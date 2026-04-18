@@ -9,7 +9,7 @@ import { readSourceTextWithCache, registerTocSourceCacheRuntime } from "./toc-ca
 import type { BrewvaBundledToolRuntime } from "./types.js";
 import { getToolSessionId } from "./utils/parallel-read.js";
 import { failTextResult, inconclusiveTextResult, textResult } from "./utils/result.js";
-import { defineBrewvaTool } from "./utils/tool.js";
+import { createRuntimeBoundBrewvaToolFactory } from "./utils/runtime-bound-tool.js";
 
 const MAX_SPANS = 16;
 const MAX_TOTAL_RETURN_LINES = 400;
@@ -53,7 +53,8 @@ export function createReadSpansTool(options?: {
   runtime?: BrewvaBundledToolRuntime;
 }): ToolDefinition {
   registerTocSourceCacheRuntime(options?.runtime);
-  return defineBrewvaTool({
+  const readSpansTool = createRuntimeBoundBrewvaToolFactory(options?.runtime, "read_spans");
+  return readSpansTool.define({
     name: "read_spans",
     label: "Read Spans",
     description:
@@ -69,7 +70,7 @@ export function createReadSpansTool(options?: {
       ),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
-      const scope = resolveToolTargetScope(options?.runtime, ctx);
+      const scope = resolveToolTargetScope(readSpansTool.runtime, ctx);
       const absolutePath = resolveScopedPath(params.file_path, scope);
       if (!absolutePath) {
         return failTextResult(
@@ -93,7 +94,7 @@ export function createReadSpansTool(options?: {
         observedPaths: [absolutePath],
       });
       if (sessionId && discoveryPayload) {
-        recordToolRuntimeEvent(options?.runtime, {
+        recordToolRuntimeEvent(readSpansTool.runtime, {
           sessionId,
           type: TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE,
           payload: discoveryPayload,

@@ -47,13 +47,16 @@ import { ReversibleMutationService } from "./services/reversible-mutation.js";
 import { ScheduleIntentService } from "./services/schedule-intent.js";
 import { SessionLifecycleService } from "./services/session-lifecycle.js";
 import type { RuntimeSessionStateStore } from "./services/session-state.js";
+import { SessionWireService } from "./services/session-wire.js";
 import { SkillLifecycleService } from "./services/skill-lifecycle.js";
 import { TapeService } from "./services/tape.js";
 import { TaskWatchdogService } from "./services/task-watchdog.js";
 import { TaskService } from "./services/task.js";
+import { ToolAccessPolicyService } from "./services/tool-access-policy.js";
 import { ToolGateService } from "./services/tool-gate.js";
 import { ToolInvocationSpine } from "./services/tool-invocation-spine.js";
 import { ToolLifecycleRecoveryWalService } from "./services/tool-lifecycle-recovery-wal.js";
+import { ToolStartReadinessService } from "./services/tool-start-readiness.js";
 import { TruthProjectorService } from "./services/truth-projector.js";
 import { TruthService } from "./services/truth.js";
 import { VerificationProjectorService } from "./services/verification-projector.js";
@@ -92,31 +95,35 @@ export interface RuntimeCoreDependencies {
 }
 
 export interface RuntimeServiceDependencies {
-  credentialVaultService: CredentialVaultService;
-  proposalAdmissionService: ProposalAdmissionService;
   skillLifecycleService: SkillLifecycleService;
   taskService: TaskService;
   truthService: TruthService;
   ledgerService: LedgerService;
-  resourceLeaseService: ResourceLeaseService;
-  parallelService: ParallelService;
   costService: CostService;
-  verificationService: VerificationService;
   contextService: ContextService;
   taskWatchdogService: TaskWatchdogService;
-  tapeService: TapeService;
   eventPipeline: EventPipelineService;
   toolLifecycleRecoveryWalService: ToolLifecycleRecoveryWalService;
-  truthProjectorService: TruthProjectorService;
-  verificationProjectorService: VerificationProjectorService;
-  scheduleIntentService: ScheduleIntentService;
-  reasoningService: ReasoningService;
-  fileChangeService: FileChangeService;
-  mutationRollbackService: MutationRollbackService;
   sessionLifecycleService: SessionLifecycleService;
-  toolGateService: ToolGateService;
-  toolInvocationSpine: ToolInvocationSpine;
-  effectCommitmentDeskService: EffectCommitmentDeskService;
+  reversibleMutationService: ReversibleMutationService;
+  getTapeService(): TapeService;
+  getEffectCommitmentDeskService(): EffectCommitmentDeskService;
+  getProposalAdmissionService(): ProposalAdmissionService;
+  clearEffectCommitmentDeskState(sessionId: string): void;
+}
+
+export interface RuntimeLazyServiceFactories {
+  createCredentialVaultService(): CredentialVaultService;
+  createFileChangeService(): FileChangeService;
+  createMutationRollbackService(): MutationRollbackService;
+  createParallelService(): ParallelService;
+  createReasoningService(): ReasoningService;
+  createResourceLeaseService(): ResourceLeaseService;
+  createScheduleIntentService(): ScheduleIntentService;
+  createSessionWireService(): SessionWireService;
+  createToolGateService(): ToolGateService;
+  createToolInvocationSpine(): ToolInvocationSpine;
+  createVerificationService(): VerificationService;
 }
 
 interface RuntimeCoreAssemblyOptions {
@@ -161,6 +168,33 @@ interface RuntimeServiceAssemblyOptions {
   resolveCheckpointCostSummary(sessionId: string): SessionCostSummary;
   resolveCheckpointCostSkillLastTurnByName(sessionId: string): Record<string, number>;
   evaluateCompletion(sessionId: string, level?: VerificationLevel): VerificationReport;
+}
+
+interface RuntimeLazyServiceAssemblyOptions {
+  cwd: string;
+  workspaceRoot: string;
+  config: BrewvaConfig;
+  governancePort?: GovernancePort;
+  kernel: RuntimeKernelContext;
+  coreDependencies: RuntimeCoreDependencies;
+  sessionState: RuntimeSessionStateStore;
+  eventPipeline: EventPipelineService;
+  contextService: ContextService;
+  getProposalAdmissionService(): ProposalAdmissionService;
+  getEffectCommitmentDeskService(): EffectCommitmentDeskService;
+  skillLifecycleService: SkillLifecycleService;
+  ledgerService: LedgerService;
+  reversibleMutationService: ReversibleMutationService;
+  resolveToolAuthority: (toolName: string, args?: Record<string, unknown>) => ResolvedToolAuthority;
+}
+
+interface RuntimeProjectionSubscriberBootstrapOptions {
+  cwd: string;
+  kernel: RuntimeKernelContext;
+  verificationGate: VerificationGate;
+  eventPipeline: EventPipelineService;
+  taskService: TaskService;
+  truthService: TruthService;
 }
 
 function normalizeReasonList(
@@ -209,6 +243,30 @@ function buildKernelEffectCommitmentDecision(input: {
     policyBasis: ["effect_commitment_kernel_policy", policySuffix],
     reasons: [`effect_commitment_requires_governance_port:${toolName}`],
   };
+}
+
+function initializeProjectionSubscribers(
+  options: RuntimeProjectionSubscriberBootstrapOptions,
+): void {
+  const truthProjector = new TruthProjectorService({
+    cwd: options.cwd,
+    getTaskState: (sessionId) => options.kernel.getTaskState(sessionId),
+    getTruthState: (sessionId) => options.kernel.getTruthState(sessionId),
+    eventPipeline: options.eventPipeline,
+    taskService: options.taskService,
+    truthService: options.truthService,
+  });
+  const verificationProjector = new VerificationProjectorService({
+    getTaskState: (sessionId) => options.kernel.getTaskState(sessionId),
+    getTruthState: (sessionId) => options.kernel.getTruthState(sessionId),
+    verificationStateStore: options.verificationGate.stateStore,
+    eventPipeline: options.eventPipeline,
+    taskService: options.taskService,
+    truthService: options.truthService,
+  });
+
+  void truthProjector;
+  void verificationProjector;
 }
 
 export function createRuntimeCoreDependencies(
@@ -322,10 +380,6 @@ export function createRuntimeKernelContext(
 export function createRuntimeServiceDependencies(
   options: RuntimeServiceAssemblyOptions,
 ): RuntimeServiceDependencies {
-  const credentialVaultService = createCredentialVaultServiceFromSecurityConfig(
-    options.workspaceRoot,
-    options.config.security,
-  );
   const taskService = new TaskService({
     config: options.config,
     isContextBudgetEnabled: () => options.kernel.isContextBudgetEnabled(),
@@ -378,11 +432,15 @@ export function createRuntimeServiceDependencies(
     getTruthState: (sessionId) => options.kernel.getTruthState(sessionId),
     recordEvent: (input) => options.kernel.recordEvent(input),
   });
-  const effectCommitmentDeskService = new EffectCommitmentDeskService({
-    getCurrentTurn: (sessionId) => options.kernel.getCurrentTurn(sessionId),
-    listEvents: (sessionId) => options.coreDependencies.eventStore.list(sessionId),
-    recordEvent: (input) => options.kernel.recordEvent(input),
-  });
+  let effectCommitmentDeskService: EffectCommitmentDeskService | undefined;
+  const getEffectCommitmentDeskService = (): EffectCommitmentDeskService => {
+    effectCommitmentDeskService ??= new EffectCommitmentDeskService({
+      getCurrentTurn: (sessionId) => options.kernel.getCurrentTurn(sessionId),
+      listEvents: (sessionId) => options.coreDependencies.eventStore.list(sessionId),
+      recordEvent: (input) => options.kernel.recordEvent(input),
+    });
+    return effectCommitmentDeskService;
+  };
   const ledgerService = new LedgerService({
     config: options.config,
     evidenceLedger: options.coreDependencies.evidenceLedger,
@@ -390,13 +448,9 @@ export function createRuntimeServiceDependencies(
     getCurrentTurn: (sessionId) => options.kernel.getCurrentTurn(sessionId),
     recordEvent: (input) => options.kernel.recordEvent(input),
     skillLifecycleService,
-    effectCommitmentDeskService,
-  });
-  const resourceLeaseService = new ResourceLeaseService({
-    sessionState: options.sessionState,
-    getCurrentTurn: (sessionId) => options.kernel.getCurrentTurn(sessionId),
-    recordEvent: (input) => options.kernel.recordEvent(input),
-    skillLifecycleService,
+    effectCommitmentDeskService: {
+      observeToolOutcome: (input) => getEffectCommitmentDeskService().observeToolOutcome(input),
+    },
   });
   const costService = new CostService({
     costTracker: options.coreDependencies.costTracker,
@@ -406,92 +460,86 @@ export function createRuntimeServiceDependencies(
     skillLifecycleService,
     governancePort: options.governancePort,
   });
-  const verificationService = new VerificationService({
-    cwd: options.cwd,
-    config: options.config,
-    verificationGate: options.coreDependencies.verificationGate,
-    getTaskState: (sessionId) => options.kernel.getTaskState(sessionId),
-    recordEvent: (input) => options.kernel.recordEvent(input),
-    governancePort: options.governancePort,
-    skillLifecycleService,
-    ledgerService,
-  });
-  const proposalAdmissionService = new ProposalAdmissionService({
-    listDecisionReceiptEvents: (sessionId) =>
-      options.coreDependencies.eventStore.list(sessionId, {
-        type: DECISION_RECEIPT_RECORDED_EVENT_TYPE,
-      }),
-    recordEvent: (input) => options.kernel.recordEvent(input),
-    getCurrentTurn: (sessionId) => options.kernel.getCurrentTurn(sessionId),
-    resolveToolAuthority: (toolName) => options.resolveToolAuthority(toolName),
-    effectCommitmentAuthorizer: ({ sessionId, proposal, descriptor, turn }) => {
-      const toolName = proposal.payload.toolName.trim() || proposal.subject.trim();
-      const governanceDecision = options.governancePort?.authorizeEffectCommitment?.({
-        sessionId,
-        proposal,
-        turn,
-      });
-      if (governanceDecision !== undefined) {
-        const decision =
-          governanceDecision.decision === "accept" ||
-          governanceDecision.decision === "reject" ||
-          governanceDecision.decision === "defer"
-            ? governanceDecision.decision
-            : "reject";
-        if (decision === "defer") {
-          const deskDecision = effectCommitmentDeskService.authorize({
-            sessionId,
-            proposal,
-            descriptor,
-            turn,
-          });
-          const combinedDecision =
-            deskDecision.decision === "accept" || deskDecision.decision === "reject"
-              ? deskDecision.decision
-              : "defer";
+  let proposalAdmissionService: ProposalAdmissionService | undefined;
+  const getProposalAdmissionService = (): ProposalAdmissionService => {
+    proposalAdmissionService ??= new ProposalAdmissionService({
+      listDecisionReceiptEvents: (sessionId) =>
+        options.coreDependencies.eventStore.list(sessionId, {
+          type: DECISION_RECEIPT_RECORDED_EVENT_TYPE,
+        }),
+      recordEvent: (input) => options.kernel.recordEvent(input),
+      getCurrentTurn: (sessionId) => options.kernel.getCurrentTurn(sessionId),
+      resolveToolAuthority: (toolName) => options.resolveToolAuthority(toolName),
+      effectCommitmentAuthorizer: ({ sessionId, proposal, descriptor, turn }) => {
+        const toolName = proposal.payload.toolName.trim() || proposal.subject.trim();
+        const governanceDecision = options.governancePort?.authorizeEffectCommitment?.({
+          sessionId,
+          proposal,
+          turn,
+        });
+        if (governanceDecision !== undefined) {
+          const decision =
+            governanceDecision.decision === "accept" ||
+            governanceDecision.decision === "reject" ||
+            governanceDecision.decision === "defer"
+              ? governanceDecision.decision
+              : "reject";
+          if (decision === "defer") {
+            const deskDecision = getEffectCommitmentDeskService().authorize({
+              sessionId,
+              proposal,
+              descriptor,
+              turn,
+            });
+            const combinedDecision =
+              deskDecision.decision === "accept" || deskDecision.decision === "reject"
+                ? deskDecision.decision
+                : "defer";
+            return {
+              decision: combinedDecision,
+              requestId: deskDecision.requestId,
+              policyBasis: normalizePolicyBasis(
+                [...(governanceDecision.policyBasis ?? []), ...(deskDecision.policyBasis ?? [])],
+                "effect_commitment_governance_port",
+              ),
+              reasons: normalizePolicyBasis(
+                [
+                  ...normalizeReasonList(governanceDecision, `effect_commitment_defer:${toolName}`),
+                  ...(deskDecision.reasons ?? []),
+                ],
+                `effect_commitment_${combinedDecision}:${toolName}`,
+              ),
+              committedEffects: deskDecision.committedEffects,
+            };
+          }
           return {
-            decision: combinedDecision,
-            requestId: deskDecision.requestId,
+            decision,
             policyBasis: normalizePolicyBasis(
-              [...(governanceDecision.policyBasis ?? []), ...(deskDecision.policyBasis ?? [])],
+              governanceDecision.policyBasis,
               "effect_commitment_governance_port",
             ),
-            reasons: normalizePolicyBasis(
-              [
-                ...normalizeReasonList(governanceDecision, `effect_commitment_defer:${toolName}`),
-                ...(deskDecision.reasons ?? []),
-              ],
-              `effect_commitment_${combinedDecision}:${toolName}`,
+            reasons: normalizeReasonList(
+              governanceDecision,
+              `effect_commitment_${decision}:${toolName}`,
             ),
-            committedEffects: deskDecision.committedEffects,
           };
         }
-        return {
-          decision,
-          policyBasis: normalizePolicyBasis(
-            governanceDecision.policyBasis,
-            "effect_commitment_governance_port",
-          ),
-          reasons: normalizeReasonList(
-            governanceDecision,
-            `effect_commitment_${decision}:${toolName}`,
-          ),
-        };
-      }
-      if (options.governancePort) {
-        return buildKernelEffectCommitmentDecision({
+        if (options.governancePort) {
+          return buildKernelEffectCommitmentDecision({
+            descriptor,
+            toolName,
+          });
+        }
+        return getEffectCommitmentDeskService().authorize({
+          sessionId,
+          proposal,
           descriptor,
-          toolName,
+          turn,
         });
-      }
-      return effectCommitmentDeskService.authorize({
-        sessionId,
-        proposal,
-        descriptor,
-        turn,
-      });
-    },
-  });
+      },
+    });
+    return proposalAdmissionService;
+  };
   const contextSourceProviders = new ContextSourceProviderRegistry();
   registerBuiltInContextSourceProviders(contextSourceProviders, {
     workspaceRoot: options.workspaceRoot,
@@ -527,22 +575,26 @@ export function createRuntimeServiceDependencies(
     recordEvent: (input) => options.kernel.recordEvent(input),
     resolveToolAuthority: (toolName) => options.resolveToolAuthority(toolName),
   });
-  const tapeService = new TapeService({
-    tapeConfig: options.config.tape,
-    sessionState: options.sessionState,
-    queryEvents: (sessionId, query) => options.coreDependencies.eventStore.list(sessionId, query),
-    getCurrentTurn: (sessionId) => options.kernel.getCurrentTurn(sessionId),
-    getTaskState: (sessionId) => options.kernel.getTaskState(sessionId),
-    getTruthState: (sessionId) => options.kernel.getTruthState(sessionId),
-    getCostSummary: (sessionId) => options.resolveCheckpointCostSummary(sessionId),
-    getCostSkillLastTurnByName: (sessionId) =>
-      options.resolveCheckpointCostSkillLastTurnByName(sessionId),
-    getCheckpointEvidenceState: (sessionId) =>
-      options.coreDependencies.turnReplay.getCheckpointEvidenceState(sessionId),
-    getCheckpointProjectionState: (sessionId) =>
-      options.coreDependencies.turnReplay.getCheckpointProjectionState(sessionId),
-    recordEvent: (input) => options.kernel.recordEvent(input),
-  });
+  let tapeService: TapeService | undefined;
+  const getTapeService = (): TapeService => {
+    tapeService ??= new TapeService({
+      tapeConfig: options.config.tape,
+      sessionState: options.sessionState,
+      queryEvents: (sessionId, query) => options.coreDependencies.eventStore.list(sessionId, query),
+      getCurrentTurn: (sessionId) => options.kernel.getCurrentTurn(sessionId),
+      getTaskState: (sessionId) => options.kernel.getTaskState(sessionId),
+      getTruthState: (sessionId) => options.kernel.getTruthState(sessionId),
+      getCostSummary: (sessionId) => options.resolveCheckpointCostSummary(sessionId),
+      getCostSkillLastTurnByName: (sessionId) =>
+        options.resolveCheckpointCostSkillLastTurnByName(sessionId),
+      getCheckpointEvidenceState: (sessionId) =>
+        options.coreDependencies.turnReplay.getCheckpointEvidenceState(sessionId),
+      getCheckpointProjectionState: (sessionId) =>
+        options.coreDependencies.turnReplay.getCheckpointProjectionState(sessionId),
+      recordEvent: (input) => options.kernel.recordEvent(input),
+    });
+    return tapeService;
+  };
   const eventPipeline = new EventPipelineService({
     events: options.coreDependencies.eventStore,
     level: options.config.infrastructure.events.level,
@@ -552,89 +604,19 @@ export function createRuntimeServiceDependencies(
       options.coreDependencies.reasoningReplay.observeEvent(event);
     },
     ingestProjectionEvent: (event) => options.coreDependencies.projectionEngine.ingestEvent(event),
-    maybeRecordTapeCheckpoint: (event) => tapeService.maybeRecordTapeCheckpoint(event),
+    maybeRecordTapeCheckpoint: (event) => getTapeService().maybeRecordTapeCheckpoint(event),
   });
-  const reasoningService = new ReasoningService({
-    replay: options.coreDependencies.reasoningReplay,
-    getCurrentTurn: (sessionId) => options.kernel.getCurrentTurn(sessionId),
-    recordEvent: (input) => options.kernel.recordEvent(input),
-  });
-  const truthProjectorService = new TruthProjectorService({
+  initializeProjectionSubscribers({
     cwd: options.cwd,
-    getTaskState: (sessionId) => options.kernel.getTaskState(sessionId),
-    getTruthState: (sessionId) => options.kernel.getTruthState(sessionId),
+    kernel: options.kernel,
+    verificationGate: options.coreDependencies.verificationGate,
     eventPipeline,
     taskService,
     truthService,
-  });
-  const verificationProjectorService = new VerificationProjectorService({
-    getTaskState: (sessionId) => options.kernel.getTaskState(sessionId),
-    getTruthState: (sessionId) => options.kernel.getTruthState(sessionId),
-    verificationStateStore: options.coreDependencies.verificationGate.stateStore,
-    eventPipeline,
-    taskService,
-    truthService,
-  });
-  const scheduleIntentService = new ScheduleIntentService({
-    createManager: () =>
-      new SchedulerService({
-        runtime: {
-          workspaceRoot: options.workspaceRoot,
-          scheduleConfig: options.config.schedule,
-          listSessionIds: () => options.coreDependencies.eventStore.listSessionIds(),
-          listEvents: (sessionId, query) =>
-            options.coreDependencies.eventStore.list(sessionId, query),
-          recordEvent: (input) => eventPipeline.recordEvent(input),
-          subscribeEvents: (listener) => eventPipeline.subscribeEvents(listener),
-          getTruthState: (sessionId) => options.kernel.getTruthState(sessionId),
-          getTaskState: (sessionId) => options.kernel.getTaskState(sessionId),
-          recoveryWal: {
-            appendPending: (envelope, source, walOptions) =>
-              options.coreDependencies.recoveryWalStore.appendPending(envelope, source, walOptions),
-            markInflight: (walId) => options.coreDependencies.recoveryWalStore.markInflight(walId),
-            markDone: (walId) => options.coreDependencies.recoveryWalStore.markDone(walId),
-            markFailed: (walId, error) =>
-              options.coreDependencies.recoveryWalStore.markFailed(walId, error),
-            markExpired: (walId) => options.coreDependencies.recoveryWalStore.markExpired(walId),
-            listPending: () => options.coreDependencies.recoveryWalStore.listPending(),
-          },
-        },
-        enableExecution: false,
-      }),
   });
   const toolLifecycleRecoveryWalService = new ToolLifecycleRecoveryWalService({
     recoveryWalStore: options.coreDependencies.recoveryWalStore,
     eventPipeline,
-  });
-  const fileChangeService = new FileChangeService({
-    sessionState: options.sessionState,
-    fileChanges: options.coreDependencies.fileChanges,
-    costTracker: options.coreDependencies.costTracker,
-    getCurrentTurn: (sessionId) => options.kernel.getCurrentTurn(sessionId),
-    recordEvent: (input) => options.kernel.recordEvent(input),
-    ledgerService,
-    skillLifecycleService,
-    reversibleMutationService,
-  });
-  const parallelService = new ParallelService({
-    workspaceRoot: options.workspaceRoot,
-    securityConfig: options.config.security,
-    parallel: options.coreDependencies.parallel,
-    parallelResults: options.coreDependencies.parallelResults,
-    sessionState: options.sessionState,
-    eventStore: options.coreDependencies.eventStore,
-    subscribeEvents: (listener) => eventPipeline.subscribeEvents(listener),
-    getCurrentTurn: (sessionId) => options.kernel.getCurrentTurn(sessionId),
-    recordEvent: (input) => options.kernel.recordEvent(input),
-    fileChangeService,
-    resourceLeaseService,
-    skillLifecycleService,
-  });
-  const mutationRollbackService = new MutationRollbackService({
-    getCurrentTurn: (sessionId) => options.kernel.getCurrentTurn(sessionId),
-    recordEvent: (input) => options.kernel.recordEvent(input),
-    reversibleMutationService,
-    fileChangeService,
   });
   const sessionLifecycleService = new SessionLifecycleService({
     sessionState: options.sessionState,
@@ -649,65 +631,226 @@ export function createRuntimeServiceDependencies(
     turnReplay: options.coreDependencies.turnReplay,
     eventStore: options.coreDependencies.eventStore,
     recoveryWalStore: options.coreDependencies.recoveryWalStore,
-    evidenceLedger: options.coreDependencies.evidenceLedger,
     reversibleMutationService,
     recordEvent: (input) => options.kernel.recordEvent(input),
     contextService,
-  });
-  const toolGateService = new ToolGateService({
-    workspaceRoot: options.workspaceRoot,
-    securityConfig: options.config.security,
-    costTracker: options.coreDependencies.costTracker,
-    sessionState: options.sessionState,
-    getCurrentTurn: (sessionId) => options.kernel.getCurrentTurn(sessionId),
-    recordEvent: (input) => options.kernel.recordEvent(input),
-    alwaysAllowedTools: CONTROL_PLANE_TOOLS,
-    resolveToolAuthority: (toolName, args) => options.resolveToolAuthority(toolName, args),
-    resourceLeaseService,
-    skillLifecycleService,
-    contextService,
-    proposalAdmissionService,
-    effectCommitmentDeskService,
-    hasRoutingScope: (scope) => options.config.skills.routing.scopes.includes(scope),
-  });
-  const toolInvocationSpine = new ToolInvocationSpine({
-    toolGateService,
-    fileChangeService,
-    ledgerService,
-    reversibleMutationService,
   });
   sessionLifecycleService.onClearState((sessionId) => {
     toolLifecycleRecoveryWalService.clearSession(sessionId);
     reversibleMutationService.clear(sessionId);
-    effectCommitmentDeskService.clear(sessionId);
+    effectCommitmentDeskService?.clear(sessionId);
     options.coreDependencies.reasoningReplay.clear(sessionId);
   });
 
   return {
-    credentialVaultService,
-    proposalAdmissionService,
     skillLifecycleService,
     taskService,
     truthService,
     ledgerService,
-    resourceLeaseService,
-    parallelService,
     costService,
-    verificationService,
     contextService,
     taskWatchdogService,
-    tapeService,
     eventPipeline,
     toolLifecycleRecoveryWalService,
-    effectCommitmentDeskService,
-    truthProjectorService,
-    verificationProjectorService,
-    scheduleIntentService,
-    reasoningService,
-    fileChangeService,
-    mutationRollbackService,
+    reversibleMutationService,
     sessionLifecycleService,
-    toolGateService,
-    toolInvocationSpine,
+    getTapeService,
+    getEffectCommitmentDeskService,
+    getProposalAdmissionService,
+    clearEffectCommitmentDeskState: (sessionId: string) => {
+      effectCommitmentDeskService?.clear(sessionId);
+    },
+  };
+}
+
+export function createRuntimeLazyServiceFactories(
+  options: RuntimeLazyServiceAssemblyOptions,
+): RuntimeLazyServiceFactories {
+  let resourceLeaseService: ResourceLeaseService | undefined;
+  const getResourceLeaseService = (): ResourceLeaseService => {
+    resourceLeaseService ??= new ResourceLeaseService({
+      sessionState: options.sessionState,
+      getCurrentTurn: (sessionId) => options.kernel.getCurrentTurn(sessionId),
+      recordEvent: (input) => options.kernel.recordEvent(input),
+      skillLifecycleService: options.skillLifecycleService,
+    });
+    return resourceLeaseService;
+  };
+
+  let fileChangeService: FileChangeService | undefined;
+  const getFileChangeService = (): FileChangeService => {
+    fileChangeService ??= new FileChangeService({
+      sessionState: options.sessionState,
+      fileChanges: options.coreDependencies.fileChanges,
+      costTracker: options.coreDependencies.costTracker,
+      getCurrentTurn: (sessionId) => options.kernel.getCurrentTurn(sessionId),
+      recordEvent: (input) => options.kernel.recordEvent(input),
+      ledgerService: options.ledgerService,
+      skillLifecycleService: options.skillLifecycleService,
+      reversibleMutationService: options.reversibleMutationService,
+    });
+    return fileChangeService;
+  };
+
+  let parallelService: ParallelService | undefined;
+  const getParallelService = (): ParallelService => {
+    parallelService ??= new ParallelService({
+      workspaceRoot: options.workspaceRoot,
+      securityConfig: options.config.security,
+      parallel: options.coreDependencies.parallel,
+      parallelResults: options.coreDependencies.parallelResults,
+      sessionState: options.sessionState,
+      eventStore: options.coreDependencies.eventStore,
+      subscribeEvents: (listener) => options.eventPipeline.subscribeEvents(listener),
+      getCurrentTurn: (sessionId) => options.kernel.getCurrentTurn(sessionId),
+      recordEvent: (input) => options.kernel.recordEvent(input),
+      fileChangeService: getFileChangeService(),
+      resourceLeaseService: getResourceLeaseService(),
+      skillLifecycleService: options.skillLifecycleService,
+    });
+    return parallelService;
+  };
+
+  let mutationRollbackService: MutationRollbackService | undefined;
+  const getMutationRollbackService = (): MutationRollbackService => {
+    mutationRollbackService ??= new MutationRollbackService({
+      getCurrentTurn: (sessionId) => options.kernel.getCurrentTurn(sessionId),
+      recordEvent: (input) => options.kernel.recordEvent(input),
+      reversibleMutationService: options.reversibleMutationService,
+      fileChangeService: getFileChangeService(),
+    });
+    return mutationRollbackService;
+  };
+
+  let toolAccessPolicyService: ToolAccessPolicyService | undefined;
+  const getToolAccessPolicyService = (): ToolAccessPolicyService => {
+    toolAccessPolicyService ??= new ToolAccessPolicyService({
+      securityConfig: options.config.security,
+      costTracker: options.coreDependencies.costTracker,
+      sessionState: options.sessionState,
+      getCurrentTurn: (sessionId) => options.kernel.getCurrentTurn(sessionId),
+      recordEvent: (input) => options.kernel.recordEvent(input),
+      alwaysAllowedTools: CONTROL_PLANE_TOOLS,
+      resolveToolAuthority: (toolName, args) => options.resolveToolAuthority(toolName, args),
+      resourceLeaseService: getResourceLeaseService(),
+      skillLifecycleService: options.skillLifecycleService,
+      hasRoutingScope: (scope) => options.config.skills.routing.scopes.includes(scope),
+    });
+    return toolAccessPolicyService;
+  };
+
+  let toolStartReadinessService: ToolStartReadinessService | undefined;
+  const getToolStartReadinessService = (): ToolStartReadinessService => {
+    toolStartReadinessService ??= new ToolStartReadinessService({
+      contextService: options.contextService,
+    });
+    return toolStartReadinessService;
+  };
+
+  let toolGateService: ToolGateService | undefined;
+  const getToolGateService = (): ToolGateService => {
+    toolGateService ??= new ToolGateService({
+      workspaceRoot: options.workspaceRoot,
+      securityConfig: options.config.security,
+      sessionState: options.sessionState,
+      getCurrentTurn: (sessionId) => options.kernel.getCurrentTurn(sessionId),
+      recordEvent: (input) => options.kernel.recordEvent(input),
+      resolveToolAuthority: (toolName, args) => options.resolveToolAuthority(toolName, args),
+      toolAccessPolicyService: getToolAccessPolicyService(),
+      skillLifecycleService: options.skillLifecycleService,
+      proposalAdmissionService: {
+        submitProposal: (sessionId, proposal) =>
+          options.getProposalAdmissionService().submitProposal(sessionId, proposal),
+      },
+      effectCommitmentDeskService: {
+        prepareResume: (input) => options.getEffectCommitmentDeskService().prepareResume(input),
+        getRequestIdForProposal: (sessionId, proposalId) =>
+          options.getEffectCommitmentDeskService().getRequestIdForProposal(sessionId, proposalId),
+      },
+    });
+    return toolGateService;
+  };
+
+  let toolInvocationSpine: ToolInvocationSpine | undefined;
+  const getToolInvocationSpine = (): ToolInvocationSpine => {
+    toolInvocationSpine ??= new ToolInvocationSpine({
+      toolStartReadinessService: getToolStartReadinessService(),
+      toolGateService: getToolGateService(),
+      fileChangeService: getFileChangeService(),
+      ledgerService: options.ledgerService,
+      reversibleMutationService: options.reversibleMutationService,
+    });
+    return toolInvocationSpine;
+  };
+
+  return {
+    createCredentialVaultService: () =>
+      createCredentialVaultServiceFromSecurityConfig(
+        options.workspaceRoot,
+        options.config.security,
+      ),
+    createFileChangeService: () => getFileChangeService(),
+    createMutationRollbackService: () => getMutationRollbackService(),
+    createParallelService: () => getParallelService(),
+    createReasoningService: () =>
+      new ReasoningService({
+        replay: options.coreDependencies.reasoningReplay,
+        getCurrentTurn: (sessionId) => options.kernel.getCurrentTurn(sessionId),
+        recordEvent: (input) => options.kernel.recordEvent(input),
+      }),
+    createResourceLeaseService: () => getResourceLeaseService(),
+    createScheduleIntentService: () =>
+      new ScheduleIntentService({
+        createManager: () =>
+          new SchedulerService({
+            runtime: {
+              workspaceRoot: options.workspaceRoot,
+              scheduleConfig: options.config.schedule,
+              listSessionIds: () => options.coreDependencies.eventStore.listSessionIds(),
+              listEvents: (sessionId, query) =>
+                options.coreDependencies.eventStore.list(sessionId, query),
+              recordEvent: (input) => options.eventPipeline.recordEvent(input),
+              subscribeEvents: (listener) => options.eventPipeline.subscribeEvents(listener),
+              getTruthState: (sessionId) => options.kernel.getTruthState(sessionId),
+              getTaskState: (sessionId) => options.kernel.getTaskState(sessionId),
+              recoveryWal: {
+                appendPending: (envelope, source, walOptions) =>
+                  options.coreDependencies.recoveryWalStore.appendPending(
+                    envelope,
+                    source,
+                    walOptions,
+                  ),
+                markInflight: (walId) =>
+                  options.coreDependencies.recoveryWalStore.markInflight(walId),
+                markDone: (walId) => options.coreDependencies.recoveryWalStore.markDone(walId),
+                markFailed: (walId, error) =>
+                  options.coreDependencies.recoveryWalStore.markFailed(walId, error),
+                markExpired: (walId) =>
+                  options.coreDependencies.recoveryWalStore.markExpired(walId),
+                listPending: () => options.coreDependencies.recoveryWalStore.listPending(),
+              },
+            },
+            enableExecution: false,
+          }),
+      }),
+    createSessionWireService: () =>
+      new SessionWireService({
+        queryStructuredEvents: (sessionId) =>
+          options.eventPipeline.queryStructuredEvents(sessionId),
+        subscribeEvents: (listener) => options.eventPipeline.subscribeEvents(listener),
+      }),
+    createToolGateService: () => getToolGateService(),
+    createToolInvocationSpine: () => getToolInvocationSpine(),
+    createVerificationService: () =>
+      new VerificationService({
+        cwd: options.cwd,
+        config: options.config,
+        verificationGate: options.coreDependencies.verificationGate,
+        getTaskState: (sessionId) => options.kernel.getTaskState(sessionId),
+        recordEvent: (input) => options.kernel.recordEvent(input),
+        governancePort: options.governancePort,
+        skillLifecycleService: options.skillLifecycleService,
+        ledgerService: options.ledgerService,
+      }),
   };
 }

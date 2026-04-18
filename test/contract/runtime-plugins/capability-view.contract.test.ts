@@ -5,6 +5,7 @@ import {
   createExecTool,
   createGrepTool,
   createProcessTool,
+  createResourceLeaseTool,
   createScheduleIntentTool,
 } from "@brewva/brewva-tools";
 import { requireDefined } from "../../helpers/assertions.js";
@@ -207,6 +208,31 @@ describe("capability view", () => {
     expect(rendered[2]?.content).toContain("param.case:");
     expect(rendered[2]?.content).toContain("values=smart|insensitive|sensitive");
     expect(rendered[2]?.content).not.toContain("aliases=");
+  });
+
+  test("renders required capabilities for privileged managed tools", () => {
+    const runtime = createRuntimeFixture();
+    const resourceLeaseTool = createResourceLeaseTool({ runtime });
+    const result = buildCapabilityView({
+      prompt: "inspect $resource_lease",
+      allTools: [resourceLeaseTool],
+      activeToolNames: [],
+    });
+
+    expect(result.details[0]?.requiredCapabilities).toEqual([
+      "authority.tools.cancelResourceLease",
+      "authority.tools.requestResourceLease",
+      "inspect.tools.listResourceLeases",
+    ]);
+
+    const rendered = renderCapabilityView({
+      capabilityView: result,
+      mode: "full",
+      includeInventory: false,
+    });
+    expect(rendered[2]?.content).toContain("required_capabilities:");
+    expect(rendered[2]?.content).toContain("authority.tools.requestResourceLease");
+    expect(rendered[2]?.content).toContain("inspect.tools.listResourceLeases");
   });
 
   test("renders nested enum contract details for schedule intent predicates", () => {

@@ -11,5 +11,7 @@ describe("runtime internal entrypoint", () => {
     expect("ImplementationOutputValidator" in internal).toBe(false);
     expect("ReviewOutputValidator" in internal).toBe(false);
     expect("QaOutputValidator" in internal).toBe(false);
+    expect("getSemanticArtifactOutputContract" in internal).toBe(true);
+    expect("renderSemanticArtifactExample" in internal).toBe(true);
   });
 });

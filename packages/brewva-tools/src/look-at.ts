@@ -9,7 +9,7 @@ import { resolveScopedPath, resolveToolTargetScope } from "./target-scope.js";
 import type { BrewvaToolRuntime } from "./types.js";
 import { getToolSessionId } from "./utils/parallel-read.js";
 import { failTextResult, inconclusiveTextResult, textResult } from "./utils/result.js";
-import { defineBrewvaTool } from "./utils/tool.js";
+import { createRuntimeBoundBrewvaToolFactory } from "./utils/runtime-bound-tool.js";
 
 function isLikelyText(content: Buffer): boolean {
   const sample = content.subarray(0, Math.min(content.length, 1024));
@@ -116,7 +116,8 @@ function extractRelevantText(text: string, goal: string): RelevantTextResult {
 }
 
 export function createLookAtTool(options?: { runtime?: BrewvaToolRuntime }): ToolDefinition {
-  return defineBrewvaTool({
+  const lookAtTool = createRuntimeBoundBrewvaToolFactory(options?.runtime, "look_at");
+  return lookAtTool.define({
     name: "look_at",
     label: "Look At",
     description: "Analyze file content and extract goal-focused findings.",
@@ -125,7 +126,7 @@ export function createLookAtTool(options?: { runtime?: BrewvaToolRuntime }): Too
       goal: Type.String(),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
-      const scope = resolveToolTargetScope(options?.runtime, ctx);
+      const scope = resolveToolTargetScope(lookAtTool.runtime, ctx);
       const absolute = resolveScopedPath(params.file_path, scope);
       if (!absolute) {
         return failTextResult(
@@ -149,7 +150,7 @@ export function createLookAtTool(options?: { runtime?: BrewvaToolRuntime }): Too
         observedPaths: [absolute],
       });
       if (sessionId && discoveryPayload) {
-        recordToolRuntimeEvent(options?.runtime, {
+        recordToolRuntimeEvent(lookAtTool.runtime, {
           sessionId,
           type: TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE,
           payload: discoveryPayload,

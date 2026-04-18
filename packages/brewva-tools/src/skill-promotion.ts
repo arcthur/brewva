@@ -9,7 +9,7 @@ import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "./types.js";
 import { buildStringEnumSchema } from "./utils/input-alias.js";
 import { failTextResult, inconclusiveTextResult, textResult } from "./utils/result.js";
-import { defineBrewvaTool } from "./utils/tool.js";
+import { createManagedBrewvaToolFactory } from "./utils/runtime-bound-tool.js";
 
 const ACTION_VALUES = ["list", "show", "review", "promote"] as const;
 const REVIEW_DECISION_VALUES = ["approve", "reject", "reopen"] as const;
@@ -121,7 +121,8 @@ function formatDraftDetail(draft: SkillPromotionDraft): string {
 }
 
 export function createSkillPromotionTool(options: BrewvaToolOptions): ToolDefinition {
-  return defineBrewvaTool({
+  const skillPromotionTool = createManagedBrewvaToolFactory("skill_promotion");
+  return skillPromotionTool.define({
     name: "skill_promotion",
     label: "Skill Promotion",
     description:

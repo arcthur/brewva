@@ -5,14 +5,9 @@ import type {
   ContextBudgetUsage,
   DecisionReceipt,
   EffectCommitmentProposal,
-  SkillRoutingScope,
   SkillDocument,
-  ToolExecutionBoundary,
-  ToolMutationReceipt,
 } from "../contracts/index.js";
-import type { SessionCostTracker } from "../cost/tracker.js";
 import {
-  GOVERNANCE_METADATA_MISSING_EVENT_TYPE,
   ITERATION_GUARD_RECORDED_EVENT_TYPE,
   TOOL_EFFECT_GATE_SELECTED_EVENT_TYPE,
 } from "../events/event-types.js";
@@ -24,32 +19,21 @@ import {
   evaluateBoundaryClassification,
   resolveBoundaryPolicy,
 } from "../security/boundary-policy.js";
-import { resolveSecurityPolicy } from "../security/mode.js";
-import { checkToolAccess as evaluateSkillToolAccess } from "../security/tool-policy.js";
 import { sha256 } from "../utils/hash.js";
 import { stableJsonStringify } from "../utils/json.js";
 import { normalizeToolName } from "../utils/tool-name.js";
 import { resolveToolResultVerdict } from "../utils/tool-result.js";
-import type { ContextService } from "./context.js";
 import type { EffectCommitmentDeskService } from "./effect-commitment-desk.js";
 import type { ProposalAdmissionService } from "./proposal-admission.js";
-import type { ResourceLeaseService } from "./resource-lease.js";
 import { RuntimeSessionStateStore } from "./session-state.js";
 import type { SkillLifecycleService } from "./skill-lifecycle.js";
+import {
+  ToolAccessPolicyService,
+  type ToolAccessDecision,
+  type ToolAccessExplanation,
+} from "./tool-access-policy.js";
 
-export interface ToolAccessDecision {
-  allowed: boolean;
-  reason?: string;
-  advisory?: string;
-  boundary?: ToolExecutionBoundary;
-  commitmentReceipt?: DecisionReceipt;
-  effectCommitmentRequestId?: string;
-  mutationReceipt?: ToolMutationReceipt;
-}
-
-export interface ToolAccessExplanation extends ToolAccessDecision {
-  warning?: string;
-}
+export type { ToolAccessDecision, ToolAccessExplanation } from "./tool-access-policy.js";
 
 export interface StartToolCallInput {
   sessionId: string;
@@ -87,51 +71,34 @@ export interface ToolCompletionContext {
 export interface ToolGateServiceOptions {
   workspaceRoot: string;
   securityConfig: RuntimeKernelContext["config"]["security"];
-  costTracker: RuntimeKernelContext["costTracker"];
   sessionState: RuntimeKernelContext["sessionState"];
   getCurrentTurn: RuntimeKernelContext["getCurrentTurn"];
   recordEvent: RuntimeKernelContext["recordEvent"];
-  alwaysAllowedTools: string[];
   resolveToolAuthority: (toolName: string, args?: Record<string, unknown>) => ResolvedToolAuthority;
-  resourceLeaseService: Pick<ResourceLeaseService, "getEffectiveBudget">;
-  skillLifecycleService: Pick<
-    SkillLifecycleService,
-    "getActiveSkill" | "explainRepairToolAccess" | "consumeRepairToolAccess"
-  >;
-  contextService: Pick<ContextService, "checkContextCompactionGate" | "observeContextUsage">;
+  toolAccessPolicyService: Pick<ToolAccessPolicyService, "checkToolAccess" | "explainToolAccess">;
+  skillLifecycleService: Pick<SkillLifecycleService, "getActiveSkill" | "consumeRepairToolAccess">;
   proposalAdmissionService: Pick<ProposalAdmissionService, "submitProposal">;
   effectCommitmentDeskService: Pick<
     EffectCommitmentDeskService,
     "prepareResume" | "getRequestIdForProposal"
   >;
-  hasRoutingScope: (scope: SkillRoutingScope) => boolean;
 }
 
 export class ToolGateService {
   private readonly workspaceRoot: string;
   private readonly securityConfig: RuntimeKernelContext["config"]["security"];
-  private readonly securityPolicy: ReturnType<typeof resolveSecurityPolicy>;
-  private readonly costTracker: SessionCostTracker;
   private readonly sessionState: RuntimeSessionStateStore;
-  private readonly alwaysAllowedTools: string[];
-  private readonly alwaysAllowedToolSet: Set<string>;
   private readonly resolveToolAuthority: (
     toolName: string,
     args?: Record<string, unknown>,
   ) => ResolvedToolAuthority;
   private readonly getActiveSkill: (sessionId: string) => SkillDocument | undefined;
-  private readonly explainRepairToolAccess: (
-    sessionId: string,
-    toolName: string,
-    usage?: ContextBudgetUsage,
-  ) => { allowed: boolean; reason?: string };
   private readonly consumeRepairToolAccess: (
     sessionId: string,
     toolName: string,
     usage?: ContextBudgetUsage,
   ) => { allowed: boolean; reason?: string };
   private readonly getCurrentTurn: (sessionId: string) => number;
-  private readonly getEffectiveBudget: ResourceLeaseService["getEffectiveBudget"];
   private readonly recordEvent: (input: {
     sessionId: string;
     type: string;
@@ -140,15 +107,8 @@ export class ToolGateService {
     timestamp?: number;
     skipTapeCheckpoint?: boolean;
   }) => BrewvaEventRecord | undefined;
-  private readonly checkContextCompactionGate: (
-    sessionId: string,
-    toolName: string,
-    usage?: ContextBudgetUsage,
-  ) => ToolAccessDecision;
-  private readonly observeContextUsage: (
-    sessionId: string,
-    usage: ContextBudgetUsage | undefined,
-  ) => void;
+  private readonly checkToolAccessPolicy: ToolAccessPolicyService["checkToolAccess"];
+  private readonly explainToolAccessPolicy: ToolAccessPolicyService["explainToolAccess"];
   private readonly submitProposal: (
     sessionId: string,
     proposal: EffectCommitmentProposal,
@@ -158,86 +118,27 @@ export class ToolGateService {
     sessionId: string,
     proposalId: string,
   ) => string | undefined;
-  private readonly hasRoutingScope: (scope: SkillRoutingScope) => boolean;
 
   constructor(options: ToolGateServiceOptions) {
     this.workspaceRoot = options.workspaceRoot;
     this.securityConfig = options.securityConfig;
-    this.securityPolicy = resolveSecurityPolicy(options.securityConfig);
-    this.costTracker = options.costTracker;
     this.sessionState = options.sessionState;
-    this.alwaysAllowedTools = options.alwaysAllowedTools;
-    this.alwaysAllowedToolSet = new Set(
-      options.alwaysAllowedTools
-        .map((toolName) => normalizeToolName(toolName))
-        .filter((toolName) => toolName.length > 0),
-    );
     this.resolveToolAuthority = (toolName, args) => options.resolveToolAuthority(toolName, args);
     this.getActiveSkill = (sessionId) => options.skillLifecycleService.getActiveSkill(sessionId);
-    this.explainRepairToolAccess = (sessionId, toolName, usage) =>
-      options.skillLifecycleService.explainRepairToolAccess(sessionId, toolName, usage);
     this.consumeRepairToolAccess = (sessionId, toolName, usage) =>
       options.skillLifecycleService.consumeRepairToolAccess(sessionId, toolName, usage);
     this.getCurrentTurn = (sessionId) => options.getCurrentTurn(sessionId);
-    this.getEffectiveBudget = (sessionId, contract, skillName) =>
-      options.resourceLeaseService.getEffectiveBudget(sessionId, contract, skillName);
     this.recordEvent = (input) => options.recordEvent(input);
-    this.checkContextCompactionGate = (sessionId, toolName, usage) =>
-      options.contextService.checkContextCompactionGate(sessionId, toolName, usage);
-    this.observeContextUsage = (sessionId, usage) =>
-      options.contextService.observeContextUsage(sessionId, usage);
+    this.checkToolAccessPolicy = (sessionId, toolName, args) =>
+      options.toolAccessPolicyService.checkToolAccess(sessionId, toolName, args);
+    this.explainToolAccessPolicy = (sessionId, toolName, args) =>
+      options.toolAccessPolicyService.explainToolAccess(sessionId, toolName, args);
     this.submitProposal = (sessionId, proposal) =>
       options.proposalAdmissionService.submitProposal(sessionId, proposal);
     this.prepareEffectCommitmentResume = (input) =>
       options.effectCommitmentDeskService.prepareResume(input);
     this.getEffectCommitmentRequestIdForProposal = (sessionId, proposalId) =>
       options.effectCommitmentDeskService.getRequestIdForProposal(sessionId, proposalId);
-    this.hasRoutingScope = (scope) => options.hasRoutingScope(scope);
-  }
-
-  private buildAccessContext(
-    sessionId: string,
-    toolName: string,
-    args?: Record<string, unknown>,
-  ): {
-    state: ReturnType<RuntimeSessionStateStore["getCell"]>;
-    skill: SkillDocument | undefined;
-    normalizedToolName: string;
-    authority: ResolvedToolAuthority;
-    access: ReturnType<typeof evaluateSkillToolAccess>;
-  } {
-    const state = this.sessionState.getCell(sessionId);
-    const skill = this.getActiveSkill(sessionId);
-    const normalizedToolName = normalizeToolName(toolName);
-    const authority = this.resolveToolAuthority(normalizedToolName, args);
-    const access = evaluateSkillToolAccess(
-      skill?.contract,
-      toolName,
-      {
-        enforceDeniedEffects: this.securityPolicy.enforceDeniedEffects,
-        effectAuthorizationMode: this.securityPolicy.effectAuthorizationMode,
-        alwaysAllowedTools: this.alwaysAllowedTools,
-        resolveToolGovernanceDescriptor: (nextToolName, nextArgs) =>
-          this.resolveToolAuthority(nextToolName, nextArgs).descriptor,
-      },
-      args,
-    );
-    const requiredRoutingScopes = authority.descriptor?.requiredRoutingScopes ?? [];
-    const routingScopeAccess =
-      requiredRoutingScopes.length === 0 ||
-      requiredRoutingScopes.some((scope) => this.hasRoutingScope(scope))
-        ? access
-        : {
-            allowed: false,
-            reason: `Tool '${normalizedToolName}' requires one of the routing scopes: ${requiredRoutingScopes.join(", ")}.`,
-          };
-    return {
-      state,
-      skill,
-      normalizedToolName,
-      authority,
-      access: routingScopeAccess,
-    };
   }
 
   checkToolAccess(
@@ -245,228 +146,7 @@ export class ToolGateService {
     toolName: string,
     args?: Record<string, unknown>,
   ): ToolAccessDecision {
-    const { state, skill, normalizedToolName, authority, access } = this.buildAccessContext(
-      sessionId,
-      toolName,
-      args,
-    );
-    const governanceSource = authority.source;
-    const boundary = authority.boundary;
-    if (normalizedToolName === "bash" || normalizedToolName === "shell") {
-      const reason = `Tool '${normalizedToolName}' has been removed. Use 'exec' with 'process' for command execution.`;
-      this.recordEvent({
-        sessionId,
-        type: "tool_call_blocked",
-        turn: this.getCurrentTurn(sessionId),
-        payload: {
-          toolName: normalizedToolName,
-          skill: skill?.name ?? null,
-          reason,
-        },
-      });
-      return { allowed: false, reason };
-    }
-
-    if (access.warning && skill) {
-      const key = `${skill.name}:${normalizedToolName}`;
-      const seen = state.toolContractWarnings;
-      if (!seen.has(key)) {
-        seen.add(key);
-        this.recordEvent({
-          sessionId,
-          type: "tool_contract_warning",
-          turn: this.getCurrentTurn(sessionId),
-          payload: {
-            skill: skill.name,
-            toolName: normalizedToolName,
-            mode: this.securityPolicy.effectAuthorizationMode,
-            reason: access.warning,
-          },
-        });
-      }
-    }
-
-    if (skill && authority.source === "hint") {
-      const key = `${skill.name}:${normalizedToolName}`;
-      if (!state.governanceMetadataWarnings.has(key)) {
-        state.governanceMetadataWarnings.add(key);
-        this.recordEvent({
-          sessionId,
-          type: GOVERNANCE_METADATA_MISSING_EVENT_TYPE,
-          turn: this.getCurrentTurn(sessionId),
-          payload: {
-            skill: skill.name,
-            toolName: normalizedToolName,
-            resolution: "hint",
-            message:
-              "Tool governance fell back to regex hint matching; add an exact descriptor to remove ambiguity.",
-          },
-        });
-      }
-    }
-
-    if (
-      boundary === "effectful" &&
-      governanceSource !== "exact" &&
-      governanceSource !== "registry"
-    ) {
-      const reason = `Effectful tool '${normalizedToolName}' requires an exact governance descriptor.`;
-      this.recordEvent({
-        sessionId,
-        type: "tool_call_blocked",
-        turn: this.getCurrentTurn(sessionId),
-        payload: {
-          toolName: normalizedToolName,
-          skill: skill?.name ?? null,
-          reason,
-          resolution: governanceSource,
-        },
-      });
-      return { allowed: false, reason };
-    }
-
-    if (!access.allowed) {
-      this.recordEvent({
-        sessionId,
-        type: "tool_call_blocked",
-        turn: this.getCurrentTurn(sessionId),
-        payload: {
-          toolName: normalizedToolName,
-          skill: skill?.name ?? null,
-          reason: access.reason ?? "Tool call blocked.",
-        },
-      });
-      return { allowed: false, reason: access.reason };
-    }
-
-    const repairAccess = this.explainRepairToolAccess(sessionId, normalizedToolName);
-    if (!repairAccess.allowed) {
-      this.recordEvent({
-        sessionId,
-        type: "tool_call_blocked",
-        turn: this.getCurrentTurn(sessionId),
-        payload: {
-          toolName: normalizedToolName,
-          skill: skill?.name ?? null,
-          reason: repairAccess.reason ?? "Tool call blocked by repair posture.",
-        },
-      });
-      return { allowed: false, reason: repairAccess.reason };
-    }
-
-    const budget = this.costTracker.getBudgetStatus(sessionId);
-    if (budget.blocked && !this.alwaysAllowedToolSet.has(normalizedToolName)) {
-      this.recordEvent({
-        sessionId,
-        type: "tool_call_blocked",
-        turn: this.getCurrentTurn(sessionId),
-        payload: {
-          toolName: normalizedToolName,
-          skill: skill?.name ?? null,
-          reason: budget.reason ?? "Session budget exceeded.",
-        },
-      });
-      return {
-        allowed: false,
-        reason: budget.reason ?? "Session budget exceeded.",
-      };
-    }
-
-    if (!skill) {
-      return access;
-    }
-
-    const effectiveBudget = this.getEffectiveBudget(sessionId, skill.contract, skill.name);
-
-    if (
-      this.securityPolicy.skillMaxTokensMode !== "off" &&
-      !this.alwaysAllowedToolSet.has(normalizedToolName)
-    ) {
-      const maxTokens = effectiveBudget?.maxTokens;
-      if (typeof maxTokens === "number") {
-        const usedTokens = this.costTracker.getSkillTotalTokens(sessionId, skill.name);
-        if (usedTokens >= maxTokens) {
-          const reason = `Skill '${skill.name}' exceeded maxTokens=${maxTokens} (used=${usedTokens}).`;
-          if (this.securityPolicy.skillMaxTokensMode === "warn") {
-            const key = `maxTokens:${skill.name}`;
-            const seen = state.skillBudgetWarnings;
-            if (!seen.has(key)) {
-              seen.add(key);
-              this.recordEvent({
-                sessionId,
-                type: "skill_budget_warning",
-                turn: this.getCurrentTurn(sessionId),
-                payload: {
-                  skill: skill.name,
-                  usedTokens,
-                  maxTokens,
-                  budget: "tokens",
-                  mode: this.securityPolicy.skillMaxTokensMode,
-                },
-              });
-            }
-          } else if (this.securityPolicy.skillMaxTokensMode === "enforce") {
-            this.recordEvent({
-              sessionId,
-              type: "tool_call_blocked",
-              turn: this.getCurrentTurn(sessionId),
-              payload: {
-                toolName: normalizedToolName,
-                skill: skill.name,
-                reason,
-              },
-            });
-            return { allowed: false, reason };
-          }
-        }
-      }
-    }
-
-    if (
-      this.securityPolicy.skillMaxToolCallsMode !== "off" &&
-      !this.alwaysAllowedToolSet.has(normalizedToolName)
-    ) {
-      const maxToolCalls = effectiveBudget?.maxToolCalls;
-      if (typeof maxToolCalls === "number") {
-        const usedCalls = state.toolCalls;
-        if (usedCalls >= maxToolCalls) {
-          const reason = `Skill '${skill.name}' exceeded maxToolCalls=${maxToolCalls} (used=${usedCalls}).`;
-          if (this.securityPolicy.skillMaxToolCallsMode === "warn") {
-            const key = `maxToolCalls:${skill.name}`;
-            const seen = state.skillBudgetWarnings;
-            if (!seen.has(key)) {
-              seen.add(key);
-              this.recordEvent({
-                sessionId,
-                type: "skill_budget_warning",
-                turn: this.getCurrentTurn(sessionId),
-                payload: {
-                  skill: skill.name,
-                  usedToolCalls: usedCalls,
-                  maxToolCalls,
-                  budget: "tool_calls",
-                  mode: this.securityPolicy.skillMaxToolCallsMode,
-                },
-              });
-            }
-          } else if (this.securityPolicy.skillMaxToolCallsMode === "enforce") {
-            this.recordEvent({
-              sessionId,
-              type: "tool_call_blocked",
-              turn: this.getCurrentTurn(sessionId),
-              payload: {
-                toolName: normalizedToolName,
-                skill: skill.name,
-                reason,
-              },
-            });
-            return { allowed: false, reason };
-          }
-        }
-      }
-    }
-
-    return access;
+    return this.checkToolAccessPolicy(sessionId, toolName, args);
   }
 
   explainToolAccess(sessionId: string, toolName: string): ToolAccessExplanation {
@@ -479,96 +159,14 @@ export class ToolGateService {
     args?: Record<string, unknown>,
     cwd?: string,
   ): ToolAccessExplanation {
-    const { state, skill, normalizedToolName, authority, access } = this.buildAccessContext(
-      sessionId,
-      toolName,
-      args,
-    );
-    if (normalizedToolName === "bash" || normalizedToolName === "shell") {
-      return {
-        allowed: false,
-        reason: `Tool '${normalizedToolName}' has been removed. Use 'exec' with 'process' for command execution.`,
-      };
-    }
-
+    const access = this.explainToolAccessPolicy(sessionId, toolName, args);
     if (!access.allowed) {
-      return { allowed: false, reason: access.reason };
-    }
-
-    if (
-      authority.boundary === "effectful" &&
-      authority.source !== "exact" &&
-      authority.source !== "registry"
-    ) {
-      return {
-        allowed: false,
-        reason: `Effectful tool '${normalizedToolName}' requires an exact governance descriptor.`,
-      };
-    }
-
-    const repairAccess = this.explainRepairToolAccess(sessionId, normalizedToolName);
-    if (!repairAccess.allowed) {
-      return repairAccess;
+      return access;
     }
 
     const boundary = this.evaluateBoundaryPolicy(sessionId, toolName, args, cwd);
     if (!boundary.allowed) {
       return boundary;
-    }
-
-    const budget = this.costTracker.getBudgetStatus(sessionId);
-    if (budget.blocked && !this.alwaysAllowedToolSet.has(normalizedToolName)) {
-      return {
-        allowed: false,
-        reason: budget.reason ?? "Session budget exceeded.",
-      };
-    }
-
-    if (!skill) {
-      return {
-        allowed: true,
-        warning: access.warning,
-      };
-    }
-
-    const effectiveBudget = this.getEffectiveBudget(sessionId, skill.contract, skill.name);
-
-    if (
-      this.securityPolicy.skillMaxTokensMode !== "off" &&
-      !this.alwaysAllowedToolSet.has(normalizedToolName)
-    ) {
-      const maxTokens = effectiveBudget?.maxTokens;
-      if (typeof maxTokens === "number") {
-        const usedTokens = this.costTracker.getSkillTotalTokens(sessionId, skill.name);
-        if (usedTokens >= maxTokens) {
-          const reason = `Skill '${skill.name}' exceeded maxTokens=${maxTokens} (used=${usedTokens}).`;
-          if (this.securityPolicy.skillMaxTokensMode === "enforce") {
-            return { allowed: false, reason };
-          }
-          if (this.securityPolicy.skillMaxTokensMode === "warn") {
-            return { allowed: true, warning: reason };
-          }
-        }
-      }
-    }
-
-    if (
-      this.securityPolicy.skillMaxToolCallsMode !== "off" &&
-      !this.alwaysAllowedToolSet.has(normalizedToolName)
-    ) {
-      const maxToolCalls = effectiveBudget?.maxToolCalls;
-      if (typeof maxToolCalls === "number") {
-        const usedCalls = state.toolCalls;
-        if (usedCalls >= maxToolCalls) {
-          const reason = `Skill '${skill.name}' exceeded maxToolCalls=${maxToolCalls} (used=${usedCalls}).`;
-          if (this.securityPolicy.skillMaxToolCallsMode === "enforce") {
-            return { allowed: false, reason };
-          }
-          if (this.securityPolicy.skillMaxToolCallsMode === "warn") {
-            return { allowed: true, warning: reason };
-          }
-        }
-      }
     }
 
     return {
@@ -613,10 +211,12 @@ export class ToolGateService {
   private checkCallDeduplication(input: StartToolCallInput): ToolAccessDecision {
     const config = this.securityConfig.loopDetection.exactCall;
     const normalizedToolName = normalizeToolName(input.toolName);
-    if (!config.enabled || this.alwaysAllowedToolSet.has(normalizedToolName)) {
+    if (!config.enabled) {
       return { allowed: true };
     }
-    if (config.exemptTools.includes(normalizedToolName)) {
+    if (
+      config.exemptTools.map((toolName) => normalizeToolName(toolName)).includes(normalizedToolName)
+    ) {
       return { allowed: true };
     }
 
@@ -933,10 +533,6 @@ export class ToolGateService {
     const state = this.sessionState.getCell(input.sessionId);
     const requestedEffectCommitmentRequestId = input.effectCommitmentRequestId?.trim();
 
-    if (input.usage) {
-      this.observeContextUsage(input.sessionId, input.usage);
-    }
-
     const effectGateEvent =
       boundary === "effectful"
         ? this.recordEvent({
@@ -1070,7 +666,7 @@ export class ToolGateService {
     effectGateEvent: BrewvaEventRecord | undefined,
   ): ToolAccessDecision {
     const boundary = authority.boundary;
-    const access = this.checkToolAccess(input.sessionId, input.toolName, input.args);
+    const access = this.checkToolAccessPolicy(input.sessionId, input.toolName, input.args);
     if (!access.allowed) {
       return {
         ...access,
@@ -1107,18 +703,6 @@ export class ToolGateService {
       });
       return {
         ...boundaryDecision,
-        boundary,
-      };
-    }
-
-    const compaction = this.checkContextCompactionGate(
-      input.sessionId,
-      input.toolName,
-      input.usage,
-    );
-    if (!compaction.allowed) {
-      return {
-        ...compaction,
         boundary,
       };
     }

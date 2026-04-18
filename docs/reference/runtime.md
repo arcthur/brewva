@@ -38,6 +38,26 @@ Runtime boundary note:
 - Pi compatibility remains import/export oriented and does not justify
   reintroducing runtime-path dependency on `Pi`
 
+## Current Transaction Boundary
+
+The current stable authority-bearing transaction boundary is
+`single tool-call granularity`.
+
+Runtime guarantees durable semantics for one tool call at a time:
+
+- classify the call
+- authorize, defer, or deny it
+- resume exact approval-bearing calls by request id and digest
+- record durable linked outcomes
+- roll back the latest mutation or patch set when the effect model supports a
+  rollback receipt
+
+The runtime does not currently expose a stable public contract for cross-agent
+saga semantics, generalized compensation graphs, or broader all-or-nothing
+control-plane transactions. Hosted orchestration, scheduler triggers, and
+delegated runs remain control-plane behavior over kernel receipts rather than a
+second transaction kernel.
+
 ## Stable Root Shape
 
 ```ts
@@ -365,6 +385,11 @@ This surface is the metadata truth for primary context providers. Hosted
 from these descriptors rather than from duplicated static tables or hand-kept
 source lists.
 
+`reservedBudgetRatio` is provider-admission metadata. Runtime-owned recovery
+inspection, including history-view baseline reconstruction, uses its own
+kernel constant rather than dynamically deriving the reserved budget from the
+mutable provider registry.
+
 ### `inspect.tools`
 
 - `checkAccess(sessionId, toolName, args?)`
@@ -686,7 +711,10 @@ Tool consumers receive:
 
 They do not receive `maintain` by default.
 
-This is the stable public minimum for tool-facing runtime access.
+This is the stable public minimum shape for tool-facing runtime access.
+Repo-owned managed tools then execute through a capability-scoped facade
+derived from their declared `requiredCapabilities`; undeclared `authority.*`,
+`inspect.*`, and injected `internal.*` method calls fail closed.
 
 Repo-owned bundled tools that need runtime-owned telemetry, credential
 resolution, supplemental injection, or similar implementation-side hooks do not

@@ -73,6 +73,74 @@ describe("recovery context baseline integration", () => {
     );
   });
 
+  test("inspect baseline budgeting stays pinned to the runtime constant even if provider descriptors drift", () => {
+    const config = createConfig();
+    setStaticContextInjectionBudget(config, 200);
+    const runtime = new BrewvaRuntime({
+      cwd: createTestWorkspace("recovery-context-baseline-budget-constant"),
+      config,
+    });
+    const sessionId = "recovery-context-baseline-budget-constant";
+
+    expect(runtime.maintain.context.unregisterProvider(CONTEXT_SOURCES.historyViewBaseline)).toBe(
+      true,
+    );
+    runtime.maintain.context.registerProvider({
+      source: CONTEXT_SOURCES.historyViewBaseline,
+      plane: "history_view",
+      admissionLane: "primary_registry",
+      category: "narrative",
+      budgetClass: "core",
+      collectionOrder: 14,
+      selectionPriority: 14,
+      readsFrom: ["readModel.historyViewBaseline"],
+      continuityCritical: true,
+      profileSelectable: true,
+      preservationPolicy: "non_truncatable",
+      reservedBudgetRatio: 1,
+      collect() {},
+    });
+
+    recordRuntimeEvent(runtime, {
+      sessionId,
+      turn: 1,
+      type: "turn_input_recorded",
+      payload: {
+        turnId: "turn-1",
+        trigger: "user_submit",
+        promptText: "x".repeat(80),
+      } as Record<string, unknown>,
+    });
+    recordRuntimeEvent(runtime, {
+      sessionId,
+      turn: 1,
+      type: "turn_render_committed",
+      payload: {
+        turnId: "turn-1",
+        attemptId: "attempt-1",
+        status: "completed",
+        assistantText: "y".repeat(80),
+        toolOutputs: [],
+      } as Record<string, unknown>,
+    });
+
+    expect(runtime.inspect.context.listProviders()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          source: CONTEXT_SOURCES.historyViewBaseline,
+          reservedBudgetRatio: 1,
+        }),
+      ]),
+    );
+    expect(runtime.inspect.context.getHistoryViewBaseline(sessionId)).toBeUndefined();
+    expect(runtime.inspect.recovery.getPosture(sessionId)).toEqual(
+      expect.objectContaining({
+        mode: "diagnostic_only",
+        degradedReason: "exact_history_over_budget",
+      }),
+    );
+  });
+
   test("admits history-view baseline and recovery working-set through normal injection ordering", async () => {
     const runtime = new BrewvaRuntime({
       cwd: createTestWorkspace("recovery-context-baseline-ordering"),

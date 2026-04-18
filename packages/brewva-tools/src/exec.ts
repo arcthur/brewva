@@ -30,8 +30,8 @@ import {
 import { isPathInsideRoots, resolveToolTargetScope } from "./target-scope.js";
 import type { BrewvaBundledToolRuntime } from "./types.js";
 import { textResult, withVerdict } from "./utils/result.js";
+import { createRuntimeBoundBrewvaToolFactory } from "./utils/runtime-bound-tool.js";
 import { getSessionId } from "./utils/session.js";
-import { defineBrewvaTool } from "./utils/tool.js";
 
 const ExecSchema = Type.Object({
   command: Type.String({ minLength: 1 }),
@@ -733,143 +733,204 @@ async function executeSandboxCommand(input: {
 }
 
 export function createExecTool(options?: ExecToolOptions): ToolDefinition {
-  return defineBrewvaTool({
-    name: "exec",
-    label: "Exec",
-    description:
-      "Execute shell commands with optional background continuation. Pair with process tool for list/poll/log/kill.",
-    promptSnippet:
-      "Run a bounded shell command when real workspace execution or verification is required.",
-    promptGuidelines: [
-      "Prefer read-only inspection before mutation or long-running execution.",
-      "Use explicit workdir and bounded output for broad commands.",
-      "After mutating commands, collect verification evidence before concluding.",
-    ],
-    parameters: ExecSchema,
-    async execute(toolCallId, params, signal, _onUpdate, ctx) {
-      const ownerSessionId = getSessionId(ctx);
-      const targetScope = resolveToolTargetScope(options?.runtime, ctx);
-      const baseCwd = targetScope.baseCwd;
-      const command = normalizeCommand(params.command);
-      if (!command) {
-        return textResult(
-          "Exec rejected (missing_command).",
-          withVerdict({ status: "failed" }, "fail"),
+  const execTool = createRuntimeBoundBrewvaToolFactory(options?.runtime, "exec");
+  const runtime = execTool.runtime;
+  return execTool.define(
+    {
+      name: "exec",
+      label: "Exec",
+      description:
+        "Execute shell commands with optional background continuation. Pair with process tool for list/poll/log/kill.",
+      promptSnippet:
+        "Run a bounded shell command when real workspace execution or verification is required.",
+      promptGuidelines: [
+        "Prefer read-only inspection before mutation or long-running execution.",
+        "Use explicit workdir and bounded output for broad commands.",
+        "After mutating commands, collect verification evidence before concluding.",
+      ],
+      parameters: ExecSchema,
+      async execute(toolCallId, params, signal, _onUpdate, ctx) {
+        const ownerSessionId = getSessionId(ctx);
+        const targetScope = resolveToolTargetScope(runtime, ctx);
+        const baseCwd = targetScope.baseCwd;
+        const command = normalizeCommand(params.command);
+        if (!command) {
+          return textResult(
+            "Exec rejected (missing_command).",
+            withVerdict({ status: "failed" }, "fail"),
+          );
+        }
+
+        const requestedWorkdir = normalizeOptionalString(params.workdir);
+        const hostCwd = resolveWorkdir(baseCwd, requestedWorkdir);
+        if (!isPathInsideRoots(hostCwd, targetScope.allowedRoots)) {
+          return textResult(
+            `Exec rejected (workdir_outside_target): ${hostCwd}`,
+            withVerdict(
+              {
+                status: "failed",
+                reason: "workdir_outside_target",
+                requestedCwd: hostCwd,
+                allowedRoots: targetScope.allowedRoots,
+              },
+              "fail",
+            ),
+          );
+        }
+        const sandboxRequestedCwd = requestedWorkdir ? hostCwd : undefined;
+        const boundEnv = resolveToolRuntimeCredentialBindings(runtime, ownerSessionId, "exec");
+        const requestedEnv =
+          params.env || Object.keys(boundEnv).length > 0
+            ? {
+                ...params.env,
+                ...boundEnv,
+              }
+            : undefined;
+        const requestedEnvKeys = Object.keys(requestedEnv ?? {});
+        const hostEnv = requestedEnv ? { ...process.env, ...requestedEnv } : process.env;
+        const timeoutSec = resolveTimeoutSec(params);
+        const background = params.background === true;
+        const yieldMs = background ? 0 : resolveYieldMs(params);
+
+        const policy = resolveExecutionPolicy(
+          runtime,
+          resolveToolRuntimeSandboxApiKey(runtime, ownerSessionId),
         );
-      }
-
-      const requestedWorkdir = normalizeOptionalString(params.workdir);
-      const hostCwd = resolveWorkdir(baseCwd, requestedWorkdir);
-      if (!isPathInsideRoots(hostCwd, targetScope.allowedRoots)) {
-        return textResult(
-          `Exec rejected (workdir_outside_target): ${hostCwd}`,
-          withVerdict(
-            {
-              status: "failed",
-              reason: "workdir_outside_target",
-              requestedCwd: hostCwd,
-              allowedRoots: targetScope.allowedRoots,
-            },
-            "fail",
-          ),
-        );
-      }
-      const sandboxRequestedCwd = requestedWorkdir ? hostCwd : undefined;
-      const boundEnv = resolveToolRuntimeCredentialBindings(
-        options?.runtime,
-        ownerSessionId,
-        "exec",
-      );
-      const requestedEnv =
-        params.env || Object.keys(boundEnv).length > 0
-          ? {
-              ...params.env,
-              ...boundEnv,
-            }
-          : undefined;
-      const requestedEnvKeys = Object.keys(requestedEnv ?? {});
-      const hostEnv = requestedEnv ? { ...process.env, ...requestedEnv } : process.env;
-      const timeoutSec = resolveTimeoutSec(params);
-      const background = params.background === true;
-      const yieldMs = background ? 0 : resolveYieldMs(params);
-
-      const policy = resolveExecutionPolicy(
-        options?.runtime,
-        resolveToolRuntimeSandboxApiKey(options?.runtime, ownerSessionId),
-      );
-      const boundaryClassification = classifyToolBoundaryRequest({
-        toolName: "exec",
-        args: params as Record<string, unknown>,
-        cwd: baseCwd,
-        workspaceRoot: options?.runtime?.workspaceRoot,
-      });
-      const primaryTokens = boundaryClassification.detectedCommands;
-      const misroutedToolName = resolveMisroutedToolName(primaryTokens);
-      if (misroutedToolName) {
-        const reason = `Command '${misroutedToolName}' is a Brewva tool name. Call tool '${misroutedToolName}' directly instead of using exec.`;
-        recordExecEvent(
-          options?.runtime,
-          ownerSessionId,
-          EXEC_BLOCKED_ISOLATION_EVENT_TYPE,
-          buildExecAuditPayload({
-            toolCallId,
-            policy,
-            command,
-            payload: {
-              detectedCommands: primaryTokens,
-              reason,
-              blockedAsToolNameMisroute: true,
-              suggestedTool: misroutedToolName,
-            },
-          }),
-        );
-        throw new Error(`exec_blocked_isolation: ${reason}`);
-      }
-
-      const boundaryDecision = evaluateBoundaryClassification(
-        policy.boundaryPolicy,
-        boundaryClassification,
-      );
-      if (!boundaryDecision.allowed) {
-        const deniedCommand = primaryTokens.find((token) => policy.commandDenyList.has(token));
-        recordExecEvent(
-          options?.runtime,
-          ownerSessionId,
-          EXEC_BLOCKED_ISOLATION_EVENT_TYPE,
-          buildExecAuditPayload({
-            toolCallId,
-            policy,
-            command,
-            payload: {
-              detectedCommands: primaryTokens,
-              deniedCommand,
-              requestedCwd: boundaryClassification.requestedCwd ?? null,
-              targetHosts: boundaryClassification.targetHosts.map((target) => target.host),
-              reason: boundaryDecision.reason,
-              denyListPolicy: deniedCommand ? DENY_LIST_BEST_EFFORT_MESSAGE : undefined,
-            },
-          }),
-        );
-        throw new Error(`exec_blocked_isolation: ${boundaryDecision.reason}`);
-      }
-
-      const preferredBackend = policy.backend;
-
-      const runHost = async () =>
-        executeHostCommand({
-          ownerSessionId,
-          command,
-          cwd: hostCwd,
-          env: hostEnv,
-          timeoutSec,
-          background,
-          yieldMs,
-          signal,
+        const boundaryClassification = classifyToolBoundaryRequest({
+          toolName: "exec",
+          args: params as Record<string, unknown>,
+          cwd: baseCwd,
+          workspaceRoot: runtime?.workspaceRoot,
         });
+        const primaryTokens = boundaryClassification.detectedCommands;
+        const misroutedToolName = resolveMisroutedToolName(primaryTokens);
+        if (misroutedToolName) {
+          const reason = `Command '${misroutedToolName}' is a Brewva tool name. Call tool '${misroutedToolName}' directly instead of using exec.`;
+          recordExecEvent(
+            runtime,
+            ownerSessionId,
+            EXEC_BLOCKED_ISOLATION_EVENT_TYPE,
+            buildExecAuditPayload({
+              toolCallId,
+              policy,
+              command,
+              payload: {
+                detectedCommands: primaryTokens,
+                reason,
+                blockedAsToolNameMisroute: true,
+                suggestedTool: misroutedToolName,
+              },
+            }),
+          );
+          throw new Error(`exec_blocked_isolation: ${reason}`);
+        }
 
-      if (preferredBackend === "host") {
+        const boundaryDecision = evaluateBoundaryClassification(
+          policy.boundaryPolicy,
+          boundaryClassification,
+        );
+        if (!boundaryDecision.allowed) {
+          const deniedCommand = primaryTokens.find((token) => policy.commandDenyList.has(token));
+          recordExecEvent(
+            runtime,
+            ownerSessionId,
+            EXEC_BLOCKED_ISOLATION_EVENT_TYPE,
+            buildExecAuditPayload({
+              toolCallId,
+              policy,
+              command,
+              payload: {
+                detectedCommands: primaryTokens,
+                deniedCommand,
+                requestedCwd: boundaryClassification.requestedCwd ?? null,
+                targetHosts: boundaryClassification.targetHosts.map((target) => target.host),
+                reason: boundaryDecision.reason,
+                denyListPolicy: deniedCommand ? DENY_LIST_BEST_EFFORT_MESSAGE : undefined,
+              },
+            }),
+          );
+          throw new Error(`exec_blocked_isolation: ${boundaryDecision.reason}`);
+        }
+
+        const preferredBackend = policy.backend;
+
+        const runHost = async () =>
+          executeHostCommand({
+            ownerSessionId,
+            command,
+            cwd: hostCwd,
+            env: hostEnv,
+            timeoutSec,
+            background,
+            yieldMs,
+            signal,
+          });
+
+        if (preferredBackend === "host") {
+          recordExecEvent(
+            runtime,
+            ownerSessionId,
+            EXEC_ROUTED_EVENT_TYPE,
+            buildExecAuditPayload({
+              toolCallId,
+              policy,
+              command,
+              payload: {
+                resolvedBackend: preferredBackend,
+                fallbackToHost: policy.allowHostFallback,
+                requestedCwd: sandboxRequestedCwd,
+                effectiveSandboxCwd: sandboxRequestedCwd ?? DEFAULT_SANDBOX_WORKDIR,
+                requestedEnvKeys,
+                requestedTimeoutSec: timeoutSec,
+                sandboxDefaultTimeoutSec: policy.sandbox.timeout,
+              },
+            }),
+          );
+          return await runHost();
+        }
+
+        if (policy.allowHostFallback) {
+          const now = Date.now();
+          const sessionPinRemainingMs = getSandboxSessionPinRemainingMs(ownerSessionId, now);
+          if (sessionPinRemainingMs > 0) {
+            recordExecEvent(
+              runtime,
+              ownerSessionId,
+              EXEC_FALLBACK_HOST_EVENT_TYPE,
+              buildExecAuditPayload({
+                toolCallId,
+                policy,
+                command,
+                payload: {
+                  reason: "sandbox_unavailable_session_pinned",
+                  sessionPinMsRemaining: sessionPinRemainingMs,
+                },
+              }),
+            );
+            return await runHost();
+          }
+          const backoffMsRemaining = getRemainingSandboxBackoffMs(policy, now);
+          if (backoffMsRemaining > 0) {
+            recordExecEvent(
+              runtime,
+              ownerSessionId,
+              EXEC_FALLBACK_HOST_EVENT_TYPE,
+              buildExecAuditPayload({
+                toolCallId,
+                policy,
+                command,
+                payload: {
+                  reason: "sandbox_unavailable_cached",
+                  backoffMsRemaining,
+                },
+              }),
+            );
+            return await runHost();
+          }
+        }
+
         recordExecEvent(
-          options?.runtime,
+          runtime,
           ownerSessionId,
           EXEC_ROUTED_EVENT_TYPE,
           buildExecAuditPayload({
@@ -887,76 +948,28 @@ export function createExecTool(options?: ExecToolOptions): ToolDefinition {
             },
           }),
         );
-        return await runHost();
-      }
 
-      if (policy.allowHostFallback) {
-        const now = Date.now();
-        const sessionPinRemainingMs = getSandboxSessionPinRemainingMs(ownerSessionId, now);
-        if (sessionPinRemainingMs > 0) {
-          recordExecEvent(
-            options?.runtime,
-            ownerSessionId,
-            EXEC_FALLBACK_HOST_EVENT_TYPE,
-            buildExecAuditPayload({
-              toolCallId,
-              policy,
-              command,
-              payload: {
-                reason: "sandbox_unavailable_session_pinned",
-                sessionPinMsRemaining: sessionPinRemainingMs,
-              },
-            }),
-          );
-          return await runHost();
-        }
-        const backoffMsRemaining = getRemainingSandboxBackoffMs(policy, now);
-        if (backoffMsRemaining > 0) {
-          recordExecEvent(
-            options?.runtime,
-            ownerSessionId,
-            EXEC_FALLBACK_HOST_EVENT_TYPE,
-            buildExecAuditPayload({
-              toolCallId,
-              policy,
-              command,
-              payload: {
-                reason: "sandbox_unavailable_cached",
-                backoffMsRemaining,
-              },
-            }),
-          );
-          return await runHost();
-        }
-      }
+        if (background) {
+          const reason = "sandbox backend does not support background process mode";
+          if (policy.allowHostFallback) {
+            recordExecEvent(
+              runtime,
+              ownerSessionId,
+              EXEC_FALLBACK_HOST_EVENT_TYPE,
+              buildExecAuditPayload({
+                toolCallId,
+                policy,
+                command,
+                payload: { reason },
+              }),
+            );
+            return await runHost();
+          }
 
-      recordExecEvent(
-        options?.runtime,
-        ownerSessionId,
-        EXEC_ROUTED_EVENT_TYPE,
-        buildExecAuditPayload({
-          toolCallId,
-          policy,
-          command,
-          payload: {
-            resolvedBackend: preferredBackend,
-            fallbackToHost: policy.allowHostFallback,
-            requestedCwd: sandboxRequestedCwd,
-            effectiveSandboxCwd: sandboxRequestedCwd ?? DEFAULT_SANDBOX_WORKDIR,
-            requestedEnvKeys,
-            requestedTimeoutSec: timeoutSec,
-            sandboxDefaultTimeoutSec: policy.sandbox.timeout,
-          },
-        }),
-      );
-
-      if (background) {
-        const reason = "sandbox backend does not support background process mode";
-        if (policy.allowHostFallback) {
           recordExecEvent(
-            options?.runtime,
+            runtime,
             ownerSessionId,
-            EXEC_FALLBACK_HOST_EVENT_TYPE,
+            EXEC_BLOCKED_ISOLATION_EVENT_TYPE,
             buildExecAuditPayload({
               toolCallId,
               policy,
@@ -964,81 +977,91 @@ export function createExecTool(options?: ExecToolOptions): ToolDefinition {
               payload: { reason },
             }),
           );
-          return await runHost();
+          throw new Error(`exec_blocked_isolation: ${reason}`);
         }
 
-        recordExecEvent(
-          options?.runtime,
-          ownerSessionId,
-          EXEC_BLOCKED_ISOLATION_EVENT_TYPE,
-          buildExecAuditPayload({
-            toolCallId,
-            policy,
+        try {
+          const startedAt = Date.now();
+          const result = await executeSandboxCommand({
             command,
-            payload: { reason },
-          }),
-        );
-        throw new Error(`exec_blocked_isolation: ${reason}`);
-      }
-
-      try {
-        const startedAt = Date.now();
-        const result = await executeSandboxCommand({
-          command,
-          policy,
-          requestedCwd: sandboxRequestedCwd,
-          requestedEnv,
-          requestedTimeoutSec: timeoutSec,
-          signal,
-        });
-        clearSandboxBackoff(policy);
-        clearSandboxSessionFailureState(ownerSessionId);
-        return textResult(result.output, {
-          status: "completed",
-          exitCode: result.exitCode,
-          durationMs: Date.now() - startedAt,
-          cwd: result.effectiveCwd,
-          command,
-          backend: "sandbox",
-          requestedCwd: result.requestedCwd,
-          requestedEnvKeys: result.requestedEnvKeys,
-          appliedEnvKeys: result.appliedEnvKeys,
-          droppedEnvKeys: result.droppedEnvKeys,
-          timeoutSec: result.timeoutSec,
-        });
-      } catch (error) {
-        if (error instanceof SandboxCommandFailedError) {
-          throw new Error(error.message, { cause: error });
-        }
-        if (isSandboxAbortedError(error) || signal?.aborted) {
-          throw error;
-        }
-
-        const message = error instanceof Error ? error.message : String(error);
-        const now = Date.now();
-        const backoffUntil = policy.allowHostFallback ? markSandboxBackoff(policy, now) : null;
-        const sessionPin = policy.allowHostFallback
-          ? noteSandboxSessionFailure(ownerSessionId, now)
-          : { pinned: false };
-        recordExecEvent(
-          options?.runtime,
-          ownerSessionId,
-          EXEC_SANDBOX_ERROR_EVENT_TYPE,
-          buildExecAuditPayload({
-            toolCallId,
             policy,
+            requestedCwd: sandboxRequestedCwd,
+            requestedEnv,
+            requestedTimeoutSec: timeoutSec,
+            signal,
+          });
+          clearSandboxBackoff(policy);
+          clearSandboxSessionFailureState(ownerSessionId);
+          return textResult(result.output, {
+            status: "completed",
+            exitCode: result.exitCode,
+            durationMs: Date.now() - startedAt,
+            cwd: result.effectiveCwd,
             command,
-            payload: {
-              error: message,
-            },
-          }),
-        );
+            backend: "sandbox",
+            requestedCwd: result.requestedCwd,
+            requestedEnvKeys: result.requestedEnvKeys,
+            appliedEnvKeys: result.appliedEnvKeys,
+            droppedEnvKeys: result.droppedEnvKeys,
+            timeoutSec: result.timeoutSec,
+          });
+        } catch (error) {
+          if (error instanceof SandboxCommandFailedError) {
+            throw new Error(error.message, { cause: error });
+          }
+          if (isSandboxAbortedError(error) || signal?.aborted) {
+            throw error;
+          }
 
-        if (policy.allowHostFallback) {
+          const message = error instanceof Error ? error.message : String(error);
+          const now = Date.now();
+          const backoffUntil = policy.allowHostFallback ? markSandboxBackoff(policy, now) : null;
+          const sessionPin = policy.allowHostFallback
+            ? noteSandboxSessionFailure(ownerSessionId, now)
+            : { pinned: false };
           recordExecEvent(
-            options?.runtime,
+            runtime,
             ownerSessionId,
-            EXEC_FALLBACK_HOST_EVENT_TYPE,
+            EXEC_SANDBOX_ERROR_EVENT_TYPE,
+            buildExecAuditPayload({
+              toolCallId,
+              policy,
+              command,
+              payload: {
+                error: message,
+              },
+            }),
+          );
+
+          if (policy.allowHostFallback) {
+            recordExecEvent(
+              runtime,
+              ownerSessionId,
+              EXEC_FALLBACK_HOST_EVENT_TYPE,
+              buildExecAuditPayload({
+                toolCallId,
+                policy,
+                command,
+                payload: {
+                  reason: "sandbox_execution_error",
+                  error: message,
+                  backoffMs: SANDBOX_FAILURE_BACKOFF_MS,
+                  backoffUntil,
+                  sessionPinnedUntil: sessionPin.until,
+                  sessionPinTtlMs:
+                    sessionPin.pinned && typeof sessionPin.until === "number"
+                      ? Math.max(0, sessionPin.until - now)
+                      : undefined,
+                },
+              }),
+            );
+            return await runHost();
+          }
+
+          recordExecEvent(
+            runtime,
+            ownerSessionId,
+            EXEC_BLOCKED_ISOLATION_EVENT_TYPE,
             buildExecAuditPayload({
               toolCallId,
               policy,
@@ -1046,35 +1069,20 @@ export function createExecTool(options?: ExecToolOptions): ToolDefinition {
               payload: {
                 reason: "sandbox_execution_error",
                 error: message,
-                backoffMs: SANDBOX_FAILURE_BACKOFF_MS,
-                backoffUntil,
-                sessionPinnedUntil: sessionPin.until,
-                sessionPinTtlMs:
-                  sessionPin.pinned && typeof sessionPin.until === "number"
-                    ? Math.max(0, sessionPin.until - now)
-                    : undefined,
               },
             }),
           );
-          return await runHost();
+          throw new Error(`exec_blocked_isolation: ${message}`, { cause: error });
         }
-
-        recordExecEvent(
-          options?.runtime,
-          ownerSessionId,
-          EXEC_BLOCKED_ISOLATION_EVENT_TYPE,
-          buildExecAuditPayload({
-            toolCallId,
-            policy,
-            command,
-            payload: {
-              reason: "sandbox_execution_error",
-              error: message,
-            },
-          }),
-        );
-        throw new Error(`exec_blocked_isolation: ${message}`, { cause: error });
-      }
+      },
     },
-  });
+    {
+      requiredCapabilities: [
+        "inspect.task.getTargetDescriptor",
+        "internal.recordEvent",
+        "internal.resolveCredentialBindings",
+        "internal.resolveSandboxApiKey",
+      ],
+    },
+  );
 }

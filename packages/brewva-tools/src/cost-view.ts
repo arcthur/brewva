@@ -4,8 +4,8 @@ import { Type } from "@sinclair/typebox";
 import { formatISO } from "date-fns";
 import type { BrewvaToolOptions } from "./types.js";
 import { textResult } from "./utils/result.js";
+import { createRuntimeBoundBrewvaToolFactory } from "./utils/runtime-bound-tool.js";
 import { getSessionId } from "./utils/session.js";
-import { defineBrewvaTool } from "./utils/tool.js";
 
 function formatTopRows<T>(
   rows: Array<[string, T]>,
@@ -63,7 +63,8 @@ export function formatCostViewText(summary: SessionCostSummary, top: number): st
 }
 
 export function createCostViewTool(options: BrewvaToolOptions): ToolDefinition {
-  return defineBrewvaTool({
+  const costViewTool = createRuntimeBoundBrewvaToolFactory(options.runtime, "cost_view");
+  return costViewTool.define({
     name: "cost_view",
     label: "Cost View",
     description: "Show session, skill, and tool cost breakdown with budget status.",
@@ -73,7 +74,7 @@ export function createCostViewTool(options: BrewvaToolOptions): ToolDefinition {
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const sessionId = getSessionId(ctx);
       const top = typeof params.top === "number" ? Math.max(1, Math.trunc(params.top)) : 5;
-      const summary = options.runtime.inspect.cost.getSummary(sessionId);
+      const summary = costViewTool.runtime.inspect.cost.getSummary(sessionId);
 
       return textResult(formatCostViewText(summary, top), {
         sessionId,

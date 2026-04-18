@@ -1,6 +1,4 @@
 import {
-  coerceReviewReportArtifact,
-  normalizePlanningArtifactSet,
   type SemanticArtifactSchemaId,
   type SkillConsumedOutputsView,
   type SkillNormalizedBlockingState,
@@ -9,6 +7,8 @@ import {
   type SkillOutputRecord,
   type SkillSemanticBindings,
 } from "../contracts/index.js";
+import { normalizePlanningArtifactSet } from "./planning-normalization.js";
+import { coerceReviewReportArtifact } from "./review-normalization.js";
 
 const SKILL_OUTPUT_NORMALIZER_VERSION = "skill-artifact-normalizer.v2";
 

@@ -17,7 +17,7 @@ import { resolveToolTargetScope } from "./target-scope.js";
 import type { BrewvaToolOptions } from "./types.js";
 import { buildStringEnumSchema } from "./utils/input-alias.js";
 import { failTextResult, inconclusiveTextResult, textResult } from "./utils/result.js";
-import { defineBrewvaTool } from "./utils/tool.js";
+import { createRuntimeBoundBrewvaToolFactory } from "./utils/runtime-bound-tool.js";
 
 const SOLUTION_STATUS_VALUES = ["active", "stale", "superseded"] as const;
 const MAINTENANCE_RECOMMENDATION_VALUES = [
@@ -166,7 +166,11 @@ function formatSweepText(input: {
 }
 
 export function createPrecedentSweepTool(options: BrewvaToolOptions): ToolDefinition {
-  return defineBrewvaTool({
+  const precedentSweepTool = createRuntimeBoundBrewvaToolFactory(
+    options.runtime,
+    "precedent_sweep",
+  );
+  return precedentSweepTool.define({
     name: "precedent_sweep",
     label: "Precedent Sweep",
     description:
@@ -186,7 +190,7 @@ export function createPrecedentSweepTool(options: BrewvaToolOptions): ToolDefini
       output_limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 200 })),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-      const scope = resolveToolTargetScope(options.runtime, ctx);
+      const scope = resolveToolTargetScope(precedentSweepTool.runtime, ctx);
       const solutionRoot = join(scope.primaryRoot, "docs", "solutions");
       const files = collectSolutionFiles(solutionRoot);
       if (files.length === 0) {

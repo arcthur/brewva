@@ -20,12 +20,16 @@ import {
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate";
 import { Type } from "@sinclair/typebox";
 import { recordToolRuntimeEvent } from "./runtime-internal.js";
-import { shouldInvokeSemanticRerank } from "./semantic-reranker.js";
 import type { BrewvaBundledToolOptions } from "./types.js";
 import { buildStringEnumSchema } from "./utils/input-alias.js";
+import {
+  readMemoryToolString,
+  rerankMemoryToolRetrievals,
+  resolveMemoryToolLimit,
+} from "./utils/memory-plane-tool.js";
 import { failTextResult, inconclusiveTextResult, textResult } from "./utils/result.js";
+import { createManagedBrewvaToolFactory } from "./utils/runtime-bound-tool.js";
 import { getSessionId } from "./utils/session.js";
-import { defineBrewvaTool } from "./utils/tool.js";
 
 const ACTION_VALUES = [
   "list",
@@ -45,12 +49,6 @@ const ClassSchema = buildStringEnumSchema(NARRATIVE_MEMORY_RECORD_CLASSES, {});
 const StatusSchema = buildStringEnumSchema(NARRATIVE_MEMORY_RECORD_STATUSES, {});
 const ScopeSchema = buildStringEnumSchema(NARRATIVE_MEMORY_SCOPE_VALUES, {});
 const ReviewDecisionSchema = buildStringEnumSchema(REVIEW_DECISION_VALUES, {});
-
-function readTrimmedString(value: unknown): string | undefined {
-  if (typeof value !== "string") return undefined;
-  const normalized = value.trim();
-  return normalized.length > 0 ? normalized : undefined;
-}
 
 function readRecordClass(
   value: unknown,
@@ -348,7 +346,8 @@ async function promoteRecordToAgentMemory(input: {
 }
 
 export function createNarrativeMemoryTool(options: BrewvaBundledToolOptions): ToolDefinition {
-  return defineBrewvaTool({
+  const narrativeMemoryTool = createManagedBrewvaToolFactory("narrative_memory");
+  return narrativeMemoryTool.define({
     name: "narrative_memory",
     label: "Narrative Memory",
     description:
@@ -383,9 +382,9 @@ export function createNarrativeMemoryTool(options: BrewvaBundledToolOptions): To
       const recordClass = readRecordClass(params.class);
       const status = readRecordStatus(params.status);
       const scope = readScope(params.scope);
-      const recordId = readTrimmedString(params.record_id);
-      const query = readTrimmedString(params.query);
-      const limit = Math.max(1, Math.min(20, params.limit ?? 10));
+      const recordId = readMemoryToolString(params.record_id);
+      const query = readMemoryToolString(params.query);
+      const limit = resolveMemoryToolLimit(params.limit);
       const targetRoots = options.runtime.inspect.task.getTargetDescriptor(sessionId).roots;
 
       if (params.action === "stats") {
@@ -464,35 +463,33 @@ export function createNarrativeMemoryTool(options: BrewvaBundledToolOptions): To
           })
           .filter((entry) => !recordClass || entry.record.class === recordClass)
           .filter((entry) => !scope || entry.record.applicabilityScope === scope);
-
         const oracle = options.runtime.semanticReranker;
-        if (
-          retrievals.length >= 3 &&
-          oracle?.rerankNarrativeMemory &&
-          shouldInvokeSemanticRerank(retrievals.map((entry) => entry.score))
-        ) {
-          const reranked = await oracle.rerankNarrativeMemory({
-            sessionId,
-            surface: "narrative_memory",
-            query,
-            targetRoots,
-            candidates: retrievals.map((entry) => ({
-              id: entry.record.id,
-              title: entry.record.title,
-              summary: entry.record.summary,
-              content: entry.record.content,
-              kind: entry.record.class,
-              scope: entry.record.applicabilityScope,
-            })),
-            stateRevision: String(plane.getState().updatedAt),
-          });
-          if (reranked) {
-            const byId = new Map(retrievals.map((entry) => [entry.record.id, entry] as const));
-            retrievals = reranked.orderedIds
-              .map((id) => byId.get(id))
-              .filter((entry): entry is (typeof retrievals)[number] => Boolean(entry));
-          }
-        }
+        const rerankNarrativeMemory = oracle?.rerankNarrativeMemory?.bind(oracle);
+
+        retrievals = await rerankMemoryToolRetrievals({
+          retrievals,
+          getId: (entry) => entry.record.id,
+          getScore: (entry) => entry.score,
+          toCandidate: (entry) => ({
+            id: entry.record.id,
+            title: entry.record.title,
+            summary: entry.record.summary,
+            content: entry.record.content,
+            kind: entry.record.class,
+            scope: entry.record.applicabilityScope,
+          }),
+          rerank: rerankNarrativeMemory
+            ? (candidates) =>
+                rerankNarrativeMemory({
+                  sessionId,
+                  surface: "narrative_memory",
+                  query,
+                  targetRoots,
+                  candidates,
+                  stateRevision: String(plane.getState().updatedAt),
+                })
+            : undefined,
+        });
 
         retrievals = retrievals.slice(0, limit);
         if (retrievals.length === 0) {
@@ -535,8 +532,8 @@ export function createNarrativeMemoryTool(options: BrewvaBundledToolOptions): To
             error: "missing_class",
           });
         }
-        const title = readTrimmedString(params.title);
-        const content = readTrimmedString(params.content);
+        const title = readMemoryToolString(params.title);
+        const content = readMemoryToolString(params.content);
         if (!title || !content) {
           return failTextResult("remember requires title and content.", {
             ok: false,
@@ -568,7 +565,7 @@ export function createNarrativeMemoryTool(options: BrewvaBundledToolOptions): To
             error: validation.code,
           });
         }
-        const summary = readTrimmedString(params.summary) ?? compactText(content, 180);
+        const summary = readMemoryToolString(params.summary) ?? compactText(content, 180);
         const record = plane.addRecord({
           class: recordClass,
           title,
@@ -810,7 +807,7 @@ export function createNarrativeMemoryTool(options: BrewvaBundledToolOptions): To
           status: record.status,
         });
       }
-      const targetAgentId = readTrimmedString(params.agent_id) ?? options.runtime.agentId;
+      const targetAgentId = readMemoryToolString(params.agent_id) ?? options.runtime.agentId;
       const promotion = await promoteRecordToAgentMemory({
         workspaceRoot: options.runtime.workspaceRoot,
         agentId: targetAgentId,

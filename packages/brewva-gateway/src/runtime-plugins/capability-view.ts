@@ -7,7 +7,9 @@ import {
 } from "@brewva/brewva-runtime";
 import {
   collectStringEnumContracts,
+  getBrewvaToolRequiredCapabilities,
   getBrewvaToolSurface,
+  type BrewvaToolRequiredCapability,
   type BrewvaToolSurface,
   type StringEnumContractEntry,
 } from "@brewva/brewva-tools";
@@ -33,6 +35,7 @@ interface CapabilityEntry {
   description: string;
   parameterKeys: string[];
   parameterDetails: CapabilityParameterDetail[];
+  requiredCapabilities: BrewvaToolRequiredCapability[];
   visible: boolean;
   governance: boolean;
   surface: CapabilitySurface;
@@ -106,6 +109,7 @@ export interface CapabilityDetail {
   description: string;
   parameterKeys: string[];
   parameterDetails: CapabilityParameterDetail[];
+  requiredCapabilities: BrewvaToolRequiredCapability[];
   surface: CapabilitySurface;
   boundary: ToolExecutionBoundary;
   effects: ToolEffectClass[];
@@ -340,6 +344,7 @@ function toCapabilityEntries(input: BuildCapabilityViewInput): CapabilityEntry[]
       description: tool.description.trim(),
       parameterKeys: extractParameterKeys(tool.parameters),
       parameterDetails,
+      requiredCapabilities: getBrewvaToolRequiredCapabilities(name),
       visible: activeToolNames.has(name),
       governance: GOVERNANCE_TOOL_NAMES.has(name),
       surface: resolveCapabilitySurface(name),
@@ -406,6 +411,9 @@ function formatFullDetailBlock(detail: CapabilityDetail): string {
     `[CapabilityDetail:$${detail.name}]`,
     `description: ${description}`,
     `parameters: ${parameters}`,
+    `required_capabilities: ${
+      detail.requiredCapabilities.length > 0 ? detail.requiredCapabilities.join(", ") : "(none)"
+    }`,
     `surface: ${detail.surface}`,
     `boundary: ${detail.boundary}`,
     `effects: ${detail.effects.length > 0 ? detail.effects.join(", ") : "(none)"}`,
@@ -460,6 +468,9 @@ function formatCompactDetailBlock(detail: CapabilityDetail): string {
   const lines = [
     `[CapabilityDetail:$${detail.name}]`,
     `parameters: ${parameters}`,
+    `required_capabilities: ${
+      detail.requiredCapabilities.length > 0 ? detail.requiredCapabilities.join(", ") : "(none)"
+    }`,
     `boundary: ${detail.boundary}`,
     `effects: ${detail.effects.length > 0 ? detail.effects.join(", ") : "(none)"}`,
     `approval_required: ${detail.requiresApproval ? "true" : "false"}`,
@@ -624,6 +635,7 @@ export function buildCapabilityView(input: BuildCapabilityViewInput): BuildCapab
       description: entry.description,
       parameterKeys: entry.parameterKeys,
       parameterDetails: entry.parameterDetails,
+      requiredCapabilities: entry.requiredCapabilities,
       surface: entry.surface,
       boundary: entry.boundary,
       effects: entry.effects,

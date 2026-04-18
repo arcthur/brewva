@@ -80,7 +80,7 @@ Representative anchors:
 
 - `test/contract/tools/tools-skill-complete.contract.test.ts`
 - `test/unit/runtime/skill-validation-pipeline.unit.test.ts`
-- `packages/brewva-runtime/src/workflow/derivation.ts`
+- `packages/brewva-runtime/src/workflow/artifact-derivation.ts`
 - `packages/brewva-gateway/src/runtime-plugins/completion-guard.ts`
 
 ## Remaining Backlog

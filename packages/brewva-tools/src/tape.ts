@@ -10,8 +10,8 @@ import { formatISO } from "date-fns";
 import type { BrewvaToolOptions } from "./types.js";
 import { buildStringEnumSchema } from "./utils/input-alias.js";
 import { failTextResult, textResult } from "./utils/result.js";
+import { createRuntimeBoundBrewvaToolFactory } from "./utils/runtime-bound-tool.js";
 import { getSessionId } from "./utils/session.js";
-import { defineBrewvaTool } from "./utils/tool.js";
 
 const TAPE_SEARCH_SCOPE_VALUES = ["current_phase", "all_phases", "anchors_only"] as const;
 const TapeSearchScopeSchema = buildStringEnumSchema(TAPE_SEARCH_SCOPE_VALUES, {
@@ -139,62 +139,72 @@ function toSafeScope(value: unknown): TapeSearchScope {
 }
 
 export function createTapeTools(options: BrewvaToolOptions): ToolDefinition[] {
-  const tapeHandoff = defineBrewvaTool({
-    name: "tape_handoff",
-    label: "Tape Handoff",
-    description:
-      "Create a tape anchor for semantic phase handoff. This does not compact message history.",
-    parameters: Type.Object({
-      name: Type.String({ minLength: 1, maxLength: 120 }),
-      summary: Type.Optional(Type.String({ minLength: 1, maxLength: 4000 })),
-      next_steps: Type.Optional(Type.String({ minLength: 1, maxLength: 4000 })),
-    }),
-    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-      const sessionId = getSessionId(ctx);
-      const handoff = options.runtime.authority.events.recordTapeHandoff(sessionId, {
-        name: params.name,
-        summary: params.summary,
-        nextSteps: params.next_steps,
-      });
-      if (!handoff.ok) {
-        return failTextResult(
-          `Tape handoff rejected (${handoff.error ?? "unknown_error"}).`,
-          handoff,
-        );
-      }
+  const tapeHandoffTool = createRuntimeBoundBrewvaToolFactory(options.runtime, "tape_handoff");
+  const tapeInfoTool = createRuntimeBoundBrewvaToolFactory(options.runtime, "tape_info");
+  const tapeSearchTool = createRuntimeBoundBrewvaToolFactory(options.runtime, "tape_search");
 
-      const status = handoff.tapeStatus ?? options.runtime.inspect.events.getTapeStatus(sessionId);
-      const text = [
-        "Tape handoff recorded.",
-        `name: ${params.name}`,
-        `anchor_id: ${handoff.eventId ?? "unknown"}`,
-        `tape_pressure: ${status.tapePressure}`,
-        `entries_since_anchor: ${status.entriesSinceAnchor}`,
-        `total_entries: ${status.totalEntries}`,
-      ].join("\n");
-      return textResult(text, {
-        ok: true,
-        anchorId: handoff.eventId ?? null,
-        createdAt: handoff.createdAt ?? null,
-        tapePressure: status.tapePressure,
-        entriesSinceAnchor: status.entriesSinceAnchor,
-        totalEntries: status.totalEntries,
-      });
+  const tapeHandoff = tapeHandoffTool.define(
+    {
+      name: "tape_handoff",
+      label: "Tape Handoff",
+      description:
+        "Create a tape anchor for semantic phase handoff. This does not compact message history.",
+      parameters: Type.Object({
+        name: Type.String({ minLength: 1, maxLength: 120 }),
+        summary: Type.Optional(Type.String({ minLength: 1, maxLength: 4000 })),
+        next_steps: Type.Optional(Type.String({ minLength: 1, maxLength: 4000 })),
+      }),
+      async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+        const sessionId = getSessionId(ctx);
+        const handoff = tapeHandoffTool.runtime.authority.events.recordTapeHandoff(sessionId, {
+          name: params.name,
+          summary: params.summary,
+          nextSteps: params.next_steps,
+        });
+        if (!handoff.ok) {
+          return failTextResult(
+            `Tape handoff rejected (${handoff.error ?? "unknown_error"}).`,
+            handoff,
+          );
+        }
+
+        const status =
+          handoff.tapeStatus ?? tapeHandoffTool.runtime.inspect.events.getTapeStatus(sessionId);
+        const text = [
+          "Tape handoff recorded.",
+          `name: ${params.name}`,
+          `anchor_id: ${handoff.eventId ?? "unknown"}`,
+          `tape_pressure: ${status.tapePressure}`,
+          `entries_since_anchor: ${status.entriesSinceAnchor}`,
+          `total_entries: ${status.totalEntries}`,
+        ].join("\n");
+        return textResult(text, {
+          ok: true,
+          anchorId: handoff.eventId ?? null,
+          createdAt: handoff.createdAt ?? null,
+          tapePressure: status.tapePressure,
+          entriesSinceAnchor: status.entriesSinceAnchor,
+          totalEntries: status.totalEntries,
+        });
+      },
     },
-  });
+    {
+      requiredCapabilities: ["authority.events.recordTapeHandoff", "inspect.events.getTapeStatus"],
+    },
+  );
 
-  const tapeInfo = defineBrewvaTool({
+  const tapeInfo = tapeInfoTool.define({
     name: "tape_info",
     label: "Tape Info",
     description: "Show tape status and context pressure for the current session.",
     parameters: Type.Object({}),
     async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
       const sessionId = getSessionId(ctx);
-      const tape = options.runtime.inspect.events.getTapeStatus(sessionId);
+      const tape = tapeInfoTool.runtime.inspect.events.getTapeStatus(sessionId);
       const usage =
-        resolveToolContextUsage(ctx) ?? options.runtime.inspect.context.getUsage(sessionId);
-      const pressure = options.runtime.inspect.context.getPressureStatus(sessionId, usage);
-      const reasoning = options.runtime.inspect.reasoning.getActiveState(sessionId);
+        resolveToolContextUsage(ctx) ?? tapeInfoTool.runtime.inspect.context.getUsage(sessionId);
+      const pressure = tapeInfoTool.runtime.inspect.context.getPressureStatus(sessionId, usage);
+      const reasoning = tapeInfoTool.runtime.inspect.reasoning.getActiveState(sessionId);
 
       return textResult(
         formatTapeInfoBlock({
@@ -216,7 +226,7 @@ export function createTapeTools(options: BrewvaToolOptions): ToolDefinition[] {
     },
   });
 
-  const tapeSearch = defineBrewvaTool({
+  const tapeSearch = tapeSearchTool.define({
     name: "tape_search",
     label: "Tape Search",
     description: "Search historical tape entries by text query.",
@@ -236,7 +246,7 @@ export function createTapeTools(options: BrewvaToolOptions): ToolDefinition[] {
       }
 
       const scope = toSafeScope(params.scope);
-      const result = options.runtime.inspect.events.searchTape(sessionId, {
+      const result = tapeSearchTool.runtime.inspect.events.searchTape(sessionId, {
         query,
         scope,
         limit: params.limit,

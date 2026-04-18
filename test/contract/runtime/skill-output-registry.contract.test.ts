@@ -265,7 +265,7 @@ describe("skill output registry", () => {
             "A replay contract test rewrites the local skill and keeps normalization stable.",
         },
       ],
-      execution_mode_hint: "Direct Patch",
+      execution_mode_hint: "direct_patch",
       risk_register: [
         {
           risk: "Replay could reinterpret old outputs using a newer skill contract.",

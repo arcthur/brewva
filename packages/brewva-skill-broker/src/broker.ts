@@ -16,13 +16,12 @@ import {
   SKILL_PROMOTION_MATERIALIZED_EVENT_TYPE,
   SKILL_PROMOTION_PROMOTED_EVENT_TYPE,
   SKILL_PROMOTION_REVIEWED_EVENT_TYPE,
-  coerceReviewReportArtifact,
   type BrewvaEventRecord,
   type BrewvaInspectionPort,
   type ContextSourceProvider,
   type SkillDocument,
 } from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
+import { coerceReviewReportArtifact, recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import { FileSkillPromotionStore } from "./file-store.js";
 import { isRecord, readString } from "./parse.js";
 import {

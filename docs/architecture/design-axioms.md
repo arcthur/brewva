@@ -54,6 +54,14 @@ public contracts.
     but the default host and extension contract should stay anchored to the
     smallest authority-facing layer that preserves effect governance, replay,
     verification, and rollback semantics.
+13. `Kernel contracts admit only correctness-bearing judgments.`
+    If a wrong judgment would not change replay correctness, approval truth,
+    rollback correctness, or recovery correctness, it does not belong in the
+    kernel contract.
+14. `Platform growth stays opt-in until multi-agent semantics mature.`
+    New orchestration breadth must land as opt-in control-plane behavior or as
+    an explicit exception with a compatibility story. The current stable
+    transaction boundary remains `single tool call`.
 
 Implementation note:
 
@@ -84,6 +92,10 @@ Implementation note:
   without becoming the default coupling layer for hosts, skills, or plugins
 - explicit control-plane exemptions may exist, but they must stay narrow and
   auditable
+- the current stable authority-bearing transaction boundary is `single tool
+call`; turn-level bounded recovery may grow later, but cross-agent saga
+  semantics, generalized compensation graphs, and default-path partial-failure
+  repair are not part of the current stable contract
 - architecture prose about planes, lanes, prompts, or flow should be read as
   descriptive only unless it names a concrete invariant or public contract
 

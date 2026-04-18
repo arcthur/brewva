@@ -269,8 +269,10 @@ describe("effect governance policy modes", () => {
     const first = runtime.inspect.tools.checkAccess(sessionId, "custom_query_tool");
     const second = runtime.inspect.tools.checkAccess(sessionId, "custom_query_tool");
 
-    expect(first.allowed).toBe(true);
-    expect(second.allowed).toBe(true);
+    expect(first.allowed).toBe(false);
+    expect(first.reason).toContain("exact governance descriptor");
+    expect(second.allowed).toBe(false);
+    expect(second.reason).toContain("exact governance descriptor");
     const events = runtime.inspect.events.query(sessionId, { type: "governance_metadata_missing" });
     expect(events).toHaveLength(1);
     expect(events[0]?.payload).toMatchObject({
@@ -310,14 +312,18 @@ describe("effect governance policy modes", () => {
     const runtime = createRuntime(workspace, options);
     runtime.maintain.context.onTurnStart(sessionId, 1);
     expect(runtime.authority.skills.activate(sessionId, "design").ok).toBe(true);
-    expect(runtime.inspect.tools.checkAccess(sessionId, "custom_query_tool").allowed).toBe(true);
+    const initial = runtime.inspect.tools.checkAccess(sessionId, "custom_query_tool");
+    expect(initial.allowed).toBe(false);
+    expect(initial.reason).toContain("exact governance descriptor");
     expect(
       runtime.inspect.events.query(sessionId, { type: "governance_metadata_missing" }),
     ).toHaveLength(1);
 
     const reloaded = createRuntime(workspace, options);
     reloaded.maintain.context.onTurnStart(sessionId, 1);
-    expect(reloaded.inspect.tools.checkAccess(sessionId, "custom_query_tool").allowed).toBe(true);
+    const afterRestart = reloaded.inspect.tools.checkAccess(sessionId, "custom_query_tool");
+    expect(afterRestart.allowed).toBe(false);
+    expect(afterRestart.reason).toContain("exact governance descriptor");
     expect(
       reloaded.inspect.events.query(sessionId, { type: "governance_metadata_missing" }),
     ).toHaveLength(1);

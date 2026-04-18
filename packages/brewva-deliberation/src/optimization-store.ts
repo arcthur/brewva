@@ -1,6 +1,5 @@
-import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { writeFileAtomic } from "./plane-substrate.js";
+import { readNormalizedJsonFile, writeNormalizedJsonFile } from "./plane-substrate.js";
 import {
   OPTIMIZATION_CONTINUITY_MODE_VALUES,
   OPTIMIZATION_CONTINUITY_STATE_SCHEMA,
@@ -280,18 +279,10 @@ export class FileOptimizationContinuityStore {
   }
 
   read(): OptimizationContinuityState | undefined {
-    if (!existsSync(this.filePath)) {
-      return undefined;
-    }
-    try {
-      const parsed = JSON.parse(readFileSync(this.filePath, "utf8")) as unknown;
-      return normalizeState(parsed);
-    } catch {
-      return undefined;
-    }
+    return readNormalizedJsonFile(this.filePath, normalizeState);
   }
 
   write(state: OptimizationContinuityState): void {
-    writeFileAtomic(this.filePath, `${JSON.stringify(state, null, 2)}\n`);
+    writeNormalizedJsonFile(this.filePath, state);
   }
 }

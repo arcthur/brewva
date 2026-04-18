@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { BREWVA_REGISTERED_EVENT_TYPES, isBrewvaRegisteredEventType } from "@brewva/brewva-runtime";
+import {
+  BREWVA_EVENT_DURABILITY_BY_TYPE,
+  BREWVA_REGISTERED_EVENT_TYPES,
+  getBrewvaEventDurabilityClass,
+  isBrewvaRegisteredEventType,
+} from "@brewva/brewva-runtime";
 
 describe("runtime event registry", () => {
   test("registers session_turn_transition and drops legacy hosted lifecycle event names", () => {
@@ -27,5 +32,22 @@ describe("runtime event registry", () => {
 
     expect(isBrewvaRegisteredEventType("session_interrupted")).toBe(false);
     expect(isBrewvaRegisteredEventType("session_turn_compaction_resume_requested")).toBe(false);
+  });
+
+  test("assigns an explicit durability class to every registered event family", () => {
+    expect(
+      BREWVA_REGISTERED_EVENT_TYPES.every(
+        (type) => BREWVA_EVENT_DURABILITY_BY_TYPE[type] !== undefined,
+      ),
+    ).toBe(true);
+
+    expect(getBrewvaEventDurabilityClass("turn_input_recorded")).toBe("authority-bearing");
+    expect(getBrewvaEventDurabilityClass("effect_commitment_approval_requested")).toBe(
+      "authority-bearing",
+    );
+    expect(getBrewvaEventDurabilityClass("projection_refreshed")).toBe("audit-only");
+    expect(getBrewvaEventDurabilityClass("skill_recommendation_derived")).toBe("audit-only");
+    expect(getBrewvaEventDurabilityClass("tool_parallel_read")).toBe("session-local");
+    expect(getBrewvaEventDurabilityClass("not_a_runtime_event")).toBeUndefined();
   });
 });

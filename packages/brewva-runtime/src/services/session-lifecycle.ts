@@ -2,51 +2,26 @@ import type { RecoveryWalStore } from "../channels/recovery-wal.js";
 import type { ContextBudgetManager } from "../context/budget.js";
 import type { ContextInjectionCollector } from "../context/injection.js";
 import type {
-  BrewvaEventRecord,
-  IntegrityIssue,
   IntegrityStatus,
-  OpenTurnRecord,
   OpenToolCallRecord,
   SessionHydrationState,
-  SessionUncleanShutdownReason,
   SessionUncleanShutdownDiagnostic,
 } from "../contracts/index.js";
 import type { SessionCostTracker } from "../cost/tracker.js";
-import {
-  SESSION_SHUTDOWN_EVENT_TYPE,
-  SESSION_UNCLEAN_SHUTDOWN_RECONCILED_EVENT_TYPE,
-  TOOL_OUTPUT_ARTIFACT_PERSIST_FAILED_EVENT_TYPE,
-  TURN_END_EVENT_TYPE,
-  TURN_START_EVENT_TYPE,
-} from "../events/event-types.js";
 import type { BrewvaEventStore } from "../events/store.js";
-import type { EvidenceLedger } from "../ledger/evidence-ledger.js";
 import type { ParallelBudgetManager } from "../parallel/budget.js";
 import type { ParallelResultStore } from "../parallel/results.js";
 import { deriveParallelBudgetStateFromEvents } from "../parallel/state.js";
 import type { ProjectionEngine } from "../projection/engine.js";
-import { deriveRecoveryCanonicalization } from "../recovery/read-model.js";
 import type { RuntimeKernelContext } from "../runtime-kernel.js";
 import type { FileChangeTracker } from "../state/file-change-tracker.js";
-import { TAPE_CHECKPOINT_EVENT_TYPE, coerceTapeCheckpointPayload } from "../tape/events.js";
 import type { TurnReplayEngine } from "../tape/replay-engine.js";
 import type { VerificationGate } from "../verification/gate.js";
 import type { ContextService } from "./context.js";
 import type { ReversibleMutationService } from "./reversible-mutation.js";
-import { createCostHydrationFold } from "./session-hydration-fold-cost.js";
-import { createLedgerHydrationFold } from "./session-hydration-fold-ledger.js";
-import { createResourceLeaseHydrationFold } from "./session-hydration-fold-resource-lease.js";
-import { createSkillHydrationFold } from "./session-hydration-fold-skill.js";
-import { createToolLifecycleHydrationFold } from "./session-hydration-fold-tool-lifecycle.js";
-import { createVerificationHydrationFold } from "./session-hydration-fold-verification.js";
-import {
-  applySessionHydrationFold,
-  type SessionHydrationApplyContext,
-  type SessionHydrationFold,
-  type SessionHydrationFoldCallbacks,
-  type SessionHydrationFoldContext,
-} from "./session-hydration-fold.js";
-import { RuntimeSessionStateCell, RuntimeSessionStateStore } from "./session-state.js";
+import { SessionHydrationCoordinator } from "./session-hydration-coordinator.js";
+import { SessionIntegrityCoordinator } from "./session-integrity-coordinator.js";
+import { RuntimeSessionStateStore } from "./session-state.js";
 
 export interface SessionLifecycleServiceOptions {
   sessionState: RuntimeKernelContext["sessionState"];
@@ -61,30 +36,10 @@ export interface SessionLifecycleServiceOptions {
   turnReplay: RuntimeKernelContext["turnReplay"];
   eventStore: RuntimeKernelContext["eventStore"];
   recoveryWalStore: RecoveryWalStore;
-  evidenceLedger: RuntimeKernelContext["evidenceLedger"];
   reversibleMutationService: ReversibleMutationService;
   recordEvent: RuntimeKernelContext["recordEvent"];
   contextService: Pick<ContextService, "clearReservedInjectionTokensForSession">;
 }
-
-interface SessionHydrationReplayState {
-  costReplayStartIndex: number;
-  checkpointTurn: number | null;
-}
-
-interface SessionHydrationFoldEntry {
-  fold: SessionHydrationFold<unknown>;
-  state: unknown;
-}
-
-interface SessionHydrationRun {
-  issues: IntegrityIssue[];
-  callbacks: SessionHydrationFoldCallbacks;
-  applyContext: SessionHydrationApplyContext;
-  foldEntries: SessionHydrationFoldEntry[];
-}
-
-const UNCLEAN_SHUTDOWN_RECONCILIATION_GRACE_MS = 5_000;
 
 export class SessionLifecycleService {
   private readonly sessionState: RuntimeSessionStateStore;
@@ -99,17 +54,9 @@ export class SessionLifecycleService {
   private readonly projectionEngine: ProjectionEngine;
   private readonly turnReplay: TurnReplayEngine;
   private readonly events: BrewvaEventStore;
-  private readonly recoveryWal: RecoveryWalStore;
-  private readonly ledger: EvidenceLedger;
   private readonly reversibleMutations: ReversibleMutationService;
-  private readonly recordEvent: (input: {
-    sessionId: string;
-    type: string;
-    turn?: number;
-    payload?: object;
-    timestamp?: number;
-    skipTapeCheckpoint?: boolean;
-  }) => unknown;
+  private readonly hydrationCoordinator: SessionHydrationCoordinator;
+  private readonly integrityCoordinator: SessionIntegrityCoordinator;
   private readonly clearStateListeners = new Set<(sessionId: string) => void>();
 
   constructor(options: SessionLifecycleServiceOptions) {
@@ -126,20 +73,18 @@ export class SessionLifecycleService {
     this.projectionEngine = options.projectionEngine;
     this.turnReplay = options.turnReplay;
     this.events = options.eventStore;
-    this.recoveryWal = options.recoveryWalStore;
-    this.ledger = options.evidenceLedger;
     this.reversibleMutations = options.reversibleMutationService;
-    this.recordEvent = (input) => options.recordEvent(input);
+    this.hydrationCoordinator = new SessionHydrationCoordinator({
+      costTracker: this.costTracker,
+      verificationGate: this.verification,
+    });
+    this.integrityCoordinator = new SessionIntegrityCoordinator({
+      sessionState: this.sessionState,
+      eventStore: options.eventStore,
+      recoveryWalStore: options.recoveryWalStore,
+      recordEvent: (input) => options.recordEvent(input),
+    });
   }
-
-  private static readonly hydrationFolds: SessionHydrationFold<unknown>[] = [
-    createSkillHydrationFold(),
-    createToolLifecycleHydrationFold(),
-    createVerificationHydrationFold(),
-    createResourceLeaseHydrationFold(),
-    createCostHydrationFold(),
-    createLedgerHydrationFold(),
-  ];
 
   onTurnStart(sessionId: string, turnIndex: number): void {
     this.hydrateSessionStateFromEvents(sessionId);
@@ -157,7 +102,7 @@ export class SessionLifecycleService {
   }
 
   getHydrationState(sessionId: string): SessionHydrationState {
-    this.refreshHydrationIntegrity(sessionId);
+    this.integrityCoordinator.refreshHydrationState(sessionId);
     const hydration = this.sessionState.getExistingCell(sessionId)?.hydration;
     if (!hydration) {
       return {
@@ -174,16 +119,7 @@ export class SessionLifecycleService {
   }
 
   getIntegrityStatus(sessionId: string): IntegrityStatus {
-    const hydration = this.getHydrationState(sessionId);
-    const issues = structuredClone(hydration.issues);
-    issues.push(
-      ...this.recoveryWal.getIntegrityIssues(),
-      ...this.getArtifactIntegrityIssues(sessionId),
-    );
-    return {
-      status: this.resolveIntegrityStatus(issues),
-      issues,
-    };
+    return this.integrityCoordinator.getIntegrityStatus(sessionId);
   }
 
   getOpenToolCalls(sessionId: string): OpenToolCallRecord[] {
@@ -232,44 +168,12 @@ export class SessionLifecycleService {
     this.events.clearSessionCache(sessionId);
   }
 
-  private refreshHydrationIntegrity(sessionId: string): void {
-    const state = this.sessionState.getExistingCell(sessionId);
-    if (!state || state.hydration.status === "cold") {
-      return;
-    }
-    const tapeIssues = this.events.getIntegrityIssues(sessionId);
-    if (tapeIssues.length === 0) {
-      return;
-    }
-    const seen = new Set(state.hydration.issues.map((issue) => this.integrityIssueKey(issue)));
-    const nextIssues = state.hydration.issues.map((issue) => ({ ...issue }));
-    let changed = false;
-    for (const issue of tapeIssues) {
-      const key = this.integrityIssueKey(issue);
-      if (seen.has(key)) {
-        continue;
-      }
-      seen.add(key);
-      nextIssues.push({ ...issue });
-      changed = true;
-    }
-    if (!changed) {
-      return;
-    }
-    state.hydration = {
-      ...state.hydration,
-      status: "degraded",
-      issues: nextIssues,
-    };
-  }
-
   private hydrateSessionStateFromEvents(sessionId: string): void {
     const state = this.sessionState.getCell(sessionId);
     if (state.hydration.status !== "cold") return;
 
     const events = this.events.list(sessionId);
     const integrityIssues = this.events.getIntegrityIssues(sessionId);
-    this.applyRecoveryCanonicalization(sessionId, events, state, integrityIssues);
     this.resetHydrationSupportStores(sessionId);
     const parallelBudgetState = deriveParallelBudgetStateFromEvents(events);
     this.parallel.restoreSession(sessionId, {
@@ -288,42 +192,18 @@ export class SessionLifecycleService {
     }
 
     this.reversibleMutations.restoreFromEvents(sessionId, events);
-    const replayState = this.prepareHydrationReplayState(sessionId, events);
-    const hydrationRun = this.createHydrationRun(sessionId, state, integrityIssues);
-    this.replayHydrationEvents(sessionId, events, hydrationRun, replayState);
-    this.applyHydrationRun(state, events, hydrationRun);
-    this.reconcileUncleanShutdown(sessionId, events, state);
-  }
-
-  private applyRecoveryCanonicalization(
-    sessionId: string,
-    events: BrewvaEventRecord[],
-    state: RuntimeSessionStateCell,
-    integrityIssues: IntegrityIssue[],
-  ): void {
-    const canonicalization = deriveRecoveryCanonicalization(events);
-    if (events.length === 0 || canonicalization.mode !== "degraded") {
-      return;
-    }
-    const latestEvent = events[events.length - 1];
-    if (!latestEvent || latestEvent.type === SESSION_SHUTDOWN_EVENT_TYPE) {
-      return;
-    }
-    if (Date.now() - latestEvent.timestamp < UNCLEAN_SHUTDOWN_RECONCILIATION_GRACE_MS) {
-      return;
-    }
-    const issue: IntegrityIssue = {
-      domain: "event_tape",
-      severity: "degraded",
+    this.hydrationCoordinator.hydrate({
       sessionId,
-      eventType: SESSION_UNCLEAN_SHUTDOWN_RECONCILED_EVENT_TYPE,
-      reason: canonicalization.degradedReason ?? "recovery_canonicalization_degraded",
-    };
-    const issueKey = this.integrityIssueKey(issue);
-    if (integrityIssues.some((entry) => this.integrityIssueKey(entry) === issueKey)) {
-      return;
-    }
-    integrityIssues.push(issue);
+      state,
+      events,
+      initialIssues: integrityIssues,
+    });
+    this.integrityCoordinator.reconcileHydratedSession({
+      sessionId,
+      events,
+      state,
+      initialIssues: integrityIssues,
+    });
   }
 
   private resetHydrationSupportStores(sessionId: string): void {
@@ -331,334 +211,5 @@ export class SessionLifecycleService {
     this.verification.stateStore.clear(sessionId);
     this.reversibleMutations.clear(sessionId);
     this.parallel.clear(sessionId);
-  }
-
-  private prepareHydrationReplayState(
-    sessionId: string,
-    events: BrewvaEventRecord[],
-  ): SessionHydrationReplayState {
-    const latestCheckpoint = this.findLatestCheckpoint(events);
-    const replayState: SessionHydrationReplayState = {
-      costReplayStartIndex: latestCheckpoint ? latestCheckpoint.index + 1 : 0,
-      checkpointTurn: latestCheckpoint ? this.normalizeTurn(latestCheckpoint.turn) : null,
-    };
-    if (latestCheckpoint) {
-      this.costTracker.restore(
-        sessionId,
-        latestCheckpoint.payload.state.cost,
-        latestCheckpoint.payload.state.costSkillLastTurnByName,
-      );
-    }
-    return replayState;
-  }
-
-  private createHydrationRun(
-    sessionId: string,
-    state: RuntimeSessionStateCell,
-    initialIssues: IntegrityIssue[],
-  ): SessionHydrationRun {
-    const issues: IntegrityIssue[] = initialIssues.map((issue) => ({ ...issue }));
-    const callbacks = this.buildHydrationCallbacks();
-    return {
-      issues,
-      callbacks,
-      applyContext: {
-        sessionId,
-        callbacks,
-      },
-      foldEntries: SessionLifecycleService.hydrationFolds.map((fold) => ({
-        fold,
-        state: fold.initial(state),
-      })),
-    };
-  }
-
-  private replayHydrationEvents(
-    sessionId: string,
-    events: BrewvaEventRecord[],
-    hydrationRun: SessionHydrationRun,
-    replayState: SessionHydrationReplayState,
-  ): void {
-    for (let index = 0; index < events.length; index += 1) {
-      const event = events[index];
-      if (!event) continue;
-      const foldContext: SessionHydrationFoldContext = {
-        sessionId,
-        index,
-        replayCostTail: index >= replayState.costReplayStartIndex,
-        replayCheckpointTurnTransient: this.shouldReplayCheckpointTurnTransient(
-          event,
-          index,
-          replayState,
-        ),
-        callbacks: hydrationRun.callbacks,
-        issues: hydrationRun.issues,
-      };
-      for (const entry of hydrationRun.foldEntries) {
-        applySessionHydrationFold(entry.fold, entry.state, event, foldContext);
-      }
-    }
-  }
-
-  private shouldReplayCheckpointTurnTransient(
-    event: BrewvaEventRecord,
-    index: number,
-    replayState: SessionHydrationReplayState,
-  ): boolean {
-    if (index >= replayState.costReplayStartIndex || replayState.checkpointTurn === null) {
-      return false;
-    }
-    return (
-      this.normalizeTurn(event.turn) === replayState.checkpointTurn &&
-      this.isCheckpointTurnCostTransientEvent(event.type)
-    );
-  }
-
-  private applyHydrationRun(
-    state: RuntimeSessionStateCell,
-    events: BrewvaEventRecord[],
-    hydrationRun: SessionHydrationRun,
-  ): void {
-    for (const entry of hydrationRun.foldEntries) {
-      entry.fold.apply(entry.state, state, hydrationRun.applyContext);
-    }
-    state.hydration = {
-      status: hydrationRun.issues.length > 0 ? "degraded" : "ready",
-      latestEventId: events[events.length - 1]?.id,
-      hydratedAt: Date.now(),
-      issues: hydrationRun.issues,
-    };
-  }
-
-  private buildHydrationCallbacks(): SessionHydrationFoldCallbacks {
-    return {
-      replayCostStateEvent: (sessionId, event, payload, options) =>
-        this.replayCostStateEvent(sessionId, event, payload, options),
-      restoreVerificationState: (sessionId, snapshot) => {
-        this.verification.stateStore.clear(sessionId);
-        this.verification.stateStore.restore(sessionId, snapshot);
-      },
-    };
-  }
-
-  private getArtifactIntegrityIssues(sessionId: string): IntegrityIssue[] {
-    return this.events
-      .list(sessionId, { type: TOOL_OUTPUT_ARTIFACT_PERSIST_FAILED_EVENT_TYPE })
-      .map((event, index) => ({
-        domain: "artifact" as const,
-        severity: "degraded" as const,
-        sessionId,
-        eventId: event.id,
-        eventType: event.type,
-        index,
-        reason:
-          typeof event.payload?.reason === "string" && event.payload.reason.trim().length > 0
-            ? event.payload.reason
-            : "artifact_persist_failed",
-      }));
-  }
-
-  private resolveIntegrityStatus(issues: readonly IntegrityIssue[]): IntegrityStatus["status"] {
-    if (issues.some((issue) => issue.severity === "unavailable")) {
-      return "unavailable";
-    }
-    return issues.length > 0 ? "degraded" : "healthy";
-  }
-
-  private integrityIssueKey(issue: IntegrityIssue): string {
-    return [
-      issue.domain,
-      issue.severity,
-      issue.sessionId ?? "",
-      issue.eventId ?? "",
-      issue.eventType ?? "",
-      issue.index ?? -1,
-      issue.reason,
-    ].join(":");
-  }
-
-  private findLatestCheckpoint(events: BrewvaEventRecord[]): {
-    index: number;
-    turn: number;
-    payload: NonNullable<ReturnType<typeof coerceTapeCheckpointPayload>>;
-  } | null {
-    for (let index = events.length - 1; index >= 0; index -= 1) {
-      const event = events[index];
-      if (!event || event.type !== TAPE_CHECKPOINT_EVENT_TYPE) continue;
-      const payload = coerceTapeCheckpointPayload(event.payload);
-      if (!payload) continue;
-      return {
-        index,
-        turn: this.normalizeTurn(event.turn),
-        payload,
-      };
-    }
-    return null;
-  }
-
-  private isCheckpointTurnCostTransientEvent(type: string): boolean {
-    return type === "tool_call_marked";
-  }
-
-  private replayCostStateEvent(
-    sessionId: string,
-    event: BrewvaEventRecord,
-    payload: Record<string, unknown> | null,
-    options?: {
-      checkpointTurnTransient?: boolean;
-    },
-  ): void {
-    const turn = this.normalizeTurn(event.turn);
-    const checkpointTurnTransient = options?.checkpointTurnTransient === true;
-
-    if (event.type === "tool_call_marked") {
-      const toolName =
-        payload && typeof payload.toolName === "string" ? payload.toolName.trim() : "";
-      if (!toolName) return;
-      if (checkpointTurnTransient) {
-        this.costTracker.restoreToolCallForTurn(sessionId, {
-          toolName,
-          turn,
-        });
-      } else {
-        this.costTracker.recordToolCall(sessionId, {
-          toolName,
-          turn,
-        });
-      }
-      return;
-    }
-
-    if (event.type !== "cost_update" || !payload) return;
-    this.costTracker.applyCostUpdateEvent(sessionId, payload, turn, event.timestamp);
-  }
-
-  private reconcileUncleanShutdown(
-    sessionId: string,
-    events: BrewvaEventRecord[],
-    state: RuntimeSessionStateCell,
-  ): void {
-    if (events.length === 0) {
-      return;
-    }
-
-    const latestEvent = events[events.length - 1];
-    if (!latestEvent || latestEvent.type === SESSION_SHUTDOWN_EVENT_TYPE) {
-      return;
-    }
-    if (Date.now() - latestEvent.timestamp < UNCLEAN_SHUTDOWN_RECONCILIATION_GRACE_MS) {
-      return;
-    }
-    if (
-      events.some((event) => event.type === SESSION_UNCLEAN_SHUTDOWN_RECONCILED_EVENT_TYPE) ||
-      state.uncleanShutdownDiagnostic
-    ) {
-      return;
-    }
-
-    const openToolCalls = [...state.openToolCalls.values()]
-      .map((record) => Object.assign({}, record))
-      .toSorted(
-        (left, right) =>
-          left.openedAt - right.openedAt || left.toolCallId.localeCompare(right.toolCallId),
-      );
-    const openTurns = this.collectOpenTurns(events);
-    const reasons: SessionUncleanShutdownReason[] = [];
-    if (openToolCalls.length > 0) {
-      reasons.push("open_tool_calls_without_terminal_receipt");
-    }
-    if (openTurns.length > 0) {
-      reasons.push("open_turn_without_terminal_receipt");
-    }
-    if (state.activeSkillState) {
-      reasons.push("active_skill_without_terminal_receipt");
-    }
-    if (reasons.length === 0) {
-      return;
-    }
-
-    const diagnostic: SessionUncleanShutdownDiagnostic = {
-      detectedAt: Date.now(),
-      reasons,
-      openToolCalls,
-      ...(openTurns.length > 0 ? { openTurns } : {}),
-      ...(state.activeSkillState ? { activeSkill: structuredClone(state.activeSkillState) } : {}),
-      ...(state.latestSkillFailure
-        ? { latestFailure: structuredClone(state.latestSkillFailure) }
-        : {}),
-      latestEventType: latestEvent.type,
-      latestEventAt: latestEvent.timestamp,
-    };
-    state.uncleanShutdownDiagnostic = diagnostic;
-
-    this.appendHydrationIssue(state, {
-      domain: "event_tape",
-      severity: "degraded",
-      sessionId,
-      eventType: SESSION_UNCLEAN_SHUTDOWN_RECONCILED_EVENT_TYPE,
-      reason: `${reasons.join("+")}:${[
-        openToolCalls.length > 0
-          ? `tools=${openToolCalls.map((record) => record.toolName).join(",")}`
-          : null,
-        openTurns.length > 0 ? `turns=${openTurns.map((record) => record.turn).join(",")}` : null,
-        state.activeSkillState ? `skill=${state.activeSkillState.skillName}` : null,
-      ]
-        .filter((entry): entry is string => Boolean(entry))
-        .join(";")}`,
-    });
-
-    this.recordEvent({
-      sessionId,
-      type: SESSION_UNCLEAN_SHUTDOWN_RECONCILED_EVENT_TYPE,
-      payload: diagnostic,
-      skipTapeCheckpoint: true,
-    });
-  }
-
-  private collectOpenTurns(events: BrewvaEventRecord[]): OpenTurnRecord[] {
-    const openTurns = new Map<number, OpenTurnRecord>();
-    for (const event of events) {
-      if (typeof event.turn !== "number" || !Number.isFinite(event.turn)) {
-        continue;
-      }
-      const turn = Math.max(0, Math.floor(event.turn));
-      if (event.type === TURN_START_EVENT_TYPE) {
-        openTurns.set(turn, {
-          turn,
-          startedAt: event.timestamp,
-          eventId: event.id,
-        });
-        continue;
-      }
-      if (event.type === TURN_END_EVENT_TYPE) {
-        openTurns.delete(turn);
-      }
-    }
-    return [...openTurns.values()].toSorted((left, right) => left.turn - right.turn);
-  }
-
-  private appendHydrationIssue(state: RuntimeSessionStateCell, issue: IntegrityIssue): void {
-    const key = this.integrityIssueKey(issue);
-    const existingKeys = new Set(
-      state.hydration.issues.map((entry) => this.integrityIssueKey(entry)),
-    );
-    if (existingKeys.has(key)) {
-      return;
-    }
-    state.hydration = {
-      ...state.hydration,
-      status: "degraded",
-      issues: [...state.hydration.issues, issue],
-    };
-  }
-
-  private normalizeTurn(value: unknown): number {
-    if (typeof value !== "number" || !Number.isFinite(value)) return 0;
-    return Math.max(0, Math.floor(value));
-  }
-
-  private readNonNegativeNumber(value: unknown): number | null {
-    if (typeof value !== "number" || !Number.isFinite(value)) return null;
-    return Math.max(0, value);
   }
 }

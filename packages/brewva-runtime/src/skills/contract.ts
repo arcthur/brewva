@@ -24,7 +24,7 @@ import type {
   TaskPhase,
   ToolEffectClass,
 } from "../contracts/index.js";
-import { isSemanticArtifactSchemaId } from "../contracts/semantic-artifacts.js";
+import { isSemanticArtifactSchemaId } from "../contracts/index.js";
 import { parseMarkdownFrontmatter } from "../markdown/frontmatter.js";
 import { normalizeToolName } from "../utils/tool-name.js";
 

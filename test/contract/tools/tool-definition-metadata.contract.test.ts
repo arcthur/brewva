@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { createRequire } from "node:module";
 import { TOOL_GOVERNANCE_BY_NAME, getExactToolGovernanceDescriptor } from "@brewva/brewva-runtime";
 import {
+  MANAGED_BREWVA_TOOL_NAMES,
   attachBrewvaToolExecutionTraits,
   buildBrewvaTools,
   createA2ATools,
@@ -92,6 +93,29 @@ describe("managed Brewva tool definition metadata", () => {
         ),
       ).toEqual(metadata.governance);
     }
+  });
+
+  test("repo-owned managed tool registry stays aligned with bundled and A2A tool definitions", () => {
+    const runtime = {
+      internal: {},
+    } as Parameters<typeof buildBrewvaTools>[0]["runtime"];
+    const bundledTools = buildBrewvaTools({ runtime });
+    const a2aTools = createA2ATools({
+      runtime: {
+        orchestration: {
+          a2a: {
+            send: async () => ({ ok: false, toAgentId: "na", error: "unused" }),
+            broadcast: async () => ({ ok: true, results: [] }),
+            listAgents: async () => [],
+          },
+        },
+      },
+    });
+
+    const actualManagedToolNames = [...bundledTools, ...a2aTools]
+      .map((tool) => tool.name)
+      .toSorted();
+    expect(actualManagedToolNames).toEqual(MANAGED_BREWVA_TOOL_NAMES);
   });
 
   test("execution traits resolve per invocation without coupling to governance metadata", () => {
@@ -189,5 +213,30 @@ describe("managed Brewva tool definition metadata", () => {
       streamingEligible: false,
       contextModifying: false,
     });
+  });
+
+  test("privileged managed tools declare required capabilities in metadata", () => {
+    const runtime = {
+      internal: {},
+    } as Parameters<typeof buildBrewvaTools>[0]["runtime"];
+    const tools = buildBrewvaTools({ runtime });
+
+    const resourceLease = requireDefined(
+      tools.find((tool) => tool.name === "resource_lease"),
+      "missing resource_lease tool",
+    );
+    const rollbackLastPatch = requireDefined(
+      tools.find((tool) => tool.name === "rollback_last_patch"),
+      "missing rollback_last_patch tool",
+    );
+
+    expect(getBrewvaToolMetadata(resourceLease)?.requiredCapabilities).toEqual([
+      "authority.tools.cancelResourceLease",
+      "authority.tools.requestResourceLease",
+      "inspect.tools.listResourceLeases",
+    ]);
+    expect(getBrewvaToolMetadata(rollbackLastPatch)?.requiredCapabilities).toEqual([
+      "authority.tools.rollbackLastPatchSet",
+    ]);
   });
 });

@@ -8,8 +8,8 @@ import { recordToolRuntimeEvent } from "../runtime-internal.js";
 import type { BrewvaBundledToolOptions } from "../types.js";
 import { buildStringEnumSchema } from "../utils/input-alias.js";
 import { inconclusiveTextResult, textResult } from "../utils/result.js";
+import { createManagedBrewvaToolFactory } from "../utils/runtime-bound-tool.js";
 import { getSessionId } from "../utils/session.js";
-import { defineBrewvaTool } from "../utils/tool.js";
 import {
   OBS_AGGREGATION_SCHEMA,
   OBS_OPERATOR_SCHEMA,
@@ -56,7 +56,8 @@ function buildBlockedText(input: { recentSingleQueryCalls: number }): string {
 }
 
 export function createObsSloAssertTool(options: BrewvaBundledToolOptions): ToolDefinition {
-  return defineBrewvaTool({
+  const obsSloAssertTool = createManagedBrewvaToolFactory("obs_slo_assert");
+  return obsSloAssertTool.define({
     name: "obs_slo_assert",
     label: "Observability SLO Assert",
     description:

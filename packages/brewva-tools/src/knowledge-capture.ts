@@ -18,7 +18,7 @@ import {
 import { isPathInsideRoots, resolveScopedPath, resolveToolTargetScope } from "./target-scope.js";
 import type { BrewvaToolOptions } from "./types.js";
 import { failTextResult, textResult } from "./utils/result.js";
-import { defineBrewvaTool } from "./utils/tool.js";
+import { createRuntimeBoundBrewvaToolFactory } from "./utils/runtime-bound-tool.js";
 
 interface ResolvedSolutionPath {
   absolutePath: string;
@@ -129,7 +129,11 @@ function formatResultText(input: {
 }
 
 export function createKnowledgeCaptureTool(options: BrewvaToolOptions): ToolDefinition {
-  return defineBrewvaTool({
+  const knowledgeCaptureTool = createRuntimeBoundBrewvaToolFactory(
+    options.runtime,
+    "knowledge_capture",
+  );
+  return knowledgeCaptureTool.define({
     name: "knowledge_capture",
     label: "Knowledge Capture",
     description:
@@ -146,7 +150,7 @@ export function createKnowledgeCaptureTool(options: BrewvaToolOptions): ToolDefi
       solution_doc_path: Type.Optional(Type.String({ minLength: 1, maxLength: 512 })),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-      const scope = resolveToolTargetScope(options.runtime, ctx);
+      const scope = resolveToolTargetScope(knowledgeCaptureTool.runtime, ctx);
       const record = normalizeSolutionRecord(params.solution_record);
       const validationProblems = validateSolutionRecord(record);
       if (validationProblems.length > 0) {

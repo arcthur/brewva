@@ -4,16 +4,16 @@ import type {
   PlanningEvidenceState,
 } from "../../contracts/index.js";
 import {
-  collectLatestPlanningOutputTimestamps,
-  derivePlanningEvidenceState,
-  resolveLatestWorkspaceWriteTimestamp,
-} from "../../contracts/index.js";
-import {
   VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
   VERIFICATION_WRITE_MARKED_EVENT_TYPE,
   WORKER_RESULTS_APPLIED_EVENT_TYPE,
 } from "../../events/event-types.js";
 import { collectVerificationCoverageTexts } from "../../workflow/coverage-utils.js";
+import {
+  collectLatestPlanningOutputTimestamps,
+  derivePlanningEvidenceState,
+  resolveLatestWorkspaceWriteTimestamp,
+} from "../planning-normalization.js";
 import type { VerificationEvidenceContext } from "./context.js";
 
 export function deriveSkillPlanningEvidenceStateFromEvents(input: {

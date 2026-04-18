@@ -97,6 +97,8 @@ Its runtime input is intentionally narrower than a raw `BrewvaRuntime`:
 - stable semantic base: `BrewvaToolRuntimePort` from `@brewva/brewva-runtime`
 - repo-owned bundle overlay: `BrewvaBundledToolRuntime` from
   `@brewva/brewva-tools`
+- repo-owned capability scope: managed tools execute through a scoped runtime
+  facade derived from their declared `requiredCapabilities`
 
 `BrewvaBundledToolRuntime` is `BrewvaToolRuntimePort` plus explicit injected
 repo-owned hooks such as:
@@ -116,6 +118,9 @@ Boundary rule:
   tool port, not on raw runtime internals
 - repository-owned bundled tools that need internal hooks must receive them
   explicitly
+- repository-owned managed tools must declare each `authority.*`, `inspect.*`,
+  and `internal.*` method they call; undeclared runtime calls fail closed at the
+  scoped facade
 - tool code must not rediscover a raw `BrewvaRuntime` or reach sideways into
   `runtime.maintain.*` as an implicit fallback path
 
@@ -363,6 +368,7 @@ Managed Brewva tools expose exact metadata on the definition object:
 
 - `brewva.surface`
 - `brewva.governance`
+- `brewva.requiredCapabilities`
 
 `brewva.governance` declares:
 
@@ -370,6 +376,11 @@ Managed Brewva tools expose exact metadata on the definition object:
 - `defaultRisk`
 - `boundary`
 - `rollbackable`
+
+`brewva.requiredCapabilities` declares the runtime methods the managed tool may
+call through the scoped runtime facade. It is deny-by-default across
+`authority.*`, `inspect.*`, and injected `internal.*` hooks: visibility in the
+model-facing tool surface does not grant undeclared runtime access.
 
 Current public boundary vocabulary:
 
@@ -597,6 +608,9 @@ Semantics:
 - `waitMode=start` does not support `returnMode=supplemental`; background
   delegated runs must use `text_only` and surface outcomes later through
   durable delegation state
+- delegated runs are a control-plane product, not a distributed transaction
+  protocol; current stable semantics do not include cross-agent saga behavior,
+  generalized compensation, or automatic partial-failure repair
 - late detached outcomes surface through replay-visible
   `handoffState=pending_parent_turn|surfaced` delegation state instead of a
   proposal-backed return mode

@@ -5,25 +5,9 @@ import {
   resolveRecoveryContextReadModels,
   type HistoryViewBaselineStateResolution,
 } from "./read-models.js";
+import { resolveReservedBudgetFromRatio } from "./reserved-budget.js";
 import type { ToolFailureEntry } from "./tool-failures.js";
 import type { ToolOutputDistillationEntry } from "./tool-output-distilled.js";
-
-function resolveReservedBudgetFromRatio(
-  kernel: RuntimeKernelContext,
-  sessionId: string,
-  usage: ContextBudgetUsage | undefined,
-  ratio: number | undefined,
-): number | null {
-  if (ratio === undefined || !kernel.isContextBudgetEnabled()) {
-    return null;
-  }
-  const totalBudget = kernel.contextBudget.getEffectiveInjectionTokenBudget(sessionId, usage);
-  const total = Math.max(0, Math.floor(totalBudget));
-  if (total <= 0) {
-    return 0;
-  }
-  return Math.max(1, Math.floor(total * ratio));
-}
 
 export interface RuntimeStatusView {
   verification: ReturnType<RuntimeKernelContext["getLatestVerificationOutcome"]>;
@@ -101,12 +85,13 @@ export function resolveHistoryViewBaselineView(
     sessionId: input.sessionId,
     usage: input.usage,
     referenceContextDigest: input.referenceContextDigest,
-    maxBaselineTokens: resolveReservedBudgetFromRatio(
-      kernel,
-      input.sessionId,
-      input.usage,
-      input.reservedBudgetRatio,
-    ),
+    maxBaselineTokens:
+      input.reservedBudgetRatio === undefined || !kernel.isContextBudgetEnabled()
+        ? null
+        : resolveReservedBudgetFromRatio(
+            input.reservedBudgetRatio,
+            kernel.contextBudget.getEffectiveInjectionTokenBudget(input.sessionId, input.usage),
+          ),
   });
 }
 
@@ -123,11 +108,12 @@ export function resolveRecoveryWorkingSetView(
     sessionId: input.sessionId,
     usage: input.usage,
     referenceContextDigest: input.referenceContextDigest,
-    maxBaselineTokens: resolveReservedBudgetFromRatio(
-      kernel,
-      input.sessionId,
-      input.usage,
-      input.reservedBudgetRatio,
-    ),
+    maxBaselineTokens:
+      input.reservedBudgetRatio === undefined || !kernel.isContextBudgetEnabled()
+        ? null
+        : resolveReservedBudgetFromRatio(
+            input.reservedBudgetRatio,
+            kernel.contextBudget.getEffectiveInjectionTokenBudget(input.sessionId, input.usage),
+          ),
   });
 }

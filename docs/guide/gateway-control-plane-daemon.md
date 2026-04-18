@@ -9,6 +9,15 @@ This is a different path from `--channel` (for example, Telegram ingress/egress)
 - `--channel` handles external channel message transport.
 - `brewva gateway` handles local control-plane session orchestration and process isolation.
 
+Current boundary:
+
+- gateway is a control-plane daemon and transport/integration layer
+- it is not a transaction coordinator for cross-session or cross-agent work
+- it does not add cross-agent compensation, saga semantics, or automatic
+  partial-failure repair on top of kernel receipts
+- future orchestration growth should remain opt-in and compatibility-explicit
+  rather than widening the default daemon path
+
 ## Security Boundaries
 
 - Bind only to loopback (`127.0.0.1`, `::1`, or `localhost`).

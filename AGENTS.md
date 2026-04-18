@@ -33,7 +33,8 @@
 ### Runtime Contract
 
 - `BrewvaRuntime` stays semantic-surface based. Keep the public API organized around `runtime.authority`, `runtime.inspect`, and `runtime.maintain`; do not widen it back into a mixed top-level implementation surface.
-- Caller ports are role-specific views over the same semantic contract: hosted gets all three surfaces, tools get `authority + inspect`, operators get `inspect + limited maintain`.
+- Caller ports are role-specific views over the same semantic contract: hosted gets all three surfaces, tools get the tool semantic port shape, and operators get `inspect + limited maintain`.
+- Repo-owned managed tools must declare every runtime capability they use. Execution must pass through the capability-scoped managed-tool runtime facade; undeclared `authority.*`, `inspect.*`, and `internal.*` calls must fail closed instead of falling through to the wider port.
 - Repo-owned managed-tool bundles that need runtime-owned telemetry, credential resolution, or supplemental-injection hooks must compose `BrewvaToolRuntimePort` with explicit injected `internal` hooks. Do not rediscover raw `BrewvaRuntime` internals from tool code.
 - Raw WAL mutation and raw event append stay out of the public root runtime contract. Use `createSchedulerIngressPort(...)` and `recordRuntimeEvent(...)` / `createRuntimeInternalEventAppendPort(...)` only where repo-owned implementation wiring genuinely requires them.
 - Keep `@brewva/brewva-runtime` root exports narrow: stable contracts, runtime construction, semantic port types, governance helpers, and stable vocabularies. Service/store/tracker/engine classes belong under `@brewva/brewva-runtime/internal`, not the root entrypoint.
@@ -85,6 +86,7 @@
 - Runtime config and semantics: `packages/brewva-runtime/src/config/defaults.ts`, `packages/brewva-runtime/src/config/normalize.ts`, `packages/brewva-runtime/src/security/mode.ts`, `packages/brewva-runtime/src/services/event-pipeline.ts`
 - Runtime context and durability: `packages/brewva-runtime/src/context/arena.ts`, `packages/brewva-runtime/src/context/injection-orchestrator.ts`, `packages/brewva-runtime/src/services/context*.ts`, `packages/brewva-runtime/src/channels/recovery-wal*.ts`, `packages/brewva-runtime/src/governance/port.ts`
 - Runtime authorization / rollback / diagnostics: `packages/brewva-runtime/src/services/tool-gate.ts`, `packages/brewva-runtime/src/services/effect-commitment-desk.ts`, `packages/brewva-runtime/src/services/reversible-mutation.ts`, `packages/brewva-runtime/src/services/mutation-rollback.ts`, `packages/brewva-runtime/src/services/task-watchdog.ts`
+- Managed-tool capability boundaries: `packages/brewva-tools/src/runtime-capability-scope.ts`, `packages/brewva-tools/src/managed-tool-metadata-registry.ts`, `packages/brewva-tools/src/utils/runtime-bound-tool.ts`
 - Package entrypoints: `packages/brewva-substrate/src/index.ts`, `packages/brewva-agent-engine/src/index.ts`, `packages/brewva-provider-core/src/index.ts`, `packages/brewva-recall/src/index.ts`, `packages/brewva-deliberation/src/index.ts`, `packages/brewva-skill-broker/src/index.ts`, `packages/brewva-tools/src/index.ts`, `packages/brewva-gateway/src/runtime-plugins/index.ts`, `packages/brewva-gateway/src/channels/host.ts`, `packages/brewva-gateway/src/host/create-hosted-session.ts`, `packages/brewva-gateway/src/subagents`, `packages/brewva-ingress/src/index.ts`, `packages/brewva-cli/src/index.ts`, `packages/brewva-gateway/src`
 - Verification and release tooling: `script/verify-dist.ts`, `script/build-binaries.ts`, `distribution/worker`, `.github/workflows/ci.yml`
 - Reference docs: `docs/index.md`, `docs/architecture/system-architecture.md`, `docs/reference/runtime.md`, `docs/reference/proposal-boundary.md`, `docs/reference/events.md`, `docs/reference/*.md`, `docs/research/README.md`, `docs/solutions/README.md`
@@ -97,6 +99,7 @@
 - Reintroducing a mixed top-level runtime implementation surface or bypassing semantic root surfaces
 - Presenting repo-owned `@brewva/brewva-runtime/internal` helpers as the default integration surface or stable product contract
 - Passing raw `BrewvaRuntime` into internal-aware tool factories or reintroducing tool-side fallback rediscovery of runtime internals
+- Adding managed-tool runtime calls without updating the repo-owned `requiredCapabilities` metadata and scoped-runtime tests
 - Re-exposing removed low-level tuning knobs as public config
 - Editing generated distribution artifacts by hand
 - Skipping `test:dist` for export, CLI, or distribution changes

@@ -18,8 +18,8 @@ import { resolveToolTargetScope } from "./target-scope.js";
 import type { BrewvaToolOptions } from "./types.js";
 import { buildStringEnumSchema } from "./utils/input-alias.js";
 import { failTextResult, textResult } from "./utils/result.js";
+import { createRuntimeBoundBrewvaToolFactory } from "./utils/runtime-bound-tool.js";
 import { getSessionId } from "./utils/session.js";
-import { defineBrewvaTool } from "./utils/tool.js";
 
 const RECALL_SCOPE_SCHEMA = buildStringEnumSchema(RECALL_SCOPE_VALUES, {
   recommendedValue: "user_repository_root",
@@ -59,8 +59,8 @@ function normalizeScope(value: unknown): RecallScope | undefined {
     : undefined;
 }
 
-function hasRecallOperatorProfile(options: BrewvaToolOptions): boolean {
-  const scopes = options.runtime.inspect.skills.getLoadReport().routingScopes;
+function hasRecallOperatorProfile(runtime: BrewvaToolOptions["runtime"]): boolean {
+  const scopes = runtime.inspect.skills.getLoadReport().routingScopes;
   return scopes.includes("operator") || scopes.includes("meta");
 }
 
@@ -104,7 +104,8 @@ function renderRecallEntry(entry: RecallSearchEntry): string {
 }
 
 export function createRecallSearchTool(options: BrewvaToolOptions): ToolDefinition {
-  return defineBrewvaTool({
+  const { runtime, define } = createRuntimeBoundBrewvaToolFactory(options.runtime, "recall_search");
+  return define({
     name: "recall_search",
     label: "Recall Search",
     description:
@@ -144,9 +145,9 @@ export function createRecallSearchTool(options: BrewvaToolOptions): ToolDefiniti
         });
       }
 
-      const scope = resolveToolTargetScope(options.runtime, ctx);
+      const scope = resolveToolTargetScope(runtime, ctx);
       if (query) {
-        const search = getOrCreateRecallBroker(options.runtime).search({
+        const search = getOrCreateRecallBroker(runtime).search({
           sessionId,
           query,
           scope: normalizeScope(params.scope),
@@ -154,7 +155,7 @@ export function createRecallSearchTool(options: BrewvaToolOptions): ToolDefiniti
         });
 
         if (search.results.length > 0) {
-          recordToolRuntimeEvent(options.runtime, {
+          recordToolRuntimeEvent(runtime, {
             sessionId,
             type: RECALL_RESULTS_SURFACED_EVENT_TYPE,
             payload: {
@@ -203,13 +204,13 @@ export function createRecallSearchTool(options: BrewvaToolOptions): ToolDefiniti
         );
       }
 
-      const inspection = getOrCreateRecallBroker(options.runtime).inspectStableIds({
+      const inspection = getOrCreateRecallBroker(runtime).inspectStableIds({
         sessionId,
         stableIds,
         scope: normalizeScope(params.scope),
       });
       if (inspection.results.length > 0) {
-        recordToolRuntimeEvent(options.runtime, {
+        recordToolRuntimeEvent(runtime, {
           sessionId,
           type: RECALL_RESULTS_SURFACED_EVENT_TYPE,
           payload: {
@@ -267,7 +268,8 @@ export function createRecallSearchTool(options: BrewvaToolOptions): ToolDefiniti
 }
 
 export function createRecallCurateTool(options: BrewvaToolOptions): ToolDefinition {
-  return defineBrewvaTool({
+  const { runtime, define } = createRuntimeBoundBrewvaToolFactory(options.runtime, "recall_curate");
+  return define({
     name: "recall_curate",
     label: "Recall Curate",
     description:
@@ -282,7 +284,7 @@ export function createRecallCurateTool(options: BrewvaToolOptions): ToolDefiniti
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const sessionId = getSessionId(ctx);
-      if (!hasRecallOperatorProfile(options)) {
+      if (!hasRecallOperatorProfile(runtime)) {
         return failTextResult("recall_curate rejected (operator_profile_required).", {
           ok: false,
           error: "operator_profile_required",
@@ -297,7 +299,7 @@ export function createRecallCurateTool(options: BrewvaToolOptions): ToolDefiniti
       }
 
       const signal = params.signal as RecallCurationSignal;
-      recordToolRuntimeEvent(options.runtime, {
+      recordToolRuntimeEvent(runtime, {
         sessionId,
         type: RECALL_CURATION_RECORDED_EVENT_TYPE,
         payload: {

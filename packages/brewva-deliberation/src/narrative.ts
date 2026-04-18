@@ -16,7 +16,7 @@ import {
   type NarrativeMemoryRetrieval,
   type NarrativeMemoryState,
 } from "./narrative-types.js";
-import { clamp, tokenize, uniqueStrings } from "./plane-substrate.js";
+import { clamp, getOrCreatePlaneForRuntime, tokenize, uniqueStrings } from "./plane-substrate.js";
 
 const DEFAULT_MAX_RETRIEVAL = 4;
 const DEFAULT_CONTEXT_RECORDS = 3;
@@ -513,14 +513,11 @@ export function getOrCreateNarrativeMemoryPlane(
   runtime: NarrativeMemoryRuntime,
   options: { workspaceRoot?: string } = {},
 ): NarrativeMemoryPlane {
-  const key = runtime as unknown as object;
-  const existing = planeByRuntime.get(key);
-  if (existing) {
-    return existing;
-  }
-  const created = new NarrativeMemoryPlane(runtime, options);
-  planeByRuntime.set(key, created);
-  return created;
+  return getOrCreatePlaneForRuntime({
+    planes: planeByRuntime,
+    runtime,
+    create: () => new NarrativeMemoryPlane(runtime, options),
+  });
 }
 
 export function createNarrativeMemoryContextProvider(input: {

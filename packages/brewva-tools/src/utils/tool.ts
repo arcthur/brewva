@@ -5,6 +5,7 @@ import {
 } from "@brewva/brewva-runtime";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate";
 import type { TSchema } from "@sinclair/typebox";
+import { getExactBrewvaToolRequiredCapabilities } from "../required-capabilities.js";
 import { getBrewvaToolSurface } from "../surface.js";
 import type {
   BrewvaManagedToolDefinition,
@@ -13,6 +14,7 @@ import type {
   BrewvaToolExecutionTraits,
   BrewvaToolExecutionTraitsDefinition,
   BrewvaToolMetadata,
+  BrewvaToolRequiredCapability,
 } from "../types.js";
 import { lowerStringEnumContractParameters } from "./input-alias.js";
 
@@ -62,6 +64,33 @@ function cloneExecutionTraitsDefinition(
   return cloneExecutionTraits(input);
 }
 
+function cloneRequiredCapabilities(
+  input: readonly BrewvaToolRequiredCapability[] | undefined,
+): BrewvaToolRequiredCapability[] | undefined {
+  if (!input || input.length === 0) {
+    return undefined;
+  }
+  return [...new Set(input)].toSorted();
+}
+
+function describeRequiredCapabilities(
+  input: readonly BrewvaToolRequiredCapability[] | undefined,
+): string {
+  return input && input.length > 0 ? [...input].join(", ") : "(none)";
+}
+
+function sameRequiredCapabilities(
+  left: readonly BrewvaToolRequiredCapability[] | undefined,
+  right: readonly BrewvaToolRequiredCapability[] | undefined,
+): boolean {
+  const normalizedLeft = cloneRequiredCapabilities(left) ?? [];
+  const normalizedRight = cloneRequiredCapabilities(right) ?? [];
+  if (normalizedLeft.length !== normalizedRight.length) {
+    return false;
+  }
+  return normalizedLeft.every((value, index) => value === normalizedRight[index]);
+}
+
 function resolveCanonicalBrewvaToolMetadata(
   toolName: string,
   metadata: Partial<BrewvaToolMetadata> = {},
@@ -81,6 +110,9 @@ function resolveCanonicalBrewvaToolMetadata(
   return {
     surface,
     governance: cloneGovernanceDescriptor(governance),
+    requiredCapabilities: cloneRequiredCapabilities(
+      metadata.requiredCapabilities ?? getExactBrewvaToolRequiredCapabilities(normalizedName),
+    ),
   };
 }
 
@@ -187,6 +219,7 @@ export function getBrewvaToolMetadata(
       governance: cloneGovernanceDescriptor(metadata.governance),
       executionTraits:
         attachedExecutionTraits ?? cloneExecutionTraitsDefinition(metadata.executionTraits),
+      requiredCapabilities: cloneRequiredCapabilities(metadata.requiredCapabilities),
     };
   }
   const canonicalMetadata = resolveCanonicalBrewvaToolMetadata(tool?.name ?? "");
@@ -197,6 +230,37 @@ export function getBrewvaToolMetadata(
     ...canonicalMetadata,
     executionTraits: attachedExecutionTraits,
   };
+}
+
+export function validateBrewvaToolRequiredCapabilities(
+  tool: BrewvaToolMetadataCarrier | undefined,
+): void {
+  const managedTool = tool as BrewvaManagedToolDefinition | undefined;
+  const normalizedName = normalizeToolName(managedTool?.name ?? "");
+  if (!normalizedName) {
+    return;
+  }
+  const declared = cloneRequiredCapabilities(managedTool?.brewva?.requiredCapabilities);
+  const expected = cloneRequiredCapabilities(
+    getExactBrewvaToolRequiredCapabilities(normalizedName),
+  );
+  if (!expected && !declared) {
+    return;
+  }
+  if (!expected) {
+    throw new Error(
+      `managed Brewva tool '${normalizedName}' declares required capabilities without a repo-owned registry entry: ${describeRequiredCapabilities(
+        declared,
+      )}`,
+    );
+  }
+  if (!sameRequiredCapabilities(declared, expected)) {
+    throw new Error(
+      `managed Brewva tool '${normalizedName}' required capabilities must match the repo-owned registry. Expected ${describeRequiredCapabilities(
+        expected,
+      )}; received ${describeRequiredCapabilities(declared)}.`,
+    );
+  }
 }
 
 function resolveExecutionTraitsFromDefinition(

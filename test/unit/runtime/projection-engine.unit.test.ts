@@ -206,7 +206,7 @@ describe("projection engine", () => {
             ],
             implementation_targets: [
               {
-                target: "packages/brewva-runtime/src/workflow/derivation.ts",
+                target: "packages/brewva-runtime/src/workflow/artifact-derivation.ts",
                 kind: "module",
                 owner_boundary: "runtime.workflow",
                 reason: "Workflow artifact derivation is implemented here.",

@@ -1,5 +1,4 @@
 import {
-  getSemanticArtifactSchema,
   type ActiveSkillRuntimeState,
   type BrewvaEventRecord,
   type ContextBudgetUsage,
@@ -27,6 +26,7 @@ import {
 } from "../skills/facets.js";
 import { normalizeSkillOutputs } from "../skills/normalization.js";
 import type { SkillRegistry } from "../skills/registry.js";
+import { getSemanticArtifactSchema } from "../skills/semantic-artifact-catalog.js";
 import type { SkillValidationContextBuilder } from "../skills/validation/builders/validation-context-builder.js";
 import type { SkillOutputValidationPipeline } from "../skills/validation/pipeline.js";
 import { resolveOutputRootKey } from "../skills/validation/utils.js";

@@ -18,8 +18,8 @@ import {
 } from "./exec-process-registry.js";
 import { buildStringEnumSchema } from "./utils/input-alias.js";
 import { textResult, type ToolResultVerdict, withVerdict } from "./utils/result.js";
+import { createManagedBrewvaToolFactory } from "./utils/runtime-bound-tool.js";
 import { getSessionId } from "./utils/session.js";
-import { defineBrewvaTool } from "./utils/tool.js";
 
 const PROCESS_ACTION_VALUES = ["list", "poll", "log", "write", "kill", "clear", "remove"] as const;
 const ProcessActionSchema = buildStringEnumSchema(PROCESS_ACTION_VALUES, {
@@ -131,7 +131,8 @@ function resolveProcessVerdict(
 }
 
 export function createProcessTool(): ToolDefinition {
-  return defineBrewvaTool({
+  const processTool = createManagedBrewvaToolFactory("process");
+  return processTool.define({
     name: "process",
     label: "Process",
     description:

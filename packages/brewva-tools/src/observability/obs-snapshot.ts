@@ -6,8 +6,8 @@ import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-subs
 import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "../types.js";
 import { textResult } from "../utils/result.js";
+import { createRuntimeBoundBrewvaToolFactory } from "../utils/runtime-bound-tool.js";
 import { getSessionId } from "../utils/session.js";
-import { defineBrewvaTool } from "../utils/tool.js";
 
 function formatPercent(value: number | null): string {
   if (value === null) return "unknown";
@@ -15,21 +15,23 @@ function formatPercent(value: number | null): string {
 }
 
 export function createObsSnapshotTool(options: BrewvaToolOptions): ToolDefinition {
-  return defineBrewvaTool({
+  const obsSnapshotTool = createRuntimeBoundBrewvaToolFactory(options.runtime, "obs_snapshot");
+  return obsSnapshotTool.define({
     name: "obs_snapshot",
     label: "Observability Snapshot",
     description: "Show a compact health snapshot for the current session runtime state.",
     parameters: Type.Object({}),
     async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
       const sessionId = getSessionId(ctx);
-      const tape = options.runtime.inspect.events.getTapeStatus(sessionId);
-      const usage = options.runtime.inspect.context.getUsage(sessionId);
-      const promptStability = options.runtime.inspect.context.getPromptStability(sessionId);
-      const transientReduction = options.runtime.inspect.context.getTransientReduction(sessionId);
-      const pressure = options.runtime.inspect.context.getPressureStatus(sessionId, usage);
-      const cost = options.runtime.inspect.cost.getSummary(sessionId);
-      const task = options.runtime.inspect.task.getState(sessionId);
-      const verificationEvent = options.runtime.inspect.events.list(sessionId, {
+      const tape = obsSnapshotTool.runtime.inspect.events.getTapeStatus(sessionId);
+      const usage = obsSnapshotTool.runtime.inspect.context.getUsage(sessionId);
+      const promptStability = obsSnapshotTool.runtime.inspect.context.getPromptStability(sessionId);
+      const transientReduction =
+        obsSnapshotTool.runtime.inspect.context.getTransientReduction(sessionId);
+      const pressure = obsSnapshotTool.runtime.inspect.context.getPressureStatus(sessionId, usage);
+      const cost = obsSnapshotTool.runtime.inspect.cost.getSummary(sessionId);
+      const task = obsSnapshotTool.runtime.inspect.task.getState(sessionId);
+      const verificationEvent = obsSnapshotTool.runtime.inspect.events.list(sessionId, {
         type: VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
         last: 1,
       })[0];

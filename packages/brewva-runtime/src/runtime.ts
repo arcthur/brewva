@@ -1,7 +1,6 @@
 import { resolve } from "node:path";
 import { RecoveryWalRecovery } from "./channels/recovery-wal-recovery.js";
 import { RecoveryWalStore } from "./channels/recovery-wal.js";
-import type { TurnEnvelope } from "./channels/turn.js";
 import {
   loadBrewvaConfigResolution,
   normalizeExplicitBrewvaConfigResolution,
@@ -14,115 +13,28 @@ import {
   resolveRecoveryWorkingSetView,
 } from "./context/dependency-views.js";
 import { normalizeAgentId } from "./context/identity.js";
-import { ContextInjectionCollector, type ContextInjectionEntry } from "./context/injection.js";
-import {
-  type ContextSourceProvider,
-  type ContextSourceProviderDescriptor,
-} from "./context/provider.js";
-import { CONTEXT_SOURCES } from "./context/sources.js";
+import { ContextInjectionCollector } from "./context/injection.js";
+import { HISTORY_VIEW_BASELINE_RESERVED_BUDGET_RATIO } from "./context/reserved-budget.js";
 import type { ToolOutputDistillationEntry } from "./context/tool-output-distilled.js";
 import type {
-  ContextCompactionReason,
-  ContextPressureLevel,
-  ContextPressureStatus,
-  ContextCompactionGateStatus,
-  ContextBudgetUsage,
-  BuildContextInjectionOptions,
-  HistoryViewBaselineSnapshot,
-  PromptStabilityObservationInput,
-  PromptStabilityState,
-  RecoveryPostureSnapshot,
-  RecoveryWorkingSetSnapshot,
-  ResourceLeaseCancelResult,
-  ResourceLeaseQuery,
-  ResourceLeaseRecord,
-  ResourceLeaseRequest,
-  ResourceLeaseResult,
-  ActiveReasoningBranchState,
-  EvidenceLedgerRow,
-  EvidenceQuery,
-  ParallelAcquireResult,
-  RollbackResult,
-  ScheduleIntentCancelInput,
-  ScheduleIntentCancelResult,
-  ScheduleIntentCreateInput,
-  ScheduleIntentCreateResult,
-  ScheduleIntentListQuery,
-  ScheduleIntentProjectionRecord,
-  ScheduleIntentUpdateInput,
-  ScheduleIntentUpdateResult,
-  ScheduleProjectionSnapshot,
   BrewvaEventQuery,
   BrewvaEventRecord,
-  BrewvaReplaySession,
-  BrewvaWalId,
   BrewvaConfig,
-  BrewvaStructuredEvent,
-  ActiveSkillRuntimeState,
   DeepReadonly,
-  DecideEffectCommitmentInput,
-  DecideEffectCommitmentResult,
-  DecisionReceipt,
-  EffectCommitmentListQuery,
-  EffectCommitmentProposal,
-  EffectCommitmentRequestListQuery,
-  EffectCommitmentRequestRecord,
-  EffectCommitmentRecord,
-  IntegrityStatus,
-  PendingEffectCommitmentRequest,
-  ToolExecutionBoundary,
-  ToolGovernanceDescriptor,
-  ToolGovernanceResolver,
-  ToolMutationReceipt,
-  ToolMutationRollbackResult,
-  SkillDocument,
-  SkillActivationResult,
-  SkillCompletionFailureRecord,
-  SkillConsumedOutputsView,
-  SkillNormalizedOutputsView,
-  SkillOutputValidationResult,
+  HistoryViewBaselineSnapshot,
+  RecoveryPostureSnapshot,
+  RecoveryWorkingSetSnapshot,
   SkillRefreshInput,
   SkillRefreshResult,
-  SkillRegistryLoadReport,
   SkillRoutingScope,
-  SessionHydrationState,
   SessionLifecycleSnapshot,
-  SessionUncleanShutdownDiagnostic,
   SessionCostSummary,
-  SessionCompactionCommitInput,
-  SessionWireFrame,
-  OpenToolCallRecord,
-  ReasoningCheckpointRecord,
-  ReasoningRevertInput,
-  ReasoningRevertRecord,
-  RecordReasoningCheckpointInput,
-  TapeSearchResult,
-  TapeSearchScope,
-  TapeHandoffResult,
-  TapeStatusState,
-  TaskBlockerRecordResult,
-  TaskBlockerResolveResult,
-  TaskAcceptanceRecordResult,
-  TaskItemAddResult,
-  TaskItemUpdateResult,
   TaskTargetDescriptor,
-  TaskSpec,
   TaskState,
-  TransientReductionObservationInput,
-  TransientReductionState,
-  RecoveryWalRecord,
-  RecoveryWalRecoveryResult,
-  RecoveryWalSource,
   VerificationLevel,
   VerificationReport,
-  WorkerMergeReport,
-  WorkerApplyReport,
-  WorkerResult,
-  TruthFactResolveResult,
-  TruthFactUpsertResult,
+  TruthState,
 } from "./contracts/index.js";
-import type { TaskItemStatus } from "./contracts/index.js";
-import type { TruthFactSeverity, TruthFactStatus, TruthState } from "./contracts/index.js";
 import { SessionCostTracker } from "./cost/tracker.js";
 import {
   EFFECT_COMMITMENT_APPROVAL_CONSUMED_EVENT_TYPE,
@@ -169,22 +81,24 @@ import { deriveOpenToolCallsFromEvents, deriveTransitionState } from "./recovery
 import {
   createRuntimeCoreDependencies as assembleRuntimeCoreDependencies,
   createRuntimeKernelContext as assembleRuntimeKernelContext,
+  createRuntimeLazyServiceFactories as assembleRuntimeLazyServiceFactories,
   createRuntimeServiceDependencies as assembleRuntimeServiceDependencies,
   type RuntimeCoreDependencies,
+  type RuntimeLazyServiceFactories,
   type RuntimeServiceDependencies,
 } from "./runtime-assembler.js";
 import type { RuntimeKernelContext } from "./runtime-kernel.js";
+import {
+  createRuntimeMethodGroups,
+  type BrewvaRuntimeMethodGroups,
+} from "./runtime-method-groups.js";
 import { BREWVA_RUNTIME_METHOD_GROUPS } from "./runtime-symbols.js";
 import { sanitizeContextText } from "./security/sanitize.js";
 import { ContextService } from "./services/context.js";
 import { CostService } from "./services/cost.js";
 import type { CredentialVaultService } from "./services/credential-vault.js";
 import { EffectCommitmentDeskService } from "./services/effect-commitment-desk.js";
-import {
-  EventPipelineService,
-  type RuntimeRecordEvent,
-  type RuntimeRecordEventInput,
-} from "./services/event-pipeline.js";
+import { EventPipelineService, type RuntimeRecordEventInput } from "./services/event-pipeline.js";
 import { FileChangeService } from "./services/file-change.js";
 import { LedgerService } from "./services/ledger.js";
 import { MutationRollbackService } from "./services/mutation-rollback.js";
@@ -192,6 +106,7 @@ import { ParallelService } from "./services/parallel.js";
 import { ProposalAdmissionService } from "./services/proposal-admission.js";
 import { ReasoningService } from "./services/reasoning.js";
 import { ResourceLeaseService } from "./services/resource-lease.js";
+import { ReversibleMutationService } from "./services/reversible-mutation.js";
 import { ScheduleIntentService } from "./services/schedule-intent.js";
 import { SessionLifecycleService } from "./services/session-lifecycle.js";
 import { RuntimeSessionStateStore } from "./services/session-state.js";
@@ -203,9 +118,7 @@ import { TaskService } from "./services/task.js";
 import { ToolGateService } from "./services/tool-gate.js";
 import { ToolInvocationSpine } from "./services/tool-invocation-spine.js";
 import { ToolLifecycleRecoveryWalService } from "./services/tool-lifecycle-recovery-wal.js";
-import { TruthProjectorService } from "./services/truth-projector.js";
 import { TruthService } from "./services/truth.js";
-import { VerificationProjectorService } from "./services/verification-projector.js";
 import { VerificationService } from "./services/verification.js";
 import { SkillRegistry } from "./skills/registry.js";
 import { ensureBundledSystemSkills } from "./skills/system-install.js";
@@ -286,404 +199,6 @@ export interface BrewvaRuntimeIdentity {
   readonly agentId: string;
   readonly config: DeepReadonly<BrewvaConfig>;
 }
-
-interface BrewvaRuntimeMethodGroups {
-  skills: {
-    refresh(input?: SkillRefreshInput): SkillRefreshResult;
-    getLoadReport(): SkillRegistryLoadReport;
-    list(): SkillDocument[];
-    get(name: string): SkillDocument | undefined;
-    activate(sessionId: string, name: string): SkillActivationResult;
-    getActive(sessionId: string): SkillDocument | undefined;
-    getActiveState(sessionId: string): ActiveSkillRuntimeState | undefined;
-    getLatestFailure(sessionId: string): SkillCompletionFailureRecord | undefined;
-    validateOutputs(
-      sessionId: string,
-      outputs: Record<string, unknown>,
-    ): SkillOutputValidationResult;
-    recordCompletionFailure(
-      sessionId: string,
-      outputs: Record<string, unknown>,
-      validation: SkillOutputValidationResult & { ok: false },
-      usage?: ContextBudgetUsage,
-    ): SkillCompletionFailureRecord | undefined;
-    complete(
-      sessionId: string,
-      output: Record<string, unknown>,
-      options?: { proof?: string; summary?: string; notes?: string },
-    ): SkillOutputValidationResult;
-    getRawOutputs(sessionId: string, skillName: string): Record<string, unknown> | undefined;
-    getNormalizedOutputs(
-      sessionId: string,
-      skillName: string,
-    ): SkillNormalizedOutputsView | undefined;
-    getConsumedOutputs(sessionId: string, targetSkillName: string): SkillConsumedOutputsView;
-  };
-  proposals: {
-    submit(sessionId: string, proposal: EffectCommitmentProposal): DecisionReceipt;
-    list(sessionId: string, query?: EffectCommitmentListQuery): EffectCommitmentRecord[];
-    listEffectCommitmentRequests(
-      sessionId: string,
-      query?: EffectCommitmentRequestListQuery,
-    ): EffectCommitmentRequestRecord[];
-    listPendingEffectCommitments(sessionId: string): PendingEffectCommitmentRequest[];
-    decideEffectCommitment(
-      sessionId: string,
-      requestId: string,
-      input: DecideEffectCommitmentInput,
-    ): DecideEffectCommitmentResult;
-  };
-  reasoning: {
-    recordCheckpoint(
-      sessionId: string,
-      input: RecordReasoningCheckpointInput,
-    ): ReasoningCheckpointRecord;
-    revert(sessionId: string, input: ReasoningRevertInput): ReasoningRevertRecord;
-    getActiveState(sessionId: string): ActiveReasoningBranchState;
-    listCheckpoints(sessionId: string): ReasoningCheckpointRecord[];
-    getCheckpoint(sessionId: string, checkpointId: string): ReasoningCheckpointRecord | undefined;
-    listReverts(sessionId: string): ReasoningRevertRecord[];
-    canRevertTo(sessionId: string, checkpointId: string): boolean;
-  };
-  context: {
-    onTurnStart(sessionId: string, turnIndex: number): void;
-    onTurnEnd(sessionId: string): void;
-    onUserInput(sessionId: string): void;
-    sanitizeInput(text: string): string;
-    observeUsage(sessionId: string, usage: ContextBudgetUsage | undefined): void;
-    observePromptStability(
-      sessionId: string,
-      input: PromptStabilityObservationInput,
-    ): PromptStabilityState;
-    observeTransientReduction(
-      sessionId: string,
-      input: TransientReductionObservationInput,
-    ): TransientReductionState;
-    getUsage(sessionId: string): ContextBudgetUsage | undefined;
-    getPromptStability(sessionId: string): PromptStabilityState | undefined;
-    getTransientReduction(sessionId: string): TransientReductionState | undefined;
-    getReservedPrimaryTokens(sessionId: string, injectionScopeId?: string): number;
-    getReservedSupplementalTokens(sessionId: string, injectionScopeId?: string): number;
-    getUsageRatio(usage: ContextBudgetUsage | undefined): number | null;
-    getHardLimitRatio(sessionId: string, usage?: ContextBudgetUsage): number;
-    getCompactionThresholdRatio(sessionId: string, usage?: ContextBudgetUsage): number;
-    getPressureStatus(sessionId: string, usage?: ContextBudgetUsage): ContextPressureStatus;
-    getPressureLevel(sessionId: string, usage?: ContextBudgetUsage): ContextPressureLevel;
-    getCompactionGateStatus(
-      sessionId: string,
-      usage?: ContextBudgetUsage,
-    ): ContextCompactionGateStatus;
-    checkCompactionGate(
-      sessionId: string,
-      toolName: string,
-      usage?: ContextBudgetUsage,
-    ): { allowed: boolean; reason?: string };
-    getHistoryViewBaseline(sessionId: string): HistoryViewBaselineSnapshot | undefined;
-    registerProvider(provider: ContextSourceProvider): void;
-    unregisterProvider(source: string): boolean;
-    listProviders(): readonly ContextSourceProviderDescriptor[];
-    buildInjection(
-      sessionId: string,
-      prompt: string,
-      usage?: ContextBudgetUsage,
-      options?: BuildContextInjectionOptions,
-    ): Promise<{
-      text: string;
-      entries: ContextInjectionEntry[];
-      accepted: boolean;
-      originalTokens: number;
-      finalTokens: number;
-      truncated: boolean;
-    }>;
-    appendGuardedSupplementalBlocks(
-      sessionId: string,
-      blocks: readonly {
-        familyId: string;
-        content: string;
-      }[],
-      usage?: ContextBudgetUsage,
-      injectionScopeId?: string,
-    ): Array<{
-      familyId: string;
-      accepted: boolean;
-      text: string;
-      originalTokens: number;
-      finalTokens: number;
-      truncated: boolean;
-      droppedReason?: "hard_limit" | "budget_exhausted";
-    }>;
-    checkAndRequestCompaction(sessionId: string, usage: ContextBudgetUsage | undefined): boolean;
-    requestCompaction(sessionId: string, reason: ContextCompactionReason): void;
-    getPendingCompactionReason(sessionId: string): ContextCompactionReason | null;
-    getCompactionInstructions(): string;
-    getCompactionWindowTurns(): number;
-  };
-  tools: {
-    checkAccess(
-      sessionId: string,
-      toolName: string,
-      args?: Record<string, unknown>,
-    ): { allowed: boolean; reason?: string };
-    explainAccess(input: {
-      sessionId: string;
-      toolName: string;
-      args?: Record<string, unknown>;
-      cwd?: string;
-      usage?: ContextBudgetUsage;
-    }): {
-      allowed: boolean;
-      reason?: string;
-      warning?: string;
-    };
-    getGovernanceDescriptor(
-      toolName: string,
-      args?: Record<string, unknown>,
-    ): ToolGovernanceDescriptor | undefined;
-    registerGovernanceDescriptor(toolName: string, input: ToolGovernanceDescriptor): void;
-    registerGovernanceResolver(toolName: string, resolver: ToolGovernanceResolver): void;
-    unregisterGovernanceDescriptor(toolName: string): void;
-    start(input: {
-      sessionId: string;
-      toolCallId: string;
-      toolName: string;
-      args?: Record<string, unknown>;
-      cwd?: string;
-      usage?: ContextBudgetUsage;
-      recordLifecycleEvent?: boolean;
-      effectCommitmentRequestId?: string;
-    }): {
-      allowed: boolean;
-      reason?: string;
-      advisory?: string;
-      boundary?: ToolExecutionBoundary;
-      commitmentReceipt?: DecisionReceipt;
-      effectCommitmentRequestId?: string;
-      mutationReceipt?: ToolMutationReceipt;
-    };
-    finish(input: {
-      sessionId: string;
-      toolCallId: string;
-      toolName: string;
-      args: Record<string, unknown>;
-      outputText: string;
-      channelSuccess: boolean;
-      verdict?: "pass" | "fail" | "inconclusive";
-      metadata?: Record<string, unknown>;
-      effectCommitmentRequestId?: string;
-    }): void;
-    acquireParallelSlot(sessionId: string, runId: string): ParallelAcquireResult;
-    acquireParallelSlotAsync(
-      sessionId: string,
-      runId: string,
-      options?: { timeoutMs?: number },
-    ): Promise<ParallelAcquireResult>;
-    releaseParallelSlot(sessionId: string, runId: string): void;
-    requestResourceLease(sessionId: string, request: ResourceLeaseRequest): ResourceLeaseResult;
-    listResourceLeases(sessionId: string, query?: ResourceLeaseQuery): ResourceLeaseRecord[];
-    cancelResourceLease(
-      sessionId: string,
-      leaseId: string,
-      reason?: string,
-    ): ResourceLeaseCancelResult;
-    markCall(sessionId: string, toolName: string): void;
-    trackCallStart(input: {
-      sessionId: string;
-      toolCallId: string;
-      toolName: string;
-      args?: Record<string, unknown>;
-    }): void;
-    trackCallEnd(input: {
-      sessionId: string;
-      toolCallId: string;
-      toolName: string;
-      channelSuccess: boolean;
-    }): void;
-    rollbackLastPatchSet(sessionId: string): RollbackResult;
-    rollbackLastMutation(sessionId: string): ToolMutationRollbackResult;
-    resolveUndoSessionId(preferredSessionId?: string): string | undefined;
-    recordResult(input: {
-      sessionId: string;
-      toolCallId?: string;
-      toolName: string;
-      args: Record<string, unknown>;
-      outputText: string;
-      channelSuccess: boolean;
-      verdict?: "pass" | "fail" | "inconclusive";
-      metadata?: Record<string, unknown>;
-      effectCommitmentRequestId?: string;
-    }): string;
-  };
-  task: {
-    setSpec(sessionId: string, spec: TaskSpec): void;
-    addItem(
-      sessionId: string,
-      input: { text: string; status?: TaskItemStatus; id?: string },
-    ): TaskItemAddResult;
-    updateItem(
-      sessionId: string,
-      input: { id: string; text?: string; status?: TaskItemStatus },
-    ): TaskItemUpdateResult;
-    recordBlocker(
-      sessionId: string,
-      input: { id?: string; message: string; source?: string; truthFactId?: string },
-    ): TaskBlockerRecordResult;
-    recordAcceptance(
-      sessionId: string,
-      input: { status: "pending" | "accepted" | "rejected"; decidedBy?: string; notes?: string },
-    ): TaskAcceptanceRecordResult;
-    resolveBlocker(sessionId: string, blockerId: string): TaskBlockerResolveResult;
-    getTargetDescriptor(sessionId: string): TaskTargetDescriptor;
-    getState(sessionId: string): TaskState;
-  };
-  truth: {
-    getState(sessionId: string): TruthState;
-    upsertFact(
-      sessionId: string,
-      input: {
-        id: string;
-        kind: string;
-        severity: TruthFactSeverity;
-        summary: string;
-        details?: Record<string, unknown>;
-        evidenceIds?: string[];
-        status?: TruthFactStatus;
-      },
-    ): TruthFactUpsertResult;
-    resolveFact(sessionId: string, truthFactId: string): TruthFactResolveResult;
-  };
-  ledger: {
-    getDigest(sessionId: string): string;
-    query(sessionId: string, query: EvidenceQuery): string;
-    listRows(sessionId?: string): EvidenceLedgerRow[];
-    verifyIntegrity(sessionId: string): { valid: boolean; reason?: string };
-    getPath(): string;
-  };
-  schedule: {
-    createIntent(
-      sessionId: string,
-      input: ScheduleIntentCreateInput,
-    ): Promise<ScheduleIntentCreateResult>;
-    cancelIntent(
-      sessionId: string,
-      input: ScheduleIntentCancelInput,
-    ): Promise<ScheduleIntentCancelResult>;
-    updateIntent(
-      sessionId: string,
-      input: ScheduleIntentUpdateInput,
-    ): Promise<ScheduleIntentUpdateResult>;
-    listIntents(query?: ScheduleIntentListQuery): Promise<ScheduleIntentProjectionRecord[]>;
-    getProjectionSnapshot(): Promise<ScheduleProjectionSnapshot>;
-  };
-  recoveryWal: {
-    appendPending(
-      envelope: TurnEnvelope,
-      source: RecoveryWalSource,
-      options?: { ttlMs?: number; dedupeKey?: string },
-    ): RecoveryWalRecord;
-    markInflight(walId: BrewvaWalId): RecoveryWalRecord | undefined;
-    markDone(walId: BrewvaWalId): RecoveryWalRecord | undefined;
-    markFailed(walId: BrewvaWalId, error?: string): RecoveryWalRecord | undefined;
-    markExpired(walId: BrewvaWalId): RecoveryWalRecord | undefined;
-    listPending(): RecoveryWalRecord[];
-    getPosture(sessionId: string): RecoveryPostureSnapshot;
-    getWorkingSet(sessionId: string): RecoveryWorkingSetSnapshot | undefined;
-    recover(): Promise<RecoveryWalRecoveryResult>;
-    compact(): {
-      scope: string;
-      filePath: string;
-      scanned: number;
-      retained: number;
-      dropped: number;
-    };
-  };
-  lifecycle: {
-    getSnapshot(sessionId: string): SessionLifecycleSnapshot;
-  };
-  events: {
-    record: RuntimeRecordEvent;
-    resolveLogPath(sessionId: string): string;
-    query(sessionId: string, query?: BrewvaEventQuery): BrewvaEventRecord[];
-    queryStructured(sessionId: string, query?: BrewvaEventQuery): BrewvaStructuredEvent[];
-    recordMetricObservation(
-      sessionId: string,
-      input: MetricObservationInput,
-    ): BrewvaEventRecord | undefined;
-    listMetricObservations(
-      sessionId: string,
-      query?: MetricObservationQuery,
-    ): MetricObservationRecord[];
-    recordGuardResult(sessionId: string, input: GuardResultInput): BrewvaEventRecord | undefined;
-    listGuardResults(sessionId: string, query?: GuardResultQuery): GuardResultRecord[];
-    getTapeStatus(sessionId: string): TapeStatusState;
-    getTapePressureThresholds(): TapeStatusState["thresholds"];
-    recordTapeHandoff(
-      sessionId: string,
-      input: { name: string; summary?: string; nextSteps?: string },
-    ): TapeHandoffResult;
-    searchTape(
-      sessionId: string,
-      input: { query: string; scope?: TapeSearchScope; limit?: number },
-    ): TapeSearchResult;
-    listReplaySessions(limit?: number): BrewvaReplaySession[];
-    subscribe(listener: (event: BrewvaStructuredEvent) => void): () => void;
-    toStructured(event: BrewvaEventRecord): BrewvaStructuredEvent;
-    list(sessionId: string, query?: BrewvaEventQuery): BrewvaEventRecord[];
-    listSessionIds(): string[];
-  };
-  verification: {
-    evaluate(sessionId: string, level?: VerificationLevel): VerificationReport;
-    verify(
-      sessionId: string,
-      level?: VerificationLevel,
-      options?: VerifyCompletionOptions,
-    ): Promise<VerificationReport>;
-  };
-  cost: {
-    recordAssistantUsage(input: {
-      sessionId: string;
-      model: string;
-      inputTokens: number;
-      outputTokens: number;
-      cacheReadTokens: number;
-      cacheWriteTokens: number;
-      totalTokens: number;
-      costUsd: number;
-      stopReason?: string;
-    }): void;
-    getSummary(sessionId: string): SessionCostSummary;
-  };
-  session: {
-    recordWorkerResult(sessionId: string, result: WorkerResult): void;
-    listWorkerResults(sessionId: string): WorkerResult[];
-    getOpenToolCalls(sessionId: string): OpenToolCallRecord[];
-    getUncleanShutdownDiagnostic(sessionId: string): SessionUncleanShutdownDiagnostic | undefined;
-    mergeWorkerResults(sessionId: string): WorkerMergeReport;
-    applyMergedWorkerResults(
-      sessionId: string,
-      input: { toolName: string; toolCallId?: string },
-    ): WorkerApplyReport;
-    clearWorkerResults(sessionId: string): void;
-    pollStall(
-      sessionId: string,
-      input?: {
-        now?: number;
-        thresholdMs?: number;
-      },
-    ): void;
-    clearState(sessionId: string): void;
-    onClearState(listener: (sessionId: string) => void): () => void;
-    getHydration(sessionId: string): SessionHydrationState;
-    getIntegrity(sessionId: string): IntegrityStatus;
-    commitCompaction(sessionId: string, input: SessionCompactionCommitInput): BrewvaEventRecord;
-    resolveCredentialBindings(sessionId: string, toolName: string): Record<string, string>;
-    resolveSandboxApiKey(sessionId: string): string | undefined;
-  };
-  sessionWire: {
-    query(sessionId: string): SessionWireFrame[];
-    subscribe(sessionId: string, listener: (frame: SessionWireFrame) => void): () => void;
-  };
-}
-
 export interface BrewvaAuthorityPort {
   readonly skills: Pick<
     BrewvaRuntimeMethodGroups["skills"],
@@ -899,32 +414,32 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
   private readonly sessionState = new RuntimeSessionStateStore();
   private readonly sessionLifecycleSnapshotCache = new Map<string, SessionLifecycleSnapshot>();
   private readonly kernel: RuntimeKernelContext;
+  private readonly lazyServiceFactories: RuntimeLazyServiceFactories;
+  private readonly clearEffectCommitmentDeskState: (sessionId: string) => void;
   declare private readonly contextService: ContextService;
   declare private readonly costService: CostService;
-  declare private readonly credentialVaultService: CredentialVaultService;
   declare private readonly eventPipeline: EventPipelineService;
-  declare private readonly effectCommitmentDeskService: EffectCommitmentDeskService;
-  declare private readonly fileChangeService: FileChangeService;
-  declare private readonly resourceLeaseService: ResourceLeaseService;
   declare private readonly ledgerService: LedgerService;
-  declare private readonly mutationRollbackService: MutationRollbackService;
-  declare private readonly parallelService: ParallelService;
-  declare private readonly proposalAdmissionService: ProposalAdmissionService;
   declare private readonly taskWatchdogService: TaskWatchdogService;
-  declare private readonly scheduleIntentService: ScheduleIntentService;
   declare private readonly sessionLifecycleService: SessionLifecycleService;
-  declare private readonly sessionWireService: SessionWireService;
   declare private readonly skillLifecycleService: SkillLifecycleService;
   declare private readonly taskService: TaskService;
-  declare private readonly tapeService: TapeService;
   declare private readonly truthService: TruthService;
-  declare private readonly truthProjectorService: TruthProjectorService;
-  declare private readonly toolGateService: ToolGateService;
-  declare private readonly toolInvocationSpine: ToolInvocationSpine;
   declare private readonly toolLifecycleRecoveryWalService: ToolLifecycleRecoveryWalService;
-  declare private readonly verificationProjectorService: VerificationProjectorService;
-  declare private readonly verificationService: VerificationService;
-  declare private readonly reasoningService: ReasoningService;
+  private readonly tapeServiceGetter: () => TapeService;
+  private readonly effectCommitmentDeskServiceGetter: () => EffectCommitmentDeskService;
+  private readonly proposalAdmissionServiceGetter: () => ProposalAdmissionService;
+  private verificationService: VerificationService | undefined;
+  private fileChangeService: FileChangeService | undefined;
+  private mutationRollbackService: MutationRollbackService | undefined;
+  private parallelService: ParallelService | undefined;
+  private resourceLeaseService: ResourceLeaseService | undefined;
+  private toolGateService: ToolGateService | undefined;
+  private toolInvocationSpine: ToolInvocationSpine | undefined;
+  private credentialVaultService: CredentialVaultService | undefined;
+  private scheduleIntentService: ScheduleIntentService | undefined;
+  private sessionWireService: SessionWireService | undefined;
+  private reasoningService: ReasoningService | undefined;
   declare private readonly runtimeConfig: BrewvaConfig;
   private readonly toolGovernanceRegistry = createToolGovernanceRegistry();
   declare private turnReplay: TurnReplayEngine;
@@ -934,32 +449,63 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
     const cwd = resolve(options.cwd ?? process.cwd());
     const workspaceRoot = resolveWorkspaceRootDir(cwd);
     const agentId = normalizeAgentId(options.agentId ?? process.env["BREWVA_AGENT_ID"]);
-    Object.assign(this, {
-      cwd,
-      workspaceRoot,
-      agentId,
-    });
+    this.cwd = cwd;
+    this.workspaceRoot = workspaceRoot;
+    this.agentId = agentId;
+
     const configState = this.resolveRuntimeConfig(options);
-    Object.assign(this, {
-      runtimeConfig: configState.config,
-      config: configState.readonlyConfig,
-    });
-    Object.assign(this, this.createCoreDependencies(options));
+    this.runtimeConfig = configState.config;
+    this.config = configState.readonlyConfig;
+
+    const coreDependencies = this.createCoreDependencies(options);
+    this.skillRegistry = coreDependencies.skillRegistry;
+    this.evidenceLedger = coreDependencies.evidenceLedger;
+    this.verificationGate = coreDependencies.verificationGate;
+    this.parallel = coreDependencies.parallel;
+    this.parallelResults = coreDependencies.parallelResults;
+    this.eventStore = coreDependencies.eventStore;
+    this.recoveryWalStore = coreDependencies.recoveryWalStore;
+    this.contextBudget = coreDependencies.contextBudget;
+    this.contextInjection = coreDependencies.contextInjection;
+    this.turnReplay = coreDependencies.turnReplay;
+    this.reasoningReplay = coreDependencies.reasoningReplay;
+    this.fileChanges = coreDependencies.fileChanges;
+    this.costTracker = coreDependencies.costTracker;
+    this.projectionEngine = coreDependencies.projectionEngine;
+
     this.kernel = this.createKernelContext(options);
-    Object.assign(this, this.createServiceDependencies(options));
+
+    const serviceDependencies = this.createServiceDependencies(options);
+    this.skillLifecycleService = serviceDependencies.skillLifecycleService;
+    this.taskService = serviceDependencies.taskService;
+    this.truthService = serviceDependencies.truthService;
+    this.ledgerService = serviceDependencies.ledgerService;
+    this.costService = serviceDependencies.costService;
+    this.contextService = serviceDependencies.contextService;
+    this.taskWatchdogService = serviceDependencies.taskWatchdogService;
+    this.eventPipeline = serviceDependencies.eventPipeline;
+    this.toolLifecycleRecoveryWalService = serviceDependencies.toolLifecycleRecoveryWalService;
+    this.sessionLifecycleService = serviceDependencies.sessionLifecycleService;
+    this.tapeServiceGetter = () => serviceDependencies.getTapeService();
+    this.effectCommitmentDeskServiceGetter = () =>
+      serviceDependencies.getEffectCommitmentDeskService();
+    this.proposalAdmissionServiceGetter = () => serviceDependencies.getProposalAdmissionService();
+    this.clearEffectCommitmentDeskState = (sessionId) =>
+      serviceDependencies.clearEffectCommitmentDeskState(sessionId);
+    this.lazyServiceFactories = this.createLazyServiceFactories(
+      serviceDependencies.reversibleMutationService,
+    );
+
     this.sessionLifecycleService.onClearState((sessionId) => {
       this.invalidateSessionLifecycleSnapshot(sessionId);
-    });
-    Object.assign(this, {
-      sessionWireService: new SessionWireService({
-        queryStructuredEvents: (sessionId) => this.eventPipeline.queryStructuredEvents(sessionId),
-        subscribeEvents: (listener) => this.eventPipeline.subscribeEvents(listener),
-      }),
     });
     this.refreshSkillsState();
     const methodGroups = this.createMethodGroups();
     attachRuntimeMethodGroupsCarrier(this, methodGroups);
-    Object.assign(this, this.createSurfacePorts(methodGroups));
+    const surfacePorts = this.createSurfacePorts(methodGroups);
+    this.authority = surfacePorts.authority;
+    this.inspect = surfacePorts.inspect;
+    this.maintain = surfacePorts.maintain;
   }
 
   private resolveRuntimeConfig(options: BrewvaRuntimeOptions): RuntimeConfigState {
@@ -1072,334 +618,175 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
     });
   }
 
+  private createLazyServiceFactories(
+    reversibleMutationService: ReversibleMutationService,
+  ): RuntimeLazyServiceFactories {
+    return assembleRuntimeLazyServiceFactories({
+      cwd: this.cwd,
+      workspaceRoot: this.workspaceRoot,
+      config: this.runtimeConfig,
+      governancePort: this.kernel.governancePort,
+      kernel: this.kernel,
+      coreDependencies: {
+        skillRegistry: this.skillRegistry,
+        evidenceLedger: this.evidenceLedger,
+        verificationGate: this.verificationGate,
+        parallel: this.parallel,
+        parallelResults: this.parallelResults,
+        eventStore: this.eventStore,
+        recoveryWalStore: this.recoveryWalStore,
+        contextBudget: this.contextBudget,
+        contextInjection: this.contextInjection,
+        turnReplay: this.turnReplay,
+        reasoningReplay: this.reasoningReplay,
+        fileChanges: this.fileChanges,
+        costTracker: this.costTracker,
+        projectionEngine: this.projectionEngine,
+      },
+      sessionState: this.sessionState,
+      eventPipeline: this.eventPipeline,
+      contextService: this.contextService,
+      getProposalAdmissionService: () => this.getProposalAdmissionService(),
+      getEffectCommitmentDeskService: () => this.getEffectCommitmentDeskService(),
+      skillLifecycleService: this.skillLifecycleService,
+      ledgerService: this.ledgerService,
+      reversibleMutationService,
+      resolveToolAuthority: (toolName, args) =>
+        resolveToolAuthority(toolName, this.toolGovernanceRegistry, args),
+    });
+  }
+
+  private getCredentialVaultService(): CredentialVaultService {
+    this.credentialVaultService ??= this.lazyServiceFactories.createCredentialVaultService();
+    return this.credentialVaultService;
+  }
+
+  private getScheduleIntentService(): ScheduleIntentService {
+    this.scheduleIntentService ??= this.lazyServiceFactories.createScheduleIntentService();
+    return this.scheduleIntentService;
+  }
+
+  private getSessionWireService(): SessionWireService {
+    this.sessionWireService ??= this.lazyServiceFactories.createSessionWireService();
+    return this.sessionWireService;
+  }
+
+  private getTapeService(): TapeService {
+    return this.tapeServiceGetter();
+  }
+
+  private getEffectCommitmentDeskService(): EffectCommitmentDeskService {
+    return this.effectCommitmentDeskServiceGetter();
+  }
+
+  private getProposalAdmissionService(): ProposalAdmissionService {
+    return this.proposalAdmissionServiceGetter();
+  }
+
+  private getVerificationService(): VerificationService {
+    this.verificationService ??= this.lazyServiceFactories.createVerificationService();
+    return this.verificationService;
+  }
+
+  private getReasoningService(): ReasoningService {
+    this.reasoningService ??= this.lazyServiceFactories.createReasoningService();
+    return this.reasoningService;
+  }
+
+  private getFileChangeService(): FileChangeService {
+    this.fileChangeService ??= this.lazyServiceFactories.createFileChangeService();
+    return this.fileChangeService;
+  }
+
+  private getMutationRollbackService(): MutationRollbackService {
+    this.mutationRollbackService ??= this.lazyServiceFactories.createMutationRollbackService();
+    return this.mutationRollbackService;
+  }
+
+  private getParallelService(): ParallelService {
+    this.parallelService ??= this.lazyServiceFactories.createParallelService();
+    return this.parallelService;
+  }
+
+  private getResourceLeaseService(): ResourceLeaseService {
+    this.resourceLeaseService ??= this.lazyServiceFactories.createResourceLeaseService();
+    return this.resourceLeaseService;
+  }
+
+  private getToolGateService(): ToolGateService {
+    this.toolGateService ??= this.lazyServiceFactories.createToolGateService();
+    return this.toolGateService;
+  }
+
+  private getToolInvocationSpine(): ToolInvocationSpine {
+    this.toolInvocationSpine ??= this.lazyServiceFactories.createToolInvocationSpine();
+    return this.toolInvocationSpine;
+  }
+
   private createMethodGroups(): BrewvaRuntimeMethodGroups {
-    return {
-      skills: {
-        refresh: (input) => this.refreshSkillsState(input),
-        getLoadReport: () => this.skillRegistry.getLoadReport(),
-        list: () => this.skillRegistry.list(),
-        get: (name) => this.skillRegistry.get(name),
-        activate: (sessionId, name) => this.skillLifecycleService.activateSkill(sessionId, name),
-        getActive: (sessionId) => this.skillLifecycleService.getActiveSkill(sessionId),
-        getActiveState: (sessionId) => this.skillLifecycleService.getActiveSkillState(sessionId),
-        getLatestFailure: (sessionId) =>
-          this.skillLifecycleService.getLatestSkillFailure(sessionId),
-        validateOutputs: (sessionId, outputs) =>
-          this.skillLifecycleService.validateSkillOutputs(sessionId, outputs),
-        recordCompletionFailure: (sessionId, outputs, validation, usage) =>
-          this.skillLifecycleService.recordCompletionFailure(sessionId, outputs, validation, usage),
-        complete: (sessionId, output) =>
-          this.skillLifecycleService.completeSkill(sessionId, output),
-        getRawOutputs: (sessionId, skillName) =>
-          this.skillLifecycleService.getRawSkillOutputs(sessionId, skillName),
-        getNormalizedOutputs: (sessionId, skillName) =>
-          this.skillLifecycleService.getNormalizedSkillOutputs(sessionId, skillName),
-        getConsumedOutputs: (sessionId, targetSkillName) =>
-          this.skillLifecycleService.getAvailableConsumedOutputs(sessionId, targetSkillName),
+    return createRuntimeMethodGroups({
+      runtimeConfig: this.runtimeConfig,
+      skillRegistry: this.skillRegistry,
+      skillLifecycleService: this.skillLifecycleService,
+      getProposalAdmissionService: () => this.getProposalAdmissionService(),
+      getEffectCommitmentDeskService: () => this.getEffectCommitmentDeskService(),
+      contextInjection: this.contextInjection,
+      contextService: this.contextService,
+      sessionLifecycleService: this.sessionLifecycleService,
+      taskWatchdogService: this.taskWatchdogService,
+      taskService: this.taskService,
+      truthService: this.truthService,
+      ledgerService: this.ledgerService,
+      recoveryWalStore: this.recoveryWalStore,
+      eventStore: this.eventStore,
+      eventPipeline: this.eventPipeline,
+      costService: this.costService,
+      toolGovernanceRegistry: this.toolGovernanceRegistry,
+      getReasoningService: () => this.getReasoningService(),
+      getToolGateService: () => this.getToolGateService(),
+      getToolInvocationSpine: () => this.getToolInvocationSpine(),
+      getParallelService: () => this.getParallelService(),
+      getResourceLeaseService: () => this.getResourceLeaseService(),
+      getFileChangeService: () => this.getFileChangeService(),
+      getMutationRollbackService: () => this.getMutationRollbackService(),
+      getScheduleIntentService: () => this.getScheduleIntentService(),
+      getTapeService: () => this.getTapeService(),
+      getVerificationService: () => this.getVerificationService(),
+      getCredentialVaultService: () => this.getCredentialVaultService(),
+      getSessionWireService: () => this.getSessionWireService(),
+      refreshSkillsState: (input) => this.refreshSkillsState(input),
+      sanitizeInput: (text) => this.sanitizeInput(text),
+      getHistoryViewBaseline: (sessionId) => this.getHistoryViewBaseline(sessionId),
+      getTaskTargetDescriptor: (sessionId) => this.getTaskTargetDescriptor(sessionId),
+      getTaskState: (sessionId) => this.getTaskState(sessionId),
+      getTruthState: (sessionId) => this.getTruthState(sessionId),
+      getRecoveryPosture: (sessionId) => this.getRecoveryPosture(sessionId),
+      getRecoveryWorkingSet: (sessionId) => this.getRecoveryWorkingSet(sessionId),
+      recordEvent: (input) => this.recordEvent(input),
+      recordMetricObservation: (sessionId, input) => this.recordMetricObservation(sessionId, input),
+      listMetricObservations: (sessionId, query) => this.listMetricObservations(sessionId, query),
+      recordGuardResult: (sessionId, input) => this.recordGuardResult(sessionId, input),
+      listGuardResults: (sessionId, query) => this.listGuardResults(sessionId, query),
+      evaluateCompletion: (sessionId, level) => this.evaluateCompletion(sessionId, level),
+      getSessionLifecycleSnapshot: (sessionId) => this.getSessionLifecycleSnapshot(sessionId),
+      invalidateSessionLifecycleSnapshot: (sessionId) =>
+        this.invalidateSessionLifecycleSnapshot(sessionId),
+      recoverRecoveryWal: async () => {
+        const recovery = new RecoveryWalRecovery({
+          workspaceRoot: this.workspaceRoot,
+          config: this.runtimeConfig.infrastructure.recoveryWal,
+          recordEvent: (input: { sessionId: string; type: string; payload?: object }) => {
+            this.recordEvent({
+              sessionId: input.sessionId,
+              type: input.type,
+              payload: input.payload,
+              skipTapeCheckpoint: true,
+            });
+          },
+        });
+        return await recovery.recover();
       },
-      proposals: {
-        submit: (sessionId, proposal) =>
-          this.proposalAdmissionService.submitProposal(sessionId, proposal),
-        list: (sessionId, query) =>
-          this.proposalAdmissionService.listProposalRecords(sessionId, query),
-        listEffectCommitmentRequests: (sessionId, query) =>
-          this.effectCommitmentDeskService.listRequests(sessionId, query),
-        listPendingEffectCommitments: (sessionId) =>
-          this.effectCommitmentDeskService.listPending(sessionId),
-        decideEffectCommitment: (sessionId, requestId, input) =>
-          this.effectCommitmentDeskService.decide(sessionId, requestId, input),
-      },
-      reasoning: {
-        recordCheckpoint: (sessionId, input) =>
-          this.reasoningService.recordCheckpoint(sessionId, input),
-        revert: (sessionId, input) => this.reasoningService.revert(sessionId, input),
-        getActiveState: (sessionId) => this.reasoningService.getActiveState(sessionId),
-        listCheckpoints: (sessionId) => this.reasoningService.listCheckpoints(sessionId),
-        getCheckpoint: (sessionId, checkpointId) =>
-          this.reasoningService.getCheckpoint(sessionId, checkpointId),
-        listReverts: (sessionId) => this.reasoningService.listReverts(sessionId),
-        canRevertTo: (sessionId, checkpointId) =>
-          this.reasoningService.canRevertTo(sessionId, checkpointId),
-      },
-      context: {
-        onTurnStart: (sessionId, turnIndex) => {
-          this.sessionLifecycleService.onTurnStart(sessionId, turnIndex);
-          this.taskWatchdogService.onTurnStart(sessionId);
-        },
-        onTurnEnd: (sessionId) => {
-          this.sessionLifecycleService.ensureHydrated(sessionId);
-          this.contextInjection.clearPending(sessionId);
-          this.contextService.clearReservedInjectionTokensForSession(sessionId);
-        },
-        onUserInput: (sessionId) => {
-          this.sessionLifecycleService.ensureHydrated(sessionId);
-        },
-        sanitizeInput: (text) => this.sanitizeInput(text),
-        observeUsage: (sessionId, usage) =>
-          this.contextService.observeContextUsage(sessionId, usage),
-        observePromptStability: (sessionId, input) => {
-          const observed = this.contextService.observePromptStability(sessionId, input);
-          this.invalidateSessionLifecycleSnapshot(sessionId);
-          return observed;
-        },
-        observeTransientReduction: (sessionId, input) =>
-          this.contextService.observeTransientReduction(sessionId, input),
-        getUsage: (sessionId) => this.contextService.getContextUsage(sessionId),
-        getPromptStability: (sessionId) => this.contextService.getPromptStability(sessionId),
-        getTransientReduction: (sessionId) => this.contextService.getTransientReduction(sessionId),
-        getReservedPrimaryTokens: (sessionId, injectionScopeId) =>
-          this.contextService.getReservedPrimaryTokens(sessionId, injectionScopeId),
-        getReservedSupplementalTokens: (sessionId, injectionScopeId) =>
-          this.contextService.getReservedSupplementalTokens(sessionId, injectionScopeId),
-        getUsageRatio: (usage) => this.contextService.getContextUsageRatio(usage),
-        getHardLimitRatio: (sessionId, usage) =>
-          this.contextService.getContextHardLimitRatio(sessionId, usage),
-        getCompactionThresholdRatio: (sessionId, usage) =>
-          this.contextService.getContextCompactionThresholdRatio(sessionId, usage),
-        getPressureStatus: (sessionId, usage) =>
-          this.contextService.getContextPressureStatus(sessionId, usage),
-        getPressureLevel: (sessionId, usage) =>
-          this.contextService.getContextPressureLevel(sessionId, usage),
-        getCompactionGateStatus: (sessionId, usage) =>
-          this.contextService.getContextCompactionGateStatus(sessionId, usage),
-        checkCompactionGate: (sessionId, toolName, usage) =>
-          this.contextService.checkContextCompactionGate(sessionId, toolName, usage),
-        getHistoryViewBaseline: (sessionId) => this.getHistoryViewBaseline(sessionId),
-        registerProvider: (provider) => this.contextService.registerContextSourceProvider(provider),
-        unregisterProvider: (source) => this.contextService.unregisterContextSourceProvider(source),
-        listProviders: () => this.contextService.listContextSourceProviders(),
-        buildInjection: (sessionId, prompt, usage, options) =>
-          this.contextService.buildContextInjection(sessionId, prompt, usage, options),
-        appendGuardedSupplementalBlocks: (sessionId, blocks, usage, injectionScopeId) =>
-          this.contextService.appendGuardedSupplementalBlocks(
-            sessionId,
-            blocks,
-            usage,
-            injectionScopeId,
-          ),
-        checkAndRequestCompaction: (sessionId, usage) =>
-          this.contextService.checkAndRequestCompaction(sessionId, usage),
-        requestCompaction: (sessionId, reason) =>
-          this.contextService.requestCompaction(sessionId, reason),
-        getPendingCompactionReason: (sessionId) =>
-          this.contextService.getPendingCompactionReason(sessionId),
-        getCompactionInstructions: () => this.contextService.getCompactionInstructions(),
-        getCompactionWindowTurns: () => this.contextService.getRecentCompactionWindowTurns(),
-      },
-      tools: {
-        checkAccess: (sessionId, toolName, args) =>
-          this.toolGateService.checkToolAccess(sessionId, toolName, args),
-        explainAccess: (input) => {
-          const access = this.toolGateService.explainToolAccessWithArgs(
-            input.sessionId,
-            input.toolName,
-            input.args,
-            input.cwd,
-          );
-          if (!access.allowed) {
-            return {
-              allowed: false,
-              reason: access.reason,
-              warning: access.warning,
-            };
-          }
-          const compaction = this.contextService.explainContextCompactionGate(
-            input.sessionId,
-            input.toolName,
-            input.usage,
-          );
-          if (!compaction.allowed) {
-            return {
-              allowed: false,
-              reason: compaction.reason,
-            };
-          }
-          const warnings = [access.warning].filter(
-            (value): value is string => typeof value === "string" && value.trim().length > 0,
-          );
-          return warnings.length > 0
-            ? { allowed: true, warning: warnings.join("; ") }
-            : { allowed: true };
-        },
-        getGovernanceDescriptor: (toolName, args) =>
-          this.toolGovernanceRegistry.get(toolName, args),
-        registerGovernanceDescriptor: (toolName, input) =>
-          this.toolGovernanceRegistry.register(toolName, input),
-        registerGovernanceResolver: (toolName, resolver) =>
-          this.toolGovernanceRegistry.registerResolver(toolName, resolver),
-        unregisterGovernanceDescriptor: (toolName) =>
-          this.toolGovernanceRegistry.unregister(toolName),
-        start: (input) => this.toolInvocationSpine.begin(input),
-        finish: (input) => {
-          this.toolInvocationSpine.complete(input);
-        },
-        acquireParallelSlot: (sessionId, runId) =>
-          this.parallelService.acquireParallelSlot(sessionId, runId),
-        acquireParallelSlotAsync: (sessionId, runId, options) =>
-          this.parallelService.acquireParallelSlotAsync(sessionId, runId, options),
-        releaseParallelSlot: (sessionId, runId) =>
-          this.parallelService.releaseParallelSlot(sessionId, runId),
-        requestResourceLease: (sessionId, request) =>
-          this.resourceLeaseService.requestLease(sessionId, request),
-        listResourceLeases: (sessionId, query) =>
-          this.resourceLeaseService.listLeases(sessionId, query),
-        cancelResourceLease: (sessionId, leaseId, reason) =>
-          this.resourceLeaseService.cancelLease(sessionId, leaseId, reason),
-        markCall: (sessionId, toolName) => this.fileChangeService.markToolCall(sessionId, toolName),
-        trackCallStart: (input) => this.fileChangeService.trackToolCallStart(input),
-        trackCallEnd: (input) => this.fileChangeService.trackToolCallEnd(input),
-        rollbackLastPatchSet: (sessionId) => this.fileChangeService.rollbackLastPatchSet(sessionId),
-        rollbackLastMutation: (sessionId) => this.mutationRollbackService.rollbackLast(sessionId),
-        resolveUndoSessionId: (preferredSessionId) =>
-          this.fileChangeService.resolveUndoSessionId(preferredSessionId),
-        recordResult: (input) => this.toolInvocationSpine.recordResult(input),
-      },
-      task: {
-        setSpec: (sessionId, spec) => this.taskService.setTaskSpec(sessionId, spec),
-        addItem: (sessionId, input) => this.taskService.addTaskItem(sessionId, input),
-        updateItem: (sessionId, input) => this.taskService.updateTaskItem(sessionId, input),
-        recordBlocker: (sessionId, input) => this.taskService.recordTaskBlocker(sessionId, input),
-        recordAcceptance: (sessionId, input) =>
-          this.taskService.recordTaskAcceptance(sessionId, input),
-        resolveBlocker: (sessionId, blockerId) =>
-          this.taskService.resolveTaskBlocker(sessionId, blockerId),
-        getTargetDescriptor: (sessionId) => this.getTaskTargetDescriptor(sessionId),
-        getState: (sessionId) => this.getTaskState(sessionId),
-      },
-      truth: {
-        getState: (sessionId) => this.getTruthState(sessionId),
-        upsertFact: (sessionId, input) => this.truthService.upsertTruthFact(sessionId, input),
-        resolveFact: (sessionId, truthFactId) =>
-          this.truthService.resolveTruthFact(sessionId, truthFactId),
-      },
-      ledger: {
-        getDigest: (sessionId) => this.ledgerService.getLedgerDigest(sessionId),
-        query: (sessionId, query) => this.ledgerService.queryLedger(sessionId, query),
-        listRows: (sessionId) => this.ledgerService.listLedgerRows(sessionId),
-        verifyIntegrity: (sessionId) => this.ledgerService.verifyLedgerIntegrity(sessionId),
-        getPath: () => this.ledgerService.getLedgerPath(),
-      },
-      schedule: {
-        createIntent: (sessionId, input) =>
-          this.scheduleIntentService.createScheduleIntent(sessionId, input),
-        cancelIntent: (sessionId, input) =>
-          this.scheduleIntentService.cancelScheduleIntent(sessionId, input),
-        updateIntent: (sessionId, input) =>
-          this.scheduleIntentService.updateScheduleIntent(sessionId, input),
-        listIntents: (query) => this.scheduleIntentService.listScheduleIntents(query),
-        getProjectionSnapshot: () => this.scheduleIntentService.getScheduleProjectionSnapshot(),
-      },
-      recoveryWal: {
-        appendPending: (envelope, source, options) =>
-          this.recoveryWalStore.appendPending(envelope, source, options),
-        markInflight: (walId) => this.recoveryWalStore.markInflight(walId),
-        markDone: (walId) => this.recoveryWalStore.markDone(walId),
-        markFailed: (walId, error) => this.recoveryWalStore.markFailed(walId, error),
-        markExpired: (walId) => this.recoveryWalStore.markExpired(walId),
-        listPending: () => this.recoveryWalStore.listPending(),
-        getPosture: (sessionId) => this.getRecoveryPosture(sessionId),
-        getWorkingSet: (sessionId) => this.getRecoveryWorkingSet(sessionId),
-        recover: async () => {
-          const recovery = new RecoveryWalRecovery({
-            workspaceRoot: this.workspaceRoot,
-            config: this.runtimeConfig.infrastructure.recoveryWal,
-            recordEvent: (input: { sessionId: string; type: string; payload?: object }) => {
-              this.recordEvent({
-                sessionId: input.sessionId,
-                type: input.type,
-                payload: input.payload,
-                skipTapeCheckpoint: true,
-              });
-            },
-          });
-          return await recovery.recover();
-        },
-        compact: () => this.recoveryWalStore.compact(),
-      },
-      lifecycle: {
-        getSnapshot: (sessionId) => this.getSessionLifecycleSnapshot(sessionId),
-      },
-      events: {
-        record: (input) => this.recordEvent(input),
-        resolveLogPath: (sessionId) => this.eventStore.getLogPath(sessionId),
-        query: (sessionId, query) => this.eventPipeline.queryEvents(sessionId, query),
-        queryStructured: (sessionId, query) =>
-          this.eventPipeline.queryStructuredEvents(sessionId, query),
-        recordMetricObservation: (sessionId, input) =>
-          this.recordMetricObservation(sessionId, input),
-        listMetricObservations: (sessionId, query) => this.listMetricObservations(sessionId, query),
-        recordGuardResult: (sessionId, input) => this.recordGuardResult(sessionId, input),
-        listGuardResults: (sessionId, query) => this.listGuardResults(sessionId, query),
-        getTapeStatus: (sessionId) => this.tapeService.getTapeStatus(sessionId),
-        getTapePressureThresholds: () => this.tapeService.getPressureThresholds(),
-        recordTapeHandoff: (sessionId, input) =>
-          this.tapeService.recordTapeHandoff(sessionId, input),
-        searchTape: (sessionId, input) => this.tapeService.searchTape(sessionId, input),
-        listReplaySessions: (limit) => this.eventPipeline.listReplaySessions(limit),
-        subscribe: (listener) => this.eventPipeline.subscribeEvents(listener),
-        toStructured: (event) => this.eventPipeline.toStructuredEvent(event),
-        list: (sessionId, query) => this.eventStore.list(sessionId, query),
-        listSessionIds: () => this.eventStore.listSessionIds(),
-      },
-      verification: {
-        evaluate: (sessionId, level) => this.evaluateCompletion(sessionId, level),
-        verify: (sessionId, level, options) => {
-          this.sessionLifecycleService.ensureHydrated(sessionId);
-          return this.verificationService.verifyCompletion(sessionId, level, options);
-        },
-      },
-      cost: {
-        recordAssistantUsage: (input) => this.costService.recordAssistantUsage(input),
-        getSummary: (sessionId) => this.costService.getCostSummary(sessionId),
-      },
-      session: {
-        recordWorkerResult: (sessionId, result) =>
-          this.parallelService.recordWorkerResult(sessionId, result),
-        listWorkerResults: (sessionId) => this.parallelService.listWorkerResults(sessionId),
-        getOpenToolCalls: (sessionId) => this.sessionLifecycleService.getOpenToolCalls(sessionId),
-        getUncleanShutdownDiagnostic: (sessionId) =>
-          this.sessionLifecycleService.getUncleanShutdownDiagnostic(sessionId),
-        mergeWorkerResults: (sessionId) => this.parallelService.mergeWorkerResults(sessionId),
-        applyMergedWorkerResults: (sessionId, input) =>
-          this.parallelService.applyMergedWorkerResults(sessionId, input),
-        clearWorkerResults: (sessionId) => this.parallelService.clearWorkerResults(sessionId),
-        pollStall: (sessionId, input) =>
-          this.taskWatchdogService.pollTaskProgress({
-            sessionId,
-            now: input?.now,
-            thresholdMs: input?.thresholdMs,
-          }),
-        clearState: (sessionId) => this.sessionLifecycleService.clearSessionState(sessionId),
-        onClearState: (listener) => this.sessionLifecycleService.onClearState(listener),
-        getHydration: (sessionId) => {
-          this.sessionLifecycleService.ensureHydrated(sessionId);
-          return this.sessionLifecycleService.getHydrationState(sessionId);
-        },
-        getIntegrity: (sessionId) => {
-          this.sessionLifecycleService.ensureHydrated(sessionId);
-          return this.sessionLifecycleService.getIntegrityStatus(sessionId);
-        },
-        commitCompaction: (sessionId, input) =>
-          this.contextService.markContextCompacted(sessionId, input),
-        resolveCredentialBindings: (sessionId, toolName) => {
-          this.sessionLifecycleService.ensureHydrated(sessionId);
-          return this.credentialVaultService.resolveToolBindings(
-            toolName,
-            this.runtimeConfig.security.credentials.bindings,
-          );
-        },
-        resolveSandboxApiKey: (sessionId) => {
-          this.sessionLifecycleService.ensureHydrated(sessionId);
-          return this.credentialVaultService.resolveConfiguredSecret(
-            this.runtimeConfig.security.credentials.sandboxApiKeyRef,
-          );
-        },
-      },
-      sessionWire: {
-        query: (sessionId) => this.sessionWireService.query(sessionId),
-        subscribe: (sessionId, listener) => this.sessionWireService.subscribe(sessionId, listener),
-      },
-    };
+    });
   }
 
   private createSurfacePorts(methodGroups: BrewvaRuntimeMethodGroups): {
@@ -1594,7 +981,7 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
       sessionId,
       usage: this.contextService.getContextUsage(sessionId),
       referenceContextDigest: this.sessionState.getPromptStability(sessionId)?.stablePrefixHash,
-      reservedBudgetRatio: this.getHistoryViewBaselineReservedBudgetRatio(),
+      reservedBudgetRatio: HISTORY_VIEW_BASELINE_RESERVED_BUDGET_RATIO,
     });
   }
 
@@ -1609,7 +996,7 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
       sessionId,
       usage: this.contextService.getContextUsage(sessionId),
       referenceContextDigest: this.sessionState.getPromptStability(sessionId)?.stablePrefixHash,
-      reservedBudgetRatio: this.getHistoryViewBaselineReservedBudgetRatio(),
+      reservedBudgetRatio: HISTORY_VIEW_BASELINE_RESERVED_BUDGET_RATIO,
     }).posture;
   }
 
@@ -1619,15 +1006,8 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
       sessionId,
       usage: this.contextService.getContextUsage(sessionId),
       referenceContextDigest: this.sessionState.getPromptStability(sessionId)?.stablePrefixHash,
-      reservedBudgetRatio: this.getHistoryViewBaselineReservedBudgetRatio(),
+      reservedBudgetRatio: HISTORY_VIEW_BASELINE_RESERVED_BUDGET_RATIO,
     }).workingSet;
-  }
-
-  private getHistoryViewBaselineReservedBudgetRatio(): number | undefined {
-    return this.contextService
-      .listContextSourceProviders()
-      .find((provider) => provider.source === CONTEXT_SOURCES.historyViewBaseline)
-      ?.reservedBudgetRatio;
   }
 
   private invalidateSessionLifecycleSnapshot(sessionId: string): void {
@@ -1648,7 +1028,7 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
       sessionId,
       usage,
       referenceContextDigest,
-      reservedBudgetRatio: this.getHistoryViewBaselineReservedBudgetRatio(),
+      reservedBudgetRatio: HISTORY_VIEW_BASELINE_RESERVED_BUDGET_RATIO,
     });
     const transitionState = deriveTransitionState(events);
     const snapshot = buildSessionLifecycleSnapshot({
@@ -1663,9 +1043,9 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
       },
       activeSkillState: this.skillLifecycleService.getActiveSkillState(sessionId),
       latestSkillFailure: this.skillLifecycleService.getLatestSkillFailure(sessionId),
-      pendingApprovals: this.effectCommitmentDeskService.listPending(sessionId),
+      pendingApprovals: this.getEffectCommitmentDeskService().listPending(sessionId),
       openToolCalls: deriveOpenToolCallsFromEvents(events),
-      frames: this.sessionWireService.query(sessionId),
+      frames: this.getSessionWireService().query(sessionId),
     });
     this.sessionLifecycleSnapshotCache.set(sessionId, snapshot);
     return structuredClone(snapshot);
@@ -1699,7 +1079,7 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
     const recorded = this.eventPipeline.recordEvent(input);
     if (recorded) {
       if (LIFECYCLE_APPROVAL_CACHE_EVENT_TYPES.has(recorded.type)) {
-        this.effectCommitmentDeskService.clear(recorded.sessionId);
+        this.clearEffectCommitmentDeskState(recorded.sessionId);
       }
       this.invalidateSessionLifecycleSnapshot(recorded.sessionId);
     }

@@ -20,7 +20,7 @@ import {
 import { isPathInsideRoots, resolveScopedPath, resolveToolTargetScope } from "./target-scope.js";
 import type { BrewvaToolOptions } from "./types.js";
 import { failTextResult, inconclusiveTextResult, textResult } from "./utils/result.js";
-import { defineBrewvaTool } from "./utils/tool.js";
+import { createManagedBrewvaToolFactory } from "./utils/runtime-bound-tool.js";
 
 const DISPLACEMENT_TARGET_KINDS = new Set(["stable_doc", "solution_record"] as const);
 const STABLE_DOC_PREFIXES = ["docs/architecture/", "docs/reference/"] as const;
@@ -695,7 +695,8 @@ function loadAuditCandidate(input: {
 }
 
 export function createPrecedentAuditTool(options: BrewvaToolOptions): ToolDefinition {
-  return defineBrewvaTool({
+  const precedentAuditTool = createManagedBrewvaToolFactory("precedent_audit");
+  return precedentAuditTool.define({
     name: "precedent_audit",
     label: "Precedent Audit",
     description:

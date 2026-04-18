@@ -21,5 +21,4 @@ export * from "./cost.js";
 export * from "./integrity.js";
 export * from "./review.js";
 export * from "./planning.js";
-export * from "./semantic-artifacts.js";
 export * from "./reasoning.js";

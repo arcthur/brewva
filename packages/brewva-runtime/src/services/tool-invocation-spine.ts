@@ -9,6 +9,7 @@ import type {
   ToolAccessDecision,
   ToolGateService,
 } from "./tool-gate.js";
+import type { ToolStartReadinessService } from "./tool-start-readiness.js";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -69,6 +70,7 @@ export interface RecordToolResultInput {
 }
 
 export interface ToolInvocationSpineOptions {
+  toolStartReadinessService: Pick<ToolStartReadinessService, "checkToolStartReadiness">;
   toolGateService: Pick<
     ToolGateService,
     "authorizeToolCall" | "clearEffectCommitmentState" | "resolveToolCompletion"
@@ -88,6 +90,7 @@ type CompletionContext = {
 };
 
 export class ToolInvocationSpine {
+  private readonly checkToolStartReadiness: ToolStartReadinessService["checkToolStartReadiness"];
   private readonly authorizeToolCall: ToolGateService["authorizeToolCall"];
   private readonly clearEffectCommitmentState: ToolGateService["clearEffectCommitmentState"];
   private readonly resolveToolCompletion: ToolGateService["resolveToolCompletion"];
@@ -99,6 +102,8 @@ export class ToolInvocationSpine {
   private readonly recordMutation: ReversibleMutationService["record"];
 
   constructor(options: ToolInvocationSpineOptions) {
+    this.checkToolStartReadiness = (sessionId, toolName, usage) =>
+      options.toolStartReadinessService.checkToolStartReadiness(sessionId, toolName, usage);
     this.authorizeToolCall = (input) => options.toolGateService.authorizeToolCall(input);
     this.clearEffectCommitmentState = (input) =>
       options.toolGateService.clearEffectCommitmentState(input);
@@ -113,6 +118,11 @@ export class ToolInvocationSpine {
   }
 
   begin(input: StartToolCallInput): ToolAccessDecision {
+    const readiness = this.checkToolStartReadiness(input.sessionId, input.toolName, input.usage);
+    if (!readiness.allowed) {
+      return readiness;
+    }
+
     const decision = this.authorizeToolCall(input);
     if (!decision.allowed) {
       return decision;

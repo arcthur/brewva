@@ -2,17 +2,18 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import type { BrewvaConfig } from "../contracts/index.js";
 import { DEFAULT_BREWVA_CONFIG } from "./defaults.js";
+export * from "./errors.js";
+import type { BrewvaForensicConfigWarning } from "./errors.js";
+import { BrewvaConfigLoadError } from "./errors.js";
 import { parseJsonc } from "./jsonc.js";
 import { deepMerge } from "./merge.js";
 import { normalizeBrewvaConfig } from "./normalize.js";
+import {
+  forensicallyValidateLoadedBrewvaConfigObject,
+  validateLoadedBrewvaConfigObject,
+} from "./object-validation.js";
 import { resolveGlobalBrewvaConfigPath, resolveProjectBrewvaConfigPath } from "./paths.js";
-import { validateBrewvaConfigFile } from "./validate.js";
-
-export type BrewvaConfigLoadErrorCode =
-  | "config_parse_error"
-  | "config_not_object"
-  | "config_schema_unavailable"
-  | "config_schema_invalid";
+import { assertExplicitBrewvaConfigSemantics } from "./semantic-validation.js";
 
 export interface LoadConfigOptions {
   cwd?: string;
@@ -37,36 +38,9 @@ export interface BrewvaConfigResolution {
   metadata: BrewvaConfigMetadata;
 }
 
-export type BrewvaForensicConfigWarningCode =
-  | "config_parse_skipped"
-  | "config_not_object_skipped"
-  | "config_unknown_fields_stripped"
-  | "config_removed_fields_stripped"
-  | "config_schema_skipped"
-  | "config_normalize_skipped";
-
-export interface BrewvaForensicConfigWarning {
-  code: BrewvaForensicConfigWarningCode;
-  configPath: string;
-  message: string;
-  fields?: string[];
-}
-
 export interface BrewvaForensicConfigResolution extends BrewvaConfigResolution {
   consultedPaths: string[];
   warnings: BrewvaForensicConfigWarning[];
-}
-
-export class BrewvaConfigLoadError extends Error {
-  readonly code: BrewvaConfigLoadErrorCode;
-  readonly configPath: string;
-
-  constructor(input: { code: BrewvaConfigLoadErrorCode; configPath: string; message: string }) {
-    super(input.message);
-    this.name = "BrewvaConfigLoadError";
-    this.code = input.code;
-    this.configPath = input.configPath;
-  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -141,178 +115,6 @@ function resolveConfigRelativeSkillRoots(
   };
 }
 
-function stripMetaFields(value: Record<string, unknown>): Record<string, unknown> {
-  const output = { ...value };
-  // Used for editor completion/validation, ignored by runtime.
-  delete output["$schema"];
-  return output;
-}
-
-const REMOVED_PROJECTION_FIELDS = new Set<string>([
-  "dailyRefreshHourLocal",
-  "crystalMinUnits",
-  "retrievalTopK",
-  "retrievalWeights",
-  "recallMode",
-  "externalRecall",
-  "evolvesMode",
-  "cognitive",
-  "global",
-]);
-
-function formatSchemaInvalidMessage(errors: ReadonlyArray<string>): string {
-  return `Config does not match schema: ${errors.join("; ")}`;
-}
-
-function collectRemovedFieldErrors(parsed: Record<string, unknown>): string[] {
-  const errors: string[] = [];
-  const projection = parsed["projection"];
-  if (!isRecord(projection)) return errors;
-
-  for (const key of Object.keys(projection)) {
-    if (!REMOVED_PROJECTION_FIELDS.has(key)) continue;
-    errors.push(`/projection: unknown property "${key}"`);
-  }
-
-  return errors;
-}
-
-function decodeJsonPointerSegment(segment: string): string {
-  return segment.replaceAll("~1", "/").replaceAll("~0", "~");
-}
-
-function deletePropertyAtPointer(
-  root: Record<string, unknown>,
-  pointer: string,
-  property: string,
-): boolean {
-  const segments =
-    pointer === "/" || pointer.length === 0
-      ? []
-      : pointer
-          .split("/")
-          .slice(1)
-          .map((segment) => decodeJsonPointerSegment(segment));
-  let cursor: unknown = root;
-  for (const segment of segments) {
-    if (!isRecord(cursor)) {
-      return false;
-    }
-    cursor = cursor[segment];
-  }
-  if (!isRecord(cursor) || !Object.hasOwn(cursor, property)) {
-    return false;
-  }
-  delete cursor[property];
-  return true;
-}
-
-function collectUnknownPropertyErrors(
-  errors: ReadonlyArray<string>,
-): Array<{ pointer: string; property: string }> {
-  const output: Array<{ pointer: string; property: string }> = [];
-  for (const error of errors) {
-    const match = error.match(/^(.*): unknown property "([^"]+)"$/);
-    if (!match) {
-      continue;
-    }
-    const pointer = match[1]?.trim();
-    const property = match[2]?.trim();
-    if (!pointer || !property) {
-      continue;
-    }
-    output.push({ pointer, property });
-  }
-  return output;
-}
-
-function stripForensicRemovedFields(root: Record<string, unknown>): string[] {
-  const stripped: string[] = [];
-  const projection = isRecord(root["projection"]) ? root["projection"] : null;
-  if (projection) {
-    for (const key of Object.keys(projection)) {
-      if (!REMOVED_PROJECTION_FIELDS.has(key)) {
-        continue;
-      }
-      delete projection[key];
-      stripped.push(`/projection/${key}`);
-    }
-  }
-  const skills = isRecord(root["skills"]) ? root["skills"] : null;
-  if (skills && Object.hasOwn(skills, "cascade")) {
-    delete skills["cascade"];
-    stripped.push("/skills/cascade");
-  }
-  return stripped;
-}
-
-function stripUnknownPropertiesForForensics(root: Record<string, unknown>): string[] {
-  const stripped = new Set<string>();
-  for (let attempt = 0; attempt < 32; attempt += 1) {
-    const validation = validateBrewvaConfigFile(root);
-    if (validation.ok) {
-      break;
-    }
-    const unknownProperties = collectUnknownPropertyErrors(validation.errors);
-    if (unknownProperties.length === 0) {
-      break;
-    }
-    let changed = false;
-    for (const unknownProperty of unknownProperties) {
-      if (deletePropertyAtPointer(root, unknownProperty.pointer, unknownProperty.property)) {
-        stripped.add(
-          `${unknownProperty.pointer === "/" ? "" : unknownProperty.pointer}/${unknownProperty.property}`,
-        );
-        changed = true;
-      }
-    }
-    if (!changed) {
-      break;
-    }
-  }
-  return [...stripped].toSorted((left, right) => left.localeCompare(right));
-}
-
-function validateConfigObject(parsed: unknown, configPath: string): Record<string, unknown> {
-  if (!isRecord(parsed)) {
-    throw new BrewvaConfigLoadError({
-      code: "config_not_object",
-      message: "Config must be a JSON object at the top-level.",
-      configPath,
-    });
-  }
-
-  const removedFieldErrors = collectRemovedFieldErrors(parsed);
-  if (removedFieldErrors.length > 0) {
-    throw new BrewvaConfigLoadError({
-      code: "config_schema_invalid",
-      message: formatSchemaInvalidMessage(removedFieldErrors),
-      configPath,
-    });
-  }
-
-  const validation = validateBrewvaConfigFile(parsed);
-  if (!validation.ok) {
-    if ("error" in validation) {
-      throw new BrewvaConfigLoadError({
-        code: "config_schema_unavailable",
-        message: `Schema validation is unavailable: ${validation.error}`,
-        configPath,
-      });
-    }
-
-    if (validation.errors.length > 0) {
-      throw new BrewvaConfigLoadError({
-        code: "config_schema_invalid",
-        message: formatSchemaInvalidMessage(validation.errors),
-        configPath,
-      });
-    }
-  }
-
-  return stripMetaFields(parsed);
-}
-
 export function normalizeExplicitBrewvaConfig(
   config: unknown,
   options: NormalizeExplicitBrewvaConfigOptions = {},
@@ -325,10 +127,8 @@ export function normalizeExplicitBrewvaConfigResolution(
   options: NormalizeExplicitBrewvaConfigOptions = {},
 ): BrewvaConfigResolution {
   const sourceLabel = options.sourceLabel ?? "<direct runtime config>";
-  // Preserve explicit migration/prohibition diagnostics already encoded in the
-  // normalizer before schema validation rejects unknown keys generically.
-  normalizeBrewvaConfig(config, DEFAULT_BREWVA_CONFIG);
-  const validated = validateConfigObject(config, sourceLabel);
+  assertExplicitBrewvaConfigSemantics(config);
+  const validated = validateLoadedBrewvaConfigObject(config, sourceLabel);
   return {
     config: normalizeBrewvaConfig(validated as Partial<BrewvaConfig>, DEFAULT_BREWVA_CONFIG),
     metadata: collectBrewvaConfigMetadata(validated),
@@ -350,7 +150,7 @@ function readConfigFile(configPath: string): Partial<BrewvaConfig> | undefined {
     });
   }
 
-  const cleaned = validateConfigObject(parsed, configPath);
+  const cleaned = validateLoadedBrewvaConfigObject(parsed, configPath);
   return resolveConfigRelativeSkillRoots(cleaned as Partial<BrewvaConfig>, configPath);
 }
 
@@ -394,51 +194,18 @@ function readConfigFileForInspect(configPath: string): {
     };
   }
 
-  const sanitized = stripMetaFields(structuredClone(parsed));
-  const warnings: BrewvaForensicConfigWarning[] = [];
-  const removedFields = stripForensicRemovedFields(sanitized);
-  if (removedFields.length > 0) {
-    warnings.push({
-      code: "config_removed_fields_stripped",
-      configPath,
-      message:
-        "Stripped removed config fields while loading inspect runtime; old semantics remain disabled.",
-      fields: removedFields,
-    });
-  }
-
-  const unknownFields = stripUnknownPropertiesForForensics(sanitized);
-  if (unknownFields.length > 0) {
-    warnings.push({
-      code: "config_unknown_fields_stripped",
-      configPath,
-      message: "Stripped unknown config fields while loading inspect runtime.",
-      fields: unknownFields,
-    });
-  }
-
-  const validation = validateBrewvaConfigFile(sanitized);
-  if (!validation.ok) {
-    warnings.push({
-      code: "config_schema_skipped",
-      configPath,
-      message: `Skipped inspect config after forensic stripping because validation still failed: ${
-        validation.errors.length > 0
-          ? formatSchemaInvalidMessage(validation.errors)
-          : "error" in validation
-            ? validation.error
-            : "schema validation unavailable"
-      }`,
-    });
+  const forensicValidation = forensicallyValidateLoadedBrewvaConfigObject(parsed, configPath);
+  if (!forensicValidation.parsed) {
     return {
       metadata,
-      warnings,
+      warnings: forensicValidation.warnings,
     };
   }
 
   try {
-    normalizeBrewvaConfig(sanitized, DEFAULT_BREWVA_CONFIG);
+    normalizeBrewvaConfig(forensicValidation.parsed, DEFAULT_BREWVA_CONFIG);
   } catch (error) {
+    const warnings = [...forensicValidation.warnings];
     warnings.push({
       code: "config_normalize_skipped",
       configPath,
@@ -453,9 +220,12 @@ function readConfigFileForInspect(configPath: string): {
   }
 
   return {
-    parsed: resolveConfigRelativeSkillRoots(sanitized as Partial<BrewvaConfig>, configPath),
-    metadata: collectBrewvaConfigMetadata(sanitized),
-    warnings,
+    parsed: resolveConfigRelativeSkillRoots(
+      forensicValidation.parsed as Partial<BrewvaConfig>,
+      configPath,
+    ),
+    metadata: collectBrewvaConfigMetadata(forensicValidation.parsed),
+    warnings: forensicValidation.warnings,
   };
 }
 

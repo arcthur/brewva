@@ -3,8 +3,8 @@ import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-subs
 import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "./types.js";
 import { failTextResult, inconclusiveTextResult, textResult } from "./utils/result.js";
+import { createRuntimeBoundBrewvaToolFactory } from "./utils/runtime-bound-tool.js";
 import { getSessionId } from "./utils/session.js";
-import { defineBrewvaTool } from "./utils/tool.js";
 
 function formatMergeReport(report: WorkerMergeReport): string {
   if (report.status === "empty") {
@@ -77,7 +77,11 @@ function formatApplyReport(report: WorkerApplyReport): string {
 }
 
 export function createWorkerResultsMergeTool(options: BrewvaToolOptions): ToolDefinition {
-  return defineBrewvaTool({
+  const { runtime, define } = createRuntimeBoundBrewvaToolFactory(
+    options.runtime,
+    "worker_results_merge",
+  );
+  return define({
     name: "worker_results_merge",
     label: "Worker Results Merge",
     description: "Inspect the current session's recorded worker results and report merge status.",
@@ -90,7 +94,7 @@ export function createWorkerResultsMergeTool(options: BrewvaToolOptions): ToolDe
     parameters: Type.Object({}, { additionalProperties: false }),
     async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
       const sessionId = getSessionId(ctx);
-      const report = options.runtime.inspect.session.mergeWorkerResults(sessionId);
+      const report = runtime.inspect.session.mergeWorkerResults(sessionId);
       if (report.status === "conflicts") {
         return failTextResult(formatMergeReport(report), {
           ok: false,
@@ -120,52 +124,61 @@ export function createWorkerResultsMergeTool(options: BrewvaToolOptions): ToolDe
 }
 
 export function createWorkerResultsApplyTool(options: BrewvaToolOptions): ToolDefinition {
-  return defineBrewvaTool({
-    name: "worker_results_apply",
-    label: "Worker Results Apply",
-    description:
-      "Merge recorded worker results for the current session and apply the merged patch set to the parent workspace.",
-    promptSnippet:
-      "Apply a clean merged worker patch set only after inspecting that the current worker results are conflict-free.",
-    promptGuidelines: [
-      "Prefer calling worker_results_merge first when the current worker set may conflict.",
-      "Use this only when the parent session is ready to adopt the merged worker patch into its own workspace.",
-    ],
-    parameters: Type.Object({}, { additionalProperties: false }),
-    async execute(toolCallId, _params, _signal, _onUpdate, ctx) {
-      const sessionId = getSessionId(ctx);
-      const report = options.runtime.authority.session.applyMergedWorkerResults(sessionId, {
-        toolName: "worker_results_apply",
-        toolCallId,
-      });
-      if (report.status === "applied") {
-        return textResult(formatApplyReport(report), {
-          ok: true,
-          status: report.status,
-          workerIds: report.workerIds,
-          mergedPatchSet: report.mergedPatchSet ?? null,
-          patchSet: report.mergedPatchSet ?? null,
-          appliedPatchSetId: report.appliedPatchSetId ?? null,
-          appliedPaths: report.appliedPaths,
+  const { runtime, define } = createRuntimeBoundBrewvaToolFactory(
+    options.runtime,
+    "worker_results_apply",
+  );
+  return define(
+    {
+      name: "worker_results_apply",
+      label: "Worker Results Apply",
+      description:
+        "Merge recorded worker results for the current session and apply the merged patch set to the parent workspace.",
+      promptSnippet:
+        "Apply a clean merged worker patch set only after inspecting that the current worker results are conflict-free.",
+      promptGuidelines: [
+        "Prefer calling worker_results_merge first when the current worker set may conflict.",
+        "Use this only when the parent session is ready to adopt the merged worker patch into its own workspace.",
+      ],
+      parameters: Type.Object({}, { additionalProperties: false }),
+      async execute(toolCallId, _params, _signal, _onUpdate, ctx) {
+        const sessionId = getSessionId(ctx);
+        const report = runtime.authority.session.applyMergedWorkerResults(sessionId, {
+          toolName: "worker_results_apply",
+          toolCallId,
         });
-      }
-      if (report.status === "empty") {
-        return inconclusiveTextResult(formatApplyReport(report), {
+        if (report.status === "applied") {
+          return textResult(formatApplyReport(report), {
+            ok: true,
+            status: report.status,
+            workerIds: report.workerIds,
+            mergedPatchSet: report.mergedPatchSet ?? null,
+            patchSet: report.mergedPatchSet ?? null,
+            appliedPatchSetId: report.appliedPatchSetId ?? null,
+            appliedPaths: report.appliedPaths,
+          });
+        }
+        if (report.status === "empty") {
+          return inconclusiveTextResult(formatApplyReport(report), {
+            ok: false,
+            status: report.status,
+            workerIds: report.workerIds,
+            reason: report.reason ?? null,
+          });
+        }
+        return failTextResult(formatApplyReport(report), {
           ok: false,
           status: report.status,
           workerIds: report.workerIds,
-          reason: report.reason ?? null,
+          conflicts: report.conflicts,
+          mergedPatchSet: report.mergedPatchSet ?? null,
+          failedPaths: report.failedPaths,
+          reason: report.status === "apply_failed" ? report.reason : null,
         });
-      }
-      return failTextResult(formatApplyReport(report), {
-        ok: false,
-        status: report.status,
-        workerIds: report.workerIds,
-        conflicts: report.conflicts,
-        mergedPatchSet: report.mergedPatchSet ?? null,
-        failedPaths: report.failedPaths,
-        reason: report.status === "apply_failed" ? report.reason : null,
-      });
+      },
     },
-  });
+    {
+      requiredCapabilities: ["authority.session.applyMergedWorkerResults"],
+    },
+  );
 }

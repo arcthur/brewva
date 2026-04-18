@@ -2,8 +2,8 @@ import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-subs
 import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "./types.js";
 import { textResult } from "./utils/result.js";
+import { createRuntimeBoundBrewvaToolFactory } from "./utils/runtime-bound-tool.js";
 import { getSessionId } from "./utils/session.js";
-import { defineBrewvaTool } from "./utils/tool.js";
 
 function formatRollbackMessage(input: {
   ok: boolean;
@@ -31,25 +31,34 @@ function formatRollbackMessage(input: {
 }
 
 export function createRollbackLastPatchTool(options: BrewvaToolOptions): ToolDefinition {
-  return defineBrewvaTool({
-    name: "rollback_last_patch",
-    label: "Rollback Last Patch Set",
-    description: "Roll back the most recently tracked file mutation patch set for this session.",
-    promptSnippet: "Restore the most recent tracked mutation patch set for the session.",
-    promptGuidelines: [
-      "Use this when the latest tracked file mutation should be reverted, especially after a failed edit path.",
-    ],
-    parameters: Type.Object({}, { additionalProperties: false }),
-    async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
-      const sessionId = getSessionId(ctx);
-      const rollback = options.runtime.authority.tools.rollbackLastPatchSet(sessionId);
-      return textResult(formatRollbackMessage(rollback), {
-        ok: rollback.ok,
-        patchSetId: rollback.patchSetId,
-        restoredPaths: rollback.restoredPaths,
-        failedPaths: rollback.failedPaths,
-        reason: rollback.ok ? undefined : rollback.reason,
-      });
+  const { runtime, define } = createRuntimeBoundBrewvaToolFactory(
+    options.runtime,
+    "rollback_last_patch",
+  );
+  return define(
+    {
+      name: "rollback_last_patch",
+      label: "Rollback Last Patch Set",
+      description: "Roll back the most recently tracked file mutation patch set for this session.",
+      promptSnippet: "Restore the most recent tracked mutation patch set for the session.",
+      promptGuidelines: [
+        "Use this when the latest tracked file mutation should be reverted, especially after a failed edit path.",
+      ],
+      parameters: Type.Object({}, { additionalProperties: false }),
+      async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
+        const sessionId = getSessionId(ctx);
+        const rollback = runtime.authority.tools.rollbackLastPatchSet(sessionId);
+        return textResult(formatRollbackMessage(rollback), {
+          ok: rollback.ok,
+          patchSetId: rollback.patchSetId,
+          restoredPaths: rollback.restoredPaths,
+          failedPaths: rollback.failedPaths,
+          reason: rollback.ok ? undefined : rollback.reason,
+        });
+      },
     },
-  });
+    {
+      requiredCapabilities: ["authority.tools.rollbackLastPatchSet"],
+    },
+  );
 }

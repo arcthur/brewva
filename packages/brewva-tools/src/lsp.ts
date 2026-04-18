@@ -31,7 +31,7 @@ import {
   withParallelReadSlot,
 } from "./utils/parallel-read.js";
 import { failTextResult, inconclusiveTextResult, textResult, withVerdict } from "./utils/result.js";
-import { defineBrewvaTool } from "./utils/tool.js";
+import { createRuntimeBoundBrewvaToolFactory } from "./utils/runtime-bound-tool.js";
 
 const CODE_EXTENSIONS = new Set([
   ".ts",
@@ -461,12 +461,30 @@ function applyRename(
 }
 
 export function createLspTools(options?: { runtime?: BrewvaBundledToolRuntime }): ToolDefinition[] {
+  const lspGotoDefinitionTool = createRuntimeBoundBrewvaToolFactory(
+    options?.runtime,
+    "lsp_goto_definition",
+  );
+  const lspFindReferencesTool = createRuntimeBoundBrewvaToolFactory(
+    options?.runtime,
+    "lsp_find_references",
+  );
+  const lspSymbolsTool = createRuntimeBoundBrewvaToolFactory(options?.runtime, "lsp_symbols");
+  const lspDiagnosticsTool = createRuntimeBoundBrewvaToolFactory(
+    options?.runtime,
+    "lsp_diagnostics",
+  );
+  const lspPrepareRenameTool = createRuntimeBoundBrewvaToolFactory(
+    options?.runtime,
+    "lsp_prepare_rename",
+  );
+  const lspRenameTool = createRuntimeBoundBrewvaToolFactory(options?.runtime, "lsp_rename");
   const resolveLspScope = (ctx: unknown) => resolveToolTargetScope(options?.runtime, ctx);
   const resolveLspCwd = (ctx: unknown) => resolveLspScope(ctx).baseCwd;
   const resolveLspFilePath = (ctx: unknown, filePath: string): string | null =>
     resolveScopedPath(filePath, resolveLspScope(ctx));
 
-  const lspGotoDefinition = defineBrewvaTool({
+  const lspGotoDefinition = lspGotoDefinitionTool.define({
     name: "lsp_goto_definition",
     label: "LSP Go To Definition",
     description:
@@ -486,7 +504,7 @@ export function createLspTools(options?: { runtime?: BrewvaBundledToolRuntime })
       }
       const sessionId = getToolSessionId(ctx);
       recordLspDiscoveryObservation({
-        runtime: options?.runtime,
+        runtime: lspGotoDefinitionTool.runtime,
         sessionId,
         baseCwd: resolveLspCwd(ctx),
         toolName: "lsp_goto_definition",
@@ -498,17 +516,17 @@ export function createLspTools(options?: { runtime?: BrewvaBundledToolRuntime })
       if (!symbol) return inconclusiveTextResult("No symbol found at cursor.");
 
       const scan: LspParallelReadContext = {
-        runtime: options?.runtime,
+        runtime: lspGotoDefinitionTool.runtime,
         sessionId,
         toolName: "lsp_goto_definition",
-        config: resolveParallelReadConfig(options?.runtime),
+        config: resolveParallelReadConfig(lspGotoDefinitionTool.runtime),
       };
       const matches = await findDefinition(resolveLspCwd(ctx), symbol, scan, targetFilePath, 1);
       if (matches.length === 0) {
         return inconclusiveTextResult(`No definition found for '${symbol}'.`);
       }
       recordLspDiscoveryObservation({
-        runtime: options?.runtime,
+        runtime: lspGotoDefinitionTool.runtime,
         sessionId,
         baseCwd: resolveLspCwd(ctx),
         toolName: "lsp_goto_definition",
@@ -526,7 +544,7 @@ export function createLspTools(options?: { runtime?: BrewvaBundledToolRuntime })
     },
   });
 
-  const lspFindReferences = defineBrewvaTool({
+  const lspFindReferences = lspFindReferencesTool.define({
     name: "lsp_find_references",
     label: "LSP Find References",
     description: "Heuristic-based (regex/file scan), not real LSP. Find likely symbol references.",
@@ -546,7 +564,7 @@ export function createLspTools(options?: { runtime?: BrewvaBundledToolRuntime })
       }
       const sessionId = getToolSessionId(ctx);
       recordLspDiscoveryObservation({
-        runtime: options?.runtime,
+        runtime: lspFindReferencesTool.runtime,
         sessionId,
         baseCwd: resolveLspCwd(ctx),
         toolName: "lsp_find_references",
@@ -558,10 +576,10 @@ export function createLspTools(options?: { runtime?: BrewvaBundledToolRuntime })
       if (!symbol) return inconclusiveTextResult("No symbol found at cursor.");
 
       const scan: LspParallelReadContext = {
-        runtime: options?.runtime,
+        runtime: lspFindReferencesTool.runtime,
         sessionId,
         toolName: "lsp_find_references",
-        config: resolveParallelReadConfig(options?.runtime),
+        config: resolveParallelReadConfig(lspFindReferencesTool.runtime),
       };
       let refs = await findReferences(resolveLspCwd(ctx), symbol, scan, 500);
       if (params.includeDeclaration === false) {
@@ -575,7 +593,7 @@ export function createLspTools(options?: { runtime?: BrewvaBundledToolRuntime })
         return inconclusiveTextResult(`No references found for '${symbol}'.`);
       }
       recordLspDiscoveryObservation({
-        runtime: options?.runtime,
+        runtime: lspFindReferencesTool.runtime,
         sessionId,
         baseCwd: resolveLspCwd(ctx),
         toolName: "lsp_find_references",
@@ -593,7 +611,7 @@ export function createLspTools(options?: { runtime?: BrewvaBundledToolRuntime })
     },
   });
 
-  const lspSymbols = defineBrewvaTool({
+  const lspSymbols = lspSymbolsTool.define({
     name: "lsp_symbols",
     label: "LSP Symbols",
     description:
@@ -634,7 +652,7 @@ export function createLspTools(options?: { runtime?: BrewvaBundledToolRuntime })
           return failTextResult(`Error: Path is not a file: ${targetFilePath}`);
         }
         recordLspDiscoveryObservation({
-          runtime: options?.runtime,
+          runtime: lspSymbolsTool.runtime,
           sessionId: getToolSessionId(ctx),
           baseCwd: resolveLspCwd(ctx),
           toolName: "lsp_symbols",
@@ -658,14 +676,14 @@ export function createLspTools(options?: { runtime?: BrewvaBundledToolRuntime })
       }
 
       const scan: LspParallelReadContext = {
-        runtime: options?.runtime,
+        runtime: lspSymbolsTool.runtime,
         sessionId: getToolSessionId(ctx),
         toolName: "lsp_symbols",
-        config: resolveParallelReadConfig(options?.runtime),
+        config: resolveParallelReadConfig(lspSymbolsTool.runtime),
       };
       const refs = await findReferences(resolveLspCwd(ctx), params.query, scan, limit);
       recordLspDiscoveryObservation({
-        runtime: options?.runtime,
+        runtime: lspSymbolsTool.runtime,
         sessionId: scan.sessionId,
         baseCwd: resolveLspCwd(ctx),
         toolName: "lsp_symbols",
@@ -681,7 +699,7 @@ export function createLspTools(options?: { runtime?: BrewvaBundledToolRuntime })
     },
   });
 
-  const lspDiagnostics = defineBrewvaTool({
+  const lspDiagnostics = lspDiagnosticsTool.define({
     name: "lsp_diagnostics",
     label: "LSP Diagnostics",
     description: "Runs TypeScript compiler (tsc). Not a real LSP server connection.",
@@ -703,7 +721,7 @@ export function createLspTools(options?: { runtime?: BrewvaBundledToolRuntime })
         }
         if (existsSync(targetFilePath)) {
           recordLspDiscoveryObservation({
-            runtime: options?.runtime,
+            runtime: lspDiagnosticsTool.runtime,
             sessionId: getToolSessionId(ctx),
             baseCwd: resolveLspCwd(ctx),
             toolName: "lsp_diagnostics",
@@ -741,7 +759,7 @@ export function createLspTools(options?: { runtime?: BrewvaBundledToolRuntime })
     },
   });
 
-  const lspPrepareRename = defineBrewvaTool({
+  const lspPrepareRename = lspPrepareRenameTool.define({
     name: "lsp_prepare_rename",
     label: "LSP Prepare Rename",
     description: "Heuristic-based. Checks rename availability via workspace scan (not real LSP).",
@@ -765,10 +783,10 @@ export function createLspTools(options?: { runtime?: BrewvaBundledToolRuntime })
       }
 
       const scan: LspParallelReadContext = {
-        runtime: options?.runtime,
+        runtime: lspPrepareRenameTool.runtime,
         sessionId: getToolSessionId(ctx),
         toolName: "lsp_prepare_rename",
-        config: resolveParallelReadConfig(options?.runtime),
+        config: resolveParallelReadConfig(lspPrepareRenameTool.runtime),
       };
       const refs = await findReferences(dirname(resolve(targetFilePath)), symbol, scan, 1000);
       const definitions = await findDefinition(resolveLspCwd(ctx), symbol, scan, targetFilePath);
@@ -780,7 +798,7 @@ export function createLspTools(options?: { runtime?: BrewvaBundledToolRuntime })
     },
   });
 
-  const lspRename = defineBrewvaTool({
+  const lspRename = lspRenameTool.define({
     name: "lsp_rename",
     label: "LSP Rename",
     description: "Heuristic-based global replacement (unsafe). Not real LSP rename.",

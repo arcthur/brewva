@@ -3,8 +3,8 @@ import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "./types.js";
 import { buildStringEnumSchema } from "./utils/input-alias.js";
 import { textResult } from "./utils/result.js";
+import { createRuntimeBoundBrewvaToolFactory } from "./utils/runtime-bound-tool.js";
 import { getSessionId } from "./utils/session.js";
-import { defineBrewvaTool } from "./utils/tool.js";
 
 const LEDGER_VERDICT_VALUES = ["pass", "fail", "inconclusive"] as const;
 const LedgerVerdictSchema = buildStringEnumSchema(LEDGER_VERDICT_VALUES, {
@@ -22,7 +22,8 @@ function normalizeLedgerVerdict(value: unknown): "pass" | "fail" | "inconclusive
 }
 
 export function createLedgerQueryTool(options: BrewvaToolOptions): ToolDefinition {
-  return defineBrewvaTool({
+  const ledgerQueryTool = createRuntimeBoundBrewvaToolFactory(options.runtime, "ledger_query");
+  return ledgerQueryTool.define({
     name: "ledger_query",
     label: "Ledger Query",
     description: "Query evidence ledger by file, skill, verdict, tool, or last N entries.",
@@ -47,7 +48,7 @@ export function createLedgerQueryTool(options: BrewvaToolOptions): ToolDefinitio
         tool: params.tool,
         last: params.last,
       };
-      const text = options.runtime.inspect.ledger.query(sessionId, query);
+      const text = ledgerQueryTool.runtime.inspect.ledger.query(sessionId, query);
       return textResult(text, { sessionId, query });
     },
   });

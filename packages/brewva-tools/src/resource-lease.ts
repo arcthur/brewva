@@ -4,8 +4,8 @@ import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "./types.js";
 import { buildStringEnumSchema } from "./utils/input-alias.js";
 import { failTextResult, textResult } from "./utils/result.js";
+import { createRuntimeBoundBrewvaToolFactory } from "./utils/runtime-bound-tool.js";
 import { getSessionId } from "./utils/session.js";
-import { defineBrewvaTool } from "./utils/tool.js";
 
 const RESOURCE_LEASE_ACTION_VALUES = ["request", "list", "cancel"] as const;
 const LeaseActionSchema = buildStringEnumSchema(RESOURCE_LEASE_ACTION_VALUES, {
@@ -31,90 +31,103 @@ function formatLease(lease: ResourceLeaseRecord): string {
 }
 
 export function createResourceLeaseTool(options: BrewvaToolOptions): ToolDefinition {
-  return defineBrewvaTool({
-    name: "resource_lease",
-    label: "Resource Lease",
-    description: "Request, inspect, or cancel temporary budget expansions for the active skill.",
-    promptSnippet:
-      "Negotiate temporary budget expansions when the active skill needs more execution headroom.",
-    promptGuidelines: [
-      "Use this when the active skill needs more budget than its default lease provides.",
-      "Prefer bounded TTLs and the smallest budget increase that unblocks the task.",
-      "Action values are request, list, and cancel.",
-    ],
-    parameters: Type.Object({
-      action: LeaseActionSchema,
-      reason: Type.Optional(Type.String({ minLength: 1, maxLength: 800 })),
-      leaseId: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
-      maxToolCalls: Type.Optional(Type.Integer({ minimum: 1 })),
-      maxTokens: Type.Optional(Type.Integer({ minimum: 1 })),
-      maxParallel: Type.Optional(Type.Integer({ minimum: 1 })),
-      ttlMs: Type.Optional(Type.Integer({ minimum: 1 })),
-      ttlTurns: Type.Optional(Type.Integer({ minimum: 1 })),
-      includeInactive: Type.Optional(Type.Boolean()),
-      skillName: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
-    }),
-    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-      const sessionId = getSessionId(ctx);
+  const { runtime, define } = createRuntimeBoundBrewvaToolFactory(
+    options.runtime,
+    "resource_lease",
+  );
+  return define(
+    {
+      name: "resource_lease",
+      label: "Resource Lease",
+      description: "Request, inspect, or cancel temporary budget expansions for the active skill.",
+      promptSnippet:
+        "Negotiate temporary budget expansions when the active skill needs more execution headroom.",
+      promptGuidelines: [
+        "Use this when the active skill needs more budget than its default lease provides.",
+        "Prefer bounded TTLs and the smallest budget increase that unblocks the task.",
+        "Action values are request, list, and cancel.",
+      ],
+      parameters: Type.Object({
+        action: LeaseActionSchema,
+        reason: Type.Optional(Type.String({ minLength: 1, maxLength: 800 })),
+        leaseId: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
+        maxToolCalls: Type.Optional(Type.Integer({ minimum: 1 })),
+        maxTokens: Type.Optional(Type.Integer({ minimum: 1 })),
+        maxParallel: Type.Optional(Type.Integer({ minimum: 1 })),
+        ttlMs: Type.Optional(Type.Integer({ minimum: 1 })),
+        ttlTurns: Type.Optional(Type.Integer({ minimum: 1 })),
+        includeInactive: Type.Optional(Type.Boolean()),
+        skillName: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
+      }),
+      async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+        const sessionId = getSessionId(ctx);
 
-      if (params.action === "request") {
-        if (typeof params.reason !== "string" || params.reason.trim().length === 0) {
-          return failTextResult("Error: reason is required for action=request.", { ok: false });
+        if (params.action === "request") {
+          if (typeof params.reason !== "string" || params.reason.trim().length === 0) {
+            return failTextResult("Error: reason is required for action=request.", { ok: false });
+          }
+          const result = runtime.authority.tools.requestResourceLease(sessionId, {
+            reason: params.reason,
+            budget: {
+              maxToolCalls: params.maxToolCalls,
+              maxTokens: params.maxTokens,
+              maxParallel: params.maxParallel,
+            },
+            ttlMs: params.ttlMs,
+            ttlTurns: params.ttlTurns,
+          });
+          if (!result.ok) {
+            return failTextResult(`Error: ${result.error}`, { ok: false });
+          }
+          return textResult(["# Resource Lease Granted", formatLease(result.lease)].join("\n"), {
+            ok: true,
+            leaseId: result.lease.id,
+            sessionId,
+          });
         }
-        const result = options.runtime.authority.tools.requestResourceLease(sessionId, {
-          reason: params.reason,
-          budget: {
-            maxToolCalls: params.maxToolCalls,
-            maxTokens: params.maxTokens,
-            maxParallel: params.maxParallel,
-          },
-          ttlMs: params.ttlMs,
-          ttlTurns: params.ttlTurns,
-        });
+
+        if (params.action === "list") {
+          const leases = runtime.inspect.tools.listResourceLeases(sessionId, {
+            includeInactive: params.includeInactive,
+            skillName: params.skillName,
+          });
+          const lines = ["# Resource Leases"];
+          if (leases.length === 0) {
+            lines.push("(none)");
+          } else {
+            lines.push(...leases.map((lease) => formatLease(lease)));
+          }
+          return textResult(lines.join("\n"), {
+            ok: true,
+            count: leases.length,
+            sessionId,
+          });
+        }
+
+        if (typeof params.leaseId !== "string" || params.leaseId.trim().length === 0) {
+          return failTextResult("Error: leaseId is required for action=cancel.", { ok: false });
+        }
+        const result = runtime.authority.tools.cancelResourceLease(
+          sessionId,
+          params.leaseId,
+          params.reason,
+        );
         if (!result.ok) {
           return failTextResult(`Error: ${result.error}`, { ok: false });
         }
-        return textResult(["# Resource Lease Granted", formatLease(result.lease)].join("\n"), {
+        return textResult(["# Resource Lease Cancelled", formatLease(result.lease)].join("\n"), {
           ok: true,
           leaseId: result.lease.id,
           sessionId,
         });
-      }
-
-      if (params.action === "list") {
-        const leases = options.runtime.inspect.tools.listResourceLeases(sessionId, {
-          includeInactive: params.includeInactive,
-          skillName: params.skillName,
-        });
-        const lines = ["# Resource Leases"];
-        if (leases.length === 0) {
-          lines.push("(none)");
-        } else {
-          lines.push(...leases.map((lease) => formatLease(lease)));
-        }
-        return textResult(lines.join("\n"), {
-          ok: true,
-          count: leases.length,
-          sessionId,
-        });
-      }
-
-      if (typeof params.leaseId !== "string" || params.leaseId.trim().length === 0) {
-        return failTextResult("Error: leaseId is required for action=cancel.", { ok: false });
-      }
-      const result = options.runtime.authority.tools.cancelResourceLease(
-        sessionId,
-        params.leaseId,
-        params.reason,
-      );
-      if (!result.ok) {
-        return failTextResult(`Error: ${result.error}`, { ok: false });
-      }
-      return textResult(["# Resource Lease Cancelled", formatLease(result.lease)].join("\n"), {
-        ok: true,
-        leaseId: result.lease.id,
-        sessionId,
-      });
+      },
     },
-  });
+    {
+      requiredCapabilities: [
+        "authority.tools.requestResourceLease",
+        "authority.tools.cancelResourceLease",
+        "inspect.tools.listResourceLeases",
+      ],
+    },
+  );
 }

@@ -5,7 +5,7 @@ import { Type } from "@sinclair/typebox";
 import { isPathInsideRoots, resolveToolTargetScope } from "./target-scope.js";
 import type { BrewvaToolOptions } from "./types.js";
 import { failTextResult, textResult, withVerdict } from "./utils/result.js";
-import { defineBrewvaTool } from "./utils/tool.js";
+import { createRuntimeBoundBrewvaToolFactory } from "./utils/runtime-bound-tool.js";
 
 interface GitObserveToolOptions extends BrewvaToolOptions {
   gitCommand?: string;
@@ -167,7 +167,8 @@ function renderGitResult(input: {
 }
 
 export function createGitStatusTool(options: GitObserveToolOptions): ToolDefinition {
-  return defineBrewvaTool(
+  const { runtime, define } = createRuntimeBoundBrewvaToolFactory(options.runtime, "git_status");
+  return define(
     {
       name: "git_status",
       label: "Git Status",
@@ -184,7 +185,7 @@ export function createGitStatusTool(options: GitObserveToolOptions): ToolDefinit
       async execute(_toolCallId, params, signal, _onUpdate, ctx) {
         let cwd: string;
         try {
-          cwd = resolveWorkdir(options.runtime, ctx, params.workdir);
+          cwd = resolveWorkdir(runtime, ctx, params.workdir);
         } catch (error) {
           return failTextResult(
             `git_status rejected: ${error instanceof Error ? error.message : String(error)}.`,
@@ -232,7 +233,8 @@ export function createGitStatusTool(options: GitObserveToolOptions): ToolDefinit
 }
 
 export function createGitDiffTool(options: GitObserveToolOptions): ToolDefinition {
-  return defineBrewvaTool(
+  const { runtime, define } = createRuntimeBoundBrewvaToolFactory(options.runtime, "git_diff");
+  return define(
     {
       name: "git_diff",
       label: "Git Diff",
@@ -251,7 +253,7 @@ export function createGitDiffTool(options: GitObserveToolOptions): ToolDefinitio
       async execute(_toolCallId, params, signal, _onUpdate, ctx) {
         let cwd: string;
         try {
-          cwd = resolveWorkdir(options.runtime, ctx, params.workdir);
+          cwd = resolveWorkdir(runtime, ctx, params.workdir);
         } catch (error) {
           return failTextResult(
             `git_diff rejected: ${error instanceof Error ? error.message : String(error)}.`,
@@ -310,7 +312,8 @@ export function createGitDiffTool(options: GitObserveToolOptions): ToolDefinitio
 }
 
 export function createGitLogTool(options: GitObserveToolOptions): ToolDefinition {
-  return defineBrewvaTool(
+  const { runtime, define } = createRuntimeBoundBrewvaToolFactory(options.runtime, "git_log");
+  return define(
     {
       name: "git_log",
       label: "Git Log",
@@ -328,7 +331,7 @@ export function createGitLogTool(options: GitObserveToolOptions): ToolDefinition
       async execute(_toolCallId, params, signal, _onUpdate, ctx) {
         let cwd: string;
         try {
-          cwd = resolveWorkdir(options.runtime, ctx, params.workdir);
+          cwd = resolveWorkdir(runtime, ctx, params.workdir);
         } catch (error) {
           return failTextResult(
             `git_log rejected: ${error instanceof Error ? error.message : String(error)}.`,

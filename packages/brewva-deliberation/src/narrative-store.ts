@@ -1,4 +1,3 @@
-import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
   NARRATIVE_MEMORY_EVIDENCE_KINDS,
@@ -15,7 +14,7 @@ import {
   type NarrativeMemoryRecord,
   type NarrativeMemoryState,
 } from "./narrative-types.js";
-import { writeFileAtomic } from "./plane-substrate.js";
+import { readNormalizedJsonFile, writeNormalizedJsonFile } from "./plane-substrate.js";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -219,18 +218,10 @@ export class FileNarrativeMemoryStore {
   }
 
   read(): NarrativeMemoryState | undefined {
-    if (!existsSync(this.filePath)) {
-      return undefined;
-    }
-    try {
-      const parsed = JSON.parse(readFileSync(this.filePath, "utf8")) as unknown;
-      return normalizeState(parsed);
-    } catch {
-      return undefined;
-    }
+    return readNormalizedJsonFile(this.filePath, normalizeState);
   }
 
   write(state: NarrativeMemoryState): void {
-    writeFileAtomic(this.filePath, `${JSON.stringify(state, null, 2)}\n`);
+    writeNormalizedJsonFile(this.filePath, state);
   }
 }

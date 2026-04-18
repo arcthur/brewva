@@ -10,17 +10,20 @@ import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-subs
 import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "./types.js";
 import { textResult, withVerdict } from "./utils/result.js";
+import { createRuntimeBoundBrewvaToolFactory } from "./utils/runtime-bound-tool.js";
 import { getSessionId } from "./utils/session.js";
-import { defineBrewvaTool } from "./utils/tool.js";
 
-async function listPendingDelegationOutcomes(options: BrewvaToolOptions, sessionId: string) {
-  const readModelResults = options.runtime.delegation?.listPendingOutcomes?.(sessionId, {
+async function listPendingDelegationOutcomes(
+  runtime: BrewvaToolOptions["runtime"],
+  sessionId: string,
+) {
+  const readModelResults = runtime.delegation?.listPendingOutcomes?.(sessionId, {
     limit: 6,
   });
   if (readModelResults) {
     return readModelResults;
   }
-  const adapter = options.runtime.orchestration?.subagents;
+  const adapter = runtime.orchestration?.subagents;
   if (!adapter?.status) {
     return [];
   }
@@ -144,7 +147,11 @@ function findLatestArtifactByKind(
 }
 
 export function createWorkflowStatusTool(options: BrewvaToolOptions): ToolDefinition {
-  return defineBrewvaTool({
+  const workflowStatusTool = createRuntimeBoundBrewvaToolFactory(
+    options.runtime,
+    "workflow_status",
+  );
+  return workflowStatusTool.define({
     name: "workflow_status",
     label: "Workflow Status",
     description:
@@ -161,15 +168,20 @@ export function createWorkflowStatusTool(options: BrewvaToolOptions): ToolDefini
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const sessionId = getSessionId(ctx);
-      const events = options.runtime.inspect.events.query(sessionId);
-      const taskState = options.runtime.inspect.task.getState(sessionId);
-      const activeSkillState = options.runtime.inspect.skills.getActiveState(sessionId);
-      const latestSkillFailure = options.runtime.inspect.skills.getLatestFailure(sessionId);
-      const openToolCalls = options.runtime.inspect.session.getOpenToolCalls(sessionId);
+      const events = workflowStatusTool.runtime.inspect.events.query(sessionId);
+      const taskState = workflowStatusTool.runtime.inspect.task.getState(sessionId);
+      const activeSkillState = workflowStatusTool.runtime.inspect.skills.getActiveState(sessionId);
+      const latestSkillFailure =
+        workflowStatusTool.runtime.inspect.skills.getLatestFailure(sessionId);
+      const openToolCalls = workflowStatusTool.runtime.inspect.session.getOpenToolCalls(sessionId);
       const uncleanShutdownDiagnostic =
-        options.runtime.inspect.session.getUncleanShutdownDiagnostic(sessionId);
-      const pendingWorkerResults = options.runtime.inspect.session.listWorkerResults(sessionId);
-      const pendingDelegationOutcomes = await listPendingDelegationOutcomes(options, sessionId);
+        workflowStatusTool.runtime.inspect.session.getUncleanShutdownDiagnostic(sessionId);
+      const pendingWorkerResults =
+        workflowStatusTool.runtime.inspect.session.listWorkerResults(sessionId);
+      const pendingDelegationOutcomes = await listPendingDelegationOutcomes(
+        workflowStatusTool.runtime,
+        sessionId,
+      );
       const stallAdjudication = readLatestStallAdjudication(events);
       const snapshot = deriveWorkflowStatus({
         sessionId,
@@ -185,7 +197,7 @@ export function createWorkflowStatusTool(options: BrewvaToolOptions): ToolDefini
         },
         pendingWorkerResults: pendingWorkerResults.length,
         pendingDelegationOutcomes: pendingDelegationOutcomes.length,
-        workspaceRoot: options.runtime.workspaceRoot,
+        workspaceRoot: workflowStatusTool.runtime.workspaceRoot,
       });
 
       const posture = snapshot.posture;

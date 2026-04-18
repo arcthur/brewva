@@ -32,7 +32,7 @@ import type { BrewvaToolOptions } from "./types.js";
 import { buildStringEnumSchema } from "./utils/input-alias.js";
 import { getToolSessionId } from "./utils/parallel-read.js";
 import { failTextResult, textResult } from "./utils/result.js";
-import { defineBrewvaTool } from "./utils/tool.js";
+import { createManagedBrewvaToolFactory } from "./utils/runtime-bound-tool.js";
 
 interface GrepToolOptions extends BrewvaToolOptions {
   ripgrepCommand?: string;
@@ -519,7 +519,8 @@ export function createGrepTool(options: GrepToolOptions): ToolDefinition {
     tocSearchCache.delete(resolveTocSessionKey(sessionId));
   });
 
-  return defineBrewvaTool({
+  const grepTool = createManagedBrewvaToolFactory("grep");
+  return grepTool.define({
     name: "grep",
     label: "Grep",
     description: "Search code using ripgrep (rg) with bounded output.",

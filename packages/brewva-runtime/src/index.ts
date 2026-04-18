@@ -33,4 +33,10 @@ export * from "./utils/tool-name.js";
 export * from "./schedule/events.js";
 export * from "./schedule/cron.js";
 export * from "./iteration/facts.js";
-export * from "./workflow/derivation.js";
+export * from "./workflow/types.js";
+export {
+  deriveWorkflowArtifacts,
+  deriveWorkflowArtifactsFromEvent,
+} from "./workflow/artifact-derivation.js";
+export { deriveWorkflowStatus } from "./workflow/status-derivation.js";
+export { resolveWorkspaceRevision } from "./workflow/workspace-revision.js";

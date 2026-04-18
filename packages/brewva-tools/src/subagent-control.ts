@@ -4,8 +4,8 @@ import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "./types.js";
 import { buildStringEnumSchema } from "./utils/input-alias.js";
 import { failTextResult, textResult, toolDetails, withVerdict } from "./utils/result.js";
+import { createRuntimeBoundBrewvaToolFactory } from "./utils/runtime-bound-tool.js";
 import { getSessionId } from "./utils/session.js";
-import { defineBrewvaTool } from "./utils/tool.js";
 
 const SUBAGENT_STATUS_VALUES = [
   "pending",
@@ -98,7 +98,11 @@ function summarizeRun(
 }
 
 export function createSubagentStatusTool(options: BrewvaToolOptions): ToolDefinition {
-  return defineBrewvaTool({
+  const { runtime, define } = createRuntimeBoundBrewvaToolFactory(
+    options.runtime,
+    "subagent_status",
+  );
+  return define({
     name: "subagent_status",
     label: "Subagent Status",
     description: "Inspect active and recent delegated subagent runs for the current session.",
@@ -116,7 +120,7 @@ export function createSubagentStatusTool(options: BrewvaToolOptions): ToolDefini
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const sessionId = getSessionId(ctx);
-      const adapter = options.runtime.orchestration?.subagents;
+      const adapter = runtime.orchestration?.subagents;
       const query = {
         runIds: typeof params.runId === "string" ? [params.runId] : undefined,
         statuses: normalizeStatuses(params.statuses),
@@ -124,7 +128,7 @@ export function createSubagentStatusTool(options: BrewvaToolOptions): ToolDefini
           typeof params.includeTerminal === "boolean" ? params.includeTerminal : true,
         limit: typeof params.limit === "number" ? params.limit : undefined,
       };
-      const readModelRuns = options.runtime.delegation?.listRuns?.(sessionId, query);
+      const readModelRuns = runtime.delegation?.listRuns?.(sessionId, query);
       let readModelResult:
         | {
             ok: true;
@@ -192,7 +196,11 @@ export function createSubagentStatusTool(options: BrewvaToolOptions): ToolDefini
 }
 
 export function createSubagentCancelTool(options: BrewvaToolOptions): ToolDefinition {
-  return defineBrewvaTool({
+  const { runtime, define } = createRuntimeBoundBrewvaToolFactory(
+    options.runtime,
+    "subagent_cancel",
+  );
+  return define({
     name: "subagent_cancel",
     label: "Subagent Cancel",
     description: "Cancel a live delegated subagent run by runId.",
@@ -208,7 +216,7 @@ export function createSubagentCancelTool(options: BrewvaToolOptions): ToolDefini
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const sessionId = getSessionId(ctx);
-      const adapter = options.runtime.orchestration?.subagents;
+      const adapter = runtime.orchestration?.subagents;
       if (!adapter?.cancel) {
         return failTextResult("Subagent cancellation is unavailable in this session.", {
           ok: false,

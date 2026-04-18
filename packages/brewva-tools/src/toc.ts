@@ -38,7 +38,7 @@ import {
 import type { BrewvaBundledToolRuntime } from "./types.js";
 import { getToolSessionId } from "./utils/parallel-read.js";
 import { failTextResult, inconclusiveTextResult, textResult } from "./utils/result.js";
-import { defineBrewvaTool } from "./utils/tool.js";
+import { createRuntimeBoundBrewvaToolFactory } from "./utils/runtime-bound-tool.js";
 
 const TOC_EVENT_TYPE = "tool_toc_query";
 const UNAVAILABLE_STATUS = "unavailable";
@@ -313,8 +313,10 @@ export function createTocTools(options?: { runtime?: BrewvaBundledToolRuntime })
   registerToolRuntimeClearStateListener(options?.runtime, (sessionId) => {
     sessionCache.delete(resolveTocSessionKey(sessionId));
   });
+  const tocDocumentTool = createRuntimeBoundBrewvaToolFactory(options?.runtime, "toc_document");
+  const tocSearchTool = createRuntimeBoundBrewvaToolFactory(options?.runtime, "toc_search");
 
-  const tocDocument = defineBrewvaTool({
+  const tocDocument = tocDocumentTool.define({
     name: "toc_document",
     label: "TOC Document",
     description:
@@ -323,7 +325,7 @@ export function createTocTools(options?: { runtime?: BrewvaBundledToolRuntime })
       file_path: Type.String({ minLength: 1 }),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
-      const scope = resolveBaseDir(ctx, options?.runtime);
+      const scope = resolveBaseDir(ctx, tocDocumentTool.runtime);
       const absolutePath = resolveAbsolutePath(scope, params.file_path);
       if (!absolutePath) {
         return failTextResult(
@@ -344,7 +346,7 @@ export function createTocTools(options?: { runtime?: BrewvaBundledToolRuntime })
       }
       const sessionId = getToolSessionId(ctx);
       recordTocReadPathObservation({
-        runtime: options?.runtime,
+        runtime: tocDocumentTool.runtime,
         sessionId,
         baseCwd: scope.baseCwd,
         toolName: "toc_document",
@@ -402,7 +404,7 @@ export function createTocTools(options?: { runtime?: BrewvaBundledToolRuntime })
         signature,
         sourceText: source.sourceText,
       });
-      recordTocEvent(options?.runtime, sessionId, {
+      recordTocEvent(tocDocumentTool.runtime, sessionId, {
         toolName: "toc_document",
         operation: "document",
         filePath: absolutePath,
@@ -425,7 +427,7 @@ export function createTocTools(options?: { runtime?: BrewvaBundledToolRuntime })
     },
   });
 
-  const tocSearch = defineBrewvaTool({
+  const tocSearch = tocSearchTool.define({
     name: "toc_search",
     label: "TOC Search",
     description:
@@ -442,7 +444,7 @@ export function createTocTools(options?: { runtime?: BrewvaBundledToolRuntime })
       ),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
-      const scope = resolveBaseDir(ctx, options?.runtime);
+      const scope = resolveBaseDir(ctx, tocSearchTool.runtime);
       const roots = (params.paths ?? ["."])
         .map((entry) => resolveAbsolutePath(scope, entry))
         .filter((entry): entry is string => Boolean(entry));
@@ -455,7 +457,7 @@ export function createTocTools(options?: { runtime?: BrewvaBundledToolRuntime })
       const queryText = params.query.trim();
       const limit = params.limit ?? DEFAULT_TOC_SEARCH_LIMIT;
       registerSearchIntent({
-        runtime: options?.runtime,
+        runtime: tocSearchTool.runtime,
         sessionId,
         toolName: "toc_search",
         query: queryText,
@@ -466,7 +468,7 @@ export function createTocTools(options?: { runtime?: BrewvaBundledToolRuntime })
 
       const startedAt = Date.now();
       const core = runTocSearchCore({
-        runtime: options?.runtime,
+        runtime: tocSearchTool.runtime,
         sessionId,
         baseDir: scope.baseCwd,
         roots,
@@ -492,7 +494,7 @@ export function createTocTools(options?: { runtime?: BrewvaBundledToolRuntime })
       }
 
       if (core.scopeOverflow) {
-        recordTocEvent(options?.runtime, sessionId, {
+        recordTocEvent(tocSearchTool.runtime, sessionId, {
           toolName: "toc_search",
           operation: "search",
           broadQuery: false,
@@ -562,7 +564,7 @@ export function createTocTools(options?: { runtime?: BrewvaBundledToolRuntime })
         broadQuery: boolean;
         budgetExceeded: boolean;
       }): void => {
-        recordTocEvent(options?.runtime, sessionId, {
+        recordTocEvent(tocSearchTool.runtime, sessionId, {
           toolName: "toc_search",
           operation: "search",
           indexedFiles: searchSummary.indexedFiles,
@@ -594,7 +596,7 @@ export function createTocTools(options?: { runtime?: BrewvaBundledToolRuntime })
             .filter((path): path is string => Boolean(path)),
         });
         recordTocReadPathObservation({
-          runtime: options?.runtime,
+          runtime: tocSearchTool.runtime,
           sessionId,
           baseCwd: scope.baseCwd,
           toolName: "toc_search",
@@ -695,7 +697,7 @@ export function createTocTools(options?: { runtime?: BrewvaBundledToolRuntime })
             .filter((path): path is string => Boolean(path)),
         });
         recordTocReadPathObservation({
-          runtime: options?.runtime,
+          runtime: tocSearchTool.runtime,
           sessionId,
           baseCwd: scope.baseCwd,
           toolName: "toc_search",
@@ -742,7 +744,7 @@ export function createTocTools(options?: { runtime?: BrewvaBundledToolRuntime })
           .filter((path): path is string => Boolean(path)),
       });
       recordTocReadPathObservation({
-        runtime: options?.runtime,
+        runtime: tocSearchTool.runtime,
         sessionId,
         baseCwd: scope.baseCwd,
         toolName: "toc_search",

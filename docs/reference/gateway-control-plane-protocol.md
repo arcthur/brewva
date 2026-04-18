@@ -2,6 +2,14 @@
 
 Implementation entry point: `packages/brewva-gateway/src/protocol/schema.ts`.
 
+Protocol boundary:
+
+- this protocol transports and inspects control-plane behavior
+- it does not define cross-agent saga semantics, generalized compensation, or
+  automatic partial-failure repair
+- gateway sessions stay subordinate to the kernel's current `single tool call`
+  transaction boundary
+
 ## Transport and Addressing
 
 - Transport: WebSocket.

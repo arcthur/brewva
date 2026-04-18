@@ -16,8 +16,8 @@ import { FileOptimizationContinuityStore } from "./optimization-store.js";
 import {
   clamp,
   collectPlaneSessionDigests,
-  samePlaneSessionDigests,
-  shouldThrottlePlaneRefresh,
+  getOrCreatePlaneForRuntime,
+  reconcileSessionDigestBackedPlaneState,
   tokenize,
   uniqueStrings,
 } from "./plane-substrate.js";
@@ -1306,43 +1306,30 @@ export class OptimizationContinuityPlane {
   }
 
   private reconcile(): OptimizationContinuityState {
-    const now = Date.now();
-    const sessionDigests = collectPlaneSessionDigests(this.runtime.inspect.events);
-    const current = this.store.read() ?? this.state;
-    const hasState = Boolean(current);
-    const digestsChanged =
-      !hasState ||
-      !samePlaneSessionDigests(
-        current?.sessionDigests ?? [],
-        sessionDigests as DeliberationMemorySessionDigest[],
-      );
-    if (!digestsChanged && !this.dirty) {
-      this.state = current;
-      return current ?? createEmptyOptimizationState(sessionDigests);
-    }
-    if (
-      current &&
-      shouldThrottlePlaneRefresh({
-        currentUpdatedAt: current.updatedAt,
-        dirty: this.dirty,
-        digestsChanged,
-        minRefreshIntervalMs: this.minRefreshIntervalMs,
-        now,
-      })
-    ) {
-      this.state = current;
-      return current;
-    }
-
-    const nextState: OptimizationContinuityState = {
-      schema: OPTIMIZATION_CONTINUITY_STATE_SCHEMA,
-      updatedAt: now,
-      sessionDigests,
-      lineages: buildOptimizationLineages(this.runtime),
-    };
-    this.store.write(nextState);
+    const nextState = reconcileSessionDigestBackedPlaneState({
+      currentState: this.state,
+      readPersistedState: () => this.store.read(),
+      writePersistedState: (state) => {
+        this.store.write(state);
+      },
+      dirty: this.dirty,
+      setDirty: (dirty) => {
+        this.dirty = dirty;
+      },
+      minRefreshIntervalMs: this.minRefreshIntervalMs,
+      collectSessionDigests: () =>
+        collectPlaneSessionDigests(
+          this.runtime.inspect.events,
+        ) as DeliberationMemorySessionDigest[],
+      createEmptyState: (sessionDigests) => createEmptyOptimizationState(sessionDigests),
+      rebuildState: ({ now, sessionDigests }) => ({
+        schema: OPTIMIZATION_CONTINUITY_STATE_SCHEMA,
+        updatedAt: now,
+        sessionDigests: [...sessionDigests],
+        lineages: buildOptimizationLineages(this.runtime),
+      }),
+    });
     this.state = nextState;
-    this.dirty = false;
     return nextState;
   }
 }
@@ -1354,14 +1341,11 @@ export function getOrCreateOptimizationContinuityPlane(
     minRefreshIntervalMs?: number;
   } = {},
 ): OptimizationContinuityPlane {
-  const key = runtime as unknown as object;
-  const existing = planeByRuntime.get(key);
-  if (existing) {
-    return existing;
-  }
-  const created = new OptimizationContinuityPlane(runtime, options);
-  planeByRuntime.set(key, created);
-  return created;
+  return getOrCreatePlaneForRuntime({
+    planes: planeByRuntime,
+    runtime,
+    create: () => new OptimizationContinuityPlane(runtime, options),
+  });
 }
 
 export function createOptimizationContinuityContextProvider(input: {

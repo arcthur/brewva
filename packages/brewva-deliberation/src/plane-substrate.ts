@@ -1,11 +1,32 @@
 import { randomUUID } from "node:crypto";
-import { mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
 export interface PlaneSessionDigest {
   sessionId: string;
   eventCount: number;
   lastEventAt: number;
+}
+
+export interface SessionDigestBackedPlaneState<
+  TSessionDigest extends PlaneSessionDigest = PlaneSessionDigest,
+> {
+  updatedAt: number;
+  sessionDigests: readonly TSessionDigest[];
+}
+
+export function getOrCreatePlaneForRuntime<TPlane>(input: {
+  planes: WeakMap<object, TPlane>;
+  runtime: object;
+  create: () => TPlane;
+}): TPlane {
+  const existing = input.planes.get(input.runtime);
+  if (existing) {
+    return existing;
+  }
+  const created = input.create();
+  input.planes.set(input.runtime, created);
+  return created;
 }
 
 interface EventLike {
@@ -84,6 +105,52 @@ export function shouldThrottlePlaneRefresh(input: {
   return input.now - input.currentUpdatedAt < minRefreshIntervalMs;
 }
 
+export function reconcileSessionDigestBackedPlaneState<
+  TState extends SessionDigestBackedPlaneState<TSessionDigest>,
+  TSessionDigest extends PlaneSessionDigest = PlaneSessionDigest,
+>(input: {
+  currentState?: TState;
+  readPersistedState: () => TState | undefined;
+  writePersistedState: (state: TState) => void;
+  dirty: boolean;
+  setDirty: (dirty: boolean) => void;
+  minRefreshIntervalMs?: number;
+  collectSessionDigests: () => readonly TSessionDigest[];
+  createEmptyState: (sessionDigests: readonly TSessionDigest[]) => TState;
+  rebuildState: (context: { now: number; sessionDigests: readonly TSessionDigest[] }) => TState;
+  now?: number;
+}): TState {
+  const now = input.now ?? Date.now();
+  const sessionDigests = input.collectSessionDigests();
+  const current = input.readPersistedState() ?? input.currentState;
+  const hasState = Boolean(current);
+  const digestsChanged =
+    !hasState || !samePlaneSessionDigests(current?.sessionDigests ?? [], sessionDigests);
+  if (!digestsChanged && !input.dirty) {
+    return current ?? input.createEmptyState(sessionDigests);
+  }
+  if (
+    current &&
+    shouldThrottlePlaneRefresh({
+      currentUpdatedAt: current.updatedAt,
+      dirty: input.dirty,
+      digestsChanged,
+      minRefreshIntervalMs: input.minRefreshIntervalMs,
+      now,
+    })
+  ) {
+    return current;
+  }
+
+  const nextState = input.rebuildState({
+    now,
+    sessionDigests,
+  });
+  input.writePersistedState(nextState);
+  input.setDirty(false);
+  return nextState;
+}
+
 export function writeFileAtomic(filePath: string, content: string): void {
   const resolvedPath = resolve(filePath);
   mkdirSync(dirname(resolvedPath), { recursive: true });
@@ -99,4 +166,23 @@ export function writeFileAtomic(filePath: string, content: string): void {
     }
     throw error;
   }
+}
+
+export function readNormalizedJsonFile<TState>(
+  filePath: string,
+  normalize: (value: unknown) => TState | undefined,
+): TState | undefined {
+  if (!existsSync(filePath)) {
+    return undefined;
+  }
+  try {
+    const parsed = JSON.parse(readFileSync(filePath, "utf8")) as unknown;
+    return normalize(parsed);
+  } catch {
+    return undefined;
+  }
+}
+
+export function writeNormalizedJsonFile(filePath: string, state: unknown): void {
+  writeFileAtomic(filePath, `${JSON.stringify(state, null, 2)}\n`);
 }

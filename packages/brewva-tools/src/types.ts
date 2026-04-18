@@ -23,6 +23,72 @@ export type BrewvaToolSurface = "base" | "skill" | "control_plane" | "operator";
 
 export type BrewvaToolInterruptBehavior = "cancel" | "block" | "allow_completion";
 
+export type BrewvaToolRequiredCapability =
+  | "authority.events.recordGuardResult"
+  | "authority.events.recordMetricObservation"
+  | "authority.events.recordTapeHandoff"
+  | "authority.reasoning.recordCheckpoint"
+  | "authority.reasoning.revert"
+  | "authority.schedule.cancelIntent"
+  | "authority.schedule.createIntent"
+  | "authority.schedule.updateIntent"
+  | "authority.session.applyMergedWorkerResults"
+  | "authority.skills.activate"
+  | "authority.skills.complete"
+  | "authority.skills.recordCompletionFailure"
+  | "authority.task.addItem"
+  | "authority.task.recordAcceptance"
+  | "authority.task.recordBlocker"
+  | "authority.task.resolveBlocker"
+  | "authority.task.setSpec"
+  | "authority.task.updateItem"
+  | "authority.tools.acquireParallelSlotAsync"
+  | "authority.tools.requestResourceLease"
+  | "authority.tools.cancelResourceLease"
+  | "authority.tools.releaseParallelSlot"
+  | "authority.tools.rollbackLastPatchSet"
+  | "authority.verification.verify"
+  | "inspect.context.getCompactionInstructions"
+  | "inspect.context.getPressureStatus"
+  | "inspect.context.getUsageRatio"
+  | "inspect.context.getPromptStability"
+  | "inspect.context.getTransientReduction"
+  | "inspect.context.getUsage"
+  | "inspect.cost.getSummary"
+  | "inspect.events.getTapeStatus"
+  | "inspect.events.list"
+  | "inspect.events.listSessionIds"
+  | "inspect.events.listGuardResults"
+  | "inspect.events.listMetricObservations"
+  | "inspect.events.query"
+  | "inspect.events.queryStructured"
+  | "inspect.events.searchTape"
+  | "inspect.events.subscribe"
+  | "inspect.ledger.query"
+  | "inspect.reasoning.getActiveState"
+  | "inspect.schedule.getProjectionSnapshot"
+  | "inspect.schedule.listIntents"
+  | "inspect.session.getOpenToolCalls"
+  | "inspect.session.getUncleanShutdownDiagnostic"
+  | "inspect.session.listWorkerResults"
+  | "inspect.session.mergeWorkerResults"
+  | "inspect.skills.getActive"
+  | "inspect.skills.getActiveState"
+  | "inspect.skills.getConsumedOutputs"
+  | "inspect.skills.getLatestFailure"
+  | "inspect.skills.getLoadReport"
+  | "inspect.skills.list"
+  | "inspect.skills.validateOutputs"
+  | "inspect.task.getState"
+  | "inspect.task.getTargetDescriptor"
+  | "inspect.tools.explainAccess"
+  | "inspect.tools.listResourceLeases"
+  | "internal.recordEvent"
+  | "internal.onClearState"
+  | "internal.appendGuardedSupplementalBlocks"
+  | "internal.resolveCredentialBindings"
+  | "internal.resolveSandboxApiKey";
+
 export interface BrewvaToolExecutionTraits {
   concurrencySafe: boolean;
   interruptBehavior: BrewvaToolInterruptBehavior;
@@ -48,6 +114,7 @@ export interface BrewvaToolMetadata {
   surface: BrewvaToolSurface;
   governance: ToolGovernanceDescriptor;
   executionTraits?: BrewvaToolExecutionTraitsDefinition;
+  requiredCapabilities?: readonly BrewvaToolRequiredCapability[];
 }
 
 export interface BrewvaToolInternalRuntime {
@@ -521,6 +588,72 @@ export type BrewvaToolRuntime = RuntimeToolRuntimePort & {
   delegation?: BrewvaToolDelegationQuery;
   semanticReranker?: BrewvaSemanticReranker;
 };
+
+type CapabilityScopedMethod<
+  TMethod,
+  TCapability extends string,
+  TCapabilities extends string,
+> = TMethod extends (...args: infer TArgs) => infer TResult
+  ? TCapability extends TCapabilities
+    ? (...args: TArgs) => TResult
+    : never
+  : TMethod;
+
+type CapabilityScopedRuntimePort<
+  TPort extends object,
+  TPrefix extends "authority" | "inspect",
+  TGroupName extends string,
+  TCapabilities extends string,
+> = {
+  [TMethodName in keyof TPort]: CapabilityScopedMethod<
+    TPort[TMethodName],
+    `${TPrefix}.${TGroupName}.${Extract<TMethodName, string>}`,
+    TCapabilities
+  >;
+};
+
+type CapabilityScopedRuntimeGroup<
+  TGroupMap extends object,
+  TPrefix extends "authority" | "inspect",
+  TCapabilities extends string,
+> = {
+  [TGroupName in keyof TGroupMap]: TGroupMap[TGroupName] extends object
+    ? CapabilityScopedRuntimePort<
+        TGroupMap[TGroupName],
+        TPrefix,
+        Extract<TGroupName, string>,
+        TCapabilities
+      >
+    : TGroupMap[TGroupName];
+};
+
+type CapabilityScopedInternalRuntime<TCapabilities extends string> = {
+  [TMethodName in keyof BrewvaToolInternalRuntime]: CapabilityScopedMethod<
+    BrewvaToolInternalRuntime[TMethodName],
+    `internal.${Extract<TMethodName, string>}`,
+    TCapabilities
+  >;
+};
+
+export type CapabilityScopedBrewvaToolRuntime<
+  TRuntime extends BrewvaToolRuntime | undefined,
+  TCapabilities extends string,
+> = TRuntime extends undefined
+  ? undefined
+  : Omit<TRuntime, "authority" | "inspect" | "internal"> & {
+      authority: CapabilityScopedRuntimeGroup<
+        RuntimeToolRuntimePort["authority"],
+        "authority",
+        TCapabilities
+      >;
+      inspect: CapabilityScopedRuntimeGroup<
+        RuntimeToolRuntimePort["inspect"],
+        "inspect",
+        TCapabilities
+      >;
+    } & (TRuntime extends { internal: BrewvaToolInternalRuntime }
+        ? { internal: CapabilityScopedInternalRuntime<TCapabilities> }
+        : { internal?: CapabilityScopedInternalRuntime<TCapabilities> });
 
 export type BrewvaBundledToolRuntime = RuntimeToolRuntimePort & {
   internal: BrewvaToolInternalRuntime;

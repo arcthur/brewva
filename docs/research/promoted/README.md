@@ -32,6 +32,7 @@ refresh the pointer summary and `Last reviewed` metadata here.
 - [`rfc-default-path-re-hardening-and-advisory-surface-narrowing.md`](./rfc-default-path-re-hardening-and-advisory-surface-narrowing.md)
 - [`rfc-durability-taxonomy-and-rebuildable-surface-narrowing.md`](./rfc-durability-taxonomy-and-rebuildable-surface-narrowing.md)
 - [`rfc-iteration-facts-and-model-native-optimization-protocols.md`](./rfc-iteration-facts-and-model-native-optimization-protocols.md)
+- [`rfc-kernel-first-subtraction-and-control-plane-deferral.md`](./rfc-kernel-first-subtraction-and-control-plane-deferral.md)
 - [`rfc-repository-fitness-plane-and-runtime-boundary.md`](./rfc-repository-fitness-plane-and-runtime-boundary.md)
 - [`rfc-workflow-artifacts-and-posture-control-plane.md`](./rfc-workflow-artifacts-and-posture-control-plane.md)
 

@@ -9,8 +9,8 @@ import { recordToolRuntimeEvent, resolveToolRuntimeEventPort } from "./runtime-i
 import { tokenizeSearchTerms } from "./shared/query.js";
 import type { BrewvaBundledToolOptions } from "./types.js";
 import { inconclusiveTextResult, textResult } from "./utils/result.js";
+import { createManagedBrewvaToolFactory } from "./utils/runtime-bound-tool.js";
 import { getSessionId } from "./utils/session.js";
-import { defineBrewvaTool } from "./utils/tool.js";
 
 const DEFAULT_RESULTS_PER_QUERY = 2;
 const DEFAULT_ARTIFACT_EVENTS = 120;
@@ -639,7 +639,8 @@ function clampOutput(text: string, maxChars: number): string {
 }
 
 export function createOutputSearchTool(options: BrewvaBundledToolOptions): ToolDefinition {
-  return defineBrewvaTool({
+  const outputSearchTool = createManagedBrewvaToolFactory("output_search");
+  return outputSearchTool.define({
     name: "output_search",
     label: "Output Search",
     description:

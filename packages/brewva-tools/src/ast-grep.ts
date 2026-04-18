@@ -2,7 +2,7 @@ import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-subs
 import { Type } from "@sinclair/typebox";
 import { runCommand } from "./utils/exec.js";
 import { failTextResult, textResult } from "./utils/result.js";
-import { defineBrewvaTool } from "./utils/tool.js";
+import { createRuntimeBoundBrewvaToolFactory } from "./utils/runtime-bound-tool.js";
 
 function buildAstGrepUnavailableResult(
   action: "search" | "replace",
@@ -26,7 +26,10 @@ function buildAstGrepUnavailableResult(
 }
 
 export function createAstGrepTools(): ToolDefinition[] {
-  const astGrepSearch = defineBrewvaTool({
+  const astGrepSearchTool = createRuntimeBoundBrewvaToolFactory(undefined, "ast_grep_search");
+  const astGrepReplaceTool = createRuntimeBoundBrewvaToolFactory(undefined, "ast_grep_replace");
+
+  const astGrepSearch = astGrepSearchTool.define({
     name: "ast_grep_search",
     label: "AST Grep Search",
     description: "Search code patterns via ast-grep semantic matching.",
@@ -54,7 +57,7 @@ export function createAstGrepTools(): ToolDefinition[] {
     },
   });
 
-  const astGrepReplace = defineBrewvaTool({
+  const astGrepReplace = astGrepReplaceTool.define({
     name: "ast_grep_replace",
     label: "AST Grep Replace",
     description: "Replace code patterns via ast-grep semantic matching.",

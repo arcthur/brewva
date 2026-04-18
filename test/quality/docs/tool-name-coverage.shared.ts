@@ -31,6 +31,14 @@ export function collectDefinedToolNames(sourceRoot: string): string[] {
         names.add(toolName);
       }
     }
+    for (const match of text.matchAll(
+      /createRuntimeBoundBrewvaToolFactory\s*\(\s*[^,]+,\s*"([a-z0-9_]+)"/g,
+    )) {
+      const toolName = match[1];
+      if (toolName) {
+        names.add(toolName);
+      }
+    }
   }
 
   return [...names].toSorted((left, right) => left.localeCompare(right));

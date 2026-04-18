@@ -2,8 +2,8 @@ import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-subs
 import { Type } from "@sinclair/typebox";
 import type { BrewvaToolRuntime } from "./types.js";
 import { failTextResult, textResult, withVerdict } from "./utils/result.js";
+import { createManagedBrewvaToolFactory } from "./utils/runtime-bound-tool.js";
 import { getSessionId } from "./utils/session.js";
-import { defineBrewvaTool } from "./utils/tool.js";
 
 const OptionalUInt = Type.Optional(Type.Integer({ minimum: 0 }));
 
@@ -12,7 +12,11 @@ export interface CreateA2AToolsOptions {
 }
 
 export function createA2ATools(options: CreateA2AToolsOptions): ToolDefinition[] {
-  const agentSendTool = defineBrewvaTool({
+  const agentSendTool = createManagedBrewvaToolFactory("agent_send");
+  const agentBroadcastTool = createManagedBrewvaToolFactory("agent_broadcast");
+  const agentListTool = createManagedBrewvaToolFactory("agent_list");
+
+  const send = agentSendTool.define({
     name: "agent_send",
     label: "Agent Send",
     description: "Send a message to another orchestrated agent and receive its response.",
@@ -50,7 +54,7 @@ export function createA2ATools(options: CreateA2AToolsOptions): ToolDefinition[]
     },
   });
 
-  const agentBroadcastTool = defineBrewvaTool({
+  const broadcast = agentBroadcastTool.define({
     name: "agent_broadcast",
     label: "Agent Broadcast",
     description: "Broadcast a message to multiple orchestrated agents in one call.",
@@ -93,7 +97,7 @@ export function createA2ATools(options: CreateA2AToolsOptions): ToolDefinition[]
     },
   });
 
-  const agentListTool = defineBrewvaTool({
+  const list = agentListTool.define({
     name: "agent_list",
     label: "Agent List",
     description: "List orchestrated agents visible to the current channel workspace.",
@@ -124,5 +128,5 @@ export function createA2ATools(options: CreateA2AToolsOptions): ToolDefinition[]
     },
   });
 
-  return [agentSendTool, agentBroadcastTool, agentListTool];
+  return [send, broadcast, list];
 }

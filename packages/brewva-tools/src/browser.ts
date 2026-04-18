@@ -8,8 +8,8 @@ import { recordToolRuntimeEvent } from "./runtime-internal.js";
 import type { BrewvaBundledToolOptions } from "./types.js";
 import { buildStringEnumSchema } from "./utils/input-alias.js";
 import { failTextResult, textResult } from "./utils/result.js";
+import { createRuntimeBoundBrewvaToolFactory } from "./utils/runtime-bound-tool.js";
 import { getSessionId } from "./utils/session.js";
-import { defineBrewvaTool } from "./utils/tool.js";
 
 const DEFAULT_BROWSER_COMMAND = "agent-browser";
 const DEFAULT_BROWSER_ARTIFACT_DIR = ".orchestrator/browser-artifacts";
@@ -516,7 +516,47 @@ export function createBrowserTools(
   options: BrewvaBundledToolOptions,
   deps: BrowserToolDeps = {},
 ): ToolDefinition[] {
-  const browserOpen = defineBrewvaTool({
+  const browserOpenTool = createRuntimeBoundBrewvaToolFactory(options.runtime, "browser_open");
+  const browserOpenOptions = { ...options, runtime: browserOpenTool.runtime };
+  const browserWaitTool = createRuntimeBoundBrewvaToolFactory(options.runtime, "browser_wait");
+  const browserWaitOptions = { ...options, runtime: browserWaitTool.runtime };
+  const browserSnapshotTool = createRuntimeBoundBrewvaToolFactory(
+    options.runtime,
+    "browser_snapshot",
+  );
+  const browserSnapshotOptions = { ...options, runtime: browserSnapshotTool.runtime };
+  const browserClickTool = createRuntimeBoundBrewvaToolFactory(options.runtime, "browser_click");
+  const browserClickOptions = { ...options, runtime: browserClickTool.runtime };
+  const browserFillTool = createRuntimeBoundBrewvaToolFactory(options.runtime, "browser_fill");
+  const browserFillOptions = { ...options, runtime: browserFillTool.runtime };
+  const browserGetTool = createRuntimeBoundBrewvaToolFactory(options.runtime, "browser_get");
+  const browserGetOptions = { ...options, runtime: browserGetTool.runtime };
+  const browserScreenshotTool = createRuntimeBoundBrewvaToolFactory(
+    options.runtime,
+    "browser_screenshot",
+  );
+  const browserScreenshotOptions = { ...options, runtime: browserScreenshotTool.runtime };
+  const browserPdfTool = createRuntimeBoundBrewvaToolFactory(options.runtime, "browser_pdf");
+  const browserPdfOptions = { ...options, runtime: browserPdfTool.runtime };
+  const browserDiffSnapshotTool = createRuntimeBoundBrewvaToolFactory(
+    options.runtime,
+    "browser_diff_snapshot",
+  );
+  const browserDiffSnapshotOptions = { ...options, runtime: browserDiffSnapshotTool.runtime };
+  const browserStateLoadTool = createRuntimeBoundBrewvaToolFactory(
+    options.runtime,
+    "browser_state_load",
+  );
+  const browserStateLoadOptions = { ...options, runtime: browserStateLoadTool.runtime };
+  const browserStateSaveTool = createRuntimeBoundBrewvaToolFactory(
+    options.runtime,
+    "browser_state_save",
+  );
+  const browserStateSaveOptions = { ...options, runtime: browserStateSaveTool.runtime };
+  const browserCloseTool = createRuntimeBoundBrewvaToolFactory(options.runtime, "browser_close");
+  const browserCloseOptions = { ...options, runtime: browserCloseTool.runtime };
+
+  const browserOpen = browserOpenTool.define({
     name: "browser_open",
     label: "Browser Open",
     description: "Open a URL in the managed agent-browser session.",
@@ -526,9 +566,9 @@ export function createBrowserTools(
     async execute(_toolCallId, params, signal, _onUpdate, ctx) {
       const sessionId = getSessionId(ctx);
       const sessionName = resolveBrowserSessionName(sessionId);
-      const cwd = resolveBaseCwd(options, ctx);
+      const cwd = resolveBaseCwd(browserOpenOptions, ctx);
       const access = enforceRuntimeToolAccess({
-        options,
+        options: browserOpenOptions,
         sessionId,
         toolName: "browser_open",
         args: { url: params.url },
@@ -565,7 +605,7 @@ export function createBrowserTools(
     },
   });
 
-  const browserWait = defineBrewvaTool({
+  const browserWait = browserWaitTool.define({
     name: "browser_wait",
     label: "Browser Wait",
     description: "Wait for a load state or URL pattern in the managed browser session.",
@@ -585,7 +625,7 @@ export function createBrowserTools(
       }
 
       const sessionName = resolveBrowserSessionName(getSessionId(ctx));
-      const cwd = resolveBaseCwd(options, ctx);
+      const cwd = resolveBaseCwd(browserWaitOptions, ctx);
       const loadState = normalizeBrowserLoadState(params.loadState) ?? "networkidle";
       const args = ["wait"];
       if (params.urlPattern) {
@@ -628,7 +668,7 @@ export function createBrowserTools(
     },
   });
 
-  const browserSnapshot = defineBrewvaTool({
+  const browserSnapshot = browserSnapshotTool.define({
     name: "browser_snapshot",
     label: "Browser Snapshot",
     description: "Capture a DOM/text snapshot from the managed browser session.",
@@ -639,8 +679,8 @@ export function createBrowserTools(
     async execute(toolCallId, params, signal, _onUpdate, ctx) {
       const sessionId = getSessionId(ctx);
       const sessionName = resolveBrowserSessionName(sessionId);
-      const cwd = resolveBaseCwd(options, ctx);
-      const workspaceRoot = resolveWorkspaceRoot(options);
+      const cwd = resolveBaseCwd(browserSnapshotOptions, ctx);
+      const workspaceRoot = resolveWorkspaceRoot(browserSnapshotOptions);
       const path = resolveWritablePath({
         workspaceRoot,
         baseCwd: cwd,
@@ -700,7 +740,7 @@ export function createBrowserTools(
     },
   });
 
-  const browserClick = defineBrewvaTool({
+  const browserClick = browserClickTool.define({
     name: "browser_click",
     label: "Browser Click",
     description: "Click a snapshot ref in the managed browser session.",
@@ -709,7 +749,7 @@ export function createBrowserTools(
     }),
     async execute(_toolCallId, params, signal, _onUpdate, ctx) {
       const sessionName = resolveBrowserSessionName(getSessionId(ctx));
-      const cwd = resolveBaseCwd(options, ctx);
+      const cwd = resolveBaseCwd(browserClickOptions, ctx);
       const result = await executeBrowserCommand(
         {
           sessionName,
@@ -738,7 +778,7 @@ export function createBrowserTools(
     },
   });
 
-  const browserFill = defineBrewvaTool({
+  const browserFill = browserFillTool.define({
     name: "browser_fill",
     label: "Browser Fill",
     description: "Fill a snapshot ref with a value in the managed browser session.",
@@ -748,7 +788,7 @@ export function createBrowserTools(
     }),
     async execute(_toolCallId, params, signal, _onUpdate, ctx) {
       const sessionName = resolveBrowserSessionName(getSessionId(ctx));
-      const cwd = resolveBaseCwd(options, ctx);
+      const cwd = resolveBaseCwd(browserFillOptions, ctx);
       const result = await executeBrowserCommand(
         {
           sessionName,
@@ -778,7 +818,7 @@ export function createBrowserTools(
     },
   });
 
-  const browserGet = defineBrewvaTool({
+  const browserGet = browserGetTool.define({
     name: "browser_get",
     label: "Browser Get",
     description: "Get a page title, URL, or rendered text from the managed browser session.",
@@ -812,8 +852,8 @@ export function createBrowserTools(
 
       const sessionId = getSessionId(ctx);
       const sessionName = resolveBrowserSessionName(sessionId);
-      const cwd = resolveBaseCwd(options, ctx);
-      const workspaceRoot = resolveWorkspaceRoot(options);
+      const cwd = resolveBaseCwd(browserGetOptions, ctx);
+      const workspaceRoot = resolveWorkspaceRoot(browserGetOptions);
       const artifactPath =
         field === "text"
           ? resolveWritablePath({
@@ -898,7 +938,7 @@ export function createBrowserTools(
     },
   });
 
-  const browserScreenshot = defineBrewvaTool({
+  const browserScreenshot = browserScreenshotTool.define({
     name: "browser_screenshot",
     label: "Browser Screenshot",
     description:
@@ -910,8 +950,8 @@ export function createBrowserTools(
     async execute(toolCallId, params, signal, _onUpdate, ctx) {
       const sessionId = getSessionId(ctx);
       const sessionName = resolveBrowserSessionName(sessionId);
-      const cwd = resolveBaseCwd(options, ctx);
-      const workspaceRoot = resolveWorkspaceRoot(options);
+      const cwd = resolveBaseCwd(browserScreenshotOptions, ctx);
+      const workspaceRoot = resolveWorkspaceRoot(browserScreenshotOptions);
       const path = resolveWritablePath({
         workspaceRoot,
         baseCwd: cwd,
@@ -970,7 +1010,7 @@ export function createBrowserTools(
     },
   });
 
-  const browserPdf = defineBrewvaTool({
+  const browserPdf = browserPdfTool.define({
     name: "browser_pdf",
     label: "Browser PDF",
     description: "Render the current page to PDF and persist it in the workspace.",
@@ -980,8 +1020,8 @@ export function createBrowserTools(
     async execute(toolCallId, params, signal, _onUpdate, ctx) {
       const sessionId = getSessionId(ctx);
       const sessionName = resolveBrowserSessionName(sessionId);
-      const cwd = resolveBaseCwd(options, ctx);
-      const workspaceRoot = resolveWorkspaceRoot(options);
+      const cwd = resolveBaseCwd(browserPdfOptions, ctx);
+      const workspaceRoot = resolveWorkspaceRoot(browserPdfOptions);
       const path = resolveWritablePath({
         workspaceRoot,
         baseCwd: cwd,
@@ -1033,7 +1073,7 @@ export function createBrowserTools(
     },
   });
 
-  const browserDiffSnapshot = defineBrewvaTool({
+  const browserDiffSnapshot = browserDiffSnapshotTool.define({
     name: "browser_diff_snapshot",
     label: "Browser Diff Snapshot",
     description:
@@ -1044,8 +1084,8 @@ export function createBrowserTools(
     async execute(toolCallId, params, signal, _onUpdate, ctx) {
       const sessionId = getSessionId(ctx);
       const sessionName = resolveBrowserSessionName(sessionId);
-      const cwd = resolveBaseCwd(options, ctx);
-      const workspaceRoot = resolveWorkspaceRoot(options);
+      const cwd = resolveBaseCwd(browserDiffSnapshotOptions, ctx);
+      const workspaceRoot = resolveWorkspaceRoot(browserDiffSnapshotOptions);
       const path = resolveWritablePath({
         workspaceRoot,
         baseCwd: cwd,
@@ -1099,7 +1139,7 @@ export function createBrowserTools(
     },
   });
 
-  const browserStateLoad = defineBrewvaTool({
+  const browserStateLoad = browserStateLoadTool.define({
     name: "browser_state_load",
     label: "Browser State Load",
     description: "Load a saved browser session state file from the workspace.",
@@ -1108,8 +1148,8 @@ export function createBrowserTools(
     }),
     async execute(_toolCallId, params, signal, _onUpdate, ctx) {
       const sessionName = resolveBrowserSessionName(getSessionId(ctx));
-      const cwd = resolveBaseCwd(options, ctx);
-      const workspaceRoot = resolveWorkspaceRoot(options);
+      const cwd = resolveBaseCwd(browserStateLoadOptions, ctx);
+      const workspaceRoot = resolveWorkspaceRoot(browserStateLoadOptions);
       const path = resolveExistingPath({
         workspaceRoot,
         baseCwd: cwd,
@@ -1154,7 +1194,7 @@ export function createBrowserTools(
     },
   });
 
-  const browserStateSave = defineBrewvaTool({
+  const browserStateSave = browserStateSaveTool.define({
     name: "browser_state_save",
     label: "Browser State Save",
     description: "Persist the current browser session state into the workspace.",
@@ -1164,8 +1204,8 @@ export function createBrowserTools(
     async execute(toolCallId, params, signal, _onUpdate, ctx) {
       const sessionId = getSessionId(ctx);
       const sessionName = resolveBrowserSessionName(sessionId);
-      const cwd = resolveBaseCwd(options, ctx);
-      const workspaceRoot = resolveWorkspaceRoot(options);
+      const cwd = resolveBaseCwd(browserStateSaveOptions, ctx);
+      const workspaceRoot = resolveWorkspaceRoot(browserStateSaveOptions);
       const path = resolveWritablePath({
         workspaceRoot,
         baseCwd: cwd,
@@ -1216,14 +1256,14 @@ export function createBrowserTools(
     },
   });
 
-  const browserClose = defineBrewvaTool({
+  const browserClose = browserCloseTool.define({
     name: "browser_close",
     label: "Browser Close",
     description: "Close the managed browser session.",
     parameters: Type.Object({}),
     async execute(_toolCallId, _params, signal, _onUpdate, ctx) {
       const sessionName = resolveBrowserSessionName(getSessionId(ctx));
-      const cwd = resolveBaseCwd(options, ctx);
+      const cwd = resolveBaseCwd(browserCloseOptions, ctx);
       const result = await executeBrowserCommand(
         {
           sessionName,

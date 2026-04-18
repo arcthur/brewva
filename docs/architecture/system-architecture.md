@@ -161,6 +161,39 @@ Boundary note:
   to justify hidden stage machines, default injected lane briefs, or
   model-writable control state
 
+## Current Transaction Boundary And Platform Growth Rule
+
+The current stable authority-bearing transaction boundary is `single tool
+call`.
+
+That boundary means Brewva currently provides durable semantics for:
+
+- tool-call classification
+- proposal / approval / exact resume
+- durable linked tool outcomes
+- rollback-bearing mutation receipts where the effect model supports rollback
+
+It does not currently provide a stable contract for:
+
+- cross-agent saga semantics
+- generalized compensation graphs
+- automatic partial-failure repair across delegated runs
+- default-path backpressure guarantees across the broader control plane
+
+Turn-level bounded recovery remains a possible future expansion, but it should
+be added only through a new focused RFC instead of being implied by current
+gateway or orchestration behavior.
+
+Platform-growth rule:
+
+- new orchestration breadth that widens the default hosted or runtime-plugin
+  path should land as opt-in control-plane behavior
+- exceptions should stay narrow, preserve the current `single tool call`
+  boundary, and carry an explicit compatibility story for events, WAL, and
+  integration seams
+- planes may describe orchestration products, but they must not silently turn
+  advisory routing into an assumed protocol dependency
+
 ## Context Governance Objects
 
 Context governance uses three different object kinds. They are related, but they

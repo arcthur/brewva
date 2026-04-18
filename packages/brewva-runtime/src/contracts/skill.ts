@@ -37,6 +37,9 @@ export const SEMANTIC_ARTIFACT_SCHEMA_IDS = [
 ] as const;
 export type SemanticArtifactSchemaId = (typeof SEMANTIC_ARTIFACT_SCHEMA_IDS)[number];
 export type SkillSemanticBindings = Record<string, SemanticArtifactSchemaId>;
+export function isSemanticArtifactSchemaId(value: string): value is SemanticArtifactSchemaId {
+  return (SEMANTIC_ARTIFACT_SCHEMA_IDS as readonly string[]).includes(value);
+}
 export const SKILL_REPAIR_ALLOWED_TOOL_NAMES = [
   "skill_complete",
   "workflow_status",

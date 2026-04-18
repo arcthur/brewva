@@ -1,4 +1,4 @@
-import { coerceReviewReportArtifact } from "../../../contracts/index.js";
+import { coerceReviewReportArtifact } from "../../review-normalization.js";
 import type { SkillValidationContext } from "../context.js";
 import {
   SHIP_SEMANTIC_OUTPUT_KEYS,

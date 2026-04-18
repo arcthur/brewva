@@ -1,11 +1,11 @@
 import {
   getSkillSemanticBindings,
   listSkillOutputs,
-  renderSemanticArtifactExample,
   SKILL_REPAIR_ALLOWED_TOOL_NAMES,
   type BrewvaHostedRuntimePort,
   type SkillDocument,
 } from "@brewva/brewva-runtime";
+import { renderSemanticArtifactExample } from "@brewva/brewva-runtime/internal";
 import type { BrewvaHostPluginApi } from "@brewva/brewva-substrate";
 
 const MAX_NUDGES_PER_PROMPT = 2;

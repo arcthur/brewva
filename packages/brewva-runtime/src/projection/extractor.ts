@@ -4,7 +4,7 @@ import { TRUTH_EVENT_TYPE, coerceTruthLedgerPayload } from "../truth/ledger.js";
 import {
   deriveWorkflowArtifacts,
   deriveWorkflowArtifactsFromEvent,
-} from "../workflow/derivation.js";
+} from "../workflow/artifact-derivation.js";
 import type {
   ProjectionExtractionResult,
   ProjectionSourceRef,

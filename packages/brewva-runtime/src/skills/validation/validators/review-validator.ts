@@ -1,5 +1,6 @@
 import type { PlanningEvidenceKey, PlanningEvidenceState } from "../../../contracts/index.js";
-import { PLANNING_EVIDENCE_KEYS, coerceReviewReportArtifact } from "../../../contracts/index.js";
+import { PLANNING_EVIDENCE_KEYS } from "../../../contracts/index.js";
+import { coerceReviewReportArtifact } from "../../review-normalization.js";
 import type { SkillValidationContext, VerificationEvidenceState } from "../context.js";
 import {
   REVIEW_SEMANTIC_EVIDENCE_KEYS,

@@ -11,7 +11,7 @@ import { resolveToolTargetScope } from "./target-scope.js";
 import type { BrewvaToolOptions } from "./types.js";
 import { buildStringEnumSchema } from "./utils/input-alias.js";
 import { failTextResult, inconclusiveTextResult, textResult } from "./utils/result.js";
-import { defineBrewvaTool } from "./utils/tool.js";
+import { createRuntimeBoundBrewvaToolFactory } from "./utils/runtime-bound-tool.js";
 
 const SOURCE_TYPE_SCHEMA = buildStringEnumSchema(KNOWLEDGE_SOURCE_TYPES, {});
 const QUERY_INTENT_SCHEMA = buildStringEnumSchema(KNOWLEDGE_QUERY_INTENTS, {});
@@ -57,7 +57,11 @@ function renderResult(entry: ReturnType<typeof executeKnowledgeSearch>["results"
 }
 
 export function createKnowledgeSearchTool(options: BrewvaToolOptions): ToolDefinition {
-  return defineBrewvaTool({
+  const knowledgeSearchTool = createRuntimeBoundBrewvaToolFactory(
+    options.runtime,
+    "knowledge_search",
+  );
+  return knowledgeSearchTool.define({
     name: "knowledge_search",
     label: "Knowledge Search",
     description:
@@ -92,7 +96,7 @@ export function createKnowledgeSearchTool(options: BrewvaToolOptions): ToolDefin
         );
       }
 
-      const scope = resolveToolTargetScope(options.runtime, ctx);
+      const scope = resolveToolTargetScope(knowledgeSearchTool.runtime, ctx);
       const search = executeKnowledgeSearch(scope.allowedRoots, {
         query: params.query,
         queryIntent: readQueryIntent(params.query_intent),

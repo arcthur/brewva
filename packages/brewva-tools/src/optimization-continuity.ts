@@ -7,8 +7,9 @@ import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-subs
 import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "./types.js";
 import { buildStringEnumSchema } from "./utils/input-alias.js";
+import { readMemoryToolString, resolveMemoryToolLimit } from "./utils/memory-plane-tool.js";
 import { failTextResult, inconclusiveTextResult, textResult } from "./utils/result.js";
-import { defineBrewvaTool } from "./utils/tool.js";
+import { createManagedBrewvaToolFactory } from "./utils/runtime-bound-tool.js";
 
 const ACTION_VALUES = ["list", "show", "attention"] as const;
 
@@ -24,12 +25,6 @@ function readStatus(
     )
     ? (value as (typeof OPTIMIZATION_LINEAGE_STATUS_VALUES)[number])
     : undefined;
-}
-
-function readTrimmedString(value: unknown): string | undefined {
-  if (typeof value !== "string") return undefined;
-  const normalized = value.trim();
-  return normalized.length > 0 ? normalized : undefined;
 }
 
 function formatLineageSummary(lineage: OptimizationLineageArtifact): string {
@@ -254,7 +249,8 @@ function formatAttentionSummary(summary: OptimizationAttentionSummary): string {
 }
 
 export function createOptimizationContinuityTool(options: BrewvaToolOptions): ToolDefinition {
-  return defineBrewvaTool({
+  const optimizationContinuityTool = createManagedBrewvaToolFactory("optimization_continuity");
+  return optimizationContinuityTool.define({
     name: "optimization_continuity",
     label: "Optimization Continuity",
     description:
@@ -278,9 +274,9 @@ export function createOptimizationContinuityTool(options: BrewvaToolOptions): To
     async execute(_toolCallId, params) {
       const plane = getOrCreateOptimizationContinuityPlane(options.runtime);
       const status = readStatus(params.status);
-      const loopKey = readTrimmedString(params.loop_key);
-      const lineageId = readTrimmedString(params.lineage_id);
-      const limit = Math.max(1, Math.min(20, params.limit ?? 10));
+      const loopKey = readMemoryToolString(params.loop_key);
+      const lineageId = readMemoryToolString(params.lineage_id);
+      const limit = resolveMemoryToolLimit(params.limit);
       const staleAfterDays = Math.max(1, Math.min(365, params.stale_after_days ?? 3));
       const runCountFloor = Math.max(1, Math.min(100, params.run_count_floor ?? 4));
       const now = params.as_of_ms ?? Date.now();

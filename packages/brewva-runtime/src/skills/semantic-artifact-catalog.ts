@@ -1,15 +1,15 @@
-import type { JsonValue } from "../utils/json.js";
-import { DESIGN_EXECUTION_MODE_HINTS } from "./planning.js";
+import { DESIGN_EXECUTION_MODE_HINTS } from "../contracts/planning.js";
 import {
   PLANNING_OWNER_LANES,
   REVIEW_CHANGE_CATEGORIES,
   REVIEW_REPORT_OUTPUT_CONTRACT,
-} from "./review.js";
+} from "../contracts/review.js";
 import type {
   SemanticArtifactSchemaId,
   SkillOutputContract,
   SkillSemanticBindings,
-} from "./skill.js";
+} from "../contracts/skill.js";
+import type { JsonValue } from "../utils/json.js";
 
 export interface SemanticArtifactSchema {
   id: SemanticArtifactSchemaId;
@@ -255,7 +255,9 @@ const SCOPE_DECLARATION_OUTPUT_CONTRACT: SkillOutputContract = {
   },
 };
 
-const SEMANTIC_ARTIFACT_SCHEMAS: Record<SemanticArtifactSchemaId, SemanticArtifactSchema> = {
+const SEMANTIC_ARTIFACT_SCHEMAS: Readonly<
+  Record<SemanticArtifactSchemaId, SemanticArtifactSchema>
+> = {
   "planning.design_spec.v2": {
     id: "planning.design_spec.v2",
     family: "planning",
@@ -529,10 +531,6 @@ const SEMANTIC_ARTIFACT_SCHEMAS: Record<SemanticArtifactSchemaId, SemanticArtifa
     example: "needs_follow_up",
   },
 };
-
-export function isSemanticArtifactSchemaId(value: string): value is SemanticArtifactSchemaId {
-  return Object.hasOwn(SEMANTIC_ARTIFACT_SCHEMAS, value);
-}
 
 export function getSemanticArtifactSchema(
   schemaId: SemanticArtifactSchemaId,

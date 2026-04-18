@@ -136,6 +136,25 @@ source selection: it does not install a profile allowlist ahead of
 
 There are no longer legacy runtime plugin profiles such as `core` or `memory`.
 
+## Platform-Growth Boundary
+
+The hosted runtime-plugin package is a control-plane integration surface, not a
+second transaction kernel.
+
+Stable rule:
+
+- the default hosted pipeline stays anchored to the current
+  `single tool call` transaction boundary
+- new orchestration breadth should land as opt-in control-plane behavior rather
+  than widening the default hosted path
+- runtime plugins may surface delegated state, route child work, or deliver
+  recovery hints, but they do not create cross-agent saga semantics,
+  generalized compensation graphs, or automatic partial-failure repair
+
+If a future plugin feature needs broader multi-agent guarantees, it should
+start from a focused RFC with an explicit compatibility story for events, WAL,
+and host integration seams.
+
 ## Port Narrowing
 
 `createHostedTurnPipeline()` may accept or construct a root `BrewvaRuntime`,

@@ -13,6 +13,36 @@ contract and session lifecycle details, use:
 - `docs/reference/session-lifecycle.md`
 - `docs/reference/runtime.md`
 
+## Current Guarantees And Non-Goals
+
+The current orchestration stack is a control-plane product over kernel-owned
+receipts. It is not a distributed transaction coordinator.
+
+Current stable guarantees:
+
+- delegated runs, schedule wakeups, and control routing remain inspectable and
+  replay-visible where they write durable receipts
+- parent-side adoption stays explicit through tools such as
+  `worker_results_apply`
+- control-plane routing remains subordinate to runtime governance, rollback,
+  and event truth
+
+Current non-goals:
+
+- no cross-agent saga semantics
+- no generalized compensation graph
+- no automatic partial-failure repair across fan-out or parent/child runs
+- no default-path backpressure guarantee beyond the bounded limits documented
+  elsewhere in config and runtime surfaces
+
+Platform-growth rule:
+
+- new multi-agent breadth should remain opt-in control-plane behavior rather
+  than widening the default hosted path
+- explicit tools, channel orchestration config, or host-owned routing choices
+  are acceptable opt-in surfaces; hidden default-path orchestration growth is
+  not
+
 ## Hosted Pipeline
 
 1. Gateway host creates a session through the stable host entrypoint

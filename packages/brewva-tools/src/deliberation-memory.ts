@@ -9,12 +9,16 @@ import {
 } from "@brewva/brewva-deliberation";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate";
 import { Type } from "@sinclair/typebox";
-import { shouldInvokeSemanticRerank } from "./semantic-reranker.js";
 import type { BrewvaToolOptions } from "./types.js";
 import { buildStringEnumSchema } from "./utils/input-alias.js";
+import {
+  readMemoryToolString,
+  rerankMemoryToolRetrievals,
+  resolveMemoryToolLimit,
+} from "./utils/memory-plane-tool.js";
 import { failTextResult, inconclusiveTextResult, textResult } from "./utils/result.js";
+import { createManagedBrewvaToolFactory } from "./utils/runtime-bound-tool.js";
 import { getSessionId } from "./utils/session.js";
-import { defineBrewvaTool } from "./utils/tool.js";
 
 const ACTION_VALUES = ["list", "show", "retrieve", "stats"] as const;
 
@@ -38,12 +42,6 @@ function readScope(value: unknown): (typeof DELIBERATION_MEMORY_SCOPE_VALUES)[nu
     )
     ? (value as (typeof DELIBERATION_MEMORY_SCOPE_VALUES)[number])
     : undefined;
-}
-
-function readTrimmedString(value: unknown): string | undefined {
-  if (typeof value !== "string") return undefined;
-  const normalized = value.trim();
-  return normalized.length > 0 ? normalized : undefined;
 }
 
 function formatArtifactSummary(artifact: DeliberationMemoryArtifact): string {
@@ -148,7 +146,8 @@ function formatStats(state: DeliberationMemoryState): string {
 }
 
 export function createDeliberationMemoryTool(options: BrewvaToolOptions): ToolDefinition {
-  return defineBrewvaTool({
+  const deliberationMemoryTool = createManagedBrewvaToolFactory("deliberation_memory");
+  return deliberationMemoryTool.define({
     name: "deliberation_memory",
     label: "Deliberation Memory",
     description:
@@ -171,9 +170,9 @@ export function createDeliberationMemoryTool(options: BrewvaToolOptions): ToolDe
       const plane = getOrCreateDeliberationMemoryPlane(options.runtime);
       const kind = readKind(params.kind);
       const scope = readScope(params.scope);
-      const artifactId = readTrimmedString(params.artifact_id);
-      const query = readTrimmedString(params.query);
-      const limit = Math.max(1, Math.min(20, params.limit ?? 10));
+      const artifactId = readMemoryToolString(params.artifact_id);
+      const query = readMemoryToolString(params.query);
+      const limit = resolveMemoryToolLimit(params.limit);
       const sessionId = getSessionId(ctx);
       const targetRoots = options.runtime.inspect.task.getTargetDescriptor(sessionId).roots;
 
@@ -230,34 +229,32 @@ export function createDeliberationMemoryTool(options: BrewvaToolOptions): ToolDe
           .filter((entry) => !kind || entry.artifact.kind === kind)
           .filter((entry) => !scope || entry.artifact.applicabilityScope === scope);
         const oracle = options.runtime.semanticReranker;
-        if (
-          retrievals.length >= 3 &&
-          oracle?.rerankDeliberationMemory &&
-          shouldInvokeSemanticRerank(retrievals.map((entry) => entry.score))
-        ) {
-          const reranked = await oracle.rerankDeliberationMemory({
-            sessionId,
-            surface: "deliberation_memory",
-            query,
-            targetRoots,
-            stateRevision: String(plane.getState().updatedAt),
-            artifacts: retrievals.map((entry) => entry.artifact),
-            candidates: retrievals.map((entry) => ({
-              id: entry.artifact.id,
-              title: entry.artifact.title,
-              summary: entry.artifact.summary,
-              content: entry.artifact.content,
-              kind: entry.artifact.kind,
-              scope: entry.artifact.applicabilityScope,
-            })),
-          });
-          if (reranked) {
-            const byId = new Map(retrievals.map((entry) => [entry.artifact.id, entry] as const));
-            retrievals = reranked.orderedIds
-              .map((id) => byId.get(id))
-              .filter((entry): entry is (typeof retrievals)[number] => Boolean(entry));
-          }
-        }
+        const rerankDeliberationMemory = oracle?.rerankDeliberationMemory?.bind(oracle);
+        retrievals = await rerankMemoryToolRetrievals({
+          retrievals,
+          getId: (entry) => entry.artifact.id,
+          getScore: (entry) => entry.score,
+          toCandidate: (entry) => ({
+            id: entry.artifact.id,
+            title: entry.artifact.title,
+            summary: entry.artifact.summary,
+            content: entry.artifact.content,
+            kind: entry.artifact.kind,
+            scope: entry.artifact.applicabilityScope,
+          }),
+          rerank: rerankDeliberationMemory
+            ? (candidates) =>
+                rerankDeliberationMemory({
+                  sessionId,
+                  surface: "deliberation_memory",
+                  query,
+                  targetRoots,
+                  stateRevision: String(plane.getState().updatedAt),
+                  artifacts: retrievals.map((entry) => entry.artifact),
+                  candidates,
+                })
+            : undefined,
+        });
         retrievals = retrievals.slice(0, limit);
         if (retrievals.length === 0) {
           return inconclusiveTextResult(

@@ -14,6 +14,7 @@ Brewva is an AI-native coding-agent runtime built with Bun and TypeScript. It ke
 
 - Deterministic runtime boundaries for context, tools, verification, cost, and state mutation
 - A shared invocation spine with an explicit `safe | effectful` execution boundary
+- Per-tool least privilege through repo-owned capability declarations and scoped runtime facades
 - Tape-first durability and replay, with working state rebuilt from event history
 - Explicit proposal and governance boundaries instead of implicit agent-side mutation
 - Replay-first approval and rollback flows instead of hidden in-memory authority

@@ -3,8 +3,8 @@ import { Type } from "@sinclair/typebox";
 import { recordToolRuntimeEvent, resolveToolRuntimeContextPort } from "./runtime-internal.js";
 import type { BrewvaBundledToolOptions } from "./types.js";
 import { failTextResult, textResult } from "./utils/result.js";
+import { createRuntimeBoundBrewvaToolFactory } from "./utils/runtime-bound-tool.js";
 import { getSessionId } from "./utils/session.js";
-import { defineBrewvaTool } from "./utils/tool.js";
 
 function normalizeReason(input: unknown): string | undefined {
   if (typeof input !== "string") return undefined;
@@ -19,7 +19,11 @@ function normalizeErrorMessage(error: unknown): string {
 }
 
 export function createSessionCompactTool(options: BrewvaBundledToolOptions): ToolDefinition {
-  return defineBrewvaTool({
+  const sessionCompactTool = createRuntimeBoundBrewvaToolFactory(
+    options.runtime,
+    "session_compact",
+  );
+  return sessionCompactTool.define({
     name: "session_compact",
     label: "Session Compact",
     description: "Compact LLM message history for the current session.",
@@ -30,7 +34,7 @@ export function createSessionCompactTool(options: BrewvaBundledToolOptions): Too
       const sessionId = getSessionId(ctx);
       const reason = normalizeReason(params.reason);
       const usage = ctx.getContextUsage();
-      const contextPort = resolveToolRuntimeContextPort(options.runtime);
+      const contextPort = resolveToolRuntimeContextPort(sessionCompactTool.runtime);
       const usagePercent =
         contextPort?.getUsageRatio?.(usage) ??
         (typeof usage?.percent === "number"
@@ -46,7 +50,7 @@ export function createSessionCompactTool(options: BrewvaBundledToolOptions): Too
           customInstructions,
           onError: (error) => {
             compactError = normalizeErrorMessage(error);
-            recordToolRuntimeEvent(options.runtime, {
+            recordToolRuntimeEvent(sessionCompactTool.runtime, {
               sessionId,
               type: "session_compact_failed",
               payload: {
@@ -62,7 +66,7 @@ export function createSessionCompactTool(options: BrewvaBundledToolOptions): Too
             error: compactError,
           });
         }
-        recordToolRuntimeEvent(options.runtime, {
+        recordToolRuntimeEvent(sessionCompactTool.runtime, {
           sessionId,
           type: "session_compact_requested",
           payload: {
@@ -73,7 +77,7 @@ export function createSessionCompactTool(options: BrewvaBundledToolOptions): Too
         });
       } catch (error) {
         const errorMessage = normalizeErrorMessage(error);
-        recordToolRuntimeEvent(options.runtime, {
+        recordToolRuntimeEvent(sessionCompactTool.runtime, {
           sessionId,
           type: "session_compact_request_failed",
           payload: {

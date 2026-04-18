@@ -19,6 +19,7 @@ import {
   readPersonaProfile,
 } from "./identity.js";
 import type { ContextSourceProvider, ContextSourceProviderRegistry } from "./provider.js";
+import { HISTORY_VIEW_BASELINE_RESERVED_BUDGET_RATIO } from "./reserved-budget.js";
 import { buildRuntimeStatusBlock } from "./runtime-status.js";
 import { createSkillRoutingContextProvider } from "./skill-routing.js";
 import { CONTEXT_SOURCES } from "./sources.js";
@@ -33,8 +34,6 @@ export interface BuiltInContextSourceProviderDeps {
 }
 
 const PRIMARY_REGISTRY_LANE = "primary_registry";
-const HISTORY_VIEW_BASELINE_RESERVED_BUDGET_RATIO = 0.3;
-
 function createPrimaryProvider(
   provider: Omit<ContextSourceProvider, "admissionLane">,
 ): ContextSourceProvider {

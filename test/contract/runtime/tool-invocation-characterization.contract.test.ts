@@ -497,22 +497,11 @@ describe("Tool invocation characterization", () => {
 
     expect(blocked).toMatchObject({
       allowed: false,
-      boundary: "effectful",
       reason: expect.stringContaining("session_compact"),
     });
     expect(summarizeEvents(runtime.inspect.events.query(sessionId))).toEqual([
       { type: "context_usage" },
       { type: "context_usage" },
-      {
-        type: "tool_effect_gate_selected",
-        payload: {
-          toolCallId: "tc-exec-compact",
-          toolName: "exec",
-          boundary: "effectful",
-          requiresApproval: true,
-          rollbackable: false,
-        },
-      },
       {
         type: "context_compaction_gate_blocked_tool",
         payload: {

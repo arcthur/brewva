@@ -20,8 +20,8 @@ import type {
 } from "./types.js";
 import { buildStringEnumSchema } from "./utils/input-alias.js";
 import { failTextResult, textResult, toolDetails, withVerdict } from "./utils/result.js";
+import { createRuntimeBoundBrewvaToolFactory } from "./utils/runtime-bound-tool.js";
 import { getSessionId } from "./utils/session.js";
-import { defineBrewvaTool } from "./utils/tool.js";
 
 const SUBAGENT_MODE_VALUES = ["single", "parallel"] as const;
 const SUBAGENT_BOUNDARY_VALUES = ["safe", "effectful"] as const;
@@ -842,127 +842,142 @@ async function executeSubagentToolWithRequest(input: {
 }
 
 export function createSubagentRunTool(options: BrewvaToolOptions): ToolDefinition {
-  return defineBrewvaTool({
-    name: "subagent_run",
-    label: "Subagent Run",
-    description:
-      "Delegate a bounded task to an isolated worker configuration and return structured results.",
-    promptSnippet:
-      "Use isolated delegated runs for focused advisor consults, QA, or patch work without polluting the main context window.",
-    promptGuidelines: [
-      "Prefer canonical public agent specs advisor, qa, and patch-worker for the default delegated posture.",
-      "For advisor runs, declare consultKind explicitly and provide a consultBrief with the decision and success criteria.",
-      "Delegate when the task needs cross-3+-file investigation, diagnosis, a second-opinion review pass, or parallel slice analysis.",
-      "Use single for one delegated run and parallel to fan out multiple independent slices.",
-      "Use agentSpec for named reusable workers, envelope for runtime posture, and skillName for explicit semantic contracts.",
-      "Keep objectives specific, pass only the context references the child needs, and avoid broad parent-context dumps.",
-    ],
-    parameters: Type.Object({
-      ...SubagentRunParamsSchema.properties,
-    }),
-    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-      const adapter = options.runtime.orchestration?.subagents;
-      if (!adapter) {
-        return failTextResult("Subagent orchestration is unavailable in this session.", {
-          ok: false,
-        });
-      }
+  const { runtime, define } = createRuntimeBoundBrewvaToolFactory(options.runtime, "subagent_run");
+  return define(
+    {
+      name: "subagent_run",
+      label: "Subagent Run",
+      description:
+        "Delegate a bounded task to an isolated worker configuration and return structured results.",
+      promptSnippet:
+        "Use isolated delegated runs for focused advisor consults, QA, or patch work without polluting the main context window.",
+      promptGuidelines: [
+        "Prefer canonical public agent specs advisor, qa, and patch-worker for the default delegated posture.",
+        "For advisor runs, declare consultKind explicitly and provide a consultBrief with the decision and success criteria.",
+        "Delegate when the task needs cross-3+-file investigation, diagnosis, a second-opinion review pass, or parallel slice analysis.",
+        "Use single for one delegated run and parallel to fan out multiple independent slices.",
+        "Use agentSpec for named reusable workers, envelope for runtime posture, and skillName for explicit semantic contracts.",
+        "Keep objectives specific, pass only the context references the child needs, and avoid broad parent-context dumps.",
+      ],
+      parameters: Type.Object({
+        ...SubagentRunParamsSchema.properties,
+      }),
+      async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+        const adapter = runtime.orchestration?.subagents;
+        if (!adapter) {
+          return failTextResult("Subagent orchestration is unavailable in this session.", {
+            ok: false,
+          });
+        }
 
-      const legacyFieldPaths = collectLegacyDelegationFieldPaths(params);
-      if (legacyFieldPaths.length > 0) {
-        return failTextResult(legacyDelegationFieldMessage(legacyFieldPaths), { ok: false });
-      }
-      const decodedParams = decodeToolParams(SubagentRunParamsSchema, params);
-      const mode = resolveMode(decodedParams.mode, decodedParams.tasks);
-      const waitMode = resolveWaitMode(decodedParams.waitMode);
-      const returnMode = resolveReturnMode(decodedParams.returnMode);
-      const deliveryValidation = validateDeliveryConfiguration(options.runtime, returnMode);
-      if (!deliveryValidation.ok) {
-        return failTextResult(deliveryValidation.message, { ok: false });
-      }
-      const builtRequest = buildRunRequestFromParams({
-        params: decodedParams,
-        mode,
-      });
-      if (!builtRequest.ok) {
-        return failTextResult(builtRequest.message, { ok: false });
-      }
-      const sessionId = getSessionId(ctx);
-      return executeSubagentToolWithRequest({
-        options,
-        sessionId,
-        delegate: resolveDelegationLabel(builtRequest.request),
-        mode,
-        waitMode,
-        returnMode,
-        request: builtRequest.request,
-        adapter,
-        completionVerb: "subagent_run",
-        startVerb: "subagent_run started",
-        delivery: buildDeliveryRequest(returnMode, decodedParams),
-      });
+        const legacyFieldPaths = collectLegacyDelegationFieldPaths(params);
+        if (legacyFieldPaths.length > 0) {
+          return failTextResult(legacyDelegationFieldMessage(legacyFieldPaths), { ok: false });
+        }
+        const decodedParams = decodeToolParams(SubagentRunParamsSchema, params);
+        const mode = resolveMode(decodedParams.mode, decodedParams.tasks);
+        const waitMode = resolveWaitMode(decodedParams.waitMode);
+        const returnMode = resolveReturnMode(decodedParams.returnMode);
+        const deliveryValidation = validateDeliveryConfiguration(runtime, returnMode);
+        if (!deliveryValidation.ok) {
+          return failTextResult(deliveryValidation.message, { ok: false });
+        }
+        const builtRequest = buildRunRequestFromParams({
+          params: decodedParams,
+          mode,
+        });
+        if (!builtRequest.ok) {
+          return failTextResult(builtRequest.message, { ok: false });
+        }
+        const sessionId = getSessionId(ctx);
+        return executeSubagentToolWithRequest({
+          options: { ...options, runtime },
+          sessionId,
+          delegate: resolveDelegationLabel(builtRequest.request),
+          mode,
+          waitMode,
+          returnMode,
+          request: builtRequest.request,
+          adapter,
+          completionVerb: "subagent_run",
+          startVerb: "subagent_run started",
+          delivery: buildDeliveryRequest(returnMode, decodedParams),
+        });
+      },
     },
-  });
+    {
+      requiredCapabilities: ["internal.appendGuardedSupplementalBlocks"],
+    },
+  );
 }
 
 export function createSubagentFanoutTool(options: BrewvaToolOptions): ToolDefinition {
-  return defineBrewvaTool({
-    name: "subagent_fanout",
-    label: "Subagent Fanout",
-    description:
-      "Launch multiple isolated delegated runs under one worker configuration for independent slices of work.",
-    promptSnippet:
-      "Use this for explicit fan-out when several repository slices or internal review lanes can run independently under the same delegated setup.",
-    promptGuidelines: [
-      "Prefer canonical public agent specs advisor, qa, and patch-worker unless a narrower internal worker is explicitly required.",
-      "For advisor fan-out, keep consultKind explicit and share one consultBrief across the delegated slices unless a lane-specific brief is required.",
-      "Use this when tasks are independent and a shared packet plus per-task objectives is clearer than one large delegated run.",
-      "Keep each task label and objective specific so the parent can inspect outcomes separately.",
-      "Prefer read-only envelopes unless the workflow is explicitly ready to inspect and merge isolated patch results.",
-    ],
-    parameters: Type.Object({
-      ...SubagentFanoutParamsSchema.properties,
-    }),
-    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-      const adapter = options.runtime.orchestration?.subagents;
-      if (!adapter) {
-        return failTextResult("Subagent orchestration is unavailable in this session.", {
-          ok: false,
-        });
-      }
+  const { runtime, define } = createRuntimeBoundBrewvaToolFactory(
+    options.runtime,
+    "subagent_fanout",
+  );
+  return define(
+    {
+      name: "subagent_fanout",
+      label: "Subagent Fanout",
+      description:
+        "Launch multiple isolated delegated runs under one worker configuration for independent slices of work.",
+      promptSnippet:
+        "Use this for explicit fan-out when several repository slices or internal review lanes can run independently under the same delegated setup.",
+      promptGuidelines: [
+        "Prefer canonical public agent specs advisor, qa, and patch-worker unless a narrower internal worker is explicitly required.",
+        "For advisor fan-out, keep consultKind explicit and share one consultBrief across the delegated slices unless a lane-specific brief is required.",
+        "Use this when tasks are independent and a shared packet plus per-task objectives is clearer than one large delegated run.",
+        "Keep each task label and objective specific so the parent can inspect outcomes separately.",
+        "Prefer read-only envelopes unless the workflow is explicitly ready to inspect and merge isolated patch results.",
+      ],
+      parameters: Type.Object({
+        ...SubagentFanoutParamsSchema.properties,
+      }),
+      async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+        const adapter = runtime.orchestration?.subagents;
+        if (!adapter) {
+          return failTextResult("Subagent orchestration is unavailable in this session.", {
+            ok: false,
+          });
+        }
 
-      const legacyFieldPaths = collectLegacyDelegationFieldPaths(params);
-      if (legacyFieldPaths.length > 0) {
-        return failTextResult(legacyDelegationFieldMessage(legacyFieldPaths), { ok: false });
-      }
-      const decodedParams = decodeToolParams(SubagentFanoutParamsSchema, params);
-      const waitMode = resolveWaitMode(decodedParams.waitMode);
-      const returnMode = resolveReturnMode(decodedParams.returnMode);
-      const deliveryValidation = validateDeliveryConfiguration(options.runtime, returnMode);
-      if (!deliveryValidation.ok) {
-        return failTextResult(deliveryValidation.message, { ok: false });
-      }
-      const builtRequest = buildRunRequestFromParams({
-        params: { ...decodedParams, mode: "parallel" },
-        mode: "parallel",
-      });
-      if (!builtRequest.ok) {
-        return failTextResult(builtRequest.message, { ok: false });
-      }
-      const sessionId = getSessionId(ctx);
-      return executeSubagentToolWithRequest({
-        options,
-        sessionId,
-        delegate: resolveDelegationLabel(builtRequest.request),
-        mode: "parallel",
-        waitMode,
-        returnMode,
-        request: builtRequest.request,
-        adapter,
-        completionVerb: "subagent_fanout",
-        startVerb: "subagent_fanout started",
-        delivery: buildDeliveryRequest(returnMode, decodedParams),
-      });
+        const legacyFieldPaths = collectLegacyDelegationFieldPaths(params);
+        if (legacyFieldPaths.length > 0) {
+          return failTextResult(legacyDelegationFieldMessage(legacyFieldPaths), { ok: false });
+        }
+        const decodedParams = decodeToolParams(SubagentFanoutParamsSchema, params);
+        const waitMode = resolveWaitMode(decodedParams.waitMode);
+        const returnMode = resolveReturnMode(decodedParams.returnMode);
+        const deliveryValidation = validateDeliveryConfiguration(runtime, returnMode);
+        if (!deliveryValidation.ok) {
+          return failTextResult(deliveryValidation.message, { ok: false });
+        }
+        const builtRequest = buildRunRequestFromParams({
+          params: { ...decodedParams, mode: "parallel" },
+          mode: "parallel",
+        });
+        if (!builtRequest.ok) {
+          return failTextResult(builtRequest.message, { ok: false });
+        }
+        const sessionId = getSessionId(ctx);
+        return executeSubagentToolWithRequest({
+          options: { ...options, runtime },
+          sessionId,
+          delegate: resolveDelegationLabel(builtRequest.request),
+          mode: "parallel",
+          waitMode,
+          returnMode,
+          request: builtRequest.request,
+          adapter,
+          completionVerb: "subagent_fanout",
+          startVerb: "subagent_fanout started",
+          delivery: buildDeliveryRequest(returnMode, decodedParams),
+        });
+      },
     },
-  });
+    {
+      requiredCapabilities: ["internal.appendGuardedSupplementalBlocks"],
+    },
+  );
 }

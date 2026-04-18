@@ -10,8 +10,8 @@ import {
 import type { BrewvaToolOptions } from "./types.js";
 import { buildStringEnumSchema } from "./utils/input-alias.js";
 import { failTextResult, textResult } from "./utils/result.js";
+import { createRuntimeBoundBrewvaToolFactory } from "./utils/runtime-bound-tool.js";
 import { getSessionId } from "./utils/session.js";
-import { defineBrewvaTool } from "./utils/tool.js";
 
 const FOLLOW_UP_ACTION_VALUES = ["create", "cancel", "list"] as const;
 const FollowUpActionSchema = buildStringEnumSchema(FOLLOW_UP_ACTION_VALUES, {
@@ -81,91 +81,145 @@ function compileEveryDurationToCron(duration: {
 }
 
 export function createFollowUpTool(options: BrewvaToolOptions): ToolDefinition {
-  return defineBrewvaTool({
-    name: "follow_up",
-    label: "Follow Up",
-    description:
-      "Create, cancel, or list bounded follow-ups using after/every durations. Compiles to schedule_intent semantics without exposing the lower-level contract.",
-    promptSnippet: "Create, cancel, or list bounded follow-ups using after/every durations.",
-    promptGuidelines: [
-      "Use this when the user wants a simple delayed or recurring follow-up without editing the lower-level schedule_intent contract directly.",
-      "Use after for a one-shot follow-up and every for a recurring follow-up. Keep recurring follow-ups bounded.",
-    ],
-    parameters: Type.Object({
-      action: FollowUpActionSchema,
-      reason: Type.Optional(Type.String({ minLength: 1, maxLength: 800 })),
-      intentId: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
-      after: Type.Optional(Type.String({ pattern: FOLLOW_UP_DURATION_PATTERN, maxLength: 32 })),
-      every: Type.Optional(
-        Type.String({ pattern: FOLLOW_UP_RECURRING_DURATION_PATTERN, maxLength: 32 }),
-      ),
-      runs: Type.Optional(Type.Integer({ minimum: 1, maximum: 10_000 })),
-    }),
-    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-      const sessionId = getSessionId(ctx);
-      if (!options.runtime.config.schedule.enabled) {
-        return failTextResult("Follow-up rejected (scheduler_disabled).", {
-          ok: false,
-          error: "scheduler_disabled",
-        });
-      }
-
-      if (params.action === "create") {
-        const reason = normalizeOptionalString(params.reason);
-        if (!reason) {
-          return failTextResult("Follow-up rejected (missing_reason).", {
+  const { runtime, define } = createRuntimeBoundBrewvaToolFactory(options.runtime, "follow_up");
+  return define(
+    {
+      name: "follow_up",
+      label: "Follow Up",
+      description:
+        "Create, cancel, or list bounded follow-ups using after/every durations. Compiles to schedule_intent semantics without exposing the lower-level contract.",
+      promptSnippet: "Create, cancel, or list bounded follow-ups using after/every durations.",
+      promptGuidelines: [
+        "Use this when the user wants a simple delayed or recurring follow-up without editing the lower-level schedule_intent contract directly.",
+        "Use after for a one-shot follow-up and every for a recurring follow-up. Keep recurring follow-ups bounded.",
+      ],
+      parameters: Type.Object({
+        action: FollowUpActionSchema,
+        reason: Type.Optional(Type.String({ minLength: 1, maxLength: 800 })),
+        intentId: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
+        after: Type.Optional(Type.String({ pattern: FOLLOW_UP_DURATION_PATTERN, maxLength: 32 })),
+        every: Type.Optional(
+          Type.String({ pattern: FOLLOW_UP_RECURRING_DURATION_PATTERN, maxLength: 32 }),
+        ),
+        runs: Type.Optional(Type.Integer({ minimum: 1, maximum: 10_000 })),
+      }),
+      async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+        const sessionId = getSessionId(ctx);
+        if (!runtime.config.schedule.enabled) {
+          return failTextResult("Follow-up rejected (scheduler_disabled).", {
             ok: false,
-            error: "missing_reason",
+            error: "scheduler_disabled",
           });
         }
 
-        if (params.after !== undefined && params.every !== undefined) {
-          return failTextResult("Follow-up rejected (after_and_every_are_mutually_exclusive).", {
-            ok: false,
-            error: "after_and_every_are_mutually_exclusive",
-          });
-        }
-        if (params.after === undefined && params.every === undefined) {
-          return failTextResult("Follow-up rejected (missing_follow_up_timing).", {
-            ok: false,
-            error: "missing_follow_up_timing",
-          });
-        }
-
-        const followUpIntentId = normalizeOptionalString(params.intentId);
-        const brandedFollowUpIntentId =
-          followUpIntentId !== undefined ? asBrewvaIntentId(followUpIntentId) : undefined;
-
-        if (params.after !== undefined) {
-          if (params.runs !== undefined) {
-            return failTextResult("Follow-up rejected (runs_requires_every).", {
+        if (params.action === "create") {
+          const reason = normalizeOptionalString(params.reason);
+          if (!reason) {
+            return failTextResult("Follow-up rejected (missing_reason).", {
               ok: false,
-              error: "runs_requires_every",
+              error: "missing_reason",
             });
           }
 
-          const after = parseDuration(params.after, ["m", "h", "d"]);
-          if (!after) {
-            return failTextResult("Follow-up rejected (invalid_after).", {
+          if (params.after !== undefined && params.every !== undefined) {
+            return failTextResult("Follow-up rejected (after_and_every_are_mutually_exclusive).", {
               ok: false,
-              error: "invalid_after",
+              error: "after_and_every_are_mutually_exclusive",
+            });
+          }
+          if (params.after === undefined && params.every === undefined) {
+            return failTextResult("Follow-up rejected (missing_follow_up_timing).", {
+              ok: false,
+              error: "missing_follow_up_timing",
             });
           }
 
-          const scheduleTarget = resolveScheduleTarget({ delayMs: after.ms });
-          if (!scheduleTarget.ok || scheduleTarget.runAt === undefined) {
-            return failTextResult("Follow-up rejected (invalid_after).", {
+          const followUpIntentId = normalizeOptionalString(params.intentId);
+          const brandedFollowUpIntentId =
+            followUpIntentId !== undefined ? asBrewvaIntentId(followUpIntentId) : undefined;
+
+          if (params.after !== undefined) {
+            if (params.runs !== undefined) {
+              return failTextResult("Follow-up rejected (runs_requires_every).", {
+                ok: false,
+                error: "runs_requires_every",
+              });
+            }
+
+            const after = parseDuration(params.after, ["m", "h", "d"]);
+            if (!after) {
+              return failTextResult("Follow-up rejected (invalid_after).", {
+                ok: false,
+                error: "invalid_after",
+              });
+            }
+
+            const scheduleTarget = resolveScheduleTarget({ delayMs: after.ms });
+            if (!scheduleTarget.ok || scheduleTarget.runAt === undefined) {
+              return failTextResult("Follow-up rejected (invalid_after).", {
+                ok: false,
+                error: "invalid_after",
+              });
+            }
+
+            const created = await runtime.authority.schedule.createIntent(sessionId, {
+              reason,
+              intentId: brandedFollowUpIntentId,
+              continuityMode: "inherit",
+              runAt: scheduleTarget.runAt,
+              maxRuns: 1,
+            });
+            if (!created.ok) {
+              return failTextResult(`Follow-up rejected (${created.error}).`, {
+                ok: false,
+                error: created.error,
+              });
+            }
+
+            const intent = created.intent;
+            return textResult(
+              [
+                "Follow-up created.",
+                `intentId: ${intent.intentId}`,
+                "mode: after",
+                `runAt: ${intent.runAt ? formatISO(intent.runAt) : "none"}`,
+                `nextRunAt: ${intent.nextRunAt ? formatISO(intent.nextRunAt) : "none"}`,
+              ].join("\n"),
+              {
+                ok: true,
+                intent,
+              },
+            );
+          }
+
+          const every = parseDuration(params.every, ["m", "h"]);
+          const recurringEvery =
+            every && (every.unit === "m" || every.unit === "h")
+              ? {
+                  value: every.value,
+                  unit: every.unit,
+                }
+              : undefined;
+          if (!recurringEvery) {
+            return failTextResult("Follow-up rejected (invalid_every).", {
               ok: false,
-              error: "invalid_after",
+              error: "invalid_every",
+            });
+          }
+          const cron = compileEveryDurationToCron(recurringEvery);
+          if (!cron) {
+            return failTextResult("Follow-up rejected (unsupported_every_interval).", {
+              ok: false,
+              error: "unsupported_every_interval",
             });
           }
 
-          const created = await options.runtime.authority.schedule.createIntent(sessionId, {
+          const created = await runtime.authority.schedule.createIntent(sessionId, {
             reason,
             intentId: brandedFollowUpIntentId,
             continuityMode: "inherit",
-            runAt: scheduleTarget.runAt,
-            maxRuns: 1,
+            cron,
+            maxRuns: params.runs ?? 12,
           });
           if (!created.ok) {
             return failTextResult(`Follow-up rejected (${created.error}).`, {
@@ -179,9 +233,10 @@ export function createFollowUpTool(options: BrewvaToolOptions): ToolDefinition {
             [
               "Follow-up created.",
               `intentId: ${intent.intentId}`,
-              "mode: after",
-              `runAt: ${intent.runAt ? formatISO(intent.runAt) : "none"}`,
+              "mode: every",
+              `cron: ${intent.cron ?? "none"}`,
               `nextRunAt: ${intent.nextRunAt ? formatISO(intent.nextRunAt) : "none"}`,
+              `runs: ${intent.runCount}/${intent.maxRuns}`,
             ].join("\n"),
             {
               ok: true,
@@ -190,101 +245,57 @@ export function createFollowUpTool(options: BrewvaToolOptions): ToolDefinition {
           );
         }
 
-        const every = parseDuration(params.every, ["m", "h"]);
-        const recurringEvery =
-          every && (every.unit === "m" || every.unit === "h")
-            ? {
-                value: every.value,
-                unit: every.unit,
-              }
-            : undefined;
-        if (!recurringEvery) {
-          return failTextResult("Follow-up rejected (invalid_every).", {
-            ok: false,
-            error: "invalid_every",
-          });
-        }
-        const cron = compileEveryDurationToCron(recurringEvery);
-        if (!cron) {
-          return failTextResult("Follow-up rejected (unsupported_every_interval).", {
-            ok: false,
-            error: "unsupported_every_interval",
-          });
-        }
+        if (params.action === "cancel") {
+          const intentId = normalizeOptionalString(params.intentId);
+          if (!intentId) {
+            return failTextResult("Follow-up cancel rejected (missing_intent_id).", {
+              ok: false,
+              error: "missing_intent_id",
+            });
+          }
 
-        const created = await options.runtime.authority.schedule.createIntent(sessionId, {
-          reason,
-          intentId: brandedFollowUpIntentId,
-          continuityMode: "inherit",
-          cron,
-          maxRuns: params.runs ?? 12,
-        });
-        if (!created.ok) {
-          return failTextResult(`Follow-up rejected (${created.error}).`, {
-            ok: false,
-            error: created.error,
+          const cancelled = await runtime.authority.schedule.cancelIntent(sessionId, {
+            intentId: asBrewvaIntentId(intentId),
+            reason: normalizeOptionalString(params.reason),
           });
-        }
-
-        const intent = created.intent;
-        return textResult(
-          [
-            "Follow-up created.",
-            `intentId: ${intent.intentId}`,
-            "mode: every",
-            `cron: ${intent.cron ?? "none"}`,
-            `nextRunAt: ${intent.nextRunAt ? formatISO(intent.nextRunAt) : "none"}`,
-            `runs: ${intent.runCount}/${intent.maxRuns}`,
-          ].join("\n"),
-          {
+          if (!cancelled.ok) {
+            return failTextResult(`Follow-up cancel rejected (${cancelled.error}).`, {
+              ok: false,
+              error: cancelled.error ?? "unknown_error",
+            });
+          }
+          return textResult(`Follow-up cancelled (${intentId}).`, {
             ok: true,
-            intent,
-          },
-        );
-      }
-
-      if (params.action === "cancel") {
-        const intentId = normalizeOptionalString(params.intentId);
-        if (!intentId) {
-          return failTextResult("Follow-up cancel rejected (missing_intent_id).", {
-            ok: false,
-            error: "missing_intent_id",
+            intentId,
           });
         }
 
-        const cancelled = await options.runtime.authority.schedule.cancelIntent(sessionId, {
-          intentId: asBrewvaIntentId(intentId),
-          reason: normalizeOptionalString(params.reason),
+        const intents = await runtime.inspect.schedule.listIntents({
+          parentSessionId: asBrewvaSessionId(sessionId),
         });
-        if (!cancelled.ok) {
-          return failTextResult(`Follow-up cancel rejected (${cancelled.error}).`, {
-            ok: false,
-            error: cancelled.error ?? "unknown_error",
-          });
-        }
-        return textResult(`Follow-up cancelled (${intentId}).`, {
+        const snapshot = await runtime.inspect.schedule.getProjectionSnapshot();
+        const header = [
+          "[FollowUps]",
+          `count: ${intents.length}`,
+          "scope: session",
+          `watermarkOffset: ${snapshot.watermarkOffset}`,
+        ];
+        const lines =
+          intents.length > 0 ? intents.map((intent) => formatIntentSummary(intent)) : ["- (none)"];
+        return textResult([...header, ...lines].join("\n"), {
           ok: true,
-          intentId,
+          intents,
+          watermarkOffset: snapshot.watermarkOffset,
         });
-      }
-
-      const intents = await options.runtime.inspect.schedule.listIntents({
-        parentSessionId: asBrewvaSessionId(sessionId),
-      });
-      const snapshot = await options.runtime.inspect.schedule.getProjectionSnapshot();
-      const header = [
-        "[FollowUps]",
-        `count: ${intents.length}`,
-        "scope: session",
-        `watermarkOffset: ${snapshot.watermarkOffset}`,
-      ];
-      const lines =
-        intents.length > 0 ? intents.map((intent) => formatIntentSummary(intent)) : ["- (none)"];
-      return textResult([...header, ...lines].join("\n"), {
-        ok: true,
-        intents,
-        watermarkOffset: snapshot.watermarkOffset,
-      });
+      },
     },
-  });
+    {
+      requiredCapabilities: [
+        "authority.schedule.createIntent",
+        "authority.schedule.cancelIntent",
+        "inspect.schedule.getProjectionSnapshot",
+        "inspect.schedule.listIntents",
+      ],
+    },
+  );
 }

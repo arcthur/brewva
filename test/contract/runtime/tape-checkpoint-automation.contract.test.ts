@@ -318,7 +318,7 @@ requires: []
           ],
           implementation_targets: [
             {
-              target: "packages/brewva-runtime/src/workflow/derivation.ts",
+              target: "packages/brewva-runtime/src/workflow/status-derivation.ts",
               kind: "module",
               owner_boundary: "runtime.workflow",
               reason: "Workflow posture is rebuilt here during restart.",

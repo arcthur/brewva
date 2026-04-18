@@ -72,7 +72,7 @@ describe("system: workflow recovery", () => {
             ],
             implementation_targets: [
               {
-                target: "packages/brewva-runtime/src/workflow/derivation.ts",
+                target: "packages/brewva-runtime/src/workflow/artifact-derivation.ts",
                 kind: "module",
                 owner_boundary: "runtime.workflow",
                 reason: "Recovery workflow artifacts are derived here.",

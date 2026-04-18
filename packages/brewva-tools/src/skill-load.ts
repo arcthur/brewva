@@ -20,8 +20,8 @@ import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-subs
 import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "./types.js";
 import { failTextResult, textResult } from "./utils/result.js";
+import { createRuntimeBoundBrewvaToolFactory } from "./utils/runtime-bound-tool.js";
 import { getSessionId } from "./utils/session.js";
-import { defineBrewvaTool } from "./utils/tool.js";
 
 function formatSkillOutput(input: {
   name: string;
@@ -113,52 +113,59 @@ function formatSkillOutput(input: {
 }
 
 export function createSkillLoadTool(options: BrewvaToolOptions): ToolDefinition {
-  return defineBrewvaTool({
-    name: "skill_load",
-    label: "Skill Load",
-    description: "Load a skill by name, activate its contract, and return full skill instructions.",
-    promptSnippet:
-      "Load the selected skill contract and working instructions before executing the skill.",
-    promptGuidelines: [
-      "When a pending skill recommendation exists, load the selected skill before implementation.",
-      "Use the exact selected skill name.",
-    ],
-    parameters: Type.Object({
-      name: Type.String({
-        description: "Skill name from an accepted proposal or explicit operator choice",
-      }),
-    }),
-    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-      const sessionId = getSessionId(ctx);
-      const result = options.runtime.authority.skills.activate(sessionId, params.name);
-      if (!result.ok) {
-        return failTextResult(`Error: ${result.reason}`, {
-          ok: false,
-        });
-      }
-      const skill = result.skill;
-
-      const availableConsumedOutputs = options.runtime.inspect.skills.getConsumedOutputs(
-        sessionId,
-        params.name,
-      );
-
-      return textResult(
-        formatSkillOutput({
-          name: skill.name,
-          category: skill.category,
-          baseDir: skill.baseDir,
-          markdown: skill.markdown,
-          contract: skill.contract,
-          resources: skill.resources,
-          availableConsumedOutputs,
+  const { runtime, define } = createRuntimeBoundBrewvaToolFactory(options.runtime, "skill_load");
+  return define(
+    {
+      name: "skill_load",
+      label: "Skill Load",
+      description:
+        "Load a skill by name, activate its contract, and return full skill instructions.",
+      promptSnippet:
+        "Load the selected skill contract and working instructions before executing the skill.",
+      promptGuidelines: [
+        "When a pending skill recommendation exists, load the selected skill before implementation.",
+        "Use the exact selected skill name.",
+      ],
+      parameters: Type.Object({
+        name: Type.String({
+          description: "Skill name from an accepted proposal or explicit operator choice",
         }),
-        {
-          ok: true,
+      }),
+      async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+        const sessionId = getSessionId(ctx);
+        const result = runtime.authority.skills.activate(sessionId, params.name);
+        if (!result.ok) {
+          return failTextResult(`Error: ${result.reason}`, {
+            ok: false,
+          });
+        }
+        const skill = result.skill;
+
+        const availableConsumedOutputs = runtime.inspect.skills.getConsumedOutputs(
           sessionId,
-          skill: skill.name,
-        },
-      );
+          params.name,
+        );
+
+        return textResult(
+          formatSkillOutput({
+            name: skill.name,
+            category: skill.category,
+            baseDir: skill.baseDir,
+            markdown: skill.markdown,
+            contract: skill.contract,
+            resources: skill.resources,
+            availableConsumedOutputs,
+          }),
+          {
+            ok: true,
+            sessionId,
+            skill: skill.name,
+          },
+        );
+      },
     },
-  });
+    {
+      requiredCapabilities: ["authority.skills.activate", "inspect.skills.getConsumedOutputs"],
+    },
+  );
 }

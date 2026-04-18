@@ -93,6 +93,7 @@ interface ToolSurfaceRuntimeOptions {
   taskState?: ReturnType<ToolSurfaceRuntime["inspect"]["task"]["getState"]>;
   recordEvent?: ToolSurfaceRuntime["recordEvent"];
   routingScopes?: SkillRoutingScope[];
+  routingEnabled?: boolean;
   governanceDescriptors?: Array<{
     toolName: string;
     descriptor: ToolGovernanceDescriptor;
@@ -102,7 +103,7 @@ interface ToolSurfaceRuntimeOptions {
 function createToolSurfaceRuntime(options: ToolSurfaceRuntimeOptions = {}): ToolSurfaceRuntime {
   const runtime = createBaseRuntimeFixture({
     config: createRuntimeConfig((config) => {
-      config.skills.routing.enabled = true;
+      config.skills.routing.enabled = options.routingEnabled ?? true;
       config.skills.routing.scopes = options.routingScopes ?? ["core", "domain"];
     }),
   });
@@ -126,7 +127,7 @@ function createToolSurfaceRuntime(options: ToolSurfaceRuntimeOptions = {}): Tool
     return {
       roots: [],
       loadedSkills,
-      routingEnabled: true,
+      routingEnabled: options.routingEnabled ?? true,
       routingScopes,
       routableSkills,
       hiddenSkills: loadedSkills.filter((name) => !routableSkills.includes(name)),
@@ -822,6 +823,75 @@ describe("tool surface runtime plugin", () => {
 
     expect(result).toBeUndefined();
     expect(getStateCalls).toBe(1);
+  });
+
+  test("disabling hosted recommendation suppresses advisory receipts without breaking tool-surface resolution", async () => {
+    const extensionApi = createMockRuntimePluginApi();
+    registerTools(extensionApi.api, [
+      "read",
+      "edit",
+      "write",
+      "session_compact",
+      "skill_load",
+      "workflow_status",
+      "task_set_spec",
+      "task_view_state",
+      "knowledge_search",
+    ]);
+
+    const events: Array<Record<string, unknown>> = [];
+    const runtime = createToolSurfaceRuntime({
+      routingEnabled: false,
+      taskState: {
+        spec: {
+          goal: "Find repository precedents before implementation.",
+          expectedBehavior: "Keep the turn replay-safe even when routing is disabled.",
+          constraints: ["Read-only investigation"],
+        },
+        status: { phase: "investigate" },
+        items: [],
+        blockers: [],
+        updatedAt: null,
+      },
+      listSkills: () => [
+        createSkillDocument(
+          "learning-research",
+          ["workspace_read", "runtime_observe"],
+          ["knowledge_search"],
+          {
+            selection: {
+              whenToUse:
+                "Use when repository precedents and prior solutions should be consulted before implementation.",
+              phases: ["investigate"],
+            },
+          },
+        ),
+      ],
+      recordEvent: (input: Record<string, unknown>) => {
+        events.push(input);
+        return undefined;
+      },
+    });
+
+    registerToolSurface(extensionApi.api, runtime);
+    await invokeHandlerAsync(
+      extensionApi.handlers,
+      "before_agent_start",
+      {
+        type: "before_agent_start",
+        prompt: "先看一下仓库里有没有类似先例，再决定是否实现",
+      },
+      {
+        sessionManager: {
+          getSessionId: () => "tool-surface-routing-disabled",
+        },
+      },
+    );
+
+    expect(events.filter((input) => input.type === "tool_surface_resolved")).toHaveLength(1);
+    expect(events.filter((input) => input.type === "skill_recommendation_derived")).toHaveLength(0);
+    expect(extensionApi.activeTools).toContain("workflow_status");
+    expect(extensionApi.activeTools).toContain("task_set_spec");
   });
 
   test("session shutdown clears cached tool-surface session state", async () => {

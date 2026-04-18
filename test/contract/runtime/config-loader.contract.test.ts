@@ -94,7 +94,7 @@ describe("Brewva config loader normalization", () => {
     );
 
     expect(() => loadBrewvaConfig({ cwd: workspace, configPath: ".brewva/brewva.json" })).toThrow(
-      /Config does not match schema/,
+      /projection\.recallMode has been removed/,
     );
   });
 
@@ -408,7 +408,7 @@ describe("Brewva config loader normalization", () => {
     );
 
     expect(() => loadBrewvaConfig({ cwd: workspace, configPath: ".brewva/brewva.json" })).toThrow(
-      /Config does not match schema/,
+      /skills\.selector has been removed/,
     );
   });
 
@@ -431,7 +431,7 @@ describe("Brewva config loader normalization", () => {
     );
 
     expect(() => loadBrewvaConfig({ cwd: workspace, configPath: ".brewva/brewva.json" })).toThrow(
-      /Config does not match schema/,
+      /skills\.routing\.continuityPhrases has been removed/,
     );
   });
 
@@ -472,7 +472,7 @@ describe("Brewva config loader normalization", () => {
     );
 
     expect(() => loadBrewvaConfig({ cwd: workspace, configPath: ".brewva/brewva.json" })).toThrow(
-      /unknown property "commandDenyList"/,
+      /security\.execution\.commandDenyList must not appear in active config/,
     );
   });
 
@@ -497,7 +497,30 @@ describe("Brewva config loader normalization", () => {
     );
 
     expect(() => loadBrewvaConfig({ cwd: workspace, configPath: ".brewva/brewva.json" })).toThrow(
-      /unknown property "apiKey"/,
+      /security\.execution\.sandbox\.apiKey must not appear in active config/,
+    );
+  });
+
+  test("fails fast when legacy context-budget keys are present in config files", () => {
+    const workspace = createTestWorkspace("file-legacy-context-budget");
+    writeFileSync(
+      join(workspace, ".brewva/brewva.json"),
+      JSON.stringify(
+        {
+          infrastructure: {
+            contextBudget: {
+              hardLimitPercent: 0.9,
+            },
+          },
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    expect(() => loadBrewvaConfig({ cwd: workspace, configPath: ".brewva/brewva.json" })).toThrow(
+      /infrastructure\.contextBudget\.hardLimitPercent has been replaced/,
     );
   });
 
@@ -546,5 +569,63 @@ describe("Brewva config loader normalization", () => {
           config: config as unknown as typeof DEFAULT_BREWVA_CONFIG,
         }),
     ).toThrow(/security\.execution\.sandbox\.apiKey must not appear in active config/);
+  });
+
+  test("fails fast on direct runtime config when removed skills.selector appears", () => {
+    const workspace = createTestWorkspace("direct-runtime-skills-selector-removed");
+    const config = structuredClone(DEFAULT_BREWVA_CONFIG) as unknown as Record<string, unknown>;
+    config["skills"] = {
+      ...DEFAULT_BREWVA_CONFIG.skills,
+      selector: {
+        mode: "llm_auto",
+      },
+    };
+
+    expect(
+      () =>
+        new BrewvaRuntime({
+          cwd: workspace,
+          config: config as unknown as typeof DEFAULT_BREWVA_CONFIG,
+        }),
+    ).toThrow(/skills\.selector has been removed/);
+  });
+
+  test("fails fast on direct runtime config when removed skills.routing continuity overrides appear", () => {
+    const workspace = createTestWorkspace("direct-runtime-routing-continuity-removed");
+    const config = structuredClone(DEFAULT_BREWVA_CONFIG) as unknown as Record<string, unknown>;
+    config["skills"] = {
+      ...DEFAULT_BREWVA_CONFIG.skills,
+      routing: {
+        ...DEFAULT_BREWVA_CONFIG.skills.routing,
+        continuityPhrases: ["keep going"],
+      },
+    };
+
+    expect(
+      () =>
+        new BrewvaRuntime({
+          cwd: workspace,
+          config: config as unknown as typeof DEFAULT_BREWVA_CONFIG,
+        }),
+    ).toThrow(/skills\.routing\.continuityPhrases has been removed/);
+  });
+
+  test("fails fast on direct runtime config when removed skills.cascade appears", () => {
+    const workspace = createTestWorkspace("direct-runtime-skills-cascade-removed");
+    const config = structuredClone(DEFAULT_BREWVA_CONFIG) as unknown as Record<string, unknown>;
+    config["skills"] = {
+      ...DEFAULT_BREWVA_CONFIG.skills,
+      cascade: {
+        enabled: true,
+      },
+    };
+
+    expect(
+      () =>
+        new BrewvaRuntime({
+          cwd: workspace,
+          config: config as unknown as typeof DEFAULT_BREWVA_CONFIG,
+        }),
+    ).toThrow(/skills\.cascade has been removed/);
   });
 });

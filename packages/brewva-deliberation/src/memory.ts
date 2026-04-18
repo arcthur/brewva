@@ -22,8 +22,8 @@ import { FileDeliberationMemoryStore } from "./file-store.js";
 import {
   clamp,
   collectPlaneSessionDigests,
-  samePlaneSessionDigests,
-  shouldThrottlePlaneRefresh,
+  getOrCreatePlaneForRuntime,
+  reconcileSessionDigestBackedPlaneState,
   tokenize,
   uniqueStrings,
 } from "./plane-substrate.js";
@@ -1201,50 +1201,39 @@ export class DeliberationMemoryPlane {
   }
 
   private reconcile(): DeliberationMemoryState {
-    const now = Date.now();
-    const digests = collectPlaneSessionDigests(this.runtime.inspect.events);
-    const current = this.store.read() ?? this.state;
-    const hasState = Boolean(current);
-    const digestsChanged =
-      !hasState ||
-      !samePlaneSessionDigests(
-        current?.sessionDigests ?? [],
-        digests as DeliberationMemorySessionDigest[],
-      );
-    if (!digestsChanged && !this.dirty) {
-      this.state = current;
-      return current ?? createEmptyDeliberationMemoryState(digests);
-    }
-    if (
-      current &&
-      shouldThrottlePlaneRefresh({
-        currentUpdatedAt: current.updatedAt,
-        dirty: this.dirty,
-        digestsChanged,
-        minRefreshIntervalMs: this.minRefreshIntervalMs,
-        now,
-      })
-    ) {
-      this.state = current;
-      return current;
-    }
-
-    const sessions = digests.map((digest) =>
-      buildSessionMemoryInput(
-        digest.sessionId,
-        this.runtime.inspect.events.list(digest.sessionId),
-        this.runtime.inspect.task.getTargetDescriptor(digest.sessionId).roots,
-      ),
-    );
-    const nextState = buildDeliberationMemoryState({
-      updatedAt: now,
-      sessionDigests: digests,
-      sessions,
-      now,
+    const nextState = reconcileSessionDigestBackedPlaneState({
+      currentState: this.state,
+      readPersistedState: () => this.store.read(),
+      writePersistedState: (state) => {
+        this.store.write(state);
+      },
+      dirty: this.dirty,
+      setDirty: (dirty) => {
+        this.dirty = dirty;
+      },
+      minRefreshIntervalMs: this.minRefreshIntervalMs,
+      collectSessionDigests: () =>
+        collectPlaneSessionDigests(
+          this.runtime.inspect.events,
+        ) as DeliberationMemorySessionDigest[],
+      createEmptyState: (sessionDigests) => createEmptyDeliberationMemoryState(sessionDigests),
+      rebuildState: ({ now, sessionDigests }) => {
+        const sessions = sessionDigests.map((digest) =>
+          buildSessionMemoryInput(
+            digest.sessionId,
+            this.runtime.inspect.events.list(digest.sessionId),
+            this.runtime.inspect.task.getTargetDescriptor(digest.sessionId).roots,
+          ),
+        );
+        return buildDeliberationMemoryState({
+          updatedAt: now,
+          sessionDigests,
+          sessions,
+          now,
+        });
+      },
     });
-    this.store.write(nextState);
     this.state = nextState;
-    this.dirty = false;
     return nextState;
   }
 }
@@ -1256,14 +1245,11 @@ export function getOrCreateDeliberationMemoryPlane(
     minRefreshIntervalMs?: number;
   } = {},
 ): DeliberationMemoryPlane {
-  const key = runtime as unknown as object;
-  const existing = planeByRuntime.get(key);
-  if (existing) {
-    return existing;
-  }
-  const created = new DeliberationMemoryPlane(runtime, options);
-  planeByRuntime.set(key, created);
-  return created;
+  return getOrCreatePlaneForRuntime({
+    planes: planeByRuntime,
+    runtime,
+    create: () => new DeliberationMemoryPlane(runtime, options),
+  });
 }
 
 export function createDeliberationMemoryContextProvider(input: {

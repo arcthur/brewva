@@ -519,6 +519,19 @@ describe("inspect subcommand", () => {
               profile: "legacy",
             },
           },
+          security: {
+            execution: {
+              commandDenyList: ["node"],
+              sandbox: {
+                apiKey: "inline-secret",
+              },
+            },
+          },
+          infrastructure: {
+            contextBudget: {
+              hardLimitPercent: 0.9,
+            },
+          },
         },
         null,
         2,
@@ -561,10 +574,20 @@ describe("inspect subcommand", () => {
       };
 
       expect(payload.sessionId).toBe(sessionId);
-      expect(payload.configLoad.warningCount).toBeGreaterThanOrEqual(2);
+      expect(payload.configLoad.warningCount).toBeGreaterThanOrEqual(1);
+      expect(payload.configLoad.warnings.map((warning) => warning.code)).toContain(
+        "config_removed_fields_stripped",
+      );
       const strippedFields = payload.configLoad.warnings.flatMap((warning) => warning.fields ?? []);
       expect(strippedFields).toEqual(
-        expect.arrayContaining(["/skills/cascade", "/skills/selector", "/skills/routing/profile"]),
+        expect.arrayContaining([
+          "/skills/cascade",
+          "/skills/selector",
+          "/skills/routing/profile",
+          "/security/execution/commandDenyList",
+          "/security/execution/sandbox/apiKey",
+          "/infrastructure/contextBudget/hardLimitPercent",
+        ]),
       );
     } finally {
       restoreEnv();

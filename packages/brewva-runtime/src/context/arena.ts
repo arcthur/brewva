@@ -5,6 +5,7 @@ import type {
   ContextInjectionRegisterResult,
   RegisterContextInjectionInput,
 } from "./injection.js";
+import { resolveReservedBudgetFromRatio } from "./reserved-budget.js";
 import type { ContextInjectionBudgetClass } from "./sources.js";
 
 const ENTRY_SEPARATOR = "\n\n";
@@ -611,13 +612,6 @@ export class ContextArena {
     ratio: number | undefined,
     totalTokenBudget: number,
   ): number | null {
-    if (ratio === undefined) {
-      return null;
-    }
-    const total = Math.max(0, Math.floor(totalTokenBudget));
-    if (total <= 0) {
-      return 0;
-    }
-    return Math.max(1, Math.floor(total * ratio));
+    return resolveReservedBudgetFromRatio(ratio, totalTokenBudget);
   }
 }

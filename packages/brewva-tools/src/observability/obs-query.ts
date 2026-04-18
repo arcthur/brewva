@@ -4,8 +4,8 @@ import { Type } from "@sinclair/typebox";
 import { recordToolRuntimeEvent } from "../runtime-internal.js";
 import type { BrewvaBundledToolOptions } from "../types.js";
 import { failTextResult, inconclusiveTextResult, textResult } from "../utils/result.js";
+import { createManagedBrewvaToolFactory } from "../utils/runtime-bound-tool.js";
 import { getSessionId } from "../utils/session.js";
-import { defineBrewvaTool } from "../utils/tool.js";
 import {
   OBS_AGGREGATION_SCHEMA,
   OBS_TYPES_SCHEMA,
@@ -39,7 +39,8 @@ function buildBlockedText(input: { recentSingleQueryCalls: number }): string {
 }
 
 export function createObsQueryTool(options: BrewvaBundledToolOptions): ToolDefinition {
-  return defineBrewvaTool({
+  const obsQueryTool = createManagedBrewvaToolFactory("obs_query");
+  return obsQueryTool.define({
     name: "obs_query",
     label: "Observability Query",
     description:

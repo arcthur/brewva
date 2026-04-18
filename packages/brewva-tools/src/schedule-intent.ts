@@ -18,8 +18,8 @@ import {
 import type { BrewvaToolOptions } from "./types.js";
 import { attachStringEnumContractPaths, buildStringEnumSchema } from "./utils/input-alias.js";
 import { failTextResult, textResult } from "./utils/result.js";
+import { createRuntimeBoundBrewvaToolFactory } from "./utils/runtime-bound-tool.js";
 import { getSessionId } from "./utils/session.js";
-import { defineBrewvaTool } from "./utils/tool.js";
 
 const SCHEDULE_ACTION_VALUES = ["create", "update", "cancel", "list"] as const;
 const ScheduleActionSchema = buildStringEnumSchema(SCHEDULE_ACTION_VALUES, {
@@ -162,244 +162,256 @@ function normalizeConvergencePredicate(value: unknown): ConvergencePredicate | u
 }
 
 export function createScheduleIntentTool(options: BrewvaToolOptions): ToolDefinition {
-  return defineBrewvaTool({
-    name: "schedule_intent",
-    label: "Schedule Intent",
-    description:
-      "Create, update, cancel, or list schedule intents. Supports one-shot runAt/delayMs and recurring cron.",
-    promptSnippet: "Create, update, cancel, or list deferred and recurring execution intents.",
-    promptGuidelines: [
-      "Use this only when the user explicitly wants future or recurring execution.",
-      "Action values are create, update, cancel, and list. Prefer continuityMode=inherit unless the scheduled work should detach into a fresh branch.",
-    ],
-    parameters: Type.Object({
-      action: ScheduleActionSchema,
-      reason: Type.Optional(Type.String({ minLength: 1, maxLength: 800 })),
-      intentId: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
-      runAt: Type.Optional(Type.Number({ minimum: 1 })),
-      delayMs: Type.Optional(Type.Integer({ minimum: 1 })),
-      cron: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
-      timeZone: Type.Optional(Type.String({ minLength: 1, maxLength: 120 })),
-      maxRuns: Type.Optional(Type.Integer({ minimum: 1, maximum: 10_000 })),
-      continuityMode: Type.Optional(ContinuityModeSchema),
-      goalRef: Type.Optional(Type.String({ minLength: 1, maxLength: 300 })),
-      convergenceCondition: Type.Optional(ConvergencePredicateSchema),
-      status: Type.Optional(ListStatusSchema),
-      includeAllSessions: Type.Optional(Type.Boolean()),
-    }),
-    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-      const sessionId = getSessionId(ctx);
-      const continuityMode = normalizeContinuityMode(params.continuityMode);
-      const convergenceCondition = normalizeConvergencePredicate(params.convergenceCondition);
-      if (!options.runtime.config.schedule.enabled) {
-        return failTextResult("Schedule intent rejected (scheduler_disabled).", {
-          ok: false,
-          error: "scheduler_disabled",
-        });
-      }
-
-      if (params.action === "create") {
-        const reason = normalizeOptionalString(params.reason);
-        if (!reason) {
-          return failTextResult("Schedule intent rejected (missing_reason).", {
+  const { runtime, define } = createRuntimeBoundBrewvaToolFactory(
+    options.runtime,
+    "schedule_intent",
+  );
+  return define(
+    {
+      name: "schedule_intent",
+      label: "Schedule Intent",
+      description:
+        "Create, update, cancel, or list schedule intents. Supports one-shot runAt/delayMs and recurring cron.",
+      promptSnippet: "Create, update, cancel, or list deferred and recurring execution intents.",
+      promptGuidelines: [
+        "Use this only when the user explicitly wants future or recurring execution.",
+        "Action values are create, update, cancel, and list. Prefer continuityMode=inherit unless the scheduled work should detach into a fresh branch.",
+      ],
+      parameters: Type.Object({
+        action: ScheduleActionSchema,
+        reason: Type.Optional(Type.String({ minLength: 1, maxLength: 800 })),
+        intentId: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
+        runAt: Type.Optional(Type.Number({ minimum: 1 })),
+        delayMs: Type.Optional(Type.Integer({ minimum: 1 })),
+        cron: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
+        timeZone: Type.Optional(Type.String({ minLength: 1, maxLength: 120 })),
+        maxRuns: Type.Optional(Type.Integer({ minimum: 1, maximum: 10_000 })),
+        continuityMode: Type.Optional(ContinuityModeSchema),
+        goalRef: Type.Optional(Type.String({ minLength: 1, maxLength: 300 })),
+        convergenceCondition: Type.Optional(ConvergencePredicateSchema),
+        status: Type.Optional(ListStatusSchema),
+        includeAllSessions: Type.Optional(Type.Boolean()),
+      }),
+      async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+        const sessionId = getSessionId(ctx);
+        const continuityMode = normalizeContinuityMode(params.continuityMode);
+        const convergenceCondition = normalizeConvergencePredicate(params.convergenceCondition);
+        if (!runtime.config.schedule.enabled) {
+          return failTextResult("Schedule intent rejected (scheduler_disabled).", {
             ok: false,
-            error: "missing_reason",
+            error: "scheduler_disabled",
           });
         }
 
-        const scheduleTarget = resolveScheduleTarget({
-          runAt: params.runAt,
-          delayMs: params.delayMs,
-          cron: params.cron,
-          timeZone: params.timeZone,
-        });
-        if (!scheduleTarget.ok) {
-          return failTextResult(`Schedule intent rejected (${scheduleTarget.error}).`, {
-            ok: false,
-            error: scheduleTarget.error,
-          });
-        }
-
-        const rawIntentId = normalizeOptionalString(params.intentId);
-        const created = await options.runtime.authority.schedule.createIntent(sessionId, {
-          reason,
-          intentId: rawIntentId !== undefined ? asBrewvaIntentId(rawIntentId) : undefined,
-          goalRef: normalizeOptionalString(params.goalRef),
-          continuityMode,
-          runAt: scheduleTarget.runAt,
-          cron: scheduleTarget.cron,
-          timeZone: scheduleTarget.timeZone,
-          maxRuns: params.maxRuns,
-          convergenceCondition,
-        });
-
-        if (!created.ok) {
-          return failTextResult(`Schedule intent rejected (${created.error}).`, {
-            ok: false,
-            error: created.error,
-          });
-        }
-
-        const intent = created.intent;
-        const message = [
-          "Schedule intent created.",
-          `intentId: ${intent.intentId}`,
-          `status: ${intent.status}`,
-          `cron: ${intent.cron ?? "none"}`,
-          `timeZone: ${intent.timeZone ?? "none"}`,
-          `runAt: ${intent.runAt ? formatISO(intent.runAt) : "none"}`,
-          `nextRunAt: ${intent.nextRunAt ? formatISO(intent.nextRunAt) : "none"}`,
-          `runs: ${intent.runCount}/${intent.maxRuns}`,
-        ].join("\n");
-        return textResult(message, {
-          ok: true,
-          intent,
-        });
-      }
-
-      if (params.action === "update") {
-        const intentId = normalizeOptionalString(params.intentId);
-        if (!intentId) {
-          return failTextResult("Schedule intent update rejected (missing_intent_id).", {
-            ok: false,
-            error: "missing_intent_id",
-          });
-        }
-
-        const schedulePatch = resolveSchedulePatch({
-          runAt: params.runAt,
-          delayMs: params.delayMs,
-          cron: params.cron,
-          timeZone: params.timeZone,
-        });
-        if (!schedulePatch.ok) {
-          return failTextResult(`Schedule intent update rejected (${schedulePatch.error}).`, {
-            ok: false,
-            error: schedulePatch.error,
-          });
-        }
-
-        const reason = normalizeOptionalString(params.reason);
-        if (params.reason !== undefined && !reason) {
-          return failTextResult("Schedule intent update rejected (invalid_reason).", {
-            ok: false,
-            error: "invalid_reason",
-          });
-        }
-        const goalRef =
-          params.goalRef !== undefined ? normalizeOptionalString(params.goalRef) : undefined;
-        if (params.goalRef !== undefined && !goalRef) {
-          return failTextResult("Schedule intent update rejected (invalid_goal_ref).", {
-            ok: false,
-            error: "invalid_goal_ref",
-          });
-        }
-        const hasNonSchedulePatch =
-          reason !== undefined ||
-          goalRef !== undefined ||
-          continuityMode !== undefined ||
-          params.maxRuns !== undefined ||
-          convergenceCondition !== undefined;
-        if (!schedulePatch.hasScheduleUpdate && !hasNonSchedulePatch) {
-          return failTextResult("Schedule intent update rejected (empty_update).", {
-            ok: false,
-            error: "empty_update",
-          });
-        }
-
-        const updateInput: ScheduleIntentUpdateInput = {
-          intentId: asBrewvaIntentId(intentId),
-          continuityMode,
-          maxRuns: params.maxRuns,
-          convergenceCondition,
-        };
-        if (reason !== undefined) updateInput.reason = reason;
-        if (params.goalRef !== undefined) updateInput.goalRef = goalRef;
-        if (schedulePatch.hasScheduleUpdate) {
-          if (schedulePatch.runAt !== undefined) updateInput.runAt = schedulePatch.runAt;
-          if (schedulePatch.cron !== undefined) updateInput.cron = schedulePatch.cron;
-          if (schedulePatch.timeZone !== undefined) updateInput.timeZone = schedulePatch.timeZone;
-        }
-
-        const updated = await options.runtime.authority.schedule.updateIntent(
-          sessionId,
-          updateInput,
-        );
-        if (!updated.ok) {
-          return failTextResult(`Schedule intent update rejected (${updated.error}).`, {
-            ok: false,
-            error: updated.error,
-          });
-        }
-
-        const intent = updated.intent;
-        const message = [
-          "Schedule intent updated.",
-          `intentId: ${intent.intentId}`,
-          `status: ${intent.status}`,
-          `cron: ${intent.cron ?? "none"}`,
-          `timeZone: ${intent.timeZone ?? "none"}`,
-          `runAt: ${intent.runAt ? formatISO(intent.runAt) : "none"}`,
-          `nextRunAt: ${intent.nextRunAt ? formatISO(intent.nextRunAt) : "none"}`,
-          `runs: ${intent.runCount}/${intent.maxRuns}`,
-        ].join("\n");
-        return textResult(message, {
-          ok: true,
-          intent,
-        });
-      }
-
-      if (params.action === "cancel") {
-        const intentId = normalizeOptionalString(params.intentId);
-        if (!intentId) {
-          return failTextResult("Schedule intent cancel rejected (missing_intent_id).", {
-            ok: false,
-            error: "missing_intent_id",
-          });
-        }
-
-        const cancelled = await options.runtime.authority.schedule.cancelIntent(sessionId, {
-          intentId: asBrewvaIntentId(intentId),
-          reason: normalizeOptionalString(params.reason),
-        });
-        if (!cancelled.ok) {
-          return failTextResult(
-            `Schedule intent cancel rejected (${cancelled.error ?? "unknown_error"}).`,
-            {
+        if (params.action === "create") {
+          const reason = normalizeOptionalString(params.reason);
+          if (!reason) {
+            return failTextResult("Schedule intent rejected (missing_reason).", {
               ok: false,
-              error: cancelled.error ?? "unknown_error",
-            },
-          );
+              error: "missing_reason",
+            });
+          }
+
+          const scheduleTarget = resolveScheduleTarget({
+            runAt: params.runAt,
+            delayMs: params.delayMs,
+            cron: params.cron,
+            timeZone: params.timeZone,
+          });
+          if (!scheduleTarget.ok) {
+            return failTextResult(`Schedule intent rejected (${scheduleTarget.error}).`, {
+              ok: false,
+              error: scheduleTarget.error,
+            });
+          }
+
+          const rawIntentId = normalizeOptionalString(params.intentId);
+          const created = await runtime.authority.schedule.createIntent(sessionId, {
+            reason,
+            intentId: rawIntentId !== undefined ? asBrewvaIntentId(rawIntentId) : undefined,
+            goalRef: normalizeOptionalString(params.goalRef),
+            continuityMode,
+            runAt: scheduleTarget.runAt,
+            cron: scheduleTarget.cron,
+            timeZone: scheduleTarget.timeZone,
+            maxRuns: params.maxRuns,
+            convergenceCondition,
+          });
+
+          if (!created.ok) {
+            return failTextResult(`Schedule intent rejected (${created.error}).`, {
+              ok: false,
+              error: created.error,
+            });
+          }
+
+          const intent = created.intent;
+          const message = [
+            "Schedule intent created.",
+            `intentId: ${intent.intentId}`,
+            `status: ${intent.status}`,
+            `cron: ${intent.cron ?? "none"}`,
+            `timeZone: ${intent.timeZone ?? "none"}`,
+            `runAt: ${intent.runAt ? formatISO(intent.runAt) : "none"}`,
+            `nextRunAt: ${intent.nextRunAt ? formatISO(intent.nextRunAt) : "none"}`,
+            `runs: ${intent.runCount}/${intent.maxRuns}`,
+          ].join("\n");
+          return textResult(message, {
+            ok: true,
+            intent,
+          });
         }
-        return textResult(`Schedule intent cancelled (${intentId}).`, {
+
+        if (params.action === "update") {
+          const intentId = normalizeOptionalString(params.intentId);
+          if (!intentId) {
+            return failTextResult("Schedule intent update rejected (missing_intent_id).", {
+              ok: false,
+              error: "missing_intent_id",
+            });
+          }
+
+          const schedulePatch = resolveSchedulePatch({
+            runAt: params.runAt,
+            delayMs: params.delayMs,
+            cron: params.cron,
+            timeZone: params.timeZone,
+          });
+          if (!schedulePatch.ok) {
+            return failTextResult(`Schedule intent update rejected (${schedulePatch.error}).`, {
+              ok: false,
+              error: schedulePatch.error,
+            });
+          }
+
+          const reason = normalizeOptionalString(params.reason);
+          if (params.reason !== undefined && !reason) {
+            return failTextResult("Schedule intent update rejected (invalid_reason).", {
+              ok: false,
+              error: "invalid_reason",
+            });
+          }
+          const goalRef =
+            params.goalRef !== undefined ? normalizeOptionalString(params.goalRef) : undefined;
+          if (params.goalRef !== undefined && !goalRef) {
+            return failTextResult("Schedule intent update rejected (invalid_goal_ref).", {
+              ok: false,
+              error: "invalid_goal_ref",
+            });
+          }
+          const hasNonSchedulePatch =
+            reason !== undefined ||
+            goalRef !== undefined ||
+            continuityMode !== undefined ||
+            params.maxRuns !== undefined ||
+            convergenceCondition !== undefined;
+          if (!schedulePatch.hasScheduleUpdate && !hasNonSchedulePatch) {
+            return failTextResult("Schedule intent update rejected (empty_update).", {
+              ok: false,
+              error: "empty_update",
+            });
+          }
+
+          const updateInput: ScheduleIntentUpdateInput = {
+            intentId: asBrewvaIntentId(intentId),
+            continuityMode,
+            maxRuns: params.maxRuns,
+            convergenceCondition,
+          };
+          if (reason !== undefined) updateInput.reason = reason;
+          if (params.goalRef !== undefined) updateInput.goalRef = goalRef;
+          if (schedulePatch.hasScheduleUpdate) {
+            if (schedulePatch.runAt !== undefined) updateInput.runAt = schedulePatch.runAt;
+            if (schedulePatch.cron !== undefined) updateInput.cron = schedulePatch.cron;
+            if (schedulePatch.timeZone !== undefined) updateInput.timeZone = schedulePatch.timeZone;
+          }
+
+          const updated = await runtime.authority.schedule.updateIntent(sessionId, updateInput);
+          if (!updated.ok) {
+            return failTextResult(`Schedule intent update rejected (${updated.error}).`, {
+              ok: false,
+              error: updated.error,
+            });
+          }
+
+          const intent = updated.intent;
+          const message = [
+            "Schedule intent updated.",
+            `intentId: ${intent.intentId}`,
+            `status: ${intent.status}`,
+            `cron: ${intent.cron ?? "none"}`,
+            `timeZone: ${intent.timeZone ?? "none"}`,
+            `runAt: ${intent.runAt ? formatISO(intent.runAt) : "none"}`,
+            `nextRunAt: ${intent.nextRunAt ? formatISO(intent.nextRunAt) : "none"}`,
+            `runs: ${intent.runCount}/${intent.maxRuns}`,
+          ].join("\n");
+          return textResult(message, {
+            ok: true,
+            intent,
+          });
+        }
+
+        if (params.action === "cancel") {
+          const intentId = normalizeOptionalString(params.intentId);
+          if (!intentId) {
+            return failTextResult("Schedule intent cancel rejected (missing_intent_id).", {
+              ok: false,
+              error: "missing_intent_id",
+            });
+          }
+
+          const cancelled = await runtime.authority.schedule.cancelIntent(sessionId, {
+            intentId: asBrewvaIntentId(intentId),
+            reason: normalizeOptionalString(params.reason),
+          });
+          if (!cancelled.ok) {
+            return failTextResult(
+              `Schedule intent cancel rejected (${cancelled.error ?? "unknown_error"}).`,
+              {
+                ok: false,
+                error: cancelled.error ?? "unknown_error",
+              },
+            );
+          }
+          return textResult(`Schedule intent cancelled (${intentId}).`, {
+            ok: true,
+            intentId,
+          });
+        }
+
+        const statusFilter = toStatusFilter(params.status);
+        const statusLabel = typeof params.status === "string" ? params.status : "all";
+        const listQuery = {
+          parentSessionId: params.includeAllSessions ? undefined : asBrewvaSessionId(sessionId),
+          status: statusFilter,
+        };
+        const intents = await runtime.inspect.schedule.listIntents(listQuery);
+        const snapshot = await runtime.inspect.schedule.getProjectionSnapshot();
+
+        const header = [
+          "[ScheduleIntents]",
+          `count: ${intents.length}`,
+          `scope: ${listQuery.parentSessionId ? "session" : "global"}`,
+          `status: ${statusLabel}`,
+          `watermarkOffset: ${snapshot.watermarkOffset}`,
+        ];
+        const lines =
+          intents.length > 0 ? intents.map((intent) => formatIntentSummary(intent)) : ["- (none)"];
+        return textResult([...header, ...lines].join("\n"), {
           ok: true,
-          intentId,
+          intents,
+          watermarkOffset: snapshot.watermarkOffset,
         });
-      }
-
-      const statusFilter = toStatusFilter(params.status);
-      const statusLabel = typeof params.status === "string" ? params.status : "all";
-      const listQuery = {
-        parentSessionId: params.includeAllSessions ? undefined : asBrewvaSessionId(sessionId),
-        status: statusFilter,
-      };
-      const intents = await options.runtime.inspect.schedule.listIntents(listQuery);
-      const snapshot = await options.runtime.inspect.schedule.getProjectionSnapshot();
-
-      const header = [
-        "[ScheduleIntents]",
-        `count: ${intents.length}`,
-        `scope: ${listQuery.parentSessionId ? "session" : "global"}`,
-        `status: ${statusLabel}`,
-        `watermarkOffset: ${snapshot.watermarkOffset}`,
-      ];
-      const lines =
-        intents.length > 0 ? intents.map((intent) => formatIntentSummary(intent)) : ["- (none)"];
-      return textResult([...header, ...lines].join("\n"), {
-        ok: true,
-        intents,
-        watermarkOffset: snapshot.watermarkOffset,
-      });
+      },
     },
-  });
+    {
+      requiredCapabilities: [
+        "authority.schedule.createIntent",
+        "authority.schedule.updateIntent",
+        "authority.schedule.cancelIntent",
+        "inspect.schedule.getProjectionSnapshot",
+        "inspect.schedule.listIntents",
+      ],
+    },
+  );
 }

@@ -1,8 +1,9 @@
-import { collectPlanningRequiredEvidence, type DesignRiskItem } from "../../../contracts/index.js";
+import type { DesignRiskItem } from "../../../contracts/index.js";
 import {
   collectQaCoverageTexts,
   isRequiredEvidenceCovered,
 } from "../../../workflow/coverage-utils.js";
+import { collectPlanningRequiredEvidence } from "../../planning-normalization.js";
 import type { SkillValidationContext } from "../context.js";
 import {
   QA_SEMANTIC_OUTPUT_KEYS,
