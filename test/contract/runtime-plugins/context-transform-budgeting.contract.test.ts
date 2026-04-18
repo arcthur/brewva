@@ -134,14 +134,19 @@ describe("context transform budgeting contract", () => {
     const { api, handlers } = createMockRuntimePluginApi();
     const runtime = createRuntimeFixture({
       context: {
-        appendSupplementalInjection: () => ({
-          accepted: false,
-          text: "",
-          originalTokens: 64,
-          finalTokens: 0,
-          truncated: false,
-          droppedReason: "budget_exhausted",
-        }),
+        appendGuardedSupplementalBlocks: (
+          _sessionId: string,
+          blocks: readonly { familyId: string; content: string }[],
+        ) =>
+          blocks.map(({ familyId }) => ({
+            familyId,
+            accepted: false,
+            text: "",
+            originalTokens: 64,
+            finalTokens: 0,
+            truncated: false,
+            droppedReason: "budget_exhausted" as const,
+          })),
       },
     });
 

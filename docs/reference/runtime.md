@@ -342,6 +342,29 @@ block. `docs/reference/context-composer.md` covers how the rewrite text is
 rendered for the model, while `docs/reference/working-projection.md` covers the
 separate rebuildable working snapshot that may appear alongside it.
 
+`listProviders()` is the runtime-owned primary-source descriptor surface.
+
+Each descriptor carries the current execution contract for one
+`primary_registry` source:
+
+- `source`
+- `plane`
+- `admissionLane`
+- `category`
+- `budgetClass`
+- `collectionOrder`
+- `selectionPriority`
+- `readsFrom`
+- `continuityCritical`
+- `profileSelectable`
+- `preservationPolicy`
+- optional `reservedBudgetRatio`
+
+This surface is the metadata truth for primary context providers. Hosted
+`contextProfile` narrowing, inspect tooling, and contract tests should derive
+from these descriptors rather than from duplicated static tables or hand-kept
+source lists.
+
 ### `inspect.tools`
 
 - `checkAccess(sessionId, toolName, args?)`
@@ -584,7 +607,7 @@ This is the explicit skill-registry rebuild path.
 - `registerProvider(provider)`
 - `unregisterProvider(source)`
 - `buildInjection(sessionId, prompt, usage?, options?)`
-- `appendSupplementalInjection(sessionId, inputText, usage?, injectionScopeId?)`
+- `appendGuardedSupplementalBlocks(sessionId, blocks, usage?, injectionScopeId?)`
 - `checkAndRequestCompaction(sessionId, usage)`
 - `requestCompaction(sessionId, reason)`
 
@@ -595,11 +618,22 @@ also carries the current admission-time recovery contract:
 
 - `options.injectionScopeId` selects the branch or leaf scope for duplicate
   fingerprinting and turn-local budgeting
-- `options.sourceAllowlist` narrows the provider set without changing provider
-  order
+- `options.sourceSelection` narrows the primary provider set without changing
+  `collectionOrder`
 - `options.referenceContextDigest` is the current stable reference-context
   digest used to reject incompatible history-view baselines during admission
-  does not authorize effects.
+
+Like the rest of `maintain.context`, these options shape admission and
+maintenance behavior only. They do not authorize effects.
+
+Guarded supplemental delivery is a separate headroom-governed path. Callers
+append family-tagged blocks rather than anonymous text so runtime accounting can
+preserve family identity independently of primary-source admission.
+
+`appendGuardedSupplementalBlocks(...)` therefore does not register new context
+sources. It appends post-primary, family-described exception-lane blocks that
+remain outside provider-registry selection, class-budget floors, and source
+descriptor inspection.
 
 ### `maintain.tools`
 

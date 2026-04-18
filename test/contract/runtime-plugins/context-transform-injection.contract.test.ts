@@ -20,7 +20,7 @@ describe("context transform injection contract", () => {
       | {
           injectionScopeId?: string;
           referenceContextDigest?: string | null;
-          sourceAllowlist?: ReadonlySet<string>;
+          sourceSelection?: ReadonlySet<string>;
         }
       | undefined
     > = [];
@@ -37,7 +37,7 @@ describe("context transform injection contract", () => {
           options?: {
             injectionScopeId?: string;
             referenceContextDigest?: string | null;
-            sourceAllowlist?: ReadonlySet<string>;
+            sourceSelection?: ReadonlySet<string>;
           },
         ) => {
           optionsSeen.push(options);

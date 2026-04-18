@@ -5,6 +5,8 @@ function makeRegistration(content: string) {
   return {
     category: "narrative" as const,
     budgetClass: "core" as const,
+    selectionPriority: 10,
+    preservationPolicy: "truncatable" as const,
     source: "brewva.identity",
     id: "identity-default",
     content,

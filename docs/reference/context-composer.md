@@ -47,21 +47,33 @@ Hosted supplemental blocks are post-admission inputs. They are rendered by the
 composer, but they are not provider-registry entries returned from
 `runtime.maintain.context.buildInjection(...)`.
 
+Model-visible context therefore comes from three different governance objects:
+
+- primary registry entries returned from `buildInjection(...)`
+- guarded supplemental families appended after primary admission
+- composer-generated policy blocks synthesized during rendering
+
+Only the first category is source-typed primary admission. Guarded
+supplementals are exception-lane blocks, and composer policy blocks are render
+provenance only.
+
 `buildInjection(...)` admission is now explicit about recovery-sensitive inputs:
 
 - branch or leaf scope travels through `options.injectionScopeId`
-- provider narrowing travels through `options.sourceAllowlist`
+- provider narrowing travels through `options.sourceSelection`
 - history-view baseline compatibility is checked against
   `options.referenceContextDigest`
 
 Hosted context profiles narrow sources before composition:
 
-- `minimal` allows only `brewva.history-view-baseline` and
-  `brewva.recovery-working-set`
-- `standard` additionally allows `brewva.runtime-status`,
-  `brewva.task-state`, `brewva.tool-outputs-distilled`, and
-  `brewva.projection-working`
-- `full` or omitted `contextProfile` installs no source allowlist, so the
+- `minimal` compiles `sourceSelection` from provider descriptors where
+  `profileSelectable=true` and `continuityCritical=true`; today this resolves
+  to `brewva.history-view-baseline` and `brewva.recovery-working-set`
+- `standard` compiles `sourceSelection` from provider descriptors where
+  `profileSelectable=true` and `plane in {history_view, working_state}`; today
+  this additionally includes `brewva.runtime-status`, `brewva.task-state`,
+  `brewva.tool-outputs-distilled`, and `brewva.projection-working`
+- `full` or omitted `contextProfile` installs no source selection, so the
   kernel provider registry decides from the full registered source set
 
 `ContextComposer` therefore renders only the already-admitted subset for the
@@ -72,7 +84,9 @@ This source narrowing is limited to kernel provider collection. Hosted
 supplemental / recovery blocks appended after admission, such as operational
 diagnostics, pending delegation outcomes, read-path recovery, skill-routing
 availability, skill recommendations, and same-turn supplemental returns, do not
-flow through `options.sourceAllowlist`.
+flow through `options.sourceSelection`. These blocks carry guarded-supplemental
+or composer-policy provenance instead of being reintroduced as primary source
+entries.
 
 ## Output Contract
 
@@ -115,8 +129,11 @@ Each block carries:
 
 - `id`
 - `category`
+- `provenance`
 - `content`
 - `estimatedTokens`
+- optional `familyId` for guarded supplemental families
+- optional `laneReason` for guarded supplemental families
 
 ## Static Contract Boundary
 
@@ -242,6 +259,10 @@ The lifecycle adapter records `context_composed` with:
 - total composed tokens
 - narrative tokens
 - narrative ratio
+- block counts by provenance
+- token totals by provenance
+- guarded-supplemental family summaries including `familyId`, `blockCount`,
+  `tokenCount`, and `laneReason`
 
 It intentionally does not carry prompt hashes, prompt-stability booleans, or
 provider cache-token counters. Those belong to live inspect surfaces and the

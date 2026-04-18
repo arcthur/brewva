@@ -2,9 +2,24 @@ import type { ContextBudgetUsage } from "../contracts/index.js";
 import type { RegisterContextInjectionInput } from "./injection.js";
 import type { ContextInjectionBudgetClass, ContextInjectionCategory } from "./sources.js";
 
+export type ContextDependencyPlane =
+  | "contract_core"
+  | "history_view"
+  | "working_state"
+  | "advisory_recall";
+
+export type ContextAdmissionLane = "primary_registry";
+export type ContextReadDependencyId = string;
+export type ContextPreservationPolicy = "truncatable" | "non_truncatable";
+
 export interface ContextSourceProviderRegistration extends Omit<
   RegisterContextInjectionInput,
-  "source" | "category" | "budgetClass"
+  | "source"
+  | "category"
+  | "budgetClass"
+  | "selectionPriority"
+  | "preservationPolicy"
+  | "reservedBudgetRatio"
 > {}
 
 export interface ContextSourceProviderInput {
@@ -18,17 +33,33 @@ export interface ContextSourceProviderInput {
 
 export interface ContextSourceProvider {
   readonly source: string;
+  readonly plane: ContextDependencyPlane;
+  readonly admissionLane: ContextAdmissionLane;
   readonly category: ContextInjectionCategory;
   readonly budgetClass: ContextInjectionBudgetClass;
-  readonly order?: number;
+  readonly collectionOrder: number;
+  readonly selectionPriority: number;
+  readonly readsFrom: readonly ContextReadDependencyId[];
+  readonly continuityCritical: boolean;
+  readonly profileSelectable: boolean;
+  readonly preservationPolicy: ContextPreservationPolicy;
+  readonly reservedBudgetRatio?: number;
   collect(input: ContextSourceProviderInput): void;
 }
 
 export interface ContextSourceProviderDescriptor {
-  source: string;
-  category: ContextInjectionCategory;
-  budgetClass: ContextInjectionBudgetClass;
-  order: number;
+  readonly source: string;
+  readonly plane: ContextDependencyPlane;
+  readonly admissionLane: ContextAdmissionLane;
+  readonly category: ContextInjectionCategory;
+  readonly budgetClass: ContextInjectionBudgetClass;
+  readonly collectionOrder: number;
+  readonly selectionPriority: number;
+  readonly readsFrom: readonly ContextReadDependencyId[];
+  readonly continuityCritical: boolean;
+  readonly profileSelectable: boolean;
+  readonly preservationPolicy: ContextPreservationPolicy;
+  readonly reservedBudgetRatio?: number;
 }
 
 export class ContextSourceProviderRegistry {
@@ -36,6 +67,7 @@ export class ContextSourceProviderRegistry {
 
   register(provider: ContextSourceProvider): void {
     const source = this.normalizeSource(provider.source);
+    this.validateProvider(provider);
     if (this.providers.has(source)) {
       throw new Error(`Context source provider already registered: ${source}`);
     }
@@ -52,11 +84,11 @@ export class ContextSourceProviderRegistry {
     usage?: ContextBudgetUsage;
     injectionScopeId?: string;
     referenceContextDigest?: string | null;
-    sourceAllowlist?: ReadonlySet<string>;
+    sourceSelection?: ReadonlySet<string>;
     register(input: RegisterContextInjectionInput): void;
   }): void {
     for (const provider of this.getProviders()) {
-      if (input.sourceAllowlist && !input.sourceAllowlist.has(provider.source)) {
+      if (input.sourceSelection && !input.sourceSelection.has(provider.source)) {
         continue;
       }
       provider.collect({
@@ -71,24 +103,22 @@ export class ContextSourceProviderRegistry {
             source: provider.source,
             category: provider.category,
             budgetClass: provider.budgetClass,
+            selectionPriority: provider.selectionPriority,
+            preservationPolicy: provider.preservationPolicy,
+            reservedBudgetRatio: provider.reservedBudgetRatio,
           }),
       });
     }
   }
 
   list(): readonly ContextSourceProviderDescriptor[] {
-    return this.getProviders().map((provider) => ({
-      source: provider.source,
-      category: provider.category,
-      budgetClass: provider.budgetClass,
-      order: this.getProviderOrder(provider),
-    }));
+    return this.getProviders().map((provider) => this.toDescriptor(provider));
   }
 
   private getProviders(): ContextSourceProvider[] {
     return [...this.providers.values()].toSorted((left, right) => {
-      const leftOrder = this.getProviderOrder(left);
-      const rightOrder = this.getProviderOrder(right);
+      const leftOrder = this.getProviderCollectionOrder(left);
+      const rightOrder = this.getProviderCollectionOrder(right);
       if (leftOrder !== rightOrder) {
         return leftOrder - rightOrder;
       }
@@ -96,9 +126,58 @@ export class ContextSourceProviderRegistry {
     });
   }
 
-  private getProviderOrder(provider: ContextSourceProvider): number {
-    const order = provider.order ?? 0;
+  private getProviderCollectionOrder(provider: ContextSourceProvider): number {
+    const order = provider.collectionOrder;
     return Number.isFinite(order) ? Math.trunc(order) : 0;
+  }
+
+  private getProviderSelectionPriority(provider: ContextSourceProvider): number {
+    const priority = provider.selectionPriority;
+    return Number.isFinite(priority) ? Math.trunc(priority) : 0;
+  }
+
+  private toDescriptor(provider: ContextSourceProvider): ContextSourceProviderDescriptor {
+    return {
+      source: provider.source,
+      plane: provider.plane,
+      admissionLane: provider.admissionLane,
+      category: provider.category,
+      budgetClass: provider.budgetClass,
+      collectionOrder: this.getProviderCollectionOrder(provider),
+      selectionPriority: this.getProviderSelectionPriority(provider),
+      readsFrom: [...provider.readsFrom],
+      continuityCritical: provider.continuityCritical,
+      profileSelectable: provider.profileSelectable,
+      preservationPolicy: provider.preservationPolicy,
+      ...(provider.reservedBudgetRatio !== undefined
+        ? { reservedBudgetRatio: provider.reservedBudgetRatio }
+        : {}),
+    };
+  }
+
+  private validateProvider(provider: ContextSourceProvider): void {
+    if (provider.admissionLane !== "primary_registry") {
+      throw new Error(
+        `Context source provider admission lane must be primary_registry: ${provider.source}`,
+      );
+    }
+    if (!Array.isArray(provider.readsFrom)) {
+      throw new Error(`Context source provider readsFrom must be an array: ${provider.source}`);
+    }
+    if (!Number.isFinite(provider.collectionOrder)) {
+      throw new Error(`Context source provider collectionOrder must be finite: ${provider.source}`);
+    }
+    if (!Number.isFinite(provider.selectionPriority)) {
+      throw new Error(
+        `Context source provider selectionPriority must be finite: ${provider.source}`,
+      );
+    }
+    const ratio = provider.reservedBudgetRatio;
+    if (ratio !== undefined && (!Number.isFinite(ratio) || ratio <= 0 || ratio > 1)) {
+      throw new Error(
+        `Context source provider reservedBudgetRatio must be within (0, 1]: ${provider.source}`,
+      );
+    }
   }
 
   private normalizeSource(source: string): string {

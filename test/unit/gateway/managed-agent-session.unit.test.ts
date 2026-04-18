@@ -1707,8 +1707,16 @@ describe("managed agent session compaction", () => {
     runtime.maintain.context.onTurnStart(sessionId, 1);
     runtime.maintain.context.registerProvider({
       source: "brewva.test-context-state",
+      plane: "working_state",
+      admissionLane: "primary_registry",
       category: "narrative",
       budgetClass: "core",
+      collectionOrder: 60,
+      selectionPriority: 60,
+      readsFrom: ["test.contextState"],
+      continuityCritical: false,
+      profileSelectable: true,
+      preservationPolicy: "truncatable",
       collect: (input) => {
         input.register({
           id: `context-state:${input.sessionId}`,
@@ -1728,9 +1736,14 @@ describe("managed agent session compaction", () => {
         injectionScopeId: "leaf-one",
       },
     );
-    runtime.maintain.context.appendSupplementalInjection(
+    runtime.maintain.context.appendGuardedSupplementalBlocks(
       sessionId,
-      "Supplemental context block.",
+      [
+        {
+          familyId: "test-managed-agent-session",
+          content: "Supplemental context block.",
+        },
+      ],
       {
         tokens: 512,
         contextWindow: 8_192,
@@ -1923,8 +1936,16 @@ describe("managed agent session compaction", () => {
       runtime.maintain.context.onTurnStart(sessionStore.getSessionId(), 1);
       runtime.maintain.context.registerProvider({
         source: "brewva.test-plugin-state",
+        plane: "working_state",
+        admissionLane: "primary_registry",
         category: "narrative",
         budgetClass: "core",
+        collectionOrder: 60,
+        selectionPriority: 60,
+        readsFrom: ["test.pluginState"],
+        continuityCritical: false,
+        profileSelectable: true,
+        preservationPolicy: "truncatable",
         collect: (input) => {
           input.register({
             id: `plugin-state:${input.sessionId}`,

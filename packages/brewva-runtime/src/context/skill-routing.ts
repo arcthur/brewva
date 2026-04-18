@@ -159,9 +159,16 @@ export function createSkillRoutingContextProvider(
 ): ContextSourceProvider {
   return {
     source: CONTEXT_SOURCES.skillRouting,
+    plane: "advisory_recall",
+    admissionLane: "primary_registry",
     category: "narrative",
     budgetClass: "recall",
-    order: 15,
+    collectionOrder: 15,
+    selectionPriority: 15,
+    readsFrom: ["session.skillOutputs", "skill.registry"],
+    continuityCritical: false,
+    profileSelectable: true,
+    preservationPolicy: "truncatable",
     collect: (input) => {
       const cell = deps.sessionState.getExistingCell(input.sessionId);
       if (!cell) return;

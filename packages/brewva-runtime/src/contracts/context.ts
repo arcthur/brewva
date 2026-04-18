@@ -221,7 +221,7 @@ export interface ContextInjectionDecision {
 
 export interface BuildContextInjectionOptions {
   injectionScopeId?: string;
-  sourceAllowlist?: ReadonlySet<string>;
+  sourceSelection?: ReadonlySet<string>;
   referenceContextDigest?: string | null;
 }
 

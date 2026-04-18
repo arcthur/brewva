@@ -1276,9 +1276,16 @@ export function createDeliberationMemoryContextProvider(input: {
   });
   return {
     source: CONTEXT_SOURCES.deliberationMemory,
+    plane: "advisory_recall",
+    admissionLane: "primary_registry",
     category: "narrative",
     budgetClass: "recall",
-    order: 15,
+    collectionOrder: 17,
+    selectionPriority: 17,
+    readsFrom: ["deliberationMemory.retrieve"],
+    continuityCritical: false,
+    profileSelectable: true,
+    preservationPolicy: "truncatable",
     collect: (providerInput) => {
       const retrievals = plane.retrieve(
         providerInput.promptText,

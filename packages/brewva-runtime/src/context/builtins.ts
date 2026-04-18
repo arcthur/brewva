@@ -4,6 +4,14 @@ import { buildTaskStateBlock } from "../runtime-helpers.js";
 import type { RuntimeKernelContext } from "../runtime-kernel.js";
 import type { SkillLifecycleService } from "../services/skill-lifecycle.js";
 import type { SkillRegistry } from "../skills/registry.js";
+import {
+  resolveHistoryViewBaselineView,
+  resolveProjectionWorkingView,
+  resolveRecoveryWorkingSetView,
+  resolveRuntimeStatusView,
+  resolveTaskStateView,
+  resolveToolOutputDistillationView,
+} from "./dependency-views.js";
 import { buildHistoryViewBaselineBlock } from "./history-view-baseline.js";
 import {
   readAgentConstitutionProfile,
@@ -11,18 +19,10 @@ import {
   readPersonaProfile,
 } from "./identity.js";
 import type { ContextSourceProvider, ContextSourceProviderRegistry } from "./provider.js";
-import {
-  resolveHistoryViewBaselineStateFromKernel,
-  resolveRecoveryContextReadModels,
-} from "./read-models.js";
 import { buildRuntimeStatusBlock } from "./runtime-status.js";
 import { createSkillRoutingContextProvider } from "./skill-routing.js";
 import { CONTEXT_SOURCES } from "./sources.js";
-import type { ToolFailureEntry } from "./tool-failures.js";
-import {
-  buildRecentToolOutputDistillationBlock,
-  type ToolOutputDistillationEntry,
-} from "./tool-output-distilled.js";
+import { buildRecentToolOutputDistillationBlock } from "./tool-output-distilled.js";
 
 export interface BuiltInContextSourceProviderDeps {
   workspaceRoot: string;
@@ -30,6 +30,18 @@ export interface BuiltInContextSourceProviderDeps {
   kernel: RuntimeKernelContext;
   skillLifecycleService: Pick<SkillLifecycleService, "getActiveSkill">;
   skillRegistry?: SkillRegistry;
+}
+
+const PRIMARY_REGISTRY_LANE = "primary_registry";
+const HISTORY_VIEW_BASELINE_RESERVED_BUDGET_RATIO = 0.3;
+
+function createPrimaryProvider(
+  provider: Omit<ContextSourceProvider, "admissionLane">,
+): ContextSourceProvider {
+  return {
+    ...provider,
+    admissionLane: PRIMARY_REGISTRY_LANE,
+  };
 }
 
 export function registerBuiltInContextSourceProviders(
@@ -75,11 +87,17 @@ export function createBuiltInContextSourceProviders(
 function createAgentConstitutionProvider(
   deps: BuiltInContextSourceProviderDeps,
 ): ContextSourceProvider {
-  return {
+  return createPrimaryProvider({
     source: CONTEXT_SOURCES.agentConstitution,
+    plane: "contract_core",
     category: "narrative",
     budgetClass: "core",
-    order: 12,
+    collectionOrder: 12,
+    selectionPriority: 12,
+    readsFrom: ["workspace.agentConstitution"],
+    continuityCritical: false,
+    profileSelectable: true,
+    preservationPolicy: "truncatable",
     collect: (input) => {
       let profile: ReturnType<typeof readAgentConstitutionProfile>;
       try {
@@ -108,15 +126,21 @@ function createAgentConstitutionProvider(
         oncePerSession: true,
       });
     },
-  };
+  });
 }
 
 function createAgentMemoryProvider(deps: BuiltInContextSourceProviderDeps): ContextSourceProvider {
-  return {
+  return createPrimaryProvider({
     source: CONTEXT_SOURCES.agentMemory,
+    plane: "contract_core",
     category: "narrative",
     budgetClass: "core",
-    order: 13,
+    collectionOrder: 13,
+    selectionPriority: 13,
+    readsFrom: ["workspace.agentMemory"],
+    continuityCritical: false,
+    profileSelectable: true,
+    preservationPolicy: "truncatable",
     collect: (input) => {
       let profile: ReturnType<typeof readAgentMemoryProfile>;
       try {
@@ -145,15 +169,21 @@ function createAgentMemoryProvider(deps: BuiltInContextSourceProviderDeps): Cont
         oncePerSession: true,
       });
     },
-  };
+  });
 }
 
 function createIdentityProvider(deps: BuiltInContextSourceProviderDeps): ContextSourceProvider {
-  return {
+  return createPrimaryProvider({
     source: CONTEXT_SOURCES.identity,
+    plane: "contract_core",
     category: "narrative",
     budgetClass: "core",
-    order: 10,
+    collectionOrder: 10,
+    selectionPriority: 10,
+    readsFrom: ["workspace.identity"],
+    continuityCritical: false,
+    profileSelectable: true,
+    preservationPolicy: "truncatable",
     collect: (input) => {
       let profile: ReturnType<typeof readPersonaProfile>;
       try {
@@ -181,25 +211,29 @@ function createIdentityProvider(deps: BuiltInContextSourceProviderDeps): Context
         oncePerSession: true,
       });
     },
-  };
+  });
 }
 
 function createRuntimeStatusProvider(
   deps: BuiltInContextSourceProviderDeps,
 ): ContextSourceProvider {
-  return {
+  return createPrimaryProvider({
     source: CONTEXT_SOURCES.runtimeStatus,
+    plane: "working_state",
     category: "narrative",
     budgetClass: "core",
-    order: 20,
+    collectionOrder: 20,
+    selectionPriority: 20,
+    readsFrom: ["view.runtimeStatus"],
+    continuityCritical: false,
+    profileSelectable: true,
+    preservationPolicy: "truncatable",
     collect: (input) => {
       const toolFailureConfig = deps.kernel.config.infrastructure.toolFailureInjection;
-      const recentFailures = toolFailureConfig.enabled
-        ? getRecentToolFailures(deps.kernel, input.sessionId)
-        : [];
+      const statusView = resolveRuntimeStatusView(deps.kernel, input.sessionId);
       const runtimeStatusBlock = buildRuntimeStatusBlock({
-        verification: deps.kernel.getLatestVerificationOutcome(input.sessionId),
-        failures: recentFailures,
+        verification: statusView.verification,
+        failures: toolFailureConfig.enabled ? statusView.failures : [],
         options: {
           maxFailureEntries: toolFailureConfig.maxEntries,
           maxOutputChars: toolFailureConfig.maxOutputChars,
@@ -211,22 +245,30 @@ function createRuntimeStatusProvider(
         content: runtimeStatusBlock,
       });
     },
-  };
+  });
 }
 
 function createHistoryViewBaselineProvider(
   deps: BuiltInContextSourceProviderDeps,
 ): ContextSourceProvider {
-  return {
+  return createPrimaryProvider({
     source: CONTEXT_SOURCES.historyViewBaseline,
+    plane: "history_view",
     category: "narrative",
     budgetClass: "core",
-    order: 14,
+    collectionOrder: 14,
+    selectionPriority: 14,
+    readsFrom: ["readModel.historyViewBaseline"],
+    continuityCritical: true,
+    profileSelectable: true,
+    preservationPolicy: "non_truncatable",
+    reservedBudgetRatio: HISTORY_VIEW_BASELINE_RESERVED_BUDGET_RATIO,
     collect: (input) => {
-      const baseline = resolveHistoryViewBaselineStateFromKernel(deps.kernel, {
+      const baseline = resolveHistoryViewBaselineView(deps.kernel, {
         sessionId: input.sessionId,
         usage: input.usage,
         referenceContextDigest: input.referenceContextDigest,
+        reservedBudgetRatio: HISTORY_VIEW_BASELINE_RESERVED_BUDGET_RATIO,
       }).snapshot;
       const block = buildHistoryViewBaselineBlock(baseline);
       if (!block) return;
@@ -235,21 +277,27 @@ function createHistoryViewBaselineProvider(
         content: block,
       });
     },
-  };
+  });
 }
 
 function createToolOutputDistilledProvider(
   deps: BuiltInContextSourceProviderDeps,
 ): ContextSourceProvider {
-  return {
+  return createPrimaryProvider({
     source: CONTEXT_SOURCES.toolOutputsDistilled,
+    plane: "working_state",
     category: "narrative",
     budgetClass: "working",
-    order: 30,
+    collectionOrder: 30,
+    selectionPriority: 30,
+    readsFrom: ["view.toolOutputDistillations"],
+    continuityCritical: false,
+    profileSelectable: true,
+    preservationPolicy: "truncatable",
     collect: (input) => {
       const distillationConfig = deps.kernel.config.infrastructure.toolOutputDistillationInjection;
       const distilledBlock = buildRecentToolOutputDistillationBlock(
-        getRecentToolOutputDistillations(deps.kernel, input.sessionId),
+        resolveToolOutputDistillationView(deps.kernel, input.sessionId),
         {
           maxEntries: distillationConfig.maxEntries,
           maxSummaryChars: distillationConfig.maxOutputChars,
@@ -261,17 +309,23 @@ function createToolOutputDistilledProvider(
         content: distilledBlock,
       });
     },
-  };
+  });
 }
 
 function createTaskStateProvider(deps: BuiltInContextSourceProviderDeps): ContextSourceProvider {
-  return {
+  return createPrimaryProvider({
     source: CONTEXT_SOURCES.taskState,
+    plane: "working_state",
     category: "narrative",
     budgetClass: "core",
-    order: 40,
+    collectionOrder: 40,
+    selectionPriority: 40,
+    readsFrom: ["view.taskState"],
+    continuityCritical: false,
+    profileSelectable: true,
+    preservationPolicy: "truncatable",
     collect: (input) => {
-      const taskState = deps.kernel.getTaskState(input.sessionId);
+      const taskState = resolveTaskStateView(deps.kernel, input.sessionId);
       if (
         !taskState.spec &&
         !taskState.status &&
@@ -287,22 +341,29 @@ function createTaskStateProvider(deps: BuiltInContextSourceProviderDeps): Contex
         content: taskBlock,
       });
     },
-  };
+  });
 }
 
 function createRecoveryWorkingSetProvider(
   deps: BuiltInContextSourceProviderDeps,
 ): ContextSourceProvider {
-  return {
+  return createPrimaryProvider({
     source: CONTEXT_SOURCES.recoveryWorkingSet,
+    plane: "working_state",
     category: "constraint",
     budgetClass: "working",
-    order: 45,
+    collectionOrder: 45,
+    selectionPriority: 45,
+    readsFrom: ["readModel.recoveryWorkingSet"],
+    continuityCritical: true,
+    profileSelectable: true,
+    preservationPolicy: "truncatable",
     collect: (input) => {
-      const snapshot = resolveRecoveryContextReadModels(deps.kernel, {
+      const snapshot = resolveRecoveryWorkingSetView(deps.kernel, {
         sessionId: input.sessionId,
         usage: input.usage,
         referenceContextDigest: input.referenceContextDigest,
+        reservedBudgetRatio: HISTORY_VIEW_BASELINE_RESERVED_BUDGET_RATIO,
       }).workingSet;
       const block = buildRecoveryWorkingSetBlock(snapshot);
       if (!block) return;
@@ -311,61 +372,30 @@ function createRecoveryWorkingSetProvider(
         content: block,
       });
     },
-  };
+  });
 }
 
 function createProjectionWorkingProvider(
   deps: BuiltInContextSourceProviderDeps,
 ): ContextSourceProvider {
-  return {
+  return createPrimaryProvider({
     source: CONTEXT_SOURCES.projectionWorking,
+    plane: "working_state",
     category: "narrative",
     budgetClass: "working",
-    order: 50,
+    collectionOrder: 50,
+    selectionPriority: 50,
+    readsFrom: ["view.projectionWorking"],
+    continuityCritical: false,
+    profileSelectable: true,
+    preservationPolicy: "truncatable",
     collect: (input) => {
-      deps.kernel.projectionEngine.refreshIfNeeded({ sessionId: input.sessionId });
-      const working = deps.kernel.projectionEngine.getWorkingProjection(input.sessionId);
-      const workingContent = deps.kernel.sanitizeInput(working?.content ?? "").trim();
-      if (!workingContent) return;
+      const working = resolveProjectionWorkingView(deps.kernel, input.sessionId);
+      if (!working) return;
       input.register({
         id: "projection-working",
-        content: workingContent,
+        content: working.content,
       });
     },
-  };
-}
-
-function getRecentToolFailures(
-  kernel: RuntimeKernelContext,
-  sessionId: string,
-): ToolFailureEntry[] {
-  return kernel.turnReplay.getRecentToolFailures(sessionId, 12).map((entry) => ({
-    toolName: entry.toolName,
-    args: entry.args,
-    outputText: kernel.sanitizeInput(entry.outputText),
-    turn: Number.isFinite(entry.turn) ? Math.max(0, Math.floor(entry.turn)) : 0,
-    failureClass: entry.failureClass,
-  }));
-}
-
-function getRecentToolOutputDistillations(
-  kernel: RuntimeKernelContext,
-  sessionId: string,
-): ToolOutputDistillationEntry[] {
-  return kernel
-    .getRecentToolOutputDistillations(sessionId, 12)
-    .map((entry) => ({
-      toolName: entry.toolName,
-      strategy: entry.strategy,
-      summaryText: kernel.sanitizeInput(entry.summaryText),
-      rawTokens: entry.rawTokens,
-      summaryTokens: entry.summaryTokens,
-      compressionRatio: entry.compressionRatio,
-      artifactRef: entry.artifactRef ? kernel.sanitizeInput(entry.artifactRef) : null,
-      isError: entry.isError,
-      verdict: entry.verdict,
-      turn: entry.turn,
-      timestamp: entry.timestamp,
-    }))
-    .filter((entry) => entry.summaryText.trim().length > 0);
+  });
 }

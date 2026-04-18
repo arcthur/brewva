@@ -298,36 +298,47 @@ export class ContextService {
     return this.finalizeContextInjection(sessionId, prompt, usage, options);
   }
 
-  appendSupplementalContextInjection(
+  appendGuardedSupplementalBlocks(
     sessionId: string,
-    inputText: string,
+    blocks: readonly {
+      familyId: string;
+      content: string;
+    }[],
     usage?: ContextBudgetUsage,
     injectionScopeId?: string,
-  ): {
+  ): Array<{
+    familyId: string;
     accepted: boolean;
     text: string;
     originalTokens: number;
     finalTokens: number;
     truncated: boolean;
     droppedReason?: "hard_limit" | "budget_exhausted";
-  } {
-    const plan = planSupplementalContextInjection(
-      this.contextSupplementalBudgetDeps,
-      sessionId,
-      inputText,
-      usage,
-      injectionScopeId,
-    );
-    if (plan.accepted && plan.finalTokens > 0) {
-      commitSupplementalContextInjection(
+  }> {
+    const acceptedPlans = [];
+    for (const block of blocks) {
+      const plan = planSupplementalContextInjection(
         this.contextSupplementalBudgetDeps,
         sessionId,
-        plan.finalTokens,
-        injectionScopeId,
+        block.content,
         usage,
+        injectionScopeId,
       );
+      if (plan.accepted && plan.finalTokens > 0) {
+        commitSupplementalContextInjection(
+          this.contextSupplementalBudgetDeps,
+          sessionId,
+          plan.finalTokens,
+          injectionScopeId,
+          usage,
+        );
+      }
+      acceptedPlans.push({
+        familyId: block.familyId,
+        ...plan,
+      });
     }
-    return plan;
+    return acceptedPlans;
   }
 
   checkAndRequestCompaction(sessionId: string, usage: ContextBudgetUsage | undefined): boolean {
@@ -401,7 +412,7 @@ export class ContextService {
       prompt,
       usage,
       injectionScopeId: options?.injectionScopeId,
-      sourceAllowlist: options?.sourceAllowlist,
+      sourceSelection: options?.sourceSelection,
       referenceContextDigest: options?.referenceContextDigest ?? null,
     });
   }
@@ -412,6 +423,9 @@ export class ContextService {
       source: string;
       category: ContextInjectionEntry["category"];
       budgetClass: ContextInjectionEntry["budgetClass"];
+      selectionPriority: ContextInjectionEntry["selectionPriority"];
+      preservationPolicy: ContextInjectionEntry["preservationPolicy"];
+      reservedBudgetRatio?: ContextInjectionEntry["reservedBudgetRatio"];
       id: string;
       content: string;
       estimatedTokens?: number;

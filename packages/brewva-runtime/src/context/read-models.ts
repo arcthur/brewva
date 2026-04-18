@@ -10,7 +10,6 @@ import {
 } from "../recovery/read-model.js";
 import type { RuntimeKernelContext } from "../runtime-kernel.js";
 import { deriveHistoryViewBaselineState } from "./history-view-baseline.js";
-import { CONTEXT_SOURCES, resolveReservedContextSourceBudget } from "./sources.js";
 
 export interface HistoryViewBaselineStateResolution {
   snapshot?: ReturnType<typeof deriveHistoryViewBaselineState>["snapshot"];
@@ -29,34 +28,19 @@ function normalizeNullableString(value: string | null | undefined): string | nul
   return normalized.length > 0 ? normalized : null;
 }
 
-function resolveHistoryViewBaselineTokenBudget(
-  kernel: RuntimeKernelContext,
-  sessionId: string,
-  usage?: ContextBudgetUsage,
-): number | null {
-  if (!kernel.isContextBudgetEnabled()) {
-    return null;
-  }
-  const totalBudget = kernel.contextBudget.getEffectiveInjectionTokenBudget(sessionId, usage);
-  return resolveReservedContextSourceBudget(CONTEXT_SOURCES.historyViewBaseline, totalBudget);
-}
-
 export function resolveHistoryViewBaselineStateFromKernel(
   kernel: RuntimeKernelContext,
   input: {
     sessionId: string;
     usage?: ContextBudgetUsage;
     referenceContextDigest?: string | null;
+    maxBaselineTokens?: number | null;
   },
 ): HistoryViewBaselineStateResolution {
   const events = kernel.eventStore.list(input.sessionId);
   const latestEventId = events.at(-1)?.id ?? null;
   const referenceContextDigest = normalizeNullableString(input.referenceContextDigest);
-  const maxBaselineTokens = resolveHistoryViewBaselineTokenBudget(
-    kernel,
-    input.sessionId,
-    input.usage,
-  );
+  const maxBaselineTokens = input.maxBaselineTokens ?? null;
   const cached = kernel.sessionState.getHistoryViewBaselineCache(input.sessionId);
   if (
     cached &&
@@ -98,6 +82,7 @@ export function resolveRecoveryContextReadModels(
     sessionId: string;
     usage?: ContextBudgetUsage;
     referenceContextDigest?: string | null;
+    maxBaselineTokens?: number | null;
   },
 ): RecoveryContextReadModels {
   const events = kernel.eventStore.list(input.sessionId);

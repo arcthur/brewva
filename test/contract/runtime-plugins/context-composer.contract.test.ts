@@ -4,18 +4,25 @@ import {
   composeContextBlocks,
   type ContextComposerInput,
 } from "@brewva/brewva-gateway/runtime-plugins";
-import {
-  CONTEXT_SOURCES,
-  CONTEXT_SOURCE_BUDGET_CLASSES,
-  type ContextInjectionBudgetClass,
-  asBrewvaSessionId,
-} from "@brewva/brewva-runtime";
+import { CONTEXT_SOURCES, asBrewvaSessionId } from "@brewva/brewva-runtime";
 import type { ContextInjectionEntry } from "@brewva/brewva-runtime/internal";
 
-function resolveBudgetClass(source: string): ContextInjectionBudgetClass {
-  return (
-    (CONTEXT_SOURCE_BUDGET_CLASSES as Record<string, ContextInjectionBudgetClass>)[source] ?? "core"
-  );
+function resolveBudgetClass(source: string): "core" | "working" | "recall" {
+  switch (source) {
+    case CONTEXT_SOURCES.recoveryWorkingSet:
+    case CONTEXT_SOURCES.toolOutputsDistilled:
+    case CONTEXT_SOURCES.projectionWorking:
+      return "working";
+    case CONTEXT_SOURCES.recallBroker:
+    case CONTEXT_SOURCES.narrativeMemory:
+    case CONTEXT_SOURCES.deliberationMemory:
+    case CONTEXT_SOURCES.optimizationContinuity:
+    case CONTEXT_SOURCES.skillPromotionDrafts:
+    case CONTEXT_SOURCES.skillRouting:
+      return "recall";
+    default:
+      return "core";
+  }
 }
 
 function makeEntry(
@@ -28,6 +35,8 @@ function makeEntry(
   return {
     category,
     budgetClass: resolveBudgetClass(source),
+    selectionPriority: 10,
+    preservationPolicy: "truncatable",
     source,
     id,
     content,
@@ -567,8 +576,11 @@ describe("context composer", () => {
         {
           id: "operational-diagnostics",
           category: "diagnostic",
+          provenance: "guarded_supplemental",
           content: "[OperationalDiagnostics]\ncontext_pressure: low",
           estimatedTokens: 8,
+          familyId: "operational-diagnostics",
+          laneReason: "test supplemental block",
         },
       ],
     });

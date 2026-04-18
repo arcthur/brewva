@@ -24,6 +24,8 @@ function makeEntry(
   return {
     category: "narrative" as const,
     budgetClass: budgetClassForSource(source),
+    selectionPriority: 10,
+    preservationPolicy: "truncatable" as const,
     source,
     id,
     content,
@@ -100,19 +102,25 @@ describe("ContextArena", () => {
 
   test("plan preserves deterministic append order", () => {
     const arena = new ContextArena();
-    arena.append(
-      sessionId,
-      makeEntry("brewva.projection-working", "projection-working", "projection"),
-    );
-    arena.append(sessionId, makeEntry("brewva.runtime-status", "runtime-status", "status"));
-    arena.append(sessionId, makeEntry("brewva.task-state", "task-1", "task"));
+    arena.append(sessionId, {
+      ...makeEntry("brewva.projection-working", "projection-working", "projection"),
+      selectionPriority: 50,
+    });
+    arena.append(sessionId, {
+      ...makeEntry("brewva.runtime-status", "runtime-status", "status"),
+      selectionPriority: 20,
+    });
+    arena.append(sessionId, {
+      ...makeEntry("brewva.task-state", "task-1", "task"),
+      selectionPriority: 40,
+    });
 
     const planned = arena.plan(sessionId, 10_000);
     const sources = planned.entries.map((entry) => entry.source);
     expect(sources).toEqual([
-      "brewva.projection-working",
       "brewva.runtime-status",
       "brewva.task-state",
+      "brewva.projection-working",
     ]);
   });
 

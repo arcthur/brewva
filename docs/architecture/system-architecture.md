@@ -161,6 +161,37 @@ Boundary note:
   to justify hidden stage machines, default injected lane briefs, or
   model-writable control state
 
+## Context Governance Objects
+
+Context governance uses three different object kinds. They are related, but they
+are not interchangeable:
+
+- `Primary Registry Sources`
+  - source-typed provider contracts owned by the runtime
+  - carry plane, admission-lane, scheduling, dependency, and preservation
+    metadata
+  - participate in deterministic admission, source selection, arena planning,
+    and provider inspection
+- `Guarded Supplemental Families`
+  - host-local post-primary block families appended through a separate
+    headroom-governed exception lane
+  - do not masquerade as primary sources and do not participate in provider
+    selection or arena class floors
+- `Composer Policy Blocks`
+  - render-local policy artifacts such as compaction gate or capability policy
+  - carry provenance for observability and model presentation
+  - are not admitted source objects
+
+Boundary rules:
+
+- only primary registry sources are source-typed context providers
+- hosted `contextProfile` compiles `sourceSelection` from primary-source
+  descriptors rather than from duplicated source tables
+- guarded supplemental families stay explicit exception paths and must not become
+  silent continuity carriers
+- composer policy blocks remain presentation artifacts; they do not widen
+  runtime authority or create a second source taxonomy
+
 ## Adjacent Repository Fitness Plane
 
 Brewva's architecture is centered on the `runtime commitment plane`.

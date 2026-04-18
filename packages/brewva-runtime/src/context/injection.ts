@@ -1,10 +1,14 @@
 import { ContextArena } from "./arena.js";
+import type { ContextPreservationPolicy } from "./provider.js";
 import type { ContextInjectionBudgetClass, ContextInjectionCategory } from "./sources.js";
 
 export interface RegisterContextInjectionInput {
   source: string;
   category: ContextInjectionCategory;
   budgetClass: ContextInjectionBudgetClass;
+  selectionPriority: number;
+  preservationPolicy: ContextPreservationPolicy;
+  reservedBudgetRatio?: number;
   id: string;
   content: string;
   estimatedTokens?: number;
@@ -15,6 +19,9 @@ export interface ContextInjectionEntry {
   source: string;
   category: ContextInjectionCategory;
   budgetClass: ContextInjectionBudgetClass;
+  selectionPriority: number;
+  preservationPolicy: ContextPreservationPolicy;
+  reservedBudgetRatio?: number;
   id: string;
   content: string;
   estimatedTokens: number;

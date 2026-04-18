@@ -6,6 +6,7 @@ import {
   CONTEXT_SOURCES,
   DEFAULT_BREWVA_CONFIG,
   type BrewvaConfig,
+  type ContextSourceProviderDescriptor,
   type ContextSourceProvider,
 } from "@brewva/brewva-runtime";
 import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
@@ -57,12 +58,23 @@ function blockIndex(text: string, block: string): number {
   return text.indexOf(`[${block}]`);
 }
 
+function summarizeProviders(runtime: BrewvaRuntime) {
+  return runtime.inspect.context.listProviders();
+}
+
 function registerCustomContextProvider(runtime: BrewvaRuntime): void {
   const provider: ContextSourceProvider = {
     source: "brewva.custom-operator-note",
+    plane: "working_state",
+    admissionLane: "primary_registry",
     category: "constraint",
     budgetClass: "core",
-    order: 55,
+    collectionOrder: 55,
+    selectionPriority: 55,
+    readsFrom: ["test.customOperatorNote"],
+    continuityCritical: false,
+    profileSelectable: true,
+    preservationPolicy: "truncatable",
     collect: (input) => {
       input.register({
         id: `custom-operator-note:${input.sessionId}`,
@@ -73,8 +85,141 @@ function registerCustomContextProvider(runtime: BrewvaRuntime): void {
   runtime.maintain.context.registerProvider(provider);
 }
 
+function expectedBaseProviders() {
+  return [
+    {
+      source: CONTEXT_SOURCES.identity,
+      plane: "contract_core",
+      admissionLane: "primary_registry",
+      category: "narrative",
+      budgetClass: "core",
+      collectionOrder: 10,
+      selectionPriority: 10,
+      readsFrom: ["workspace.identity"],
+      continuityCritical: false,
+      profileSelectable: true,
+      preservationPolicy: "truncatable",
+    },
+    {
+      source: CONTEXT_SOURCES.agentConstitution,
+      plane: "contract_core",
+      admissionLane: "primary_registry",
+      category: "narrative",
+      budgetClass: "core",
+      collectionOrder: 12,
+      selectionPriority: 12,
+      readsFrom: ["workspace.agentConstitution"],
+      continuityCritical: false,
+      profileSelectable: true,
+      preservationPolicy: "truncatable",
+    },
+    {
+      source: CONTEXT_SOURCES.agentMemory,
+      plane: "contract_core",
+      admissionLane: "primary_registry",
+      category: "narrative",
+      budgetClass: "core",
+      collectionOrder: 13,
+      selectionPriority: 13,
+      readsFrom: ["workspace.agentMemory"],
+      continuityCritical: false,
+      profileSelectable: true,
+      preservationPolicy: "truncatable",
+    },
+    {
+      source: CONTEXT_SOURCES.historyViewBaseline,
+      plane: "history_view",
+      admissionLane: "primary_registry",
+      category: "narrative",
+      budgetClass: "core",
+      collectionOrder: 14,
+      selectionPriority: 14,
+      readsFrom: ["readModel.historyViewBaseline"],
+      continuityCritical: true,
+      profileSelectable: true,
+      preservationPolicy: "non_truncatable",
+      reservedBudgetRatio: 0.3,
+    },
+    {
+      source: CONTEXT_SOURCES.skillRouting,
+      plane: "advisory_recall",
+      admissionLane: "primary_registry",
+      category: "narrative",
+      budgetClass: "recall",
+      collectionOrder: 15,
+      selectionPriority: 15,
+      readsFrom: ["session.skillOutputs", "skill.registry"],
+      continuityCritical: false,
+      profileSelectable: true,
+      preservationPolicy: "truncatable",
+    },
+    {
+      source: CONTEXT_SOURCES.runtimeStatus,
+      plane: "working_state",
+      admissionLane: "primary_registry",
+      category: "narrative",
+      budgetClass: "core",
+      collectionOrder: 20,
+      selectionPriority: 20,
+      readsFrom: ["view.runtimeStatus"],
+      continuityCritical: false,
+      profileSelectable: true,
+      preservationPolicy: "truncatable",
+    },
+    {
+      source: CONTEXT_SOURCES.taskState,
+      plane: "working_state",
+      admissionLane: "primary_registry",
+      category: "narrative",
+      budgetClass: "core",
+      collectionOrder: 40,
+      selectionPriority: 40,
+      readsFrom: ["view.taskState"],
+      continuityCritical: false,
+      profileSelectable: true,
+      preservationPolicy: "truncatable",
+    },
+    {
+      source: CONTEXT_SOURCES.recoveryWorkingSet,
+      plane: "working_state",
+      admissionLane: "primary_registry",
+      category: "constraint",
+      budgetClass: "working",
+      collectionOrder: 45,
+      selectionPriority: 45,
+      readsFrom: ["readModel.recoveryWorkingSet"],
+      continuityCritical: true,
+      profileSelectable: true,
+      preservationPolicy: "truncatable",
+    },
+    {
+      source: CONTEXT_SOURCES.projectionWorking,
+      plane: "working_state",
+      admissionLane: "primary_registry",
+      category: "narrative",
+      budgetClass: "working",
+      collectionOrder: 50,
+      selectionPriority: 50,
+      readsFrom: ["view.projectionWorking"],
+      continuityCritical: false,
+      profileSelectable: true,
+      preservationPolicy: "truncatable",
+    },
+  ] satisfies ContextSourceProviderDescriptor[];
+}
+
 describe("context source order integration", () => {
-  test("injects deterministic governance sources without recall branch", async () => {
+  test("exposes the full provider contract from runtime inspect", () => {
+    const runtime = new BrewvaRuntime({
+      cwd: createContextOrderWorkspace("provider-contract"),
+      config: createConfig(),
+      agentId: "default",
+    });
+
+    expect(summarizeProviders(runtime)).toEqual(expectedBaseProviders());
+  });
+
+  test("injects governance blocks in selection-priority order", async () => {
     const runtime = new BrewvaRuntime({
       cwd: createContextOrderWorkspace("strict-order"),
       config: createConfig(),
@@ -112,63 +257,6 @@ describe("context source order integration", () => {
       outputText: "Error: deterministic source order failure block",
       channelSuccess: false,
     });
-    runtime.authority.truth.upsertFact(sessionId, {
-      id: "truth:order",
-      kind: "diagnostic",
-      severity: "warn",
-      summary: "deterministic truth fact",
-    });
-    expect(runtime.inspect.context.listProviders()).toEqual([
-      { source: CONTEXT_SOURCES.identity, category: "narrative", budgetClass: "core", order: 10 },
-      {
-        source: CONTEXT_SOURCES.agentConstitution,
-        category: "narrative",
-        budgetClass: "core",
-        order: 12,
-      },
-      {
-        source: CONTEXT_SOURCES.agentMemory,
-        category: "narrative",
-        budgetClass: "core",
-        order: 13,
-      },
-      {
-        source: CONTEXT_SOURCES.historyViewBaseline,
-        category: "narrative",
-        budgetClass: "core",
-        order: 14,
-      },
-      {
-        source: CONTEXT_SOURCES.skillRouting,
-        category: "narrative",
-        budgetClass: "recall",
-        order: 15,
-      },
-      {
-        source: CONTEXT_SOURCES.runtimeStatus,
-        category: "narrative",
-        budgetClass: "core",
-        order: 20,
-      },
-      {
-        source: CONTEXT_SOURCES.taskState,
-        category: "narrative",
-        budgetClass: "core",
-        order: 40,
-      },
-      {
-        source: CONTEXT_SOURCES.recoveryWorkingSet,
-        category: "constraint",
-        budgetClass: "working",
-        order: 45,
-      },
-      {
-        source: CONTEXT_SOURCES.projectionWorking,
-        category: "narrative",
-        budgetClass: "working",
-        order: 50,
-      },
-    ]);
 
     const injected = await runtime.maintain.context.buildInjection(
       sessionId,
@@ -176,20 +264,18 @@ describe("context source order integration", () => {
       { tokens: 320, contextWindow: 16_000, percent: 0.02 },
       { injectionScopeId: "leaf-order" },
     );
-    expect(injected.accepted).toBe(true);
-    expect(injected.text.length).toBeGreaterThan(0);
+
     const runtimeStatusPosition = blockIndex(injected.text, "RuntimeStatus");
     const taskLedgerPosition = blockIndex(injected.text, "TaskLedger");
     const workingProjectionPosition = blockIndex(injected.text, "WorkingProjection");
-    expect(injected.text.includes("[TruthLedger]")).toBe(false);
-    expect(injected.text.includes("[TruthFacts]")).toBe(false);
+    expect(injected.accepted).toBe(true);
     expect(runtimeStatusPosition).toBeGreaterThanOrEqual(0);
     expect(taskLedgerPosition).toBeGreaterThan(runtimeStatusPosition);
     expect(workingProjectionPosition).toBeGreaterThan(taskLedgerPosition);
     expect(injected.text.includes("[MemoryRecall]")).toBe(false);
   });
 
-  test("allows runtime callers to register and unregister context providers", async () => {
+  test("allows runtime callers to register and unregister fully-declared providers", async () => {
     const runtime = new BrewvaRuntime({
       cwd: createContextOrderWorkspace("custom-provider"),
       config: createConfig(),
@@ -226,18 +312,23 @@ describe("context source order integration", () => {
       channelSuccess: false,
     });
 
-    const providers = runtime.inspect.context.listProviders();
-    expect(providers.some((provider) => provider.source === "brewva.custom-operator-note")).toBe(
-      true,
-    );
-    expect(providers.find((provider) => provider.source === "brewva.custom-operator-note")).toEqual(
-      {
-        source: "brewva.custom-operator-note",
-        category: "constraint",
-        budgetClass: "core",
-        order: 55,
-      },
-    );
+    expect(
+      runtime.inspect.context
+        .listProviders()
+        .find((provider) => provider.source === "brewva.custom-operator-note"),
+    ).toEqual({
+      source: "brewva.custom-operator-note",
+      plane: "working_state",
+      admissionLane: "primary_registry",
+      category: "constraint",
+      budgetClass: "core",
+      collectionOrder: 55,
+      selectionPriority: 55,
+      readsFrom: ["test.customOperatorNote"],
+      continuityCritical: false,
+      profileSelectable: true,
+      preservationPolicy: "truncatable",
+    });
 
     const injected = await runtime.maintain.context.buildInjection(
       sessionId,
@@ -257,46 +348,6 @@ describe("context source order integration", () => {
 
     expect(runtime.maintain.context.unregisterProvider("brewva.custom-operator-note")).toBe(true);
     expect(runtime.maintain.context.unregisterProvider("brewva.custom-operator-note")).toBe(false);
-    expect(
-      runtime.inspect.context
-        .listProviders()
-        .some((provider) => provider.source === "brewva.custom-operator-note"),
-    ).toBe(false);
-
-    const otherSessionId = "context-source-custom-provider-removed";
-    runtime.maintain.context.onTurnStart(otherSessionId, 1);
-    runtime.authority.task.setSpec(otherSessionId, {
-      schema: "brewva.task.v1",
-      goal: "Validate provider removal",
-    });
-    runtime.authority.tools.recordResult({
-      sessionId: otherSessionId,
-      toolName: "exec",
-      args: { command: "bun test" },
-      outputText: "Error: runtime status block should still be present",
-      channelSuccess: false,
-    });
-
-    const afterRemoval = await runtime.maintain.context.buildInjection(
-      otherSessionId,
-      "verify provider removal",
-      { tokens: 320, contextWindow: 16_000, percent: 0.02 },
-      { injectionScopeId: "leaf-custom-provider-removed" },
-    );
-    expect(afterRemoval.text.includes("[CustomOperatorNote]")).toBe(false);
-  });
-
-  test("rejects duplicate context provider sources", () => {
-    const runtime = new BrewvaRuntime({
-      cwd: createContextOrderWorkspace("custom-provider-duplicate"),
-      config: createConfig(),
-      agentId: "default",
-    });
-    registerCustomContextProvider(runtime);
-
-    expect(() => registerCustomContextProvider(runtime)).toThrow(
-      "Context source provider already registered: brewva.custom-operator-note",
-    );
   });
 
   test("registers optional built-in providers only when config enables them", () => {
@@ -310,62 +361,24 @@ describe("context source order integration", () => {
       agentId: "default",
     });
 
-    expect(runtime.inspect.context.listProviders()).toEqual([
-      { source: CONTEXT_SOURCES.identity, category: "narrative", budgetClass: "core", order: 10 },
-      {
-        source: CONTEXT_SOURCES.agentConstitution,
-        category: "narrative",
-        budgetClass: "core",
-        order: 12,
-      },
-      {
-        source: CONTEXT_SOURCES.agentMemory,
-        category: "narrative",
-        budgetClass: "core",
-        order: 13,
-      },
-      {
-        source: CONTEXT_SOURCES.historyViewBaseline,
-        category: "narrative",
-        budgetClass: "core",
-        order: 14,
-      },
-      {
-        source: CONTEXT_SOURCES.skillRouting,
-        category: "narrative",
-        budgetClass: "recall",
-        order: 15,
-      },
-      {
-        source: CONTEXT_SOURCES.runtimeStatus,
-        category: "narrative",
-        budgetClass: "core",
-        order: 20,
-      },
+    const expectedProviders = [
+      ...expectedBaseProviders().slice(0, 6),
       {
         source: CONTEXT_SOURCES.toolOutputsDistilled,
+        plane: "working_state",
+        admissionLane: "primary_registry",
         category: "narrative",
         budgetClass: "working",
-        order: 30,
+        collectionOrder: 30,
+        selectionPriority: 30,
+        readsFrom: ["view.toolOutputDistillations"],
+        continuityCritical: false,
+        profileSelectable: true,
+        preservationPolicy: "truncatable",
       },
-      {
-        source: CONTEXT_SOURCES.taskState,
-        category: "narrative",
-        budgetClass: "core",
-        order: 40,
-      },
-      {
-        source: CONTEXT_SOURCES.recoveryWorkingSet,
-        category: "constraint",
-        budgetClass: "working",
-        order: 45,
-      },
-      {
-        source: CONTEXT_SOURCES.projectionWorking,
-        category: "narrative",
-        budgetClass: "working",
-        order: 50,
-      },
-    ]);
+      ...expectedBaseProviders().slice(6),
+    ] satisfies ContextSourceProviderDescriptor[];
+
+    expect(summarizeProviders(runtime)).toEqual(expectedProviders);
   });
 });

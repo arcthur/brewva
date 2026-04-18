@@ -5,11 +5,7 @@ import type {
   ContextInjectionRegisterResult,
   RegisterContextInjectionInput,
 } from "./injection.js";
-import {
-  isNonTruncatableContextSource,
-  resolveReservedContextSourceBudget,
-  type ContextInjectionBudgetClass,
-} from "./sources.js";
+import type { ContextInjectionBudgetClass } from "./sources.js";
 
 const ENTRY_SEPARATOR = "\n\n";
 const ARENA_TRIM_MIN_ENTRIES = 2_048;
@@ -30,6 +26,7 @@ const BUDGET_CLASS_SOFT_CAPS: Record<ContextInjectionBudgetClass, number> = {
 interface ArenaEntry extends ContextInjectionEntry {
   key: string;
   index: number;
+  order: number;
   presented: boolean;
 }
 
@@ -38,6 +35,7 @@ interface ArenaSessionState {
   latestIndexByKey: Map<string, number>;
   onceKeys: Set<string>;
   lastDegradationApplied: boolean;
+  nextOrder: number;
 }
 
 interface ArenaCapacityDecision {
@@ -94,9 +92,12 @@ export class ContextArena {
       source,
       category: input.category,
       budgetClass: input.budgetClass,
+      selectionPriority: this.normalizePriority(input.selectionPriority),
+      preservationPolicy: input.preservationPolicy,
+      reservedBudgetRatio: this.normalizeReservedBudgetRatio(input.reservedBudgetRatio),
       id,
       content,
-      estimatedTokens: estimateTokenCount(content),
+      estimatedTokens: this.resolveEstimatedTokens(input.estimatedTokens, content),
       timestamp: Date.now(),
       oncePerSession,
       truncated: false,
@@ -126,10 +127,14 @@ export class ContextArena {
     }
 
     const replaceIndex = capacity.replaceIndex;
+    const previousIndex = state.latestIndexByKey.get(key);
+    const previousEntry = previousIndex !== undefined ? state.entries[previousIndex] : undefined;
+    const order = previousEntry?.order ?? state.nextOrder++;
     const arenaEntry: ArenaEntry = {
       ...entry,
       key,
       index: replaceIndex ?? state.entries.length,
+      order,
       presented: false,
     };
     if (typeof replaceIndex === "number") {
@@ -184,6 +189,12 @@ export class ContextArena {
         planTelemetry: this.consumePlanTelemetry(state, this.emptyPlanTelemetry()),
       };
     }
+    allCandidates.sort((left, right) => {
+      if (left.selectionPriority !== right.selectionPriority) {
+        return left.selectionPriority - right.selectionPriority;
+      }
+      return left.order - right.order;
+    });
 
     const classBudgets = this.allocateBudgetByClass(allCandidates, totalTokenBudget);
     const reservedBudgets = this.allocateReservedBudgetBySource(allCandidates, totalTokenBudget);
@@ -396,7 +407,7 @@ export class ContextArena {
         continue;
       }
 
-      if (isNonTruncatableContextSource(entry.source)) {
+      if (entry.preservationPolicy === "non_truncatable") {
         truncated = true;
         continue;
       }
@@ -427,7 +438,10 @@ export class ContextArena {
   ): Map<string, ReservedSourceBudgetState> {
     const reservedBySource = new Map<string, ReservedSourceBudgetState>();
     for (const entry of entries) {
-      const reservedBudget = resolveReservedContextSourceBudget(entry.source, totalTokenBudget);
+      const reservedBudget = this.resolveReservedBudget(
+        entry.reservedBudgetRatio,
+        totalTokenBudget,
+      );
       if (reservedBudget === null) {
         continue;
       }
@@ -455,6 +469,7 @@ export class ContextArena {
       latestIndexByKey: new Map(),
       onceKeys: new Set(),
       lastDegradationApplied: false,
+      nextOrder: 0,
     };
     this.sessions.set(sessionId, state);
     return state;
@@ -465,6 +480,11 @@ export class ContextArena {
       source: entry.source,
       category: entry.category,
       budgetClass: entry.budgetClass,
+      selectionPriority: entry.selectionPriority,
+      preservationPolicy: entry.preservationPolicy,
+      ...(entry.reservedBudgetRatio !== undefined
+        ? { reservedBudgetRatio: entry.reservedBudgetRatio }
+        : {}),
       id: entry.id,
       content: entry.content,
       estimatedTokens: entry.estimatedTokens,
@@ -567,5 +587,37 @@ export class ContextArena {
       ...telemetry,
       degradationApplied,
     };
+  }
+
+  private normalizePriority(value: number): number {
+    return Number.isFinite(value) ? Math.trunc(value) : 0;
+  }
+
+  private normalizeReservedBudgetRatio(value: number | undefined): number | undefined {
+    if (value === undefined || !Number.isFinite(value) || value <= 0) {
+      return undefined;
+    }
+    return Math.min(1, value);
+  }
+
+  private resolveEstimatedTokens(estimatedTokens: number | undefined, content: string): number {
+    if (typeof estimatedTokens === "number" && Number.isFinite(estimatedTokens)) {
+      return Math.max(0, Math.trunc(estimatedTokens));
+    }
+    return estimateTokenCount(content);
+  }
+
+  private resolveReservedBudget(
+    ratio: number | undefined,
+    totalTokenBudget: number,
+  ): number | null {
+    if (ratio === undefined) {
+      return null;
+    }
+    const total = Math.max(0, Math.floor(totalTokenBudget));
+    if (total <= 0) {
+      return 0;
+    }
+    return Math.max(1, Math.floor(total * ratio));
   }
 }

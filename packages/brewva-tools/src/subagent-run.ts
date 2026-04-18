@@ -2,8 +2,8 @@ import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-subs
 import { Type, type Static, type TSchema } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 import {
-  appendToolRuntimeSupplementalInjection,
-  canAppendToolRuntimeSupplementalInjection,
+  appendToolRuntimeGuardedSupplementalBlocks,
+  canAppendToolRuntimeGuardedSupplementalBlocks,
 } from "./runtime-internal.js";
 import type {
   AdvisorConsultBrief,
@@ -574,18 +574,23 @@ function deliverSubagentOutcome(input: {
   } = {};
 
   if (includesSupplementalReturn(input.returnMode)) {
-    const decision = appendToolRuntimeSupplementalInjection(
+    const decision = appendToolRuntimeGuardedSupplementalBlocks(
       input.runtime,
       input.sessionId,
-      content,
+      [
+        {
+          familyId: "subagent-outcome",
+          content,
+        },
+      ],
       input.returnScopeId ?? `subagent:${input.delegate}`,
     );
     delivery.supplemental = {
       attempted: true,
-      accepted: decision?.accepted ?? false,
-      truncated: decision?.truncated,
-      finalTokens: decision?.finalTokens,
-      droppedReason: decision?.droppedReason,
+      accepted: decision?.[0]?.accepted ?? false,
+      truncated: decision?.[0]?.truncated,
+      finalTokens: decision?.[0]?.finalTokens,
+      droppedReason: decision?.[0]?.droppedReason,
     };
   }
 
@@ -598,7 +603,7 @@ function validateDeliveryConfiguration(
 ): { ok: true } | { ok: false; message: string } {
   if (
     includesSupplementalReturn(returnMode) &&
-    !canAppendToolRuntimeSupplementalInjection(runtime)
+    !canAppendToolRuntimeGuardedSupplementalBlocks(runtime)
   ) {
     return {
       ok: false,

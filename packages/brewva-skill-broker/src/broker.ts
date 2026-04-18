@@ -1036,9 +1036,16 @@ export function createSkillPromotionContextProvider(input: {
   });
   return {
     source: CONTEXT_SOURCES.skillPromotionDrafts,
+    plane: "advisory_recall",
+    admissionLane: "primary_registry",
     category: "narrative",
     budgetClass: "recall",
-    order: 16,
+    collectionOrder: 16,
+    selectionPriority: 16,
+    readsFrom: ["skillPromotion.cachedDrafts"],
+    continuityCritical: false,
+    profileSelectable: true,
+    preservationPolicy: "truncatable",
     collect: (providerInput) => {
       const activeDrafts = broker
         .listCached()

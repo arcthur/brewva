@@ -72,21 +72,15 @@ export function registerToolRuntimeClearStateListener(
   }
 }
 
-export function appendToolRuntimeSupplementalInjection(
+export function appendToolRuntimeGuardedSupplementalBlocks(
   runtime: BrewvaToolRuntime,
   sessionId: string,
-  content: string,
+  blocks: readonly { familyId: string; content: string }[],
   scopeId?: string,
-): {
-  accepted: boolean;
-  truncated?: boolean;
-  finalTokens?: number;
-  droppedReason?: "hard_limit" | "budget_exhausted";
-} | null {
-  const internalResult = runtime.internal?.appendSupplementalInjection?.(
+) {
+  const internalResult = runtime.internal?.appendGuardedSupplementalBlocks?.(
     sessionId,
-    content,
-    undefined,
+    blocks,
     scopeId,
   );
   if (internalResult) {
@@ -119,13 +113,13 @@ export function resolveToolRuntimeAuthorityTools(
   return runtime?.authority?.tools;
 }
 
-export function canAppendToolRuntimeSupplementalInjection(
+export function canAppendToolRuntimeGuardedSupplementalBlocks(
   runtime: BrewvaToolRuntime | undefined,
 ): boolean {
   const internal = runtime?.internal;
   if (!internal) return false;
   return (
-    typeof Reflect.getOwnPropertyDescriptor(internal, "appendSupplementalInjection")?.value ===
+    typeof Reflect.getOwnPropertyDescriptor(internal, "appendGuardedSupplementalBlocks")?.value ===
     "function"
   );
 }

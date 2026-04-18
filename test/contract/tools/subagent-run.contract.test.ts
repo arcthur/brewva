@@ -284,24 +284,29 @@ describe("subagent_run tool", () => {
   });
 
   test("supports supplemental delivery when explicitly requested", async () => {
-    const appendCalls: Array<{ sessionId: string; text: string; scopeId?: string }> = [];
+    const appendCalls: Array<{
+      sessionId: string;
+      familyId: string;
+      text: string;
+      scopeId?: string;
+    }> = [];
     const tool = createSubagentRunTool({
       runtime: {
         internal: {
-          appendSupplementalInjection(
+          appendGuardedSupplementalBlocks(
             sessionId: string,
-            text: string,
-            _sourceLabel?: string,
+            blocks: readonly { familyId: string; content: string }[],
             scopeId?: string,
           ) {
-            appendCalls.push({ sessionId, text, scopeId });
-            return {
-              accepted: true,
-              text,
-              originalTokens: 12,
-              finalTokens: 12,
-              truncated: false,
-            };
+            return blocks.map(({ familyId, content }) => {
+              appendCalls.push({ sessionId, familyId, text: content, scopeId });
+              return {
+                familyId,
+                accepted: true,
+                finalTokens: 12,
+                truncated: false,
+              };
+            });
           },
         },
         orchestration: {
@@ -353,6 +358,7 @@ describe("subagent_run tool", () => {
     expect(appendCalls).toHaveLength(1);
     expect(appendCalls[0]).toMatchObject({
       sessionId: "session-supplemental",
+      familyId: "subagent-outcome",
       scopeId: "delegation-leaf",
     });
     expect(appendCalls[0]?.text).toContain("Delegation outcome for delegate=advisor");

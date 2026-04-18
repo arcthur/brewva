@@ -530,9 +530,16 @@ export function createNarrativeMemoryContextProvider(input: {
   const plane = getOrCreateNarrativeMemoryPlane(input.runtime);
   return {
     source: CONTEXT_SOURCES.narrativeMemory,
+    plane: "advisory_recall",
+    admissionLane: "primary_registry",
     category: "narrative",
     budgetClass: "recall",
-    order: 14,
+    collectionOrder: 16,
+    selectionPriority: 16,
+    readsFrom: ["narrativeMemory.retrieve"],
+    continuityCritical: false,
+    profileSelectable: true,
+    preservationPolicy: "truncatable",
     collect(providerInput) {
       const retrievals = plane.retrieve(providerInput.promptText, {
         limit: input.maxRecords ?? DEFAULT_CONTEXT_RECORDS,

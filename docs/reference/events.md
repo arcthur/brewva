@@ -550,8 +550,10 @@ categories, scores, and matched reasons. The hosted path may emit another
 receipt in the same turn after `task_set_spec` or other task-state mutations if
 the routed posture changes.
 
-`context_composed` is the coarse hosted composition receipt. Its payload stays
-metrics-only:
+`context_composed` is the coarse hosted composition receipt. Its payload
+remains aggregate-only, but it now records both composition totals and the
+governance split between primary, guarded-supplemental, and composer-policy
+blocks:
 
 - `narrativeBlockCount`
 - `constraintBlockCount`
@@ -560,6 +562,15 @@ metrics-only:
 - `narrativeTokens`
 - `narrativeRatio`
 - `injectionAccepted`
+- `primarySourceBlockCount`
+- `guardedSupplementalBlockCount`
+- `composerPolicyBlockCount`
+- `primarySourceTokens`
+- `guardedSupplementalTokens`
+- `composerPolicyBlockTokens`
+- `guardedSupplementalFamilies[]`
+  - each entry carries `familyId`, `blockCount`, `tokenCount`, and
+    `laneReason`
 
 It does not carry prompt hashes, provider cache counters, or the composed text
 itself.

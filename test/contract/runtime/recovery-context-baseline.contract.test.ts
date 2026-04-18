@@ -42,18 +42,33 @@ describe("recovery context baseline integration", () => {
 
     expect(runtime.inspect.context.listProviders()).toEqual(
       expect.arrayContaining([
-        {
+        expect.objectContaining({
           source: CONTEXT_SOURCES.historyViewBaseline,
+          plane: "history_view",
+          admissionLane: "primary_registry",
           category: "narrative",
           budgetClass: "core",
-          order: 14,
-        },
-        {
+          collectionOrder: 14,
+          selectionPriority: 14,
+          continuityCritical: true,
+          profileSelectable: true,
+          preservationPolicy: "non_truncatable",
+          reservedBudgetRatio: 0.3,
+          readsFrom: ["readModel.historyViewBaseline"],
+        }),
+        expect.objectContaining({
           source: CONTEXT_SOURCES.recoveryWorkingSet,
+          plane: "working_state",
+          admissionLane: "primary_registry",
           category: "constraint",
           budgetClass: "working",
-          order: 45,
-        },
+          collectionOrder: 45,
+          selectionPriority: 45,
+          continuityCritical: true,
+          profileSelectable: true,
+          preservationPolicy: "truncatable",
+          readsFrom: ["readModel.recoveryWorkingSet"],
+        }),
       ]),
     );
   });
@@ -563,5 +578,75 @@ describe("recovery context baseline integration", () => {
         degradedReason: "exact_history_over_budget",
       }),
     );
+  });
+
+  test("keeps recovery working-set admission aligned with inspect when the exact-history fallback is over budget", async () => {
+    const config = createConfig();
+    setStaticContextInjectionBudget(config, 48);
+    const runtime = new BrewvaRuntime({
+      cwd: createTestWorkspace("recovery-context-exact-history-admission-parity"),
+      config,
+    });
+    const sessionId = "recovery-context-exact-history-admission-parity";
+
+    runtime.authority.task.setSpec(sessionId, {
+      schema: "brewva.task.v1",
+      goal: "Resume only when the baseline remains admissible",
+    });
+    recordRuntimeEvent(runtime, {
+      sessionId,
+      turn: 1,
+      type: "turn_input_recorded",
+      payload: {
+        turnId: "turn-1",
+        trigger: "user_submit",
+        promptText: "x".repeat(2_000),
+      } as Record<string, unknown>,
+    });
+    recordRuntimeEvent(runtime, {
+      sessionId,
+      turn: 1,
+      type: "turn_render_committed",
+      payload: {
+        turnId: "turn-1",
+        attemptId: "attempt-1",
+        status: "completed",
+        assistantText: "y".repeat(2_000),
+        toolOutputs: [],
+      } as Record<string, unknown>,
+    });
+    recordRuntimeEvent(runtime, {
+      sessionId,
+      turn: 1,
+      type: "session_turn_transition",
+      payload: {
+        reason: "compaction_retry",
+        status: "entered",
+        sequence: 1,
+        family: "recovery",
+        attempt: 1,
+        sourceEventId: "ev-source",
+        sourceEventType: "session_compact",
+        error: null,
+        breakerOpen: false,
+        model: null,
+      } as Record<string, unknown>,
+    });
+
+    const injected = await runtime.maintain.context.buildInjection(
+      sessionId,
+      "resume under reserved baseline pressure",
+      { tokens: 16, contextWindow: 4_000, percent: 0.004 },
+      { injectionScopeId: "leaf-parity" },
+    );
+
+    expect(runtime.inspect.recovery.getPosture(sessionId)).toEqual(
+      expect.objectContaining({
+        mode: "diagnostic_only",
+        degradedReason: "exact_history_over_budget",
+      }),
+    );
+    expect(runtime.inspect.recovery.getWorkingSet(sessionId)).toBeUndefined();
+    expect(injected.text).not.toContain("[RecoveryWorkingSet]");
   });
 });

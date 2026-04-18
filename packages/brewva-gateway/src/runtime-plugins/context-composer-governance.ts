@@ -9,9 +9,12 @@ const CHARS_PER_TOKEN = 3.5;
 export interface GovernanceContextBlock {
   id: string;
   category: ContextInjectionCategory;
+  provenance: "primary_source" | "guarded_supplemental" | "composer_policy_block";
   content: string;
   estimatedTokens: number;
   compactContent?: string;
+  familyId?: string;
+  laneReason?: string;
 }
 
 export interface GovernanceContextMetrics {
@@ -60,8 +63,11 @@ function rebuildBlock(
   return {
     id: block.id,
     category: block.category,
+    provenance: block.provenance,
     content: normalized,
     estimatedTokens: estimateTokens(normalized),
+    familyId: block.familyId,
+    laneReason: block.laneReason,
     compactContent:
       normalizedCompact && normalizedCompact.length > 0 && normalizedCompact !== normalized
         ? normalizedCompact

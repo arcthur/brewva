@@ -351,6 +351,7 @@ export function buildReadPathRecoveryBlocks(
     {
       id: "read-path-recovery",
       category: "constraint",
+      provenance: "composer_policy_block",
       content,
       estimatedTokens: 0,
     },

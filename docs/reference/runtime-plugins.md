@@ -105,12 +105,30 @@ available by default while still respecting an explicit
 `contextProfile` is the current hosted context-source narrowing switch:
 
 - `minimal`
-  - passes `sourceAllowlist={historyViewBaseline,recoveryWorkingSet}`
+  - compiles `sourceSelection` from current provider descriptors where
+    `profileSelectable=true` and `continuityCritical=true`
+  - today this resolves to
+    `sourceSelection={historyViewBaseline,recoveryWorkingSet}`
 - `standard`
-  - passes `sourceAllowlist={historyViewBaseline,runtimeStatus,taskState,recoveryWorkingSet,toolOutputsDistilled,projectionWorking}`
+  - compiles `sourceSelection` from current provider descriptors where
+    `profileSelectable=true` and `plane in {history_view, working_state}`
+  - today this resolves to
+    `sourceSelection={historyViewBaseline,runtimeStatus,taskState,recoveryWorkingSet,toolOutputsDistilled,projectionWorking}`
 - `full`
   - disables source narrowing and lets the kernel provider registry consider
     the full admitted source set
+
+These are explicit named selection policies over the primary-source provider
+contract. They are not a second hard-coded source registry, and they are not an
+open-ended automatic expansion from one metadata field.
+
+The stable rule is:
+
+- provider descriptors remain the only runtime-owned metadata truth
+- each hosted profile compiles `sourceSelection` from those descriptors using a
+  documented predicate
+- adding a new provider affects `minimal` or `standard` only when that
+  provider's descriptor satisfies the named policy
 
 When `contextProfile` is omitted, the hosted pipeline behaves like `full` for
 source selection: it does not install a profile allowlist ahead of
@@ -321,13 +339,13 @@ hidden-tail composition blocks such as `[ContextCompactionGate]` and
 
 Important boundary:
 
-- `contextProfile` / `sourceAllowlist` narrows only kernel provider collection
+- `contextProfile` / `sourceSelection` narrows only kernel provider collection
   before `runtime.maintain.context.buildInjection(...)`
 - hosted supplemental and recovery blocks, including operational diagnostics,
   delegation-outcome surfacing, read-path recovery, skill-routing availability,
   skill recommendations, and same-turn supplemental returns, are appended after
   admission by the hosted pipeline and are not suppressed by that provider
-  allowlist
+  selection
 
 Transient outbound reduction is intentionally not a compaction authority. It is
 a cache-class request-copy optimization: it may clear older large tool-result

@@ -1374,9 +1374,16 @@ export function createOptimizationContinuityContextProvider(input: {
   });
   return {
     source: CONTEXT_SOURCES.optimizationContinuity,
+    plane: "advisory_recall",
+    admissionLane: "primary_registry",
     category: "narrative",
     budgetClass: "recall",
-    order: 17,
+    collectionOrder: 19,
+    selectionPriority: 19,
+    readsFrom: ["optimizationContinuity.retrieve"],
+    continuityCritical: false,
+    profileSelectable: true,
+    preservationPolicy: "truncatable",
     collect: (providerInput) => {
       const lineages = plane.list({
         limit: Math.max(1, input.maxLineages ?? DEFAULT_MAX_RETRIEVAL),

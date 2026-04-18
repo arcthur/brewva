@@ -33,9 +33,16 @@ export function createRecallContextProvider(input: {
   const broker = getOrCreateRecallBroker(input.runtime);
   return {
     source: CONTEXT_SOURCES.recallBroker,
+    plane: "advisory_recall",
+    admissionLane: "primary_registry",
     category: "narrative",
     budgetClass: "recall",
-    order: 48,
+    collectionOrder: 48,
+    selectionPriority: 48,
+    readsFrom: ["recallBroker.search"],
+    continuityCritical: false,
+    profileSelectable: true,
+    preservationPolicy: "truncatable",
     collect: (providerInput) => {
       const search = broker.search({
         sessionId: providerInput.sessionId,

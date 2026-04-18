@@ -5,7 +5,9 @@ import {
   readContextEvidenceRecords,
 } from "@brewva/brewva-gateway/runtime-plugins";
 import {
+  CONTEXT_SOURCES,
   TOOL_READ_PATH_GATE_ARMED_EVENT_TYPE,
+  type ContextSourceProviderDescriptor,
   type ContextBudgetUsage,
   type ContextCompactionGateStatus,
 } from "@brewva/brewva-runtime";
@@ -94,6 +96,285 @@ function installRuntimeForensicsSkill(runtime: ReturnType<typeof createRuntimeFi
 }
 
 describe("hosted context injection pipeline", () => {
+  test("derives the minimal profile from current provider descriptors", async () => {
+    let providers: ContextSourceProviderDescriptor[] = [
+      {
+        source: CONTEXT_SOURCES.historyViewBaseline,
+        plane: "history_view",
+        admissionLane: "primary_registry",
+        category: "narrative",
+        budgetClass: "core",
+        collectionOrder: 14,
+        selectionPriority: 14,
+        readsFrom: ["readModel.historyViewBaseline"],
+        continuityCritical: true,
+        profileSelectable: true,
+        preservationPolicy: "non_truncatable",
+        reservedBudgetRatio: 0.3,
+      },
+      {
+        source: CONTEXT_SOURCES.recoveryWorkingSet,
+        plane: "working_state",
+        admissionLane: "primary_registry",
+        category: "constraint",
+        budgetClass: "working",
+        collectionOrder: 45,
+        selectionPriority: 45,
+        readsFrom: ["readModel.recoveryWorkingSet"],
+        continuityCritical: true,
+        profileSelectable: true,
+        preservationPolicy: "truncatable",
+      },
+      {
+        source: CONTEXT_SOURCES.runtimeStatus,
+        plane: "working_state",
+        admissionLane: "primary_registry",
+        category: "narrative",
+        budgetClass: "core",
+        collectionOrder: 20,
+        selectionPriority: 20,
+        readsFrom: ["view.runtimeStatus"],
+        continuityCritical: false,
+        profileSelectable: true,
+        preservationPolicy: "truncatable",
+      },
+    ];
+    const sourceSelections: string[][] = [];
+    const runtime = createRuntimeFixture({
+      context: {
+        observeUsage: () => undefined,
+        getCompactionGateStatus: () => ({
+          required: false,
+          reason: null,
+          pressure: {
+            level: "low",
+            usageRatio: 0.2,
+            hardLimitRatio: 0.95,
+            compactionThresholdRatio: 0.8,
+          },
+          recentCompaction: false,
+          windowTurns: 0,
+          lastCompactionTurn: null,
+          turnsSinceCompaction: null,
+        }),
+        getPendingCompactionReason: () => null,
+        listProviders: () => providers,
+        buildInjection: async (
+          _sessionId: string,
+          _prompt: string,
+          _usage: unknown,
+          options?: {
+            sourceSelection?: ReadonlySet<string>;
+          },
+        ) => {
+          sourceSelections.push([...(options?.sourceSelection ?? new Set<string>())].toSorted());
+          return {
+            text: "",
+            entries: [],
+            accepted: false,
+            originalTokens: 0,
+            finalTokens: 0,
+            truncated: false,
+          };
+        },
+      },
+    });
+    const telemetry = createHostedContextTelemetry(runtime);
+    const { api } = createMockRuntimePluginApi();
+    const pipeline = createHostedContextInjectionPipeline(
+      api,
+      runtime,
+      telemetry,
+      {
+        getTurnIndex: () => 2,
+        setLastRuntimeGateRequired: () => undefined,
+      },
+      { contextProfile: "minimal" },
+    );
+
+    await pipeline.beforeAgentStart({
+      sessionId: "s-minimal-profile",
+      sessionManager: {
+        getLeafId: () => "leaf-minimal",
+      },
+      prompt: "continue",
+      systemPrompt: "base prompt",
+      usage: {
+        tokens: 100,
+        contextWindow: 4_000,
+        percent: 0.025,
+      },
+    });
+
+    expect(sourceSelections).toEqual([
+      [CONTEXT_SOURCES.historyViewBaseline, CONTEXT_SOURCES.recoveryWorkingSet].toSorted(),
+    ]);
+  });
+
+  test("recomputes the standard profile from provider descriptors on each turn", async () => {
+    let providers: ContextSourceProviderDescriptor[] = [
+      {
+        source: CONTEXT_SOURCES.historyViewBaseline,
+        plane: "history_view",
+        admissionLane: "primary_registry",
+        category: "narrative",
+        budgetClass: "core",
+        collectionOrder: 14,
+        selectionPriority: 14,
+        readsFrom: ["readModel.historyViewBaseline"],
+        continuityCritical: true,
+        profileSelectable: true,
+        preservationPolicy: "non_truncatable",
+        reservedBudgetRatio: 0.3,
+      },
+      {
+        source: CONTEXT_SOURCES.runtimeStatus,
+        plane: "working_state",
+        admissionLane: "primary_registry",
+        category: "narrative",
+        budgetClass: "core",
+        collectionOrder: 20,
+        selectionPriority: 20,
+        readsFrom: ["view.runtimeStatus"],
+        continuityCritical: false,
+        profileSelectable: true,
+        preservationPolicy: "truncatable",
+      },
+      {
+        source: CONTEXT_SOURCES.agentMemory,
+        plane: "contract_core",
+        admissionLane: "primary_registry",
+        category: "narrative",
+        budgetClass: "core",
+        collectionOrder: 13,
+        selectionPriority: 13,
+        readsFrom: ["workspace.agentMemory"],
+        continuityCritical: false,
+        profileSelectable: true,
+        preservationPolicy: "truncatable",
+      },
+      {
+        source: "custom.hidden-working",
+        plane: "working_state",
+        admissionLane: "primary_registry",
+        category: "diagnostic",
+        budgetClass: "working",
+        collectionOrder: 60,
+        selectionPriority: 60,
+        readsFrom: ["test.hidden"],
+        continuityCritical: false,
+        profileSelectable: false,
+        preservationPolicy: "truncatable",
+      },
+    ];
+    const sourceSelections: string[][] = [];
+    const runtime = createRuntimeFixture({
+      context: {
+        observeUsage: () => undefined,
+        getCompactionGateStatus: () => ({
+          required: false,
+          reason: null,
+          pressure: {
+            level: "low",
+            usageRatio: 0.2,
+            hardLimitRatio: 0.95,
+            compactionThresholdRatio: 0.8,
+          },
+          recentCompaction: false,
+          windowTurns: 0,
+          lastCompactionTurn: null,
+          turnsSinceCompaction: null,
+        }),
+        getPendingCompactionReason: () => null,
+        listProviders: () => providers,
+        buildInjection: async (
+          _sessionId: string,
+          _prompt: string,
+          _usage: unknown,
+          options?: {
+            sourceSelection?: ReadonlySet<string>;
+          },
+        ) => {
+          sourceSelections.push([...(options?.sourceSelection ?? new Set<string>())].toSorted());
+          return {
+            text: "",
+            entries: [],
+            accepted: false,
+            originalTokens: 0,
+            finalTokens: 0,
+            truncated: false,
+          };
+        },
+      },
+    });
+    const telemetry = createHostedContextTelemetry(runtime);
+    const { api } = createMockRuntimePluginApi();
+    const pipeline = createHostedContextInjectionPipeline(
+      api,
+      runtime,
+      telemetry,
+      {
+        getTurnIndex: () => 4,
+        setLastRuntimeGateRequired: () => undefined,
+      },
+      { contextProfile: "standard" },
+    );
+
+    await pipeline.beforeAgentStart({
+      sessionId: "s-standard-profile",
+      sessionManager: {
+        getLeafId: () => "leaf-standard",
+      },
+      prompt: "continue",
+      systemPrompt: "base prompt",
+      usage: {
+        tokens: 100,
+        contextWindow: 4_000,
+        percent: 0.025,
+      },
+    });
+
+    providers = [
+      ...providers,
+      {
+        source: CONTEXT_SOURCES.projectionWorking,
+        plane: "working_state",
+        admissionLane: "primary_registry",
+        category: "narrative",
+        budgetClass: "working",
+        collectionOrder: 50,
+        selectionPriority: 50,
+        readsFrom: ["view.projectionWorking"],
+        continuityCritical: false,
+        profileSelectable: true,
+        preservationPolicy: "truncatable",
+      },
+    ];
+
+    await pipeline.beforeAgentStart({
+      sessionId: "s-standard-profile",
+      sessionManager: {
+        getLeafId: () => "leaf-standard-2",
+      },
+      prompt: "continue again",
+      systemPrompt: "base prompt",
+      usage: {
+        tokens: 120,
+        contextWindow: 4_000,
+        percent: 0.03,
+      },
+    });
+
+    expect(sourceSelections).toEqual([
+      [CONTEXT_SOURCES.historyViewBaseline, CONTEXT_SOURCES.runtimeStatus].toSorted(),
+      [
+        CONTEXT_SOURCES.historyViewBaseline,
+        CONTEXT_SOURCES.projectionWorking,
+        CONTEXT_SOURCES.runtimeStatus,
+      ].toSorted(),
+    ]);
+  });
+
   test("fails closed on a hard gate without calling buildInjection", async () => {
     const recordedTypes: string[] = [];
     let buildInjectionCalls = 0;

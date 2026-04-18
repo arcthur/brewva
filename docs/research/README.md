@@ -124,6 +124,7 @@ None currently.
 - `docs/research/promoted/rfc-boundary-first-subtraction-and-model-native-recovery.md`
 - `docs/research/promoted/rfc-boundary-policy-credential-vault-and-loop-guard.md`
 - `docs/research/promoted/rfc-capability-compression-and-output-distillation.md`
+- `docs/research/promoted/rfc-context-dependency-layering-and-admission-lanes.md`
 - `docs/research/promoted/rfc-default-path-re-hardening-and-advisory-surface-narrowing.md`
 - `docs/research/promoted/rfc-derived-session-wire-schema-and-frontend-session-protocol.md`
 - `docs/research/promoted/rfc-durability-taxonomy-and-rebuildable-surface-narrowing.md`

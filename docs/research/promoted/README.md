@@ -28,6 +28,7 @@ refresh the pointer summary and `Last reviewed` metadata here.
 - [`rfc-boundary-first-subtraction-and-model-native-recovery.md`](./rfc-boundary-first-subtraction-and-model-native-recovery.md)
 - [`rfc-boundary-policy-credential-vault-and-loop-guard.md`](./rfc-boundary-policy-credential-vault-and-loop-guard.md)
 - [`rfc-capability-compression-and-output-distillation.md`](./rfc-capability-compression-and-output-distillation.md)
+- [`rfc-context-dependency-layering-and-admission-lanes.md`](./rfc-context-dependency-layering-and-admission-lanes.md)
 - [`rfc-default-path-re-hardening-and-advisory-surface-narrowing.md`](./rfc-default-path-re-hardening-and-advisory-surface-narrowing.md)
 - [`rfc-durability-taxonomy-and-rebuildable-surface-narrowing.md`](./rfc-durability-taxonomy-and-rebuildable-surface-narrowing.md)
 - [`rfc-iteration-facts-and-model-native-optimization-protocols.md`](./rfc-iteration-facts-and-model-native-optimization-protocols.md)

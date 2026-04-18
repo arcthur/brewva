@@ -24,9 +24,27 @@ describe("hosted context telemetry", () => {
     const telemetry = createHostedContextTelemetry(runtime);
     const composed: ContextComposerResult = {
       blocks: [
-        { id: "narrative-1", category: "narrative", content: "n", estimatedTokens: 10 },
-        { id: "constraint-1", category: "constraint", content: "c", estimatedTokens: 4 },
-        { id: "diagnostic-1", category: "diagnostic", content: "d", estimatedTokens: 2 },
+        {
+          id: "narrative-1",
+          category: "narrative",
+          provenance: "primary_source",
+          content: "n",
+          estimatedTokens: 10,
+        },
+        {
+          id: "constraint-1",
+          category: "constraint",
+          provenance: "composer_policy_block",
+          content: "c",
+          estimatedTokens: 4,
+        },
+        {
+          id: "diagnostic-1",
+          category: "diagnostic",
+          provenance: "guarded_supplemental",
+          content: "d",
+          estimatedTokens: 2,
+        },
       ],
       content: "payload",
       metrics: {
@@ -59,6 +77,20 @@ describe("hosted context telemetry", () => {
         narrativeTokens: 10,
         narrativeRatio: 0.625,
         injectionAccepted: true,
+        primarySourceBlockCount: 1,
+        guardedSupplementalBlockCount: 1,
+        composerPolicyBlockCount: 1,
+        primarySourceTokens: 10,
+        guardedSupplementalTokens: 2,
+        composerPolicyBlockTokens: 4,
+        guardedSupplementalFamilies: [
+          {
+            familyId: "diagnostic-1",
+            blockCount: 1,
+            tokenCount: 2,
+            laneReason: "unspecified",
+          },
+        ],
       },
     });
     expect(recorded[0]?.timestamp).toEqual(expect.any(Number));

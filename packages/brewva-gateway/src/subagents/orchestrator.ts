@@ -327,9 +327,14 @@ function deliverDelegationOutcome(input: {
   });
   let supplementalAppended = false;
   if (input.delivery.returnMode === "supplemental") {
-    input.runtime.maintain.context.appendSupplementalInjection(
+    input.runtime.maintain.context.appendGuardedSupplementalBlocks(
       input.sessionId,
-      content,
+      [
+        {
+          familyId: "subagent-outcome",
+          content,
+        },
+      ],
       undefined,
       input.delivery.returnScopeId ?? `subagent:${input.delegate}`,
     );

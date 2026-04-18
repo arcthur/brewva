@@ -1,7 +1,7 @@
 import {
-  CONTEXT_SOURCES,
   SKILL_RECOMMENDATION_DERIVED_EVENT_TYPE,
   type BrewvaHostedRuntimePort,
+  type ContextSourceProviderDescriptor,
   type ContextBudgetUsage,
 } from "@brewva/brewva-runtime";
 import { type ContextInjectionEntry, recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
@@ -87,26 +87,32 @@ export interface HostedContextInjectionPipelineOptions {
   contextProfile?: "minimal" | "standard" | "full";
 }
 
-const CONTEXT_PROFILES = {
-  minimal: [CONTEXT_SOURCES.historyViewBaseline, CONTEXT_SOURCES.recoveryWorkingSet] as const,
-  standard: [
-    CONTEXT_SOURCES.historyViewBaseline,
-    CONTEXT_SOURCES.runtimeStatus,
-    CONTEXT_SOURCES.taskState,
-    CONTEXT_SOURCES.recoveryWorkingSet,
-    CONTEXT_SOURCES.toolOutputsDistilled,
-    CONTEXT_SOURCES.projectionWorking,
-  ] as const,
-  full: null,
-} as const;
+function providerSelectedByHostedProfile(
+  descriptor: ContextSourceProviderDescriptor,
+  profile: Exclude<HostedContextInjectionPipelineOptions["contextProfile"], undefined | "full">,
+): boolean {
+  if (!descriptor.profileSelectable) {
+    return false;
+  }
+  if (profile === "minimal") {
+    return descriptor.continuityCritical;
+  }
+  return descriptor.plane === "history_view" || descriptor.plane === "working_state";
+}
 
-function resolveContextSourceAllowlist(
+function resolveContextSourceSelection(
+  runtime: BrewvaHostedRuntimePort,
   profile: HostedContextInjectionPipelineOptions["contextProfile"],
 ): ReadonlySet<string> | undefined {
   if (!profile || profile === "full") {
     return undefined;
   }
-  return new Set(CONTEXT_PROFILES[profile]);
+  return new Set(
+    runtime.inspect.context
+      .listProviders()
+      .filter((descriptor) => providerSelectedByHostedProfile(descriptor, profile))
+      .map((descriptor) => descriptor.source),
+  );
 }
 
 function createContextComposerRuntime(
@@ -145,7 +151,7 @@ async function resolveContextInjection(
     prompt: string;
     usage?: ContextBudgetUsage;
     injectionScopeId?: string;
-    sourceAllowlist?: ReadonlySet<string>;
+    sourceSelection?: ReadonlySet<string>;
     referenceContextDigest?: string | null;
   },
 ): Promise<{
@@ -158,7 +164,7 @@ async function resolveContextInjection(
 }> {
   return runtime.maintain.context.buildInjection(input.sessionId, input.prompt, input.usage, {
     injectionScopeId: input.injectionScopeId,
-    sourceAllowlist: input.sourceAllowlist,
+    sourceSelection: input.sourceSelection,
     referenceContextDigest: input.referenceContextDigest ?? null,
   });
 }
@@ -273,6 +279,7 @@ function buildSkillRecommendationBlocks(
     {
       id: "skill-first-policy",
       category: "constraint",
+      provenance: "composer_policy_block",
       content,
       estimatedTokens: 0,
     },
@@ -303,6 +310,7 @@ function buildSkillRoutingAvailabilityBlocks(
     {
       id: "skill-routing-availability",
       category: "diagnostic",
+      provenance: "composer_policy_block",
       content: lines.join("\n"),
       estimatedTokens: 0,
     },
@@ -357,7 +365,6 @@ export function createHostedContextInjectionPipeline(
   options: HostedContextInjectionPipelineOptions = {},
 ): HostedContextInjectionPipeline {
   const contextComposerRuntime = createContextComposerRuntime(runtime, options.delegationStore);
-  const sourceAllowlist = resolveContextSourceAllowlist(options.contextProfile);
 
   return {
     async beforeAgentStart(input) {
@@ -455,7 +462,7 @@ export function createHostedContextInjectionPipeline(
         prompt: input.prompt,
         usage: input.usage,
         injectionScopeId,
-        sourceAllowlist,
+        sourceSelection: resolveContextSourceSelection(runtime, options.contextProfile),
         referenceContextDigest: promptStabilitySeed.stablePrefixHash,
       });
 

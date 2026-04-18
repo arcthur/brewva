@@ -2,11 +2,7 @@ import {
   createHostedTurnPipeline,
   registerContextTransform,
 } from "@brewva/brewva-gateway/runtime-plugins";
-import {
-  CONTEXT_SOURCES,
-  CONTEXT_SOURCE_BUDGET_CLASSES,
-  type ContextInjectionBudgetClass,
-} from "@brewva/brewva-runtime";
+import { CONTEXT_SOURCES } from "@brewva/brewva-runtime";
 import type { ContextInjectionEntry } from "@brewva/brewva-runtime/internal";
 import {
   createMockRuntimePluginApi,
@@ -28,20 +24,37 @@ export {
   registerContextTransform,
 };
 
+function resolveBudgetClass(source: string): "core" | "working" | "recall" {
+  switch (source) {
+    case CONTEXT_SOURCES.recoveryWorkingSet:
+    case CONTEXT_SOURCES.toolOutputsDistilled:
+    case CONTEXT_SOURCES.projectionWorking:
+      return "working";
+    case CONTEXT_SOURCES.recallBroker:
+    case CONTEXT_SOURCES.narrativeMemory:
+    case CONTEXT_SOURCES.deliberationMemory:
+    case CONTEXT_SOURCES.optimizationContinuity:
+    case CONTEXT_SOURCES.skillPromotionDrafts:
+    case CONTEXT_SOURCES.skillRouting:
+      return "recall";
+    default:
+      return "core";
+  }
+}
+
 export function makeInjectedEntry(
   source: string,
   id: string,
   content: string,
   estimatedTokens = 8,
-  budgetClass?: ContextInjectionBudgetClass,
+  budgetClass?: "core" | "working" | "recall",
 ): ContextInjectionEntry {
-  const resolvedBudgetClass =
-    budgetClass ??
-    (CONTEXT_SOURCE_BUDGET_CLASSES as Record<string, ContextInjectionBudgetClass>)[source] ??
-    "core";
+  const resolvedBudgetClass = budgetClass ?? resolveBudgetClass(source);
   return {
     category: "narrative",
     budgetClass: resolvedBudgetClass,
+    selectionPriority: 10,
+    preservationPolicy: "truncatable",
     source,
     id,
     content,

@@ -16,9 +16,10 @@
 
 ## Objective
 
-Describe how Brewva executes context admission, pressure evaluation, the
-compaction gate, hosted auto-compaction, and post-compaction turn recovery
-through one explicit path.
+Describe how Brewva executes deterministic primary context admission, explicit
+post-primary hosted context additions, pressure evaluation, the compaction gate,
+hosted auto-compaction, and post-compaction turn recovery through one reviewable
+flow.
 
 ## In Scope
 
@@ -59,31 +60,41 @@ flowchart TD
 
 1. At turn start, the runtime initializes turn-local budget state and clears
    leftover reservations from the previous turn.
-2. Context providers enter the same admission path; the runtime builds one
-   admitted injection plan for the turn.
-3. `ContextPressureService` computes gate status from usage ratio, hard limit,
+2. Primary context providers enter one deterministic registry-and-arena
+   admission path; the runtime builds one admitted injection plan for the turn.
+3. Hosted logic may then append family-tagged guarded supplemental blocks under
+   headroom governance, and the composer may synthesize provenance-tagged policy
+   blocks without back-modeling them as sources.
+4. `ContextPressureService` computes gate status from usage ratio, hard limit,
    and the recent-compaction window.
-4. Under critical pressure without recent compaction, every tool except
+5. Under critical pressure without recent compaction, every tool except
    `session_compact` and the minimal context-critical allowlist is blocked by
    the gate.
-5. The hosted path then decides whether to:
+6. The hosted path then decides whether to:
    - emit advisory state only
    - defer auto-compaction because the agent is active
    - trigger auto-compaction while the session is idle
-6. If pressure is elevated but still below hard-gate posture, the hosted path
+7. If pressure is elevated but still below hard-gate posture, the hosted path
    may clear older large tool-result bodies on the outbound provider request
    copy before the provider call is sent.
-7. After `session_compact` completes, the runtime commits the durable
+8. After `session_compact` completes, the runtime commits the durable
    compaction receipt, clears the gate, and resumes the interrupted turn when
    required.
-8. If a durable `reasoning_revert` arrives, hosted recovery rebuilds the active
+9. If a durable `reasoning_revert` arrives, hosted recovery rebuilds the active
    branch from the target checkpoint and resumes from that surviving context
    instead of keeping superseded branch history visible to the model.
 
 ## Execution Semantics
 
-- context admission is deterministic and single-path; runtime plugins may
-  compose admitted entries but may not bypass admission
+- primary source admission is deterministic and single-path; runtime plugins may
+  not bypass it or reintroduce pseudo-sources through side channels
+- hosted `contextProfile` narrows only primary provider collection by compiling
+  `sourceSelection` from primary-source descriptors
+- guarded supplemental families are explicit post-primary exception-lane blocks:
+  - they stay headroom-governed
+  - they do not participate in provider selection or arena budget-class floors
+- composer policy blocks are provenance-tagged render artifacts rather than
+  source-typed admission objects
 - the effective compaction threshold is derived from context window, threshold
   floor / ceiling, and headroom policy
 - those live ratios drive turn-scoped gate and advisory guidance; the hosted

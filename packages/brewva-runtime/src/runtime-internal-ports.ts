@@ -81,17 +81,17 @@ export interface BrewvaToolRuntimeInternalPort {
   onClearState(listener: (sessionId: string) => void): void;
   resolveCredentialBindings(sessionId: string, toolName: string): Record<string, string>;
   resolveSandboxApiKey(sessionId: string): string | undefined;
-  appendSupplementalInjection(
+  appendGuardedSupplementalBlocks(
     sessionId: string,
-    content: string,
-    sourceLabel?: string,
+    blocks: readonly { familyId: string; content: string }[],
     scopeId?: string,
-  ): {
+  ): Array<{
+    familyId: string;
     accepted: boolean;
     truncated?: boolean;
     finalTokens?: number;
     droppedReason?: "hard_limit" | "budget_exhausted";
-  };
+  }>;
 }
 
 export function createSchedulerIngressPort(runtime: BrewvaRuntime): BrewvaSchedulerIngressPort {
@@ -128,20 +128,16 @@ export function createToolRuntimeInternalPort(
     onClearState: runtime.maintain.session.onClearState,
     resolveCredentialBindings: runtime.maintain.session.resolveCredentialBindings,
     resolveSandboxApiKey: runtime.maintain.session.resolveSandboxApiKey,
-    appendSupplementalInjection: (sessionId, content, _sourceLabel, scopeId) => {
-      const result = runtime.maintain.context.appendSupplementalInjection(
-        sessionId,
-        content,
-        undefined,
-        scopeId,
-      );
-      return {
-        accepted: result.accepted,
-        truncated: result.truncated,
-        finalTokens: result.finalTokens,
-        droppedReason: result.droppedReason,
-      };
-    },
+    appendGuardedSupplementalBlocks: (sessionId, blocks, scopeId) =>
+      runtime.maintain.context
+        .appendGuardedSupplementalBlocks(sessionId, blocks, undefined, scopeId)
+        .map((result) => ({
+          familyId: result.familyId,
+          accepted: result.accepted,
+          truncated: result.truncated,
+          finalTokens: result.finalTokens,
+          droppedReason: result.droppedReason,
+        })),
   };
 }
 

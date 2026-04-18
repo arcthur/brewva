@@ -9,16 +9,17 @@ import {
 } from "./config/loader.js";
 import { resolveWorkspaceRootDir } from "./config/paths.js";
 import { ContextBudgetManager } from "./context/budget.js";
+import {
+  resolveHistoryViewBaselineView,
+  resolveRecoveryWorkingSetView,
+} from "./context/dependency-views.js";
 import { normalizeAgentId } from "./context/identity.js";
 import { ContextInjectionCollector, type ContextInjectionEntry } from "./context/injection.js";
 import {
   type ContextSourceProvider,
   type ContextSourceProviderDescriptor,
 } from "./context/provider.js";
-import {
-  resolveHistoryViewBaselineStateFromKernel,
-  resolveRecoveryContextReadModels,
-} from "./context/read-models.js";
+import { CONTEXT_SOURCES } from "./context/sources.js";
 import type { ToolOutputDistillationEntry } from "./context/tool-output-distilled.js";
 import type {
   ContextCompactionReason,
@@ -394,19 +395,23 @@ interface BrewvaRuntimeMethodGroups {
       finalTokens: number;
       truncated: boolean;
     }>;
-    appendSupplementalInjection(
+    appendGuardedSupplementalBlocks(
       sessionId: string,
-      inputText: string,
+      blocks: readonly {
+        familyId: string;
+        content: string;
+      }[],
       usage?: ContextBudgetUsage,
       injectionScopeId?: string,
-    ): {
+    ): Array<{
+      familyId: string;
       accepted: boolean;
       text: string;
       originalTokens: number;
       finalTokens: number;
       truncated: boolean;
       droppedReason?: "hard_limit" | "budget_exhausted";
-    };
+    }>;
     checkAndRequestCompaction(sessionId: string, usage: ContextBudgetUsage | undefined): boolean;
     requestCompaction(sessionId: string, reason: ContextCompactionReason): void;
     getPendingCompactionReason(sessionId: string): ContextCompactionReason | null;
@@ -830,7 +835,7 @@ export interface BrewvaMaintenancePort {
     | "registerProvider"
     | "unregisterProvider"
     | "buildInjection"
-    | "appendSupplementalInjection"
+    | "appendGuardedSupplementalBlocks"
     | "checkAndRequestCompaction"
     | "requestCompaction"
   >;
@@ -1165,10 +1170,10 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
         listProviders: () => this.contextService.listContextSourceProviders(),
         buildInjection: (sessionId, prompt, usage, options) =>
           this.contextService.buildContextInjection(sessionId, prompt, usage, options),
-        appendSupplementalInjection: (sessionId, inputText, usage, injectionScopeId) =>
-          this.contextService.appendSupplementalContextInjection(
+        appendGuardedSupplementalBlocks: (sessionId, blocks, usage, injectionScopeId) =>
+          this.contextService.appendGuardedSupplementalBlocks(
             sessionId,
-            inputText,
+            blocks,
             usage,
             injectionScopeId,
           ),
@@ -1557,7 +1562,7 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
           "registerProvider",
           "unregisterProvider",
           "buildInjection",
-          "appendSupplementalInjection",
+          "appendGuardedSupplementalBlocks",
           "checkAndRequestCompaction",
           "requestCompaction",
         ] as const),
@@ -1585,10 +1590,11 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
   }
 
   private resolveHistoryViewBaselineState(sessionId: string) {
-    return resolveHistoryViewBaselineStateFromKernel(this.kernel, {
+    return resolveHistoryViewBaselineView(this.kernel, {
       sessionId,
       usage: this.contextService.getContextUsage(sessionId),
       referenceContextDigest: this.sessionState.getPromptStability(sessionId)?.stablePrefixHash,
+      reservedBudgetRatio: this.getHistoryViewBaselineReservedBudgetRatio(),
     });
   }
 
@@ -1599,20 +1605,29 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
 
   private getRecoveryPosture(sessionId: string): RecoveryPostureSnapshot {
     this.sessionLifecycleService.ensureHydrated(sessionId);
-    return resolveRecoveryContextReadModels(this.kernel, {
+    return resolveRecoveryWorkingSetView(this.kernel, {
       sessionId,
       usage: this.contextService.getContextUsage(sessionId),
       referenceContextDigest: this.sessionState.getPromptStability(sessionId)?.stablePrefixHash,
+      reservedBudgetRatio: this.getHistoryViewBaselineReservedBudgetRatio(),
     }).posture;
   }
 
   private getRecoveryWorkingSet(sessionId: string): RecoveryWorkingSetSnapshot | undefined {
     this.sessionLifecycleService.ensureHydrated(sessionId);
-    return resolveRecoveryContextReadModels(this.kernel, {
+    return resolveRecoveryWorkingSetView(this.kernel, {
       sessionId,
       usage: this.contextService.getContextUsage(sessionId),
       referenceContextDigest: this.sessionState.getPromptStability(sessionId)?.stablePrefixHash,
+      reservedBudgetRatio: this.getHistoryViewBaselineReservedBudgetRatio(),
     }).workingSet;
+  }
+
+  private getHistoryViewBaselineReservedBudgetRatio(): number | undefined {
+    return this.contextService
+      .listContextSourceProviders()
+      .find((provider) => provider.source === CONTEXT_SOURCES.historyViewBaseline)
+      ?.reservedBudgetRatio;
   }
 
   private invalidateSessionLifecycleSnapshot(sessionId: string): void {
@@ -1629,10 +1644,11 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
     const usage = this.contextService.getContextUsage(sessionId);
     const referenceContextDigest =
       this.sessionState.getPromptStability(sessionId)?.stablePrefixHash;
-    const recoveryContext = resolveRecoveryContextReadModels(this.kernel, {
+    const recoveryContext = resolveRecoveryWorkingSetView(this.kernel, {
       sessionId,
       usage,
       referenceContextDigest,
+      reservedBudgetRatio: this.getHistoryViewBaselineReservedBudgetRatio(),
     });
     const transitionState = deriveTransitionState(events);
     const snapshot = buildSessionLifecycleSnapshot({

@@ -15,6 +15,8 @@ function makeRegistration(
     category: "narrative" as const,
     budgetClass:
       options.budgetClass ?? (source === "brewva.projection-working" ? "working" : "core"),
+    selectionPriority: 10,
+    preservationPolicy: "truncatable" as const,
     source,
     id,
     content,

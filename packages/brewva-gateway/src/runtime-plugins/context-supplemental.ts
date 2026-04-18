@@ -11,13 +11,20 @@ export function appendSupplementalContextBlocks(
   },
 ): ComposedContextBlock[] {
   const acceptedBlocks: ComposedContextBlock[] = [];
-  for (const block of input.blocks) {
-    const decision = runtime.maintain.context.appendSupplementalInjection(
-      input.sessionId,
-      block.content,
-      input.usage,
-      input.injectionScopeId,
-    );
+  const decisions = runtime.maintain.context.appendGuardedSupplementalBlocks(
+    input.sessionId,
+    input.blocks.map((block) => ({
+      familyId: block.familyId ?? block.id,
+      content: block.content,
+    })),
+    input.usage,
+    input.injectionScopeId,
+  );
+  for (const [index, block] of input.blocks.entries()) {
+    const decision = decisions[index];
+    if (!decision) {
+      continue;
+    }
     if (!decision.accepted || decision.finalTokens <= 0) {
       continue;
     }

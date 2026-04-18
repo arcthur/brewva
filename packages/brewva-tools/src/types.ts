@@ -62,17 +62,17 @@ export interface BrewvaToolInternalRuntime {
   onClearState?(listener: (sessionId: string) => void): void;
   resolveCredentialBindings?(sessionId: string, toolName: string): Record<string, string>;
   resolveSandboxApiKey?(sessionId: string): string | undefined;
-  appendSupplementalInjection?(
+  appendGuardedSupplementalBlocks?(
     sessionId: string,
-    content: string,
-    sourceLabel?: string,
+    blocks: readonly { familyId: string; content: string }[],
     scopeId?: string,
-  ): {
+  ): Array<{
+    familyId: string;
     accepted: boolean;
     truncated?: boolean;
     finalTokens?: number;
     droppedReason?: "hard_limit" | "budget_exhausted";
-  };
+  }>;
 }
 
 export interface BrewvaToolMetadataCarrier {

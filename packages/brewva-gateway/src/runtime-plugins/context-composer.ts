@@ -22,12 +22,19 @@ const CAPABILITY_VIEW_COMPACT_RATIO_THRESHOLD = 0.2;
 
 export type ContextBlockCategory = ContextInjectionCategory;
 export type ContextComposerRuntime = ContextComposerSupplementalRuntime;
+export type ContextBlockProvenance =
+  | "primary_source"
+  | "guarded_supplemental"
+  | "composer_policy_block";
 
 export interface ComposedContextBlock {
   id: string;
   category: ContextBlockCategory;
+  provenance: ContextBlockProvenance;
   content: string;
   estimatedTokens: number;
+  familyId?: string;
+  laneReason?: string;
 }
 
 export interface ContextComposerMetrics {
@@ -57,6 +64,18 @@ export interface ContextComposedEventPayload extends Record<string, unknown> {
   narrativeTokens: number;
   narrativeRatio: number;
   injectionAccepted: boolean;
+  primarySourceBlockCount: number;
+  guardedSupplementalBlockCount: number;
+  composerPolicyBlockCount: number;
+  primarySourceTokens: number;
+  guardedSupplementalTokens: number;
+  composerPolicyBlockTokens: number;
+  guardedSupplementalFamilies: Array<{
+    familyId: string;
+    blockCount: number;
+    tokenCount: number;
+    laneReason: string;
+  }>;
 }
 
 export interface ContextComposerInput {
@@ -74,9 +93,12 @@ export interface ContextComposerInput {
 function makeBlock(
   id: string,
   category: ContextBlockCategory,
+  provenance: ContextBlockProvenance,
   content: string,
   options: {
     compactContent?: string;
+    familyId?: string;
+    laneReason?: string;
   } = {},
 ): InternalContextBlock | null {
   const normalized = content.trim();
@@ -88,8 +110,11 @@ function makeBlock(
   return {
     id,
     category,
+    provenance,
     content: normalized,
     estimatedTokens: estimateTokens(normalized),
+    familyId: options.familyId,
+    laneReason: options.laneReason,
     compactContent:
       normalizedCompact && normalizedCompact.length > 0 && normalizedCompact !== normalized
         ? normalizedCompact
@@ -164,6 +189,70 @@ function buildMetrics(
   };
 }
 
+function buildProvenanceTelemetry(blocks: readonly ComposedContextBlock[]): {
+  primarySourceBlockCount: number;
+  guardedSupplementalBlockCount: number;
+  composerPolicyBlockCount: number;
+  primarySourceTokens: number;
+  guardedSupplementalTokens: number;
+  composerPolicyBlockTokens: number;
+  guardedSupplementalFamilies: Array<{
+    familyId: string;
+    blockCount: number;
+    tokenCount: number;
+    laneReason: string;
+  }>;
+} {
+  let primarySourceBlockCount = 0;
+  let guardedSupplementalBlockCount = 0;
+  let composerPolicyBlockCount = 0;
+  let primarySourceTokens = 0;
+  let guardedSupplementalTokens = 0;
+  let composerPolicyBlockTokens = 0;
+  const guardedSupplementalFamilies = new Map<
+    string,
+    { familyId: string; blockCount: number; tokenCount: number; laneReason: string }
+  >();
+
+  for (const block of blocks) {
+    if (block.provenance === "primary_source") {
+      primarySourceBlockCount += 1;
+      primarySourceTokens += block.estimatedTokens;
+      continue;
+    }
+    if (block.provenance === "composer_policy_block") {
+      composerPolicyBlockCount += 1;
+      composerPolicyBlockTokens += block.estimatedTokens;
+      continue;
+    }
+    guardedSupplementalBlockCount += 1;
+    guardedSupplementalTokens += block.estimatedTokens;
+    const familyId = block.familyId ?? block.id;
+    const existing = guardedSupplementalFamilies.get(familyId);
+    if (existing) {
+      existing.blockCount += 1;
+      existing.tokenCount += block.estimatedTokens;
+      continue;
+    }
+    guardedSupplementalFamilies.set(familyId, {
+      familyId,
+      blockCount: 1,
+      tokenCount: block.estimatedTokens,
+      laneReason: block.laneReason ?? "unspecified",
+    });
+  }
+
+  return {
+    primarySourceBlockCount,
+    guardedSupplementalBlockCount,
+    composerPolicyBlockCount,
+    primarySourceTokens,
+    guardedSupplementalTokens,
+    composerPolicyBlockTokens,
+    guardedSupplementalFamilies: [...guardedSupplementalFamilies.values()],
+  };
+}
+
 function estimateRenderedBlockTokens(blocks: CapabilityRenderedBlock[]): number {
   return blocks.reduce((sum, block) => sum + estimateTokens(block.content), 0);
 }
@@ -228,9 +317,15 @@ function buildCapabilityBlocks(
 ): InternalContextBlock[] {
   const renderedBlocks = resolveCapabilityBlocks(capabilityView, existingMetrics);
   return renderedBlocks.flatMap((block) => {
-    const constraintBlock = makeBlock(block.id, "constraint", block.content, {
-      compactContent: block.compactContent,
-    });
+    const constraintBlock = makeBlock(
+      block.id,
+      "constraint",
+      "composer_policy_block",
+      block.content,
+      {
+        compactContent: block.compactContent,
+      },
+    );
     return constraintBlock ? [constraintBlock] : [];
   });
 }
@@ -255,7 +350,12 @@ function normalizeSupplementalBlocks(
         ? "supplemental-operational-diagnostics"
         : block.id,
       block.category,
+      block.provenance,
       block.content,
+      {
+        familyId: block.familyId,
+        laneReason: block.laneReason,
+      },
     );
     return normalized ? [normalized] : [];
   });
@@ -268,7 +368,12 @@ export function composeContextBlocks(input: ContextComposerInput): ContextCompos
 
   if (input.injectionAccepted) {
     for (const entry of input.admittedEntries) {
-      const block = makeBlock(`source:${entry.source}:${entry.id}`, entry.category, entry.content);
+      const block = makeBlock(
+        `source:${entry.source}:${entry.id}`,
+        entry.category,
+        "primary_source",
+        entry.content,
+      );
       if (block) {
         blocks.push(block);
       }
@@ -279,6 +384,7 @@ export function composeContextBlocks(input: ContextComposerInput): ContextCompos
     const gateBlock = makeBlock(
       "compaction-gate",
       "constraint",
+      "composer_policy_block",
       buildCompactionGateBlock({
         pressure: input.gateStatus.pressure,
       }),
@@ -290,6 +396,7 @@ export function composeContextBlocks(input: ContextComposerInput): ContextCompos
     const advisoryBlock = makeBlock(
       "compaction-advisory",
       "constraint",
+      "composer_policy_block",
       buildCompactionAdvisoryBlock({
         reason: input.pendingCompactionReason,
         pressure: input.gateStatus.pressure,
@@ -336,6 +443,7 @@ export function buildContextComposedEventPayload(
   composed: ContextComposerResult,
   injectionAccepted: boolean,
 ): ContextComposedEventPayload {
+  const provenanceTelemetry = buildProvenanceTelemetry(composed.blocks);
   return {
     narrativeBlockCount: composed.blocks.filter((block) => block.category === "narrative").length,
     constraintBlockCount: composed.blocks.filter((block) => block.category === "constraint").length,
@@ -344,5 +452,6 @@ export function buildContextComposedEventPayload(
     narrativeTokens: composed.metrics.narrativeTokens,
     narrativeRatio: composed.metrics.narrativeRatio,
     injectionAccepted,
+    ...provenanceTelemetry,
   };
 }

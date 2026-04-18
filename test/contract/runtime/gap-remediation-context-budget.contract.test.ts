@@ -8,6 +8,32 @@ import {
   writeGapRemediationConfig as writeConfig,
 } from "./gap-remediation.helpers.js";
 
+function appendGuardedSupplemental(
+  runtime: BrewvaRuntime,
+  sessionId: string,
+  content: string,
+  usage:
+    | {
+        tokens: number;
+        contextWindow: number;
+        percent: number;
+      }
+    | undefined,
+  injectionScopeId?: string,
+) {
+  return runtime.maintain.context.appendGuardedSupplementalBlocks(
+    sessionId,
+    [
+      {
+        familyId: "test-guarded-supplemental",
+        content,
+      },
+    ],
+    usage,
+    injectionScopeId,
+  )[0]!;
+}
+
 describe("Gap remediation: context budget", () => {
   test("drops context injection when usage exceeds hard limit", async () => {
     const workspace = createWorkspace("context-budget");
@@ -168,7 +194,8 @@ describe("Gap remediation: context budget", () => {
     expect(primary.accepted).toBe(true);
     expect(primary.finalTokens).toBeGreaterThan(0);
 
-    const supplemental = runtime.maintain.context.appendSupplementalInjection(
+    const supplemental = appendGuardedSupplemental(
+      runtime,
       sessionId,
       "y".repeat(800),
       {
@@ -204,7 +231,8 @@ describe("Gap remediation: context budget", () => {
       usage,
       { injectionScopeId: "leaf-a" },
     );
-    const supplemental = runtime.maintain.context.appendSupplementalInjection(
+    const supplemental = appendGuardedSupplemental(
+      runtime,
       sessionId,
       "x".repeat(2000),
       usage,
@@ -217,7 +245,8 @@ describe("Gap remediation: context budget", () => {
       expect(supplemental.droppedReason).toBe("budget_exhausted");
     }
 
-    const otherScope = runtime.maintain.context.appendSupplementalInjection(
+    const otherScope = appendGuardedSupplemental(
+      runtime,
       sessionId,
       "y".repeat(120),
       usage,
@@ -226,7 +255,8 @@ describe("Gap remediation: context budget", () => {
     expect(otherScope.accepted).toBe(true);
 
     runtime.maintain.context.onTurnStart(sessionId, 2);
-    const afterTurnReset = runtime.maintain.context.appendSupplementalInjection(
+    const afterTurnReset = appendGuardedSupplemental(
+      runtime,
       sessionId,
       "z".repeat(120),
       usage,
@@ -250,24 +280,15 @@ describe("Gap remediation: context budget", () => {
     };
 
     runtime.maintain.context.onTurnStart(sessionId, 1);
-    const first = runtime.maintain.context.appendSupplementalInjection(
-      sessionId,
-      "x".repeat(2000),
-      usage,
-      "leaf-a",
-    );
+    const first = appendGuardedSupplemental(runtime, sessionId, "x".repeat(2000), usage, "leaf-a");
     expect(first.accepted).toBe(true);
 
-    const second = runtime.maintain.context.appendSupplementalInjection(
-      sessionId,
-      "x".repeat(2000),
-      usage,
-      "leaf-a",
-    );
+    const second = appendGuardedSupplemental(runtime, sessionId, "x".repeat(2000), usage, "leaf-a");
     expect(second.accepted).toBe(false);
     expect(second.droppedReason).toBe("budget_exhausted");
 
-    const exhausted = runtime.maintain.context.appendSupplementalInjection(
+    const exhausted = appendGuardedSupplemental(
+      runtime,
       sessionId,
       "x".repeat(2000),
       usage,
@@ -276,7 +297,8 @@ describe("Gap remediation: context budget", () => {
     expect(exhausted.accepted).toBe(false);
     expect(exhausted.droppedReason).toBe("budget_exhausted");
 
-    const otherScope = runtime.maintain.context.appendSupplementalInjection(
+    const otherScope = appendGuardedSupplemental(
+      runtime,
       sessionId,
       "x".repeat(2000),
       usage,
@@ -285,7 +307,8 @@ describe("Gap remediation: context budget", () => {
     expect(otherScope.accepted).toBe(true);
 
     runtime.maintain.context.onTurnStart(sessionId, 2);
-    const afterTurnReset = runtime.maintain.context.appendSupplementalInjection(
+    const afterTurnReset = appendGuardedSupplemental(
+      runtime,
       sessionId,
       "x".repeat(2000),
       usage,
@@ -322,7 +345,8 @@ describe("Gap remediation: context budget", () => {
     );
     expect(primary.accepted).toBe(true);
 
-    const firstSupplemental = runtime.maintain.context.appendSupplementalInjection(
+    const firstSupplemental = appendGuardedSupplemental(
+      runtime,
       sessionId,
       "s".repeat(28),
       usage,
@@ -339,7 +363,8 @@ describe("Gap remediation: context budget", () => {
     );
     expect(duplicatePrimary.accepted).toBe(false);
 
-    const secondSupplemental = runtime.maintain.context.appendSupplementalInjection(
+    const secondSupplemental = appendGuardedSupplemental(
+      runtime,
       sessionId,
       "z".repeat(4000),
       usage,

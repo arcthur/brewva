@@ -5,6 +5,8 @@ function makeEntry(source: string, id: string, content: string) {
   return {
     category: "narrative" as const,
     budgetClass: "core" as const,
+    selectionPriority: 10,
+    preservationPolicy: "truncatable" as const,
     source,
     id,
     content,

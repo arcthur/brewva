@@ -8,6 +8,7 @@ import {
   type ContextInjectionCategory,
 } from "@brewva/brewva-runtime";
 import type { BuildCapabilityViewResult } from "./capability-view.js";
+import type { ContextBlockProvenance } from "./context-composer.js";
 import { estimateTokens } from "./tool-output-distiller.js";
 
 type ContextComposerEventQuery = Pick<Exclude<BrewvaEventQuery, undefined>, "type" | "last">;
@@ -48,8 +49,18 @@ export type ContextComposerSupplementalRuntime = {
 export interface SupplementalContextBlock {
   id: string;
   category: ContextInjectionCategory;
+  provenance: ContextBlockProvenance;
   content: string;
   estimatedTokens: number;
+  familyId: string;
+  laneReason: string;
+}
+
+export interface GuardedSupplementalFamilyDescriptor {
+  familyId: string;
+  laneReason: string;
+  renderCategory: ContextInjectionCategory;
+  provenance: "guarded_supplemental";
 }
 
 export interface ResolveSupplementalContextBlocksInput {
@@ -70,8 +81,8 @@ const DIAGNOSTIC_CAPABILITY_NAMES = new Set<string>([
 ]);
 
 function makeSupplementalBlock(
+  descriptor: GuardedSupplementalFamilyDescriptor,
   id: string,
-  category: ContextInjectionCategory,
   content: string,
 ): SupplementalContextBlock | null {
   const normalized = content.trim();
@@ -80,11 +91,38 @@ function makeSupplementalBlock(
   }
   return {
     id,
-    category,
+    category: descriptor.renderCategory,
+    provenance: descriptor.provenance,
     content: normalized,
     estimatedTokens: estimateTokens(normalized),
+    familyId: descriptor.familyId,
+    laneReason: descriptor.laneReason,
   };
 }
+
+const PENDING_DELEGATIONS_FAMILY: GuardedSupplementalFamilyDescriptor = {
+  familyId: "pending-delegations",
+  laneReason:
+    "hosted delegation state is surfaced after primary admission and consumes headroom only",
+  renderCategory: "constraint",
+  provenance: "guarded_supplemental",
+};
+
+const COMPLETED_DELEGATION_OUTCOMES_FAMILY: GuardedSupplementalFamilyDescriptor = {
+  familyId: "completed-delegation-outcomes",
+  laneReason:
+    "completed delegation outcomes are host-local delivery blocks appended through the guarded lane",
+  renderCategory: "diagnostic",
+  provenance: "guarded_supplemental",
+};
+
+const OPERATIONAL_DIAGNOSTICS_FAMILY: GuardedSupplementalFamilyDescriptor = {
+  familyId: "operational-diagnostics",
+  laneReason:
+    "operational diagnostics are advisory host-local detail and remain outside primary source selection",
+  renderCategory: "diagnostic",
+  provenance: "guarded_supplemental",
+};
 
 function sortDelegationRuns(runs: readonly DelegationRunRecord[]): DelegationRunRecord[] {
   return runs.toSorted(
@@ -242,8 +280,8 @@ export function resolveSupplementalContextBlocks(
     (input.gateStatus.required || !!input.pendingCompactionReason)
   ) {
     const pendingDelegationsBlock = makeSupplementalBlock(
+      PENDING_DELEGATIONS_FAMILY,
       "pending-delegations",
-      "constraint",
       buildPendingDelegationsBlock({
         pendingDelegations,
       }),
@@ -254,8 +292,8 @@ export function resolveSupplementalContextBlocks(
   }
   if (pendingDelegationOutcomes.length > 0) {
     const completedOutcomesBlock = makeSupplementalBlock(
+      COMPLETED_DELEGATION_OUTCOMES_FAMILY,
       "completed-delegation-outcomes",
-      "diagnostic",
       buildCompletedDelegationOutcomesBlock({
         pendingDelegationOutcomes,
       }),
@@ -273,8 +311,8 @@ export function resolveSupplementalContextBlocks(
       diagnosticRequests.length === 0 &&
       (input.gateStatus.required || !!input.pendingCompactionReason);
     const diagnosticBlock = makeSupplementalBlock(
+      OPERATIONAL_DIAGNOSTICS_FAMILY,
       "operational-diagnostics",
-      "diagnostic",
       buildOperationalDiagnosticsBlock({
         runtime: input.runtime,
         sessionId: input.sessionId,

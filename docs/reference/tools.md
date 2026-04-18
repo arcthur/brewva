@@ -104,7 +104,7 @@ repo-owned hooks such as:
 - `runtime.internal.recordEvent(...)`
 - `runtime.internal.resolveCredentialBindings(...)`
 - `runtime.internal.resolveSandboxApiKey(...)`
-- `runtime.internal.appendSupplementalInjection(...)`
+- `runtime.internal.appendGuardedSupplementalBlocks(...)`
 
 These hooks exist for repository-owned bundle behavior such as telemetry,
 credential lookup, supplemental context delivery, and session-maintenance
