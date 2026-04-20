@@ -8,6 +8,7 @@ import type {
   WorkerResult,
 } from "@brewva/brewva-runtime";
 import {
+  deriveToolGovernanceDescriptor,
   listSkillFallbackTools,
   listSkillPreferredTools,
   resolveSkillEffectLevel,
@@ -126,6 +127,14 @@ function boundaryWithinCeiling(
   ceiling: SubagentExecutionBoundary,
 ): boolean {
   return BOUNDARY_RANK[boundary ?? "safe"] <= BOUNDARY_RANK[ceiling];
+}
+
+function resolveRuntimeToolBoundary(
+  runtime: BrewvaRuntime,
+  toolName: string,
+): ToolExecutionBoundary | undefined {
+  const policy = runtime.inspect.tools.getActionPolicy(toolName);
+  return policy ? deriveToolGovernanceDescriptor(policy).boundary : undefined;
 }
 
 function hintedToolNames(packet: DelegationPacket | undefined): string[] {
@@ -266,10 +275,7 @@ export function resolveBuiltinToolNamesForRun(
     resolveSkillToolHints(runtime, target.skillName),
   );
   return requested.filter((toolName) =>
-    boundaryWithinCeiling(
-      runtime.inspect.tools.getGovernanceDescriptor(toolName)?.boundary,
-      boundary,
-    ),
+    boundaryWithinCeiling(resolveRuntimeToolBoundary(runtime, toolName), boundary),
   );
 }
 
@@ -293,10 +299,7 @@ export function resolveManagedToolNamesForRun(
     ) {
       return false;
     }
-    return boundaryWithinCeiling(
-      runtime.inspect.tools.getGovernanceDescriptor(toolName)?.boundary,
-      boundary,
-    );
+    return boundaryWithinCeiling(resolveRuntimeToolBoundary(runtime, toolName), boundary);
   });
 }
 

@@ -39,6 +39,7 @@ effects:
     - workspace_write
     - local_exec
     - runtime_observe
+    - delegation
 resources:
   default_lease:
     max_tool_calls: 110

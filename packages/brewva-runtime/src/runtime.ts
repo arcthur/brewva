@@ -47,11 +47,9 @@ import {
   VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
 } from "./events/event-types.js";
 import { BrewvaEventStore } from "./events/store.js";
+import { createActionPolicyRegistry } from "./governance/action-policy.js";
 import type { GovernancePort } from "./governance/port.js";
-import {
-  createToolGovernanceRegistry,
-  resolveToolAuthority,
-} from "./governance/tool-governance.js";
+import { resolveToolAuthority } from "./governance/tool-governance.js";
 import {
   applyFactWindow,
   buildGuardResultPayload,
@@ -294,7 +292,7 @@ export interface BrewvaInspectionPort {
     BrewvaRuntimeMethodGroups["tools"],
     | "checkAccess"
     | "explainAccess"
-    | "getGovernanceDescriptor"
+    | "getActionPolicy"
     | "listResourceLeases"
     | "resolveUndoSessionId"
   >;
@@ -357,7 +355,7 @@ export interface BrewvaMaintenancePort {
   >;
   readonly tools: Pick<
     BrewvaRuntimeMethodGroups["tools"],
-    "registerGovernanceDescriptor" | "registerGovernanceResolver" | "unregisterGovernanceDescriptor"
+    "registerActionPolicy" | "registerActionPolicyResolver" | "unregisterActionPolicy"
   >;
   readonly session: Pick<
     BrewvaRuntimeMethodGroups["session"],
@@ -442,7 +440,7 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
   private sessionWireService: SessionWireService | undefined;
   private reasoningService: ReasoningService | undefined;
   declare private readonly runtimeConfig: BrewvaConfig;
-  private readonly toolGovernanceRegistry = createToolGovernanceRegistry();
+  private readonly actionPolicyRegistry = createActionPolicyRegistry();
   declare private turnReplay: TurnReplayEngine;
   declare private reasoningReplay: ReasoningReplayEngine;
 
@@ -611,7 +609,12 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
       },
       sessionState: this.sessionState,
       resolveToolAuthority: (toolName, args) =>
-        resolveToolAuthority(toolName, this.toolGovernanceRegistry, args),
+        resolveToolAuthority(
+          toolName,
+          this.actionPolicyRegistry,
+          args,
+          this.runtimeConfig.security.actionAdmissionOverrides,
+        ),
       resolveCheckpointCostSummary: (sessionId) => this.resolveCheckpointCostSummary(sessionId),
       resolveCheckpointCostSkillLastTurnByName: (sessionId) =>
         this.resolveCheckpointCostSkillLastTurnByName(sessionId),
@@ -653,7 +656,12 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
       ledgerService: this.ledgerService,
       reversibleMutationService,
       resolveToolAuthority: (toolName, args) =>
-        resolveToolAuthority(toolName, this.toolGovernanceRegistry, args),
+        resolveToolAuthority(
+          toolName,
+          this.actionPolicyRegistry,
+          args,
+          this.runtimeConfig.security.actionAdmissionOverrides,
+        ),
     });
   }
 
@@ -742,7 +750,7 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
       eventStore: this.eventStore,
       eventPipeline: this.eventPipeline,
       costService: this.costService,
-      toolGovernanceRegistry: this.toolGovernanceRegistry,
+      actionPolicyRegistry: this.actionPolicyRegistry,
       getReasoningService: () => this.getReasoningService(),
       getToolGateService: () => this.getToolGateService(),
       getToolInvocationSpine: () => this.getToolInvocationSpine(),
@@ -897,7 +905,7 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
         tools: bindMethods(methodGroups.tools, [
           "checkAccess",
           "explainAccess",
-          "getGovernanceDescriptor",
+          "getActionPolicy",
           "listResourceLeases",
           "resolveUndoSessionId",
         ] as const),
@@ -956,9 +964,9 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
           "requestCompaction",
         ] as const),
         tools: bindMethods(methodGroups.tools, [
-          "registerGovernanceDescriptor",
-          "registerGovernanceResolver",
-          "unregisterGovernanceDescriptor",
+          "registerActionPolicy",
+          "registerActionPolicyResolver",
+          "unregisterActionPolicy",
         ] as const),
         session: bindMethods(methodGroups.session, [
           "recordWorkerResult",

@@ -1,14 +1,9 @@
-import {
-  MANAGED_BREWVA_TOOL_METADATA_BY_NAME,
-  type ManagedBrewvaToolMetadataRegistryEntry,
-} from "./managed-tool-metadata-registry.js";
+import { MANAGED_BREWVA_TOOL_METADATA_BY_NAME } from "./managed-tool-metadata-registry.js";
 import type { BrewvaToolSurface } from "./types.js";
 
 export type { BrewvaToolSurface } from "./types.js";
 
-const MANAGED_BREWVA_TOOL_METADATA_ENTRIES = Object.entries(
-  MANAGED_BREWVA_TOOL_METADATA_BY_NAME,
-) as Array<[string, ManagedBrewvaToolMetadataRegistryEntry]>;
+const MANAGED_BREWVA_TOOL_METADATA_ENTRIES = Object.entries(MANAGED_BREWVA_TOOL_METADATA_BY_NAME);
 
 export const BREWVA_TOOL_SURFACE_BY_NAME = Object.fromEntries(
   MANAGED_BREWVA_TOOL_METADATA_ENTRIES.map(([name, entry]) => [name, entry.surface]),

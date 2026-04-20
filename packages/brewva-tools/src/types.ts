@@ -12,7 +12,7 @@ import type {
   QaSubagentOutcomeData as RuntimeQaSubagentOutcomeData,
   ReviewLaneName as RuntimeReviewLaneName,
   SkillOutputValidationResult,
-  ToolGovernanceDescriptor,
+  ToolActionClass,
   ToolExecutionBoundary,
 } from "@brewva/brewva-runtime";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate";
@@ -113,7 +113,7 @@ export type BrewvaToolExecutionTraitsDefinition =
 
 export interface BrewvaToolMetadata {
   surface: BrewvaToolSurface;
-  governance: ToolGovernanceDescriptor;
+  actionClass: ToolActionClass;
   executionTraits?: BrewvaToolExecutionTraitsDefinition;
   requiredCapabilities?: readonly BrewvaToolRequiredCapability[];
 }

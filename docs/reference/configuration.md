@@ -349,8 +349,15 @@ If governance metadata is missing, or only inferred through hint matching,
 runtime emits warning signals because effect authorization cannot be proven
 from an ambiguous descriptor alone. That warning is not an execution permit
 for effectful paths: tools that resolve as `effectful` without an exact or
-registry-backed descriptor fail closed regardless of `security.mode`. Only
-safe hint-matched tools remain warn-only until their metadata is made exact.
+registry-backed action policy fail closed regardless of `security.mode`. Only
+safe hint-matched tools remain warn-only until their policy is made exact.
+
+`security.actionAdmissionOverrides` lets operators change admission behavior by
+action class. Overrides may always tighten (`allow` -> `ask` -> `deny`), but
+relaxation beyond the action policy's `maxAdmission` is rejected during config
+normalization. Critical action classes cannot be relaxed below `ask`. Overrides
+do not disable receipts, change recovery semantics, or grant runtime
+capabilities.
 
 `security.sanitizeContext` controls pattern-based text sanitization before skill selection and
 context injection. Structural boundary wrapping remains enabled even when this flag is `false`.
@@ -365,7 +372,7 @@ critical context compaction gate.
 
 `security.boundaryPolicy` is the deployment-level execution boundary model.
 It complements effect classification; it does not replace `security.mode`,
-skill contracts, or tool governance descriptors.
+skill contracts, or runtime action policies.
 
 - `commandDenyList`
   - best-effort shell preflight deny list for `exec`

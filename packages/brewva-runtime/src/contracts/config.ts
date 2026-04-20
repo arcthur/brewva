@@ -1,3 +1,4 @@
+import type { ToolActionAdmissionOverrides } from "./governance.js";
 import type { BrewvaIntentId, BrewvaSessionId } from "./identifiers.js";
 import type { SecurityEnforcementPreference, VerificationLevel } from "./shared.js";
 import type { SkillContractOverride, SkillRoutingScope } from "./skill.js";
@@ -91,6 +92,7 @@ export interface BrewvaConfig {
   security: {
     mode: "permissive" | "standard" | "strict";
     sanitizeContext: boolean;
+    actionAdmissionOverrides: ToolActionAdmissionOverrides;
     enforcement: {
       effectAuthorizationMode: SecurityEnforcementPreference;
       skillMaxTokensMode: SecurityEnforcementPreference;

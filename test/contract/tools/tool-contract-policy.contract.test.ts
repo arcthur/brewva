@@ -4,11 +4,13 @@ import { resolve } from "node:path";
 import {
   DEFAULT_BREWVA_CONFIG,
   BrewvaRuntime,
-  getToolGovernanceDescriptor,
-  sameToolGovernanceDescriptor,
+  getToolActionPolicy,
+  sameToolActionPolicy,
   type BrewvaConfig,
   type SkillContractOverride,
   type SkillRoutingScope,
+  type ToolActionPolicy,
+  type ToolEffectClass,
 } from "@brewva/brewva-runtime";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
@@ -47,16 +49,31 @@ function createRuntime(
   return new BrewvaRuntime({ cwd: workspace, config });
 }
 
+function customActionPolicy(
+  effects: ToolEffectClass[],
+  riskLevel: ToolActionPolicy["riskLevel"] = "high",
+): ToolActionPolicy {
+  return {
+    actionClass: effects.includes("local_exec") ? "local_exec_effectful" : "external_side_effect",
+    riskLevel,
+    defaultAdmission: "ask",
+    maxAdmission: "ask",
+    receiptPolicy: { kind: "commitment", required: true },
+    recoveryPolicy: { kind: "manual_recovery_evidence" },
+    effectClasses: effects,
+  };
+}
+
 describe("effect governance policy modes", () => {
   test("standard mode warns on unauthorized non-control-plane effects and deduplicates the warning", () => {
     const workspace = createPolicyWorkspace("effect-governance-warn");
     const runtime = createRuntime(workspace, { security: { mode: "standard" } });
     const sessionId = "effect-governance-warn-1";
 
-    runtime.maintain.tools.registerGovernanceDescriptor("custom_network_tool", {
-      effects: ["external_network"],
-      defaultRisk: "high",
-    });
+    runtime.maintain.tools.registerActionPolicy(
+      "custom_network_tool",
+      customActionPolicy(["external_network"]),
+    );
     expect(runtime.authority.skills.activate(sessionId, "design").ok).toBe(true);
 
     expect(runtime.inspect.tools.checkAccess(sessionId, "task_add_item").allowed).toBe(true);
@@ -81,10 +98,10 @@ describe("effect governance policy modes", () => {
     const sessionId = "effect-governance-warn-restart-1";
 
     const runtime = createRuntime(workspace, options);
-    runtime.maintain.tools.registerGovernanceDescriptor("custom_network_tool", {
-      effects: ["external_network"],
-      defaultRisk: "high",
-    });
+    runtime.maintain.tools.registerActionPolicy(
+      "custom_network_tool",
+      customActionPolicy(["external_network"]),
+    );
     runtime.maintain.context.onTurnStart(sessionId, 1);
     expect(runtime.authority.skills.activate(sessionId, "design").ok).toBe(true);
     expect(runtime.inspect.tools.checkAccess(sessionId, "task_add_item").allowed).toBe(true);
@@ -97,10 +114,10 @@ describe("effect governance policy modes", () => {
     );
 
     const reloaded = createRuntime(workspace, options);
-    reloaded.maintain.tools.registerGovernanceDescriptor("custom_network_tool", {
-      effects: ["external_network"],
-      defaultRisk: "high",
-    });
+    reloaded.maintain.tools.registerActionPolicy(
+      "custom_network_tool",
+      customActionPolicy(["external_network"]),
+    );
     reloaded.maintain.context.onTurnStart(sessionId, 1);
     expect(reloaded.inspect.tools.checkAccess(sessionId, "task_add_item").allowed).toBe(true);
     expect(
@@ -139,10 +156,10 @@ describe("effect governance policy modes", () => {
     const runtime = createRuntime(workspace, { security: { mode: "strict" } });
     const sessionId = "effect-governance-enforce-1";
 
-    runtime.maintain.tools.registerGovernanceDescriptor("custom_network_tool", {
-      effects: ["external_network"],
-      defaultRisk: "high",
-    });
+    runtime.maintain.tools.registerActionPolicy(
+      "custom_network_tool",
+      customActionPolicy(["external_network"]),
+    );
     expect(runtime.authority.skills.activate(sessionId, "design").ok).toBe(true);
 
     const blocked = runtime.inspect.tools.checkAccess(sessionId, "custom_network_tool");
@@ -178,10 +195,10 @@ describe("effect governance policy modes", () => {
     });
     const sessionId = "effect-governance-standard-override-1";
 
-    runtime.maintain.tools.registerGovernanceDescriptor("custom_network_tool", {
-      effects: ["external_network"],
-      defaultRisk: "high",
-    });
+    runtime.maintain.tools.registerActionPolicy(
+      "custom_network_tool",
+      customActionPolicy(["external_network"]),
+    );
     expect(runtime.authority.skills.activate(sessionId, "design").ok).toBe(true);
     expect(runtime.inspect.tools.checkAccess(sessionId, "task_add_item").allowed).toBe(true);
     const blocked = runtime.inspect.tools.checkAccess(sessionId, "custom_network_tool");
@@ -189,7 +206,7 @@ describe("effect governance policy modes", () => {
     expect(blocked.reason).toContain("unauthorized effects");
   });
 
-  test("strict mode blocks effectful-unknown tools until an exact governance descriptor exists", () => {
+  test("strict mode blocks effectful-unknown tools until an exact action policy exists", () => {
     const workspace = createPolicyWorkspace("effect-governance-unknown-tool");
     const runtime = createRuntime(workspace, { security: { mode: "strict" } });
     const sessionId = "effect-governance-unknown-tool-1";
@@ -198,54 +215,85 @@ describe("effect governance policy modes", () => {
 
     const access = runtime.inspect.tools.checkAccess(sessionId, "custom_tool");
     expect(access.allowed).toBe(false);
-    expect(access.reason).toContain("exact governance descriptor");
+    expect(access.reason).toContain("exact action policy");
     expect(runtime.inspect.events.query(sessionId, { type: "tool_contract_warning" })).toHaveLength(
       1,
     );
     expect(runtime.inspect.events.query(sessionId, { type: "tool_call_blocked" })).toHaveLength(1);
   });
 
-  test("custom governance descriptors let strict mode enforce third-party tools", () => {
+  test("standard mode fails closed when an effectful tool has no action policy", () => {
+    const workspace = createPolicyWorkspace("effect-governance-standard-missing-policy");
+    const runtime = createRuntime(workspace, { security: { mode: "standard" } });
+    const sessionId = "effect-governance-standard-missing-policy-1";
+
+    runtime.maintain.context.onTurnStart(sessionId, 1);
+    expect(runtime.authority.skills.activate(sessionId, "design").ok).toBe(true);
+
+    const started = runtime.authority.tools.start({
+      sessionId,
+      toolCallId: "tc-missing-policy",
+      toolName: "custom_tool",
+      args: { value: "opaque" },
+    });
+
+    expect(started.allowed).toBe(false);
+    expect(started.reason).toContain("exact action policy");
+    expect(
+      runtime.inspect.events.query(sessionId, { type: "tool_effect_gate_selected" }).at(-1)
+        ?.payload,
+    ).toMatchObject({
+      toolName: "custom_tool",
+      actionClass: null,
+      requiresApproval: true,
+    });
+  });
+
+  test("custom action policies let strict mode enforce third-party tools", () => {
     const workspace = createPolicyWorkspace("effect-governance-custom-descriptor");
     const runtime = createRuntime(workspace, { security: { mode: "strict" } });
     const sessionId = "effect-governance-custom-descriptor-1";
 
-    runtime.maintain.tools.registerGovernanceDescriptor("custom_exec_tool", {
-      effects: ["local_exec"],
-      defaultRisk: "high",
-    });
+    runtime.maintain.tools.registerActionPolicy(
+      "custom_exec_tool",
+      customActionPolicy(["local_exec"]),
+    );
     try {
       expect(runtime.authority.skills.activate(sessionId, "design").ok).toBe(true);
       const blocked = runtime.inspect.tools.checkAccess(sessionId, "custom_exec_tool");
       expect(blocked.allowed).toBe(false);
       expect(blocked.reason).toContain("local_exec");
     } finally {
-      runtime.maintain.tools.unregisterGovernanceDescriptor("custom_exec_tool");
+      runtime.maintain.tools.unregisterActionPolicy("custom_exec_tool");
     }
   });
 
-  test("invalid governance descriptors fail closed at registration time", () => {
+  test("invalid action policies fail closed at registration time", () => {
     const workspace = createPolicyWorkspace("effect-governance-invalid-descriptor");
     const runtime = createRuntime(workspace, { security: { mode: "strict" } });
 
     expect(() =>
-      runtime.maintain.tools.registerGovernanceDescriptor("custom_invalid_tool", {
-        effects: ["local_exec", "workspace_write"],
-        defaultRisk: "high",
-        rollbackable: true,
+      runtime.maintain.tools.registerActionPolicy("custom_invalid_tool", {
+        actionClass: "credential_access",
+        riskLevel: "critical",
+        defaultAdmission: "ask",
+        maxAdmission: "allow",
+        receiptPolicy: { kind: "security_audit", required: true },
+        recoveryPolicy: { kind: "none" },
+        effectClasses: ["credential_access"],
       }),
-    ).toThrow("tool_governance_invariant_violated");
+    ).toThrow("critical action policy cannot be relaxed below ask");
   });
 
-  test("explainAccess uses runtime-scoped governance descriptors", () => {
+  test("explainAccess uses runtime-scoped action policies", () => {
     const workspace = createPolicyWorkspace("effect-governance-explain-custom");
     const runtime = createRuntime(workspace, { security: { mode: "strict" } });
     const sessionId = "effect-governance-explain-custom-1";
 
-    runtime.maintain.tools.registerGovernanceDescriptor("custom_exec_tool", {
-      effects: ["local_exec"],
-      defaultRisk: "high",
-    });
+    runtime.maintain.tools.registerActionPolicy(
+      "custom_exec_tool",
+      customActionPolicy(["local_exec"]),
+    );
     try {
       expect(runtime.authority.skills.activate(sessionId, "design").ok).toBe(true);
       const explained = runtime.inspect.tools.explainAccess({
@@ -255,11 +303,11 @@ describe("effect governance policy modes", () => {
       expect(explained.allowed).toBe(false);
       expect(explained.reason).toContain("local_exec");
     } finally {
-      runtime.maintain.tools.unregisterGovernanceDescriptor("custom_exec_tool");
+      runtime.maintain.tools.unregisterActionPolicy("custom_exec_tool");
     }
   });
 
-  test("hint-based governance emits governance_metadata_missing once until exact metadata is added", () => {
+  test("hint-based governance emits governance_metadata_missing once until exact policy is added", () => {
     const workspace = createPolicyWorkspace("effect-governance-hint-metadata");
     const runtime = createRuntime(workspace, { security: { mode: "strict" } });
     const sessionId = "effect-governance-hint-metadata-1";
@@ -270,9 +318,9 @@ describe("effect governance policy modes", () => {
     const second = runtime.inspect.tools.checkAccess(sessionId, "custom_query_tool");
 
     expect(first.allowed).toBe(false);
-    expect(first.reason).toContain("exact governance descriptor");
+    expect(first.reason).toContain("exact action policy");
     expect(second.allowed).toBe(false);
-    expect(second.reason).toContain("exact governance descriptor");
+    expect(second.reason).toContain("exact action policy");
     const events = runtime.inspect.events.query(sessionId, { type: "governance_metadata_missing" });
     expect(events).toHaveLength(1);
     expect(events[0]?.payload).toMatchObject({
@@ -282,7 +330,7 @@ describe("effect governance policy modes", () => {
     });
   });
 
-  test("effectful hint matches are blocked until exact governance metadata is registered", () => {
+  test("effectful hint matches are blocked until exact action policy is registered", () => {
     const workspace = createPolicyWorkspace("effect-governance-hint-effectful");
     const runtime = createRuntime(workspace, { security: { mode: "strict" } });
     const sessionId = "effect-governance-hint-effectful-1";
@@ -292,7 +340,7 @@ describe("effect governance policy modes", () => {
     const access = runtime.inspect.tools.checkAccess(sessionId, "custom_command_runner");
 
     expect(access.allowed).toBe(false);
-    expect(access.reason).toContain("exact governance descriptor");
+    expect(access.reason).toContain("exact action policy");
     const metadataEvents = runtime.inspect.events.query(sessionId, {
       type: "governance_metadata_missing",
     });
@@ -314,7 +362,7 @@ describe("effect governance policy modes", () => {
     expect(runtime.authority.skills.activate(sessionId, "design").ok).toBe(true);
     const initial = runtime.inspect.tools.checkAccess(sessionId, "custom_query_tool");
     expect(initial.allowed).toBe(false);
-    expect(initial.reason).toContain("exact governance descriptor");
+    expect(initial.reason).toContain("exact action policy");
     expect(
       runtime.inspect.events.query(sessionId, { type: "governance_metadata_missing" }),
     ).toHaveLength(1);
@@ -323,13 +371,13 @@ describe("effect governance policy modes", () => {
     reloaded.maintain.context.onTurnStart(sessionId, 1);
     const afterRestart = reloaded.inspect.tools.checkAccess(sessionId, "custom_query_tool");
     expect(afterRestart.allowed).toBe(false);
-    expect(afterRestart.reason).toContain("exact governance descriptor");
+    expect(afterRestart.reason).toContain("exact action policy");
     expect(
       reloaded.inspect.events.query(sessionId, { type: "governance_metadata_missing" }),
     ).toHaveLength(1);
   });
 
-  test("runtime-scoped governance descriptors do not leak across runtime instances", () => {
+  test("runtime-scoped action policies do not leak across runtime instances", () => {
     const runtimeA = createRuntime(createPolicyWorkspace("effect-governance-runtime-a"), {
       security: { mode: "strict" },
     });
@@ -337,10 +385,10 @@ describe("effect governance policy modes", () => {
       security: { mode: "strict" },
     });
 
-    runtimeA.maintain.tools.registerGovernanceDescriptor("custom_remote_tool", {
-      effects: ["local_exec"],
-      defaultRisk: "high",
-    });
+    runtimeA.maintain.tools.registerActionPolicy(
+      "custom_remote_tool",
+      customActionPolicy(["local_exec"]),
+    );
     try {
       expect(runtimeA.authority.skills.activate("runtime-a", "design").ok).toBe(true);
       expect(runtimeB.authority.skills.activate("runtime-b", "design").ok).toBe(true);
@@ -351,7 +399,7 @@ describe("effect governance policy modes", () => {
       expect(blocked.allowed).toBe(false);
       expect(blocked.reason).toContain("local_exec");
       expect(warned.allowed).toBe(false);
-      expect(warned.reason).toContain("exact governance descriptor");
+      expect(warned.reason).toContain("exact action policy");
       expect(
         runtimeA.inspect.events.query("runtime-a", { type: "tool_contract_warning" }),
       ).toHaveLength(0);
@@ -359,18 +407,18 @@ describe("effect governance policy modes", () => {
         runtimeB.inspect.events.query("runtime-b", { type: "tool_contract_warning" }),
       ).toHaveLength(1);
     } finally {
-      runtimeA.maintain.tools.unregisterGovernanceDescriptor("custom_remote_tool");
+      runtimeA.maintain.tools.unregisterActionPolicy("custom_remote_tool");
     }
   });
 
-  test("command heuristics no longer misclassify generic process_* tool names as local_exec", () => {
-    expect(getToolGovernanceDescriptor("process")).toEqual({
-      effects: ["local_exec"],
-      defaultRisk: "medium",
-      boundary: "effectful",
+  test("command heuristics no longer misclassify generic process_* tool names as local exec policy", () => {
+    expect(getToolActionPolicy("process")).toMatchObject({
+      actionClass: "local_exec_effectful",
+      riskLevel: "medium",
+      defaultAdmission: "ask",
     });
-    expect(getToolGovernanceDescriptor("process_image")).toBeUndefined();
-    expect(getToolGovernanceDescriptor("data_process")).toBeUndefined();
+    expect(getToolActionPolicy("process_image")).toBeUndefined();
+    expect(getToolActionPolicy("data_process")).toBeUndefined();
   });
 
   test("narrative_memory resolves action-level governance for inspect and promote actions", () => {
@@ -380,31 +428,28 @@ describe("effect governance policy modes", () => {
 
     runtime.maintain.context.onTurnStart(sessionId, 1);
 
-    expect(runtime.inspect.tools.getGovernanceDescriptor("narrative_memory")).toEqual({
-      effects: ["runtime_observe", "memory_write", "workspace_write"],
-      defaultRisk: "medium",
-      boundary: "effectful",
-      rollbackable: false,
+    expect(runtime.inspect.tools.getActionPolicy("narrative_memory")).toMatchObject({
+      actionClass: "memory_write",
+      riskLevel: "medium",
+      recoveryPolicy: { kind: "none" },
     });
     expect(
-      runtime.inspect.tools.getGovernanceDescriptor("narrative_memory", {
+      runtime.inspect.tools.getActionPolicy("narrative_memory", {
         action: "list",
       }),
-    ).toEqual({
-      effects: ["runtime_observe"],
-      defaultRisk: "low",
-      boundary: "safe",
-      rollbackable: undefined,
+    ).toMatchObject({
+      actionClass: "runtime_observe",
+      riskLevel: "low",
+      defaultAdmission: "allow",
     });
     expect(
-      runtime.inspect.tools.getGovernanceDescriptor("narrative_memory", {
+      runtime.inspect.tools.getActionPolicy("narrative_memory", {
         action: "promote",
       }),
-    ).toEqual({
-      effects: ["memory_write", "workspace_write"],
-      defaultRisk: "medium",
-      boundary: "effectful",
-      rollbackable: false,
+    ).toMatchObject({
+      actionClass: "memory_write",
+      effectClasses: ["memory_write", "workspace_write"],
+      recoveryPolicy: { kind: "none" },
     });
 
     const inspectStart = runtime.authority.tools.start({
@@ -428,17 +473,15 @@ describe("effect governance policy modes", () => {
     expect(promoteStart.mutationReceipt).toBeUndefined();
   });
 
-  test("recall tools expose explicit read and curation governance descriptors", () => {
-    expect(getToolGovernanceDescriptor("recall_search")).toEqual({
-      effects: ["workspace_read", "runtime_observe"],
-      defaultRisk: "low",
-      boundary: "safe",
+  test("recall tools expose explicit read and curation action policies", () => {
+    expect(getToolActionPolicy("recall_search")).toMatchObject({
+      actionClass: "workspace_read",
+      riskLevel: "low",
     });
-    expect(getToolGovernanceDescriptor("recall_curate")).toEqual({
-      effects: ["memory_write"],
-      defaultRisk: "medium",
-      boundary: "effectful",
-      rollbackable: false,
+    expect(getToolActionPolicy("recall_curate")).toMatchObject({
+      actionClass: "memory_write",
+      riskLevel: "medium",
+      recoveryPolicy: { kind: "none" },
       requiredRoutingScopes: ["operator", "meta"],
     });
   });
@@ -462,32 +505,52 @@ describe("effect governance policy modes", () => {
     );
   });
 
-  test("tool governance descriptor equality includes required routing scopes", () => {
+  test("tool action policy equality includes required routing scopes", () => {
     expect(
-      sameToolGovernanceDescriptor(
+      sameToolActionPolicy(
         {
-          effects: ["memory_write"],
-          defaultRisk: "medium",
+          actionClass: "memory_write",
+          riskLevel: "medium",
+          defaultAdmission: "allow",
+          maxAdmission: "ask",
+          receiptPolicy: { kind: "control_plane", required: true },
+          recoveryPolicy: { kind: "none" },
+          effectClasses: ["memory_write"],
           requiredRoutingScopes: ["operator"],
         },
         {
-          effects: ["memory_write"],
-          defaultRisk: "medium",
+          actionClass: "memory_write",
+          riskLevel: "medium",
+          defaultAdmission: "allow",
+          maxAdmission: "ask",
+          receiptPolicy: { kind: "control_plane", required: true },
+          recoveryPolicy: { kind: "none" },
+          effectClasses: ["memory_write"],
           requiredRoutingScopes: ["meta"],
         },
       ),
     ).toBe(false);
 
     expect(
-      sameToolGovernanceDescriptor(
+      sameToolActionPolicy(
         {
-          effects: ["memory_write"],
-          defaultRisk: "medium",
+          actionClass: "memory_write",
+          riskLevel: "medium",
+          defaultAdmission: "allow",
+          maxAdmission: "ask",
+          receiptPolicy: { kind: "control_plane", required: true },
+          recoveryPolicy: { kind: "none" },
+          effectClasses: ["memory_write"],
           requiredRoutingScopes: ["meta", "operator"],
         },
         {
-          effects: ["memory_write"],
-          defaultRisk: "medium",
+          actionClass: "memory_write",
+          riskLevel: "medium",
+          defaultAdmission: "allow",
+          maxAdmission: "ask",
+          receiptPolicy: { kind: "control_plane", required: true },
+          recoveryPolicy: { kind: "none" },
+          effectClasses: ["memory_write"],
           requiredRoutingScopes: ["operator", "meta"],
         },
       ),
@@ -723,10 +786,10 @@ describe("resource lease negotiation", () => {
     });
     const sessionId = "resource-lease-effect-1";
 
-    runtime.maintain.tools.registerGovernanceDescriptor("custom_network_tool", {
-      effects: ["external_network"],
-      defaultRisk: "high",
-    });
+    runtime.maintain.tools.registerActionPolicy(
+      "custom_network_tool",
+      customActionPolicy(["external_network"]),
+    );
     expect(runtime.authority.skills.activate(sessionId, "design").ok).toBe(true);
     expect(runtime.inspect.tools.checkAccess(sessionId, "task_add_item").allowed).toBe(true);
     expect(runtime.inspect.tools.checkAccess(sessionId, "custom_network_tool").allowed).toBe(false);

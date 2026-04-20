@@ -180,7 +180,7 @@ export class ToolAccessPolicyService {
     }
 
     if (authority.source !== "exact" && authority.source !== "registry") {
-      const reason = `Tool '${normalizedToolName}' requires an exact governance descriptor.`;
+      const reason = `Tool '${normalizedToolName}' requires an exact action policy.`;
       if (emitEvents) {
         this.recordBlockedCall(sessionId, normalizedToolName, skill?.name, reason, {
           resolution: authority.source,
@@ -379,8 +379,8 @@ export class ToolAccessPolicyService {
         resolution: authority.source,
         message:
           authority.source === "hint"
-            ? "Tool governance fell back to regex hint matching; add an exact descriptor to remove ambiguity."
-            : "Tool governance is missing an exact descriptor; access remains blocked until one is declared.",
+            ? "Tool action policy fell back to regex hint matching; add an exact policy to remove ambiguity."
+            : "Tool action policy is missing an exact policy; access remains blocked until one is declared.",
       },
     });
   }

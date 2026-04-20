@@ -23,6 +23,7 @@ refresh the pointer summary and `Last reviewed` metadata here.
 ## Runtime Shape And Policy
 
 - [`rfc-architecture-doc-precision-review.md`](./rfc-architecture-doc-precision-review.md)
+- [`rfc-action-policy-registry-and-least-privilege-governance.md`](./rfc-action-policy-registry-and-least-privilege-governance.md)
 - [`rfc-authority-surface-narrowing-and-runtime-facade-compression.md`](./rfc-authority-surface-narrowing-and-runtime-facade-compression.md)
 - [`rfc-brewva-c2-full-internalization-and-kernel-substrate-boundaries.md`](./rfc-brewva-c2-full-internalization-and-kernel-substrate-boundaries.md)
 - [`rfc-boundary-first-subtraction-and-model-native-recovery.md`](./rfc-boundary-first-subtraction-and-model-native-recovery.md)

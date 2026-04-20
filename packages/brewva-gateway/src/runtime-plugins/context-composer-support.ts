@@ -46,8 +46,7 @@ export function prepareContextComposerSupport(input: {
         toolName,
         usage: input.usage,
       }),
-    resolveGovernanceDescriptor: (toolName) =>
-      input.runtime.inspect.tools.getGovernanceDescriptor(toolName),
+    resolveActionPolicy: (toolName) => input.runtime.inspect.tools.getActionPolicy(toolName),
   });
   const skillRecommendations = deriveSkillRecommendations(input.runtime, {
     sessionId: input.sessionId,

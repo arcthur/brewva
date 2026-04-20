@@ -593,6 +593,29 @@
             },
             "sanitizeContext": {
               "type": "boolean"
+            },
+            "actionAdmissionOverrides": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string",
+                "enum": ["allow", "ask", "deny"]
+              },
+              "propertyNames": {
+                "enum": [
+                  "workspace_read",
+                  "runtime_observe",
+                  "workspace_patch",
+                  "memory_write",
+                  "control_state_mutation",
+                  "budget_mutation",
+                  "local_exec_readonly",
+                  "local_exec_effectful",
+                  "external_side_effect",
+                  "schedule_mutation",
+                  "delegation",
+                  "credential_access"
+                ]
+              }
             }
           }
         },
@@ -1043,7 +1066,11 @@
         "external_network",
         "external_side_effect",
         "schedule_mutation",
-        "memory_write"
+        "memory_write",
+        "budget_mutation",
+        "control_state_mutation",
+        "delegation",
+        "credential_access"
       ]
     },
     "VerificationLevel": {

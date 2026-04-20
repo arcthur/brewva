@@ -547,6 +547,13 @@ export class ToolGateService {
               defaultRisk: authority.descriptor?.defaultRisk ?? null,
               requiresApproval: authority.requiresApproval,
               rollbackable: authority.rollbackable,
+              actionClass: authority.actionClass ?? null,
+              riskLevel: authority.riskLevel ?? null,
+              defaultAdmission: authority.defaultAdmission ?? null,
+              maxAdmission: authority.maxAdmission ?? null,
+              effectiveAdmission: authority.effectiveAdmission ?? null,
+              receiptPolicy: authority.receiptPolicy ?? null,
+              recoveryPolicy: authority.recoveryPolicy ?? null,
             },
           })
         : undefined;

@@ -168,7 +168,7 @@ Rendered capability detail may include:
 - visible-now summary
 - boundary counts
 - approval-required flags
-- rollbackable flags
+- action class, receipt policy, and recovery policy
 - explicit `$tool_name` detail
 
 Compaction pressure degrades disclosure semantically rather than truncating raw

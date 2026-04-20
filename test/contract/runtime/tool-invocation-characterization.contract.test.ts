@@ -331,6 +331,34 @@ describe("Tool invocation characterization", () => {
     ]);
   });
 
+  test("effect gate telemetry records semantic action policy evidence", () => {
+    const runtime = createRuntime({
+      governancePort: createTrustedLocalGovernancePort(),
+    });
+    const sessionId = "tool-char-action-policy-evidence";
+
+    const started = runtime.authority.tools.start({
+      sessionId,
+      toolCallId: "tc-exec-policy",
+      toolName: "exec",
+      args: { command: "echo hi" },
+    });
+
+    expect(started.allowed).toBe(true);
+    const effectGateEvent = runtime.inspect.events
+      .query(sessionId)
+      .find((event) => event.type === "tool_effect_gate_selected");
+    expect(effectGateEvent?.payload).toMatchObject({
+      actionClass: "local_exec_effectful",
+      riskLevel: "high",
+      defaultAdmission: "ask",
+      maxAdmission: "ask",
+      effectiveAdmission: "ask",
+      receiptPolicy: { kind: "commitment", required: true },
+      recoveryPolicy: { kind: "manual_recovery_evidence" },
+    });
+  });
+
   test("deferred effect commitment keeps approval request before block event", () => {
     const runtime = createRuntime();
     const sessionId = "tool-char-defer";

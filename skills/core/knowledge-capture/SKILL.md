@@ -37,6 +37,7 @@ effects:
     - workspace_read
     - workspace_write
     - runtime_observe
+    - delegation
   denied_effects:
     - local_exec
 resources:

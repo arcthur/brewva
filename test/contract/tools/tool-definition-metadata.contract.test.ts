@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createRequire } from "node:module";
-import { TOOL_GOVERNANCE_BY_NAME, getExactToolGovernanceDescriptor } from "@brewva/brewva-runtime";
+import { TOOL_ACTION_POLICY_BY_NAME, getExactToolActionPolicy } from "@brewva/brewva-runtime";
 import {
   MANAGED_BREWVA_TOOL_NAMES,
   attachBrewvaToolExecutionTraits,
@@ -28,7 +28,7 @@ const { Type } = requireFromBrewvaTools("@sinclair/typebox") as {
 };
 
 describe("managed Brewva tool definition metadata", () => {
-  test("default Brewva tool bundle attaches surface and governance metadata", () => {
+  test("default Brewva tool bundle attaches surface and action class metadata", () => {
     const runtime = {
       internal: {},
     } as Parameters<typeof buildBrewvaTools>[0]["runtime"];
@@ -43,22 +43,23 @@ describe("managed Brewva tool definition metadata", () => {
         getBrewvaToolSurface(tool.name),
         `missing tool surface for ${tool.name}`,
       );
-      const expectedGovernance = requireDefined(
-        TOOL_GOVERNANCE_BY_NAME[tool.name],
-        `missing governance metadata for ${tool.name}`,
+      const expectedPolicy = requireDefined(
+        TOOL_ACTION_POLICY_BY_NAME[tool.name],
+        `missing action policy for ${tool.name}`,
       );
       expect(metadata.surface).toBe(expectedSurface);
-      expect(metadata.governance).toEqual(expectedGovernance);
+      expect(metadata.actionClass).toBe(expectedPolicy.actionClass);
+      expect("governance" in metadata).toBe(false);
       expect(
         requireDefined(
-          getExactToolGovernanceDescriptor(tool.name),
-          `missing exact governance descriptor for ${tool.name}`,
+          getExactToolActionPolicy(tool.name),
+          `missing exact action policy for ${tool.name}`,
         ),
-      ).toEqual(metadata.governance);
+      ).toEqual(expectedPolicy);
     }
   });
 
-  test("A2A tools attach surface and governance metadata", () => {
+  test("A2A tools attach surface and action class metadata", () => {
     const tools = createA2ATools({
       runtime: {
         orchestration: {
@@ -80,18 +81,19 @@ describe("managed Brewva tool definition metadata", () => {
         getBrewvaToolSurface(tool.name),
         `missing tool surface for ${tool.name}`,
       );
-      const expectedGovernance = requireDefined(
-        TOOL_GOVERNANCE_BY_NAME[tool.name],
-        `missing governance metadata for ${tool.name}`,
+      const expectedPolicy = requireDefined(
+        TOOL_ACTION_POLICY_BY_NAME[tool.name],
+        `missing action policy for ${tool.name}`,
       );
       expect(metadata.surface).toBe(expectedSurface);
-      expect(metadata.governance).toEqual(expectedGovernance);
+      expect(metadata.actionClass).toBe(expectedPolicy.actionClass);
+      expect("governance" in metadata).toBe(false);
       expect(
         requireDefined(
-          getExactToolGovernanceDescriptor(tool.name),
-          `missing exact governance descriptor for ${tool.name}`,
+          getExactToolActionPolicy(tool.name),
+          `missing exact action policy for ${tool.name}`,
         ),
-      ).toEqual(metadata.governance);
+      ).toEqual(expectedPolicy);
     }
   });
 
@@ -174,7 +176,9 @@ describe("managed Brewva tool definition metadata", () => {
       streamingEligible: true,
       contextModifying: false,
     });
-    expect(getBrewvaToolMetadata(tool)?.governance).toEqual(TOOL_GOVERNANCE_BY_NAME.grep);
+    expect(getBrewvaToolMetadata(tool)?.actionClass).toBe(
+      requireDefined(TOOL_ACTION_POLICY_BY_NAME.grep, "missing grep policy").actionClass,
+    );
   });
 
   test("execution traits can be attached to non-managed tools without surface metadata", () => {

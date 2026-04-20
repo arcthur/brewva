@@ -394,7 +394,7 @@ mutable provider registry.
 
 - `checkAccess(sessionId, toolName, args?)`
 - `explainAccess(input)`
-- `getGovernanceDescriptor(toolName, args?)`
+- `getActionPolicy(toolName, args?)`
 - `listResourceLeases(sessionId, query?)`
 - `resolveUndoSessionId(preferredSessionId?)`
 
@@ -662,12 +662,14 @@ descriptor inspection.
 
 ### `maintain.tools`
 
-- `registerGovernanceDescriptor(toolName, input)`
-- `registerGovernanceResolver(toolName, resolver)`
-- `unregisterGovernanceDescriptor(toolName)`
+- `registerActionPolicy(toolName, input)`
+- `registerActionPolicyResolver(toolName, resolver)`
+- `unregisterActionPolicy(toolName)`
 
-These are maintenance-time governance registry operations. They are not
-read-only inspection and they are not effect authority by themselves.
+These are maintenance-time action policy registry operations for custom tools.
+They are not read-only inspection and they do not grant runtime capabilities by
+themselves. The registry lives in `@brewva/brewva-runtime`; managed tools only
+declare an `actionClass` plus their independent `requiredCapabilities`.
 
 ### `maintain.session`
 

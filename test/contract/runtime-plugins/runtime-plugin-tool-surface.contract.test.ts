@@ -8,7 +8,7 @@ import type {
   SkillRegistryLoadReport,
   SkillRoutingScope,
   TaskPhase,
-  ToolGovernanceDescriptor,
+  ToolActionPolicy,
 } from "@brewva/brewva-runtime";
 import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import type { BrewvaToolDefinition } from "@brewva/brewva-substrate";
@@ -96,9 +96,9 @@ interface ToolSurfaceRuntimeOptions {
   recordEvent?: ToolSurfaceRuntime["recordEvent"];
   routingScopes?: SkillRoutingScope[];
   routingEnabled?: boolean;
-  governanceDescriptors?: Array<{
+  actionPolicies?: Array<{
     toolName: string;
-    descriptor: ToolGovernanceDescriptor;
+    policy: ToolActionPolicy;
   }>;
 }
 
@@ -109,11 +109,8 @@ function createToolSurfaceRuntime(options: ToolSurfaceRuntimeOptions = {}): Tool
       config.skills.routing.scopes = options.routingScopes ?? ["core", "domain"];
     }),
   });
-  for (const registration of options.governanceDescriptors ?? []) {
-    runtime.maintain.tools.registerGovernanceDescriptor(
-      registration.toolName,
-      registration.descriptor,
-    );
+  for (const registration of options.actionPolicies ?? []) {
+    runtime.maintain.tools.registerActionPolicy(registration.toolName, registration.policy);
   }
   const listSkills = options.listSkills ?? (() => []);
   const routingScopes = options.routingScopes ?? ["core", "domain"];
@@ -358,12 +355,17 @@ describe("tool surface runtime plugin", () => {
     ]);
 
     const runtime = createToolSurfaceRuntime({
-      governanceDescriptors: [
+      actionPolicies: [
         {
           toolName: "narrative_memory",
-          descriptor: {
-            effects: ["runtime_observe"],
-            defaultRisk: "low",
+          policy: {
+            actionClass: "runtime_observe",
+            riskLevel: "low",
+            defaultAdmission: "allow",
+            maxAdmission: "allow",
+            receiptPolicy: { kind: "audit", required: false },
+            recoveryPolicy: { kind: "none" },
+            effectClasses: ["runtime_observe"],
             requiredRoutingScopes: ["operator"],
           },
         },

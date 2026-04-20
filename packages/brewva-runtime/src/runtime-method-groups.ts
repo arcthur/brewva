@@ -88,9 +88,9 @@ import type {
   TaskTargetDescriptor,
   TaskSpec,
   TaskState,
+  ToolActionPolicy,
+  ToolActionPolicyResolver,
   ToolExecutionBoundary,
-  ToolGovernanceDescriptor,
-  ToolGovernanceResolver,
   ToolMutationReceipt,
   ToolMutationRollbackResult,
   TransientReductionObservationInput,
@@ -138,10 +138,10 @@ import type { TruthService } from "./services/truth.js";
 import type { VerificationService } from "./services/verification.js";
 import type { SkillRegistry } from "./skills/registry.js";
 
-interface ToolGovernanceRegistryLike {
-  get(toolName: string, args?: Record<string, unknown>): ToolGovernanceDescriptor | undefined;
-  register(toolName: string, input: ToolGovernanceDescriptor): void;
-  registerResolver(toolName: string, resolver: ToolGovernanceResolver): void;
+interface ActionPolicyRegistryLike {
+  get(toolName: string, args?: Record<string, unknown>): ToolActionPolicy | undefined;
+  register(toolName: string, input: ToolActionPolicy): void;
+  registerResolver(toolName: string, resolver: ToolActionPolicyResolver): void;
   unregister(toolName: string): void;
 }
 
@@ -290,13 +290,10 @@ export interface BrewvaRuntimeMethodGroups {
       reason?: string;
       warning?: string;
     };
-    getGovernanceDescriptor(
-      toolName: string,
-      args?: Record<string, unknown>,
-    ): ToolGovernanceDescriptor | undefined;
-    registerGovernanceDescriptor(toolName: string, input: ToolGovernanceDescriptor): void;
-    registerGovernanceResolver(toolName: string, resolver: ToolGovernanceResolver): void;
-    unregisterGovernanceDescriptor(toolName: string): void;
+    getActionPolicy(toolName: string, args?: Record<string, unknown>): ToolActionPolicy | undefined;
+    registerActionPolicy(toolName: string, input: ToolActionPolicy): void;
+    registerActionPolicyResolver(toolName: string, resolver: ToolActionPolicyResolver): void;
+    unregisterActionPolicy(toolName: string): void;
     start(input: {
       sessionId: string;
       toolCallId: string;
@@ -573,7 +570,7 @@ export interface RuntimeMethodGroupsDependencies {
   eventStore: BrewvaEventStore;
   eventPipeline: EventPipelineService;
   costService: CostService;
-  toolGovernanceRegistry: ToolGovernanceRegistryLike;
+  actionPolicyRegistry: ActionPolicyRegistryLike;
   getReasoningService(): ReasoningService;
   getToolGateService(): ToolGateService;
   getToolInvocationSpine(): ToolInvocationSpine;
@@ -796,14 +793,13 @@ export function createRuntimeMethodGroups(
           ? { allowed: true, warning: warnings.join("; ") }
           : { allowed: true };
       },
-      getGovernanceDescriptor: (toolName: string, args?: Record<string, unknown>) =>
-        deps.toolGovernanceRegistry.get(toolName, args),
-      registerGovernanceDescriptor: (toolName: string, input: ToolGovernanceDescriptor) =>
-        deps.toolGovernanceRegistry.register(toolName, input),
-      registerGovernanceResolver: (toolName: string, resolver: ToolGovernanceResolver) =>
-        deps.toolGovernanceRegistry.registerResolver(toolName, resolver),
-      unregisterGovernanceDescriptor: (toolName: string) =>
-        deps.toolGovernanceRegistry.unregister(toolName),
+      getActionPolicy: (toolName: string, args?: Record<string, unknown>) =>
+        deps.actionPolicyRegistry.get(toolName, args),
+      registerActionPolicy: (toolName: string, input: ToolActionPolicy) =>
+        deps.actionPolicyRegistry.register(toolName, input),
+      registerActionPolicyResolver: (toolName: string, resolver: ToolActionPolicyResolver) =>
+        deps.actionPolicyRegistry.registerResolver(toolName, resolver),
+      unregisterActionPolicy: (toolName: string) => deps.actionPolicyRegistry.unregister(toolName),
       start: (input: Parameters<ToolInvocationSpine["begin"]>[0]) =>
         deps.getToolInvocationSpine().begin(input),
       finish: (input: Parameters<ToolInvocationSpine["complete"]>[0]) => {

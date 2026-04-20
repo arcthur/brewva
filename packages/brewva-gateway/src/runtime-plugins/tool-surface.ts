@@ -2,7 +2,8 @@ import {
   SKILL_REPAIR_ALLOWED_TOOL_NAMES,
   SKILL_RECOMMENDATION_DERIVED_EVENT_TYPE,
   TOOL_SURFACE_RESOLVED_EVENT_TYPE,
-  getToolGovernanceDescriptor,
+  deriveToolGovernanceDescriptor,
+  getToolActionPolicy,
   listSkillAllowedEffects,
   listSkillDeniedEffects,
   listSkillFallbackTools,
@@ -19,7 +20,6 @@ import type {
 import {
   BASE_BREWVA_TOOL_NAMES,
   CONTROL_PLANE_BREWVA_TOOL_NAMES,
-  getBrewvaToolMetadata,
   getBrewvaToolSurface,
   MANAGED_BREWVA_TOOL_NAMES,
   OPERATOR_BREWVA_TOOL_NAMES,
@@ -105,10 +105,10 @@ export interface ToolSurfaceRuntime {
   };
   inspect: {
     tools: {
-      getGovernanceDescriptor(
+      getActionPolicy(
         toolName: string,
         args?: Record<string, unknown>,
-      ): ReturnType<typeof getToolGovernanceDescriptor>;
+      ): ReturnType<typeof getToolActionPolicy>;
     };
     skills: {
       list(): ToolSurfaceSkill[];
@@ -208,14 +208,10 @@ function resolveSurfaceSkills(runtime: ToolSurfaceRuntime, sessionId: string): T
 function resolveManagedToolGovernanceDescriptor(
   runtime: ToolSurfaceRuntime,
   toolName: string,
-  dynamicToolDefinitions?: ReadonlyMap<string, ToolDefinition>,
+  _dynamicToolDefinitions?: ReadonlyMap<string, ToolDefinition>,
 ) {
-  const dynamicMetadata = getBrewvaToolMetadata(dynamicToolDefinitions?.get(toolName));
-  return (
-    dynamicMetadata?.governance ??
-    runtime.inspect.tools.getGovernanceDescriptor(toolName) ??
-    getToolGovernanceDescriptor(toolName)
-  );
+  const policy = runtime.inspect.tools.getActionPolicy(toolName) ?? getToolActionPolicy(toolName);
+  return policy ? deriveToolGovernanceDescriptor(policy) : undefined;
 }
 
 function collectRequestableOperatorManagedToolNames(

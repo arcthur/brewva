@@ -118,6 +118,7 @@ None currently.
 
 ## Promoted notes (status pointers)
 
+- `docs/research/promoted/rfc-action-policy-registry-and-least-privilege-governance.md`
 - `docs/research/promoted/rfc-architecture-doc-precision-review.md`
 - `docs/research/promoted/rfc-authority-surface-narrowing-and-runtime-facade-compression.md`
 - `docs/research/promoted/rfc-brewva-c2-full-internalization-and-kernel-substrate-boundaries.md`

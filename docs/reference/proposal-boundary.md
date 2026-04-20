@@ -122,10 +122,10 @@ Current admission is conservative:
 - `payload.toolCallId` is required
 - `payload.argsDigest` is required
 - `payload.boundary` must be `effectful`
-- the tool must have an exact or registry-backed governance descriptor; regex
+- the tool must have an exact or registry-backed action policy; regex
   hints are not sufficient for admission
-- the tool must actually require approval under that descriptor
-- the declared `effects` must match the governance descriptor
+- the tool must actually require approval under that action policy
+- the declared `effects` must match the policy-derived execution descriptor
 
 Decision meanings:
 
@@ -143,7 +143,8 @@ Not every effectful action becomes a proposal.
 Direct kernel execution still applies to:
 
 - `safe` tools
-- `effectful` tools that are rollbackable but not approval-bound
+- `effectful` tools whose action policy admits direct execution with an
+  appropriate receipt and recovery policy
 - internal runtime bookkeeping that does not cross an external authority boundary
 
 The proposal boundary exists only for approval-bearing effect commitment.

@@ -328,8 +328,9 @@ message deltas or standalone tool-result transport frames.
 When a tool definition carries Brewva execution-traits metadata, `tool_call`
 and `tool_execution_start` may include `executionTraits` payload fields. Those
 fields are hosted scheduling metadata derived from the specific invocation
-input; they do not replace governance descriptors or receipt-bearing authority
-decisions.
+input; they do not replace runtime action policies or receipt-bearing authority
+decisions. Runtime action policies remain the source for admission, receipt, and
+recovery semantics.
 
 For hosted session-wire live transport, repo-owned tool lifecycle receipts also
 carry `attempt` when the hosted turn has an authoritative active attempt. Those
@@ -788,7 +789,13 @@ properties such as:
 
 - `boundary`
 - `requiresApproval`
-- `rollbackable`
+- `actionClass`
+- `riskLevel`
+- `defaultAdmission`
+- `maxAdmission`
+- `effectiveAdmission`
+- `receiptPolicy`
+- `recoveryPolicy`
 
 `subagent_*` lifecycle events carry delegated-run state such as:
 

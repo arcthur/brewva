@@ -781,15 +781,23 @@ describe("runtime facade coverage", () => {
       }),
     });
     const sessionId = "runtime-facade-exact-call-guard-1";
-    runtime.maintain.tools.registerGovernanceDescriptor("browser_snapshot", {
-      effects: ["runtime_observe"],
-      boundary: "safe",
-      defaultRisk: "low",
+    runtime.maintain.tools.registerActionPolicy("browser_snapshot", {
+      actionClass: "runtime_observe",
+      riskLevel: "low",
+      defaultAdmission: "allow",
+      maxAdmission: "allow",
+      receiptPolicy: { kind: "audit", required: false },
+      recoveryPolicy: { kind: "none" },
+      effectClasses: ["runtime_observe"],
     });
-    runtime.maintain.tools.registerGovernanceDescriptor("browser_get", {
-      effects: ["runtime_observe"],
-      boundary: "safe",
-      defaultRisk: "low",
+    runtime.maintain.tools.registerActionPolicy("browser_get", {
+      actionClass: "runtime_observe",
+      riskLevel: "low",
+      defaultAdmission: "allow",
+      maxAdmission: "allow",
+      receiptPolicy: { kind: "audit", required: false },
+      recoveryPolicy: { kind: "none" },
+      effectClasses: ["runtime_observe"],
     });
 
     const start = (toolCallId: string, toolName: string, args: Record<string, unknown>) =>
@@ -822,8 +830,8 @@ describe("runtime facade coverage", () => {
       }),
     ]);
 
-    runtime.maintain.tools.unregisterGovernanceDescriptor("browser_snapshot");
-    runtime.maintain.tools.unregisterGovernanceDescriptor("browser_get");
+    runtime.maintain.tools.unregisterActionPolicy("browser_snapshot");
+    runtime.maintain.tools.unregisterActionPolicy("browser_get");
   });
 
   test("iteration fact helpers stay scoped to the current session", () => {

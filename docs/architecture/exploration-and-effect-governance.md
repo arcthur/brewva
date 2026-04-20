@@ -271,16 +271,17 @@ Deployment boundary policy is now a stable part of the governance model.
 
 The architectural split is:
 
-- tool governance descriptors classify what kind of effect a tool carries
+- runtime action policies classify what kind of effect a tool carries and how
+  it is admitted, receipted, and recovered
 - deployment boundary policy constrains where that effect may land in a
   specific deployment
 - execution adapters enforce the resulting decision at the concrete tool
   boundary
 
 That means hostnames, filesystem roots, and similar deployment-specific rules
-do not belong inside `ToolGovernanceDescriptor`.
-They belong in runtime config and are evaluated on the shared invocation path
-for the small set of tools that need argument-aware classification.
+do not belong inside the action policy registry. They belong in runtime config
+and are evaluated on the shared invocation path for the small set of tools that
+need argument-aware classification.
 
 Current implementation notes:
 

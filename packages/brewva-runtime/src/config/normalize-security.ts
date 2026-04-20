@@ -1,4 +1,10 @@
-import type { BrewvaConfig } from "../contracts/index.js";
+import type { BrewvaConfig, ToolActionClass, ToolAdmissionBehavior } from "../contracts/index.js";
+import {
+  TOOL_ACTION_CLASSES,
+  TOOL_ADMISSION_BEHAVIORS,
+  compareToolAdmission,
+  getToolActionClassAdmissionBounds,
+} from "../governance/action-policy.js";
 import {
   isRecord,
   normalizeBoolean,
@@ -16,6 +22,43 @@ const VALID_SECURITY_ENFORCEMENT_MODES = new Set(["off", "warn", "enforce", "inh
 const VALID_BOUNDARY_NETWORK_MODES = new Set(["inherit", "deny", "allowlist"]);
 const VALID_EXACT_CALL_LOOP_MODES = new Set(["warn", "block"]);
 const VALID_EXECUTION_BACKENDS = new Set(["host", "sandbox", "best_available"]);
+const VALID_ACTION_CLASSES = new Set<string>(TOOL_ACTION_CLASSES);
+const VALID_ADMISSION_BEHAVIORS = new Set<string>(TOOL_ADMISSION_BEHAVIORS);
+
+function normalizeActionAdmissionOverrides(
+  value: unknown,
+  fallback: BrewvaConfig["security"]["actionAdmissionOverrides"],
+): BrewvaConfig["security"]["actionAdmissionOverrides"] {
+  if (!isRecord(value)) {
+    return { ...fallback };
+  }
+  const normalized: BrewvaConfig["security"]["actionAdmissionOverrides"] = {};
+  for (const [actionClass, admission] of Object.entries(value)) {
+    if (!VALID_ACTION_CLASSES.has(actionClass)) {
+      throw new Error(`Invalid security.actionAdmissionOverrides action class '${actionClass}'`);
+    }
+    if (!VALID_ADMISSION_BEHAVIORS.has(admission as string)) {
+      throw new Error(
+        `Invalid security.actionAdmissionOverrides.${actionClass} admission '${String(admission)}'`,
+      );
+    }
+    const normalizedActionClass = actionClass as ToolActionClass;
+    const normalizedAdmission = admission as ToolAdmissionBehavior;
+    const bounds = getToolActionClassAdmissionBounds(normalizedActionClass);
+    if (compareToolAdmission(normalizedAdmission, bounds.maxAdmission) < 0) {
+      throw new Error(
+        `security.actionAdmissionOverrides.${actionClass} cannot relax beyond max admission '${bounds.maxAdmission}'`,
+      );
+    }
+    if (bounds.riskLevel === "critical" && compareToolAdmission(normalizedAdmission, "ask") < 0) {
+      throw new Error(
+        `security.actionAdmissionOverrides.${actionClass} cannot relax critical action classes below 'ask'`,
+      );
+    }
+    normalized[normalizedActionClass] = normalizedAdmission;
+  }
+  return normalized;
+}
 
 function normalizeBoundaryNetworkRules(
   value: unknown,
@@ -123,6 +166,10 @@ export function normalizeSecurityConfig(
   return {
     mode: normalizedSecurityMode,
     sanitizeContext: normalizeBoolean(securityInput.sanitizeContext, defaults.sanitizeContext),
+    actionAdmissionOverrides: normalizeActionAdmissionOverrides(
+      securityInput.actionAdmissionOverrides,
+      defaults.actionAdmissionOverrides,
+    ),
     enforcement: {
       effectAuthorizationMode: normalizeStrictStringEnum(
         securityEnforcementInput.effectAuthorizationMode,

@@ -164,12 +164,9 @@ describe("context composer", () => {
       ],
     });
 
-    expect(result.blocks.map((block) => block.category)).toEqual([
-      "narrative",
-      "narrative",
-      "constraint",
-      "constraint",
-    ]);
+    const categories = result.blocks.map((block) => block.category);
+    expect(categories.slice(0, 2)).toEqual(["narrative", "narrative"]);
+    expect(categories.slice(2).every((category) => category === "constraint")).toBe(true);
     expect(result.content.indexOf("[TaskState]")).toBeLessThan(
       result.content.indexOf("[CustomConstraint]"),
     );

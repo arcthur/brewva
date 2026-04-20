@@ -565,13 +565,17 @@ describe("runtime proposals API", () => {
     expect(remainingPending[0]?.toolCallId).toBe(asBrewvaToolCallId("tc-exec-reject-twice"));
   });
 
-  test("custom approval-bound descriptors also fail closed without a governance port", () => {
+  test("custom approval-bound action policies also fail closed without a governance port", () => {
     const toolName = "custom_commitment_probe";
     const runtime = createCleanRuntime();
-    runtime.maintain.tools.registerGovernanceDescriptor(toolName, {
-      effects: ["local_exec"],
-      defaultRisk: "high",
-      boundary: "effectful",
+    runtime.maintain.tools.registerActionPolicy(toolName, {
+      actionClass: "local_exec_effectful",
+      riskLevel: "high",
+      defaultAdmission: "ask",
+      maxAdmission: "ask",
+      receiptPolicy: { kind: "commitment", required: true },
+      recoveryPolicy: { kind: "manual_recovery_evidence" },
+      effectClasses: ["local_exec"],
     });
     try {
       const sessionId = `runtime-proposals-custom-commitment-${crypto.randomUUID()}`;
@@ -589,7 +593,7 @@ describe("runtime proposals API", () => {
       expect(started.reason).toContain("effect_commitment_pending_operator_approval:");
       expect(runtime.inspect.proposals.listPendingEffectCommitments(sessionId)).toHaveLength(1);
     } finally {
-      runtime.maintain.tools.unregisterGovernanceDescriptor(toolName);
+      runtime.maintain.tools.unregisterActionPolicy(toolName);
     }
   });
 
@@ -695,7 +699,7 @@ describe("runtime proposals API", () => {
     });
 
     expect(started.allowed).toBe(false);
-    expect(started.reason).toContain("exact governance descriptor");
+    expect(started.reason).toContain("exact action policy");
     expect(runtime.inspect.proposals.list(sessionId)).toHaveLength(0);
     expect(runtime.inspect.proposals.listPendingEffectCommitments(sessionId)).toHaveLength(0);
   });

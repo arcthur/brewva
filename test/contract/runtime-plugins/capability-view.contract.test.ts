@@ -325,7 +325,7 @@ describe("capability view", () => {
 
     expect(result.details[0]).toMatchObject({
       name: "task_record_acceptance",
-      rollbackable: false,
+      recoveryPolicy: { kind: "none" },
       requiresApproval: false,
       boundary: "effectful",
     });
@@ -367,8 +367,71 @@ describe("capability view", () => {
     });
 
     expect(result.details[0]?.boundary).toBe("effectful");
-    expect(result.details[0]?.rollbackable).toBe(false);
+    expect(result.details[0]?.recoveryPolicy).toEqual({ kind: "none" });
     expect(result.details[0]?.effects).toEqual(["memory_write"]);
+  });
+
+  test("renders semantic action policy for budget mutation tools", () => {
+    const runtime = createRuntimeFixture();
+    const resourceLeaseTool = createResourceLeaseTool({ runtime });
+    const result = buildCapabilityView({
+      prompt: "inspect $resource_lease",
+      allTools: [resourceLeaseTool],
+      activeToolNames: [],
+    });
+
+    expect(result.details[0]).toMatchObject({
+      actionClass: "budget_mutation",
+      riskLevel: "medium",
+      receiptPolicy: { kind: "control_plane", required: true },
+      recoveryPolicy: { kind: "compensation", mode: "async_cancel" },
+    });
+
+    const rendered = renderCapabilityView({
+      capabilityView: result,
+      mode: "full",
+      includeInventory: false,
+    });
+    expect(rendered[2]?.content).toContain("action_class: budget_mutation");
+    expect(rendered[2]?.content).toContain("receipt_policy: control_plane(required)");
+    expect(rendered[2]?.content).toContain("recovery_policy: compensation(async_cancel)");
+    expect(rendered[2]?.content).not.toContain("rollbackable:");
+  });
+
+  test("renders control-plane and delegation actions as effectful semantic actions", () => {
+    const result = buildCapabilityView({
+      prompt: "inspect $session_compact and $subagent_run",
+      allTools: [
+        {
+          name: "session_compact",
+          description: "Compact session context.",
+          parameters: { type: "object", properties: {} },
+        },
+        {
+          name: "subagent_run",
+          description: "Run a child agent.",
+          parameters: { type: "object", properties: {} },
+        },
+      ],
+      activeToolNames: ["session_compact", "subagent_run"],
+    });
+
+    expect(result.details[0]).toMatchObject({
+      name: "session_compact",
+      actionClass: "control_state_mutation",
+      boundary: "effectful",
+      effects: ["control_state_mutation"],
+      receiptPolicy: { kind: "control_plane", required: true },
+      recoveryPolicy: { kind: "forward_correction" },
+    });
+    expect(result.details[1]).toMatchObject({
+      name: "subagent_run",
+      actionClass: "delegation",
+      boundary: "effectful",
+      effects: ["delegation"],
+      receiptPolicy: { kind: "delegation", required: true },
+      recoveryPolicy: { kind: "none", scope: "parent_delegation" },
+    });
   });
 
   test("renders compact disclosure without inventory noise", () => {

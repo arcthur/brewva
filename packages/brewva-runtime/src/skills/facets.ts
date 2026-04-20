@@ -17,6 +17,9 @@ const MUTATION_EFFECTS = new Set<ToolEffectClass>([
   "external_side_effect",
   "schedule_mutation",
   "memory_write",
+  "budget_mutation",
+  "control_state_mutation",
+  "credential_access",
 ]);
 
 export function resolveSkillIntent(contract: SkillContractLike | undefined): SkillIntentContract {

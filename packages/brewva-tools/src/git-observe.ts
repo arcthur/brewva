@@ -222,12 +222,7 @@ export function createGitStatusTool(options: GitObserveToolOptions): ToolDefinit
     },
     {
       surface: "base",
-      governance: {
-        effects: ["workspace_read"],
-        defaultRisk: "low",
-        boundary: "safe",
-        rollbackable: false,
-      },
+      actionClass: "workspace_read",
     },
   );
 }
@@ -301,12 +296,7 @@ export function createGitDiffTool(options: GitObserveToolOptions): ToolDefinitio
     },
     {
       surface: "base",
-      governance: {
-        effects: ["workspace_read"],
-        defaultRisk: "low",
-        boundary: "safe",
-        rollbackable: false,
-      },
+      actionClass: "workspace_read",
     },
   );
 }
@@ -377,12 +367,7 @@ export function createGitLogTool(options: GitObserveToolOptions): ToolDefinition
     },
     {
       surface: "base",
-      governance: {
-        effects: ["workspace_read"],
-        defaultRisk: "low",
-        boundary: "safe",
-        rollbackable: false,
-      },
+      actionClass: "workspace_read",
     },
   );
 }

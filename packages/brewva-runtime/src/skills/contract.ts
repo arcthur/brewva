@@ -459,6 +459,10 @@ const TOOL_EFFECT_CLASSES: ToolEffectClass[] = [
   "external_side_effect",
   "schedule_mutation",
   "memory_write",
+  "budget_mutation",
+  "control_state_mutation",
+  "delegation",
+  "credential_access",
 ];
 
 function normalizeIntentContract(

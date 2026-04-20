@@ -342,6 +342,41 @@ describe("Brewva config loader normalization", () => {
     expect(loaded.skills.routing.scopes).toEqual(["domain", "operator"]);
   });
 
+  test("fails fast when an action admission override exceeds the action class maximum", () => {
+    const workspace = createTestWorkspace("action-admission-override-too-relaxed");
+    writeFileSync(
+      join(workspace, ".brewva/brewva.json"),
+      JSON.stringify(
+        {
+          security: {
+            actionAdmissionOverrides: {
+              credential_access: "allow",
+            },
+          },
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    expect(() => loadBrewvaConfig({ cwd: workspace, configPath: ".brewva/brewva.json" })).toThrow(
+      /security\.actionAdmissionOverrides\.credential_access cannot relax beyond max admission 'ask'/,
+    );
+  });
+
+  test("fails fast on direct runtime config when an action admission override is too relaxed", () => {
+    const workspace = createTestWorkspace("direct-action-admission-override-too-relaxed");
+    const config = structuredClone(DEFAULT_BREWVA_CONFIG);
+    config.security.actionAdmissionOverrides = {
+      credential_access: "allow",
+    };
+
+    expect(() => new BrewvaRuntime({ cwd: workspace, config })).toThrow(
+      /security\.actionAdmissionOverrides\.credential_access cannot relax beyond max admission 'ask'/,
+    );
+  });
+
   test("loads the project config from workspace root when running from a nested cwd inside a repo", () => {
     const workspace = createTestWorkspace("workspace-root-config");
     const nestedCwd = join(workspace, "packages", "api");

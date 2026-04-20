@@ -367,15 +367,18 @@ it does not create a second scheduler or bypass scheduling governance.
 Managed Brewva tools expose exact metadata on the definition object:
 
 - `brewva.surface`
-- `brewva.governance`
+- `brewva.actionClass`
 - `brewva.requiredCapabilities`
 
-`brewva.governance` declares:
+`brewva.actionClass` is the single authoring declaration for runtime
+governance. The runtime-owned action policy registry derives the executable
+policy from that class:
 
-- `effects`
-- `defaultRisk`
-- `boundary`
-- `rollbackable`
+- risk level
+- admission behavior (`allow`, `ask`, or `deny`)
+- receipt policy
+- recovery policy
+- derived effect classes and execution boundary
 
 `brewva.requiredCapabilities` declares the runtime methods the managed tool may
 call through the scoped runtime facade. It is deny-by-default across
@@ -388,8 +391,8 @@ Current public boundary vocabulary:
 - `effectful`
 
 `effectful` does not mean "always requires approval". Some `effectful` tools
-are rollbackable and execute directly; approval is required only when the tool's
-exact governance descriptor says so.
+have exact patch recovery and execute directly with a mutation receipt; approval
+is required when the action policy admission is `ask`.
 
 Managed Brewva tools accept both `camelCase` and `snake_case` parameter keys.
 This reference shows the canonical agent-facing spellings only.

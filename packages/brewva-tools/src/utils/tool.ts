@@ -1,8 +1,4 @@
-import {
-  getExactToolGovernanceDescriptor,
-  type ToolGovernanceDescriptor,
-  normalizeToolName,
-} from "@brewva/brewva-runtime";
+import { getExactToolActionPolicy, normalizeToolName } from "@brewva/brewva-runtime";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate";
 import type { TSchema } from "@sinclair/typebox";
 import { getExactBrewvaToolRequiredCapabilities } from "../required-capabilities.js";
@@ -29,18 +25,6 @@ export function defineTool<TParams extends TSchema, TDetails = unknown>(
   tool: ToolDefinition<TParams, TDetails>,
 ): ToolDefinition<TParams, TDetails> {
   return tool;
-}
-
-function cloneGovernanceDescriptor(input: ToolGovernanceDescriptor): ToolGovernanceDescriptor {
-  return {
-    effects: [...new Set(input.effects)],
-    defaultRisk: input.defaultRisk,
-    boundary: input.boundary,
-    rollbackable: input.rollbackable,
-    requiredRoutingScopes: input.requiredRoutingScopes
-      ? [...new Set(input.requiredRoutingScopes)]
-      : undefined,
-  };
 }
 
 function cloneExecutionTraits(input: BrewvaToolExecutionTraits): BrewvaToolExecutionTraits {
@@ -103,13 +87,13 @@ function resolveCanonicalBrewvaToolMetadata(
   if (!surface) {
     return undefined;
   }
-  const governance = metadata.governance ?? getExactToolGovernanceDescriptor(normalizedName);
-  if (!governance) {
+  const actionClass = metadata.actionClass ?? getExactToolActionPolicy(normalizedName)?.actionClass;
+  if (!actionClass) {
     return undefined;
   }
   return {
     surface,
-    governance: cloneGovernanceDescriptor(governance),
+    actionClass,
     requiredCapabilities: cloneRequiredCapabilities(
       metadata.requiredCapabilities ?? getExactBrewvaToolRequiredCapabilities(normalizedName),
     ),
@@ -154,8 +138,8 @@ export function defineBrewvaTool<TParams extends TSchema, TDetails = unknown>(
   if (!canonicalMetadata?.surface) {
     throw new Error(`managed Brewva tool '${normalizedName}' is missing surface metadata`);
   }
-  if (!canonicalMetadata.governance) {
-    throw new Error(`managed Brewva tool '${normalizedName}' is missing governance metadata`);
+  if (!canonicalMetadata.actionClass) {
+    throw new Error(`managed Brewva tool '${normalizedName}' is missing action class metadata`);
   }
 
   const execute: ToolDefinition<TParams, TDetails>["execute"] = async (
@@ -216,7 +200,7 @@ export function getBrewvaToolMetadata(
   if (metadata) {
     return {
       surface: metadata.surface,
-      governance: cloneGovernanceDescriptor(metadata.governance),
+      actionClass: metadata.actionClass,
       executionTraits:
         attachedExecutionTraits ?? cloneExecutionTraitsDefinition(metadata.executionTraits),
       requiredCapabilities: cloneRequiredCapabilities(metadata.requiredCapabilities),

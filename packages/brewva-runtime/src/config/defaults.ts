@@ -44,6 +44,7 @@ export const DEFAULT_BREWVA_CONFIG: BrewvaConfig = {
   security: {
     mode: "standard",
     sanitizeContext: true,
+    actionAdmissionOverrides: {},
     enforcement: {
       effectAuthorizationMode: "inherit",
       skillMaxTokensMode: "inherit",

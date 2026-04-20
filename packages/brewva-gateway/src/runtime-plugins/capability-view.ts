@@ -1,9 +1,14 @@
 import {
-  getToolGovernanceDescriptor,
-  toolGovernanceCreatesRollbackAnchor,
-  toolGovernanceRequiresEffectCommitment,
+  deriveToolGovernanceDescriptor,
+  getToolActionPolicy,
+  toolActionPolicyRequiresApproval,
+  type ToolActionClass,
+  type ToolAdmissionBehavior,
   type ToolEffectClass,
   type ToolExecutionBoundary,
+  type ToolReceiptPolicy,
+  type ToolRecoveryPolicy,
+  type ToolRiskLevel,
 } from "@brewva/brewva-runtime";
 import {
   collectStringEnumContracts,
@@ -39,20 +44,27 @@ interface CapabilityEntry {
   visible: boolean;
   governance: boolean;
   surface: CapabilitySurface;
+  actionClass?: ToolActionClass;
+  riskLevel?: ToolRiskLevel;
+  admission?: ToolAdmissionBehavior;
+  receiptPolicy?: ToolReceiptPolicy;
+  recoveryPolicy?: ToolRecoveryPolicy;
   boundary: ToolExecutionBoundary;
   effects: ToolEffectClass[];
   requiresApproval: boolean;
-  rollbackable: boolean;
   actionGovernance: CapabilityActionGovernance[];
 }
 
 interface CapabilityManifestEntry {
   name: string;
   description: string;
+  actionClass?: ToolActionClass;
+  riskLevel?: ToolRiskLevel;
+  admission?: ToolAdmissionBehavior;
+  recoveryPolicy?: ToolRecoveryPolicy;
   boundary: ToolExecutionBoundary;
   effects: ToolEffectClass[];
   requiresApproval: boolean;
-  rollbackable: boolean;
   loadWhen: string;
 }
 
@@ -73,10 +85,14 @@ export interface CapabilityAccessDecision {
 
 export interface CapabilityActionGovernance {
   action: string;
+  actionClass?: ToolActionClass;
+  riskLevel?: ToolRiskLevel;
+  admission?: ToolAdmissionBehavior;
+  receiptPolicy?: ToolReceiptPolicy;
+  recoveryPolicy?: ToolRecoveryPolicy;
   boundary: ToolExecutionBoundary;
   effects: ToolEffectClass[];
   requiresApproval: boolean;
-  rollbackable: boolean;
 }
 
 export interface BuildCapabilityViewInput {
@@ -84,10 +100,10 @@ export interface BuildCapabilityViewInput {
   allTools: ToolLike[];
   activeToolNames: string[];
   resolveAccess?: (toolName: string) => CapabilityAccessDecision;
-  resolveGovernanceDescriptor?: (
+  resolveActionPolicy?: (
     toolName: string,
     args?: Record<string, unknown>,
-  ) => ReturnType<typeof getToolGovernanceDescriptor>;
+  ) => ReturnType<typeof getToolActionPolicy>;
   maxRequestedDetails?: number;
 }
 
@@ -111,10 +127,14 @@ export interface CapabilityDetail {
   parameterDetails: CapabilityParameterDetail[];
   requiredCapabilities: BrewvaToolRequiredCapability[];
   surface: CapabilitySurface;
+  actionClass?: ToolActionClass;
+  riskLevel?: ToolRiskLevel;
+  admission?: ToolAdmissionBehavior;
+  receiptPolicy?: ToolReceiptPolicy;
+  recoveryPolicy?: ToolRecoveryPolicy;
   boundary: ToolExecutionBoundary;
   effects: ToolEffectClass[];
   requiresApproval: boolean;
-  rollbackable: boolean;
   actionGovernance: CapabilityActionGovernance[];
   visibleNow: boolean;
   governance: boolean;
@@ -230,24 +250,32 @@ function resolveCapabilitySurface(name: string): CapabilitySurface {
   return getBrewvaToolSurface(name) ?? "external";
 }
 
-function resolveCapabilityBoundary(
-  input: Pick<BuildCapabilityViewInput, "resolveGovernanceDescriptor">,
+function resolveCapabilityPolicy(
+  input: Pick<BuildCapabilityViewInput, "resolveActionPolicy">,
   name: string,
   args?: Record<string, unknown>,
 ): {
+  actionClass?: ToolActionClass;
+  riskLevel?: ToolRiskLevel;
+  admission?: ToolAdmissionBehavior;
+  receiptPolicy?: ToolReceiptPolicy;
+  recoveryPolicy?: ToolRecoveryPolicy;
   boundary: ToolExecutionBoundary;
   effects: ToolEffectClass[];
   requiresApproval: boolean;
-  rollbackable: boolean;
 } {
-  const descriptor =
-    input.resolveGovernanceDescriptor?.(name, args) ??
-    getToolGovernanceDescriptor(name, undefined, args);
+  const policy =
+    input.resolveActionPolicy?.(name, args) ?? getToolActionPolicy(name, undefined, args);
+  const descriptor = policy ? deriveToolGovernanceDescriptor(policy) : undefined;
   return {
+    actionClass: policy?.actionClass,
+    riskLevel: policy?.riskLevel,
+    admission: policy?.defaultAdmission,
+    receiptPolicy: policy?.receiptPolicy,
+    recoveryPolicy: policy?.recoveryPolicy,
     boundary: descriptor?.boundary ?? "safe",
     effects: [...(descriptor?.effects ?? [])],
-    requiresApproval: toolGovernanceRequiresEffectCommitment(descriptor),
-    rollbackable: toolGovernanceCreatesRollbackAnchor(descriptor),
+    requiresApproval: policy ? toolActionPolicyRequiresApproval(policy) : false,
   };
 }
 
@@ -264,17 +292,19 @@ function readActionParameterValues(parameterDetails: CapabilityParameterDetail[]
 function sameCapabilityGovernance(
   left: Pick<
     CapabilityActionGovernance,
-    "boundary" | "effects" | "requiresApproval" | "rollbackable"
+    "actionClass" | "riskLevel" | "admission" | "boundary" | "effects" | "requiresApproval"
   >,
   right: Pick<
     CapabilityActionGovernance,
-    "boundary" | "effects" | "requiresApproval" | "rollbackable"
+    "actionClass" | "riskLevel" | "admission" | "boundary" | "effects" | "requiresApproval"
   >,
 ): boolean {
   return (
+    left.actionClass === right.actionClass &&
+    left.riskLevel === right.riskLevel &&
+    left.admission === right.admission &&
     left.boundary === right.boundary &&
     left.requiresApproval === right.requiresApproval &&
-    left.rollbackable === right.rollbackable &&
     left.effects.length === right.effects.length &&
     left.effects.every((effect, index) => effect === right.effects[index])
   );
@@ -288,7 +318,11 @@ function resolveActionGovernance(
     boundary: ToolExecutionBoundary;
     effects: ToolEffectClass[];
     requiresApproval: boolean;
-    rollbackable: boolean;
+    actionClass?: ToolActionClass;
+    riskLevel?: ToolRiskLevel;
+    admission?: ToolAdmissionBehavior;
+    receiptPolicy?: ToolReceiptPolicy;
+    recoveryPolicy?: ToolRecoveryPolicy;
   },
 ): CapabilityActionGovernance[] {
   const actionValues = readActionParameterValues(parameterDetails);
@@ -297,13 +331,17 @@ function resolveActionGovernance(
   }
 
   const variants = actionValues.map((action) => {
-    const resolved = resolveCapabilityBoundary(input, name, { action });
+    const resolved = resolveCapabilityPolicy(input, name, { action });
     return {
       action,
+      actionClass: resolved.actionClass,
+      riskLevel: resolved.riskLevel,
+      admission: resolved.admission,
+      receiptPolicy: resolved.receiptPolicy,
+      recoveryPolicy: resolved.recoveryPolicy,
       boundary: resolved.boundary,
       effects: resolved.effects,
       requiresApproval: resolved.requiresApproval,
-      rollbackable: resolved.rollbackable,
     };
   });
   return variants.some((variant) => !sameCapabilityGovernance(variant, baseline)) ? variants : [];
@@ -338,7 +376,7 @@ function toCapabilityEntries(input: BuildCapabilityViewInput): CapabilityEntry[]
     const name = normalizeToolName(tool.name);
     if (!name) continue;
     const parameterDetails = extractParameterDetails(tool.parameters);
-    const baseline = resolveCapabilityBoundary(input, name);
+    const baseline = resolveCapabilityPolicy(input, name);
     entries.push({
       name,
       description: tool.description.trim(),
@@ -397,11 +435,21 @@ function resolveManifestLoadWhen(surface: CapabilitySurface): string {
   return "provider_specific";
 }
 
-function resolveManifestRisk(entry: CapabilityManifestEntry): "low" | "medium" | "high" {
-  if (entry.requiresApproval) return "high";
-  if (entry.boundary === "effectful") return "medium";
-  if (entry.effects.length > 0) return "medium";
-  return "low";
+function resolveManifestRisk(entry: CapabilityManifestEntry): ToolRiskLevel | "unknown" {
+  return entry.riskLevel ?? "unknown";
+}
+
+function formatReceiptPolicy(policy: ToolReceiptPolicy | undefined): string {
+  if (!policy) return "(unknown)";
+  return `${policy.kind}${policy.required ? "(required)" : "(optional)"}`;
+}
+
+function formatRecoveryPolicy(policy: ToolRecoveryPolicy | undefined): string {
+  if (!policy) return "(unknown)";
+  if (policy.kind === "exact_patch") return `exact_patch(${policy.strategy})`;
+  if (policy.kind === "compensation") return `compensation(${policy.mode})`;
+  if (policy.kind === "none" && policy.scope) return `none(${policy.scope})`;
+  return policy.kind;
 }
 
 function formatFullDetailBlock(detail: CapabilityDetail): string {
@@ -415,10 +463,14 @@ function formatFullDetailBlock(detail: CapabilityDetail): string {
       detail.requiredCapabilities.length > 0 ? detail.requiredCapabilities.join(", ") : "(none)"
     }`,
     `surface: ${detail.surface}`,
+    `action_class: ${detail.actionClass ?? "(unknown)"}`,
+    `risk_level: ${detail.riskLevel ?? "(unknown)"}`,
+    `admission: ${detail.admission ?? "(unknown)"}`,
+    `receipt_policy: ${formatReceiptPolicy(detail.receiptPolicy)}`,
+    `recovery_policy: ${formatRecoveryPolicy(detail.recoveryPolicy)}`,
     `boundary: ${detail.boundary}`,
     `effects: ${detail.effects.length > 0 ? detail.effects.join(", ") : "(none)"}`,
     `approval_required: ${detail.requiresApproval ? "true" : "false"}`,
-    `rollbackable: ${detail.rollbackable ? "true" : "false"}`,
     `visible_now: ${detail.visibleNow ? "true" : "false"}`,
     `governance: ${detail.governance ? "true" : "false"}`,
   ];
@@ -444,9 +496,11 @@ function formatFullDetailBlock(detail: CapabilityDetail): string {
     lines.push(
       `action.${actionDetail.action}: boundary=${actionDetail.boundary} ; effects=${
         actionDetail.effects.length > 0 ? actionDetail.effects.join("|") : "(none)"
-      } ; approval=${actionDetail.requiresApproval ? "true" : "false"} ; rollback=${
-        actionDetail.rollbackable ? "true" : "false"
-      }`,
+      } ; action_class=${actionDetail.actionClass ?? "(unknown)"} ; admission=${
+        actionDetail.admission ?? "(unknown)"
+      } ; receipt=${formatReceiptPolicy(actionDetail.receiptPolicy)} ; recovery=${formatRecoveryPolicy(
+        actionDetail.recoveryPolicy,
+      )} ; approval=${actionDetail.requiresApproval ? "true" : "false"}`,
     );
   }
 
@@ -471,10 +525,12 @@ function formatCompactDetailBlock(detail: CapabilityDetail): string {
     `required_capabilities: ${
       detail.requiredCapabilities.length > 0 ? detail.requiredCapabilities.join(", ") : "(none)"
     }`,
+    `action_class: ${detail.actionClass ?? "(unknown)"}`,
+    `admission: ${detail.admission ?? "(unknown)"}`,
+    `recovery_policy: ${formatRecoveryPolicy(detail.recoveryPolicy)}`,
     `boundary: ${detail.boundary}`,
     `effects: ${detail.effects.length > 0 ? detail.effects.join(", ") : "(none)"}`,
     `approval_required: ${detail.requiresApproval ? "true" : "false"}`,
-    `rollbackable: ${detail.rollbackable ? "true" : "false"}`,
   ];
 
   for (const parameterDetail of detail.parameterDetails.slice(0, 3)) {
@@ -487,9 +543,9 @@ function formatCompactDetailBlock(detail: CapabilityDetail): string {
 
   for (const actionDetail of detail.actionGovernance.slice(0, 3)) {
     lines.push(
-      `action.${actionDetail.action}: ${actionDetail.boundary} ${
+      `action.${actionDetail.action}: ${actionDetail.actionClass ?? "(unknown)"} ${
         actionDetail.effects.length > 0 ? actionDetail.effects.join("|") : "(none)"
-      }`,
+      } recovery=${formatRecoveryPolicy(actionDetail.recoveryPolicy)}`,
     );
   }
 
@@ -522,7 +578,11 @@ function renderSummaryBlock(
       ...inventory.visibleManifest.slice(0, 6).map((entry) => {
         const risk = resolveManifestRisk(entry);
         const duty = compactText(entry.description || "(no description)", 72);
-        return `- $${entry.name} | duty=${duty} | risk=${risk} | approval=${entry.requiresApproval ? "yes" : "no"} | rollback=${entry.rollbackable ? "yes" : "no"} | load_when=${entry.loadWhen}`;
+        return `- $${entry.name} | duty=${duty} | action_class=${
+          entry.actionClass ?? "(unknown)"
+        } | risk=${risk} | admission=${entry.admission ?? "(unknown)"} | recovery=${formatRecoveryPolicy(
+          entry.recoveryPolicy,
+        )} | load_when=${entry.loadWhen}`;
       }),
     ].join("\n"),
     compactContent: [
@@ -565,15 +625,14 @@ function renderPolicyBlock(
     }
     if (policy.id === "effect_boundaries") {
       const text =
-        "boundary_policy: safe tools support direct inspection; effectful tools either create rollback anchors or require explicit approval before execution.";
+        "boundary_policy: safe tools support direct inspection; effectful tools follow action policy admission, receipt, and recovery semantics.";
       lines.push(text);
-      compactLines.push(text);
+      compactLines.push("boundary_policy: action admission governs effects.");
       continue;
     }
     if (policy.id === "explicit_request_expansion") {
       const text = "expand_hint: include `$name` in your turn to reveal one capability detail.";
       lines.push(text);
-      compactLines.push(text);
     }
   }
 
@@ -637,10 +696,14 @@ export function buildCapabilityView(input: BuildCapabilityViewInput): BuildCapab
       parameterDetails: entry.parameterDetails,
       requiredCapabilities: entry.requiredCapabilities,
       surface: entry.surface,
+      actionClass: entry.actionClass,
+      riskLevel: entry.riskLevel,
+      admission: entry.admission,
+      receiptPolicy: entry.receiptPolicy,
+      recoveryPolicy: entry.recoveryPolicy,
       boundary: entry.boundary,
       effects: entry.effects,
       requiresApproval: entry.requiresApproval,
-      rollbackable: entry.rollbackable,
       actionGovernance: entry.actionGovernance,
       visibleNow: entry.visible,
       governance: entry.governance,
@@ -654,10 +717,13 @@ export function buildCapabilityView(input: BuildCapabilityViewInput): BuildCapab
     visibleManifest: visibleEntries.map((entry) => ({
       name: entry.name,
       description: entry.description,
+      actionClass: entry.actionClass,
+      riskLevel: entry.riskLevel,
+      admission: entry.admission,
+      recoveryPolicy: entry.recoveryPolicy,
       boundary: entry.boundary,
       effects: entry.effects,
       requiresApproval: entry.requiresApproval,
-      rollbackable: entry.rollbackable,
       loadWhen: resolveManifestLoadWhen(entry.surface),
     })),
     visibleByBoundary: {

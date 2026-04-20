@@ -1,25 +1,35 @@
 import { normalizeToolName } from "@brewva/brewva-runtime";
-import {
-  MANAGED_BREWVA_TOOL_METADATA_BY_NAME,
-  type ManagedBrewvaToolMetadataRegistryEntry,
-} from "./managed-tool-metadata-registry.js";
+import { MANAGED_BREWVA_TOOL_METADATA_BY_NAME } from "./managed-tool-metadata-registry.js";
 import type { BrewvaToolRequiredCapability } from "./types.js";
 
-const MANAGED_BREWVA_TOOL_METADATA_ENTRIES = Object.entries(
-  MANAGED_BREWVA_TOOL_METADATA_BY_NAME,
-) as Array<[string, ManagedBrewvaToolMetadataRegistryEntry]>;
+const MANAGED_BREWVA_TOOL_METADATA_ENTRIES = Object.entries(MANAGED_BREWVA_TOOL_METADATA_BY_NAME);
+
+function hasRequiredCapabilities(
+  entry: (typeof MANAGED_BREWVA_TOOL_METADATA_ENTRIES)[number][1],
+): entry is (typeof MANAGED_BREWVA_TOOL_METADATA_ENTRIES)[number][1] & {
+  requiredCapabilities: readonly BrewvaToolRequiredCapability[];
+} {
+  return (
+    "requiredCapabilities" in entry &&
+    Array.isArray(entry.requiredCapabilities) &&
+    entry.requiredCapabilities.length > 0
+  );
+}
 
 export const TOOL_REQUIRED_CAPABILITIES_BY_NAME = Object.fromEntries(
-  MANAGED_BREWVA_TOOL_METADATA_ENTRIES.filter((entry) => {
-    const requiredCapabilities = entry[1].requiredCapabilities;
-    return Array.isArray(requiredCapabilities) && requiredCapabilities.length > 0;
-  }).map(([name, entry]) => {
-    const requiredCapabilities = entry.requiredCapabilities ?? [];
-    return [
-      name,
-      [...new Set(requiredCapabilities)].toSorted((left, right) => left.localeCompare(right)),
-    ];
-  }),
+  MANAGED_BREWVA_TOOL_METADATA_ENTRIES.filter(
+    (
+      entry,
+    ): entry is [
+      string,
+      (typeof MANAGED_BREWVA_TOOL_METADATA_ENTRIES)[number][1] & {
+        requiredCapabilities: readonly BrewvaToolRequiredCapability[];
+      },
+    ] => hasRequiredCapabilities(entry[1]),
+  ).map(([name, entry]) => [
+    name,
+    [...new Set(entry.requiredCapabilities)].toSorted((left, right) => left.localeCompare(right)),
+  ]),
 ) as Readonly<Record<string, readonly BrewvaToolRequiredCapability[]>>;
 
 export type ManagedBrewvaToolName = keyof typeof MANAGED_BREWVA_TOOL_METADATA_BY_NAME;

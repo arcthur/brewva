@@ -3,8 +3,6 @@ import {
   createHostedRuntimePort,
   createToolRuntimePort,
   createTrustedLocalGovernancePort,
-  getExactToolGovernanceDescriptor,
-  sameToolGovernanceDescriptor,
   type BrewvaRuntimeOptions,
 } from "@brewva/brewva-runtime";
 import { createToolRuntimeInternalPort, recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
@@ -15,7 +13,6 @@ import type {
 } from "@brewva/brewva-substrate";
 import {
   buildBrewvaTools,
-  getBrewvaToolMetadata,
   getBrewvaToolSurface,
   type BrewvaSemanticReranker,
   type BrewvaToolOrchestration,
@@ -103,23 +100,6 @@ function buildManagedTools(
     delegation,
     toolNames: options.managedToolNames,
   });
-}
-
-function registerGovernanceDescriptors(
-  runtime: BrewvaRuntime,
-  tools: ReturnType<typeof buildBrewvaTools>,
-): void {
-  for (const tool of tools) {
-    const metadata = getBrewvaToolMetadata(tool);
-    if (!metadata?.governance) {
-      continue;
-    }
-    const exactGovernance = getExactToolGovernanceDescriptor(tool.name);
-    if (sameToolGovernanceDescriptor(exactGovernance, metadata.governance)) {
-      continue;
-    }
-    runtime.maintain.tools.registerGovernanceDescriptor(tool.name, metadata.governance);
-  }
 }
 
 function registerHostedPipeline(
@@ -230,7 +210,6 @@ export function createHostedTurnPipeline(
       ) ?? [];
     const registerTools = options.registerTools !== false;
 
-    registerGovernanceDescriptors(runtime, allTools);
     if (registerTools) {
       for (const tool of allTools) {
         if (getBrewvaToolSurface(tool.name) !== "base") {
