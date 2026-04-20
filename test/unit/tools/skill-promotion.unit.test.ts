@@ -3,8 +3,15 @@ import { cpSync } from "node:fs";
 import { resolve } from "node:path";
 import { CONTEXT_SOURCES, BrewvaRuntime, SKILL_COMPLETED_EVENT_TYPE } from "@brewva/brewva-runtime";
 import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
-import { createSkillPromotionContextProvider } from "@brewva/brewva-skill-broker";
-import { createSkillPromotionTool } from "@brewva/brewva-tools";
+import {
+  createSkillPromotionContextProvider,
+  getOrCreateSkillPromotionBroker,
+} from "@brewva/brewva-skill-broker";
+import {
+  createSkillPromotionInspectTool,
+  createSkillPromotionPromoteTool,
+  createSkillPromotionReviewTool,
+} from "@brewva/brewva-tools";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 function createWorkspaceWithSkills(name: string): string {
@@ -52,11 +59,28 @@ describe("skill promotion tool", () => {
     recordPromotionSourceEvent(runtime, "promotion-tool-session-1", 1_000);
     recordPromotionSourceEvent(runtime, "promotion-tool-session-2", 2_000);
 
-    const tool = createSkillPromotionTool({ runtime });
+    getOrCreateSkillPromotionBroker(runtime, {
+      subscribeToEvents: true,
+      minRefreshIntervalMs: 1,
+    }).sync();
 
-    const listResult = await tool.execute(
+    createSkillPromotionContextProvider({
+      runtime,
+      maxDrafts: 2,
+      minRefreshIntervalMs: 1,
+    }).collect({
+      sessionId: "promotion-tool-session-2",
+      promptText: "promote the repeated lesson into a reusable skill",
+      register: () => undefined,
+    });
+
+    const inspectTool = createSkillPromotionInspectTool({ runtime });
+    const reviewTool = createSkillPromotionReviewTool({ runtime });
+    const promoteTool = createSkillPromotionPromoteTool({ runtime });
+
+    const listResult = await inspectTool.execute(
       "tc-skill-promotion-list",
-      { action: "list" } as never,
+      {} as never,
       undefined,
       undefined,
       {} as never,
@@ -69,10 +93,9 @@ describe("skill promotion tool", () => {
     const draftId = listDetails?.drafts?.[0]?.id;
     expect(typeof draftId).toBe("string");
 
-    const reviewResult = await tool.execute(
+    const reviewResult = await reviewTool.execute(
       "tc-skill-promotion-review",
       {
-        action: "review",
         draft_id: draftId!,
         decision: "approve",
         note: "Evidence is repeated and the target home is correct.",
@@ -87,10 +110,9 @@ describe("skill promotion tool", () => {
     expect(reviewText).toContain("status: approved");
     expect(reviewText).toContain("decision: approve");
 
-    const promoteResult = await tool.execute(
+    const promoteResult = await promoteTool.execute(
       "tc-skill-promotion-promote",
       {
-        action: "promote",
         draft_id: draftId!,
         target_kind: "new_skill",
       } as never,
@@ -134,10 +156,17 @@ describe("skill promotion tool", () => {
     expect(provider.source).toBe(CONTEXT_SOURCES.skillPromotionDrafts);
     expect(beforeSyncEntries).toHaveLength(0);
 
-    const tool = createSkillPromotionTool({ runtime });
-    const listResult = await tool.execute(
+    getOrCreateSkillPromotionBroker(runtime, {
+      subscribeToEvents: true,
+      minRefreshIntervalMs: 1,
+    }).sync();
+
+    const inspectTool = createSkillPromotionInspectTool({ runtime });
+    const reviewTool = createSkillPromotionReviewTool({ runtime });
+    const promoteTool = createSkillPromotionPromoteTool({ runtime });
+    const listResult = await inspectTool.execute(
       "tc-skill-promotion-provider-list",
-      { action: "list" } as never,
+      {} as never,
       undefined,
       undefined,
       {} as never,
@@ -160,10 +189,21 @@ describe("skill promotion tool", () => {
     expect(provider.selectionPriority).toBe(48);
     expect(provider.collectionOrder).toBe(48);
 
-    await tool.execute(
+    await reviewTool.execute(
+      "tc-skill-promotion-provider-review",
+      {
+        draft_id: draftId!,
+        decision: "approve",
+        note: "Materialize this as a reviewable artifact.",
+      } as never,
+      undefined,
+      undefined,
+      {} as never,
+    );
+
+    await promoteTool.execute(
       "tc-skill-promotion-provider-promote",
       {
-        action: "promote",
         draft_id: draftId!,
         target_kind: "new_skill",
       } as never,

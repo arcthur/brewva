@@ -7,10 +7,12 @@ import {
 } from "@brewva/brewva-runtime";
 import { createToolRuntimeInternalPort, recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import type {
-  BrewvaHostPluginApi,
-  BrewvaHostPluginFactory,
+  InternalHostPlugin,
+  InternalHostPluginApi,
+  RuntimePluginCapability,
   BrewvaToolDefinition,
 } from "@brewva/brewva-substrate";
+import { defineInternalHostPlugin } from "@brewva/brewva-substrate";
 import {
   buildBrewvaTools,
   getBrewvaToolSurface,
@@ -29,6 +31,8 @@ import { createContextTransformLifecycle } from "./context-transform.js";
 import { createDeliberationMaintenanceLifecycle } from "./deliberation-maintenance.js";
 import { registerEventStream } from "./event-stream.js";
 import { registerLedgerWriter } from "./ledger-writer.js";
+import { createLocalHookManager } from "./local-hook-port.js";
+import type { LocalHookPort } from "./local-hook-port.js";
 import { createNarrativeMemoryLifecycle } from "./narrative-memory-lifecycle.js";
 import { registerProviderRequestRecovery } from "./provider-request-recovery.js";
 import { registerProviderRequestReduction } from "./provider-request-reduction.js";
@@ -43,8 +47,10 @@ import {
 } from "./tool-surface.js";
 import { registerTurnLifecyclePorts, type TurnLifecyclePort } from "./turn-lifecycle-port.js";
 
-export type RuntimePlugin = BrewvaHostPluginFactory;
-export type RuntimePluginApi = BrewvaHostPluginApi;
+export type InternalRuntimePlugin = InternalHostPlugin;
+export type InternalRuntimePluginApi = InternalHostPluginApi;
+export type { RuntimePluginCapability };
+export const defineInternalRuntimePlugin = defineInternalHostPlugin;
 
 export interface CreateHostedTurnPipelineOptions extends BrewvaRuntimeOptions {
   runtime?: BrewvaRuntime;
@@ -55,6 +61,7 @@ export interface CreateHostedTurnPipelineOptions extends BrewvaRuntimeOptions {
   contextProfile?: "minimal" | "standard" | "full";
   semanticReranker?: BrewvaSemanticReranker;
   ports?: readonly TurnLifecyclePort[];
+  localHooks?: readonly LocalHookPort[];
   toolExecutionCoordinator?: HostedToolExecutionCoordinator;
   hostedToolDefinitionsByName?: ReadonlyMap<string, BrewvaToolDefinition>;
 }
@@ -104,7 +111,7 @@ function buildManagedTools(
 
 function registerHostedPipeline(
   runtime: BrewvaRuntime,
-  runtimePluginApi: RuntimePluginApi,
+  runtimePluginApi: InternalRuntimePluginApi,
   tools: ReturnType<typeof buildBrewvaTools>,
   extraToolDefinitionsByName: ReadonlyMap<string, BrewvaToolDefinition>,
   registerTools: boolean,
@@ -112,6 +119,7 @@ function registerHostedPipeline(
   contextProfile: "minimal" | "standard" | "full" | undefined,
   semanticReranker: BrewvaSemanticReranker | undefined,
   userPorts: readonly TurnLifecyclePort[],
+  localHooks: readonly LocalHookPort[],
 ): void {
   const toolDefinitionsByName = new Map<string, BrewvaToolDefinition>(extraToolDefinitionsByName);
   for (const tool of tools) {
@@ -125,10 +133,16 @@ function registerHostedPipeline(
     recordEvent: (input: { sessionId: string; type: string; payload?: object }) =>
       recordRuntimeEvent(hostedRuntime, input),
   };
+  const localHookManager = createLocalHookManager({
+    extensionApi: runtimePluginApi,
+    runtime: hostedRuntime,
+    hooks: localHooks,
+  });
   const contextTransform = createContextTransformLifecycle(runtimePluginApi, hostedRuntime, {
     delegationStore,
     turnClock,
     contextProfile,
+    resolveClassificationHints: (sessionId) => localHookManager.getClassificationHints(sessionId),
   });
   const deliberationMaintenance = createDeliberationMaintenanceLifecycle(runtime);
   const narrativeMemory = createNarrativeMemoryLifecycle(runtime, semanticReranker);
@@ -137,8 +151,11 @@ function registerHostedPipeline(
   });
   const toolSurface = createToolSurfaceLifecycle(runtimePluginApi, toolSurfaceRuntime, {
     dynamicToolDefinitions: registerTools ? toolDefinitionsByName : undefined,
+    resolveClassificationHints: (sessionId) => localHookManager.getClassificationHints(sessionId),
   });
-  const completionGuard = createCompletionGuardLifecycle(runtimePluginApi, hostedRuntime);
+  const completionGuard = createCompletionGuardLifecycle(runtimePluginApi, hostedRuntime, {
+    resolveClassificationHints: (sessionId) => localHookManager.getClassificationHints(sessionId),
+  });
   const readPathRecovery = createReadPathRecoveryLifecycle(hostedRuntime);
 
   runtimePluginApi.on("tool_call", qualityGate.toolCall);
@@ -156,6 +173,7 @@ function registerHostedPipeline(
       beforeAgentStart: deliberationMaintenance.beforeAgentStart,
       agentEnd: deliberationMaintenance.agentEnd,
     },
+    localHookManager.lifecycle,
     {
       turnStart: contextTransform.turnStart,
       beforeAgentStart: toolSurface.beforeAgentStart,
@@ -187,50 +205,65 @@ function registerHostedPipeline(
 
 export function createHostedTurnPipeline(
   options: CreateHostedTurnPipelineOptions = {},
-): RuntimePlugin {
-  return (runtimePluginApi) => {
-    assertHostedPipelineRuntimeCompatibility(options);
-    const runtime =
-      options.runtime ??
-      new BrewvaRuntime({
-        ...options,
-        routingDefaultScopes:
-          options.routingScopes && options.routingScopes.length > 0
-            ? options.routingDefaultScopes
-            : (options.routingDefaultScopes ?? [...DEFAULT_HOSTED_ROUTING_SCOPES]),
-        governancePort:
-          options.governancePort ?? createTrustedLocalGovernancePort({ profile: "team" }),
-      });
-    const executionCoordinator =
-      options.toolExecutionCoordinator ?? createHostedToolExecutionCoordinator();
-    const allTools =
-      wrapToolDefinitionsWithHostedExecutionTraits(
-        buildManagedTools(runtime, options),
-        executionCoordinator,
-      ) ?? [];
-    const registerTools = options.registerTools !== false;
+): InternalRuntimePlugin {
+  return defineInternalHostPlugin({
+    name: "hosted_turn_pipeline",
+    capabilities: [
+      "tool_registration.write",
+      "tool_surface.write",
+      "system_prompt.write",
+      "context_messages.write",
+      "provider_payload.write",
+      "input_parts.write",
+      "tool_call.block",
+      "tool_result.write",
+      "assistant_message.enqueue",
+    ],
+    register(runtimePluginApi) {
+      assertHostedPipelineRuntimeCompatibility(options);
+      const runtime =
+        options.runtime ??
+        new BrewvaRuntime({
+          ...options,
+          routingDefaultScopes:
+            options.routingScopes && options.routingScopes.length > 0
+              ? options.routingDefaultScopes
+              : (options.routingDefaultScopes ?? [...DEFAULT_HOSTED_ROUTING_SCOPES]),
+          governancePort:
+            options.governancePort ?? createTrustedLocalGovernancePort({ profile: "team" }),
+        });
+      const executionCoordinator =
+        options.toolExecutionCoordinator ?? createHostedToolExecutionCoordinator();
+      const allTools =
+        wrapToolDefinitionsWithHostedExecutionTraits(
+          buildManagedTools(runtime, options),
+          executionCoordinator,
+        ) ?? [];
+      const registerTools = options.registerTools !== false;
 
-    if (registerTools) {
-      for (const tool of allTools) {
-        if (getBrewvaToolSurface(tool.name) !== "base") {
-          continue;
+      if (registerTools) {
+        for (const tool of allTools) {
+          if (getBrewvaToolSurface(tool.name) !== "base") {
+            continue;
+          }
+          runtimePluginApi.registerTool(tool);
         }
-        runtimePluginApi.registerTool(tool);
       }
-    }
 
-    registerHostedPipeline(
-      runtime,
-      runtimePluginApi,
-      allTools,
-      options.hostedToolDefinitionsByName ?? new Map<string, BrewvaToolDefinition>(),
-      registerTools,
-      options.delegationStore,
-      options.contextProfile,
-      options.semanticReranker,
-      options.ports ?? [],
-    );
-  };
+      registerHostedPipeline(
+        runtime,
+        runtimePluginApi,
+        allTools,
+        options.hostedToolDefinitionsByName ?? new Map<string, BrewvaToolDefinition>(),
+        registerTools,
+        options.delegationStore,
+        options.contextProfile,
+        options.semanticReranker,
+        options.ports ?? [],
+        options.localHooks ?? [],
+      );
+    },
+  });
 }
 
 export { registerContextTransform } from "./context-transform.js";
@@ -280,10 +313,28 @@ export {
 export {
   buildSkillFirstPolicyBlock,
   deriveSkillRecommendations,
+  type SkillActivationPosture,
+  type SkillClassificationHint,
   type SkillRecommendation,
   type SkillRecommendationSet,
   type SkillFirstRuntimeLike,
+  type ToolAvailabilityPosture,
 } from "./skill-first.js";
+export type {
+  LocalHookEndTurnInput,
+  LocalHookEndTurnResult,
+  LocalHookNote,
+  LocalHookPhase,
+  LocalHookPort,
+  LocalHookPostToolInput,
+  LocalHookPostToolResult,
+  LocalHookPreClassifyInput,
+  LocalHookPreClassifyResult,
+  LocalHookPreToolInput,
+  LocalHookPreToolResult,
+  LocalHookRecommendation,
+  LocalHookResult,
+} from "./local-hook-port.js";
 export { registerEventStream } from "./event-stream.js";
 export { registerQualityGate } from "./quality-gate.js";
 export { registerLedgerWriter } from "./ledger-writer.js";

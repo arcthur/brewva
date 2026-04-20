@@ -534,14 +534,14 @@ The runtime/runtime-plugin stack treats tool surface as three layers:
 Visible surface helps the model understand available paths, but authority sits
 on effect classes, approval requirements, rollbackability, and resource ceilings.
 
-Hosted interactive turns now resolve the pre-skill surface through an explicit
-TaskSpec-first control-plane posture:
+Hosted interactive turns now resolve the pre-skill surface through explicit
+skill activation and tool availability postures:
 
-- when no skill is active and no TaskSpec is recorded, the visible surface may
-  narrow to bootstrap control-plane tools so the next semantic decision is
-  `task_set_spec`
-- once TaskSpec exists, the hosted path narrows again to a
-  `skill_load_required` posture when a routed skill is retained
+- exploratory and analytical turns keep read/search/mutation/lifecycle tools
+  visible while surfacing `recommend_task_spec` or `recommend_skill_load`
+- execution, verification, mutation, and contract-sensitive workflows may enter
+  `require_task_spec`, `require_skill_load`, or `repair_failed_contract`
+  postures with a corresponding `ToolAvailabilityPosture`
 - these posture changes are visible control-plane shaping plus replayable
   receipts such as `skill_recommendation_derived`; they do not activate skills
   automatically and they do not create a runtime-owned planning state machine

@@ -3,7 +3,11 @@ import {
   type AuthoredOverlaySummary,
   type HostedDelegationCatalogInspection,
 } from "@brewva/brewva-gateway";
-import type { RuntimePlugin, RuntimePluginApi } from "@brewva/brewva-gateway/runtime-plugins";
+import {
+  defineInternalRuntimePlugin,
+  type InternalRuntimePlugin,
+  type InternalRuntimePluginApi,
+} from "@brewva/brewva-gateway/runtime-plugins";
 import type { BrewvaRuntime } from "@brewva/brewva-runtime";
 import type { BrewvaHostContext } from "@brewva/brewva-substrate";
 import { clampText } from "./inspect-analysis.js";
@@ -106,49 +110,55 @@ function formatOverlayDetail(
   return lines.join("\n");
 }
 
-export function createAgentOverlaysCommandRuntimePlugin(runtime: BrewvaRuntime): RuntimePlugin {
-  return (runtimePluginApi: RuntimePluginApi) => {
-    runtimePluginApi.on("session_start", async (_event, ctx) => {
-      clearOverlayWidget(ctx, OVERLAY_WIDGET_ID);
-    });
-    runtimePluginApi.on("session_switch", async (_event, ctx) => {
-      clearOverlayWidget(ctx, OVERLAY_WIDGET_ID);
-    });
-    runtimePluginApi.on("session_shutdown", async (_event, ctx) => {
-      clearOverlayWidget(ctx, OVERLAY_WIDGET_ID);
-    });
+export function createAgentOverlaysCommandRuntimePlugin(
+  runtime: BrewvaRuntime,
+): InternalRuntimePlugin {
+  return defineInternalRuntimePlugin({
+    name: "cli.agent_overlays_command",
+    capabilities: ["tool_registration.write"],
+    register(runtimePluginApi: InternalRuntimePluginApi) {
+      runtimePluginApi.on("session_start", async (_event, ctx) => {
+        clearOverlayWidget(ctx, OVERLAY_WIDGET_ID);
+      });
+      runtimePluginApi.on("session_switch", async (_event, ctx) => {
+        clearOverlayWidget(ctx, OVERLAY_WIDGET_ID);
+      });
+      runtimePluginApi.on("session_shutdown", async (_event, ctx) => {
+        clearOverlayWidget(ctx, OVERLAY_WIDGET_ID);
+      });
 
-    runtimePluginApi.registerCommand("agent-overlays", {
-      description:
-        "Inspect or validate authored delegated-worker overlays (usage: /agent-overlays | /agent-overlays validate | /agent-overlays <name> | /agent-overlays clear)",
-      handler: async (args, ctx) => {
-        const normalizedArgs = normalizeArgs(args);
-        if (normalizedArgs === "clear") {
-          clearOverlayWidget(ctx, OVERLAY_WIDGET_ID);
-          if (ctx.hasUI) {
-            ctx.ui.notify("Agent overlay widget cleared.", "info");
+      runtimePluginApi.registerCommand("agent-overlays", {
+        description:
+          "Inspect or validate authored delegated-worker overlays (usage: /agent-overlays | /agent-overlays validate | /agent-overlays <name> | /agent-overlays clear)",
+        handler: async (args, ctx) => {
+          const normalizedArgs = normalizeArgs(args);
+          if (normalizedArgs === "clear") {
+            clearOverlayWidget(ctx, OVERLAY_WIDGET_ID);
+            if (ctx.hasUI) {
+              ctx.ui.notify("Agent overlay widget cleared.", "info");
+            }
+            return;
           }
-          return;
-        }
-        const inspection = await inspectHostedDelegationCatalog(runtime.workspaceRoot);
-        const text =
-          normalizedArgs && normalizedArgs !== "validate"
-            ? formatOverlayDetail(inspection, normalizedArgs)
-            : formatOverlayList(inspection);
-        if (ctx.hasUI) {
-          ctx.ui.setWidget(OVERLAY_WIDGET_ID, toWidgetLines(text), {
-            placement: "belowEditor",
-          });
-          ctx.ui.notify(
-            inspection.status === "valid"
-              ? normalizedArgs === "validate"
-                ? "Agent overlay validation passed."
-                : "Agent overlay inspection updated."
-              : "Agent overlay inspection found validation errors.",
-            inspection.status === "valid" ? "info" : "warning",
-          );
-        }
-      },
-    });
-  };
+          const inspection = await inspectHostedDelegationCatalog(runtime.workspaceRoot);
+          const text =
+            normalizedArgs && normalizedArgs !== "validate"
+              ? formatOverlayDetail(inspection, normalizedArgs)
+              : formatOverlayList(inspection);
+          if (ctx.hasUI) {
+            ctx.ui.setWidget(OVERLAY_WIDGET_ID, toWidgetLines(text), {
+              placement: "belowEditor",
+            });
+            ctx.ui.notify(
+              inspection.status === "valid"
+                ? normalizedArgs === "validate"
+                  ? "Agent overlay validation passed."
+                  : "Agent overlay inspection updated."
+                : "Agent overlay inspection found validation errors.",
+              inspection.status === "valid" ? "info" : "warning",
+            );
+          }
+        },
+      });
+    },
+  });
 }

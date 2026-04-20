@@ -1,5 +1,5 @@
 import { type BrewvaHostedRuntimePort, type ContextBudgetUsage } from "@brewva/brewva-runtime";
-import type { BrewvaHostPluginApi } from "@brewva/brewva-substrate";
+import type { InternalHostPluginApi } from "@brewva/brewva-substrate";
 import { recordTransientReductionEvidence } from "./context-evidence.js";
 import { estimateTokens } from "./tool-output-distiller.js";
 
@@ -567,7 +567,7 @@ export function applyTransientOutboundReductionToPayload(payload: unknown): Redu
 }
 
 export function registerProviderRequestReduction(
-  extensionApi: BrewvaHostPluginApi,
+  extensionApi: InternalHostPluginApi,
   runtime: BrewvaHostedRuntimePort,
 ): void {
   extensionApi.on("before_provider_request", (event, ctx) => {

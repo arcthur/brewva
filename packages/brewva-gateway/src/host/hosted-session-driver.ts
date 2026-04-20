@@ -1,6 +1,6 @@
 import type { BrewvaRuntime } from "@brewva/brewva-runtime";
 import type {
-  BrewvaHostPluginFactory,
+  InternalHostPlugin,
   BrewvaManagedPromptSession,
   BrewvaModelCatalog,
   BrewvaMutableModelCatalog,
@@ -67,7 +67,7 @@ export interface CreateHostedSessionRuntimeOptions {
   cwd: string;
   settings: HostedSessionSettings;
   runtime?: BrewvaRuntime;
-  runtimePlugins?: readonly BrewvaHostPluginFactory[];
+  internalRuntimePlugins?: readonly InternalHostPlugin[];
   requestedModel?: BrewvaRegisteredModel;
   requestedThinkingLevel?: string;
   customTools?: HostedSessionCustomTool[];

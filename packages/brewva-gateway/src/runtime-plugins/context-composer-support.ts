@@ -1,7 +1,11 @@
 import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
-import type { BrewvaHostPluginApi, BrewvaHostToolInfo } from "@brewva/brewva-substrate";
+import type { InternalHostPluginApi, BrewvaHostToolInfo } from "@brewva/brewva-substrate";
 import { buildCapabilityView, type BuildCapabilityViewResult } from "./capability-view.js";
-import { deriveSkillRecommendations, type SkillRecommendationSet } from "./skill-first.js";
+import {
+  deriveSkillRecommendations,
+  type SkillClassificationHint,
+  type SkillRecommendationSet,
+} from "./skill-first.js";
 
 export interface PreparedContextComposerSupport {
   gateStatus: ReturnType<BrewvaHostedRuntimePort["inspect"]["context"]["getCompactionGateStatus"]>;
@@ -12,10 +16,11 @@ export interface PreparedContextComposerSupport {
 
 export function prepareContextComposerSupport(input: {
   runtime: BrewvaHostedRuntimePort;
-  extensionApi: BrewvaHostPluginApi;
+  extensionApi: InternalHostPluginApi;
   sessionId: string;
   prompt: string;
   usage: Parameters<BrewvaHostedRuntimePort["maintain"]["context"]["observeUsage"]>[1];
+  classificationHints?: readonly SkillClassificationHint[];
 }): PreparedContextComposerSupport {
   const gateStatus = input.runtime.inspect.context.getCompactionGateStatus(
     input.sessionId,
@@ -51,6 +56,7 @@ export function prepareContextComposerSupport(input: {
   const skillRecommendations = deriveSkillRecommendations(input.runtime, {
     sessionId: input.sessionId,
     prompt: input.prompt,
+    classificationHints: input.classificationHints,
   });
   return {
     gateStatus,

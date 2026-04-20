@@ -157,6 +157,38 @@ function memoryWrite(
   });
 }
 
+function operatorReviewedMemoryWrite(input: {
+  effectClasses?: readonly ToolEffectClass[];
+  requiredRoutingScopes?: readonly SkillRoutingScope[];
+}): ToolActionPolicy {
+  return buildPolicy({
+    actionClass: "memory_write",
+    riskLevel: "medium",
+    defaultAdmission: "ask",
+    maxAdmission: "ask",
+    receiptPolicy: { kind: "control_plane", required: true },
+    recoveryPolicy: { kind: "none" },
+    effectClasses: input.effectClasses ?? ["memory_write"],
+    requiredRoutingScopes: input.requiredRoutingScopes,
+  });
+}
+
+function operatorReviewedWorkspacePatch(input: {
+  effectClasses?: readonly ToolEffectClass[];
+  requiredRoutingScopes?: readonly SkillRoutingScope[];
+}): ToolActionPolicy {
+  return buildPolicy({
+    actionClass: "workspace_patch",
+    riskLevel: "high",
+    defaultAdmission: "ask",
+    maxAdmission: "ask",
+    receiptPolicy: { kind: "mutation", required: true },
+    recoveryPolicy: { kind: "artifact_cleanup" },
+    effectClasses: input.effectClasses ?? ["workspace_write"],
+    requiredRoutingScopes: input.requiredRoutingScopes,
+  });
+}
+
 function controlStateMutation(): ToolActionPolicy {
   // recoveryPolicy is declaration-of-intent metadata. "forward_correction" signals that
   // recovery happens by issuing a corrective forward action, not by rolling back a patch.
@@ -427,7 +459,15 @@ export const TOOL_ACTION_POLICY_BY_NAME: Record<string, ToolActionPolicy> = {
   follow_up: scheduleMutation(),
   skill_load: controlStateMutation(),
   skill_complete: controlStateMutation(),
-  skill_promotion: memoryWrite({ effectClasses: ["memory_write", "workspace_write"] }),
+  skill_promotion_inspect: runtimeObserve(),
+  skill_promotion_review: operatorReviewedMemoryWrite({
+    effectClasses: ["memory_write"],
+    requiredRoutingScopes: ["operator", "meta"],
+  }),
+  skill_promotion_promote: operatorReviewedWorkspacePatch({
+    effectClasses: ["memory_write", "workspace_write"],
+    requiredRoutingScopes: ["operator", "meta"],
+  }),
   worker_results_merge: runtimeObserve(),
   worker_results_apply: workspacePatch(),
   subagent_run: delegation(),

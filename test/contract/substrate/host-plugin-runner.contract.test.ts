@@ -1,9 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import {
   createBrewvaHostPluginRunner,
+  defineInternalHostPlugin,
   type BrewvaHostCommandContext,
   type BrewvaHostContext,
   type BrewvaPromptContentPart,
+  type InternalHostPlugin,
+  type RuntimePluginCapability,
 } from "@brewva/brewva-substrate";
 import { Type } from "@sinclair/typebox";
 
@@ -71,14 +74,33 @@ function textPrompt(text: string): BrewvaPromptContentPart[] {
   return [{ type: "text", text }];
 }
 
+type CapabilityViolation = {
+  pluginName: string;
+  capability: RuntimePluginCapability;
+  operation: string;
+  event?: string;
+};
+
+function testPlugin(
+  name: string,
+  capabilities: readonly RuntimePluginCapability[],
+  register: InternalHostPlugin["register"],
+): InternalHostPlugin {
+  return defineInternalHostPlugin({
+    name,
+    capabilities,
+    register,
+  });
+}
+
 describe("substrate host plugin runner", () => {
-  test("initializes plugins, tracks registrations, and forwards registration callbacks", async () => {
+  test("initializes manifest plugins, tracks registrations, and forwards callbacks", async () => {
     const registeredTools: string[] = [];
     const registeredCommands: string[] = [];
 
     const runner = await createBrewvaHostPluginRunner({
       plugins: [
-        (api) => {
+        testPlugin("registration-plugin", ["tool_registration.write"], (api) => {
           api.registerTool({
             name: "demo_tool",
             label: "Demo",
@@ -94,7 +116,7 @@ describe("substrate host plugin runner", () => {
               return undefined;
             },
           });
-        },
+        }),
       ],
       actions: {
         sendMessage: () => undefined,
@@ -124,20 +146,18 @@ describe("substrate host plugin runner", () => {
     const seenInputs: string[] = [];
     const runner = await createBrewvaHostPluginRunner({
       plugins: [
-        (api) => {
+        testPlugin("input-transform-plugin", ["input_parts.write"], (api) => {
           api.on("input", async (event) => ({
             action: "transform" as const,
             parts: textPrompt(`one:${event.text}`),
           }));
-        },
-        (api) => {
+        }),
+        testPlugin("input-handle-plugin", ["turn_input.handle"], (api) => {
           api.on("input", async (event) => {
             seenInputs.push(event.text);
-            return {
-              action: "handled" as const,
-            };
+            return { action: "handled" as const };
           });
-        },
+        }),
       ],
       actions: {
         sendMessage: () => undefined,
@@ -167,7 +187,7 @@ describe("substrate host plugin runner", () => {
     const seenParts: BrewvaPromptContentPart[][] = [];
     const runner = await createBrewvaHostPluginRunner({
       plugins: [
-        (api) => {
+        testPlugin("structured-input-transform-plugin", ["input_parts.write"], (api) => {
           api.on("input", async (event) => ({
             action: "transform" as const,
             parts: [
@@ -178,13 +198,13 @@ describe("substrate host plugin runner", () => {
               ),
             ],
           }));
-        },
-        (api) => {
+        }),
+        testPlugin("structured-input-handle-plugin", ["turn_input.handle"], (api) => {
           api.on("input", async (event) => {
             seenParts.push(event.parts);
             return { action: "handled" as const };
           });
-        },
+        }),
       ],
       actions: {
         sendMessage: () => undefined,
@@ -231,24 +251,32 @@ describe("substrate host plugin runner", () => {
   test("chains context and provider request transforms in Brewva-owned order", async () => {
     const runner = await createBrewvaHostPluginRunner({
       plugins: [
-        (api) => {
-          api.on("context", async (event) => ({
-            messages: [...event.messages, { role: "custom", value: "a" }],
-          }));
-          api.on("before_provider_request", async (event) => ({
-            ...(event.payload as Record<string, unknown>),
-            stepA: true,
-          }));
-        },
-        (api) => {
-          api.on("context", async (event) => ({
-            messages: [...event.messages, { role: "custom", value: "b" }],
-          }));
-          api.on("before_provider_request", async (event) => ({
-            ...(event.payload as Record<string, unknown>),
-            stepB: true,
-          }));
-        },
+        testPlugin(
+          "context-provider-plugin-a",
+          ["context_messages.write", "provider_payload.write"],
+          (api) => {
+            api.on("context", async (event) => ({
+              messages: [...event.messages, { role: "custom", value: "a" }],
+            }));
+            api.on("before_provider_request", async (event) => ({
+              ...(event.payload as Record<string, unknown>),
+              stepA: true,
+            }));
+          },
+        ),
+        testPlugin(
+          "context-provider-plugin-b",
+          ["context_messages.write", "provider_payload.write"],
+          (api) => {
+            api.on("context", async (event) => ({
+              messages: [...event.messages, { role: "custom", value: "b" }],
+            }));
+            api.on("before_provider_request", async (event) => ({
+              ...(event.payload as Record<string, unknown>),
+              stepB: true,
+            }));
+          },
+        ),
       ],
       actions: {
         sendMessage: () => undefined,
@@ -280,24 +308,26 @@ describe("substrate host plugin runner", () => {
   test("collects before-agent-start messages and keeps the latest system prompt override", async () => {
     const runner = await createBrewvaHostPluginRunner({
       plugins: [
-        (api) => {
-          api.on("before_agent_start", async () => ({
-            message: {
-              customType: "note",
-              content: "alpha",
-            },
-            systemPrompt: "system-a",
-          }));
-        },
-        (api) => {
-          api.on("before_agent_start", async () => ({
-            message: {
-              customType: "note",
-              content: "beta",
-            },
-            systemPrompt: "system-b",
-          }));
-        },
+        testPlugin(
+          "before-agent-start-plugin-a",
+          ["context_messages.write", "system_prompt.write"],
+          (api) => {
+            api.on("before_agent_start", async () => ({
+              message: { customType: "note", content: "alpha" },
+              systemPrompt: "system-a",
+            }));
+          },
+        ),
+        testPlugin(
+          "before-agent-start-plugin-b",
+          ["context_messages.write", "system_prompt.write"],
+          (api) => {
+            api.on("before_agent_start", async () => ({
+              message: { customType: "note", content: "beta" },
+              systemPrompt: "system-b",
+            }));
+          },
+        ),
       ],
       actions: {
         sendMessage: () => undefined,
@@ -328,12 +358,95 @@ describe("substrate host plugin runner", () => {
     });
   });
 
-  test("short-circuits blocked tool calls and chains tool-result rewrites", async () => {
-    const toolCallOrder: string[] = [];
-
+  test("fails closed when a manifest plugin writes system prompt without capability", async () => {
+    const violations: CapabilityViolation[] = [];
     const runner = await createBrewvaHostPluginRunner({
       plugins: [
-        (api) => {
+        testPlugin("bad-system-prompt-plugin", [], (api) => {
+          api.on("before_agent_start", async () => ({
+            systemPrompt: "rewritten",
+          }));
+        }),
+      ],
+      actions: {
+        sendMessage: () => undefined,
+        sendUserMessage: () => undefined,
+        getActiveTools: () => [],
+        getAllTools: () => [],
+        setActiveTools: () => undefined,
+        refreshTools: () => undefined,
+        recordPluginCapabilityViolation(violation) {
+          violations.push(violation);
+        },
+      },
+    });
+
+    let thrown: unknown;
+    try {
+      await runner.emitBeforeAgentStart(
+        {
+          type: "before_agent_start",
+          prompt: "ship it",
+          parts: textPrompt("ship it"),
+          systemPrompt: "base",
+        },
+        createHostContext(),
+      );
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(String(thrown)).toContain("system_prompt.write");
+    expect(violations).toEqual([
+      {
+        pluginName: "bad-system-prompt-plugin",
+        capability: "system_prompt.write",
+        operation: "before_agent_start.systemPrompt",
+        event: "before_agent_start",
+      },
+    ]);
+  });
+
+  test("allows manifest plugin system prompt writes when capability is declared", async () => {
+    const runner = await createBrewvaHostPluginRunner({
+      plugins: [
+        testPlugin("system-prompt-plugin", ["system_prompt.write"], (api) => {
+          api.on("before_agent_start", async () => ({
+            systemPrompt: "rewritten",
+          }));
+        }),
+      ],
+      actions: {
+        sendMessage: () => undefined,
+        sendUserMessage: () => undefined,
+        getActiveTools: () => [],
+        getAllTools: () => [],
+        setActiveTools: () => undefined,
+        refreshTools: () => undefined,
+      },
+    });
+
+    const result = await runner.emitBeforeAgentStart(
+      {
+        type: "before_agent_start",
+        prompt: "ship it",
+        parts: textPrompt("ship it"),
+        systemPrompt: "base",
+      },
+      createHostContext(),
+    );
+
+    expect(result).toEqual({
+      messages: undefined,
+      systemPrompt: "rewritten",
+    });
+  });
+
+  test("short-circuits blocked tool calls and chains tool-result rewrites", async () => {
+    const toolCallOrder: string[] = [];
+    const runner = await createBrewvaHostPluginRunner({
+      plugins: [
+        testPlugin("tool-call-blocking-plugin", ["tool_call.block", "tool_result.write"], (api) => {
           api.on("tool_call", async () => {
             toolCallOrder.push("first");
             return { block: true, reason: "blocked" };
@@ -346,8 +459,8 @@ describe("substrate host plugin runner", () => {
               },
             ],
           }));
-        },
-        (api) => {
+        }),
+        testPlugin("tool-result-rewrite-plugin", ["tool_result.write"], (api) => {
           api.on("tool_call", async () => {
             toolCallOrder.push("second");
             return { block: false };
@@ -361,7 +474,7 @@ describe("substrate host plugin runner", () => {
             ],
             isError: true,
           }));
-        },
+        }),
       ],
       actions: {
         sendMessage: () => undefined,
@@ -382,7 +495,6 @@ describe("substrate host plugin runner", () => {
       },
       createHostContext(),
     );
-
     const toolResult = await runner.emitToolResult(
       {
         type: "tool_result",
@@ -404,17 +516,17 @@ describe("substrate host plugin runner", () => {
     });
   });
 
-  test("chains message_end transforms so lifecycle plugins can hide draft assistant output", async () => {
+  test("chains message_end transforms when plugins declare visibility capability", async () => {
     const runner = await createBrewvaHostPluginRunner({
       plugins: [
-        (api) => {
+        testPlugin("visibility-plugin-a", ["message_visibility.write"], (api) => {
           api.on("message_end", async () => ({
             visibility: {
               display: false,
             },
           }));
-        },
-        (api) => {
+        }),
+        testPlugin("visibility-plugin-b", ["message_visibility.write"], (api) => {
           api.on("message_end", async (event) => ({
             visibility: {
               details: {
@@ -422,7 +534,7 @@ describe("substrate host plugin runner", () => {
               },
             },
           }));
-        },
+        }),
       ],
       actions: {
         sendMessage: () => undefined,
@@ -456,18 +568,74 @@ describe("substrate host plugin runner", () => {
     });
   });
 
-  test("forwards command-side messaging actions through the action port", async () => {
-    const sentUsers: Array<{ content: BrewvaPromptContentPart[]; deliverAs?: string }> = [];
-
+  test("fails closed when a manifest plugin changes message visibility without capability", async () => {
+    const violations: CapabilityViolation[] = [];
     const runner = await createBrewvaHostPluginRunner({
       plugins: [
-        (api) => {
-          api.registerCommand("queue-demo", {
-            async handler(_args, _ctx) {
-              api.sendUserMessage(textPrompt("queued"), { deliverAs: "followUp" });
+        testPlugin("bad-visibility-plugin", [], (api) => {
+          api.on("message_end", async () => ({
+            visibility: {
+              display: false,
             },
-          });
+          }));
+        }),
+      ],
+      actions: {
+        sendMessage: () => undefined,
+        sendUserMessage: () => undefined,
+        getActiveTools: () => [],
+        getAllTools: () => [],
+        setActiveTools: () => undefined,
+        refreshTools: () => undefined,
+        recordPluginCapabilityViolation(violation) {
+          violations.push(violation);
         },
+      },
+    });
+
+    let thrown: unknown;
+    try {
+      await runner.emitMessageEnd(
+        {
+          type: "message_end",
+          message: {
+            role: "assistant",
+            stopReason: "stop",
+            content: [{ type: "text", text: "Draft output." }],
+          },
+        },
+        createHostContext(),
+      );
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(String(thrown)).toContain("message_visibility.write");
+    expect(violations).toEqual([
+      {
+        pluginName: "bad-visibility-plugin",
+        capability: "message_visibility.write",
+        operation: "message_end.visibility",
+        event: "message_end",
+      },
+    ]);
+  });
+
+  test("forwards command-side messaging actions through the action port", async () => {
+    const sentUsers: Array<{ content: BrewvaPromptContentPart[]; deliverAs?: string }> = [];
+    const runner = await createBrewvaHostPluginRunner({
+      plugins: [
+        testPlugin(
+          "command-message-plugin",
+          ["tool_registration.write", "user_message.enqueue"],
+          (api) => {
+            api.registerCommand("queue-demo", {
+              async handler() {
+                api.sendUserMessage(textPrompt("queued"), { deliverAs: "followUp" });
+              },
+            });
+          },
+        ),
       ],
       actions: {
         sendMessage: () => undefined,

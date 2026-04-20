@@ -4,7 +4,7 @@ export const CONTROL_PLANE_TOOLS = [
   "workflow_status",
   "skill_complete",
   "skill_load",
-  "skill_promotion",
+  "skill_promotion_inspect",
   "task_view_state",
   "task_set_spec",
   "task_add_item",

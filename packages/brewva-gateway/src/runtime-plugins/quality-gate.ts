@@ -5,7 +5,7 @@ import {
 } from "@brewva/brewva-runtime";
 import {
   BrewvaHostInputEventResult as InputEventResult,
-  BrewvaHostPluginApi,
+  InternalHostPluginApi,
   BrewvaPromptContentPart,
   BrewvaHostToolResultEvent as ToolResultEvent,
   brewvaPromptContentPartsEqual,
@@ -287,7 +287,7 @@ export function createQualityGateLifecycle(
 }
 
 export function registerQualityGate(
-  extensionApi: BrewvaHostPluginApi,
+  extensionApi: InternalHostPluginApi,
   runtime: BrewvaHostedRuntimePort,
   options: QualityGateLifecycleOptions = {},
 ): void {

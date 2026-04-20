@@ -5,7 +5,7 @@ import {
   type ContextBudgetUsage,
 } from "@brewva/brewva-runtime";
 import { type ContextInjectionEntry, recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
-import type { BrewvaHostPluginApi } from "@brewva/brewva-substrate";
+import type { InternalHostPluginApi } from "@brewva/brewva-substrate";
 import type { HostedDelegationStore } from "../subagents/delegation-store.js";
 import { type BuildCapabilityViewResult } from "./capability-view.js";
 import { prepareContextComposerSupport } from "./context-composer-support.js";
@@ -27,7 +27,9 @@ import { buildReadPathRecoveryBlocks } from "./read-path-recovery.js";
 import {
   buildSkillRecommendationReceiptPayload,
   buildSkillFirstPolicyBlock,
-  type SkillRecommendationGateMode,
+  type SkillActivationPosture,
+  type SkillClassificationHint,
+  type ToolAvailabilityPosture,
   type SkillRecommendationSet,
 } from "./skill-first.js";
 
@@ -62,7 +64,8 @@ export interface HostedContextInjectionMessageDetails {
     missing: string[];
   };
   skillRecommendation: {
-    gateMode: SkillRecommendationGateMode;
+    activationPosture: SkillActivationPosture;
+    toolAvailabilityPosture: ToolAvailabilityPosture;
     taskSpecReady: boolean;
     names: string[];
   };
@@ -85,6 +88,7 @@ export interface HostedContextInjectionPipeline {
 export interface HostedContextInjectionPipelineOptions {
   delegationStore?: HostedDelegationStore;
   contextProfile?: "minimal" | "standard" | "full";
+  resolveClassificationHints?: (sessionId: string) => readonly SkillClassificationHint[];
 }
 
 function providerSelectedByHostedProfile(
@@ -195,7 +199,8 @@ function buildMessageDetails(input: {
       missing: input.capabilityView.missing,
     },
     skillRecommendation: {
-      gateMode: input.skillRecommendations.gateMode,
+      activationPosture: input.skillRecommendations.activationPosture,
+      toolAvailabilityPosture: input.skillRecommendations.toolAvailabilityPosture,
       taskSpecReady: input.skillRecommendations.taskSpecReady,
       names: input.skillRecommendations.recommendations.map((entry) => entry.name),
     },
@@ -358,7 +363,7 @@ function buildHostedSupplementalBlocks(
 }
 
 export function createHostedContextInjectionPipeline(
-  extensionApi: BrewvaHostPluginApi,
+  extensionApi: InternalHostPluginApi,
   runtime: BrewvaHostedRuntimePort,
   telemetry: HostedContextTelemetry,
   statePort: HostedContextGateStatePort,
@@ -379,6 +384,7 @@ export function createHostedContextInjectionPipeline(
           sessionId: input.sessionId,
           prompt: input.prompt,
           usage: input.usage,
+          classificationHints: options.resolveClassificationHints?.(input.sessionId),
         });
 
       if (gateStatus.required) {
@@ -472,6 +478,7 @@ export function createHostedContextInjectionPipeline(
         sessionId: input.sessionId,
         prompt: input.prompt,
         usage: input.usage,
+        classificationHints: options.resolveClassificationHints?.(input.sessionId),
       });
       const gateStatusAfterInjection = supportAfterInjection.gateStatus;
       if (!gateStatus.required && gateStatusAfterInjection.required) {

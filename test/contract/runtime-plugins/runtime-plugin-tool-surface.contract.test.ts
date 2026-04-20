@@ -8,6 +8,7 @@ import type {
   SkillRegistryLoadReport,
   SkillRoutingScope,
   TaskPhase,
+  ToolEffectClass,
   ToolActionPolicy,
 } from "@brewva/brewva-runtime";
 import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
@@ -45,7 +46,7 @@ function registerTools(
 
 function createSkillDocument(
   name: string,
-  allowedEffects: Array<"workspace_read" | "runtime_observe" | "local_exec">,
+  allowedEffects: ToolEffectClass[],
   preferredTools: string[],
   options: {
     markdown?: string;
@@ -226,6 +227,82 @@ describe("tool surface runtime plugin", () => {
     expect(extensionApi.activeTools).toContain("skill_complete");
     expect(extensionApi.activeTools).not.toContain("obs_query");
     expect(events.map((event) => event.type)).toContain("tool_surface_resolved");
+  });
+
+  test("skill-scoped tools honor required routing scopes before becoming visible", async () => {
+    const extensionApi = createMockRuntimePluginApi();
+    registerTools(extensionApi.api, [
+      "read",
+      "edit",
+      "write",
+      "session_compact",
+      "skill_load",
+      "workflow_status",
+      "skill_complete",
+      "skill_promotion_promote",
+    ]);
+
+    const skill = createSkillDocument(
+      "self-improve",
+      ["memory_write", "workspace_write"],
+      ["skill_promotion_promote"],
+    );
+    const runtime = createToolSurfaceRuntime({
+      routingScopes: ["core", "domain"],
+      getActive: () => skill,
+      getSkill: (name: string) => (name === skill.name ? skill : undefined),
+    });
+
+    registerToolSurface(extensionApi.api, runtime);
+    await invokeHandlerAsync(
+      extensionApi.handlers,
+      "before_agent_start",
+      {
+        type: "before_agent_start",
+        prompt: "Materialize the approved learning proposal.",
+      },
+      {
+        sessionManager: {
+          getSessionId: () => "tool-surface-scope-denied",
+        },
+      },
+    );
+
+    expect(extensionApi.activeTools).not.toContain("skill_promotion_promote");
+
+    const operatorApi = createMockRuntimePluginApi();
+    registerTools(operatorApi.api, [
+      "read",
+      "edit",
+      "write",
+      "session_compact",
+      "skill_load",
+      "workflow_status",
+      "skill_complete",
+      "skill_promotion_promote",
+    ]);
+    const operatorRuntime = createToolSurfaceRuntime({
+      routingScopes: ["core", "domain", "operator"],
+      getActive: () => skill,
+      getSkill: (name: string) => (name === skill.name ? skill : undefined),
+    });
+
+    registerToolSurface(operatorApi.api, operatorRuntime);
+    await invokeHandlerAsync(
+      operatorApi.handlers,
+      "before_agent_start",
+      {
+        type: "before_agent_start",
+        prompt: "Materialize the approved learning proposal.",
+      },
+      {
+        sessionManager: {
+          getSessionId: () => "tool-surface-scope-allowed",
+        },
+      },
+    );
+
+    expect(operatorApi.activeTools).toContain("skill_promotion_promote");
   });
 
   test("explicit capability requests can surface managed tools for one turn after skill activation", async () => {
@@ -562,9 +639,9 @@ describe("tool surface runtime plugin", () => {
       },
     );
 
-    expect(extensionApi.activeTools).not.toContain("read");
-    expect(extensionApi.activeTools).not.toContain("edit");
-    expect(extensionApi.activeTools).not.toContain("write");
+    expect(extensionApi.activeTools).toContain("read");
+    expect(extensionApi.activeTools).toContain("edit");
+    expect(extensionApi.activeTools).toContain("write");
     expect(extensionApi.activeTools).toContain("skill_load");
     expect(extensionApi.activeTools).toContain("workflow_status");
     expect(extensionApi.activeTools).toContain("task_set_spec");
@@ -572,7 +649,10 @@ describe("tool surface runtime plugin", () => {
     const event = events.find((input) => input.type === "tool_surface_resolved") as
       | { payload?: Record<string, unknown> }
       | undefined;
-    expect(event?.payload?.skillGateMode).toBe("task_spec_required");
+    expect(event?.payload?.skillActivationPosture).toEqual(
+      expect.objectContaining({ kind: "recommend_task_spec" }),
+    );
+    expect(event?.payload?.toolAvailabilityPosture).toBe("recommend");
     expect(event?.payload?.taskSpecReady).toBe(false);
     expect(event?.payload?.recommendedSkillNames).toEqual([]);
   });
@@ -663,8 +743,8 @@ describe("tool surface runtime plugin", () => {
       },
     );
 
-    expect(extensionApi.activeTools).not.toContain("read");
-    expect(extensionApi.activeTools).not.toContain("knowledge_search");
+    expect(extensionApi.activeTools).toContain("read");
+    expect(extensionApi.activeTools).toContain("knowledge_search");
     expect(extensionApi.activeTools).toContain("task_set_spec");
     expect(extensionApi.activeTools).toContain("workflow_status");
 
@@ -711,26 +791,14 @@ describe("tool surface runtime plugin", () => {
       },
     );
 
-    expect(extensionApi.activeTools).not.toContain("read");
-    expect(extensionApi.activeTools).not.toContain("knowledge_search");
+    expect(extensionApi.activeTools).toContain("read");
+    expect(extensionApi.activeTools).toContain("knowledge_search");
     expect(extensionApi.activeTools).toContain("skill_load");
     expect(extensionApi.activeTools).toContain("task_set_spec");
-    expect(result?.content?.[0]?.text).toContain("[Brewva Skill-First Refresh]");
-    expect(result?.content?.[0]?.text).toContain("learning-research");
-    const recommendationEvent = events.findLast(
-      (input) => input.type === "skill_recommendation_derived",
-    ) as { payload?: Record<string, unknown> } | undefined;
-    expect(recommendationEvent?.payload?.gateMode).toBe("skill_load_required");
-    expect(recommendationEvent?.payload?.taskSpecReady).toBe(true);
-    expect(recommendationEvent?.payload?.recommendations).toEqual([
-      expect.objectContaining({
-        name: "learning-research",
-        primary: true,
-      }),
-    ]);
+    expect(result).toBeUndefined();
   });
 
-  test("task spec recommendations require skill_load even when the score is advisory-strength", async () => {
+  test("task spec recommendations keep the current tool surface visible at advisory strength", async () => {
     const extensionApi = createMockRuntimePluginApi();
     registerTools(extensionApi.api, [
       "read",
@@ -853,15 +921,12 @@ describe("tool surface runtime plugin", () => {
       },
     );
 
-    expect(extensionApi.activeTools).not.toContain("read");
-    expect(extensionApi.activeTools).not.toContain("grep");
+    expect(extensionApi.activeTools).toContain("read");
+    expect(extensionApi.activeTools).toContain("edit");
+    expect(extensionApi.activeTools).toContain("write");
+    expect(extensionApi.activeTools).toContain("knowledge_search");
     expect(extensionApi.activeTools).toContain("skill_load");
-    expect(result?.content?.[0]?.text).toContain("[Brewva Skill-First Refresh]");
-    expect(result?.content?.[0]?.text).toContain("primary_skill:");
-    const recommendationEvent = events.findLast(
-      (input) => input.type === "skill_recommendation_derived",
-    ) as { payload?: Record<string, unknown> } | undefined;
-    expect(recommendationEvent?.payload?.gateMode).toBe("skill_load_required");
+    expect(result).toBeUndefined();
   });
 
   test("failed skill contracts block downstream routing and repository tools", async () => {
@@ -978,7 +1043,10 @@ describe("tool surface runtime plugin", () => {
     const event = events.find((input) => input.type === "tool_surface_resolved") as
       | { payload?: Record<string, unknown> }
       | undefined;
-    expect(event?.payload?.skillGateMode).toBe("skill_contract_failed");
+    expect(event?.payload?.skillActivationPosture).toEqual(
+      expect.objectContaining({ kind: "repair_failed_contract" }),
+    );
+    expect(event?.payload?.toolAvailabilityPosture).toBe("contract_failed");
     expect(event?.payload?.recommendedSkillNames).toEqual([]);
   });
 

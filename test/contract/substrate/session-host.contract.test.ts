@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import {
   createInMemorySessionHost,
-  type HostRuntimePlugin,
-  type HostRuntimePluginContext,
+  type InternalSessionHostPlugin,
+  type InternalSessionHostPluginContext,
   type SessionPhase,
 } from "@brewva/brewva-substrate";
 
-function createPluginContext(): HostRuntimePluginContext {
+function createPluginContext(): InternalSessionHostPluginContext {
   return {
     commands: {
       interrupt() {},
@@ -23,7 +23,7 @@ function createPluginContext(): HostRuntimePluginContext {
 describe("substrate session host", () => {
   test("owns prompt queue and execution phase transitions", async () => {
     const observedPhases: SessionPhase[] = [];
-    const plugin: HostRuntimePlugin = {
+    const plugin: InternalSessionHostPlugin = {
       name: "phase-audit",
       onSessionPhaseChange(phase) {
         observedPhases.push(phase);

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createUpdateCommandRuntimePlugin } from "@brewva/brewva-cli";
-import type { RuntimePluginApi } from "@brewva/brewva-gateway/runtime-plugins";
+import type { InternalRuntimePluginApi } from "@brewva/brewva-gateway/runtime-plugins";
 import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
 import { buildBrewvaPromptText, type BrewvaPromptContentPart } from "@brewva/brewva-substrate";
 import { requireDefined } from "../../helpers/assertions.js";
@@ -14,7 +14,7 @@ type RegisteredCommand = {
 };
 
 function createCommandApiMock(): {
-  api: RuntimePluginApi;
+  api: InternalRuntimePluginApi;
   commands: Map<string, RegisteredCommand>;
   sentMessages: Array<{ content: BrewvaPromptContentPart[]; options?: Record<string, unknown> }>;
 } {
@@ -34,7 +34,7 @@ function createCommandApiMock(): {
     sendUserMessage(content: BrewvaPromptContentPart[], options?: Record<string, unknown>) {
       sentMessages.push({ content, options });
     },
-  } as unknown as RuntimePluginApi;
+  } as unknown as InternalRuntimePluginApi;
 
   return { api, commands, sentMessages };
 }
@@ -53,7 +53,7 @@ describe("update interactive command runtime plugin", () => {
     });
 
     const { api, commands, sentMessages } = createCommandApiMock();
-    await createUpdateCommandRuntimePlugin(runtime)(api);
+    await createUpdateCommandRuntimePlugin(runtime).register(api);
 
     const command = requireCommand(commands, "update");
 
@@ -90,7 +90,7 @@ describe("update interactive command runtime plugin", () => {
     });
 
     const { api, commands, sentMessages } = createCommandApiMock();
-    await createUpdateCommandRuntimePlugin(runtime)(api);
+    await createUpdateCommandRuntimePlugin(runtime).register(api);
 
     const command = requireCommand(commands, "update");
 

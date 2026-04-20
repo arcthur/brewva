@@ -67,7 +67,7 @@ Default tools registered by `buildBrewvaTools()`:
 - `worker_results_apply`
 - `skill_load`
 - `skill_complete`
-- `skill_promotion`
+- `skill_promotion_inspect`, `skill_promotion_review`, and `skill_promotion_promote`
 - `subagent_run`
 - `subagent_fanout`
 - `subagent_status`
@@ -317,7 +317,7 @@ Current posture:
 
 - `skill_load`
 - `skill_complete`
-- `skill_promotion`
+- `skill_promotion_inspect`, `skill_promotion_review`, and `skill_promotion_promote`
 - `subagent_run`
 - `subagent_fanout`
 - `subagent_status`
@@ -333,10 +333,16 @@ Naming taxonomy:
 - `worker_results_*` operates only on `WorkerResult` artifacts emitted by
   patch-producing delegated runs
 
-`skill_promotion` operates on post-execution promotion drafts derived from
-`skill_completed` evidence. Promotion materializes review packets under
-`.brewva/skill-broker/materialized/<draft-id>/` and does not patch the live
-skill catalog automatically.
+The skill promotion tools operate on post-execution promotion drafts derived
+from `skill_completed` evidence:
+
+- `skill_promotion_inspect` reads cached draft state without deriving new drafts
+- `skill_promotion_review` records an operator review decision
+- `skill_promotion_promote` materializes a review packet under
+  `.brewva/skill-broker/materialized/<draft-id>/`
+
+`skill_promotion_apply` is reserved and intentionally not registered. Promotion
+does not patch the live skill catalog automatically.
 
 `optimization_continuity` exposes deliberation-owned continuity artifacts folded
 from `goal-loop` outputs, `schedule_intent`, and `iteration_fact` evidence. It
@@ -669,7 +675,7 @@ and evidence capture, but it is intentionally non-patch-producing.
   results; the parent keeps the same replay-visible patch candidates until a
   later successful apply or explicit cleanup
 
-## `skill_load`, `skill_complete`, And `skill_promotion`
+## `skill_load`, `skill_complete`, And Skill Promotion
 
 Skill sequencing is model-native.
 
@@ -678,7 +684,9 @@ Skill sequencing is model-native.
   including parent-side `reviewEnsemble` synthesis for canonical review outputs
   and `learningResearch` synthesis for canonical planning-time proof-of-consult
   artifacts
-- `skill_promotion` inspects or advances post-execution promotion drafts
+- `skill_promotion_inspect` inspects cached post-execution promotion drafts
+- `skill_promotion_review` records operator review decisions for those drafts
+- `skill_promotion_promote` materializes review packets without live-rule apply
 
 There is no public skill-cascade or chain-control tool.
 

@@ -392,7 +392,9 @@ prompt-only behavior:
 
 - `deliberation_memory` for explicit inspection of retained repository, user,
   agent, and loop memory artifacts
-- `skill_promotion` for post-execution draft review and promotion
+- `skill_promotion_inspect` for cached post-execution draft inspection
+- `skill_promotion_review` for operator review decisions
+- `skill_promotion_promote` for materializing review packets without live apply
 - `optimization_continuity` for explicit inspection of loop continuation,
   convergence, escalation, and attention-worthy lineage state
 
@@ -541,8 +543,8 @@ improvement hypotheses and learning backlog artifacts rather than runtime
 control state.
 
 Promotion remains explicit. `self-improve` may help derive repeat-backed
-lessons, but `skill_promotion` is the control-plane path that reviews and
-materializes those drafts.
+lessons, but the split skill promotion tools are the governed paths that
+inspect, review, and materialize those drafts.
 
 Scheduled `self-improve` runs do not change that boundary. They are still
 repeat-backed, proposal-only passes rather than autonomous skill-file writes.

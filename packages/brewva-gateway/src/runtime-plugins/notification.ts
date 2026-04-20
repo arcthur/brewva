@@ -1,5 +1,5 @@
 import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
-import type { BrewvaHostPluginApi } from "@brewva/brewva-substrate";
+import type { InternalHostPluginApi } from "@brewva/brewva-substrate";
 
 function buildActionableNotification(
   runtime: BrewvaHostedRuntimePort,
@@ -43,7 +43,7 @@ export function createNotificationLifecycle(
 }
 
 export function registerNotification(
-  extensionApi: BrewvaHostPluginApi,
+  extensionApi: InternalHostPluginApi,
   runtime: BrewvaHostedRuntimePort,
 ): void {
   const hooks = extensionApi as unknown as {

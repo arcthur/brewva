@@ -50,7 +50,8 @@ They are not replacements for:
 
 - `docs/architecture/**`: stable invariants and implemented design
 - `docs/reference/**`: public contracts and normative technical surfaces
-- `skill_promotion`: agent behavior or protocol improvements
+- `skill_promotion_inspect` / `skill_promotion_review` /
+  `skill_promotion_promote`: agent behavior or protocol improvements
 
 One event may produce both a solution record and a promotion candidate, but the
 artifacts should cross-reference each other explicitly.

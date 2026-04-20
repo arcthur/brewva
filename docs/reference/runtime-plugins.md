@@ -62,19 +62,24 @@ semantics live in `docs/reference/runtime.md` and
 
 ## Factory API
 
-- `RuntimePlugin`
-- `RuntimePluginApi`
+- `InternalRuntimePlugin`
+- `InternalRuntimePluginApi`
+- `RuntimePluginCapability`
+- `LocalHookPort`
 - `createHostedTurnPipeline`
 - `TurnLifecyclePort`
 - `registerTurnLifecyclePorts`
 
-`RuntimePluginApi` is the upstream event/tool registration object passed into a
-runtime plugin at host bootstrap.
+`InternalRuntimePluginApi` is the internal event/tool registration object
+passed into a repo-owned runtime plugin at host bootstrap. Internal plugins are
+manifest objects with explicit capabilities; local project rules use
+`LocalHookPort` instead of receiving the raw plugin API.
 
 Current factory option surface:
 
 - `runtime?`
-- `runtimePlugins?` on `createHostedSession(...)` / `createBrewvaSession(...)` for composing additional runtime plugins alongside the canonical hosted pipeline
+- `internalRuntimePlugins?` on `createHostedSession(...)` / `createBrewvaSession(...)` for composing repo-owned internal runtime plugins alongside the canonical hosted pipeline
+- `localHooks?` for safe local hooks at `pre_classify`, `pre_tool`, `post_tool`, and `end_turn`
 - `registerTools?` (default `true`)
 - `orchestration?`
 - `delegationStore?`
@@ -84,6 +89,10 @@ Current factory option surface:
 - `ports?`
 - `toolExecutionCoordinator?`
 - `hostedToolDefinitionsByName?`
+
+`post_tool` hooks receive a snapshot of the normalized tool result content,
+details, and error posture. The snapshot is advisory input only; returning or
+mutating local hook data cannot rewrite the model-visible tool result.
 
 When `runtime` is omitted, `createHostedTurnPipeline(...)` also accepts
 inherited `BrewvaRuntimeOptions` for runtime construction:

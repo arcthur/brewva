@@ -1,6 +1,6 @@
 import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import { coerceContextBudgetUsage } from "@brewva/brewva-runtime";
-import type { BrewvaHostPluginApi } from "@brewva/brewva-substrate";
+import type { InternalHostPluginApi } from "@brewva/brewva-substrate";
 import { getHostedTurnTransitionCoordinator } from "../session/turn-transition.js";
 import type { HostedDelegationStore } from "../subagents/delegation-store.js";
 import {
@@ -13,12 +13,14 @@ import {
 } from "./hosted-context-injection-pipeline.js";
 import { createHostedContextTelemetry } from "./hosted-context-telemetry.js";
 import { createRuntimeTurnClockStore, type RuntimeTurnClockStore } from "./runtime-turn-clock.js";
+import type { SkillClassificationHint } from "./skill-first.js";
 
 export interface ContextTransformOptions {
   autoCompactionWatchdogMs?: number;
   delegationStore?: HostedDelegationStore;
   turnClock?: RuntimeTurnClockStore;
   contextProfile?: "minimal" | "standard" | "full";
+  resolveClassificationHints?: (sessionId: string) => readonly SkillClassificationHint[];
 }
 
 export interface ContextTransformLifecycle {
@@ -73,7 +75,7 @@ function resolveUsage(ctx: RuntimePluginLifecycleContext) {
 }
 
 export function createContextTransformLifecycle(
-  extensionApi: BrewvaHostPluginApi,
+  extensionApi: InternalHostPluginApi,
   runtime: BrewvaHostedRuntimePort,
   options: ContextTransformOptions = {},
 ): ContextTransformLifecycle {
@@ -91,6 +93,7 @@ export function createContextTransformLifecycle(
     {
       delegationStore: options.delegationStore,
       contextProfile: options.contextProfile,
+      resolveClassificationHints: options.resolveClassificationHints,
     },
   );
 
@@ -150,7 +153,7 @@ export function createContextTransformLifecycle(
 }
 
 export function registerContextTransform(
-  extensionApi: BrewvaHostPluginApi,
+  extensionApi: InternalHostPluginApi,
   runtime: BrewvaHostedRuntimePort,
   options: ContextTransformOptions = {},
 ): void {

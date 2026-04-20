@@ -925,11 +925,15 @@ describe("hosted context injection pipeline", () => {
       },
     });
 
-    expect(result.message.content).toContain("[Brewva Skill-First Policy]");
+    expect(result.message.content).toContain("[Brewva Skill Recommendation]");
     expect(result.message.content).toContain("No TaskSpec is currently recorded for this session.");
-    expect(result.message.content).toContain("call `task_set_spec`");
+    expect(result.message.content).toContain("Consider calling `task_set_spec`");
     expect(result.message.details.skillRecommendation).toEqual({
-      gateMode: "task_spec_required",
+      activationPosture: {
+        kind: "recommend_task_spec",
+        reason: "Prompt has enough task context to benefit from an explicit TaskSpec.",
+      },
+      toolAvailabilityPosture: "recommend",
       taskSpecReady: false,
       names: [],
     });
@@ -1013,10 +1017,15 @@ describe("hosted context injection pipeline", () => {
       },
     });
 
-    expect(result.message.content).toContain("[Brewva Skill-First Policy]");
+    expect(result.message.content).toContain("[Brewva Skill Recommendation]");
     expect(result.message.content).toContain("primary_skill: runtime-forensics");
     expect(result.message.details.skillRecommendation).toEqual({
-      gateMode: "skill_load_required",
+      activationPosture: {
+        kind: "recommend_skill_load",
+        skillNames: ["runtime-forensics"],
+        reason: "TaskSpec strongly matches routable loaded skills.",
+      },
+      toolAvailabilityPosture: "recommend",
       taskSpecReady: true,
       names: ["runtime-forensics"],
     });
@@ -1086,9 +1095,9 @@ describe("hosted context injection pipeline", () => {
       },
     });
 
-    expect(result.message.content).toContain("[Brewva Skill-First Policy]");
+    expect(result.message.content).toContain("[Brewva Skill Recommendation]");
     expect(result.message.content).toContain("No TaskSpec is currently recorded for this session.");
-    expect(result.message.content).toContain("call `task_set_spec`");
+    expect(result.message.content).toContain("Consider calling `task_set_spec`");
   });
 
   test("emits skill recommendation telemetry once when the hard gate path returns early", async () => {

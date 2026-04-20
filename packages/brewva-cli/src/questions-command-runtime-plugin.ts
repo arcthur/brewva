@@ -5,7 +5,11 @@ import {
   collectOpenSessionQuestions,
   resolveOpenSessionQuestion,
 } from "@brewva/brewva-gateway";
-import type { RuntimePlugin, RuntimePluginApi } from "@brewva/brewva-gateway/runtime-plugins";
+import {
+  defineInternalRuntimePlugin,
+  type InternalRuntimePlugin,
+  type InternalRuntimePluginApi,
+} from "@brewva/brewva-gateway/runtime-plugins";
 import type { BrewvaRuntime } from "@brewva/brewva-runtime";
 import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import type { BrewvaHostContext } from "@brewva/brewva-substrate";
@@ -77,100 +81,104 @@ function parseAnswerArgs(
   return { questionId, answerText };
 }
 
-export function createQuestionsCommandRuntimePlugin(runtime: BrewvaRuntime): RuntimePlugin {
-  return (runtimePluginApi: RuntimePluginApi) => {
-    runtimePluginApi.on("session_start", async (_event, ctx) => {
-      clearQuestionsWidget(ctx, QUESTIONS_WIDGET_ID);
-    });
-    runtimePluginApi.on("session_switch", async (_event, ctx) => {
-      clearQuestionsWidget(ctx, QUESTIONS_WIDGET_ID);
-    });
-    runtimePluginApi.on("session_shutdown", async (_event, ctx) => {
-      clearQuestionsWidget(ctx, QUESTIONS_WIDGET_ID);
-    });
+export function createQuestionsCommandRuntimePlugin(runtime: BrewvaRuntime): InternalRuntimePlugin {
+  return defineInternalRuntimePlugin({
+    name: "cli.questions_command",
+    capabilities: ["tool_registration.write", "user_message.enqueue"],
+    register(runtimePluginApi: InternalRuntimePluginApi) {
+      runtimePluginApi.on("session_start", async (_event, ctx) => {
+        clearQuestionsWidget(ctx, QUESTIONS_WIDGET_ID);
+      });
+      runtimePluginApi.on("session_switch", async (_event, ctx) => {
+        clearQuestionsWidget(ctx, QUESTIONS_WIDGET_ID);
+      });
+      runtimePluginApi.on("session_shutdown", async (_event, ctx) => {
+        clearQuestionsWidget(ctx, QUESTIONS_WIDGET_ID);
+      });
 
-    runtimePluginApi.registerCommand("questions", {
-      description:
-        "Inspect unresolved session questions without entering a model turn (usage: /questions | /questions clear)",
-      handler: async (args, ctx) => {
-        const normalizedArgs = normalizeArgs(args);
-        if (normalizedArgs === "clear") {
-          clearQuestionsWidget(ctx, QUESTIONS_WIDGET_ID);
-          if (ctx.hasUI) {
-            ctx.ui.notify("Questions widget cleared.", "info");
+      runtimePluginApi.registerCommand("questions", {
+        description:
+          "Inspect unresolved session questions without entering a model turn (usage: /questions | /questions clear)",
+        handler: async (args, ctx) => {
+          const normalizedArgs = normalizeArgs(args);
+          if (normalizedArgs === "clear") {
+            clearQuestionsWidget(ctx, QUESTIONS_WIDGET_ID);
+            if (ctx.hasUI) {
+              ctx.ui.notify("Questions widget cleared.", "info");
+            }
+            return;
           }
-          return;
-        }
-        if (normalizedArgs) {
-          if (ctx.hasUI) {
-            ctx.ui.notify("Usage: /questions | /questions clear", "warning");
+          if (normalizedArgs) {
+            if (ctx.hasUI) {
+              ctx.ui.notify("Usage: /questions | /questions clear", "warning");
+            }
+            return;
           }
-          return;
-        }
-        const sessionId = ctx.sessionManager.getSessionId();
-        const collection = await collectOpenSessionQuestions(runtime, sessionId);
-        if (ctx.hasUI) {
-          ctx.ui.setWidget(QUESTIONS_WIDGET_ID, toWidgetLines(formatQuestionsText(collection)), {
-            placement: "belowEditor",
-          });
-          ctx.ui.notify(
-            collection.questions.length > 0
-              ? `Questions updated (${collection.questions.length} open).`
-              : "No open questions found.",
-            collection.questions.length > 0 ? "info" : "warning",
-          );
-        }
-      },
-    });
+          const sessionId = ctx.sessionManager.getSessionId();
+          const collection = await collectOpenSessionQuestions(runtime, sessionId);
+          if (ctx.hasUI) {
+            ctx.ui.setWidget(QUESTIONS_WIDGET_ID, toWidgetLines(formatQuestionsText(collection)), {
+              placement: "belowEditor",
+            });
+            ctx.ui.notify(
+              collection.questions.length > 0
+                ? `Questions updated (${collection.questions.length} open).`
+                : "No open questions found.",
+              collection.questions.length > 0 ? "info" : "warning",
+            );
+          }
+        },
+      });
 
-    runtimePluginApi.registerCommand("answer", {
-      description:
-        "Record an operator answer for an open session question and route it back into the current session (usage: /answer <question-id> <answer>)",
-      handler: async (args, ctx) => {
-        const parsed = parseAnswerArgs(args);
-        if ("error" in parsed) {
-          if (ctx.hasUI) {
-            ctx.ui.notify(parsed.error, "warning");
+      runtimePluginApi.registerCommand("answer", {
+        description:
+          "Record an operator answer for an open session question and route it back into the current session (usage: /answer <question-id> <answer>)",
+        handler: async (args, ctx) => {
+          const parsed = parseAnswerArgs(args);
+          if ("error" in parsed) {
+            if (ctx.hasUI) {
+              ctx.ui.notify(parsed.error, "warning");
+            }
+            return;
           }
-          return;
-        }
-        const sessionId = ctx.sessionManager.getSessionId();
-        const question = await resolveOpenSessionQuestion(runtime, sessionId, parsed.questionId);
-        if (!question) {
-          if (ctx.hasUI) {
-            ctx.ui.notify(`Open question not found: ${parsed.questionId}`, "warning");
+          const sessionId = ctx.sessionManager.getSessionId();
+          const question = await resolveOpenSessionQuestion(runtime, sessionId, parsed.questionId);
+          if (!question) {
+            if (ctx.hasUI) {
+              ctx.ui.notify(`Open question not found: ${parsed.questionId}`, "warning");
+            }
+            return;
           }
-          return;
-        }
-        const prompt = buildOperatorQuestionAnswerPrompt({
-          question,
-          answerText: parsed.answerText,
-        });
-        if (ctx.isIdle()) {
-          runtimePluginApi.sendUserMessage([{ type: "text", text: prompt }]);
-        } else {
-          runtimePluginApi.sendUserMessage([{ type: "text", text: prompt }], {
-            deliverAs: "followUp",
-          });
-        }
-        recordRuntimeEvent(runtime, {
-          sessionId,
-          type: OPERATOR_QUESTION_ANSWERED_EVENT_TYPE,
-          payload: buildOperatorQuestionAnsweredPayload({
+          const prompt = buildOperatorQuestionAnswerPrompt({
             question,
             answerText: parsed.answerText,
-            source: "runtime_plugin",
-          }),
-        });
-        if (ctx.hasUI) {
-          ctx.ui.notify(
-            ctx.isIdle()
-              ? `Queued answer for ${parsed.questionId}.`
-              : `Queued answer for ${parsed.questionId} after the current run.`,
-            "info",
-          );
-        }
-      },
-    });
-  };
+          });
+          if (ctx.isIdle()) {
+            runtimePluginApi.sendUserMessage([{ type: "text", text: prompt }]);
+          } else {
+            runtimePluginApi.sendUserMessage([{ type: "text", text: prompt }], {
+              deliverAs: "followUp",
+            });
+          }
+          recordRuntimeEvent(runtime, {
+            sessionId,
+            type: OPERATOR_QUESTION_ANSWERED_EVENT_TYPE,
+            payload: buildOperatorQuestionAnsweredPayload({
+              question,
+              answerText: parsed.answerText,
+              source: "runtime_plugin",
+            }),
+          });
+          if (ctx.hasUI) {
+            ctx.ui.notify(
+              ctx.isIdle()
+                ? `Queued answer for ${parsed.questionId}.`
+                : `Queued answer for ${parsed.questionId} after the current run.`,
+              "info",
+            );
+          }
+        },
+      });
+    },
+  });
 }

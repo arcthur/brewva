@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createInspectCommandRuntimePlugin } from "@brewva/brewva-cli";
-import type { RuntimePluginApi } from "@brewva/brewva-gateway/runtime-plugins";
+import type { InternalRuntimePluginApi } from "@brewva/brewva-gateway/runtime-plugins";
 import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
 import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import { requireDefined } from "../../helpers/assertions.js";
@@ -14,7 +14,7 @@ type RegisteredCommand = {
 };
 
 function createCommandApiMock(): {
-  api: RuntimePluginApi;
+  api: InternalRuntimePluginApi;
   commands: Map<string, RegisteredCommand>;
   handlers: Map<
     string,
@@ -39,7 +39,7 @@ function createCommandApiMock(): {
     registerCommand(name: string, definition: RegisteredCommand) {
       commands.set(name, definition);
     },
-  } as unknown as RuntimePluginApi;
+  } as unknown as InternalRuntimePluginApi;
 
   return { api, commands, handlers };
 }
@@ -110,7 +110,7 @@ describe("inspect interactive command runtime plugin", () => {
     const { api, commands } = createCommandApiMock();
     await createInspectCommandRuntimePlugin(runtime, {
       maxWidgetLines: 64,
-    })(api);
+    }).register(api);
 
     const inspectCommand = requireCommand(commands, "inspect");
 
@@ -153,7 +153,7 @@ describe("inspect interactive command runtime plugin", () => {
     });
 
     const { api, commands } = createCommandApiMock();
-    await createInspectCommandRuntimePlugin(runtime)(api);
+    await createInspectCommandRuntimePlugin(runtime).register(api);
     const command = requireCommand(commands, "inspect");
 
     const widgets: Array<{ id: string; lines?: string[]; options?: Record<string, unknown> }> = [];

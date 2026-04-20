@@ -1,7 +1,7 @@
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
 import {
   createHostedResourceLoader,
-  type BrewvaHostPluginFactory,
+  type InternalHostPlugin,
   type BrewvaMutableModelCatalog,
 } from "@brewva/brewva-substrate";
 import { createHostedTurnPipeline } from "../runtime-plugins/index.js";
@@ -206,7 +206,7 @@ async function createHostedLocalSessionServicesBundle(input: {
   cwd: string;
   settings: HostedSessionSettings;
   runtime?: BrewvaRuntime;
-  runtimePlugins?: readonly BrewvaHostPluginFactory[];
+  runtimePlugins?: readonly InternalHostPlugin[];
   sessionId?: string;
 }): Promise<HostedSessionServicesBundle> {
   const settingsManager = readHostedSettingsHandle(input.settings);

@@ -5,9 +5,10 @@ import { BrewvaRuntime } from "@brewva/brewva-runtime";
 import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import {
   type ContextState,
+  type CreateBrewvaHostPluginRunnerOptions,
   createHostedResourceLoader,
   createInMemoryModelCatalog,
-  type BrewvaHostPluginFactory,
+  defineInternalHostPlugin,
   type BrewvaPromptContentPart,
   type BrewvaHostedResourceLoader,
   type BrewvaPromptThinkingLevel,
@@ -15,6 +16,7 @@ import {
   type BrewvaSessionMessageEntry,
   type BrewvaToolContext,
   type BrewvaToolUiPort,
+  type RuntimePluginCapability,
 } from "@brewva/brewva-substrate";
 import type { HostedSessionLogger } from "../../../packages/brewva-gateway/src/host/logger.js";
 import { createBrewvaManagedAgentSession } from "../../../packages/brewva-gateway/src/host/managed-agent-session.js";
@@ -22,6 +24,20 @@ import { HostedRuntimeTapeSessionStore } from "../../../packages/brewva-gateway/
 import { createHostedTurnPipeline } from "../../../packages/brewva-gateway/src/runtime-plugins/index.js";
 import { registerFauxProvider } from "../../../packages/brewva-provider-core/src/providers/faux.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
+
+type TestRuntimePlugin = NonNullable<CreateBrewvaHostPluginRunnerOptions["plugins"]>[number];
+
+function testRuntimePlugin(
+  name: string,
+  capabilities: readonly RuntimePluginCapability[],
+  register: TestRuntimePlugin["register"],
+): TestRuntimePlugin {
+  return defineInternalHostPlugin({
+    name,
+    capabilities,
+    register,
+  });
+}
 
 const TEST_MODEL: BrewvaRegisteredModel = {
   provider: "openai",
@@ -565,14 +581,18 @@ describe("managed agent session compaction", () => {
     });
     const replayModel = fauxProvider.getModel();
     const observedContexts: Array<Array<{ role?: unknown; content?: unknown }>> = [];
-    const captureContextPlugin: BrewvaHostPluginFactory = (api) => {
-      api.on("context", (event) => {
-        observedContexts.push(
-          structuredClone(event.messages) as Array<{ role?: unknown; content?: unknown }>,
-        );
-        return event;
-      });
-    };
+    const captureContextPlugin = testRuntimePlugin(
+      "capture-replay-context",
+      ["context_messages.write"],
+      (api) => {
+        api.on("context", (event) => {
+          observedContexts.push(
+            structuredClone(event.messages) as Array<{ role?: unknown; content?: unknown }>,
+          );
+          return event;
+        });
+      },
+    );
 
     try {
       sessionStore.appendModelChange(replayModel.provider, replayModel.id);
@@ -733,14 +753,18 @@ describe("managed agent session compaction", () => {
     });
     const replayModel = fauxProvider.getModel();
     const observedContexts: Array<Array<{ role?: unknown; content?: unknown }>> = [];
-    const captureContextPlugin: BrewvaHostPluginFactory = (api) => {
-      api.on("context", (event) => {
-        observedContexts.push(
-          structuredClone(event.messages) as Array<{ role?: unknown; content?: unknown }>,
-        );
-        return event;
-      });
-    };
+    const captureContextPlugin = testRuntimePlugin(
+      "capture-file-parts-context",
+      ["context_messages.write"],
+      (api) => {
+        api.on("context", (event) => {
+          observedContexts.push(
+            structuredClone(event.messages) as Array<{ role?: unknown; content?: unknown }>,
+          );
+          return event;
+        });
+      },
+    );
 
     try {
       sessionStore.appendModelChange(replayModel.provider, replayModel.id);
@@ -879,11 +903,11 @@ describe("managed agent session compaction", () => {
     };
 
     const observedPhases: string[] = [];
-    const plugin: BrewvaHostPluginFactory = (api) => {
+    const plugin = testRuntimePlugin("observe-session-phase", [], (api) => {
       api.on("session_phase_change", (event) => {
         observedPhases.push(event.phase.kind);
       });
-    };
+    });
 
     const modelCatalog = createInMemoryModelCatalog();
     modelCatalog.registerProvider(TEST_MODEL.provider, {
@@ -1379,14 +1403,14 @@ describe("managed agent session compaction", () => {
     sessionStore.appendThinkingLevelChange("high");
 
     const observedEvents: string[] = [];
-    const plugin: BrewvaHostPluginFactory = (api) => {
+    const plugin = testRuntimePlugin("observe-custom-message-hooks", [], (api) => {
       api.on("message_start", () => {
         observedEvents.push("message_start");
       });
       api.on("message_end", () => {
         observedEvents.push("message_end");
       });
-    };
+    });
 
     const modelCatalog = createInMemoryModelCatalog();
     modelCatalog.registerProvider(TEST_MODEL.provider, {
@@ -1510,14 +1534,14 @@ describe("managed agent session compaction", () => {
       thinkingLevel: string;
       previousThinkingLevel?: string;
     }> = [];
-    const plugin: BrewvaHostPluginFactory = (api) => {
+    const plugin = testRuntimePlugin("observe-thinking-level", [], (api) => {
       api.on("thinking_level_select", (event) => {
         observedThinkingLevels.push({
           thinkingLevel: event.thinkingLevel,
           previousThinkingLevel: event.previousThinkingLevel,
         });
       });
-    };
+    });
 
     session.dispose();
 
@@ -1628,23 +1652,27 @@ describe("managed agent session compaction", () => {
       const observedContexts: Array<
         Array<{ role?: unknown; summary?: unknown; content?: unknown }>
       > = [];
-      const captureContextPlugin: BrewvaHostPluginFactory = (api) => {
-        api.on("context", (event) => {
-          observedContexts.push(
-            structuredClone(event.messages) as Array<{
-              role?: unknown;
-              summary?: unknown;
-              content?: unknown;
-            }>,
-          );
-          return event;
-        });
-      };
-      const throwingPlugin: BrewvaHostPluginFactory = (api) => {
+      const captureContextPlugin = testRuntimePlugin(
+        "capture-compaction-context",
+        ["context_messages.write"],
+        (api) => {
+          api.on("context", (event) => {
+            observedContexts.push(
+              structuredClone(event.messages) as Array<{
+                role?: unknown;
+                summary?: unknown;
+                content?: unknown;
+              }>,
+            );
+            return event;
+          });
+        },
+      );
+      const throwingPlugin = testRuntimePlugin("throw-after-compaction-commit", [], (api) => {
         api.on("session_compact", () => {
           throw new Error("post-commit plugin failure");
         });
-      };
+      });
 
       const modelCatalog = createInMemoryModelCatalog();
       modelCatalog.registerProvider(replayModel.provider, {
@@ -1929,7 +1957,7 @@ describe("managed agent session compaction", () => {
     const observedPhases: string[] = [];
     const observedSessionPhases: string[] = [];
     const observedContextStates: ContextState[] = [];
-    const plugin: BrewvaHostPluginFactory = (api) => {
+    const plugin = testRuntimePlugin("observe-session-state-events", [], (api) => {
       api.on("tool_execution_phase_change", (event) => {
         observedPhases.push(event.phase);
       });
@@ -1939,7 +1967,7 @@ describe("managed agent session compaction", () => {
       api.on("context_state_change", (event) => {
         observedContextStates.push(structuredClone(event.state));
       });
-    };
+    });
 
     const modelCatalog = createInMemoryModelCatalog();
     modelCatalog.registerProvider(TEST_MODEL.provider, {

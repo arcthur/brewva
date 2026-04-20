@@ -11,7 +11,7 @@ import {
   type BrewvaHostedRuntimePort,
 } from "@brewva/brewva-runtime";
 import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
-import type { BrewvaHostPluginApi, BrewvaToolDefinition } from "@brewva/brewva-substrate";
+import type { InternalHostPluginApi, BrewvaToolDefinition } from "@brewva/brewva-substrate";
 import { resolveBrewvaToolExecutionTraits } from "@brewva/brewva-tools";
 import { buildTranscriptMessagePayload } from "../session/runtime-session-transcript.js";
 import { ToolAttemptBindingRegistry } from "../session/tool-attempt-binding.js";
@@ -237,7 +237,7 @@ function resolveExecutionTraitsPayload(input: {
 }
 
 export function registerEventStream(
-  extensionApi: BrewvaHostPluginApi,
+  extensionApi: InternalHostPluginApi,
   runtime: BrewvaHostedRuntimePort,
   turnClock: RuntimeTurnClockStore = createRuntimeTurnClockStore(),
   options: EventStreamOptions = {},

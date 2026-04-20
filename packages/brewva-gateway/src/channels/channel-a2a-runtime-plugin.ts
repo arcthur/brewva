@@ -1,5 +1,9 @@
 import { createA2ATools, type A2ABroadcastResult, type A2ASendResult } from "@brewva/brewva-tools";
-import type { RuntimePlugin, RuntimePluginApi } from "../runtime-plugins/index.js";
+import {
+  defineInternalRuntimePlugin,
+  type InternalRuntimePlugin,
+  type InternalRuntimePluginApi,
+} from "../runtime-plugins/index.js";
 
 export interface ChannelA2AAdapter {
   send(input: {
@@ -30,26 +34,30 @@ export interface ChannelA2AAdapter {
 
 export function createChannelA2ARuntimePlugin(options: {
   adapter: ChannelA2AAdapter;
-}): RuntimePlugin {
-  return (runtimePluginApi: RuntimePluginApi) => {
-    const tools = createA2ATools({
-      runtime: {
-        orchestration: {
-          a2a: options.adapter,
+}): InternalRuntimePlugin {
+  return defineInternalRuntimePlugin({
+    name: "channel.a2a",
+    capabilities: ["tool_registration.write"],
+    register(runtimePluginApi: InternalRuntimePluginApi) {
+      const tools = createA2ATools({
+        runtime: {
+          orchestration: {
+            a2a: options.adapter,
+          },
         },
-      },
-    });
-    const ensureRegistered = () => {
-      const currentNames = new Set(runtimePluginApi.getAllTools().map((tool) => tool.name));
-      for (const tool of tools) {
-        if (currentNames.has(tool.name)) continue;
-        runtimePluginApi.registerTool(tool);
-      }
-    };
+      });
+      const ensureRegistered = () => {
+        const currentNames = new Set(runtimePluginApi.getAllTools().map((tool) => tool.name));
+        for (const tool of tools) {
+          if (currentNames.has(tool.name)) continue;
+          runtimePluginApi.registerTool(tool);
+        }
+      };
 
-    runtimePluginApi.on("session_start", () => {
-      ensureRegistered();
-      return undefined;
-    });
-  };
+      runtimePluginApi.on("session_start", () => {
+        ensureRegistered();
+        return undefined;
+      });
+    },
+  });
 }

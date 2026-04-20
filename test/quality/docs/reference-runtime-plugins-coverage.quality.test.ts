@@ -3,8 +3,10 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const EXPECTED_SYMBOLS = [
-  "RuntimePlugin",
-  "RuntimePluginApi",
+  "InternalRuntimePlugin",
+  "InternalRuntimePluginApi",
+  "RuntimePluginCapability",
+  "LocalHookPort",
   "createHostedTurnPipeline",
   "TurnLifecyclePort",
   "registerTurnLifecyclePorts",

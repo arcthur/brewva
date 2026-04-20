@@ -12,13 +12,15 @@ import type {
   BrewvaHostContext,
   BrewvaHostMessageEndEvent,
   BrewvaHostMessageEndResult,
-  BrewvaHostMessageEnvelope,
-  BrewvaHostMessageVisibilityPatch,
-  BrewvaHostPluginApi,
+  InternalHostPluginApi,
   BrewvaHostSessionShutdownEvent,
   BrewvaHostTurnEndEvent,
 } from "@brewva/brewva-substrate";
-import { buildSkillFirstPolicyBlock, deriveSkillRecommendations } from "./skill-first.js";
+import {
+  buildSkillFirstPolicyBlock,
+  deriveSkillRecommendations,
+  type SkillClassificationHint,
+} from "./skill-first.js";
 
 const MAX_NUDGES_PER_PROMPT = 2;
 
@@ -113,8 +115,12 @@ function formatSkillLoadGuardMessage(
   }
   return [
     "[Brewva Skill-First Guard]",
-    "A routed skill is pending and no active skill is loaded.",
-    `Call tool \`skill_load\` with name \`${primary.name}\` before producing a final answer.`,
+    recommendations.activationPosture.kind === "require_skill_load"
+      ? "A routed skill is required before execution or mutation, and no active skill is loaded."
+      : "A routed skill is recommended, and no active skill is loaded.",
+    recommendations.activationPosture.kind === "require_skill_load"
+      ? `Call tool \`skill_load\` with name \`${primary.name}\` before execution or mutation.`
+      : `Consider tool \`skill_load\` with name \`${primary.name}\` if the task needs the specialized workflow.`,
     "",
     policyBlock,
   ].join("\n");
@@ -169,29 +175,8 @@ function isTerminalAssistantMessage(message: unknown): boolean {
   return record.stopReason === "stop" || record.stopReason === "length";
 }
 
-function suppressAssistantDraft(input: {
-  message: BrewvaHostMessageEnvelope;
-  reason: "active_skill_incomplete" | "skill_load_pending" | "skill_contract_failed";
-  skillName?: string;
-  obligation?: string;
-}): BrewvaHostMessageVisibilityPatch {
-  const existingDetails = isRecord(input.message.details) ? input.message.details : {};
-  return {
-    display: false,
-    excludeFromContext: true,
-    details: {
-      ...existingDetails,
-      brewvaDraftSuppressed: {
-        reason: input.reason,
-        ...(input.skillName ? { skillName: input.skillName } : {}),
-        ...(input.obligation ? { obligation: input.obligation } : {}),
-      },
-    },
-  };
-}
-
 export function registerCompletionGuard(
-  extensionApi: BrewvaHostPluginApi,
+  extensionApi: InternalHostPluginApi,
   runtime: BrewvaHostedRuntimePort,
 ): void {
   const lifecycle = createCompletionGuardLifecycle(extensionApi, runtime);
@@ -213,6 +198,10 @@ export interface CompletionGuardLifecycle {
   sessionShutdown: (event: BrewvaHostSessionShutdownEvent, ctx: BrewvaHostContext) => undefined;
 }
 
+export interface CompletionGuardOptions {
+  resolveClassificationHints?: (sessionId: string) => readonly SkillClassificationHint[];
+}
+
 function isTerminalAssistantTurn(event: BrewvaHostTurnEndEvent): boolean {
   const message = event.message as { role?: unknown; stopReason?: unknown } | undefined;
   if (message?.role !== "assistant") {
@@ -225,8 +214,9 @@ function isTerminalAssistantTurn(event: BrewvaHostTurnEndEvent): boolean {
 }
 
 export function createCompletionGuardLifecycle(
-  extensionApi: BrewvaHostPluginApi,
+  extensionApi: InternalHostPluginApi,
   runtime: BrewvaHostedRuntimePort,
+  options: CompletionGuardOptions = {},
 ): CompletionGuardLifecycle {
   const nudgeCounts = new Map<string, number>();
   const latestPromptBySession = new Map<string, string>();
@@ -257,7 +247,7 @@ export function createCompletionGuardLifecycle(
           phase: latestFailure.phase,
         },
       },
-      { deliverAs: "transcript", triggerTurn: false },
+      { triggerTurn: false },
     );
   }
 
@@ -268,16 +258,18 @@ export function createCompletionGuardLifecycle(
       const recommendations = deriveSkillRecommendations(runtime, {
         sessionId,
         prompt: latestPromptBySession.get(sessionId) ?? "",
+        classificationHints: options.resolveClassificationHints?.(sessionId),
       });
       const latestFailure = runtime.inspect.skills.getLatestFailure(sessionId);
-      if (recommendations.gateMode === "skill_contract_failed") {
+      if (recommendations.activationPosture.kind === "repair_failed_contract") {
         nudgeCounts.delete(sessionId);
         enqueueFailedContractNotice(sessionId, latestFailure);
         return;
       }
       if (
         recommendations.activeSkillName ||
-        recommendations.gateMode !== "skill_load_required" ||
+        (recommendations.activationPosture.kind !== "require_skill_load" &&
+          recommendations.activationPosture.kind !== "recommend_skill_load") ||
         recommendations.recommendations.length === 0
       ) {
         nudgeCounts.delete(sessionId);
@@ -291,7 +283,10 @@ export function createCompletionGuardLifecycle(
         nudgeCounts.delete(sessionId);
         return;
       }
-      if (count > MAX_NUDGES_PER_PROMPT) {
+      if (
+        recommendations.activationPosture.kind === "require_skill_load" &&
+        count > MAX_NUDGES_PER_PROMPT
+      ) {
         ctx.ui.notify(
           `Brewva guard: routed skill '${recommendations.recommendations[0]?.name}' was not loaded before final answer.`,
           "warning",
@@ -310,7 +305,9 @@ export function createCompletionGuardLifecycle(
             obligation: "skill_load",
           },
         },
-        { deliverAs: "followUp", triggerTurn: true },
+        recommendations.activationPosture.kind === "require_skill_load"
+          ? { deliverAs: "followUp", triggerTurn: true }
+          : { triggerTurn: false },
       );
       return;
     }
@@ -357,41 +354,17 @@ export function createCompletionGuardLifecycle(
       const sessionId = ctx.sessionManager.getSessionId();
       const active = runtime.inspect.skills.getActive(sessionId);
       if (active) {
-        return {
-          visibility: suppressAssistantDraft({
-            message: event.message,
-            reason: "active_skill_incomplete",
-            skillName: active.name,
-            obligation: "skill_complete",
-          }),
-        };
+        return undefined;
       }
 
       const recommendations = deriveSkillRecommendations(runtime, {
         sessionId,
         prompt: latestPromptBySession.get(sessionId) ?? "",
+        classificationHints: options.resolveClassificationHints?.(sessionId),
       });
-      if (recommendations.gateMode === "skill_contract_failed") {
-        const latestFailure = runtime.inspect.skills.getLatestFailure(sessionId);
-        return {
-          visibility: suppressAssistantDraft({
-            message: event.message,
-            reason: "skill_contract_failed",
-            skillName: latestFailure?.skillName,
-            obligation: "operator_intervention",
-          }),
-        };
-      }
-      const primary = recommendations.recommendations[0];
-      if (recommendations.gateMode === "skill_load_required" && primary) {
-        return {
-          visibility: suppressAssistantDraft({
-            message: event.message,
-            reason: "skill_load_pending",
-            skillName: primary.name,
-            obligation: "skill_load",
-          }),
-        };
+      if (recommendations.activationPosture.kind === "repair_failed_contract") {
+        enqueueFailedContractNotice(sessionId, runtime.inspect.skills.getLatestFailure(sessionId));
+        return undefined;
       }
       return undefined;
     },

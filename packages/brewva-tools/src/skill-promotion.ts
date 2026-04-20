@@ -11,10 +11,8 @@ import { buildStringEnumSchema } from "./utils/input-alias.js";
 import { failTextResult, inconclusiveTextResult, textResult } from "./utils/result.js";
 import { createManagedBrewvaToolFactory } from "./utils/runtime-bound-tool.js";
 
-const ACTION_VALUES = ["list", "show", "review", "promote"] as const;
 const REVIEW_DECISION_VALUES = ["approve", "reject", "reopen"] as const;
 
-const ActionSchema = buildStringEnumSchema(ACTION_VALUES, {});
 const StatusSchema = buildStringEnumSchema(SKILL_PROMOTION_STATUSES, {});
 const ReviewDecisionSchema = buildStringEnumSchema(REVIEW_DECISION_VALUES, {});
 const TargetKindSchema = buildStringEnumSchema(SKILL_PROMOTION_TARGET_KINDS, {});
@@ -120,27 +118,22 @@ function formatDraftDetail(draft: SkillPromotionDraft): string {
   return `${lines.join("\n")}\n`;
 }
 
-export function createSkillPromotionTool(options: BrewvaToolOptions): ToolDefinition {
-  const skillPromotionTool = createManagedBrewvaToolFactory("skill_promotion");
+export function createSkillPromotionInspectTool(options: BrewvaToolOptions): ToolDefinition {
+  const skillPromotionTool = createManagedBrewvaToolFactory("skill_promotion_inspect");
   return skillPromotionTool.define({
-    name: "skill_promotion",
-    label: "Skill Promotion",
+    name: "skill_promotion_inspect",
+    label: "Skill Promotion Inspect",
     description:
-      "Inspect, review, and materialize evidence-backed skill promotion drafts derived from completed work.",
+      "Inspect cached evidence-backed skill promotion drafts derived from completed work without deriving new drafts.",
     promptSnippet:
-      "Use this to inspect or advance post-execution promotion drafts without turning runtime execution into a turn-time skill broker.",
+      "Use this to list or show already-derived promotion drafts. This tool is read-only and does not refresh broker state.",
     promptGuidelines: [
-      "List or show drafts before approving or promoting them when the target home is still ambiguous.",
-      "Promotion materializes a review packet under .brewva/skill-broker/materialized and does not patch live skills automatically.",
+      "Use this before review or promote so the operator-visible draft is explicit.",
+      "If no cached drafts are visible, let lifecycle maintenance derive drafts instead of using inspect as a refresh path.",
     ],
     parameters: Type.Object({
-      action: ActionSchema,
       draft_id: Type.Optional(Type.String({ minLength: 1 })),
       status: Type.Optional(StatusSchema),
-      decision: Type.Optional(ReviewDecisionSchema),
-      note: Type.Optional(Type.String({ minLength: 1, maxLength: 4_000 })),
-      target_kind: Type.Optional(TargetKindSchema),
-      path_hint: Type.Optional(Type.String({ minLength: 1, maxLength: 512 })),
       limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 20 })),
     }),
     async execute(_toolCallId, params) {
@@ -149,13 +142,10 @@ export function createSkillPromotionTool(options: BrewvaToolOptions): ToolDefini
       });
       const draftId = readTrimmedString(params.draft_id);
       const status = readStatus(params.status);
-      const decision = readDecision(params.decision);
-      const targetKind = readTargetKind(params.target_kind);
-      const pathHint = readTrimmedString(params.path_hint);
       const limit = Math.max(1, Math.min(20, params.limit ?? 10));
 
-      if (params.action === "list") {
-        const drafts = broker.list({
+      if (!draftId) {
+        const drafts = broker.listCached({
           status,
           limit,
         });
@@ -180,58 +170,126 @@ export function createSkillPromotionTool(options: BrewvaToolOptions): ToolDefini
         );
       }
 
+      const draft = broker.getDraftCached(draftId);
+      if (!draft) {
+        return failTextResult(
+          `Skill promotion draft not found in cached broker state: ${draftId}`,
+          {
+            ok: false,
+            error: "draft_not_found",
+            draftId,
+          },
+        );
+      }
+      return textResult(formatDraftDetail(draft), {
+        ok: true,
+        draft,
+      });
+    },
+  });
+}
+
+export function createSkillPromotionReviewTool(options: BrewvaToolOptions): ToolDefinition {
+  const skillPromotionTool = createManagedBrewvaToolFactory("skill_promotion_review");
+  return skillPromotionTool.define({
+    name: "skill_promotion_review",
+    label: "Skill Promotion Review",
+    description: "Record an operator review decision on a skill promotion draft.",
+    promptSnippet:
+      "Use this only after inspecting the draft and deciding whether it should be approved, rejected, or reopened.",
+    promptGuidelines: [
+      "Review changes broker state and must be treated as operator-governed memory write.",
+      "Reject ambiguous or low-confidence drafts instead of promoting them speculatively.",
+    ],
+    parameters: Type.Object({
+      draft_id: Type.String({ minLength: 1 }),
+      decision: ReviewDecisionSchema,
+      note: Type.Optional(Type.String({ minLength: 1, maxLength: 4_000 })),
+    }),
+    async execute(_toolCallId, params) {
+      const draftId = readTrimmedString(params.draft_id);
+      const decision = readDecision(params.decision);
+      if (!draftId || !decision) {
+        return failTextResult("draft_id and decision are required.", {
+          ok: false,
+          error: "invalid_review_input",
+        });
+      }
+      const broker = getOrCreateSkillPromotionBroker(options.runtime, {
+        subscribeToEvents: true,
+      });
+      const draft = broker.reviewDraft({
+        draftId,
+        decision,
+        note: readTrimmedString(params.note),
+      });
+      if (!draft) {
+        return failTextResult(`Skill promotion draft not found: ${draftId}`, {
+          ok: false,
+          error: "draft_not_found",
+          draftId,
+        });
+      }
+      return textResult(formatDraftDetail(draft), {
+        ok: true,
+        draft,
+      });
+    },
+  });
+}
+
+export function createSkillPromotionPromoteTool(options: BrewvaToolOptions): ToolDefinition {
+  const skillPromotionTool = createManagedBrewvaToolFactory("skill_promotion_promote");
+  return skillPromotionTool.define({
+    name: "skill_promotion_promote",
+    label: "Skill Promotion Promote",
+    description:
+      "Materialize an approved skill promotion draft as a reviewable artifact without patching live rules.",
+    promptSnippet:
+      "Use this to create a materialized promotion packet after the draft has been reviewed and approved.",
+    promptGuidelines: [
+      "Promotion writes review artifacts only; it does not apply live AGENTS.md or skill-file changes.",
+      "Prefer approved drafts. Re-check the target kind and path hint before materializing.",
+    ],
+    parameters: Type.Object({
+      draft_id: Type.String({ minLength: 1 }),
+      target_kind: Type.Optional(TargetKindSchema),
+      path_hint: Type.Optional(Type.String({ minLength: 1, maxLength: 512 })),
+    }),
+    async execute(_toolCallId, params) {
+      const draftId = readTrimmedString(params.draft_id);
       if (!draftId) {
-        return failTextResult("draft_id is required for show, review, and promote.", {
+        return failTextResult("draft_id is required.", {
           ok: false,
           error: "missing_draft_id",
         });
       }
-
-      if (params.action === "show") {
-        const draft = broker.getDraft(draftId);
-        if (!draft) {
-          return failTextResult(`Skill promotion draft not found: ${draftId}`, {
-            ok: false,
-            error: "draft_not_found",
-            draftId,
-          });
-        }
-        return textResult(formatDraftDetail(draft), {
-          ok: true,
-          draft,
-        });
-      }
-
-      if (params.action === "review") {
-        if (!decision) {
-          return failTextResult("review requires decision = approve | reject | reopen.", {
-            ok: false,
-            error: "missing_decision",
-            draftId,
-          });
-        }
-        const draft = broker.reviewDraft({
+      const broker = getOrCreateSkillPromotionBroker(options.runtime, {
+        subscribeToEvents: true,
+      });
+      const currentDraft = broker.getDraft(draftId);
+      if (!currentDraft) {
+        return failTextResult(`Skill promotion draft not found: ${draftId}`, {
+          ok: false,
+          error: "draft_not_found",
           draftId,
-          decision,
-          note: readTrimmedString(params.note),
-        });
-        if (!draft) {
-          return failTextResult(`Skill promotion draft not found: ${draftId}`, {
-            ok: false,
-            error: "draft_not_found",
-            draftId,
-          });
-        }
-        return textResult(formatDraftDetail(draft), {
-          ok: true,
-          draft,
         });
       }
-
+      if (currentDraft.status !== "approved") {
+        return failTextResult(
+          `Skill promotion draft must be approved before promotion: ${draftId}`,
+          {
+            ok: false,
+            error: "draft_not_approved",
+            draftId,
+            status: currentDraft.status,
+          },
+        );
+      }
       const draft = broker.promoteDraft({
         draftId,
-        targetKind,
-        pathHint,
+        targetKind: readTargetKind(params.target_kind),
+        pathHint: readTrimmedString(params.path_hint),
       });
       if (!draft) {
         return failTextResult(`Skill promotion draft not found: ${draftId}`, {

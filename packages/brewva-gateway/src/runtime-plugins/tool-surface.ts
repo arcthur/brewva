@@ -12,7 +12,7 @@ import {
   type SkillDocument,
 } from "@brewva/brewva-runtime";
 import type {
-  BrewvaHostPluginApi as ExtensionAPI,
+  InternalHostPluginApi as ExtensionAPI,
   BrewvaHostToolInfo as ToolInfo,
   BrewvaHostToolResultEvent as ToolResultEvent,
   BrewvaToolDefinition as ToolDefinition,
@@ -31,8 +31,9 @@ import {
   buildSkillFirstPolicyBlock,
   computeSkillRecommendationReceiptKey,
   deriveSkillRecommendations,
-  type SkillRecommendationGateMode,
+  type SkillClassificationHint,
   type SkillRecommendationSet,
+  type ToolAvailabilityPosture,
 } from "./skill-first.js";
 
 const CAPABILITY_REQUEST_PATTERN = /\$([a-z][a-z0-9_]*)/g;
@@ -214,6 +215,18 @@ function resolveManagedToolGovernanceDescriptor(
   return policy ? deriveToolGovernanceDescriptor(policy) : undefined;
 }
 
+function routingScopesAllowTool(
+  runtime: ToolSurfaceRuntime,
+  descriptor: ReturnType<typeof deriveToolGovernanceDescriptor> | undefined,
+): boolean {
+  const requiredRoutingScopes = descriptor?.requiredRoutingScopes ?? [];
+  if (requiredRoutingScopes.length === 0) {
+    return true;
+  }
+  const routingScopes = new Set(runtime.config.skills.routing.scopes);
+  return requiredRoutingScopes.some((scope) => routingScopes.has(scope));
+}
+
 function collectRequestableOperatorManagedToolNames(
   runtime: ToolSurfaceRuntime,
   knownToolNames: ReadonlySet<string>,
@@ -228,7 +241,10 @@ function collectRequestableOperatorManagedToolNames(
       toolName,
       dynamicToolDefinitions,
     );
-    return descriptor !== undefined && (descriptor.requiredRoutingScopes?.length ?? 0) === 0;
+    if (!descriptor) {
+      return false;
+    }
+    return routingScopesAllowTool(runtime, descriptor);
   });
 }
 
@@ -240,9 +256,25 @@ function collectSkillToolNames(
   const names = new Set<string>();
   for (const skill of skills) {
     for (const toolName of listSkillPreferredTools(skill.contract)) {
+      const descriptor = resolveManagedToolGovernanceDescriptor(
+        runtime,
+        toolName,
+        dynamicToolDefinitions,
+      );
+      if (!routingScopesAllowTool(runtime, descriptor)) {
+        continue;
+      }
       names.add(normalizeToolName(toolName));
     }
     for (const toolName of listSkillFallbackTools(skill.contract)) {
+      const descriptor = resolveManagedToolGovernanceDescriptor(
+        runtime,
+        toolName,
+        dynamicToolDefinitions,
+      );
+      if (!routingScopesAllowTool(runtime, descriptor)) {
+        continue;
+      }
       names.add(normalizeToolName(toolName));
     }
     const allowedEffects = new Set(listSkillAllowedEffects(skill.contract));
@@ -254,6 +286,9 @@ function collectSkillToolNames(
         dynamicToolDefinitions,
       );
       if (!descriptor) continue;
+      if (!routingScopesAllowTool(runtime, descriptor)) {
+        continue;
+      }
       if (descriptor.effects.some((effect) => deniedEffects.has(effect))) {
         continue;
       }
@@ -284,20 +319,106 @@ type TurnSurfacePlan = {
   hasActiveSkill: boolean;
   repairRequired: boolean;
   recommendedSkillNames: string[];
-  skillGateMode: SkillRecommendationGateMode;
+  skillActivationPosture: SkillRecommendationSet["activationPosture"];
+  toolAvailabilityPosture: ToolAvailabilityPosture;
   taskSpecReady: boolean;
   skillManagedToolNames: string[];
   lifecycleManagedToolNames: string[];
   operatorManagedToolNames: string[];
   operatorProfile: boolean;
-  preSkillGateActive: boolean;
 };
+
+function isLifecycleManagedTool(toolName: string): boolean {
+  return (
+    PRE_SKILL_CONTROL_PLANE_TOOL_NAMES.includes(
+      toolName as (typeof PRE_SKILL_CONTROL_PLANE_TOOL_NAMES)[number],
+    ) || toolName === "skill_complete"
+  );
+}
+
+function isContractRepairManagedTool(toolName: string): boolean {
+  return FAILED_CONTRACT_CONTROL_PLANE_TOOL_NAMES.includes(
+    toolName as (typeof FAILED_CONTRACT_CONTROL_PLANE_TOOL_NAMES)[number],
+  );
+}
+
+function isReadLikeToolPolicy(runtime: ToolSurfaceRuntime, toolName: string): boolean {
+  const policy = runtime.inspect.tools.getActionPolicy(toolName) ?? getToolActionPolicy(toolName);
+  if (!policy) {
+    return false;
+  }
+  return policy.actionClass === "workspace_read" || policy.actionClass === "runtime_observe";
+}
+
+function isToolAllowedForPosture(input: {
+  runtime: ToolSurfaceRuntime;
+  toolName: string;
+  posture: ToolAvailabilityPosture;
+  managed: boolean;
+}): boolean {
+  if (input.posture === "none" || input.posture === "recommend") {
+    return true;
+  }
+  if (input.posture === "contract_failed") {
+    return input.managed && isContractRepairManagedTool(input.toolName);
+  }
+  if (input.posture === "require_execute") {
+    return input.managed && isLifecycleManagedTool(input.toolName);
+  }
+  return (
+    (input.managed && isLifecycleManagedTool(input.toolName)) ||
+    isReadLikeToolPolicy(input.runtime, input.toolName)
+  );
+}
+
+function collectPostureAllowedManagedToolNames(
+  runtime: ToolSurfaceRuntime,
+  posture: ToolAvailabilityPosture,
+): string[] {
+  return MANAGED_BREWVA_TOOL_NAMES.filter((toolName) =>
+    isToolAllowedForPosture({
+      runtime,
+      toolName,
+      posture,
+      managed: true,
+    }),
+  );
+}
+
+function resolveAllowedRequestedManagedToolNames(input: {
+  runtime: ToolSurfaceRuntime;
+  knownToolNames: ReadonlySet<string>;
+  turnPlan: TurnSurfacePlan;
+  dynamicToolDefinitions?: ReadonlyMap<string, ToolDefinition>;
+}): Set<string> {
+  const postureAllowedManagedToolNames = collectPostureAllowedManagedToolNames(
+    input.runtime,
+    input.turnPlan.toolAvailabilityPosture,
+  );
+  if (input.turnPlan.hasActiveSkill) {
+    return new Set(postureAllowedManagedToolNames);
+  }
+
+  const requestableOperatorManagedToolNames = collectRequestableOperatorManagedToolNames(
+    input.runtime,
+    input.knownToolNames,
+    input.dynamicToolDefinitions,
+  );
+  return new Set(
+    [
+      ...input.turnPlan.lifecycleManagedToolNames,
+      ...requestableOperatorManagedToolNames,
+      ...input.turnPlan.operatorManagedToolNames,
+    ].filter((toolName) => postureAllowedManagedToolNames.includes(toolName)),
+  );
+}
 
 function resolveTurnSurfacePlan(input: {
   runtime: ToolSurfaceRuntime;
   sessionId: string;
   prompt: string;
   dynamicToolDefinitions?: ReadonlyMap<string, ToolDefinition>;
+  classificationHints?: readonly SkillClassificationHint[];
 }): TurnSurfacePlan {
   const requestedToolNames = extractRequestedToolNames(input.prompt);
   const requestedManagedToolNames = requestedToolNames.filter((toolName) =>
@@ -310,6 +431,7 @@ function resolveTurnSurfacePlan(input: {
   const recommendationSet = deriveSkillRecommendations(input.runtime, {
     sessionId: input.sessionId,
     prompt: input.prompt,
+    classificationHints: input.classificationHints,
   });
   const skillManagedToolNames = collectSkillToolNames(
     input.runtime,
@@ -324,7 +446,9 @@ function resolveTurnSurfacePlan(input: {
 
   const operatorProfile = isOperatorProfile(input.runtime);
   const operatorManagedToolNames = operatorProfile ? OPERATOR_BREWVA_TOOL_NAMES : [];
-  const preSkillGateActive = !hasActiveSkill && recommendationSet.gateMode !== "none";
+  const toolAvailabilityPosture = hasActiveSkill
+    ? "none"
+    : recommendationSet.toolAvailabilityPosture;
 
   return {
     requestedToolNames,
@@ -334,13 +458,13 @@ function resolveTurnSurfacePlan(input: {
     hasActiveSkill,
     repairRequired,
     recommendedSkillNames: recommendationSet.recommendations.map((entry) => entry.name),
-    skillGateMode: recommendationSet.gateMode,
+    skillActivationPosture: recommendationSet.activationPosture,
+    toolAvailabilityPosture,
     taskSpecReady: recommendationSet.taskSpecReady,
     skillManagedToolNames,
     lifecycleManagedToolNames: [...new Set(lifecycleManagedToolNames)],
     operatorManagedToolNames,
     operatorProfile,
-    preSkillGateActive,
   };
 }
 
@@ -358,7 +482,8 @@ function resolveActiveToolNames(input: {
   ignoredRequestedToolNames: string[];
   skillNames: string[];
   recommendedSkillNames: string[];
-  skillGateMode: SkillRecommendationGateMode;
+  skillActivationPosture: SkillRecommendationSet["activationPosture"];
+  toolAvailabilityPosture: ToolAvailabilityPosture;
   taskSpecReady: boolean;
   operatorProfile: boolean;
   repairRequired: boolean;
@@ -380,7 +505,15 @@ function resolveActiveToolNames(input: {
     const normalized = normalizeToolName(toolName);
     if (!knownToolNames.has(normalized)) continue;
     if (!isManagedBrewvaToolName(normalized)) {
-      if (turnPlan.preSkillGateActive) {
+      if (
+        !turnPlan.hasActiveSkill &&
+        !isToolAllowedForPosture({
+          runtime: input.runtime,
+          toolName: normalized,
+          posture: turnPlan.toolAvailabilityPosture,
+          managed: false,
+        })
+      ) {
         continue;
       }
       active.add(normalized);
@@ -388,34 +521,25 @@ function resolveActiveToolNames(input: {
   }
 
   const bootstrapManagedToolNames = new Set<string>(
-    turnPlan.skillGateMode === "skill_contract_failed"
+    turnPlan.toolAvailabilityPosture === "contract_failed"
       ? FAILED_CONTRACT_CONTROL_PLANE_TOOL_NAMES
-      : turnPlan.preSkillGateActive
+      : turnPlan.toolAvailabilityPosture === "require_execute"
         ? PRE_SKILL_CONTROL_PLANE_TOOL_NAMES
         : BOOTSTRAP_MANAGED_TOOL_NAMES,
   );
-  const requestableOperatorManagedToolNames = collectRequestableOperatorManagedToolNames(
-    input.runtime,
+  const allowedRequestedManagedToolNames = resolveAllowedRequestedManagedToolNames({
+    runtime: input.runtime,
     knownToolNames,
-    input.dynamicToolDefinitions,
-  );
-  const allowedRequestedManagedToolNames = turnPlan.hasActiveSkill
-    ? new Set<string>(MANAGED_BREWVA_TOOL_NAMES)
-    : turnPlan.skillGateMode === "skill_contract_failed"
-      ? new Set<string>(FAILED_CONTRACT_CONTROL_PLANE_TOOL_NAMES)
-      : turnPlan.preSkillGateActive
-        ? new Set<string>(PRE_SKILL_CONTROL_PLANE_TOOL_NAMES)
-        : new Set<string>([
-            ...BOOTSTRAP_MANAGED_TOOL_NAMES,
-            ...requestableOperatorManagedToolNames,
-          ]);
+    turnPlan,
+    dynamicToolDefinitions: input.dynamicToolDefinitions,
+  });
   const requestedActivatedToolNames = resolveRequestedManagedToolNames(
     turnPlan.requestedToolNames,
     knownToolNames,
     allowedRequestedManagedToolNames,
   );
 
-  if (turnPlan.skillGateMode === "skill_contract_failed") {
+  if (turnPlan.toolAvailabilityPosture === "contract_failed") {
     for (const toolName of FAILED_CONTRACT_CONTROL_PLANE_TOOL_NAMES) {
       if (knownToolNames.has(toolName)) {
         active.add(toolName);
@@ -461,7 +585,8 @@ function resolveActiveToolNames(input: {
         .filter((toolName) => !requestedActivatedToolNames.includes(toolName)),
       skillNames: turnPlan.skillNames,
       recommendedSkillNames: turnPlan.recommendedSkillNames,
-      skillGateMode: turnPlan.skillGateMode,
+      skillActivationPosture: turnPlan.skillActivationPosture,
+      toolAvailabilityPosture: turnPlan.toolAvailabilityPosture,
       taskSpecReady: turnPlan.taskSpecReady,
       operatorProfile: turnPlan.operatorProfile,
       repairRequired: false,
@@ -528,7 +653,8 @@ function resolveActiveToolNames(input: {
         .filter((toolName) => !requestedActivatedToolNames.includes(toolName)),
       skillNames: turnPlan.skillNames,
       recommendedSkillNames: turnPlan.recommendedSkillNames,
-      skillGateMode: turnPlan.skillGateMode,
+      skillActivationPosture: turnPlan.skillActivationPosture,
+      toolAvailabilityPosture: turnPlan.toolAvailabilityPosture,
       taskSpecReady: turnPlan.taskSpecReady,
       operatorProfile: turnPlan.operatorProfile,
       repairRequired: true,
@@ -586,7 +712,11 @@ function resolveActiveToolNames(input: {
     active.add("workflow_status");
   }
 
-  if (turnPlan.operatorProfile && !turnPlan.preSkillGateActive) {
+  if (
+    turnPlan.operatorProfile &&
+    (turnPlan.toolAvailabilityPosture === "none" ||
+      turnPlan.toolAvailabilityPosture === "recommend")
+  ) {
     for (const toolName of OPERATOR_BREWVA_TOOL_NAMES) {
       if (knownToolNames.has(toolName)) {
         active.add(toolName);
@@ -632,7 +762,8 @@ function resolveActiveToolNames(input: {
       .filter((toolName) => !requestedActivatedToolNames.includes(toolName)),
     skillNames: turnPlan.skillNames,
     recommendedSkillNames: turnPlan.recommendedSkillNames,
-    skillGateMode: turnPlan.skillGateMode,
+    skillActivationPosture: turnPlan.skillActivationPosture,
+    toolAvailabilityPosture: turnPlan.toolAvailabilityPosture,
     taskSpecReady: turnPlan.taskSpecReady,
     operatorProfile: turnPlan.operatorProfile,
     repairRequired: false,
@@ -651,22 +782,26 @@ function resolveActiveToolNames(input: {
 type ResolvedToolSurface = ReturnType<typeof resolveActiveToolNames>;
 
 function computeSkillEnforcementKey(
-  resolved: Pick<ResolvedToolSurface, "skillNames" | "recommendedSkillNames" | "skillGateMode">,
+  resolved: Pick<
+    ResolvedToolSurface,
+    "skillNames" | "recommendedSkillNames" | "skillActivationPosture"
+  >,
 ): string {
   if (resolved.skillNames.length > 0) {
     return "";
   }
   if (
-    resolved.skillGateMode !== "skill_load_required" ||
+    resolved.skillActivationPosture.kind !== "require_skill_load" ||
     resolved.recommendedSkillNames.length === 0
   ) {
     return "";
   }
-  return `skill_load_required:${resolved.recommendedSkillNames.join(",")}`;
+  return `require_skill_load:${resolved.recommendedSkillNames.join(",")}`;
 }
 
 export interface RegisterToolSurfaceOptions {
   dynamicToolDefinitions?: ReadonlyMap<string, ToolDefinition>;
+  resolveClassificationHints?: (sessionId: string) => readonly SkillClassificationHint[];
 }
 
 export interface ToolSurfaceLifecycle {
@@ -688,6 +823,7 @@ function resolveAndActivateToolSurface(input: {
   sessionId: string;
   prompt: string;
   dynamicToolDefinitions?: ReadonlyMap<string, ToolDefinition>;
+  resolveClassificationHints?: (sessionId: string) => readonly SkillClassificationHint[];
 }): ResolvedToolSurface | undefined {
   const allToolsGetter = (input.extensionApi as { getAllTools?: () => ToolInfo[] }).getAllTools;
   const activeToolsGetter = (input.extensionApi as { getActiveTools?: () => string[] })
@@ -712,10 +848,12 @@ function resolveAndActivateToolSurface(input: {
     sessionId: input.sessionId,
     prompt: input.prompt,
     dynamicToolDefinitions: input.dynamicToolDefinitions,
+    classificationHints: input.resolveClassificationHints?.(input.sessionId),
   });
   const knownToolNames = new Set(allTools.map((tool) => normalizeToolName(tool.name)));
   registerMissingManagedTools({
     extensionApi: input.extensionApi,
+    runtime: input.runtime,
     dynamicToolDefinitions: input.dynamicToolDefinitions,
     knownToolNames,
     turnPlan,
@@ -746,7 +884,8 @@ function resolveAndActivateToolSurface(input: {
       ignoredRequestedToolNames: resolved.ignoredRequestedToolNames,
       skillNames: resolved.skillNames,
       recommendedSkillNames: resolved.recommendedSkillNames,
-      skillGateMode: resolved.skillGateMode,
+      skillActivationPosture: resolved.skillActivationPosture,
+      toolAvailabilityPosture: resolved.toolAvailabilityPosture,
       taskSpecReady: resolved.taskSpecReady,
       operatorProfile: resolved.operatorProfile,
       repairRequired: resolved.repairRequired,
@@ -766,27 +905,50 @@ function resolveAndActivateToolSurface(input: {
 
 function registerMissingManagedTools(input: {
   extensionApi: ExtensionAPI;
+  runtime: ToolSurfaceRuntime;
   dynamicToolDefinitions?: ReadonlyMap<string, ToolDefinition>;
   knownToolNames: Set<string>;
   turnPlan: TurnSurfacePlan;
 }): void {
   if (!input.dynamicToolDefinitions || input.dynamicToolDefinitions.size === 0) return;
+  const knownOrDynamicToolNames = new Set([
+    ...input.knownToolNames,
+    ...input.dynamicToolDefinitions.keys(),
+  ]);
+  const allowedRequestedManagedToolNames = resolveAllowedRequestedManagedToolNames({
+    runtime: input.runtime,
+    knownToolNames: knownOrDynamicToolNames,
+    turnPlan: input.turnPlan,
+    dynamicToolDefinitions: input.dynamicToolDefinitions,
+  });
   const namesToEnsure = [
-    ...(input.turnPlan.preSkillGateActive
-      ? input.turnPlan.requestedManagedToolNames.filter((toolName) => {
-          if (input.turnPlan.skillGateMode === "skill_contract_failed") {
-            return FAILED_CONTRACT_CONTROL_PLANE_TOOL_NAMES.includes(
-              toolName as (typeof FAILED_CONTRACT_CONTROL_PLANE_TOOL_NAMES)[number],
-            );
-          }
-          return PRE_SKILL_CONTROL_PLANE_TOOL_NAMES.includes(
-            toolName as (typeof PRE_SKILL_CONTROL_PLANE_TOOL_NAMES)[number],
-          );
-        })
-      : input.turnPlan.requestedManagedToolNames),
-    ...(input.turnPlan.preSkillGateActive ? [] : input.turnPlan.skillManagedToolNames),
-    ...input.turnPlan.lifecycleManagedToolNames,
-    ...(input.turnPlan.preSkillGateActive ? [] : input.turnPlan.operatorManagedToolNames),
+    ...input.turnPlan.requestedManagedToolNames.filter((toolName) =>
+      allowedRequestedManagedToolNames.has(toolName),
+    ),
+    ...input.turnPlan.skillManagedToolNames.filter((toolName) =>
+      isToolAllowedForPosture({
+        runtime: input.runtime,
+        toolName,
+        posture: input.turnPlan.toolAvailabilityPosture,
+        managed: true,
+      }),
+    ),
+    ...input.turnPlan.lifecycleManagedToolNames.filter((toolName) =>
+      isToolAllowedForPosture({
+        runtime: input.runtime,
+        toolName,
+        posture: input.turnPlan.toolAvailabilityPosture,
+        managed: true,
+      }),
+    ),
+    ...input.turnPlan.operatorManagedToolNames.filter((toolName) =>
+      isToolAllowedForPosture({
+        runtime: input.runtime,
+        toolName,
+        posture: input.turnPlan.toolAvailabilityPosture,
+        managed: true,
+      }),
+    ),
   ];
 
   for (const toolName of new Set(namesToEnsure)) {
@@ -823,6 +985,7 @@ export function createToolSurfaceLifecycle(
         sessionId,
         prompt,
         dynamicToolDefinitions: options.dynamicToolDefinitions,
+        resolveClassificationHints: options.resolveClassificationHints,
       });
       if (resolved) {
         skillEnforcementKeyBySession.set(sessionId, computeSkillEnforcementKey(resolved));
@@ -868,6 +1031,7 @@ export function createToolSurfaceLifecycle(
         sessionId,
         prompt,
         dynamicToolDefinitions: options.dynamicToolDefinitions,
+        resolveClassificationHints: options.resolveClassificationHints,
       });
       if (!resolved) {
         return undefined;
@@ -897,7 +1061,7 @@ export function createToolSurfaceLifecycle(
       const policyBlock = buildSkillFirstPolicyBlock(recommendations);
       if (
         recommendations.activeSkillName ||
-        recommendations.gateMode !== "skill_load_required" ||
+        recommendations.activationPosture.kind !== "require_skill_load" ||
         recommendations.recommendations.length === 0 ||
         !policyBlock
       ) {

@@ -15,7 +15,7 @@ describe("managed tool registration modes", () => {
     const runtime = createRuntimeFixture();
     const api = createMockRuntimePluginApi();
     const runtimePlugin = createHostedTurnPipeline({ runtime });
-    await runtimePlugin(api.api);
+    await runtimePlugin.register(api.api);
 
     const readSpans = api.api.getAllTools().find((tool) => tool.name === "read_spans");
     const parameters = requireDefined(
@@ -43,14 +43,14 @@ describe("managed tool registration modes", () => {
     await createHostedTurnPipeline({
       runtime: managedRuntime,
       registerTools: true,
-    })(managedApi.api);
+    }).register(managedApi.api);
 
     const bridgeOnlyRuntime = createRuntimeFixture();
     const bridgeOnlyApi = createMockRuntimePluginApi();
     await createHostedTurnPipeline({
       runtime: bridgeOnlyRuntime,
       registerTools: false,
-    })(bridgeOnlyApi.api);
+    }).register(bridgeOnlyApi.api);
 
     const managedHandlers = handlerNames(managedApi.handlers);
     const bridgeOnlyHandlers = handlerNames(bridgeOnlyApi.handlers);
@@ -88,7 +88,7 @@ describe("managed tool registration modes", () => {
       runtime,
       registerTools: false,
     });
-    await runtimePlugin(api.api);
+    await runtimePlugin.register(api.api);
 
     await invokeHandlerAsync(
       api.handlers,

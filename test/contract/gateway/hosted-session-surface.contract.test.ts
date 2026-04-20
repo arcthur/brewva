@@ -153,7 +153,7 @@ describe("gateway contract: hosted session surface", () => {
     expect(driverSource).toContain("createHostedSessionDriver");
     expect(driverSource).toContain("createRuntime(");
     expect(driverSource).toContain("requestedModel");
-    expect(driverSource).toContain("runtimePlugins");
+    expect(driverSource).toContain("internalRuntimePlugins");
     expect(driverSource).toContain("readonly settings: HostedSessionSettingsView");
     expect(driverSource).toContain("readonly modelCatalog: BrewvaModelCatalog");
     expect(driverSource).not.toContain("HostedSessionResourceLoader");

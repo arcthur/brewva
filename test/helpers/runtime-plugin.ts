@@ -1,4 +1,4 @@
-import type { RuntimePluginApi } from "@brewva/brewva-gateway/runtime-plugins";
+import type { InternalRuntimePluginApi } from "@brewva/brewva-gateway/runtime-plugins";
 
 export type RuntimePluginTestHandler = (
   event: Record<string, unknown>,
@@ -6,7 +6,7 @@ export type RuntimePluginTestHandler = (
 ) => unknown;
 
 export function createMockRuntimePluginApi(): {
-  api: RuntimePluginApi;
+  api: InternalRuntimePluginApi;
   handlers: Map<string, RuntimePluginTestHandler[]>;
   sentMessages: Array<Record<string, unknown>>;
   activeTools: string[];
@@ -46,7 +46,7 @@ export function createMockRuntimePluginApi(): {
     sendMessage(message: Record<string, unknown>) {
       sentMessages.push(message);
     },
-  } as unknown as RuntimePluginApi;
+  } as unknown as InternalRuntimePluginApi;
   return {
     api,
     handlers,

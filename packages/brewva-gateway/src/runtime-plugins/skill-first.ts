@@ -72,6 +72,11 @@ export interface SkillFirstRuntimeLike {
   };
 }
 
+export interface SkillClassificationHint {
+  readonly skillNames?: readonly string[];
+  readonly reason?: string;
+}
+
 export interface SkillRecommendation {
   name: string;
   category: SkillRecommendationCandidate["category"];
@@ -80,15 +85,33 @@ export interface SkillRecommendation {
   primary: boolean;
 }
 
-export type SkillRecommendationGateMode =
+export type SkillActivationPosture =
+  | { readonly kind: "none" }
+  | { readonly kind: "recommend_task_spec"; readonly reason: string }
+  | { readonly kind: "require_task_spec"; readonly boundary: "execute" | "mutation" }
+  | {
+      readonly kind: "recommend_skill_load";
+      readonly skillNames: readonly string[];
+      readonly reason: string;
+    }
+  | {
+      readonly kind: "require_skill_load";
+      readonly skillNames: readonly string[];
+      readonly boundary: "execute" | "verify" | "contract";
+    }
+  | { readonly kind: "repair_failed_contract"; readonly failedSkillNames: readonly string[] };
+
+export type ToolAvailabilityPosture =
   | "none"
-  | "task_spec_required"
-  | "skill_load_required"
-  | "skill_contract_failed";
+  | "recommend"
+  | "require_explore"
+  | "require_execute"
+  | "contract_failed";
 
 export interface SkillRecommendationSet {
   activeSkillName: string | null;
-  gateMode: SkillRecommendationGateMode;
+  activationPosture: SkillActivationPosture;
+  toolAvailabilityPosture: ToolAvailabilityPosture;
   taskSpecReady: boolean;
   recommendations: SkillRecommendation[];
   failedSkill?: {
@@ -99,8 +122,9 @@ export interface SkillRecommendationSet {
 }
 
 export interface SkillRecommendationReceiptPayload {
-  schema: "brewva.skill_recommendation.v2";
-  gateMode: SkillRecommendationGateMode;
+  schema: "brewva.skill_recommendation.v3";
+  activationPosture: SkillActivationPosture;
+  toolAvailabilityPosture: ToolAvailabilityPosture;
   taskSpecReady: boolean;
   recommendations: Array<{
     name: string;
@@ -123,6 +147,8 @@ const MAX_REASON_COUNT = 4;
 const ENGLISH_TOKEN_PATTERN = /[a-z0-9]+/g;
 const CJK_PATTERN = /[\u3400-\u9fff]/u;
 const PATH_LIKE_PATTERN = /(?:^|[\s"'`(])([A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)+)/g;
+const MUTATION_INTENT_PATTERN =
+  /\b(add|apply|build|change|commit|delete|edit|execute|fix|implement|modify|patch|promote|refactor|remove|rename|run|ship|test|update|verify|write)\b/i;
 const PHASE_VALUES: TaskPhase[] = [
   "align",
   "investigate",
@@ -668,18 +694,57 @@ function formatReasons(reasons: readonly string[]): string {
   return reasons.slice(0, MAX_REASON_COUNT).join(", ");
 }
 
+function isExecutionPhase(phase: TaskPhase | null): boolean {
+  return phase === "execute" || phase === "verify" || phase === "ready_for_acceptance";
+}
+
+function isVerificationPhase(phase: TaskPhase | null): boolean {
+  return phase === "verify" || phase === "ready_for_acceptance";
+}
+
+function hasMutationIntent(signals: TaskIntentSignals): boolean {
+  return MUTATION_INTENT_PATTERN.test(signals.combinedNormalizedText);
+}
+
+function recommendedSkillNames(recommendations: readonly SkillRecommendation[]): readonly string[] {
+  return recommendations.map((entry) => entry.name);
+}
+
+function normalizeHintSkillNames(
+  hints: readonly SkillClassificationHint[] | undefined,
+): Set<string> {
+  const names = new Set<string>();
+  for (const hint of hints ?? []) {
+    for (const skillName of hint.skillNames ?? []) {
+      const normalized = skillName.trim();
+      if (normalized.length > 0) {
+        names.add(normalized);
+      }
+    }
+  }
+  return names;
+}
+
+function firstHintReasonForSkill(
+  hints: readonly SkillClassificationHint[] | undefined,
+  skillName: string,
+): string | undefined {
+  return (hints ?? []).find((hint) => hint.skillNames?.includes(skillName))?.reason;
+}
+
 export function buildSkillRecommendationReceiptPayload(
   input: SkillRecommendationSet,
 ): SkillRecommendationReceiptPayload | null {
   if (input.activeSkillName) {
     return null;
   }
-  if (input.gateMode === "none" && input.recommendations.length === 0) {
+  if (input.activationPosture.kind === "none" && input.recommendations.length === 0) {
     return null;
   }
   return {
-    schema: "brewva.skill_recommendation.v2",
-    gateMode: input.gateMode,
+    schema: "brewva.skill_recommendation.v3",
+    activationPosture: input.activationPosture,
+    toolAvailabilityPosture: input.toolAvailabilityPosture,
     taskSpecReady: input.taskSpecReady,
     recommendations: input.recommendations.map((entry) => ({
       name: entry.name,
@@ -706,6 +771,7 @@ export function deriveSkillRecommendations(
   input: {
     sessionId: string;
     prompt: string;
+    classificationHints?: readonly SkillClassificationHint[];
   },
 ): SkillRecommendationSet {
   const taskState = runtime.inspect.task.getState(input.sessionId);
@@ -715,7 +781,8 @@ export function deriveSkillRecommendations(
   if (activeSkillName) {
     return {
       activeSkillName,
-      gateMode: "none",
+      activationPosture: { kind: "none" },
+      toolAvailabilityPosture: "none",
       taskSpecReady,
       recommendations: [],
     };
@@ -725,7 +792,11 @@ export function deriveSkillRecommendations(
   if (latestFailure?.phase === "failed_contract") {
     return {
       activeSkillName: null,
-      gateMode: "skill_contract_failed",
+      activationPosture: {
+        kind: "repair_failed_contract",
+        failedSkillNames: [latestFailure.skillName],
+      },
+      toolAvailabilityPosture: "contract_failed",
       taskSpecReady,
       recommendations: [],
       failedSkill: {
@@ -740,7 +811,8 @@ export function deriveSkillRecommendations(
   if (routableSkills.length === 0) {
     return {
       activeSkillName: null,
-      gateMode: "none",
+      activationPosture: { kind: "none" },
+      toolAvailabilityPosture: "none",
       taskSpecReady,
       recommendations: [],
     };
@@ -751,21 +823,55 @@ export function deriveSkillRecommendations(
     if (!signals.prompt.hasContent && !signals.taskContext.hasContent) {
       return {
         activeSkillName: null,
-        gateMode: "none",
+        activationPosture: { kind: "none" },
+        toolAvailabilityPosture: "none",
+        taskSpecReady: false,
+        recommendations: [],
+      };
+    }
+    if (hasMutationIntent(signals) || isExecutionPhase(signals.phase)) {
+      return {
+        activeSkillName: null,
+        activationPosture: {
+          kind: "require_task_spec",
+          boundary: hasMutationIntent(signals) ? "mutation" : "execute",
+        },
+        toolAvailabilityPosture: "require_execute",
         taskSpecReady: false,
         recommendations: [],
       };
     }
     return {
       activeSkillName: null,
-      gateMode: "task_spec_required",
+      activationPosture: {
+        kind: "recommend_task_spec",
+        reason: "Prompt has enough task context to benefit from an explicit TaskSpec.",
+      },
+      toolAvailabilityPosture: "recommend",
       taskSpecReady: false,
       recommendations: [],
     };
   }
 
+  const hintedSkillNames = normalizeHintSkillNames(input.classificationHints);
   const scored = routableSkills
-    .map((skill) => scoreSkill(skill, signals))
+    .map((skill) => {
+      const scoredSkill = scoreSkill(skill, signals);
+      if (!hintedSkillNames.has(skill.name)) {
+        return scoredSkill;
+      }
+      const hintReason = firstHintReasonForSkill(input.classificationHints, skill.name);
+      const base = scoredSkill ?? {
+        name: skill.name,
+        category: skill.category,
+        score: MIN_RECOMMENDATION_SCORE,
+        reasons: [],
+        primary: false,
+      };
+      pushReason(base.reasons, hintReason ? `local_hook:${hintReason}` : "local_hook");
+      base.score = Number(Math.max(base.score + 1, MIN_RECOMMENDATION_SCORE).toFixed(2));
+      return base;
+    })
     .filter((entry): entry is SkillRecommendation => entry !== null)
     .toSorted((left, right) => right.score - left.score || left.name.localeCompare(right.name));
 
@@ -773,7 +879,8 @@ export function deriveSkillRecommendations(
   if (!top) {
     return {
       activeSkillName: null,
-      gateMode: "none",
+      activationPosture: { kind: "none" },
+      toolAvailabilityPosture: "none",
       taskSpecReady: true,
       recommendations: [],
     };
@@ -794,7 +901,22 @@ export function deriveSkillRecommendations(
 
   return {
     activeSkillName: null,
-    gateMode: "skill_load_required",
+    activationPosture:
+      hasMutationIntent(signals) || isExecutionPhase(signals.phase)
+        ? {
+            kind: "require_skill_load",
+            skillNames: recommendedSkillNames(retained),
+            boundary: isVerificationPhase(signals.phase) ? "verify" : "execute",
+          }
+        : {
+            kind: "recommend_skill_load",
+            skillNames: recommendedSkillNames(retained),
+            reason: "TaskSpec strongly matches routable loaded skills.",
+          },
+    toolAvailabilityPosture:
+      hasMutationIntent(signals) || isExecutionPhase(signals.phase)
+        ? "require_execute"
+        : "recommend",
     taskSpecReady: true,
     recommendations: retained,
   };
@@ -804,26 +926,35 @@ export function buildSkillFirstPolicyBlock(input: SkillRecommendationSet): strin
   if (input.activeSkillName) {
     return null;
   }
-  if (input.gateMode === "none" && input.recommendations.length === 0) {
+  if (input.activationPosture.kind === "none" && input.recommendations.length === 0) {
     return null;
   }
 
   const lines = [
-    "[Brewva Skill-First Policy]",
-    "Brewva is skill-first.",
+    "[Brewva Skill Recommendation]",
+    "Brewva uses skills as explicit workflow amplifiers.",
     "No active skill is currently loaded.",
   ];
 
-  if (input.gateMode === "task_spec_required") {
+  if (input.activationPosture.kind === "recommend_task_spec") {
     lines.push("No TaskSpec is currently recorded for this session.");
     lines.push(
-      "Before deeper repository reads, searches, execution, or edits, call `task_set_spec` to record the task goal, constraints, targets, and verification intent.",
+      "Consider calling `task_set_spec` before deeper work so skill routing has durable task intent.",
     );
-    lines.push("After `task_set_spec`, Brewva will re-evaluate whether `skill_load` is required.");
+    lines.push(`reason: ${input.activationPosture.reason}`);
     return lines.join("\n");
   }
 
-  if (input.gateMode === "skill_contract_failed") {
+  if (input.activationPosture.kind === "require_task_spec") {
+    lines.push("No TaskSpec is currently recorded for this session.");
+    lines.push(
+      "Before execution or mutation, call `task_set_spec` to record the task goal, constraints, targets, and verification intent.",
+    );
+    lines.push(`required_boundary: ${input.activationPosture.boundary}`);
+    return lines.join("\n");
+  }
+
+  if (input.activationPosture.kind === "repair_failed_contract") {
     const failedSkill = input.failedSkill;
     lines.push("The latest active skill contract has failed permanently.");
     if (failedSkill) {
@@ -846,12 +977,16 @@ export function buildSkillFirstPolicyBlock(input: SkillRecommendationSet): strin
     return null;
   }
 
-  if (input.gateMode === "skill_load_required") {
+  if (input.activationPosture.kind === "require_skill_load") {
     lines.push(
-      "This TaskSpec now matches loaded skills strongly. Before substantive repository reads, searches, execution, or edits, call `skill_load` with the best match.",
+      "This TaskSpec strongly matches loaded skills. Before execution or mutation, call `skill_load` with the best match.",
     );
+    lines.push(`required_boundary: ${input.activationPosture.boundary}`);
   } else {
-    lines.push("TaskSpec is present. Prefer `skill_load` before deeper tool work.");
+    lines.push("TaskSpec is present. Consider `skill_load` before deeper specialized work.");
+    if (input.activationPosture.kind === "recommend_skill_load") {
+      lines.push(`reason: ${input.activationPosture.reason}`);
+    }
   }
 
   lines.push(`primary_skill: ${primary.name}`);

@@ -1,4 +1,8 @@
-import type { RuntimePlugin, RuntimePluginApi } from "@brewva/brewva-gateway/runtime-plugins";
+import {
+  defineInternalRuntimePlugin,
+  type InternalRuntimePlugin,
+  type InternalRuntimePluginApi,
+} from "@brewva/brewva-gateway/runtime-plugins";
 import type { BrewvaOperatorRuntimePort } from "@brewva/brewva-runtime";
 import type { BrewvaHostContext } from "@brewva/brewva-substrate";
 import { clampText, resolveInspectDirectory } from "./inspect-analysis.js";
@@ -44,7 +48,7 @@ export function createInspectCommandRuntimePlugin(
     maxWidgetLines?: number;
     maxLineChars?: number;
   } = {},
-): RuntimePlugin {
+): InternalRuntimePlugin {
   const widgetId = options.widgetId ?? DEFAULT_WIDGET_ID;
   const maxWidgetLines = Math.max(
     8,
@@ -52,58 +56,62 @@ export function createInspectCommandRuntimePlugin(
   );
   const maxLineChars = Math.max(40, Math.trunc(options.maxLineChars ?? DEFAULT_MAX_LINE_CHARS));
 
-  return (runtimePluginApi: RuntimePluginApi) => {
-    runtimePluginApi.on("session_start", async (_event, ctx) => {
-      clearInspectWidget(ctx, widgetId);
-    });
-    runtimePluginApi.on("session_switch", async (_event, ctx) => {
-      clearInspectWidget(ctx, widgetId);
-    });
-    runtimePluginApi.on("session_shutdown", async (_event, ctx) => {
-      clearInspectWidget(ctx, widgetId);
-    });
-
-    const handler = async (args: string, ctx: BrewvaHostContext) => {
-      const normalizedArgs = normalizeCommandArgs(args);
-      if (normalizedArgs === "clear") {
+  return defineInternalRuntimePlugin({
+    name: "cli.inspect_command",
+    capabilities: ["tool_registration.write"],
+    register(runtimePluginApi: InternalRuntimePluginApi) {
+      runtimePluginApi.on("session_start", async (_event, ctx) => {
         clearInspectWidget(ctx, widgetId);
-        if (ctx.hasUI) {
-          ctx.ui.notify("Inspect widget cleared.", "info");
+      });
+      runtimePluginApi.on("session_switch", async (_event, ctx) => {
+        clearInspectWidget(ctx, widgetId);
+      });
+      runtimePluginApi.on("session_shutdown", async (_event, ctx) => {
+        clearInspectWidget(ctx, widgetId);
+      });
+
+      const handler = async (args: string, ctx: BrewvaHostContext) => {
+        const normalizedArgs = normalizeCommandArgs(args);
+        if (normalizedArgs === "clear") {
+          clearInspectWidget(ctx, widgetId);
+          if (ctx.hasUI) {
+            ctx.ui.notify("Inspect widget cleared.", "info");
+          }
+          return;
         }
-        return;
-      }
 
-      if (!ctx.hasUI) {
-        return;
-      }
+        if (!ctx.hasUI) {
+          return;
+        }
 
-      try {
-        const directory = resolveInspectDirectory(runtime, normalizedArgs, undefined);
-        const report = buildSessionInspectReport({
-          runtime,
-          sessionId: ctx.sessionManager.getSessionId(),
-          directory,
-        });
-        const text = formatInspectText(report.base);
-        ctx.ui.setWidget(widgetId, toWidgetLines(text, maxWidgetLines, maxLineChars), {
-          placement: "belowEditor",
-        });
-        ctx.ui.notify(
-          `Inspect updated for ${report.directory} (${report.verdict}). Use /inspect clear to dismiss.`,
-          resolveVerdictNotifyLevel(report.verdict),
-        );
-      } catch (error) {
-        ctx.ui.notify(
-          `Inspect failed: ${error instanceof Error ? error.message : String(error)}`,
-          "warning",
-        );
-      }
-    };
+        try {
+          const directory = resolveInspectDirectory(runtime, normalizedArgs, undefined);
+          const report = buildSessionInspectReport({
+            runtime,
+            sessionId: ctx.sessionManager.getSessionId(),
+            directory,
+          });
+          const text = formatInspectText(report.base);
+          ctx.ui.setWidget(widgetId, toWidgetLines(text, maxWidgetLines, maxLineChars), {
+            placement: "belowEditor",
+          });
+          ctx.ui.notify(
+            `Inspect updated for ${report.directory} (${report.verdict}). Use /inspect clear to dismiss.`,
+            resolveVerdictNotifyLevel(report.verdict),
+          );
+        } catch (error) {
+          ctx.ui.notify(
+            `Inspect failed: ${error instanceof Error ? error.message : String(error)}`,
+            "warning",
+          );
+        }
+      };
 
-    runtimePluginApi.registerCommand("inspect", {
-      description:
-        "Review the current Brewva session for a directory without entering a model turn (usage: /inspect [dir] | /inspect clear)",
-      handler,
-    });
-  };
+      runtimePluginApi.registerCommand("inspect", {
+        description:
+          "Review the current Brewva session for a directory without entering a model turn (usage: /inspect [dir] | /inspect clear)",
+        handler,
+      });
+    },
+  });
 }

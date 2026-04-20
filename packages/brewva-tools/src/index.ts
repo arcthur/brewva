@@ -138,7 +138,11 @@ export { createFollowUpTool } from "./follow-up.js";
 export { createScheduleIntentTool } from "./schedule-intent.js";
 export { createSkillLoadTool } from "./skill-load.js";
 export { createSkillCompleteTool } from "./skill-complete.js";
-export { createSkillPromotionTool } from "./skill-promotion.js";
+export {
+  createSkillPromotionInspectTool,
+  createSkillPromotionPromoteTool,
+  createSkillPromotionReviewTool,
+} from "./skill-promotion.js";
 export { createSubagentStatusTool, createSubagentCancelTool } from "./subagent-control.js";
 export { createSubagentRunTool, createSubagentFanoutTool } from "./subagent-run.js";
 export { createTaskLedgerTools } from "./task-ledger.js";

@@ -120,6 +120,25 @@ describe("managed Brewva tool definition metadata", () => {
     expect(actualManagedToolNames).toEqual(MANAGED_BREWVA_TOOL_NAMES);
   });
 
+  test("skill promotion apply remains a reserved contract name, not a live tool", () => {
+    const runtime = {
+      internal: {},
+    } as Parameters<typeof buildBrewvaTools>[0]["runtime"];
+    const tools = buildBrewvaTools({ runtime });
+    const toolNames = tools.map((tool) => tool.name);
+    const actionPolicies = TOOL_ACTION_POLICY_BY_NAME as Record<string, unknown>;
+
+    expect(toolNames).toContain("skill_promotion_inspect");
+    expect(toolNames).toContain("skill_promotion_review");
+    expect(toolNames).toContain("skill_promotion_promote");
+    expect(toolNames).not.toContain("skill_promotion_apply");
+    expect(MANAGED_BREWVA_TOOL_NAMES).not.toContain("skill_promotion_apply");
+    expect(getBrewvaToolSurface("skill_promotion_apply")).toBeUndefined();
+    expect(actionPolicies.skill_promotion_apply).toBeUndefined();
+    expect(getExactToolActionPolicy("skill_promotion_apply")).toBeUndefined();
+    expect(buildBrewvaTools({ runtime, toolNames: ["skill_promotion_apply"] })).toEqual([]);
+  });
+
   test("execution traits resolve per invocation without coupling to governance metadata", () => {
     const parameters = Type.Object({
       command: Type.String(),

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createQuestionsCommandRuntimePlugin } from "@brewva/brewva-cli";
-import type { RuntimePluginApi } from "@brewva/brewva-gateway/runtime-plugins";
+import type { InternalRuntimePluginApi } from "@brewva/brewva-gateway/runtime-plugins";
 import {
   BrewvaRuntime,
   DEFAULT_BREWVA_CONFIG,
@@ -19,7 +19,7 @@ type RegisteredCommand = {
 };
 
 function createCommandApiMock(): {
-  api: RuntimePluginApi;
+  api: InternalRuntimePluginApi;
   commands: Map<string, RegisteredCommand>;
   sentMessages: Array<{ content: BrewvaPromptContentPart[]; options?: Record<string, unknown> }>;
   handlers: Map<
@@ -52,7 +52,7 @@ function createCommandApiMock(): {
     sendUserMessage(content: BrewvaPromptContentPart[], options?: Record<string, unknown>) {
       sentMessages.push({ content, options });
     },
-  } as unknown as RuntimePluginApi;
+  } as unknown as InternalRuntimePluginApi;
 
   return { api, commands, sentMessages, handlers };
 }
@@ -90,7 +90,7 @@ describe("questions interactive command runtime plugin", () => {
 
     const beforeEventCount = runtime.inspect.events.query(sessionId).length;
     const { api, commands } = createCommandApiMock();
-    await createQuestionsCommandRuntimePlugin(runtime)(api);
+    await createQuestionsCommandRuntimePlugin(runtime).register(api);
 
     const questionsCommand = requireCommand(commands, "questions");
 
@@ -147,7 +147,7 @@ describe("questions interactive command runtime plugin", () => {
     const questionId = `skill:${requireNonEmptyString(questionEvent.id, "Expected question event id.")}:1`;
 
     const { api, commands, sentMessages } = createCommandApiMock();
-    await createQuestionsCommandRuntimePlugin(runtime)(api);
+    await createQuestionsCommandRuntimePlugin(runtime).register(api);
 
     const answerCommand = requireCommand(commands, "answer");
 

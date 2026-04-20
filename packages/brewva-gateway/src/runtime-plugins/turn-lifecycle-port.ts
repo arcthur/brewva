@@ -5,7 +5,7 @@ import type {
   BrewvaHostContext as ExtensionContext,
   BrewvaHostInputEvent as InputEvent,
   BrewvaHostInputEventResult as InputEventResult,
-  BrewvaHostPluginApi as ExtensionAPI,
+  InternalHostPluginApi as ExtensionAPI,
   BrewvaHostSessionCompactEvent as SessionCompactEvent,
   BrewvaHostSessionShutdownEvent as SessionShutdownEvent,
   BrewvaHostSessionStartEvent as SessionStartEvent,

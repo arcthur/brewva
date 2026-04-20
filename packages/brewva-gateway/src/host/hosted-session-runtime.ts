@@ -251,7 +251,7 @@ class HostedSessionRuntimeDriver implements HostedSessionDriver {
   private async createServices(
     options: Pick<
       CreateHostedSessionRuntimeOptions,
-      "cwd" | "settings" | "runtime" | "runtimePlugins" | "sessionId"
+      "cwd" | "settings" | "runtime" | "internalRuntimePlugins" | "sessionId"
     >,
   ): Promise<HostedSessionServices> {
     const runtime = await createHostedSessionServicesBundle({
@@ -259,7 +259,7 @@ class HostedSessionRuntimeDriver implements HostedSessionDriver {
       cwd: options.cwd,
       settings: options.settings,
       runtime: options.runtime,
-      runtimePlugins: options.runtimePlugins,
+      runtimePlugins: options.internalRuntimePlugins,
       sessionId: options.sessionId,
     });
     return createHostedSessionServices({

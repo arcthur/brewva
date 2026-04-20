@@ -73,7 +73,7 @@ describe("context composition parity", () => {
     await createHostedTurnPipeline({
       runtime: hostedRuntime,
       registerTools: false,
-    })(hosted.api);
+    }).register(hosted.api);
     await invokeHandlerAsync(
       hosted.handlers,
       "before_agent_start",

@@ -27,7 +27,11 @@ import {
   type BrewvaSemanticReranker,
   type BrewvaToolOrchestration,
 } from "@brewva/brewva-tools";
-import { createHostedTurnPipeline, type RuntimePlugin } from "../runtime-plugins/index.js";
+import {
+  createHostedTurnPipeline,
+  type InternalRuntimePlugin,
+  type LocalHookPort,
+} from "../runtime-plugins/index.js";
 import {
   analyzeReadPathRecoveryState,
   isReadPathVerified,
@@ -74,7 +78,8 @@ export interface HostedSessionResult {
 
 export interface CreateHostedSessionOptions extends RuntimeCreateBrewvaSessionOptions {
   runtime?: BrewvaRuntime;
-  runtimePlugins?: RuntimePlugin[];
+  internalRuntimePlugins?: InternalRuntimePlugin[];
+  localHooks?: readonly LocalHookPort[];
   orchestration?: BrewvaToolOrchestration;
   managedToolNames?: readonly string[];
   builtinToolNames?: readonly HostedDelegationBuiltinToolName[];
@@ -655,7 +660,7 @@ function createRuntimePlugins(input: {
   semanticReranker?: BrewvaSemanticReranker;
   toolExecutionCoordinator: HostedToolExecutionCoordinator;
   hostedToolDefinitionsByName?: ReadonlyMap<string, HostedSessionCustomTool>;
-}): RuntimePlugin[] {
+}): InternalRuntimePlugin[] {
   const managedToolMode = resolveManagedToolMode(input.options.managedToolMode);
   const registerManagedTools = managedToolMode === "runtime_plugin";
   const runtimePlugins = [
@@ -669,10 +674,11 @@ function createRuntimePlugins(input: {
       semanticReranker: input.semanticReranker,
       toolExecutionCoordinator: input.toolExecutionCoordinator,
       hostedToolDefinitionsByName: input.hostedToolDefinitionsByName,
+      localHooks: input.options.localHooks,
     }),
   ];
-  if (input.options.runtimePlugins && input.options.runtimePlugins.length > 0) {
-    runtimePlugins.push(...input.options.runtimePlugins);
+  if (input.options.internalRuntimePlugins && input.options.internalRuntimePlugins.length > 0) {
+    runtimePlugins.push(...input.options.internalRuntimePlugins);
   }
   return runtimePlugins;
 }
@@ -803,7 +809,7 @@ export async function createHostedSession(
     cwd: environment.cwd,
     settings,
     runtime,
-    runtimePlugins,
+    internalRuntimePlugins: runtimePlugins,
     requestedModel: environment.requestedModelSelection.model,
     requestedThinkingLevel: environment.requestedModelSelection.thinkingLevel,
     customTools,

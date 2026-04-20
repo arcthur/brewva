@@ -1025,7 +1025,7 @@ async function run(): Promise<void> {
       agentId: parsed.agentId,
       managedToolMode: parsed.managedToolMode,
       sessionId,
-      runtimePlugins: createRuntimePlugins(),
+      internalRuntimePlugins: createRuntimePlugins(),
     });
   let sessionResult = await openEmbeddedSession(parsed.sessionId);
   let session = sessionResult.session;

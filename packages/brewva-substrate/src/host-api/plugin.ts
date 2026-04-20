@@ -22,25 +22,25 @@ export interface HostUIPort {
   notify(message: string, level?: "info" | "warning" | "error"): void;
 }
 
-export interface HostRuntimePluginContext {
+export interface InternalSessionHostPluginContext {
   commands: HostCommandPort;
   ui: HostUIPort;
 }
 
-export interface HostRuntimePlugin {
+export interface InternalSessionHostPlugin {
   name: string;
   onSessionPhaseChange?(
     phase: SessionPhase,
-    context: HostRuntimePluginContext,
+    context: InternalSessionHostPluginContext,
   ): Promise<void> | void;
   onToolRegistered?(
     tool: BrewvaToolDefinition,
-    context: HostRuntimePluginContext,
+    context: InternalSessionHostPluginContext,
   ): Promise<void> | void;
   onToolResult?(
     toolName: string,
     result: BrewvaToolResult,
-    context: HostRuntimePluginContext,
+    context: InternalSessionHostPluginContext,
   ): Promise<void> | void;
 }
 
@@ -362,6 +362,20 @@ export interface BrewvaHostPluginEventMap {
   tool_result: BrewvaHostToolResultEvent;
 }
 
+export type RuntimePluginCapability =
+  | "tool_registration.write"
+  | "tool_surface.write"
+  | "system_prompt.write"
+  | "context_messages.write"
+  | "provider_payload.write"
+  | "input_parts.write"
+  | "turn_input.handle"
+  | "tool_call.block"
+  | "tool_result.write"
+  | "message_visibility.write"
+  | "assistant_message.enqueue"
+  | "user_message.enqueue";
+
 type BrewvaHostPluginHandlerResult<TKey extends keyof BrewvaHostPluginEventMap> =
   TKey extends "before_agent_start"
     ? BrewvaHostBeforeAgentStartResult | undefined
@@ -379,7 +393,7 @@ type BrewvaHostPluginHandlerResult<TKey extends keyof BrewvaHostPluginEventMap> 
                 ? unknown
                 : void | undefined;
 
-export interface BrewvaHostPluginApi {
+export interface InternalHostPluginApi {
   on<TKey extends keyof BrewvaHostPluginEventMap>(
     event: TKey,
     handler: (
@@ -403,6 +417,14 @@ export interface BrewvaHostPluginApi {
   refreshTools(): void;
 }
 
-export type BrewvaHostPluginFactory = (api: BrewvaHostPluginApi) => void | Promise<void>;
+export interface InternalHostPlugin {
+  readonly name: string;
+  readonly capabilities: readonly RuntimePluginCapability[];
+  register(api: InternalHostPluginApi): void | Promise<void>;
+}
+
+export function defineInternalHostPlugin(plugin: InternalHostPlugin): InternalHostPlugin {
+  return plugin;
+}
 
 export type { BrewvaToolUiPort };

@@ -2,10 +2,10 @@ import { describe, expect, test } from "bun:test";
 import {
   buildContextEvidenceReport,
   createHostedTurnPipeline,
+  type LocalHookPort,
 } from "@brewva/brewva-gateway/runtime-plugins";
 import {
   createMockRuntimePluginApi,
-  invokeHandler,
   invokeHandlerAsync,
   invokeHandlersAsync,
   invokeHandlers,
@@ -198,6 +198,12 @@ function createSessionContext(sessionId: string): {
   };
 }
 
+function readEventPayload(event: Record<string, unknown>): Record<string, unknown> {
+  return event.payload && typeof event.payload === "object" && !Array.isArray(event.payload)
+    ? (event.payload as Record<string, unknown>)
+    : {};
+}
+
 function invokeBeforeProviderRequestChain(
   handlers: Map<
     string,
@@ -230,7 +236,7 @@ describe("hosted turn pipeline", () => {
     await createHostedTurnPipeline({
       runtime,
       registerTools: false,
-    })(api);
+    }).register(api);
 
     expect(handlers.has("session_start")).toBe(true);
     expect(handlers.has("turn_start")).toBe(true);
@@ -254,7 +260,7 @@ describe("hosted turn pipeline", () => {
       createHostedTurnPipeline({
         runtime,
         routingDefaultScopes: ["core", "domain"],
-      })(api),
+      }).register(api),
     ).toThrow(/routingDefaultScopes must be applied when constructing BrewvaRuntime/);
   });
 
@@ -264,7 +270,7 @@ describe("hosted turn pipeline", () => {
     await createHostedTurnPipeline({
       runtime,
       registerTools: false,
-    })(api);
+    }).register(api);
 
     const results = await invokeHandlersAsync<{
       systemPrompt?: string;
@@ -291,6 +297,62 @@ describe("hosted turn pipeline", () => {
     expect(calls.observedContext[0]?.sessionId).toBe("hosted-before-start");
   });
 
+  test("runs local pre_classify hooks before hosted tool-surface resolution", async () => {
+    const { api, handlers } = createMockRuntimePluginApi();
+    const { runtime, calls } = createRuntimeFixture();
+    const seenInputs: string[] = [];
+    const localHook: LocalHookPort = {
+      name: "local-classification-hint",
+      preClassify(input) {
+        seenInputs.push(`${input.phase}:${input.sessionId}:${input.prompt}`);
+        return {
+          kind: "recommend",
+          recommendations: [
+            {
+              message: "Treat this as repository analysis.",
+              classificationHint: {
+                skillName: "repository-analysis",
+                scoreBoost: 0.2,
+                reason: "Local rule matched repository-analysis wording.",
+              },
+            },
+          ],
+        };
+      },
+    };
+
+    await createHostedTurnPipeline({
+      runtime,
+      localHooks: [localHook],
+    }).register(api);
+
+    await invokeHandlersAsync(
+      handlers,
+      "before_agent_start",
+      {
+        type: "before_agent_start",
+        prompt: "Analyze repository boundaries before changing code.",
+        systemPrompt: "base prompt",
+      },
+      createSessionContext("hosted-local-hook-classify"),
+    );
+
+    expect(seenInputs).toEqual([
+      "pre_classify:hosted-local-hook-classify:Analyze repository boundaries before changing code.",
+    ]);
+
+    const governanceIndex = calls.events.findIndex((event) => {
+      const payload = readEventPayload(event);
+      return event.type === "turn_governance_decision" && payload.phase === "pre_classify";
+    });
+    const toolSurfaceIndex = calls.events.findIndex(
+      (event) => event.type === "tool_surface_resolved",
+    );
+
+    expect(governanceIndex).toBeGreaterThanOrEqual(0);
+    expect(toolSurfaceIndex).toBeGreaterThan(governanceIndex);
+  });
+
   test("routes tool_call blocking through the hosted pipeline quality gate", async () => {
     const { api, handlers } = createMockRuntimePluginApi();
     const { runtime, calls } = createRuntimeFixture({
@@ -300,9 +362,9 @@ describe("hosted turn pipeline", () => {
     await createHostedTurnPipeline({
       runtime,
       registerTools: false,
-    })(api);
+    }).register(api);
 
-    const result = invokeHandler<{ block?: boolean; reason?: string }>(
+    const results = await invokeHandlersAsync<{ block?: boolean; reason?: string }>(
       handlers,
       "tool_call",
       {
@@ -316,6 +378,7 @@ describe("hosted turn pipeline", () => {
         getContextUsage: () => ({ tokens: 200, contextWindow: 4000, percent: 0.05 }),
       },
     );
+    const result = results.find((entry) => entry?.block);
 
     expect(result).toEqual({
       block: true,
@@ -325,13 +388,130 @@ describe("hosted turn pipeline", () => {
     expect(calls.started[0]?.toolCallId).toBe("tool-call-1");
   });
 
+  test("local pre_tool blocks narrow execution before runtime authority starts", async () => {
+    const { api, handlers } = createMockRuntimePluginApi();
+    const { runtime, calls } = createRuntimeFixture();
+    const localHook: LocalHookPort = {
+      name: "local-tool-blocker",
+      preTool(input) {
+        expect(input.phase).toBe("pre_tool");
+        expect(input.toolName).toBe("exec");
+        return {
+          kind: "block_tool",
+          reason: "local policy denies exec",
+        };
+      },
+    };
+
+    await createHostedTurnPipeline({
+      runtime,
+      registerTools: false,
+      localHooks: [localHook],
+    }).register(api);
+
+    let result: { block?: boolean; reason?: string } | undefined;
+    for (const handler of handlers.get("tool_call") ?? []) {
+      result = (await handler(
+        {
+          type: "tool_call",
+          toolCallId: "tool-call-local-block",
+          toolName: "exec",
+          input: { command: "pwd" },
+        },
+        createSessionContext("hosted-local-hook-tool"),
+      )) as { block?: boolean; reason?: string } | undefined;
+      if (result?.block) {
+        break;
+      }
+    }
+
+    expect(result).toEqual({
+      block: true,
+      reason: "local policy denies exec",
+    });
+    expect(calls.started).toHaveLength(0);
+    expect(
+      calls.events.some((event) => {
+        const payload = readEventPayload(event);
+        return (
+          event.type === "turn_governance_decision" &&
+          payload.phase === "pre_tool" &&
+          payload.hookName === "local-tool-blocker"
+        );
+      }),
+    ).toBe(true);
+  });
+
+  test("local post_tool recommendations do not rewrite normalized tool results", async () => {
+    const { api, handlers } = createMockRuntimePluginApi();
+    const { runtime } = createRuntimeFixture();
+    const observed: Array<{
+      contentText: string | undefined;
+      detailValue: string | undefined;
+    }> = [];
+    const localHook: LocalHookPort = {
+      name: "local-post-tool-observer",
+      postTool(input) {
+        expect(input.phase).toBe("post_tool");
+        const contentText = input.content[0]?.type === "text" ? input.content[0].text : undefined;
+        const detailValue = (input.details as { nested?: { value?: string } } | undefined)?.nested
+          ?.value;
+        observed.push({ contentText, detailValue });
+        (input.content as Array<{ type: "text"; text: string }>)[0]!.text = "mutated";
+        (input.details as { nested: { value: string } }).nested.value = "mutated";
+        return {
+          kind: "recommend",
+          recommendations: [
+            {
+              message: `Observed ${input.toolName}.`,
+            },
+          ],
+          content: [{ type: "text", text: "mutated" }],
+        } as never;
+      },
+    };
+
+    await createHostedTurnPipeline({
+      runtime,
+      registerTools: false,
+      localHooks: [localHook],
+    }).register(api);
+
+    const content = [{ type: "text" as const, text: "original" }];
+    const details = { nested: { value: "original-detail" } };
+    const results = await invokeHandlersAsync<{ content?: unknown }>(
+      handlers,
+      "tool_result",
+      {
+        type: "tool_result",
+        toolCallId: "tool-result-local-observe",
+        toolName: "read",
+        input: { path: "README.md" },
+        isError: false,
+        content,
+        details,
+      },
+      createSessionContext("hosted-local-hook-post-tool"),
+    );
+
+    expect(observed).toEqual([
+      {
+        contentText: "original",
+        detailValue: "original-detail",
+      },
+    ]);
+    expect(content[0]?.text).toBe("original");
+    expect(details.nested.value).toBe("original-detail");
+    expect(results.some((result) => result?.content !== undefined)).toBe(false);
+  });
+
   test("uses tool_execution_end only as fallback finalize source", async () => {
     const { api, handlers } = createMockRuntimePluginApi();
     const { runtime, calls } = createRuntimeFixture();
     await createHostedTurnPipeline({
       runtime,
       registerTools: false,
-    })(api);
+    }).register(api);
 
     invokeHandlers(
       handlers,
@@ -372,7 +552,7 @@ describe("hosted turn pipeline", () => {
     await createHostedTurnPipeline({
       runtime,
       registerTools: false,
-    })(api);
+    }).register(api);
 
     await invokeHandlerAsync(
       handlers,
@@ -452,7 +632,7 @@ describe("hosted turn pipeline", () => {
     await createHostedTurnPipeline({
       runtime,
       registerTools: false,
-    })(api);
+    }).register(api);
 
     await invokeHandlersAsync(
       handlers,

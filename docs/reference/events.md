@@ -547,6 +547,7 @@ proposal objects and they do not themselves create approval-bearing requests.
 - `context_usage`
 - `tool_surface_resolved`
 - `skill_recommendation_derived`
+- `turn_governance_decision`
 - `identity_parse_warning`
 - `task_stuck_detected`
 - `task_stuck_cleared`
@@ -555,11 +556,17 @@ proposal objects and they do not themselves create approval-bearing requests.
 
 `skill_recommendation_derived` is the hosted control-plane receipt for
 skill-first routing posture while no skill is active yet. The payload records
-the control-plane `gateMode` (`none | task_spec_required | skill_load_required`),
-whether TaskSpec is already present, and the ranked candidate set with
-categories, scores, and matched reasons. The hosted path may emit another
-receipt in the same turn after `task_set_spec` or other task-state mutations if
-the routed posture changes.
+the semantic `activationPosture`, the derived `toolAvailabilityPosture`, whether
+TaskSpec is already present, and the ranked candidate set with categories,
+scores, and matched reasons. The hosted path may emit another receipt in the
+same turn after `task_set_spec` or other task-state mutations if the routed
+posture changes.
+
+`turn_governance_decision` is the aggregate explanation receipt for local hook,
+skill-first, tool-surface, completion guard, and plugin-capability governance
+decisions. It exists so operators can answer why a turn received a warning,
+lost access to a tool class, or had a local hook block a call without
+reconstructing the behavior from hidden prompt text.
 
 `context_composed` is the coarse hosted composition receipt. Its payload
 remains aggregate-only, but it now records both composition totals and the
@@ -598,7 +605,8 @@ records the resolved visible-surface counts and recommendation posture, such as:
 - `ignoredRequestedToolNames`
 - `skillNames`
 - `recommendedSkillNames`
-- `skillGateMode`
+- `skillActivationPosture`
+- `toolAvailabilityPosture`
 - `taskSpecReady`
 - `operatorProfile`
 - `repairRequired`

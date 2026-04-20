@@ -110,7 +110,7 @@ export function createChannelSessionCoordinator(input: {
   ) => Promise<HostedSessionResult>;
   createRuntimePlugins: () => NonNullable<
     Parameters<typeof createHostedSession>[0]
-  >["runtimePlugins"];
+  >["internalRuntimePlugins"];
   sessionOptions: {
     cwd?: string;
     configPath?: string;
@@ -423,7 +423,7 @@ export function createChannelSessionCoordinator(input: {
               managedToolMode: input.sessionOptions.managedToolMode,
               runtime: workerRuntime,
               scopeId: scopeKey,
-              runtimePlugins: input.createRuntimePlugins(),
+              internalRuntimePlugins: input.createRuntimePlugins(),
             });
             const agentSessionId = result.session.sessionManager.getSessionId();
             if (!input.registry.isActive(agentId)) {

@@ -35,6 +35,7 @@ refresh the pointer summary and `Last reviewed` metadata here.
 - [`rfc-iteration-facts-and-model-native-optimization-protocols.md`](./rfc-iteration-facts-and-model-native-optimization-protocols.md)
 - [`rfc-kernel-first-subtraction-and-control-plane-deferral.md`](./rfc-kernel-first-subtraction-and-control-plane-deferral.md)
 - [`rfc-repository-fitness-plane-and-runtime-boundary.md`](./rfc-repository-fitness-plane-and-runtime-boundary.md)
+- [`rfc-skill-first-plugin-and-promotion-governance.md`](./rfc-skill-first-plugin-and-promotion-governance.md)
 - [`rfc-workflow-artifacts-and-posture-control-plane.md`](./rfc-workflow-artifacts-and-posture-control-plane.md)
 
 ## Delegation, Product, And Knowledge

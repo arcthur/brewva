@@ -1,5 +1,8 @@
 import type { SessionPhase } from "../contracts/session-phase.js";
-import type { HostRuntimePlugin, HostRuntimePluginContext } from "../host-api/plugin.js";
+import type {
+  InternalSessionHostPlugin,
+  InternalSessionHostPluginContext,
+} from "../host-api/plugin.js";
 import { advanceSessionPhaseResult, type SessionPhaseEvent } from "./phase-machine.js";
 import type { BrewvaPromptContentPart } from "./prompt-content.js";
 
@@ -30,8 +33,8 @@ export interface BrewvaSessionHost {
 }
 
 export interface CreateInMemorySessionHostOptions {
-  plugins?: readonly HostRuntimePlugin[];
-  pluginContext: HostRuntimePluginContext;
+  plugins?: readonly InternalSessionHostPlugin[];
+  pluginContext: InternalSessionHostPluginContext;
 }
 
 class InMemorySessionHost implements BrewvaSessionHost {
@@ -48,8 +51,8 @@ class InMemorySessionHost implements BrewvaSessionHost {
   private followUpMode: BrewvaPromptQueueMode = "one-at-a-time";
 
   constructor(
-    private readonly plugins: readonly HostRuntimePlugin[],
-    private readonly pluginContext: HostRuntimePluginContext,
+    private readonly plugins: readonly InternalSessionHostPlugin[],
+    private readonly pluginContext: InternalSessionHostPluginContext,
   ) {}
 
   getPhase(): SessionPhase {

@@ -33,7 +33,8 @@ Promoted outcomes:
   `session_local` fallback and policy-gated broader scopes
 - curation is rebuildable, time-decayed, inspectable, and separated from truth
 - typed materialization remains split across `narrative_memory`,
-  `skill_promotion`, and `knowledge_capture`
+  `skill_promotion_inspect` / `skill_promotion_review` /
+  `skill_promotion_promote`, and `knowledge_capture`
 - repository precedent remains explicit and source-typed inside recall rather
   than hidden memory
 - recall-specific evaluation now runs through `bun run eval:recall` and
@@ -64,7 +65,8 @@ The promoted contract is:
    authority.
 3. Products stay typed.
    `recall_search` unifies reads; final writes stay in `narrative_memory`,
-   `skill_promotion`, and `knowledge_capture`.
+   `skill_promotion_inspect` / `skill_promotion_review` /
+   `skill_promotion_promote`, and `knowledge_capture`.
 4. Recall stays source-typed and scope-bounded.
    Tape evidence, narrative memory, deliberation memory, optimization
    continuity, promotion drafts, and repository precedent remain distinguishable

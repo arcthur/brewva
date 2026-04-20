@@ -121,7 +121,7 @@ The exact current managed tool names are:
 - `worker_results_apply`
 - `skill_load`
 - `skill_complete`
-- `skill_promotion`
+- `skill_promotion_inspect`, `skill_promotion_review`, and `skill_promotion_promote`
 - `subagent_run`
 - `subagent_fanout`
 - `subagent_status`

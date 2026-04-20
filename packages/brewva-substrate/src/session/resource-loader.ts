@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import type { BrewvaHostPluginFactory } from "../host-api/plugin.js";
+import type { InternalHostPlugin } from "../host-api/plugin.js";
 import { type BrewvaPromptTemplate, loadBrewvaPromptTemplates } from "./prompt-templates.js";
 import { discoverHostedSkills } from "./skill-discovery.js";
 
@@ -91,7 +91,7 @@ function loadProjectContextFiles(input: {
 class InMemoryHostedResourceLoader implements BrewvaHostedResourceLoader {
   readonly #cwd: string;
   readonly #agentDir: string;
-  readonly #runtimePlugins: readonly BrewvaHostPluginFactory[];
+  readonly #runtimePlugins: readonly InternalHostPlugin[];
   #extensions: BrewvaHostedResourceExtensions = {
     extensions: [],
     errors: [],
@@ -109,7 +109,7 @@ class InMemoryHostedResourceLoader implements BrewvaHostedResourceLoader {
   constructor(input: {
     cwd: string;
     agentDir: string;
-    runtimePlugins?: readonly BrewvaHostPluginFactory[];
+    runtimePlugins?: readonly InternalHostPlugin[];
   }) {
     this.#cwd = input.cwd;
     this.#agentDir = input.agentDir;
@@ -175,7 +175,7 @@ class InMemoryHostedResourceLoader implements BrewvaHostedResourceLoader {
 export async function createHostedResourceLoader(input: {
   cwd: string;
   agentDir: string;
-  runtimePlugins?: readonly BrewvaHostPluginFactory[];
+  runtimePlugins?: readonly InternalHostPlugin[];
 }): Promise<BrewvaHostedResourceLoader> {
   const loader = new InMemoryHostedResourceLoader(input);
   await loader.reload();

@@ -218,7 +218,7 @@ describe("context transform registration contract", () => {
       runtime,
       registerTools: false,
     });
-    await runtimePlugin(api);
+    await runtimePlugin.register(api);
 
     const results = await invokeHandlersAsync<{
       message: {

@@ -19,14 +19,15 @@ import type {
   BrewvaHostMessageEndResult,
   BrewvaHostMessageEnvelope,
   BrewvaHostMessageVisibilityPatch,
-  BrewvaHostPluginApi,
   BrewvaHostPluginEventMap,
-  BrewvaHostPluginFactory,
   BrewvaHostRegisteredCommand,
   BrewvaHostToolCallEvent,
   BrewvaHostToolCallResult,
   BrewvaHostToolResultEvent,
   BrewvaHostToolResultResult,
+  InternalHostPlugin,
+  InternalHostPluginApi,
+  RuntimePluginCapability,
 } from "./plugin.js";
 
 type PluginHandler<TKey extends keyof BrewvaHostPluginEventMap> = (
@@ -34,8 +35,14 @@ type PluginHandler<TKey extends keyof BrewvaHostPluginEventMap> = (
   ctx: BrewvaHostContext,
 ) => unknown;
 
+interface PluginHandlerRecord<TKey extends keyof BrewvaHostPluginEventMap> {
+  readonly pluginName: string;
+  readonly capabilities: ReadonlySet<RuntimePluginCapability>;
+  readonly handler: PluginHandler<TKey>;
+}
+
 type HandlerRegistry = {
-  [TKey in keyof BrewvaHostPluginEventMap]: PluginHandler<TKey>[];
+  [TKey in keyof BrewvaHostPluginEventMap]: PluginHandlerRecord<TKey>[];
 };
 
 function applyMessageVisibilityPatch(
@@ -82,6 +89,12 @@ export interface BrewvaHostPluginRunnerActionPort {
   }[];
   setActiveTools(toolNames: string[]): void;
   refreshTools(): void;
+  recordPluginCapabilityViolation?(input: {
+    pluginName: string;
+    capability: RuntimePluginCapability;
+    operation: string;
+    event?: keyof BrewvaHostPluginEventMap;
+  }): void;
 }
 
 export interface BrewvaHostPluginRunnerRegistrationPort {
@@ -90,13 +103,13 @@ export interface BrewvaHostPluginRunnerRegistrationPort {
 }
 
 export interface CreateBrewvaHostPluginRunnerOptions {
-  plugins?: readonly BrewvaHostPluginFactory[];
+  plugins?: readonly InternalHostPlugin[];
   actions: BrewvaHostPluginRunnerActionPort;
   registrations?: BrewvaHostPluginRunnerRegistrationPort;
 }
 
 export interface BrewvaHostPluginRunner {
-  readonly api: BrewvaHostPluginApi;
+  readonly api: InternalHostPluginApi;
   hasHandlers(event: keyof BrewvaHostPluginEventMap): boolean;
   getHandlers<TKey extends keyof BrewvaHostPluginEventMap>(
     event: TKey,
@@ -138,6 +151,66 @@ export interface BrewvaHostPluginRunner {
   ): Promise<BrewvaHostMessageEndResult | undefined>;
 }
 
+const ALL_RUNTIME_PLUGIN_CAPABILITIES: readonly RuntimePluginCapability[] = [
+  "tool_registration.write",
+  "tool_surface.write",
+  "system_prompt.write",
+  "context_messages.write",
+  "provider_payload.write",
+  "input_parts.write",
+  "turn_input.handle",
+  "tool_call.block",
+  "tool_result.write",
+  "message_visibility.write",
+  "assistant_message.enqueue",
+  "user_message.enqueue",
+];
+
+function createCapabilitySet(
+  capabilities: readonly RuntimePluginCapability[],
+): ReadonlySet<RuntimePluginCapability> {
+  return new Set(capabilities);
+}
+
+function assertCapability(input: {
+  actions: BrewvaHostPluginRunnerActionPort;
+  pluginName: string;
+  capabilities: ReadonlySet<RuntimePluginCapability>;
+  capability: RuntimePluginCapability;
+  operation: string;
+  event?: keyof BrewvaHostPluginEventMap;
+}): void {
+  if (input.capabilities.has(input.capability)) {
+    return;
+  }
+  input.actions.recordPluginCapabilityViolation?.({
+    pluginName: input.pluginName,
+    capability: input.capability,
+    operation: input.operation,
+    ...(input.event ? { event: input.event } : {}),
+  });
+  throw new Error(
+    `Internal runtime plugin '${input.pluginName}' attempted '${input.operation}' without capability '${input.capability}'`,
+  );
+}
+
+function assertHandlerCapability<TKey extends keyof BrewvaHostPluginEventMap>(
+  actions: BrewvaHostPluginRunnerActionPort,
+  record: PluginHandlerRecord<TKey>,
+  capability: RuntimePluginCapability,
+  operation: string,
+  event: TKey,
+): void {
+  assertCapability({
+    actions,
+    pluginName: record.pluginName,
+    capabilities: record.capabilities,
+    capability,
+    operation,
+    event,
+  });
+}
+
 function createEmptyHandlerRegistry(): HandlerRegistry {
   return {
     session_start: [],
@@ -176,40 +249,101 @@ export async function createBrewvaHostPluginRunner(
   const registeredTools = new Map<string, BrewvaToolDefinition>();
   const registeredCommands = new Map<string, BrewvaHostRegisteredCommand>();
 
-  const api: BrewvaHostPluginApi = {
-    on(event, handler) {
-      handlers[event].push(handler as PluginHandler<typeof event>);
-    },
-    registerTool(tool) {
-      registeredTools.set(tool.name, tool);
-      options.registrations?.registerTool?.(tool);
-    },
-    registerCommand(name, command) {
-      registeredCommands.set(name, command);
-      options.registrations?.registerCommand?.(name, command);
-    },
-    sendMessage(message, sendOptions) {
-      options.actions.sendMessage(message, sendOptions);
-    },
-    sendUserMessage(content, sendOptions) {
-      options.actions.sendUserMessage(content, sendOptions);
-    },
-    getActiveTools() {
-      return options.actions.getActiveTools();
-    },
-    getAllTools() {
-      return options.actions.getAllTools();
-    },
-    setActiveTools(toolNames) {
-      options.actions.setActiveTools(toolNames);
-    },
-    refreshTools() {
-      options.actions.refreshTools();
-    },
-  };
+  function createApiForPlugin(input: {
+    pluginName: string;
+    capabilities: ReadonlySet<RuntimePluginCapability>;
+  }): InternalHostPluginApi {
+    return {
+      on(event, handler) {
+        handlers[event].push({
+          pluginName: input.pluginName,
+          capabilities: input.capabilities,
+          handler: handler as PluginHandler<typeof event>,
+        });
+      },
+      registerTool(tool) {
+        assertCapability({
+          actions: options.actions,
+          pluginName: input.pluginName,
+          capabilities: input.capabilities,
+          capability: "tool_registration.write",
+          operation: "registerTool",
+        });
+        registeredTools.set(tool.name, tool);
+        options.registrations?.registerTool?.(tool);
+      },
+      registerCommand(name, command) {
+        assertCapability({
+          actions: options.actions,
+          pluginName: input.pluginName,
+          capabilities: input.capabilities,
+          capability: "tool_registration.write",
+          operation: "registerCommand",
+        });
+        registeredCommands.set(name, command);
+        options.registrations?.registerCommand?.(name, command);
+      },
+      sendMessage(message, sendOptions) {
+        assertCapability({
+          actions: options.actions,
+          pluginName: input.pluginName,
+          capabilities: input.capabilities,
+          capability: "assistant_message.enqueue",
+          operation: "sendMessage",
+        });
+        options.actions.sendMessage(message, sendOptions);
+      },
+      sendUserMessage(content, sendOptions) {
+        assertCapability({
+          actions: options.actions,
+          pluginName: input.pluginName,
+          capabilities: input.capabilities,
+          capability: "user_message.enqueue",
+          operation: "sendUserMessage",
+        });
+        options.actions.sendUserMessage(content, sendOptions);
+      },
+      getActiveTools() {
+        return options.actions.getActiveTools();
+      },
+      getAllTools() {
+        return options.actions.getAllTools();
+      },
+      setActiveTools(toolNames) {
+        assertCapability({
+          actions: options.actions,
+          pluginName: input.pluginName,
+          capabilities: input.capabilities,
+          capability: "tool_surface.write",
+          operation: "setActiveTools",
+        });
+        options.actions.setActiveTools(toolNames);
+      },
+      refreshTools() {
+        assertCapability({
+          actions: options.actions,
+          pluginName: input.pluginName,
+          capabilities: input.capabilities,
+          capability: "tool_surface.write",
+          operation: "refreshTools",
+        });
+        options.actions.refreshTools();
+      },
+    };
+  }
+
+  const api = createApiForPlugin({
+    pluginName: "internal.runner",
+    capabilities: createCapabilitySet(ALL_RUNTIME_PLUGIN_CAPABILITIES),
+  });
 
   for (const plugin of options.plugins ?? []) {
-    await plugin(api);
+    await plugin.register(
+      createApiForPlugin({
+        pluginName: plugin.name,
+        capabilities: createCapabilitySet(plugin.capabilities),
+      }),
+    );
   }
 
   return {
@@ -218,7 +352,7 @@ export async function createBrewvaHostPluginRunner(
       return handlers[event].length > 0;
     },
     getHandlers(event) {
-      return [...handlers[event]];
+      return handlers[event].map((record) => record.handler);
     },
     getRegisteredTools() {
       return [...registeredTools.values()];
@@ -227,18 +361,25 @@ export async function createBrewvaHostPluginRunner(
       return new Map(registeredCommands);
     },
     async emit(event, payload, ctx) {
-      for (const handler of handlers[event]) {
-        await handler(payload, ctx);
+      for (const record of handlers[event]) {
+        await record.handler(payload, ctx);
       }
     },
     async emitContext(payload, ctx) {
       let currentMessages = structuredClone(payload.messages);
-      for (const handler of handlers.context) {
-        const result = (await handler({ ...payload, messages: currentMessages }, ctx)) as
+      for (const record of handlers.context) {
+        const result = (await record.handler({ ...payload, messages: currentMessages }, ctx)) as
           | BrewvaHostContextEvent
           | { messages?: unknown[] }
           | undefined;
         if (result && "messages" in result && Array.isArray(result.messages)) {
+          assertHandlerCapability(
+            options.actions,
+            record,
+            "context_messages.write",
+            "context.messages",
+            "context",
+          );
           currentMessages = result.messages;
         }
       }
@@ -246,9 +387,16 @@ export async function createBrewvaHostPluginRunner(
     },
     async emitBeforeProviderRequest(payload, ctx) {
       let currentPayload = payload.payload;
-      for (const handler of handlers.before_provider_request) {
-        const result = await handler({ ...payload, payload: currentPayload }, ctx);
+      for (const record of handlers.before_provider_request) {
+        const result = await record.handler({ ...payload, payload: currentPayload }, ctx);
         if (result !== undefined) {
+          assertHandlerCapability(
+            options.actions,
+            record,
+            "provider_payload.write",
+            "before_provider_request.payload",
+            "before_provider_request",
+          );
           currentPayload = result;
         }
       }
@@ -259,17 +407,32 @@ export async function createBrewvaHostPluginRunner(
       let currentSystemPrompt = payload.systemPrompt;
       let systemPromptChanged = false;
 
-      for (const handler of handlers.before_agent_start) {
-        const result = (await handler({ ...payload, systemPrompt: currentSystemPrompt }, ctx)) as
-          | BrewvaHostBeforeAgentStartResult
-          | undefined;
+      for (const record of handlers.before_agent_start) {
+        const result = (await record.handler(
+          { ...payload, systemPrompt: currentSystemPrompt },
+          ctx,
+        )) as BrewvaHostBeforeAgentStartResult | undefined;
         if (!result) {
           continue;
         }
         if (result.message) {
+          assertHandlerCapability(
+            options.actions,
+            record,
+            "context_messages.write",
+            "before_agent_start.message",
+            "before_agent_start",
+          );
           messages.push(result.message);
         }
         if (result.systemPrompt !== undefined) {
+          assertHandlerCapability(
+            options.actions,
+            record,
+            "system_prompt.write",
+            "before_agent_start.systemPrompt",
+            "before_agent_start",
+          );
           currentSystemPrompt = result.systemPrompt;
           systemPromptChanged = true;
         }
@@ -287,8 +450,8 @@ export async function createBrewvaHostPluginRunner(
     async emitInput(payload, ctx) {
       let currentParts = cloneBrewvaPromptContentParts(payload.parts);
 
-      for (const handler of handlers.input) {
-        const result = (await handler(
+      for (const record of handlers.input) {
+        const result = (await record.handler(
           {
             ...payload,
             parts: currentParts,
@@ -297,9 +460,23 @@ export async function createBrewvaHostPluginRunner(
           ctx,
         )) as BrewvaHostInputEventResult | undefined;
         if (result?.action === "handled") {
+          assertHandlerCapability(
+            options.actions,
+            record,
+            "turn_input.handle",
+            "input.handled",
+            "input",
+          );
           return result;
         }
         if (result?.action === "transform") {
+          assertHandlerCapability(
+            options.actions,
+            record,
+            "input_parts.write",
+            "input.transform",
+            "input",
+          );
           currentParts = cloneBrewvaPromptContentParts(result.parts);
         }
       }
@@ -311,13 +488,20 @@ export async function createBrewvaHostPluginRunner(
     },
     async emitToolCall(payload, ctx) {
       let lastResult: BrewvaHostToolCallResult | undefined;
-      for (const handler of handlers.tool_call) {
-        const result = (await handler(payload, ctx)) as BrewvaHostToolCallResult | undefined;
+      for (const record of handlers.tool_call) {
+        const result = (await record.handler(payload, ctx)) as BrewvaHostToolCallResult | undefined;
         if (!result) {
           continue;
         }
         lastResult = result;
         if (result.block) {
+          assertHandlerCapability(
+            options.actions,
+            record,
+            "tool_call.block",
+            "tool_call.block",
+            "tool_call",
+          );
           return result;
         }
       }
@@ -329,8 +513,8 @@ export async function createBrewvaHostPluginRunner(
       let currentIsError = payload.isError;
       let changed = false;
 
-      for (const handler of handlers.tool_result) {
-        const result = (await handler(
+      for (const record of handlers.tool_result) {
+        const result = (await record.handler(
           {
             ...payload,
             content: currentContent,
@@ -343,14 +527,35 @@ export async function createBrewvaHostPluginRunner(
           continue;
         }
         if (result.content !== undefined) {
+          assertHandlerCapability(
+            options.actions,
+            record,
+            "tool_result.write",
+            "tool_result.content",
+            "tool_result",
+          );
           currentContent = result.content;
           changed = true;
         }
         if (result.details !== undefined) {
+          assertHandlerCapability(
+            options.actions,
+            record,
+            "tool_result.write",
+            "tool_result.details",
+            "tool_result",
+          );
           currentDetails = result.details;
           changed = true;
         }
         if (result.isError !== undefined) {
+          assertHandlerCapability(
+            options.actions,
+            record,
+            "tool_result.write",
+            "tool_result.isError",
+            "tool_result",
+          );
           currentIsError = result.isError;
           changed = true;
         }
@@ -370,8 +575,8 @@ export async function createBrewvaHostPluginRunner(
       let currentMessage = payload.message;
       let changed = false;
 
-      for (const handler of handlers.message_end) {
-        const result = (await handler(
+      for (const record of handlers.message_end) {
+        const result = (await record.handler(
           {
             ...payload,
             message: currentMessage,
@@ -381,6 +586,13 @@ export async function createBrewvaHostPluginRunner(
         if (!result?.visibility) {
           continue;
         }
+        assertHandlerCapability(
+          options.actions,
+          record,
+          "message_visibility.write",
+          "message_end.visibility",
+          "message_end",
+        );
         currentMessage = applyMessageVisibilityPatch(currentMessage, result.visibility);
         changed = true;
       }

@@ -8,7 +8,9 @@ Current responsibilities:
 - persist promotion draft state under `.brewva/skill-broker/`
 - inject pending promotion drafts into hosted context when the prompt asks to
   promote or codify learning
-- review and materialize promotion packets through the `skill_promotion` tool
+- review and materialize promotion packets through the split
+  `skill_promotion_inspect`, `skill_promotion_review`, and
+  `skill_promotion_promote` tools
 
 Non-responsibilities:
 

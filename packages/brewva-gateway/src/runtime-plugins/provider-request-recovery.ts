@@ -1,5 +1,5 @@
 import type { BrewvaRuntime } from "@brewva/brewva-runtime";
-import type { BrewvaHostPluginApi } from "@brewva/brewva-substrate";
+import type { InternalHostPluginApi } from "@brewva/brewva-substrate";
 import {
   consumeNextPromptOutputBudgetEscalation,
   markProviderRequestRecoveryInstalled,
@@ -120,7 +120,7 @@ export function applyOutputBudgetEscalationToPayload(
 }
 
 export function registerProviderRequestRecovery(
-  extensionApi: BrewvaHostPluginApi,
+  extensionApi: InternalHostPluginApi,
   runtime: BrewvaRuntime,
 ): void {
   markProviderRequestRecoveryInstalled(runtime);

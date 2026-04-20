@@ -32,7 +32,11 @@ import { createScheduleIntentTool } from "./schedule-intent.js";
 import { createSessionCompactTool } from "./session-compact.js";
 import { createSkillCompleteTool } from "./skill-complete.js";
 import { createSkillLoadTool } from "./skill-load.js";
-import { createSkillPromotionTool } from "./skill-promotion.js";
+import {
+  createSkillPromotionInspectTool,
+  createSkillPromotionPromoteTool,
+  createSkillPromotionReviewTool,
+} from "./skill-promotion.js";
 import { createSubagentCancelTool, createSubagentStatusTool } from "./subagent-control.js";
 import { createSubagentFanoutTool, createSubagentRunTool } from "./subagent-run.js";
 import { createTapeTools } from "./tape.js";
@@ -88,7 +92,9 @@ export function buildDefaultBundledBrewvaTools(
     createWorkerResultsApplyTool({ runtime }),
     createSkillLoadTool({ runtime }),
     createSkillCompleteTool({ runtime }),
-    createSkillPromotionTool({ runtime }),
+    createSkillPromotionInspectTool({ runtime }),
+    createSkillPromotionReviewTool({ runtime }),
+    createSkillPromotionPromoteTool({ runtime }),
     createSubagentRunTool({ runtime }),
     createSubagentFanoutTool({ runtime }),
     createSubagentStatusTool({ runtime }),

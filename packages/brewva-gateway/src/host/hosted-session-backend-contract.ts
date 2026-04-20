@@ -1,6 +1,6 @@
 import type { BrewvaRuntime } from "@brewva/brewva-runtime";
 import type {
-  BrewvaHostPluginFactory,
+  InternalHostPlugin,
   BrewvaHostedResourceLoader,
   BrewvaManagedPromptSession,
   BrewvaMutableModelCatalog,
@@ -67,7 +67,7 @@ export type HostedSessionServicesBundle = {
   settingsManager: HostedSessionSettingsBackend;
   resourceLoader: HostedSessionResourceLoaderBackend;
   sessionManager: HostedSessionPersistenceBackend;
-  runtimePlugins?: readonly BrewvaHostPluginFactory[];
+  runtimePlugins?: readonly InternalHostPlugin[];
 };
 
 export interface HostedSessionModelServices {
@@ -83,7 +83,7 @@ export interface HostedSessionBackendAdapter {
     cwd: string;
     settings: HostedSessionSettings;
     runtime?: BrewvaRuntime;
-    runtimePlugins?: readonly import("@brewva/brewva-substrate").BrewvaHostPluginFactory[];
+    runtimePlugins?: readonly import("@brewva/brewva-substrate").InternalHostPlugin[];
     sessionId?: string;
   }): Promise<HostedSessionServicesBundle>;
   createSessionResult(input: {

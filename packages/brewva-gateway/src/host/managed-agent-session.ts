@@ -11,13 +11,13 @@ import {
   cloneBrewvaPromptContentParts,
   createBrewvaHostPluginRunner,
   expandBrewvaPromptTemplate,
+  type CreateBrewvaHostPluginRunnerOptions,
   promptPartsArePlainText,
   type BrewvaHostedResourceLoader,
   type BrewvaHostCommandContext,
   type BrewvaHostCustomMessage,
   type BrewvaHostCustomMessageDelivery,
   type BrewvaHostMessageVisibilityPatch,
-  type BrewvaHostPluginFactory,
   type BrewvaHostPluginRunner,
   type BrewvaManagedPromptSession,
   type BrewvaManagedSessionStore,
@@ -96,7 +96,7 @@ export interface CreateBrewvaManagedAgentSessionOptions {
   settings: BrewvaManagedAgentSessionSettingsPort;
   modelCatalog: BrewvaMutableModelCatalog;
   resourceLoader: BrewvaHostedResourceLoader;
-  runtimePlugins?: readonly BrewvaHostPluginFactory[];
+  runtimePlugins?: CreateBrewvaHostPluginRunnerOptions["plugins"];
   customTools?: readonly BrewvaToolDefinition[];
   initialModel?: BrewvaRegisteredModel;
   initialThinkingLevel?: BrewvaPromptThinkingLevel;

@@ -1,5 +1,5 @@
 import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
-import type { BrewvaHostPluginApi } from "@brewva/brewva-substrate";
+import type { InternalHostPluginApi } from "@brewva/brewva-substrate";
 import { distillToolOutput } from "./tool-output-distiller.js";
 
 function extractTextOnlyContent(content: unknown): string | undefined {
@@ -22,7 +22,7 @@ function extractTextOnlyContent(content: unknown): string | undefined {
 }
 
 export function registerToolResultDistiller(
-  extensionApi: BrewvaHostPluginApi,
+  extensionApi: InternalHostPluginApi,
   _runtime: BrewvaHostedRuntimePort,
 ): void {
   extensionApi.on("tool_result", (event) => {

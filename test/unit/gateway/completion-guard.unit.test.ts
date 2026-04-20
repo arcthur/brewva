@@ -4,7 +4,7 @@ import type {
   SkillCompletionFailureRecord,
   SkillDocument,
 } from "@brewva/brewva-runtime";
-import type { BrewvaHostContext, BrewvaHostPluginApi } from "@brewva/brewva-substrate";
+import type { BrewvaHostContext, InternalHostPluginApi } from "@brewva/brewva-substrate";
 import { createCompletionGuardLifecycle } from "../../../packages/brewva-gateway/src/runtime-plugins/completion-guard.js";
 
 function createSkillDocument(): SkillDocument {
@@ -42,8 +42,8 @@ function createSkillDocument(): SkillDocument {
 
 function createLifecycleHarness() {
   const sentMessages: Array<{
-    message: Parameters<BrewvaHostPluginApi["sendMessage"]>[0];
-    options: Parameters<BrewvaHostPluginApi["sendMessage"]>[1];
+    message: Parameters<InternalHostPluginApi["sendMessage"]>[0];
+    options: Parameters<InternalHostPluginApi["sendMessage"]>[1];
   }> = [];
   const notifications: Array<{ message: string; level: string }> = [];
   const skill = createSkillDocument();
@@ -58,12 +58,12 @@ function createLifecycleHarness() {
   } as unknown as BrewvaHostedRuntimePort;
   const extensionApi = {
     sendMessage(
-      message: Parameters<BrewvaHostPluginApi["sendMessage"]>[0],
-      options: Parameters<BrewvaHostPluginApi["sendMessage"]>[1],
+      message: Parameters<InternalHostPluginApi["sendMessage"]>[0],
+      options: Parameters<InternalHostPluginApi["sendMessage"]>[1],
     ) {
       sentMessages.push({ message, options });
     },
-  } as unknown as BrewvaHostPluginApi;
+  } as unknown as InternalHostPluginApi;
   const ctx = {
     sessionManager: {
       getSessionId: () => "completion-guard-session",
@@ -85,8 +85,8 @@ function createLifecycleHarness() {
 
 function createFailedContractHarness() {
   const sentMessages: Array<{
-    message: Parameters<BrewvaHostPluginApi["sendMessage"]>[0];
-    options: Parameters<BrewvaHostPluginApi["sendMessage"]>[1];
+    message: Parameters<InternalHostPluginApi["sendMessage"]>[0];
+    options: Parameters<InternalHostPluginApi["sendMessage"]>[1];
   }> = [];
   const notifications: Array<{ message: string; level: string }> = [];
   const failure = {
@@ -129,12 +129,12 @@ function createFailedContractHarness() {
   } as unknown as BrewvaHostedRuntimePort;
   const extensionApi = {
     sendMessage(
-      message: Parameters<BrewvaHostPluginApi["sendMessage"]>[0],
-      options: Parameters<BrewvaHostPluginApi["sendMessage"]>[1],
+      message: Parameters<InternalHostPluginApi["sendMessage"]>[0],
+      options: Parameters<InternalHostPluginApi["sendMessage"]>[1],
     ) {
       sentMessages.push({ message, options });
     },
-  } as unknown as BrewvaHostPluginApi;
+  } as unknown as InternalHostPluginApi;
   const ctx = {
     sessionManager: {
       getSessionId: () => "completion-guard-failed-contract-session",
@@ -156,8 +156,8 @@ function createFailedContractHarness() {
 
 function createSkillFirstHarness() {
   const sentMessages: Array<{
-    message: Parameters<BrewvaHostPluginApi["sendMessage"]>[0];
-    options: Parameters<BrewvaHostPluginApi["sendMessage"]>[1];
+    message: Parameters<InternalHostPluginApi["sendMessage"]>[0];
+    options: Parameters<InternalHostPluginApi["sendMessage"]>[1];
   }> = [];
   const notifications: Array<{ message: string; level: string }> = [];
   const skill = createSkillDocument();
@@ -208,12 +208,12 @@ function createSkillFirstHarness() {
   } as unknown as BrewvaHostedRuntimePort;
   const extensionApi = {
     sendMessage(
-      message: Parameters<BrewvaHostPluginApi["sendMessage"]>[0],
-      options: Parameters<BrewvaHostPluginApi["sendMessage"]>[1],
+      message: Parameters<InternalHostPluginApi["sendMessage"]>[0],
+      options: Parameters<InternalHostPluginApi["sendMessage"]>[1],
     ) {
       sentMessages.push({ message, options });
     },
-  } as unknown as BrewvaHostPluginApi;
+  } as unknown as InternalHostPluginApi;
   const ctx = {
     sessionManager: {
       getSessionId: () => "completion-guard-skill-first-session",
@@ -258,7 +258,7 @@ describe("completion guard lifecycle", () => {
     });
   });
 
-  test("marks terminal assistant prose as hidden while an active skill is unfinished", () => {
+  test("keeps terminal assistant prose visible while an active skill is unfinished", () => {
     const { lifecycle, ctx } = createLifecycleHarness();
 
     const result = lifecycle.messageEnd(
@@ -273,16 +273,7 @@ describe("completion guard lifecycle", () => {
       ctx,
     );
 
-    expect(result?.visibility).toMatchObject({
-      display: false,
-      excludeFromContext: true,
-      details: {
-        brewvaDraftSuppressed: expect.objectContaining({
-          reason: "active_skill_incomplete",
-          skillName: "repository-analysis",
-        }),
-      },
-    });
+    expect(result).toBeUndefined();
   });
 
   test("does not queue a guard follow-up for tool-result turns", () => {
@@ -309,7 +300,7 @@ describe("completion guard lifecycle", () => {
     expect(sentMessages).toEqual([]);
   });
 
-  test("queues a skill-load follow-up when a terminal assistant turn skips a pending routed skill", () => {
+  test("emits a visible skill-load recommendation notice for advisory routed skills", () => {
     const { lifecycle, sentMessages, ctx } = createSkillFirstHarness();
 
     lifecycle.beforeAgentStart(
@@ -337,11 +328,10 @@ describe("completion guard lifecycle", () => {
 
     expect(sentMessages).toHaveLength(1);
     expect(sentMessages[0]?.message.customType).toBe("brewva-guard");
-    expect(String(sentMessages[0]?.message.content)).toContain("Call tool `skill_load`");
+    expect(String(sentMessages[0]?.message.content)).toContain("Consider tool `skill_load`");
     expect(String(sentMessages[0]?.message.content)).toContain("repository-analysis");
     expect(sentMessages[0]?.options).toEqual({
-      deliverAs: "followUp",
-      triggerTurn: true,
+      triggerTurn: false,
     });
   });
 
@@ -372,21 +362,11 @@ describe("completion guard lifecycle", () => {
       ctx,
     );
 
-    expect(result?.visibility).toMatchObject({
-      display: false,
-      excludeFromContext: true,
-      details: {
-        brewvaDraftSuppressed: expect.objectContaining({
-          reason: "skill_contract_failed",
-          skillName: "repository-analysis",
-        }),
-      },
-    });
+    expect(result).toBeUndefined();
     expect(sentMessages).toHaveLength(1);
     expect(sentMessages[0]?.message.customType).toBe("brewva-guard");
     expect(String(sentMessages[0]?.message.content)).toContain("Skill contract failed");
     expect(sentMessages[0]?.options).toEqual({
-      deliverAs: "transcript",
       triggerTurn: false,
     });
   });
