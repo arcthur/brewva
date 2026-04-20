@@ -120,7 +120,7 @@ describe("channel mode prompt output collector", () => {
     expect(outputs.toolOutputs[0]?.text).toContain("Tool exec (tc-2) failed");
   });
 
-  test("resumes channel prompt collection after compaction when runtime emits session_compact", async () => {
+  test("resumes channel prompt collection after compaction through the hosted thread loop", async () => {
     const listeners = new Set<
       (event: { id: string; sessionId: string; type: string; timestamp: number }) => void
     >();
@@ -197,7 +197,8 @@ describe("channel mode prompt output collector", () => {
     );
 
     expect(sentMessages).toHaveLength(2);
-    expect(sentMessages[1]).toContain("Resume the interrupted turn");
+    expect(sentMessages[0]).toBe("hello");
+    expect(sentMessages[1]).toContain("Context compaction completed");
     expect(outputs.assistantText).toBe("telegram resumed");
   });
 

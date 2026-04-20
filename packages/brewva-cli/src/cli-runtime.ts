@@ -1,4 +1,5 @@
 import process from "node:process";
+import { runHostedPromptTurn } from "@brewva/brewva-gateway/host";
 import type { BrewvaRuntime } from "@brewva/brewva-runtime";
 import type {
   BrewvaManagedPromptSession,
@@ -90,6 +91,7 @@ async function runCliTurn(
   prompt: string,
   options: {
     printText: boolean;
+    runtime?: BrewvaRuntime;
   },
 ): Promise<string> {
   let emittedText = "";
@@ -138,7 +140,23 @@ async function runCliTurn(
   });
 
   try {
-    await session.prompt([{ type: "text", text: prompt }], { source: "interactive" });
+    const output = await runHostedPromptTurn({
+      session,
+      parts: [{ type: "text", text: prompt }],
+      source: "print",
+      runtime: options.runtime,
+      sessionId: session.sessionManager?.getSessionId?.(),
+    });
+    if (output.status === "failed") {
+      throw output.error instanceof Error ? output.error : new Error(String(output.error));
+    }
+    if (output.status === "completed" && emittedText.length === 0) {
+      emittedText = output.assistantText;
+      if (options.printText) {
+        streamedText = true;
+        writeStdout(output.assistantText);
+      }
+    }
     await session.waitForIdle();
   } finally {
     unsubscribe();
@@ -196,6 +214,7 @@ export async function runCliPrintSession(
   options: {
     mode: CliPrintMode;
     initialMessage?: string;
+    runtime?: BrewvaRuntime;
   },
 ): Promise<void> {
   if (typeof options.initialMessage !== "string" || options.initialMessage.trim().length === 0) {
@@ -204,5 +223,6 @@ export async function runCliPrintSession(
 
   await runCliTurn(session, options.initialMessage, {
     printText: options.mode === "text",
+    runtime: options.runtime,
   });
 }

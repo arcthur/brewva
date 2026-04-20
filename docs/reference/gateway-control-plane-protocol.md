@@ -191,7 +191,7 @@ Important protocol rules:
 - live tool `attemptId` is not guessed from the current active attempt at
   emission time. Gateway binds each `toolCallId` to an authoritative attempt
   from repo-owned tool lifecycle receipts (`tool_call`, `tool_execution_start`,
-  `tool_execution_end`) and hosted turn-attempt state.
+  `tool_execution_end`) and hosted thread-loop attempt state.
 - late superseded-attempt tool completions still emit live `tool.finished`
   under their original bound `attemptId`; they are not silently rewritten to
   the current attempt.
@@ -207,6 +207,10 @@ Important protocol rules:
   `attempt.started(reason=output_budget_escalation|compaction_retry|provider_fallback_retry|max_output_recovery|reasoning_revert_resume)`
   when those retry attempts are derived from durable `session_turn_transition`
   receipts; replay does not promise the full live attempt timeline.
+- live retry, compact-resume, reasoning-revert-resume, approval suspension, and
+  breaker decisions are owned by the gateway-internal `HostedThreadLoop`; the
+  protocol exposes their resulting frames and replayable transition receipts,
+  not the loop's process-local state.
 - durable session-wire frames carry `sourceEventId` and `sourceEventType`;
   cache frames and replay control frames do not.
 - `session.status.contextPressure` is a live cache projection derived from

@@ -100,7 +100,14 @@ is that runtime lifecycle owns aggregate posture semantics.
 3. Register lifecycle handlers through the canonical hosted pipeline (`packages/brewva-gateway/src/runtime-plugins/index.ts`)
    - `managedToolMode=runtime_plugin`: register managed Brewva tools through the runtime plugin API
    - `managedToolMode=direct`: provide managed Brewva tools directly from the host
-4. Run turn loop with tool execution, ledger/event writes, and verification updates
+4. Resolve the hosted thread-loop profile and run the gateway-internal
+   `HostedThreadLoop`
+   - `interactive` and `print` keep schedule trigger and Recovery WAL replay out
+     of the ordinary human fast path
+   - `scheduled`, `heartbeat`, `wal_recovery`, `channel`, and `subagent`
+     profiles opt into the control-plane features their entrypoint needs
+   - the low-level agent loop still owns model streaming, tool calls, steering,
+     follow-up messages, request authorization, and context transformation
 5. Materialize durable turn receipts (`turn_input_recorded`,
    `turn_render_committed`), expose derived session wire replay through the
    runtime-owned session-wire compiler surface, and dispose session resources
@@ -114,6 +121,8 @@ is that runtime lifecycle owns aggregate posture semantics.
   product differences stay in operator UX and transport, not in runtime truth
   - once mode resolution commits to interactive execution, CLI boots the
     OpenTUI-backed shell in `alternate-screen`
+  - ordinary non-streaming prompts run through the `interactive` hosted-loop
+    profile; streaming follow-up remains a low-level agent-loop continuation
   - approvals, questions, tasks, inspect, session switching, and pager
     drill-down remain presentation over Brewva-owned session state rather than
     a second lifecycle truth
@@ -127,6 +136,7 @@ is that runtime lifecycle owns aggregate posture semantics.
   the runtime plugin package; wiring details live in
   `docs/reference/runtime-plugins.md`
 - Channel gateway (`--channel`): run adapter bridge loop; bind conversations to scopes, then scopes to agent sessions, and dispatch inbound turns serially per scope
+  through the `channel` hosted-loop profile
 
 ## Durability Boundaries
 
@@ -162,7 +172,9 @@ Target recovery order is:
 2. hydrate replay-owned runtime state from tape
 3. rebuild the history-view baseline
 4. derive the recovery working set
-5. admit context through the normal provider path
+5. resolve a hosted-loop decision from turn-local state and transition signals
+6. admit context through the normal provider path when the decision streams or
+   retries
 
 Step 3 is not a projection-cache rebuild. The history-view baseline is the
 receipt-derived rewrite authority rebuilt from durable `session_compact`
@@ -251,18 +263,19 @@ permanent degradation.
   bounded `exact_history` continuity snapshot derived from
   `turn_input_recorded` / `turn_render_committed`, but that fallback is not a
   replacement for receipt-backed history rewrite authority.
-- Before a recovered prompt runs, hosted recovery checks whether the latest
+- Before a recovered prompt runs, `HostedThreadLoop` checks whether the latest
   durable reasoning revert has already completed `reasoning_revert_resume`.
-  If not, the worker rebuilds the active branch from the revert target,
-  replaces model-visible messages from that surviving branch, and resumes with
-  bounded hosted continuity instead of replaying superseded history.
+  If not, the loop resolves `revert_then_stream`, rebuilds the active branch
+  from the revert target, replaces model-visible messages from that surviving
+  branch, and resumes with bounded hosted continuity instead of replaying
+  superseded history.
 - `completed` is the only terminal hosted-resume status for replay purposes.
   Any latest reasoning revert without a completed
   `reasoning_revert_resume` receipt remains pending for the next serialized
   recovery pass.
-- That reasoning resume remains owned by the serialized turn runner that was
-  already handling the prompt. Hosted recovery prepares the branch reset, but it
-  does not start a second out-of-band prompt behind the scheduler.
+- That reasoning resume remains owned by the hosted thread loop that was already
+  handling the prompt. Hosted recovery prepares the branch reset, but it does
+  not start a second out-of-band prompt behind the scheduler.
 - `reasoning_revert_resume` is therefore crash-safe over the existing gateway
   prompt WAL: the WAL replays the pending turn envelope, while tape determines
   whether branch reset must be re-applied first.

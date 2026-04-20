@@ -3,9 +3,10 @@ import {
   type BrewvaRuntime,
   type ReasoningRevertRecord,
 } from "@brewva/brewva-runtime";
+import { normalizeRuntimeError } from "./error-classification.js";
 import { recordSessionTurnTransition } from "./turn-transition.js";
 
-const REASONING_REVERT_RESUME_PROMPT =
+export const REASONING_REVERT_RESUME_PROMPT =
   "Reasoning branch revert completed. Continue from the restored checkpoint and the branch summary that was injected. Do not reconstruct abandoned reasoning or repeat completed tool side effects. Finish the pending response.";
 
 type ReasoningRevertResumeStatus = "entered" | "completed" | "failed" | "skipped";
@@ -64,16 +65,6 @@ function requireReasoningRecoverySessionManager(
 
 function normalizeSessionId(session: ReasoningRevertRecoverySessionLike): string {
   return requireReasoningRecoverySessionManager(session).getSessionId().trim();
-}
-
-function normalizeRuntimeError(error: unknown): string {
-  if (error instanceof Error && error.message.trim().length > 0) {
-    return error.message.trim();
-  }
-  if (typeof error === "string" && error.trim().length > 0) {
-    return error.trim();
-  }
-  return "unknown_error";
 }
 
 function applyHostedReasoningBranchReset(
@@ -143,6 +134,13 @@ function resolvePendingReasoningRevert(
     : latestRevert;
 }
 
+export function probePendingSessionReasoningRevertResume(
+  runtime: BrewvaRuntime,
+  sessionId: string,
+): ReasoningRevertRecord | null {
+  return resolvePendingReasoningRevert(runtime, sessionId);
+}
+
 async function waitForSessionIdle(session: ReasoningRevertRecoverySessionLike): Promise<void> {
   if (typeof session.waitForIdle === "function") {
     await session.waitForIdle();
@@ -171,19 +169,17 @@ function recordReasoningRevertResumeTransition(
   });
 }
 
-export async function preparePendingSessionReasoningRevertResume(
+export async function applySessionReasoningRevertResume(
   session: ReasoningRevertRecoverySessionLike,
   input: {
     runtime: BrewvaRuntime;
     sessionId?: string;
     turn?: number;
+    revert: ReasoningRevertRecord;
   },
-): Promise<PreparedSessionReasoningRevertResume | null> {
+): Promise<PreparedSessionReasoningRevertResume> {
   const sessionId = input.sessionId?.trim() || normalizeSessionId(session);
-  const revert = resolvePendingReasoningRevert(input.runtime, sessionId);
-  if (!revert) {
-    return null;
-  }
+  const revert = input.revert;
 
   const latestStatus = readReasoningRevertResumeStatus(input.runtime, sessionId, revert.eventId);
   if (latestStatus !== "entered") {
@@ -226,6 +222,26 @@ export async function preparePendingSessionReasoningRevertResume(
       });
     },
   };
+}
+
+export async function preparePendingSessionReasoningRevertResume(
+  session: ReasoningRevertRecoverySessionLike,
+  input: {
+    runtime: BrewvaRuntime;
+    sessionId?: string;
+    turn?: number;
+  },
+): Promise<PreparedSessionReasoningRevertResume | null> {
+  const sessionId = input.sessionId?.trim() || normalizeSessionId(session);
+  const revert = resolvePendingReasoningRevert(input.runtime, sessionId);
+  if (!revert) {
+    return null;
+  }
+  return await applySessionReasoningRevertResume(session, {
+    ...input,
+    sessionId,
+    revert,
+  });
 }
 
 export const REASONING_REVERT_RECOVERY_TEST_ONLY = {

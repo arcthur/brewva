@@ -214,6 +214,14 @@ The hosted pipeline therefore preserves one execution spine while still keeping
 runtime access role-shaped: host lifecycle code, operator commands, and bundled
 tools do not all share the same runtime view.
 
+Turn continuation is owned one layer above runtime-plugin registration by the
+gateway-internal `HostedThreadLoop`. Runtime plugins provide lifecycle hooks,
+context admission, tool result distillation, event streaming, and recovery
+signals. They do not decide whether a hosted turn should retry, compact-resume,
+reasoning-revert-resume, suspend for approval, or fail. Those decisions are
+made from `ThreadLoopState`, the selected hosted-loop profile, and the
+event-derived hosted transition snapshot.
+
 ## Turn Lifecycle Port
 
 `TurnLifecyclePort` is the public experience/control-plane contract. Stages:

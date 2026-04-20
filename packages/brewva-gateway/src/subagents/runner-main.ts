@@ -16,8 +16,9 @@ import type {
 } from "@brewva/brewva-tools";
 import { createHostedSession } from "../host/create-hosted-session.js";
 import type { HostedSessionLogger } from "../host/logger.js";
-import { collectSessionPromptOutput } from "../session/collect-output.js";
+import { runHostedThreadLoop } from "../session/hosted-thread-loop.js";
 import { resolveSubagentSessionShutdownReason } from "../session/shutdown-receipts.js";
+import { resolveThreadLoopProfile } from "../session/thread-loop-profiles.js";
 import { recordSessionShutdownIfMissing } from "../utils/runtime.js";
 import {
   readDetachedSubagentCancelRequest,
@@ -360,10 +361,16 @@ async function main(): Promise<void> {
       promptOverride: executionPlan.prompt,
       skill: skillDocument,
     });
-    const output = await collectSessionPromptOutput(childSession.session, prompt, {
+    const output = await runHostedThreadLoop({
+      session: childSession.session,
+      prompt,
+      profile: resolveThreadLoopProfile({ source: "subagent" }),
       runtime: childSession.runtime,
       sessionId: childSessionId,
     });
+    if (output.status !== "completed") {
+      throw new Error(`subagent_thread_loop_${output.status}`);
+    }
     const childCostSummary = childSession.runtime.inspect.cost.getSummary(childSessionId);
     aggregateChildCost(parentRuntime, spec.parentSessionId, childCostSummary);
     const structuredOutcome = extractStructuredOutcomeData({

@@ -8,18 +8,26 @@ import {
   BrewvaSessionModelDescriptor,
 } from "@brewva/brewva-substrate";
 import { selectBrewvaFallbackModel } from "@brewva/brewva-tools";
+import type { CompactionGenerationCoordinator } from "./compaction-generation-coordinator.js";
 import type { PromptDispatchSession } from "./contracts.js";
+import {
+  looksLikeMaxOutputError,
+  looksLikeRetryableProviderError,
+  normalizeRuntimeError,
+} from "./error-classification.js";
+import { dispatchHostedPromptAttempt } from "./hosted-prompt-attempt.js";
 import {
   armNextPromptOutputBudgetEscalation,
   clearNextPromptOutputBudgetEscalation,
   hasProviderRequestRecoveryInstalled,
 } from "./prompt-recovery-state.js";
+import type { ThreadLoopRecoveryPolicyName } from "./thread-loop-types.js";
 import {
   getHostedTurnTransitionCoordinator,
   recordSessionTurnTransition,
 } from "./turn-transition.js";
 
-const COMPACTION_RESUME_PROMPT =
+export const COMPACTION_RESUME_PROMPT =
   "Context compaction completed. Resume the interrupted turn from the current task and evidence state. Do not repeat completed tool side effects unless required for correctness. Finish the pending response.";
 const MAX_OUTPUT_RECOVERY_PROMPT =
   "The previous assistant response exceeded the output budget. Continue from the current task and evidence state, but finish more concisely. Do not repeat prior content or replay completed tool side effects. Deliver only the highest-value remaining answer.";
@@ -30,15 +38,8 @@ const controllerStoreByRuntime = new WeakMap<
   BrewvaRuntime,
   Map<string, InstalledCompactionRecoveryController>
 >();
-const RECOVERY_MODE_SYMBOL = Symbol("brewva.compactionRecoveryMode");
 
 type PromptDispatchOptions = BrewvaPromptOptions;
-type CompactionRecoveryMode = "background" | "settled";
-type PromptRecoveryPolicyName =
-  | "deterministic_context_reduction"
-  | "output_budget_escalation"
-  | "provider_fallback_retry"
-  | "max_output_recovery";
 type PromptRecoveryDecision = "recovered" | "continue";
 interface PromptRecoveryResult {
   decision: PromptRecoveryDecision;
@@ -62,15 +63,7 @@ interface ModelAwarePromptDispatchSession extends PromptDispatchSession {
   readonly waitForIdle?: () => Promise<void>;
 }
 
-interface CompactionRecoveryController {
-  readonly sessionId: string;
-  getRequestedGeneration(): number;
-  waitForSettled(afterGeneration?: number): Promise<void>;
-  dispose(): void;
-  installMode(mode: CompactionRecoveryMode): void;
-}
-
-interface InstalledCompactionRecoveryController extends CompactionRecoveryController {
+interface InstalledCompactionRecoveryController extends CompactionGenerationCoordinator {
   dispatchPrompt(
     content: readonly BrewvaPromptContentPart[],
     promptOptions?: PromptDispatchOptions,
@@ -95,13 +88,17 @@ interface PromptRecoveryContext {
   error: unknown;
   message: string;
   controller?: InstalledCompactionRecoveryController;
+  dispatchPrompt: (
+    content: readonly BrewvaPromptContentPart[],
+    promptOptions?: PromptDispatchOptions,
+  ) => Promise<void>;
   transitionCoordinator: ReturnType<typeof getHostedTurnTransitionCoordinator>;
   afterGeneration: number;
   operatorVisibleCheckpoint: number;
 }
 
 interface PromptRecoveryPolicy {
-  readonly name: PromptRecoveryPolicyName;
+  readonly name: ThreadLoopRecoveryPolicyName;
   execute(input: PromptRecoveryContext): Promise<PromptRecoveryResult>;
 }
 
@@ -136,37 +133,6 @@ function getControllerStore(
   const created = new Map<string, InstalledCompactionRecoveryController>();
   controllerStoreByRuntime.set(runtime, created);
   return created;
-}
-
-function normalizeRuntimeError(error: unknown): string {
-  if (error instanceof Error && error.message.trim().length > 0) {
-    return error.message.trim();
-  }
-  if (typeof error === "string" && error.trim().length > 0) {
-    return error.trim();
-  }
-  return "unknown_error";
-}
-
-function looksLikeMaxOutputError(error: unknown): boolean {
-  const message = normalizeRuntimeError(error).toLowerCase();
-  return (
-    message.includes("max_output") ||
-    message.includes("max output") ||
-    message.includes("output token") ||
-    message.includes("response too long") ||
-    message.includes("length finish reason")
-  );
-}
-
-function looksLikeRetryableProviderError(error: unknown): boolean {
-  const message = normalizeRuntimeError(error).toLowerCase();
-  if (looksLikeMaxOutputError(error)) {
-    return false;
-  }
-  return /overloaded|provider.?returned.?error|rate.?limit|too many requests|429|500|502|503|504|529|service.?unavailable|server.?error|internal.?error|network.?error|connection.?error|connection.?refused|other side closed|fetch failed|upstream.?connect|reset before headers|socket hang up|timed? out|timeout|terminated|retry delay/u.test(
-    message,
-  );
 }
 
 function readCurrentModel(session: CompactionRecoverySessionLike): PromptSessionModel | undefined {
@@ -249,21 +215,6 @@ async function withTemporaryModel<T>(
     }
     typedSession.setThinkingLevel?.(previousThinkingLevel);
   }
-}
-
-async function dispatchResumePrompt(input: {
-  session: CompactionRecoverySessionLike;
-  dispatchPrompt: (
-    content: readonly BrewvaPromptContentPart[],
-    promptOptions?: PromptDispatchOptions,
-  ) => Promise<void>;
-}): Promise<void> {
-  const promptOptions: PromptDispatchOptions = {
-    expandPromptTemplates: false,
-    source: "extension",
-    ...(input.session.isStreaming === true ? { streamingBehavior: "followUp" as const } : {}),
-  };
-  await input.dispatchPrompt(buildTextPromptParts(COMPACTION_RESUME_PROMPT), promptOptions);
 }
 
 async function dispatchMaxOutputRecoveryPrompt(input: {
@@ -375,7 +326,7 @@ const outputBudgetEscalationPolicy: PromptRecoveryPolicy = {
       model: formatModelKey(currentModel),
     });
     try {
-      await input.controller.dispatchPrompt(input.parts, input.promptOptions);
+      await input.dispatchPrompt(input.parts, input.promptOptions);
       if (clearNextPromptOutputBudgetEscalation(input.runtime, input.sessionId)) {
         recordSessionTurnTransition(input.runtime, {
           sessionId: input.sessionId,
@@ -476,9 +427,7 @@ const providerFallbackPolicy: PromptRecoveryPolicy = {
       await withTemporaryModel(input.session, fallbackModel, async () => {
         await dispatchProviderFallbackRecoveryPrompt({
           session: input.session,
-          dispatchPrompt: (content, promptOptions) =>
-            input.controller?.dispatchPrompt(content, promptOptions) ??
-            Promise.reject(new Error("provider_fallback_retry_controller_unavailable")),
+          dispatchPrompt: input.dispatchPrompt,
         });
       });
       recordSessionTurnTransition(input.runtime, {
@@ -551,9 +500,7 @@ const maxOutputRecoveryPolicy: PromptRecoveryPolicy = {
       }
       await dispatchMaxOutputRecoveryPrompt({
         session: input.session,
-        dispatchPrompt: (content, promptOptions) =>
-          input.controller?.dispatchPrompt(content, promptOptions) ??
-          Promise.reject(new Error("max_output_recovery_controller_unavailable")),
+        dispatchPrompt: input.dispatchPrompt,
       });
       recordSessionTurnTransition(input.runtime, {
         sessionId: input.sessionId,
@@ -606,14 +553,10 @@ function createCompactionRecoveryController(
 
   const seenCompactionEventIds = new Set<string>();
   const pendingGenerationPromises = new Map<number, Promise<void>>();
-  const transitionCoordinator = getHostedTurnTransitionCoordinator(options.runtime);
-  // Wrapper teardown must restore the exact original prompt function identity.
-  // eslint-disable-next-line @typescript-eslint/unbound-method
-  const originalPrompt = session.prompt;
+  // Capture the original prompt only for explicit coordinator dispatch. Installing
+  // the coordinator must not mutate session.prompt.
   const basePrompt: CompactionRecoverySessionLike["prompt"] = (content, promptOptions) =>
-    originalPrompt.call(session, content, promptOptions);
-  const originalDispose = session.dispose?.bind(session);
-  const sessionState = session as unknown as Record<PropertyKey, unknown>;
+    dispatchHostedPromptAttempt(session, content, promptOptions);
   let latestPromptSettlement: Promise<void> = Promise.resolve();
   let requestedGeneration = 0;
   let completedGeneration = 0;
@@ -642,37 +585,6 @@ function createCompactionRecoveryController(
     return await promptPromise;
   };
 
-  const installPromptMode = (mode: CompactionRecoveryMode): void => {
-    if (disposed) {
-      return;
-    }
-    if (sessionState[RECOVERY_MODE_SYMBOL] === mode) {
-      return;
-    }
-    const promptWrapper: CompactionRecoverySessionLike["prompt"] = (content, promptOptions) => {
-      if (mode === "settled") {
-        return sendPromptWithCompactionRecovery(session, content, {
-          runtime: options.runtime,
-          sessionId,
-          promptOptions,
-        });
-      }
-      return sendPromptWithBackgroundCompactionRecovery(session, content, {
-        runtime: options.runtime,
-        sessionId,
-        promptOptions,
-      });
-    };
-    session.prompt = promptWrapper;
-    if (typeof originalDispose === "function") {
-      session.dispose = () => {
-        controller.dispose();
-        originalDispose();
-      };
-    }
-    sessionState[RECOVERY_MODE_SYMBOL] = mode;
-  };
-
   const controller: InstalledCompactionRecoveryController = {
     sessionId,
     runtime: options.runtime,
@@ -680,8 +592,11 @@ function createCompactionRecoveryController(
     getRequestedGeneration() {
       return requestedGeneration;
     },
-    installMode(mode) {
-      installPromptMode(mode);
+    getCompletedGeneration() {
+      return completedGeneration;
+    },
+    installMode(_mode) {
+      return;
     },
     async dispatchPrompt(
       content: readonly BrewvaPromptContentPart[],
@@ -725,11 +640,6 @@ function createCompactionRecoveryController(
       unsubscribe();
       pendingGenerationPromises.clear();
       removeController();
-      session.prompt = originalPrompt;
-      if (typeof originalDispose === "function") {
-        session.dispose = originalDispose;
-      }
-      delete sessionState[RECOVERY_MODE_SYMBOL];
     },
   };
 
@@ -748,71 +658,14 @@ function createCompactionRecoveryController(
     seenCompactionEventIds.add(event.id);
     requestedGeneration += 1;
     const generation = requestedGeneration;
-    const attempt = transitionCoordinator.getFailureCount(sessionId, "compaction_retry") + 1;
     const previousGeneration =
       pendingGenerationPromises.get(generation - 1)?.catch(() => undefined) ?? Promise.resolve();
-
-    if (transitionCoordinator.isBreakerOpen(sessionId, "compaction_retry")) {
-      completedGeneration = Math.max(completedGeneration, generation);
-      recordSessionTurnTransition(options.runtime, {
-        sessionId,
-        turn: event.turn,
-        reason: "compaction_retry",
-        status: "skipped",
-        attempt,
-        sourceEventId: event.id,
-        sourceEventType: event.type,
-        breakerOpen: true,
-      });
-      const skippedGeneration = previousGeneration.then(() => undefined);
-      pendingGenerationPromises.set(generation, skippedGeneration);
-      return;
-    }
-
-    recordSessionTurnTransition(options.runtime, {
-      sessionId,
-      turn: event.turn,
-      reason: "compaction_retry",
-      status: "entered",
-      attempt,
-      sourceEventId: event.id,
-      sourceEventType: event.type,
-    });
 
     const currentGeneration = previousGeneration.then(async () => {
       await latestPromptSettlement;
       await waitForCompactionToFinish(session);
       await session.waitForIdle?.();
-
-      try {
-        await dispatchResumePrompt({
-          session,
-          dispatchPrompt,
-        });
-        completedGeneration = Math.max(completedGeneration, generation);
-        recordSessionTurnTransition(options.runtime, {
-          sessionId,
-          turn: event.turn,
-          reason: "compaction_retry",
-          status: "completed",
-          attempt,
-          sourceEventId: event.id,
-          sourceEventType: event.type,
-        });
-      } catch (error) {
-        completedGeneration = Math.max(completedGeneration, generation);
-        recordSessionTurnTransition(options.runtime, {
-          sessionId,
-          turn: event.turn,
-          reason: "compaction_retry",
-          status: "failed",
-          attempt,
-          sourceEventId: event.id,
-          sourceEventType: event.type,
-          error: normalizeRuntimeError(error),
-        });
-        throw error;
-      }
+      completedGeneration = Math.max(completedGeneration, generation);
     });
 
     pendingGenerationPromises.set(generation, currentGeneration);
@@ -836,66 +689,96 @@ function getOrInstallCompactionRecovery(
   });
 }
 
-async function sendPromptWithBackgroundCompactionRecovery(
-  session: CompactionRecoverySessionLike,
-  prompt: readonly BrewvaPromptContentPart[],
-  options: CompactionRecoveryOptions = {},
-): Promise<void> {
-  const controller = getOrInstallCompactionRecovery(session, options);
-  if (controller) {
-    await controller.dispatchPrompt(prompt, options.promptOptions);
-    return;
-  }
-  await session.prompt(prompt, options.promptOptions);
-}
-
-async function handlePromptRecoveryFailure(input: {
-  runtime: BrewvaRuntime;
-  session: CompactionRecoverySessionLike;
-  sessionId: string;
-  parts: readonly BrewvaPromptContentPart[];
-  prompt: string;
-  promptOptions?: PromptDispatchOptions;
-  error: unknown;
-  controller?: InstalledCompactionRecoveryController;
-  afterGeneration: number;
-  operatorVisibleCheckpoint: number;
-}): Promise<void> {
-  const transitionCoordinator = getHostedTurnTransitionCoordinator(input.runtime);
-  let currentError: unknown = input.error;
-
-  for (const policy of PROMPT_RECOVERY_POLICIES) {
-    if (
-      transitionCoordinator.hasOperatorVisibleFactSince(
-        input.sessionId,
-        input.operatorVisibleCheckpoint,
-      )
-    ) {
-      throw currentError;
+export type PromptRecoveryPolicyApplicationResult =
+  | {
+      readonly outcome: "recovered";
+      readonly policy: ThreadLoopRecoveryPolicyName;
     }
+  | {
+      readonly outcome: "continued";
+      readonly policy: ThreadLoopRecoveryPolicyName;
+      readonly error: unknown;
+    }
+  | {
+      readonly outcome: "aborted";
+      readonly policy: ThreadLoopRecoveryPolicyName;
+      readonly error: unknown;
+    };
+
+export async function applyPromptRecoveryPolicy(input: {
+  readonly runtime: BrewvaRuntime;
+  readonly session: CompactionRecoverySessionLike;
+  readonly sessionId: string;
+  readonly policy: ThreadLoopRecoveryPolicyName;
+  readonly parts: readonly BrewvaPromptContentPart[];
+  readonly promptOptions?: PromptDispatchOptions;
+  readonly error: unknown;
+  readonly afterGeneration: number;
+  readonly operatorVisibleCheckpoint: number;
+  readonly dispatchPrompt: (
+    content: readonly BrewvaPromptContentPart[],
+    promptOptions?: PromptDispatchOptions,
+  ) => Promise<void>;
+}): Promise<PromptRecoveryPolicyApplicationResult> {
+  const policy = PROMPT_RECOVERY_POLICIES.find((candidate) => candidate.name === input.policy);
+  if (!policy) {
+    return {
+      outcome: "continued",
+      policy: input.policy,
+      error: input.error,
+    };
+  }
+  const transitionCoordinator = getHostedTurnTransitionCoordinator(input.runtime);
+  if (
+    transitionCoordinator.hasOperatorVisibleFactSince(
+      input.sessionId,
+      input.operatorVisibleCheckpoint,
+    )
+  ) {
+    return {
+      outcome: "aborted",
+      policy: input.policy,
+      error: input.error,
+    };
+  }
+  const controller = getOrInstallCompactionRecovery(input.session, {
+    runtime: input.runtime,
+    sessionId: input.sessionId,
+  });
+  try {
     const result = await policy.execute({
       runtime: input.runtime,
       session: input.session,
       sessionId: input.sessionId,
       parts: input.parts,
-      prompt: input.prompt,
+      prompt: buildBrewvaPromptText(input.parts),
       promptOptions: input.promptOptions,
-      error: currentError,
-      message: normalizeRuntimeError(currentError),
-      controller: input.controller,
+      error: input.error,
+      message: normalizeRuntimeError(input.error),
+      controller,
+      dispatchPrompt: input.dispatchPrompt,
       transitionCoordinator,
       afterGeneration: input.afterGeneration,
       operatorVisibleCheckpoint: input.operatorVisibleCheckpoint,
     });
     if (result.decision === "recovered") {
-      return;
+      return {
+        outcome: "recovered",
+        policy: input.policy,
+      };
     }
-    if ("nextError" in result) {
-      currentError = result.nextError;
-    }
+    return {
+      outcome: "continued",
+      policy: input.policy,
+      error: result.nextError ?? input.error,
+    };
+  } catch (error) {
+    return {
+      outcome: "aborted",
+      policy: input.policy,
+      error,
+    };
   }
-
-  throw currentError;
 }
 
 export function installSessionCompactionRecovery<T extends CompactionRecoverySessionLike>(
@@ -910,61 +793,32 @@ export function installSessionCompactionRecovery<T extends CompactionRecoverySes
   return session;
 }
 
-export async function sendPromptWithCompactionRecovery(
+export function getCompactionGenerationState(
+  session: CompactionRecoverySessionLike,
+  options: CompactionRecoveryOptions = {},
+): {
+  readonly requestedGeneration: number;
+  readonly completedGeneration: number;
+} {
+  const controller = getOrInstallCompactionRecovery(session, options);
+  return {
+    requestedGeneration: controller?.getRequestedGeneration() ?? 0,
+    completedGeneration: controller?.getCompletedGeneration() ?? 0,
+  };
+}
+
+export async function dispatchPromptWithCompactionSettlement(
   session: CompactionRecoverySessionLike,
   prompt: readonly BrewvaPromptContentPart[],
   options: CompactionRecoveryOptions = {},
 ): Promise<void> {
   const controller = getOrInstallCompactionRecovery(session, options);
   const afterGeneration = controller?.getRequestedGeneration() ?? 0;
-  const sessionId = options.sessionId?.trim() || normalizeSessionId(session);
-  const operatorVisibleCheckpoint =
-    options.runtime && sessionId
-      ? getHostedTurnTransitionCoordinator(options.runtime).captureOperatorVisibleCheckpoint(
-          sessionId,
-        )
-      : null;
-
-  try {
-    if (controller) {
-      await controller.dispatchPrompt(prompt, options.promptOptions);
-    } else {
-      await session.prompt(prompt, options.promptOptions);
-    }
-  } catch (error) {
-    let recovered = false;
-    if (options.runtime) {
-      if (
-        sessionId &&
-        (operatorVisibleCheckpoint === null ||
-          !getHostedTurnTransitionCoordinator(options.runtime).hasOperatorVisibleFactSince(
-            sessionId,
-            operatorVisibleCheckpoint,
-          ))
-      ) {
-        if (operatorVisibleCheckpoint === null) {
-          throw error;
-        }
-        await handlePromptRecoveryFailure({
-          runtime: options.runtime,
-          session,
-          sessionId,
-          parts: prompt,
-          prompt: buildBrewvaPromptText(prompt),
-          promptOptions: options.promptOptions,
-          error,
-          controller,
-          afterGeneration,
-          operatorVisibleCheckpoint,
-        });
-        recovered = true;
-      }
-    }
-    if (!recovered) {
-      throw error;
-    }
+  if (controller) {
+    await controller.dispatchPrompt(prompt, options.promptOptions);
+  } else {
+    await dispatchHostedPromptAttempt(session, prompt, options.promptOptions);
   }
-
   if (!controller) {
     return;
   }
@@ -975,15 +829,6 @@ export async function sendPromptWithCompactionRecovery(
     return;
   }
   await controller.waitForSettled(afterGeneration);
-}
-
-export function wrapSessionWithSettledPrompts<T extends CompactionRecoverySessionLike>(
-  session: T,
-  options: CompactionRecoveryOptions = {},
-): T {
-  const controller = getOrInstallCompactionRecovery(session, options);
-  controller?.installMode("settled");
-  return session;
 }
 
 export const COMPACTION_RECOVERY_TEST_ONLY = {

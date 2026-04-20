@@ -11,12 +11,12 @@ import { recordRuntimeEvent, resolveRuntimeEventLogPath } from "@brewva/brewva-r
 import type { HostedSessionLogger } from "../host/logger.js";
 import { createRuntimeTurnClockStore } from "../runtime-plugins/runtime-turn-clock.js";
 import { recordSessionShutdownIfMissing } from "../utils/runtime.js";
-import { SessionPromptCollectionError, collectSessionPromptOutput } from "./collect-output.js";
 import { createGatewaySession, type GatewaySessionResult } from "./create-session.js";
-import { preparePendingSessionReasoningRevertResume } from "./reasoning-revert-recovery.js";
+import { runHostedThreadLoop } from "./hosted-thread-loop.js";
 import { applySchedulePromptTrigger } from "./schedule-trigger.js";
 import { resolveWorkerSessionShutdownReceipt } from "./shutdown-receipts.js";
 import { TaskProgressWatchdog } from "./task-progress-watchdog.js";
+import { resolveThreadLoopProfile } from "./thread-loop-profiles.js";
 import { recordSessionTurnTransition } from "./turn-transition.js";
 import type { ParentToWorkerMessage, WorkerToParentMessage } from "./worker-protocol.js";
 import { resolveWorkerTestHarness, type ResolvedWorkerTestHarness } from "./worker-test-harness.js";
@@ -562,12 +562,14 @@ async function runTurn(input: {
     source: input.source,
     walReplayId: input.walReplayId,
   });
+  const profile = resolveThreadLoopProfile({
+    source: input.source,
+    triggerKind: input.trigger?.kind,
+    walReplayId: input.walReplayId,
+  });
 
-  let preparedReasoningResume: Awaited<
-    ReturnType<typeof preparePendingSessionReasoningRevertResume>
-  > | null = null;
   try {
-    if (input.trigger?.kind === "schedule") {
+    if (profile.allowsScheduleTrigger && input.trigger?.kind === "schedule") {
       const appliedTrigger = applySchedulePromptTrigger(
         sessionResult.runtime,
         input.agentSessionId,
@@ -586,7 +588,7 @@ async function runTurn(input: {
         });
       }
     }
-    if (typeof input.walReplayId === "string" && input.walReplayId.trim().length > 0) {
+    if (profile.requiresRecoveryWalReplay) {
       recordSessionTurnTransition(sessionResult.runtime, {
         sessionId: input.agentSessionId,
         turn: runtimeTurn,
@@ -597,20 +599,10 @@ async function runTurn(input: {
         sourceEventType: "recovery_wal_recovery_completed",
       });
     }
-    preparedReasoningResume = await preparePendingSessionReasoningRevertResume(
-      sessionResult.session,
-      {
-        runtime: sessionResult.runtime,
-        sessionId: input.agentSessionId,
-        turn: runtimeTurn,
-      },
-    );
-    const effectivePrompt = preparedReasoningResume?.prompt ?? input.prompt;
     const fakeAssistantText = workerTestHarness.fakeAssistantText;
     if (fakeAssistantText) {
-      preparedReasoningResume?.complete();
       recordFakeTurnLifecycle(input.agentSessionId, input.turnId, fakeAssistantText);
-      if (typeof input.walReplayId === "string" && input.walReplayId.trim().length > 0) {
+      if (profile.requiresRecoveryWalReplay) {
         recordSessionTurnTransition(sessionResult.runtime, {
           sessionId: input.agentSessionId,
           turn: runtimeTurn,
@@ -632,16 +624,33 @@ async function runTurn(input: {
       });
       return;
     }
-    const output = await collectSessionPromptOutput(sessionResult.session, effectivePrompt, {
+    const output = await runHostedThreadLoop({
+      session: sessionResult.session,
+      prompt: input.prompt,
+      profile,
       runtime: sessionResult.runtime,
       sessionId: input.agentSessionId,
       turnId: input.turnId,
+      runtimeTurn,
       onFrame: (frame) => {
         sendSessionWireFrame(requestedSessionId, frame);
       },
     });
-    preparedReasoningResume?.complete();
-    if (typeof input.walReplayId === "string" && input.walReplayId.trim().length > 0) {
+
+    if (output.status === "suspended") {
+      recordTurnCommittedReceipt({
+        agentSessionId: input.agentSessionId,
+        turnId: input.turnId,
+        runtimeTurn,
+        attemptId: "attempt-1",
+        status: "failed",
+        assistantText: "",
+        toolOutputs: [],
+      });
+      return;
+    }
+
+    if (profile.requiresRecoveryWalReplay) {
       recordSessionTurnTransition(sessionResult.runtime, {
         sessionId: input.agentSessionId,
         turn: runtimeTurn,
@@ -653,27 +662,41 @@ async function runTurn(input: {
       });
     }
 
-    recordTurnCommittedReceipt({
-      agentSessionId: input.agentSessionId,
-      turnId: input.turnId,
-      runtimeTurn,
-      attemptId: output.attemptId,
-      status: "completed",
-      assistantText: output.assistantText,
-      toolOutputs: output.toolOutputs,
-    });
+    if (output.status === "completed") {
+      recordTurnCommittedReceipt({
+        agentSessionId: input.agentSessionId,
+        turnId: input.turnId,
+        runtimeTurn,
+        attemptId: output.attemptId,
+        status: "completed",
+        assistantText: output.assistantText,
+        toolOutputs: [...output.toolOutputs],
+      });
+    } else if (output.status === "failed") {
+      recordTurnCommittedReceipt({
+        agentSessionId: input.agentSessionId,
+        turnId: input.turnId,
+        runtimeTurn,
+        attemptId: output.attemptId ?? "attempt-1",
+        status: "failed",
+        assistantText: output.assistantText ?? "",
+        toolOutputs: [...(output.toolOutputs ?? [])],
+      });
+    } else {
+      recordTurnCommittedReceipt({
+        agentSessionId: input.agentSessionId,
+        turnId: input.turnId,
+        runtimeTurn,
+        attemptId: "attempt-1",
+        status: "failed",
+        assistantText: "",
+        toolOutputs: [],
+      });
+    }
   } catch (error) {
     const isCancelled = pendingUserCancellationTurnId === input.turnId;
-    const collectionError =
-      error instanceof SessionPromptCollectionError
-        ? error
-        : new SessionPromptCollectionError(error instanceof Error ? error.message : String(error), {
-            attemptId: "attempt-1",
-            assistantText: "",
-            toolOutputs: [],
-          });
-    preparedReasoningResume?.fail(collectionError);
-    if (typeof input.walReplayId === "string" && input.walReplayId.trim().length > 0) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    if (profile.requiresRecoveryWalReplay) {
       recordSessionTurnTransition(sessionResult.runtime, {
         sessionId: input.agentSessionId,
         turn: runtimeTurn,
@@ -682,17 +705,17 @@ async function runTurn(input: {
         family: "recovery",
         sourceEventId: input.walReplayId,
         sourceEventType: "recovery_wal_recovery_completed",
-        error: collectionError.message,
+        error: errorMessage,
       });
     }
     recordTurnCommittedReceipt({
       agentSessionId: input.agentSessionId,
       turnId: input.turnId,
       runtimeTurn,
-      attemptId: collectionError.attemptId,
+      attemptId: "attempt-1",
       status: isCancelled ? "cancelled" : "failed",
-      assistantText: collectionError.assistantText,
-      toolOutputs: collectionError.toolOutputs,
+      assistantText: "",
+      toolOutputs: [],
     });
   } finally {
     if (pendingUserCancellationTurnId === input.turnId) {

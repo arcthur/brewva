@@ -178,9 +178,12 @@ It does not currently provide a stable contract for:
 - automatic partial-failure repair across delegated runs
 - default-path backpressure guarantees across the broader control plane
 
-Turn-level bounded recovery remains a possible future expansion, but it should
-be added only through a new focused RFC instead of being implied by current
-gateway or orchestration behavior.
+Gateway-internal hosted turn continuation is now a named control-plane loop,
+but it does not change the kernel transaction boundary. The hosted thread loop
+may recover, retry, compact-resume, reasoning-revert-resume, suspend, or fail a
+turn, while effect authority still stays at the receipt-bearing tool boundary.
+Kernel-level turn transactions or cross-agent compensation still require a new
+focused RFC.
 
 Platform-growth rule:
 
@@ -336,10 +339,19 @@ State visibility rule:
 
 Hosted recovery note:
 
+- `HostedThreadLoop` is the gateway-internal continuation owner above the
+  low-level model/tool loop
+- hosted entrypoints resolve an explicit profile such as `interactive`,
+  `print`, `channel`, `scheduled`, `heartbeat`, `wal_recovery`, or `subagent`
+  before running the loop
 - `session_turn_transition` is a rebuildable control-plane surface for hosted
   continuation, interruption, and bounded-recovery posture
 - it explains why hosted execution continued or retried; it does not authorize
   effects, approvals, rollback, or replay truth
+- `HostedTurnTransitionCoordinator` remains event-derived state and breaker
+  posture; it is not the hosted business-policy engine
+- thread-loop diagnostics are internal and sanitized; prompt text and provider
+  payloads do not become public runtime inspect state
 - runtime lifecycle aggregate composes hydration, approval, open tool calls,
   recovery posture, hosted transitions, and terminal receipts into one posture
   contract for host and gateway consumers

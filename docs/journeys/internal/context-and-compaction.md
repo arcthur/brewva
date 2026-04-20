@@ -181,9 +181,16 @@ flowchart TD
   - deterministic-first ordering lives in the recovery/context strategy path,
     not in the trigger ladder itself
 - prompt failure recovery:
-  - ordered hosted policy chain: deterministic context reduction, then
-    capability-gated output budget escalation on the same prompt, then bounded
-    provider-fallback retry, then bounded max-output recovery
+  - `HostedThreadLoop` owns recovery decision ordering from a turn-local state
+    projection instead of letting policy helpers recursively dispatch prompts
+  - deterministic context reduction maps to
+    `wait_for_compaction_settlement` and does not dispatch an extra resume
+    prompt
+  - active compaction that interrupts a turn and returns no assistant answer
+    maps to `compact_resume_stream`
+  - capability-gated output budget escalation may continue on the same prompt
+  - bounded provider-fallback retry and bounded max-output recovery abort
+    remaining policies when their breaker or failure path opens
 - outbound reduction:
   - no new durable `context_*` event family is emitted for transient outbound
     reduction

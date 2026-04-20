@@ -73,6 +73,7 @@ export interface HostedTransitionSnapshot {
   latest: SessionTurnTransitionPayload | null;
   pendingFamily: HostedTransitionFamily | null;
   activeAttemptSequence: number | null;
+  activeReasonCounts: Partial<Record<TurnTransitionReason, number>>;
   operatorVisibleFactGeneration: number;
   consecutiveFailuresByReason: Partial<Record<BreakerManagedReason, number>>;
   breakerOpenByReason: Partial<Record<BreakerManagedReason, boolean>>;
@@ -175,6 +176,7 @@ function cloneSnapshot(state: HostedSessionTransitionState): HostedTransitionSna
     latest: state.latest ? { ...state.latest } : null,
     pendingFamily: state.pendingFamily,
     activeAttemptSequence: state.activeAttemptSequence,
+    activeReasonCounts: { ...state.activeReasonCounts },
     operatorVisibleFactGeneration: state.operatorVisibleFactGeneration,
     consecutiveFailuresByReason: { ...state.consecutiveFailuresByReason },
     breakerOpenByReason: { ...state.breakerOpenByReason },

@@ -6,8 +6,9 @@ import {
   type BrewvaPromptSessionEvent,
 } from "@brewva/brewva-substrate";
 import { registerProviderRequestRecovery } from "../../../packages/brewva-gateway/src/runtime-plugins/provider-request-recovery.js";
-import { collectSessionPromptOutput } from "../../../packages/brewva-gateway/src/session/collect-output.js";
 import { COMPACTION_RECOVERY_TEST_ONLY } from "../../../packages/brewva-gateway/src/session/compaction-recovery.js";
+import { runHostedThreadLoop } from "../../../packages/brewva-gateway/src/session/hosted-thread-loop.js";
+import { getThreadLoopProfile } from "../../../packages/brewva-gateway/src/session/thread-loop-profiles.js";
 import { createMockRuntimePluginApi, invokeHandler } from "../../helpers/runtime-plugin.js";
 import { createRuntimeFixture } from "../../helpers/runtime.js";
 
@@ -111,18 +112,17 @@ describe("output budget recovery chain", () => {
       },
     };
 
-    const output = await collectSessionPromptOutput(
-      session as unknown as Parameters<typeof collectSessionPromptOutput>[0],
-      "recover this answer",
-      {
-        runtime,
-        sessionId,
-        turnId: "turn-output-budget",
-        onFrame: (frame) => {
-          frames.push(frame);
-        },
+    const output = await runHostedThreadLoop({
+      session: session as unknown as Parameters<typeof runHostedThreadLoop>[0]["session"],
+      prompt: "recover this answer",
+      profile: getThreadLoopProfile("interactive"),
+      runtime,
+      sessionId,
+      turnId: "turn-output-budget",
+      onFrame: (frame) => {
+        frames.push(frame);
       },
-    );
+    });
 
     expect(promptedMessages).toEqual([
       "recover this answer",
@@ -135,8 +135,22 @@ describe("output budget recovery chain", () => {
         max_tokens: 16_384,
       },
     ]);
+    expect(output.status).toBe("completed");
+    if (output.status !== "completed") {
+      return;
+    }
     expect(output.assistantText).toBe("final concise answer");
     expect(output.attemptId).toBe("attempt-3");
+    expect(output.diagnostic.recoveryHistory).toEqual([
+      expect.objectContaining({
+        policy: "output_budget_escalation",
+        outcome: "continued",
+      }),
+      expect.objectContaining({
+        policy: "max_output_recovery",
+        outcome: "recovered",
+      }),
+    ]);
     expect(frames).toEqual(
       expect.arrayContaining([
         {

@@ -95,8 +95,21 @@ function createFakeBundle(
           query() {
             return [];
           },
+          queryStructured() {
+            return [];
+          },
+          subscribe() {
+            return () => {};
+          },
           listReplaySessions() {
             return replaySessions;
+          },
+        },
+        reasoning: {
+          getActiveState() {
+            return {
+              latestRevert: null,
+            };
           },
         },
         sessionWire: {

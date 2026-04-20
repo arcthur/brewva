@@ -15,6 +15,8 @@ import {
   type BrewvaPromptSessionEvent,
 } from "@brewva/brewva-substrate";
 import { collectSessionPromptOutput } from "../../../packages/brewva-gateway/src/session/collect-output.js";
+import { runHostedThreadLoop } from "../../../packages/brewva-gateway/src/session/hosted-thread-loop.js";
+import { resolveThreadLoopProfile } from "../../../packages/brewva-gateway/src/session/thread-loop-profiles.js";
 
 type SessionLike = {
   subscribe: (listener: (event: BrewvaPromptSessionEvent) => void) => () => void;
@@ -230,7 +232,7 @@ describe("gateway collect output", () => {
     expect(output.toolOutputs[0]?.text).toContain("status: failed");
   });
 
-  test("given session_compact during the turn, when collecting output, then gateway waits for the resumed turn", async () => {
+  test("given session_compact during the attempt, when hosted thread loop runs, then it resumes from compacted context", async () => {
     const eventBridge = createRuntimeEventBridge();
     recordTurnInput(eventBridge, "agent-session-1", "turn-compact");
     const sentMessages: string[] = [];
@@ -265,7 +267,6 @@ describe("gateway collect output", () => {
           });
           return;
         }
-
         listener?.({
           type: "message_end",
           message: {
@@ -280,24 +281,25 @@ describe("gateway collect output", () => {
     };
 
     const frames: SessionWireFrame[] = [];
-    const output = await collectSessionPromptOutput(
-      session as unknown as Parameters<typeof collectSessionPromptOutput>[0],
-      "initial prompt",
-      {
-        runtime: eventBridge.runtime as any,
-        sessionId: "agent-session-1",
-        turnId: "turn-compact",
-        onFrame: (frame) => {
-          frames.push(frame);
-        },
+    const output = await runHostedThreadLoop({
+      session: session as unknown as Parameters<typeof runHostedThreadLoop>[0]["session"],
+      prompt: "initial prompt",
+      profile: resolveThreadLoopProfile({ source: "channel" }),
+      runtime: eventBridge.runtime as any,
+      sessionId: "agent-session-1",
+      turnId: "turn-compact",
+      runtimeTurn: 1,
+      onFrame: (frame) => {
+        frames.push(frame);
       },
-    );
+    });
 
+    expect(output.status).toBe("completed");
     expect(sentMessages).toHaveLength(2);
     expect(sentMessages[0]).toBe("initial prompt");
-    expect(sentMessages[1]).toContain("Resume the interrupted turn");
-    expect(output.assistantText).toBe("resumed answer");
-    expect(output.attemptId).toBe("attempt-2");
+    expect(sentMessages[1]).toContain("Context compaction completed");
+    expect(output.status === "completed" ? output.assistantText : "").toBe("resumed answer");
+    expect(output.status === "completed" ? output.attemptId : "").toBe("attempt-2");
     expect(frames).toEqual(
       expect.arrayContaining([
         {
@@ -355,7 +357,82 @@ describe("gateway collect output", () => {
     );
   });
 
-  test("given reasoning_revert during the turn, when collecting output, then the current turn owner resumes inline from the restored branch", async () => {
+  test("given a failed compact resume attempt with an open breaker, when hosted thread loop fails, then it preserves the active attempt id", async () => {
+    const eventBridge = createRuntimeEventBridge();
+    const sessionId = "agent-session-compact-breaker";
+    recordTurnInput(eventBridge, sessionId, "turn-compact-breaker");
+    let listener: ((event: BrewvaPromptSessionEvent) => void) | undefined;
+    let promptCount = 0;
+    const session: SessionLike = {
+      subscribe(next) {
+        listener = next;
+        return () => {
+          listener = undefined;
+        };
+      },
+      sessionManager: {
+        getSessionId: () => sessionId,
+      },
+      async prompt(): Promise<void> {
+        promptCount += 1;
+        if (promptCount === 1) {
+          listener?.({
+            type: "tool_execution_end",
+            toolCallId: "tc-compact-breaker",
+            toolName: "session_compact",
+            result: "requested",
+            isError: false,
+          } as BrewvaPromptSessionEvent);
+          recordRuntimeEvent(eventBridge.runtime, {
+            sessionId,
+            type: "session_compact",
+            payload: {
+              entryId: "comp-breaker-1",
+            },
+          });
+          return;
+        }
+
+        recordRuntimeEvent(eventBridge.runtime, {
+          sessionId,
+          type: "session_turn_transition",
+          payload: {
+            reason: "provider_fallback_retry",
+            status: "skipped",
+            sequence: 1,
+            family: "recovery",
+            attempt: 2,
+            sourceEventId: null,
+            sourceEventType: null,
+            error: null,
+            breakerOpen: true,
+            model: null,
+          },
+        });
+        throw new Error("compact resume failed after breaker opened");
+      },
+      async waitForIdle(): Promise<void> {
+        return;
+      },
+    };
+
+    const output = await runHostedThreadLoop({
+      session: session as unknown as Parameters<typeof runHostedThreadLoop>[0]["session"],
+      prompt: "initial prompt",
+      profile: resolveThreadLoopProfile({ source: "channel" }),
+      runtime: eventBridge.runtime as any,
+      sessionId,
+      turnId: "turn-compact-breaker",
+      runtimeTurn: 1,
+    });
+
+    expect(output.status).toBe("failed");
+    expect(output.status === "failed" ? output.attemptId : "").toBe("attempt-2");
+    expect(output.diagnostic.attemptSequence).toBe(2);
+    expect(output.diagnostic.lastDecision).toBe("breaker_open");
+  });
+
+  test("given reasoning_revert during the turn, when hosted thread loop runs, then the owner resumes inline from the restored branch", async () => {
     const eventBridge = createRuntimeEventBridge();
     const sessionId = "agent-session-reasoning-resume";
     recordTurnInput(eventBridge, sessionId, "turn-reasoning-resume");
@@ -438,24 +515,25 @@ describe("gateway collect output", () => {
     };
 
     const frames: SessionWireFrame[] = [];
-    const output = await collectSessionPromptOutput(
-      session as unknown as Parameters<typeof collectSessionPromptOutput>[0],
-      "initial prompt",
-      {
-        runtime: eventBridge.runtime as any,
-        sessionId,
-        turnId: "turn-reasoning-resume",
-        onFrame: (frame) => {
-          frames.push(frame);
-        },
+    const output = await runHostedThreadLoop({
+      session: session as unknown as Parameters<typeof runHostedThreadLoop>[0]["session"],
+      prompt: "initial prompt",
+      profile: resolveThreadLoopProfile({ source: "channel" }),
+      runtime: eventBridge.runtime as any,
+      sessionId,
+      turnId: "turn-reasoning-resume",
+      runtimeTurn: 1,
+      onFrame: (frame) => {
+        frames.push(frame);
       },
-    );
+    });
 
+    expect(output.status).toBe("completed");
     expect(sentMessages).toHaveLength(2);
     expect(sentMessages[0]).toBe("initial prompt");
     expect(sentMessages[1]).toContain("Reasoning branch revert completed");
-    expect(output.assistantText).toBe("restored answer");
-    expect(output.attemptId).toBe("attempt-2");
+    expect(output.status === "completed" ? output.assistantText : "").toBe("restored answer");
+    expect(output.status === "completed" ? output.attemptId : "").toBe("attempt-2");
     expect(branchWithSummaryCalls).toEqual([
       expect.objectContaining({
         targetLeafEntryId: "leaf-restore-a",
@@ -470,19 +548,6 @@ describe("gateway collect output", () => {
     expect(replacedMessages).toEqual([rebuiltMessages]);
     expect(frames).toEqual(
       expect.arrayContaining([
-        {
-          schema: "brewva.session-wire.v2",
-          sessionId,
-          type: "attempt.superseded",
-          turnId: "turn-reasoning-resume",
-          attemptId: "attempt-1",
-          supersededByAttemptId: "attempt-2",
-          reason: "reasoning_revert_resume",
-          source: "live",
-          durability: "cache",
-          frameId: expect.any(String),
-          ts: expect.any(Number),
-        },
         {
           schema: "brewva.session-wire.v2",
           sessionId,

@@ -1,15 +1,9 @@
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { BrewvaRuntime, type ToolOutputView } from "@brewva/brewva-runtime";
 import type { TurnEnvelope, TurnPart } from "@brewva/brewva-runtime/channels";
 import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
-import type { BrewvaPromptSessionEvent } from "@brewva/brewva-substrate";
-import {
-  resolveToolDisplayStatus,
-  resolveToolDisplayText,
-  resolveToolDisplayVerdict,
-} from "../runtime-plugins/index.js";
-import { sendPromptWithCompactionRecovery } from "../session/compaction-recovery.js";
 import type { SubscribablePromptSession } from "../session/contracts.js";
-import { preparePendingSessionReasoningRevertResume } from "../session/reasoning-revert-recovery.js";
+import { runHostedThreadLoop } from "../session/hosted-thread-loop.js";
+import { resolveThreadLoopProfile } from "../session/thread-loop-profiles.js";
 import { toErrorMessage } from "../utils/errors.js";
 import { clampText } from "../utils/runtime.js";
 import type { AgentRegistry } from "./agent-registry.js";
@@ -45,88 +39,24 @@ function normalizeText(value: string | undefined): string {
   return (value ?? "").trim();
 }
 
-function extractMessageRole(message: unknown): string | undefined {
-  if (!message || typeof message !== "object") return undefined;
-  const role = (message as { role?: unknown }).role;
-  return typeof role === "string" ? role : undefined;
-}
-
-function extractMessageText(message: unknown): string {
-  if (!message || typeof message !== "object") return "";
-  const content = (message as { content?: unknown }).content;
-  if (!Array.isArray(content)) return "";
-
-  const parts: string[] = [];
-  for (const item of content) {
-    if (!item || typeof item !== "object") continue;
-    const text = (item as { text?: unknown }).text;
-    if (typeof text === "string" && text.length > 0) {
-      parts.push(text);
-    }
-  }
-  return parts.join("");
-}
-
-function asToolExecutionEndEvent(event: BrewvaPromptSessionEvent): {
-  toolCallId: string;
-  toolName: string;
-  isError: boolean;
-  result: unknown;
-} | null {
-  if (event.type !== "tool_execution_end") {
-    return null;
-  }
-  const candidate = event as {
-    toolCallId?: unknown;
-    toolName?: unknown;
-    isError?: unknown;
-    result?: unknown;
-  };
-  if (typeof candidate.toolCallId !== "string" || !candidate.toolCallId.trim()) {
-    return null;
-  }
-  if (typeof candidate.toolName !== "string" || !candidate.toolName.trim()) {
-    return null;
-  }
+function formatChannelToolTurnOutput(input: ToolOutputView): ChannelToolTurnOutput {
+  const status =
+    input.verdict === "fail"
+      ? "failed"
+      : input.verdict === "inconclusive"
+        ? "inconclusive"
+        : "completed";
+  const detail = clampText(input.text, 1200);
+  const toolCallId = String(input.toolCallId);
+  const toolName = String(input.toolName);
   return {
-    toolCallId: candidate.toolCallId.trim(),
-    toolName: candidate.toolName.trim(),
-    isError: candidate.isError === true,
-    result: candidate.result,
-  };
-}
-
-function formatToolTurnOutput(input: {
-  toolCallId: string;
-  toolName: string;
-  isError: boolean;
-  result: unknown;
-}): ChannelToolTurnOutput {
-  const verdict = resolveToolDisplayVerdict({
+    toolCallId,
+    toolName,
     isError: input.isError,
-    result: input.result,
-  });
-  const status = resolveToolDisplayStatus({
-    isError: input.isError,
-    result: input.result,
-  });
-  const detail = clampText(
-    resolveToolDisplayText({
-      toolName: input.toolName,
-      isError: input.isError,
-      result: input.result,
-    }),
-    1200,
-  );
-  const text = detail
-    ? `Tool ${input.toolName} (${input.toolCallId}) ${status}\n${detail}`
-    : `Tool ${input.toolName} (${input.toolCallId}) ${status}`;
-  return {
-    toolCallId: input.toolCallId,
-    toolName: input.toolName,
-    isError: input.isError,
-    verdict,
-    text,
+    verdict: input.verdict,
+    text: detail
+      ? `Tool ${toolName} (${toolCallId}) ${status}\n${detail}`
+      : `Tool ${toolName} (${toolCallId}) ${status}`,
   };
 }
 
@@ -242,70 +172,21 @@ export async function collectPromptTurnOutputs(
     turnId?: string;
   },
 ): Promise<PromptTurnOutputs> {
-  let latestAssistantText = "";
-  const toolOutputs: ChannelToolTurnOutput[] = [];
-  const seenToolCallIds = new Set<string>();
-
-  const unsubscribe = session.subscribe((event: BrewvaPromptSessionEvent) => {
-    const toolEvent = asToolExecutionEndEvent(event);
-    if (toolEvent) {
-      if (seenToolCallIds.has(toolEvent.toolCallId)) {
-        return;
-      }
-      seenToolCallIds.add(toolEvent.toolCallId);
-      toolOutputs.push(formatToolTurnOutput(toolEvent));
-      return;
-    }
-
-    if (event.type === "message_end") {
-      const message = (event as { message?: unknown }).message;
-      if (extractMessageRole(message) !== "assistant") return;
-      const text = normalizeText(extractMessageText(message));
-      if (text) {
-        latestAssistantText = text;
-      }
-    }
+  const output = await runHostedThreadLoop({
+    session,
+    prompt,
+    profile: resolveThreadLoopProfile({ source: "channel" }),
+    runtime: options?.runtime,
+    sessionId: options?.sessionId,
+    turnId: options?.turnId,
   });
-
-  try {
-    let activePrompt = prompt;
-    let preparedReasoningResume: Awaited<
-      ReturnType<typeof preparePendingSessionReasoningRevertResume>
-    > | null = null;
-    for (;;) {
-      try {
-        await sendPromptWithCompactionRecovery(session, [{ type: "text", text: activePrompt }], {
-          runtime: options?.runtime,
-          sessionId: options?.sessionId,
-        });
-        preparedReasoningResume?.complete();
-        return {
-          assistantText: latestAssistantText,
-          toolOutputs,
-        };
-      } catch (error) {
-        preparedReasoningResume?.fail(error);
-        preparedReasoningResume = null;
-        const pendingReasoningResume =
-          options?.runtime && options.sessionId
-            ? await preparePendingSessionReasoningRevertResume(session, {
-                runtime: options.runtime,
-                sessionId: options.sessionId,
-              })
-            : null;
-        if (!pendingReasoningResume) {
-          throw error;
-        }
-        latestAssistantText = "";
-        toolOutputs.length = 0;
-        seenToolCallIds.clear();
-        preparedReasoningResume = pendingReasoningResume;
-        activePrompt = pendingReasoningResume.prompt;
-      }
-    }
-  } finally {
-    unsubscribe();
+  if (output.status !== "completed") {
+    throw new Error(`channel_thread_loop_${output.status}`);
   }
+  return {
+    assistantText: output.assistantText,
+    toolOutputs: output.toolOutputs.map(formatChannelToolTurnOutput),
+  };
 }
 
 export function createChannelAgentDispatch(input: {

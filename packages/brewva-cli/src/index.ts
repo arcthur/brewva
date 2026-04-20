@@ -10,7 +10,6 @@ import {
   recordSessionTurnTransition,
   runChannelMode,
   runGatewayCli,
-  wrapSessionWithSettledPrompts,
 } from "@brewva/brewva-gateway";
 import { DEFAULT_HOSTED_ROUTING_SCOPES } from "@brewva/brewva-gateway/host";
 import {
@@ -1031,7 +1030,7 @@ async function run(): Promise<void> {
   let sessionResult = await openEmbeddedSession(parsed.sessionId);
   let session = sessionResult.session;
   let orchestration = sessionResult.orchestration;
-  const printSession = wrapSessionWithSettledPrompts(session, { runtime });
+  const printSession = session;
 
   const getSessionId = (): string => session.sessionManager.getSessionId();
   const initialSessionId = getSessionId();
@@ -1147,12 +1146,14 @@ async function run(): Promise<void> {
       await runCliPrintSession(printSession, {
         mode: "json",
         initialMessage,
+        runtime,
       });
       emitJsonBundle = true;
     } else {
       await runCliPrintSession(printSession, {
         mode: "text",
         initialMessage,
+        runtime,
       });
       printCostSummary(getSessionId(), runtime);
     }

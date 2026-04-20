@@ -20,10 +20,13 @@ import {
   type ToolOutputView,
 } from "@brewva/brewva-runtime";
 import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
-import type { BrewvaPromptSessionEvent } from "@brewva/brewva-substrate";
-import { sendPromptWithCompactionRecovery } from "./compaction-recovery.js";
+import type {
+  BrewvaPromptContentPart,
+  BrewvaPromptOptions,
+  BrewvaPromptSessionEvent,
+} from "@brewva/brewva-substrate";
+import { dispatchPromptWithCompactionSettlement } from "./compaction-recovery.js";
 import type { SubscribablePromptSession } from "./contracts.js";
-import { preparePendingSessionReasoningRevertResume } from "./reasoning-revert-recovery.js";
 import { ToolAttemptBindingRegistry, formatAttemptId } from "./tool-attempt-binding.js";
 import { getHostedTurnTransitionCoordinator } from "./turn-transition.js";
 
@@ -32,6 +35,8 @@ export interface SessionPromptOutput {
   toolOutputs: ToolOutputView[];
   attemptId: string;
 }
+
+export type SessionPromptInput = string | readonly BrewvaPromptContentPart[];
 
 export class SessionPromptCollectionError extends Error {
   readonly attemptId: string;
@@ -59,6 +64,8 @@ export interface CollectSessionPromptOutputOptions {
   runtime?: BrewvaRuntime;
   sessionId?: string;
   turnId?: string;
+  attemptReason?: LiveAttemptReason;
+  promptOptions?: BrewvaPromptOptions;
 }
 
 export interface CollectSessionPromptOutputSession extends SubscribablePromptSession {}
@@ -86,6 +93,10 @@ function normalizeAttemptSequence(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) && value > 0
     ? Math.trunc(value)
     : null;
+}
+
+function normalizePromptInput(input: SessionPromptInput): readonly BrewvaPromptContentPart[] {
+  return typeof input === "string" ? [{ type: "text", text: input }] : input;
 }
 
 function extractMessageRole(message: unknown): string | undefined {
@@ -278,9 +289,9 @@ function buildLiveToolFrameBase(input: {
   };
 }
 
-export async function collectSessionPromptOutput(
+export async function streamAndCollectAttempt(
   session: CollectSessionPromptOutputSession,
-  prompt: string,
+  prompt: SessionPromptInput,
   options?: CollectSessionPromptOutputOptions,
 ): Promise<SessionPromptOutput> {
   const normalizedSessionId = options?.sessionId?.trim();
@@ -448,7 +459,10 @@ export async function collectSessionPromptOutput(
   };
 
   toolAttemptBindings.beginTurn(currentAttemptSequence);
-  beginAttempt("initial", resolveAuthoritativeCurrentAttemptSequence() ?? 1);
+  beginAttempt(
+    options?.attemptReason ?? "initial",
+    resolveAuthoritativeCurrentAttemptSequence() ?? 1,
+  );
 
   const unsubscribe = session.subscribe((event: BrewvaPromptSessionEvent) => {
     const assistantDelta = asAssistantDelta(event);
@@ -661,51 +675,37 @@ export async function collectSessionPromptOutput(
         })
       : undefined;
 
-  let activePrompt = prompt;
-  let preparedReasoningResume: Awaited<
-    ReturnType<typeof preparePendingSessionReasoningRevertResume>
-  > | null = null;
-
   try {
-    for (;;) {
-      try {
-        await sendPromptWithCompactionRecovery(session, [{ type: "text", text: activePrompt }], {
-          runtime: options?.runtime,
-          sessionId: options?.sessionId,
-        });
-        preparedReasoningResume?.complete();
-        return {
-          assistantText: latestAssistantText,
-          toolOutputs: currentCommittedToolOutputs(),
-          attemptId: currentAttemptId,
-        };
-      } catch (error) {
-        preparedReasoningResume?.fail(error);
-        preparedReasoningResume = null;
-        const pendingReasoningResume =
-          options?.runtime && sessionId
-            ? await preparePendingSessionReasoningRevertResume(session, {
-                runtime: options.runtime,
-                sessionId,
-              })
-            : null;
-        if (!pendingReasoningResume) {
-          const message = error instanceof Error ? error.message : String(error);
-          throw new SessionPromptCollectionError(message, {
-            assistantText: latestAssistantText,
-            toolOutputs: currentCommittedToolOutputs(),
-            attemptId: currentAttemptId,
-          });
-        }
-        preparedReasoningResume = pendingReasoningResume;
-        activePrompt = pendingReasoningResume.prompt;
-      }
-    }
+    await dispatchPromptWithCompactionSettlement(session, normalizePromptInput(prompt), {
+      runtime: options?.runtime,
+      sessionId: options?.sessionId,
+      promptOptions: options?.promptOptions,
+    });
+    return {
+      assistantText: latestAssistantText,
+      toolOutputs: currentCommittedToolOutputs(),
+      attemptId: currentAttemptId,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new SessionPromptCollectionError(message, {
+      assistantText: latestAssistantText,
+      toolOutputs: currentCommittedToolOutputs(),
+      attemptId: currentAttemptId,
+    });
   } finally {
     toolAttemptBindings.clearTurn();
     unsubscribe();
     unsubscribeRuntimeEvents?.();
   }
+}
+
+export async function collectSessionPromptOutput(
+  session: CollectSessionPromptOutputSession,
+  prompt: SessionPromptInput,
+  options?: CollectSessionPromptOutputOptions,
+): Promise<SessionPromptOutput> {
+  return streamAndCollectAttempt(session, prompt, options);
 }
 
 export const COLLECT_OUTPUT_TEST_ONLY = {

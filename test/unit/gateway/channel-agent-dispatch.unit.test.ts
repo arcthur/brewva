@@ -239,6 +239,12 @@ describe("channel agent dispatch", () => {
           throw new Error("turn aborted for reasoning revert");
         }
         listener?.({
+          type: "tool_execution_start",
+          toolCallId: "tool-current-2",
+          toolName: "read",
+          args: { path: "current.txt" },
+        } as BrewvaPromptSessionEvent);
+        listener?.({
           type: "tool_execution_end",
           toolCallId: "tool-current-2",
           toolName: "read",

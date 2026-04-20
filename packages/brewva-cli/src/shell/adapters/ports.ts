@@ -7,6 +7,7 @@ import {
   collectOpenSessionQuestions,
   resolveOpenSessionQuestion,
 } from "@brewva/brewva-gateway";
+import { runHostedPromptTurn } from "@brewva/brewva-gateway/host";
 import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import type {
   CliShellSessionBundle,
@@ -116,8 +117,25 @@ export function createSessionViewPort(bundle: CliShellSessionBundle): SessionVie
     getThinkingLevel() {
       return bundle.session.thinkingLevel ?? "off";
     },
-    prompt(parts, options) {
-      return bundle.session.prompt(parts, options);
+    async prompt(parts, options) {
+      if (
+        bundle.session.isStreaming ||
+        options?.streamingBehavior ||
+        options?.source !== "interactive"
+      ) {
+        await bundle.session.prompt(parts, options);
+        return;
+      }
+      const output = await runHostedPromptTurn({
+        session: bundle.session,
+        parts,
+        source: "interactive",
+        runtime: bundle.runtime,
+        sessionId: bundle.session.sessionManager.getSessionId(),
+      });
+      if (output.status === "failed") {
+        throw output.error instanceof Error ? output.error : new Error(String(output.error));
+      }
     },
     waitForIdle() {
       return bundle.session.waitForIdle();
@@ -180,7 +198,16 @@ export function createOperatorSurfacePort(input: {
           streamingBehavior: "followUp",
         });
       } else {
-        await bundle.session.prompt([{ type: "text", text: prompt }], { source: "interactive" });
+        const output = await runHostedPromptTurn({
+          session: bundle.session,
+          parts: [{ type: "text", text: prompt }],
+          source: "interactive",
+          runtime: bundle.runtime,
+          sessionId,
+        });
+        if (output.status === "failed") {
+          throw output.error instanceof Error ? output.error : new Error(String(output.error));
+        }
       }
       recordRuntimeEvent(bundle.runtime, {
         sessionId,

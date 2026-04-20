@@ -28,9 +28,10 @@ import type {
   SubagentStartResult,
   SubagentStatusResult,
 } from "@brewva/brewva-tools";
-import { collectSessionPromptOutput } from "../session/collect-output.js";
 import type { SubscribablePromptSession } from "../session/contracts.js";
+import { runHostedThreadLoop } from "../session/hosted-thread-loop.js";
 import { resolveSubagentSessionShutdownReason } from "../session/shutdown-receipts.js";
+import { resolveThreadLoopProfile } from "../session/thread-loop-profiles.js";
 import { recordSessionTurnTransition } from "../session/turn-transition.js";
 import { recordSessionShutdownIfMissing } from "../utils/runtime.js";
 import type { HostedSubagentBackgroundController } from "./background-controller.js";
@@ -831,10 +832,16 @@ export function createHostedSubagentAdapter(
           promptOverride: executionPlan.prompt,
           skill: skillDocument,
         });
-        const output = await collectSessionPromptOutput(child.session, prompt, {
+        const output = await runHostedThreadLoop({
+          session: child.session,
+          prompt,
+          profile: resolveThreadLoopProfile({ source: "subagent" }),
           runtime: child.runtime,
           sessionId: childSessionId,
         });
+        if (output.status !== "completed") {
+          throw new Error(`subagent_thread_loop_${output.status}`);
+        }
         const childCostSummary = child.runtime.inspect.cost.getSummary(childSessionId);
         aggregateChildCost(options.runtime, input.parentSessionId, childCostSummary);
         childCostAggregated = true;

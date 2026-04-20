@@ -41,6 +41,7 @@ import {
   BrewvaToolResult,
   type BrewvaToolUiPort,
 } from "@brewva/brewva-substrate";
+import { HOSTED_PROMPT_ATTEMPT_DISPATCH } from "../session/hosted-prompt-attempt.js";
 import {
   deriveSessionPhaseFromRuntimeFactFrame,
   deriveSessionPhaseFromRuntimeFactHistory,
@@ -928,6 +929,13 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
   }
 
   async prompt(
+    parts: readonly BrewvaPromptContentPart[],
+    options?: BrewvaPromptOptions,
+  ): Promise<void> {
+    await this[HOSTED_PROMPT_ATTEMPT_DISPATCH](parts, options);
+  }
+
+  async [HOSTED_PROMPT_ATTEMPT_DISPATCH](
     parts: readonly BrewvaPromptContentPart[],
     options?: BrewvaPromptOptions,
   ): Promise<void> {
