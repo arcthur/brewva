@@ -4,7 +4,7 @@
 
 - Status: `promoted`
 - Owner: runtime and gateway maintainers
-- Last reviewed: `2026-04-18`
+- Last reviewed: `2026-04-21`
 - Promotion target:
   - `docs/architecture/system-architecture.md`
   - `docs/reference/context-composer.md`
@@ -72,11 +72,31 @@ working_state}`.
    `guarded_supplemental`, and composer policy blocks do not widen into a second
    pseudo-source taxonomy.
 
+## Convergence Constraint
+
+The promoted contract is already dense enough. Future work should not add
+context-governance concepts to explain provider behavior that can instead be
+enforced by construction, registry validation, or contract tests.
+
+The provider descriptor field set should be treated as saturated. New fields,
+profile modes, admission lanes, or supplemental families need a stronger bar
+than "this clarifies the RFC": they should remove an existing convention,
+collapse a documentation-only rule into machine enforcement, or replace a wider
+mechanism.
+
+Illegal descriptor combinations should fail before they become hosted prompt
+behavior. Prefer typed source definitions or narrowly scoped constructor helpers
+that make valid plane / budget / authority / preservation combinations easy to
+choose and invalid combinations hard to express.
+
 ## Validation Status
 
 Current contract and regression coverage include:
 
 - provider-descriptor inspection through `runtime.inspect.context.listProviders()`
+- branded provider construction through `defineContextSourceProvider(...)`
+- registry fail-closed coverage for unconstructed providers and spoofed illegal
+  plane / authority / budget / preservation combinations
 - arena coverage that distinguishes `collectionOrder` from
   `selectionPriority`
 - recovery-baseline tests that keep primary admission and inspect on the same

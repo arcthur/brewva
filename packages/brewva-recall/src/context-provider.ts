@@ -1,8 +1,9 @@
-import type { ContextSourceProvider } from "@brewva/brewva-runtime";
 import {
   CONTEXT_SOURCES,
   RECALL_RESULTS_SURFACED_EVENT_TYPE,
   type BrewvaHostedRuntimePort,
+  type ContextSourceProvider,
+  defineContextSourceProvider,
 } from "@brewva/brewva-runtime";
 import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import { getOrCreateRecallBroker } from "./broker.js";
@@ -32,19 +33,12 @@ export function createRecallContextProvider(input: {
   scope?: RecallScope;
 }): ContextSourceProvider {
   const broker = getOrCreateRecallBroker(input.runtime);
-  return {
+  return defineContextSourceProvider({
+    kind: "advisory_recall",
     source: CONTEXT_SOURCES.recallBroker,
-    plane: "advisory_recall",
-    authorityTier: "advisory_recall",
-    admissionLane: "primary_registry",
-    category: "narrative",
-    budgetClass: "recall",
     collectionOrder: 14,
     selectionPriority: 14,
     readsFrom: ["recallBroker.search"],
-    continuityCritical: false,
-    profileSelectable: true,
-    preservationPolicy: "truncatable",
     collect: (providerInput) => {
       const search = broker.search({
         sessionId: providerInput.sessionId,
@@ -73,5 +67,5 @@ export function createRecallContextProvider(input: {
         });
       }
     },
-  };
+  });
 }

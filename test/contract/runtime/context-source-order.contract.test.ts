@@ -11,9 +11,10 @@ import {
   BrewvaRuntime,
   CONTEXT_SOURCES,
   DEFAULT_BREWVA_CONFIG,
+  defineContextSourceProvider,
   type BrewvaConfig,
-  type ContextSourceProviderDescriptor,
   type ContextSourceProvider,
+  type ContextSourceProviderDescriptor,
 } from "@brewva/brewva-runtime";
 import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import { createSkillPromotionContextProvider } from "@brewva/brewva-skill-broker";
@@ -70,27 +71,39 @@ function summarizeProviders(runtime: BrewvaRuntime) {
 }
 
 function registerCustomContextProvider(runtime: BrewvaRuntime): void {
-  const provider: ContextSourceProvider = {
+  const provider = defineContextSourceProvider({
+    kind: "working_state",
     source: "brewva.custom-operator-note",
-    plane: "working_state",
-    authorityTier: "working_state",
-    admissionLane: "primary_registry",
     category: "constraint",
-    budgetClass: "core",
     collectionOrder: 55,
     selectionPriority: 55,
     readsFrom: ["test.customOperatorNote"],
-    continuityCritical: false,
-    profileSelectable: true,
-    preservationPolicy: "truncatable",
     collect: (input) => {
       input.register({
         id: `custom-operator-note:${input.sessionId}`,
         content: "[CustomOperatorNote]\nstatus: custom provider registered through runtime.context",
       });
     },
-  };
+  });
   runtime.maintain.context.registerProvider(provider);
+}
+
+function getProviderBrandSymbol(): symbol {
+  const provider = defineContextSourceProvider({
+    kind: "working_state",
+    source: "brewva.test-brand-source",
+    category: "narrative",
+    collectionOrder: 1,
+    readsFrom: ["test.brand"],
+    collect: () => undefined,
+  });
+  const brand = Object.getOwnPropertySymbols(provider).find(
+    (symbol) => (provider as unknown as Record<symbol, unknown>)[symbol] === true,
+  );
+  if (!brand) {
+    throw new Error("Context source provider brand symbol was not found.");
+  }
+  return brand;
 }
 
 function expectedBaseProviders() {
@@ -339,7 +352,7 @@ describe("context source order integration", () => {
       authorityTier: "working_state",
       admissionLane: "primary_registry",
       category: "constraint",
-      budgetClass: "core",
+      budgetClass: "working",
       collectionOrder: 55,
       selectionPriority: 55,
       readsFrom: ["test.customOperatorNote"],
@@ -366,6 +379,134 @@ describe("context source order integration", () => {
 
     expect(runtime.maintain.context.unregisterProvider("brewva.custom-operator-note")).toBe(true);
     expect(runtime.maintain.context.unregisterProvider("brewva.custom-operator-note")).toBe(false);
+  });
+
+  test("rejects unconstructed context providers before admission", () => {
+    const runtime = new BrewvaRuntime({
+      cwd: createContextOrderWorkspace("unconstructed-provider"),
+      config: createConfig(),
+      agentId: "default",
+    });
+
+    expect(() =>
+      runtime.maintain.context.registerProvider({
+        source: "brewva.unconstructed-provider",
+        plane: "working_state",
+        authorityTier: "working_state",
+        admissionLane: "primary_registry",
+        category: "narrative",
+        budgetClass: "working",
+        collectionOrder: 60,
+        selectionPriority: 60,
+        readsFrom: ["test.unconstructed"],
+        continuityCritical: false,
+        profileSelectable: true,
+        preservationPolicy: "truncatable",
+        collect: () => undefined,
+      } as unknown as ContextSourceProvider),
+    ).toThrow("defineContextSourceProvider");
+  });
+
+  test("rejects malformed provider definitions at construction", () => {
+    expect(() =>
+      defineContextSourceProvider({
+        kind: "working_state",
+        source: "brewva.invalid-fractional-order",
+        category: "narrative",
+        collectionOrder: 1.5,
+        readsFrom: ["test.invalidFractionalOrder"],
+        collect: () => undefined,
+      }),
+    ).toThrow("collectionOrder must be an integer");
+
+    expect(() =>
+      defineContextSourceProvider({
+        kind: "working_state",
+        source: "brewva.invalid-read-dependency",
+        category: "narrative",
+        collectionOrder: 63,
+        readsFrom: [" test.invalidReadDependency"],
+        collect: () => undefined,
+      }),
+    ).toThrow("readsFrom entries must be trimmed");
+
+    expect(() =>
+      defineContextSourceProvider({
+        kind: "working_state",
+        source: "brewva.invalid-collect",
+        category: "narrative",
+        collectionOrder: 64,
+        readsFrom: ["test.invalidCollect"],
+        collect: undefined,
+      } as unknown as Parameters<typeof defineContextSourceProvider>[0]),
+    ).toThrow("collect must be a function");
+  });
+
+  test("rejects illegal descriptor combinations even when callers spoof construction", () => {
+    const runtime = new BrewvaRuntime({
+      cwd: createContextOrderWorkspace("provider-invariant-matrix"),
+      config: createConfig(),
+      agentId: "default",
+    });
+    const brand = getProviderBrandSymbol();
+
+    expect(() =>
+      runtime.maintain.context.registerProvider({
+        [brand]: true,
+        source: "brewva.invalid-working-core-budget",
+        plane: "working_state",
+        authorityTier: "working_state",
+        admissionLane: "primary_registry",
+        category: "narrative",
+        budgetClass: "core",
+        collectionOrder: 60,
+        selectionPriority: 60,
+        readsFrom: ["test.invalidWorking"],
+        continuityCritical: false,
+        profileSelectable: true,
+        preservationPolicy: "truncatable",
+        collect: () => undefined,
+      } as unknown as ContextSourceProvider),
+    ).toThrow("must use working budget");
+
+    expect(() =>
+      runtime.maintain.context.registerProvider({
+        [brand]: true,
+        source: "brewva.invalid-history-view",
+        plane: "history_view",
+        authorityTier: "runtime_contract",
+        admissionLane: "primary_registry",
+        category: "narrative",
+        budgetClass: "core",
+        collectionOrder: 61,
+        selectionPriority: 61,
+        readsFrom: ["test.invalidHistory"],
+        continuityCritical: true,
+        profileSelectable: true,
+        preservationPolicy: "truncatable",
+        reservedBudgetRatio: 1,
+        collect: () => undefined,
+      } as unknown as ContextSourceProvider),
+    ).toThrow("History-view context source provider has an invalid descriptor combination");
+
+    expect(() =>
+      runtime.maintain.context.registerProvider({
+        [brand]: true,
+        source: "brewva.invalid-advisory-budget",
+        plane: "advisory_recall",
+        authorityTier: "advisory_recall",
+        admissionLane: "primary_registry",
+        category: "narrative",
+        budgetClass: "core",
+        collectionOrder: 62,
+        selectionPriority: 62,
+        readsFrom: ["test.invalidAdvisory"],
+        continuityCritical: false,
+        profileSelectable: true,
+        preservationPolicy: "truncatable",
+        collect: () => undefined,
+      } as unknown as ContextSourceProvider),
+    ).toThrow("Advisory context source provider has an invalid descriptor combination");
   });
 
   test("registers optional built-in providers only when config enables them", () => {

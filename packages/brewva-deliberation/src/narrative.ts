@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { BrewvaInspectionPort, ContextSourceProvider } from "@brewva/brewva-runtime";
-import { CONTEXT_SOURCES } from "@brewva/brewva-runtime";
+import { CONTEXT_SOURCES, defineContextSourceProvider } from "@brewva/brewva-runtime";
 import { tokenizeSearchText } from "@brewva/brewva-search";
 import { FileNarrativeMemoryStore } from "./narrative-store.js";
 import {
@@ -526,19 +526,12 @@ export function createNarrativeMemoryContextProvider(input: {
   maxRecords?: number;
 }): ContextSourceProvider {
   const plane = getOrCreateNarrativeMemoryPlane(input.runtime);
-  return {
+  return defineContextSourceProvider({
+    kind: "advisory_recall",
     source: CONTEXT_SOURCES.narrativeMemory,
-    plane: "advisory_recall",
-    authorityTier: "advisory_recall",
-    admissionLane: "primary_registry",
-    category: "narrative",
-    budgetClass: "recall",
     collectionOrder: 42,
     selectionPriority: 42,
     readsFrom: ["narrativeMemory.retrieve"],
-    continuityCritical: false,
-    profileSelectable: true,
-    preservationPolicy: "truncatable",
     collect(providerInput) {
       const retrievals = plane.retrieve(providerInput.promptText, {
         limit: input.maxRecords ?? DEFAULT_CONTEXT_RECORDS,
@@ -553,7 +546,7 @@ export function createNarrativeMemoryContextProvider(input: {
         });
       }
     },
-  };
+  });
 }
 
 export {

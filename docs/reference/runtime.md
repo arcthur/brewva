@@ -385,6 +385,22 @@ This surface is the metadata truth for primary context providers. Hosted
 from these descriptors rather than from duplicated static tables or hand-kept
 source lists.
 
+Provider authoring must go through `defineContextSourceProvider(...)`. The
+constructor chooses the legal plane / authority / budget / preservation matrix
+for each source kind, and the registry rejects unconstructed providers plus
+spoofed illegal combinations before they can affect hosted prompt behavior.
+Construction also rejects malformed source ids, non-integer ordering metadata,
+untrimmed read dependencies, and non-function collectors.
+Directly hand-authoring a `ContextSourceProvider` descriptor is not a supported
+extension path.
+
+The descriptor surface is not a general policy-extension point. When a provider
+family requires a fixed plane / budget / authority / preservation combination,
+prefer source-kind construction helpers, registry validation, and contract tests
+over asking maintainers to remember the combination from RFC prose. Avoid adding
+descriptor fields or hosted profile modes unless the same change removes an
+older convention or converts a documentation-only invariant into enforcement.
+
 `reservedBudgetRatio` is provider-admission metadata. Runtime-owned recovery
 inspection, including history-view baseline reconstruction, uses its own
 kernel constant rather than dynamically deriving the reserved budget from the
@@ -647,6 +663,10 @@ also carries the current admission-time recovery contract:
   `collectionOrder`
 - `options.referenceContextDigest` is the current stable reference-context
   digest used to reject incompatible history-view baselines during admission
+
+`registerProvider(...)` accepts only providers produced by
+`defineContextSourceProvider(...)`. This keeps custom providers on the same
+typed construction path as repo-owned built-ins and advisory recall providers.
 
 Like the rest of `maintain.context`, these options shape admission and
 maintenance behavior only. They do not authorize effects.

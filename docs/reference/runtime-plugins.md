@@ -134,10 +134,19 @@ open-ended automatic expansion from one metadata field.
 The stable rule is:
 
 - provider descriptors remain the only runtime-owned metadata truth
+- provider descriptors are produced through `defineContextSourceProvider(...)`;
+  hosted runtime plugins should not hand-author provider objects or patch
+  descriptor metadata
 - each hosted profile compiles `sourceSelection` from those descriptors using a
   documented predicate
 - adding a new provider affects `minimal` or `standard` only when that
   provider's descriptor satisfies the named policy
+
+Recovery context follows the same boundary. Runtime plugins consume recovery
+posture and working-set state through the runtime read-model surface, whose
+ordering is owned by `runRecoveryContextPipeline(...)`; plugins should not
+rederive open tool calls, baseline degradation, or replay-guard posture from raw
+events.
 
 When `contextProfile` is omitted, the hosted pipeline behaves like `full` for
 source selection: it does not install a profile allowlist ahead of

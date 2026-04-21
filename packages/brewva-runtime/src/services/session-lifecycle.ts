@@ -175,6 +175,11 @@ export class SessionLifecycleService {
     const events = this.events.list(sessionId);
     const integrityIssues = this.events.getIntegrityIssues(sessionId);
     this.resetHydrationSupportStores(sessionId);
+    this.integrityCoordinator.canonicalizeBeforeHydration({
+      sessionId,
+      events,
+      integrityIssues,
+    });
     const parallelBudgetState = deriveParallelBudgetStateFromEvents(events);
     this.parallel.restoreSession(sessionId, {
       activeRunIds: parallelBudgetState.activeRunIds,

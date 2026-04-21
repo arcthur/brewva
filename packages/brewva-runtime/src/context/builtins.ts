@@ -18,7 +18,11 @@ import {
   readAgentMemoryProfile,
   readPersonaProfile,
 } from "./identity.js";
-import type { ContextSourceProvider, ContextSourceProviderRegistry } from "./provider.js";
+import {
+  defineContextSourceProvider,
+  type ContextSourceProvider,
+  type ContextSourceProviderRegistry,
+} from "./provider.js";
 import { HISTORY_VIEW_BASELINE_RESERVED_BUDGET_RATIO } from "./reserved-budget.js";
 import { buildRuntimeStatusBlock } from "./runtime-status.js";
 import { createSkillRoutingContextProvider } from "./skill-routing.js";
@@ -31,16 +35,6 @@ export interface BuiltInContextSourceProviderDeps {
   kernel: RuntimeKernelContext;
   skillLifecycleService: Pick<SkillLifecycleService, "getActiveSkill">;
   skillRegistry?: SkillRegistry;
-}
-
-const PRIMARY_REGISTRY_LANE = "primary_registry";
-function createPrimaryProvider(
-  provider: Omit<ContextSourceProvider, "admissionLane">,
-): ContextSourceProvider {
-  return {
-    ...provider,
-    admissionLane: PRIMARY_REGISTRY_LANE,
-  };
 }
 
 export function registerBuiltInContextSourceProviders(
@@ -86,18 +80,12 @@ export function createBuiltInContextSourceProviders(
 function createAgentConstitutionProvider(
   deps: BuiltInContextSourceProviderDeps,
 ): ContextSourceProvider {
-  return createPrimaryProvider({
+  return defineContextSourceProvider({
+    kind: "operator_profile",
     source: CONTEXT_SOURCES.agentConstitution,
-    plane: "contract_core",
-    authorityTier: "operator_profile",
-    category: "narrative",
-    budgetClass: "core",
     collectionOrder: 12,
     selectionPriority: 12,
     readsFrom: ["workspace.agentConstitution"],
-    continuityCritical: false,
-    profileSelectable: true,
-    preservationPolicy: "truncatable",
     collect: (input) => {
       let profile: ReturnType<typeof readAgentConstitutionProfile>;
       try {
@@ -130,18 +118,12 @@ function createAgentConstitutionProvider(
 }
 
 function createAgentMemoryProvider(deps: BuiltInContextSourceProviderDeps): ContextSourceProvider {
-  return createPrimaryProvider({
+  return defineContextSourceProvider({
+    kind: "operator_profile",
     source: CONTEXT_SOURCES.agentMemory,
-    plane: "contract_core",
-    authorityTier: "operator_profile",
-    category: "narrative",
-    budgetClass: "core",
     collectionOrder: 13,
     selectionPriority: 13,
     readsFrom: ["workspace.agentMemory"],
-    continuityCritical: false,
-    profileSelectable: true,
-    preservationPolicy: "truncatable",
     collect: (input) => {
       let profile: ReturnType<typeof readAgentMemoryProfile>;
       try {
@@ -174,18 +156,12 @@ function createAgentMemoryProvider(deps: BuiltInContextSourceProviderDeps): Cont
 }
 
 function createIdentityProvider(deps: BuiltInContextSourceProviderDeps): ContextSourceProvider {
-  return createPrimaryProvider({
+  return defineContextSourceProvider({
+    kind: "operator_profile",
     source: CONTEXT_SOURCES.identity,
-    plane: "contract_core",
-    authorityTier: "operator_profile",
-    category: "narrative",
-    budgetClass: "core",
     collectionOrder: 10,
     selectionPriority: 10,
     readsFrom: ["workspace.identity"],
-    continuityCritical: false,
-    profileSelectable: true,
-    preservationPolicy: "truncatable",
     collect: (input) => {
       let profile: ReturnType<typeof readPersonaProfile>;
       try {
@@ -219,18 +195,14 @@ function createIdentityProvider(deps: BuiltInContextSourceProviderDeps): Context
 function createRuntimeStatusProvider(
   deps: BuiltInContextSourceProviderDeps,
 ): ContextSourceProvider {
-  return createPrimaryProvider({
+  return defineContextSourceProvider({
+    kind: "runtime_read_model",
     source: CONTEXT_SOURCES.runtimeStatus,
-    plane: "working_state",
-    authorityTier: "runtime_read_model",
     category: "narrative",
     budgetClass: "core",
     collectionOrder: 20,
     selectionPriority: 20,
     readsFrom: ["view.runtimeStatus"],
-    continuityCritical: false,
-    profileSelectable: true,
-    preservationPolicy: "truncatable",
     collect: (input) => {
       const toolFailureConfig = deps.kernel.config.infrastructure.toolFailureInjection;
       const statusView = resolveRuntimeStatusView(deps.kernel, input.sessionId);
@@ -254,19 +226,12 @@ function createRuntimeStatusProvider(
 function createHistoryViewBaselineProvider(
   deps: BuiltInContextSourceProviderDeps,
 ): ContextSourceProvider {
-  return createPrimaryProvider({
+  return defineContextSourceProvider({
+    kind: "history_view",
     source: CONTEXT_SOURCES.historyViewBaseline,
-    plane: "history_view",
-    authorityTier: "runtime_contract",
-    category: "narrative",
-    budgetClass: "core",
     collectionOrder: 14,
     selectionPriority: 14,
     readsFrom: ["readModel.historyViewBaseline"],
-    continuityCritical: true,
-    profileSelectable: true,
-    preservationPolicy: "non_truncatable",
-    reservedBudgetRatio: HISTORY_VIEW_BASELINE_RESERVED_BUDGET_RATIO,
     collect: (input) => {
       const baseline = resolveHistoryViewBaselineView(deps.kernel, {
         sessionId: input.sessionId,
@@ -287,18 +252,14 @@ function createHistoryViewBaselineProvider(
 function createToolOutputDistilledProvider(
   deps: BuiltInContextSourceProviderDeps,
 ): ContextSourceProvider {
-  return createPrimaryProvider({
+  return defineContextSourceProvider({
+    kind: "runtime_read_model",
     source: CONTEXT_SOURCES.toolOutputsDistilled,
-    plane: "working_state",
-    authorityTier: "runtime_read_model",
     category: "narrative",
     budgetClass: "working",
     collectionOrder: 30,
     selectionPriority: 30,
     readsFrom: ["view.toolOutputDistillations"],
-    continuityCritical: false,
-    profileSelectable: true,
-    preservationPolicy: "truncatable",
     collect: (input) => {
       const distillationConfig = deps.kernel.config.infrastructure.toolOutputDistillationInjection;
       const distilledBlock = buildRecentToolOutputDistillationBlock(
@@ -318,18 +279,13 @@ function createToolOutputDistilledProvider(
 }
 
 function createTaskStateProvider(deps: BuiltInContextSourceProviderDeps): ContextSourceProvider {
-  return createPrimaryProvider({
+  return defineContextSourceProvider({
+    kind: "runtime_contract_state",
     source: CONTEXT_SOURCES.taskState,
-    plane: "working_state",
-    authorityTier: "runtime_contract",
     category: "narrative",
-    budgetClass: "core",
     collectionOrder: 40,
     selectionPriority: 40,
     readsFrom: ["view.taskState"],
-    continuityCritical: false,
-    profileSelectable: true,
-    preservationPolicy: "truncatable",
     collect: (input) => {
       const taskState = resolveTaskStateView(deps.kernel, input.sessionId);
       if (
@@ -353,18 +309,14 @@ function createTaskStateProvider(deps: BuiltInContextSourceProviderDeps): Contex
 function createRecoveryWorkingSetProvider(
   deps: BuiltInContextSourceProviderDeps,
 ): ContextSourceProvider {
-  return createPrimaryProvider({
+  return defineContextSourceProvider({
+    kind: "working_state",
     source: CONTEXT_SOURCES.recoveryWorkingSet,
-    plane: "working_state",
-    authorityTier: "working_state",
     category: "constraint",
-    budgetClass: "working",
     collectionOrder: 45,
     selectionPriority: 45,
     readsFrom: ["readModel.recoveryWorkingSet"],
     continuityCritical: true,
-    profileSelectable: true,
-    preservationPolicy: "truncatable",
     collect: (input) => {
       const snapshot = resolveRecoveryWorkingSetView(deps.kernel, {
         sessionId: input.sessionId,
@@ -385,18 +337,13 @@ function createRecoveryWorkingSetProvider(
 function createProjectionWorkingProvider(
   deps: BuiltInContextSourceProviderDeps,
 ): ContextSourceProvider {
-  return createPrimaryProvider({
+  return defineContextSourceProvider({
+    kind: "working_state",
     source: CONTEXT_SOURCES.projectionWorking,
-    plane: "working_state",
-    authorityTier: "working_state",
     category: "narrative",
-    budgetClass: "working",
     collectionOrder: 50,
     selectionPriority: 50,
     readsFrom: ["view.projectionWorking"],
-    continuityCritical: false,
-    profileSelectable: true,
-    preservationPolicy: "truncatable",
     collect: (input) => {
       const working = resolveProjectionWorkingView(deps.kernel, input.sessionId);
       if (!working) return;

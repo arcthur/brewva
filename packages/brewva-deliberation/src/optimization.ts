@@ -6,6 +6,7 @@ import {
   SKILL_COMPLETED_EVENT_TYPE,
   coerceGuardResultPayload,
   coerceMetricObservationPayload,
+  defineContextSourceProvider,
   parseScheduleIntentEvent,
   type BrewvaEventRecord,
   type BrewvaInspectionPort,
@@ -1357,19 +1358,12 @@ export function createOptimizationContinuityContextProvider(input: {
   const plane = getOrCreateOptimizationContinuityPlane(input.runtime, {
     minRefreshIntervalMs: input.minRefreshIntervalMs,
   });
-  return {
+  return defineContextSourceProvider({
+    kind: "advisory_recall",
     source: CONTEXT_SOURCES.optimizationContinuity,
-    plane: "advisory_recall",
-    authorityTier: "advisory_recall",
-    admissionLane: "primary_registry",
-    category: "narrative",
-    budgetClass: "recall",
     collectionOrder: 46,
     selectionPriority: 46,
     readsFrom: ["optimizationContinuity.retrieve"],
-    continuityCritical: false,
-    profileSelectable: true,
-    preservationPolicy: "truncatable",
     collect: (providerInput) => {
       const lineages = plane.list({
         limit: Math.max(1, input.maxLineages ?? DEFAULT_MAX_RETRIEVAL),
@@ -1385,5 +1379,5 @@ export function createOptimizationContinuityContextProvider(input: {
         });
       }
     },
-  };
+  });
 }

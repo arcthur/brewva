@@ -4,7 +4,7 @@
 
 - Status: `active`
 - Owner: runtime and gateway maintainers
-- Last reviewed: `2026-04-09`
+- Last reviewed: `2026-04-21`
 - Promotion target:
   - `docs/reference/context-composer.md`
   - `docs/journeys/internal/context-and-compaction.md`
@@ -169,25 +169,23 @@ Relevant lesson for Brewva:
 
 ### Brewva (Current)
 
-- **The system-prompt suffix is partly dynamic.**
-  `buildContextContractBlock(...)` includes threshold percentages derived from
-  the effective context budget policy (`contextWindow`-adaptive thresholds).
-  These values are stable within a single model but shift at model-transition
-  or provider-fallback boundaries.
+- **The system-prompt contract is static.**
+  `applyContextContract(...)` keeps provider `usage`, `contextWindow`, live
+  percentages, and threshold-derived text out of the system-prompt contract.
 - **Duplicate primary injection content is already scope-aware.**
   `buildContextInjection(...)` fingerprints accepted injection text by
   `sessionId + injectionScopeId` and drops duplicate primary injection content
   on the next matching scope.
-- **The remaining instability lives in presentation, not only admission.**
-  `ContextComposer` and hosted supplemental blocks still need stronger
-  canonicalization guarantees.
-- `**session_compact` is the only replay-visible compaction authority.\*\*
+- **Transient reduction is outbound-only.**
+  Provider-request reduction operates on a cloned `before_provider_request`
+  payload and does not mutate durable history, WAL, compaction receipts, or the
+  event tape.
+- **`session_compact` is the only replay-visible compaction authority.**
   This is correct and must remain correct unless Brewva adds a new durable
   receipt family and recovery contract.
-- **Context telemetry exists, but cache-specific telemetry does not.**
-  `context_composed` is already useful, but it does not yet expose prompt
-  stability or map the upstream Pi cache counters into Brewva-owned inspect or
-  metric surfaces.
+- **Prompt-stability inspection and evidence exist.**
+  Hosted prompt-stability samples are session-local inspect/evidence data; raw
+  stability hashes stay out of `context_composed` durable payloads.
 
 ## Design
 
@@ -554,6 +552,30 @@ replay-safe boundary:
 - cache-class
 - non-durable
 - no history mutation
+
+### Convergence Constraints
+
+This RFC should narrow the existing hosted request path rather than create a new
+context-governance layer.
+
+Transient outbound reduction is a `before_provider_request` stage over a cloned
+outbound payload. It is not:
+
+- a new context plane
+- a new hosted profile mode
+- a new admission lane
+- a hidden compaction authority
+- a reason for `ContextComposer` to own replay, recovery, or provider payload
+  mutation
+
+The implementation should keep the existing `minimal` / `standard` / `full`
+hosted profile set. If future cache or reduction work needs a different source
+set, it should first prove that the current descriptor-derived
+`sourceSelection` model cannot express the need.
+
+Any new hook or transform in this area must replace or compress an existing
+decision point. Do not add another context hook, overlay, or profile-composition
+mechanism to work around unclear ownership.
 
 ## Part 3: Cache-Efficiency Observability with Correct Durability
 
@@ -928,6 +950,8 @@ These changes are intentionally narrower than the previous draft:
 - **Part 3** reuses existing telemetry and optional iteration metrics instead of
   adding a new durable context event family or a duplicate provider-accounting
   layer.
+- No part of this RFC adds a new context profile mode, context overlay, context
+  hook family, or provider descriptor field.
 
 Effects on compatibility:
 
@@ -942,6 +966,14 @@ The main intentional behavior change is prompt composition shape:
 - numeric pressure guidance remains dynamic
 
 ## Implementation Plan
+
+Current implementation status: the first sweep is implemented through the
+existing hosted lifecycle ring. `applyContextContract(...)` is static and
+deduplicated, prompt-stability state is session-local inspect/evidence data,
+and `provider-request-reduction` performs clone-only transient reduction while
+skipping active recovery and output-budget recovery posture. No new provider
+descriptor field, profile mode, hook family, durable context-cache event, or
+provider-specific cache API was added.
 
 ### Phase 1: Prefix Determinism (P0)
 
@@ -1073,8 +1105,12 @@ Validation:
   - transient outbound reduction as a cache-class optimization
   - cache observability through hosted telemetry and optional iteration metrics
 
-## Current Promotion Gaps
+## Promotion Evidence Remaining
 
+- **This note stays active until representative evidence satisfies the
+  promotion thresholds.**
+  The remaining blocker is not missing core implementation; it is collecting
+  and reviewing target-session evidence for the promoted contract.
 - **The evidence pipeline is implemented, but target-session runs still need to
   be captured.**
   Hosted prompt-stability and transient-reduction samples now land in the

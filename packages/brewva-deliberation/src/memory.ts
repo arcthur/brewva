@@ -13,6 +13,7 @@ import {
   coerceTruthLedgerPayload,
   coerceMetricObservationPayload,
   deriveWorkflowArtifacts,
+  defineContextSourceProvider,
   foldTruthLedgerEvents,
   type BrewvaEventRecord,
   type BrewvaInspectionPort,
@@ -1261,19 +1262,12 @@ export function createDeliberationMemoryContextProvider(input: {
   const plane = getOrCreateDeliberationMemoryPlane(input.runtime, {
     minRefreshIntervalMs: input.minRefreshIntervalMs,
   });
-  return {
+  return defineContextSourceProvider({
+    kind: "advisory_recall",
     source: CONTEXT_SOURCES.deliberationMemory,
-    plane: "advisory_recall",
-    authorityTier: "advisory_recall",
-    admissionLane: "primary_registry",
-    category: "narrative",
-    budgetClass: "recall",
     collectionOrder: 44,
     selectionPriority: 44,
     readsFrom: ["deliberationMemory.retrieve"],
-    continuityCritical: false,
-    profileSelectable: true,
-    preservationPolicy: "truncatable",
     collect: (providerInput) => {
       const retrievals = plane.retrieve(
         providerInput.promptText,
@@ -1287,5 +1281,5 @@ export function createDeliberationMemoryContextProvider(input: {
         });
       }
     },
-  };
+  });
 }

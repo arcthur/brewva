@@ -5,7 +5,9 @@ import {
   BrewvaRuntime,
   CONTEXT_SOURCES,
   DEFAULT_BREWVA_CONFIG,
+  defineContextSourceProvider,
   type BrewvaConfig,
+  type ContextSourceProvider,
 } from "@brewva/brewva-runtime";
 import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import { setStaticContextInjectionBudget } from "../../fixtures/config.js";
@@ -31,6 +33,23 @@ function writeAgentProfile(
   const root = join(workspace, ".brewva", "agents", "default");
   mkdirSync(root, { recursive: true });
   writeFileSync(join(root, fileName), `${content.trim()}\n`, "utf8");
+}
+
+function getProviderBrandSymbol(): symbol {
+  const provider = defineContextSourceProvider({
+    kind: "history_view",
+    source: "brewva.test-history-brand",
+    collectionOrder: 1,
+    readsFrom: ["test.historyBrand"],
+    collect: () => undefined,
+  });
+  const brand = Object.getOwnPropertySymbols(provider).find(
+    (symbol) => (provider as unknown as Record<symbol, unknown>)[symbol] === true,
+  );
+  if (!brand) {
+    throw new Error("Context source provider brand symbol was not found.");
+  }
+  return brand;
 }
 
 describe("recovery context baseline integration", () => {
@@ -75,73 +94,37 @@ describe("recovery context baseline integration", () => {
     );
   });
 
-  test("inspect baseline budgeting stays pinned to the runtime constant even if provider descriptors drift", () => {
+  test("rejects history-view baseline descriptor drift before admission", () => {
     const config = createConfig();
     setStaticContextInjectionBudget(config, 200);
     const runtime = new BrewvaRuntime({
       cwd: createTestWorkspace("recovery-context-baseline-budget-constant"),
       config,
     });
-    const sessionId = "recovery-context-baseline-budget-constant";
+    const brand = getProviderBrandSymbol();
 
     expect(runtime.maintain.context.unregisterProvider(CONTEXT_SOURCES.historyViewBaseline)).toBe(
       true,
     );
-    runtime.maintain.context.registerProvider({
-      source: CONTEXT_SOURCES.historyViewBaseline,
-      plane: "history_view",
-      authorityTier: "runtime_contract",
-      admissionLane: "primary_registry",
-      category: "narrative",
-      budgetClass: "core",
-      collectionOrder: 14,
-      selectionPriority: 14,
-      readsFrom: ["readModel.historyViewBaseline"],
-      continuityCritical: true,
-      profileSelectable: true,
-      preservationPolicy: "non_truncatable",
-      reservedBudgetRatio: 1,
-      collect() {},
-    });
-
-    recordRuntimeEvent(runtime, {
-      sessionId,
-      turn: 1,
-      type: "turn_input_recorded",
-      payload: {
-        turnId: "turn-1",
-        trigger: "user_submit",
-        promptText: "x".repeat(80),
-      } as Record<string, unknown>,
-    });
-    recordRuntimeEvent(runtime, {
-      sessionId,
-      turn: 1,
-      type: "turn_render_committed",
-      payload: {
-        turnId: "turn-1",
-        attemptId: "attempt-1",
-        status: "completed",
-        assistantText: "y".repeat(80),
-        toolOutputs: [],
-      } as Record<string, unknown>,
-    });
-
-    expect(runtime.inspect.context.listProviders()).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          source: CONTEXT_SOURCES.historyViewBaseline,
-          reservedBudgetRatio: 1,
-        }),
-      ]),
-    );
-    expect(runtime.inspect.context.getHistoryViewBaseline(sessionId)).toBeUndefined();
-    expect(runtime.inspect.recovery.getPosture(sessionId)).toEqual(
-      expect.objectContaining({
-        mode: "diagnostic_only",
-        degradedReason: "exact_history_over_budget",
-      }),
-    );
+    expect(() =>
+      runtime.maintain.context.registerProvider({
+        [brand]: true,
+        source: CONTEXT_SOURCES.historyViewBaseline,
+        plane: "history_view",
+        authorityTier: "runtime_contract",
+        admissionLane: "primary_registry",
+        category: "narrative",
+        budgetClass: "core",
+        collectionOrder: 14,
+        selectionPriority: 14,
+        readsFrom: ["readModel.historyViewBaseline"],
+        continuityCritical: true,
+        profileSelectable: true,
+        preservationPolicy: "non_truncatable",
+        reservedBudgetRatio: 1,
+        collect() {},
+      } as unknown as ContextSourceProvider),
+    ).toThrow("History-view context source provider has an invalid descriptor combination");
   });
 
   test("admits history-view baseline and recovery working-set through normal injection ordering", async () => {

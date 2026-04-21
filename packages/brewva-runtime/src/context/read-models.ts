@@ -1,12 +1,17 @@
 import type {
+  BrewvaEventRecord,
   ContextBudgetUsage,
   RecoveryPostureSnapshot,
   RecoveryWorkingSetSnapshot,
 } from "../contracts/index.js";
 import {
-  deriveOpenToolCallsFromEvents,
+  deriveDuplicateSideEffectSuppressionCount,
+  deriveRecoveryCanonicalization,
   deriveRecoveryPosture,
   deriveRecoveryWorkingSet,
+  deriveTransitionState,
+  type RecoveryCanonicalizationResult,
+  type RecoveryTransitionState,
 } from "../recovery/read-model.js";
 import type { RuntimeKernelContext } from "../runtime-kernel.js";
 import { deriveHistoryViewBaselineState } from "./history-view-baseline.js";
@@ -21,6 +26,13 @@ export interface RecoveryContextReadModels {
   baselineState: HistoryViewBaselineStateResolution;
   posture: RecoveryPostureSnapshot;
   workingSet: RecoveryWorkingSetSnapshot | undefined;
+}
+
+export interface RecoveryContextPipelineResult extends RecoveryContextReadModels {
+  events: readonly BrewvaEventRecord[];
+  canonicalization: RecoveryCanonicalizationResult;
+  transitionState: RecoveryTransitionState;
+  duplicateSideEffectSuppressionCount: number;
 }
 
 function normalizeNullableString(value: string | null | undefined): string | null {
@@ -38,6 +50,19 @@ export function resolveHistoryViewBaselineStateFromKernel(
   },
 ): HistoryViewBaselineStateResolution {
   const events = kernel.eventStore.list(input.sessionId);
+  return resolveHistoryViewBaselineStateFromEvents(kernel, input, events);
+}
+
+function resolveHistoryViewBaselineStateFromEvents(
+  kernel: RuntimeKernelContext,
+  input: {
+    sessionId: string;
+    usage?: ContextBudgetUsage;
+    referenceContextDigest?: string | null;
+    maxBaselineTokens?: number | null;
+  },
+  events: readonly BrewvaEventRecord[],
+): HistoryViewBaselineStateResolution {
   const latestEventId = events.at(-1)?.id ?? null;
   const referenceContextDigest = normalizeNullableString(input.referenceContextDigest);
   const maxBaselineTokens = input.maxBaselineTokens ?? null;
@@ -84,21 +109,43 @@ export function resolveRecoveryContextReadModels(
     referenceContextDigest?: string | null;
     maxBaselineTokens?: number | null;
   },
-): RecoveryContextReadModels {
+): RecoveryContextPipelineResult {
+  return runRecoveryContextPipeline(kernel, input);
+}
+
+export function runRecoveryContextPipeline(
+  kernel: RuntimeKernelContext,
+  input: {
+    sessionId: string;
+    usage?: ContextBudgetUsage;
+    referenceContextDigest?: string | null;
+    maxBaselineTokens?: number | null;
+  },
+): RecoveryContextPipelineResult {
   const events = kernel.eventStore.list(input.sessionId);
-  const baselineState = resolveHistoryViewBaselineStateFromKernel(kernel, input);
+  const canonicalization = deriveRecoveryCanonicalization(events);
+  const baselineState = resolveHistoryViewBaselineStateFromEvents(kernel, input, events);
+  const transitionState = deriveTransitionState(events);
+  const duplicateSideEffectSuppressionCount = deriveDuplicateSideEffectSuppressionCount(events);
   const posture = deriveRecoveryPosture({
     events,
+    canonicalization,
+    transitionState,
+    duplicateSideEffectSuppressionCount,
     historyViewDegradedReason: baselineState.degradedReason,
     historyViewPostureMode: baselineState.postureMode,
   });
   return {
+    events,
+    canonicalization,
+    transitionState,
+    duplicateSideEffectSuppressionCount,
     baselineState,
     posture,
     workingSet: deriveRecoveryWorkingSet({
       posture,
       taskState: kernel.getTaskState(input.sessionId),
-      openToolCalls: deriveOpenToolCallsFromEvents(events),
+      openToolCalls: canonicalization.openToolCalls,
     }),
   };
 }

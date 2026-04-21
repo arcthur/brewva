@@ -4,7 +4,7 @@
 
 - Status: `active`
 - Owner: runtime and gateway maintainers
-- Last reviewed: `2026-04-10`
+- Last reviewed: `2026-04-21`
 - Promotion target:
   - `docs/architecture/system-architecture.md`
   - `docs/reference/session-lifecycle.md`
@@ -25,18 +25,17 @@ The repository already distinguishes:
 - `rebuildable state`
 - `cache`
 
-However, the model-visible context path still has four unresolved gaps:
+The model-visible context path has four failure modes this RFC keeps closed:
 
-1. There is no explicit, rebuildable model-visible baseline after `session_compact`,
-   and current compaction bookkeeping is too thin to reconstruct one from durable
-   authority outputs alone.
-2. Hosted transition snapshots and the current recovery working set are useful, but
-   they still behave primarily as presentation blocks rather than as a formal read model.
-3. Request-local reduction, working projection, advisory memory, and post-compact
-   continuity do not yet share a single layering contract. Left alone, that gap will
-   eventually produce compaction-only prompt patch paths.
-4. Narrative memory and deliberation memory are now stable products, but without a
-   stronger contract they are easy to misuse as compact baselines or resume truth.
+1. post-`session_compact` model-visible history must remain rebuildable from
+   durable authority outputs
+2. hosted transition snapshots and the recovery working set must remain formal
+   read models rather than presentation-only prompt blocks
+3. request-local reduction, working projection, advisory memory, and
+   post-compact continuity must share the same provider layering and admission
+   contract
+4. narrative memory and deliberation memory must remain advisory recall rather
+   than compact baselines or resume truth
 
 This note covers:
 
@@ -287,16 +286,18 @@ recall and working-admission system rather than becoming an independent planner 
 
 ## Recovery Pipeline
 
-Recovery should converge on an explicit five-step sequence.
+Recovery uses an explicit five-step sequence across the session-hydration and
+context-read-model paths.
 
 ### Step 1: Canonicalize Before Hydration
 
 On resume, the system should repair shape before it attempts continuation.
 
-This section describes the target recovery order. The current implementation still
-performs unclean-shutdown diagnosis after authority hydration and fold application;
-Phase 1 of this note formalizes canonicalization as a pre-hydration pass without
-changing replay truth.
+The runtime now runs recovery canonicalization as a pre-hydration integrity
+preflight before session hydration folds apply replayed authority state. The
+context recovery read model uses the same event-first canonicalization before it
+resolves history-view baseline state, recovery transitions, replay guards,
+posture, and the recovery working set. Neither path rewrites replay truth.
 
 That pass should clean or explicitly diagnose at least:
 
@@ -428,6 +429,41 @@ The following constraints must remain true:
 4. Recovery consults durable artifacts before process-local helper state.
 5. `ContextComposer` does not take ownership of replay, admission, or recovery semantics.
 
+## Enforcement Compression
+
+This note should not introduce more context-governance vocabulary. The remaining
+work is to collapse existing conventions into enforcement points that future
+changes cannot accidentally bypass.
+
+The hot path should stay explicit and narrow:
+
+- ordinary forward turns should read as identity, runtime status, task state,
+  and an optional history-view baseline through the normal admission path
+- recovery working set, working projection, tool-output distillation, and
+  advisory recall remain conditional paths rather than concepts every provider
+  author must understand up front
+
+Implementation should prefer:
+
+- typed provider construction or registry validation for valid
+  plane / budget / authority / preservation combinations
+- one explicit recovery pipeline for:
+  canonicalize -> hydrate authority -> rebuild baseline -> build working set ->
+  normal admission
+- contract tests and replay fixtures for sequence-sensitive invariants that the
+  type system cannot prove
+
+Implementation should avoid:
+
+- new context planes, hosted profile modes, overlays, or hook families
+- adding provider descriptor fields unless an existing convention is removed or
+  converted into machine enforcement in the same change
+- treating RFC prose as the only enforcement mechanism for provider invariants
+
+When a rule cannot be enforced through types, construction helpers, runtime
+assertions, or tests, it should be tracked as an implementation gap rather than
+presented as a stable invariant.
+
 ## Baseline Precedence And Degradation Rules
 
 The baseline contract must specify precedence and fallback explicitly:
@@ -451,12 +487,28 @@ The baseline contract must specify precedence and fallback explicitly:
 - persist or reference the sanitized compact output, its digest, the source turn
   or receipt, the lineage anchor, and the compatible reference-context digest
 - do not create a second authority source or a separate durable event family
+- freeze context-governance vocabulary while this RFC is active; do not add new
+  planes, profile modes, descriptor fields, overlays, or hook families as part
+  of this work
 
 ### Phase 1
 
 - formalize the recovery working-set read model as a stable runtime surface
 - add canonicalization before resume as a first-class pre-hydration pass
 - strengthen working-set coverage for open tool lifecycle and effect-replay guards
+- express recovery order as a single reviewable pipeline rather than as an
+  implicit sequence spread across service helpers
+
+Current implementation status: `runRecoveryContextPipeline(...)` now expresses
+the context read-model order as event listing, recovery canonicalization,
+history-view baseline resolution/cache, transition and replay-guard derivation,
+posture selection, and working-set construction. Session hydration also runs
+canonicalization before fold application, and lifecycle inspect reuses the
+pipeline's canonical open-tool-call and transition views instead of deriving
+parallel branches. The pipeline reuses one event-tape read across baseline
+resolution, posture derivation, transition derivation, duplicate-side-effect
+suppression, and working-set construction; baseline resolution outside the
+pipeline keeps its existing kernel entry point.
 
 ### Phase 2
 
@@ -518,14 +570,16 @@ Existing validation must not regress:
 - `test/contract/runtime/context-budget.contract.test.ts`
 - `test/contract/runtime/context-injection.contract.test.ts`
 
-Additional validation needed for this contract includes:
+Additional validation coverage for this contract includes:
 
 - rebuilding the history-view baseline artifact from receipts when the artifact is missing
 - rebuilding the history-view baseline from enriched compaction authority outputs when
   the artifact is missing
 - verifying that post-`session_compact` recovery does not depend on compaction-only prompt patches
 - proving that recovery-aware reduction never severs open tool lifecycle state
-- proving that reasoning-revert and WAL resume paths do not replay completed side effects
+  through the existing transient-reduction recovery-posture skip tests
+- proving that reasoning-revert and WAL resume paths do not replay completed
+  side effects through replay-guard recovery working-set tests
 - proving that exact-history fallback over budget produces degraded recovery diagnostics
 - proving precedence rules across `compact -> compact`, `compact -> revert`, and
   `revert -> compact`
@@ -538,8 +592,24 @@ Additional validation needed for this contract includes:
 - reference docs explain the model-visible baseline after `session_compact`
 - recovery docs describe the sequence:
   canonicalize -> hydrate -> rebuild baseline -> build working set -> normal admission
-- recovery docs explicitly distinguish target recovery order from current post-hydration
-  diagnosis behavior during rollout
+- recovery docs explicitly distinguish authority hydration from context read-model
+  projection while keeping both on canonicalization-first recovery ordering
+- provider and recovery invariants are backed by construction-time validation,
+  runtime assertions, or contract tests instead of documentation-only rules
 - operator journey docs explain missing-baseline, damaged-artifact, and duplicate-side-effect incidents
 - operator journey docs explain degraded recovery when exact-history fallback exceeds budget
 - inspect and metric surfaces distinguish replay-correctness issues from helper-artifact loss
+
+## Promotion Evidence Remaining
+
+- **This note stays active until the recovery contract has representative
+  operator evidence and metric coverage.**
+  The constructor/registry enforcement gap and the implicit recovery-order gap
+  are closed, but promotion still needs evidence that the stable docs and
+  inspection surfaces are sufficient during real damaged-baseline,
+  exact-history-over-budget, and duplicate-side-effect recovery incidents.
+- **The remaining work is evidence and observability hardening, not new context
+  vocabulary.**
+  Future work should either implement the Phase 3 and Phase 4 inspection /
+  metric signals or explicitly move those ideas into separate focused RFCs
+  before this note collapses into a promoted pointer.

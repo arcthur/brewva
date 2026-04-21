@@ -75,7 +75,6 @@ import { buildSessionLifecycleSnapshot } from "./lifecycle/session-lifecycle-sna
 import { ParallelBudgetManager } from "./parallel/budget.js";
 import { ParallelResultStore } from "./parallel/results.js";
 import { ProjectionEngine } from "./projection/engine.js";
-import { deriveOpenToolCallsFromEvents, deriveTransitionState } from "./recovery/read-model.js";
 import {
   createRuntimeCoreDependencies as assembleRuntimeCoreDependencies,
   createRuntimeKernelContext as assembleRuntimeKernelContext,
@@ -1030,7 +1029,6 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
       return structuredClone(cached);
     }
     this.sessionLifecycleService.ensureHydrated(sessionId);
-    const events = this.eventStore.list(sessionId);
     const usage = this.contextService.getContextUsage(sessionId);
     const referenceContextDigest =
       this.sessionState.getPromptStability(sessionId)?.stablePrefixHash;
@@ -1040,21 +1038,20 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
       referenceContextDigest,
       reservedBudgetRatio: HISTORY_VIEW_BASELINE_RESERVED_BUDGET_RATIO,
     });
-    const transitionState = deriveTransitionState(events);
     const snapshot = buildSessionLifecycleSnapshot({
       sessionId,
       hydration: this.sessionLifecycleService.getHydrationState(sessionId),
       integrity: this.sessionLifecycleService.getIntegrityStatus(sessionId),
       recovery: {
         ...recoveryContext.posture,
-        latestSourceEventId: transitionState.latestSourceEventId,
-        latestSourceEventType: transitionState.latestSourceEventType,
-        recentTransitions: transitionState.recentTransitions,
+        latestSourceEventId: recoveryContext.transitionState.latestSourceEventId,
+        latestSourceEventType: recoveryContext.transitionState.latestSourceEventType,
+        recentTransitions: recoveryContext.transitionState.recentTransitions,
       },
       activeSkillState: this.skillLifecycleService.getActiveSkillState(sessionId),
       latestSkillFailure: this.skillLifecycleService.getLatestSkillFailure(sessionId),
       pendingApprovals: this.getEffectCommitmentDeskService().listPending(sessionId),
-      openToolCalls: deriveOpenToolCallsFromEvents(events),
+      openToolCalls: recoveryContext.canonicalization.openToolCalls,
       frames: this.getSessionWireService().query(sessionId),
     });
     this.sessionLifecycleSnapshotCache.set(sessionId, snapshot);

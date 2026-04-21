@@ -15,6 +15,7 @@ import {
   SKILL_PROMOTION_MATERIALIZED_EVENT_TYPE,
   SKILL_PROMOTION_PROMOTED_EVENT_TYPE,
   SKILL_PROMOTION_REVIEWED_EVENT_TYPE,
+  defineContextSourceProvider,
   type BrewvaEventRecord,
   type BrewvaInspectionPort,
   type ContextSourceProvider,
@@ -1038,19 +1039,12 @@ export function createSkillPromotionContextProvider(input: {
     subscribeToEvents: true,
     minRefreshIntervalMs: input.minRefreshIntervalMs,
   });
-  return {
+  return defineContextSourceProvider({
+    kind: "advisory_recall",
     source: CONTEXT_SOURCES.skillPromotionDrafts,
-    plane: "advisory_recall",
-    authorityTier: "advisory_recall",
-    admissionLane: "primary_registry",
-    category: "narrative",
-    budgetClass: "recall",
     collectionOrder: 48,
     selectionPriority: 48,
     readsFrom: ["skillPromotion.cachedDrafts"],
-    continuityCritical: false,
-    profileSelectable: true,
-    preservationPolicy: "truncatable",
     collect: (providerInput) => {
       const activeDrafts = broker
         .listCached()
@@ -1068,7 +1062,7 @@ export function createSkillPromotionContextProvider(input: {
         });
       }
     },
-  };
+  });
 }
 
 export interface SkillPromotionRuntime {

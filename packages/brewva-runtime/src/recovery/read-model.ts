@@ -404,7 +404,7 @@ export function deriveRecoveryCanonicalization(
   };
 }
 
-interface TransitionState {
+export interface RecoveryTransitionState {
   latestReason: string | null;
   latestStatus: TransitionStatus | null;
   pendingFamily: RecoveryPendingFamily | null;
@@ -413,8 +413,10 @@ interface TransitionState {
   recentTransitions: RecoveryTransitionSnapshot[];
 }
 
-export function deriveTransitionState(events: readonly BrewvaEventRecord[]): TransitionState {
-  const state: TransitionState = {
+export function deriveTransitionState(
+  events: readonly BrewvaEventRecord[],
+): RecoveryTransitionState {
+  const state: RecoveryTransitionState = {
     latestReason: null,
     latestStatus: null,
     pendingFamily: null,
@@ -469,6 +471,7 @@ export function deriveRecoveryPosture(input: {
   events: readonly BrewvaEventRecord[];
   existingDiagnostic?: SessionUncleanShutdownDiagnostic;
   canonicalization?: RecoveryCanonicalizationResult;
+  transitionState?: RecoveryTransitionState;
   duplicateSideEffectSuppressionCount?: number;
   historyViewDegradedReason?: string | null;
   historyViewPostureMode?: "degraded" | "diagnostic_only" | null;
@@ -477,7 +480,7 @@ export function deriveRecoveryPosture(input: {
     input.existingDiagnostic !== undefined
       ? deriveRecoveryCanonicalization(input.events, input.existingDiagnostic)
       : (input.canonicalization ?? deriveRecoveryCanonicalization(input.events));
-  const transition = deriveTransitionState(input.events);
+  const transition = input.transitionState ?? deriveTransitionState(input.events);
   const duplicateSideEffectSuppressionCount = Math.max(
     0,
     Math.trunc(

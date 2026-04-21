@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { BrewvaRuntime, defineContextSourceProvider } from "@brewva/brewva-runtime";
 import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import {
   type ContextState,
@@ -1778,26 +1778,22 @@ describe("managed agent session compaction", () => {
 
     const sessionId = sessionStore.getSessionId();
     runtime.maintain.context.onTurnStart(sessionId, 1);
-    runtime.maintain.context.registerProvider({
-      source: "brewva.test-context-state",
-      plane: "working_state",
-      authorityTier: "working_state",
-      admissionLane: "primary_registry",
-      category: "narrative",
-      budgetClass: "core",
-      collectionOrder: 60,
-      selectionPriority: 60,
-      readsFrom: ["test.contextState"],
-      continuityCritical: false,
-      profileSelectable: true,
-      preservationPolicy: "truncatable",
-      collect: (input) => {
-        input.register({
-          id: `context-state:${input.sessionId}`,
-          content: "[ContextStateTest]\nstatus: injected primary context",
-        });
-      },
-    });
+    runtime.maintain.context.registerProvider(
+      defineContextSourceProvider({
+        kind: "working_state",
+        source: "brewva.test-context-state",
+        category: "narrative",
+        collectionOrder: 60,
+        selectionPriority: 60,
+        readsFrom: ["test.contextState"],
+        collect: (input) => {
+          input.register({
+            id: `context-state:${input.sessionId}`,
+            content: "[ContextStateTest]\nstatus: injected primary context",
+          });
+        },
+      }),
+    );
     await runtime.maintain.context.buildInjection(
       sessionId,
       "Summarize the current runtime posture.",
@@ -2008,26 +2004,22 @@ describe("managed agent session compaction", () => {
       ).handleAgentEvent.bind(session);
 
       runtime.maintain.context.onTurnStart(sessionStore.getSessionId(), 1);
-      runtime.maintain.context.registerProvider({
-        source: "brewva.test-plugin-state",
-        plane: "working_state",
-        authorityTier: "working_state",
-        admissionLane: "primary_registry",
-        category: "narrative",
-        budgetClass: "core",
-        collectionOrder: 60,
-        selectionPriority: 60,
-        readsFrom: ["test.pluginState"],
-        continuityCritical: false,
-        profileSelectable: true,
-        preservationPolicy: "truncatable",
-        collect: (input) => {
-          input.register({
-            id: `plugin-state:${input.sessionId}`,
-            content: "[PluginState]\nstatus: injected",
-          });
-        },
-      });
+      runtime.maintain.context.registerProvider(
+        defineContextSourceProvider({
+          kind: "working_state",
+          source: "brewva.test-plugin-state",
+          category: "narrative",
+          collectionOrder: 60,
+          selectionPriority: 60,
+          readsFrom: ["test.pluginState"],
+          collect: (input) => {
+            input.register({
+              id: `plugin-state:${input.sessionId}`,
+              content: "[PluginState]\nstatus: injected",
+            });
+          },
+        }),
+      );
       await runtime.maintain.context.buildInjection(
         sessionStore.getSessionId(),
         "Observe hosted state transitions.",

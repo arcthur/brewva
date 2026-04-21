@@ -107,8 +107,15 @@ export class SessionIntegrityCoordinator {
     state: RuntimeSessionStateCell;
     initialIssues: IntegrityIssue[];
   }): void {
-    this.applyRecoveryCanonicalization(input.sessionId, input.events, input.initialIssues);
     this.reconcileUncleanShutdown(input.sessionId, input.events, input.state);
+  }
+
+  canonicalizeBeforeHydration(input: {
+    sessionId: string;
+    events: BrewvaEventRecord[];
+    integrityIssues: IntegrityIssue[];
+  }): void {
+    this.applyRecoveryCanonicalization(input.sessionId, input.events, input.integrityIssues);
   }
 
   private applyRecoveryCanonicalization(

@@ -2,7 +2,7 @@ import type { SkillOutputRecord, SkillReadinessEntry } from "../contracts/index.
 import type { RuntimeSessionStateStore } from "../services/session-state.js";
 import { deriveSkillReadiness } from "../skills/readiness.js";
 import type { SkillRegistry } from "../skills/registry.js";
-import type { ContextSourceProvider } from "./provider.js";
+import { defineContextSourceProvider, type ContextSourceProvider } from "./provider.js";
 import { CONTEXT_SOURCES } from "./sources.js";
 
 const MAX_CANDIDATES = 5;
@@ -91,19 +91,12 @@ export interface SkillRoutingContextProviderDeps {
 export function createSkillRoutingContextProvider(
   deps: SkillRoutingContextProviderDeps,
 ): ContextSourceProvider {
-  return {
+  return defineContextSourceProvider({
+    kind: "advisory_recall",
     source: CONTEXT_SOURCES.skillRouting,
-    plane: "advisory_recall",
-    authorityTier: "advisory_recall",
-    admissionLane: "primary_registry",
-    category: "narrative",
-    budgetClass: "recall",
     collectionOrder: 15,
     selectionPriority: 15,
     readsFrom: ["session.skillOutputs", "skill.registry"],
-    continuityCritical: false,
-    profileSelectable: true,
-    preservationPolicy: "truncatable",
     collect: (input) => {
       const cell = deps.sessionState.getExistingCell(input.sessionId);
       if (!cell) return;
@@ -129,5 +122,5 @@ export function createSkillRoutingContextProvider(
         content: block,
       });
     },
-  };
+  });
 }

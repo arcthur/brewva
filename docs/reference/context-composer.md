@@ -187,8 +187,21 @@ strings:
 - admission decisions
 - replay
 - hidden planning hints
+- context profile composition
+- provider payload mutation
 
 Those stay in runtime services and lifecycle plumbing.
+
+Do not use `ContextComposer` as a workaround for weak upstream enforcement. If a
+new context source needs stricter plane, budget, preservation, or recovery
+semantics, enforce that at source construction, registry validation, admission,
+or recovery-pipeline boundaries. Composer changes should stay limited to
+ordering and model-visible rendering of already-admitted blocks.
+
+Primary-source construction now flows through `defineContextSourceProvider(...)`;
+the composer should never infer or repair provider metadata. Recovery ordering
+is likewise owned by the runtime recovery context pipeline rather than by
+composer block ordering.
 
 Special rule for recovery context:
 
