@@ -1,6 +1,7 @@
 export type ToolFailureClass =
   | "execution"
   | "invocation_validation"
+  | "policy_denied"
   | "shell_syntax"
   | "script_composition";
 

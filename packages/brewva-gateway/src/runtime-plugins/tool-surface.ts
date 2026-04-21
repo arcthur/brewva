@@ -10,6 +10,7 @@ import {
   listSkillPreferredTools,
   type SkillCompletionFailureRecord,
   type SkillDocument,
+  type ToolEffectClass,
 } from "@brewva/brewva-runtime";
 import type {
   InternalHostPluginApi as ExtensionAPI,
@@ -79,6 +80,11 @@ const TASK_CONTEXT_MUTATION_TOOL_NAMES = new Set([
   "task_record_blocker",
   "task_resolve_blocker",
 ]);
+const SKILL_LIFECYCLE_MUTATION_TOOL_NAMES = new Set(["skill_load", "skill_complete"]);
+const TOOL_SURFACE_REFRESH_TOOL_NAMES = new Set([
+  ...TASK_CONTEXT_MUTATION_TOOL_NAMES,
+  ...SKILL_LIFECYCLE_MUTATION_TOOL_NAMES,
+]);
 
 type ToolSurfaceSkill = Pick<
   SkillDocument,
@@ -94,6 +100,12 @@ type ToolSurfaceSkillState = {
     tokenBudget: number;
     usedTokens?: number;
   };
+};
+
+type ActiveSkillEffectPolicy = {
+  active: boolean;
+  allowedEffects: ReadonlySet<ToolEffectClass>;
+  deniedEffects: ReadonlySet<ToolEffectClass>;
 };
 
 export interface ToolSurfaceRuntime {
@@ -188,22 +200,13 @@ function isOperatorProfile(runtime: ToolSurfaceRuntime): boolean {
   return scopes.has("operator") || scopes.has("meta");
 }
 
-function appendSkillName(names: string[], skillName: string | null | undefined): void {
-  if (typeof skillName !== "string") return;
-  const trimmed = skillName.trim();
-  if (!trimmed || names.includes(trimmed)) return;
-  names.push(trimmed);
-}
-
 function resolveSurfaceSkills(runtime: ToolSurfaceRuntime, sessionId: string): ToolSurfaceSkill[] {
-  const names: string[] = [];
   const active = runtime.inspect.skills.getActive(sessionId);
+  if (active) {
+    return [active];
+  }
 
-  appendSkillName(names, active?.name);
-
-  return names
-    .map((name) => runtime.inspect.skills.get(name))
-    .filter((skill): skill is ToolSurfaceSkill => skill !== undefined);
+  return [];
 }
 
 function resolveManagedToolGovernanceDescriptor(
@@ -300,6 +303,55 @@ function collectSkillToolNames(
   return [...names];
 }
 
+function resolveActiveSkillEffectPolicy(skills: ToolSurfaceSkill[]): ActiveSkillEffectPolicy {
+  const allowedEffects = new Set<ToolEffectClass>();
+  const deniedEffects = new Set<ToolEffectClass>();
+  for (const skill of skills) {
+    for (const effect of listSkillAllowedEffects(skill.contract)) {
+      allowedEffects.add(effect);
+    }
+    for (const effect of listSkillDeniedEffects(skill.contract)) {
+      deniedEffects.add(effect);
+    }
+  }
+  return {
+    active: skills.length > 0,
+    allowedEffects,
+    deniedEffects,
+  };
+}
+
+function isToolAllowedByActiveSkillEffectPolicy(input: {
+  runtime: ToolSurfaceRuntime;
+  toolName: string;
+  effectPolicy: ActiveSkillEffectPolicy;
+  lifecycleManagedToolNames: ReadonlySet<string>;
+  dynamicToolDefinitions?: ReadonlyMap<string, ToolDefinition>;
+}): boolean {
+  if (!input.effectPolicy.active) {
+    return true;
+  }
+  if (
+    getBrewvaToolSurface(input.toolName) === "control_plane" ||
+    input.lifecycleManagedToolNames.has(input.toolName)
+  ) {
+    return true;
+  }
+
+  const descriptor = resolveManagedToolGovernanceDescriptor(
+    input.runtime,
+    input.toolName,
+    input.dynamicToolDefinitions,
+  );
+  if (!descriptor) {
+    return false;
+  }
+  if (descriptor.effects.some((effect) => input.effectPolicy.deniedEffects.has(effect))) {
+    return false;
+  }
+  return descriptor.effects.every((effect) => input.effectPolicy.allowedEffects.has(effect));
+}
+
 function resolveRequestedManagedToolNames(
   requestedToolNames: string[],
   knownToolNames: Set<string>,
@@ -326,6 +378,7 @@ type TurnSurfacePlan = {
   lifecycleManagedToolNames: string[];
   operatorManagedToolNames: string[];
   operatorProfile: boolean;
+  activeSkillEffectPolicy: ActiveSkillEffectPolicy;
 };
 
 function isLifecycleManagedTool(toolName: string): boolean {
@@ -391,6 +444,12 @@ function resolveAllowedRequestedManagedToolNames(input: {
   turnPlan: TurnSurfacePlan;
   dynamicToolDefinitions?: ReadonlyMap<string, ToolDefinition>;
 }): Set<string> {
+  if (input.turnPlan.repairRequired) {
+    return new Set(
+      SKILL_REPAIR_ALLOWED_TOOL_NAMES.filter((toolName) => input.knownToolNames.has(toolName)),
+    );
+  }
+
   const postureAllowedManagedToolNames = collectPostureAllowedManagedToolNames(
     input.runtime,
     input.turnPlan.toolAvailabilityPosture,
@@ -465,18 +524,57 @@ function resolveTurnSurfacePlan(input: {
     lifecycleManagedToolNames: [...new Set(lifecycleManagedToolNames)],
     operatorManagedToolNames,
     operatorProfile,
+    activeSkillEffectPolicy: resolveActiveSkillEffectPolicy(surfaceSkills),
   };
 }
 
-function resolveActiveToolNames(input: {
-  allTools: ToolInfo[];
-  activeToolNames: string[];
-  turnPlan: TurnSurfacePlan;
+function resolveVisibleActiveToolNames(input: {
+  allToolNames: string[];
+  active: ReadonlySet<string>;
   runtime: ToolSurfaceRuntime;
+  turnPlan: TurnSurfacePlan;
   dynamicToolDefinitions?: ReadonlyMap<string, ToolDefinition>;
-}): {
-  activeToolNames: string[];
+}): string[] {
+  const lifecycleManagedToolNames = new Set(input.turnPlan.lifecycleManagedToolNames);
+  return input.allToolNames.filter((toolName) => {
+    if (!input.active.has(toolName)) {
+      return false;
+    }
+    if (input.turnPlan.repairRequired && !REPAIR_ALLOWED_TOOL_NAME_SET.has(toolName)) {
+      return false;
+    }
+    return isToolAllowedByActiveSkillEffectPolicy({
+      runtime: input.runtime,
+      toolName,
+      effectPolicy: input.turnPlan.activeSkillEffectPolicy,
+      lifecycleManagedToolNames,
+      dynamicToolDefinitions: input.dynamicToolDefinitions,
+    });
+  });
+}
+
+function filterActivatedRequestedToolNames(
+  requestedActivatedToolNames: string[],
+  activeToolNames: readonly string[],
+): string[] {
+  const activeToolNameSet = new Set(activeToolNames);
+  return requestedActivatedToolNames.filter((toolName) => activeToolNameSet.has(toolName));
+}
+
+interface ToolSurfaceCounts {
   managedActiveCount: number;
+  baseActiveCount: number;
+  skillActiveCount: number;
+  controlPlaneActiveCount: number;
+  operatorActiveCount: number;
+  externalActiveCount: number;
+  hiddenSkillCount: number;
+  hiddenControlPlaneCount: number;
+  hiddenOperatorCount: number;
+}
+
+interface ResolvedToolSurface extends ToolSurfaceCounts {
+  activeToolNames: string[];
   requestedToolNames: string[];
   requestedActivatedToolNames: string[];
   ignoredRequestedToolNames: string[];
@@ -487,16 +585,83 @@ function resolveActiveToolNames(input: {
   taskSpecReady: boolean;
   operatorProfile: boolean;
   repairRequired: boolean;
-  baseActiveCount: number;
-  skillActiveCount: number;
-  controlPlaneActiveCount: number;
-  operatorActiveCount: number;
-  externalActiveCount: number;
-  hiddenSkillCount: number;
-  hiddenControlPlaneCount: number;
-  hiddenOperatorCount: number;
   recommendationSet: SkillRecommendationSet;
-} {
+}
+
+function computeToolSurfaceCounts(input: {
+  allToolNames: readonly string[];
+  activeToolNames: readonly string[];
+}): ToolSurfaceCounts {
+  const activeToolNameSet = new Set(input.activeToolNames);
+  const countActiveBySurface = (surface: ReturnType<typeof getBrewvaToolSurface>) =>
+    input.activeToolNames.filter((toolName) => getBrewvaToolSurface(toolName) === surface).length;
+  const countHiddenBySurface = (
+    surface: Exclude<ReturnType<typeof getBrewvaToolSurface>, undefined>,
+  ) =>
+    input.allToolNames.filter(
+      (toolName) => !activeToolNameSet.has(toolName) && getBrewvaToolSurface(toolName) === surface,
+    ).length;
+
+  return {
+    managedActiveCount: input.activeToolNames.filter((toolName) =>
+      isManagedBrewvaToolName(toolName),
+    ).length,
+    baseActiveCount: countActiveBySurface("base"),
+    skillActiveCount: countActiveBySurface("skill"),
+    controlPlaneActiveCount: countActiveBySurface("control_plane"),
+    operatorActiveCount: countActiveBySurface("operator"),
+    externalActiveCount: countActiveBySurface(undefined),
+    hiddenSkillCount: countHiddenBySurface("skill"),
+    hiddenControlPlaneCount: countHiddenBySurface("control_plane"),
+    hiddenOperatorCount: countHiddenBySurface("operator"),
+  };
+}
+
+function buildResolvedToolSurface(input: {
+  allToolNames: readonly string[];
+  activeToolNames: string[];
+  knownToolNames: ReadonlySet<string>;
+  requestedActivatedToolNames: string[];
+  turnPlan: TurnSurfacePlan;
+  repairRequired: boolean;
+}): ResolvedToolSurface {
+  const requestedToolNames = input.turnPlan.requestedToolNames.filter((toolName) =>
+    input.knownToolNames.has(toolName),
+  );
+  const requestedActivatedToolNames = filterActivatedRequestedToolNames(
+    input.requestedActivatedToolNames,
+    input.activeToolNames,
+  );
+
+  return {
+    activeToolNames: input.activeToolNames,
+    ...computeToolSurfaceCounts({
+      allToolNames: input.allToolNames,
+      activeToolNames: input.activeToolNames,
+    }),
+    requestedToolNames,
+    requestedActivatedToolNames,
+    ignoredRequestedToolNames: requestedToolNames.filter(
+      (toolName) => !requestedActivatedToolNames.includes(toolName),
+    ),
+    skillNames: input.turnPlan.skillNames,
+    recommendedSkillNames: input.turnPlan.recommendedSkillNames,
+    skillActivationPosture: input.turnPlan.skillActivationPosture,
+    toolAvailabilityPosture: input.turnPlan.toolAvailabilityPosture,
+    taskSpecReady: input.turnPlan.taskSpecReady,
+    operatorProfile: input.turnPlan.operatorProfile,
+    repairRequired: input.repairRequired,
+    recommendationSet: input.turnPlan.recommendationSet,
+  };
+}
+
+function resolveActiveToolNames(input: {
+  allTools: ToolInfo[];
+  activeToolNames: string[];
+  turnPlan: TurnSurfacePlan;
+  runtime: ToolSurfaceRuntime;
+  dynamicToolDefinitions?: ReadonlyMap<string, ToolDefinition>;
+}): ResolvedToolSurface {
   const allToolNames = input.allTools.map((tool) => normalizeToolName(tool.name));
   const knownToolNames = new Set(allToolNames);
   const active = new Set<string>();
@@ -546,63 +711,26 @@ function resolveActiveToolNames(input: {
       }
     }
 
-    const activeToolNames = allToolNames.filter((toolName) => active.has(toolName));
-    const baseActiveCount = activeToolNames.filter(
-      (toolName) => getBrewvaToolSurface(toolName) === "base",
-    ).length;
-    const skillActiveCount = activeToolNames.filter(
-      (toolName) => getBrewvaToolSurface(toolName) === "skill",
-    ).length;
-    const controlPlaneActiveCount = activeToolNames.filter(
-      (toolName) => getBrewvaToolSurface(toolName) === "control_plane",
-    ).length;
-    const operatorActiveCount = activeToolNames.filter(
-      (toolName) => getBrewvaToolSurface(toolName) === "operator",
-    ).length;
-    const externalActiveCount = activeToolNames.filter(
-      (toolName) => getBrewvaToolSurface(toolName) === undefined,
-    ).length;
-    const hiddenSkillCount = allToolNames.filter(
-      (toolName) => !active.has(toolName) && getBrewvaToolSurface(toolName) === "skill",
-    ).length;
-    const hiddenControlPlaneCount = allToolNames.filter(
-      (toolName) => !active.has(toolName) && getBrewvaToolSurface(toolName) === "control_plane",
-    ).length;
-    const hiddenOperatorCount = allToolNames.filter(
-      (toolName) => !active.has(toolName) && getBrewvaToolSurface(toolName) === "operator",
-    ).length;
+    const activeToolNames = resolveVisibleActiveToolNames({
+      allToolNames,
+      active,
+      runtime: input.runtime,
+      turnPlan,
+      dynamicToolDefinitions: input.dynamicToolDefinitions,
+    });
 
-    return {
+    return buildResolvedToolSurface({
       activeToolNames,
-      managedActiveCount: [...active].filter((toolName) => isManagedBrewvaToolName(toolName))
-        .length,
-      requestedToolNames: turnPlan.requestedToolNames.filter((toolName) =>
-        knownToolNames.has(toolName),
-      ),
+      allToolNames,
+      knownToolNames,
       requestedActivatedToolNames,
-      ignoredRequestedToolNames: turnPlan.requestedToolNames
-        .filter((toolName) => knownToolNames.has(toolName))
-        .filter((toolName) => !requestedActivatedToolNames.includes(toolName)),
-      skillNames: turnPlan.skillNames,
-      recommendedSkillNames: turnPlan.recommendedSkillNames,
-      skillActivationPosture: turnPlan.skillActivationPosture,
-      toolAvailabilityPosture: turnPlan.toolAvailabilityPosture,
-      taskSpecReady: turnPlan.taskSpecReady,
-      operatorProfile: turnPlan.operatorProfile,
+      turnPlan,
       repairRequired: false,
-      baseActiveCount,
-      skillActiveCount,
-      controlPlaneActiveCount,
-      operatorActiveCount,
-      externalActiveCount,
-      hiddenSkillCount,
-      hiddenControlPlaneCount,
-      hiddenOperatorCount,
-      recommendationSet: turnPlan.recommendationSet,
-    };
+    });
   }
 
   if (turnPlan.repairRequired) {
+    active.clear();
     for (const toolName of requestedActivatedToolNames) {
       if (REPAIR_ALLOWED_TOOL_NAME_SET.has(toolName)) {
         active.add(toolName);
@@ -614,60 +742,22 @@ function resolveActiveToolNames(input: {
       }
     }
 
-    const activeToolNames = allToolNames.filter((toolName) => active.has(toolName));
-    const baseActiveCount = activeToolNames.filter(
-      (toolName) => getBrewvaToolSurface(toolName) === "base",
-    ).length;
-    const skillActiveCount = activeToolNames.filter(
-      (toolName) => getBrewvaToolSurface(toolName) === "skill",
-    ).length;
-    const controlPlaneActiveCount = activeToolNames.filter(
-      (toolName) => getBrewvaToolSurface(toolName) === "control_plane",
-    ).length;
-    const operatorActiveCount = activeToolNames.filter(
-      (toolName) => getBrewvaToolSurface(toolName) === "operator",
-    ).length;
-    const externalActiveCount = activeToolNames.filter(
-      (toolName) => getBrewvaToolSurface(toolName) === undefined,
-    ).length;
-    const hiddenSkillCount = allToolNames.filter(
-      (toolName) => !active.has(toolName) && getBrewvaToolSurface(toolName) === "skill",
-    ).length;
-    const hiddenControlPlaneCount = allToolNames.filter(
-      (toolName) => !active.has(toolName) && getBrewvaToolSurface(toolName) === "control_plane",
-    ).length;
-    const hiddenOperatorCount = allToolNames.filter(
-      (toolName) => !active.has(toolName) && getBrewvaToolSurface(toolName) === "operator",
-    ).length;
+    const activeToolNames = resolveVisibleActiveToolNames({
+      allToolNames,
+      active,
+      runtime: input.runtime,
+      turnPlan,
+      dynamicToolDefinitions: input.dynamicToolDefinitions,
+    });
 
-    return {
+    return buildResolvedToolSurface({
       activeToolNames,
-      managedActiveCount: [...active].filter((toolName) => isManagedBrewvaToolName(toolName))
-        .length,
-      requestedToolNames: turnPlan.requestedToolNames.filter((toolName) =>
-        knownToolNames.has(toolName),
-      ),
+      allToolNames,
+      knownToolNames,
       requestedActivatedToolNames,
-      ignoredRequestedToolNames: turnPlan.requestedToolNames
-        .filter((toolName) => knownToolNames.has(toolName))
-        .filter((toolName) => !requestedActivatedToolNames.includes(toolName)),
-      skillNames: turnPlan.skillNames,
-      recommendedSkillNames: turnPlan.recommendedSkillNames,
-      skillActivationPosture: turnPlan.skillActivationPosture,
-      toolAvailabilityPosture: turnPlan.toolAvailabilityPosture,
-      taskSpecReady: turnPlan.taskSpecReady,
-      operatorProfile: turnPlan.operatorProfile,
+      turnPlan,
       repairRequired: true,
-      baseActiveCount,
-      skillActiveCount,
-      controlPlaneActiveCount,
-      operatorActiveCount,
-      externalActiveCount,
-      hiddenSkillCount,
-      hiddenControlPlaneCount,
-      hiddenOperatorCount,
-      recommendationSet: turnPlan.recommendationSet,
-    };
+    });
   }
 
   if (turnPlan.hasActiveSkill) {
@@ -724,62 +814,23 @@ function resolveActiveToolNames(input: {
     }
   }
 
-  const activeToolNames = allToolNames.filter((toolName) => active.has(toolName));
-  const baseActiveCount = activeToolNames.filter(
-    (toolName) => getBrewvaToolSurface(toolName) === "base",
-  ).length;
-  const skillActiveCount = activeToolNames.filter(
-    (toolName) => getBrewvaToolSurface(toolName) === "skill",
-  ).length;
-  const controlPlaneActiveCount = activeToolNames.filter(
-    (toolName) => getBrewvaToolSurface(toolName) === "control_plane",
-  ).length;
-  const operatorActiveCount = activeToolNames.filter(
-    (toolName) => getBrewvaToolSurface(toolName) === "operator",
-  ).length;
-  const externalActiveCount = activeToolNames.filter(
-    (toolName) => getBrewvaToolSurface(toolName) === undefined,
-  ).length;
-  const hiddenSkillCount = allToolNames.filter(
-    (toolName) => !active.has(toolName) && getBrewvaToolSurface(toolName) === "skill",
-  ).length;
-  const hiddenControlPlaneCount = allToolNames.filter(
-    (toolName) => !active.has(toolName) && getBrewvaToolSurface(toolName) === "control_plane",
-  ).length;
-  const hiddenOperatorCount = allToolNames.filter(
-    (toolName) => !active.has(toolName) && getBrewvaToolSurface(toolName) === "operator",
-  ).length;
+  const activeToolNames = resolveVisibleActiveToolNames({
+    allToolNames,
+    active,
+    runtime: input.runtime,
+    turnPlan,
+    dynamicToolDefinitions: input.dynamicToolDefinitions,
+  });
 
-  return {
+  return buildResolvedToolSurface({
     activeToolNames,
-    managedActiveCount: [...active].filter((toolName) => isManagedBrewvaToolName(toolName)).length,
-    requestedToolNames: turnPlan.requestedToolNames.filter((toolName) =>
-      knownToolNames.has(toolName),
-    ),
+    allToolNames,
+    knownToolNames,
     requestedActivatedToolNames,
-    ignoredRequestedToolNames: turnPlan.requestedToolNames
-      .filter((toolName) => knownToolNames.has(toolName))
-      .filter((toolName) => !requestedActivatedToolNames.includes(toolName)),
-    skillNames: turnPlan.skillNames,
-    recommendedSkillNames: turnPlan.recommendedSkillNames,
-    skillActivationPosture: turnPlan.skillActivationPosture,
-    toolAvailabilityPosture: turnPlan.toolAvailabilityPosture,
-    taskSpecReady: turnPlan.taskSpecReady,
-    operatorProfile: turnPlan.operatorProfile,
+    turnPlan,
     repairRequired: false,
-    baseActiveCount,
-    skillActiveCount,
-    controlPlaneActiveCount,
-    operatorActiveCount,
-    externalActiveCount,
-    hiddenSkillCount,
-    hiddenControlPlaneCount,
-    hiddenOperatorCount,
-    recommendationSet: turnPlan.recommendationSet,
-  };
+  });
 }
-
-type ResolvedToolSurface = ReturnType<typeof resolveActiveToolNames>;
 
 function computeSkillEnforcementKey(
   resolved: Pick<
@@ -877,6 +928,7 @@ function resolveAndActivateToolSurface(input: {
     payload: {
       availableCount: refreshedTools.length,
       activeCount: resolved.activeToolNames.length,
+      activeToolNames: resolved.activeToolNames,
       managedCount: MANAGED_BREWVA_TOOL_NAMES.length,
       managedActiveCount: resolved.managedActiveCount,
       requestedToolNames: resolved.requestedToolNames,
@@ -921,35 +973,37 @@ function registerMissingManagedTools(input: {
     turnPlan: input.turnPlan,
     dynamicToolDefinitions: input.dynamicToolDefinitions,
   });
-  const namesToEnsure = [
-    ...input.turnPlan.requestedManagedToolNames.filter((toolName) =>
-      allowedRequestedManagedToolNames.has(toolName),
-    ),
-    ...input.turnPlan.skillManagedToolNames.filter((toolName) =>
-      isToolAllowedForPosture({
-        runtime: input.runtime,
-        toolName,
-        posture: input.turnPlan.toolAvailabilityPosture,
-        managed: true,
-      }),
-    ),
-    ...input.turnPlan.lifecycleManagedToolNames.filter((toolName) =>
-      isToolAllowedForPosture({
-        runtime: input.runtime,
-        toolName,
-        posture: input.turnPlan.toolAvailabilityPosture,
-        managed: true,
-      }),
-    ),
-    ...input.turnPlan.operatorManagedToolNames.filter((toolName) =>
-      isToolAllowedForPosture({
-        runtime: input.runtime,
-        toolName,
-        posture: input.turnPlan.toolAvailabilityPosture,
-        managed: true,
-      }),
-    ),
-  ];
+  const namesToEnsure = input.turnPlan.repairRequired
+    ? SKILL_REPAIR_ALLOWED_TOOL_NAMES.filter((toolName) => knownOrDynamicToolNames.has(toolName))
+    : [
+        ...input.turnPlan.requestedManagedToolNames.filter((toolName) =>
+          allowedRequestedManagedToolNames.has(toolName),
+        ),
+        ...input.turnPlan.skillManagedToolNames.filter((toolName) =>
+          isToolAllowedForPosture({
+            runtime: input.runtime,
+            toolName,
+            posture: input.turnPlan.toolAvailabilityPosture,
+            managed: true,
+          }),
+        ),
+        ...input.turnPlan.lifecycleManagedToolNames.filter((toolName) =>
+          isToolAllowedForPosture({
+            runtime: input.runtime,
+            toolName,
+            posture: input.turnPlan.toolAvailabilityPosture,
+            managed: true,
+          }),
+        ),
+        ...input.turnPlan.operatorManagedToolNames.filter((toolName) =>
+          isToolAllowedForPosture({
+            runtime: input.runtime,
+            toolName,
+            posture: input.turnPlan.toolAvailabilityPosture,
+            managed: true,
+          }),
+        ),
+      ];
 
   for (const toolName of new Set(namesToEnsure)) {
     if (input.knownToolNames.has(toolName)) continue;
@@ -1005,9 +1059,6 @@ export function createToolSurfaceLifecycle(
         isError?: unknown;
         content?: unknown;
       };
-      if (rawEvent.isError === true) {
-        return undefined;
-      }
 
       const sessionId = getSessionId(ctx);
       if (!sessionId) {
@@ -1016,7 +1067,10 @@ export function createToolSurfaceLifecycle(
 
       const toolName =
         typeof rawEvent.toolName === "string" ? normalizeToolName(rawEvent.toolName) : "";
-      if (!TASK_CONTEXT_MUTATION_TOOL_NAMES.has(toolName)) {
+      if (!TOOL_SURFACE_REFRESH_TOOL_NAMES.has(toolName)) {
+        return undefined;
+      }
+      if (rawEvent.isError === true && !SKILL_LIFECYCLE_MUTATION_TOOL_NAMES.has(toolName)) {
         return undefined;
       }
 
@@ -1040,6 +1094,13 @@ export function createToolSurfaceLifecycle(
       const nextKey = computeSkillEnforcementKey(resolved);
       const previousKey = skillEnforcementKeyBySession.get(sessionId) ?? "";
       skillEnforcementKeyBySession.set(sessionId, nextKey);
+      if (!TASK_CONTEXT_MUTATION_TOOL_NAMES.has(toolName)) {
+        recommendationReceiptKeyBySession.set(
+          sessionId,
+          computeSkillRecommendationReceiptKey(resolved.recommendationSet),
+        );
+        return undefined;
+      }
       if (!nextKey || nextKey === previousKey) {
         return undefined;
       }

@@ -88,6 +88,80 @@ describe("Truth extraction from evidence artifacts", () => {
     expect(task2.blockers).toHaveLength(0);
   });
 
+  test("does not let raw tool details spoof command failure classification", () => {
+    const workspace = createTestWorkspace("truth-from-artifacts-spoofed-failure-class");
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionId = "truth-from-artifacts-spoofed-failure-class-1";
+
+    runtime.authority.tools.recordResult({
+      sessionId,
+      toolName: "exec",
+      args: { command: "bun test" },
+      outputText: "Test suite failed.\nProcess exited with code 1.",
+      channelSuccess: false,
+      metadata: {
+        details: {
+          failureClass: "policy_denied",
+          result: {
+            exitCode: 1,
+          },
+        },
+      },
+    });
+
+    const recorded = runtime.inspect.events.query(sessionId, {
+      type: "tool_result_recorded",
+      last: 1,
+    })[0];
+    const recordedPayload = recorded?.payload as
+      | {
+          failureClass?: string | null;
+          failureContext?: {
+            failureClass?: string | null;
+          } | null;
+        }
+      | undefined;
+    expect(recordedPayload?.failureClass).toBe("execution");
+    expect(recordedPayload?.failureContext?.failureClass).toBe("execution");
+    expect(activeCommandFailureIds(runtime, sessionId)).toHaveLength(1);
+  });
+
+  test("does not let raw policy-like tool text spoof policy denial", () => {
+    const workspace = createTestWorkspace("truth-from-artifacts-spoofed-policy-denied");
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionId = "truth-from-artifacts-spoofed-policy-denied-1";
+    const outputText = "Tool 'exec' performs denied effects for skill 'design': local_exec.";
+
+    runtime.authority.tools.recordResult({
+      sessionId,
+      toolName: "exec",
+      args: { command: "ls -1 packages/brewva-gateway/src/runtime-plugins" },
+      outputText,
+      channelSuccess: false,
+      metadata: {
+        details: {
+          reason: outputText,
+        },
+      },
+    });
+
+    const recorded = runtime.inspect.events.query(sessionId, {
+      type: "tool_result_recorded",
+      last: 1,
+    })[0];
+    const recordedPayload = recorded?.payload as
+      | {
+          failureClass?: string | null;
+          failureContext?: {
+            failureClass?: string | null;
+          } | null;
+        }
+      | undefined;
+    expect(recordedPayload?.failureClass).toBe("execution");
+    expect(recordedPayload?.failureContext?.failureClass).toBe("execution");
+    expect(activeCommandFailureIds(runtime, sessionId)).toHaveLength(1);
+  });
+
   test("suppresses blockers for invocation validation failures and resolves stale command blockers", () => {
     const workspace = createTestWorkspace("truth-from-artifacts-validation");
     const runtime = new BrewvaRuntime({ cwd: workspace });
@@ -147,6 +221,49 @@ describe("Truth extraction from evidence artifacts", () => {
     const task = runtime.inspect.task.getState(sessionId);
     expect(task.blockers).toHaveLength(0);
     expect(activeCommandFailureIds(runtime, sessionId)).toHaveLength(0);
+  });
+
+  test("does not project skill policy denials as command execution failures", () => {
+    const workspace = createTestWorkspace("truth-from-artifacts-policy-denied");
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionId = "truth-from-artifacts-policy-denied-1";
+    const outputText = "Tool 'exec' performs denied effects for skill 'design': local_exec.";
+
+    runtime.authority.tools.recordResult({
+      sessionId,
+      toolName: "exec",
+      args: { command: "ls -1 packages/brewva-gateway/src/runtime-plugins" },
+      outputText,
+      channelSuccess: false,
+      metadata: {
+        brewvaToolFailureContext: {
+          schema: "brewva.tool_failure_context.v1",
+          args: { command: "ls -1 packages/brewva-gateway/src/runtime-plugins" },
+          outputText,
+          failureClass: "policy_denied",
+        },
+        details: {
+          reason: outputText,
+        },
+      },
+    });
+
+    const recorded = runtime.inspect.events.query(sessionId, {
+      type: "tool_result_recorded",
+      last: 1,
+    })[0];
+    const recordedPayload = recorded?.payload as
+      | {
+          failureClass?: string | null;
+          failureContext?: {
+            failureClass?: string | null;
+          } | null;
+        }
+      | undefined;
+    expect(recordedPayload?.failureClass).toBe("policy_denied");
+    expect(recordedPayload?.failureContext?.failureClass).toBe("policy_denied");
+    expect(activeCommandFailureIds(runtime, sessionId)).toHaveLength(0);
+    expect(taskBlockerIds(runtime, sessionId)).toHaveLength(0);
   });
 
   test("records invocation validation failureClass for non-exec tool failures", () => {

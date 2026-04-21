@@ -104,6 +104,7 @@ export function checkpointEvent(input: {
         failureClassCounts: {
           execution: 0,
           invocation_validation: 0,
+          policy_denied: 0,
           shell_syntax: 0,
           script_composition: 0,
         },
@@ -124,7 +125,12 @@ export function toolResultFailureEvent(input: {
   timestamp: number;
   turn?: number;
   toolName: string;
-  failureClass?: "execution" | "invocation_validation" | "shell_syntax" | "script_composition";
+  failureClass?:
+    | "execution"
+    | "invocation_validation"
+    | "policy_denied"
+    | "shell_syntax"
+    | "script_composition";
 }): BrewvaEventRecord {
   return {
     id: input.id,

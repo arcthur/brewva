@@ -3,6 +3,7 @@ import {
   registerToolSurface,
   type ToolSurfaceRuntime,
 } from "@brewva/brewva-gateway/runtime-plugins";
+import { SKILL_REPAIR_ALLOWED_TOOL_NAMES } from "@brewva/brewva-runtime";
 import type {
   SkillCompletionFailureRecord,
   SkillRegistryLoadReport,
@@ -90,6 +91,7 @@ function createSkillDocument(
 
 interface ToolSurfaceRuntimeOptions {
   getActive?: ToolSurfaceRuntime["inspect"]["skills"]["getActive"];
+  getActiveState?: ToolSurfaceRuntime["inspect"]["skills"]["getActiveState"];
   getSkill?: ToolSurfaceRuntime["inspect"]["skills"]["get"];
   listSkills?: ToolSurfaceRuntime["inspect"]["skills"]["list"];
   taskState?: ReturnType<ToolSurfaceRuntime["inspect"]["task"]["getState"]>;
@@ -145,6 +147,7 @@ function createToolSurfaceRuntime(options: ToolSurfaceRuntimeOptions = {}): Tool
   Object.assign(runtime.inspect.skills, {
     list: listSkills,
     getActive: options.getActive ?? (() => undefined),
+    getActiveState: options.getActiveState ?? (() => undefined),
     getLatestFailure: () => options.latestFailure,
     get: options.getSkill ?? (() => undefined),
     getLoadReport: buildLoadReport,
@@ -227,6 +230,145 @@ describe("tool surface runtime plugin", () => {
     expect(extensionApi.activeTools).toContain("skill_complete");
     expect(extensionApi.activeTools).not.toContain("obs_query");
     expect(events.map((event) => event.type)).toContain("tool_surface_resolved");
+  });
+
+  test("active skill surface hides tools outside the skill effect contract", async () => {
+    const extensionApi = createMockRuntimePluginApi();
+    registerTools(extensionApi.api, [
+      "read",
+      "edit",
+      "write",
+      "session_compact",
+      "skill_load",
+      "workflow_status",
+      "task_view_state",
+      "grep",
+      "exec",
+      "process",
+      "skill_complete",
+      "knowledge_search",
+    ]);
+
+    const skill = createSkillDocument(
+      "design",
+      ["workspace_read", "runtime_observe"],
+      ["read", "grep", "knowledge_search"],
+    );
+    const runtime = createToolSurfaceRuntime({
+      getActive: () => skill,
+      getSkill: (name: string) => (name === skill.name ? skill : undefined),
+    });
+
+    registerToolSurface(extensionApi.api, runtime);
+    await invokeHandlerAsync(
+      extensionApi.handlers,
+      "before_agent_start",
+      {
+        type: "before_agent_start",
+        prompt: "Plan the implementation before editing files.",
+      },
+      {
+        sessionManager: {
+          getSessionId: () => "tool-surface-active-skill-effect-filter",
+        },
+      },
+    );
+
+    expect(extensionApi.activeTools).toContain("read");
+    expect(extensionApi.activeTools).toContain("grep");
+    expect(extensionApi.activeTools).toContain("knowledge_search");
+    expect(extensionApi.activeTools).toContain("skill_complete");
+    expect(extensionApi.activeTools).toContain("skill_load");
+    expect(extensionApi.activeTools).toContain("workflow_status");
+    expect(extensionApi.activeTools).not.toContain("edit");
+    expect(extensionApi.activeTools).not.toContain("write");
+    expect(extensionApi.activeTools).not.toContain("exec");
+    expect(extensionApi.activeTools).not.toContain("process");
+  });
+
+  test("repair-required skill surface is capped by the repair allowlist", async () => {
+    const extensionApi = createMockRuntimePluginApi();
+    registerTools(extensionApi.api, [
+      "read",
+      "edit",
+      "write",
+      "grep",
+      "knowledge_search",
+      "workflow_status",
+      "task_view_state",
+      "ledger_query",
+      "tape_info",
+      "reasoning_checkpoint",
+      "reasoning_revert",
+      "session_compact",
+      "skill_complete",
+      "obs_query",
+    ]);
+
+    const skill = createSkillDocument(
+      "learning-research",
+      ["workspace_read", "runtime_observe"],
+      ["knowledge_search", "read"],
+    );
+    const events: Array<Record<string, unknown>> = [];
+    const runtime = createToolSurfaceRuntime({
+      getActive: () => skill,
+      getActiveState: () => ({
+        skillName: skill.name,
+        phase: "repair_required",
+        repairBudget: {
+          remainingAttempts: 1,
+          remainingToolCalls: 6,
+          tokenBudget: 12_000,
+        },
+      }),
+      getSkill: (name: string) => (name === skill.name ? skill : undefined),
+      recordEvent: (input: Record<string, unknown>) => {
+        events.push(input);
+        return undefined;
+      },
+    });
+
+    registerToolSurface(extensionApi.api, runtime);
+    await invokeHandlerAsync(
+      extensionApi.handlers,
+      "before_agent_start",
+      {
+        type: "before_agent_start",
+        prompt: "Repair the skill completion. Use $read and $knowledge_search if useful.",
+      },
+      {
+        sessionManager: {
+          getSessionId: () => "tool-surface-repair-required",
+        },
+      },
+    );
+
+    const expectedRepairTools = [
+      "workflow_status",
+      "task_view_state",
+      "ledger_query",
+      "tape_info",
+      "reasoning_checkpoint",
+      "reasoning_revert",
+      "session_compact",
+      "skill_complete",
+    ];
+    expect(extensionApi.activeTools).toEqual(expectedRepairTools);
+    expect(new Set(extensionApi.activeTools)).toEqual(new Set(SKILL_REPAIR_ALLOWED_TOOL_NAMES));
+    expect(extensionApi.activeTools).not.toContain("read");
+    expect(extensionApi.activeTools).not.toContain("grep");
+    expect(extensionApi.activeTools).not.toContain("knowledge_search");
+    expect(extensionApi.activeTools).not.toContain("obs_query");
+
+    const event = events.find((input) => input.type === "tool_surface_resolved") as
+      | { payload?: Record<string, unknown> }
+      | undefined;
+    expect(event?.payload?.repairRequired).toBe(true);
+    expect(event?.payload?.requestedActivatedToolNames).toEqual([]);
+    expect(event?.payload?.ignoredRequestedToolNames).toEqual(["read", "knowledge_search"]);
+    expect(event?.payload?.baseActiveCount).toBe(0);
+    expect(event?.payload?.externalActiveCount).toBe(0);
   });
 
   test("skill-scoped tools honor required routing scopes before becoming visible", async () => {
@@ -1461,6 +1603,227 @@ describe("tool surface runtime plugin", () => {
     expect(extensionApi.activeTools).toContain("obs_query");
   });
 
+  test("refreshes the active tool surface after skill_load activates a skill", async () => {
+    const extensionApi = createMockRuntimePluginApi();
+    registerTools(extensionApi.api, ["read", "edit", "write", "session_compact"]);
+
+    const skill = createSkillDocument(
+      "learning-research",
+      ["workspace_read", "runtime_observe"],
+      ["read"],
+    );
+    let activeSkillName: string | undefined;
+    const events: Array<Record<string, unknown>> = [];
+    const runtime = createToolSurfaceRuntime({
+      listSkills: () => [skill],
+      getActive: () => (activeSkillName === skill.name ? skill : undefined),
+      getSkill: (name: string) => (name === skill.name ? skill : undefined),
+      recordEvent: (input: Record<string, unknown>) => {
+        events.push(input);
+        return undefined;
+      },
+    });
+    const dynamicToolDefinitions = new Map(
+      ["skill_load", "skill_complete", "workflow_status"].map((name) => [
+        name,
+        createToolDefinition(name),
+      ]),
+    );
+
+    registerToolSurface(extensionApi.api, runtime, {
+      dynamicToolDefinitions,
+    });
+    await invokeHandlerAsync(
+      extensionApi.handlers,
+      "before_agent_start",
+      {
+        type: "before_agent_start",
+        prompt: "Use $skill_load before researching repository precedent.",
+      },
+      {
+        sessionManager: {
+          getSessionId: () => "tool-surface-skill-load-refresh",
+        },
+      },
+    );
+
+    expect(extensionApi.api.getAllTools().map((tool) => tool.name)).toContain("skill_load");
+    expect(extensionApi.api.getAllTools().map((tool) => tool.name)).not.toContain("skill_complete");
+    expect(extensionApi.activeTools).not.toContain("skill_complete");
+
+    activeSkillName = skill.name;
+    await invokeHandlerAsync(
+      extensionApi.handlers,
+      "tool_result",
+      {
+        type: "tool_result",
+        toolName: "skill_load",
+        toolCallId: "tc-skill-load-refresh",
+        isError: false,
+        content: [{ type: "text", text: "Skill loaded." }],
+      },
+      {
+        sessionManager: {
+          getSessionId: () => "tool-surface-skill-load-refresh",
+        },
+      },
+    );
+
+    expect(extensionApi.api.getAllTools().map((tool) => tool.name)).toContain("skill_complete");
+    expect(extensionApi.activeTools).toContain("skill_complete");
+    const resolvedEvents = events.filter(
+      (input) => input.type === "tool_surface_resolved",
+    ) as Array<{
+      payload?: Record<string, unknown>;
+    }>;
+    expect(resolvedEvents[resolvedEvents.length - 1]?.payload?.activeToolNames).toContain(
+      "skill_complete",
+    );
+  });
+
+  test("refreshes the active tool surface after skill_complete clears the active skill", async () => {
+    const extensionApi = createMockRuntimePluginApi();
+    registerTools(extensionApi.api, ["read", "edit", "write", "session_compact"]);
+
+    const skill = createSkillDocument(
+      "learning-research",
+      ["workspace_read", "runtime_observe"],
+      ["read"],
+    );
+    let activeSkillName: string | undefined = skill.name;
+    const runtime = createToolSurfaceRuntime({
+      listSkills: () => [skill],
+      getActive: () => (activeSkillName === skill.name ? skill : undefined),
+      getSkill: (name: string) => (name === skill.name ? skill : undefined),
+    });
+    const dynamicToolDefinitions = new Map(
+      ["skill_load", "skill_complete", "workflow_status"].map((name) => [
+        name,
+        createToolDefinition(name),
+      ]),
+    );
+
+    registerToolSurface(extensionApi.api, runtime, {
+      dynamicToolDefinitions,
+    });
+    await invokeHandlerAsync(
+      extensionApi.handlers,
+      "before_agent_start",
+      {
+        type: "before_agent_start",
+        prompt: "Research repository precedent under the active skill.",
+      },
+      {
+        sessionManager: {
+          getSessionId: () => "tool-surface-skill-complete-refresh",
+        },
+      },
+    );
+    expect(extensionApi.activeTools).toContain("skill_complete");
+
+    activeSkillName = undefined;
+    await invokeHandlerAsync(
+      extensionApi.handlers,
+      "tool_result",
+      {
+        type: "tool_result",
+        toolName: "skill_complete",
+        toolCallId: "tc-skill-complete-refresh",
+        isError: false,
+        content: [{ type: "text", text: "Skill completed." }],
+      },
+      {
+        sessionManager: {
+          getSessionId: () => "tool-surface-skill-complete-refresh",
+        },
+      },
+    );
+
+    expect(extensionApi.activeTools).not.toContain("skill_complete");
+  });
+
+  test("refreshes the active tool surface after skill_complete records a repair failure", async () => {
+    const extensionApi = createMockRuntimePluginApi();
+    registerTools(extensionApi.api, ["read", "edit", "write", "session_compact"]);
+
+    const skill = createSkillDocument(
+      "learning-research",
+      ["workspace_read", "runtime_observe"],
+      ["obs_query"],
+    );
+    let activeSkillState: ReturnType<ToolSurfaceRuntime["inspect"]["skills"]["getActiveState"]> = {
+      skillName: skill.name,
+      phase: "active",
+    };
+    const runtime = createToolSurfaceRuntime({
+      listSkills: () => [skill],
+      getActive: () => skill,
+      getActiveState: () => activeSkillState,
+      getSkill: (name: string) => (name === skill.name ? skill : undefined),
+    });
+    const dynamicToolDefinitions = new Map(
+      [
+        "skill_load",
+        "skill_complete",
+        "workflow_status",
+        "task_view_state",
+        "ledger_query",
+        "tape_info",
+        "reasoning_checkpoint",
+        "reasoning_revert",
+        "obs_query",
+      ].map((name) => [name, createToolDefinition(name)]),
+    );
+
+    registerToolSurface(extensionApi.api, runtime, {
+      dynamicToolDefinitions,
+    });
+    await invokeHandlerAsync(
+      extensionApi.handlers,
+      "before_agent_start",
+      {
+        type: "before_agent_start",
+        prompt: "Research repository precedent under the active skill.",
+      },
+      {
+        sessionManager: {
+          getSessionId: () => "tool-surface-skill-repair-refresh",
+        },
+      },
+    );
+    expect(extensionApi.activeTools).toContain("obs_query");
+
+    activeSkillState = {
+      skillName: skill.name,
+      phase: "repair_required",
+      repairBudget: {
+        remainingAttempts: 1,
+        remainingToolCalls: 4,
+        tokenBudget: 8000,
+      },
+    };
+    await invokeHandlerAsync(
+      extensionApi.handlers,
+      "tool_result",
+      {
+        type: "tool_result",
+        toolName: "skill_complete",
+        toolCallId: "tc-skill-repair-refresh",
+        isError: true,
+        content: [{ type: "text", text: "Skill completion rejected." }],
+      },
+      {
+        sessionManager: {
+          getSessionId: () => "tool-surface-skill-repair-refresh",
+        },
+      },
+    );
+
+    expect(extensionApi.activeTools).toContain("skill_complete");
+    expect(extensionApi.activeTools).toContain("workflow_status");
+    expect(extensionApi.activeTools).not.toContain("obs_query");
+  });
+
   test("effect-authorized managed skill tools stay visible even when not listed in execution hints", async () => {
     const extensionApi = createMockRuntimePluginApi();
     registerTools(extensionApi.api, [
@@ -1511,6 +1874,6 @@ describe("tool surface runtime plugin", () => {
 
     expect(extensionApi.activeTools).toContain("toc_document");
     expect(extensionApi.activeTools).toContain("lsp_symbols");
-    expect(extensionApi.activeTools).toContain("process");
+    expect(extensionApi.activeTools).not.toContain("process");
   });
 });

@@ -20,7 +20,7 @@ import type {
   RecoveryWalStatus,
 } from "../contracts/index.js";
 import { asBrewvaSessionId, asBrewvaWalId } from "../contracts/index.js";
-import { ensureDir, writeFileAtomic } from "../utils/fs.js";
+import { ensureDir, ensureDirForFile, writeFileAtomic } from "../utils/fs.js";
 import { assertTurnEnvelope, type TurnEnvelope } from "./turn.js";
 
 export interface RecoveryWalStoreOptions {
@@ -618,6 +618,11 @@ export class RecoveryWalStore {
   }
 
   private appendRecord(row: RecoveryWalRecord): void {
+    ensureDirForFile(this.filePath);
+    if (!existsSync(this.filePath)) {
+      this.fileHasContent = false;
+      this.cacheByFilePath.delete(this.filePath);
+    }
     const prefix = this.hasContent() ? "\n" : "";
     const serialized = JSON.stringify(row);
     const appended = `${prefix}${serialized}`;

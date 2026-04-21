@@ -6,8 +6,22 @@ export type EvidenceArtifact = Record<string, JsonValue> & { kind: string };
 export type CommandFailureClass =
   | "execution"
   | "invocation_validation"
+  | "policy_denied"
   | "shell_syntax"
   | "script_composition";
+
+function normalizeCommandFailureClass(value: unknown): CommandFailureClass | undefined {
+  if (
+    value === "execution" ||
+    value === "invocation_validation" ||
+    value === "policy_denied" ||
+    value === "shell_syntax" ||
+    value === "script_composition"
+  ) {
+    return value;
+  }
+  return undefined;
+}
 
 function getCommand(args: Record<string, unknown> | undefined): string | undefined {
   if (!args) return undefined;
@@ -67,9 +81,9 @@ function uniqueLines(lines: string[], limit: number): string[] {
 }
 
 const INVOCATION_VALIDATION_PATTERN =
-  /\b(invalid\s+(?:arguments?|params?|parameters?)|missing\s+required|schema\s+validation|must\s+be\s+(?:an?\s+)?(?:integer|number|string|boolean)|must\s+be\s+(?:<=|>=|<|>)|expected\s+type|unexpected\s+argument)\b/iu;
+  /\b(validation\s+failed\s+for\s+tool|skill\s+completion\s+rejected|required\s+skill\s+outputs|explicit\s+outputs\s+object|invalid\s+(?:arguments?|params?|parameters?)|missing\s+required(?:\s+outputs?)?|schema\s+validation|must\s+be\s+(?:an?\s+)?(?:integer|number|string|boolean|object)|must\s+be\s+(?:<=|>=|<|>)|expected\s+type|unexpected\s+argument)\b/iu;
 const INVOCATION_VALIDATION_OUTPUT_PATTERN =
-  /(?:^|\n)\s*(?:error:\s*)?(?:invalid\s+(?:arguments?|params?|parameters?)|schema\s+validation|missing\s+required|unexpected\s+argument|unknown\s+argument|unknown\s+option|invalid\s+value\s+for)\b/iu;
+  /(?:^|\n)\s*(?:error:\s*)?(?:validation\s+failed\s+for\s+tool|skill\s+completion\s+rejected|invalid\s+(?:arguments?|params?|parameters?)|schema\s+validation|missing\s+required(?:\s+outputs?)?|unexpected\s+argument|unknown\s+argument|unknown\s+option|invalid\s+value\s+for)\b/iu;
 const EXECUTION_EVIDENCE_PATTERN =
   /\b(process exited with code|assertionerror|traceback|command not found|permission denied|no such file or directory|segmentation fault)\b/iu;
 const SHELL_SYNTAX_PATTERN =
@@ -164,9 +178,15 @@ export function classifyToolFailure(input: {
   outputText: string;
   details?: unknown;
   isError: boolean;
+  trustedFailureClass?: CommandFailureClass;
 }): CommandFailureClass | undefined {
   if (!input.isError) {
     return undefined;
+  }
+
+  const trustedFailureClass = normalizeCommandFailureClass(input.trustedFailureClass);
+  if (trustedFailureClass) {
+    return trustedFailureClass;
   }
 
   const toolName = input.toolName.trim().toLowerCase();
@@ -258,6 +278,7 @@ export function extractEvidenceArtifacts(input: {
   outputText: string;
   isError: boolean;
   details?: unknown;
+  trustedFailureClass?: CommandFailureClass;
 }): EvidenceArtifact[] {
   const toolName = input.toolName.trim().toLowerCase();
   const artifacts: EvidenceArtifact[] = [];
@@ -272,6 +293,7 @@ export function extractEvidenceArtifacts(input: {
         outputText: input.outputText,
         details: input.details,
         isError: input.isError,
+        trustedFailureClass: input.trustedFailureClass,
       }) ?? "execution";
 
     const failingTests = uniqueLines(

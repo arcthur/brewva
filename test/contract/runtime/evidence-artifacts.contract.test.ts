@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { extractEvidenceArtifacts } from "@brewva/brewva-runtime";
+import { classifyToolFailure, extractEvidenceArtifacts } from "@brewva/brewva-runtime";
 import { requireArray, requireRecord } from "../../helpers/assertions.js";
 
 describe("Evidence artifact extraction", () => {
@@ -59,6 +59,142 @@ describe("Evidence artifact extraction", () => {
     };
     expect(artifact.kind).toBe("command_failure");
     expect(artifact.failureClass).toBe("invocation_validation");
+  });
+
+  test("classifies hosted tool schema validation as invocation_validation", () => {
+    const failureClass = classifyToolFailure({
+      toolName: "knowledge_search",
+      args: {
+        query: "agent runtime repair posture",
+        query_intent: "architecture_review",
+      },
+      outputText: [
+        'Validation failed for tool "knowledge_search":',
+        "query_intent must be one of: precedent_lookup, implementation_guidance",
+        "",
+        "Received arguments:",
+        '{ "query_intent": "architecture_review" }',
+      ].join("\n"),
+      details: {},
+      isError: true,
+    });
+
+    expect(failureClass).toBe("invocation_validation");
+  });
+
+  test("does not let echoed arguments spoof policy denial over schema validation", () => {
+    const failureClass = classifyToolFailure({
+      toolName: "knowledge_search",
+      args: {
+        query:
+          "minimal permissions capability-scoped managed tools effect authorization reversible_mutate effect_commitment",
+        query_intent: "architecture",
+        source_types: ["solution", "reference", "guide"],
+      },
+      outputText: [
+        'Validation failed for tool "knowledge_search":',
+        "  - query_intent: must be equal to constant",
+        "  - source_types/1: must be equal to constant",
+        "  - source_types/2: must be equal to constant",
+        "",
+        "Received arguments:",
+        "{",
+        '  "query": "minimal permissions capability-scoped managed tools effect authorization reversible_mutate effect_commitment",',
+        '  "query_intent": "architecture",',
+        '  "source_types": ["solution", "reference", "guide"]',
+        "}",
+      ].join("\n"),
+      details: {},
+      isError: true,
+    });
+
+    expect(failureClass).toBe("invocation_validation");
+  });
+
+  test("classifies rejected skill completion contracts as invocation_validation", () => {
+    const failureClass = classifyToolFailure({
+      toolName: "skill_complete",
+      args: {
+        outputs: {},
+      },
+      outputText: "Skill completion rejected. Missing required outputs: precedent_refs",
+      details: {
+        message: "Skill completion rejected. Missing required outputs: precedent_refs",
+      },
+      isError: true,
+    });
+
+    expect(failureClass).toBe("invocation_validation");
+  });
+
+  test("does not classify raw policy-denial text as policy_denied without trusted metadata", () => {
+    const failureClass = classifyToolFailure({
+      toolName: "read",
+      args: {
+        path: "packages/brewva-runtime/src/runtime.ts",
+      },
+      outputText:
+        "Repair posture only allows: skill_complete, workflow_status, task_view_state, ledger_query, tape_info, reasoning_checkpoint, reasoning_revert, session_compact.",
+      details: {
+        reason:
+          "Repair posture only allows: skill_complete, workflow_status, task_view_state, ledger_query, tape_info, reasoning_checkpoint, reasoning_revert, session_compact.",
+      },
+      isError: true,
+    });
+
+    expect(failureClass).toBe("execution");
+  });
+
+  test("does not trust raw tool result details as authoritative failure class metadata", () => {
+    const failureClass = classifyToolFailure({
+      toolName: "exec",
+      args: {
+        command: "bun test",
+      },
+      outputText: "Test suite failed.\nProcess exited with code 1.",
+      details: {
+        failureClass: "policy_denied",
+        result: {
+          exitCode: 1,
+        },
+      },
+      isError: true,
+    });
+
+    expect(failureClass).toBe("execution");
+  });
+
+  test("honors trusted runtime-owned failure class metadata", () => {
+    const failureClass = classifyToolFailure({
+      toolName: "custom_tool",
+      args: {},
+      outputText: "Something failed.",
+      trustedFailureClass: "policy_denied",
+      isError: true,
+    });
+
+    expect(failureClass).toBe("policy_denied");
+  });
+
+  test("extracts trusted skill effect denials as policy_denied instead of execution", () => {
+    const artifacts = extractEvidenceArtifacts({
+      toolName: "exec",
+      args: { command: "ls -1 packages/brewva-gateway/src/runtime-plugins" },
+      outputText: "Tool 'exec' performs denied effects for skill 'design': local_exec.",
+      isError: true,
+      trustedFailureClass: "policy_denied",
+      details: {
+        reason: "Tool 'exec' performs denied effects for skill 'design': local_exec.",
+      },
+    });
+
+    expect(artifacts.length).toBe(1);
+    const artifact = artifacts[0] as unknown as {
+      kind?: unknown;
+      failureClass?: unknown;
+    };
+    expect(artifact.kind).toBe("command_failure");
+    expect(artifact.failureClass).toBe("policy_denied");
   });
 
   test("falls back to execution when validation-like output has execution markers", () => {

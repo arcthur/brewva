@@ -14,6 +14,7 @@ import type {
   BrewvaHostMessageEndResult,
   InternalHostPluginApi,
   BrewvaHostSessionShutdownEvent,
+  BrewvaHostToolResultEvent,
   BrewvaHostTurnEndEvent,
 } from "@brewva/brewva-substrate";
 import {
@@ -182,6 +183,7 @@ export function registerCompletionGuard(
   const lifecycle = createCompletionGuardLifecycle(extensionApi, runtime);
   extensionApi.on("before_agent_start", lifecycle.beforeAgentStart);
   extensionApi.on("message_end", lifecycle.messageEnd);
+  extensionApi.on("tool_result", lifecycle.toolResult);
   extensionApi.on("turn_end", lifecycle.turnEnd);
   extensionApi.on("agent_end", lifecycle.agentEnd);
   extensionApi.on("session_shutdown", lifecycle.sessionShutdown);
@@ -193,6 +195,7 @@ export interface CompletionGuardLifecycle {
     event: BrewvaHostMessageEndEvent,
     ctx: BrewvaHostContext,
   ) => BrewvaHostMessageEndResult | undefined;
+  toolResult: (event: BrewvaHostToolResultEvent, ctx: BrewvaHostContext) => undefined;
   turnEnd: (event: BrewvaHostTurnEndEvent, ctx: BrewvaHostContext) => undefined;
   agentEnd: (event: BrewvaHostAgentEndEvent, ctx: BrewvaHostContext) => undefined;
   sessionShutdown: (event: BrewvaHostSessionShutdownEvent, ctx: BrewvaHostContext) => undefined;
@@ -220,7 +223,17 @@ export function createCompletionGuardLifecycle(
 ): CompletionGuardLifecycle {
   const nudgeCounts = new Map<string, number>();
   const latestPromptBySession = new Map<string, string>();
+  const fulfilledPromptBySession = new Map<string, string>();
   const failureGuardKeyBySession = new Map<string, string>();
+
+  function currentPromptKey(sessionId: string): string {
+    return (latestPromptBySession.get(sessionId) ?? "").trim();
+  }
+
+  function hasFulfilledCurrentPrompt(sessionId: string): boolean {
+    const fulfilledPrompt = fulfilledPromptBySession.get(sessionId);
+    return fulfilledPrompt !== undefined && fulfilledPrompt === currentPromptKey(sessionId);
+  }
 
   function enqueueFailedContractNotice(
     sessionId: string,
@@ -264,6 +277,10 @@ export function createCompletionGuardLifecycle(
       if (recommendations.activationPosture.kind === "repair_failed_contract") {
         nudgeCounts.delete(sessionId);
         enqueueFailedContractNotice(sessionId, latestFailure);
+        return;
+      }
+      if (hasFulfilledCurrentPrompt(sessionId)) {
+        nudgeCounts.delete(sessionId);
         return;
       }
       if (
@@ -344,7 +361,9 @@ export function createCompletionGuardLifecycle(
 
   return {
     beforeAgentStart(event, ctx) {
-      latestPromptBySession.set(ctx.sessionManager.getSessionId(), event.prompt);
+      const sessionId = ctx.sessionManager.getSessionId();
+      latestPromptBySession.set(sessionId, event.prompt);
+      fulfilledPromptBySession.delete(sessionId);
       return undefined;
     },
     messageEnd(event, ctx) {
@@ -365,6 +384,14 @@ export function createCompletionGuardLifecycle(
       if (recommendations.activationPosture.kind === "repair_failed_contract") {
         enqueueFailedContractNotice(sessionId, runtime.inspect.skills.getLatestFailure(sessionId));
         return undefined;
+      }
+      return undefined;
+    },
+    toolResult(event, ctx) {
+      const sessionId = ctx.sessionManager.getSessionId();
+      if (event.toolName.trim().toLowerCase() === "skill_complete" && !event.isError) {
+        fulfilledPromptBySession.set(sessionId, currentPromptKey(sessionId));
+        nudgeCounts.delete(sessionId);
       }
       return undefined;
     },
@@ -400,6 +427,7 @@ export function createCompletionGuardLifecycle(
       const sessionId = ctx.sessionManager.getSessionId();
       nudgeCounts.delete(sessionId);
       latestPromptBySession.delete(sessionId);
+      fulfilledPromptBySession.delete(sessionId);
       failureGuardKeyBySession.delete(sessionId);
       return undefined;
     },

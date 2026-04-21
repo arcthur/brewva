@@ -233,6 +233,85 @@ function createSkillFirstHarness() {
   };
 }
 
+function createRequiredSkillFirstHarness() {
+  const sentMessages: Array<{
+    message: Parameters<InternalHostPluginApi["sendMessage"]>[0];
+    options: Parameters<InternalHostPluginApi["sendMessage"]>[1];
+  }> = [];
+  const notifications: Array<{ message: string; level: string }> = [];
+  const skill = createSkillDocument();
+  const runtime = {
+    inspect: {
+      skills: {
+        getActive: () => undefined,
+        getActiveState: () => undefined,
+        getLatestFailure: () => undefined,
+        list: () => [
+          {
+            ...skill,
+            description: "Build a reliable repository snapshot, impact map, and planning posture.",
+            contract: {
+              ...skill.contract,
+              routing: { scope: "core" },
+              selection: {
+                whenToUse:
+                  "Use when the task needs repository orientation, impact analysis, or boundary mapping before design, debugging, review, or execution.",
+                examples: ["Analyze this repository before changing code."],
+                phases: ["execute"],
+              },
+            },
+          },
+        ],
+        getLoadReport: () => ({
+          loadedSkills: ["repository-analysis"],
+          routingEnabled: true,
+          routingScopes: ["core"],
+          routableSkills: ["repository-analysis"],
+          hiddenSkills: [],
+        }),
+      },
+      task: {
+        getState: () => ({
+          spec: {
+            schema: "brewva.task.v1",
+            goal: "Execute the implementation after repository orientation and impact analysis.",
+            expectedBehavior: "Use the repository-analysis workflow before execution.",
+            constraints: ["Execution phase requires explicit skill activation"],
+          },
+          status: { phase: "execute" },
+          items: [],
+          blockers: [],
+        }),
+      },
+    },
+  } as unknown as BrewvaHostedRuntimePort;
+  const extensionApi = {
+    sendMessage(
+      message: Parameters<InternalHostPluginApi["sendMessage"]>[0],
+      options: Parameters<InternalHostPluginApi["sendMessage"]>[1],
+    ) {
+      sentMessages.push({ message, options });
+    },
+  } as unknown as InternalHostPluginApi;
+  const ctx = {
+    sessionManager: {
+      getSessionId: () => "completion-guard-required-skill-first-session",
+    },
+    ui: {
+      notify(message: string, level: string) {
+        notifications.push({ message, level });
+      },
+    },
+  } as unknown as BrewvaHostContext;
+
+  return {
+    lifecycle: createCompletionGuardLifecycle(extensionApi, runtime),
+    sentMessages,
+    notifications,
+    ctx,
+  };
+}
+
 describe("completion guard lifecycle", () => {
   test("queues a follow-up before agent_end when a terminal assistant turn leaves an active skill open", () => {
     const { lifecycle, sentMessages, ctx } = createLifecycleHarness();
@@ -333,6 +412,45 @@ describe("completion guard lifecycle", () => {
     expect(sentMessages[0]?.options).toEqual({
       triggerTurn: false,
     });
+  });
+
+  test("does not re-open a skill-load obligation after skill_complete fulfilled the current prompt", () => {
+    const { lifecycle, sentMessages, ctx } = createRequiredSkillFirstHarness();
+
+    lifecycle.beforeAgentStart(
+      {
+        type: "before_agent_start",
+        prompt: "Execute the implementation after using the repository-analysis workflow.",
+        parts: [],
+        systemPrompt: "",
+      },
+      ctx,
+    );
+    lifecycle.toolResult(
+      {
+        type: "tool_result",
+        toolCallId: "tc-skill-complete",
+        toolName: "skill_complete",
+        input: {},
+        content: [{ type: "text", text: "Skill completed." }],
+        isError: false,
+      },
+      ctx,
+    );
+    lifecycle.turnEnd(
+      {
+        type: "turn_end",
+        turnIndex: 2,
+        message: {
+          role: "assistant",
+          stopReason: "stop",
+        },
+        toolResults: [],
+      },
+      ctx,
+    );
+
+    expect(sentMessages).toEqual([]);
   });
 
   test("does not start another repair turn after a skill contract has failed permanently", () => {

@@ -783,6 +783,12 @@ be read as authority.
 `effectCommitmentRequestId` and `toolCallId` link the result back to the exact
 approval-bearing request that authorized it.
 
+Failed tool results may carry a `failureClass` of `execution`,
+`invocation_validation`, `policy_denied`, `shell_syntax`, or
+`script_composition`. Only real execution failures are projected into
+`command_failure` truth facts; policy-denied and invocation-validation failures
+remain governance or call-shape evidence.
+
 `tool_result_recorded` remains operator truth, but `session-wire.v2` replay
 does not project it into standalone durable `tool.finished` frames. Final
 frontend-facing tool outputs are carried by `turn_render_committed.toolOutputs`.

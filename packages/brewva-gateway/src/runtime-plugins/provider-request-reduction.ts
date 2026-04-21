@@ -432,20 +432,25 @@ function collectReductionCandidates(payload: Record<string, unknown>): Reduction
   return candidates;
 }
 
-function shouldSkipForRecovery(runtime: BrewvaHostedRuntimePort, sessionId: string): boolean {
+function resolveReductionPostureBlockReason(
+  runtime: BrewvaHostedRuntimePort,
+  sessionId: string,
+): string | null {
   const lifecycle = runtime.inspect.lifecycle.getSnapshot(sessionId);
   if (lifecycle.summary.kind === "degraded" || lifecycle.summary.kind === "recovering") {
-    return true;
+    return "recovery posture is active";
   }
-  if (lifecycle.summary.kind !== "blocked") {
-    return false;
-  }
-  return (
-    lifecycle.execution.kind === "waiting_approval" ||
+  if (
     lifecycle.recovery.pendingFamily !== null ||
     lifecycle.recovery.latestStatus === "entered" ||
-    lifecycle.tooling.openToolCalls.length > 0
-  );
+    lifecycle.execution.kind === "recovering"
+  ) {
+    return "recovery posture is active";
+  }
+  if (lifecycle.execution.kind === "waiting_approval") {
+    return "approval wait is active";
+  }
+  return null;
 }
 
 export function resolveTransientOutboundReductionEligibility(
@@ -461,10 +466,11 @@ export function resolveTransientOutboundReductionEligibility(
     };
   }
 
-  if (shouldSkipForRecovery(runtime, sessionId)) {
+  const postureBlockReason = resolveReductionPostureBlockReason(runtime, sessionId);
+  if (postureBlockReason) {
     return {
       allowed: false,
-      detail: "recovery posture is active",
+      detail: postureBlockReason,
       pressureLevel: "unknown",
     };
   }
@@ -625,5 +631,5 @@ export const PROVIDER_REQUEST_REDUCTION_TEST_ONLY = {
   buildEstimatedPayloadUsage,
   estimatePayloadTextTokens,
   resolveTransientOutboundReductionEligibility,
-  shouldSkipForRecovery,
+  resolveReductionPostureBlockReason,
 };

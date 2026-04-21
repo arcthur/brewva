@@ -380,6 +380,97 @@ describe("provider request reduction", () => {
     );
   });
 
+  test("ordinary blocked tool lifecycle does not masquerade as recovery posture", () => {
+    const runtime = createRuntimeFixture();
+    const { api, handlers } = createMockRuntimePluginApi();
+    const sessionId = "provider-request-reduction-open-tool-call";
+
+    registerProviderRequestReduction(api, createHostedRuntimePort(runtime));
+    runtime.maintain.context.observeUsage(sessionId, {
+      tokens: 88_000,
+      contextWindow: 100_000,
+      percent: 88,
+    });
+    Object.assign(runtime.inspect.lifecycle, {
+      getSnapshot() {
+        return {
+          hydration: {
+            status: "ready",
+            issues: [],
+          },
+          execution: {
+            kind: "tool_executing",
+            toolCallId: "tc-read",
+            toolName: "read",
+          },
+          recovery: {
+            mode: "normal",
+            latestReason: null,
+            latestStatus: null,
+            pendingFamily: null,
+            degradedReason: null,
+            duplicateSideEffectSuppressionCount: 0,
+            latestSourceEventId: null,
+            latestSourceEventType: null,
+            recentTransitions: [],
+          },
+          skill: {
+            posture: "repair_required",
+            activeSkillName: "learning-research",
+          },
+          approval: {
+            status: "idle",
+            pendingCount: 0,
+            requestId: null,
+            toolCallId: null,
+            toolName: null,
+            subject: null,
+          },
+          tooling: {
+            openToolCalls: [
+              {
+                toolCallId: "tc-read",
+                toolName: "read",
+                openedAt: 100,
+              },
+            ],
+          },
+          integrity: {
+            status: "healthy",
+            issues: [],
+          },
+          summary: {
+            kind: "blocked",
+            reason: "skill_repair_required",
+            detail: "learning-research",
+          },
+        };
+      },
+    });
+
+    const payload = invokeBeforeProviderRequestChain(
+      handlers,
+      {
+        model: "gpt-5.4",
+        messages: buildToolMessages(6),
+      },
+      sessionId,
+    );
+
+    expect((payload.messages as Array<Record<string, unknown>>)[0]?.content).toBe(
+      CLEARED_TOOL_RESULT_PLACEHOLDER,
+    );
+    expect(runtime.inspect.context.getTransientReduction(sessionId)).toEqual(
+      expect.objectContaining({
+        status: "completed",
+        reason: null,
+        eligibleToolResults: 6,
+        clearedToolResults: 2,
+        pressureLevel: "high",
+      }),
+    );
+  });
+
   test("records live transient reduction state when a high-pressure outbound payload is reduced", () => {
     const runtime = createRuntimeFixture();
     const { api, handlers } = createMockRuntimePluginApi();

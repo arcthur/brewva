@@ -175,6 +175,7 @@ describe("TurnReplayEngine checkpoint replay", () => {
             failureClassCounts: {
               execution: 0,
               invocation_validation: 0,
+              policy_denied: 0,
               shell_syntax: 0,
               script_composition: 0,
             },

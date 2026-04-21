@@ -23,6 +23,7 @@ export interface ToolFailureContextMetadata {
 function normalizeFailureClass(value: unknown): ToolFailureClass | undefined {
   if (value === "execution") return value;
   if (value === "invocation_validation") return value;
+  if (value === "policy_denied") return value;
   if (value === "shell_syntax") return value;
   if (value === "script_composition") return value;
   return undefined;

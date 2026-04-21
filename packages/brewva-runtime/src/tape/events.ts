@@ -60,7 +60,12 @@ export interface TapeCheckpointToolFailureEntry {
   args: Record<string, unknown>;
   outputText: string;
   turn: number;
-  failureClass?: "execution" | "invocation_validation" | "shell_syntax" | "script_composition";
+  failureClass?:
+    | "execution"
+    | "invocation_validation"
+    | "policy_denied"
+    | "shell_syntax"
+    | "script_composition";
   anchorEpoch: number;
   timestamp: number;
 }
@@ -68,6 +73,7 @@ export interface TapeCheckpointToolFailureEntry {
 export interface TapeCheckpointFailureClassCounts {
   execution: number;
   invocation_validation: number;
+  policy_denied: number;
   shell_syntax: number;
   script_composition: number;
 }
@@ -522,6 +528,7 @@ function coerceCheckpointToolFailureEntry(value: unknown): TapeCheckpointToolFai
   const failureClass =
     value.failureClass === "execution" ||
     value.failureClass === "invocation_validation" ||
+    value.failureClass === "policy_denied" ||
     value.failureClass === "shell_syntax" ||
     value.failureClass === "script_composition"
       ? value.failureClass
@@ -561,6 +568,7 @@ function coerceCheckpointEvidenceState(value: unknown): TapeCheckpointEvidenceSt
   const invocationValidation = normalizeNonNegativeInteger(
     failureClassCountsInput.invocation_validation,
   );
+  const policyDenied = normalizeNonNegativeInteger(failureClassCountsInput.policy_denied) ?? 0;
   const shellSyntax = normalizeNonNegativeInteger(failureClassCountsInput.shell_syntax);
   const scriptComposition = normalizeNonNegativeInteger(failureClassCountsInput.script_composition);
   if (
@@ -574,6 +582,7 @@ function coerceCheckpointEvidenceState(value: unknown): TapeCheckpointEvidenceSt
   const failureClassCounts = {
     execution,
     invocation_validation: invocationValidation,
+    policy_denied: policyDenied,
     shell_syntax: shellSyntax,
     script_composition: scriptComposition,
   };

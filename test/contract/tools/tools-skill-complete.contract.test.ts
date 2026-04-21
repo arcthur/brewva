@@ -640,6 +640,84 @@ describe("skill_complete tool", () => {
     });
   });
 
+  test("repair support budget exhaustion preserves the final skill completion path", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-skill-complete-repair-budget-"));
+    const config = structuredClone(DEFAULT_BREWVA_CONFIG);
+    config.infrastructure.events.enabled = true;
+    config.ledger.path = ".orchestrator/ledger/evidence.jsonl";
+    config.infrastructure.events.dir = ".orchestrator/events";
+    const runtime = new BrewvaRuntime({ cwd: workspace, config });
+    const sessionId = "skill-complete-repair-budget";
+    const loadTool = createSkillLoadTool({ runtime });
+    const completeTool = createSkillCompleteTool({
+      runtime,
+      verification: { executeCommands: false },
+    });
+
+    await loadTool.execute(
+      "tc-load-design-repair-budget",
+      { name: "design" },
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+
+    const invalidOutputs = {
+      design_spec: "todo",
+    };
+
+    await completeTool.execute(
+      "tc-complete-design-repair-budget-1",
+      {
+        outputs: invalidOutputs,
+      },
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+
+    for (let index = 0; index < 6; index += 1) {
+      const started = runtime.authority.tools.start({
+        sessionId,
+        toolCallId: `tc-repair-support-${index}`,
+        toolName: "ledger_query",
+        args: { last: 1 },
+      });
+      expect(started.allowed).toBe(true);
+    }
+
+    const blockedSupportTool = runtime.authority.tools.start({
+      sessionId,
+      toolCallId: "tc-repair-support-exhausted",
+      toolName: "ledger_query",
+      args: { last: 1 },
+    });
+    expect(blockedSupportTool.allowed).toBe(false);
+    expect(blockedSupportTool.reason).toContain("Repair posture exhausted maxToolCalls=6");
+    expect(runtime.inspect.skills.getActiveState(sessionId)).toMatchObject({
+      skillName: "design",
+      phase: "repair_required",
+      repairBudget: expect.objectContaining({
+        remainingToolCalls: 0,
+      }),
+    });
+    expect(runtime.inspect.skills.getLatestFailure(sessionId)).toMatchObject({
+      skillName: "design",
+      phase: "repair_required",
+    });
+
+    const completionAccess = runtime.inspect.tools.checkAccess(sessionId, "skill_complete");
+    expect(completionAccess.allowed).toBe(true);
+
+    const completionStart = runtime.authority.tools.start({
+      sessionId,
+      toolCallId: "tc-repair-final-complete",
+      toolName: "skill_complete",
+      args: { outputs: invalidOutputs },
+    });
+    expect(completionStart.allowed).toBe(true);
+  });
+
   test("records non-canonical planning taxonomy as advisory normalization drift for semantic-bound custom skills", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-skill-complete-planning-taxonomy-"));
     writeSkill(join(workspace, ".brewva/skills/core/planning-loose/SKILL.md"), {

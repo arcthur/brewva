@@ -102,6 +102,31 @@ describe("TurnReplayEngine cost and evidence folding", () => {
     expect(view.evidenceState.failureClassCounts.execution).toBe(0);
   });
 
+  test("counts policy-denied tool results separately from execution failures", () => {
+    const sessionId = asBrewvaSessionId("replay-engine-policy-denied");
+    const events: BrewvaEventRecord[] = [
+      toolResultFailureEvent({
+        sessionId,
+        id: "evt-tool-policy-denied-1",
+        timestamp: 1,
+        turn: 3,
+        toolName: "exec",
+        failureClass: "policy_denied",
+      }),
+    ];
+    const engine = new TurnReplayEngine({
+      listEvents: () => events,
+      getTurn: () => 3,
+    });
+
+    const failures = engine.getRecentToolFailures(sessionId);
+    expect(failures[0]?.failureClass).toBe("policy_denied");
+
+    const view = engine.replay(sessionId);
+    expect(view.evidenceState.failureClassCounts.policy_denied).toBe(1);
+    expect(view.evidenceState.failureClassCounts.execution).toBe(0);
+  });
+
   test("derives invocation validation counts from failure context when failureClass is missing", () => {
     const sessionId = asBrewvaSessionId("replay-engine-derived-invocation-validation");
     const events: BrewvaEventRecord[] = [

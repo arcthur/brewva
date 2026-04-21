@@ -179,6 +179,7 @@ function createEmptyEvidenceState(): ReplayEvidenceState {
     failureClassCounts: {
       execution: 0,
       invocation_validation: 0,
+      policy_denied: 0,
       shell_syntax: 0,
       script_composition: 0,
     },
@@ -209,6 +210,7 @@ function normalizeToolFailureClass(
 ): ReplayToolFailureEntry["failureClass"] | undefined {
   if (value === "execution") return value;
   if (value === "invocation_validation") return value;
+  if (value === "policy_denied") return value;
   if (value === "shell_syntax") return value;
   if (value === "script_composition") return value;
   return undefined;
@@ -371,6 +373,7 @@ function checkpointEvidenceToReplay(state: TapeCheckpointEvidenceState): ReplayE
     failureClassCounts: {
       execution: state.failureClassCounts.execution,
       invocation_validation: state.failureClassCounts.invocation_validation,
+      policy_denied: state.failureClassCounts.policy_denied,
       shell_syntax: state.failureClassCounts.shell_syntax,
       script_composition: state.failureClassCounts.script_composition,
     },
@@ -410,6 +413,7 @@ function replayEvidenceToCheckpoint(state: ReplayEvidenceState): TapeCheckpointE
     failureClassCounts: {
       execution: state.failureClassCounts.execution,
       invocation_validation: state.failureClassCounts.invocation_validation,
+      policy_denied: state.failureClassCounts.policy_denied,
       shell_syntax: state.failureClassCounts.shell_syntax,
       script_composition: state.failureClassCounts.script_composition,
     },

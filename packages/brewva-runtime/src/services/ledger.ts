@@ -14,6 +14,7 @@ import { buildLedgerDigest } from "../ledger/digest.js";
 import type { EvidenceLedger } from "../ledger/evidence-ledger.js";
 import { formatLedgerRows } from "../ledger/query.js";
 import {
+  TOOL_FAILURE_CONTEXT_METADATA_KEY,
   readToolFailureContextMetadata,
   withToolFailureContextMetadata,
 } from "../ledger/tool-failure-context.js";
@@ -38,6 +39,7 @@ function normalizeFailureClass(value: unknown): CommandFailureClass | undefined 
   if (
     value === "execution" ||
     value === "invocation_validation" ||
+    value === "policy_denied" ||
     value === "shell_syntax" ||
     value === "script_composition"
   ) {
@@ -55,12 +57,16 @@ function resolveToolFailureClass(input: {
 }): CommandFailureClass | undefined {
   if (!isToolResultFail(input.verdict)) return undefined;
 
+  const trustedFailureClass = readToolFailureContextMetadata(
+    input.metadata as Record<string, JsonValue> | undefined,
+  )?.failureClass;
   const classifiedFailure = classifyToolFailure({
     toolName: input.toolName,
     args: input.args,
     outputText: input.outputText,
     details: input.metadata?.details,
     isError: true,
+    trustedFailureClass,
   });
   if (classifiedFailure) {
     return classifiedFailure;
@@ -114,6 +120,9 @@ function buildTruthProjectionPayload(input: {
       ? (input.metadata.details as Record<string, unknown>)
       : undefined;
   const artifacts = Array.isArray(input.metadata?.artifacts) ? input.metadata.artifacts : undefined;
+  const toolFailureContext = readToolFailureContextMetadata(
+    input.metadata as Record<string, JsonValue> | undefined,
+  );
 
   return {
     toolName: normalizedToolName,
@@ -122,10 +131,13 @@ function buildTruthProjectionPayload(input: {
     verdict: input.verdict,
     ledgerRow: input.ledgerRow,
     metadata:
-      details || artifacts
+      details || artifacts || toolFailureContext
         ? {
             details,
             artifacts,
+            ...(toolFailureContext
+              ? { [TOOL_FAILURE_CONTEXT_METADATA_KEY]: toolFailureContext }
+              : {}),
           }
         : undefined,
   };

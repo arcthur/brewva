@@ -14,8 +14,10 @@ import {
   type EvidenceArtifact,
 } from "../evidence/artifacts.js";
 import { parseTscDiagnostics } from "../evidence/tsc.js";
+import { readToolFailureContextMetadata } from "../ledger/tool-failure-context.js";
 import { redactSecrets } from "../security/redact.js";
 import { sha256 } from "../utils/hash.js";
+import type { JsonValue } from "../utils/json.js";
 import { normalizeToolName } from "../utils/tool-name.js";
 import {
   isToolResultFail,
@@ -189,6 +191,7 @@ function resolveCommandFailureClass(failure: EvidenceArtifact | undefined): Comm
   if (
     value === "execution" ||
     value === "invocation_validation" ||
+    value === "policy_denied" ||
     value === "shell_syntax" ||
     value === "script_composition"
   ) {
@@ -548,12 +551,16 @@ export function projectTruthFromToolResult(
   const normalizedTool = normalizeToolName(input.toolName);
 
   const metadataArtifacts = coerceEvidenceArtifacts(input.metadata?.artifacts);
+  const trustedFailureClass = readToolFailureContextMetadata(
+    input.metadata as Record<string, JsonValue> | undefined,
+  )?.failureClass;
   const extractedArtifacts = extractEvidenceArtifacts({
     toolName: input.toolName,
     args: input.args,
     outputText: input.outputText,
     isError: isToolResultFail(input.verdict),
     details: input.metadata?.details,
+    trustedFailureClass,
   });
   const artifacts = dedupeArtifacts([...metadataArtifacts, ...extractedArtifacts]);
 

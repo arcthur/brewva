@@ -195,6 +195,7 @@ function registerHostedPipeline(
     narrativeMemory,
     {
       beforeAgentStart: completionGuard.beforeAgentStart,
+      toolResult: completionGuard.toolResult,
       turnEnd: completionGuard.turnEnd,
       agentEnd: completionGuard.agentEnd,
       sessionShutdown: completionGuard.sessionShutdown,

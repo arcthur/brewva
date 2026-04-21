@@ -40,6 +40,14 @@ import { RuntimeSessionStateStore } from "./session-state.js";
 const REPAIR_ALLOWED_TOOL_NAME_SET = new Set<string>(SKILL_REPAIR_ALLOWED_TOOL_NAMES);
 const NO_ACTIVE_SKILL_REASON = "No active skill is loaded for this session.";
 
+type RepairToolAccessDecision =
+  | { allowed: true }
+  | { allowed: false; reason: string; terminalFailure: boolean };
+
+function isSkillCompletionTool(toolName: string): boolean {
+  return toolName === "skill_complete";
+}
+
 function noActiveSkillValidationResult(): SkillOutputValidationResult & { ok: false } {
   return {
     ok: false,
@@ -357,7 +365,7 @@ export class SkillLifecycleService {
     sessionId: string,
     toolName: string,
     usage?: ContextBudgetUsage,
-  ): { allowed: boolean; reason?: string } {
+  ): RepairToolAccessDecision {
     const state = this.sessionState.getExistingCell(sessionId);
     const activeSkillState = state?.activeSkillState;
     if (!activeSkillState || activeSkillState.phase !== "repair_required") {
@@ -369,6 +377,7 @@ export class SkillLifecycleService {
       return {
         allowed: false,
         reason: `Repair posture only allows: ${SKILL_REPAIR_ALLOWED_TOOL_NAMES.join(", ")}.`,
+        terminalFailure: false,
       };
     }
 
@@ -376,10 +385,11 @@ export class SkillLifecycleService {
     if (!repairBudget) {
       return { allowed: true };
     }
-    if (repairBudget.remainingToolCalls <= 0) {
+    if (repairBudget.remainingToolCalls <= 0 && !isSkillCompletionTool(normalizedToolName)) {
       return {
         allowed: false,
         reason: `Repair posture exhausted maxToolCalls=${repairBudget.maxToolCalls}.`,
+        terminalFailure: false,
       };
     }
 
@@ -393,6 +403,7 @@ export class SkillLifecycleService {
       return {
         allowed: false,
         reason: `Repair posture exhausted tokenBudget=${repairBudget.tokenBudget}.`,
+        terminalFailure: true,
       };
     }
 
@@ -412,13 +423,19 @@ export class SkillLifecycleService {
 
     const access = this.explainRepairToolAccess(sessionId, toolName, usage);
     if (!access.allowed) {
-      this.failRepairBudget(sessionId, access.reason);
+      if (access.terminalFailure) {
+        this.failRepairBudget(sessionId, access.reason);
+      }
       return access;
     }
 
     const latestFailure = state.latestSkillFailure;
     const repairBudget = latestFailure?.repairBudget;
     if (!latestFailure || !repairBudget) {
+      return { allowed: true };
+    }
+    const normalizedToolName = toolName.trim().toLowerCase();
+    if (isSkillCompletionTool(normalizedToolName)) {
       return { allowed: true };
     }
 

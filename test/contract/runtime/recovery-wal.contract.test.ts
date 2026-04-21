@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { appendFileSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync, rmSync } from "node:fs";
+import { dirname } from "node:path";
 import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG, asBrewvaWalId } from "@brewva/brewva-runtime";
 import type { TurnEnvelope } from "@brewva/brewva-runtime/channels";
 import { RecoveryWalStore, createSchedulerIngressPort } from "@brewva/brewva-runtime/internal";
@@ -84,6 +85,40 @@ describe("Recovery WAL store", () => {
       .map((line) => line.trim())
       .filter(Boolean);
     expect(lines.length).toBe(3);
+  });
+
+  test("given the wal directory disappears after construction, when appendPending is called, then the writer recreates it", () => {
+    const workspace = createTestWorkspace("recovery-wal-recreate-parent");
+    const store = new RecoveryWalStore({
+      workspaceRoot: workspace,
+      config: DEFAULT_BREWVA_CONFIG.infrastructure.recoveryWal,
+      scope: "runtime",
+    });
+    rmSync(dirname(store.filePath), { recursive: true, force: true });
+
+    const pending = store.appendPending(createEnvelope("turn-recreate-parent"), "channel");
+
+    expect(existsSync(store.filePath)).toBe(true);
+    expect(readFileSync(store.filePath, "utf8")).toContain(pending.walId);
+    expect(store.listPending().map((row) => row.walId)).toEqual([pending.walId]);
+  });
+
+  test("given the wal file disappears after previous writes, when appendPending is called, then stale cache state is discarded", () => {
+    const workspace = createTestWorkspace("recovery-wal-discard-stale-cache");
+    const store = new RecoveryWalStore({
+      workspaceRoot: workspace,
+      config: DEFAULT_BREWVA_CONFIG.infrastructure.recoveryWal,
+      scope: "runtime",
+    });
+    store.appendPending(createEnvelope("turn-before-delete"), "channel");
+    rmSync(dirname(store.filePath), { recursive: true, force: true });
+
+    const pending = store.appendPending(createEnvelope("turn-after-delete"), "channel");
+    const content = readFileSync(store.filePath, "utf8");
+
+    expect(content.startsWith("{")).toBe(true);
+    expect(content).toContain(pending.walId);
+    expect(store.listPending().map((row) => row.walId)).toEqual([pending.walId]);
   });
 
   test("given a tool-source row, when appendPending is called without ttl override, then tool retention is used", () => {
