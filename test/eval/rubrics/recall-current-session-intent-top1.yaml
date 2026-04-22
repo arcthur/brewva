@@ -1,0 +1,17 @@
+criteria:
+  - name: intent_changes_top1
+    weight: 4
+    description: Current-session intent improves the broker top-1 hit over generic broker ranking.
+    pass_condition: "output_number_gte:metrics.intent_top_1_gain:1"
+  - name: current_session_top_result
+    weight: 3
+    description: The intent-aware top broker result is the current-session tape evidence.
+    pass_condition: "output_contains:top_result:tape:current-session"
+  - name: generic_broker_misses_top1
+    weight: 2
+    description: The generic broker top result is not the current-session relevant evidence.
+    pass_condition: "output_number_lte:metrics.broker_without_intent_top_1_hit_rate:0"
+  - name: no_harmful_intent_result
+    weight: 1
+    description: The intent-aware top-k broker slice excludes the fresher historical tape note.
+    pass_condition: "output_number_lte:metrics.broker_harmful_recall_rate:0"

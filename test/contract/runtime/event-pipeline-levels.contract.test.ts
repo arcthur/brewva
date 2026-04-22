@@ -247,7 +247,7 @@ describe("event pipeline level classification", () => {
     }
   });
 
-  test("keeps read-path and skill recommendation protocol receipts at audit level", () => {
+  test("keeps read-path and skill diagnosis protocol receipts at audit level", () => {
     const runtime = new BrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-events-audit-hosted-protocol-")),
       config: createAuditConfig(),
@@ -257,7 +257,7 @@ describe("event pipeline level classification", () => {
     for (const type of [
       "tool_read_path_gate_armed",
       "tool_read_path_discovery_observed",
-      "skill_recommendation_derived",
+      "skill_diagnosis_derived",
     ] as const) {
       recordRuntimeEvent(runtime, {
         sessionId,
@@ -275,7 +275,7 @@ describe("event pipeline level classification", () => {
       runtime.inspect.events.query(sessionId, { type: "tool_read_path_discovery_observed" }),
     ).toHaveLength(1);
     expect(
-      runtime.inspect.events.query(sessionId, { type: "skill_recommendation_derived" }),
+      runtime.inspect.events.query(sessionId, { type: "skill_diagnosis_derived" }),
     ).toHaveLength(1);
   });
 

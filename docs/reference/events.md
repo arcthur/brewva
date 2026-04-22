@@ -490,12 +490,23 @@ are durable evidence events on tape
 
 remain rebuildable state under `.brewva/recall/**`
 
-Broker search ranks results by typed `sourceTier` before score:
-`runtime_evidence`, `repository_precedent`, `promotion_candidate`,
-`advisory_memory`. Runtime evidence only includes allowlisted recovery-relevant
-tape events. `recall_results_surfaced`, `context_*`, `projection_*`, semantic
-rerank telemetry, and routing telemetry are excluded from broker tape search and
-session digest text to avoid recall self-reinforcement.
+Broker search ranks results by intent/source priority, `evidenceStrength`,
+`semanticScore`, freshness, and curation into an explicit `rankingScore`.
+Rendered entries carry a presentation-only `trustLabel` and
+`evidenceStrength`. Repository precedent can outrank weak tape notes, while
+strong runtime receipts such as kernel truth, tool receipts, skill completion,
+verification outcome, decision receipts, approval lifecycle receipts,
+reversible mutation receipts, rollback, patch, and recovery-WAL append receipts
+can outrank precedent. Recovery-WAL recall is limited to appended WAL entries;
+status-change, recovery-completed, and compaction maintenance receipts remain
+outside the recall-searchable tape set. The strong set is intentionally
+receipt-broad: under broad recall scope, a cross-session strong receipt may still
+rank above current-session weak task progress; use `session_local` when the
+information need is current-session forensics rather than durable receipt
+authority. `recall_results_surfaced`,
+`context_*`, `projection_*`, semantic rerank telemetry, and routing telemetry
+are excluded from broker tape search and session digest text to avoid recall
+self-reinforcement.
 
 ### Iteration Facts
 
@@ -574,7 +585,7 @@ proposal objects and they do not themselves create approval-bearing requests.
 - `context_injection_dropped`
 - `context_usage`
 - `tool_surface_resolved`
-- `skill_recommendation_derived`
+- `skill_diagnosis_derived`
 - `turn_governance_decision`
 - `identity_parse_warning`
 - `task_stuck_detected`
@@ -582,13 +593,18 @@ proposal objects and they do not themselves create approval-bearing requests.
 - `task_stall_adjudicated`
 - `task_stall_adjudication_error`
 
-`skill_recommendation_derived` is the hosted control-plane receipt for
-skill-first routing posture while no skill is active yet. The payload records
-the semantic `activationPosture`, the derived `toolAvailabilityPosture`, whether
-TaskSpec is already present, and the ranked candidate set with categories,
-scores, and matched reasons. The hosted path may emit another receipt in the
+`skill_diagnosis_derived` is the hosted control-plane receipt for skill routing
+posture while no skill is active yet. The payload records the semantic
+`activationPosture`, the derived `toolAvailabilityPosture`, whether TaskSpec is
+already present, the selected candidate, nearby rejected candidates, readiness
+basis, missing required inputs, satisfied consumed inputs, shallow-output risk,
+and the shortest next action. The hosted path may emit another receipt in the
 same turn after `task_set_spec` or other task-state mutations if the routed
 posture changes.
+
+When the best candidate is blocked by missing required inputs, the posture uses
+`require_skill_inputs` and the tool surface stays in `require_explore` rather
+than forcing immediate `skill_load`.
 
 `turn_governance_decision` is the aggregate explanation receipt for local hook,
 skill-first, tool-surface, completion guard, and plugin-capability governance
@@ -622,7 +638,7 @@ It does not carry prompt hashes, provider cache counters, or the composed text
 itself.
 
 `tool_surface_resolved` is the hosted tool-surface posture receipt. Its payload
-records the resolved visible-surface counts and recommendation posture, such as:
+records the resolved visible-surface counts and diagnosis posture, such as:
 
 - `availableCount`
 - `activeCount`
@@ -632,7 +648,7 @@ records the resolved visible-surface counts and recommendation posture, such as:
 - `requestedActivatedToolNames`
 - `ignoredRequestedToolNames`
 - `skillNames`
-- `recommendedSkillNames`
+- `candidateSkillNames`
 - `skillActivationPosture`
 - `toolAvailabilityPosture`
 - `taskSpecReady`

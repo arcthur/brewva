@@ -100,6 +100,20 @@ describe("workflow derivation", () => {
           },
         }),
         event({
+          id: "evt-implementation",
+          type: "skill_completed",
+          sessionId: "workflow-expanded-stages",
+          timestamp: 118,
+          payload: {
+            skillName: "implementation",
+            outputKeys: ["change_set", "files_changed"],
+            outputs: {
+              change_set: "Implemented the workflow posture projection.",
+              files_changed: ["packages/brewva-runtime/src/workflow/status-derivation.ts"],
+            },
+          },
+        }),
+        event({
           id: "evt-review",
           type: "skill_completed",
           sessionId: "workflow-expanded-stages",
@@ -193,6 +207,14 @@ describe("workflow derivation", () => {
     expect(status.posture.verification).toBe("ready");
     expect(status.posture.ship).toBe("ready");
     expect(status.posture.retro).toBe("ready");
+    expect(status.finish).toEqual(
+      expect.objectContaining({
+        state: "deliverable",
+        completed: true,
+        verified: true,
+        deliverable: true,
+      }),
+    );
     const strategyArtifact = status.artifacts.find(
       (artifact) => artifact.kind === "strategy_review",
     );
@@ -230,6 +252,141 @@ describe("workflow derivation", () => {
         "retro",
         "ship_posture",
       ]),
+    );
+  });
+
+  test("derives finish view states without creating authoritative workflow stages", () => {
+    const emptyStatus = deriveWorkflowStatus({
+      sessionId: "workflow-finish-empty",
+      skillReadiness: [],
+      events: [],
+    });
+    expect(emptyStatus.finish.state).toBe("not_started");
+    expect(emptyStatus.finish.deliverable).toBe(false);
+
+    const blockedBeforeArtifacts = deriveWorkflowStatus({
+      sessionId: "workflow-finish-blocked-before-artifacts",
+      skillReadiness: [],
+      events: [],
+      blockers: [{ id: "operator-blocker", message: "Waiting on operator input." }],
+    });
+    expect(blockedBeforeArtifacts.finish).toEqual(
+      expect.objectContaining({
+        state: "blocked",
+        blockers: expect.arrayContaining(["Waiting on operator input."]),
+      }),
+    );
+
+    const technicalClosureEvents = [
+      event({
+        id: "evt-finish-implementation",
+        type: "skill_completed",
+        sessionId: "workflow-finish-acceptance",
+        timestamp: 100,
+        payload: {
+          skillName: "implementation",
+          outputKeys: ["change_set", "files_changed"],
+          outputs: {
+            change_set: "Implemented closure view.",
+            files_changed: ["packages/brewva-tools/src/workflow-status.ts"],
+          },
+        },
+      }),
+      event({
+        id: "evt-finish-review",
+        type: "skill_completed",
+        sessionId: "workflow-finish-acceptance",
+        timestamp: 110,
+        payload: {
+          skillName: "review",
+          outputKeys: ["review_report", "review_findings", "merge_decision"],
+          outputs: {
+            review_report: buildCanonicalReviewReport("Ready."),
+            review_findings: [],
+            merge_decision: "ready",
+          },
+        },
+      }),
+      event({
+        id: "evt-finish-qa",
+        type: "skill_completed",
+        sessionId: "workflow-finish-acceptance",
+        timestamp: 120,
+        payload: {
+          skillName: "qa",
+          outputKeys: ["qa_report", "qa_findings", "qa_verdict", "qa_checks"],
+          outputs: {
+            qa_report: "QA passed.",
+            qa_findings: [],
+            qa_verdict: "pass",
+            qa_checks: [],
+          },
+        },
+      }),
+      event({
+        id: "evt-finish-verify",
+        type: "verification_outcome_recorded",
+        sessionId: "workflow-finish-acceptance",
+        timestamp: 130,
+        payload: {
+          outcome: "pass",
+          level: "standard",
+          failedChecks: [],
+          evidenceFreshness: "fresh",
+        },
+      }),
+    ];
+
+    const pendingAcceptance = deriveWorkflowStatus({
+      sessionId: "workflow-finish-acceptance",
+      skillReadiness: [],
+      events: technicalClosureEvents,
+      taskState: {
+        spec: {
+          schema: "brewva.task.v1",
+          goal: "Finish closure view",
+          acceptance: { required: true },
+        },
+        status: { phase: "ready_for_acceptance", health: "acceptance_pending", updatedAt: 140 },
+        acceptance: { status: "pending", updatedAt: 140 },
+      },
+    });
+    expect(pendingAcceptance.finish).toEqual(
+      expect.objectContaining({
+        state: "ready_for_acceptance",
+        completed: true,
+        verified: true,
+        deliverable: false,
+      }),
+    );
+
+    const rejectedAcceptance = deriveWorkflowStatus({
+      sessionId: "workflow-finish-acceptance",
+      skillReadiness: [],
+      events: technicalClosureEvents,
+      taskState: {
+        spec: {
+          schema: "brewva.task.v1",
+          goal: "Finish closure view",
+          acceptance: { required: true },
+        },
+        status: { phase: "blocked", health: "acceptance_rejected", updatedAt: 150 },
+        acceptance: {
+          status: "rejected",
+          updatedAt: 150,
+          notes: "Needs clearer closure copy.",
+        },
+      },
+    });
+    expect(rejectedAcceptance.finish).toEqual(
+      expect.objectContaining({
+        state: "blocked",
+        completed: true,
+        verified: true,
+        blockers: expect.arrayContaining([
+          "Acceptance rejected; revise before closure (Needs clearer closure copy.).",
+        ]),
+      }),
     );
   });
 
@@ -594,6 +751,8 @@ describe("workflow derivation", () => {
     expect(status.posture.qa).toBe("ready");
     expect(status.posture.verification).toBe("blocked");
     expect(status.posture.ship).toBe("blocked");
+    expect(status.finish.state).toBe("blocked");
+    expect(status.finish.verified).toBe(false);
     expect(status.posture.blockers).toContain("Verification missing fresh evidence for tests.");
     const verificationArtifact = status.artifacts.find(
       (artifact) => artifact.kind === "verification",
@@ -647,6 +806,7 @@ describe("workflow derivation", () => {
     expect(status.posture.qa).toBe("missing");
     expect(status.posture.verification).toBe("ready");
     expect(status.posture.ship).toBe("blocked");
+    expect(status.finish.state).toBe("blocked");
     expect(status.posture.blockers).toContain(
       "Pending worker results require merge/apply (2 results).",
     );
@@ -702,6 +862,7 @@ describe("workflow derivation", () => {
 
     expect(status.posture.implementation).toBe("pending");
     expect(status.posture.ship).toBe("blocked");
+    expect(status.finish.state).toBe("blocked");
     expect(status.posture.blockers).toContain("Worker patch result is pending parent merge/apply.");
     expect(
       status.artifacts.find((artifact) => artifact.kind === "worker_patch")?.sourceSkillNames,

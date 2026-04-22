@@ -3,8 +3,10 @@ import {
   RECALL_CURATION_HALFLIFE_DAYS,
   RECALL_CURATION_SIGNAL_VALUES,
   RECALL_SCOPE_VALUES,
+  RECALL_SEARCH_INTENT_VALUES,
   type RecallCurationSignal,
   type RecallScope,
+  type RecallSearchIntent,
   type RecallSearchEntry,
 } from "@brewva/brewva-recall";
 import {
@@ -30,6 +32,12 @@ const RECALL_SCOPE_SCHEMA = buildStringEnumSchema(RECALL_SCOPE_VALUES, {
 const RECALL_CURATION_SIGNAL_SCHEMA = buildStringEnumSchema(RECALL_CURATION_SIGNAL_VALUES, {
   guidance:
     "Use helpful for useful recall, stale or superseded for outdated recall, and wrong_scope or misleading when the result should be de-ranked in future retrieval.",
+});
+
+const RECALL_SEARCH_INTENT_SCHEMA = buildStringEnumSchema(RECALL_SEARCH_INTENT_VALUES, {
+  recommendedValue: "prior_work",
+  guidance:
+    "Use prior_work as the neutral default. Use repository_precedent for repository practice, current_session_evidence for current-session tape evidence, and durable_runtime_receipts for completed or verified runtime receipts. Use output_search for raw recent tool output.",
 });
 
 function normalizeQuery(value: unknown): string | undefined {
@@ -59,6 +67,13 @@ function normalizeScope(value: unknown): RecallScope | undefined {
     : undefined;
 }
 
+function normalizeIntent(value: unknown): RecallSearchIntent | undefined {
+  return typeof value === "string" &&
+    RECALL_SEARCH_INTENT_VALUES.includes(value as RecallSearchIntent)
+    ? (value as RecallSearchIntent)
+    : undefined;
+}
+
 function hasRecallOperatorProfile(runtime: BrewvaToolOptions["runtime"]): boolean {
   const scopes = runtime.inspect.skills.getLoadReport().routingScopes;
   return scopes.includes("operator") || scopes.includes("meta");
@@ -66,9 +81,11 @@ function hasRecallOperatorProfile(runtime: BrewvaToolOptions["runtime"]): boolea
 
 function renderRecallEntry(entry: RecallSearchEntry): string {
   const header = [
-    `- score=${entry.score.toFixed(3)}`,
+    `- ranking_score=${entry.rankingScore.toFixed(3)}`,
+    `semantic_score=${entry.semanticScore.toFixed(3)}`,
     `source_family=${entry.sourceFamily}`,
-    `source_tier=${entry.sourceTier}`,
+    `trust_label=${entry.trustLabel}`,
+    `evidence_strength=${entry.evidenceStrength}`,
     `scope=${entry.scope}`,
     `freshness=${entry.freshness}`,
     `stable_id=${entry.stableId}`,
@@ -83,6 +100,9 @@ function renderRecallEntry(entry: RecallSearchEntry): string {
   const lines = [header.join(" | "), `  title=${JSON.stringify(entry.title)}`];
   if (entry.matchReasons.length > 0) {
     lines.push(`  match_reasons=${entry.matchReasons.join(", ")}`);
+  }
+  if (entry.rankReasons.length > 0) {
+    lines.push(`  rank_reasons=${entry.rankReasons.join(", ")}`);
   }
   lines.push(`  summary=${JSON.stringify(entry.summary)}`);
   if (entry.excerpt.length > 0) {
@@ -115,6 +135,8 @@ export function createRecallSearchTool(options: BrewvaToolOptions): ToolDefiniti
       "Use this as the default prior-work recall surface before replaying from scratch. It returns typed provenance, freshness, scope, and source-family signals.",
     promptGuidelines: [
       "Use session_local only for current-session tape forensics; prefer user_repository_root for normal prior-work recall.",
+      "Treat prior_work as the neutral default intent; it does not add a ranking boost beyond the normal source, strength, semantic, freshness, and curation weights.",
+      "Use output_search, not recall_search intent, when the information need is raw recent command or tool output.",
       "Treat repository_precedent and typed memory results as advisory recall, not authority. Follow the cited source family.",
       "Use stable_ids to inspect already-surfaced recall items and their curation state without widening to a different tool.",
     ],
@@ -127,6 +149,7 @@ export function createRecallSearchTool(options: BrewvaToolOptions): ToolDefiniti
         }),
       ),
       scope: Type.Optional(RECALL_SCOPE_SCHEMA),
+      intent: Type.Optional(RECALL_SEARCH_INTENT_SCHEMA),
       limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 20 })),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
@@ -148,10 +171,12 @@ export function createRecallSearchTool(options: BrewvaToolOptions): ToolDefiniti
 
       const scope = resolveToolTargetScope(runtime, ctx);
       if (query) {
+        const intent = normalizeIntent(params.intent) ?? "prior_work";
         const search = getOrCreateRecallBroker(runtime).search({
           sessionId,
           query,
           scope: normalizeScope(params.scope),
+          intent,
           limit: params.limit,
         });
 
@@ -162,6 +187,7 @@ export function createRecallSearchTool(options: BrewvaToolOptions): ToolDefiniti
             payload: {
               source: "recall_search",
               scope: search.scope,
+              intent: search.intent ?? null,
               stableIds: search.results.map((entry) => entry.stableId),
               allowedRoots: scope.allowedRoots,
             },
@@ -174,6 +200,7 @@ export function createRecallSearchTool(options: BrewvaToolOptions): ToolDefiniti
             "mode: search",
             `query: ${query}`,
             `scope: ${search.scope}`,
+            `intent: ${search.intent ?? "prior_work"}`,
             `allowed_roots: ${scope.allowedRoots.join(", ")}`,
             `curation_half_life_days: ${RECALL_CURATION_HALFLIFE_DAYS}`,
             `results: ${search.results.length}`,
@@ -184,22 +211,26 @@ export function createRecallSearchTool(options: BrewvaToolOptions): ToolDefiniti
             mode: "search",
             query,
             scope: search.scope,
+            intent: search.intent ?? null,
             allowedRoots: scope.allowedRoots,
             curationHalfLifeDays: RECALL_CURATION_HALFLIFE_DAYS,
             results: search.results.map((entry) => ({
               stableId: entry.stableId,
               sourceFamily: entry.sourceFamily,
-              sourceTier: entry.sourceTier,
+              trustLabel: entry.trustLabel,
+              evidenceStrength: entry.evidenceStrength,
               scope: entry.scope,
               freshness: entry.freshness,
               title: entry.title,
               summary: entry.summary,
               excerpt: entry.excerpt,
-              score: entry.score,
+              semanticScore: entry.semanticScore,
+              rankingScore: entry.rankingScore,
               sessionId: entry.sessionId ?? null,
               relativePath: entry.relativePath ?? null,
               targetRoots: entry.targetRoots ?? [],
               matchReasons: entry.matchReasons,
+              rankReasons: entry.rankReasons,
               curation: entry.curation ?? null,
             })),
           },
@@ -251,17 +282,20 @@ export function createRecallSearchTool(options: BrewvaToolOptions): ToolDefiniti
           results: inspection.results.map((entry) => ({
             stableId: entry.stableId,
             sourceFamily: entry.sourceFamily,
-            sourceTier: entry.sourceTier,
+            trustLabel: entry.trustLabel,
+            evidenceStrength: entry.evidenceStrength,
             scope: entry.scope,
             freshness: entry.freshness,
             title: entry.title,
             summary: entry.summary,
             excerpt: entry.excerpt,
-            score: entry.score,
+            semanticScore: entry.semanticScore,
+            rankingScore: entry.rankingScore,
             sessionId: entry.sessionId ?? null,
             relativePath: entry.relativePath ?? null,
             targetRoots: entry.targetRoots ?? [],
             matchReasons: entry.matchReasons,
+            rankReasons: entry.rankReasons,
             curation: entry.curation ?? null,
           })),
         },

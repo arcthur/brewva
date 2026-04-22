@@ -135,9 +135,11 @@ The exact current managed tool names are:
 - `task_view_state`
 - `resource_lease`
 
-`recall_search` is the default prior-work recall surface. `tape_search`
-remains available for session-local tape forensics, and `recall_curate`
-remains an operator-only curation surface.
+`recall_search` is the default prior-work recall surface. Its optional `intent`
+hint can bias ranking toward repository precedent, current-session evidence, or
+durable runtime receipts while preserving source-family provenance.
+`tape_search` remains available for session-local tape forensics, and
+`recall_curate` remains an operator-only curation surface.
 
 Channel-conditional A2A tools:
 

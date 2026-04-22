@@ -1,0 +1,48 @@
+schema: brewva.recall-eval.dataset.v1
+workspace_files:
+  - path: packages/gateway/session-trace.ts
+    content: |
+      export const sessionTrace = true;
+sessions:
+  - id: prior-session
+    goal: Investigate gateway trace marker
+    target_files:
+      - packages/gateway/session-trace.ts
+    events:
+      - alias: prior-note
+        type: task_event
+        payload:
+          schema: brewva.task.ledger.v1
+          kind: item_added
+          item:
+            id: prior-note-item
+            text: Delta current session evidence marker
+            status: done
+  - id: current-session
+    goal: Investigate gateway trace marker
+    target_files:
+      - packages/gateway/session-trace.ts
+    events:
+      - alias: current-note
+        type: task_event
+        age_days: 120
+        payload:
+          schema: brewva.task.ledger.v1
+          kind: item_added
+          item:
+            id: current-note-item
+            text: Delta current session evidence marker
+            status: done
+query:
+  session_id: current-session
+  text: Delta current session evidence marker
+  scope: workspace_wide
+  intent: current_session_evidence
+  limit: 1
+expectations:
+  relevant_stable_ids:
+    - tape:$current:current-note
+  harmful_stable_ids:
+    - tape:prior-session:prior-note
+  contradictory_stable_ids: []
+  expected_top_stable_id: tape:$current:current-note

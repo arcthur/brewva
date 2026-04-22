@@ -18,8 +18,8 @@ import type {
   BrewvaHostTurnEndEvent,
 } from "@brewva/brewva-substrate";
 import {
-  buildSkillFirstPolicyBlock,
-  deriveSkillRecommendations,
+  buildSkillDiagnosisPolicyBlock,
+  deriveSkillDiagnoses,
   type SkillClassificationHint,
 } from "./skill-first.js";
 
@@ -107,19 +107,19 @@ function formatGuardMessage(
 }
 
 function formatSkillLoadGuardMessage(
-  recommendations: ReturnType<typeof deriveSkillRecommendations>,
+  diagnosis: ReturnType<typeof deriveSkillDiagnoses>,
 ): string | null {
-  const policyBlock = buildSkillFirstPolicyBlock(recommendations);
-  const primary = recommendations.recommendations[0];
+  const policyBlock = buildSkillDiagnosisPolicyBlock(diagnosis);
+  const primary = diagnosis.candidates[0];
   if (!policyBlock || !primary) {
     return null;
   }
   return [
     "[Brewva Skill-First Guard]",
-    recommendations.activationPosture.kind === "require_skill_load"
+    diagnosis.activationPosture.kind === "require_skill_load"
       ? "A routed skill is required before execution or mutation, and no active skill is loaded."
       : "A routed skill is recommended, and no active skill is loaded.",
-    recommendations.activationPosture.kind === "require_skill_load"
+    diagnosis.activationPosture.kind === "require_skill_load"
       ? `Call tool \`skill_load\` with name \`${primary.name}\` before execution or mutation.`
       : `Consider tool \`skill_load\` with name \`${primary.name}\` if the task needs the specialized workflow.`,
     "",
@@ -268,13 +268,13 @@ export function createCompletionGuardLifecycle(
     const active = runtime.inspect.skills.getActive(sessionId);
     const activeState = runtime.inspect.skills.getActiveState(sessionId);
     if (!active) {
-      const recommendations = deriveSkillRecommendations(runtime, {
+      const diagnosis = deriveSkillDiagnoses(runtime, {
         sessionId,
         prompt: latestPromptBySession.get(sessionId) ?? "",
         classificationHints: options.resolveClassificationHints?.(sessionId),
       });
       const latestFailure = runtime.inspect.skills.getLatestFailure(sessionId);
-      if (recommendations.activationPosture.kind === "repair_failed_contract") {
+      if (diagnosis.activationPosture.kind === "repair_failed_contract") {
         nudgeCounts.delete(sessionId);
         enqueueFailedContractNotice(sessionId, latestFailure);
         return;
@@ -284,10 +284,10 @@ export function createCompletionGuardLifecycle(
         return;
       }
       if (
-        recommendations.activeSkillName ||
-        (recommendations.activationPosture.kind !== "require_skill_load" &&
-          recommendations.activationPosture.kind !== "recommend_skill_load") ||
-        recommendations.recommendations.length === 0
+        diagnosis.activeSkillName ||
+        (diagnosis.activationPosture.kind !== "require_skill_load" &&
+          diagnosis.activationPosture.kind !== "recommend_skill_load") ||
+        diagnosis.candidates.length === 0
       ) {
         nudgeCounts.delete(sessionId);
         return;
@@ -295,17 +295,17 @@ export function createCompletionGuardLifecycle(
 
       const count = (nudgeCounts.get(sessionId) ?? 0) + 1;
       nudgeCounts.set(sessionId, count);
-      const content = formatSkillLoadGuardMessage(recommendations);
+      const content = formatSkillLoadGuardMessage(diagnosis);
       if (!content) {
         nudgeCounts.delete(sessionId);
         return;
       }
       if (
-        recommendations.activationPosture.kind === "require_skill_load" &&
+        diagnosis.activationPosture.kind === "require_skill_load" &&
         count > MAX_NUDGES_PER_PROMPT
       ) {
         ctx.ui.notify(
-          `Brewva guard: routed skill '${recommendations.recommendations[0]?.name}' was not loaded before final answer.`,
+          `Brewva guard: routed skill '${diagnosis.candidates[0]?.name}' was not loaded before final answer.`,
           "warning",
         );
         return;
@@ -317,12 +317,12 @@ export function createCompletionGuardLifecycle(
           display: true,
           details: {
             sessionId,
-            skill: recommendations.recommendations[0]?.name,
+            skill: diagnosis.candidates[0]?.name,
             count,
             obligation: "skill_load",
           },
         },
-        recommendations.activationPosture.kind === "require_skill_load"
+        diagnosis.activationPosture.kind === "require_skill_load"
           ? { deliverAs: "followUp", triggerTurn: true }
           : { triggerTurn: false },
       );
@@ -376,12 +376,12 @@ export function createCompletionGuardLifecycle(
         return undefined;
       }
 
-      const recommendations = deriveSkillRecommendations(runtime, {
+      const diagnosis = deriveSkillDiagnoses(runtime, {
         sessionId,
         prompt: latestPromptBySession.get(sessionId) ?? "",
         classificationHints: options.resolveClassificationHints?.(sessionId),
       });
-      if (recommendations.activationPosture.kind === "repair_failed_contract") {
+      if (diagnosis.activationPosture.kind === "repair_failed_contract") {
         enqueueFailedContractNotice(sessionId, runtime.inspect.skills.getLatestFailure(sessionId));
         return undefined;
       }

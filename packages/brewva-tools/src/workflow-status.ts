@@ -5,6 +5,7 @@ import {
   type BrewvaEventRecord,
   type SkillReadinessEntry,
   type WorkflowArtifact,
+  type WorkflowFinishView,
   type WorkflowLaneStatus,
 } from "@brewva/brewva-runtime";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate";
@@ -123,6 +124,23 @@ function renderSkillReadinessLine(entry: SkillReadinessEntry): string {
   return `- ${entry.name}: ${entry.readiness} score=${entry.score} missing_requires=${missingRequires} declared_consumes=${declaredConsumes} satisfied_consumes=${satisfiedConsumes}`;
 }
 
+function renderFinishView(finish: WorkflowFinishView): string[] {
+  return [
+    "[Finish]",
+    `state: ${finish.state}`,
+    `summary: ${finish.summary}`,
+    `completed: ${finish.completed}`,
+    `verified: ${finish.verified}`,
+    `acceptance: ${finish.acceptance}`,
+    `ship: ${finish.ship}`,
+    `deliverable: ${finish.deliverable}`,
+    `missing_evidence: ${
+      finish.missingEvidence.length > 0 ? finish.missingEvidence.join(", ") : "none"
+    }`,
+    `blockers: ${finish.blockers.length > 0 ? finish.blockers.length : "none"}`,
+  ];
+}
+
 function selectArtifactsForDisplay(
   artifacts: readonly WorkflowArtifact[],
   historyLimit: number,
@@ -220,7 +238,6 @@ export function createWorkflowStatusTool(options: BrewvaToolOptions): ToolDefini
       );
       const latestReviewArtifact = findLatestArtifactByKind(snapshot.artifacts, "review");
       const latestQaArtifact = findLatestArtifactByKind(snapshot.artifacts, "qa");
-      const latestShipArtifact = findLatestArtifactByKind(snapshot.artifacts, "ship");
       const verdict = overallVerdict({
         review: posture.review,
         qa: posture.qa,
@@ -235,6 +252,9 @@ export function createWorkflowStatusTool(options: BrewvaToolOptions): ToolDefini
         "[WorkflowStatus]",
         `updated_at: ${formatTimestamp(snapshot.updatedAt)}`,
         `current_workspace_revision: ${snapshot.currentWorkspaceRevision ?? "unavailable"}`,
+        "",
+        ...renderFinishView(snapshot.finish),
+        "",
         `discovery: ${posture.discovery}`,
         `strategy: ${posture.strategy}`,
         `planning: ${posture.planning}`,
@@ -254,10 +274,6 @@ export function createWorkflowStatusTool(options: BrewvaToolOptions): ToolDefini
             ? posture.unsatisfied_required_evidence.join(", ")
             : "none"
         }`,
-        `verification: ${posture.verification}`,
-        `acceptance: ${posture.acceptance}`,
-        `ship: ${posture.ship}`,
-        renderNormalizationLine("ship_normalization", latestShipArtifact),
         `retro: ${posture.retro}`,
         `pending_worker_results: ${snapshot.pendingWorkerResults}`,
         `pending_delegation_outcomes: ${snapshot.pendingDelegationOutcomes}`,
@@ -382,6 +398,7 @@ export function createWorkflowStatusTool(options: BrewvaToolOptions): ToolDefini
             sessionId,
             currentWorkspaceRevision: snapshot.currentWorkspaceRevision ?? null,
             posture,
+            finish: snapshot.finish,
             artifacts: includeArtifacts ? displayArtifacts : [],
             pendingWorkerResults: pendingWorkerResults.map((result) => ({
               workerId: result.workerId,

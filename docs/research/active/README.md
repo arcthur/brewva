@@ -22,5 +22,6 @@ directory rather than keeping it as a shadow reference.
 
 ## Operator And Control Surfaces
 
+- [`product-semantic-compression-and-decision-surface-subtraction.md`](./product-semantic-compression-and-decision-surface-subtraction.md)
 - [`cost-observability-and-budget-governance.md`](./cost-observability-and-budget-governance.md)
 - [`rollback-ergonomics-and-patch-lifecycle-safety.md`](./rollback-ergonomics-and-patch-lifecycle-safety.md)

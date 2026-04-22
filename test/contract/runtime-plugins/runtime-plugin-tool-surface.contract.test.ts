@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  deriveSkillDiagnoses,
   registerToolSurface,
   type ToolSurfaceRuntime,
 } from "@brewva/brewva-gateway/runtime-plugins";
@@ -51,6 +52,8 @@ function createSkillDocument(
   preferredTools: string[],
   options: {
     markdown?: string;
+    requires?: string[];
+    consumes?: string[];
     selection?: {
       whenToUse: string;
       examples?: string[];
@@ -73,6 +76,8 @@ function createSkillDocument(
           }
         : undefined,
       selection: options.selection,
+      requires: options.requires,
+      consumes: options.consumes,
       effects: {
         allowedEffects,
         deniedEffects: [],
@@ -92,6 +97,7 @@ function createSkillDocument(
 interface ToolSurfaceRuntimeOptions {
   getActive?: ToolSurfaceRuntime["inspect"]["skills"]["getActive"];
   getActiveState?: ToolSurfaceRuntime["inspect"]["skills"]["getActiveState"];
+  getReadiness?: NonNullable<ToolSurfaceRuntime["inspect"]["skills"]["getReadiness"]>;
   getSkill?: ToolSurfaceRuntime["inspect"]["skills"]["get"];
   listSkills?: ToolSurfaceRuntime["inspect"]["skills"]["list"];
   taskState?: ReturnType<ToolSurfaceRuntime["inspect"]["task"]["getState"]>;
@@ -155,6 +161,7 @@ function createToolSurfaceRuntime(options: ToolSurfaceRuntimeOptions = {}): Tool
     list: listSkills,
     getActive: options.getActive ?? (() => undefined),
     getActiveState: options.getActiveState ?? (() => undefined),
+    getReadiness: options.getReadiness,
     getLatestFailure: () => options.latestFailure,
     get: options.getSkill ?? (() => undefined),
     getLoadReport: buildLoadReport,
@@ -803,7 +810,7 @@ describe("tool surface runtime plugin", () => {
     );
     expect(event?.payload?.toolAvailabilityPosture).toBe("recommend");
     expect(event?.payload?.taskSpecReady).toBe(false);
-    expect(event?.payload?.recommendedSkillNames).toEqual([]);
+    expect(event?.payload?.candidateSkillNames).toEqual([]);
   });
 
   test("task spec updates can trigger same-turn skill-first recovery for multilingual prompts", async () => {
@@ -1078,6 +1085,236 @@ describe("tool surface runtime plugin", () => {
     expect(result).toBeUndefined();
   });
 
+  test("blocked diagnosis requires inputs instead of forcing immediate skill load", async () => {
+    const extensionApi = createMockRuntimePluginApi();
+    registerTools(extensionApi.api, [
+      "read",
+      "edit",
+      "write",
+      "session_compact",
+      "skill_load",
+      "workflow_status",
+      "task_set_spec",
+      "task_view_state",
+      "knowledge_search",
+    ]);
+
+    const events: Array<Record<string, unknown>> = [];
+    const implementationSkill = createSkillDocument(
+      "implementation",
+      ["workspace_read", "workspace_write", "runtime_observe"],
+      ["edit"],
+      {
+        requires: ["design_spec"],
+        selection: {
+          whenToUse:
+            "Use when the task has a design and is ready to implement the selected change.",
+          examples: ["Implement the selected fix.", "Apply the planned code change."],
+          phases: ["execute"],
+        },
+      },
+    );
+    const runtime = createToolSurfaceRuntime({
+      listSkills: () => [implementationSkill],
+      getReadiness: () => [
+        {
+          name: "implementation",
+          category: "domain",
+          readiness: "blocked",
+          score: -1,
+          requires: ["design_spec"],
+          consumes: [],
+          satisfiedRequires: [],
+          missingRequires: ["design_spec"],
+          satisfiedConsumes: [],
+          issues: [],
+          sourceSkillNames: [],
+          sourceEventIds: [],
+          phases: ["execute"],
+        },
+      ],
+      taskState: {
+        spec: {
+          goal: "Implement the selected fix after design is ready.",
+          expectedBehavior: "Apply the planned code change safely.",
+          constraints: ["Do not invent the missing design artifact"],
+        },
+        status: { phase: "execute" },
+        items: [],
+        blockers: [],
+        updatedAt: null,
+      },
+      recordEvent: (input: Record<string, unknown>) => {
+        events.push(input);
+        return undefined;
+      },
+    });
+
+    registerToolSurface(extensionApi.api, runtime);
+    await invokeHandlerAsync(
+      extensionApi.handlers,
+      "before_agent_start",
+      {
+        type: "before_agent_start",
+        prompt: "Implement the selected fix now.",
+      },
+      {
+        sessionManager: {
+          getSessionId: () => "tool-surface-blocked-diagnosis",
+        },
+      },
+    );
+
+    expect(extensionApi.activeTools).toContain("read");
+    expect(extensionApi.activeTools).toContain("skill_load");
+    expect(extensionApi.activeTools).not.toContain("edit");
+    expect(extensionApi.activeTools).not.toContain("write");
+
+    const surfaceEvent = events.find((input) => input.type === "tool_surface_resolved") as
+      | { payload?: Record<string, unknown> }
+      | undefined;
+    expect(surfaceEvent?.payload?.skillActivationPosture).toEqual(
+      expect.objectContaining({
+        kind: "require_skill_inputs",
+        skillName: "implementation",
+        missingRequires: ["design_spec"],
+      }),
+    );
+    expect(surfaceEvent?.payload?.toolAvailabilityPosture).toBe("require_explore");
+
+    const diagnosis = deriveSkillDiagnoses(runtime, {
+      sessionId: "tool-surface-blocked-diagnosis",
+      prompt: "Implement the selected fix now.",
+    });
+    expect(diagnosis.candidates[0]).toEqual(
+      expect.objectContaining({
+        name: "implementation",
+        readiness: "blocked",
+        missingRequires: ["design_spec"],
+        shallowOutputRisk: "missing required inputs: design_spec",
+      }),
+    );
+    expect(diagnosis.activationPosture).toEqual(
+      expect.objectContaining({
+        kind: "require_skill_inputs",
+        skillName: "implementation",
+        missingRequires: ["design_spec"],
+      }),
+    );
+  });
+
+  test("artifact-ready diagnosis candidate outranks a blocked semantic leader", () => {
+    const blockedSkill = createSkillDocument(
+      "implementation",
+      ["workspace_read", "workspace_write", "runtime_observe"],
+      ["edit"],
+      {
+        requires: ["design_spec"],
+        selection: {
+          whenToUse:
+            "Use when the task has a design and is ready to implement the selected change.",
+          examples: ["Implement the selected fix.", "Apply the planned code change."],
+          phases: ["execute"],
+        },
+      },
+    );
+    const readySkill = createSkillDocument(
+      "implementation-ready",
+      ["workspace_read", "workspace_write", "runtime_observe"],
+      ["edit"],
+      {
+        consumes: ["design_spec"],
+        selection: {
+          whenToUse:
+            "Use when the task has a design and is ready to implement the selected change.",
+          examples: ["Implement the selected fix.", "Apply the planned code change."],
+          phases: ["execute"],
+        },
+      },
+    );
+    const runtime = createToolSurfaceRuntime({
+      listSkills: () => [blockedSkill, readySkill],
+      getReadiness: () => [
+        {
+          name: "implementation",
+          category: "domain",
+          readiness: "blocked",
+          score: -1,
+          requires: ["design_spec"],
+          consumes: [],
+          satisfiedRequires: [],
+          missingRequires: ["design_spec"],
+          satisfiedConsumes: [],
+          issues: [],
+          sourceSkillNames: [],
+          sourceEventIds: [],
+          phases: ["execute"],
+        },
+        {
+          name: "implementation-ready",
+          category: "domain",
+          readiness: "ready",
+          score: 12,
+          requires: [],
+          consumes: ["design_spec"],
+          satisfiedRequires: [],
+          missingRequires: [],
+          satisfiedConsumes: ["design_spec"],
+          issues: [],
+          sourceSkillNames: ["design"],
+          sourceEventIds: ["event-design-complete"],
+          phases: ["execute"],
+        },
+      ],
+      taskState: {
+        spec: {
+          goal: "Implement the selected fix now.",
+          expectedBehavior: "Apply the planned code change safely.",
+        },
+        status: { phase: "execute" },
+        items: [],
+        blockers: [],
+        updatedAt: null,
+      },
+    });
+
+    const diagnosis = deriveSkillDiagnoses(runtime, {
+      sessionId: "tool-surface-actionable-diagnosis",
+      prompt: "Implement the selected fix now.",
+      classificationHints: [
+        {
+          skillNames: ["implementation"],
+          reason: "semantic leader from local classifier",
+        },
+      ],
+    });
+
+    const blockedCandidate = diagnosis.candidates.find((entry) => entry.name === "implementation");
+
+    expect(diagnosis.candidates[0]).toEqual(
+      expect.objectContaining({
+        name: "implementation-ready",
+        readiness: "ready",
+        missingRequires: [],
+        satisfiedConsumes: ["design_spec"],
+      }),
+    );
+    expect(blockedCandidate).toEqual(
+      expect.objectContaining({
+        readiness: "blocked",
+        missingRequires: ["design_spec"],
+      }),
+    );
+    expect(blockedCandidate!.score).toBeGreaterThan(diagnosis.candidates[0]!.score);
+    expect(diagnosis.activationPosture).toEqual(
+      expect.objectContaining({
+        kind: "require_skill_load",
+        skillNames: ["implementation-ready", "implementation"],
+      }),
+    );
+    expect(diagnosis.toolAvailabilityPosture).toBe("require_execute");
+  });
+
   test("failed skill contracts block downstream routing and repository tools", async () => {
     const extensionApi = createMockRuntimePluginApi();
     registerTools(extensionApi.api, [
@@ -1196,10 +1433,10 @@ describe("tool surface runtime plugin", () => {
       expect.objectContaining({ kind: "repair_failed_contract" }),
     );
     expect(event?.payload?.toolAvailabilityPosture).toBe("contract_failed");
-    expect(event?.payload?.recommendedSkillNames).toEqual([]);
+    expect(event?.payload?.candidateSkillNames).toEqual([]);
   });
 
-  test("task-state mutation re-evaluation reuses a single recommendation pass", async () => {
+  test("task-state mutation re-evaluation reuses a single diagnosis pass", async () => {
     const extensionApi = createMockRuntimePluginApi();
     registerTools(extensionApi.api, [
       "read",
@@ -1299,7 +1536,7 @@ describe("tool surface runtime plugin", () => {
     expect(getStateCalls).toBe(1);
   });
 
-  test("disabling hosted recommendation suppresses advisory receipts without breaking tool-surface resolution", async () => {
+  test("disabling hosted diagnosis suppresses advisory receipts without breaking tool-surface resolution", async () => {
     const extensionApi = createMockRuntimePluginApi();
     registerTools(extensionApi.api, [
       "read",
@@ -1363,7 +1600,7 @@ describe("tool surface runtime plugin", () => {
     );
 
     expect(events.filter((input) => input.type === "tool_surface_resolved")).toHaveLength(1);
-    expect(events.filter((input) => input.type === "skill_recommendation_derived")).toHaveLength(0);
+    expect(events.filter((input) => input.type === "skill_diagnosis_derived")).toHaveLength(0);
     expect(extensionApi.activeTools).toContain("workflow_status");
     expect(extensionApi.activeTools).toContain("task_set_spec");
   });
@@ -1492,7 +1729,7 @@ describe("tool surface runtime plugin", () => {
 
     expect(result).toBeUndefined();
     expect(events.filter((input) => input.type === "tool_surface_resolved")).toHaveLength(1);
-    expect(events.filter((input) => input.type === "skill_recommendation_derived")).toHaveLength(0);
+    expect(events.filter((input) => input.type === "skill_diagnosis_derived")).toHaveLength(0);
   });
 
   test("investigation lifecycle tools stay visible while the session has no task spec", async () => {

@@ -120,7 +120,7 @@ describe("recall broker", () => {
     expect(result.results).toHaveLength(0);
   });
 
-  test("ranks runtime evidence and repository precedents ahead of advisory memory", () => {
+  test("ranks strong runtime evidence above precedent and precedent above weak tape notes", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-recall-broker-"));
     mkdirSync(join(workspace, "packages", "gateway"), { recursive: true });
     mkdirSync(join(workspace, "docs", "solutions", "gateway"), { recursive: true });
@@ -159,6 +159,15 @@ describe("recall broker", () => {
           text: "Gamma authority ranking runtime evidence",
           status: "done",
         },
+      } as Record<string, unknown>,
+    });
+    recordRuntimeEvent(runtime, {
+      sessionId: priorSessionId,
+      type: "verification_outcome_recorded",
+      payload: {
+        schema: "brewva.verification.outcome.v1",
+        passed: true,
+        summary: "Gamma authority ranking verified evidence",
       } as Record<string, unknown>,
     });
 
@@ -201,14 +210,267 @@ describe("recall broker", () => {
       query: "Gamma authority ranking",
       limit: 6,
     });
-    const sourceTierOrder = result.results.map((entry) => entry.sourceTier);
-
-    expect(sourceTierOrder.indexOf("runtime_evidence")).toBeGreaterThanOrEqual(0);
-    expect(sourceTierOrder.indexOf("repository_precedent")).toBeGreaterThan(
-      sourceTierOrder.indexOf("runtime_evidence"),
+    const strongRuntimeIndex = result.results.findIndex(
+      (entry) => entry.sourceFamily === "tape_evidence" && entry.evidenceStrength === "strong",
     );
-    expect(sourceTierOrder.indexOf("advisory_memory")).toBeGreaterThan(
-      sourceTierOrder.indexOf("repository_precedent"),
+    const precedentIndex = result.results.findIndex(
+      (entry) => entry.sourceFamily === "repository_precedent",
+    );
+    const weakTapeIndex = result.results.findIndex(
+      (entry) => entry.sourceFamily === "tape_evidence" && entry.evidenceStrength === "weak",
+    );
+    const advisoryIndex = result.results.findIndex(
+      (entry) => entry.sourceFamily === "narrative_memory",
+    );
+
+    expect(strongRuntimeIndex).toBeGreaterThanOrEqual(0);
+    expect(precedentIndex).toBeGreaterThan(strongRuntimeIndex);
+    expect(weakTapeIndex).toBeGreaterThan(precedentIndex);
+    expect(advisoryIndex).toBeGreaterThan(precedentIndex);
+    expect(result.results[precedentIndex]?.trustLabel).toBe("Repository precedent");
+  });
+
+  test("classifies kernel truth and patch receipts as strong runtime evidence", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-recall-broker-"));
+    mkdirSync(join(workspace, "packages", "gateway"), { recursive: true });
+    mkdirSync(join(workspace, "docs", "solutions", "gateway"), { recursive: true });
+    writeFileSync(
+      join(workspace, "docs", "solutions", "gateway", "durable-receipts.md"),
+      [
+        "---",
+        "title: Durable receipt precedent",
+        "tags: [gateway, receipt]",
+        "---",
+        "# Durable receipt precedent",
+        "Epsilon durable receipt marker belongs to repository precedent.",
+      ].join("\n"),
+      "utf8",
+    );
+
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const priorSessionId = "recall-broker-strong-receipts-prior";
+    const currentSessionId = "recall-broker-strong-receipts-current";
+
+    runtime.maintain.context.onTurnStart(priorSessionId, 1);
+    runtime.authority.task.setSpec(priorSessionId, {
+      schema: "brewva.task.v1",
+      goal: "Epsilon durable receipt marker",
+      targets: {
+        files: ["packages/gateway"],
+      },
+    });
+    recordRuntimeEvent(runtime, {
+      sessionId: priorSessionId,
+      type: "truth_event",
+      payload: {
+        schema: "brewva.truth.ledger.v1",
+        summary: "Epsilon durable receipt marker entered kernel truth.",
+      } as Record<string, unknown>,
+    });
+    recordRuntimeEvent(runtime, {
+      sessionId: priorSessionId,
+      type: "patch_recorded",
+      payload: {
+        schema: "brewva.patch.recorded.v1",
+        summary: "Epsilon durable receipt marker patch was recorded.",
+      } as Record<string, unknown>,
+    });
+
+    runtime.maintain.context.onTurnStart(currentSessionId, 1);
+    runtime.authority.task.setSpec(currentSessionId, {
+      schema: "brewva.task.v1",
+      goal: "Epsilon durable receipt marker lookup",
+      targets: {
+        files: ["packages/gateway"],
+      },
+    });
+
+    const result = getOrCreateRecallBroker(runtime).search({
+      sessionId: currentSessionId,
+      query: "Epsilon durable receipt marker",
+      scope: "workspace_wide",
+      intent: "durable_runtime_receipts",
+      limit: 8,
+    });
+    const truthIndex = result.results.findIndex(
+      (entry) => entry.sourceFamily === "tape_evidence" && entry.title.startsWith("truth_event"),
+    );
+    const patchIndex = result.results.findIndex(
+      (entry) => entry.sourceFamily === "tape_evidence" && entry.title.startsWith("patch_recorded"),
+    );
+    const precedentIndex = result.results.findIndex(
+      (entry) => entry.sourceFamily === "repository_precedent",
+    );
+
+    expect(truthIndex).toBeGreaterThanOrEqual(0);
+    expect(patchIndex).toBeGreaterThanOrEqual(0);
+    expect(precedentIndex).toBeGreaterThanOrEqual(0);
+    expect(result.results[truthIndex]).toEqual(
+      expect.objectContaining({
+        trustLabel: "Kernel truth",
+        evidenceStrength: "strong",
+      }),
+    );
+    expect(result.results[patchIndex]).toEqual(
+      expect.objectContaining({
+        trustLabel: "Verified evidence",
+        evidenceStrength: "strong",
+      }),
+    );
+    expect(truthIndex).toBeLessThan(precedentIndex);
+    expect(patchIndex).toBeLessThan(precedentIndex);
+  });
+
+  test("current-session intent only boosts tape evidence from the active session", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-recall-broker-"));
+    mkdirSync(join(workspace, "packages", "gateway"), { recursive: true });
+    mkdirSync(join(workspace, "docs", "solutions", "gateway"), { recursive: true });
+    writeFileSync(
+      join(workspace, "docs", "solutions", "gateway", "current-session-ranking.md"),
+      [
+        "---",
+        "title: Current session ranking precedent",
+        "tags: [gateway, ranking]",
+        "---",
+        "# Current session ranking precedent",
+        "Delta current session ranking marker belongs to repository precedent.",
+      ].join("\n"),
+      "utf8",
+    );
+
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const priorSessionId = "recall-broker-current-intent-prior";
+    const currentSessionId = "recall-broker-current-intent-current";
+
+    runtime.maintain.context.onTurnStart(priorSessionId, 1);
+    runtime.authority.task.setSpec(priorSessionId, {
+      schema: "brewva.task.v1",
+      goal: "Delta current session ranking marker",
+      targets: {
+        files: ["packages/gateway"],
+      },
+    });
+    const priorEvent = recordRuntimeEvent(runtime, {
+      sessionId: priorSessionId,
+      type: "task_event",
+      payload: {
+        schema: "brewva.task.ledger.v1",
+        kind: "item_added",
+        item: {
+          id: "recall-current-intent-prior-item",
+          text: "Delta current session ranking marker",
+          status: "done",
+        },
+      } as Record<string, unknown>,
+    });
+
+    runtime.maintain.context.onTurnStart(currentSessionId, 1);
+    runtime.authority.task.setSpec(currentSessionId, {
+      schema: "brewva.task.v1",
+      goal: "Delta current session ranking marker",
+      targets: {
+        files: ["packages/gateway"],
+      },
+    });
+    const currentEvent = recordRuntimeEvent(runtime, {
+      sessionId: currentSessionId,
+      type: "task_event",
+      payload: {
+        schema: "brewva.task.ledger.v1",
+        kind: "item_added",
+        item: {
+          id: "recall-current-intent-current-item",
+          text: "Delta current session ranking marker",
+          status: "done",
+        },
+      } as Record<string, unknown>,
+    });
+
+    const result = getOrCreateRecallBroker(runtime).search({
+      sessionId: currentSessionId,
+      query: "Delta current session ranking marker",
+      scope: "workspace_wide",
+      intent: "current_session_evidence",
+      limit: 8,
+    });
+
+    const currentTapeIndex = result.results.findIndex(
+      (entry) => entry.stableId === `tape:${currentSessionId}:${currentEvent!.id}`,
+    );
+    const priorTapeIndex = result.results.findIndex(
+      (entry) => entry.stableId === `tape:${priorSessionId}:${priorEvent!.id}`,
+    );
+    const precedentIndex = result.results.findIndex(
+      (entry) => entry.sourceFamily === "repository_precedent",
+    );
+
+    expect(currentTapeIndex).toBeGreaterThanOrEqual(0);
+    expect(priorTapeIndex).toBeGreaterThanOrEqual(0);
+    expect(precedentIndex).toBeGreaterThanOrEqual(0);
+    expect(currentTapeIndex).toBeLessThan(priorTapeIndex);
+    expect(precedentIndex).toBeLessThan(priorTapeIndex);
+    expect(result.results[currentTapeIndex]?.rankReasons).toContain(
+      "intent:current_session_evidence",
+    );
+    expect(result.results[priorTapeIndex]?.rankReasons).toContain(
+      "intent:current_session_evidence",
+    );
+  });
+
+  test("context provider passes inferred recall intent into rendered entries and events", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-recall-broker-"));
+    mkdirSync(join(workspace, "packages", "gateway"), { recursive: true });
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionId = "recall-broker-provider-intent-current";
+
+    runtime.maintain.context.onTurnStart(sessionId, 1);
+    runtime.authority.task.setSpec(sessionId, {
+      schema: "brewva.task.v1",
+      goal: "Inspect current session gateway trace marker",
+      targets: {
+        files: ["packages/gateway"],
+      },
+    });
+    recordRuntimeEvent(runtime, {
+      sessionId,
+      type: "task_event",
+      payload: {
+        schema: "brewva.task.ledger.v1",
+        kind: "item_added",
+        item: {
+          id: "recall-provider-intent-item",
+          text: "Current session gateway trace marker",
+          status: "done",
+        },
+      } as Record<string, unknown>,
+    });
+
+    const provider = createRecallContextProvider({ runtime });
+    const injectedContent: string[] = [];
+    provider.collect({
+      sessionId,
+      promptText: "Find current session evidence for gateway trace marker",
+      register: (entry) => {
+        injectedContent.push(entry.content);
+      },
+    });
+
+    expect(injectedContent).toEqual(
+      expect.arrayContaining([expect.stringContaining("search_intent: current_session_evidence")]),
+    );
+    expect(
+      runtime.inspect.events.query(sessionId, {
+        type: RECALL_RESULTS_SURFACED_EVENT_TYPE,
+      }),
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            source: "context_provider",
+            intent: "current_session_evidence",
+          }),
+        }),
+      ]),
     );
   });
 
@@ -279,7 +541,8 @@ describe("recall broker", () => {
       expect.objectContaining({
         stableId,
         sourceFamily: "tape_evidence",
-        sourceTier: "runtime_evidence",
+        trustLabel: "Advisory posture",
+        evidenceStrength: "weak",
         curation: expect.objectContaining({
           helpfulSignals: 1,
         }),
@@ -340,7 +603,7 @@ describe("recall broker", () => {
         expect.objectContaining({
           stableId: `tape:${priorSessionId}:${priorEvent!.id}`,
           sourceFamily: "tape_evidence",
-          sourceTier: "runtime_evidence",
+          evidenceStrength: "weak",
         }),
       ]),
     );

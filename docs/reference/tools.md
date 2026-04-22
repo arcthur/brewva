@@ -782,18 +782,28 @@ Unified recall surfaces for the new broker-first read path.
 - it retrieves source-typed results across tape evidence, narrative memory,
   deliberation memory, optimization continuity, promotion drafts, and
   repository precedent
+- it accepts an optional `intent` hint (`prior_work`, `repository_precedent`,
+  `current_session_evidence`, or `durable_runtime_receipts`) so ranking can
+  prefer the requested evidence family without hiding provenance
+- `prior_work` is the neutral default intent; it records the caller's broad
+  prior-work need but does not add an intent-specific ranking boost
+- raw recent command or tool output is intentionally outside
+  `RecallSearchIntent`; use `output_search` for that session-local artifact
+  surface
 - it also accepts `stable_ids` for direct inspection of previously surfaced
   recall items without widening to a different tool surface
 - every result carries stable identity, `source_family`, `scope`,
-  `freshness`, provenance fields such as `session_id` or `path`, and any
+  `freshness`, `trust_label`, `evidence_strength`, `ranking_score`,
+  `semantic_score`, provenance fields such as `session_id` or `path`, and any
   available curation snapshot
 - free-text matching uses the shared mandatory `@brewva/brewva-search`
   tokenizer, so tape evidence, narrative memory, deliberation memory,
   optimization continuity, promotion drafts, and repository precedents share
   the same ASCII/code and Chinese token semantics
-- default scope is `user_repository_root`; use `session_local` for current-turn
-  or current-session forensics, and treat `workspace_wide` as an explicit
-  opt-in rather than the default recall boundary
+- default scope is `user_repository_root`; default intent is `prior_work`; use
+  `session_local` for current-turn or current-session forensics, and treat
+  `workspace_wide` as an explicit opt-in rather than the default recall
+  boundary
 - worktrees under the same repository root do not share recall automatically
   unless repository policy widens the scope
 - `recall_search` is advisory and read-only; it does not promote, materialize,

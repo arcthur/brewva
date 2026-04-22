@@ -14,7 +14,11 @@ import {
   getOrCreateSkillPromotionBroker,
   type SkillPromotionDraft,
 } from "@brewva/brewva-skill-broker";
-import { isRecallSearchableTapeEvent } from "./evidence-events.js";
+import {
+  isKernelTruthRecallTapeEvent,
+  isRecallSearchableTapeEvent,
+  isStrongRecallTapeEvent,
+} from "./evidence-events.js";
 import {
   executeKnowledgeSearch,
   findKnowledgeDocByRelativePath,
@@ -28,25 +32,38 @@ import {
   type RecallBrokerState,
   type RecallCurationAggregate,
   type RecallInspectResult,
+  type RecallEvidenceStrength,
   type RecallFreshness,
   type RecallScope,
-  type RecallSourceTier,
   type RecallCurationSnapshot,
   type RecallSearchEntry,
+  type RecallSearchIntent,
   type RecallSearchResult,
   type RecallSessionDigest,
+  type RecallTrustLabel,
 } from "./types.js";
 
 const DEFAULT_MAX_RESULTS = 6;
 const DEFAULT_MAX_TAPE_SESSIONS = 6;
 const DEFAULT_SCOPE: RecallScope = "user_repository_root";
 const RECALL_CURATION_HALFLIFE_MS = RECALL_CURATION_HALFLIFE_DAYS * 24 * 60 * 60 * 1000;
-const RECALL_SOURCE_TIER_RANK: Record<RecallSourceTier, number> = {
-  runtime_evidence: 0,
-  repository_precedent: 1,
-  promotion_candidate: 2,
-  advisory_memory: 3,
+const EVIDENCE_STRENGTH_WEIGHT: Record<RecallEvidenceStrength, number> = {
+  strong: 2.0,
+  moderate: 1.0,
+  weak: 0,
 };
+
+const FRESHNESS_WEIGHT: Record<RecallFreshness, number> = {
+  fresh: 0.3,
+  aging: 0.12,
+  stale: -0.28,
+  unknown: 0,
+};
+
+interface RecallRankingContext {
+  currentSessionId: string;
+  intent?: RecallSearchIntent;
+}
 
 interface RecallBrokerEventsPort extends Pick<
   BrewvaInspectionPort["events"],
@@ -154,6 +171,37 @@ function extractEventSearchText(event: BrewvaEventRecord): string {
 
 function renderEventTitle(event: BrewvaEventRecord): string {
   return compactText(`${event.type} (${event.sessionId})`, 120);
+}
+
+function classifyTapeEvent(
+  event: BrewvaEventRecord,
+  currentSessionId: string,
+): {
+  trustLabel: RecallTrustLabel;
+  evidenceStrength: RecallEvidenceStrength;
+} {
+  if (isKernelTruthRecallTapeEvent(event)) {
+    return {
+      trustLabel: "Kernel truth",
+      evidenceStrength: "strong",
+    };
+  }
+  if (isStrongRecallTapeEvent(event)) {
+    return {
+      trustLabel: "Verified evidence",
+      evidenceStrength: "strong",
+    };
+  }
+  if (event.sessionId === currentSessionId) {
+    return {
+      trustLabel: "Session-local memory",
+      evidenceStrength: "weak",
+    };
+  }
+  return {
+    trustLabel: "Advisory posture",
+    evidenceStrength: "weak",
+  };
 }
 
 function normalizeQuery(value: string): string {
@@ -325,14 +373,100 @@ function buildCurationSnapshot(
   };
 }
 
-function compareRecallSearchEntries(left: RecallSearchEntry, right: RecallSearchEntry): number {
-  const tierDelta =
-    RECALL_SOURCE_TIER_RANK[left.sourceTier] - RECALL_SOURCE_TIER_RANK[right.sourceTier];
-  if (tierDelta !== 0) {
-    return tierDelta;
+function createRankingContext(
+  currentSessionId: string,
+  intent: RecallSearchIntent | undefined,
+): RecallRankingContext {
+  return intent ? { currentSessionId, intent } : { currentSessionId };
+}
+
+function isCurrentSessionTapeEntry(
+  entry: Pick<RecallSearchEntry, "sourceFamily" | "sessionId">,
+  currentSessionId: string,
+): boolean {
+  return entry.sourceFamily === "tape_evidence" && entry.sessionId === currentSessionId;
+}
+
+function sourceBaseWeight(
+  entry: Pick<RecallSearchEntry, "sourceFamily" | "evidenceStrength" | "sessionId">,
+  context: RecallRankingContext,
+): number {
+  if (entry.sourceFamily === "tape_evidence") {
+    if (entry.evidenceStrength === "strong") return 4.2;
+    return context.intent === "current_session_evidence" &&
+      isCurrentSessionTapeEntry(entry, context.currentSessionId)
+      ? 2.7
+      : 1.7;
   }
-  if (right.score !== left.score) {
-    return right.score - left.score;
+  if (entry.sourceFamily === "repository_precedent") return 3.25;
+  if (entry.sourceFamily === "promotion_draft") return 2.35;
+  return 1.25;
+}
+
+function intentWeight(
+  entry: Pick<RecallSearchEntry, "sourceFamily" | "evidenceStrength" | "sessionId">,
+  context: RecallRankingContext,
+): number {
+  switch (context.intent) {
+    case "repository_precedent":
+      return entry.sourceFamily === "repository_precedent" ? 0.9 : 0;
+    case "current_session_evidence":
+      return isCurrentSessionTapeEntry(entry, context.currentSessionId) ? 0.45 : 0;
+    case "durable_runtime_receipts":
+      return entry.sourceFamily === "tape_evidence" && entry.evidenceStrength === "strong"
+        ? 0.9
+        : 0;
+    case "prior_work":
+    case undefined:
+      return 0;
+  }
+  return 0;
+}
+
+function computeRankingScore(
+  entry: Omit<RecallSearchEntry, "rankingScore" | "rankReasons">,
+  context: RecallRankingContext,
+  curationAdjustmentValue = 0,
+): { rankingScore: number; rankReasons: string[] } {
+  const source = sourceBaseWeight(entry, context);
+  const strength = EVIDENCE_STRENGTH_WEIGHT[entry.evidenceStrength];
+  const freshness = FRESHNESS_WEIGHT[entry.freshness];
+  const intentBoost = intentWeight(entry, context);
+  const semantic = Math.max(0, Math.min(1, entry.semanticScore));
+  const rankingScore =
+    source + strength + semantic + freshness + intentBoost + curationAdjustmentValue;
+  const rankReasons = [
+    `source:${entry.sourceFamily}`,
+    `trust:${entry.trustLabel}`,
+    `strength:${entry.evidenceStrength}`,
+    `semantic:${semantic.toFixed(3)}`,
+    `freshness:${entry.freshness}`,
+  ];
+  if (context.intent) {
+    rankReasons.push(`intent:${context.intent}`);
+  }
+  if (curationAdjustmentValue !== 0) {
+    rankReasons.push(`curation:${curationAdjustmentValue.toFixed(3)}`);
+  }
+  return {
+    rankingScore: Number(rankingScore.toFixed(6)),
+    rankReasons,
+  };
+}
+
+function finalizeRecallEntry(
+  entry: Omit<RecallSearchEntry, "rankingScore" | "rankReasons">,
+  context: RecallRankingContext,
+): RecallSearchEntry {
+  return {
+    ...entry,
+    ...computeRankingScore(entry, context),
+  };
+}
+
+function compareRecallSearchEntries(left: RecallSearchEntry, right: RecallSearchEntry): number {
+  if (right.rankingScore !== left.rankingScore) {
+    return right.rankingScore - left.rankingScore;
   }
   return left.stableId.localeCompare(right.stableId);
 }
@@ -342,20 +476,25 @@ function mapNarrativeRecord(
   score: number,
   matchReasons: string[],
   scope: RecallScope = DEFAULT_SCOPE,
+  context: RecallRankingContext,
 ): RecallSearchEntry {
-  return {
-    stableId: `narrative:${record.id}`,
-    sourceFamily: "narrative_memory",
-    sourceTier: "advisory_memory",
-    scope,
-    score,
-    title: record.title,
-    summary: record.summary,
-    excerpt: compactText(record.content, 220),
-    freshness: freshnessFromTimestamp(record.updatedAt),
-    matchReasons: matchReasons.length > 0 ? matchReasons : ["retrieval_match"],
-    targetRoots: record.provenance.targetRoots,
-  };
+  return finalizeRecallEntry(
+    {
+      stableId: `narrative:${record.id}`,
+      sourceFamily: "narrative_memory",
+      trustLabel: "Advisory posture",
+      evidenceStrength: "weak",
+      scope,
+      semanticScore: score,
+      title: record.title,
+      summary: record.summary,
+      excerpt: compactText(record.content, 220),
+      freshness: freshnessFromTimestamp(record.updatedAt),
+      matchReasons: matchReasons.length > 0 ? matchReasons : ["retrieval_match"],
+      targetRoots: record.provenance.targetRoots,
+    },
+    context,
+  );
 }
 
 function mapDeliberationArtifact(
@@ -363,20 +502,25 @@ function mapDeliberationArtifact(
   score: number,
   matchReasons: string[],
   scope: RecallScope = DEFAULT_SCOPE,
+  context: RecallRankingContext,
 ): RecallSearchEntry {
-  return {
-    stableId: `deliberation:${artifact.id}`,
-    sourceFamily: "deliberation_memory",
-    sourceTier: "advisory_memory",
-    scope,
-    score,
-    title: artifact.title,
-    summary: artifact.summary,
-    excerpt: compactText(artifact.content, 220),
-    freshness: freshnessFromTimestamp(artifact.lastValidatedAt),
-    matchReasons: matchReasons.length > 0 ? matchReasons : ["retrieval_match"],
-    sessionId: artifact.sessionIds.at(-1),
-  };
+  return finalizeRecallEntry(
+    {
+      stableId: `deliberation:${artifact.id}`,
+      sourceFamily: "deliberation_memory",
+      trustLabel: "Advisory posture",
+      evidenceStrength: "weak",
+      scope,
+      semanticScore: score,
+      title: artifact.title,
+      summary: artifact.summary,
+      excerpt: compactText(artifact.content, 220),
+      freshness: freshnessFromTimestamp(artifact.lastValidatedAt),
+      matchReasons: matchReasons.length > 0 ? matchReasons : ["retrieval_match"],
+      sessionId: artifact.sessionIds.at(-1),
+    },
+    context,
+  );
 }
 
 function mapOptimizationLineage(
@@ -384,45 +528,56 @@ function mapOptimizationLineage(
   score: number,
   matchReasons: string[],
   scope: RecallScope = DEFAULT_SCOPE,
+  context: RecallRankingContext,
 ): RecallSearchEntry {
-  return {
-    stableId: `optimization:${artifact.id}`,
-    sourceFamily: "optimization_continuity",
-    sourceTier: "advisory_memory",
-    scope,
-    score,
-    title: artifact.goal ?? artifact.loopKey,
-    summary: artifact.summary,
-    excerpt: compactText(artifact.summary, 220),
-    freshness: freshnessFromTimestamp(artifact.lastObservedAt),
-    matchReasons,
-    sessionId: artifact.rootSessionId,
-  };
+  return finalizeRecallEntry(
+    {
+      stableId: `optimization:${artifact.id}`,
+      sourceFamily: "optimization_continuity",
+      trustLabel: "Advisory posture",
+      evidenceStrength: "weak",
+      scope,
+      semanticScore: score,
+      title: artifact.goal ?? artifact.loopKey,
+      summary: artifact.summary,
+      excerpt: compactText(artifact.summary, 220),
+      freshness: freshnessFromTimestamp(artifact.lastObservedAt),
+      matchReasons,
+      sessionId: artifact.rootSessionId,
+    },
+    context,
+  );
 }
 
 function mapPromotionDraft(
   draft: SkillPromotionDraft,
   queryTokens: readonly string[],
   scope: RecallScope = DEFAULT_SCOPE,
+  context: RecallRankingContext,
 ): RecallSearchEntry | null {
   const score = computeTokenOverlap(
     queryTokens,
     `${draft.title} ${draft.summary} ${draft.rationale} ${draft.proposalText} ${draft.tags.join(" ")}`,
   );
   if (score <= 0) return null;
-  return {
-    stableId: `promotion:${draft.id}`,
-    sourceFamily: "promotion_draft",
-    sourceTier: "promotion_candidate",
-    scope,
-    score: score + draft.confidenceScore * 0.25 + Math.min(0.12, draft.repeatCount * 0.04),
-    title: draft.title,
-    summary: draft.summary,
-    excerpt: compactText(draft.proposalText, 220),
-    freshness: freshnessFromTimestamp(draft.lastValidatedAt),
-    matchReasons: draft.tags.slice(0, 4),
-    sessionId: draft.sessionIds.at(-1),
-  };
+  return finalizeRecallEntry(
+    {
+      stableId: `promotion:${draft.id}`,
+      sourceFamily: "promotion_draft",
+      trustLabel: "Advisory posture",
+      evidenceStrength: "moderate",
+      scope,
+      semanticScore:
+        score + draft.confidenceScore * 0.25 + Math.min(0.12, draft.repeatCount * 0.04),
+      title: draft.title,
+      summary: draft.summary,
+      excerpt: compactText(draft.proposalText, 220),
+      freshness: freshnessFromTimestamp(draft.lastValidatedAt),
+      matchReasons: draft.tags.slice(0, 4),
+      sessionId: draft.sessionIds.at(-1),
+    },
+    context,
+  );
 }
 
 function mapKnowledgeDoc(
@@ -430,26 +585,32 @@ function mapKnowledgeDoc(
   score: number,
   matchReasons: string[],
   scope: RecallScope = DEFAULT_SCOPE,
+  context: RecallRankingContext,
 ): RecallSearchEntry {
-  return {
-    stableId: `precedent:${doc.relativePath}`,
-    sourceFamily: "repository_precedent",
-    sourceTier: "repository_precedent",
-    scope,
-    score,
-    title: doc.title,
-    summary: `${doc.sourceType} @ ${doc.relativePath}`,
-    excerpt: doc.excerpt,
-    freshness: doc.freshness,
-    matchReasons,
-    relativePath: doc.relativePath,
-  };
+  return finalizeRecallEntry(
+    {
+      stableId: `precedent:${doc.relativePath}`,
+      sourceFamily: "repository_precedent",
+      trustLabel: "Repository precedent",
+      evidenceStrength: "moderate",
+      scope,
+      semanticScore: score,
+      title: doc.title,
+      summary: `${doc.sourceType} @ ${doc.relativePath}`,
+      excerpt: doc.excerpt,
+      freshness: doc.freshness,
+      matchReasons,
+      relativePath: doc.relativePath,
+    },
+    context,
+  );
 }
 
 export interface RecallBrokerSearchInput {
   sessionId: string;
   query: string;
   scope?: RecallScope;
+  intent?: RecallSearchIntent;
   limit?: number;
 }
 
@@ -516,6 +677,8 @@ export class RecallBroker {
     const query = normalizeQuery(input.query);
     const limit = Math.max(1, input.limit ?? DEFAULT_MAX_RESULTS);
     const scope = input.scope ?? DEFAULT_SCOPE;
+    const intent = input.intent;
+    const rankingContext = createRankingContext(input.sessionId, intent);
     const state = this.sync();
     const queryTokens = tokenizeSearchText(query, { includeCompoundSubtokens: false });
     const curationById = new Map(state.curation.map((entry) => [entry.stableId, entry]));
@@ -527,7 +690,7 @@ export class RecallBroker {
 
     const results: RecallSearchEntry[] = [];
     results.push(
-      ...this.searchTapeEvidence(candidateDigests, input.sessionId, queryTokens, scope, limit),
+      ...this.searchTapeEvidence(candidateDigests, rankingContext, queryTokens, scope, limit),
     );
     results.push(
       ...getOrCreateNarrativeMemoryPlane(this.runtime)
@@ -541,6 +704,7 @@ export class RecallBroker {
             entry.score,
             entry.matchedTerms.length > 0 ? entry.matchedTerms : ["retrieval_match"],
             scope,
+            rankingContext,
           ),
         ),
     );
@@ -553,6 +717,7 @@ export class RecallBroker {
             entry.score,
             entry.artifact.tags.length > 0 ? entry.artifact.tags.slice(0, 4) : ["retrieval_match"],
             scope,
+            rankingContext,
           ),
         ),
     );
@@ -575,6 +740,7 @@ export class RecallBroker {
               ...(entry.artifact.scope ?? []),
             ]).slice(0, 4),
             scope,
+            rankingContext,
           ),
         ),
     );
@@ -586,20 +752,27 @@ export class RecallBroker {
             scope === "workspace_wide" ||
             draft.sessionIds.some((sessionId) => scopedSessionIds.has(sessionId)),
         )
-        .map((draft) => mapPromotionDraft(draft, queryTokens, scope))
+        .map((draft) => mapPromotionDraft(draft, queryTokens, scope, rankingContext))
         .filter((entry): entry is RecallSearchEntry => Boolean(entry)),
     );
     results.push(
       ...executeKnowledgeSearch([this.runtime.workspaceRoot], { query, limit }).results.map(
         (entry) =>
-          mapKnowledgeDoc(entry.doc, entry.relevanceScore / 100, entry.matchReasons, scope),
+          mapKnowledgeDoc(
+            entry.doc,
+            entry.relevanceScore / 100,
+            entry.matchReasons,
+            scope,
+            rankingContext,
+          ),
       ),
     );
 
     return {
       query,
       scope,
-      results: this.applyCuration(results, curationById)
+      ...(intent ? { intent } : {}),
+      results: this.applyCuration(results, curationById, rankingContext)
         .toSorted(compareRecallSearchEntries)
         .slice(0, limit),
     };
@@ -607,6 +780,7 @@ export class RecallBroker {
 
   inspectStableIds(input: RecallBrokerInspectInput): RecallInspectResult {
     const scope = input.scope ?? DEFAULT_SCOPE;
+    const rankingContext = createRankingContext(input.sessionId, undefined);
     const state = this.sync();
     const curationById = new Map(state.curation.map((entry) => [entry.stableId, entry]));
     const currentTarget = this.runtime.inspect.task.getTargetDescriptor(input.sessionId);
@@ -621,7 +795,13 @@ export class RecallBroker {
     const unresolvedStableIds: string[] = [];
 
     for (const stableId of requestedStableIds) {
-      const resolved = this.resolveStableId(stableId, candidateDigests, scopedSessionIds, scope);
+      const resolved = this.resolveStableId(
+        stableId,
+        candidateDigests,
+        scopedSessionIds,
+        scope,
+        rankingContext,
+      );
       if (!resolved) {
         unresolvedStableIds.push(stableId);
         continue;
@@ -633,7 +813,7 @@ export class RecallBroker {
       scope,
       requestedStableIds,
       unresolvedStableIds,
-      results: this.applyCuration(resolvedResults, curationById).toSorted(
+      results: this.applyCuration(resolvedResults, curationById, rankingContext).toSorted(
         compareRecallSearchEntries,
       ),
     };
@@ -641,11 +821,12 @@ export class RecallBroker {
 
   private searchTapeEvidence(
     candidateDigests: readonly RecallSessionDigest[],
-    currentSessionId: string,
+    rankingContext: RecallRankingContext,
     queryTokens: readonly string[],
     scope: RecallScope,
     limit: number,
   ): RecallSearchEntry[] {
+    const { currentSessionId } = rankingContext;
     const rankedDigests = candidateDigests
       .map((entry) => ({
         digest: entry,
@@ -668,23 +849,30 @@ export class RecallBroker {
         const text = extractEventSearchText(event);
         const overlap = computeTokenOverlap(queryTokens, text);
         if (overlap <= 0) continue;
-        results.push({
-          stableId: `tape:${digest.sessionId}:${event.id}`,
-          sourceFamily: "tape_evidence",
-          sourceTier: "runtime_evidence",
-          scope,
-          score:
-            overlap +
-            Math.min(0.12, computeTokenOverlap(queryTokens, digest.digestText) * 0.25) +
-            (digest.sessionId === currentSessionId ? 0.03 : 0),
-          title: renderEventTitle(event),
-          summary: compactText(text, 160),
-          excerpt: compactText(text, 220),
-          freshness: freshnessFromTimestamp(event.timestamp),
-          matchReasons: ["event_text"],
-          sessionId: digest.sessionId,
-          targetRoots: digest.targetRoots,
-        });
+        const classification = classifyTapeEvent(event, currentSessionId);
+        results.push(
+          finalizeRecallEntry(
+            {
+              stableId: `tape:${digest.sessionId}:${event.id}`,
+              sourceFamily: "tape_evidence",
+              trustLabel: classification.trustLabel,
+              evidenceStrength: classification.evidenceStrength,
+              scope,
+              semanticScore:
+                overlap +
+                Math.min(0.12, computeTokenOverlap(queryTokens, digest.digestText) * 0.25) +
+                (digest.sessionId === currentSessionId ? 0.03 : 0),
+              title: renderEventTitle(event),
+              summary: compactText(text, 160),
+              excerpt: compactText(text, 220),
+              freshness: freshnessFromTimestamp(event.timestamp),
+              matchReasons: ["event_text"],
+              sessionId: digest.sessionId,
+              targetRoots: digest.targetRoots,
+            },
+            rankingContext,
+          ),
+        );
       }
     }
     return results;
@@ -743,17 +931,20 @@ export class RecallBroker {
   private applyCuration(
     entries: readonly RecallSearchEntry[],
     curationById: ReadonlyMap<string, RecallCurationAggregate>,
+    rankingContext: RecallRankingContext,
   ): RecallSearchEntry[] {
     return [
       ...new Map(
         entries.map((entry) => {
           const curation = curationById.get(entry.stableId);
           const scoreAdjustment = curationAdjustment(curation);
+          const ranked = computeRankingScore(entry, rankingContext, scoreAdjustment);
           return [
             entry.stableId,
             {
               ...entry,
-              score: entry.score + scoreAdjustment,
+              rankingScore: ranked.rankingScore,
+              rankReasons: ranked.rankReasons,
               curation: buildCurationSnapshot(curation),
             },
           ] as const;
@@ -767,21 +958,26 @@ export class RecallBroker {
     candidateDigests: readonly RecallSessionDigest[],
     scopedSessionIds: ReadonlySet<string>,
     scope: RecallScope,
+    rankingContext: RecallRankingContext,
   ): RecallSearchEntry | undefined {
     if (stableId.startsWith("tape:")) {
-      return this.resolveTapeStableId(stableId, candidateDigests, scope);
+      return this.resolveTapeStableId(stableId, candidateDigests, scope, rankingContext);
     }
     if (stableId.startsWith("narrative:")) {
       const record = getOrCreateNarrativeMemoryPlane(this.runtime).getRecord(
         stableId.slice("narrative:".length),
       );
-      return record ? mapNarrativeRecord(record, 0.4, ["stable_id"], scope) : undefined;
+      return record
+        ? mapNarrativeRecord(record, 0.4, ["stable_id"], scope, rankingContext)
+        : undefined;
     }
     if (stableId.startsWith("deliberation:")) {
       const artifact = getOrCreateDeliberationMemoryPlane(this.runtime).getArtifact(
         stableId.slice("deliberation:".length),
       );
-      return artifact ? mapDeliberationArtifact(artifact, 0.4, ["stable_id"], scope) : undefined;
+      return artifact
+        ? mapDeliberationArtifact(artifact, 0.4, ["stable_id"], scope, rankingContext)
+        : undefined;
     }
     if (stableId.startsWith("optimization:")) {
       const lineage = getOrCreateOptimizationContinuityPlane(this.runtime).getLineage(
@@ -802,6 +998,7 @@ export class RecallBroker {
         0.4,
         uniqueStrings([lineage.status, lineage.loopKey, "stable_id"]).slice(0, 4),
         scope,
+        rankingContext,
       );
     }
     if (stableId.startsWith("promotion:")) {
@@ -818,26 +1015,30 @@ export class RecallBroker {
       ) {
         return undefined;
       }
-      return {
-        stableId: `promotion:${draft.id}`,
-        sourceFamily: "promotion_draft",
-        sourceTier: "promotion_candidate",
-        scope,
-        score: 0.4,
-        title: draft.title,
-        summary: draft.summary,
-        excerpt: compactText(draft.proposalText, 220),
-        freshness: freshnessFromTimestamp(draft.lastValidatedAt),
-        matchReasons: ["stable_id", ...draft.tags.slice(0, 3)],
-        sessionId: draft.sessionIds.at(-1),
-      };
+      return finalizeRecallEntry(
+        {
+          stableId: `promotion:${draft.id}`,
+          sourceFamily: "promotion_draft",
+          trustLabel: "Advisory posture",
+          evidenceStrength: "moderate",
+          scope,
+          semanticScore: 0.4,
+          title: draft.title,
+          summary: draft.summary,
+          excerpt: compactText(draft.proposalText, 220),
+          freshness: freshnessFromTimestamp(draft.lastValidatedAt),
+          matchReasons: ["stable_id", ...draft.tags.slice(0, 3)],
+          sessionId: draft.sessionIds.at(-1),
+        },
+        rankingContext,
+      );
     }
     if (stableId.startsWith("precedent:")) {
       const doc = findKnowledgeDocByRelativePath(
         [this.runtime.workspaceRoot],
         stableId.slice("precedent:".length),
       );
-      return doc ? mapKnowledgeDoc(doc, 0.4, ["stable_id"], scope) : undefined;
+      return doc ? mapKnowledgeDoc(doc, 0.4, ["stable_id"], scope, rankingContext) : undefined;
     }
     return undefined;
   }
@@ -846,6 +1047,7 @@ export class RecallBroker {
     stableId: string,
     candidateDigests: readonly RecallSessionDigest[],
     scope: RecallScope,
+    rankingContext: RecallRankingContext,
   ): RecallSearchEntry | undefined {
     const encoded = stableId.slice("tape:".length);
     const splitIndex = encoded.lastIndexOf(":");
@@ -868,20 +1070,25 @@ export class RecallBroker {
       return undefined;
     }
     const text = extractEventSearchText(event);
-    return {
-      stableId,
-      sourceFamily: "tape_evidence",
-      sourceTier: "runtime_evidence",
-      scope,
-      score: 0.4,
-      title: renderEventTitle(event),
-      summary: compactText(text, 160),
-      excerpt: compactText(text, 220),
-      freshness: freshnessFromTimestamp(event.timestamp),
-      matchReasons: ["stable_id"],
-      sessionId: digest.sessionId,
-      targetRoots: digest.targetRoots,
-    };
+    const classification = classifyTapeEvent(event, rankingContext.currentSessionId);
+    return finalizeRecallEntry(
+      {
+        stableId,
+        sourceFamily: "tape_evidence",
+        trustLabel: classification.trustLabel,
+        evidenceStrength: classification.evidenceStrength,
+        scope,
+        semanticScore: 0.4,
+        title: renderEventTitle(event),
+        summary: compactText(text, 160),
+        excerpt: compactText(text, 220),
+        freshness: freshnessFromTimestamp(event.timestamp),
+        matchReasons: ["stable_id"],
+        sessionId: digest.sessionId,
+        targetRoots: digest.targetRoots,
+      },
+      rankingContext,
+    );
   }
 }
 

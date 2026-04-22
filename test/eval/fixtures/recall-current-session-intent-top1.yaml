@@ -1,0 +1,56 @@
+outputs:
+  summary: "broker scope=workspace_wide intent=current_session_evidence moved current-session tape evidence above the generic broker result."
+  top_result:
+    stable_id: tape:current-session:current-note
+    source_family: tape_evidence
+  broker_without_intent_top_result:
+    stable_id: tape:prior-session:prior-note
+    source_family: tape_evidence
+  broker_results:
+    - stable_id: tape:current-session:current-note
+      source_family: tape_evidence
+  baseline_results:
+    - stable_id: tape:current-session:current-note
+      source_family: tape_evidence
+  metrics:
+    baseline_precision_at_k: 1
+    broker_precision_at_k: 1
+    precision_gain_at_k: 0
+    broker_without_intent_top_1_hit_rate: 0
+    broker_with_intent_top_1_hit_rate: 1
+    intent_top_1_gain: 1
+    baseline_useful_recall_rate: 1
+    broker_useful_recall_rate: 1
+    useful_recall_gain: 0
+    baseline_harmful_recall_rate: 0
+    broker_harmful_recall_rate: 0
+    baseline_contradiction_rate: 0
+    broker_contradiction_rate: 0
+    baseline_latency_ms: 0.1
+    broker_latency_ms: 4.1
+    added_latency_ms: 4
+    baseline_token_cost: 8
+    broker_token_cost: 18
+    added_token_cost: 10
+telemetry:
+  kind: recall
+  metrics:
+    baseline_precision_at_k: 1
+    broker_precision_at_k: 1
+    precision_gain_at_k: 0
+    broker_without_intent_top_1_hit_rate: 0
+    broker_with_intent_top_1_hit_rate: 1
+    intent_top_1_gain: 1
+    baseline_useful_recall_rate: 1
+    broker_useful_recall_rate: 1
+    useful_recall_gain: 0
+    baseline_harmful_recall_rate: 0
+    broker_harmful_recall_rate: 0
+    baseline_contradiction_rate: 0
+    broker_contradiction_rate: 0
+    baseline_latency_ms: 0.1
+    broker_latency_ms: 4.1
+    added_latency_ms: 4
+    baseline_token_cost: 8
+    broker_token_cost: 18
+    added_token_cost: 10

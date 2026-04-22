@@ -368,7 +368,7 @@ describe("session coordination tool contracts", () => {
 
     const result = await recallSearch.execute(
       "tc-recall-search",
-      { query: "flaky worker bootstrap", limit: 5 },
+      { query: "flaky worker bootstrap", intent: "current_session_evidence", limit: 5 },
       undefined,
       undefined,
       fakeContext(currentSessionId),
@@ -376,24 +376,30 @@ describe("session coordination tool contracts", () => {
 
     const text = extractTextContent(result);
     expect(text).toContain("[RecallSearch]");
+    expect(text).toContain("intent: current_session_evidence");
     expect(text).toContain("source_family=tape_evidence");
-    expect(text).toContain("source_tier=runtime_evidence");
+    expect(text).toContain("trust_label=Advisory posture");
+    expect(text).toContain("evidence_strength=weak");
     expect(text).toContain(`session_id=${priorSessionId}`);
 
     const details = result.details as
       | {
+          intent?: string | null;
           results?: Array<{
             sourceFamily?: string;
-            sourceTier?: string;
+            trustLabel?: string;
+            evidenceStrength?: string;
             sessionId?: string | null;
           }>;
         }
       | undefined;
+    expect(details?.intent).toBe("current_session_evidence");
     expect(details?.results).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           sourceFamily: "tape_evidence",
-          sourceTier: "runtime_evidence",
+          trustLabel: "Advisory posture",
+          evidenceStrength: "weak",
           sessionId: priorSessionId,
         }),
       ]),

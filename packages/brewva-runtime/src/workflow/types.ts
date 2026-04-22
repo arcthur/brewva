@@ -27,6 +27,12 @@ export type WorkflowLaneStatus = "missing" | "ready" | "stale" | "blocked" | "pe
 export type WorkflowPlanningStatus = "missing" | "ready";
 export type WorkflowImplementationStatus = "missing" | "pending" | "ready" | "blocked";
 export type WorkflowAcceptanceStatus = "not_required" | WorkflowLaneStatus;
+export type WorkflowFinishState =
+  | "not_started"
+  | "in_progress"
+  | "blocked"
+  | "ready_for_acceptance"
+  | "deliverable";
 
 export interface WorkflowArtifact {
   artifactId: string;
@@ -66,10 +72,23 @@ export interface WorkflowPosture {
   updatedAt: number;
 }
 
+export interface WorkflowFinishView {
+  state: WorkflowFinishState;
+  completed: boolean;
+  verified: boolean;
+  acceptance: WorkflowAcceptanceStatus;
+  ship: WorkflowLaneStatus;
+  deliverable: boolean;
+  missingEvidence: string[];
+  blockers: string[];
+  summary: string;
+}
+
 export interface WorkflowStatusSnapshot {
   sessionId: string;
   currentWorkspaceRevision?: string;
   posture: WorkflowPosture;
+  finish: WorkflowFinishView;
   skillReadiness: SkillReadinessEntry[];
   artifacts: WorkflowArtifact[];
   pendingWorkerResults: number;

@@ -107,6 +107,11 @@ function usefulRecallRate(resultIds: readonly string[], relevantIds: ReadonlySet
   return resultIds.some((stableId) => relevantIds.has(stableId)) ? 1 : 0;
 }
 
+function topOneHitRate(resultIds: readonly string[], relevantIds: ReadonlySet<string>): number {
+  const topId = resultIds[0];
+  return topId && relevantIds.has(topId) ? 1 : 0;
+}
+
 export async function executeRecallRuntimeScenario(input: {
   datasetPath: string;
   workspaceRoot: string;
@@ -168,14 +173,28 @@ export async function executeRecallRuntimeScenario(input: {
   const baselineLatencyMs = performance.now() - baselineStartedAt;
 
   const broker = getOrCreateRecallBroker(runtime);
-  const brokerStartedAt = performance.now();
-  const brokerSearch = broker.search({
+  const genericBrokerStartedAt = performance.now();
+  const genericBrokerSearch = broker.search({
     sessionId: currentSessionId,
     query: dataset.query.text,
     scope: dataset.query.scope,
     limit,
   });
-  const brokerLatencyMs = performance.now() - brokerStartedAt;
+  const genericBrokerLatencyMs = performance.now() - genericBrokerStartedAt;
+
+  let brokerSearch = genericBrokerSearch;
+  let brokerLatencyMs = genericBrokerLatencyMs;
+  if (dataset.query.intent) {
+    const intentBrokerStartedAt = performance.now();
+    brokerSearch = broker.search({
+      sessionId: currentSessionId,
+      query: dataset.query.text,
+      scope: dataset.query.scope,
+      intent: dataset.query.intent,
+      limit,
+    });
+    brokerLatencyMs = performance.now() - intentBrokerStartedAt;
+  }
 
   const relevantIds = new Set(
     dataset.expectations.relevant_stable_ids.map((stableId) =>
@@ -213,12 +232,16 @@ export async function executeRecallRuntimeScenario(input: {
     title: entry.title,
     summary: entry.summary,
     excerpt: entry.excerpt,
-    score: entry.score,
+    ranking_score: entry.rankingScore,
+    semantic_score: entry.semanticScore,
+    trust_label: entry.trustLabel,
+    evidence_strength: entry.evidenceStrength,
     freshness: entry.freshness,
   }));
 
   const baselineStableIds = baselineResults.map((entry) => entry.stable_id);
   const brokerStableIds = brokerResults.map((entry) => entry.stable_id);
+  const genericBrokerStableIds = genericBrokerSearch.results.map((entry) => entry.stableId);
   const baselineTokenCost = estimateBaselineTokenCost(baselineResults);
   const brokerTokenCost = estimateBrokerTokenCost(brokerResults);
 
@@ -227,6 +250,15 @@ export async function executeRecallRuntimeScenario(input: {
     broker_precision_at_k: precisionAtK(brokerStableIds, relevantIds),
     precision_gain_at_k:
       precisionAtK(brokerStableIds, relevantIds) - precisionAtK(baselineStableIds, relevantIds),
+    ...(dataset.query.intent
+      ? {
+          broker_without_intent_top_1_hit_rate: topOneHitRate(genericBrokerStableIds, relevantIds),
+          broker_with_intent_top_1_hit_rate: topOneHitRate(brokerStableIds, relevantIds),
+          intent_top_1_gain:
+            topOneHitRate(brokerStableIds, relevantIds) -
+            topOneHitRate(genericBrokerStableIds, relevantIds),
+        }
+      : {}),
     baseline_useful_recall_rate: usefulRecallRate(baselineStableIds, relevantIds),
     broker_useful_recall_rate: usefulRecallRate(brokerStableIds, relevantIds),
     useful_recall_gain:
@@ -245,6 +277,20 @@ export async function executeRecallRuntimeScenario(input: {
   };
 
   const topResult = brokerResults[0] ?? null;
+  const genericBrokerTopResult = genericBrokerSearch.results[0]
+    ? {
+        stable_id: genericBrokerSearch.results[0].stableId,
+        source_family: genericBrokerSearch.results[0].sourceFamily,
+        title: genericBrokerSearch.results[0].title,
+        summary: genericBrokerSearch.results[0].summary,
+        excerpt: genericBrokerSearch.results[0].excerpt,
+        ranking_score: genericBrokerSearch.results[0].rankingScore,
+        semantic_score: genericBrokerSearch.results[0].semanticScore,
+        trust_label: genericBrokerSearch.results[0].trustLabel,
+        evidence_strength: genericBrokerSearch.results[0].evidenceStrength,
+        freshness: genericBrokerSearch.results[0].freshness,
+      }
+    : null;
   const baselineTopResult = baselineResults[0] ?? null;
   const topMatchesExpectation = expectedTopStableId
     ? brokerResults[0]?.stable_id === expectedTopStableId
@@ -253,13 +299,17 @@ export async function executeRecallRuntimeScenario(input: {
   return {
     outputs: {
       summary: [
-        `broker scope=${brokerSearch.scope} query="${brokerSearch.query}" returned ${brokerResults.length} result(s)`,
+        `broker scope=${brokerSearch.scope} intent=${brokerSearch.intent ?? "none"} query="${brokerSearch.query}" returned ${brokerResults.length} result(s)`,
         `session-local baseline returned ${baselineResults.length} result(s)`,
+        dataset.query.intent
+          ? `intent_top_1_gain=${metrics.intent_top_1_gain?.toFixed(2) ?? "n/a"}`
+          : "intent_top_1_gain=not_set",
         expectedTopStableId
           ? `top_result_matches_expectation=${topMatchesExpectation ? "yes" : "no"}`
           : "top_result_matches_expectation=not_set",
       ].join("; "),
       top_result: topResult,
+      broker_without_intent_top_result: dataset.query.intent ? genericBrokerTopResult : null,
       baseline_top_result: baselineTopResult,
       broker_results: brokerResults,
       baseline_results: baselineResults,

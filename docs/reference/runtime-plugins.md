@@ -327,9 +327,8 @@ Current interactive protocol is TaskSpec-first:
   candidates from TaskSpec-first intent signals rather than from raw prompt
   scoring
 - when that re-evaluation changes the routed posture in the same turn, hosted
-  telemetry emits a fresh `skill_recommendation_derived` receipt for the new
-  posture
-- any retained post-TaskSpec recommendation narrows the turn again so the next
+  telemetry emits a fresh `skill_diagnosis_derived` receipt for the new posture
+- any retained post-TaskSpec diagnosis narrows the turn again so the next
   semantic decision is explicit `skill_load`; confidence affects ranking, not
   whether the skill boundary may be skipped
 
@@ -408,7 +407,7 @@ Important boundary:
   before `runtime.maintain.context.buildInjection(...)`
 - hosted supplemental and recovery blocks, including operational diagnostics,
   delegation-outcome surfacing, read-path recovery, skill-routing availability,
-  skill recommendations, and same-turn supplemental returns, are appended after
+  skill diagnosis, and same-turn supplemental returns, are appended after
   admission by the hosted pipeline and are not suppressed by that provider
   selection
 

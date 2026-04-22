@@ -1,5 +1,5 @@
 import {
-  SKILL_RECOMMENDATION_DERIVED_EVENT_TYPE,
+  SKILL_DIAGNOSIS_DERIVED_EVENT_TYPE,
   type BrewvaHostedRuntimePort,
   type ContextSourceProviderDescriptor,
   type ContextBudgetUsage,
@@ -25,12 +25,13 @@ import type { HostedContextTelemetry } from "./hosted-context-telemetry.js";
 import { buildPromptStabilityObservation } from "./prompt-stability.js";
 import { buildReadPathRecoveryBlocks } from "./read-path-recovery.js";
 import {
-  buildSkillRecommendationReceiptPayload,
-  buildSkillFirstPolicyBlock,
+  buildSkillDiagnosisReceiptPayload,
+  buildSkillDiagnosisPolicyBlock,
+  resolveShortestNextAction,
   type SkillActivationPosture,
   type SkillClassificationHint,
   type ToolAvailabilityPosture,
-  type SkillRecommendationSet,
+  type SkillDiagnosisSet,
 } from "./skill-first.js";
 
 export const HOSTED_CONTEXT_INJECTION_MESSAGE_TYPE = "brewva-context-injection";
@@ -63,11 +64,13 @@ export interface HostedContextInjectionMessageDetails {
     detailNames: string[];
     missing: string[];
   };
-  skillRecommendation: {
+  skillDiagnosis: {
     activationPosture: SkillActivationPosture;
     toolAvailabilityPosture: ToolAvailabilityPosture;
     taskSpecReady: boolean;
     names: string[];
+    selected: string | null;
+    shortestNextAction: string;
   };
 }
 
@@ -180,7 +183,7 @@ function buildMessageDetails(input: {
   gateRequired: boolean;
   composed: ContextComposerResult;
   capabilityView: BuildCapabilityViewResult;
-  skillRecommendations: SkillRecommendationSet;
+  skillDiagnosis: SkillDiagnosisSet;
 }): HostedContextInjectionMessageDetails {
   return {
     originalTokens: input.originalTokens,
@@ -198,11 +201,13 @@ function buildMessageDetails(input: {
       detailNames: input.capabilityView.details.map((detail) => detail.name),
       missing: input.capabilityView.missing,
     },
-    skillRecommendation: {
-      activationPosture: input.skillRecommendations.activationPosture,
-      toolAvailabilityPosture: input.skillRecommendations.toolAvailabilityPosture,
-      taskSpecReady: input.skillRecommendations.taskSpecReady,
-      names: input.skillRecommendations.recommendations.map((entry) => entry.name),
+    skillDiagnosis: {
+      activationPosture: input.skillDiagnosis.activationPosture,
+      toolAvailabilityPosture: input.skillDiagnosis.toolAvailabilityPosture,
+      taskSpecReady: input.skillDiagnosis.taskSpecReady,
+      names: input.skillDiagnosis.candidates.map((entry) => entry.name),
+      selected: input.skillDiagnosis.candidates[0]?.name ?? null,
+      shortestNextAction: resolveShortestNextAction(input.skillDiagnosis),
     },
   };
 }
@@ -255,27 +260,27 @@ function observePromptStability(
   });
 }
 
-function buildSkillRecommendationBlocks(
+function buildSkillDiagnosisBlocks(
   runtime: BrewvaHostedRuntimePort,
   input: {
     sessionId: string;
-    recommendations: SkillRecommendationSet;
+    diagnosis: SkillDiagnosisSet;
     emitEvent?: boolean;
   },
 ): ComposedContextBlock[] {
-  const content = buildSkillFirstPolicyBlock(input.recommendations);
+  const content = buildSkillDiagnosisPolicyBlock(input.diagnosis);
   if (!content) {
     return [];
   }
 
-  const payload = buildSkillRecommendationReceiptPayload(input.recommendations);
+  const payload = buildSkillDiagnosisReceiptPayload(input.diagnosis);
   if (input.emitEvent !== false) {
     if (!payload) {
       return [];
     }
     recordRuntimeEvent(runtime, {
       sessionId: input.sessionId,
-      type: SKILL_RECOMMENDATION_DERIVED_EVENT_TYPE,
+      type: SKILL_DIAGNOSIS_DERIVED_EVENT_TYPE,
       payload,
     });
   }
@@ -335,8 +340,8 @@ function buildHostedSupplementalBlocks(
       typeof prepareContextComposerSupport
     >["pendingCompactionReason"];
     capabilityView: BuildCapabilityViewResult;
-    skillRecommendations: SkillRecommendationSet;
-    emitSkillRecommendationEvent?: boolean;
+    skillDiagnosis: SkillDiagnosisSet;
+    emitSkillDiagnosisEvent?: boolean;
   },
 ): ComposedContextBlock[] {
   return appendSupplementalContextBlocks(runtime, {
@@ -353,10 +358,10 @@ function buildHostedSupplementalBlocks(
         capabilityView: input.capabilityView,
       }),
       ...buildReadPathRecoveryBlocks(runtime, input.sessionId),
-      ...buildSkillRecommendationBlocks(runtime, {
+      ...buildSkillDiagnosisBlocks(runtime, {
         sessionId: input.sessionId,
-        recommendations: input.skillRecommendations,
-        emitEvent: input.emitSkillRecommendationEvent,
+        diagnosis: input.skillDiagnosis,
+        emitEvent: input.emitSkillDiagnosisEvent,
       }),
     ],
   });
@@ -377,7 +382,7 @@ export function createHostedContextInjectionPipeline(
       const injectionScopeId = resolveInjectionScopeId(input.sessionManager);
       runtime.maintain.context.observeUsage(input.sessionId, input.usage);
 
-      let { gateStatus, pendingCompactionReason, capabilityView, skillRecommendations } =
+      let { gateStatus, pendingCompactionReason, capabilityView, skillDiagnosis } =
         prepareContextComposerSupport({
           runtime,
           extensionApi,
@@ -412,8 +417,8 @@ export function createHostedContextInjectionPipeline(
           gateStatus,
           pendingCompactionReason,
           capabilityView,
-          skillRecommendations,
-          emitSkillRecommendationEvent: gateStatus.required,
+          skillDiagnosis,
+          emitSkillDiagnosisEvent: gateStatus.required,
         });
         statePort.setLastRuntimeGateRequired(input.sessionId, true);
         const composed = composeContextBlocks({
@@ -458,7 +463,7 @@ export function createHostedContextInjectionPipeline(
             gateRequired: true,
             composed,
             capabilityView,
-            skillRecommendations,
+            skillDiagnosis,
           }),
         });
       }
@@ -493,7 +498,7 @@ export function createHostedContextInjectionPipeline(
       gateStatus = gateStatusAfterInjection;
       pendingCompactionReason = supportAfterInjection.pendingCompactionReason;
       capabilityView = supportAfterInjection.capabilityView;
-      skillRecommendations = supportAfterInjection.skillRecommendations;
+      skillDiagnosis = supportAfterInjection.skillDiagnosis;
       statePort.setLastRuntimeGateRequired(input.sessionId, gateStatus.required);
 
       const supplementalBlocks = buildHostedSupplementalBlocks(runtime, contextComposerRuntime, {
@@ -504,8 +509,8 @@ export function createHostedContextInjectionPipeline(
         gateStatus,
         pendingCompactionReason,
         capabilityView,
-        skillRecommendations,
-        emitSkillRecommendationEvent: true,
+        skillDiagnosis,
+        emitSkillDiagnosisEvent: true,
       });
 
       if (pendingCompactionReason && !gateStatus.required) {
@@ -560,7 +565,7 @@ export function createHostedContextInjectionPipeline(
           gateRequired: gateStatus.required,
           composed,
           capabilityView,
-          skillRecommendations,
+          skillDiagnosis,
         }),
       });
     },

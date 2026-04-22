@@ -94,9 +94,11 @@ helper material, not session-state durability surfaces in the taxonomy above.
   - rebuildable state only
   - stores session digests, cross-session evidence index, and curation
     aggregates for broker-first recall
-  - broker search results are typed by `sourceTier` and ranked in this order:
-    `runtime_evidence`, `repository_precedent`, `promotion_candidate`,
-    `advisory_memory`
+  - broker search results carry presentation `trustLabel`,
+    `evidenceStrength`, `semanticScore`, `rankingScore`, and `rankReasons`
+    instead of a single source-tier ordering
+  - repository precedent can outrank weak task-event notes; strong runtime
+    receipts can still outrank precedent
   - `recall_results_surfaced`, `context_*`, and `projection_*` are excluded
     from broker tape search and session digest text
   - curation aggregates keep raw signal counts plus time-decayed ranking

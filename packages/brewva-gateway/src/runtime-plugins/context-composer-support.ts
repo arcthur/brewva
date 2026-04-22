@@ -2,16 +2,16 @@ import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import type { InternalHostPluginApi, BrewvaHostToolInfo } from "@brewva/brewva-substrate";
 import { buildCapabilityView, type BuildCapabilityViewResult } from "./capability-view.js";
 import {
-  deriveSkillRecommendations,
+  deriveSkillDiagnoses,
   type SkillClassificationHint,
-  type SkillRecommendationSet,
+  type SkillDiagnosisSet,
 } from "./skill-first.js";
 
 export interface PreparedContextComposerSupport {
   gateStatus: ReturnType<BrewvaHostedRuntimePort["inspect"]["context"]["getCompactionGateStatus"]>;
   pendingCompactionReason: string | null;
   capabilityView: BuildCapabilityViewResult;
-  skillRecommendations: SkillRecommendationSet;
+  skillDiagnosis: SkillDiagnosisSet;
 }
 
 export function prepareContextComposerSupport(input: {
@@ -53,7 +53,7 @@ export function prepareContextComposerSupport(input: {
       }),
     resolveActionPolicy: (toolName) => input.runtime.inspect.tools.getActionPolicy(toolName),
   });
-  const skillRecommendations = deriveSkillRecommendations(input.runtime, {
+  const skillDiagnosis = deriveSkillDiagnoses(input.runtime, {
     sessionId: input.sessionId,
     prompt: input.prompt,
     classificationHints: input.classificationHints,
@@ -62,6 +62,6 @@ export function prepareContextComposerSupport(input: {
     gateStatus,
     pendingCompactionReason,
     capabilityView,
-    skillRecommendations,
+    skillDiagnosis,
   };
 }

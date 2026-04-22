@@ -564,10 +564,11 @@ skill activation and tool availability postures:
 - exploratory and analytical turns keep read/search/mutation/lifecycle tools
   visible while surfacing `recommend_task_spec` or `recommend_skill_load`
 - execution, verification, mutation, and contract-sensitive workflows may enter
-  `require_task_spec`, `require_skill_load`, or `repair_failed_contract`
-  postures with a corresponding `ToolAvailabilityPosture`
+  `require_task_spec`, `require_skill_inputs`, `require_skill_load`, or
+  `repair_failed_contract` postures with a corresponding
+  `ToolAvailabilityPosture`
 - these posture changes are visible control-plane shaping plus replayable
-  receipts such as `skill_recommendation_derived`; they do not activate skills
+  receipts such as `skill_diagnosis_derived`; they do not activate skills
   automatically and they do not create a runtime-owned planning state machine
 
 ## Governance Port

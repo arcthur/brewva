@@ -83,7 +83,7 @@ the full source set on its own.
 This source narrowing is limited to kernel provider collection. Hosted
 supplemental / recovery blocks appended after admission, such as operational
 diagnostics, pending delegation outcomes, read-path recovery, skill-routing
-availability, skill recommendations, and same-turn supplemental returns, do not
+availability, skill diagnosis, and same-turn supplemental returns, do not
 flow through `options.sourceSelection`. These blocks carry guarded-supplemental
 or composer-policy provenance instead of being reintroduced as primary source
 entries.
@@ -221,6 +221,9 @@ Hosted recall reminder:
 - the broker may surface source-typed recall from narrative memory,
   deliberation memory, optimization continuity, promotion drafts, tape
   evidence, and repository precedent
+- the provider passes a typed recall intent inferred from prompt wording so
+  current-session evidence, repository precedent, and durable runtime receipts
+  can rank differently without hiding source provenance
 - these blocks are already-admitted narrative context, not new kernel
   authority
 - `ContextComposer` presents them, but it does not fold, refresh, or interpret
@@ -244,6 +247,12 @@ Current default hosted behavior is broker-first:
   curation aggregates from durable tape-visible evidence
 - default broker scope is `user + repository root`; `workspace_wide` and
   `cross_workspace` behavior remain policy-gated rather than implicit defaults
+- default broker intent is `prior_work`; this is a neutral fallback with no
+  positive intent boost, while explicit or inferred non-default recall intent
+  only changes ranking, not authority or source-family identity
+- raw recent command or tool output is not a broker recall intent; the
+  session-local artifact surface for that information need remains
+  `output_search`
 - worktrees under the same repository root do not share hosted recall
   automatically unless repository policy explicitly widens the scope
 - underlying products such as narrative memory, deliberation memory,

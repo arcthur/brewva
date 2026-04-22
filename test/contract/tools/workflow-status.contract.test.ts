@@ -198,25 +198,33 @@ describe("workflow_status contract", () => {
 
     const text = extractTextContent(result);
     expect(text).toContain("[WorkflowStatus]");
+    expect(text).toContain("[Finish]");
+    expect(text).toContain("state: blocked");
     expect(text).toContain("review: stale");
-    expect(text).toContain("verification: stale");
+    expect(text).toContain("verified: false");
     expect(text).toContain("ship: blocked");
+    expect(text).toContain("Verification artifact is stale after later workspace mutations.");
     expect(text).toContain("artifacts (latest 4):");
     expect(text).toContain("- review | state=ready | freshness=stale");
     expect(text).toContain("- verification | state=ready | freshness=stale");
     expect((result.details as { verdict?: string } | undefined)?.verdict).toBe("fail");
     expect(
-      (
-        result.details as
-          | {
-              posture?: { review?: string; ship?: string };
-            }
-          | undefined
-      )?.posture,
+      result.details as
+        | {
+            finish?: { state?: string; verified?: boolean };
+            posture?: { review?: string; ship?: string };
+          }
+        | undefined,
     ).toEqual(
       expect.objectContaining({
-        review: "stale",
-        ship: "blocked",
+        finish: expect.objectContaining({
+          state: "blocked",
+          verified: false,
+        }),
+        posture: expect.objectContaining({
+          review: "stale",
+          ship: "blocked",
+        }),
       }),
     );
   });
@@ -355,24 +363,31 @@ describe("workflow_status contract", () => {
     );
 
     const text = extractTextContent(result);
-    expect(text).toContain("verification: blocked");
+    expect(text).toContain("[Finish]");
+    expect(text).toContain("state: blocked");
+    expect(text).toContain("verified: false");
     expect(text).toContain("ship: blocked");
     expect(text).toContain("Verification missing fresh evidence for tests.");
     expect(text).toContain("- verification | state=blocked | freshness=fresh");
     expect((result.details as { verdict?: string } | undefined)?.verdict).toBe("fail");
     expect(
-      (
-        result.details as
-          | {
-              posture?: { blockers?: string[]; verification?: string; ship?: string };
-            }
-          | undefined
-      )?.posture,
+      result.details as
+        | {
+            finish?: { state?: string; blockers?: string[] };
+            posture?: { blockers?: string[]; verification?: string; ship?: string };
+          }
+        | undefined,
     ).toEqual(
       expect.objectContaining({
-        verification: "blocked",
-        ship: "blocked",
-        blockers: expect.arrayContaining(["Verification missing fresh evidence for tests."]),
+        finish: expect.objectContaining({
+          state: "blocked",
+          blockers: expect.arrayContaining(["Verification missing fresh evidence for tests."]),
+        }),
+        posture: expect.objectContaining({
+          verification: "blocked",
+          ship: "blocked",
+          blockers: expect.arrayContaining(["Verification missing fresh evidence for tests."]),
+        }),
       }),
     );
   });
@@ -412,6 +427,7 @@ describe("workflow_status contract", () => {
     );
 
     const text = extractTextContent(result);
+    expect(text).toContain("state: blocked");
     expect(text).toContain("pending_delegation_outcomes: 1");
     expect(text).toContain("Pending delegation outcomes require parent attention (1 outcome).");
     expect(text).toContain("pending_delegation_outcome_runs:");
@@ -452,14 +468,22 @@ describe("workflow_status contract", () => {
       )?.pendingDelegationOutcomesCount,
     ).toBe(1);
     expect(
-      (
-        result.details as
-          | {
-              posture?: { blockers?: string[] };
-            }
-          | undefined
-      )?.posture?.blockers,
-    ).toContain("Pending delegation outcomes require parent attention (1 outcome).");
+      result.details as
+        | {
+            finish?: { state?: string };
+            posture?: { blockers?: string[] };
+          }
+        | undefined,
+    ).toEqual(
+      expect.objectContaining({
+        finish: expect.objectContaining({ state: "blocked" }),
+        posture: expect.objectContaining({
+          blockers: expect.arrayContaining([
+            "Pending delegation outcomes require parent attention (1 outcome).",
+          ]),
+        }),
+      }),
+    );
   });
 
   test("surfaces the latest stall adjudication as advisory workflow state", async () => {

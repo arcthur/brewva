@@ -925,10 +925,12 @@ describe("hosted context injection pipeline", () => {
       },
     });
 
-    expect(result.message.content).toContain("[Brewva Skill Recommendation]");
-    expect(result.message.content).toContain("No TaskSpec is currently recorded for this session.");
-    expect(result.message.content).toContain("Consider calling `task_set_spec`");
-    expect(result.message.details.skillRecommendation).toEqual({
+    expect(result.message.content).toContain("[Brewva Skill Diagnosis]");
+    expect(result.message.content).toContain("posture: recommend_task_spec");
+    expect(result.message.content).toContain("selected_skill: none");
+    expect(result.message.content).toContain("readiness: task_spec_missing");
+    expect(result.message.content).toContain("shortest_next_action: Call task_set_spec");
+    expect(result.message.details.skillDiagnosis).toEqual({
       activationPosture: {
         kind: "recommend_task_spec",
         reason: "Prompt has enough task context to benefit from an explicit TaskSpec.",
@@ -936,8 +938,10 @@ describe("hosted context injection pipeline", () => {
       toolAvailabilityPosture: "recommend",
       taskSpecReady: false,
       names: [],
+      selected: null,
+      shortestNextAction: "Call task_set_spec if the task needs deeper skill routing.",
     });
-    expect(recordedTypes).toContain("skill_recommendation_derived");
+    expect(recordedTypes).toContain("skill_diagnosis_derived");
   });
 
   test("injects a skill-load requirement once TaskSpec is present", async () => {
@@ -1017,9 +1021,18 @@ describe("hosted context injection pipeline", () => {
       },
     });
 
-    expect(result.message.content).toContain("[Brewva Skill Recommendation]");
-    expect(result.message.content).toContain("primary_skill: runtime-forensics");
-    expect(result.message.details.skillRecommendation).toEqual({
+    expect(result.message.content).toContain("[Brewva Skill Diagnosis]");
+    expect(result.message.content).toContain("posture: recommend_skill_load");
+    expect(result.message.content).toContain("selected_skill: runtime-forensics");
+    expect(result.message.content).toContain("readiness:");
+    expect(result.message.content).toContain("missing_required_inputs:");
+    expect(result.message.content).toContain(
+      'shortest_next_action: Call skill_load with name "runtime-forensics".',
+    );
+    expect(result.message.content).not.toContain("selected_basis:");
+    expect(result.message.content).not.toContain("shallow_output_risk:");
+    expect(result.message.content).not.toContain("rejected_skills:");
+    expect(result.message.details.skillDiagnosis).toEqual({
       activationPosture: {
         kind: "recommend_skill_load",
         skillNames: ["runtime-forensics"],
@@ -1028,8 +1041,10 @@ describe("hosted context injection pipeline", () => {
       toolAvailabilityPosture: "recommend",
       taskSpecReady: true,
       names: ["runtime-forensics"],
+      selected: "runtime-forensics",
+      shortestNextAction: 'Call skill_load with name "runtime-forensics".',
     });
-    expect(recordedTypes).toContain("skill_recommendation_derived");
+    expect(recordedTypes).toContain("skill_diagnosis_derived");
   });
 
   test("legacy blocker text does not bypass the TaskSpec-first bootstrap gate", async () => {
@@ -1095,12 +1110,14 @@ describe("hosted context injection pipeline", () => {
       },
     });
 
-    expect(result.message.content).toContain("[Brewva Skill Recommendation]");
-    expect(result.message.content).toContain("No TaskSpec is currently recorded for this session.");
-    expect(result.message.content).toContain("Consider calling `task_set_spec`");
+    expect(result.message.content).toContain("[Brewva Skill Diagnosis]");
+    expect(result.message.content).toContain("posture: recommend_task_spec");
+    expect(result.message.content).toContain("selected_skill: none");
+    expect(result.message.content).toContain("readiness: task_spec_missing");
+    expect(result.message.content).toContain("shortest_next_action: Call task_set_spec");
   });
 
-  test("emits skill recommendation telemetry once when the hard gate path returns early", async () => {
+  test("emits skill diagnosis telemetry once when the hard gate path returns early", async () => {
     const recordedTypes: string[] = [];
     const runtime = createRuntimeFixture({
       context: {
@@ -1148,6 +1165,6 @@ describe("hosted context injection pipeline", () => {
     });
 
     expect(result.message.details.gateRequired).toBe(true);
-    expect(recordedTypes.filter((type) => type === "skill_recommendation_derived")).toHaveLength(1);
+    expect(recordedTypes.filter((type) => type === "skill_diagnosis_derived")).toHaveLength(1);
   });
 });

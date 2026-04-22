@@ -51,6 +51,15 @@ function aggregateRecallMetrics(
       average(recallResults.map((result) => result.telemetry.metrics[key])),
     ]),
   );
+  const averageOptional = (key: keyof RecallEvalMetrics): number | undefined => {
+    const values = recallResults
+      .map((result) => result.telemetry.metrics[key])
+      .filter((value): value is number => typeof value === "number");
+    return values.length > 0 ? average(values) : undefined;
+  };
+  const brokerWithoutIntentTop1 = averageOptional("broker_without_intent_top_1_hit_rate");
+  const brokerWithIntentTop1 = averageOptional("broker_with_intent_top_1_hit_rate");
+  const intentTop1Gain = averageOptional("intent_top_1_gain");
 
   return {
     scenario_count: new Set(recallResults.map((result) => result.scenario_id)).size,
@@ -58,6 +67,13 @@ function aggregateRecallMetrics(
     baseline_precision_at_k: averages.get("baseline_precision_at_k")!,
     broker_precision_at_k: averages.get("broker_precision_at_k")!,
     precision_gain_at_k: averages.get("precision_gain_at_k")!,
+    ...(brokerWithoutIntentTop1 !== undefined
+      ? { broker_without_intent_top_1_hit_rate: brokerWithoutIntentTop1 }
+      : {}),
+    ...(brokerWithIntentTop1 !== undefined
+      ? { broker_with_intent_top_1_hit_rate: brokerWithIntentTop1 }
+      : {}),
+    ...(intentTop1Gain !== undefined ? { intent_top_1_gain: intentTop1Gain } : {}),
     baseline_useful_recall_rate: averages.get("baseline_useful_recall_rate")!,
     broker_useful_recall_rate: averages.get("broker_useful_recall_rate")!,
     useful_recall_gain: averages.get("useful_recall_gain")!,
@@ -184,6 +200,15 @@ export function formatReport(report: EvalReport): string {
     lines.push(
       `| Useful recall rate | ${formatPercent(metrics.baseline_useful_recall_rate)} | ${formatPercent(metrics.broker_useful_recall_rate)} | ${formatPercent(metrics.useful_recall_gain)} |`,
     );
+    if (
+      metrics.broker_without_intent_top_1_hit_rate !== undefined &&
+      metrics.broker_with_intent_top_1_hit_rate !== undefined &&
+      metrics.intent_top_1_gain !== undefined
+    ) {
+      lines.push(
+        `| Intent top-1 hit rate | ${formatPercent(metrics.broker_without_intent_top_1_hit_rate)} | ${formatPercent(metrics.broker_with_intent_top_1_hit_rate)} | ${formatPercent(metrics.intent_top_1_gain)} |`,
+      );
+    }
     lines.push(
       `| Harmful recall rate | ${formatPercent(metrics.baseline_harmful_recall_rate)} | ${formatPercent(metrics.broker_harmful_recall_rate)} | ${formatPercent(metrics.broker_harmful_recall_rate - metrics.baseline_harmful_recall_rate)} |`,
     );
@@ -203,8 +228,12 @@ export function formatReport(report: EvalReport): string {
     lines.push(`### ${scenario.scenario_id}`);
     lines.push("");
     if (scenario.recall_metrics) {
+      const intentMetrics =
+        scenario.recall_metrics.intent_top_1_gain !== undefined
+          ? ` intent_top1_gain=${scenario.recall_metrics.intent_top_1_gain.toFixed(2)}`
+          : "";
       lines.push(
-        `- Recall metrics: baseline_precision@k=${scenario.recall_metrics.baseline_precision_at_k.toFixed(2)} broker_precision@k=${scenario.recall_metrics.broker_precision_at_k.toFixed(2)} useful_rate=${scenario.recall_metrics.broker_useful_recall_rate.toFixed(2)} harmful_rate=${scenario.recall_metrics.broker_harmful_recall_rate.toFixed(2)} contradiction_rate=${scenario.recall_metrics.broker_contradiction_rate.toFixed(2)} added_latency_ms=${scenario.recall_metrics.added_latency_ms.toFixed(2)} added_token_cost=${scenario.recall_metrics.added_token_cost.toFixed(1)}`,
+        `- Recall metrics: baseline_precision@k=${scenario.recall_metrics.baseline_precision_at_k.toFixed(2)} broker_precision@k=${scenario.recall_metrics.broker_precision_at_k.toFixed(2)} useful_rate=${scenario.recall_metrics.broker_useful_recall_rate.toFixed(2)} harmful_rate=${scenario.recall_metrics.broker_harmful_recall_rate.toFixed(2)} contradiction_rate=${scenario.recall_metrics.broker_contradiction_rate.toFixed(2)} added_latency_ms=${scenario.recall_metrics.added_latency_ms.toFixed(2)} added_token_cost=${scenario.recall_metrics.added_token_cost.toFixed(1)}${intentMetrics}`,
       );
     }
     for (const run of scenario.runs) {

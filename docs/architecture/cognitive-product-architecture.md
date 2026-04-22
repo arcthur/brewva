@@ -159,7 +159,7 @@ Current responsibilities:
   - stays explicit and advisory-only instead of turning product UX into a hidden planner
 - TaskSpec-first routing presentation
   - exposes hosted routing posture through explicit constraint blocks and
-    durable receipts such as `skill_recommendation_derived`
+    durable receipts such as `skill_diagnosis_derived`
   - keeps pre-skill bootstrap and retained post-TaskSpec `skill_load` guidance
     visible to the model instead of relying on hidden prompt-only heuristics
   - narrows the visible tool surface without auto-activating skills or
@@ -197,7 +197,9 @@ new kernel authority object.
 Current product surfaces:
 
 - `workflow_status` as an explicit inspection tool
-- `recall_search` as the default cross-session prior-work recall tool
+- `recall_search` as the default cross-session prior-work recall tool, with
+  typed intent hints for repository precedent, current-session evidence, and
+  durable runtime receipts
 - `knowledge_search` as an explicit repository-native precedent retrieval tool
 - `precedent_audit` as an explicit repository-precedent maintenance tool
 - `precedent_sweep` as an explicit repository-wide precedent maintenance tool

@@ -4,7 +4,7 @@
 
 - Status: `promoted`
 - Owner: runtime and gateway maintainers
-- Last reviewed: `2026-04-20`
+- Last reviewed: `2026-04-22`
 - Promotion target:
   - `docs/architecture/system-architecture.md`
   - `docs/architecture/exploration-and-effect-governance.md`
@@ -143,9 +143,11 @@ The promoted contract is:
   `operator` / `meta` routing scopes.
 - `packages/brewva-runtime/src/security/control-plane-tools.ts` keeps only
   `skill_promotion_inspect` in the always-available control-plane set.
-- `docs/reference/events.md` documents `skill_recommendation_derived`,
+- `docs/reference/events.md` documents `skill_diagnosis_derived`,
   `tool_surface_resolved`, and `turn_governance_decision` as the inspectable
-  governance receipts for this area.
+  governance receipts for this area. The original promoted receipt name,
+  `skill_recommendation_derived`, was retired by the Product Semantic
+  Compression RFC when the default recommendation surface became diagnosis.
 
 ## Validation Status
 

@@ -20,11 +20,12 @@ Use this precedence order when repository knowledge sources disagree:
 4. promotion candidates and draft protocol updates
 5. deliberation-memory hints
 
-This same order is reflected in broker recall source tiers. `recall_search`
-orders `runtime_evidence` before `repository_precedent`, then
-`promotion_candidate`, then `advisory_memory`. Solution records are therefore
-cold repository precedent: stronger than generated memory, weaker than current
-runtime evidence and stable reference docs.
+This same order is reflected in broker recall ranking through source family,
+trust label, evidence strength, semantic score, freshness, curation, and search
+intent. Strong runtime receipts can outrank repository precedent; weak tape
+notes should not. Solution records are therefore cold repository precedent:
+stronger than generated memory, weaker than current code, stable reference docs,
+and verified runtime evidence.
 
 Conflict rules:
 

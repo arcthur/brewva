@@ -1,0 +1,37 @@
+id: recall-current-session-intent-top1
+skill: recall
+kind: recall
+description: Current-session intent should move the active session evidence above fresher historical tape.
+context:
+  task_description: |
+    Compare broker top-1 recall with and without current-session intent for a trace-evidence lookup.
+rubric_path: ../rubrics/recall-current-session-intent-top1.yaml
+fixture_path: ../fixtures/recall-current-session-intent-top1.yaml
+dataset_path: ../datasets/recall-current-session-intent-top1.yaml
+output_contracts:
+  summary:
+    kind: text
+    min_words: 8
+    min_length: 32
+  top_result:
+    kind: json
+    required_fields:
+      - stable_id
+      - source_family
+  broker_without_intent_top_result:
+    kind: json
+    required_fields:
+      - stable_id
+      - source_family
+  broker_results:
+    kind: json
+    min_items: 1
+  metrics:
+    kind: json
+    required_fields:
+      - broker_without_intent_top_1_hit_rate
+      - broker_with_intent_top_1_hit_rate
+      - intent_top_1_gain
+      - broker_useful_recall_rate
+      - broker_harmful_recall_rate
+      - broker_contradiction_rate

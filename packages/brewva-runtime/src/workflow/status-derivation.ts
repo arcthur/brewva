@@ -14,6 +14,7 @@ import type {
   WorkflowAcceptanceStatus,
   WorkflowArtifact,
   WorkflowArtifactKind,
+  WorkflowFinishView,
   WorkflowImplementationStatus,
   WorkflowLaneStatus,
   WorkflowPlanningStatus,
@@ -302,6 +303,136 @@ function createShipPostureArtifact(input: {
   };
 }
 
+function deriveFinishView(input: {
+  posture: WorkflowPosture;
+  artifacts: readonly WorkflowArtifact[];
+  explicitBlockerPresent: boolean;
+}): WorkflowFinishView {
+  const posture = input.posture;
+  const reviewSatisfied = !posture.review_required || posture.review === "ready";
+  const qaSatisfied = !posture.qa_required || posture.qa === "ready";
+  const completed =
+    posture.implementation === "ready" &&
+    reviewSatisfied &&
+    qaSatisfied &&
+    posture.unsatisfied_required_evidence.length === 0;
+  const verified = posture.verification === "ready";
+  const acceptanceReady = posture.acceptance === "not_required" || posture.acceptance === "ready";
+  const deliverable =
+    completed &&
+    verified &&
+    acceptanceReady &&
+    posture.ship === "ready" &&
+    posture.blockers.length === 0;
+  const missingEvidence = uniqueStrings([
+    ...posture.unsatisfied_required_evidence,
+    ...(posture.review_required && posture.review !== "ready" ? [`review:${posture.review}`] : []),
+    ...(posture.qa_required && posture.qa !== "ready" ? [`qa:${posture.qa}`] : []),
+    ...(completed && posture.verification !== "ready"
+      ? [`verification:${posture.verification}`]
+      : []),
+  ]);
+  const nonAcceptanceBlockers = posture.blockers.filter(
+    (blocker) => !blocker.startsWith("Acceptance required before closure."),
+  );
+  const operationalBlockerPresent = posture.blockers.some(
+    (blocker) =>
+      blocker.startsWith("Pending worker results") ||
+      blocker.startsWith("Pending delegation outcomes") ||
+      blocker.startsWith("Worker patch result") ||
+      blocker.startsWith("Acceptance rejected"),
+  );
+  const started =
+    input.artifacts.some((artifact) => artifact.kind !== "ship_posture") ||
+    posture.discovery === "ready" ||
+    posture.strategy === "ready" ||
+    posture.planning === "ready" ||
+    posture.implementation !== "missing" ||
+    posture.review !== "missing" ||
+    posture.qa !== "missing" ||
+    posture.verification !== "missing" ||
+    posture.ship !== "missing" ||
+    posture.retro === "ready" ||
+    input.explicitBlockerPresent ||
+    operationalBlockerPresent;
+
+  if (!started) {
+    return {
+      state: "not_started",
+      completed,
+      verified,
+      acceptance: posture.acceptance,
+      ship: posture.ship,
+      deliverable,
+      missingEvidence,
+      blockers: posture.blockers,
+      summary: "Not started: no workflow artifacts are present yet.",
+    };
+  }
+
+  if (deliverable) {
+    return {
+      state: "deliverable",
+      completed,
+      verified,
+      acceptance: posture.acceptance,
+      ship: posture.ship,
+      deliverable,
+      missingEvidence,
+      blockers: posture.blockers,
+      summary: "Deliverable: implementation, verification, acceptance, and ship posture are ready.",
+    };
+  }
+
+  if (
+    completed &&
+    verified &&
+    posture.acceptance === "pending" &&
+    nonAcceptanceBlockers.length === 0
+  ) {
+    return {
+      state: "ready_for_acceptance",
+      completed,
+      verified,
+      acceptance: posture.acceptance,
+      ship: posture.ship,
+      deliverable,
+      missingEvidence,
+      blockers: posture.blockers,
+      summary:
+        "Ready for acceptance: technical closure is ready and operator acceptance remains pending.",
+    };
+  }
+
+  if (posture.blockers.length > 0 || missingEvidence.length > 0 || posture.ship === "blocked") {
+    const preview =
+      posture.blockers[0] ?? `Missing evidence: ${formatPreviewList(missingEvidence)}.`;
+    return {
+      state: "blocked",
+      completed,
+      verified,
+      acceptance: posture.acceptance,
+      ship: posture.ship,
+      deliverable,
+      missingEvidence,
+      blockers: posture.blockers,
+      summary: compactText(preview, 200),
+    };
+  }
+
+  return {
+    state: "in_progress",
+    completed,
+    verified,
+    acceptance: posture.acceptance,
+    ship: posture.ship,
+    deliverable,
+    missingEvidence,
+    blockers: posture.blockers,
+    summary: "In progress: workflow closure evidence is still forming.",
+  };
+}
+
 export function deriveWorkflowStatus(input: {
   sessionId: string;
   events: readonly import("../contracts/index.js").BrewvaEventRecord[];
@@ -550,11 +681,17 @@ export function deriveWorkflowStatus(input: {
     ...posture.latestArtifactIds,
     shipPostureArtifact.artifactId,
   ]);
+  const finish = deriveFinishView({
+    posture,
+    artifacts,
+    explicitBlockerPresent: taskBlockers.length > 0,
+  });
 
   return {
     sessionId: input.sessionId,
     currentWorkspaceRevision,
     posture,
+    finish,
     skillReadiness: [...input.skillReadiness],
     artifacts: artifactsWithShipPosture,
     pendingWorkerResults,

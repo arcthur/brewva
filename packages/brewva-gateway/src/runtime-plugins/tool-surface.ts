@@ -1,6 +1,6 @@
 import {
   SKILL_REPAIR_ALLOWED_TOOL_NAMES,
-  SKILL_RECOMMENDATION_DERIVED_EVENT_TYPE,
+  SKILL_DIAGNOSIS_DERIVED_EVENT_TYPE,
   TOOL_SURFACE_RESOLVED_EVENT_TYPE,
   deriveToolGovernanceDescriptor,
   getToolActionPolicy,
@@ -10,6 +10,7 @@ import {
   listSkillPreferredTools,
   type SkillCompletionFailureRecord,
   type SkillDocument,
+  type SkillReadinessEntry,
   type ToolEffectClass,
 } from "@brewva/brewva-runtime";
 import type {
@@ -28,12 +29,12 @@ import {
   isManagedBrewvaToolName,
 } from "@brewva/brewva-tools";
 import {
-  buildSkillRecommendationReceiptPayload,
-  buildSkillFirstPolicyBlock,
-  computeSkillRecommendationReceiptKey,
-  deriveSkillRecommendations,
+  buildSkillDiagnosisReceiptPayload,
+  buildSkillDiagnosisPolicyBlock,
+  computeSkillDiagnosisReceiptKey,
+  deriveSkillDiagnoses,
   type SkillClassificationHint,
-  type SkillRecommendationSet,
+  type SkillDiagnosisSet,
   type ToolAvailabilityPosture,
 } from "./skill-first.js";
 
@@ -127,6 +128,7 @@ export interface ToolSurfaceRuntime {
       list(): ToolSurfaceSkill[];
       getActive(sessionId: string): ToolSurfaceSkill | null | undefined;
       getActiveState(sessionId: string): ToolSurfaceSkillState | undefined;
+      getReadiness?(sessionId: string): readonly SkillReadinessEntry[];
       getLatestFailure?(sessionId: string): SkillCompletionFailureRecord | undefined;
       get(name: string): ToolSurfaceSkill | undefined;
       getLoadReport(): {
@@ -366,12 +368,12 @@ function resolveRequestedManagedToolNames(
 type TurnSurfacePlan = {
   requestedToolNames: string[];
   requestedManagedToolNames: string[];
-  recommendationSet: SkillRecommendationSet;
+  diagnosisSet: SkillDiagnosisSet;
   skillNames: string[];
   hasActiveSkill: boolean;
   repairRequired: boolean;
-  recommendedSkillNames: string[];
-  skillActivationPosture: SkillRecommendationSet["activationPosture"];
+  candidateSkillNames: string[];
+  skillActivationPosture: SkillDiagnosisSet["activationPosture"];
   toolAvailabilityPosture: ToolAvailabilityPosture;
   taskSpecReady: boolean;
   skillManagedToolNames: string[];
@@ -487,7 +489,7 @@ function resolveTurnSurfacePlan(input: {
   const activeSkillState = input.runtime.inspect.skills.getActiveState(input.sessionId);
   const hasActiveSkill = surfaceSkills.length > 0;
   const repairRequired = activeSkillState?.phase === "repair_required";
-  const recommendationSet = deriveSkillRecommendations(input.runtime, {
+  const diagnosisSet = deriveSkillDiagnoses(input.runtime, {
     sessionId: input.sessionId,
     prompt: input.prompt,
     classificationHints: input.classificationHints,
@@ -505,21 +507,19 @@ function resolveTurnSurfacePlan(input: {
 
   const operatorProfile = isOperatorProfile(input.runtime);
   const operatorManagedToolNames = operatorProfile ? OPERATOR_BREWVA_TOOL_NAMES : [];
-  const toolAvailabilityPosture = hasActiveSkill
-    ? "none"
-    : recommendationSet.toolAvailabilityPosture;
+  const toolAvailabilityPosture = hasActiveSkill ? "none" : diagnosisSet.toolAvailabilityPosture;
 
   return {
     requestedToolNames,
     requestedManagedToolNames,
-    recommendationSet,
+    diagnosisSet,
     skillNames: surfaceSkills.map((skill) => skill.name),
     hasActiveSkill,
     repairRequired,
-    recommendedSkillNames: recommendationSet.recommendations.map((entry) => entry.name),
-    skillActivationPosture: recommendationSet.activationPosture,
+    candidateSkillNames: diagnosisSet.candidates.map((entry) => entry.name),
+    skillActivationPosture: diagnosisSet.activationPosture,
     toolAvailabilityPosture,
-    taskSpecReady: recommendationSet.taskSpecReady,
+    taskSpecReady: diagnosisSet.taskSpecReady,
     skillManagedToolNames,
     lifecycleManagedToolNames: [...new Set(lifecycleManagedToolNames)],
     operatorManagedToolNames,
@@ -579,13 +579,13 @@ interface ResolvedToolSurface extends ToolSurfaceCounts {
   requestedActivatedToolNames: string[];
   ignoredRequestedToolNames: string[];
   skillNames: string[];
-  recommendedSkillNames: string[];
-  skillActivationPosture: SkillRecommendationSet["activationPosture"];
+  candidateSkillNames: string[];
+  skillActivationPosture: SkillDiagnosisSet["activationPosture"];
   toolAvailabilityPosture: ToolAvailabilityPosture;
   taskSpecReady: boolean;
   operatorProfile: boolean;
   repairRequired: boolean;
-  recommendationSet: SkillRecommendationSet;
+  diagnosisSet: SkillDiagnosisSet;
 }
 
 function computeToolSurfaceCounts(input: {
@@ -645,13 +645,13 @@ function buildResolvedToolSurface(input: {
       (toolName) => !requestedActivatedToolNames.includes(toolName),
     ),
     skillNames: input.turnPlan.skillNames,
-    recommendedSkillNames: input.turnPlan.recommendedSkillNames,
+    candidateSkillNames: input.turnPlan.candidateSkillNames,
     skillActivationPosture: input.turnPlan.skillActivationPosture,
     toolAvailabilityPosture: input.turnPlan.toolAvailabilityPosture,
     taskSpecReady: input.turnPlan.taskSpecReady,
     operatorProfile: input.turnPlan.operatorProfile,
     repairRequired: input.repairRequired,
-    recommendationSet: input.turnPlan.recommendationSet,
+    diagnosisSet: input.turnPlan.diagnosisSet,
   };
 }
 
@@ -835,7 +835,7 @@ function resolveActiveToolNames(input: {
 function computeSkillEnforcementKey(
   resolved: Pick<
     ResolvedToolSurface,
-    "skillNames" | "recommendedSkillNames" | "skillActivationPosture"
+    "skillNames" | "candidateSkillNames" | "skillActivationPosture"
   >,
 ): string {
   if (resolved.skillNames.length > 0) {
@@ -843,11 +843,11 @@ function computeSkillEnforcementKey(
   }
   if (
     resolved.skillActivationPosture.kind !== "require_skill_load" ||
-    resolved.recommendedSkillNames.length === 0
+    resolved.candidateSkillNames.length === 0
   ) {
     return "";
   }
-  return `require_skill_load:${resolved.recommendedSkillNames.join(",")}`;
+  return `require_skill_load:${resolved.candidateSkillNames.join(",")}`;
 }
 
 export interface RegisterToolSurfaceOptions {
@@ -935,7 +935,7 @@ function resolveAndActivateToolSurface(input: {
       requestedActivatedToolNames: resolved.requestedActivatedToolNames,
       ignoredRequestedToolNames: resolved.ignoredRequestedToolNames,
       skillNames: resolved.skillNames,
-      recommendedSkillNames: resolved.recommendedSkillNames,
+      candidateSkillNames: resolved.candidateSkillNames,
       skillActivationPosture: resolved.skillActivationPosture,
       toolAvailabilityPosture: resolved.toolAvailabilityPosture,
       taskSpecReady: resolved.taskSpecReady,
@@ -1021,7 +1021,7 @@ export function createToolSurfaceLifecycle(
 ): ToolSurfaceLifecycle {
   const latestPromptBySession = new Map<string, string>();
   const skillEnforcementKeyBySession = new Map<string, string>();
-  const recommendationReceiptKeyBySession = new Map<string, string>();
+  const diagnosisReceiptKeyBySession = new Map<string, string>();
 
   return {
     beforeAgentStart(event, ctx) {
@@ -1043,13 +1043,13 @@ export function createToolSurfaceLifecycle(
       });
       if (resolved) {
         skillEnforcementKeyBySession.set(sessionId, computeSkillEnforcementKey(resolved));
-        recommendationReceiptKeyBySession.set(
+        diagnosisReceiptKeyBySession.set(
           sessionId,
-          computeSkillRecommendationReceiptKey(resolved.recommendationSet),
+          computeSkillDiagnosisReceiptKey(resolved.diagnosisSet),
         );
       } else {
         skillEnforcementKeyBySession.delete(sessionId);
-        recommendationReceiptKeyBySession.delete(sessionId);
+        diagnosisReceiptKeyBySession.delete(sessionId);
       }
       return undefined;
     },
@@ -1095,9 +1095,9 @@ export function createToolSurfaceLifecycle(
       const previousKey = skillEnforcementKeyBySession.get(sessionId) ?? "";
       skillEnforcementKeyBySession.set(sessionId, nextKey);
       if (!TASK_CONTEXT_MUTATION_TOOL_NAMES.has(toolName)) {
-        recommendationReceiptKeyBySession.set(
+        diagnosisReceiptKeyBySession.set(
           sessionId,
-          computeSkillRecommendationReceiptKey(resolved.recommendationSet),
+          computeSkillDiagnosisReceiptKey(resolved.diagnosisSet),
         );
         return undefined;
       }
@@ -1105,25 +1105,25 @@ export function createToolSurfaceLifecycle(
         return undefined;
       }
 
-      const recommendations = resolved.recommendationSet;
-      const nextReceiptKey = computeSkillRecommendationReceiptKey(recommendations);
-      const previousReceiptKey = recommendationReceiptKeyBySession.get(sessionId) ?? "";
-      recommendationReceiptKeyBySession.set(sessionId, nextReceiptKey);
+      const diagnosis = resolved.diagnosisSet;
+      const nextReceiptKey = computeSkillDiagnosisReceiptKey(diagnosis);
+      const previousReceiptKey = diagnosisReceiptKeyBySession.get(sessionId) ?? "";
+      diagnosisReceiptKeyBySession.set(sessionId, nextReceiptKey);
       if (nextReceiptKey && nextReceiptKey !== previousReceiptKey) {
-        const payload = buildSkillRecommendationReceiptPayload(recommendations);
+        const payload = buildSkillDiagnosisReceiptPayload(diagnosis);
         if (payload) {
           runtime.recordEvent({
             sessionId,
-            type: SKILL_RECOMMENDATION_DERIVED_EVENT_TYPE,
+            type: SKILL_DIAGNOSIS_DERIVED_EVENT_TYPE,
             payload,
           });
         }
       }
-      const policyBlock = buildSkillFirstPolicyBlock(recommendations);
+      const policyBlock = buildSkillDiagnosisPolicyBlock(diagnosis);
       if (
-        recommendations.activeSkillName ||
-        recommendations.activationPosture.kind !== "require_skill_load" ||
-        recommendations.recommendations.length === 0 ||
+        diagnosis.activeSkillName ||
+        diagnosis.activationPosture.kind !== "require_skill_load" ||
+        diagnosis.candidates.length === 0 ||
         !policyBlock
       ) {
         return undefined;
@@ -1150,7 +1150,7 @@ export function createToolSurfaceLifecycle(
       }
       latestPromptBySession.delete(sessionId);
       skillEnforcementKeyBySession.delete(sessionId);
-      recommendationReceiptKeyBySession.delete(sessionId);
+      diagnosisReceiptKeyBySession.delete(sessionId);
       return undefined;
     },
   };

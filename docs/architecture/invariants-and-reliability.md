@@ -153,7 +153,8 @@ Context governance is three-axis, not a single trust ladder:
   rebuildable state, or cache
 - `ContextAuthorityTier` says how an injected context source should be treated
   when it conflicts with another source
-- recall `sourceTier` says how broker results rank inside advisory recall
+- recall `trustLabel`, `evidenceStrength`, and `rankingScore` explain broker
+  result ordering inside advisory recall
 
 The axes must stay separate from prompt-sanitization `SourceTrustTier`; trusted
 formatting does not make a source authoritative.
@@ -205,11 +206,12 @@ advisory content carries `verify_before_applying: yes`.
 | `brewva.optimization-continuity` | 46                | Session optimization lineage        |
 | `brewva.skill-promotion-drafts`  | 48                | Reviewable promotion candidates     |
 
-Recall broker results then rank by `sourceTier` before score:
-`runtime_evidence`, `repository_precedent`, `promotion_candidate`,
-`advisory_memory`. Tape search only indexes an allowlist of recovery-relevant
-events; `recall_results_surfaced`, `context_*`, and `projection_*` are durable
-evidence or rebuildable signals, not searchable recall evidence.
+Recall broker results rank by intent/source priority, `evidenceStrength`,
+`semanticScore`, freshness, and curation into `rankingScore`. Tape search
+distinguishes strong runtime receipts from weak task notes; repository precedent
+can outrank weak tape notes, while strong runtime receipts can outrank
+precedent. `recall_results_surfaced`, `context_*`, and `projection_*` are
+durable evidence or rebuildable signals, not searchable recall evidence.
 
 Relevant implementation:
 

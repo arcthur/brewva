@@ -5,10 +5,11 @@ import {
   type LoadableSkillCategory,
   type SkillCompletionFailureRecord,
   type SkillContract,
+  type SkillReadinessEntry,
   type TaskPhase,
 } from "@brewva/brewva-runtime";
 
-interface SkillRecommendationCandidate {
+interface SkillDiagnosisCatalogEntry {
   name: string;
   description: string;
   category: LoadableSkillCategory;
@@ -55,8 +56,9 @@ interface SignalWeights {
 export interface SkillFirstRuntimeLike {
   inspect: {
     skills: {
-      list(): SkillRecommendationCandidate[];
-      getActive(sessionId: string): Pick<SkillRecommendationCandidate, "name"> | null | undefined;
+      list(): SkillDiagnosisCatalogEntry[];
+      getActive(sessionId: string): Pick<SkillDiagnosisCatalogEntry, "name"> | null | undefined;
+      getReadiness?(sessionId: string): readonly SkillReadinessEntry[];
       getLatestFailure?(sessionId: string): SkillCompletionFailureRecord | undefined;
       getLoadReport(): {
         loadedSkills: readonly string[];
@@ -77,12 +79,33 @@ export interface SkillClassificationHint {
   readonly reason?: string;
 }
 
-export interface SkillRecommendation {
+export type SkillDiagnosisBasis = "cold_start" | "artifact_aware" | "classification_hint";
+export type SkillDiagnosisReadiness = SkillReadinessEntry["readiness"] | "unknown";
+
+export interface SkillDiagnosisCandidate {
   name: string;
-  category: SkillRecommendationCandidate["category"];
+  category: SkillDiagnosisCatalogEntry["category"];
   score: number;
   reasons: string[];
   primary: boolean;
+  basis: SkillDiagnosisBasis;
+  readiness: SkillDiagnosisReadiness;
+  missingRequires: string[];
+  satisfiedConsumes: string[];
+  shallowOutputRisk: string | null;
+}
+
+export interface RejectedSkillDiagnosisCandidate {
+  name: string;
+  category: SkillDiagnosisCatalogEntry["category"];
+  score: number;
+  basis: SkillDiagnosisBasis;
+  readiness: SkillDiagnosisReadiness;
+  reasons: string[];
+  missingRequires: string[];
+  satisfiedConsumes: string[];
+  shallowOutputRisk: string | null;
+  rejectionReason: string;
 }
 
 export type SkillActivationPosture =
@@ -99,6 +122,13 @@ export type SkillActivationPosture =
       readonly skillNames: readonly string[];
       readonly boundary: "execute" | "verify" | "contract";
     }
+  | {
+      readonly kind: "require_skill_inputs";
+      readonly skillName: string;
+      readonly missingRequires: readonly string[];
+      readonly boundary: "execute" | "verify";
+      readonly reason: string;
+    }
   | { readonly kind: "repair_failed_contract"; readonly failedSkillNames: readonly string[] };
 
 export type ToolAvailabilityPosture =
@@ -108,12 +138,13 @@ export type ToolAvailabilityPosture =
   | "require_execute"
   | "contract_failed";
 
-export interface SkillRecommendationSet {
+export interface SkillDiagnosisSet {
   activeSkillName: string | null;
   activationPosture: SkillActivationPosture;
   toolAvailabilityPosture: ToolAvailabilityPosture;
   taskSpecReady: boolean;
-  recommendations: SkillRecommendation[];
+  candidates: SkillDiagnosisCandidate[];
+  rejectedCandidates: RejectedSkillDiagnosisCandidate[];
   failedSkill?: {
     name: string;
     missing: string[];
@@ -121,18 +152,36 @@ export interface SkillRecommendationSet {
   };
 }
 
-export interface SkillRecommendationReceiptPayload {
-  schema: "brewva.skill_recommendation.v3";
+export interface SkillDiagnosisReceiptPayload {
+  schema: "brewva.skill_diagnosis.v1";
   activationPosture: SkillActivationPosture;
   toolAvailabilityPosture: ToolAvailabilityPosture;
   taskSpecReady: boolean;
-  recommendations: Array<{
+  shortestNextAction: string;
+  selectedCandidate: {
     name: string;
-    category: SkillRecommendation["category"];
+    category: SkillDiagnosisCandidate["category"];
+    score: number;
+    basis: SkillDiagnosisBasis;
+    readiness: SkillDiagnosisReadiness;
+    reasons: string[];
+    missingRequires: string[];
+    satisfiedConsumes: string[];
+    shallowOutputRisk: string | null;
+  } | null;
+  candidates: Array<{
+    name: string;
+    category: SkillDiagnosisCandidate["category"];
     score: number;
     primary: boolean;
+    basis: SkillDiagnosisBasis;
+    readiness: SkillDiagnosisReadiness;
     reasons: string[];
+    missingRequires: string[];
+    satisfiedConsumes: string[];
+    shallowOutputRisk: string | null;
   }>;
+  rejectedCandidates: RejectedSkillDiagnosisCandidate[];
   failedSkill?: {
     name: string;
     missing: string[];
@@ -140,8 +189,8 @@ export interface SkillRecommendationReceiptPayload {
   };
 }
 
-const MAX_RECOMMENDATIONS = 3;
-const MIN_RECOMMENDATION_SCORE = 2.6;
+const MAX_DIAGNOSIS_CANDIDATES = 3;
+const MIN_DIAGNOSIS_SCORE = 2.6;
 const SCORE_DELTA_WINDOW = 1.6;
 const MAX_REASON_COUNT = 4;
 const ENGLISH_TOKEN_PATTERN = /[a-z0-9]+/g;
@@ -577,9 +626,9 @@ function scoreSelectionPhases(
 }
 
 function scoreSkill(
-  skill: SkillRecommendationCandidate,
+  skill: SkillDiagnosisCatalogEntry,
   input: TaskIntentSignals,
-): SkillRecommendation | null {
+): SkillDiagnosisCandidate | null {
   if (!skill.contract.routing?.scope || !skill.contract.selection) {
     return null;
   }
@@ -665,7 +714,7 @@ function scoreSkill(
     }
   }
 
-  if (score < MIN_RECOMMENDATION_SCORE) {
+  if (score < MIN_DIAGNOSIS_SCORE) {
     return null;
   }
 
@@ -675,10 +724,15 @@ function scoreSkill(
     score: Number(score.toFixed(2)),
     reasons,
     primary: false,
+    basis: "cold_start",
+    readiness: "unknown",
+    missingRequires: [],
+    satisfiedConsumes: [],
+    shallowOutputRisk: null,
   };
 }
 
-function resolveRoutableSkills(runtime: SkillFirstRuntimeLike): SkillRecommendationCandidate[] {
+function resolveRoutableSkills(runtime: SkillFirstRuntimeLike): SkillDiagnosisCatalogEntry[] {
   const loadReport = runtime.inspect.skills.getLoadReport();
   if (!loadReport.routingEnabled || loadReport.routableSkills.length === 0) {
     return [];
@@ -688,10 +742,6 @@ function resolveRoutableSkills(runtime: SkillFirstRuntimeLike): SkillRecommendat
     .list()
     .filter((skill) => routableNames.has(skill.name))
     .toSorted((left, right) => left.name.localeCompare(right.name));
-}
-
-function formatReasons(reasons: readonly string[]): string {
-  return reasons.slice(0, MAX_REASON_COUNT).join(", ");
 }
 
 function isExecutionPhase(phase: TaskPhase | null): boolean {
@@ -706,8 +756,79 @@ function hasMutationIntent(signals: TaskIntentSignals): boolean {
   return MUTATION_INTENT_PATTERN.test(signals.combinedNormalizedText);
 }
 
-function recommendedSkillNames(recommendations: readonly SkillRecommendation[]): readonly string[] {
-  return recommendations.map((entry) => entry.name);
+function candidateSkillNames(candidates: readonly SkillDiagnosisCandidate[]): readonly string[] {
+  return candidates.map((entry) => entry.name);
+}
+
+function applyReadinessToCandidate(
+  candidate: SkillDiagnosisCandidate,
+  readiness: SkillReadinessEntry | undefined,
+  hinted: boolean,
+): SkillDiagnosisCandidate {
+  const basis: SkillDiagnosisBasis =
+    readiness &&
+    (readiness.missingRequires.length > 0 ||
+      readiness.satisfiedRequires.length > 0 ||
+      readiness.satisfiedConsumes.length > 0)
+      ? "artifact_aware"
+      : hinted
+        ? "classification_hint"
+        : candidate.basis;
+  const shallowOutputRisk =
+    readiness && readiness.missingRequires.length > 0
+      ? `missing required inputs: ${readiness.missingRequires.join(", ")}`
+      : null;
+  return {
+    ...candidate,
+    basis,
+    readiness: readiness?.readiness ?? candidate.readiness,
+    missingRequires: readiness?.missingRequires ?? [],
+    satisfiedConsumes: readiness?.satisfiedConsumes ?? [],
+    shallowOutputRisk,
+  };
+}
+
+const READINESS_SELECTION_WEIGHT: Record<SkillDiagnosisReadiness, number> = {
+  ready: 3,
+  available: 2,
+  unknown: 1,
+  blocked: 0,
+};
+
+function compareActionableCandidates(
+  left: SkillDiagnosisCandidate,
+  right: SkillDiagnosisCandidate,
+): number {
+  const readinessDelta =
+    READINESS_SELECTION_WEIGHT[right.readiness] - READINESS_SELECTION_WEIGHT[left.readiness];
+  if (readinessDelta !== 0) {
+    return readinessDelta;
+  }
+
+  const consumedDelta = right.satisfiedConsumes.length - left.satisfiedConsumes.length;
+  if (consumedDelta !== 0) {
+    return consumedDelta;
+  }
+
+  return right.score - left.score || left.name.localeCompare(right.name);
+}
+
+function rejectedCandidateReason(input: {
+  candidate: SkillDiagnosisCandidate;
+  selected: SkillDiagnosisCandidate;
+}): string {
+  const scoreDelta = Number((input.selected.score - input.candidate.score).toFixed(2));
+  if (input.candidate.missingRequires.length > 0) {
+    return `blocked by missing required inputs: ${input.candidate.missingRequires.join(", ")}`;
+  }
+  if (scoreDelta > SCORE_DELTA_WINDOW) {
+    return `outside score window by ${scoreDelta}`;
+  }
+  return "lower ranked than selected candidate";
+}
+
+function hasMissingRequiredInputs(candidate: SkillDiagnosisCandidate | undefined): boolean {
+  return Boolean(candidate && candidate.missingRequires.length > 0);
 }
 
 function normalizeHintSkillNames(
@@ -732,48 +853,98 @@ function firstHintReasonForSkill(
   return (hints ?? []).find((hint) => hint.skillNames?.includes(skillName))?.reason;
 }
 
-export function buildSkillRecommendationReceiptPayload(
-  input: SkillRecommendationSet,
-): SkillRecommendationReceiptPayload | null {
+export function buildSkillDiagnosisReceiptPayload(
+  input: SkillDiagnosisSet,
+): SkillDiagnosisReceiptPayload | null {
   if (input.activeSkillName) {
     return null;
   }
-  if (input.activationPosture.kind === "none" && input.recommendations.length === 0) {
+  if (input.activationPosture.kind === "none" && input.candidates.length === 0) {
     return null;
   }
+  const selected = input.candidates[0] ?? null;
   return {
-    schema: "brewva.skill_recommendation.v3",
+    schema: "brewva.skill_diagnosis.v1",
     activationPosture: input.activationPosture,
     toolAvailabilityPosture: input.toolAvailabilityPosture,
     taskSpecReady: input.taskSpecReady,
-    recommendations: input.recommendations.map((entry) => ({
+    shortestNextAction: resolveShortestNextAction(input),
+    selectedCandidate: selected
+      ? {
+          name: selected.name,
+          category: selected.category,
+          score: selected.score,
+          basis: selected.basis,
+          readiness: selected.readiness,
+          reasons: selected.reasons,
+          missingRequires: selected.missingRequires,
+          satisfiedConsumes: selected.satisfiedConsumes,
+          shallowOutputRisk: selected.shallowOutputRisk,
+        }
+      : null,
+    candidates: input.candidates.map((entry) => ({
       name: entry.name,
       category: entry.category,
       score: entry.score,
       primary: entry.primary,
+      basis: entry.basis,
+      readiness: entry.readiness,
       reasons: entry.reasons,
+      missingRequires: entry.missingRequires,
+      satisfiedConsumes: entry.satisfiedConsumes,
+      shallowOutputRisk: entry.shallowOutputRisk,
     })),
+    rejectedCandidates: input.rejectedCandidates,
     ...(input.failedSkill ? { failedSkill: input.failedSkill } : {}),
   };
 }
 
-export function computeSkillRecommendationReceiptKey(input: SkillRecommendationSet): string {
-  const payload = buildSkillRecommendationReceiptPayload(input);
+export function computeSkillDiagnosisReceiptKey(input: SkillDiagnosisSet): string {
+  const payload = buildSkillDiagnosisReceiptPayload(input);
   return payload ? JSON.stringify(payload) : "";
+}
+
+export function resolveShortestNextAction(input: SkillDiagnosisSet): string {
+  if (input.activeSkillName) {
+    return "Continue the active skill and finish with skill_complete before switching.";
+  }
+  if (input.activationPosture.kind === "recommend_task_spec") {
+    return "Call task_set_spec if the task needs deeper skill routing.";
+  }
+  if (input.activationPosture.kind === "require_task_spec") {
+    return "Call task_set_spec with goal, targets, constraints, and expected behavior.";
+  }
+  if (input.activationPosture.kind === "repair_failed_contract") {
+    return "Restart or repair the failed skill contract before downstream work.";
+  }
+  const selected = input.candidates[0];
+  if (selected && selected.missingRequires.length > 0) {
+    return `Produce required inputs ${selected.missingRequires.join(", ")} before loading ${JSON.stringify(
+      selected.name,
+    )}.`;
+  }
+  if (
+    selected &&
+    (input.activationPosture.kind === "require_skill_load" ||
+      input.activationPosture.kind === "recommend_skill_load")
+  ) {
+    return `Call skill_load with name ${JSON.stringify(selected.name)}.`;
+  }
+  return "Continue with available context; no skill routing action is needed.";
 }
 
 function isTaskSpecReady(taskState: TaskStateLike | undefined): boolean {
   return !!readString(readTaskSpec(taskState)?.goal);
 }
 
-export function deriveSkillRecommendations(
+export function deriveSkillDiagnoses(
   runtime: SkillFirstRuntimeLike,
   input: {
     sessionId: string;
     prompt: string;
     classificationHints?: readonly SkillClassificationHint[];
   },
-): SkillRecommendationSet {
+): SkillDiagnosisSet {
   const taskState = runtime.inspect.task.getState(input.sessionId);
   const activeSkillName = runtime.inspect.skills.getActive(input.sessionId)?.name ?? null;
   const taskSpecReady = isTaskSpecReady(taskState);
@@ -784,7 +955,8 @@ export function deriveSkillRecommendations(
       activationPosture: { kind: "none" },
       toolAvailabilityPosture: "none",
       taskSpecReady,
-      recommendations: [],
+      candidates: [],
+      rejectedCandidates: [],
     };
   }
 
@@ -798,7 +970,8 @@ export function deriveSkillRecommendations(
       },
       toolAvailabilityPosture: "contract_failed",
       taskSpecReady,
-      recommendations: [],
+      candidates: [],
+      rejectedCandidates: [],
       failedSkill: {
         name: latestFailure.skillName,
         missing: latestFailure.missing,
@@ -814,7 +987,8 @@ export function deriveSkillRecommendations(
       activationPosture: { kind: "none" },
       toolAvailabilityPosture: "none",
       taskSpecReady,
-      recommendations: [],
+      candidates: [],
+      rejectedCandidates: [],
     };
   }
 
@@ -826,7 +1000,8 @@ export function deriveSkillRecommendations(
         activationPosture: { kind: "none" },
         toolAvailabilityPosture: "none",
         taskSpecReady: false,
-        recommendations: [],
+        candidates: [],
+        rejectedCandidates: [],
       };
     }
     if (hasMutationIntent(signals) || isExecutionPhase(signals.phase)) {
@@ -838,7 +1013,8 @@ export function deriveSkillRecommendations(
         },
         toolAvailabilityPosture: "require_execute",
         taskSpecReady: false,
-        recommendations: [],
+        candidates: [],
+        rejectedCandidates: [],
       };
     }
     return {
@@ -849,40 +1025,54 @@ export function deriveSkillRecommendations(
       },
       toolAvailabilityPosture: "recommend",
       taskSpecReady: false,
-      recommendations: [],
+      candidates: [],
+      rejectedCandidates: [],
     };
   }
 
   const hintedSkillNames = normalizeHintSkillNames(input.classificationHints);
+  const readinessByName = new Map(
+    (runtime.inspect.skills.getReadiness?.(input.sessionId) ?? []).map((entry) => [
+      entry.name,
+      entry,
+    ]),
+  );
   const scored = routableSkills
     .map((skill) => {
       const scoredSkill = scoreSkill(skill, signals);
+      const readiness = readinessByName.get(skill.name);
       if (!hintedSkillNames.has(skill.name)) {
-        return scoredSkill;
+        return scoredSkill ? applyReadinessToCandidate(scoredSkill, readiness, false) : scoredSkill;
       }
       const hintReason = firstHintReasonForSkill(input.classificationHints, skill.name);
       const base = scoredSkill ?? {
         name: skill.name,
         category: skill.category,
-        score: MIN_RECOMMENDATION_SCORE,
+        score: MIN_DIAGNOSIS_SCORE,
         reasons: [],
         primary: false,
+        basis: "classification_hint" as const,
+        readiness: "unknown" as const,
+        missingRequires: [],
+        satisfiedConsumes: [],
+        shallowOutputRisk: null,
       };
       pushReason(base.reasons, hintReason ? `local_hook:${hintReason}` : "local_hook");
-      base.score = Number(Math.max(base.score + 1, MIN_RECOMMENDATION_SCORE).toFixed(2));
-      return base;
+      base.score = Number(Math.max(base.score + 1, MIN_DIAGNOSIS_SCORE).toFixed(2));
+      return applyReadinessToCandidate(base, readiness, true);
     })
-    .filter((entry): entry is SkillRecommendation => entry !== null)
+    .filter((entry): entry is SkillDiagnosisCandidate => entry !== null)
     .toSorted((left, right) => right.score - left.score || left.name.localeCompare(right.name));
 
-  const top = scored[0];
-  if (!top) {
+  const semanticLeader = scored[0];
+  if (!semanticLeader) {
     return {
       activeSkillName: null,
       activationPosture: { kind: "none" },
       toolAvailabilityPosture: "none",
       taskSpecReady: true,
-      recommendations: [],
+      candidates: [],
+      rejectedCandidates: [],
     };
   }
 
@@ -891,120 +1081,137 @@ export function deriveSkillRecommendations(
       if (index === 0) {
         return true;
       }
-      return top.score - entry.score <= SCORE_DELTA_WINDOW;
+      return semanticLeader.score - entry.score <= SCORE_DELTA_WINDOW;
     })
-    .slice(0, MAX_RECOMMENDATIONS);
+    .toSorted(compareActionableCandidates)
+    .slice(0, MAX_DIAGNOSIS_CANDIDATES);
 
   retained.forEach((entry, index) => {
     entry.primary = index === 0;
   });
+  const retainedNames = new Set(retained.map((entry) => entry.name));
+  const rejectedCandidates = scored
+    .filter((entry) => !retainedNames.has(entry.name))
+    .slice(0, 2)
+    .map((entry) => ({
+      name: entry.name,
+      category: entry.category,
+      score: entry.score,
+      basis: entry.basis,
+      readiness: entry.readiness,
+      reasons: entry.reasons,
+      missingRequires: entry.missingRequires,
+      satisfiedConsumes: entry.satisfiedConsumes,
+      shallowOutputRisk: entry.shallowOutputRisk,
+      rejectionReason: rejectedCandidateReason({ candidate: entry, selected: retained[0]! }),
+    }));
+  const needsInputBeforeSkillLoad = hasMissingRequiredInputs(retained[0]);
+  const effectfulBoundary = hasMutationIntent(signals) || isExecutionPhase(signals.phase);
 
   return {
     activeSkillName: null,
     activationPosture:
-      hasMutationIntent(signals) || isExecutionPhase(signals.phase)
+      needsInputBeforeSkillLoad && effectfulBoundary
         ? {
-            kind: "require_skill_load",
-            skillNames: recommendedSkillNames(retained),
+            kind: "require_skill_inputs",
+            skillName: retained[0]!.name,
+            missingRequires: retained[0]!.missingRequires,
             boundary: isVerificationPhase(signals.phase) ? "verify" : "execute",
+            reason: "The best matched skill is blocked by missing required inputs.",
           }
-        : {
-            kind: "recommend_skill_load",
-            skillNames: recommendedSkillNames(retained),
-            reason: "TaskSpec strongly matches routable loaded skills.",
-          },
+        : effectfulBoundary
+          ? {
+              kind: "require_skill_load",
+              skillNames: candidateSkillNames(retained),
+              boundary: isVerificationPhase(signals.phase) ? "verify" : "execute",
+            }
+          : {
+              kind: "recommend_skill_load",
+              skillNames: candidateSkillNames(retained),
+              reason: "TaskSpec strongly matches routable loaded skills.",
+            },
     toolAvailabilityPosture:
-      hasMutationIntent(signals) || isExecutionPhase(signals.phase)
-        ? "require_execute"
-        : "recommend",
+      needsInputBeforeSkillLoad && effectfulBoundary
+        ? "require_explore"
+        : effectfulBoundary
+          ? "require_execute"
+          : "recommend",
     taskSpecReady: true,
-    recommendations: retained,
+    candidates: retained,
+    rejectedCandidates,
   };
 }
 
-export function buildSkillFirstPolicyBlock(input: SkillRecommendationSet): string | null {
+export function buildSkillDiagnosisPolicyBlock(input: SkillDiagnosisSet): string | null {
   if (input.activeSkillName) {
     return null;
   }
-  if (input.activationPosture.kind === "none" && input.recommendations.length === 0) {
+  if (input.activationPosture.kind === "none" && input.candidates.length === 0) {
     return null;
   }
 
-  const lines = [
-    "[Brewva Skill Recommendation]",
-    "Brewva uses skills as explicit workflow amplifiers.",
-    "No active skill is currently loaded.",
-  ];
+  const lines = ["[Brewva Skill Diagnosis]"];
+  const shortestNextAction = resolveShortestNextAction(input);
 
   if (input.activationPosture.kind === "recommend_task_spec") {
-    lines.push("No TaskSpec is currently recorded for this session.");
-    lines.push(
-      "Consider calling `task_set_spec` before deeper work so skill routing has durable task intent.",
-    );
-    lines.push(`reason: ${input.activationPosture.reason}`);
+    lines.push("posture: recommend_task_spec");
+    lines.push("selected_skill: none");
+    lines.push("readiness: task_spec_missing");
+    lines.push("missing_required_inputs: task_set_spec");
+    lines.push(`shortest_next_action: ${shortestNextAction}`);
     return lines.join("\n");
   }
 
   if (input.activationPosture.kind === "require_task_spec") {
-    lines.push("No TaskSpec is currently recorded for this session.");
-    lines.push(
-      "Before execution or mutation, call `task_set_spec` to record the task goal, constraints, targets, and verification intent.",
-    );
-    lines.push(`required_boundary: ${input.activationPosture.boundary}`);
+    lines.push(`posture: require_task_spec | boundary=${input.activationPosture.boundary}`);
+    lines.push("selected_skill: none");
+    lines.push("readiness: task_spec_missing");
+    lines.push("missing_required_inputs: task_set_spec");
+    lines.push(`shortest_next_action: ${shortestNextAction}`);
     return lines.join("\n");
   }
 
   if (input.activationPosture.kind === "repair_failed_contract") {
     const failedSkill = input.failedSkill;
-    lines.push("The latest active skill contract has failed permanently.");
+    lines.push("posture: repair_failed_contract");
+    lines.push(`selected_skill: ${failedSkill?.name ?? "none"}`);
+    lines.push("readiness: contract_failed");
     if (failedSkill) {
-      lines.push(`failed_skill: ${failedSkill.name}`);
       lines.push(
-        `missing_outputs: ${failedSkill.missing.length > 0 ? failedSkill.missing.join(", ") : "none"}`,
+        `missing_required_inputs: ${
+          failedSkill.missing.length > 0 ? failedSkill.missing.join(", ") : "none"
+        }`,
       );
-      lines.push(
-        `invalid_outputs: ${failedSkill.invalid.length > 0 ? failedSkill.invalid.join(", ") : "none"}`,
-      );
+    } else {
+      lines.push("missing_required_inputs: none");
     }
-    lines.push(
-      "Do not load downstream skills or continue repository work until an operator explicitly restarts or repairs the task.",
-    );
+    lines.push(`shortest_next_action: ${shortestNextAction}`);
     return lines.join("\n");
   }
 
-  const primary = input.recommendations[0];
+  const primary = input.candidates[0];
   if (!primary) {
     return null;
   }
 
-  if (input.activationPosture.kind === "require_skill_load") {
+  if (
+    input.activationPosture.kind === "require_skill_inputs" ||
+    input.activationPosture.kind === "require_skill_load"
+  ) {
     lines.push(
-      "This TaskSpec strongly matches loaded skills. Before execution or mutation, call `skill_load` with the best match.",
+      `posture: ${input.activationPosture.kind} | boundary=${input.activationPosture.boundary}`,
     );
-    lines.push(`required_boundary: ${input.activationPosture.boundary}`);
   } else {
-    lines.push("TaskSpec is present. Consider `skill_load` before deeper specialized work.");
-    if (input.activationPosture.kind === "recommend_skill_load") {
-      lines.push(`reason: ${input.activationPosture.reason}`);
-    }
+    lines.push(`posture: ${input.activationPosture.kind}`);
   }
 
-  lines.push(`primary_skill: ${primary.name}`);
-  if (primary.reasons.length > 0) {
-    lines.push(`primary_reasons: ${formatReasons(primary.reasons)}`);
-  }
-
-  if (input.recommendations.length > 1) {
-    lines.push(
-      `alternate_skills: ${input.recommendations
-        .slice(1)
-        .map((entry) =>
-          entry.reasons.length > 0 ? `${entry.name} (${formatReasons(entry.reasons)})` : entry.name,
-        )
-        .join("; ")}`,
-    );
-  }
-
-  lines.push("After loading a skill, stay inside it until `skill_complete` or an explicit switch.");
+  lines.push(`selected_skill: ${primary.name}`);
+  lines.push(`readiness: ${primary.readiness}`);
+  lines.push(
+    `missing_required_inputs: ${
+      primary.missingRequires.length > 0 ? primary.missingRequires.join(", ") : "none"
+    }`,
+  );
+  lines.push(`shortest_next_action: ${shortestNextAction}`);
   return lines.join("\n");
 }

@@ -27,16 +27,16 @@ Routing remains explicit:
 
 Brewva uses three cooperating mechanisms. None works alone.
 
-| Mechanism                                                        | When it fires                                               | What it decides or exposes                                              |
-| ---------------------------------------------------------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------- |
-| **Skill-first recommendation** (hosted control plane, per-turn)  | Every hosted turn when no skill is active                   | "Which skill best matches the current prompt and task spec?"            |
-| **Artifact-aware transition surfaces** (runtime inspect + tools) | On demand after prior skill outputs or workflow state exist | "What inputs, artifacts, and posture are available for the next skill?" |
-| **Selection metadata** (frontmatter, design-time)                | During recommendation scoring                               | "Under what conditions should this skill be considered?"                |
+| Mechanism                                                        | When it fires                                               | What it decides or exposes                                               |
+| ---------------------------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------ |
+| **Skill-first diagnosis** (hosted control plane, per-turn)       | Every hosted turn when no skill is active                   | "Which skill best matches the current prompt, task spec, and readiness?" |
+| **Artifact-aware transition surfaces** (runtime inspect + tools) | On demand after prior skill outputs or workflow state exist | "What inputs, artifacts, and posture are available for the next skill?"  |
+| **Selection metadata** (frontmatter, design-time)                | During recommendation scoring                               | "Under what conditions should this skill be considered?"                 |
 
-Skill-first recommendation handles cold starts (first skill selection).
+Skill-first diagnosis handles cold starts (first skill selection).
 Artifact-aware transition surfaces handle warm transitions (next skill after
 completion).
-Selection metadata is the data substrate for cold-start recommendation. A
+Selection metadata is the data substrate for cold-start diagnosis. A
 directory-derived `routing.scope` is only scope provenance; it is not sufficient
 for routability. A skill is routable only when routing is enabled, its scope is
 included in `skills.routing.scopes`, and `selection` declares at least one of
@@ -130,6 +130,10 @@ When a skill completes via `skill_complete`:
 The model should usually prefer a candidate whose `requires` are fully
 satisfied and whose `consumes` now materialize concrete prior outputs, unless
 the user's intent or task spec clearly points elsewhere.
+Hosted skill diagnosis applies the same rule inside the semantic shortlist:
+`ready` candidates outrank `available`, `unknown`, and `blocked` candidates for
+the selected position, so a nearby actionable skill is not hidden behind a
+blocked semantic leader.
 
 ### Escalation transitions
 

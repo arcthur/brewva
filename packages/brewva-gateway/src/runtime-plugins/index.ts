@@ -312,13 +312,15 @@ export {
   type BuildCapabilityViewResult,
 } from "./capability-view.js";
 export {
-  buildSkillFirstPolicyBlock,
-  deriveSkillRecommendations,
+  buildSkillDiagnosisPolicyBlock,
+  deriveSkillDiagnoses,
   type SkillActivationPosture,
   type SkillClassificationHint,
-  type SkillRecommendation,
-  type SkillRecommendationSet,
+  type SkillDiagnosisCandidate,
+  type SkillDiagnosisReadiness,
+  type SkillDiagnosisSet,
   type SkillFirstRuntimeLike,
+  type RejectedSkillDiagnosisCandidate,
   type ToolAvailabilityPosture,
 } from "./skill-first.js";
 export type {

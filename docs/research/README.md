@@ -140,6 +140,7 @@ None currently.
 - `docs/research/active/rollback-ergonomics-and-patch-lifecycle-safety.md`
 - `docs/research/active/prefix-stable-context-management-and-progressive-compaction.md`
 - `docs/research/active/recovery-first-context-governance-and-history-view-baselines.md`
+- `docs/research/active/product-semantic-compression-and-decision-surface-subtraction.md`
 
 ## Promoted notes (status pointers)
 

@@ -30,6 +30,9 @@ export interface RecallEvalMetrics {
   baseline_precision_at_k: number;
   broker_precision_at_k: number;
   precision_gain_at_k: number;
+  broker_without_intent_top_1_hit_rate?: number;
+  broker_with_intent_top_1_hit_rate?: number;
+  intent_top_1_gain?: number;
   baseline_useful_recall_rate: number;
   broker_useful_recall_rate: number;
   useful_recall_gain: number;
@@ -82,6 +85,11 @@ export interface RecallEvalQuery {
   session_id: string;
   text: string;
   scope?: "session_local" | "user_repository_root" | "workspace_wide";
+  intent?:
+    | "prior_work"
+    | "repository_precedent"
+    | "current_session_evidence"
+    | "durable_runtime_receipts";
   limit?: number;
 }
 

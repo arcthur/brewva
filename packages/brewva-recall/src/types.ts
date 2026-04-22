@@ -1,4 +1,4 @@
-export const RECALL_BROKER_STATE_SCHEMA = "brewva.recall.broker.v4" as const;
+export const RECALL_BROKER_STATE_SCHEMA = "brewva.recall.broker.v5" as const;
 export const RECALL_CURATION_HALFLIFE_DAYS = 45;
 
 export const RECALL_SOURCE_FAMILIES = [
@@ -16,11 +16,22 @@ export const RECALL_SCOPE_VALUES = [
   "workspace_wide",
 ] as const;
 
-export const RECALL_SOURCE_TIERS = [
-  "runtime_evidence",
+export const RECALL_TRUST_LABELS = [
+  "Kernel truth",
+  "Verified evidence",
+  "Repository precedent",
+  "Advisory posture",
+  "Session-local memory",
+  "Working projection",
+] as const;
+
+export const RECALL_EVIDENCE_STRENGTH_VALUES = ["strong", "moderate", "weak"] as const;
+
+export const RECALL_SEARCH_INTENT_VALUES = [
+  "prior_work",
   "repository_precedent",
-  "promotion_candidate",
-  "advisory_memory",
+  "current_session_evidence",
+  "durable_runtime_receipts",
 ] as const;
 
 export const RECALL_CURATION_SIGNAL_VALUES = [
@@ -35,7 +46,9 @@ export const RECALL_FRESHNESS_VALUES = ["fresh", "aging", "stale", "unknown"] as
 
 export type RecallSourceFamily = (typeof RECALL_SOURCE_FAMILIES)[number];
 export type RecallScope = (typeof RECALL_SCOPE_VALUES)[number];
-export type RecallSourceTier = (typeof RECALL_SOURCE_TIERS)[number];
+export type RecallTrustLabel = (typeof RECALL_TRUST_LABELS)[number];
+export type RecallEvidenceStrength = (typeof RECALL_EVIDENCE_STRENGTH_VALUES)[number];
+export type RecallSearchIntent = (typeof RECALL_SEARCH_INTENT_VALUES)[number];
 export type RecallCurationSignal = (typeof RECALL_CURATION_SIGNAL_VALUES)[number];
 export type RecallFreshness = (typeof RECALL_FRESHNESS_VALUES)[number];
 
@@ -101,14 +114,17 @@ export interface RecallBrokerState {
 export interface RecallSearchEntry {
   stableId: string;
   sourceFamily: RecallSourceFamily;
-  sourceTier: RecallSourceTier;
+  trustLabel: RecallTrustLabel;
+  evidenceStrength: RecallEvidenceStrength;
   scope: RecallScope;
-  score: number;
+  semanticScore: number;
+  rankingScore: number;
   title: string;
   summary: string;
   excerpt: string;
   freshness: RecallFreshness;
   matchReasons: string[];
+  rankReasons: string[];
   sessionId?: string;
   relativePath?: string;
   targetRoots?: string[];
@@ -118,6 +134,7 @@ export interface RecallSearchEntry {
 export interface RecallSearchResult {
   query: string;
   scope: RecallScope;
+  intent?: RecallSearchIntent;
   results: RecallSearchEntry[];
 }
 
