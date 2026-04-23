@@ -2,6 +2,7 @@ import { recordSessionShutdownIfMissing } from "@brewva/brewva-gateway";
 import { createOperatorRuntimePort } from "@brewva/brewva-runtime";
 import type {
   BrewvaDiffPreferences,
+  BrewvaShellViewPreferences,
   BrewvaModelPreferences,
   BrewvaPromptSessionEvent,
   BrewvaSessionModelDescriptor,
@@ -328,6 +329,15 @@ function normalizeDiffPreferences(
   return {
     style: preferences.style === "stacked" ? "stacked" : "auto",
     wrapMode: preferences.wrapMode === "none" ? "none" : "word",
+  };
+}
+
+function normalizeShellViewPreferences(
+  preferences: Partial<BrewvaShellViewPreferences>,
+): BrewvaShellViewPreferences {
+  return {
+    showThinking: preferences.showThinking !== false,
+    toolDetails: preferences.toolDetails !== false,
   };
 }
 
@@ -948,6 +958,19 @@ export class CliShellController {
     this.#state = reduceCliShellState(this.#state, {
       type: "diff.setPreferences",
       preferences: normalizeDiffPreferences(this.#sessionPort.getDiffPreferences()),
+    });
+    const shellViewPreferences = normalizeShellViewPreferences(
+      this.#sessionPort.getShellViewPreferences(),
+    );
+    this.#state = reduceCliShellState(this.#state, {
+      type: "view.setPreferences",
+      preferences: {
+        showThinking: shellViewPreferences.showThinking,
+      },
+    });
+    this.#state = reduceCliShellState(this.#state, {
+      type: "status.toolsExpanded",
+      expanded: shellViewPreferences.toolDetails,
     });
     this.applyActions(this.buildSessionStatusActions(), false);
     if (this.options.verbose) {
@@ -2198,6 +2221,52 @@ export class CliShellController {
     );
   }
 
+  private persistShellViewPreferences(preferences: BrewvaShellViewPreferences): void {
+    const normalized = normalizeShellViewPreferences(preferences);
+    this.#sessionPort.setShellViewPreferences(normalized);
+    // TODO: Move toolDetails/toolsExpanded into view state once UI port compatibility allows it.
+    this.dispatchMany(
+      [
+        {
+          type: "view.setPreferences",
+          preferences: {
+            showThinking: normalized.showThinking,
+          },
+        },
+        {
+          type: "status.toolsExpanded",
+          expanded: normalized.toolDetails,
+        },
+      ],
+      false,
+    );
+  }
+
+  private currentShellViewPreferences(): BrewvaShellViewPreferences {
+    return {
+      showThinking: this.#state.view.showThinking,
+      toolDetails: this.#state.status.toolsExpanded,
+    };
+  }
+
+  private toggleThinkingVisibility(): void {
+    const next = !this.#state.view.showThinking;
+    this.persistShellViewPreferences({
+      ...this.currentShellViewPreferences(),
+      showThinking: next,
+    });
+    this.ui.notify(next ? "Thinking blocks shown." : "Thinking blocks hidden.", "info");
+  }
+
+  private toggleToolDetails(): void {
+    const next = !this.#state.status.toolsExpanded;
+    this.persistShellViewPreferences({
+      ...this.currentShellViewPreferences(),
+      toolDetails: next,
+    });
+    this.ui.notify(next ? "Tool details shown." : "Tool details hidden.", "info");
+  }
+
   private toggleDiffWrapMode(): void {
     const next = this.#state.diff.wrapMode === "word" ? "none" : "word";
     this.persistDiffPreferences({
@@ -3027,6 +3096,14 @@ export class CliShellController {
     }
     if (prompt === "/think") {
       await this.openThinkingDialog();
+      return true;
+    }
+    if (prompt === "/thinking") {
+      this.toggleThinkingVisibility();
+      return true;
+    }
+    if (prompt === "/tool-details") {
+      this.toggleToolDetails();
       return true;
     }
     if (prompt === "/diffwrap") {

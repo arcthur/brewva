@@ -6,6 +6,7 @@ export interface ShellRenderContextValue {
   controller: CliShellController;
   diffStyle: Accessor<ShellDiffStyle>;
   diffWrapMode: Accessor<ShellDiffWrapMode>;
+  showThinking: Accessor<boolean>;
 }
 
 const ShellRenderContext = createContext<ShellRenderContextValue>();

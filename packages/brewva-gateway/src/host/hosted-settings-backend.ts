@@ -1,6 +1,10 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import type { BrewvaDiffPreferences, BrewvaModelPreferences } from "@brewva/brewva-substrate";
+import type {
+  BrewvaDiffPreferences,
+  BrewvaShellViewPreferences,
+  BrewvaModelPreferences,
+} from "@brewva/brewva-substrate";
 import type { HostedSessionSettingsBackend } from "./hosted-session-backend-contract.js";
 import type {
   CreateHostedManagedSessionOptions,
@@ -43,6 +47,10 @@ interface HostedSettingsData {
     style?: unknown;
     wrapMode?: unknown;
   };
+  shellViewPreferences?: {
+    showThinking?: unknown;
+    toolDetails?: unknown;
+  };
 }
 
 function readSettingsFile(path: string): HostedSettingsData {
@@ -79,6 +87,10 @@ function mergeSettings(base: HostedSettingsData, override: HostedSettingsData): 
     diffPreferences: {
       ...base.diffPreferences,
       ...override.diffPreferences,
+    },
+    shellViewPreferences: {
+      ...base.shellViewPreferences,
+      ...override.shellViewPreferences,
     },
   };
 }
@@ -131,6 +143,16 @@ function normalizeDiffPreferences(preferences: {
   return {
     style: preferences.style === "stacked" ? "stacked" : "auto",
     wrapMode: preferences.wrapMode === "none" ? "none" : "word",
+  };
+}
+
+function normalizeShellViewPreferences(preferences: {
+  showThinking?: unknown;
+  toolDetails?: unknown;
+}): BrewvaShellViewPreferences {
+  return {
+    showThinking: preferences.showThinking !== false,
+    toolDetails: preferences.toolDetails !== false,
   };
 }
 
@@ -257,6 +279,15 @@ class BrewvaHostedSettingsHandle implements HostedSessionSettings, HostedSession
 
   setDiffPreferences(preferences: BrewvaDiffPreferences): void {
     this.#globalSettings.diffPreferences = normalizeDiffPreferences(preferences);
+    this.persistGlobalSettings();
+  }
+
+  getShellViewPreferences(): BrewvaShellViewPreferences {
+    return normalizeShellViewPreferences(this.settings.shellViewPreferences ?? {});
+  }
+
+  setShellViewPreferences(preferences: BrewvaShellViewPreferences): void {
+    this.#globalSettings.shellViewPreferences = normalizeShellViewPreferences(preferences);
     this.persistGlobalSettings();
   }
 

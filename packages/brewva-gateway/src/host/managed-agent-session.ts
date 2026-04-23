@@ -23,6 +23,7 @@ import {
   type BrewvaManagedSessionStore,
   type BrewvaManagedSessionSettingsView,
   type BrewvaDiffPreferences,
+  type BrewvaShellViewPreferences,
   type BrewvaModelPreferences,
   type BrewvaMutableModelCatalog,
   type BrewvaCompactionRequest,
@@ -93,6 +94,8 @@ export interface BrewvaManagedAgentSessionSettingsPort {
   setModelPreferences(preferences: BrewvaModelPreferences): void;
   getDiffPreferences(): BrewvaDiffPreferences;
   setDiffPreferences(preferences: BrewvaDiffPreferences): void;
+  getShellViewPreferences(): BrewvaShellViewPreferences;
+  setShellViewPreferences(preferences: BrewvaShellViewPreferences): void;
 }
 
 export interface CreateBrewvaManagedAgentSessionOptions {
@@ -665,6 +668,14 @@ class ManagedSessionSettingsView implements BrewvaManagedSessionSettingsView {
 
   setDiffPreferences(preferences: BrewvaDiffPreferences): void {
     this.settings.setDiffPreferences(preferences);
+  }
+
+  getShellViewPreferences(): BrewvaShellViewPreferences {
+    return this.settings.getShellViewPreferences();
+  }
+
+  setShellViewPreferences(preferences: BrewvaShellViewPreferences): void {
+    this.settings.setShellViewPreferences(preferences);
   }
 }
 

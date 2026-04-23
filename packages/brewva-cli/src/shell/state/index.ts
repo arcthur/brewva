@@ -39,6 +39,10 @@ export interface CliShellDiffState {
   wrapMode: CliShellDiffWrapMode;
 }
 
+export interface CliShellViewState {
+  showThinking: boolean;
+}
+
 export interface CliShellCompletionItem {
   label: string;
   value: string;
@@ -104,6 +108,7 @@ export interface CliShellState {
   notifications: CliShellNotification[];
   status: CliShellStatusState;
   diff: CliShellDiffState;
+  view: CliShellViewState;
 }
 
 export type CliShellAction =
@@ -193,6 +198,10 @@ export type CliShellAction =
   | {
       type: "diff.setPreferences";
       preferences: Partial<CliShellDiffState>;
+    }
+  | {
+      type: "view.setPreferences";
+      preferences: Partial<CliShellViewState>;
     };
 
 function snapshotOverlayState(overlays: OverlayManager): CliShellOverlayState {
@@ -233,6 +242,9 @@ export function createCliShellState(): CliShellState {
     diff: {
       style: "auto",
       wrapMode: "word",
+    },
+    view: {
+      showThinking: true,
     },
   };
 }
@@ -458,6 +470,13 @@ export function reduceCliShellState(state: CliShellState, action: CliShellAction
         diff: {
           style: action.preferences.style ?? state.diff.style,
           wrapMode: action.preferences.wrapMode ?? state.diff.wrapMode,
+        },
+      };
+    case "view.setPreferences":
+      return {
+        ...state,
+        view: {
+          showThinking: action.preferences.showThinking ?? state.view.showThinking,
         },
       };
   }

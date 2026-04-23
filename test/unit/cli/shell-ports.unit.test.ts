@@ -77,6 +77,17 @@ describe("cli shell session port", () => {
       toolDefinitions: new Map(),
     } as unknown as CliShellSessionBundle);
 
+    expect(port.getShellViewPreferences()).toEqual({
+      showThinking: true,
+      toolDetails: true,
+    });
+    expect(() =>
+      port.setShellViewPreferences({
+        showThinking: false,
+        toolDetails: false,
+      }),
+    ).not.toThrow();
+
     await port.prompt([{ type: "text", text: "hello shell" }], { source: "interactive" });
 
     expect(sentMessages).toHaveLength(2);

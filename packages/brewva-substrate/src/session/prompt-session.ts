@@ -60,6 +60,11 @@ export interface BrewvaDiffPreferences {
   wrapMode: BrewvaDiffWrapMode;
 }
 
+export interface BrewvaShellViewPreferences {
+  showThinking: boolean;
+  toolDetails: boolean;
+}
+
 export interface BrewvaSessionModelCatalogView {
   getAvailable?():
     | Promise<readonly BrewvaSessionModelDescriptor[]>
@@ -87,6 +92,8 @@ export interface BrewvaSessionSettingsView {
   setModelPreferences?(preferences: BrewvaModelPreferences): void;
   getDiffPreferences?(): BrewvaDiffPreferences;
   setDiffPreferences?(preferences: BrewvaDiffPreferences): void;
+  getShellViewPreferences?(): BrewvaShellViewPreferences;
+  setShellViewPreferences?(preferences: BrewvaShellViewPreferences): void;
 }
 
 export interface BrewvaManagedSessionSettingsView extends BrewvaSessionSettingsView {
@@ -95,6 +102,8 @@ export interface BrewvaManagedSessionSettingsView extends BrewvaSessionSettingsV
   setModelPreferences(preferences: BrewvaModelPreferences): void;
   getDiffPreferences(): BrewvaDiffPreferences;
   setDiffPreferences(preferences: BrewvaDiffPreferences): void;
+  getShellViewPreferences(): BrewvaShellViewPreferences;
+  setShellViewPreferences(preferences: BrewvaShellViewPreferences): void;
 }
 
 export interface BrewvaPromptDispatchSession {

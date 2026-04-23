@@ -192,6 +192,7 @@ export {
   type BrewvaDiffPreferences,
   type BrewvaDiffStyle,
   type BrewvaDiffWrapMode,
+  type BrewvaShellViewPreferences,
   type BrewvaModelPreferenceRef,
   type BrewvaModelPreferences,
   type BrewvaPromptDispatchSession,

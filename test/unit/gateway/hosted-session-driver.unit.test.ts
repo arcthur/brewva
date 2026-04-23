@@ -1,11 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { HostedModelRegistry } from "../../../packages/brewva-gateway/src/host/hosted-model-registry.js";
 import {
   createHostedSessionDriver,
   createHostedSettingsManager,
 } from "../../../packages/brewva-gateway/src/host/hosted-session-driver.js";
+import { readHostedSettingsHandle } from "../../../packages/brewva-gateway/src/host/hosted-settings-backend.js";
 import { patchProcessEnv } from "../../helpers/global-state.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
@@ -334,6 +335,39 @@ describe("hosted session driver", () => {
 
     await result.session.abort();
     result.session.dispose();
+  });
+
+  test("persists shell view preferences through the hosted settings backend", () => {
+    const workspace = createTestWorkspace("hosted-session-driver-shell-view-settings");
+    const agentDir = join(workspace, ".brewva-agent");
+    const settings = readHostedSettingsHandle(createHostedSettingsManager(workspace, agentDir));
+
+    expect(settings.getShellViewPreferences()).toEqual({
+      showThinking: true,
+      toolDetails: true,
+    });
+
+    settings.setShellViewPreferences({
+      showThinking: false,
+      toolDetails: false,
+    });
+
+    expect(settings.getShellViewPreferences()).toEqual({
+      showThinking: false,
+      toolDetails: false,
+    });
+    expect(
+      JSON.parse(readFileSync(join(agentDir, "settings.json"), "utf8")).shellViewPreferences,
+    ).toEqual({
+      showThinking: false,
+      toolDetails: false,
+    });
+
+    const reloaded = readHostedSettingsHandle(createHostedSettingsManager(workspace, agentDir));
+    expect(reloaded.getShellViewPreferences()).toEqual({
+      showThinking: false,
+      toolDetails: false,
+    });
   });
 
   test("reuses a cohesive hosted session services contract to create additional sessions", async () => {

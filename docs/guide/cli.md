@@ -64,6 +64,9 @@ Completion remains keyboard-first:
   OAuth, provider-specific prompts, or API keys stored in the encrypted runtime
   vault.
 - `/think` opens the thinking-level picker for the selected model
+- `/thinking` toggles reasoning block visibility without changing the model
+  thinking level
+- `/tool-details` toggles completed tool detail visibility in the transcript
 - `/diffwrap` toggles wrapping for edit and patch diff views
 - `/diffstyle` toggles automatic split diffs and stacked unified diffs
 - `@` opens quoted or unquoted workspace path completion
@@ -293,6 +296,7 @@ Embedded interactive sessions register a small runtime-plugin command set:
 - `/insights [dir]`
 - `/questions`
 - `/theme | /theme list | /theme <name>`
+- `/thinking | /tool-details`
 - `/diffwrap | /diffstyle`
 - `/answer <question-id> <answer>`
 - `/agent-overlays | /agent-overlays validate | /agent-overlays <name>`

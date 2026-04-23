@@ -78,6 +78,9 @@ Completion and overlays are part of the stable command contract:
   vault refs such as `vault://openai/apiKey`
 - `/think` opens the thinking-level overlay and only offers levels supported by
   the selected model
+- `/thinking` toggles reasoning block visibility in the transcript; this does
+  not change the selected model's thinking level
+- `/tool-details` toggles completed tool detail visibility in the transcript
 - `/diffwrap` toggles edit/apply-patch diff wrapping
 - `/diffstyle` toggles automatic split diffs and stacked unified diffs
 - workspace path completion is triggered by `@`
@@ -110,6 +113,7 @@ runtime plugins:
 - `/insights [dir]`
 - `/questions`
 - `/theme | /theme list | /theme <name>`
+- `/thinking | /tool-details`
 - `/diffwrap | /diffstyle`
 - `/answer <question-id> <answer>`
 - `/agent-overlays | /agent-overlays validate | /agent-overlays <name>`

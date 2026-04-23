@@ -15,6 +15,7 @@ import type { DelegationRunRecord } from "@brewva/brewva-runtime";
 import type {
   BrewvaManagedPromptSession,
   BrewvaDiffPreferences,
+  BrewvaShellViewPreferences,
   BrewvaModelPreferences,
   BrewvaPromptContentPart,
   BrewvaPromptOptions,
@@ -91,6 +92,8 @@ export interface SessionViewPort {
   setModelPreferences(preferences: BrewvaModelPreferences): void;
   getDiffPreferences(): BrewvaDiffPreferences;
   setDiffPreferences(preferences: BrewvaDiffPreferences): void;
+  getShellViewPreferences(): BrewvaShellViewPreferences;
+  setShellViewPreferences(preferences: BrewvaShellViewPreferences): void;
   prompt(parts: readonly BrewvaPromptContentPart[], options?: BrewvaPromptOptions): Promise<void>;
   waitForIdle(): Promise<void>;
   abort(): Promise<void>;

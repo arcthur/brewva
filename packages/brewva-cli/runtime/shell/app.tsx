@@ -58,6 +58,7 @@ export function BrewvaOpenTuiShell(input: {
     controller: input.controller,
     diffStyle: () => state.diff.style,
     diffWrapMode: () => state.diff.wrapMode,
+    showThinking: () => state.view.showThinking,
   };
   const showScrollbar = createMemo(() => dimensions().width >= 96);
   const bundleRefreshKey = createMemo(() => `${state.transcript.messages.length}`);

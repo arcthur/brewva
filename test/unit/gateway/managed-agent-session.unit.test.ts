@@ -152,6 +152,10 @@ function createSettingsStub() {
       return { style: "auto" as const, wrapMode: "word" as const };
     },
     setDiffPreferences() {},
+    getShellViewPreferences() {
+      return { showThinking: true, toolDetails: true };
+    },
+    setShellViewPreferences() {},
   };
 }
 

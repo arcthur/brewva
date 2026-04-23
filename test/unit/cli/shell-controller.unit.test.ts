@@ -14,6 +14,7 @@ import {
   buildBrewvaPromptText,
   type BrewvaPromptContentPart,
   type BrewvaPromptSessionEvent,
+  type BrewvaShellViewPreferences,
   type BrewvaSessionModelDescriptor,
   type BrewvaToolUiPort,
 } from "@brewva/brewva-substrate";
@@ -105,6 +106,10 @@ function createFakeBundle(
     style: "auto",
     wrapMode: "word",
   };
+  let shellViewPreferences: BrewvaShellViewPreferences = {
+    showThinking: true,
+    toolDetails: true,
+  };
 
   const session = {
     get model() {
@@ -137,6 +142,12 @@ function createFakeBundle(
       },
       setDiffPreferences(next: typeof diffPreferences) {
         diffPreferences = next;
+      },
+      getShellViewPreferences() {
+        return shellViewPreferences;
+      },
+      setShellViewPreferences(next: BrewvaShellViewPreferences) {
+        shellViewPreferences = next;
       },
     },
     modelRegistry: {
@@ -226,6 +237,7 @@ function createFakeBundle(
     providerConnects,
     getModelPreferences: () => modelPreferences,
     getDiffPreferences: () => diffPreferences,
+    getShellViewPreferences: () => shellViewPreferences,
     getCurrentModel: () => currentModel,
   };
 }
@@ -320,7 +332,7 @@ describe("shell controller", () => {
     controller.dispose();
   });
 
-  test("slash completion exposes models/connect/think and omits legacy auth commands", () => {
+  test("slash completion exposes model and transcript view commands while omitting legacy auth commands", () => {
     const { bundle } = createFakeBundle();
 
     const controller = new CliShellController(bundle, {
@@ -335,12 +347,65 @@ describe("shell controller", () => {
     expect(slashValues).toContain("models");
     expect(slashValues).toContain("connect");
     expect(slashValues).toContain("think");
+    expect(slashValues).toContain("thinking");
+    expect(slashValues).toContain("tool-details");
     expect(slashValues).toContain("diffwrap");
     expect(slashValues).toContain("diffstyle");
     expect(slashValues).not.toContain("credentials");
     expect(slashValues).not.toContain("auth");
 
     controller.dispose();
+  });
+
+  test("thinking and tool-details slash commands update durable shell view preferences", async () => {
+    const fixture = createFakeBundle();
+    const controller = new CliShellController(fixture.bundle, {
+      cwd: process.cwd(),
+      openSession: async () => fixture.bundle,
+      createSession: async () => fixture.bundle,
+    });
+
+    expect(controller.getState().view.showThinking).toBe(true);
+    expect(controller.getState().status.toolsExpanded).toBe(true);
+
+    controller.ui.setEditorText("/thinking");
+    await controller.handleSemanticInput({
+      key: "enter",
+      ctrl: false,
+      meta: false,
+      shift: false,
+    });
+
+    expect(controller.getState().view.showThinking).toBe(false);
+    expect(fixture.getShellViewPreferences().showThinking).toBe(false);
+    expect(fixture.getShellViewPreferences().toolDetails).toBe(true);
+
+    controller.ui.setEditorText("/tool-details");
+    await controller.handleSemanticInput({
+      key: "enter",
+      ctrl: false,
+      meta: false,
+      shift: false,
+    });
+
+    expect(controller.getState().status.toolsExpanded).toBe(false);
+    expect(fixture.getShellViewPreferences()).toEqual({
+      showThinking: false,
+      toolDetails: false,
+    });
+
+    controller.dispose();
+
+    const restored = new CliShellController(fixture.bundle, {
+      cwd: process.cwd(),
+      openSession: async () => fixture.bundle,
+      createSession: async () => fixture.bundle,
+      operatorPollIntervalMs: 60_000,
+    });
+    await restored.start();
+    expect(restored.getState().view.showThinking).toBe(false);
+    expect(restored.getState().status.toolsExpanded).toBe(false);
+    restored.dispose();
   });
 
   test("diff slash commands update and persist transcript diff preferences", async () => {

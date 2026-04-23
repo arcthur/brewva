@@ -37,7 +37,17 @@ const SLASH_COMMANDS = [
   },
   {
     command: "think",
-    description: "Select the thinking level for the current model.",
+    description: "Select the model thinking level for future turns.",
+    argumentMode: "none",
+  },
+  {
+    command: "thinking",
+    description: "Show or hide reasoning blocks in the transcript.",
+    argumentMode: "none",
+  },
+  {
+    command: "tool-details",
+    description: "Show or hide completed tool details in the transcript.",
     argumentMode: "none",
   },
   {
@@ -201,6 +211,17 @@ export function createSessionViewPort(bundle: CliShellSessionBundle): SessionVie
     },
     setDiffPreferences(preferences) {
       bundle.session.settingsManager?.setDiffPreferences?.(preferences);
+    },
+    getShellViewPreferences() {
+      return (
+        bundle.session.settingsManager?.getShellViewPreferences?.() ?? {
+          showThinking: true,
+          toolDetails: true,
+        }
+      );
+    },
+    setShellViewPreferences(preferences) {
+      bundle.session.settingsManager?.setShellViewPreferences?.(preferences);
     },
     async prompt(parts, options) {
       if (

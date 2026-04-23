@@ -4,6 +4,7 @@ import type {
   BrewvaHostedResourceLoader,
   BrewvaManagedPromptSession,
   BrewvaDiffPreferences,
+  BrewvaShellViewPreferences,
   BrewvaModelPreferences,
   BrewvaMutableModelCatalog,
   BrewvaRegisteredModel,
@@ -34,6 +35,8 @@ export interface HostedSessionSettingsBackend extends BrewvaManagedAgentSessionS
   setModelPreferences(preferences: BrewvaModelPreferences): void;
   getDiffPreferences(): BrewvaDiffPreferences;
   setDiffPreferences(preferences: BrewvaDiffPreferences): void;
+  getShellViewPreferences(): BrewvaShellViewPreferences;
+  setShellViewPreferences(preferences: BrewvaShellViewPreferences): void;
 }
 
 export type HostedSessionPersistenceBackend = ManagedAgentSessionStore;

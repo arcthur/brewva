@@ -167,6 +167,10 @@ function createFakeBundle(
     style: "auto",
     wrapMode: "word",
   };
+  let shellViewPreferences = {
+    showThinking: true,
+    toolDetails: true,
+  };
   const replaySessions = options.replaySessions ?? [
     {
       sessionId,
@@ -212,6 +216,12 @@ function createFakeBundle(
       },
       setDiffPreferences(next: typeof diffPreferences) {
         diffPreferences = next;
+      },
+      getShellViewPreferences() {
+        return shellViewPreferences;
+      },
+      setShellViewPreferences(next: typeof shellViewPreferences) {
+        shellViewPreferences = next;
       },
     },
     subscribe(listener: (event: BrewvaPromptSessionEvent) => void) {
@@ -629,6 +639,67 @@ describe("opentui solid shell runtime", () => {
       expect(frame).toContain("I checked the Brewva output.");
       expect(frame).toContain("Changes");
       expect(frame).toContain("const value = 1;");
+    } finally {
+      controller.dispose();
+      testSetup.renderer.destroy();
+    }
+  });
+
+  test("hides reasoning blocks when thinking visibility is toggled off", async () => {
+    const { bundle } = createFakeBundle({
+      seedMessages: [
+        {
+          role: "assistant",
+          content: [
+            { type: "thinking", thinking: "Inspect the workspace first." },
+            { type: "text", text: "Ready." },
+          ],
+        },
+      ],
+    });
+    const controller = new CliShellController(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+      operatorPollIntervalMs: 60_000,
+    });
+
+    await controller.start();
+    const testSetup = await openTuiSolidTestRender(
+      createOpenTuiSolidElement(BrewvaOpenTuiShell, { controller }),
+      {
+        width: 100,
+        height: 30,
+      },
+    );
+
+    try {
+      await testSetup.renderOnce();
+      await testSetup.renderOnce();
+
+      const message = controller
+        .getState()
+        .transcript.messages.find((candidate) => candidate.role === "assistant");
+      const reasoningPart = message?.parts.find((part) => part.type === "reasoning");
+      expect(reasoningPart).toBeDefined();
+
+      const rendererInspector = testSetup.renderer as unknown as OpenTuiTestRendererInspector;
+      expect(rendererInspector.root.findDescendantById(`text-${reasoningPart!.id}`)).toBeDefined();
+
+      controller.ui.setEditorText("/thinking");
+      await controller.handleSemanticInput({
+        key: "enter",
+        ctrl: false,
+        meta: false,
+        shift: false,
+      });
+      await testSetup.renderOnce();
+      await testSetup.renderOnce();
+
+      expect(controller.getState().view.showThinking).toBe(false);
+      expect(
+        rendererInspector.root.findDescendantById(`text-${reasoningPart!.id}`),
+      ).toBeUndefined();
     } finally {
       controller.dispose();
       testSetup.renderer.destroy();

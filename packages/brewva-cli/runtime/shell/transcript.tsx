@@ -295,11 +295,12 @@ function ReasoningPartView(input: {
   part: Extract<CliShellTranscriptPart, { type: "reasoning" }>;
   theme: SessionPalette;
 }) {
+  const shellContext = useShellRenderContext();
   const content = createMemo(() => input.part.text.replace("[REDACTED]", "").trim());
   const streaming = createMemo(() => input.part.renderMode === "streaming");
   const useStreamingCodePath = createPersistentStreamingCodePath(streaming);
   return (
-    <Show when={content().length > 0}>
+    <Show when={shellContext.showThinking() && content().length > 0}>
       <box
         id={`text-${input.part.id}`}
         paddingLeft={2}

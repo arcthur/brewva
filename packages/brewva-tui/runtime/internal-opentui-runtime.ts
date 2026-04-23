@@ -1,4 +1,4 @@
-import { createCliRenderer } from "@opentui/core";
+import { createCliRenderer, getDataPaths } from "@opentui/core";
 import {
   createElement as createSolidElement,
   insert as solidInsert,
@@ -25,6 +25,7 @@ import type {
 } from "../src/internal-opentui-runtime.js";
 
 const DEFAULT_SCREEN_MODE: OpenTuiScreenMode = "alternate-screen";
+const OPEN_TUI_TEST_DATA_PATH_LISTENER_LIMIT = 100;
 const DEFAULT_KITTY_KEYBOARD_CONFIG = {
   disambiguate: true,
   alternateKeys: true,
@@ -285,6 +286,7 @@ export async function openTuiSolidTestRender(
   node: OpenTuiSolidNode,
   options: OpenTuiTestRenderOptions,
 ): Promise<OpenTuiTestRenderSetup> {
+  getDataPaths().setMaxListeners(OPEN_TUI_TEST_DATA_PATH_LISTENER_LIMIT);
   return await solidTestRender(node, options);
 }
 
