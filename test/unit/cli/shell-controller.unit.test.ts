@@ -27,6 +27,7 @@ import type {
   ProviderOAuthAuthorization,
   ProviderConnection,
 } from "../../../packages/brewva-cli/src/shell/types.js";
+import { patchDateNow } from "../../helpers/global-state.js";
 
 function modelKey(model: Pick<BrewvaSessionModelDescriptor, "provider" | "id">): string {
   return `${model.provider}/${model.id}`;
@@ -2444,6 +2445,206 @@ describe("shell controller", () => {
     await firstSubmit;
     await secondSubmit;
     expect(prompts).toEqual(["ship it"]);
+    controller.dispose();
+  });
+
+  test("records interactive correction checkpoints with monotonic turn ids", async () => {
+    const turnIds: string[] = [];
+    const { bundle } = createFakeBundle();
+    Object.assign(bundle.runtime.authority.correction, {
+      recordCheckpoint(_sessionId: string, input: { turnId?: string }) {
+        turnIds.push(input.turnId ?? "");
+      },
+    });
+    const restoreDateNow = patchDateNow(() => 1_710_000_000_000);
+
+    const controller = new CliShellController(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+      operatorPollIntervalMs: 60_000,
+    });
+
+    try {
+      controller.ui.setEditorText("first prompt");
+      await controller.handleSemanticInput({
+        key: "enter",
+        ctrl: false,
+        meta: false,
+        shift: false,
+      });
+      controller.ui.setEditorText("second prompt");
+      await controller.handleSemanticInput({
+        key: "enter",
+        ctrl: false,
+        meta: false,
+        shift: false,
+      });
+
+      expect(turnIds).toEqual(["interactive:1710000000000:1", "interactive:1710000000000:2"]);
+    } finally {
+      restoreDateNow();
+      controller.dispose();
+    }
+  });
+
+  test("blocks redo while the current session is streaming", async () => {
+    const { bundle } = createFakeBundle();
+    let redoCalls = 0;
+    Object.assign(bundle.runtime.authority.correction, {
+      redo() {
+        redoCalls += 1;
+        return { ok: false, reason: "no_undone_checkpoint" };
+      },
+    });
+    (bundle.session as unknown as { isStreaming: boolean }).isStreaming = true;
+
+    const controller = new CliShellController(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+      operatorPollIntervalMs: 60_000,
+    });
+
+    controller.ui.setEditorText("/redo");
+    await controller.handleSemanticInput({
+      key: "enter",
+      ctrl: false,
+      meta: false,
+      shift: false,
+    });
+
+    expect(redoCalls).toBe(0);
+    expect(
+      controller
+        .getState()
+        .notifications.some((notification) =>
+          notification.message.includes("Cannot redo while agent is running."),
+        ),
+    ).toBe(true);
+    controller.dispose();
+  });
+
+  test("surfaces correction undo and redo as transcript notes and prompt status", async () => {
+    const { bundle } = createFakeBundle();
+    const session = bundle.session as unknown as {
+      replaceMessages(messages: unknown[]): void;
+      sessionManager: {
+        branch?(entryId: string): void;
+        branchWithSummary?(
+          entryId: string,
+          text: string,
+          details: Record<string, unknown>,
+          replace?: boolean,
+        ): void;
+      };
+    };
+    const branches: string[] = [];
+    session.replaceMessages = () => {};
+    session.sessionManager.branch = (entryId) => {
+      branches.push(entryId);
+    };
+    session.sessionManager.branchWithSummary = (entryId) => {
+      branches.push(entryId);
+    };
+
+    let undoAvailable = true;
+    let redoAvailable = false;
+    Object.assign(bundle.runtime.inspect.correction, {
+      getState() {
+        return {
+          checkpoints: [],
+          undoAvailable,
+          redoAvailable,
+          nextRedoable: redoAvailable ? { redoLeafEntryId: "leaf-redo" } : undefined,
+        };
+      },
+    });
+    Object.assign(bundle.runtime.authority.correction, {
+      undo() {
+        undoAvailable = false;
+        redoAvailable = true;
+        return {
+          ok: true,
+          checkpoint: {},
+          reasoningRevert: {
+            revertId: "revert-1",
+            toCheckpointId: "checkpoint-1",
+            targetLeafEntryId: "leaf-before",
+            trigger: "correction_undo",
+            linkedRollbackReceiptIds: [],
+            continuityPacket: { text: "Undo summary" },
+          },
+          patchSetIds: ["patch-1"],
+          rollbackResults: [],
+          restoredPrompt: { text: "fix this", parts: [] },
+          redoLeafEntryId: "leaf-redo",
+        };
+      },
+      redo() {
+        undoAvailable = true;
+        redoAvailable = false;
+        return {
+          ok: true,
+          checkpoint: {},
+          patchSetIds: ["patch-1"],
+          redoResults: [],
+          restoredPrompt: { text: "fix this", parts: [] },
+          redoLeafEntryId: "leaf-redo",
+        };
+      },
+    });
+
+    const controller = new CliShellController(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+      operatorPollIntervalMs: 60_000,
+    });
+
+    await controller.start();
+    expect(controller.getState().status.entries.correction).toBe("undo: /undo");
+
+    controller.ui.setEditorText("/undo");
+    await controller.handleSemanticInput({
+      key: "enter",
+      ctrl: false,
+      meta: false,
+      shift: false,
+    });
+
+    expect(controller.ui.getEditorText()).toBe("fix this");
+    expect(controller.getState().status.entries.correction).toBe("redo: /redo");
+    expect(controller.getState().transcript.messages.at(-1)).toMatchObject({
+      role: "custom",
+      parts: [
+        {
+          type: "text",
+          text: expect.stringContaining("Use /redo to restore the undone turn."),
+        },
+      ],
+    });
+
+    controller.ui.setEditorText("/redo");
+    await controller.handleSemanticInput({
+      key: "enter",
+      ctrl: false,
+      meta: false,
+      shift: false,
+    });
+
+    expect(branches).toEqual(["leaf-before", "leaf-redo"]);
+    expect(controller.ui.getEditorText()).toBe("");
+    expect(controller.getState().status.entries.correction).toBe("undo: /undo");
+    expect(controller.getState().transcript.messages.at(-1)).toMatchObject({
+      role: "custom",
+      parts: [
+        {
+          type: "text",
+          text: expect.stringContaining("Correction redo applied"),
+        },
+      ],
+    });
     controller.dispose();
   });
 

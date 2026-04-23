@@ -4,6 +4,7 @@ import type {
   PatchApplyResult,
   PatchFileAction,
   PatchSet,
+  RedoResult,
   RollbackResult,
 } from "../contracts/index.js";
 import { ensureDir, writeFileAtomic } from "../utils/fs.js";
@@ -46,10 +47,17 @@ interface AppliedMutation {
   changes: Array<
     TrackedFileState & {
       action: PatchFileAction;
+      afterExists: boolean;
       afterHash?: string;
+      afterSnapshotPath?: string;
     }
   >;
+  status: "applied" | "undone" | "redone";
+  undoneAt?: number;
+  redoneAt?: number;
 }
+
+type AppliedChange = AppliedMutation["changes"][number];
 
 interface FileChangeTrackerOptions {
   snapshotsDir?: string;
@@ -156,7 +164,8 @@ export class FileChangeTracker {
     const changedFiles: AppliedMutation["changes"] = [];
     for (const tracked of pending.trackedFiles) {
       const afterExists = existsSync(tracked.absolutePath);
-      const afterHash = afterExists ? sha256(readFileSync(tracked.absolutePath)) : undefined;
+      const afterContent = afterExists ? readFileSync(tracked.absolutePath) : undefined;
+      const afterHash = afterContent ? sha256(afterContent) : undefined;
       const action = this.resolveAction({
         beforeExists: tracked.beforeExists,
         afterExists,
@@ -167,7 +176,11 @@ export class FileChangeTracker {
       changedFiles.push({
         ...tracked,
         action,
+        afterExists,
         afterHash,
+        afterSnapshotPath: afterContent
+          ? this.writeFileSnapshot(input.sessionId, tracked.relativePath, afterContent)
+          : undefined,
       });
     }
 
@@ -193,6 +206,7 @@ export class FileChangeTracker {
       patchSet,
       toolName: pending.toolName,
       appliedAt: now,
+      status: "applied",
       changes: changedFiles,
     });
     if (history.length > MAX_HISTORY) {
@@ -314,6 +328,7 @@ export class FileChangeTracker {
       validated.push({
         ...snapshot,
         action: change.action,
+        afterExists: change.action !== "delete",
         afterHash,
       });
     }
@@ -331,6 +346,11 @@ export class FileChangeTracker {
             throw new Error(`Missing artifact buffer for ${change.relativePath}`);
           }
           writeFileAtomic(change.absolutePath, artifactContent);
+          change.afterSnapshotPath = this.writeFileSnapshot(
+            sessionId,
+            change.relativePath,
+            artifactContent,
+          );
         }
         appliedPaths.push(change.relativePath);
       }
@@ -374,6 +394,7 @@ export class FileChangeTracker {
       },
       toolName: input.toolName,
       appliedAt: Date.now(),
+      status: "applied",
       changes: validated,
     });
     if (history.length > MAX_HISTORY) {
@@ -396,7 +417,7 @@ export class FileChangeTracker {
   rollbackPatchSet(sessionId: string, patchSetId?: string): RollbackResult {
     this.ensureHistoryLoaded(sessionId);
     const history = this.historyBySession.get(sessionId);
-    const latest = history?.at(-1);
+    const latest = this.findLatestUndoable(history);
     if (!latest) {
       return {
         ok: false,
@@ -416,25 +437,36 @@ export class FileChangeTracker {
       };
     }
 
+    const missingBeforeSnapshot = latest.changes.find(
+      (change) =>
+        change.beforeExists &&
+        (!change.beforeSnapshotPath || !existsSync(change.beforeSnapshotPath)),
+    );
+    if (missingBeforeSnapshot) {
+      return {
+        ok: false,
+        patchSetId: latest.patchSet.id,
+        restoredPaths: [],
+        failedPaths: [missingBeforeSnapshot.relativePath],
+        reason: "restore_failed",
+      };
+    }
+
     const restoredPaths: string[] = [];
     const failedPaths: string[] = [];
+    const restoredChanges: AppliedChange[] = [];
     for (const change of latest.changes.toReversed()) {
       try {
-        if (change.beforeExists) {
-          if (!change.beforeSnapshotPath || !existsSync(change.beforeSnapshotPath)) {
-            throw new Error(`Missing snapshot for ${change.relativePath}`);
-          }
-          writeFileAtomic(change.absolutePath, readFileSync(change.beforeSnapshotPath));
-        } else if (existsSync(change.absolutePath)) {
-          rmSync(change.absolutePath, { force: true });
-        }
+        this.restoreBeforeChange(change);
         restoredPaths.push(change.relativePath);
+        restoredChanges.push(change);
       } catch {
         failedPaths.push(change.relativePath);
       }
     }
 
     if (failedPaths.length > 0) {
+      this.restoreAfterChanges(restoredChanges.toReversed());
       return {
         ok: false,
         patchSetId: latest.patchSet.id,
@@ -444,7 +476,105 @@ export class FileChangeTracker {
       };
     }
 
-    history?.pop();
+    latest.status = "undone";
+    latest.undoneAt = Date.now();
+    this.persistHistory(sessionId);
+    return {
+      ok: true,
+      patchSetId: latest.patchSet.id,
+      restoredPaths,
+      failedPaths: [],
+    };
+  }
+
+  redoLast(sessionId: string): RedoResult {
+    return this.redoPatchSet(sessionId);
+  }
+
+  redoPatchSet(sessionId: string, patchSetId?: string): RedoResult {
+    this.ensureHistoryLoaded(sessionId);
+    const history = this.historyBySession.get(sessionId);
+    const latest = this.findNextRedoable(history);
+    if (!latest) {
+      return {
+        ok: false,
+        restoredPaths: [],
+        failedPaths: [],
+        reason: "no_undone_patchset",
+      };
+    }
+
+    const normalizedPatchSetId = patchSetId?.trim();
+    if (normalizedPatchSetId && latest.patchSet.id !== normalizedPatchSetId) {
+      return {
+        ok: false,
+        patchSetId: normalizedPatchSetId,
+        restoredPaths: [],
+        failedPaths: [],
+        reason: "patchset_not_latest",
+      };
+    }
+
+    const mismatch = latest.changes.find((change) => {
+      const currentExists = existsSync(change.absolutePath);
+      if (change.beforeExists !== currentExists) {
+        return true;
+      }
+      if (!currentExists) {
+        return false;
+      }
+      return sha256(readFileSync(change.absolutePath)) !== change.beforeHash;
+    });
+    if (mismatch) {
+      return {
+        ok: false,
+        patchSetId: latest.patchSet.id,
+        restoredPaths: [],
+        failedPaths: [mismatch.relativePath],
+        reason: "current_state_mismatch",
+      };
+    }
+
+    const missingAfterSnapshot = latest.changes.find(
+      (change) =>
+        change.afterExists && (!change.afterSnapshotPath || !existsSync(change.afterSnapshotPath)),
+    );
+    if (missingAfterSnapshot) {
+      return {
+        ok: false,
+        patchSetId: latest.patchSet.id,
+        restoredPaths: [],
+        failedPaths: [missingAfterSnapshot.relativePath],
+        reason: "missing_redo_snapshot",
+      };
+    }
+
+    const restoredPaths: string[] = [];
+    const failedPaths: string[] = [];
+    const restoredChanges: AppliedChange[] = [];
+    for (const change of latest.changes) {
+      try {
+        this.restoreAfterChange(change);
+        restoredPaths.push(change.relativePath);
+        restoredChanges.push(change);
+      } catch {
+        failedPaths.push(change.relativePath);
+      }
+    }
+
+    if (failedPaths.length > 0) {
+      this.restoreBeforeChanges(restoredChanges.toReversed());
+      return {
+        ok: false,
+        patchSetId: latest.patchSet.id,
+        restoredPaths,
+        failedPaths,
+        reason: "restore_failed",
+      };
+    }
+
+    latest.status = "redone";
+    latest.redoneAt = Date.now();
     this.persistHistory(sessionId);
     return {
       ok: true,
@@ -456,7 +586,7 @@ export class FileChangeTracker {
 
   hasHistory(sessionId: string): boolean {
     this.ensureHistoryLoaded(sessionId);
-    return (this.historyBySession.get(sessionId)?.length ?? 0) > 0;
+    return this.findLatestUndoable(this.historyBySession.get(sessionId)) !== undefined;
   }
 
   recentFiles(sessionId: string, limit = 3): string[] {
@@ -471,6 +601,7 @@ export class FileChangeTracker {
     const seen = new Set<string>();
 
     for (const entry of history.toReversed()) {
+      if (entry.status === "undone") continue;
       for (const change of entry.patchSet.changes) {
         const path = change.path;
         if (!path) continue;
@@ -497,7 +628,7 @@ export class FileChangeTracker {
         continue;
       }
       const updatedAt = parsed.updatedAt || statSync(historyFile).mtimeMs;
-      if (parsed.patchSets.length > 0) {
+      if (parsed.patchSets.some((patchSet) => patchSet.status !== "undone")) {
         candidates.push({ sessionId: parsed.sessionId, updatedAt });
       }
     }
@@ -555,9 +686,30 @@ export class FileChangeTracker {
           }
         }
 
+        let afterSnapshotPath: string | undefined;
+        if (change.afterSnapshotPath) {
+          const snapshotFile = snapshotFileName(change.afterSnapshotPath);
+          const sourceSnapshotPath = resolve(sourceDir, snapshotFile);
+          const fallbackSnapshotPath = change.afterSnapshotPath;
+          const selectedSourcePath = existsSync(sourceSnapshotPath)
+            ? sourceSnapshotPath
+            : existsSync(fallbackSnapshotPath)
+              ? fallbackSnapshotPath
+              : undefined;
+
+          if (selectedSourcePath) {
+            const targetSnapshotPath = resolve(targetDir, snapshotFile);
+            if (!existsSync(targetSnapshotPath)) {
+              writeFileAtomic(targetSnapshotPath, readFileSync(selectedSourcePath));
+            }
+            afterSnapshotPath = targetSnapshotPath;
+          }
+        }
+
         return {
           ...change,
           beforeSnapshotPath,
+          afterSnapshotPath,
         };
       });
 
@@ -576,6 +728,9 @@ export class FileChangeTracker {
         },
         toolName: entry.toolName,
         appliedAt: entry.appliedAt,
+        status: entry.status,
+        undoneAt: entry.undoneAt,
+        redoneAt: entry.redoneAt,
         changes,
       });
     }
@@ -599,6 +754,52 @@ export class FileChangeTracker {
     this.loadedSessions.delete(sessionId);
   }
 
+  private restoreBeforeChanges(changes: readonly AppliedChange[]): void {
+    for (const change of changes) {
+      try {
+        this.restoreBeforeChange(change);
+      } catch {
+        // Best-effort cleanup only; the primary failure remains the operation result.
+      }
+    }
+  }
+
+  private restoreBeforeChange(change: AppliedChange): void {
+    if (change.beforeExists) {
+      if (!change.beforeSnapshotPath || !existsSync(change.beforeSnapshotPath)) {
+        throw new Error(`Missing snapshot for ${change.relativePath}`);
+      }
+      writeFileAtomic(change.absolutePath, readFileSync(change.beforeSnapshotPath));
+      return;
+    }
+    if (existsSync(change.absolutePath)) {
+      rmSync(change.absolutePath, { force: true });
+    }
+  }
+
+  private restoreAfterChanges(changes: readonly AppliedChange[]): void {
+    for (const change of changes) {
+      try {
+        this.restoreAfterChange(change);
+      } catch {
+        // Best-effort cleanup only; the primary failure remains the operation result.
+      }
+    }
+  }
+
+  private restoreAfterChange(change: AppliedChange): void {
+    if (!change.afterExists) {
+      if (existsSync(change.absolutePath)) {
+        rmSync(change.absolutePath, { force: true });
+      }
+      return;
+    }
+    if (!change.afterSnapshotPath || !existsSync(change.afterSnapshotPath)) {
+      throw new Error(`Missing redo snapshot for ${change.relativePath}`);
+    }
+    writeFileAtomic(change.absolutePath, readFileSync(change.afterSnapshotPath));
+  }
+
   private captureFileSnapshot(
     sessionId: string,
     absolutePath: string,
@@ -615,14 +816,7 @@ export class FileChangeTracker {
 
     const content = readFileSync(absolutePath);
     const beforeHash = sha256(content);
-    const sessionDir = this.sessionDir(sessionId);
-    ensureDir(sessionDir);
-
-    const snapshotId = sha256(`${relativePath}:${beforeHash}`);
-    const beforeSnapshotPath = resolve(sessionDir, `${snapshotId}.snap`);
-    if (!existsSync(beforeSnapshotPath)) {
-      writeFileAtomic(beforeSnapshotPath, content);
-    }
+    const beforeSnapshotPath = this.writeFileSnapshot(sessionId, relativePath, content);
 
     return {
       absolutePath,
@@ -631,6 +825,18 @@ export class FileChangeTracker {
       beforeHash,
       beforeSnapshotPath,
     };
+  }
+
+  private writeFileSnapshot(sessionId: string, relativePath: string, content: Buffer): string {
+    const sessionDir = this.sessionDir(sessionId);
+    ensureDir(sessionDir);
+
+    const snapshotId = sha256(`${relativePath}:${sha256(content)}`);
+    const snapshotPath = resolve(sessionDir, `${snapshotId}.snap`);
+    if (!existsSync(snapshotPath)) {
+      writeFileAtomic(snapshotPath, content);
+    }
+    return snapshotPath;
   }
 
   private resolveAction(input: {
@@ -662,6 +868,14 @@ export class FileChangeTracker {
     return history;
   }
 
+  private findLatestUndoable(history: AppliedMutation[] | undefined): AppliedMutation | undefined {
+    return history?.toReversed().find((entry) => entry.status !== "undone");
+  }
+
+  private findNextRedoable(history: AppliedMutation[] | undefined): AppliedMutation | undefined {
+    return history?.find((entry) => entry.status === "undone");
+  }
+
   private ensureHistoryLoaded(sessionId: string): void {
     if (this.loadedSessions.has(sessionId)) {
       return;
@@ -688,6 +902,9 @@ export class FileChangeTracker {
           const beforeSnapshotPath = change.beforeSnapshotFile
             ? resolve(this.sessionDir(sessionId), change.beforeSnapshotFile)
             : undefined;
+          const afterSnapshotPath = change.afterSnapshotFile
+            ? resolve(this.sessionDir(sessionId), change.afterSnapshotFile)
+            : undefined;
           return {
             absolutePath,
             relativePath: normalizeWorkspaceRelativePath(change.path),
@@ -695,7 +912,9 @@ export class FileChangeTracker {
             beforeHash: change.beforeHash,
             beforeSnapshotPath,
             action: change.action,
+            afterExists: change.action !== "delete",
             afterHash: change.afterHash,
+            afterSnapshotPath,
           };
         });
 
@@ -714,6 +933,9 @@ export class FileChangeTracker {
           },
           toolName: entry.toolName,
           appliedAt: entry.appliedAt,
+          status: entry.status,
+          undoneAt: entry.undoneAt,
+          redoneAt: entry.redoneAt,
           changes,
         });
       }
@@ -735,6 +957,9 @@ export class FileChangeTracker {
         summary: item.patchSet.summary,
         toolName: item.toolName,
         appliedAt: item.appliedAt,
+        status: item.status,
+        undoneAt: item.undoneAt,
+        redoneAt: item.redoneAt,
         changes: item.changes.map((change) => ({
           path: change.relativePath,
           action: change.action,
@@ -743,6 +968,9 @@ export class FileChangeTracker {
           afterHash: change.afterHash,
           beforeSnapshotFile: change.beforeSnapshotPath
             ? snapshotFileName(change.beforeSnapshotPath)
+            : undefined,
+          afterSnapshotFile: change.afterSnapshotPath
+            ? snapshotFileName(change.afterSnapshotPath)
             : undefined,
           artifactRef: item.patchSet.changes.find(
             (patchChange) => patchChange.path === change.relativePath,

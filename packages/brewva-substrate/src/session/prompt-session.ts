@@ -75,6 +75,7 @@ export interface BrewvaSessionModelCatalogView {
 export interface BrewvaPromptSessionManagerView {
   getSessionId(): string;
   getLeafId?(): string | null | undefined;
+  branch?(entryId: string): void;
   branchWithSummary?(
     targetLeafEntryId: string | null,
     summaryText: string,

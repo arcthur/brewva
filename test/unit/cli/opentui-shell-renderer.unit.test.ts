@@ -255,11 +255,29 @@ function createFakeBundle(
     toolDefinitions: options.toolDefinitions ?? new Map(),
     runtime: {
       authority: {
+        correction: {
+          recordCheckpoint() {},
+          undo() {
+            return { ok: false, reason: "no_checkpoint" };
+          },
+          redo() {
+            return { ok: false, reason: "no_undone_checkpoint" };
+          },
+        },
         proposals: {
           decideEffectCommitment() {},
         },
       },
       inspect: {
+        correction: {
+          getState() {
+            return {
+              checkpoints: [],
+              undoAvailable: false,
+              redoAvailable: false,
+            };
+          },
+        },
         proposals: {
           listPendingEffectCommitments() {
             return approvals;

@@ -70,16 +70,16 @@ export function PromptPanel(input: {
     }
     const phase = input.status.entries.phase;
     const pressure = input.status.entries.pressure;
+    const correction = input.status.entries.correction;
+    let baseStatus = "idle";
     if (phase && pressure) {
-      return `${phase} · pressure=${pressure}`;
+      baseStatus = `${phase} · pressure=${pressure}`;
+    } else if (phase) {
+      baseStatus = phase;
+    } else if (pressure) {
+      baseStatus = `pressure=${pressure}`;
     }
-    if (phase) {
-      return phase;
-    }
-    if (pressure) {
-      return `pressure=${pressure}`;
-    }
-    return "idle";
+    return correction ? `${baseStatus} · ${correction}` : baseStatus;
   });
   const operatorCounts = createMemo(() => {
     const approvals = input.status.entries.approvals ?? "0";

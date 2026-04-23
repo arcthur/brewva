@@ -1,6 +1,6 @@
 import process from "node:process";
 import { createProviderConnectionPort, runHostedPromptTurn } from "@brewva/brewva-gateway/host";
-import type { BrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaRuntime, CorrectionPromptSnapshot } from "@brewva/brewva-runtime";
 import type {
   BrewvaManagedPromptSession,
   BrewvaPromptSessionEvent,
@@ -154,9 +154,17 @@ async function runCliTurn(
     if (!sessionId) {
       throw new Error("cli_print_session_missing_session_id");
     }
+    const parts = [{ type: "text" as const, text: prompt }];
+    options.runtime.authority.correction.recordCheckpoint(sessionId, {
+      turnId: `print:${Date.now()}`,
+      prompt: {
+        text: prompt,
+        parts: structuredClone(parts) as unknown as CorrectionPromptSnapshot["parts"],
+      },
+    });
     const output = await runHostedPromptTurn({
       session,
-      parts: [{ type: "text", text: prompt }],
+      parts,
       source: "print",
       runtime: options.runtime,
       sessionId,

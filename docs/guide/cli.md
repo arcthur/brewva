@@ -13,6 +13,7 @@ together. For the complete flag-level contract, use
 - One-shot JSON mode (`--mode json` or `--json`; newline-delimited JSON output,
   plus final `brewva_event_bundle`)
 - Undo mode (`--undo`)
+- Redo mode (`--redo`)
 - Replay mode (`--replay`)
 - Scheduler daemon mode (`--daemon`)
 - Channel gateway mode (`--channel`)
@@ -194,7 +195,7 @@ long-form flags you will encounter across the primary CLI surfaces:
 
 - shared and root entrypoints: `--cwd`, `--config`, `--model`, `--agent`,
   `--task`, `--task-file`, `--managed-tools`, `--print`, `--interactive`,
-  `--mode`, `--backend`, `--json`, `--undo`, `--replay`, `--daemon`,
+  `--mode`, `--backend`, `--json`, `--undo`, `--redo`, `--replay`, `--daemon`,
   `--channel`, `--session`, `--verbose`
 - credentials-specific: `--ref`, `--value`, `--from-env`
 - onboard and gateway install lifecycle: `--install-daemon`,
@@ -238,10 +239,11 @@ For subcommand-scoped flags such as `--host`, `--port`, `--state-dir`,
 - When the full-screen shell is requested on a low-capability terminal, CLI
   fails fast with an interactive-mode error instead of reviving the retired
   line-oriented loop
-- `--replay` and `--undo` are mutually exclusive
-- `--replay` and `--undo` default to auto-resolved sessions when `--session` is
-  omitted
-- `--replay` and `--undo` cannot be combined with `--task` or `--task-file`
+- `--replay`, `--undo`, and `--redo` are mutually exclusive
+- `--replay`, `--undo`, and `--redo` default to auto-resolved sessions when
+  `--session` is omitted
+- `--replay`, `--undo`, and `--redo` cannot be combined with `--task` or
+  `--task-file`
 - CLI parse and validation failures return exit code `1`
 - `--help` and `--version` return exit code `0`
 
@@ -283,7 +285,7 @@ Current backend constraints:
 
 - `--backend gateway` is rejected for interactive mode
 - `--backend gateway` is rejected for `--mode json`
-- `--backend gateway` is rejected with `--undo`, `--replay`, `--daemon`, and
+- `--backend gateway` is rejected with `--undo`, `--redo`, `--replay`, `--daemon`, and
   `--channel`
 - `--backend gateway` is rejected with `--task` or `--task-file`
 - `--backend auto` skips gateway when `--task` or `--task-file` is provided
@@ -335,7 +337,7 @@ session as explicit operator input.
 Channel mode rejects incompatible input surfaces:
 
 - `--daemon`
-- `--undo` and `--replay`
+- `--undo`, `--redo`, and `--replay`
 - `--task` and `--task-file`
 - non-interactive output flags (`--print`, `--json`, `--mode`)
 - inline prompt text
@@ -375,6 +377,7 @@ bun run start -- --print --task-file ./task.json
 bun run start -- inspect --session <session-id>
 bun run start -- insights --limit 50
 bun run start -- --undo --session <session-id>
+bun run start -- --redo --session <session-id>
 bun run start -- --replay --mode json --session <session-id>
 bun run start -- onboard --install-daemon
 bun run start -- gateway status --deep

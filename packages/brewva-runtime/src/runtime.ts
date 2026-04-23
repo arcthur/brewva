@@ -92,6 +92,7 @@ import {
 import { BREWVA_RUNTIME_METHOD_GROUPS } from "./runtime-symbols.js";
 import { sanitizeContextText } from "./security/sanitize.js";
 import { ContextService } from "./services/context.js";
+import { CorrectionService } from "./services/correction.js";
 import { CostService } from "./services/cost.js";
 import type { CredentialVaultService } from "./services/credential-vault.js";
 import { EffectCommitmentDeskService } from "./services/effect-commitment-desk.js";
@@ -206,6 +207,10 @@ export interface BrewvaAuthorityPort {
     "submit" | "decideEffectCommitment"
   >;
   readonly reasoning: Pick<BrewvaRuntimeMethodGroups["reasoning"], "recordCheckpoint" | "revert">;
+  readonly correction: Pick<
+    BrewvaRuntimeMethodGroups["correction"],
+    "recordCheckpoint" | "undo" | "redo"
+  >;
   readonly tools: Pick<
     BrewvaRuntimeMethodGroups["tools"],
     | "start"
@@ -219,6 +224,7 @@ export interface BrewvaAuthorityPort {
     | "trackCallStart"
     | "trackCallEnd"
     | "rollbackLastPatchSet"
+    | "redoLastPatchSet"
     | "rollbackLastMutation"
     | "recordResult"
   >;
@@ -266,6 +272,7 @@ export interface BrewvaInspectionPort {
     BrewvaRuntimeMethodGroups["reasoning"],
     "getActiveState" | "listCheckpoints" | "getCheckpoint" | "listReverts" | "canRevertTo"
   >;
+  readonly correction: Pick<BrewvaRuntimeMethodGroups["correction"], "getState">;
   readonly context: Pick<
     BrewvaRuntimeMethodGroups["context"],
     | "sanitizeInput"
@@ -429,6 +436,7 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
   private readonly proposalAdmissionServiceGetter: () => ProposalAdmissionService;
   private verificationService: VerificationService | undefined;
   private fileChangeService: FileChangeService | undefined;
+  private correctionService: CorrectionService | undefined;
   private mutationRollbackService: MutationRollbackService | undefined;
   private parallelService: ParallelService | undefined;
   private resourceLeaseService: ResourceLeaseService | undefined;
@@ -706,6 +714,11 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
     return this.fileChangeService;
   }
 
+  private getCorrectionService(): CorrectionService {
+    this.correctionService ??= this.lazyServiceFactories.createCorrectionService();
+    return this.correctionService;
+  }
+
   private getMutationRollbackService(): MutationRollbackService {
     this.mutationRollbackService ??= this.lazyServiceFactories.createMutationRollbackService();
     return this.mutationRollbackService;
@@ -751,6 +764,7 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
       costService: this.costService,
       actionPolicyRegistry: this.actionPolicyRegistry,
       getReasoningService: () => this.getReasoningService(),
+      getCorrectionService: () => this.getCorrectionService(),
       getToolGateService: () => this.getToolGateService(),
       getToolInvocationSpine: () => this.getToolInvocationSpine(),
       getParallelService: () => this.getParallelService(),
@@ -814,6 +828,11 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
           "decideEffectCommitment",
         ] as const),
         reasoning: bindMethods(methodGroups.reasoning, ["recordCheckpoint", "revert"] as const),
+        correction: bindMethods(methodGroups.correction, [
+          "recordCheckpoint",
+          "undo",
+          "redo",
+        ] as const),
         tools: bindMethods(methodGroups.tools, [
           "start",
           "finish",
@@ -826,6 +845,7 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
           "trackCallStart",
           "trackCallEnd",
           "rollbackLastPatchSet",
+          "redoLastPatchSet",
           "rollbackLastMutation",
           "recordResult",
         ] as const),
@@ -881,6 +901,7 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
           "listReverts",
           "canRevertTo",
         ] as const),
+        correction: bindMethods(methodGroups.correction, ["getState"] as const),
         context: bindMethods(methodGroups.context, [
           "sanitizeInput",
           "getUsage",

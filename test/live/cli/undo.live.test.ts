@@ -85,29 +85,18 @@ describe("live: undo", () => {
       );
       expect(existsSync(historyFile)).toBe(true);
 
-      let restored = readFileSync(fixturePath, "utf8") === baseline;
-      let rollbackCount = 0;
-      const undoTranscripts: string[] = [];
-      for (let attempt = 0; !restored && attempt < 5; attempt += 1) {
-        const undo = runCliSync(workspace, ["--undo", "--session", sessionId]);
-        assertCliSuccess(undo, "undo-cmd");
-        undoTranscripts.push(undo.stdout.trim());
-        if (!undo.stdout.includes("Rolled back")) {
-          break;
-        }
-        rollbackCount += 1;
-        restored = readFileSync(fixturePath, "utf8") === baseline;
-      }
+      const undo = runCliSync(workspace, ["--undo", "--session", sessionId]);
+      assertCliSuccess(undo, "undo-cmd");
+      const restored = readFileSync(fixturePath, "utf8") === baseline;
 
-      expect(rollbackCount).toBeGreaterThan(0);
+      expect(undo.stdout).toContain("Correction undo applied");
       if (!restored) {
         throw new Error(
           [
-            "[undo.live] fixture was not restored to baseline after rollback attempts.",
-            `[undo.live] rollbackCount=${rollbackCount}`,
+            "[undo.live] fixture was not restored to baseline after correction undo.",
             `[undo.live] current=${JSON.stringify(readFileSync(fixturePath, "utf8"))}`,
             `[undo.live] expected=${JSON.stringify(baseline)}`,
-            `[undo.live] undoOutput=${JSON.stringify(undoTranscripts)}`,
+            `[undo.live] undoOutput=${JSON.stringify(undo.stdout.trim())}`,
           ].join("\n"),
         );
       }
@@ -116,14 +105,14 @@ describe("live: undo", () => {
     }
   });
 
-  runLive("undo on empty workspace reports no_patchset", () => {
+  runLive("undo on empty workspace reports no_checkpoint", () => {
     const workspace = createWorkspace("undo-empty");
     writeMinimalConfig(workspace);
 
     try {
       const undo = runCliSync(workspace, ["--undo"]);
       assertCliSuccess(undo, "undo-empty");
-      expect(undo.stdout).toContain("No rollback applied (no_patchset).");
+      expect(undo.stdout).toContain("No correction undo applied (no_checkpoint).");
     } finally {
       cleanupWorkspace(workspace);
     }

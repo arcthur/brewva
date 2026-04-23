@@ -25,7 +25,7 @@ describe("live: cli exit codes", () => {
       const run = runCliSync(workspace, ["--undo", "--replay"]);
       expect(run.error).toBeUndefined();
       expect(run.status).toBe(1);
-      expect(run.stderr.includes("--undo cannot be combined with --replay")).toBe(true);
+      expect(run.stderr.includes("--undo, --redo, and --replay cannot be combined")).toBe(true);
     } finally {
       cleanupWorkspace(workspace);
     }
@@ -43,7 +43,7 @@ describe("live: cli exit codes", () => {
       expect(run.error).toBeUndefined();
       expect(run.status).toBe(1);
       expect(
-        run.stderr.includes("--undo/--replay cannot be combined with --task/--task-file"),
+        run.stderr.includes("--undo/--redo/--replay cannot be combined with --task/--task-file"),
       ).toBe(true);
     } finally {
       cleanupWorkspace(workspace);

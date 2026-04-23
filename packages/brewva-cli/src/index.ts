@@ -125,6 +125,36 @@ function cliValueError(error: string): CliValueResult<never> {
   return { ok: false, error };
 }
 
+function resolveCorrectionSession(
+  runtime: BrewvaRuntime,
+  operation: "undo" | "redo",
+  preferredSessionId?: string,
+): string | undefined {
+  if (preferredSessionId) {
+    const state = runtime.inspect.correction.getState(preferredSessionId);
+    if (state.checkpoints.length > 0 || state.undoAvailable || state.redoAvailable) {
+      return preferredSessionId;
+    }
+    return undefined;
+  }
+  let selected: { sessionId: string; timestamp: number } | undefined;
+  for (const sessionId of runtime.inspect.events.listSessionIds()) {
+    const state = runtime.inspect.correction.getState(sessionId);
+    const candidate = operation === "redo" ? state.nextRedoable : state.latestUndoable;
+    if (!candidate) {
+      continue;
+    }
+    const timestamp =
+      operation === "redo"
+        ? (candidate.undoneAt ?? candidate.timestamp)
+        : (candidate.redoneAt ?? candidate.timestamp);
+    if (!selected || timestamp > selected.timestamp) {
+      selected = { sessionId, timestamp };
+    }
+  }
+  return selected?.sessionId;
+}
+
 function printHelp(): void {
   console.log(`Brewva - AI-native coding agent CLI
 
@@ -157,7 +187,8 @@ Options:
   --mode <text|json>    One-shot output mode
   --backend <kind>      Session backend: auto | embedded | gateway (default: auto)
   --json                Alias for --mode json
-  --undo                Roll back the latest tracked patch set in this session
+  --undo                Undo the latest correction checkpoint in this session
+  --redo                Redo the latest undone correction checkpoint in this session
   --replay              Replay persisted runtime events
   --daemon              Run scheduler daemon (no interactive session)
   --channel <name>      Run channel host mode (currently: telegram)
@@ -170,7 +201,7 @@ Options:
                         Telegram getUpdates batch size (1-100)
   --telegram-poll-retry-ms <ms>
                         Delay before retry when polling fails
-  --session <id>        Target session id for interactive resume, --undo, or --replay
+  --session <id>        Target session id for interactive resume, --undo, --redo, or --replay
   --verbose             Verbose interactive startup
   -v, --version         Show CLI version
   -h, --help            Show help
@@ -188,6 +219,7 @@ Examples:
   brewva credentials list
   brewva credentials add --ref vault://openai/apiKey --from-env OPENAI_API_KEY
   brewva --undo --session <session-id>
+  brewva --redo --session <session-id>
   brewva --replay --mode json --session <session-id>
   brewva onboard --install-daemon
   brewva --channel telegram --telegram-token <bot-token>
@@ -249,6 +281,7 @@ interface CliArgs {
   channelConfig?: CliChannelConfig;
   managedToolMode: ManagedToolMode;
   undo: boolean;
+  redo: boolean;
   replay: boolean;
   daemon: boolean;
   sessionId?: string;
@@ -281,6 +314,7 @@ const CLI_PARSE_OPTIONS = {
   backend: { type: "string" },
   json: { type: "boolean" },
   undo: { type: "boolean" },
+  redo: { type: "boolean" },
   replay: { type: "boolean" },
   daemon: { type: "boolean" },
   channel: { type: "string" },
@@ -530,6 +564,7 @@ function parseCliArgs(argv: string[]): CliParseResult {
     },
     managedToolMode: managedToolMode.value,
     undo: parsed.values.undo === true,
+    redo: parsed.values.redo === true,
     replay: parsed.values.replay === true,
     daemon: parsed.values.daemon === true,
     sessionId: typeof parsed.values.session === "string" ? parsed.values.session : undefined,
@@ -540,12 +575,12 @@ function parseCliArgs(argv: string[]): CliParseResult {
     prompt,
   };
 
-  if (args.undo && args.replay) {
-    console.error("Error: --undo cannot be combined with --replay.");
+  if ((args.undo ? 1 : 0) + (args.redo ? 1 : 0) + (args.replay ? 1 : 0) > 1) {
+    console.error("Error: --undo, --redo, and --replay cannot be combined.");
     return { kind: "error" };
   }
-  if ((args.undo || args.replay) && (args.taskJson || args.taskFile)) {
-    console.error("Error: --undo/--replay cannot be combined with --task/--task-file.");
+  if ((args.undo || args.redo || args.replay) && (args.taskJson || args.taskFile)) {
+    console.error("Error: --undo/--redo/--replay cannot be combined with --task/--task-file.");
     return { kind: "error" };
   }
   if (args.channel?.trim().toLowerCase() === "telegram") {
@@ -758,8 +793,8 @@ async function run(): Promise<void> {
       process.exitCode = 1;
       return;
     }
-    if (parsed.undo || parsed.replay) {
-      console.error("Error: --channel cannot be combined with --undo/--replay.");
+    if (parsed.undo || parsed.redo || parsed.replay) {
+      console.error("Error: --channel cannot be combined with --undo/--redo/--replay.");
       process.exitCode = 1;
       return;
     }
@@ -807,8 +842,8 @@ async function run(): Promise<void> {
       process.exitCode = 1;
       return;
     }
-    if (parsed.undo || parsed.replay) {
-      console.error("Error: --daemon cannot be combined with --undo/--replay.");
+    if (parsed.undo || parsed.redo || parsed.replay) {
+      console.error("Error: --daemon cannot be combined with --undo/--redo/--replay.");
       process.exitCode = 1;
       return;
     }
@@ -858,24 +893,32 @@ async function run(): Promise<void> {
     return;
   }
 
-  if (parsed.undo) {
+  if (parsed.undo || parsed.redo) {
     const runtime = new BrewvaRuntime({
       cwd: parsed.cwd,
       configPath: parsed.configPath,
       governancePort: createTrustedLocalGovernancePort(CLI_TRUSTED_LOCAL_GOVERNANCE),
     });
-    const targetSessionId = runtime.inspect.tools.resolveUndoSessionId(parsed.sessionId);
+    const targetSessionId = resolveCorrectionSession(
+      runtime,
+      parsed.redo ? "redo" : "undo",
+      parsed.sessionId,
+    );
     if (!targetSessionId) {
-      console.log("No rollback applied (no_patchset).");
+      console.log(`No correction ${parsed.redo ? "redo" : "undo"} applied (no_checkpoint).`);
       return;
     }
-    const rollback = runtime.authority.tools.rollbackLastPatchSet(targetSessionId);
-    if (!rollback.ok) {
-      const suffix = rollback.reason ? ` (${rollback.reason})` : "";
-      console.log(`No rollback applied${suffix}.`);
+    const result = parsed.redo
+      ? runtime.authority.correction.redo(targetSessionId)
+      : runtime.authority.correction.undo(targetSessionId);
+    if (!result.ok) {
+      console.log(`No correction ${parsed.redo ? "redo" : "undo"} applied (${result.reason}).`);
     } else {
+      const promptSuffix = result.restoredPrompt?.text
+        ? ` Restored prompt: ${result.restoredPrompt.text.trim()}`
+        : "";
       console.log(
-        `Rolled back patch set ${rollback.patchSetId ?? "unknown"} in session ${targetSessionId} (${rollback.restoredPaths.length} file(s) restored).`,
+        `Correction ${parsed.redo ? "redo" : "undo"} applied in session ${targetSessionId} (${result.patchSetIds.length} patch set(s)).${promptSuffix}`,
       );
     }
     return;
@@ -938,8 +981,8 @@ async function run(): Promise<void> {
   }
 
   if (parsed.backend === "gateway") {
-    if (parsed.undo || parsed.replay) {
-      console.error("Error: --backend gateway is not supported with --undo/--replay.");
+    if (parsed.undo || parsed.redo || parsed.replay) {
+      console.error("Error: --backend gateway is not supported with --undo/--redo/--replay.");
       process.exitCode = 1;
       return;
     }

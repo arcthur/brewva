@@ -118,6 +118,13 @@ export type PatchSetRollbackFailureReason =
   | "restore_failed"
   | "patchset_not_latest";
 
+export type PatchSetRedoFailureReason =
+  | "no_undone_patchset"
+  | "restore_failed"
+  | "patchset_not_latest"
+  | "missing_redo_snapshot"
+  | "current_state_mismatch";
+
 export type ToolMutationRollbackFailureReason =
   | "no_mutation_receipt"
   | PatchSetRollbackFailureReason;

@@ -94,6 +94,15 @@ describe("brewva cli args", () => {
     const parsed = parseArgs(["--undo"]);
     expect(parsed).not.toBeNull();
     expect(parsed!.undo).toBe(true);
+    expect(parsed!.redo).toBe(false);
+    expect(parsed!.mode).toBe("interactive");
+  });
+
+  test("given --redo without prompt, when parsing args, then redo is enabled in interactive mode", () => {
+    const parsed = parseArgs(["--redo"]);
+    expect(parsed).not.toBeNull();
+    expect(parsed!.redo).toBe(true);
+    expect(parsed!.undo).toBe(false);
     expect(parsed!.mode).toBe("interactive");
   });
 
@@ -108,9 +117,17 @@ describe("brewva cli args", () => {
   test("given --undo and --replay together, when parsing args, then parser rejects conflicting flags", () => {
     const { result, errors } = captureConsole(() => parseArgs(["--undo", "--replay"]));
     expect(result).toBeNull();
-    expect(errors.some((line) => line.includes("--undo cannot be combined with --replay"))).toBe(
-      true,
-    );
+    expect(
+      errors.some((line) => line.includes("--undo, --redo, and --replay cannot be combined")),
+    ).toBe(true);
+  });
+
+  test("given --undo and --redo together, when parsing args, then parser rejects conflicting flags", () => {
+    const { result, errors } = captureConsole(() => parseArgs(["--undo", "--redo"]));
+    expect(result).toBeNull();
+    expect(
+      errors.some((line) => line.includes("--undo, --redo, and --replay cannot be combined")),
+    ).toBe(true);
   });
 
   test("given --replay with --task-file, when parsing args, then parser rejects conflicting flags", () => {
@@ -119,7 +136,7 @@ describe("brewva cli args", () => {
     );
     expect(result).toBeNull();
     expect(
-      errors.some((line) => line.includes("--undo/--replay cannot be combined with --task")),
+      errors.some((line) => line.includes("--undo/--redo/--replay cannot be combined with --task")),
     ).toBe(true);
   });
 

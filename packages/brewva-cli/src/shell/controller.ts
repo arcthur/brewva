@@ -591,6 +591,10 @@ export class CliShellController {
   #viewportRows = 24;
   #semanticInputQueue: Promise<void> = Promise.resolve();
   #transcriptNavigationRequestId = 0;
+  #interactiveTurnSequence = 0;
+  #correctionTranscriptMarkerSequence = 0;
+  #preserveComposerAfterShellCommand = false;
+  #correctionTranscriptMarkersBySessionId = new Map<string, CliShellTranscriptMessage>();
   #draftsBySessionId = new Map<
     string,
     {
@@ -986,7 +990,7 @@ export class CliShellController {
     }
     this.#state = reduceCliShellState(this.#state, {
       type: "transcript.setMessages",
-      messages: buildSeedTranscriptMessages(this.#sessionPort.getTranscriptSeed()),
+      messages: this.buildTranscriptMessagesFromSession(),
     });
     if (restoredDraft) {
       this.#state = reduceCliShellState(this.#state, {
@@ -1012,7 +1016,26 @@ export class CliShellController {
         key: "thinking",
         text: this.#sessionPort.getThinkingLevel(),
       },
+      {
+        type: "status.set",
+        key: "correction",
+        text: this.buildCorrectionStatusText(),
+      },
     ];
+  }
+
+  private buildCorrectionStatusText(): string | undefined {
+    const state = this.#sessionPort.getCorrectionState();
+    if (state.undoAvailable && state.redoAvailable) {
+      return "undo: /undo · redo: /redo";
+    }
+    if (state.redoAvailable) {
+      return "redo: /redo";
+    }
+    if (state.undoAvailable) {
+      return "undo: /undo";
+    }
+    return undefined;
   }
 
   private mountSession(bundle: CliShellSessionBundle): void {
@@ -1118,6 +1141,18 @@ export class CliShellController {
       },
       false,
     );
+  }
+
+  private buildTranscriptMessagesFromSession(): CliShellTranscriptMessage[] {
+    const messages = buildSeedTranscriptMessages(this.#sessionPort.getTranscriptSeed());
+    const correctionMarker = this.#correctionTranscriptMarkersBySessionId.get(
+      this.#sessionPort.getSessionId(),
+    );
+    return correctionMarker ? [...messages, correctionMarker] : messages;
+  }
+
+  private refreshTranscriptFromSession(): void {
+    this.replaceTranscriptMessages(this.buildTranscriptMessagesFromSession());
   }
 
   private appendTranscriptMessage(message: CliShellTranscriptMessage | null): void {
@@ -1925,15 +1960,31 @@ export class CliShellController {
       CliShellController.PROMPT_HISTORY_LIMIT,
     );
     this.#promptStore.appendHistory(promptSnapshot);
+    this.#preserveComposerAfterShellCommand = false;
     const handled = await this.handleShellCommand(prompt);
     if (handled) {
-      this.dispatch({
-        type: "composer.setText",
-        text: "",
-        cursor: 0,
-      });
+      if (!this.#preserveComposerAfterShellCommand) {
+        this.dispatch({
+          type: "composer.setText",
+          text: "",
+          cursor: 0,
+        });
+      }
+      this.#preserveComposerAfterShellCommand = false;
       return;
     }
+    type CorrectionPromptParts = NonNullable<
+      Parameters<SessionViewPort["recordCorrectionCheckpoint"]>[0]["prompt"]
+    >["parts"];
+    this.#sessionPort.recordCorrectionCheckpoint({
+      turnId: `interactive:${Date.now()}:${++this.#interactiveTurnSequence}`,
+      prompt: {
+        text: promptText,
+        parts: structuredClone(promptParts) as unknown as CorrectionPromptParts,
+      },
+    });
+    this.#correctionTranscriptMarkersBySessionId.delete(this.#sessionPort.getSessionId());
+    this.dispatchMany(this.buildSessionStatusActions(), false);
     this.appendTranscriptMessage(
       buildTextTranscriptMessage({
         id: `user:${Date.now()}`,
@@ -3073,6 +3124,14 @@ export class CliShellController {
       await this.openInspectOverlay();
       return true;
     }
+    if (prompt === "/undo") {
+      await this.undoLastCorrection();
+      return true;
+    }
+    if (prompt === "/redo") {
+      await this.redoLastCorrection();
+      return true;
+    }
     if (prompt === "/models") {
       await this.openModelsDialog();
       return true;
@@ -3164,6 +3223,79 @@ export class CliShellController {
       return true;
     }
     return false;
+  }
+
+  private async undoLastCorrection(): Promise<void> {
+    if (this.#bundle.session.isStreaming) {
+      await this.#sessionPort.abort();
+      await this.#sessionPort.waitForIdle();
+    }
+    const result = this.#sessionPort.undoCorrection();
+    if (!result.ok) {
+      this.ui.notify(`Undo unavailable (${result.reason}).`, "warning");
+      return;
+    }
+    this.setCorrectionTranscriptMarker(
+      `Correction undo applied: reverted ${result.patchSetIds.length} patch set(s) and restored the submitted prompt. Use /redo to restore the undone turn.`,
+    );
+    this.refreshTranscriptFromSession();
+    if (result.restoredPrompt) {
+      this.dispatch(
+        {
+          type: "composer.setPromptState",
+          text: result.restoredPrompt.text,
+          cursor: result.restoredPrompt.text.length,
+          parts: cloneCliShellPromptParts(
+            result.restoredPrompt.parts as unknown as CliShellPromptPart[],
+          ),
+        },
+        false,
+      );
+      this.#preserveComposerAfterShellCommand = true;
+    }
+    this.ui.notify(
+      `Undid ${result.patchSetIds.length} patch set(s); prompt restored for correction.`,
+      "info",
+    );
+    this.dispatchMany(this.buildSessionStatusActions(), false);
+  }
+
+  private async redoLastCorrection(): Promise<void> {
+    if (this.#bundle.session.isStreaming) {
+      this.ui.notify("Cannot redo while agent is running.", "warning");
+      return;
+    }
+    const result = this.#sessionPort.redoCorrection();
+    if (!result.ok) {
+      this.ui.notify(`Redo unavailable (${result.reason}).`, "warning");
+      return;
+    }
+    this.setCorrectionTranscriptMarker(
+      `Correction redo applied: restored the undone turn and reapplied ${result.patchSetIds.length} patch set(s).`,
+    );
+    this.refreshTranscriptFromSession();
+    this.dispatch(
+      {
+        type: "composer.setText",
+        text: "",
+        cursor: 0,
+      },
+      false,
+    );
+    this.ui.notify(`Redid ${result.patchSetIds.length} patch set(s).`, "info");
+    this.dispatchMany(this.buildSessionStatusActions(), false);
+  }
+
+  private setCorrectionTranscriptMarker(text: string): void {
+    const message = buildTextTranscriptMessage({
+      id: `correction:${this.#sessionPort.getSessionId()}:${++this.#correctionTranscriptMarkerSequence}`,
+      role: "custom",
+      text,
+    });
+    if (!message) {
+      return;
+    }
+    this.#correctionTranscriptMarkersBySessionId.set(this.#sessionPort.getSessionId(), message);
   }
 
   private moveOverlaySelection(delta: number): void {

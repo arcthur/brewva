@@ -128,7 +128,9 @@ is that runtime lifecycle owns aggregate posture semantics.
 ## Mode-Specific Paths
 
 - Replay (`--replay`): query structured events and print text/JSON timeline
-- Undo (`--undo`): resolve target session and rollback the latest tracked `PatchSet`
+- Undo (`--undo`): resolve target session and restore the latest correction
+  checkpoint window, including reasoning state and patch receipts
+- Redo (`--redo`): reapply the latest undone correction checkpoint window
 - JSON one-shot (`--mode json`/`--json`): emits normal stream plus final `brewva_event_bundle`
 - Interactive CLI: uses the same managed session substrate as hosted execution;
   product differences stay in operator UX and transport, not in runtime truth

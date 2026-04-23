@@ -12,6 +12,11 @@ import type {
   BuildContextInjectionOptions,
   ContextCompactionGateStatus,
   ContextCompactionReason,
+  CorrectionRedoInput,
+  CorrectionRedoResult,
+  CorrectionState,
+  CorrectionUndoInput,
+  CorrectionUndoResult,
   ContextBudgetUsage,
   ContextPressureLevel,
   ContextPressureStatus,
@@ -39,6 +44,7 @@ import type {
   ReasoningRevertInput,
   ReasoningRevertRecord,
   RecordReasoningCheckpointInput,
+  RecordCorrectionCheckpointInput,
   RecoveryPostureSnapshot,
   RecoveryWalRecord,
   RecoveryWalRecoveryResult,
@@ -50,6 +56,7 @@ import type {
   ResourceLeaseRequest,
   ResourceLeaseResult,
   RollbackResult,
+  RedoResult,
   ScheduleIntentCancelInput,
   ScheduleIntentCancelResult,
   ScheduleIntentCreateInput,
@@ -119,6 +126,7 @@ import type {
 import type { CommandPolicySummary } from "./security/command-policy.js";
 import type { VirtualReadonlyPolicySummary } from "./security/virtual-readonly-policy.js";
 import type { ContextService } from "./services/context.js";
+import type { CorrectionService } from "./services/correction.js";
 import type { CostService } from "./services/cost.js";
 import type { CredentialVaultService } from "./services/credential-vault.js";
 import type { EventPipelineService, RuntimeRecordEvent } from "./services/event-pipeline.js";
@@ -202,6 +210,15 @@ export interface BrewvaRuntimeMethodGroups {
     getCheckpoint(sessionId: string, checkpointId: string): ReasoningCheckpointRecord | undefined;
     listReverts(sessionId: string): ReasoningRevertRecord[];
     canRevertTo(sessionId: string, checkpointId: string): boolean;
+  };
+  correction: {
+    recordCheckpoint(
+      sessionId: string,
+      input?: RecordCorrectionCheckpointInput,
+    ): CorrectionState["checkpoints"][number];
+    undo(sessionId: string, input?: CorrectionUndoInput): CorrectionUndoResult;
+    redo(sessionId: string, input?: CorrectionRedoInput): CorrectionRedoResult;
+    getState(sessionId: string): CorrectionState;
   };
   context: {
     onTurnStart(sessionId: string, turnIndex: number): void;
@@ -357,6 +374,7 @@ export interface BrewvaRuntimeMethodGroups {
       channelSuccess: boolean;
     }): void;
     rollbackLastPatchSet(sessionId: string): RollbackResult;
+    redoLastPatchSet(sessionId: string): RedoResult;
     rollbackLastMutation(sessionId: string): ToolMutationRollbackResult;
     resolveUndoSessionId(preferredSessionId?: string): string | undefined;
     recordResult(input: {
@@ -578,6 +596,7 @@ export interface RuntimeMethodGroupsDependencies {
   costService: CostService;
   actionPolicyRegistry: ActionPolicyRegistryLike;
   getReasoningService(): ReasoningService;
+  getCorrectionService(): CorrectionService;
   getToolGateService(): ToolGateService;
   getToolInvocationSpine(): ToolInvocationSpine;
   getParallelService(): ParallelService;
@@ -683,6 +702,17 @@ export function createRuntimeMethodGroups(
       listReverts: (sessionId: string) => deps.getReasoningService().listReverts(sessionId),
       canRevertTo: (sessionId: string, checkpointId: string) =>
         deps.getReasoningService().canRevertTo(sessionId, checkpointId),
+    },
+    correction: {
+      recordCheckpoint: (
+        sessionId: string,
+        input?: Parameters<CorrectionService["recordCheckpoint"]>[1],
+      ) => deps.getCorrectionService().recordCheckpoint(sessionId, input),
+      undo: (sessionId: string, input?: Parameters<CorrectionService["undo"]>[1]) =>
+        deps.getCorrectionService().undo(sessionId, input),
+      redo: (sessionId: string, input?: Parameters<CorrectionService["redo"]>[1]) =>
+        deps.getCorrectionService().redo(sessionId, input),
+      getState: (sessionId: string) => deps.getCorrectionService().getState(sessionId),
     },
     context: {
       onTurnStart: (sessionId: string, turnIndex: number) => {
@@ -851,6 +881,8 @@ export function createRuntimeMethodGroups(
         deps.getFileChangeService().trackToolCallEnd(input),
       rollbackLastPatchSet: (sessionId: string) =>
         deps.getFileChangeService().rollbackLastPatchSet(sessionId),
+      redoLastPatchSet: (sessionId: string) =>
+        deps.getFileChangeService().redoLastPatchSet(sessionId),
       rollbackLastMutation: (sessionId: string) =>
         deps.getMutationRollbackService().rollbackLast(sessionId),
       resolveUndoSessionId: (preferredSessionId?: string) =>

@@ -19,6 +19,7 @@ Implementation source: `packages/brewva-cli/src/index.ts`.
 - Print text mode (`--print`)
 - Print JSON mode (`--mode json`, `--json`; newline-delimited JSON output, plus final `brewva_event_bundle` for one-shot runs)
 - Undo mode (`--undo`)
+- Redo mode (`--redo`)
 - Replay mode (`--replay`)
 - Scheduler daemon mode (`--daemon`)
 - Channel gateway mode (`--channel`)
@@ -496,7 +497,7 @@ handles graceful shutdown by aborting active child runs on signals.
 Daemon mode rejects incompatible input surfaces:
 
 - `--print` / `--json` / `--mode` (non-interactive)
-- `--undo` / `--replay`
+- `--undo` / `--redo` / `--replay`
 - `--task` / `--task-file`
 - inline prompt text
 
@@ -505,7 +506,7 @@ Supported channel ids are `telegram`.
 Channel mode rejects incompatible input surfaces:
 
 - `--daemon`
-- `--undo` / `--replay`
+- `--undo` / `--redo` / `--replay`
 - `--task` / `--task-file`
 - `--print` / `--json` / `--mode`
 - inline prompt text
@@ -575,6 +576,7 @@ With `--verbose`, daemon prints a rolling 60-second scheduler window summary
 - `--backend`
 - `--json`
 - `--undo`
+- `--redo`
 - `--replay`
 - `--daemon`
 - `--channel`
@@ -627,7 +629,7 @@ Current constraints for `--backend gateway`:
 
 - interactive mode is not supported.
 - JSON mode (`--mode json` / `--json`) is not supported.
-- `--undo`, `--replay`, `--daemon`, and `--channel` combinations are not supported.
+- `--undo`, `--redo`, `--replay`, `--daemon`, and `--channel` combinations are not supported.
 - `--task` / `--task-file` combinations are not supported.
 - Under `--backend auto`, task-based runs skip gateway and use embedded directly.
 
@@ -656,10 +658,11 @@ Channel mode examples:
 - If stdin/stdout is not a TTY and no explicit mode is set, CLI falls back to text print mode.
 - Explicit `--interactive` requires a TTY terminal.
 - `--replay` uses `--session` when provided; otherwise it replays the latest replayable session.
-- `--undo` uses `--session` when provided; otherwise it resolves the latest session with rollback history.
-- `--replay` and `--undo` are mutually exclusive.
-- `--replay`/`--undo` cannot be combined with `--task`/`--task-file`.
-- Prompt text is ignored in `--replay` and `--undo` flows.
+- `--undo` uses `--session` when provided; otherwise it resolves the latest session with an undoable correction checkpoint.
+- `--redo` uses `--session` when provided; otherwise it resolves the latest session with a redoable correction checkpoint.
+- `--replay`, `--undo`, and `--redo` are mutually exclusive.
+- `--replay`/`--undo`/`--redo` cannot be combined with `--task`/`--task-file`.
+- Prompt text is ignored in `--replay`, `--undo`, and `--redo` flows.
 - Replay JSON output is event-per-line; the `brewva_event_bundle` record is only emitted for one-shot JSON runs.
 - CLI parse/pre-session validation failures return exit code `1`.
 - `--help` and `--version` return exit code `0`.

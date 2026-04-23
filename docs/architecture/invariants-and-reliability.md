@@ -228,7 +228,10 @@ Relevant implementation:
 ## Failure Modes and Containment
 
 - Missing verification evidence: gate must block completion.
-- Missing rollback state: return explicit `no_patchset`.
+- Missing correction checkpoint state: root `--undo` / `--redo` return explicit
+  `no_checkpoint`.
+- Missing patch rollback state: patchset rollback tools return explicit
+  `no_patchset`.
 - Replay without events: return explicit no-session condition.
 - Context hard-limit breach: drop injection and emit context drop event.
 - Crash after external effect but before durable outcome persistence remains an

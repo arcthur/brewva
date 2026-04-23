@@ -2,8 +2,8 @@
 
 ## Audience
 
-- operators using `brewva inspect`, `--replay`, and `--undo`
-- developers reviewing replay, hydration, WAL, and rollback behavior
+- operators using `brewva inspect`, `--replay`, `--undo`, and `--redo`
+- developers reviewing replay, hydration, WAL, correction, and rollback behavior
 
 ## Entry Points
 
@@ -11,12 +11,13 @@
 - `brewva inspect --session <id>`
 - `brewva --replay`
 - `brewva --undo`
+- `brewva --redo`
 - `/inspect` in channel or interactive control surfaces
 
 ## Objective
 
 Describe how a persisted session is reconstructed by inspection surfaces and how
-operators move through the `inspect -> replay -> integrity -> undo` path to
+operators move through the `inspect -> replay -> integrity -> undo/redo` path to
 diagnose issues, recover state, and validate outcomes.
 
 ## In Scope
@@ -24,7 +25,7 @@ diagnose issues, recover state, and validate outcomes.
 - inspect report construction
 - event tape replay and hydration
 - integrity aggregation
-- PatchSet rollback and `--undo`
+- correction checkpoint undo/redo and PatchSet restoration
 - recovery boundaries when projection, WAL, or nearby artifacts are missing
 
 ## Out Of Scope
@@ -44,11 +45,13 @@ flowchart TD
   E --> F{"Operator action"}
   F -->|Inspect| G["Read hydration, blockers, evidence, diagnostics"]
   F -->|Replay| H["Print structured event timeline"]
-  F -->|Undo| I["Resolve latest patchset and restore snapshots"]
-  I --> J["Reset verification state and emit rollback trail"]
+  F -->|Undo| I["Resolve latest correction checkpoint and restore its patch window"]
+  I --> J["Revert reasoning state and reset verification evidence"]
+  F -->|Redo| L["Reapply undone patch window and branch to redo leaf"]
   G --> K["Re-run or continue session"]
   H --> K
   J --> K
+  L --> K
 ```
 
 ## Key Steps
@@ -61,9 +64,12 @@ flowchart TD
    persistence issues into one health surface.
 4. `--replay` prints a replay-visible timeline from the durable tape rather
    than from the live hosted stream.
-5. `--undo` resolves the target session, restores the latest tracked `PatchSet`,
-   and resets verification state.
-6. Delegated inspect surfaces now reflect the canonical specialist cutover:
+5. `--undo` resolves the target session, restores the latest correction
+   checkpoint window, resets verification state, and restores the prompt for
+   correction.
+6. `--redo` reapplies the latest undone correction window and re-anchors the
+   reasoning leaf selected before undo.
+7. Delegated inspect surfaces now reflect the canonical specialist cutover:
    public delegated outcomes are `consult`, `qa`, or `patch`, while kernel
    `runtime.authority.verification.*` remains a separate replayed authority.
 
@@ -93,8 +99,8 @@ flowchart TD
   corrupted recovery surface
 - missing projection artifacts are rebuilt from durable tape instead of making
   the session unrecoverable
-- `--undo` returns explicit `no_patchset` semantics when no tracked `PatchSet`
-  exists
+- `--undo` / `--redo` return explicit `no_checkpoint` semantics when no
+  correction checkpoint window exists
 - channel helper state and approval-screen cache are not part of recovery
   correctness
 

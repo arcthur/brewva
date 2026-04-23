@@ -341,6 +341,7 @@ gateway result, but they are not replay truth and are not a second event family.
 - `tool_effect_gate_selected`
 - `reversible_mutation_prepared`
 - `reversible_mutation_recorded`
+- `reversible_mutation_redone`
 
 `exec_routed`, `exec_fallback_host`, `exec_blocked_isolation`, and
 `exec_sandbox_error` include redacted command audit metadata (`commandHash`,
@@ -414,6 +415,11 @@ The read-path warning shape carries recovery-specific fields such as
 `reason=path_discovery_required_after_missing_path_failures`.
 
 - `reversible_mutation_rolled_back`
+- `correction_checkpoint_recorded`
+- `correction_undo_completed`
+- `correction_redo_completed`
+- `correction_window_superseded`
+- `redo`
 - `rollback`
 - `patch_recorded`
 - `file_snapshot_captured`
@@ -813,6 +819,7 @@ The audit-retained core includes:
 - `tool_output_artifact_persist_failed`
 - `cost_update`
 - `budget_alert`
+- `redo`
 - `rollback`
 - `patch_recorded`
 - schedule lifecycle events

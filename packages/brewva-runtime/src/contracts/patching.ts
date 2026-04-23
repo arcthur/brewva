@@ -1,4 +1,4 @@
-import type { PatchSetRollbackFailureReason } from "./governance.js";
+import type { PatchSetRedoFailureReason, PatchSetRollbackFailureReason } from "./governance.js";
 import type { RollbackOutcome } from "./shared.js";
 
 export type PatchFileAction = "add" | "modify" | "delete";
@@ -122,4 +122,10 @@ export type WorkerApplyReport =
 
 export type RollbackResult = RollbackOutcome<PatchSetRollbackFailureReason> & {
   patchSetId?: string;
+  mutationReceiptId?: string;
+};
+
+export type RedoResult = RollbackOutcome<PatchSetRedoFailureReason> & {
+  patchSetId?: string;
+  mutationReceiptId?: string;
 };

@@ -26,6 +26,16 @@ const SLASH_COMMANDS = [
     argumentMode: "none",
   },
   {
+    command: "undo",
+    description: "Undo the last submitted turn and restore its prompt.",
+    argumentMode: "none",
+  },
+  {
+    command: "redo",
+    description: "Redo the last undone turn.",
+    argumentMode: "none",
+  },
+  {
     command: "models",
     description: "Select a model for the current session.",
     argumentMode: "optional",
@@ -150,6 +160,32 @@ function formatPathSuggestion(cwd: string, fullPath: string): string {
   return normalized.includes(" ") ? `"${normalized}"` : normalized;
 }
 
+function buildReasoningSummaryDetails(input: {
+  revertId: string;
+  toCheckpointId: string;
+  trigger: string;
+  linkedRollbackReceiptIds: readonly string[];
+}): Record<string, unknown> {
+  return {
+    schema: "brewva.reasoning.continuity.v1",
+    revertId: input.revertId,
+    toCheckpointId: input.toCheckpointId,
+    trigger: input.trigger,
+    linkedRollbackReceiptIds: [...input.linkedRollbackReceiptIds],
+  };
+}
+
+function replaceSessionMessagesFromCurrentContext(bundle: CliShellSessionBundle): void {
+  const context = bundle.session.sessionManager.buildSessionContext?.();
+  if (!context || !Array.isArray(context.messages)) {
+    throw new Error("Correction undo/redo requires sessionManager.buildSessionContext().");
+  }
+  if (typeof bundle.session.replaceMessages !== "function") {
+    throw new Error("Correction undo/redo requires session.replaceMessages().");
+  }
+  bundle.session.replaceMessages(context.messages);
+}
+
 export function createSessionViewPort(bundle: CliShellSessionBundle): SessionViewPort {
   return {
     session: bundle.session,
@@ -255,6 +291,71 @@ export function createSessionViewPort(bundle: CliShellSessionBundle): SessionVie
     getTranscriptSeed() {
       const messages = bundle.session.sessionManager.buildSessionContext?.().messages;
       return Array.isArray(messages) ? messages : [];
+    },
+    recordCorrectionCheckpoint(input) {
+      bundle.runtime.authority.correction.recordCheckpoint(
+        bundle.session.sessionManager.getSessionId(),
+        {
+          ...input,
+          leafEntryId: input.leafEntryId ?? bundle.session.sessionManager.getLeafId?.() ?? null,
+        },
+      );
+    },
+    undoCorrection() {
+      const sessionId = bundle.session.sessionManager.getSessionId();
+      const redoLeafEntryId = bundle.session.sessionManager.getLeafId?.() ?? null;
+      if (typeof bundle.session.sessionManager.branchWithSummary !== "function") {
+        throw new Error("Correction undo requires sessionManager.branchWithSummary().");
+      }
+      if (typeof bundle.session.replaceMessages !== "function") {
+        throw new Error("Correction undo requires session.replaceMessages().");
+      }
+      const result = bundle.runtime.authority.correction.undo(sessionId, {
+        redoLeafEntryId,
+      });
+      if (!result.ok) {
+        return result;
+      }
+      bundle.session.sessionManager.branchWithSummary(
+        result.reasoningRevert.targetLeafEntryId,
+        result.reasoningRevert.continuityPacket.text,
+        buildReasoningSummaryDetails({
+          revertId: result.reasoningRevert.revertId,
+          toCheckpointId: result.reasoningRevert.toCheckpointId,
+          trigger: result.reasoningRevert.trigger,
+          linkedRollbackReceiptIds: result.reasoningRevert.linkedRollbackReceiptIds,
+        }),
+        true,
+      );
+      replaceSessionMessagesFromCurrentContext(bundle);
+      return result;
+    },
+    redoCorrection() {
+      const sessionId = bundle.session.sessionManager.getSessionId();
+      const pendingRedo = bundle.runtime.inspect.correction.getState(sessionId).nextRedoable;
+      if (
+        pendingRedo?.redoLeafEntryId &&
+        typeof bundle.session.sessionManager.branch !== "function"
+      ) {
+        throw new Error("Correction redo requires sessionManager.branch().");
+      }
+      if (typeof bundle.session.replaceMessages !== "function") {
+        throw new Error("Correction redo requires session.replaceMessages().");
+      }
+      const result = bundle.runtime.authority.correction.redo(sessionId);
+      if (!result.ok) {
+        return result;
+      }
+      if (result.redoLeafEntryId) {
+        bundle.session.sessionManager.branch?.(result.redoLeafEntryId);
+      }
+      replaceSessionMessagesFromCurrentContext(bundle);
+      return result;
+    },
+    getCorrectionState() {
+      return bundle.runtime.inspect.correction.getState(
+        bundle.session.sessionManager.getSessionId(),
+      );
     },
   };
 }

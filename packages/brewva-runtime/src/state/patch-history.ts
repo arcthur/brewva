@@ -4,6 +4,8 @@ import { isIgnoredWorkspacePath, normalizeWorkspaceRelativePath } from "./worksp
 
 export const PATCH_HISTORY_FILE = "patchsets.json";
 
+export type PersistedPatchSetStatus = "applied" | "undone" | "redone";
+
 export interface PersistedPatchChange {
   path: string;
   action: PatchFileAction;
@@ -11,6 +13,7 @@ export interface PersistedPatchChange {
   beforeHash?: string;
   afterHash?: string;
   beforeSnapshotFile?: string;
+  afterSnapshotFile?: string;
   artifactRef?: string;
 }
 
@@ -20,6 +23,9 @@ export interface PersistedPatchSet {
   summary?: string;
   toolName: string;
   appliedAt: number;
+  status: PersistedPatchSetStatus;
+  undoneAt?: number;
+  redoneAt?: number;
   changes: PersistedPatchChange[];
 }
 
@@ -36,6 +42,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isPatchAction(value: unknown): value is PatchFileAction {
   return value === "add" || value === "modify" || value === "delete";
+}
+
+function normalizeStatus(value: unknown): PersistedPatchSetStatus | null {
+  if (value === "applied" || value === "undone" || value === "redone") {
+    return value;
+  }
+  return null;
 }
 
 function normalizePersistedPatchChange(value: unknown): PersistedPatchChange | null {
@@ -63,6 +76,9 @@ function normalizePersistedPatchChange(value: unknown): PersistedPatchChange | n
   if (typeof value.beforeSnapshotFile === "string") {
     normalized.beforeSnapshotFile = value.beforeSnapshotFile;
   }
+  if (typeof value.afterSnapshotFile === "string") {
+    normalized.afterSnapshotFile = value.afterSnapshotFile;
+  }
   if (typeof value.artifactRef === "string") {
     normalized.artifactRef = value.artifactRef;
   }
@@ -74,11 +90,13 @@ function normalizePersistedPatchSet(value: unknown): PersistedPatchSet | null {
   if (!isRecord(value)) {
     return null;
   }
+  const status = normalizeStatus(value.status);
   if (
     typeof value.id !== "string" ||
     typeof value.toolName !== "string" ||
     typeof value.createdAt !== "number" ||
     typeof value.appliedAt !== "number" ||
+    status === null ||
     !Array.isArray(value.changes)
   ) {
     return null;
@@ -94,6 +112,9 @@ function normalizePersistedPatchSet(value: unknown): PersistedPatchSet | null {
     summary: typeof value.summary === "string" ? value.summary : undefined,
     toolName: value.toolName,
     appliedAt: value.appliedAt,
+    status,
+    undoneAt: typeof value.undoneAt === "number" ? value.undoneAt : undefined,
+    redoneAt: typeof value.redoneAt === "number" ? value.redoneAt : undefined,
     changes,
   };
 }

@@ -8,6 +8,10 @@ import type {
 } from "@brewva/brewva-gateway/host";
 import type { BrewvaReplaySession, BrewvaRuntime } from "@brewva/brewva-runtime";
 import type {
+  CorrectionRedoResult,
+  CorrectionState,
+  CorrectionUndoResult,
+  RecordCorrectionCheckpointInput,
   DecideEffectCommitmentInput,
   PendingEffectCommitmentRequest,
 } from "@brewva/brewva-runtime";
@@ -99,6 +103,10 @@ export interface SessionViewPort {
   abort(): Promise<void>;
   subscribe(listener: (event: BrewvaPromptSessionEvent) => void): () => void;
   getTranscriptSeed(): unknown[];
+  recordCorrectionCheckpoint(input: RecordCorrectionCheckpointInput): void;
+  undoCorrection(): CorrectionUndoResult;
+  redoCorrection(): CorrectionRedoResult;
+  getCorrectionState(): CorrectionState;
 }
 
 export interface OperatorSurfaceSnapshot {

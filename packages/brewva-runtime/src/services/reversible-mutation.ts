@@ -9,6 +9,7 @@ import type {
 import { asBrewvaToolCallId, asBrewvaToolName } from "../contracts/index.js";
 import {
   REVERSIBLE_MUTATION_PREPARED_EVENT_TYPE,
+  REVERSIBLE_MUTATION_REDONE_EVENT_TYPE,
   REVERSIBLE_MUTATION_RECORDED_EVENT_TYPE,
   REVERSIBLE_MUTATION_ROLLED_BACK_EVENT_TYPE,
 } from "../events/event-types.js";
@@ -287,6 +288,16 @@ export class ReversibleMutationService {
           rolledBack.add(receiptId);
         }
       }
+
+      if (event.type === REVERSIBLE_MUTATION_REDONE_EVENT_TYPE) {
+        const receiptId =
+          typeof payload?.receiptId === "string" && payload.receiptId.trim()
+            ? payload.receiptId.trim()
+            : null;
+        if (receiptId) {
+          rolledBack.delete(receiptId);
+        }
+      }
     }
 
     if (recorded.length > 0) {
@@ -364,6 +375,45 @@ export class ReversibleMutationService {
       }
       rolledBack.add(candidate.receipt.id);
       this.rolledBackReceiptIdsBySession.set(sessionId, rolledBack);
+      return candidate.receipt.id;
+    }
+    return undefined;
+  }
+
+  markWorkspacePatchSetRedone(sessionId: string, patchSetId: string): string | undefined {
+    const normalizedPatchSetId = patchSetId.trim();
+    if (!normalizedPatchSetId) {
+      return undefined;
+    }
+    const history = this.recordedBySession.get(sessionId);
+    if (!history || history.length === 0) {
+      return undefined;
+    }
+    const rolledBack = this.rolledBackReceiptIdsBySession.get(sessionId);
+    for (let index = history.length - 1; index >= 0; index -= 1) {
+      const candidate = history[index];
+      if (!candidate) {
+        continue;
+      }
+      if (candidate.receipt.strategy !== "workspace_patchset") {
+        continue;
+      }
+      if (candidate.patchSetId !== normalizedPatchSetId) {
+        continue;
+      }
+      rolledBack?.delete(candidate.receipt.id);
+      if (rolledBack && rolledBack.size === 0) {
+        this.rolledBackReceiptIdsBySession.delete(sessionId);
+      }
+      this.recordEvent({
+        sessionId,
+        type: REVERSIBLE_MUTATION_REDONE_EVENT_TYPE,
+        turn: this.getCurrentTurn(sessionId),
+        payload: {
+          receiptId: candidate.receipt.id,
+          patchSetId: normalizedPatchSetId,
+        },
+      });
       return candidate.receipt.id;
     }
     return undefined;

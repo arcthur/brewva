@@ -36,6 +36,7 @@ describe("shared path attribution helpers", () => {
               createdAt: 10,
               toolName: "edit",
               appliedAt: 11,
+              status: "applied",
               changes: [
                 { path: "src/app.ts", action: "modify" },
                 { path: ".orchestrator/tmp.json", action: "modify" },
@@ -46,12 +47,14 @@ describe("shared path attribution helpers", () => {
               createdAt: 20,
               toolName: "write",
               appliedAt: 21,
+              status: "applied",
               changes: [{ path: "src/extra.ts", action: "add" }],
             },
             {
               id: "invalid-patch",
               toolName: "write",
               appliedAt: 30,
+              status: "applied",
               changes: [{ path: "src/bad.ts", action: "invalid" }],
             },
           ],

@@ -30,6 +30,7 @@ import {
   CONTROL_PLANE_TOOLS,
 } from "./security/control-plane-tools.js";
 import { ContextService } from "./services/context.js";
+import { CorrectionService } from "./services/correction.js";
 import { CostService } from "./services/cost.js";
 import { createCredentialVaultServiceFromSecurityConfig } from "./services/credential-vault.js";
 import type { CredentialVaultService } from "./services/credential-vault.js";
@@ -114,6 +115,7 @@ export interface RuntimeServiceDependencies {
 
 export interface RuntimeLazyServiceFactories {
   createCredentialVaultService(): CredentialVaultService;
+  createCorrectionService(): CorrectionService;
   createFileChangeService(): FileChangeService;
   createMutationRollbackService(): MutationRollbackService;
   createParallelService(): ParallelService;
@@ -692,6 +694,28 @@ export function createRuntimeLazyServiceFactories(
     return fileChangeService;
   };
 
+  let reasoningService: ReasoningService | undefined;
+  const getReasoningService = (): ReasoningService => {
+    reasoningService ??= new ReasoningService({
+      replay: options.coreDependencies.reasoningReplay,
+      getCurrentTurn: (sessionId) => options.kernel.getCurrentTurn(sessionId),
+      recordEvent: (input) => options.kernel.recordEvent(input),
+    });
+    return reasoningService;
+  };
+
+  let correctionService: CorrectionService | undefined;
+  const getCorrectionService = (): CorrectionService => {
+    correctionService ??= new CorrectionService({
+      eventStore: options.coreDependencies.eventStore,
+      reasoningService: getReasoningService(),
+      fileChangeService: getFileChangeService(),
+      getCurrentTurn: (sessionId) => options.kernel.getCurrentTurn(sessionId),
+      recordEvent: (input) => options.kernel.recordEvent(input),
+    });
+    return correctionService;
+  };
+
   let parallelService: ParallelService | undefined;
   const getParallelService = (): ParallelService => {
     parallelService ??= new ParallelService({
@@ -789,15 +813,11 @@ export function createRuntimeLazyServiceFactories(
         options.workspaceRoot,
         options.config.security,
       ),
+    createCorrectionService: () => getCorrectionService(),
     createFileChangeService: () => getFileChangeService(),
     createMutationRollbackService: () => getMutationRollbackService(),
     createParallelService: () => getParallelService(),
-    createReasoningService: () =>
-      new ReasoningService({
-        replay: options.coreDependencies.reasoningReplay,
-        getCurrentTurn: (sessionId) => options.kernel.getCurrentTurn(sessionId),
-        recordEvent: (input) => options.kernel.recordEvent(input),
-      }),
+    createReasoningService: () => getReasoningService(),
     createResourceLeaseService: () => getResourceLeaseService(),
     createScheduleIntentService: () =>
       new ScheduleIntentService({
