@@ -24,129 +24,6 @@ import type {
 } from "../types.js";
 export { createCliShellPromptStore } from "../prompt-store.js";
 
-const SLASH_COMMANDS = [
-  {
-    command: "inspect",
-    description: "Replay-first inspect report for the current session.",
-    argumentMode: "none",
-  },
-  {
-    command: "undo",
-    description: "Undo the last submitted turn and restore its prompt.",
-    argumentMode: "none",
-  },
-  {
-    command: "redo",
-    description: "Redo the last undone turn.",
-    argumentMode: "none",
-  },
-  {
-    command: "models",
-    description: "Select a model for the current session.",
-    argumentMode: "optional",
-  },
-  {
-    command: "connect",
-    description: "Connect a model provider.",
-    argumentMode: "optional",
-  },
-  {
-    command: "think",
-    description: "Select the model thinking level for future turns.",
-    argumentMode: "none",
-  },
-  {
-    command: "thinking",
-    description: "Show or hide reasoning blocks in the transcript.",
-    argumentMode: "none",
-  },
-  {
-    command: "tool-details",
-    description: "Show or hide completed tool details in the transcript.",
-    argumentMode: "none",
-  },
-  {
-    command: "diffwrap",
-    description: "Toggle wrapping in diff views.",
-    argumentMode: "none",
-  },
-  {
-    command: "diffstyle",
-    description: "Toggle automatic split diffs and stacked unified diffs.",
-    argumentMode: "none",
-  },
-  {
-    command: "insights",
-    description: "Workspace-level insights without entering a model turn.",
-    argumentMode: "optional",
-  },
-  {
-    command: "sessions",
-    description: "Browse and switch replay sessions.",
-    argumentMode: "none",
-  },
-  {
-    command: "approvals",
-    description: "Review queued approval requests.",
-    argumentMode: "none",
-  },
-  {
-    command: "tasks",
-    description: "Inspect background task runs.",
-    argumentMode: "none",
-  },
-  {
-    command: "notifications",
-    description: "Open the operator notification inbox.",
-    argumentMode: "none",
-  },
-  {
-    command: "questions",
-    description: "Open the operator inbox for pending input.",
-    argumentMode: "none",
-  },
-  {
-    command: "theme",
-    description: "List or switch interactive shell themes.",
-    argumentMode: "optional",
-  },
-  {
-    command: "answer",
-    description: "Answer a pending operator prompt.",
-    argumentMode: "required",
-  },
-  {
-    command: "agent-overlays",
-    description: "Inspect authored agent overlays.",
-    argumentMode: "optional",
-  },
-  {
-    command: "update",
-    description: "Queue Brewva update workflow.",
-    argumentMode: "none",
-  },
-  {
-    command: "new",
-    description: "Create a new interactive session.",
-    argumentMode: "none",
-  },
-  {
-    command: "stash",
-    description: "Browse stashed prompt drafts.",
-    argumentMode: "optional",
-  },
-  {
-    command: "unstash",
-    description: "Restore the latest stashed prompt.",
-    argumentMode: "none",
-  },
-  {
-    command: "quit",
-    description: "Exit the interactive shell.",
-    argumentMode: "none",
-  },
-] as const;
-
 function resolvePathBase(cwd: string, prefix: string): { directory: string; search: string } {
   const normalized = prefix.replace(/^@/u, "");
   const resolved = resolve(cwd, normalized);
@@ -502,9 +379,6 @@ export function createOperatorSurfacePort(input: {
 
 export function createWorkspaceCompletionPort(cwd: string): WorkspaceCompletionPort {
   return {
-    listSlashCommands() {
-      return SLASH_COMMANDS;
-    },
     listPaths(prefix) {
       const { directory, search } = resolvePathBase(cwd, prefix);
       try {

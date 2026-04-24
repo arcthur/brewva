@@ -603,6 +603,88 @@ describe("opentui solid shell runtime", () => {
     }
   });
 
+  test("renders command palette metadata from the command provider", async () => {
+    const { bundle } = createFakeBundle();
+
+    const controller = new CliShellController(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+      operatorPollIntervalMs: 60_000,
+    });
+
+    await controller.start();
+    await controller.handleSemanticInput({
+      key: "k",
+      ctrl: true,
+      meta: false,
+      shift: false,
+    });
+
+    const testSetup = await openTuiSolidTestRender(
+      createOpenTuiSolidElement(BrewvaOpenTuiShell, { controller }),
+      {
+        width: 120,
+        height: 36,
+      },
+    );
+
+    try {
+      await testSetup.renderOnce();
+      await testSetup.renderOnce();
+      const frame = testSetup.captureCharFrame();
+      expect(frame).toContain("Commands");
+      expect(frame).toContain("Switch model");
+      expect(frame).toContain("Agent");
+      expect(frame).toContain("/models");
+      expect(frame).toContain("Ctrl+K");
+    } finally {
+      controller.dispose();
+      testSetup.renderer.destroy();
+    }
+  });
+
+  test("renders help hub with command palette entry and navigation hints", async () => {
+    const { bundle } = createFakeBundle();
+
+    const controller = new CliShellController(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+      operatorPollIntervalMs: 60_000,
+    });
+
+    await controller.start();
+    controller.ui.setEditorText("/help");
+    await controller.handleSemanticInput({
+      key: "enter",
+      ctrl: false,
+      meta: false,
+      shift: false,
+    });
+
+    const testSetup = await openTuiSolidTestRender(
+      createOpenTuiSolidElement(BrewvaOpenTuiShell, { controller }),
+      {
+        width: 120,
+        height: 36,
+      },
+    );
+
+    try {
+      await testSetup.renderOnce();
+      await testSetup.renderOnce();
+      const frame = testSetup.captureCharFrame();
+      expect(frame).toContain("Help");
+      expect(frame).toContain("Ctrl+K opens the command palette");
+      expect(frame).toContain("Enter runs");
+      expect(frame).toContain("Switch model");
+    } finally {
+      controller.dispose();
+      testSetup.renderer.destroy();
+    }
+  });
+
   test("renders assistant prose as separate visual transcript blocks", async () => {
     const { bundle } = createFakeBundle({
       seedMessages: [
@@ -1501,7 +1583,8 @@ describe("opentui solid shell runtime", () => {
       const frame = testSetup.captureCharFrame();
       expect(frame).toContain("enter");
       expect(frame).toContain("send");
-      expect(frame).toContain("ctrl+a");
+      expect(frame).toContain("ctrl+k");
+      expect(frame).toContain("/help");
       expect(frame).toContain("ctrl+o");
       expect(frame).toContain("idle");
       expect(frame).toContain("approvals=0");

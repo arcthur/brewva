@@ -131,11 +131,11 @@ export function PromptPanel(input: {
   const promptHints = createMemo(() =>
     [
       "enter send",
-      "/ commands",
-      "ctrl+a approvals",
+      "ctrl+k commands",
+      "/help",
+      "/ slash",
       "ctrl+o questions",
       "ctrl+s stash",
-      "ctrl+y restore",
       completionHints(),
     ]
       .filter(Boolean)

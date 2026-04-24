@@ -16,7 +16,9 @@ import type {
 } from "@brewva/brewva-substrate";
 import {
   createKeybindingResolver,
+  type KeybindingDefinition,
   type KeybindingContext,
+  type KeybindingResolver,
   type OverlayPriority,
 } from "@brewva/brewva-tui";
 import {
@@ -39,6 +41,11 @@ import {
   createShellConfigPort,
   createWorkspaceCompletionPort,
 } from "./adapters/ports.js";
+import {
+  formatKeybindingLabel,
+  ShellCommandProvider,
+  type ShellCommandListItem,
+} from "./command-provider.js";
 import {
   acceptComposerCompletion,
   appendPromptHistoryEntry,
@@ -436,212 +443,151 @@ export class CliShellController {
   static readonly STATUS_DEBOUNCE_MS = 120;
   readonly #completionPort;
   readonly #configPort = createShellConfigPort();
-  readonly #keybindings = createKeybindingResolver([
-    {
-      id: "global.exit",
-      context: "global",
-      trigger: { key: "q", ctrl: true, meta: false, shift: false },
-      action: "exit",
-    },
-    {
-      id: "global.abort",
-      context: "global",
-      trigger: { key: "c", ctrl: true, meta: false, shift: false },
-      action: "abortOrExit",
-    },
-    {
-      id: "global.approvals",
-      context: "global",
-      trigger: { key: "a", ctrl: true, meta: false, shift: false },
-      action: "openApprovals",
-    },
-    {
-      id: "global.questions",
-      context: "global",
-      trigger: { key: "o", ctrl: true, meta: false, shift: false },
-      action: "openOperatorInbox",
-    },
-    {
-      id: "global.tasks",
-      context: "global",
-      trigger: { key: "t", ctrl: true, meta: false, shift: false },
-      action: "openTasks",
-    },
-    {
-      id: "global.sessions",
-      context: "global",
-      trigger: { key: "g", ctrl: true, meta: false, shift: false },
-      action: "openSessions",
-    },
-    {
-      id: "global.inspect",
-      context: "global",
-      trigger: { key: "i", ctrl: true, meta: false, shift: false },
-      action: "openInspect",
-    },
-    {
-      id: "global.notifications",
-      context: "global",
-      trigger: { key: "n", ctrl: true, meta: false, shift: false },
-      action: "openNotifications",
-    },
-    {
-      id: "global.editor",
-      context: "global",
-      trigger: { key: "e", ctrl: true, meta: false, shift: false },
-      action: "openEditor",
-    },
-    {
-      id: "global.scrollUp",
-      context: "global",
-      trigger: { key: "pageup", ctrl: false, meta: false, shift: false },
-      action: "scrollUp",
-    },
-    {
-      id: "global.scrollDown",
-      context: "global",
-      trigger: { key: "pagedown", ctrl: false, meta: false, shift: false },
-      action: "scrollDown",
-    },
-    {
-      id: "global.scrollTop",
-      context: "global",
-      trigger: { key: "home", ctrl: false, meta: false, shift: false },
-      action: "scrollTop",
-    },
-    {
-      id: "global.scrollBottom",
-      context: "global",
-      trigger: { key: "end", ctrl: false, meta: false, shift: false },
-      action: "scrollBottom",
-    },
-    {
-      id: "composer.submit",
-      context: "composer",
-      trigger: { key: "enter", ctrl: false, meta: false, shift: false },
-      action: "submit",
-    },
-    {
-      id: "composer.newline",
-      context: "composer",
-      trigger: { key: "j", ctrl: true, meta: false, shift: false },
-      action: "newline",
-    },
-    {
-      id: "composer.stash",
-      context: "composer",
-      trigger: { key: "s", ctrl: true, meta: false, shift: false },
-      action: "stashPrompt",
-    },
-    {
-      id: "composer.unstash",
-      context: "composer",
-      trigger: { key: "y", ctrl: true, meta: false, shift: false },
-      action: "unstashPrompt",
-    },
-    {
-      id: "completion.accept",
-      context: "completion",
-      trigger: { key: "tab", ctrl: false, meta: false, shift: false },
-      action: "acceptCompletion",
-    },
-    {
-      id: "completion.acceptEnter",
-      context: "completion",
-      trigger: { key: "enter", ctrl: false, meta: false, shift: false },
-      action: "submitCompletion",
-    },
-    {
-      id: "completion.next",
-      context: "completion",
-      trigger: { key: "down", ctrl: false, meta: false, shift: false },
-      action: "nextCompletion",
-    },
-    {
-      id: "completion.nextCtrlN",
-      context: "completion",
-      trigger: { key: "n", ctrl: true, meta: false, shift: false },
-      action: "nextCompletion",
-    },
-    {
-      id: "completion.prev",
-      context: "completion",
-      trigger: { key: "up", ctrl: false, meta: false, shift: false },
-      action: "prevCompletion",
-    },
-    {
-      id: "completion.prevCtrlP",
-      context: "completion",
-      trigger: { key: "p", ctrl: true, meta: false, shift: false },
-      action: "prevCompletion",
-    },
-    {
-      id: "completion.dismiss",
-      context: "completion",
-      trigger: { key: "escape", ctrl: false, meta: false, shift: false },
-      action: "dismissCompletion",
-    },
-    {
-      id: "overlay.close",
-      context: "overlay",
-      trigger: { key: "escape", ctrl: false, meta: false, shift: false },
-      action: "closeOverlay",
-    },
-    {
-      id: "overlay.select",
-      context: "overlay",
-      trigger: { key: "enter", ctrl: false, meta: false, shift: false },
-      action: "overlayPrimary",
-    },
-    {
-      id: "overlay.next",
-      context: "overlay",
-      trigger: { key: "down", ctrl: false, meta: false, shift: false },
-      action: "overlayNext",
-    },
-    {
-      id: "overlay.nextCtrlN",
-      context: "overlay",
-      trigger: { key: "n", ctrl: true, meta: false, shift: false },
-      action: "overlayNext",
-    },
-    {
-      id: "overlay.prev",
-      context: "overlay",
-      trigger: { key: "up", ctrl: false, meta: false, shift: false },
-      action: "overlayPrev",
-    },
-    {
-      id: "overlay.prevCtrlP",
-      context: "overlay",
-      trigger: { key: "p", ctrl: true, meta: false, shift: false },
-      action: "overlayPrev",
-    },
-    {
-      id: "overlay.pageDown",
-      context: "overlay",
-      trigger: { key: "pagedown", ctrl: false, meta: false, shift: false },
-      action: "overlayPageDown",
-    },
-    {
-      id: "overlay.pageUp",
-      context: "overlay",
-      trigger: { key: "pageup", ctrl: false, meta: false, shift: false },
-      action: "overlayPageUp",
-    },
-    {
-      id: "overlay.fullscreen",
-      context: "overlay",
-      trigger: { key: "f", ctrl: true, meta: false, shift: false },
-      action: "overlayFullscreen",
-    },
-    {
-      id: "pager.external",
-      context: "pager",
-      trigger: { key: "e", ctrl: true, meta: false, shift: false },
-      action: "externalPager",
-    },
-  ]);
+  readonly #commandProvider = new ShellCommandProvider();
+  readonly #keybindings: KeybindingResolver;
+
+  private buildLocalKeybindings(): KeybindingDefinition[] {
+    return [
+      {
+        id: "global.scrollUp",
+        context: "global",
+        trigger: { key: "pageup", ctrl: false, meta: false, shift: false },
+        action: "scrollUp",
+      },
+      {
+        id: "global.scrollDown",
+        context: "global",
+        trigger: { key: "pagedown", ctrl: false, meta: false, shift: false },
+        action: "scrollDown",
+      },
+      {
+        id: "global.scrollTop",
+        context: "global",
+        trigger: { key: "home", ctrl: false, meta: false, shift: false },
+        action: "scrollTop",
+      },
+      {
+        id: "global.scrollBottom",
+        context: "global",
+        trigger: { key: "end", ctrl: false, meta: false, shift: false },
+        action: "scrollBottom",
+      },
+      {
+        id: "composer.submit",
+        context: "composer",
+        trigger: { key: "enter", ctrl: false, meta: false, shift: false },
+        action: "submit",
+      },
+      {
+        id: "composer.newline",
+        context: "composer",
+        trigger: { key: "j", ctrl: true, meta: false, shift: false },
+        action: "newline",
+      },
+      {
+        id: "completion.accept",
+        context: "completion",
+        trigger: { key: "tab", ctrl: false, meta: false, shift: false },
+        action: "acceptCompletion",
+      },
+      {
+        id: "completion.acceptEnter",
+        context: "completion",
+        trigger: { key: "enter", ctrl: false, meta: false, shift: false },
+        action: "submitCompletion",
+      },
+      {
+        id: "completion.next",
+        context: "completion",
+        trigger: { key: "down", ctrl: false, meta: false, shift: false },
+        action: "nextCompletion",
+      },
+      {
+        id: "completion.nextCtrlN",
+        context: "completion",
+        trigger: { key: "n", ctrl: true, meta: false, shift: false },
+        action: "nextCompletion",
+      },
+      {
+        id: "completion.prev",
+        context: "completion",
+        trigger: { key: "up", ctrl: false, meta: false, shift: false },
+        action: "prevCompletion",
+      },
+      {
+        id: "completion.prevCtrlP",
+        context: "completion",
+        trigger: { key: "p", ctrl: true, meta: false, shift: false },
+        action: "prevCompletion",
+      },
+      {
+        id: "completion.dismiss",
+        context: "completion",
+        trigger: { key: "escape", ctrl: false, meta: false, shift: false },
+        action: "dismissCompletion",
+      },
+      {
+        id: "overlay.close",
+        context: "overlay",
+        trigger: { key: "escape", ctrl: false, meta: false, shift: false },
+        action: "closeOverlay",
+      },
+      {
+        id: "overlay.select",
+        context: "overlay",
+        trigger: { key: "enter", ctrl: false, meta: false, shift: false },
+        action: "overlayPrimary",
+      },
+      {
+        id: "overlay.next",
+        context: "overlay",
+        trigger: { key: "down", ctrl: false, meta: false, shift: false },
+        action: "overlayNext",
+      },
+      {
+        id: "overlay.nextCtrlN",
+        context: "overlay",
+        trigger: { key: "n", ctrl: true, meta: false, shift: false },
+        action: "overlayNext",
+      },
+      {
+        id: "overlay.prev",
+        context: "overlay",
+        trigger: { key: "up", ctrl: false, meta: false, shift: false },
+        action: "overlayPrev",
+      },
+      {
+        id: "overlay.prevCtrlP",
+        context: "overlay",
+        trigger: { key: "p", ctrl: true, meta: false, shift: false },
+        action: "overlayPrev",
+      },
+      {
+        id: "overlay.pageDown",
+        context: "overlay",
+        trigger: { key: "pagedown", ctrl: false, meta: false, shift: false },
+        action: "overlayPageDown",
+      },
+      {
+        id: "overlay.pageUp",
+        context: "overlay",
+        trigger: { key: "pageup", ctrl: false, meta: false, shift: false },
+        action: "overlayPageUp",
+      },
+      {
+        id: "overlay.fullscreen",
+        context: "overlay",
+        trigger: { key: "f", ctrl: true, meta: false, shift: false },
+        action: "overlayFullscreen",
+      },
+      {
+        id: "pager.external",
+        context: "pager",
+        trigger: { key: "e", ctrl: true, meta: false, shift: false },
+        action: "externalPager",
+      },
+    ];
+  }
   readonly #listeners = new Set<() => void>();
   readonly #uiController;
   readonly #operatorPort;
@@ -707,6 +653,11 @@ export class CliShellController {
       openSession: (sessionId) => options.openSession(sessionId),
       createSession: () => options.createSession(),
     });
+    this.registerShellCommands();
+    this.#keybindings = createKeybindingResolver([
+      ...this.buildLocalKeybindings(),
+      ...this.#commandProvider.keyboundCommands(),
+    ]);
     this.#uiController = createCliShellUiPortController({
       dispatch: (action) => this.dispatch(action),
       getState: () => this.#state,
@@ -736,6 +687,372 @@ export class CliShellController {
 
   getOperatorSnapshot(): OperatorSurfaceSnapshot {
     return this.#operatorSnapshot;
+  }
+
+  private registerShellCommands(): void {
+    const registerRuntimeSlash = (input: {
+      id: string;
+      title: string;
+      description: string;
+      category: string;
+      name: string;
+      argumentMode?: "none" | "optional" | "required";
+    }): void => {
+      this.#commandProvider.register({
+        id: input.id,
+        title: input.title,
+        description: input.description,
+        category: input.category,
+        slash: {
+          name: input.name,
+          argumentMode: input.argumentMode,
+        },
+        run: () => false,
+      });
+    };
+
+    this.#commandProvider.register({
+      id: "app.commandPalette",
+      title: "Open command palette",
+      description: "Search and run available Brewva TUI actions.",
+      category: "System",
+      keybinding: { key: "k", ctrl: true, meta: false, shift: false },
+      suggested: true,
+      run: () => {
+        this.openCommandPalette();
+      },
+    });
+    this.#commandProvider.register({
+      id: "app.help",
+      title: "Help",
+      description: "Open Brewva TUI help and discovery shortcuts.",
+      category: "System",
+      slash: { name: "help" },
+      suggested: true,
+      run: () => {
+        this.openHelpHub();
+      },
+    });
+    this.#commandProvider.register({
+      id: "app.exit",
+      title: "Exit Brewva",
+      description: "Exit the interactive shell.",
+      category: "System",
+      slash: { name: "quit", aliases: ["exit"], argumentMode: "none" },
+      keybinding: { key: "q", ctrl: true, meta: false, shift: false },
+      run: () => {
+        this.#resolveExit?.();
+      },
+    });
+    this.#commandProvider.register({
+      id: "app.abortOrExit",
+      title: "Abort or exit",
+      description: "Abort the current turn; exits when no turn is streaming.",
+      category: "System",
+      keybinding: { key: "c", ctrl: true, meta: false, shift: false },
+      run: async () => {
+        if (this.#bundle.session.isStreaming) {
+          await this.#sessionPort.abort();
+          this.ui.notify("Aborted the current turn.", "warning");
+          return;
+        }
+        this.#resolveExit?.();
+      },
+    });
+    this.#commandProvider.register({
+      id: "composer.editor",
+      title: "Open external editor",
+      description: "Edit the current prompt in VISUAL or EDITOR.",
+      category: "Composer",
+      keybinding: { key: "e", ctrl: true, meta: false, shift: false },
+      run: async () => {
+        const externalPagerTarget = this.getExternalPagerTarget();
+        if (externalPagerTarget) {
+          await this.openExternalPagerTarget(externalPagerTarget);
+          return;
+        }
+        const edited = await this.openExternalEditor("brewva-composer", this.#state.composer.text);
+        if (typeof edited === "string") {
+          this.dispatch({
+            type: "composer.setText",
+            text: edited,
+            cursor: edited.length,
+          });
+        }
+      },
+    });
+    this.#commandProvider.register({
+      id: "session.new",
+      title: "New session",
+      description: "Create a new interactive session.",
+      category: "Session",
+      slash: { name: "new" },
+      run: async () => {
+        await this.switchBundle(await this.#operatorPort.createSession());
+      },
+    });
+    this.#commandProvider.register({
+      id: "session.list",
+      title: "Switch session",
+      description: "Browse and switch replay sessions.",
+      category: "Session",
+      slash: { name: "sessions" },
+      keybinding: { key: "g", ctrl: true, meta: false, shift: false },
+      suggested: true,
+      run: () => {
+        this.openSessionsOverlay();
+      },
+    });
+    this.#commandProvider.register({
+      id: "session.inspect",
+      title: "Inspect session",
+      description: "Replay-first inspect report for the current session.",
+      category: "Session",
+      slash: { name: "inspect" },
+      keybinding: { key: "i", ctrl: true, meta: false, shift: false },
+      run: async () => {
+        await this.openInspectOverlay();
+      },
+    });
+    this.#commandProvider.register({
+      id: "session.undo",
+      title: "Undo last turn",
+      description: "Undo the last submitted turn and restore its prompt.",
+      category: "Session",
+      slash: { name: "undo" },
+      run: async () => {
+        await this.undoLastCorrection();
+      },
+    });
+    this.#commandProvider.register({
+      id: "session.redo",
+      title: "Redo last turn",
+      description: "Redo the last undone turn.",
+      category: "Session",
+      slash: { name: "redo" },
+      run: async () => {
+        await this.redoLastCorrection();
+      },
+    });
+    this.#commandProvider.register({
+      id: "agent.models",
+      title: "Switch model",
+      description: "Select a model for the current session.",
+      category: "Agent",
+      slash: { name: "models", argumentMode: "optional" },
+      suggested: true,
+      run: async ({ args }) => {
+        if (args.trim() === "recent") {
+          await this.cycleRecentModel();
+          return;
+        }
+        await this.openModelsDialog(args.trim() ? { query: args.trim() } : {});
+      },
+    });
+    this.#commandProvider.register({
+      id: "agent.connect",
+      title: "Connect provider",
+      description: "Connect a model provider.",
+      category: "Agent",
+      slash: { name: "connect", argumentMode: "optional" },
+      run: async ({ args }) => {
+        await this.openConnectDialog(args.trim());
+      },
+    });
+    this.#commandProvider.register({
+      id: "agent.think",
+      title: "Select thinking level",
+      description: "Select the model thinking level for future turns.",
+      category: "Agent",
+      slash: { name: "think" },
+      run: async () => {
+        await this.openThinkingDialog();
+      },
+    });
+    this.#commandProvider.register({
+      id: "view.thinking",
+      title: "Toggle thinking blocks",
+      description: "Show or hide reasoning blocks in the transcript.",
+      category: "View",
+      slash: { name: "thinking" },
+      run: () => {
+        this.toggleThinkingVisibility();
+      },
+    });
+    this.#commandProvider.register({
+      id: "view.toolDetails",
+      title: "Toggle tool details",
+      description: "Show or hide completed tool details in the transcript.",
+      category: "View",
+      slash: { name: "tool-details" },
+      run: () => {
+        this.toggleToolDetails();
+      },
+    });
+    this.#commandProvider.register({
+      id: "view.diffWrap",
+      title: "Toggle diff wrapping",
+      description: "Toggle wrapping in diff views.",
+      category: "View",
+      slash: { name: "diffwrap" },
+      run: () => {
+        this.toggleDiffWrapMode();
+      },
+    });
+    this.#commandProvider.register({
+      id: "view.diffStyle",
+      title: "Toggle diff style",
+      description: "Toggle automatic split diffs and stacked unified diffs.",
+      category: "View",
+      slash: { name: "diffstyle" },
+      run: () => {
+        this.toggleDiffStyle();
+      },
+    });
+    this.#commandProvider.register({
+      id: "operator.approvals",
+      title: "Approvals",
+      description: "Review queued approval requests.",
+      category: "Operator",
+      slash: { name: "approvals" },
+      keybinding: { key: "a", ctrl: true, meta: false, shift: false },
+      run: () => {
+        this.openOverlay({ kind: "approval", selectedIndex: 0, snapshot: this.#operatorSnapshot });
+      },
+    });
+    this.#commandProvider.register({
+      id: "operator.questions",
+      title: "Operator questions",
+      description: "Open the operator inbox for pending input.",
+      category: "Operator",
+      slash: { name: "questions" },
+      keybinding: { key: "o", ctrl: true, meta: false, shift: false },
+      run: () => {
+        this.openOverlay({
+          kind: "question",
+          mode: "operator",
+          selectedIndex: 0,
+          snapshot: this.#operatorSnapshot,
+        });
+      },
+    });
+    this.#commandProvider.register({
+      id: "operator.tasks",
+      title: "Tasks",
+      description: "Inspect background task runs.",
+      category: "Operator",
+      slash: { name: "tasks" },
+      keybinding: { key: "t", ctrl: true, meta: false, shift: false },
+      run: () => {
+        this.openOverlay({ kind: "tasks", selectedIndex: 0, snapshot: this.#operatorSnapshot });
+      },
+    });
+    this.#commandProvider.register({
+      id: "operator.notifications",
+      title: "Notifications",
+      description: "Open the operator notification inbox.",
+      category: "Operator",
+      slash: { name: "notifications", aliases: ["inbox"] },
+      keybinding: { key: "n", ctrl: true, meta: false, shift: false },
+      run: () => {
+        this.openNotificationsOverlay();
+      },
+    });
+    this.#commandProvider.register({
+      id: "operator.answer",
+      title: "Answer operator question",
+      description: "Answer a pending operator prompt.",
+      category: "Operator",
+      slash: { name: "answer", argumentMode: "required" },
+      run: async ({ args }) => {
+        const [questionId, ...answerParts] = args.trim().split(/\s+/u);
+        const answerText = answerParts.join(" ").trim();
+        if (!questionId || !answerText) {
+          this.ui.notify("Usage: /answer <questionId> <text>", "warning");
+          return;
+        }
+        await this.#operatorPort.answerQuestion(questionId, answerText);
+        await this.refreshOperatorSnapshot();
+      },
+    });
+    this.#commandProvider.register({
+      id: "system.theme",
+      title: "Switch theme",
+      description: "List or switch interactive shell themes.",
+      category: "System",
+      slash: { name: "theme", argumentMode: "optional" },
+      run: ({ args }) => {
+        const selection = args.trim();
+        if (!selection || selection === "list") {
+          const themeNames = this.ui
+            .getAllThemes()
+            .map((theme) => theme.name)
+            .join(", ");
+          this.ui.notify(`Available themes: ${themeNames}`, "info");
+          return;
+        }
+        const result = this.ui.setTheme(selection);
+        if (result.success) {
+          this.ui.notify(`Theme switched to ${selection}.`, "info");
+        } else {
+          this.ui.notify(result.error, "warning");
+        }
+      },
+    });
+    this.#commandProvider.register({
+      id: "composer.stash",
+      title: "Stash prompt",
+      description: "Browse stashed prompt drafts.",
+      category: "Composer",
+      slash: { name: "stash", argumentMode: "optional" },
+      keybinding: { key: "s", ctrl: true, meta: false, shift: false },
+      run: async ({ args, source }) => {
+        if (source === "keybinding") {
+          this.stashCurrentPrompt();
+          return;
+        }
+        if (args.trim() === "pop") {
+          this.restoreLatestStash();
+          return;
+        }
+        await this.selectStashedPrompt();
+      },
+    });
+    this.#commandProvider.register({
+      id: "composer.unstash",
+      title: "Restore latest stash",
+      description: "Restore the latest stashed prompt.",
+      category: "Composer",
+      slash: { name: "unstash" },
+      keybinding: { key: "y", ctrl: true, meta: false, shift: false },
+      run: () => {
+        this.restoreLatestStash();
+      },
+    });
+
+    registerRuntimeSlash({
+      id: "runtime.insights",
+      title: "Insights",
+      description: "Workspace-level insights without entering a model turn.",
+      category: "Runtime",
+      name: "insights",
+      argumentMode: "optional",
+    });
+    registerRuntimeSlash({
+      id: "runtime.agentOverlays",
+      title: "Agent overlays",
+      description: "Inspect authored agent overlays.",
+      category: "Runtime",
+      name: "agent-overlays",
+      argumentMode: "optional",
+    });
+    registerRuntimeSlash({
+      id: "runtime.update",
+      title: "Update Brewva",
+      description: "Queue Brewva update workflow.",
+      category: "Runtime",
+      name: "update",
+    });
   }
 
   async openSessionById(sessionId: string): Promise<void> {
@@ -998,7 +1315,11 @@ export class CliShellController {
         return true;
       }
 
-      if (activeOverlay?.kind === "modelPicker" || activeOverlay?.kind === "providerPicker") {
+      if (
+        activeOverlay?.kind === "commandPalette" ||
+        activeOverlay?.kind === "modelPicker" ||
+        activeOverlay?.kind === "providerPicker"
+      ) {
         const handledShortcut = await this.handleOverlayShortcut(activeOverlay, input);
         if (handledShortcut) {
           return true;
@@ -2061,29 +2382,19 @@ export class CliShellController {
   }
 
   private async handleBinding(action: string): Promise<void> {
+    if (action.startsWith("command:")) {
+      await this.#commandProvider.runCommand(action.slice("command:".length), {
+        args: "",
+        source: "keybinding",
+      });
+      return;
+    }
     switch (action) {
-      case "exit":
-        this.#resolveExit?.();
-        return;
-      case "abortOrExit":
-        if (this.#bundle.session.isStreaming) {
-          await this.#sessionPort.abort();
-          this.ui.notify("Aborted the current turn.", "warning");
-          return;
-        }
-        this.#resolveExit?.();
-        return;
       case "submit":
         await this.submitComposer();
         return;
       case "newline":
         this.ui.pasteToEditor("\n");
-        return;
-      case "stashPrompt":
-        this.stashCurrentPrompt();
-        return;
-      case "unstashPrompt":
-        this.restoreLatestStash();
         return;
       case "acceptCompletion":
         this.acceptCompletion();
@@ -2124,45 +2435,6 @@ export class CliShellController {
       case "externalPager":
         await this.openActivePagerExternally();
         return;
-      case "openApprovals":
-        this.openOverlay({ kind: "approval", selectedIndex: 0, snapshot: this.#operatorSnapshot });
-        return;
-      case "openOperatorInbox":
-        this.openOverlay({
-          kind: "question",
-          mode: "operator",
-          selectedIndex: 0,
-          snapshot: this.#operatorSnapshot,
-        });
-        return;
-      case "openTasks":
-        this.openOverlay({ kind: "tasks", selectedIndex: 0, snapshot: this.#operatorSnapshot });
-        return;
-      case "openSessions":
-        this.openSessionsOverlay();
-        return;
-      case "openInspect":
-        await this.openInspectOverlay();
-        return;
-      case "openNotifications":
-        this.openNotificationsOverlay();
-        return;
-      case "openEditor": {
-        const externalPagerTarget = this.getExternalPagerTarget();
-        if (externalPagerTarget) {
-          await this.openExternalPagerTarget(externalPagerTarget);
-          return;
-        }
-        const edited = await this.openExternalEditor("brewva-composer", this.#state.composer.text);
-        if (typeof edited === "string") {
-          this.dispatch({
-            type: "composer.setText",
-            text: edited,
-            cursor: edited.length,
-          });
-        }
-        return;
-      }
       case "scrollUp":
         this.requestTranscriptNavigation("pageUp");
         return;
@@ -2186,7 +2458,7 @@ export class CliShellController {
       cursor: this.#state.composer.cursor,
       current: this.#state.composer.completion,
       dismissed: this.getDismissedCompletionState(),
-      slashCommands: this.#completionPort.listSlashCommands(),
+      slashCommands: this.#commandProvider.slashCommands(),
       pathEntries: (query) => this.#completionPort.listPaths(query),
     });
     if (result.clearDismissed) {
@@ -2534,6 +2806,77 @@ export class CliShellController {
       },
       false,
     );
+  }
+
+  private commandPaletteItem(
+    command: ShellCommandListItem,
+  ): NonNullable<Extract<CliShellOverlayPayload, { kind: "commandPalette" }>["items"]>[number] {
+    const slash = command.slashName ? `/${command.slashName}` : undefined;
+    const keybinding = formatKeybindingLabel(command.keybinding);
+    return {
+      id: command.id,
+      section: command.category,
+      label: command.title,
+      detail: command.description,
+      footer: [slash, keybinding].filter(Boolean).join("  ") || undefined,
+      marker: command.suggested ? "●" : undefined,
+    };
+  }
+
+  private buildCommandPalettePayload(
+    query = "",
+    selectedIndex = 0,
+  ): Extract<CliShellOverlayPayload, { kind: "commandPalette" }> {
+    const commands = this.#commandProvider.searchCommands(query);
+    const items = commands.map((command) => this.commandPaletteItem(command));
+    return {
+      kind: "commandPalette",
+      title: "Commands",
+      query,
+      selectedIndex:
+        items.length === 0 ? 0 : Math.max(0, Math.min(selectedIndex, items.length - 1)),
+      items,
+    };
+  }
+
+  private openCommandPalette(query = ""): void {
+    this.openOverlay(this.buildCommandPalettePayload(query));
+  }
+
+  private openHelpHub(): void {
+    const visible = this.#commandProvider.visibleCommands();
+    const grouped = new Map<string, ShellCommandListItem[]>();
+    for (const command of visible) {
+      const group = grouped.get(command.category) ?? [];
+      group.push(command);
+      grouped.set(command.category, group);
+    }
+    const lines = [
+      "Brewva commands are searchable from the command palette.",
+      "Ctrl+K opens the command palette from any normal shell context.",
+      "Type / in the composer for slash commands; aliases match search but show canonical names.",
+      "",
+      "Navigation",
+      "↑/↓ or Ctrl+P/Ctrl+N move selection; Enter runs; Esc closes.",
+      "",
+      "Commands",
+    ];
+    for (const [category, commands] of [...grouped.entries()].toSorted((left, right) =>
+      left[0].localeCompare(right[0]),
+    )) {
+      lines.push("", category);
+      for (const command of commands) {
+        const slash = command.slashName ? `/${command.slashName}` : "";
+        const keybinding = formatKeybindingLabel(command.keybinding) ?? "";
+        const suffix = [slash, keybinding].filter(Boolean).join(" · ");
+        lines.push(`  ${command.title}${suffix ? ` (${suffix})` : ""}`);
+      }
+    }
+    this.openOverlay({
+      kind: "helpHub",
+      title: "Help",
+      lines,
+    });
   }
 
   private async listProviderConnections(): Promise<ProviderConnection[]> {
@@ -3432,10 +3775,17 @@ export class CliShellController {
   }
 
   private async updatePickerQuery(
-    payload: Extract<CliShellOverlayPayload, { kind: "modelPicker" | "providerPicker" }>,
+    payload: Extract<
+      CliShellOverlayPayload,
+      { kind: "commandPalette" | "modelPicker" | "providerPicker" }
+    >,
     query: string,
   ): Promise<void> {
     if (query === payload.query) {
+      return;
+    }
+    if (payload.kind === "commandPalette") {
+      this.replaceActiveOverlay(this.buildCommandPalettePayload(query));
       return;
     }
     if (payload.kind === "modelPicker") {
@@ -3457,7 +3807,10 @@ export class CliShellController {
   }
 
   private async handlePickerTextInput(
-    payload: Extract<CliShellOverlayPayload, { kind: "modelPicker" | "providerPicker" }>,
+    payload: Extract<
+      CliShellOverlayPayload,
+      { kind: "commandPalette" | "modelPicker" | "providerPicker" }
+    >,
     input: CliShellSemanticInput,
   ): Promise<boolean> {
     const key = normalizeBindingKey(input.key);
@@ -3476,134 +3829,19 @@ export class CliShellController {
   }
 
   private async handleShellCommand(prompt: string): Promise<boolean> {
-    if (prompt === "/quit" || prompt === "/exit") {
-      this.#resolveExit?.();
-      return true;
+    const match = /^\/(?<name>[^\s]+)(?:\s+(?<args>[\s\S]*))?$/u.exec(prompt);
+    const name = match?.groups?.name;
+    if (!name) {
+      return false;
     }
-    if (prompt === "/sessions") {
-      this.openSessionsOverlay();
-      return true;
+    const command = this.#commandProvider.resolveSlashCommand(name);
+    if (!command) {
+      return false;
     }
-    if (prompt === "/questions") {
-      this.openOverlay({
-        kind: "question",
-        mode: "operator",
-        selectedIndex: 0,
-        snapshot: this.#operatorSnapshot,
-      });
-      return true;
-    }
-    if (prompt === "/approvals") {
-      this.openOverlay({ kind: "approval", selectedIndex: 0, snapshot: this.#operatorSnapshot });
-      return true;
-    }
-    if (prompt === "/tasks") {
-      this.openOverlay({ kind: "tasks", selectedIndex: 0, snapshot: this.#operatorSnapshot });
-      return true;
-    }
-    if (prompt === "/inspect") {
-      await this.openInspectOverlay();
-      return true;
-    }
-    if (prompt === "/undo") {
-      await this.undoLastCorrection();
-      return true;
-    }
-    if (prompt === "/redo") {
-      await this.redoLastCorrection();
-      return true;
-    }
-    if (prompt === "/models") {
-      await this.openModelsDialog();
-      return true;
-    }
-    if (prompt.startsWith("/models ")) {
-      const args = prompt.slice("/models ".length).trim();
-      if (args === "recent") {
-        await this.cycleRecentModel();
-        return true;
-      }
-      await this.openModelsDialog({ query: args });
-      return true;
-    }
-    if (prompt === "/connect") {
-      await this.openConnectDialog();
-      return true;
-    }
-    if (prompt.startsWith("/connect ")) {
-      await this.openConnectDialog(prompt.slice("/connect ".length).trim());
-      return true;
-    }
-    if (prompt === "/think") {
-      await this.openThinkingDialog();
-      return true;
-    }
-    if (prompt === "/thinking") {
-      this.toggleThinkingVisibility();
-      return true;
-    }
-    if (prompt === "/tool-details") {
-      this.toggleToolDetails();
-      return true;
-    }
-    if (prompt === "/diffwrap") {
-      this.toggleDiffWrapMode();
-      return true;
-    }
-    if (prompt === "/diffstyle") {
-      this.toggleDiffStyle();
-      return true;
-    }
-    if (prompt === "/notifications" || prompt === "/inbox") {
-      this.openNotificationsOverlay();
-      return true;
-    }
-    if (prompt === "/new") {
-      await this.switchBundle(await this.#operatorPort.createSession());
-      return true;
-    }
-    if (prompt === "/stash") {
-      await this.selectStashedPrompt();
-      return true;
-    }
-    if (prompt === "/stash pop" || prompt === "/unstash") {
-      this.restoreLatestStash();
-      return true;
-    }
-    if (prompt === "/theme" || prompt === "/theme list") {
-      const themeNames = this.ui
-        .getAllThemes()
-        .map((theme) => theme.name)
-        .join(", ");
-      this.ui.notify(`Available themes: ${themeNames}`, "info");
-      return true;
-    }
-    if (prompt.startsWith("/theme ")) {
-      const selection = prompt.slice("/theme ".length).trim();
-      if (selection.length === 0) {
-        this.ui.notify("Usage: /theme <name>", "warning");
-        return true;
-      }
-      const result = this.ui.setTheme(selection);
-      if (result.success) {
-        this.ui.notify(`Theme switched to ${selection}.`, "info");
-      } else {
-        this.ui.notify(result.error, "warning");
-      }
-      return true;
-    }
-    if (prompt.startsWith("/answer ")) {
-      const [questionId, ...answerParts] = prompt.slice("/answer ".length).trim().split(/\s+/u);
-      const answerText = answerParts.join(" ").trim();
-      if (!questionId || !answerText) {
-        this.ui.notify("Usage: /answer <questionId> <text>", "warning");
-        return true;
-      }
-      await this.#operatorPort.answerQuestion(questionId, answerText);
-      await this.refreshOperatorSnapshot();
-      return true;
-    }
-    return false;
+    return await this.#commandProvider.runCommand(command.id, {
+      args: match.groups?.args ?? "",
+      source: "slash",
+    });
   }
 
   private async undoLastCorrection(): Promise<void> {
@@ -3696,6 +3934,7 @@ export class CliShellController {
       active.kind === "notifications" ||
       active.kind === "inspect" ||
       active.kind === "select" ||
+      active.kind === "commandPalette" ||
       active.kind === "modelPicker" ||
       active.kind === "providerPicker" ||
       active.kind === "thinkingPicker" ||
@@ -3920,6 +4159,38 @@ export class CliShellController {
         return;
       case "select":
         active.resolve(active.options[active.selectedIndex]);
+        this.closeActiveOverlay(false);
+        return;
+      case "commandPalette": {
+        const item = active.items[active.selectedIndex];
+        if (!item) {
+          return;
+        }
+        this.closeActiveOverlay(false);
+        const handled = await this.#commandProvider.runCommand(item.id, {
+          args: "",
+          source: "palette",
+        });
+        if (!handled) {
+          const command = this.#commandProvider.getCommand(item.id);
+          const slashName = command?.slash?.name;
+          if (!slashName) {
+            return;
+          }
+          this.dispatch(
+            {
+              type: "composer.setPromptState",
+              text: `/${slashName}`,
+              cursor: slashName.length + 1,
+              parts: [],
+            },
+            false,
+          );
+          await this.submitComposer();
+        }
+        return;
+      }
+      case "helpHub":
         this.closeActiveOverlay(false);
         return;
       case "modelPicker":

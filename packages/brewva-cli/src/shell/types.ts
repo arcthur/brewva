@@ -312,6 +312,20 @@ export interface CliOAuthWaitOverlayPayload {
   submitManualCode?(code: string): Promise<void>;
 }
 
+export interface CliCommandPaletteOverlayPayload {
+  kind: "commandPalette";
+  title: string;
+  query: string;
+  selectedIndex: number;
+  items: CliPickerItem[];
+}
+
+export interface CliHelpHubOverlayPayload {
+  kind: "helpHub";
+  title: string;
+  lines: string[];
+}
+
 export type CliShellOverlayPayload =
   | CliApprovalOverlayPayload
   | CliQuestionOverlayPayload
@@ -327,7 +341,9 @@ export type CliShellOverlayPayload =
   | CliProviderPickerOverlayPayload
   | CliThinkingPickerOverlayPayload
   | CliAuthMethodPickerOverlayPayload
-  | CliOAuthWaitOverlayPayload;
+  | CliOAuthWaitOverlayPayload
+  | CliCommandPaletteOverlayPayload
+  | CliHelpHubOverlayPayload;
 
 export type {
   ProviderAuthMethod,
@@ -338,6 +354,7 @@ export type {
 
 export interface SlashCommandEntry {
   command: string;
+  aliases?: readonly string[];
   description: string;
   argumentMode?: "none" | "optional" | "required";
 }
@@ -349,7 +366,6 @@ export interface PathCompletionEntry {
 }
 
 export interface WorkspaceCompletionPort {
-  listSlashCommands(): readonly SlashCommandEntry[];
   listPaths(prefix: string): readonly PathCompletionEntry[];
 }
 

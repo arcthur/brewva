@@ -71,6 +71,8 @@ export function resolveOverlayFocusOwner(
     case "thinkingPicker":
     case "authMethodPicker":
     case "oauthWait":
+    case "commandPalette":
+    case "helpHub":
       return "dialog";
     default: {
       const exhaustiveCheck: never = payload;
@@ -366,6 +368,23 @@ export function buildOverlayView(payload: CliShellOverlayPayload): {
       return {
         title: payload.title,
         lines: renderPickerInspectLines(payload.items, payload.selectedIndex),
+      };
+    case "commandPalette":
+      return {
+        title: payload.title,
+        lines: [
+          `Search: ${payload.query}`,
+          "Use ↑/↓ to choose, type to filter, Enter to run, Esc to close.",
+          "",
+          ...(payload.items.length > 0
+            ? renderPickerInspectLines(payload.items, payload.selectedIndex)
+            : ["No matching commands."]),
+        ],
+      };
+    case "helpHub":
+      return {
+        title: payload.title,
+        lines: payload.lines,
       };
     case "oauthWait":
       return {

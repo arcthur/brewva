@@ -3,6 +3,7 @@ import {
   cloneCliShellPromptSnapshot,
   rebasePromptPartsAfterTextReplace,
 } from "./prompt-parts.js";
+import { fuzzyScore, normalizeSearchQuery } from "./search-scoring.js";
 import type { CliShellCompletionItem, CliShellCompletionState } from "./state/index.js";
 import type {
   CliShellPromptPart,
@@ -323,7 +324,7 @@ function findSlashCompletion(text: string, cursor: number): string | null {
 }
 
 function normalizeCompletionQuery(query: string): string {
-  return query.trim().toLowerCase();
+  return normalizeSearchQuery(query);
 }
 
 function resolveCompletionSelection(
@@ -395,10 +396,15 @@ function filterSlashCommandsFuzzy(
   for (const entry of commands) {
     // Match against the bare command name (no leading "/") so that prefix scoring
     // fires correctly: "qu" vs "quit" (prefix) outranks "qu" inside a description.
-    const nameTarget = entry.command.toLowerCase();
-    let score = fuzzyScore(query, nameTarget);
+    let score = fuzzyScore(query, entry.command);
+    for (const alias of entry.aliases ?? []) {
+      const aliasScore = fuzzyScore(query, alias);
+      if (aliasScore !== null && (score === null || aliasScore > score)) {
+        score = aliasScore;
+      }
+    }
     if (score === null) {
-      const descScore = fuzzyScore(query, (entry.description ?? "").toLowerCase());
+      const descScore = fuzzyScore(query, entry.description ?? "");
       if (descScore !== null) {
         score = descScore - 500;
       }
@@ -409,30 +415,4 @@ function filterSlashCommandsFuzzy(
   }
 
   return results.toSorted((a, b) => b.score - a.score).map((r) => r.entry);
-}
-
-/**
- * Returns a numeric score if `query` is a fuzzy subsequence of `target`, or null if not.
- * Prefix matches score highest. Consecutive character runs add bonus points.
- */
-function fuzzyScore(query: string, target: string): number | null {
-  if (query.length === 0) {
-    return 0;
-  }
-  // Exact prefix → highest priority bucket
-  if (target.startsWith(query)) {
-    return 1000 - target.length;
-  }
-  // Subsequence scan with consecutive-run bonus
-  let qi = 0;
-  let score = 0;
-  let lastMatchIndex = -2;
-  for (let ti = 0; ti < target.length && qi < query.length; ti++) {
-    if (target[ti] === query[qi]) {
-      score += lastMatchIndex === ti - 1 ? 10 : 1;
-      lastMatchIndex = ti;
-      qi++;
-    }
-  }
-  return qi < query.length ? null : score;
 }

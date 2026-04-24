@@ -159,6 +159,16 @@ export function cloneOverlayPayload(payload: CliShellOverlayPayload): CliShellOv
         ...payload,
         items: [...payload.items],
       };
+    case "commandPalette":
+      return {
+        ...payload,
+        items: [...payload.items],
+      };
+    case "helpHub":
+      return {
+        ...payload,
+        lines: [...payload.lines],
+      };
     case "oauthWait":
       return {
         ...payload,

@@ -8,7 +8,9 @@ import { buildTaskRunListLabel, buildTaskRunPreviewLines } from "../../src/shell
 import type {
   CliApprovalOverlayPayload,
   CliAuthMethodPickerOverlayPayload,
+  CliCommandPaletteOverlayPayload,
   CliConfirmOverlayPayload,
+  CliHelpHubOverlayPayload,
   CliInputOverlayPayload,
   CliInspectOverlayPayload,
   CliModelPickerOverlayPayload,
@@ -874,6 +876,65 @@ function AuthMethodPickerOverlay(input: {
   );
 }
 
+function CommandPaletteOverlay(input: {
+  payload: CliCommandPaletteOverlayPayload;
+  theme: SessionPalette;
+  width: number;
+  height: number;
+}) {
+  const listWidth = createMemo(() => resolveDialogContentWidth(input.width));
+  return (
+    <DialogSelectFrame
+      title={input.payload.title}
+      width={input.width}
+      height={input.height}
+      theme={input.theme}
+      size="large"
+      search={
+        <box paddingTop={1}>
+          <text fg={input.theme.textMuted}>Search: {input.payload.query}</text>
+        </box>
+      }
+      footer={
+        <box paddingLeft={DIALOG_HORIZONTAL_PADDING} paddingRight={DIALOG_HORIZONTAL_PADDING}>
+          <text fg={input.theme.textMuted}>Enter run · Esc close · type to search</text>
+        </box>
+      }
+    >
+      <PickerList
+        items={input.payload.items}
+        selectedIndex={input.payload.selectedIndex}
+        theme={input.theme}
+        width={listWidth()}
+        maxVisible={resolveDialogSelectRows(input.height, input.payload.items.length)}
+      />
+    </DialogSelectFrame>
+  );
+}
+
+function HelpHubOverlay(input: {
+  payload: CliHelpHubOverlayPayload;
+  theme: SessionPalette;
+  width: number;
+  height: number;
+}) {
+  const surface = createMemo(() => resolveDialogSurfaceDimensions(input.width, input.height));
+  const lineWindow = createMemo(() =>
+    visibleLineWindow(input.payload.lines, 0, surface().contentHeight),
+  );
+  return (
+    <OverlaySurface
+      title={input.payload.title}
+      width={input.width}
+      height={input.height}
+      theme={input.theme}
+      footer="Enter/Esc close"
+    >
+      <TextLineBlock lines={lineWindow().visibleLines} color={input.theme.text} />
+    </OverlaySurface>
+  );
+}
+
 function OAuthWaitOverlay(input: {
   payload: CliOAuthWaitOverlayPayload;
   theme: SessionPalette;
@@ -1059,6 +1120,22 @@ export function ModalOverlay(input: {
       <Match when={input.overlay.payload?.kind === "authMethodPicker"}>
         <AuthMethodPickerOverlay
           payload={input.overlay.payload as CliAuthMethodPickerOverlayPayload}
+          theme={input.theme}
+          width={input.width}
+          height={input.height}
+        />
+      </Match>
+      <Match when={input.overlay.payload?.kind === "commandPalette"}>
+        <CommandPaletteOverlay
+          payload={input.overlay.payload as CliCommandPaletteOverlayPayload}
+          theme={input.theme}
+          width={input.width}
+          height={input.height}
+        />
+      </Match>
+      <Match when={input.overlay.payload?.kind === "helpHub"}>
+        <HelpHubOverlay
+          payload={input.overlay.payload as CliHelpHubOverlayPayload}
           theme={input.theme}
           width={input.width}
           height={input.height}

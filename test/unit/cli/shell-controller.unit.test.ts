@@ -358,6 +358,108 @@ describe("shell controller", () => {
     controller.dispose();
   });
 
+  test("/help opens the help hub overlay", async () => {
+    const { bundle } = createFakeBundle();
+
+    const controller = new CliShellController(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+    });
+
+    controller.ui.setEditorText("/help");
+    await controller.handleSemanticInput({
+      key: "enter",
+      ctrl: false,
+      meta: false,
+      shift: false,
+    });
+
+    expect(controller.getState().overlay.active?.payload).toMatchObject({
+      kind: "helpHub",
+      title: "Help",
+    });
+    expect(controller.getState().overlay.active?.lines?.join("\n") ?? "").toContain("Ctrl+K");
+
+    controller.dispose();
+  });
+
+  test("ctrl+k opens command palette and can run model search result", async () => {
+    const { bundle } = createFakeBundle();
+
+    const controller = new CliShellController(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+    });
+
+    await controller.handleSemanticInput({
+      key: "k",
+      ctrl: true,
+      meta: false,
+      shift: false,
+    });
+
+    expect(controller.getState().overlay.active?.payload).toMatchObject({
+      kind: "commandPalette",
+      title: "Commands",
+    });
+
+    for (const text of "model") {
+      await controller.handleSemanticInput({
+        key: "character",
+        text,
+        ctrl: false,
+        meta: false,
+        shift: false,
+      });
+    }
+
+    const palette = controller.getState().overlay.active?.payload;
+    expect(palette).toMatchObject({
+      kind: "commandPalette",
+      query: "model",
+    });
+    expect(palette?.kind === "commandPalette" ? palette.items[0]?.label : undefined).toBe(
+      "Switch model",
+    );
+
+    await controller.handleSemanticInput({
+      key: "enter",
+      ctrl: false,
+      meta: false,
+      shift: false,
+    });
+
+    expect(controller.getState().overlay.active?.payload).toMatchObject({
+      kind: "modelPicker",
+    });
+
+    controller.dispose();
+  });
+
+  test("quit slash aliases resolve through the command provider", async () => {
+    const { bundle } = createFakeBundle();
+
+    const controller = new CliShellController(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+    });
+
+    const exited = controller.waitForExit();
+    controller.ui.setEditorText("/exit");
+    await controller.handleSemanticInput({
+      key: "enter",
+      ctrl: false,
+      meta: false,
+      shift: false,
+    });
+    await exited;
+
+    controller.dispose();
+  });
+
   test("thinking and tool-details slash commands update durable shell view preferences", async () => {
     const fixture = createFakeBundle();
     const controller = new CliShellController(fixture.bundle, {
