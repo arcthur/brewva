@@ -2,11 +2,12 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
+  BrewvaRuntime,
   DEFAULT_BREWVA_CONFIG,
   asBrewvaEventType,
   asBrewvaSessionId,
 } from "@brewva/brewva-runtime";
-import { BrewvaEventStore } from "@brewva/brewva-runtime/internal";
+import { BrewvaEventStore, recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 function listJsonlFiles(dir: string): string[] {
@@ -68,5 +69,26 @@ describe("BrewvaEventStore session id file mapping", () => {
 
     expect(existsSync(eventsRoot)).toBe(true);
     expect(store.list(sessionId).map((row) => row.type)).toEqual([asBrewvaEventType("resume")]);
+  });
+
+  test("exposes read-only event log paths through the runtime inspection surface", () => {
+    const workspace = createTestWorkspace("event-store-runtime-log-path");
+    const runtime = new BrewvaRuntime({
+      cwd: workspace,
+      config: structuredClone(DEFAULT_BREWVA_CONFIG),
+    });
+    const sessionId = asBrewvaSessionId("heartbeat:rule-1");
+
+    recordRuntimeEvent(runtime, {
+      sessionId,
+      type: "startup",
+      timestamp: 100,
+    });
+
+    const logPath = runtime.inspect.events.getLogPath(sessionId);
+    const store = new BrewvaEventStore(DEFAULT_BREWVA_CONFIG.infrastructure.events, workspace);
+    expect(logPath).toBe(store.getLogPath(sessionId));
+    expect(logPath.endsWith(".jsonl")).toBe(true);
+    expect(Object.hasOwn(runtime.inspect.events, "append")).toBe(false);
   });
 });

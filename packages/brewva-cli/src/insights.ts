@@ -4,8 +4,12 @@ import {
   createOperatorRuntimePort,
   createTrustedLocalGovernancePort,
   type BrewvaOperatorRuntimePort,
-  type BrewvaReplaySession,
 } from "@brewva/brewva-runtime";
+import {
+  createSessionIndex,
+  type SessionIndexRecentSession,
+  type SessionIndexStatus,
+} from "@brewva/brewva-session-index";
 import { formatISO } from "date-fns";
 import { clampText, resolveInspectDirectory, type InspectFinding } from "./inspect-analysis.js";
 import { buildSessionInspectReport, type SessionInspectReport } from "./inspect.js";
@@ -50,6 +54,14 @@ interface ProjectInsightsReport {
     sessionId: string;
     error: string;
   }>;
+  index: {
+    status: "ok" | "unavailable";
+    dbPath: string;
+    writer?: boolean;
+    indexedSessions?: number;
+    indexedEvents?: number;
+    error?: string;
+  };
   overview: {
     verdictDistribution: Record<string, number>;
     smoothnessDistribution: Record<string, number>;
@@ -209,14 +221,25 @@ function extractSessionFacet(report: SessionInspectReport): SessionInspectFacet 
   };
 }
 
-function listAvailableSessions(
+async function listAvailableSessions(
   runtime: BrewvaOperatorRuntimePort,
   limit: number,
-): BrewvaReplaySession[] {
-  return runtime.inspect.events
-    .listReplaySessions()
-    .toSorted((left, right) => right.lastEventAt - left.lastEventAt)
-    .slice(0, limit);
+): Promise<{ sessions: SessionIndexRecentSession[]; status: SessionIndexStatus }> {
+  const index = await createSessionIndex({
+    workspaceRoot: runtime.workspaceRoot,
+    events: runtime.inspect.events,
+    task: runtime.inspect.task,
+  });
+  try {
+    const status = await index.catchUp();
+    if (!status.ok) {
+      return { sessions: [], status };
+    }
+    const sessions = await index.listRecentSessions({ limit });
+    return { sessions, status };
+  } finally {
+    await index.close();
+  }
 }
 
 function countDistribution(
@@ -530,7 +553,7 @@ function buildNotableSessions(
   return notable;
 }
 
-function buildProjectInsightsReport(input: {
+async function buildProjectInsightsReport(input: {
   runtime: BrewvaOperatorRuntimePort;
   directory: { absolutePath: string; workspaceRelativePath: string };
   sessionIds?: string[];
@@ -540,9 +563,23 @@ function buildProjectInsightsReport(input: {
     sessionId: string;
     directory: { absolutePath: string; workspaceRelativePath: string };
   }) => SessionInspectReport;
-}): ProjectInsightsReport {
+}): Promise<ProjectInsightsReport> {
   const limit = input.limit ?? DEFAULT_SESSION_LIMIT;
-  const allSessions = listAvailableSessions(input.runtime, Number.MAX_SAFE_INTEGER);
+  const indexed = await listAvailableSessions(input.runtime, 1_000_000);
+  const indexDiagnostic = indexed.status.ok
+    ? {
+        status: "ok" as const,
+        dbPath: indexed.status.dbPath,
+        writer: indexed.status.writer,
+        indexedSessions: indexed.status.indexedSessions,
+        indexedEvents: indexed.status.indexedEvents,
+      }
+    : {
+        status: "unavailable" as const,
+        dbPath: indexed.status.dbPath,
+        error: indexed.status.message,
+      };
+  const allSessions = indexed.sessions;
   const targetSessionIds = input.sessionIds ?? allSessions.map((session) => session.sessionId);
   const selectedIds = targetSessionIds.slice(0, limit);
   const excludedCount = targetSessionIds.length - selectedIds.length;
@@ -587,6 +624,7 @@ function buildProjectInsightsReport(input: {
       failedSessions: analysisFailures.length,
     },
     analysisFailures,
+    index: indexDiagnostic,
     overview: {
       verdictDistribution: countDistribution(facets, "verdict"),
       smoothnessDistribution: countDistribution(facets, "smoothness"),
@@ -619,6 +657,13 @@ function formatProjectInsightsText(report: ProjectInsightsReport): string {
   lines.push(`  Workspace: ${report.workspaceRoot}`);
   lines.push(`  Directory: ${report.directory || "."}`);
   lines.push(`  Generated: ${report.generatedAt}`);
+  lines.push(
+    `  Session index: ${report.index.status}${
+      report.index.status === "ok"
+        ? ` (${report.index.indexedSessions ?? 0} sessions, writer=${String(report.index.writer)})`
+        : ` (${report.index.error ?? "unavailable"})`
+    }`,
+  );
   lines.push(
     `  Sessions analyzed: ${report.window.analyzedSessions} (${report.window.excludedSessions} excluded, ${report.window.failedSessions} failed)`,
   );
@@ -777,7 +822,7 @@ async function runInsightsCli(argv: string[]): Promise<number> {
     return 1;
   }
 
-  const report = buildProjectInsightsReport({
+  const report = await buildProjectInsightsReport({
     runtime: operatorRuntime,
     directory,
     limit: limitArg ?? DEFAULT_SESSION_LIMIT,

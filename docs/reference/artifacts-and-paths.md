@@ -89,11 +89,20 @@ helper material, not session-state durability surfaces in the taxonomy above.
   - stores typed, provenance-bearing, non-authoritative narrative memory records
   - distinct from the operator-authored self bundle and distinct from
     repository-native precedent under `docs/solutions/**`
-- Recall broker state:
-  - `.brewva/recall/broker-state.json`
+- Session query plane:
+  - `.brewva/session-index/session-index.duckdb`
+  - `.brewva/session-index/read-snapshot.json`
+  - `.brewva/session-index/snapshots/*.duckdb`
   - rebuildable state only
-  - stores session digests, cross-session evidence index, and curation
-    aggregates for broker-first recall
+  - stores session digests, target-root rows, event rows, event token indexes,
+    and per-session candidate tokens for typed recall and insights queries
+  - session candidate tokens include aggregated searchable event text, not only
+    task and digest text, so long sessions remain discoverable beyond the digest
+    summary window
+  - one writer updates the primary DuckDB file; non-writer processes read the
+    latest published snapshot when the primary file is locked
+  - the writer lease is guarded by PID plus heartbeat timestamp; stale locks are
+    recoverable and the index can be rebuilt from event tape
   - broker search results carry presentation `trustLabel`,
     `evidenceStrength`, `semanticScore`, `rankingScore`, and `rankReasons`
     instead of a single source-tier ordering
@@ -102,10 +111,10 @@ helper material, not session-state durability surfaces in the taxonomy above.
   - `recall_results_surfaced`, `context_*`, and `projection_*` are excluded
     from broker tape search and session digest text
   - curation aggregates keep raw signal counts plus time-decayed ranking
-    weights; they are rebuilt from durable recall feedback evidence rather than
-    acting as source-of-truth memory
+    weights in broker memory; they are rebuilt from durable recall feedback
+    evidence rather than acting as source-of-truth memory
   - explicit curation feedback and passive utility observations remain durable
-    tape-visible events; this file is not source-of-truth memory
+    tape-visible events; the DuckDB file is not source-of-truth memory
 - Heartbeat policy remains separate control-plane material:
   - gateway heartbeat policy default path:
     `<global brewva root>/agent/gateway/HEARTBEAT.md`

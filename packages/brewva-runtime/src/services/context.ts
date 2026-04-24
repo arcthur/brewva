@@ -399,14 +399,14 @@ export class ContextService {
     prompt: string,
     usage?: ContextBudgetUsage,
     options?: BuildContextInjectionOptions,
-  ): {
+  ): Promise<{
     text: string;
     entries: ContextInjectionEntry[];
     accepted: boolean;
     originalTokens: number;
     finalTokens: number;
     truncated: boolean;
-  } {
+  }> {
     return buildContextInjectionOrchestrated(this.contextInjectionOrchestratorDeps, {
       sessionId,
       prompt,

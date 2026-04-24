@@ -49,4 +49,28 @@ describe("binary packaging contract", () => {
     expect(buildScriptSource).not.toContain("tar -xzf ${tarballPath}");
     expect(buildScriptSource).not.toContain("--force-local");
   });
+
+  test("does not package glibc DuckDB bindings into musl binaries", () => {
+    const repoRoot = resolve(import.meta.dirname, "../../..");
+    const buildScriptPath = resolve(repoRoot, "script", "build-binaries.ts");
+    const buildScriptSource = readFileSync(buildScriptPath, "utf8");
+
+    expect(buildScriptSource).not.toContain(
+      '"bun-linux-x64-musl": "@duckdb/node-bindings-linux-x64"',
+    );
+    expect(buildScriptSource).not.toContain(
+      '"bun-linux-arm64-musl": "@duckdb/node-bindings-linux-arm64"',
+    );
+    expect(buildScriptSource).toContain("DUCKDB_UNSUPPORTED_NATIVE_TARGETS");
+  });
+
+  test("uses the baseline Bun runtime for the glibc Linux x64 binary", () => {
+    const repoRoot = resolve(import.meta.dirname, "../../..");
+    const buildScriptPath = resolve(repoRoot, "script", "build-binaries.ts");
+    const buildScriptSource = readFileSync(buildScriptPath, "utf8");
+
+    expect(buildScriptSource).toContain('target: "bun-linux-x64"');
+    expect(buildScriptSource).toContain('compileTarget: "bun-linux-x64-baseline"');
+    expect(buildScriptSource).toContain("platform.compileTarget ?? platform.target");
+  });
 });

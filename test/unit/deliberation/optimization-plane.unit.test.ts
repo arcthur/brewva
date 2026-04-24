@@ -124,7 +124,7 @@ describe("optimization continuity plane", () => {
     expect(state.lineages).toHaveLength(0);
   });
 
-  test("refreshes provider collection live and separates inherited lineages from fresh branches", () => {
+  test("refreshes provider collection live and separates inherited lineages from fresh branches", async () => {
     const restoreNow = patchDateNow(() => 1_710_000_500_000);
     try {
       const workspace = createTestWorkspace("optimization-continuity-plane");
@@ -236,7 +236,7 @@ describe("optimization continuity plane", () => {
         minRefreshIntervalMs: 0,
       });
       const beforeSyncEntries: Array<{ id: string; content: string }> = [];
-      provider.collect({
+      await provider.collect({
         sessionId: parentSessionId,
         promptText: "continue the goal-loop and inspect metric convergence",
         register: (entry) => {
@@ -278,7 +278,7 @@ describe("optimization continuity plane", () => {
       expect(freshLineage?.lineageSessionIds).toEqual([freshSessionId]);
 
       const afterSyncEntries: Array<{ id: string; content: string }> = [];
-      provider.collect({
+      await provider.collect({
         sessionId: parentSessionId,
         promptText: "continue the goal-loop and inspect metric convergence",
         register: (entry) => {

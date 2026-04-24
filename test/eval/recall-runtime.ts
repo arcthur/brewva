@@ -174,7 +174,7 @@ export async function executeRecallRuntimeScenario(input: {
 
   const broker = getOrCreateRecallBroker(runtime);
   const genericBrokerStartedAt = performance.now();
-  const genericBrokerSearch = broker.search({
+  const genericBrokerSearch = await broker.search({
     sessionId: currentSessionId,
     query: dataset.query.text,
     scope: dataset.query.scope,
@@ -186,7 +186,7 @@ export async function executeRecallRuntimeScenario(input: {
   let brokerLatencyMs = genericBrokerLatencyMs;
   if (dataset.query.intent) {
     const intentBrokerStartedAt = performance.now();
-    brokerSearch = broker.search({
+    brokerSearch = await broker.search({
       sessionId: currentSessionId,
       query: dataset.query.text,
       scope: dataset.query.scope,

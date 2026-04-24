@@ -323,6 +323,7 @@ export interface BrewvaInspectionPort {
     | "getTapeStatus"
     | "getTapePressureThresholds"
     | "searchTape"
+    | "getLogPath"
     | "listReplaySessions"
     | "subscribe"
     | "toStructured"
@@ -950,6 +951,7 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
           "getTapeStatus",
           "getTapePressureThresholds",
           "searchTape",
+          "getLogPath",
           "listReplaySessions",
           "subscribe",
           "toStructured",

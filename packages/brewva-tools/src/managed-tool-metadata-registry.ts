@@ -93,6 +93,7 @@ export const MANAGED_BREWVA_TOOL_METADATA_BY_NAME = {
   ]),
   knowledge_capture: metadata("skill", "workspace_patch", ["inspect.task.getTargetDescriptor"]),
   recall_search: metadata("skill", "workspace_read", [
+    "inspect.events.getLogPath",
     "inspect.events.list",
     "inspect.events.listSessionIds",
     "inspect.events.subscribe",

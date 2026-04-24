@@ -59,6 +59,18 @@ Current front-door defaults:
 - raw runtimes without a governance port fail closed by opening the replayable
   operator desk for approval-bound effectful actions
 
+## Session Index Configuration
+
+There is no public session-index config key in v1. The local DuckDB-backed
+session query plane uses `.brewva/session-index/session-index.duckdb` plus
+published snapshot files under `.brewva/session-index/`.
+
+The session index is rebuildable from event tape and current product sources.
+Deleting it can make indexed products temporarily unavailable until rebuild,
+but it does not affect replay authority, receipts, or event inspection. If
+native DuckDB cannot load or no readable snapshot exists, indexed products fail
+closed with `session_index_unavailable` rather than widening to old scan paths.
+
 ## Key Defaults
 
 ### `skills`

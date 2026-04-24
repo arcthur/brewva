@@ -28,7 +28,8 @@ Promoted outcomes:
 - `recall_search` is the default prior-work recall surface and exposes
   stable-id inspection plus source-typed results
 - `recall_curate` is the operator-only explicit curation surface
-- recall broker state is rebuildable under `.brewva/recall/broker-state.json`
+- recall broker query state is rebuildable through the DuckDB session index under
+  `.brewva/session-index/`; curation durability remains event-tape based
 - default cross-session recall scope is `user + repository root`, with
   `session_local` fallback and policy-gated broader scopes
 - curation is rebuildable, time-decayed, inspectable, and separated from truth

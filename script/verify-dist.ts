@@ -184,6 +184,7 @@ function main(): void {
     const packages = [
       "@brewva/brewva-runtime",
       "@brewva/brewva-search",
+      "@brewva/brewva-session-index",
       "@brewva/brewva-channels-telegram",
       "@brewva/brewva-ingress",
       "@brewva/brewva-tools",
@@ -321,6 +322,26 @@ function main(): void {
     const outputSearchText = outputSearchResult.content.find((item) => item.type === "text")?.text ?? "";
     if (!outputSearchText.includes("数据库连接") || !outputSearchText.includes("连接失败")) {
       throw new Error("dist output_search smoke failed: Chinese artifact was not matched");
+    }
+    const { createSessionIndex } = await import("@brewva/brewva-session-index");
+    const sessionIndex = await createSessionIndex({
+      workspaceRoot: isolatedWorkspace,
+      events: runtime.inspect.events,
+      task: runtime.inspect.task,
+      dbPath: join(isolatedWorkspace, ".brewva", "session-index", "dist-smoke.duckdb"),
+    });
+    const sessionIndexStatus = await sessionIndex.catchUp();
+    await sessionIndex.close();
+    if (!sessionIndexStatus.ok) {
+      throw new Error(
+        "dist session-index smoke failed: " +
+          sessionIndexStatus.error +
+          " " +
+          sessionIndexStatus.message,
+      );
+    }
+    if (sessionIndexStatus.indexedSessions < 1 || sessionIndexStatus.indexedEvents < 1) {
+      throw new Error("dist session-index smoke failed: expected indexed session events");
     }
     console.log(JSON.stringify(resolved));
   `;

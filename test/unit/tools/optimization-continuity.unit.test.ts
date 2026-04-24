@@ -152,7 +152,7 @@ describe("optimization continuity tool", () => {
         minRefreshIntervalMs: 0,
       });
       const beforeListEntries: Array<{ id: string; content: string }> = [];
-      provider.collect({
+      await provider.collect({
         sessionId: parentSessionId,
         promptText: "continue the goal-loop and inspect convergence",
         register: (entry) => {
@@ -178,7 +178,7 @@ describe("optimization continuity tool", () => {
       expect(listDetails?.lineages).toHaveLength(2);
 
       const afterListEntries: Array<{ id: string; content: string }> = [];
-      provider.collect({
+      await provider.collect({
         sessionId: parentSessionId,
         promptText: "continue the goal-loop and inspect convergence",
         register: (entry) => {

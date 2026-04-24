@@ -181,7 +181,7 @@ function createSessionInput(input: {
 }
 
 describe("deliberation memory plane", () => {
-  test("refreshes provider collection live and serves artifacts without a prior manual sync", () => {
+  test("refreshes provider collection live and serves artifacts without a prior manual sync", async () => {
     const workspace = createTestWorkspace("deliberation-memory-provider");
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionId = "deliberation-provider-session";
@@ -205,7 +205,7 @@ describe("deliberation memory plane", () => {
       minRefreshIntervalMs: 1,
     });
     const beforeSyncEntries: Array<{ id: string; content: string }> = [];
-    provider.collect({
+    await provider.collect({
       sessionId,
       promptText: "remember the repository strategy and verification contract",
       register: (entry) => {
@@ -223,7 +223,7 @@ describe("deliberation memory plane", () => {
     plane.sync();
 
     const afterSyncEntries: Array<{ id: string; content: string }> = [];
-    provider.collect({
+    await provider.collect({
       sessionId,
       promptText: "remember the repository strategy and verification contract",
       register: (entry) => {

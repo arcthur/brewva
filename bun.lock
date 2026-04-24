@@ -15,10 +15,12 @@
         "@brewva/brewva-recall": "workspace:*",
         "@brewva/brewva-runtime": "workspace:*",
         "@brewva/brewva-search": "workspace:*",
+        "@brewva/brewva-session-index": "workspace:*",
         "@brewva/brewva-skill-broker": "workspace:*",
         "@brewva/brewva-substrate": "workspace:*",
         "@brewva/brewva-tools": "workspace:*",
         "@brewva/brewva-tui": "workspace:*",
+        "@duckdb/node-api": "1.5.2-r.1",
         "@opentui/core": "0.1.100",
         "@opentui/solid": "0.1.100",
         "@sinclair/typebox": "^0.34.49",
@@ -130,6 +132,7 @@
       "dependencies": {
         "@brewva/brewva-gateway": "workspace:*",
         "@brewva/brewva-runtime": "workspace:*",
+        "@brewva/brewva-session-index": "workspace:*",
         "@brewva/brewva-substrate": "workspace:*",
         "@brewva/brewva-tui": "workspace:*",
         "@opentui/core": "0.1.100",
@@ -199,6 +202,7 @@
         "@brewva/brewva-deliberation": "workspace:*",
         "@brewva/brewva-runtime": "workspace:*",
         "@brewva/brewva-search": "workspace:*",
+        "@brewva/brewva-session-index": "workspace:*",
         "@brewva/brewva-skill-broker": "workspace:*",
         "fuse.js": "^7.3.0",
       },
@@ -219,6 +223,15 @@
       "version": "0.1.0",
       "dependencies": {
         "jieba-wasm": "^2.4.0",
+      },
+    },
+    "packages/brewva-session-index": {
+      "name": "@brewva/brewva-session-index",
+      "version": "0.1.0",
+      "dependencies": {
+        "@brewva/brewva-runtime": "workspace:*",
+        "@brewva/brewva-search": "workspace:*",
+        "@duckdb/node-api": "1.5.2-r.1",
       },
     },
     "packages/brewva-skill-broker": {
@@ -433,6 +446,8 @@
 
     "@brewva/brewva-search": ["@brewva/brewva-search@workspace:packages/brewva-search"],
 
+    "@brewva/brewva-session-index": ["@brewva/brewva-session-index@workspace:packages/brewva-session-index"],
+
     "@brewva/brewva-skill-broker": ["@brewva/brewva-skill-broker@workspace:packages/brewva-skill-broker"],
 
     "@brewva/brewva-substrate": ["@brewva/brewva-substrate@workspace:packages/brewva-substrate"],
@@ -444,6 +459,22 @@
     "@brewva/brewva-windows-x64": ["@brewva/brewva-windows-x64@workspace:distribution/brewva-windows-x64"],
 
     "@dimforge/rapier2d-simd-compat": ["@dimforge/rapier2d-simd-compat@0.17.3", "", {}, "sha512-bijvwWz6NHsNj5e5i1vtd3dU2pDhthSaTUZSh14DUGGKJfw8eMnlWZsxwHBxB/a3AXVNDjL9abuHw1k9FGR+jg=="],
+
+    "@duckdb/node-api": ["@duckdb/node-api@1.5.2-r.1", "", { "dependencies": { "@duckdb/node-bindings": "1.5.2-r.1" } }, "sha512-OzBBnS0JGXMoS5mzKNY/Ylr7SshcRQiLFIoxQ4AlePwJ2fNeDL/fbHu/knjxUrXwW1fJBTUgwWftmxDdnZZb3A=="],
+
+    "@duckdb/node-bindings": ["@duckdb/node-bindings@1.5.2-r.1", "", { "optionalDependencies": { "@duckdb/node-bindings-darwin-arm64": "1.5.2-r.1", "@duckdb/node-bindings-darwin-x64": "1.5.2-r.1", "@duckdb/node-bindings-linux-arm64": "1.5.2-r.1", "@duckdb/node-bindings-linux-x64": "1.5.2-r.1", "@duckdb/node-bindings-win32-arm64": "1.5.2-r.1", "@duckdb/node-bindings-win32-x64": "1.5.2-r.1" } }, "sha512-bUg3bLVj70YVku6fKyQJS8ASORl7kM7YFVFznsEB9pWbtazPj+ME2x2FUk0WiTzjJdutjzSSGXF066mB4bGGZA=="],
+
+    "@duckdb/node-bindings-darwin-arm64": ["@duckdb/node-bindings-darwin-arm64@1.5.2-r.1", "", { "os": "darwin", "cpu": "arm64" }, "sha512-v35FyKOb8EJCvaiPF7k0gvKiJTXR7PPQDNoWR0Gu+YSX5O9b+DIguzt1348Of3HebHy6ATSMzlUekaVA9YXu+g=="],
+
+    "@duckdb/node-bindings-darwin-x64": ["@duckdb/node-bindings-darwin-x64@1.5.2-r.1", "", { "os": "darwin", "cpu": "x64" }, "sha512-SU9dIJ1BluKkkGxi4UsP4keqkkstB2YDySF9KcYu3EZKIVM3FTv2zc7XO38dXnHOq6+F3WqhWWZvD+XU945p7A=="],
+
+    "@duckdb/node-bindings-linux-arm64": ["@duckdb/node-bindings-linux-arm64@1.5.2-r.1", "", { "os": "linux", "cpu": "arm64" }, "sha512-3Tra9xM3aM3denaER4KhJ6//6PpmPbik9ECBQ+sh9PyKaEgHw/0kAcKnLm5EzWUnXF0qYmZlewvkCrse8KmOYw=="],
+
+    "@duckdb/node-bindings-linux-x64": ["@duckdb/node-bindings-linux-x64@1.5.2-r.1", "", { "os": "linux", "cpu": "x64" }, "sha512-pcQvZRHiIfJ9cq8parkSQczQHEml/IeGfnDCMAbEgD6+jaV9Y9Y5Ph1kP9aR+bm6him1S5ZIEr3kZbihjKnWbA=="],
+
+    "@duckdb/node-bindings-win32-arm64": ["@duckdb/node-bindings-win32-arm64@1.5.2-r.1", "", { "os": "win32", "cpu": "arm64" }, "sha512-Ji8tym+N3LkrhVt0Up3bsacD/kpg4/JXFJQqxswiYvBaNCQOk+D+aiVS0GN5pcqvmnG7V7TpsDRzkLEFaWp1vw=="],
+
+    "@duckdb/node-bindings-win32-x64": ["@duckdb/node-bindings-win32-x64@1.5.2-r.1", "", { "os": "win32", "cpu": "x64" }, "sha512-5XqcqC+4R8ghBEEbnc2a0sqfz1zyPBRb9YcmIWfiuDoCYSYFbKhmHcEyNftZDHcwCoLOHXnUin45jraex4STqQ=="],
 
     "@google/genai": ["@google/genai@1.50.1", "", { "dependencies": { "google-auth-library": "^10.3.0", "p-retry": "^4.6.2", "protobufjs": "^7.5.4", "ws": "^8.18.0" }, "peerDependencies": { "@modelcontextprotocol/sdk": "^1.25.2" }, "optionalPeers": ["@modelcontextprotocol/sdk"] }, "sha512-YbkX7H9+1Pt8wOt7DDREy8XSoiL6fRDzZQRyaVBarFf8MR3zHGqVdvM4cLbDXqPhxqvegZShgfxb8kw9C7YhAQ=="],
 

@@ -10,6 +10,7 @@
   "references": [
     { "path": "../packages/brewva-search" },
     { "path": "../packages/brewva-runtime" },
+    { "path": "../packages/brewva-session-index" },
     { "path": "../packages/brewva-deliberation" },
     { "path": "../packages/brewva-skill-broker" },
     { "path": "../packages/brewva-channels-telegram" },

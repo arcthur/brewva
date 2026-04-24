@@ -47,6 +47,7 @@ refresh the pointer summary and `Last reviewed` metadata here.
 - [`rfc-narrative-memory-product-and-bounded-semantic-recall.md`](./rfc-narrative-memory-product-and-bounded-semantic-recall.md)
 - [`rfc-opentui-adoption-for-brewva-cli-shell-and-native-boundary.md`](./rfc-opentui-adoption-for-brewva-cli-shell-and-native-boundary.md)
 - [`rfc-recall-first-compounding-intelligence-and-experience-products.md`](./rfc-recall-first-compounding-intelligence-and-experience-products.md)
+- [`rfc-duckdb-session-query-plane.md`](./rfc-duckdb-session-query-plane.md)
 - [`rfc-repository-native-compound-knowledge-and-review-ensemble.md`](./rfc-repository-native-compound-knowledge-and-review-ensemble.md)
 - [`rfc-skill-distribution-refresh-and-catalog-surface.md`](./rfc-skill-distribution-refresh-and-catalog-surface.md)
 - [`rfc-skill-contract-layering-project-context-and-explicit-activation.md`](./rfc-skill-contract-layering-project-context-and-explicit-activation.md)

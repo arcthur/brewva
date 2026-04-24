@@ -37,7 +37,6 @@ import {
 } from "./gateway-print.js";
 import { handleInsightsChannelCommand } from "./insights-channel-command.js";
 import { createInsightsCommandRuntimePlugin } from "./insights-command-runtime-plugin.js";
-import { runInsightsCli } from "./insights.js";
 import { handleInspectChannelCommand } from "./inspect-channel-command.js";
 import { createInspectCommandRuntimePlugin } from "./inspect-command-runtime-plugin.js";
 import { resolveTargetSession, runInspectCli } from "./inspect.js";
@@ -119,6 +118,11 @@ type CliValueResult<T> = RuntimeResult<{ value: T }>;
 
 function okCliValue<T>(value: T): CliValueResult<T> {
   return { ok: true, value };
+}
+
+async function runInsightsCli(argv: string[]): Promise<number> {
+  const { runInsightsCli: loadedRunInsightsCli } = await import("./insights.js");
+  return loadedRunInsightsCli(argv);
 }
 
 function cliValueError(error: string): CliValueResult<never> {
@@ -1257,7 +1261,7 @@ export { handleQuestionsChannelCommand } from "./questions-channel-command.js";
 export { createQuestionsCommandRuntimePlugin } from "./questions-command-runtime-plugin.js";
 export { createAgentOverlaysCommandRuntimePlugin } from "./agent-overlays-command-runtime-plugin.js";
 export { createUpdateCommandRuntimePlugin } from "./update-command-runtime-plugin.js";
-export { runInsightsCli } from "./insights.js";
+export { runInsightsCli };
 export { runOnboardCli } from "./onboard.js";
 export { JsonLineWriter, type JsonLineWritable, writeJsonLine } from "./json-lines.js";
 export {

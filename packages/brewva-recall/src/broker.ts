@@ -1,4 +1,3 @@
-import { resolve, sep } from "node:path";
 import {
   getOrCreateDeliberationMemoryPlane,
   getOrCreateNarrativeMemoryPlane,
@@ -8,8 +7,20 @@ import {
   type NarrativeMemoryRecord,
   type OptimizationLineageArtifact,
 } from "@brewva/brewva-deliberation";
-import type { BrewvaEventRecord, BrewvaInspectionPort } from "@brewva/brewva-runtime";
+import {
+  RECALL_CURATION_RECORDED_EVENT_TYPE,
+  RECALL_UTILITY_OBSERVED_EVENT_TYPE,
+  type BrewvaEventRecord,
+  type BrewvaInspectionPort,
+} from "@brewva/brewva-runtime";
 import { tokenizeSearchText } from "@brewva/brewva-search";
+import {
+  SESSION_INDEX_UNAVAILABLE,
+  createSessionIndex,
+  type SessionIndex,
+  type SessionIndexDigest,
+  type SessionIndexTapeEvidence,
+} from "@brewva/brewva-session-index";
 import {
   getOrCreateSkillPromotionBroker,
   type SkillPromotionDraft,
@@ -24,8 +35,6 @@ import {
   findKnowledgeDocByRelativePath,
   type KnowledgeDocRecord,
 } from "./knowledge-search-core.js";
-import { collectRecallSessionDigests } from "./session-digests.js";
-import { FileRecallBrokerStore } from "./store.js";
 import {
   RECALL_CURATION_HALFLIFE_DAYS,
   RECALL_BROKER_STATE_SCHEMA,
@@ -67,7 +76,7 @@ interface RecallRankingContext {
 
 interface RecallBrokerEventsPort extends Pick<
   BrewvaInspectionPort["events"],
-  "listSessionIds" | "list" | "subscribe"
+  "listSessionIds" | "list" | "getLogPath" | "subscribe"
 > {}
 
 export interface RecallBrokerRuntime {
@@ -91,9 +100,20 @@ export interface RecallBrokerRuntime {
 }
 
 const brokerByRuntime = new WeakMap<object, RecallBroker>();
+const RECALL_STATE_INVALIDATING_EVENT_TYPES = new Set<string>([
+  RECALL_CURATION_RECORDED_EVENT_TYPE,
+  RECALL_UTILITY_OBSERVED_EVENT_TYPE,
+]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+export function isRecallSessionIndexUnavailable(error: unknown): boolean {
+  return (
+    isRecord(error) &&
+    (error.code === SESSION_INDEX_UNAVAILABLE || error.name === "SessionIndexUnavailableError")
+  );
 }
 
 function readString(value: unknown): string | undefined {
@@ -216,6 +236,30 @@ function buildEmptyState(): RecallBrokerState {
     evidenceIndex: [],
     curation: [],
   };
+}
+
+function mapSessionIndexDigest(entry: SessionIndexDigest): RecallSessionDigest {
+  return {
+    sessionId: entry.sessionId,
+    eventCount: entry.eventCount,
+    lastEventAt: entry.lastEventAt,
+    repositoryRoot: entry.repositoryRoot,
+    primaryRoot: entry.primaryRoot,
+    targetRoots: entry.targetRoots,
+    ...(entry.taskGoal ? { taskGoal: entry.taskGoal } : {}),
+    digestText: entry.digestText,
+  };
+}
+
+function mapSessionIndexEvidenceToEvent(entry: SessionIndexTapeEvidence): BrewvaEventRecord {
+  return {
+    id: entry.eventId,
+    sessionId: entry.sessionId,
+    type: entry.type,
+    timestamp: entry.timestamp,
+    ...(entry.turn === undefined ? {} : { turn: entry.turn }),
+    payload: entry.payload as BrewvaEventRecord["payload"],
+  } as BrewvaEventRecord;
 }
 
 function createEmptyCurationAggregate(stableId: string): RecallCurationAggregate {
@@ -621,16 +665,20 @@ export interface RecallBrokerInspectInput {
 }
 
 export class RecallBroker {
-  private readonly store: FileRecallBrokerStore;
+  private readonly indexPromise: Promise<SessionIndex>;
   private state: RecallBrokerState | undefined;
   private dirty = true;
 
   constructor(private readonly runtime: RecallBrokerRuntime) {
-    this.store = new FileRecallBrokerStore(runtime.workspaceRoot);
+    this.indexPromise = createSessionIndex({
+      workspaceRoot: runtime.workspaceRoot,
+      events: runtime.inspect.events,
+      task: runtime.inspect.task,
+    });
     runtime.inspect.events.subscribe((event) => {
       if (
         isRecallSearchableTapeEvent(event) ||
-        event.type.startsWith("recall_") ||
+        RECALL_STATE_INVALIDATING_EVENT_TYPES.has(event.type) ||
         event.type.startsWith("skill_promotion_")
       ) {
         this.dirty = true;
@@ -638,12 +686,15 @@ export class RecallBroker {
     });
   }
 
-  sync(): RecallBrokerState {
-    const current = this.store.read() ?? this.state ?? buildEmptyState();
-    const sessionDigests = collectRecallSessionDigests(this.runtime.inspect.events, {
-      task: this.runtime.inspect.task,
-      workspaceRoot: this.runtime.workspaceRoot,
-    });
+  async sync(): Promise<RecallBrokerState> {
+    if (!this.dirty && this.state) {
+      return this.state;
+    }
+    const current = this.state ?? buildEmptyState();
+    const sessionIndex = await this.indexPromise;
+    const sessionDigests = (await sessionIndex.listSessionDigests())
+      .filter((entry) => entry.digestText.trim().length > 0)
+      .map(mapSessionIndexDigest);
     if (!this.dirty && sameDigests(current.sessionDigests, sessionDigests)) {
       this.state = current;
       return current;
@@ -663,34 +714,47 @@ export class RecallBroker {
       })),
       curation: buildCurationAggregates(this.runtime),
     };
-    this.store.write(next);
     this.state = next;
     this.dirty = false;
     return next;
   }
 
   listCached(): RecallBrokerState {
-    return this.state ?? this.store.read() ?? buildEmptyState();
+    return this.state ?? buildEmptyState();
   }
 
-  search(input: RecallBrokerSearchInput): RecallSearchResult {
+  async search(input: RecallBrokerSearchInput): Promise<RecallSearchResult> {
     const query = normalizeQuery(input.query);
     const limit = Math.max(1, input.limit ?? DEFAULT_MAX_RESULTS);
     const scope = input.scope ?? DEFAULT_SCOPE;
     const intent = input.intent;
     const rankingContext = createRankingContext(input.sessionId, intent);
-    const state = this.sync();
+    const state = await this.sync();
     const queryTokens = tokenizeSearchText(query, { includeCompoundSubtokens: false });
     const curationById = new Map(state.curation.map((entry) => [entry.stableId, entry]));
     const currentTarget = this.runtime.inspect.task.getTargetDescriptor(input.sessionId);
     const targetRoots =
       currentTarget.roots.length > 0 ? currentTarget.roots : [currentTarget.primaryRoot];
-    const candidateDigests = this.resolveScopedDigests(state, input.sessionId, scope, targetRoots);
-    const scopedSessionIds = new Set(candidateDigests.map((entry) => entry.sessionId));
+    const sessionIndex = await this.indexPromise;
+    const tapeCandidateDigests = (
+      await sessionIndex.querySessionDigests({
+        currentSessionId: input.sessionId,
+        scope,
+        targetRoots,
+        queryTokens,
+        limit: Math.max(DEFAULT_MAX_TAPE_SESSIONS, limit * 2),
+      })
+    ).map(mapSessionIndexDigest);
 
     const results: RecallSearchEntry[] = [];
     results.push(
-      ...this.searchTapeEvidence(candidateDigests, rankingContext, queryTokens, scope, limit),
+      ...(await this.searchTapeEvidence(
+        tapeCandidateDigests,
+        rankingContext,
+        queryTokens,
+        scope,
+        limit,
+      )),
     );
     results.push(
       ...getOrCreateNarrativeMemoryPlane(this.runtime)
@@ -721,9 +785,25 @@ export class RecallBroker {
           ),
         ),
     );
+    const optimizationEntries = getOrCreateOptimizationContinuityPlane(this.runtime).retrieve(
+      query,
+      limit,
+    );
+    const promotionDrafts = getOrCreateSkillPromotionBroker(this.runtime).list({ limit });
+    const scopedSessionIds = await this.filterSessionIdsByScope(
+      sessionIndex,
+      input.sessionId,
+      scope,
+      targetRoots,
+      uniqueStrings([
+        ...optimizationEntries
+          .map((entry) => entry.artifact.rootSessionId ?? "")
+          .filter((sessionId) => sessionId.length > 0),
+        ...promotionDrafts.flatMap((draft) => draft.sessionIds),
+      ]),
+    );
     results.push(
-      ...getOrCreateOptimizationContinuityPlane(this.runtime)
-        .retrieve(query, limit)
+      ...optimizationEntries
         .filter(
           (entry) =>
             scope === "workspace_wide" ||
@@ -745,8 +825,7 @@ export class RecallBroker {
         ),
     );
     results.push(
-      ...getOrCreateSkillPromotionBroker(this.runtime)
-        .list({ limit })
+      ...promotionDrafts
         .filter(
           (draft) =>
             scope === "workspace_wide" ||
@@ -778,16 +857,15 @@ export class RecallBroker {
     };
   }
 
-  inspectStableIds(input: RecallBrokerInspectInput): RecallInspectResult {
+  async inspectStableIds(input: RecallBrokerInspectInput): Promise<RecallInspectResult> {
     const scope = input.scope ?? DEFAULT_SCOPE;
     const rankingContext = createRankingContext(input.sessionId, undefined);
-    const state = this.sync();
+    const state = await this.sync();
     const curationById = new Map(state.curation.map((entry) => [entry.stableId, entry]));
     const currentTarget = this.runtime.inspect.task.getTargetDescriptor(input.sessionId);
     const targetRoots =
       currentTarget.roots.length > 0 ? currentTarget.roots : [currentTarget.primaryRoot];
-    const candidateDigests = this.resolveScopedDigests(state, input.sessionId, scope, targetRoots);
-    const scopedSessionIds = new Set(candidateDigests.map((entry) => entry.sessionId));
+    const sessionIndex = await this.indexPromise;
     const requestedStableIds = uniqueStrings(
       input.stableIds.map((stableId) => stableId.trim()).filter((stableId) => stableId.length > 0),
     );
@@ -795,10 +873,10 @@ export class RecallBroker {
     const unresolvedStableIds: string[] = [];
 
     for (const stableId of requestedStableIds) {
-      const resolved = this.resolveStableId(
+      const resolved = await this.resolveStableId(
         stableId,
-        candidateDigests,
-        scopedSessionIds,
+        sessionIndex,
+        targetRoots,
         scope,
         rankingContext,
       );
@@ -819,113 +897,96 @@ export class RecallBroker {
     };
   }
 
-  private searchTapeEvidence(
+  private async searchTapeEvidence(
     candidateDigests: readonly RecallSessionDigest[],
     rankingContext: RecallRankingContext,
     queryTokens: readonly string[],
     scope: RecallScope,
     limit: number,
-  ): RecallSearchEntry[] {
+  ): Promise<RecallSearchEntry[]> {
     const { currentSessionId } = rankingContext;
-    const rankedDigests = candidateDigests
-      .map((entry) => ({
-        digest: entry,
-        score:
-          computeTokenOverlap(queryTokens, `${entry.taskGoal ?? ""} ${entry.digestText}`) +
-          (entry.sessionId === currentSessionId ? 0.02 : 0),
-      }))
-      .filter((entry) => entry.score > 0 || entry.digest.sessionId === currentSessionId)
-      .toSorted(
-        (left, right) =>
-          right.score - left.score || right.digest.lastEventAt - left.digest.lastEventAt,
-      )
-      .slice(0, Math.max(DEFAULT_MAX_TAPE_SESSIONS, limit * 2))
-      .map((entry) => entry.digest);
+    const rankedDigests = candidateDigests.slice(0, Math.max(DEFAULT_MAX_TAPE_SESSIONS, limit * 2));
 
+    const sessionIndex = await this.indexPromise;
+    const evidenceRows = await sessionIndex.queryTapeEvidence({
+      sessionIds: rankedDigests.map((entry) => entry.sessionId),
+      queryTokens,
+      limit: Math.max(DEFAULT_MAX_TAPE_SESSIONS, limit * 4),
+    });
+    const digestBySessionId = new Map(rankedDigests.map((entry) => [entry.sessionId, entry]));
     const results: RecallSearchEntry[] = [];
-    for (const digest of rankedDigests) {
-      for (const event of this.runtime.inspect.events.list(digest.sessionId)) {
-        if (!isRecallSearchableTapeEvent(event)) continue;
-        const text = extractEventSearchText(event);
-        const overlap = computeTokenOverlap(queryTokens, text);
-        if (overlap <= 0) continue;
-        const classification = classifyTapeEvent(event, currentSessionId);
-        results.push(
-          finalizeRecallEntry(
-            {
-              stableId: `tape:${digest.sessionId}:${event.id}`,
-              sourceFamily: "tape_evidence",
-              trustLabel: classification.trustLabel,
-              evidenceStrength: classification.evidenceStrength,
-              scope,
-              semanticScore:
-                overlap +
-                Math.min(0.12, computeTokenOverlap(queryTokens, digest.digestText) * 0.25) +
-                (digest.sessionId === currentSessionId ? 0.03 : 0),
-              title: renderEventTitle(event),
-              summary: compactText(text, 160),
-              excerpt: compactText(text, 220),
-              freshness: freshnessFromTimestamp(event.timestamp),
-              matchReasons: ["event_text"],
-              sessionId: digest.sessionId,
-              targetRoots: digest.targetRoots,
-            },
-            rankingContext,
-          ),
-        );
-      }
+    for (const evidence of evidenceRows) {
+      const digest = digestBySessionId.get(evidence.sessionId);
+      if (!digest) continue;
+      const event = mapSessionIndexEvidenceToEvent(evidence);
+      if (!isRecallSearchableTapeEvent(event)) continue;
+      const text = evidence.searchText || extractEventSearchText(event);
+      const overlap = evidence.tokenScore;
+      if (overlap <= 0) continue;
+      const classification = classifyTapeEvent(event, currentSessionId);
+      results.push(
+        finalizeRecallEntry(
+          {
+            stableId: `tape:${digest.sessionId}:${event.id}`,
+            sourceFamily: "tape_evidence",
+            trustLabel: classification.trustLabel,
+            evidenceStrength: classification.evidenceStrength,
+            scope,
+            semanticScore:
+              overlap +
+              Math.min(0.12, computeTokenOverlap(queryTokens, digest.digestText) * 0.25) +
+              (digest.sessionId === currentSessionId ? 0.03 : 0),
+            title: renderEventTitle(event),
+            summary: compactText(text, 160),
+            excerpt: compactText(text, 220),
+            freshness: freshnessFromTimestamp(event.timestamp),
+            matchReasons: ["event_text"],
+            sessionId: digest.sessionId,
+            targetRoots: digest.targetRoots,
+          },
+          rankingContext,
+        ),
+      );
     }
     return results;
   }
 
-  private resolveScopedDigests(
-    state: RecallBrokerState,
+  private async filterSessionIdsByScope(
+    sessionIndex: SessionIndex,
     currentSessionId: string,
     scope: RecallScope,
-    currentTargetRoots: readonly string[],
-  ): RecallSessionDigest[] {
-    const normalizedCurrentRoots = this.normalizeTargetRoots(currentTargetRoots);
-    return state.sessionDigests.filter((entry) => {
-      if (scope === "session_local") {
-        return entry.sessionId === currentSessionId;
-      }
-      if (scope === "workspace_wide") {
-        return true;
-      }
-      return (
-        entry.repositoryRoot === resolve(this.runtime.workspaceRoot) &&
-        this.targetRootsOverlap(entry.targetRoots, normalizedCurrentRoots)
-      );
-    });
-  }
-
-  private normalizeTargetRoots(roots: readonly string[]): string[] {
-    const normalized = uniqueStrings(
-      roots
-        .map((root) => root.trim())
-        .filter((root) => root.length > 0)
-        .map((root) => resolve(root)),
-    );
-    return normalized.length > 0 ? normalized : [resolve(this.runtime.workspaceRoot)];
-  }
-
-  private targetRootsOverlap(left: readonly string[], right: readonly string[]): boolean {
-    const normalizedLeft = this.normalizeTargetRoots(left);
-    const normalizedRight = this.normalizeTargetRoots(right);
-    return normalizedLeft.some((leftRoot) =>
-      normalizedRight.some((rightRoot) => this.pathsOverlap(leftRoot, rightRoot)),
+    targetRoots: readonly string[],
+    sessionIds: readonly string[],
+  ): Promise<ReadonlySet<string>> {
+    const uniqueSessionIds = uniqueStrings(sessionIds);
+    if (uniqueSessionIds.length === 0) return new Set();
+    if (scope === "workspace_wide") return new Set(uniqueSessionIds);
+    return new Set(
+      await sessionIndex.filterSessionIdsByScope({
+        currentSessionId,
+        scope,
+        targetRoots,
+        sessionIds: uniqueSessionIds,
+      }),
     );
   }
 
-  private pathsOverlap(left: string, right: string): boolean {
-    const resolvedLeft = resolve(left);
-    const resolvedRight = resolve(right);
-    if (resolvedLeft === resolvedRight) {
-      return true;
-    }
-    const leftPrefix = resolvedLeft.endsWith(sep) ? resolvedLeft : `${resolvedLeft}${sep}`;
-    const rightPrefix = resolvedRight.endsWith(sep) ? resolvedRight : `${resolvedRight}${sep}`;
-    return resolvedLeft.startsWith(rightPrefix) || resolvedRight.startsWith(leftPrefix);
+  private async isSessionInScope(
+    sessionIndex: SessionIndex,
+    sessionId: string,
+    targetRoots: readonly string[],
+    scope: RecallScope,
+    rankingContext: RecallRankingContext,
+  ): Promise<boolean> {
+    if (scope === "workspace_wide") return true;
+    const scopedSessionIds = await this.filterSessionIdsByScope(
+      sessionIndex,
+      rankingContext.currentSessionId,
+      scope,
+      targetRoots,
+      [sessionId],
+    );
+    return scopedSessionIds.has(sessionId);
   }
 
   private applyCuration(
@@ -953,15 +1014,21 @@ export class RecallBroker {
     ];
   }
 
-  private resolveStableId(
+  private async resolveStableId(
     stableId: string,
-    candidateDigests: readonly RecallSessionDigest[],
-    scopedSessionIds: ReadonlySet<string>,
+    sessionIndex: SessionIndex,
+    targetRoots: readonly string[],
     scope: RecallScope,
     rankingContext: RecallRankingContext,
-  ): RecallSearchEntry | undefined {
+  ): Promise<RecallSearchEntry | undefined> {
     if (stableId.startsWith("tape:")) {
-      return this.resolveTapeStableId(stableId, candidateDigests, scope, rankingContext);
+      return await this.resolveTapeStableId(
+        stableId,
+        sessionIndex,
+        targetRoots,
+        scope,
+        rankingContext,
+      );
     }
     if (stableId.startsWith("narrative:")) {
       const record = getOrCreateNarrativeMemoryPlane(this.runtime).getRecord(
@@ -989,7 +1056,13 @@ export class RecallBroker {
       if (
         scope !== "workspace_wide" &&
         lineage.rootSessionId &&
-        !scopedSessionIds.has(lineage.rootSessionId)
+        !(await this.isSessionInScope(
+          sessionIndex,
+          lineage.rootSessionId,
+          targetRoots,
+          scope,
+          rankingContext,
+        ))
       ) {
         return undefined;
       }
@@ -1011,7 +1084,15 @@ export class RecallBroker {
       if (
         scope !== "workspace_wide" &&
         draft.sessionIds.length > 0 &&
-        !draft.sessionIds.some((sessionId) => scopedSessionIds.has(sessionId))
+        (
+          await this.filterSessionIdsByScope(
+            sessionIndex,
+            rankingContext.currentSessionId,
+            scope,
+            targetRoots,
+            draft.sessionIds,
+          )
+        ).size === 0
       ) {
         return undefined;
       }
@@ -1043,12 +1124,13 @@ export class RecallBroker {
     return undefined;
   }
 
-  private resolveTapeStableId(
+  private async resolveTapeStableId(
     stableId: string,
-    candidateDigests: readonly RecallSessionDigest[],
+    sessionIndex: SessionIndex,
+    targetRoots: readonly string[],
     scope: RecallScope,
     rankingContext: RecallRankingContext,
-  ): RecallSearchEntry | undefined {
+  ): Promise<RecallSearchEntry | undefined> {
     const encoded = stableId.slice("tape:".length);
     const splitIndex = encoded.lastIndexOf(":");
     if (splitIndex <= 0 || splitIndex >= encoded.length - 1) {
@@ -1056,20 +1138,24 @@ export class RecallBroker {
     }
     const sessionId = encoded.slice(0, splitIndex);
     const eventId = encoded.slice(splitIndex + 1);
-    const digest = candidateDigests.find((entry) => entry.sessionId === sessionId);
+    if (
+      !(await this.isSessionInScope(sessionIndex, sessionId, targetRoots, scope, rankingContext))
+    ) {
+      return undefined;
+    }
+    const digest = await sessionIndex.getSessionDigest({ sessionId });
     if (!digest) {
       return undefined;
     }
-    const event = this.runtime.inspect.events
-      .list(sessionId)
-      .find((candidate) => candidate.id === eventId);
-    if (!event) {
+    const evidence = await sessionIndex.getTapeEvent({ sessionId, eventId });
+    if (!evidence) {
       return undefined;
     }
+    const event = mapSessionIndexEvidenceToEvent(evidence);
     if (!isRecallSearchableTapeEvent(event)) {
       return undefined;
     }
-    const text = extractEventSearchText(event);
+    const text = evidence.searchText || extractEventSearchText(event);
     const classification = classifyTapeEvent(event, rankingContext.currentSessionId);
     return finalizeRecallEntry(
       {

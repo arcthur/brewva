@@ -103,8 +103,15 @@ and proceed with available evidence only. Do not fill gaps with speculation.
 ### Phase 2: Separate artifact layers
 
 Classify each artifact as authoritative (event store, WAL) or derived
-(projections, ledger summaries, diagnostics). Authoritative artifacts win when
-they contradict derived ones.
+(projections, ledger summaries, diagnostics, session index rows).
+Authoritative artifacts win when they contradict derived ones.
+
+The DuckDB session index under `.brewva/session-index/session-index.duckdb` is a
+rebuildable query plane. Non-writer processes may read the published snapshot
+referenced by `.brewva/session-index/read-snapshot.json`. Use either file only
+to narrow cross-session evidence and locate event tape offsets; do not treat
+indexed rows as replay authority. If the index is missing, stale, or corrupt,
+rebuild it from event tape instead of drawing conclusions from partial rows.
 
 **If authoritative and derived layers contradict**: Flag the contradiction as a
 finding. Do not silently pick one.
@@ -130,7 +137,8 @@ Produce:
 
 - `scripts/locate_session_artifacts.sh` — Input: SESSION_ID (arg 1), optional
   WORKSPACE_ROOT (arg 2, default `.`). Output: JSON with `found`, `event_store`,
-  `ledger`, `projections`, `wal`. Run at the start of every investigation.
+  `ledger`, `projections`, `wal`, `session_index`. Run at the start of every
+  investigation.
 
 ## Decision Protocol
 
@@ -175,14 +183,14 @@ Output:
       "layer": "event_store",
       "detail": "`provider_fallback_retry` has an `entered` record with no later `completed` or `failed` event for attempt=1",
       "severity": "high",
-      "evidence_path": ".orchestrator/sessions/sess_abc123/events.jsonl"
+      "evidence_path": ".orchestrator/events/sess_c2Vzc19hYmMxMjM.jsonl"
     },
     {
       "type": "divergence",
       "layer": "derived_projection",
       "detail": "Recovery posture stays active even though later output was rendered successfully",
       "severity": "medium",
-      "evidence_path": ".orchestrator/sessions/sess_abc123/projections"
+      "evidence_path": ".orchestrator/projection"
     }
   ]
 }

@@ -10,7 +10,7 @@ import { BrewvaRuntime, CONTEXT_SOURCES } from "@brewva/brewva-runtime";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 describe("narrative memory plane", () => {
-  test("persists records, retrieves active records by default, and exposes a recall provider", () => {
+  test("persists records, retrieves active records by default, and exposes a recall provider", async () => {
     const workspace = createTestWorkspace("narrative-memory-plane");
     const runtime = new BrewvaRuntime({ cwd: workspace, agentId: "default" });
     const sessionId = "narrative-plane-session";
@@ -97,7 +97,7 @@ describe("narrative memory plane", () => {
 
     const provider = createNarrativeMemoryContextProvider({ runtime, maxRecords: 2 });
     const collected: Array<{ id: string; content: string }> = [];
-    provider.collect({
+    await provider.collect({
       sessionId,
       promptText: "remember the review findings ordering preference",
       register: (entry) => {

@@ -59,10 +59,10 @@ export interface ContextInjectionOrchestratorDeps {
   setLastInjectedFingerprint(scopeKey: string, fingerprint: string): void;
 }
 
-export function buildContextInjection(
+export async function buildContextInjection(
   deps: ContextInjectionOrchestratorDeps,
   input: BuildContextInjectionInput,
-): BuildContextInjectionResult {
+): Promise<BuildContextInjectionResult> {
   const promptText = deps.sanitizeInput(input.prompt);
   const truthState = deps.getTruthState(input.sessionId);
 
@@ -73,7 +73,7 @@ export function buildContextInjection(
     usage: input.usage,
   });
 
-  deps.providers.collect({
+  await deps.providers.collect({
     sessionId: input.sessionId,
     promptText,
     usage: input.usage,

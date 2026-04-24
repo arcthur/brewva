@@ -566,6 +566,7 @@ Stable rules:
 - `listGuardResults(sessionId, query?)`
 - `getTapeStatus(sessionId)`
 - `getTapePressureThresholds()`
+- `getLogPath(sessionId)`
 - `searchTape(sessionId, { query, scope?, limit? })`
 - `listReplaySessions(limit?)`
 - `subscribe(listener)`

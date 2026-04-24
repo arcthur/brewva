@@ -461,6 +461,12 @@ Slash `/insights` is the interactive-session veneer over this inspection
 family; this subcommand remains the canonical standalone CLI entrypoint for
 project-level aggregation.
 
+`brewva insights` selects its recent-session window through the local session
+query plane. Text output includes a `Session index` diagnostic; JSON output
+includes an `index` object. If the index is unavailable, the command reports a
+clear diagnostic instead of silently falling back to bespoke multi-session tape
+scans.
+
 - `brewva insights`: analyze recent sessions for the current working directory
 - `brewva insights <dir>`: analyze sessions scoped to a specific directory
 - `brewva insights --limit 50`: analyze up to 50 sessions (default: 20)

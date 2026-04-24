@@ -7,6 +7,7 @@ import {
   createRecallContextProvider,
   getOrCreateRecallBroker,
   RECALL_CURATION_HALFLIFE_DAYS,
+  type RecallBrokerRuntime,
 } from "@brewva/brewva-recall";
 import {
   BrewvaRuntime,
@@ -17,7 +18,7 @@ import {
 import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 
 describe("recall broker", () => {
-  test("context injection does not create self-reinforcing curation signals", () => {
+  test("context injection does not create self-reinforcing curation signals", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-recall-broker-"));
     mkdirSync(join(workspace, "packages", "gateway"), { recursive: true });
     const runtime = new BrewvaRuntime({ cwd: workspace });
@@ -57,7 +58,7 @@ describe("recall broker", () => {
 
     const provider = createRecallContextProvider({ runtime });
     const injectedIds: string[] = [];
-    provider.collect({
+    await provider.collect({
       sessionId: currentSessionId,
       promptText: "gateway bootstrap flake",
       register: (entry) => {
@@ -73,10 +74,10 @@ describe("recall broker", () => {
     ).toHaveLength(0);
 
     const broker = getOrCreateRecallBroker(runtime);
-    expect(broker.sync().curation).toHaveLength(0);
+    expect((await broker.sync()).curation).toHaveLength(0);
   });
 
-  test("excludes recall, context, and projection signals from searchable tape evidence", () => {
+  test("excludes recall, context, and projection signals from searchable tape evidence", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-recall-broker-"));
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const priorSessionId = "recall-broker-noise-prior";
@@ -107,10 +108,12 @@ describe("recall broker", () => {
     });
 
     const broker = getOrCreateRecallBroker(runtime);
-    const digest = broker.sync().sessionDigests.find((entry) => entry.sessionId === priorSessionId);
+    const digest = (await broker.sync()).sessionDigests.find(
+      (entry) => entry.sessionId === priorSessionId,
+    );
     expect(digest).toBeUndefined();
 
-    const result = broker.search({
+    const result = await broker.search({
       sessionId: currentSessionId,
       query: "poisoned gateway marker",
       scope: "workspace_wide",
@@ -120,7 +123,7 @@ describe("recall broker", () => {
     expect(result.results).toHaveLength(0);
   });
 
-  test("ranks strong runtime evidence above precedent and precedent above weak tape notes", () => {
+  test("ranks strong runtime evidence above precedent and precedent above weak tape notes", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-recall-broker-"));
     mkdirSync(join(workspace, "packages", "gateway"), { recursive: true });
     mkdirSync(join(workspace, "docs", "solutions", "gateway"), { recursive: true });
@@ -205,7 +208,7 @@ describe("recall broker", () => {
       },
     });
 
-    const result = getOrCreateRecallBroker(runtime).search({
+    const result = await getOrCreateRecallBroker(runtime).search({
       sessionId: currentSessionId,
       query: "Gamma authority ranking",
       limit: 6,
@@ -230,7 +233,7 @@ describe("recall broker", () => {
     expect(result.results[precedentIndex]?.trustLabel).toBe("Repository precedent");
   });
 
-  test("classifies kernel truth and patch receipts as strong runtime evidence", () => {
+  test("classifies kernel truth and patch receipts as strong runtime evidence", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-recall-broker-"));
     mkdirSync(join(workspace, "packages", "gateway"), { recursive: true });
     mkdirSync(join(workspace, "docs", "solutions", "gateway"), { recursive: true });
@@ -285,7 +288,7 @@ describe("recall broker", () => {
       },
     });
 
-    const result = getOrCreateRecallBroker(runtime).search({
+    const result = await getOrCreateRecallBroker(runtime).search({
       sessionId: currentSessionId,
       query: "Epsilon durable receipt marker",
       scope: "workspace_wide",
@@ -321,7 +324,7 @@ describe("recall broker", () => {
     expect(patchIndex).toBeLessThan(precedentIndex);
   });
 
-  test("current-session intent only boosts tape evidence from the active session", () => {
+  test("current-session intent only boosts tape evidence from the active session", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-recall-broker-"));
     mkdirSync(join(workspace, "packages", "gateway"), { recursive: true });
     mkdirSync(join(workspace, "docs", "solutions", "gateway"), { recursive: true });
@@ -386,7 +389,7 @@ describe("recall broker", () => {
       } as Record<string, unknown>,
     });
 
-    const result = getOrCreateRecallBroker(runtime).search({
+    const result = await getOrCreateRecallBroker(runtime).search({
       sessionId: currentSessionId,
       query: "Delta current session ranking marker",
       scope: "workspace_wide",
@@ -417,7 +420,7 @@ describe("recall broker", () => {
     );
   });
 
-  test("context provider passes inferred recall intent into rendered entries and events", () => {
+  test("context provider passes inferred recall intent into rendered entries and events", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-recall-broker-"));
     mkdirSync(join(workspace, "packages", "gateway"), { recursive: true });
     const runtime = new BrewvaRuntime({ cwd: workspace });
@@ -447,7 +450,7 @@ describe("recall broker", () => {
 
     const provider = createRecallContextProvider({ runtime });
     const injectedContent: string[] = [];
-    provider.collect({
+    await provider.collect({
       sessionId,
       promptText: "Find current session evidence for gateway trace marker",
       register: (entry) => {
@@ -474,7 +477,7 @@ describe("recall broker", () => {
     );
   });
 
-  test("curation aggregates are time-decayed and inspectable by stable id", () => {
+  test("curation aggregates are time-decayed and inspectable by stable id", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-recall-broker-"));
     mkdirSync(join(workspace, "packages", "gateway"), { recursive: true });
     const runtime = new BrewvaRuntime({ cwd: workspace });
@@ -526,12 +529,12 @@ describe("recall broker", () => {
     });
 
     const broker = getOrCreateRecallBroker(runtime);
-    const curation = broker.sync().curation[0];
+    const curation = (await broker.sync()).curation[0];
     expect(curation?.stableId).toBe(stableId);
     expect(curation?.helpfulSignals).toBe(1);
     expect(curation?.helpfulWeight).toBeLessThan(0.3);
 
-    const inspection = broker.inspectStableIds({
+    const inspection = await broker.inspectStableIds({
       sessionId: currentSessionId,
       stableIds: [stableId],
       scope: "workspace_wide",
@@ -552,7 +555,7 @@ describe("recall broker", () => {
     expect(inspection.results[0]?.curation?.scoreAdjustment).toBeLessThan(0.04);
   });
 
-  test("default repository-root scope still recalls prior nested targets inside the workspace root", () => {
+  test("default repository-root scope still recalls prior nested targets inside the workspace root", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-recall-broker-"));
     mkdirSync(join(workspace, "packages", "gateway"), { recursive: true });
     const runtime = new BrewvaRuntime({ cwd: workspace });
@@ -592,7 +595,7 @@ describe("recall broker", () => {
     });
 
     const broker = getOrCreateRecallBroker(runtime);
-    const result = broker.search({
+    const result = await broker.search({
       sessionId: currentSessionId,
       query: "hosted bootstrap duplicate startup hooks",
       limit: 6,
@@ -609,7 +612,141 @@ describe("recall broker", () => {
     );
   });
 
-  test("compound query tokens do not match unrelated query subtokens", () => {
+  test("recalls tape evidence from long sessions even when the match is beyond digest snippets", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-recall-broker-"));
+    mkdirSync(join(workspace, "packages", "gateway"), { recursive: true });
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const priorSessionId = "recall-broker-long-session-prior";
+    const currentSessionId = "recall-broker-long-session-current";
+
+    runtime.maintain.context.onTurnStart(priorSessionId, 1);
+    runtime.authority.task.setSpec(priorSessionId, {
+      schema: "brewva.task.v1",
+      goal: "Run a long generic maintenance session",
+      targets: {
+        files: ["packages/gateway"],
+      },
+    });
+
+    let lateEvent: ReturnType<typeof recordRuntimeEvent> | undefined;
+    for (let index = 0; index < 25; index += 1) {
+      const event = recordRuntimeEvent(runtime, {
+        sessionId: priorSessionId,
+        type: "tool_result_recorded",
+        payload: {
+          toolName: "exec",
+          outputText:
+            index === 24
+              ? "rareanchor durable indexed receipt"
+              : `generic maintenance output ${index}`,
+          verdict: "success",
+        } as Record<string, unknown>,
+      });
+      if (index === 24) {
+        lateEvent = event;
+      }
+    }
+    expect(lateEvent).toBeDefined();
+
+    runtime.maintain.context.onTurnStart(currentSessionId, 1);
+    runtime.authority.task.setSpec(currentSessionId, {
+      schema: "brewva.task.v1",
+      goal: "Find rare indexed receipt evidence",
+      targets: {
+        files: ["packages/gateway"],
+      },
+    });
+
+    const result = await getOrCreateRecallBroker(runtime).search({
+      sessionId: currentSessionId,
+      query: "rareanchor durable indexed receipt",
+      scope: "workspace_wide",
+      limit: 8,
+    });
+
+    expect(result.results).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          stableId: `tape:${priorSessionId}:${lateEvent!.id}`,
+          sourceFamily: "tape_evidence",
+        }),
+      ]),
+    );
+  });
+
+  test("recall result surfaced events do not invalidate broker state", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-recall-broker-"));
+    mkdirSync(join(workspace, "packages", "gateway"), { recursive: true });
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionId = "recall-broker-dirty-current";
+
+    runtime.maintain.context.onTurnStart(sessionId, 1);
+    runtime.authority.task.setSpec(sessionId, {
+      schema: "brewva.task.v1",
+      goal: "Track broker dirty invalidation",
+      targets: {
+        files: ["packages/gateway"],
+      },
+    });
+    recordRuntimeEvent(runtime, {
+      sessionId,
+      type: "task_event",
+      payload: {
+        schema: "brewva.task.ledger.v1",
+        kind: "item_added",
+        item: {
+          id: "recall-dirty-item",
+          text: "Track broker dirty invalidation",
+          status: "done",
+        },
+      } as Record<string, unknown>,
+    });
+
+    let listSessionIdsCalls = 0;
+    const brokerRuntime: RecallBrokerRuntime = {
+      workspaceRoot: runtime.workspaceRoot,
+      agentId: runtime.agentId,
+      inspect: {
+        events: {
+          ...runtime.inspect.events,
+          listSessionIds() {
+            listSessionIdsCalls += 1;
+            return runtime.inspect.events.listSessionIds();
+          },
+        },
+        task: runtime.inspect.task,
+        skills: runtime.inspect.skills,
+      },
+    };
+    const broker = getOrCreateRecallBroker(brokerRuntime);
+    await broker.sync();
+    const afterInitialSync = listSessionIdsCalls;
+
+    recordRuntimeEvent(runtime, {
+      sessionId,
+      type: RECALL_RESULTS_SURFACED_EVENT_TYPE,
+      payload: {
+        source: "recall_search",
+        stableIds: ["tape:example:result"],
+      } as Record<string, unknown>,
+    });
+    await broker.sync();
+    expect(listSessionIdsCalls).toBe(afterInitialSync);
+
+    recordRuntimeEvent(runtime, {
+      sessionId,
+      type: "recall_curation_recorded",
+      payload: {
+        source: "recall_curate",
+        signal: "helpful",
+        stableIds: ["tape:example:result"],
+      } as Record<string, unknown>,
+    });
+    await broker.sync();
+    expect(listSessionIdsCalls).toBeGreaterThan(afterInitialSync);
+  });
+
+  test("compound query tokens do not match unrelated query subtokens", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-recall-broker-"));
     mkdirSync(join(workspace, "packages", "gateway"), { recursive: true });
     const runtime = new BrewvaRuntime({ cwd: workspace });
@@ -648,7 +785,7 @@ describe("recall broker", () => {
     });
 
     const broker = getOrCreateRecallBroker(runtime);
-    const result = broker.search({
+    const result = await broker.search({
       sessionId: currentSessionId,
       query: "foo-bar",
       limit: 6,

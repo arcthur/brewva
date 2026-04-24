@@ -155,6 +155,7 @@ None currently.
 - `docs/research/promoted/rfc-context-dependency-layering-and-admission-lanes.md`
 - `docs/research/promoted/rfc-default-path-re-hardening-and-advisory-surface-narrowing.md`
 - `docs/research/promoted/rfc-derived-session-wire-schema-and-frontend-session-protocol.md`
+- `docs/research/promoted/rfc-duckdb-session-query-plane.md`
 - `docs/research/promoted/rfc-durability-taxonomy-and-rebuildable-surface-narrowing.md`
 - `docs/research/promoted/rfc-gateway-experience-ring-decomposition.md`
 - `docs/research/promoted/rfc-hosted-turn-transitions-and-bounded-recovery.md`

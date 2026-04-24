@@ -7,21 +7,21 @@ import type { BrewvaRuntime } from "@brewva/brewva-runtime";
 import { getOrCreateSkillPromotionBroker } from "@brewva/brewva-skill-broker";
 import type { TurnLifecyclePort } from "./turn-lifecycle-port.js";
 
-function syncDeliberationState(runtime: BrewvaRuntime): void {
+async function syncDeliberationState(runtime: BrewvaRuntime): Promise<void> {
   getOrCreateDeliberationMemoryPlane(runtime).sync();
   getOrCreateOptimizationContinuityPlane(runtime).sync();
   getOrCreateSkillPromotionBroker(runtime).sync();
-  getOrCreateRecallBroker(runtime).sync();
+  await getOrCreateRecallBroker(runtime).sync();
 }
 
 export function createDeliberationMaintenanceLifecycle(runtime: BrewvaRuntime): TurnLifecyclePort {
   return {
-    beforeAgentStart() {
-      syncDeliberationState(runtime);
+    async beforeAgentStart() {
+      await syncDeliberationState(runtime);
       return undefined;
     },
-    agentEnd() {
-      syncDeliberationState(runtime);
+    async agentEnd() {
+      await syncDeliberationState(runtime);
       return undefined;
     },
   };

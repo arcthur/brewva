@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
 import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
@@ -9,7 +9,7 @@ import { buildSessionInspectReport } from "../../../packages/brewva-cli/src/insp
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 describe("project insights aggregation", () => {
-  test("tracks failed session analyses separately from excluded sessions", () => {
+  test("tracks failed session analyses separately from excluded sessions", async () => {
     const workspace = createTestWorkspace("insights-failure-accounting");
     writeFileSync(join(workspace, ".brewva", "brewva.json"), "{}\n", "utf8");
 
@@ -36,7 +36,7 @@ describe("project insights aggregation", () => {
     }
 
     const directory = resolveInspectDirectory(runtime, ".", undefined);
-    const report = buildProjectInsightsReport({
+    const report = await buildProjectInsightsReport({
       runtime,
       directory,
       analyzeSession: (input) => {
@@ -58,7 +58,7 @@ describe("project insights aggregation", () => {
     ]);
   });
 
-  test("derives refactor work type from the task goal even when task phase is absent", () => {
+  test("derives refactor work type from the task goal even when task phase is absent", async () => {
     const workspace = createTestWorkspace("insights-work-type-refactor");
     writeFileSync(join(workspace, ".brewva", "brewva.json"), "{}\n", "utf8");
     writeFileSync(join(workspace, "src.ts"), "export const value = 1;\n", "utf8");
@@ -103,12 +103,51 @@ describe("project insights aggregation", () => {
     });
 
     const directory = resolveInspectDirectory(runtime, ".", undefined);
-    const report = buildProjectInsightsReport({
+    const report = await buildProjectInsightsReport({
       runtime,
       directory,
     });
 
     expect(report.sessions).toHaveLength(1);
     expect(report.sessions[0]?.workType).toBe("refactor");
+  });
+
+  test("reports unavailable session index instead of scanning replay sessions", async () => {
+    const workspace = createTestWorkspace("insights-index-unavailable");
+    writeFileSync(join(workspace, ".brewva", "brewva.json"), "{}\n", "utf8");
+    mkdirSync(join(workspace, ".brewva", "session-index"), { recursive: true });
+    writeFileSync(
+      join(workspace, ".brewva", "session-index", "session-index.duckdb"),
+      "not a duckdb database",
+      "utf8",
+    );
+
+    const runtime = new BrewvaRuntime({
+      cwd: workspace,
+      config: structuredClone(DEFAULT_BREWVA_CONFIG),
+    });
+    recordRuntimeEvent(runtime, {
+      sessionId: "insights-corrupt-index-session",
+      type: "session_bootstrap",
+      payload: {
+        managedToolMode: "direct",
+        skillLoad: {
+          routingEnabled: false,
+          routingScopes: ["core", "domain"],
+          routableSkills: [],
+          hiddenSkills: [],
+        },
+      },
+    });
+
+    const directory = resolveInspectDirectory(runtime, ".", undefined);
+    const report = await buildProjectInsightsReport({
+      runtime,
+      directory,
+    });
+
+    expect(report.index.status).toBe("unavailable");
+    expect(report.window.analyzedSessions).toBe(0);
+    expect(report.sessions).toEqual([]);
   });
 });

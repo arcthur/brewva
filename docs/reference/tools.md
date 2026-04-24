@@ -818,6 +818,12 @@ Unified recall surfaces for the new broker-first read path.
   tokenizer, so tape evidence, narrative memory, deliberation memory,
   optimization continuity, promotion drafts, and repository precedents share
   the same ASCII/code and Chinese token semantics
+- cross-session tape evidence retrieval is backed by the local session query
+  plane when available; the broker still owns final ranking, curation,
+  trust labels, stable ids, and result rendering
+- if the session index cannot load or no readable snapshot exists, indexed
+  recall fails closed with `session_index_unavailable` rather than silently
+  scanning old paths; runtime replay and event inspection remain unaffected
 - default scope is `user_repository_root`; default intent is `prior_work`; use
   `session_local` for current-turn or current-session forensics, and treat
   `workspace_wide` as an explicit opt-in rather than the default recall

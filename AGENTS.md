@@ -9,7 +9,7 @@
 ## Repo At A Glance
 
 - `Brewva` is a Bun + TypeScript monorepo for an AI-native coding-agent runtime.
-- Workspace packages live under `packages/*`; primary surfaces include `runtime`, `search`, `substrate`, `provider-core`, `agent-engine`, `recall`, `deliberation`, `skill-broker`, `channels-telegram`, `ingress`, `tools`, `cli`, and `gateway`.
+- Workspace packages live under `packages/*`; primary surfaces include `runtime`, `search`, `substrate`, `provider-core`, `agent-engine`, `session-index`, `recall`, `deliberation`, `skill-broker`, `channels-telegram`, `ingress`, `tools`, `cli`, and `gateway`.
 - Release artifacts live under `distribution/brewva`, `distribution/brewva-*`, and `distribution/worker`.
 - Support roots: `script/` for build and verification, `docs/` for design/reference material, `test/` for workspace coverage, and `docs/solutions/**` for repository-native precedent.
 - Project guidance is authored in `skills/project/shared/*.md` with metadata-only `strength` and `scope` frontmatter. It is context/provenance metadata, not runtime authority.
@@ -23,6 +23,7 @@
 - Keep public root exports narrow. Repo-owned implementation seams stay under documented internal entrypoints.
 - Keep managed tools capability-scoped and fail-closed when a runtime capability is undeclared.
 - Keep runtime execution receipt-based, replay-first, and recoverable through existing WAL/event/proposal boundaries.
+- Keep DuckDB session index state rebuildable and non-authoritative; event tape remains replay authority.
 - Keep search tokenization centralized in `@brewva/brewva-search`; do not add package-local tokenizers or silent Chinese-tokenizer fallbacks.
 - Use Bun for build and test. Baseline: Bun `1.3.12`, Node `^20.19.0 || >=22.12.0`, ESM, strict TypeScript.
 - Detailed invariant context is in `skills/project/shared/critical-rules.md`, `skills/project/shared/package-boundaries.md`, and `skills/project/shared/anti-patterns.md`.
@@ -49,6 +50,7 @@
 
 - Runtime API and contracts: `packages/brewva-runtime/src/runtime.ts`, `packages/brewva-runtime/src/contracts/index.ts`.
 - Runtime skills: `packages/brewva-runtime/src/skills/contract.ts`, `packages/brewva-runtime/src/skills/registry.ts`.
+- Session query plane: `packages/brewva-session-index/src/index.ts`, consumed by `packages/brewva-recall/src/broker.ts` and `packages/brewva-cli/src/insights.ts`.
 - Gateway skill routing and plugins: `packages/brewva-gateway/src/runtime-plugins/skill-first.ts`, `packages/brewva-gateway/src/runtime-plugins/local-hook-port.ts`.
 - Managed tool capabilities: `packages/brewva-tools/src/managed-tool-metadata-registry.ts`, `packages/brewva-tools/src/utils/runtime-bound-tool.ts`.
 - Expanded lookup map: `skills/project/shared/source-map.md`.

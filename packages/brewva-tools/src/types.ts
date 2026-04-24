@@ -58,6 +58,7 @@ export type BrewvaToolRequiredCapability =
   | "inspect.context.getTransientReduction"
   | "inspect.context.getUsage"
   | "inspect.cost.getSummary"
+  | "inspect.events.getLogPath"
   | "inspect.events.getTapeStatus"
   | "inspect.events.list"
   | "inspect.events.listSessionIds"

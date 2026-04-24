@@ -2,8 +2,10 @@ import type {
   ChannelInsightsCommandInput,
   ChannelInsightsCommandResult,
 } from "@brewva/brewva-gateway";
-import { buildProjectInsightsReport } from "./insights.js";
 import { clampText, resolveInspectDirectory } from "./inspect-analysis.js";
+
+type InsightsModule = typeof import("./insights.js");
+type InsightsReport = Awaited<ReturnType<InsightsModule["buildProjectInsightsReport"]>>;
 
 const MAX_DIRECTORY_SUMMARY = 2;
 const MAX_FRICTION_CODES = 3;
@@ -18,7 +20,7 @@ function normalizeDirectoryArg(value: string | undefined): string | undefined {
 function formatHeader(input: {
   agentId: string;
   focusedAgentId: string;
-  report: ReturnType<typeof buildProjectInsightsReport>;
+  report: InsightsReport;
 }): string {
   const targetLabel =
     input.agentId === input.focusedAgentId
@@ -27,7 +29,7 @@ function formatHeader(input: {
   return `${targetLabel} — dir=${input.report.directory || "."} · analyzed=${input.report.window.analyzedSessions} · failed=${input.report.window.failedSessions}`;
 }
 
-function formatDirectoriesLine(report: ReturnType<typeof buildProjectInsightsReport>): string {
+function formatDirectoriesLine(report: InsightsReport): string {
   if (report.overview.topDirectories.length === 0) {
     return "Dirs: none";
   }
@@ -40,7 +42,7 @@ function formatDirectoriesLine(report: ReturnType<typeof buildProjectInsightsRep
     : `Dirs: ${visible.join(", ")}`;
 }
 
-function formatFrictionLine(report: ReturnType<typeof buildProjectInsightsReport>): string {
+function formatFrictionLine(report: InsightsReport): string {
   if (report.overview.topFrictionCodes.length === 0) {
     return "Friction: none";
   }
@@ -53,7 +55,7 @@ function formatFrictionLine(report: ReturnType<typeof buildProjectInsightsReport
     : `Friction: ${visible.join(", ")}`;
 }
 
-function formatVerificationLine(report: ReturnType<typeof buildProjectInsightsReport>): string {
+function formatVerificationLine(report: InsightsReport): string {
   return [
     `Verification: pass=${report.verificationQuality.passedCount}`,
     `fail=${report.verificationQuality.failedCount}`,
@@ -62,7 +64,7 @@ function formatVerificationLine(report: ReturnType<typeof buildProjectInsightsRe
   ].join(" · ");
 }
 
-function formatTailLine(report: ReturnType<typeof buildProjectInsightsReport>): string | null {
+function formatTailLine(report: InsightsReport): string | null {
   const firstFailure = report.analysisFailures[0];
   if (firstFailure) {
     const hiddenCount = report.analysisFailures.length - 1;
@@ -83,7 +85,7 @@ function formatTailLine(report: ReturnType<typeof buildProjectInsightsReport>): 
 function formatInsightsChannelText(input: {
   agentId: string;
   focusedAgentId: string;
-  report: ReturnType<typeof buildProjectInsightsReport>;
+  report: InsightsReport;
 }): string {
   const lines = [
     formatHeader(input),
@@ -125,9 +127,11 @@ export async function handleInsightsChannelCommand(
   }
 
   const directory = resolveInspectDirectory(input.targetSession.runtime, directoryArg, undefined);
-  const report = buildProjectInsightsReport({
+  const { buildProjectInsightsReport } = await import("./insights.js");
+  const report = await buildProjectInsightsReport({
     runtime: input.targetSession.runtime,
     directory,
+    sessionIds: [input.targetSession.sessionId],
   });
 
   if (report.window.analyzedSessions === 0 && report.analysisFailures.length === 0) {

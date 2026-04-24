@@ -494,7 +494,8 @@ are durable evidence events on tape
 - cross-session evidence indexes
 - curation aggregates and decayed ranking weights
 
-remain rebuildable state under `.brewva/recall/**`
+remain rebuildable state under `.brewva/session-index/**` or in broker-local
+memory rebuilt from durable recall feedback events
 
 Broker search ranks results by intent/source priority, `evidenceStrength`,
 `semanticScore`, freshness, and curation into an explicit `rankingScore`.

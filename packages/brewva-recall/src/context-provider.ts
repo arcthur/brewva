@@ -6,7 +6,7 @@ import {
   defineContextSourceProvider,
 } from "@brewva/brewva-runtime";
 import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
-import { getOrCreateRecallBroker } from "./broker.js";
+import { getOrCreateRecallBroker, isRecallSessionIndexUnavailable } from "./broker.js";
 import type { RecallScope, RecallSearchEntry, RecallSearchIntent } from "./types.js";
 
 const DEFAULT_MAX_CONTEXT_RESULTS = 4;
@@ -105,15 +105,25 @@ export function createRecallContextProvider(input: {
     collectionOrder: 14,
     selectionPriority: 14,
     readsFrom: ["recallBroker.search"],
-    collect: (providerInput) => {
+    collect: async (providerInput) => {
       const intent = resolveRecallContextIntent(input.intent, providerInput);
-      const search = broker.search({
-        sessionId: providerInput.sessionId,
-        query: providerInput.promptText,
-        scope: input.scope,
-        intent,
-        limit: Math.max(1, input.maxEntries ?? DEFAULT_MAX_CONTEXT_RESULTS),
-      });
+      const search = await broker
+        .search({
+          sessionId: providerInput.sessionId,
+          query: providerInput.promptText,
+          scope: input.scope,
+          intent,
+          limit: Math.max(1, input.maxEntries ?? DEFAULT_MAX_CONTEXT_RESULTS),
+        })
+        .catch((error: unknown) => {
+          if (isRecallSessionIndexUnavailable(error)) {
+            return undefined;
+          }
+          throw error;
+        });
+      if (!search) {
+        return;
+      }
       if (search.results.length === 0) {
         return;
       }

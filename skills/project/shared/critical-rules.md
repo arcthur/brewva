@@ -13,4 +13,5 @@ scope: critical-rules
 - Do not reintroduce local alias schemes such as `@/...`.
 - Do not mix `src` and `dist` class types at public boundaries.
 - Do not import from `distribution/**` packages inside workspace package code; treat distribution as release output.
+- Keep DuckDB session index state rebuildable and non-authoritative; event tape remains replay authority.
 - Keep search tokenization centralized in `@brewva/brewva-search`; Chinese-aware retrieval depends on mandatory `jieba-wasm`.

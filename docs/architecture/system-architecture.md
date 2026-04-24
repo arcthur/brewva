@@ -308,14 +308,14 @@ Stable decisions:
 
 ## State Taxonomy
 
-| Category                 | Role                                                                                 | Authority                    | Typical carriers                                                                              |
-| ------------------------ | ------------------------------------------------------------------------------------ | ---------------------------- | --------------------------------------------------------------------------------------------- |
-| `Kernel Commitments`     | authoritative system commitments                                                     | authoritative                | tape, receipts, task, truth, ledger                                                           |
-| `Working State`          | session-local working view and budgeted context admission                            | non-authoritative            | projection, context arena, active tool surface                                                |
-| `Narrative Memory`       | typed collaboration semantics and selective recall                                   | non-authoritative            | self bundle, narrative memory records, explicit promotions                                    |
-| `Deliberation Artifacts` | non-kernel evidence, derived memory, recall ranking state, and optimization sediment | non-authoritative            | deliberation memory, recall broker state, promotion drafts, optimization continuity artifacts |
-| `Tool Surface`           | turn-visible action surface                                                          | policy-governed              | base tools, skill-scoped tools, operator tools                                                |
-| `Control Plane`          | scheduling, delegation, and operator-facing orchestration                            | non-authoritative by default | schedulers, wake prompts, child-run controllers                                               |
+| Category                 | Role                                                                                 | Authority                    | Typical carriers                                                                                                   |
+| ------------------------ | ------------------------------------------------------------------------------------ | ---------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `Kernel Commitments`     | authoritative system commitments                                                     | authoritative                | tape, receipts, task, truth, ledger                                                                                |
+| `Working State`          | session-local working view and budgeted context admission                            | non-authoritative            | projection, context arena, active tool surface                                                                     |
+| `Narrative Memory`       | typed collaboration semantics and selective recall                                   | non-authoritative            | self bundle, narrative memory records, explicit promotions                                                         |
+| `Deliberation Artifacts` | non-kernel evidence, derived memory, recall ranking state, and optimization sediment | non-authoritative            | deliberation memory, recall broker state, session query plane, promotion drafts, optimization continuity artifacts |
+| `Tool Surface`           | turn-visible action surface                                                          | policy-governed              | base tools, skill-scoped tools, operator tools                                                                     |
+| `Control Plane`          | scheduling, delegation, and operator-facing orchestration                            | non-authoritative by default | schedulers, wake prompts, child-run controllers                                                                    |
 
 Important distinctions:
 
@@ -325,6 +325,9 @@ Important distinctions:
   inside memory products
 - broker-first hosted recall is still a deliberation product; it changes the
   default read path, not the authority boundary
+- the DuckDB-backed session query plane is rebuildable state over event tape;
+  it may power recall and insights queries, but it is not replay, receipt, or
+  recovery authority
 - default broker recall scope is `user + repository root`; broader
   workspace-wide or cross-workspace recall is policy-gated, and worktrees do
   not share recall automatically by default

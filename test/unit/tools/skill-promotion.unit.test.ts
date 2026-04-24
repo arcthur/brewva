@@ -64,7 +64,7 @@ describe("skill promotion tool", () => {
       minRefreshIntervalMs: 1,
     }).sync();
 
-    createSkillPromotionContextProvider({
+    await createSkillPromotionContextProvider({
       runtime,
       maxDrafts: 2,
       minRefreshIntervalMs: 1,
@@ -145,7 +145,7 @@ describe("skill promotion tool", () => {
       minRefreshIntervalMs: 1,
     });
     const beforeSyncEntries: Array<{ id: string; content: string }> = [];
-    provider.collect({
+    await provider.collect({
       sessionId: "promotion-tool-provider-2",
       promptText: "promote the repeated lesson into a reusable skill",
       register: (entry) => {
@@ -176,7 +176,7 @@ describe("skill promotion tool", () => {
     expect(typeof draftId).toBe("string");
 
     const afterListEntries: Array<{ id: string; content: string }> = [];
-    provider.collect({
+    await provider.collect({
       sessionId: "promotion-tool-provider-2",
       promptText: "promote the repeated lesson into a reusable skill",
       register: (entry) => {
@@ -213,7 +213,7 @@ describe("skill promotion tool", () => {
     );
 
     const afterPromoteEntries: Array<{ id: string; content: string }> = [];
-    provider.collect({
+    await provider.collect({
       sessionId: "promotion-tool-provider-2",
       promptText: "promote the repeated lesson into a reusable skill",
       register: (entry) => {

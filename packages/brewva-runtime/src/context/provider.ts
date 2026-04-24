@@ -40,7 +40,9 @@ export interface ContextSourceProviderInput {
   register(input: ContextSourceProviderRegistration): void;
 }
 
-export type ContextSourceProviderCollect = (input: ContextSourceProviderInput) => void;
+export type ContextSourceProviderCollect = (
+  input: ContextSourceProviderInput,
+) => void | Promise<void>;
 
 export interface ContextSourceProvider {
   readonly [CONTEXT_SOURCE_PROVIDER_BRAND]: true;
@@ -248,7 +250,7 @@ export class ContextSourceProviderRegistry {
     return this.providers.delete(this.normalizeSource(source));
   }
 
-  collect(input: {
+  async collect(input: {
     sessionId: string;
     promptText: string;
     usage?: ContextBudgetUsage;
@@ -256,12 +258,12 @@ export class ContextSourceProviderRegistry {
     referenceContextDigest?: string | null;
     sourceSelection?: ReadonlySet<string>;
     register(input: RegisterContextInjectionInput): void;
-  }): void {
+  }): Promise<void> {
     for (const provider of this.getProviders()) {
       if (input.sourceSelection && !input.sourceSelection.has(provider.source)) {
         continue;
       }
-      provider.collect({
+      await provider.collect({
         sessionId: input.sessionId,
         promptText: input.promptText,
         usage: input.usage,

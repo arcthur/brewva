@@ -8,6 +8,7 @@ import {
   type RecallScope,
   type RecallSearchIntent,
   type RecallSearchEntry,
+  isRecallSessionIndexUnavailable,
 } from "@brewva/brewva-recall";
 import {
   RECALL_CURATION_RECORDED_EVENT_TYPE,
@@ -39,6 +40,15 @@ const RECALL_SEARCH_INTENT_SCHEMA = buildStringEnumSchema(RECALL_SEARCH_INTENT_V
   guidance:
     "Use prior_work as the neutral default. Use repository_precedent for repository practice, current_session_evidence for current-session tape evidence, and durable_runtime_receipts for completed or verified runtime receipts. Use output_search for raw recent tool output.",
 });
+
+function sessionIndexUnavailableResult(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return failTextResult(`recall_search unavailable (session_index_unavailable): ${message}`, {
+    ok: false,
+    error: "session_index_unavailable",
+    message,
+  });
+}
 
 function normalizeQuery(value: unknown): string | undefined {
   if (typeof value !== "string") {
@@ -172,13 +182,23 @@ export function createRecallSearchTool(options: BrewvaToolOptions): ToolDefiniti
       const scope = resolveToolTargetScope(runtime, ctx);
       if (query) {
         const intent = normalizeIntent(params.intent) ?? "prior_work";
-        const search = getOrCreateRecallBroker(runtime).search({
-          sessionId,
-          query,
-          scope: normalizeScope(params.scope),
-          intent,
-          limit: params.limit,
-        });
+        const search = await getOrCreateRecallBroker(runtime)
+          .search({
+            sessionId,
+            query,
+            scope: normalizeScope(params.scope),
+            intent,
+            limit: params.limit,
+          })
+          .catch((error: unknown) => {
+            if (isRecallSessionIndexUnavailable(error)) {
+              return sessionIndexUnavailableResult(error);
+            }
+            throw error;
+          });
+        if ("content" in search) {
+          return search;
+        }
 
         if (search.results.length > 0) {
           recordToolRuntimeEvent(runtime, {
@@ -237,11 +257,22 @@ export function createRecallSearchTool(options: BrewvaToolOptions): ToolDefiniti
         );
       }
 
-      const inspection = getOrCreateRecallBroker(runtime).inspectStableIds({
-        sessionId,
-        stableIds,
-        scope: normalizeScope(params.scope),
-      });
+      const inspection = await getOrCreateRecallBroker(runtime)
+        .inspectStableIds({
+          sessionId,
+          stableIds,
+          scope: normalizeScope(params.scope),
+        })
+        .catch((error: unknown) => {
+          if (isRecallSessionIndexUnavailable(error)) {
+            return sessionIndexUnavailableResult(error);
+          }
+          throw error;
+        });
+      if ("content" in inspection) {
+        return inspection;
+      }
+
       if (inspection.results.length > 0) {
         recordToolRuntimeEvent(runtime, {
           sessionId,

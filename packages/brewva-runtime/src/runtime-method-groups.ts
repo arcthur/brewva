@@ -478,6 +478,7 @@ export interface BrewvaRuntimeMethodGroups {
   events: {
     record: RuntimeRecordEvent;
     resolveLogPath(sessionId: string): string;
+    getLogPath(sessionId: string): string;
     query(sessionId: string, query?: BrewvaEventQuery): BrewvaEventRecord[];
     queryStructured(sessionId: string, query?: BrewvaEventQuery): BrewvaStructuredEvent[];
     recordMetricObservation(
@@ -946,6 +947,7 @@ export function createRuntimeMethodGroups(
     events: {
       record: (input) => deps.recordEvent(input),
       resolveLogPath: (sessionId: string) => deps.eventStore.getLogPath(sessionId),
+      getLogPath: (sessionId: string) => deps.eventStore.getLogPath(sessionId),
       query: (sessionId: string, query) => deps.eventPipeline.queryEvents(sessionId, query),
       queryStructured: (sessionId: string, query) =>
         deps.eventPipeline.queryStructuredEvents(sessionId, query),

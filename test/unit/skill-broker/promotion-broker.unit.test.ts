@@ -48,7 +48,7 @@ function recordPromotionSourceEvent(input: {
 }
 
 describe("skill promotion broker", () => {
-  test("does not derive promotion drafts from a single self-improve occurrence", () => {
+  test("does not derive promotion drafts from a single self-improve occurrence", async () => {
     const workspace = createWorkspaceWithSkills("skill-promotion-single-occurrence");
     const runtime = new BrewvaRuntime({ cwd: workspace });
 
@@ -67,7 +67,7 @@ describe("skill promotion broker", () => {
     expect(broker.list()).toHaveLength(0);
   });
 
-  test("derives repeat-backed drafts, preserves review state, and materializes promotion packets", () => {
+  test("derives repeat-backed drafts, preserves review state, and materializes promotion packets", async () => {
     const workspace = createWorkspaceWithSkills("skill-promotion-broker");
     const runtime = new BrewvaRuntime({ cwd: workspace });
 
@@ -138,7 +138,7 @@ describe("skill promotion broker", () => {
     );
   });
 
-  test("context provider injects pending promotion drafts when the prompt asks to promote learning", () => {
+  test("context provider injects pending promotion drafts when the prompt asks to promote learning", async () => {
     const workspace = createWorkspaceWithSkills("skill-promotion-provider");
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const statePath = resolveSkillPromotionStatePath(workspace);
@@ -161,7 +161,7 @@ describe("skill promotion broker", () => {
       minRefreshIntervalMs: 1,
     });
     const beforeSyncEntries: Array<{ id: string; content: string }> = [];
-    provider.collect({
+    await provider.collect({
       sessionId: "promotion-session-provider",
       promptText: "promote the repeated lesson into a reusable skill",
       register: (entry) => {
@@ -180,7 +180,7 @@ describe("skill promotion broker", () => {
     broker.sync();
 
     const afterSyncEntries: Array<{ id: string; content: string }> = [];
-    provider.collect({
+    await provider.collect({
       sessionId: "promotion-session-provider",
       promptText: "promote the repeated lesson into a reusable skill",
       register: (entry) => {
@@ -195,7 +195,7 @@ describe("skill promotion broker", () => {
     expect(existsSync(statePath)).toBe(true);
   });
 
-  test("does not inject rejected promotion drafts back into model context", () => {
+  test("does not inject rejected promotion drafts back into model context", async () => {
     const workspace = createWorkspaceWithSkills("skill-promotion-rejected-provider");
     const runtime = new BrewvaRuntime({ cwd: workspace });
     recordPromotionSourceEvent({
@@ -230,7 +230,7 @@ describe("skill promotion broker", () => {
     });
 
     const entries: Array<{ id: string; content: string }> = [];
-    provider.collect({
+    await provider.collect({
       sessionId: "promotion-session-rejected-2",
       promptText: "promote the repeated lesson into a reusable skill",
       register: (entry) => {
@@ -241,7 +241,7 @@ describe("skill promotion broker", () => {
     expect(entries).toHaveLength(0);
   });
 
-  test("rebuilds review and promotion state from events after promotion-state loss", () => {
+  test("rebuilds review and promotion state from events after promotion-state loss", async () => {
     const workspace = createWorkspaceWithSkills("skill-promotion-replay-rebuild");
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const statePath = resolveSkillPromotionStatePath(workspace);

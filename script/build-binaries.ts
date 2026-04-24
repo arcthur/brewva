@@ -1,6 +1,14 @@
 #!/usr/bin/env bun
 
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join } from "node:path";
 import solidPlugin from "@opentui/solid/bun-plugin";
 import { $ } from "bun";
@@ -8,6 +16,7 @@ import { $ } from "bun";
 interface PlatformTarget {
   dir: string;
   target: Bun.Build.CompileTarget;
+  compileTarget?: Bun.Build.CompileTarget;
   binary: string;
   description: string;
 }
@@ -40,6 +49,7 @@ export const PLATFORMS: PlatformTarget[] = [
   {
     dir: "brewva-linux-x64",
     target: "bun-linux-x64",
+    compileTarget: "bun-linux-x64-baseline",
     binary: "brewva",
     description: "Linux x64 (glibc)",
   },
@@ -73,6 +83,7 @@ const ENTRY_POINT = "packages/brewva-cli/src/index.ts";
 const WRAPPER_PACKAGE_JSON = "distribution/brewva/package.json";
 const BREWVA_RUNTIME_ASSETS_DIR = join(process.cwd(), "packages", "brewva-cli", "runtime-assets");
 const OPEN_TUI_NATIVE_STAGE_ROOT = join(process.cwd(), ".brewva-build-cache", "opentui-native");
+const DUCKDB_PACKAGE_STAGE_ROOT = join(process.cwd(), ".brewva-build-cache", "duckdb-native");
 const BREWVA_THEME_ASSETS_DIR = join(BREWVA_RUNTIME_ASSETS_DIR, "theme");
 const BREWVA_EXPORT_HTML_ASSETS_DIR = join(BREWVA_RUNTIME_ASSETS_DIR, "export-html");
 const PHOTON_WASM_PATH = join(BREWVA_RUNTIME_ASSETS_DIR, "photon_rs_bg.wasm");
@@ -98,6 +109,7 @@ const BREWVA_SHELL_SMOKE_ENV = "BREWVA_SHELL_SMOKE";
 const BREWVA_OPENTUI_SUPPORTED_ENV = "BREWVA_OPENTUI_SUPPORTED";
 const BREWVA_OPENTUI_ENV_PREFIX = "BREWVA_OPENTUI_*";
 const OPEN_TUI_VERSION = "0.1.99";
+const DUCKDB_NODE_API_VERSION = "1.5.2-r.1";
 
 const OPEN_TUI_NATIVE_PACKAGE_BY_TARGET: Partial<Record<PlatformTarget["target"], string>> = {
   "bun-darwin-arm64": "@opentui/core-darwin-arm64",
@@ -107,9 +119,24 @@ const OPEN_TUI_NATIVE_PACKAGE_BY_TARGET: Partial<Record<PlatformTarget["target"]
   "bun-windows-x64": "@opentui/core-win32-x64",
 };
 
+const DUCKDB_NATIVE_PACKAGE_BY_TARGET: Partial<Record<PlatformTarget["target"], string>> = {
+  "bun-darwin-arm64": "@duckdb/node-bindings-darwin-arm64",
+  "bun-darwin-x64": "@duckdb/node-bindings-darwin-x64",
+  "bun-linux-x64": "@duckdb/node-bindings-linux-x64",
+  "bun-linux-arm64": "@duckdb/node-bindings-linux-arm64",
+  "bun-windows-x64": "@duckdb/node-bindings-win32-x64",
+};
+
+const DUCKDB_RUNTIME_PACKAGES = ["@duckdb/node-api", "@duckdb/node-bindings"] as const;
+const DUCKDB_UNSUPPORTED_NATIVE_TARGETS = new Set<PlatformTarget["target"]>([
+  "bun-linux-x64-musl",
+  "bun-linux-arm64-musl",
+]);
+
 function copyDirectory(source: string, target: string): void {
   if (!existsSync(source)) return;
   rmSync(target, { recursive: true, force: true });
+  mkdirSync(dirname(target), { recursive: true });
   cpSync(source, target, { recursive: true });
 }
 
@@ -128,6 +155,10 @@ function copyRequiredFile(source: string, target: string, label: string): void {
 function packagePath(root: string, packageName: string): string {
   const segments = packageName.split("/");
   return join(root, ...segments);
+}
+
+function stageRootForPackage(root: string, packageName: string): string {
+  return join(root, packageName.replaceAll("@", "").replaceAll("/", "__"));
 }
 
 function isOpenTuiInteractiveSupported(platform: PlatformTarget): boolean {
@@ -201,6 +232,63 @@ async function ensureOpenTuiNativePackage(platform: PlatformTarget): Promise<voi
   cpSync(stagePackagePath, repoPackagePath, { recursive: true });
 }
 
+async function ensurePackagedDependency(packageName: string, version: string): Promise<string> {
+  const repoNodeModules = join(process.cwd(), "node_modules");
+  const repoPackagePath = packagePath(repoNodeModules, packageName);
+  if (existsSync(repoPackagePath)) {
+    return realpathSync(repoPackagePath);
+  }
+
+  const stageRoot = stageRootForPackage(DUCKDB_PACKAGE_STAGE_ROOT, packageName);
+  const stagePackagePath = packagePath(join(stageRoot, "node_modules"), packageName);
+  if (!existsSync(stagePackagePath)) {
+    mkdirSync(stageRoot, { recursive: true });
+    const tarballSpecifier = `${packageName}@${version}`;
+    const tarballName = (
+      await $`npm pack ${tarballSpecifier} --silent`.cwd(stageRoot).text()
+    ).trim();
+    const tarballPath = join(stageRoot, tarballName);
+    const extractedPackagePath = join(stageRoot, "package");
+
+    rmSync(extractedPackagePath, { recursive: true, force: true });
+    await $`tar -xzf ${tarballName}`.cwd(stageRoot);
+
+    if (!existsSync(extractedPackagePath)) {
+      throw new Error(`Failed to extract ${tarballSpecifier} into ${stageRoot}`);
+    }
+
+    mkdirSync(dirname(stagePackagePath), { recursive: true });
+    rmSync(stagePackagePath, { recursive: true, force: true });
+    cpSync(extractedPackagePath, stagePackagePath, { recursive: true });
+    rmSync(extractedPackagePath, { recursive: true, force: true });
+    rmSync(tarballPath, { force: true });
+  }
+
+  mkdirSync(dirname(repoPackagePath), { recursive: true });
+  rmSync(repoPackagePath, { recursive: true, force: true });
+  cpSync(stagePackagePath, repoPackagePath, { recursive: true });
+  return repoPackagePath;
+}
+
+async function copyDuckDBRuntimeAssets(outDir: string, platform: PlatformTarget): Promise<void> {
+  if (DUCKDB_UNSUPPORTED_NATIVE_TARGETS.has(platform.target)) {
+    console.log(
+      "  duckdb: native bindings unavailable for this target; session index will fail closed",
+    );
+    return;
+  }
+  const nativePackage = DUCKDB_NATIVE_PACKAGE_BY_TARGET[platform.target];
+  if (!nativePackage) {
+    return;
+  }
+
+  const targetNodeModules = join(outDir, "node_modules");
+  for (const packageName of [...DUCKDB_RUNTIME_PACKAGES, nativePackage]) {
+    const source = await ensurePackagedDependency(packageName, DUCKDB_NODE_API_VERSION);
+    copyDirectory(source, packagePath(targetNodeModules, packageName));
+  }
+}
+
 function resolveCurrentHostTarget(): PlatformTarget["target"] | null {
   if (process.platform === "darwin" && process.arch === "arm64") return "bun-darwin-arm64";
   if (process.platform === "darwin" && process.arch === "x64") return "bun-darwin-x64";
@@ -263,7 +351,7 @@ For repository documentation, use the workspace root \`README.md\` and \`docs/\`
 `;
 }
 
-function copyRuntimeAssets(outDir: string): void {
+async function copyRuntimeAssets(outDir: string, platform: PlatformTarget): Promise<void> {
   const wrapperPackage = JSON.parse(
     readFileSync(WRAPPER_PACKAGE_JSON, "utf8"),
   ) as RuntimePackageJson;
@@ -288,6 +376,7 @@ function copyRuntimeAssets(outDir: string): void {
   copyDirectory(BREWVA_THEME_ASSETS_DIR, join(outDir, "theme"));
   copyDirectory(BREWVA_EXPORT_HTML_ASSETS_DIR, join(outDir, "export-html"));
   copyDirectory(join(process.cwd(), "skills"), join(outDir, "skills"));
+  await copyDuckDBRuntimeAssets(outDir, platform);
   writeFileSync(join(outDir, ".gitkeep"), "");
 }
 
@@ -301,6 +390,9 @@ async function buildPlatform(platform: PlatformTarget): Promise<boolean> {
 
   console.log(`\nBuilding ${platform.description}...`);
   console.log(`  target: ${platform.target}`);
+  if (platform.compileTarget && platform.compileTarget !== platform.target) {
+    console.log(`  compile target: ${platform.compileTarget}`);
+  }
   console.log(`  output: ${outfile}`);
 
   try {
@@ -315,7 +407,7 @@ async function buildPlatform(platform: PlatformTarget): Promise<boolean> {
         minify: true,
         env: BREWVA_OPENTUI_ENV_PREFIX,
         compile: {
-          target: platform.target,
+          target: platform.compileTarget ?? platform.target,
           outfile,
         },
         plugins: [solidPlugin],
@@ -340,7 +432,7 @@ async function buildPlatform(platform: PlatformTarget): Promise<boolean> {
       return false;
     }
 
-    copyRuntimeAssets(outDir);
+    await copyRuntimeAssets(outDir, platform);
     await maybeRunOpenTuiSmoke(platform, outfile);
 
     if (process.platform !== "win32") {

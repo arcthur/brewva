@@ -243,8 +243,9 @@ Hosted recall does not share one session-start frozen snapshot.
 Current default hosted behavior is broker-first:
 
 - `brewva.recall-broker` is the default hosted recall provider
-- the broker rebuilds session digests, cross-session evidence index, and
-  curation aggregates from durable tape-visible evidence
+- the broker refreshes the DuckDB-backed session query plane for session
+  digests and tape evidence, then rebuilds curation aggregates from durable
+  tape-visible feedback evidence
 - default broker scope is `user + repository root`; `workspace_wide` and
   `cross_workspace` behavior remain policy-gated rather than implicit defaults
 - default broker intent is `prior_work`; this is a neutral fallback with no

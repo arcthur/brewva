@@ -4,7 +4,6 @@ import {
   type InternalRuntimePluginApi,
 } from "@brewva/brewva-gateway/runtime-plugins";
 import type { BrewvaOperatorRuntimePort } from "@brewva/brewva-runtime";
-import { buildProjectInsightsReport, formatProjectInsightsText } from "./insights.js";
 import { clampText, resolveInspectDirectory } from "./inspect-analysis.js";
 
 const DEFAULT_MAX_NOTIFICATION_LINES = 28;
@@ -66,7 +65,9 @@ export function createInsightsCommandRuntimePlugin(
               normalizedArgs.length > 0 ? normalizedArgs : undefined,
               undefined,
             );
-            const report = buildProjectInsightsReport({
+            const { buildProjectInsightsReport, formatProjectInsightsText } =
+              await import("./insights.js");
+            const report = await buildProjectInsightsReport({
               runtime,
               directory,
             });
