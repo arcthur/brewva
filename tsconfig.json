@@ -2,6 +2,7 @@
   "files": [],
   "references": [
     { "path": "./packages/brewva-search" },
+    { "path": "./packages/brewva-box" },
     { "path": "./packages/brewva-runtime" },
     { "path": "./packages/brewva-session-index" },
     { "path": "./packages/brewva-substrate" },

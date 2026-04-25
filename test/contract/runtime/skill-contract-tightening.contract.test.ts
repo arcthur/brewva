@@ -153,7 +153,7 @@ describe("skill contract tightening", () => {
     });
   });
 
-  test("explicit empty allowed effects remain fully sandboxed instead of falling back to read-only", () => {
+  test("explicit empty allowed effects remain fully denied instead of falling back to read-only", () => {
     const contract = createContract({
       name: "narrator",
       category: "core",

@@ -32,7 +32,7 @@ export interface BrewvaSecurityCredentialsConfig {
   path: string;
   masterKeyEnv: string;
   allowDerivedKeyFallback: boolean;
-  sandboxApiKeyRef?: string;
+  boxSecretsRef?: string;
   gatewayTokenRef?: string;
   bindings: BrewvaSecurityCredentialBinding[];
 }
@@ -105,15 +105,23 @@ export interface BrewvaConfig {
     };
     credentials: BrewvaSecurityCredentialsConfig;
     execution: {
-      backend: "host" | "sandbox" | "best_available";
-      enforceIsolation: boolean;
-      fallbackToHost: boolean;
-      sandbox: {
-        serverUrl: string;
-        defaultImage: string;
-        memory: number;
+      backend: "host" | "box";
+      box: {
+        home: string;
+        image: string;
         cpus: number;
-        timeout: number;
+        memoryMib: number;
+        diskGb: number;
+        workspaceGuestPath: string;
+        scopeDefault: "session" | "task" | "ephemeral";
+        network: { mode: "off" } | { mode: "allowlist"; allow: string[] };
+        detach: boolean;
+        autoSnapshotOnRelease: boolean;
+        perSessionLifetime: "session" | "forever";
+        gc: {
+          maxStoppedBoxes: number;
+          maxAgeDays: number;
+        };
       };
     };
   };
@@ -247,8 +255,8 @@ export interface BrewvaConfigFile {
     credentials?: Partial<Omit<BrewvaConfig["security"]["credentials"], "bindings">> & {
       bindings?: DeepPartial<BrewvaConfig["security"]["credentials"]["bindings"]>;
     };
-    execution?: Partial<Omit<BrewvaConfig["security"]["execution"], "sandbox">> & {
-      sandbox?: Partial<BrewvaConfig["security"]["execution"]["sandbox"]>;
+    execution?: Partial<Omit<BrewvaConfig["security"]["execution"], "box">> & {
+      box?: DeepPartial<BrewvaConfig["security"]["execution"]["box"]>;
     };
   };
   schedule?: Partial<Omit<BrewvaConfig["schedule"], "selfImprove">> & {

@@ -194,17 +194,22 @@ Verification plan semantics:
 - `security.credentials.path`: `.brewva/credentials.vault`
 - `security.credentials.masterKeyEnv`: `BREWVA_VAULT_KEY`
 - `security.credentials.allowDerivedKeyFallback`: `true`
-- `security.credentials.sandboxApiKeyRef`: `vault://sandbox/apiKey`
 - `security.credentials.gatewayTokenRef`: `vault://gateway/token`
 - `security.credentials.bindings`: `[]`
-- `security.execution.backend`: `sandbox`
-- `security.execution.enforceIsolation`: `false`
-- `security.execution.fallbackToHost`: `false`
-- `security.execution.sandbox.serverUrl`: `http://127.0.0.1:5555`
-- `security.execution.sandbox.defaultImage`: `microsandbox/node`
-- `security.execution.sandbox.memory`: `512`
-- `security.execution.sandbox.cpus`: `1`
-- `security.execution.sandbox.timeout`: `180`
+- `security.execution.backend`: `box`
+- `security.execution.box.home`: `~/.brewva/boxes`
+- `security.execution.box.image`: `ghcr.io/brewva/box-default:latest`
+- `security.execution.box.cpus`: `2`
+- `security.execution.box.memoryMib`: `1024`
+- `security.execution.box.diskGb`: `8`
+- `security.execution.box.workspaceGuestPath`: `/workspace`
+- `security.execution.box.scopeDefault`: `session`
+- `security.execution.box.network.mode`: `off`
+- `security.execution.box.detach`: `true`
+- `security.execution.box.autoSnapshotOnRelease`: `false`
+- `security.execution.box.perSessionLifetime`: `session`
+- `security.execution.box.gc.maxStoppedBoxes`: `64`
+- `security.execution.box.gc.maxAgeDays`: `30`
 
 `security.enforcement.*` controls per-policy behavior on top of `security.mode`:
 
@@ -450,8 +455,11 @@ execution-time secret binding model.
 - `allowDerivedKeyFallback`
   - if `true`, runtime may derive a machine-local fallback key when
     `masterKeyEnv` is unset
-- `sandboxApiKeyRef`
-  - vault ref used by sandbox execution when a sandbox API key is needed
+- `boxSecretsRef`
+  - reserved optional vault ref for BoxLite-backed secret material
+  - promoted v1 does not pass direct BoxLite secret injection until the SDK
+    exposes an enforceable secret-carrier contract; tool-specific `bindings`
+    remain the supported execution environment secret path
 - `gatewayTokenRef`
   - vault ref used for gateway daemon token persistence
 - `bindings`
@@ -469,76 +477,70 @@ sha256("brewva:" + hostname + ":" + homedir)
 
 `security.execution` controls command isolation for `exec`:
 
-- `backend=sandbox` is the default and fails closed when the sandbox backend is
-  unavailable.
-- `backend=best_available` still resolves to sandbox first, but it no longer
-  implies host fallback.
+- `backend=box` is the default. It uses BoxLite through the Brewva box plane and
+  fails closed when the local VM runtime is unavailable.
 - `backend=host` is an explicit operator policy for high-risk local execution.
-- Host fallback is controlled only by `fallbackToHost` (`false` by default) and
-  is still disabled by strict/enforced isolation.
-- `enforceIsolation=true` forces `backend=sandbox` and disables host fallback regardless of other inputs.
-- `strict` always disables host fallback.
+  `security.mode=strict` rejects `backend=host` during config normalization.
+- There is no automatic host fallback and no daemon API key. Removed legacy
+  backend and fallback fields are invalid active config.
 - `local_exec_readonly` auto-admission is available only for commands accepted
   by the runtime command-policy grammar and routed through `virtual_readonly`.
   The v1 virtual backend materializes explicit relative path arguments into a
   temporary workspace subset and rejects unsafe path materialization rather than
   reading the host workspace in place.
-- `exec.timeout` overrides `security.execution.sandbox.timeout` per command.
 - `exec.workdir` is validated against the current task target roots before
-  backend routing; out-of-scope directories are rejected for both host and
-  sandbox execution.
-- `exec.workdir` and `exec.env` are forwarded into sandbox commands via a shell wrapper (`cd` + `export`) only after target-root validation succeeds.
-- `exec.env` keys are validated before host or sandbox launch; invalid keys and
+  backend routing; out-of-scope directories are rejected for host and box
+  execution.
+- `exec.env` keys are validated before host or box launch; invalid keys and
   prototype-pollution keys are dropped and reported by key name only.
 
-### `security.execution` Resolution Order
+### Stateful Box Lifecycle
 
-At runtime, execution isolation is resolved in this order:
+The box backend is stateful. Brewva acquires a box by `BoxScope`, executes one
+or more commands inside it, and releases the handle without destroying the VM by
+default.
 
-1. `BREWVA_ENFORCE_EXEC_ISOLATION` environment flag (`1`, `true`, `yes`, `on`)
-2. `security.execution.enforceIsolation`
-3. `security.mode === strict`
-4. configured `security.execution.backend`
-5. `security.execution.fallbackToHost` (when resolved backend is `sandbox`)
-
-This yields the following invariants:
-
-- If `BREWVA_ENFORCE_EXEC_ISOLATION` is enabled, host fallback is disabled.
-- If `enforceIsolation=true`, host fallback is disabled.
-- If `security.mode=strict`, host fallback is disabled.
-- `backend=best_available` routes `sandbox` first and fails closed unless
-  `fallbackToHost=true`.
-- `backend=host` is honored only when none of the above force sandbox.
+- Session scopes are keyed by `(kind, id, image, workspaceRoot, capabilitySet)`.
+  Identical fingerprints reuse the same box.
+- Any capability-set change creates a new box and records `box.acquired` with
+  `acquisitionReason="capability_changed"`. Brewva does not execute a narrower
+  request inside a previously broader box, because capabilities are fixed at VM
+  creation time.
+- `workspaceRoot` is immutable after box creation. Changing it creates a new box
+  instead of hot-swapping the mount source.
+- `release("detach")` keeps filesystem, packages, and environment state for
+  later `runtime.get`/reacquire. Named snapshots protect a box from GC unless
+  the snapshot is explicitly removed.
+- Snapshot creation is a native BoxLite operation. Brewva stops the box before
+  creating a snapshot so later restore rolls back the container disk
+  deterministically.
+- Forks create ephemeral child boxes through native clone and preserve parent
+  snapshot lineage.
+- Linux box execution requires `/dev/kvm`. Missing KVM fails closed with an
+  actionable diagnostic.
 
 ### `security.execution` Routing Matrix
 
-| mode       | backend        | enforceIsolation | fallbackToHost | resolved backend | host fallback |
-| ---------- | -------------- | ---------------- | -------------- | ---------------- | ------------- |
-| permissive | best_available | false            | false          | sandbox          | false         |
-| standard   | best_available | false            | false          | sandbox          | false         |
-| standard   | best_available | false            | true           | sandbox          | true          |
-| standard   | sandbox        | false            | false          | sandbox          | false         |
-| standard   | sandbox        | false            | true           | sandbox          | true          |
-| strict     | any            | false            | any            | sandbox          | false         |
-| any        | any            | true             | any            | sandbox          | false         |
+| mode       | backend | resolved backend | host fallback |
+| ---------- | ------- | ---------------- | ------------- |
+| permissive | host    | host             | false         |
+| permissive | box     | box              | false         |
+| standard   | host    | host             | false         |
+| standard   | box     | box              | false         |
+| strict     | box     | box              | false         |
+| strict     | host    | invalid config   | false         |
 
 Notes:
 
-- `host fallback` applies only when the resolved backend is `sandbox`.
-- `backend=best_available` does not implicitly enable host fallback.
-- Sandbox background process mode is unsupported; with fallback disabled this is fail-closed.
-- When sandbox execution fails and host fallback is enabled, runtime applies a short backoff window before retrying sandbox (`exec_fallback_host.reason=sandbox_unavailable_cached`) to avoid repeated sandbox error churn.
-- Repeated sandbox failures in the same session can trigger a temporary session pin (`exec_fallback_host.reason=sandbox_unavailable_session_pinned`) so subsequent exec calls bypass sandbox until the pin TTL expires.
-- If `exec.workdir` is omitted, sandbox execution defaults to `/` and does not inherit host runtime cwd.
-- Omitting `exec.workdir` does not widen authority: runtime still resolves
-  target-root scope first and rejects explicit directories outside the current
-  task target roots.
-- `security.boundaryPolicy.commandDenyList` is the active best-effort command deny list.
+- `security.boundaryPolicy.commandDenyList` is the active best-effort command
+  deny list.
 - `security.boundaryPolicy.network.mode` defaults to `allowlist`; explicit
   outbound targets detected by command policy are denied unless loopback or an
   allowlist rule permits them.
-- sandbox API key resolution uses the vault ref from `security.credentials.sandboxApiKeyRef`.
-- `security.execution.commandDenyList` and `security.execution.sandbox.apiKey` are invalid in active config. Rewrite or delete them in the config file before normal runtime use.
+- `security.execution.box.network.mode=off` denies box network access by
+  default. An empty allowlist is treated as deny-all.
+- Non-empty box domain allowlists are fail-closed in the promoted v1 BoxLite
+  adapter until the SDK exposes enforceable domain allowlist semantics.
 
 ## Event Level Model
 

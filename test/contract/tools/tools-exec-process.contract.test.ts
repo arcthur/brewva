@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { BoxExecSpec, BoxHandle, BoxPlane, BoxScope } from "@brewva/brewva-box";
 import { createExecTool, createProcessTool } from "@brewva/brewva-tools";
 import { requireDefined, requireNonEmptyString } from "../../helpers/assertions.js";
 import {
@@ -9,6 +10,200 @@ import {
   extractTextContent,
   fakeContext,
 } from "./tools-exec-process.helpers.js";
+
+function createOutputRaceBoxPlane(output: string, observedOffsets: number[]): BoxPlane {
+  let releaseObservationGate: (() => void) | undefined;
+  let firstObservationStarted: (() => void) | undefined;
+  const firstObservation = new Promise<void>((resolveNow) => {
+    firstObservationStarted = resolveNow;
+  });
+  const observationGate = new Promise<void>((resolveNow) => {
+    releaseObservationGate = resolveNow;
+  });
+  let observationCount = 0;
+  let gateTimer: ReturnType<typeof setTimeout> | undefined;
+  const scopeRecords: BoxScope[] = [];
+
+  const handleForScope = (scope: BoxScope): BoxHandle => ({
+    id: "box-output-race",
+    scope,
+    fingerprint: "fingerprint-output-race",
+    acquisitionReason: "created",
+    async exec(spec: BoxExecSpec) {
+      return {
+        id: "exec-output-race",
+        boxId: "box-output-race",
+        detached: spec.detach === true,
+        async wait() {
+          await firstObservation;
+          await new Promise((resolveNow) => setTimeout(resolveNow, 0));
+          return {
+            id: "exec-output-race",
+            boxId: "box-output-race",
+            stdout: output,
+            stderr: "",
+            exitCode: 0,
+          };
+        },
+        async kill() {},
+      };
+    },
+    async snapshot(name) {
+      return {
+        id: "snapshot-output-race",
+        name,
+        boxId: "box-output-race",
+        createdAt: new Date(0).toISOString(),
+      };
+    },
+    async restore() {},
+    async fork() {
+      return handleForScope(scope);
+    },
+    async release() {},
+  });
+
+  return {
+    async acquire(scope) {
+      scopeRecords.push(scope);
+      return handleForScope(scope);
+    },
+    async reattach() {
+      return undefined;
+    },
+    async observeExecution(_boxId, _executionId, options) {
+      observationCount += 1;
+      const offset = Math.max(0, options?.stdoutOffset ?? 0);
+      observedOffsets.push(offset);
+      if (observationCount === 1) {
+        firstObservationStarted?.();
+        gateTimer = setTimeout(() => releaseObservationGate?.(), 20);
+        await observationGate;
+      } else {
+        if (gateTimer) clearTimeout(gateTimer);
+        releaseObservationGate?.();
+      }
+      return {
+        id: "exec-output-race",
+        boxId: "box-output-race",
+        status: "completed",
+        stdout: output.slice(offset),
+        stderr: "",
+        stdoutOffset: output.length,
+        stderrOffset: 0,
+        stdoutBytes: output.length,
+        stderrBytes: 0,
+        exitCode: 0,
+      };
+    },
+    async releaseScope() {},
+    async inspect() {
+      return {
+        boxes: scopeRecords.map((scope) => ({
+          id: "box-output-race",
+          scope,
+          fingerprint: "fingerprint-output-race",
+          createReason: "created",
+          createdAt: new Date(0).toISOString(),
+          snapshots: [],
+        })),
+      };
+    },
+    async maintain() {
+      return { stopped: [], removed: [], retained: [] };
+    },
+  };
+}
+
+function createChunkedDetachedBoxPlane(chunks: string[], observedOffsets: number[]): BoxPlane {
+  const output = chunks.join("");
+  const scopeRecords: BoxScope[] = [];
+
+  const handleForScope = (scope: BoxScope): BoxHandle => ({
+    id: "box-chunked-detached",
+    scope,
+    fingerprint: "fingerprint-chunked-detached",
+    acquisitionReason: "created",
+    async exec() {
+      return {
+        id: "exec-chunked-detached",
+        boxId: "box-chunked-detached",
+        detached: true,
+        async wait() {
+          return {
+            id: "exec-chunked-detached",
+            boxId: "box-chunked-detached",
+            stdout: output,
+            stderr: "",
+            exitCode: 0,
+          };
+        },
+        async kill() {},
+      };
+    },
+    async snapshot(name) {
+      return {
+        id: "snapshot-chunked-detached",
+        name,
+        boxId: "box-chunked-detached",
+        createdAt: new Date(0).toISOString(),
+      };
+    },
+    async restore() {},
+    async fork() {
+      return handleForScope(scope);
+    },
+    async release() {},
+  });
+
+  return {
+    async acquire(scope) {
+      scopeRecords.push(scope);
+      return handleForScope(scope);
+    },
+    async reattach() {
+      return undefined;
+    },
+    async observeExecution(_boxId, _executionId, options) {
+      const offset = Math.max(0, options?.stdoutOffset ?? 0);
+      observedOffsets.push(offset);
+      const chunk =
+        offset === 0
+          ? (chunks[0] ?? "")
+          : output.slice(offset, offset + (chunks[1]?.length ?? output.length));
+      const nextOffset = Math.min(output.length, offset + chunk.length);
+      return {
+        id: "exec-chunked-detached",
+        boxId: "box-chunked-detached",
+        status: nextOffset >= output.length ? "completed" : "running",
+        stdout: chunk,
+        stderr: "",
+        stdoutOffset: nextOffset,
+        stderrOffset: 0,
+        stdoutBytes: output.length,
+        stderrBytes: 0,
+        stdoutTruncated: nextOffset < output.length,
+        exitCode: nextOffset >= output.length ? 0 : undefined,
+      };
+    },
+    async releaseScope() {},
+    async inspect() {
+      return {
+        boxes: scopeRecords.map((scope) => ({
+          id: "box-chunked-detached",
+          scope,
+          fingerprint: "fingerprint-chunked-detached",
+          createReason: "created",
+          createdAt: new Date(0).toISOString(),
+          snapshots: [],
+        })),
+      };
+    },
+    async maintain() {
+      return { stopped: [], removed: [], retained: [] };
+    },
+  };
+}
 
 describe("exec/process tool flow", () => {
   test("exec backgrounds and process poll waits for completion", async () => {
@@ -80,6 +275,86 @@ describe("exec/process tool flow", () => {
     expect(observedDone).toBe(true);
     expect(finalStatus).toBe("completed");
     expect(finalVerdict).toBeUndefined();
+  });
+
+  test("box background output polling does not duplicate final observed chunks", async () => {
+    const output = "box-race-output\n";
+    const observedOffsets: number[] = [];
+    const boxPlane = createOutputRaceBoxPlane(output, observedOffsets);
+    const { runtime } = createRuntimeForExecTests({
+      mode: "standard",
+      backend: "box",
+      boxPlane,
+    });
+    const execTool = createExecTool({ runtime });
+    const processTool = createProcessTool({ runtime });
+    const sessionId = "s13-box-output-race";
+
+    const started = await execTool.execute(
+      "tc-box-output-race-start",
+      {
+        command: "echo box-race-output",
+        background: true,
+      },
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+    const sessionHandle = requireNonEmptyString(
+      (started.details as { sessionId?: string }).sessionId,
+      "Expected box process session handle.",
+    );
+
+    const polled = await processTool.execute(
+      "tc-box-output-race-poll",
+      {
+        action: "poll",
+        sessionId: sessionHandle,
+        timeout: 2_000,
+      },
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+    const pollText = extractTextContent(polled);
+    const occurrences = pollText.split("box-race-output").length - 1;
+
+    expect((polled.details as { status?: string }).status).toBe("completed");
+    expect(occurrences).toBe(1);
+    expect(observedOffsets).toContain(output.length);
+  });
+
+  test("direct detached box polling advances observe offsets", async () => {
+    const observedOffsets: number[] = [];
+    const firstChunk = "first-chunk\n";
+    const chunks = [firstChunk, "second-chunk\n"];
+    const boxPlane = createChunkedDetachedBoxPlane(chunks, observedOffsets);
+    const { runtime } = createRuntimeForExecTests({
+      mode: "standard",
+      backend: "box",
+      boxPlane,
+    });
+    const processTool = createProcessTool({ runtime });
+    const sessionId = "s13-direct-box-offsets";
+
+    const polled = await processTool.execute(
+      "tc-direct-box-offsets-poll",
+      {
+        action: "poll",
+        boxId: "box-chunked-detached",
+        executionId: "exec-chunked-detached",
+        timeout: 1_000,
+      },
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+
+    const pollText = extractTextContent(polled);
+    expect(pollText).toContain("first-chunk");
+    expect(pollText).toContain("second-chunk");
+    expect((polled.details as { status?: string }).status).toBe("completed");
+    expect(observedOffsets).toEqual([0, firstChunk.length]);
   });
 
   test("process kill stops a background session", async () => {
@@ -201,7 +476,7 @@ describe("exec/process tool flow", () => {
     );
     expect(extractTextContent(resultFromLargeTimeout)).toContain("timeout-large");
 
-    const routedEvents = events.filter((event) => event.type === "exec_routed");
+    const routedEvents = events.filter((event) => event.type === "exec.started");
     expect(routedEvents[0]?.payload?.requestedTimeoutSec).toBe(120);
     expect(routedEvents).toHaveLength(1);
   });

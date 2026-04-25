@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import { createExecTool } from "@brewva/brewva-tools";
-import { assertRejectsWithMessage } from "../../helpers.js";
 import { requireDefined, requireRecord } from "../../helpers/assertions.js";
 import {
   createRuntimeForExecTests,
@@ -28,9 +27,7 @@ describe("exec command policy routing", () => {
   test("readonly command routes to virtual backend and records exploration evidence", async () => {
     const { runtime, events } = createRuntimeForExecTests({
       mode: "standard",
-      backend: "sandbox",
-      fallbackToHost: false,
-      serverUrl: "http://127.0.0.1:2",
+      backend: "box",
     });
     const execTool = createExecTool({ runtime });
 
@@ -55,8 +52,8 @@ describe("exec command policy routing", () => {
     expect(details.materializedPaths).toEqual(["package.json"]);
 
     const routed = requireDefined(
-      events.find((event) => event.type === "exec_routed"),
-      "Expected exec_routed event.",
+      events.find((event) => event.type === "exec.started"),
+      "Expected exec.started event.",
     );
     expect(routed.payload?.resolvedBackend).toBe("virtual_readonly");
     const commandPolicy = requireRecord(
@@ -76,9 +73,7 @@ describe("exec command policy routing", () => {
   test("readonly virtual route withholds bound credential environment", async () => {
     const { runtime, events } = createRuntimeForExecTests({
       mode: "standard",
-      backend: "sandbox",
-      fallbackToHost: false,
-      serverUrl: "http://127.0.0.1:2",
+      backend: "box",
       boundEnv: { BREWVA_TEST_SECRET: "super-secret-value" },
     });
     const execTool = createExecTool({ runtime });
@@ -99,8 +94,8 @@ describe("exec command policy routing", () => {
       verificationEvidence: false,
     });
     const routed = requireDefined(
-      events.find((event) => event.type === "exec_routed"),
-      "Expected exec_routed event.",
+      events.find((event) => event.type === "exec.started"),
+      "Expected exec.started event.",
     );
     expect(routed.payload?.resolvedBackend).toBe("virtual_readonly");
     expect(routed.payload?.requestedEnvKeys).toEqual([]);
@@ -111,9 +106,7 @@ describe("exec command policy routing", () => {
   test("grep commands with option-supplied patterns still materialize file candidates", async () => {
     const { runtime, events } = createRuntimeForExecTests({
       mode: "standard",
-      backend: "sandbox",
-      fallbackToHost: false,
-      serverUrl: "http://127.0.0.1:2",
+      backend: "box",
     });
     const execTool = createExecTool({ runtime });
 
@@ -134,8 +127,8 @@ describe("exec command policy routing", () => {
     });
 
     const routed = requireDefined(
-      events.find((event) => event.type === "exec_routed"),
-      "Expected exec_routed event.",
+      events.find((event) => event.type === "exec.started"),
+      "Expected exec.started event.",
     );
     expect(routed.payload?.resolvedBackend).toBe("virtual_readonly");
     const virtualReadonly = requireRecord(
@@ -149,34 +142,28 @@ describe("exec command policy routing", () => {
     });
   });
 
-  test("unsupported shell constructs fail closed without host fallback", async () => {
+  test("unsupported shell constructs route to box instead of virtual readonly", async () => {
     const { runtime, events } = createRuntimeForExecTests({
       mode: "standard",
-      backend: "sandbox",
-      fallbackToHost: false,
-      serverUrl: "http://127.0.0.1:2",
+      backend: "box",
     });
     const execTool = createExecTool({ runtime });
 
-    await assertRejectsWithMessage(
-      () =>
-        execTool.execute(
-          "tc-exec-unsupported-no-fallback",
-          {
-            command: "cat $(pwd)/package.json",
-          },
-          undefined,
-          undefined,
-          fakeContext("s13-exec-unsupported-no-fallback"),
-        ),
-      "exec_blocked_isolation",
+    const result = await execTool.execute(
+      "tc-exec-unsupported-box",
+      {
+        command: "cat $(pwd)/package.json",
+      },
+      undefined,
+      undefined,
+      fakeContext("s13-exec-unsupported-box"),
     );
 
-    expect(eventTypes(events)).toContain("exec_blocked_isolation");
-    expect(eventTypes(events)).not.toContain("exec_fallback_host");
+    expect((result.details as { backend?: string }).backend).toBe("box");
+    expect(eventTypes(events)).toContain("box.exec.started");
     const blocked = requireDefined(
-      events.find((event) => event.type === "exec_blocked_isolation"),
-      "Expected exec_blocked_isolation event.",
+      events.find((event) => event.type === "box.exec.started"),
+      "Expected box.exec.started event.",
     );
     const commandPolicy = requireRecord(
       blocked.payload?.commandPolicy,
@@ -188,41 +175,34 @@ describe("exec command policy routing", () => {
     );
   });
 
-  test("unsafe absolute path is not authorized as a virtual readonly route", async () => {
+  test("unsafe absolute path is not authorized as a virtual readonly route but can run in box", async () => {
     const { runtime, events } = createRuntimeForExecTests({
       mode: "standard",
-      backend: "sandbox",
-      fallbackToHost: false,
-      serverUrl: "http://127.0.0.1:2",
+      backend: "box",
     });
     const execTool = createExecTool({ runtime });
 
-    await assertRejectsWithMessage(
-      () =>
-        execTool.execute(
-          "tc-exec-readonly-absolute-path",
-          {
-            command: "cat /etc/hosts",
-          },
-          undefined,
-          undefined,
-          fakeContext("s13-exec-readonly-absolute-path"),
-        ),
-      "exec_blocked_isolation",
+    const result = await execTool.execute(
+      "tc-exec-readonly-absolute-path",
+      {
+        command: "cat /etc/hosts",
+      },
+      undefined,
+      undefined,
+      fakeContext("s13-exec-readonly-absolute-path"),
     );
 
-    expect(eventTypes(events)).toContain("exec_blocked_isolation");
-    expect(eventTypes(events)).not.toContain("exec_fallback_host");
+    expect((result.details as { backend?: string }).backend).toBe("box");
+    expect(eventTypes(events)).toContain("box.exec.started");
     const routed = requireDefined(
-      events.find((event) => event.type === "exec_routed"),
-      "Expected exec_routed event.",
+      events.find((event) => event.type === "box.exec.started"),
+      "Expected box.exec.started event.",
     );
-    expect(routed.payload?.resolvedBackend).toBe("sandbox");
+    expect(routed.payload?.resolvedBackend).toBe("box");
     const blocked = requireDefined(
-      events.find((event) => event.type === "exec_blocked_isolation"),
-      "Expected exec_blocked_isolation event.",
+      events.find((event) => event.type === "box.exec.started"),
+      "Expected box.exec.started event.",
     );
-    expect(blocked.payload?.reason).toBe("sandbox_execution_error");
     const virtualReadonly = requireRecord(
       blocked.payload?.virtualReadonly,
       "Expected virtualReadonly payload.",
@@ -242,7 +222,6 @@ describe("exec command policy routing", () => {
     const { runtime, events } = createRuntimeForExecTests({
       mode: "standard",
       backend: "host",
-      fallbackToHost: false,
     });
     const execTool = createExecTool({ runtime });
     const env = Object.create(null) as Record<string, string>;
@@ -264,8 +243,8 @@ describe("exec command policy routing", () => {
 
     expect(extractTextContent(result)).toContain("ok\nclean");
     const routed = requireDefined(
-      events.find((event) => event.type === "exec_routed"),
-      "Expected exec_routed event.",
+      events.find((event) => event.type === "exec.started"),
+      "Expected exec.started event.",
     );
     expect(routed.payload?.appliedEnvKeys).toEqual(["SAFE_ENV"]);
     expect(routed.payload?.droppedEnvKeys).toEqual(

@@ -158,9 +158,6 @@ function createToolRuntimeFixture(): BrewvaToolRuntime {
       resolveCredentialBindings() {
         return { API_TOKEN: "token" };
       },
-      resolveSandboxApiKey() {
-        return "sandbox-key";
-      },
     },
   };
 }

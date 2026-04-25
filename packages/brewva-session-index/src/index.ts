@@ -117,6 +117,16 @@ export interface SessionIndexRecentSession {
   lastEventAt: number;
 }
 
+export interface SessionIndexBox {
+  sessionId: string;
+  boxId: string;
+  image: string;
+  createdAt: number;
+  lastExecAt: number;
+  fingerprint?: string;
+  snapshotRefs: string[];
+}
+
 export type SessionIndexStatus =
   | {
       ok: true;
@@ -152,6 +162,7 @@ export interface SessionIndex {
     eventId: string;
   }): Promise<SessionIndexTapeEvidence | undefined>;
   listRecentSessions(input: QueryRecentSessionsInput): Promise<SessionIndexRecentSession[]>;
+  listSessionBoxes(input?: { sessionId?: string }): Promise<SessionIndexBox[]>;
   close(): Promise<void>;
 }
 
@@ -247,6 +258,16 @@ interface SessionRow {
   task_goal: string | null;
   digest_text: string;
   token_matches?: bigint | number;
+}
+
+interface SessionBoxRow {
+  session_id: string;
+  box_id: string;
+  image: string;
+  created_at: number;
+  last_exec_at: number;
+  fingerprint: string | null;
+  snapshot_refs_json: string;
 }
 
 let duckdbModulePromise: Promise<DuckDBModule> | undefined;
@@ -368,6 +389,10 @@ class UnavailableSessionIndex implements SessionIndex {
   }
 
   async listRecentSessions(): Promise<SessionIndexRecentSession[]> {
+    throw new SessionIndexUnavailableError(this.message);
+  }
+
+  async listSessionBoxes(): Promise<SessionIndexBox[]> {
     throw new SessionIndexUnavailableError(this.message);
   }
 
@@ -777,6 +802,27 @@ class DuckDBSessionIndex implements SessionIndex {
     }));
   }
 
+  async listSessionBoxes(input: { sessionId?: string } = {}): Promise<SessionIndexBox[]> {
+    const status = await this.catchUp();
+    if (!status.ok) throw new SessionIndexUnavailableError(status.message);
+    const rows = await this.selectRows<SessionBoxRow>(
+      input.sessionId
+        ? `
+          select session_id, box_id, image, created_at, last_exec_at, fingerprint, snapshot_refs_json
+          from session_box
+          where session_id = $sessionId
+          order by last_exec_at desc
+        `
+        : `
+          select session_id, box_id, image, created_at, last_exec_at, fingerprint, snapshot_refs_json
+          from session_box
+          order by last_exec_at desc
+        `,
+      input.sessionId ? { sessionId: input.sessionId } : {},
+    );
+    return rows.map(mapSessionBoxRow);
+  }
+
   async close(): Promise<void> {
     if (this.closed) return;
     this.closed = true;
@@ -805,6 +851,16 @@ class DuckDBSessionIndex implements SessionIndex {
       create table if not exists session_target_roots (
         session_id varchar not null,
         target_root varchar not null
+      );
+
+      create table if not exists session_box (
+        session_id varchar primary key,
+        box_id varchar not null,
+        image varchar not null,
+        created_at double not null,
+        last_exec_at double not null,
+        fingerprint varchar,
+        snapshot_refs_json varchar not null
       );
 
       create table if not exists events (
@@ -848,6 +904,8 @@ class DuckDBSessionIndex implements SessionIndex {
         on session_target_roots(session_id);
       create index if not exists session_target_roots_root_idx
         on session_target_roots(target_root);
+      create index if not exists session_box_box_idx
+        on session_box(box_id);
       create index if not exists event_tokens_token_idx
         on event_tokens(token);
       create index if not exists event_tokens_session_idx
@@ -910,6 +968,9 @@ class DuckDBSessionIndex implements SessionIndex {
     await this.connection.run("delete from session_target_roots where session_id = $sessionId", {
       sessionId,
     });
+    await this.connection.run("delete from session_box where session_id = $sessionId", {
+      sessionId,
+    });
     await this.connection.run("delete from events where session_id = $sessionId", { sessionId });
     await this.connection.run("delete from sessions where session_id = $sessionId", { sessionId });
     await this.connection.run("delete from index_state where session_id = $sessionId", {
@@ -928,6 +989,7 @@ class DuckDBSessionIndex implements SessionIndex {
       await this.connection.run("delete from event_tokens");
       await this.connection.run("delete from session_tokens");
       await this.connection.run("delete from session_target_roots");
+      await this.connection.run("delete from session_box");
       await this.connection.run("delete from events");
       await this.connection.run("delete from sessions");
       await this.connection.run("delete from index_state");
@@ -1130,6 +1192,7 @@ class DuckDBSessionIndex implements SessionIndex {
       sessionId,
     });
     await this.insertSessionTargetRoots(sessionId, targetRoots);
+    await this.rebuildSessionBoxProjection(sessionId, records);
 
     await this.connection.run("delete from session_tokens where session_id = $sessionId", {
       sessionId,
@@ -1170,6 +1233,47 @@ class DuckDBSessionIndex implements SessionIndex {
         indexedEventCount: records.length,
         lastIndexedAt: String(Date.now()),
         schemaVersion: SESSION_INDEX_SCHEMA_VERSION,
+      },
+    );
+  }
+
+  private async rebuildSessionBoxProjection(
+    sessionId: string,
+    records: readonly BrewvaEventRecord[],
+  ): Promise<void> {
+    const projection = extractSessionBoxProjection(sessionId, records);
+    await this.connection.run("delete from session_box where session_id = $sessionId", {
+      sessionId,
+    });
+    if (!projection) return;
+    await this.connection.run(
+      `
+        insert or replace into session_box (
+          session_id,
+          box_id,
+          image,
+          created_at,
+          last_exec_at,
+          fingerprint,
+          snapshot_refs_json
+        ) values (
+          $sessionId,
+          $boxId,
+          $image,
+          cast($createdAt as double),
+          cast($lastExecAt as double),
+          $fingerprint,
+          $snapshotRefsJson
+        )
+      `,
+      {
+        sessionId: projection.sessionId,
+        boxId: projection.boxId,
+        image: projection.image,
+        createdAt: String(projection.createdAt),
+        lastExecAt: String(projection.lastExecAt),
+        fingerprint: projection.fingerprint ?? null,
+        snapshotRefsJson: JSON.stringify(projection.snapshotRefs),
       },
     );
   }
@@ -1692,6 +1796,61 @@ function mapEventRow(row: EventRow, tokenScore: number): SessionIndexTapeEvidenc
     logOffset: Number(row.log_offset),
     tokenScore,
   };
+}
+
+function mapSessionBoxRow(row: SessionBoxRow): SessionIndexBox {
+  return {
+    sessionId: row.session_id,
+    boxId: row.box_id,
+    image: row.image,
+    createdAt: row.created_at,
+    lastExecAt: row.last_exec_at,
+    ...(row.fingerprint ? { fingerprint: row.fingerprint } : {}),
+    snapshotRefs: parseStringArray(row.snapshot_refs_json),
+  };
+}
+
+function extractSessionBoxProjection(
+  sessionId: string,
+  records: readonly BrewvaEventRecord[],
+): SessionIndexBox | undefined {
+  let projection: SessionIndexBox | undefined;
+  for (const event of records) {
+    const payload = normalizePayload(event.payload);
+    if (event.type === "box.acquired") {
+      const boxId = readString(payload.boxId);
+      if (!boxId) continue;
+      projection = {
+        sessionId,
+        boxId,
+        image: readString(payload.image) ?? "unknown",
+        createdAt: event.timestamp,
+        lastExecAt: event.timestamp,
+        ...(readString(payload.fingerprint)
+          ? { fingerprint: readString(payload.fingerprint) }
+          : {}),
+        snapshotRefs: [],
+      };
+      continue;
+    }
+    if (!projection) continue;
+    if (event.type === "box.exec.started" || event.type === "box.exec.completed") {
+      const boxId = readString(payload.boxId);
+      if (!boxId || boxId === projection.boxId) {
+        projection.lastExecAt = event.timestamp;
+      }
+      continue;
+    }
+    if (event.type === "box.snapshot.created") {
+      const boxId = readString(payload.boxId);
+      if (boxId && boxId !== projection.boxId) continue;
+      const snapshotRef = readString(payload.snapshotId) ?? readString(payload.snapshotRef);
+      if (snapshotRef) {
+        projection.snapshotRefs = uniqueStrings([...projection.snapshotRefs, snapshotRef]);
+      }
+    }
+  }
+  return projection;
 }
 
 function parsePayload(value: string): Record<string, unknown> {

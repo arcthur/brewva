@@ -482,12 +482,12 @@ describe("Brewva config loader normalization", () => {
     );
   });
 
-  test("defaults exec routing to fail-closed sandbox and network allowlist", () => {
+  test("defaults exec routing to stateful box and network allowlist", () => {
     const workspace = createTestWorkspace("exec-fail-closed-defaults");
     const loaded = loadBrewvaConfig({ cwd: workspace, configPath: ".brewva/brewva.json" });
 
-    expect(loaded.security.execution.backend).toBe("sandbox");
-    expect(loaded.security.execution.fallbackToHost).toBe(false);
+    expect(loaded.security.execution.backend).toBe("box");
+    expect(loaded.security.execution.box.network.mode).toBe("off");
     expect(loaded.security.boundaryPolicy.network.mode).toBe("allowlist");
   });
 
@@ -520,17 +520,15 @@ describe("Brewva config loader normalization", () => {
     );
   });
 
-  test("fails fast when security.execution.sandbox.apiKey is present in config files", () => {
-    const workspace = createTestWorkspace("inline-sandbox-api-key-present");
+  test("fails fast when removed security.execution.sandbox is present in config files", () => {
+    const workspace = createTestWorkspace("inline-sandbox-present");
     writeFileSync(
       join(workspace, ".brewva/brewva.json"),
       JSON.stringify(
         {
           security: {
             execution: {
-              sandbox: {
-                apiKey: "inline-secret",
-              },
+              sandbox: {},
             },
           },
         },
@@ -541,7 +539,30 @@ describe("Brewva config loader normalization", () => {
     );
 
     expect(() => loadBrewvaConfig({ cwd: workspace, configPath: ".brewva/brewva.json" })).toThrow(
-      /security\.execution\.sandbox\.apiKey must not appear in active config/,
+      /security\.execution\.sandbox has been removed/,
+    );
+  });
+
+  test("fails fast when removed security.credentials.sandboxApiKeyRef is present", () => {
+    const workspace = createTestWorkspace("sandbox-api-key-ref-present");
+    writeFileSync(
+      join(workspace, ".brewva/brewva.json"),
+      JSON.stringify(
+        {
+          security: {
+            credentials: {
+              sandboxApiKeyRef: "vault://sandbox/apiKey",
+            },
+          },
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    expect(() => loadBrewvaConfig({ cwd: workspace, configPath: ".brewva/brewva.json" })).toThrow(
+      /security\.credentials\.sandboxApiKeyRef has been removed/,
     );
   });
 
@@ -576,10 +597,6 @@ describe("Brewva config loader normalization", () => {
       execution: {
         ...DEFAULT_BREWVA_CONFIG.security.execution,
         commandDenyList: ["node"],
-        sandbox: {
-          ...DEFAULT_BREWVA_CONFIG.security.execution.sandbox,
-          apiKey: "inline-secret",
-        },
       },
     };
 
@@ -592,17 +609,14 @@ describe("Brewva config loader normalization", () => {
     ).toThrow(/security\.execution\.commandDenyList must not appear in active config/);
   });
 
-  test("fails fast on direct runtime config when security.execution.sandbox.apiKey appears", () => {
-    const workspace = createTestWorkspace("direct-runtime-inline-sandbox-api-key");
+  test("fails fast on direct runtime config when removed security.execution.sandbox appears", () => {
+    const workspace = createTestWorkspace("direct-runtime-inline-sandbox");
     const config = structuredClone(DEFAULT_BREWVA_CONFIG) as unknown as Record<string, unknown>;
     config["security"] = {
       ...DEFAULT_BREWVA_CONFIG.security,
       execution: {
         ...DEFAULT_BREWVA_CONFIG.security.execution,
-        sandbox: {
-          ...DEFAULT_BREWVA_CONFIG.security.execution.sandbox,
-          apiKey: "inline-secret",
-        },
+        sandbox: {},
       },
     };
 
@@ -612,7 +626,7 @@ describe("Brewva config loader normalization", () => {
           cwd: workspace,
           config: config as unknown as typeof DEFAULT_BREWVA_CONFIG,
         }),
-    ).toThrow(/security\.execution\.sandbox\.apiKey must not appear in active config/);
+    ).toThrow(/security\.execution\.sandbox has been removed/);
   });
 
   test("fails fast on direct runtime config when removed skills.selector appears", () => {

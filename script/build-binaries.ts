@@ -41,12 +41,6 @@ export const PLATFORMS: PlatformTarget[] = [
     description: "macOS ARM64",
   },
   {
-    dir: "brewva-darwin-x64",
-    target: "bun-darwin-x64",
-    binary: "brewva",
-    description: "macOS x64",
-  },
-  {
     dir: "brewva-linux-x64",
     target: "bun-linux-x64",
     compileTarget: "bun-linux-x64-baseline",
@@ -59,31 +53,13 @@ export const PLATFORMS: PlatformTarget[] = [
     binary: "brewva",
     description: "Linux ARM64 (glibc)",
   },
-  {
-    dir: "brewva-linux-x64-musl",
-    target: "bun-linux-x64-musl",
-    binary: "brewva",
-    description: "Linux x64 (musl)",
-  },
-  {
-    dir: "brewva-linux-arm64-musl",
-    target: "bun-linux-arm64-musl",
-    binary: "brewva",
-    description: "Linux ARM64 (musl)",
-  },
-  {
-    dir: "brewva-windows-x64",
-    target: "bun-windows-x64",
-    binary: "brewva.exe",
-    description: "Windows x64",
-  },
 ];
 
 const ENTRY_POINT = "packages/brewva-cli/src/index.ts";
 const WRAPPER_PACKAGE_JSON = "distribution/brewva/package.json";
 const BREWVA_RUNTIME_ASSETS_DIR = join(process.cwd(), "packages", "brewva-cli", "runtime-assets");
 const OPEN_TUI_NATIVE_STAGE_ROOT = join(process.cwd(), ".brewva-build-cache", "opentui-native");
-const DUCKDB_PACKAGE_STAGE_ROOT = join(process.cwd(), ".brewva-build-cache", "duckdb-native");
+const NATIVE_PACKAGE_STAGE_ROOT = join(process.cwd(), ".brewva-build-cache", "native-packages");
 const BREWVA_THEME_ASSETS_DIR = join(BREWVA_RUNTIME_ASSETS_DIR, "theme");
 const BREWVA_EXPORT_HTML_ASSETS_DIR = join(BREWVA_RUNTIME_ASSETS_DIR, "export-html");
 const PHOTON_WASM_PATH = join(BREWVA_RUNTIME_ASSETS_DIR, "photon_rs_bg.wasm");
@@ -110,6 +86,7 @@ const BREWVA_OPENTUI_SUPPORTED_ENV = "BREWVA_OPENTUI_SUPPORTED";
 const BREWVA_OPENTUI_ENV_PREFIX = "BREWVA_OPENTUI_*";
 const OPEN_TUI_VERSION = "0.1.99";
 const DUCKDB_NODE_API_VERSION = "1.5.2-r.1";
+const BOXLITE_VERSION = "0.8.2";
 
 const OPEN_TUI_NATIVE_PACKAGE_BY_TARGET: Partial<Record<PlatformTarget["target"], string>> = {
   "bun-darwin-arm64": "@opentui/core-darwin-arm64",
@@ -121,17 +98,18 @@ const OPEN_TUI_NATIVE_PACKAGE_BY_TARGET: Partial<Record<PlatformTarget["target"]
 
 const DUCKDB_NATIVE_PACKAGE_BY_TARGET: Partial<Record<PlatformTarget["target"], string>> = {
   "bun-darwin-arm64": "@duckdb/node-bindings-darwin-arm64",
-  "bun-darwin-x64": "@duckdb/node-bindings-darwin-x64",
   "bun-linux-x64": "@duckdb/node-bindings-linux-x64",
   "bun-linux-arm64": "@duckdb/node-bindings-linux-arm64",
-  "bun-windows-x64": "@duckdb/node-bindings-win32-x64",
+};
+
+const BOXLITE_NATIVE_PACKAGE_BY_TARGET: Partial<Record<PlatformTarget["target"], string>> = {
+  "bun-darwin-arm64": "@boxlite-ai/boxlite-darwin-arm64",
+  "bun-linux-x64": "@boxlite-ai/boxlite-linux-x64-gnu",
+  "bun-linux-arm64": "@boxlite-ai/boxlite-linux-arm64-gnu",
 };
 
 const DUCKDB_RUNTIME_PACKAGES = ["@duckdb/node-api", "@duckdb/node-bindings"] as const;
-const DUCKDB_UNSUPPORTED_NATIVE_TARGETS = new Set<PlatformTarget["target"]>([
-  "bun-linux-x64-musl",
-  "bun-linux-arm64-musl",
-]);
+const BOXLITE_RUNTIME_PACKAGES = ["@boxlite-ai/boxlite"] as const;
 
 function copyDirectory(source: string, target: string): void {
   if (!existsSync(source)) return;
@@ -239,7 +217,7 @@ async function ensurePackagedDependency(packageName: string, version: string): P
     return realpathSync(repoPackagePath);
   }
 
-  const stageRoot = stageRootForPackage(DUCKDB_PACKAGE_STAGE_ROOT, packageName);
+  const stageRoot = stageRootForPackage(NATIVE_PACKAGE_STAGE_ROOT, packageName);
   const stagePackagePath = packagePath(join(stageRoot, "node_modules"), packageName);
   if (!existsSync(stagePackagePath)) {
     mkdirSync(stageRoot, { recursive: true });
@@ -271,12 +249,6 @@ async function ensurePackagedDependency(packageName: string, version: string): P
 }
 
 async function copyDuckDBRuntimeAssets(outDir: string, platform: PlatformTarget): Promise<void> {
-  if (DUCKDB_UNSUPPORTED_NATIVE_TARGETS.has(platform.target)) {
-    console.log(
-      "  duckdb: native bindings unavailable for this target; session index will fail closed",
-    );
-    return;
-  }
   const nativePackage = DUCKDB_NATIVE_PACKAGE_BY_TARGET[platform.target];
   if (!nativePackage) {
     return;
@@ -285,6 +257,19 @@ async function copyDuckDBRuntimeAssets(outDir: string, platform: PlatformTarget)
   const targetNodeModules = join(outDir, "node_modules");
   for (const packageName of [...DUCKDB_RUNTIME_PACKAGES, nativePackage]) {
     const source = await ensurePackagedDependency(packageName, DUCKDB_NODE_API_VERSION);
+    copyDirectory(source, packagePath(targetNodeModules, packageName));
+  }
+}
+
+async function copyBoxLiteRuntimeAssets(outDir: string, platform: PlatformTarget): Promise<void> {
+  const nativePackage = BOXLITE_NATIVE_PACKAGE_BY_TARGET[platform.target];
+  if (!nativePackage) {
+    throw new Error(`BoxLite native binding is unavailable for ${platform.target}`);
+  }
+
+  const targetNodeModules = join(outDir, "node_modules");
+  for (const packageName of [...BOXLITE_RUNTIME_PACKAGES, nativePackage]) {
+    const source = await ensurePackagedDependency(packageName, BOXLITE_VERSION);
     copyDirectory(source, packagePath(targetNodeModules, packageName));
   }
 }
@@ -377,6 +362,7 @@ async function copyRuntimeAssets(outDir: string, platform: PlatformTarget): Prom
   copyDirectory(BREWVA_EXPORT_HTML_ASSETS_DIR, join(outDir, "export-html"));
   copyDirectory(join(process.cwd(), "skills"), join(outDir, "skills"));
   await copyDuckDBRuntimeAssets(outDir, platform);
+  await copyBoxLiteRuntimeAssets(outDir, platform);
   writeFileSync(join(outDir, ".gitkeep"), "");
 }
 

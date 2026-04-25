@@ -330,10 +330,20 @@ gateway result, but they are not replay truth and are not a second event family.
 - `resource_lease_granted`
 - `resource_lease_cancelled`
 - `resource_lease_expired`
-- `exec_routed`
-- `exec_fallback_host`
-- `exec_blocked_isolation`
-- `exec_sandbox_error`
+- `exec.started`
+- `exec.failed`
+- `box.bootstrap.started`
+- `box.bootstrap.progress`
+- `box.bootstrap.completed`
+- `box.bootstrap.failed`
+- `box.acquired`
+- `box.exec.started`
+- `box.exec.completed`
+- `box.exec.failed`
+- `box.snapshot.created`
+- `box.fork.created`
+- `box.released`
+- `box.maintenance.completed`
 - `verification_write_marked`
 - `verification_outcome_recorded`
 - `verification_state_reset`
@@ -343,18 +353,24 @@ gateway result, but they are not replay truth and are not a second event family.
 - `reversible_mutation_recorded`
 - `reversible_mutation_redone`
 
-`exec_routed`, `exec_fallback_host`, `exec_blocked_isolation`, and
-`exec_sandbox_error` include redacted command audit metadata (`commandHash`,
-`commandRedacted`) and, when a shell command was present, a structured
-`commandPolicy` verdict. The verdict records normalized command names,
-read-only eligibility, filesystem intent, unsupported features, effects, and
-network host/port details. Raw command strings, raw environment values, and
+`exec.*` and `box.exec.*` events include redacted command audit metadata
+(`commandHash`, `commandRedacted`) and, when a shell command was present, a
+structured `commandPolicy` verdict. The verdict records normalized command
+names, read-only eligibility, filesystem intent, unsupported features, effects,
+and network host/port details. Raw command strings, raw environment values, and
 secret-bearing error text are not event payload fields.
 
-`exec_routed` for `virtual_readonly` also records the backend selection and
-environment key metadata only. The tool result, not the audit event, carries
-exploration-only materialization details such as `isolation`,
-`materializedPaths`, `materializedBytes`, and `materializedEntries`.
+`exec.started` is used for host and `virtual_readonly` execution routes.
+`box.exec.*` is reserved for real stateful box execution and carries box
+identity fields such as `boxId` and `fingerprint`. For `virtual_readonly`, the
+tool result, not the audit event, carries exploration-only materialization
+details such as `isolation`, `materializedPaths`, `materializedBytes`, and
+`materializedEntries`.
+
+`box.released` is a lifecycle-ending event for `session_closed`,
+`task_completed`, and `ephemeral_done`. A per-command detach checkpoint keeps
+the box reusable and therefore does not emit `box.released`; the session close
+or task completion release records the terminal lifecycle receipt.
 
 When a tool definition carries Brewva execution-traits metadata, `tool_call`
 and `tool_execution_start` may include `executionTraits` payload fields. Those

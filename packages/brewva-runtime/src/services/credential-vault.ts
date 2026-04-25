@@ -60,7 +60,6 @@ const DISCOVERY_MAPPINGS: Array<{
   { provider: "groq", envVar: "GROQ_API_KEY", credentialRef: "vault://groq/apiKey" },
   { provider: "together", envVar: "TOGETHER_API_KEY", credentialRef: "vault://together/apiKey" },
   { provider: "xai", envVar: "XAI_API_KEY", credentialRef: "vault://xai/apiKey" },
-  { provider: "sandbox", envVar: "MSB_API_KEY", credentialRef: "vault://sandbox/apiKey" },
 ];
 
 function readString(value: unknown): string | undefined {

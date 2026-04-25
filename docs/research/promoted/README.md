@@ -36,6 +36,7 @@ refresh the pointer summary and `Last reviewed` metadata here.
 - [`rfc-kernel-first-subtraction-and-control-plane-deferral.md`](./rfc-kernel-first-subtraction-and-control-plane-deferral.md)
 - [`rfc-repository-fitness-plane-and-runtime-boundary.md`](./rfc-repository-fitness-plane-and-runtime-boundary.md)
 - [`rfc-skill-first-plugin-and-promotion-governance.md`](./rfc-skill-first-plugin-and-promotion-governance.md)
+- [`rfc-stateful-box-plane-and-boxlite-execution-runtime.md`](./rfc-stateful-box-plane-and-boxlite-execution-runtime.md)
 - [`rfc-workflow-artifacts-and-posture-control-plane.md`](./rfc-workflow-artifacts-and-posture-control-plane.md)
 
 ## Delegation, Product, And Knowledge

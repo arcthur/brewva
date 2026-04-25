@@ -80,7 +80,6 @@ export interface BrewvaToolRuntimeInternalPort {
   recordEvent: RuntimeRecordEvent;
   onClearState(listener: (sessionId: string) => void): void;
   resolveCredentialBindings(sessionId: string, toolName: string): Record<string, string>;
-  resolveSandboxApiKey(sessionId: string): string | undefined;
   appendGuardedSupplementalBlocks(
     sessionId: string,
     blocks: readonly { familyId: string; content: string }[],
@@ -127,7 +126,6 @@ export function createToolRuntimeInternalPort(
     recordEvent: createRuntimeInternalEventAppendPort(runtime).record,
     onClearState: runtime.maintain.session.onClearState,
     resolveCredentialBindings: runtime.maintain.session.resolveCredentialBindings,
-    resolveSandboxApiKey: runtime.maintain.session.resolveSandboxApiKey,
     appendGuardedSupplementalBlocks: (sessionId, blocks, scopeId) =>
       runtime.maintain.context
         .appendGuardedSupplementalBlocks(sessionId, blocks, undefined, scopeId)

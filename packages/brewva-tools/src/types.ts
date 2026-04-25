@@ -1,3 +1,4 @@
+import type { BoxPlane } from "@brewva/brewva-box";
 import type {
   BrewvaToolRuntimePort as RuntimeToolRuntimePort,
   DelegationConsultKind as RuntimeDelegationConsultKind,
@@ -91,8 +92,7 @@ export type BrewvaToolRequiredCapability =
   | "internal.recordEvent"
   | "internal.onClearState"
   | "internal.appendGuardedSupplementalBlocks"
-  | "internal.resolveCredentialBindings"
-  | "internal.resolveSandboxApiKey";
+  | "internal.resolveCredentialBindings";
 
 export interface BrewvaToolExecutionTraits {
   concurrencySafe: boolean;
@@ -133,7 +133,6 @@ export interface BrewvaToolInternalRuntime {
   }): unknown;
   onClearState?(listener: (sessionId: string) => void): void;
   resolveCredentialBindings?(sessionId: string, toolName: string): Record<string, string>;
-  resolveSandboxApiKey?(sessionId: string): string | undefined;
   appendGuardedSupplementalBlocks?(
     sessionId: string,
     blocks: readonly { familyId: string; content: string }[],
@@ -671,6 +670,7 @@ export type BrewvaBundledToolRuntime = RuntimeToolRuntimePort & {
   orchestration?: BrewvaToolOrchestration;
   delegation?: BrewvaToolDelegationQuery;
   semanticReranker?: BrewvaSemanticReranker;
+  boxPlane?: BoxPlane;
 };
 
 export interface BrewvaBundledToolOptions {

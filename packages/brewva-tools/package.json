@@ -14,6 +14,7 @@
     }
   },
   "dependencies": {
+    "@brewva/brewva-box": "workspace:*",
     "@brewva/brewva-deliberation": "workspace:*",
     "@brewva/brewva-recall": "workspace:*",
     "@brewva/brewva-runtime": "workspace:*",
@@ -24,7 +25,6 @@
     "date-fns": "^4.1.0",
     "fuse.js": "^7.3.0",
     "lru-cache": "^11.3.5",
-    "microsandbox": "^0.1.1",
     "typescript": "^6.0.2"
   },
   "engines": {

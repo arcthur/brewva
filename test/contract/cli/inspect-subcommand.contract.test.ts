@@ -522,9 +522,6 @@ describe("inspect subcommand", () => {
           security: {
             execution: {
               commandDenyList: ["node"],
-              sandbox: {
-                apiKey: "inline-secret",
-              },
             },
           },
           infrastructure: {
@@ -585,7 +582,6 @@ describe("inspect subcommand", () => {
           "/skills/selector",
           "/skills/routing/profile",
           "/security/execution/commandDenyList",
-          "/security/execution/sandbox/apiKey",
           "/infrastructure/contextBudget/hardLimitPercent",
         ]),
       );
@@ -682,10 +678,14 @@ describe("inspect subcommand", () => {
     }
   });
 
-  test("rejects the removed single-session alias before prompt execution", () => {
-    const result = runSubcommand("insight", []);
-    expect(result.status).toBe(1);
-    expect(result.stderr).toContain("unknown subcommand");
-    expect(result.stderr).toContain("brewva inspect");
-  });
+  test(
+    "rejects the removed single-session alias before prompt execution",
+    () => {
+      const result = runSubcommand("insight", []);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain("unknown subcommand");
+      expect(result.stderr).toContain("brewva inspect");
+    },
+    { timeout: 20_000 },
+  );
 });

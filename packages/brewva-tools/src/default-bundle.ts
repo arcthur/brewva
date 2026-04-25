@@ -63,7 +63,7 @@ export function buildDefaultBundledBrewvaTools(
     createGitLogTool({ runtime }),
     createExecTool({ runtime }),
     ...createBrowserTools({ runtime }),
-    createProcessTool(),
+    createProcessTool({ runtime }),
     createQuestionTool(),
     createCostViewTool({ runtime }),
     createDeliberationMemoryTool({ runtime }),

@@ -9,7 +9,7 @@ function joinProjectBrewvaRootDir(baseDir: string): string {
   return resolve(baseDir, BREWVA_CONFIG_DIR_RELATIVE);
 }
 
-function normalizePathInput(input: string): string {
+export function normalizePathInput(input: string): string {
   const trimmed = input.trim();
   if (!trimmed) return trimmed;
   if (trimmed === "~") return homedir();
@@ -17,7 +17,7 @@ function normalizePathInput(input: string): string {
   return trimmed;
 }
 
-function resolveMaybeAbsolute(baseDir: string, pathText: string): string {
+export function resolvePathInput(baseDir: string, pathText: string): string {
   const normalized = normalizePathInput(pathText);
   if (isAbsolute(normalized)) {
     return resolve(normalized);
@@ -29,7 +29,7 @@ function resolveAgentDirFromEnv(env: NodeJS.ProcessEnv): string | undefined {
   const fromBrewva =
     typeof env["BREWVA_CODING_AGENT_DIR"] === "string" ? env["BREWVA_CODING_AGENT_DIR"] : "";
   if (fromBrewva.trim().length > 0) {
-    return resolveMaybeAbsolute(process.cwd(), fromBrewva);
+    return resolvePathInput(process.cwd(), fromBrewva);
   }
 
   return undefined;
@@ -43,7 +43,7 @@ export function resolveGlobalBrewvaRootDir(env: NodeJS.ProcessEnv = process.env)
 
   const configured = typeof env.XDG_CONFIG_HOME === "string" ? env.XDG_CONFIG_HOME : "";
   if (configured.trim().length > 0) {
-    return resolveMaybeAbsolute(process.cwd(), join(configured, "brewva"));
+    return resolvePathInput(process.cwd(), join(configured, "brewva"));
   }
   return resolve(homedir(), ".config", "brewva");
 }

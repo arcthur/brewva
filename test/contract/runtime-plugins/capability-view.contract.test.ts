@@ -488,7 +488,17 @@ describe("capability view", () => {
     });
     expect(result.details[1]).toMatchObject({
       name: "process",
-      parameterKeys: ["action", "data", "eof", "limit", "offset", "sessionId", "timeout"],
+      parameterKeys: [
+        "action",
+        "boxId",
+        "data",
+        "eof",
+        "executionId",
+        "limit",
+        "offset",
+        "sessionId",
+        "timeout",
+      ],
     });
   });
 });

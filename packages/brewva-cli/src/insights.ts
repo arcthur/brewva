@@ -476,7 +476,7 @@ const GUIDANCE_RULES: Array<{
     findingCode: "ops_environment",
     threshold: 2,
     suggestion:
-      "Check execution environment setup (sandbox, isolation) to reduce operational friction.",
+      "Check execution environment setup (box, isolation) to reduce operational friction.",
     reason: "Operational environment friction appeared repeatedly.",
   },
 ];

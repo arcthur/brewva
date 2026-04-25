@@ -93,6 +93,15 @@ const DIST_FORBIDDEN_MARKERS = [
   '"piConfig"',
 ];
 
+const DIST_REMOVED_EXEC_MARKERS = [
+  "microsandbox",
+  "NodeSandbox",
+  "MSB_SERVER_URL",
+  "sandboxApiKeyRef",
+  '"best_available"',
+  '"sandbox_required"',
+];
+
 const NODE_SAFE_DIST_FORBIDDEN_MARKERS = ["bun:ffi", "@opentui/core"];
 
 function collectTextFiles(root: string): string[] {
@@ -355,6 +364,11 @@ function main(): void {
     ...collectTextFiles(resolve(repoRoot, "distribution")),
     ...collectTextFiles(resolve(repoRoot, "packages", "brewva-cli", "runtime-assets")),
   ]);
+  assertNoForbiddenMarkers(
+    [...collectTextFiles(resolve(repoRoot, "distribution"))],
+    DIST_REMOVED_EXEC_MARKERS,
+    "dist removed exec runtime marker check failed",
+  );
   assertNoForbiddenMarkers(
     [
       ...collectTextFiles(resolve(repoRoot, "packages", "brewva-cli", "dist")),

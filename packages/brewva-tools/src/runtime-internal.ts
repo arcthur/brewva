@@ -53,16 +53,6 @@ export function resolveToolRuntimeCredentialBindings(
   return {};
 }
 
-export function resolveToolRuntimeSandboxApiKey(
-  runtime: BrewvaToolRuntime | undefined,
-  sessionId: string,
-): string | undefined {
-  if (runtime?.internal?.resolveSandboxApiKey) {
-    return runtime.internal.resolveSandboxApiKey(sessionId);
-  }
-  return undefined;
-}
-
 export function registerToolRuntimeClearStateListener(
   runtime: BrewvaToolRuntime | undefined,
   listener: (sessionId: string) => void,

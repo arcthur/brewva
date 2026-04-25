@@ -1,0 +1,29 @@
+{
+  "name": "@brewva/brewva-box",
+  "version": "0.1.0",
+  "description": "Stateful BoxLite-backed execution plane for Brewva.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "bun": "./src/index.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./internal/stable-json": {
+      "types": "./dist/internal/stable-json.d.ts",
+      "bun": "./src/internal/stable-json.ts",
+      "import": "./dist/internal/stable-json.js",
+      "default": "./dist/internal/stable-json.js"
+    }
+  },
+  "dependencies": {
+    "@boxlite-ai/boxlite": "^0.8.2"
+  },
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  }
+}

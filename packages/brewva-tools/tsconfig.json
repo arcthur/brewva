@@ -5,6 +5,7 @@
     "outDir": "dist"
   },
   "references": [
+    { "path": "../brewva-box" },
     { "path": "../brewva-runtime" },
     { "path": "../brewva-search" },
     { "path": "../brewva-substrate" },

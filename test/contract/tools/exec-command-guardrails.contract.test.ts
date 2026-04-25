@@ -26,8 +26,8 @@ describe("exec command guardrails", () => {
     ).rejects.toThrow("exec_blocked_isolation");
 
     const blocked = requireDefined(
-      events.find((event) => event.type === "exec_blocked_isolation"),
-      "Expected exec_blocked_isolation event.",
+      events.find((event) => event.type === "exec.failed"),
+      "Expected exec.failed event.",
     );
     const denyListPolicy = requireNonEmptyString(
       blocked.payload?.denyListPolicy,
@@ -56,7 +56,7 @@ describe("exec command guardrails", () => {
       ),
     ).rejects.toThrow("exec_blocked_isolation");
 
-    const blockedEvent = events.find((event) => event.type === "exec_blocked_isolation");
+    const blockedEvent = events.find((event) => event.type === "exec.failed");
     expect(blockedEvent?.payload?.blockedAsToolNameMisroute).toBe(true);
     expect(blockedEvent?.payload?.suggestedTool).toBe("session_compact");
   });
@@ -83,7 +83,7 @@ describe("exec command guardrails", () => {
     ).rejects.toThrow("exec_blocked_isolation");
 
     requireDefined(
-      events.find((event) => event.type === "exec_blocked_isolation"),
+      events.find((event) => event.type === "exec.failed"),
       "Expected blocked shell-wrapper event.",
     );
   });

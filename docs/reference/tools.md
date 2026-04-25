@@ -105,12 +105,10 @@ repo-owned hooks such as:
 
 - `runtime.internal.recordEvent(...)`
 - `runtime.internal.resolveCredentialBindings(...)`
-- `runtime.internal.resolveSandboxApiKey(...)`
 - `runtime.internal.appendGuardedSupplementalBlocks(...)`
 
 These hooks exist for repository-owned bundle behavior such as telemetry,
-credential lookup, supplemental context delivery, and session-maintenance
-integration.
+credential lookup, supplemental context delivery, and session-maintenance integration.
 
 Boundary rule:
 
@@ -244,7 +242,7 @@ Scope notes:
 
 - `exec` shares the same target-root descriptor as code-navigation tools;
   `exec.workdir` must stay inside the current task target roots before host or
-  sandbox routing is evaluated
+  box routing is evaluated
 - `exec` is governed by the runtime command-policy analyzer before boundary
   evaluation. The analyzer records normalized commands, readonly eligibility,
   filesystem intent, unsupported shell features, and explicit network targets.
@@ -258,12 +256,16 @@ Scope notes:
   special files, or symlinks that resolve outside the target root.
 - `exec.env` keys are filtered through a null-prototype environment overlay;
   invalid keys and prototype-pollution keys such as `__proto__`,
-  `constructor`, and `prototype` are dropped before host or sandbox execution.
+  `constructor`, and `prototype` are dropped before host or box execution.
 - commands outside the read-only grammar remain effectful `exec` and require
-  the normal action admission, receipt, and sandbox/host routing path.
+  the normal action admission, receipt, and box/host routing path.
 - `process` is the explicit follow-up surface for background `exec` sessions;
   long-running commands are not an implicit hidden control plane, and
   `virtual_readonly` commands do not create process sessions
+- Box-backed background execution also accepts `(boxId, executionId)` directly
+  for `process.poll`, `process.log`, and `process.kill`. This reattach path is
+  backed by the in-box supervisor metadata, so stdout, stderr, and exit status
+  remain observable after the launcher process exits.
 
 `workflow_status` is advisory only. It derives workflow status and ship posture
 from runtime events and session state, but it does not prescribe or

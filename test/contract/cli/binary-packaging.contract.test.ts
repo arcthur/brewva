@@ -50,18 +50,28 @@ describe("binary packaging contract", () => {
     expect(buildScriptSource).not.toContain("--force-local");
   });
 
-  test("does not package glibc DuckDB bindings into musl binaries", () => {
+  test("packages only BoxLite-supported binary targets and stages native bindings", () => {
     const repoRoot = resolve(import.meta.dirname, "../../..");
     const buildScriptPath = resolve(repoRoot, "script", "build-binaries.ts");
     const buildScriptSource = readFileSync(buildScriptPath, "utf8");
 
+    expect(buildScriptSource).toContain('target: "bun-darwin-arm64"');
+    expect(buildScriptSource).toContain('target: "bun-linux-x64"');
+    expect(buildScriptSource).toContain('target: "bun-linux-arm64"');
+    expect(buildScriptSource).not.toContain('target: "bun-darwin-x64"');
+    expect(buildScriptSource).not.toContain('target: "bun-windows-x64"');
+    expect(buildScriptSource).not.toContain('target: "bun-linux-x64-musl"');
+    expect(buildScriptSource).not.toContain('target: "bun-linux-arm64-musl"');
     expect(buildScriptSource).not.toContain(
       '"bun-linux-x64-musl": "@duckdb/node-bindings-linux-x64"',
     );
     expect(buildScriptSource).not.toContain(
       '"bun-linux-arm64-musl": "@duckdb/node-bindings-linux-arm64"',
     );
-    expect(buildScriptSource).toContain("DUCKDB_UNSUPPORTED_NATIVE_TARGETS");
+    expect(buildScriptSource).toContain("@boxlite-ai/boxlite-darwin-arm64");
+    expect(buildScriptSource).toContain("@boxlite-ai/boxlite-linux-x64-gnu");
+    expect(buildScriptSource).toContain("@boxlite-ai/boxlite-linux-arm64-gnu");
+    expect(buildScriptSource).toContain("copyBoxLiteRuntimeAssets");
   });
 
   test("uses the baseline Bun runtime for the glibc Linux x64 binary", () => {

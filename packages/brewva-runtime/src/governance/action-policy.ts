@@ -23,7 +23,7 @@ type ToolActionPolicyInput = {
   receiptPolicy: ToolActionPolicy["receiptPolicy"];
   recoveryPolicy: ToolActionPolicy["recoveryPolicy"];
   effectClasses: readonly ToolEffectClass[];
-  sandboxPolicy?: ToolActionPolicy["sandboxPolicy"];
+  boxPolicy?: ToolActionPolicy["boxPolicy"];
   budgetWeight?: number;
   requiredRoutingScopes?: readonly SkillRoutingScope[];
   safetyGate?: ToolActionPolicy["safetyGate"];
@@ -90,7 +90,7 @@ function buildPolicy(input: ToolActionPolicyInput): ToolActionPolicy {
     receiptPolicy: input.receiptPolicy,
     recoveryPolicy: input.recoveryPolicy,
     effectClasses: [...new Set(input.effectClasses)],
-    sandboxPolicy: input.sandboxPolicy,
+    boxPolicy: input.boxPolicy,
     budgetWeight: input.budgetWeight,
     requiredRoutingScopes: uniqueValues(input.requiredRoutingScopes),
     safetyGate: input.safetyGate,
@@ -260,7 +260,12 @@ function localExecEffectful(
     receiptPolicy: { kind: "commitment", required: true },
     recoveryPolicy: input.recoveryPolicy ?? { kind: "manual_recovery_evidence" },
     effectClasses: input.effectClasses ?? ["local_exec"],
-    sandboxPolicy: { kind: "host_effect" },
+    boxPolicy: {
+      kind: "box_required",
+      scopeKind: "session",
+      requiresSnapshotBefore: true,
+      allowDetachedExecution: true,
+    },
   });
 }
 
@@ -273,7 +278,7 @@ function localExecReadonly(): ToolActionPolicy {
     receiptPolicy: { kind: "execution", required: true },
     recoveryPolicy: { kind: "none" },
     effectClasses: ["local_exec"],
-    sandboxPolicy: { kind: "sandbox_required" },
+    boxPolicy: { kind: "box_required", scopeKind: "session" },
     safetyGate: {
       localExecReadonlyAutoAllow: true,
       reason: "command_policy_and_virtual_readonly_shell_enforced",
@@ -557,7 +562,7 @@ function clonePolicy(input: ToolActionPolicy): ToolActionPolicy {
       : undefined,
     receiptPolicy: { ...input.receiptPolicy },
     recoveryPolicy: { ...input.recoveryPolicy },
-    sandboxPolicy: input.sandboxPolicy ? { ...input.sandboxPolicy } : undefined,
+    boxPolicy: input.boxPolicy ? { ...input.boxPolicy } : undefined,
     safetyGate: input.safetyGate ? { ...input.safetyGate } : undefined,
   };
 }
@@ -838,7 +843,7 @@ export function sameToolActionPolicy(
     samePrimitiveRecord(left.recoveryPolicy, right.recoveryPolicy) &&
     sameValues(left.effectClasses, right.effectClasses) &&
     sameValues(left.requiredRoutingScopes, right.requiredRoutingScopes) &&
-    samePrimitiveRecord(left.sandboxPolicy, right.sandboxPolicy) &&
+    samePrimitiveRecord(left.boxPolicy, right.boxPolicy) &&
     samePrimitiveRecord(left.safetyGate, right.safetyGate) &&
     left.budgetWeight === right.budgetWeight
   );

@@ -205,11 +205,11 @@ describe("tool action policy", () => {
       receiptPolicy: { kind: "commitment", required: true },
       recoveryPolicy: { kind: "compensation", mode: "manual" },
       effectClasses: ["local_exec"],
-      sandboxPolicy: { kind: "host_effect" },
+      boxPolicy: { kind: "box_required", scopeKind: "session" },
       budgetWeight: 2,
       safetyGate: {
         localExecReadonlyAutoAllow: false,
-        reason: "command_policy_and_sandbox_not_implemented",
+        reason: "command_policy_and_box_not_implemented",
       },
     };
     const sameWithDifferentKeyOrder: ToolActionPolicy = {
@@ -220,10 +220,10 @@ describe("tool action policy", () => {
       receiptPolicy: { required: true, kind: "commitment" },
       recoveryPolicy: { mode: "manual", kind: "compensation" },
       effectClasses: ["local_exec"],
-      sandboxPolicy: { kind: "host_effect" },
+      boxPolicy: { kind: "box_required", scopeKind: "session" },
       budgetWeight: 2,
       safetyGate: {
-        reason: "command_policy_and_sandbox_not_implemented",
+        reason: "command_policy_and_box_not_implemented",
         localExecReadonlyAutoAllow: false,
       },
     };
@@ -232,7 +232,7 @@ describe("tool action policy", () => {
     expect(
       sameToolActionPolicy(left, {
         ...sameWithDifferentKeyOrder,
-        sandboxPolicy: { kind: "sandbox_required" },
+        boxPolicy: { kind: "box_required", scopeKind: "task" },
       }),
     ).toBe(false);
     expect(

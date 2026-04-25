@@ -553,7 +553,6 @@ export interface BrewvaRuntimeMethodGroups {
     getIntegrity(sessionId: string): IntegrityStatus;
     commitCompaction(sessionId: string, input: SessionCompactionCommitInput): BrewvaEventRecord;
     resolveCredentialBindings(sessionId: string, toolName: string): Record<string, string>;
-    resolveSandboxApiKey(sessionId: string): string | undefined;
   };
   sessionWire: {
     query(sessionId: string): SessionWireFrame[];
@@ -1033,12 +1032,6 @@ export function createRuntimeMethodGroups(
         return deps
           .getCredentialVaultService()
           .resolveToolBindings(toolName, deps.runtimeConfig.security.credentials.bindings);
-      },
-      resolveSandboxApiKey: (sessionId: string) => {
-        deps.sessionLifecycleService.ensureHydrated(sessionId);
-        return deps
-          .getCredentialVaultService()
-          .resolveConfiguredSecret(deps.runtimeConfig.security.credentials.sandboxApiKeyRef);
       },
     },
     sessionWire: {

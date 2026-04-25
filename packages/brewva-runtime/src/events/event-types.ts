@@ -99,6 +99,8 @@ export const TOOL_EXECUTION_END_EVENT_TYPE = "tool_execution_end" as const;
 export const TOOL_EXECUTION_START_EVENT_TYPE = "tool_execution_start" as const;
 export const TOOL_OUTPUT_SEARCH_EVENT_TYPE = "tool_output_search" as const;
 export const PATCH_RECORDED_EVENT_TYPE = "patch_recorded" as const;
+export const EXEC_STARTED_EVENT_TYPE = "exec.started" as const;
+export const EXEC_FAILED_EVENT_TYPE = "exec.failed" as const;
 export const TURN_END_EVENT_TYPE = "turn_end" as const;
 export const TURN_START_EVENT_TYPE = "turn_start" as const;
 
@@ -107,10 +109,18 @@ export const CORRECTION_UNDO_COMPLETED_EVENT_TYPE = "correction_undo_completed" 
 export const CORRECTION_REDO_COMPLETED_EVENT_TYPE = "correction_redo_completed" as const;
 export const CORRECTION_WINDOW_SUPERSEDED_EVENT_TYPE = "correction_window_superseded" as const;
 
-export const EXEC_ROUTED_EVENT_TYPE = "exec_routed" as const;
-export const EXEC_FALLBACK_HOST_EVENT_TYPE = "exec_fallback_host" as const;
-export const EXEC_BLOCKED_ISOLATION_EVENT_TYPE = "exec_blocked_isolation" as const;
-export const EXEC_SANDBOX_ERROR_EVENT_TYPE = "exec_sandbox_error" as const;
+export const BOX_BOOTSTRAP_STARTED_EVENT_TYPE = "box.bootstrap.started" as const;
+export const BOX_BOOTSTRAP_PROGRESS_EVENT_TYPE = "box.bootstrap.progress" as const;
+export const BOX_BOOTSTRAP_COMPLETED_EVENT_TYPE = "box.bootstrap.completed" as const;
+export const BOX_BOOTSTRAP_FAILED_EVENT_TYPE = "box.bootstrap.failed" as const;
+export const BOX_ACQUIRED_EVENT_TYPE = "box.acquired" as const;
+export const BOX_EXEC_STARTED_EVENT_TYPE = "box.exec.started" as const;
+export const BOX_EXEC_COMPLETED_EVENT_TYPE = "box.exec.completed" as const;
+export const BOX_EXEC_FAILED_EVENT_TYPE = "box.exec.failed" as const;
+export const BOX_SNAPSHOT_CREATED_EVENT_TYPE = "box.snapshot.created" as const;
+export const BOX_FORK_CREATED_EVENT_TYPE = "box.fork.created" as const;
+export const BOX_RELEASED_EVENT_TYPE = "box.released" as const;
+export const BOX_MAINTENANCE_COMPLETED_EVENT_TYPE = "box.maintenance.completed" as const;
 
 export const VERIFICATION_WRITE_MARKED_EVENT_TYPE = "verification_write_marked" as const;
 export const VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE = "verification_outcome_recorded" as const;
@@ -277,6 +287,8 @@ export const BREWVA_REGISTERED_EVENT_TYPES = [
   TOOL_EXECUTION_START_EVENT_TYPE,
   TOOL_OUTPUT_SEARCH_EVENT_TYPE,
   PATCH_RECORDED_EVENT_TYPE,
+  EXEC_STARTED_EVENT_TYPE,
+  EXEC_FAILED_EVENT_TYPE,
   TURN_END_EVENT_TYPE,
   TURN_START_EVENT_TYPE,
   CORRECTION_CHECKPOINT_RECORDED_EVENT_TYPE,
@@ -284,10 +296,18 @@ export const BREWVA_REGISTERED_EVENT_TYPES = [
   CORRECTION_REDO_COMPLETED_EVENT_TYPE,
   CORRECTION_WINDOW_SUPERSEDED_EVENT_TYPE,
   CRITICAL_WITHOUT_COMPACT_EVENT_TYPE,
-  EXEC_ROUTED_EVENT_TYPE,
-  EXEC_FALLBACK_HOST_EVENT_TYPE,
-  EXEC_BLOCKED_ISOLATION_EVENT_TYPE,
-  EXEC_SANDBOX_ERROR_EVENT_TYPE,
+  BOX_BOOTSTRAP_STARTED_EVENT_TYPE,
+  BOX_BOOTSTRAP_PROGRESS_EVENT_TYPE,
+  BOX_BOOTSTRAP_COMPLETED_EVENT_TYPE,
+  BOX_BOOTSTRAP_FAILED_EVENT_TYPE,
+  BOX_ACQUIRED_EVENT_TYPE,
+  BOX_EXEC_STARTED_EVENT_TYPE,
+  BOX_EXEC_COMPLETED_EVENT_TYPE,
+  BOX_EXEC_FAILED_EVENT_TYPE,
+  BOX_SNAPSHOT_CREATED_EVENT_TYPE,
+  BOX_FORK_CREATED_EVENT_TYPE,
+  BOX_RELEASED_EVENT_TYPE,
+  BOX_MAINTENANCE_COMPLETED_EVENT_TYPE,
   VERIFICATION_WRITE_MARKED_EVENT_TYPE,
   VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
   VERIFICATION_STATE_RESET_EVENT_TYPE,

@@ -122,6 +122,63 @@ function recordTaskSession(
 }
 
 describe("session index concurrency contract", () => {
+  test("projects session box ownership from box lifecycle events", async () => {
+    const { workspace, runtime } = createIndexedRuntime("session-index-box-projection");
+    const sessionId = "indexed-box-session";
+    runtime.maintain.context.onTurnStart(sessionId, 1);
+    recordRuntimeEvent(runtime, {
+      sessionId,
+      type: "box.acquired",
+      timestamp: 1_700_000_000_000,
+      payload: {
+        boxId: "box_01",
+        image: "ghcr.io/brewva/box-default:latest",
+        fingerprint: "fingerprint-01",
+      },
+    });
+    recordRuntimeEvent(runtime, {
+      sessionId,
+      type: "box.exec.completed",
+      timestamp: 1_700_000_000_500,
+      payload: {
+        boxId: "box_01",
+        exitCode: 0,
+      },
+    });
+    recordRuntimeEvent(runtime, {
+      sessionId,
+      type: "box.snapshot.created",
+      timestamp: 1_700_000_001_000,
+      payload: {
+        boxId: "box_01",
+        snapshotId: "snapshot-01",
+      },
+    });
+
+    const index = await createSessionIndex({
+      workspaceRoot: workspace,
+      events: runtime.inspect.events,
+      task: runtime.inspect.task,
+    });
+    try {
+      await index.rebuild();
+      const boxes = await index.listSessionBoxes({ sessionId });
+      expect(boxes).toEqual([
+        {
+          sessionId,
+          boxId: "box_01",
+          image: "ghcr.io/brewva/box-default:latest",
+          createdAt: 1_700_000_000_000,
+          lastExecAt: 1_700_000_000_500,
+          fingerprint: "fingerprint-01",
+          snapshotRefs: ["snapshot-01"],
+        },
+      ]);
+    } finally {
+      await index.close();
+    }
+  });
+
   test("non-writers read the published snapshot while the primary database is locked", async () => {
     const { workspace, runtime } = createIndexedRuntime("session-index-snapshot-reader");
     recordTaskSession(runtime, {

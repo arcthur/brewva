@@ -72,7 +72,8 @@ The accepted decision is:
 - `local_exec_readonly` now carries `maxAdmission=allow` with a safety gate
   reason tied to command-policy and virtual-readonly enforcement.
 - `exec` command events include structured command-policy verdicts and redacted
-  audit payloads; host fallback is explicit, not implied by `best_available`.
+  audit payloads; host execution is explicit and never implied by a fallback
+  backend.
 
 ## Validation Status
 

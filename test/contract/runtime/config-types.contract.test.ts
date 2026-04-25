@@ -47,7 +47,7 @@ describe("BrewvaConfigFile typing", () => {
         },
         credentials: {
           gatewayTokenRef: "vault://gateway/token",
-          sandboxApiKeyRef: "vault://sandbox/apiKey",
+          boxSecretsRef: "vault://box/secrets",
           bindings: [
             {
               toolNames: ["exec"],
@@ -68,6 +68,7 @@ describe("BrewvaConfigFile typing", () => {
     };
 
     expect(config.security?.credentials?.gatewayTokenRef).toBe("vault://gateway/token");
+    expect(config.security?.credentials?.boxSecretsRef).toBe("vault://box/secrets");
     expect(config.security?.boundaryPolicy?.network?.outbound?.[0]?.host).toBe("*.openai.com");
     expect(config.security?.loopDetection?.exactCall?.mode).toBe("block");
   });

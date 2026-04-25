@@ -372,7 +372,6 @@ export interface BrewvaMaintenancePort {
     | "clearState"
     | "onClearState"
     | "resolveCredentialBindings"
-    | "resolveSandboxApiKey"
   >;
   // This is the public maintenance surface over the Recovery WAL implementation.
   readonly recovery: Pick<BrewvaRuntimeMethodGroups["recoveryWal"], "recover" | "compact">;
@@ -997,7 +996,6 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
           "clearState",
           "onClearState",
           "resolveCredentialBindings",
-          "resolveSandboxApiKey",
         ] as const),
         recovery: bindMethods(methodGroups.recoveryWal, ["recover", "compact"] as const),
       },

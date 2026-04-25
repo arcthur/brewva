@@ -714,7 +714,6 @@ declare an `actionClass` plus their independent `requiredCapabilities`.
 - `clearState(sessionId)`
 - `onClearState(listener)`
 - `resolveCredentialBindings(sessionId, toolName)`
-- `resolveSandboxApiKey(sessionId)`
 
 ### `maintain.recovery`
 

@@ -75,9 +75,9 @@ export const MANAGED_BREWVA_TOOL_METADATA_BY_NAME = {
   ]),
   exec: metadata("base", "local_exec_effectful", [
     "inspect.task.getTargetDescriptor",
+    "internal.onClearState",
     "internal.recordEvent",
     "internal.resolveCredentialBindings",
-    "internal.resolveSandboxApiKey",
   ]),
   lsp_diagnostics: metadata("base", "workspace_read", [
     "authority.tools.acquireParallelSlotAsync",

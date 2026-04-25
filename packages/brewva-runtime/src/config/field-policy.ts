@@ -81,9 +81,24 @@ const ACTIVE_CONFIG_FIELD_POLICY_RULES: readonly ActiveConfigFieldPolicyRule[] =
       "security.execution.commandDenyList must not appear in active config. Move entries to security.boundaryPolicy.commandDenyList.",
   },
   {
-    path: ["security", "execution", "sandbox", "apiKey"],
+    path: ["security", "execution", "sandbox"],
     message:
-      "security.execution.sandbox.apiKey must not appear in active config. Import the secret into the credential vault and set security.credentials.sandboxApiKeyRef.",
+      "security.execution.sandbox has been removed; use security.execution.box and the stateful BoxLite-backed box plane.",
+  },
+  {
+    path: ["security", "execution", "enforceIsolation"],
+    message:
+      "security.execution.enforceIsolation has been removed; backend selection is explicit via security.execution.backend.",
+  },
+  {
+    path: ["security", "execution", "fallbackToHost"],
+    message:
+      "security.execution.fallbackToHost has been removed; box execution is fail-closed and does not fall back to host.",
+  },
+  {
+    path: ["security", "credentials", "sandboxApiKeyRef"],
+    message:
+      "security.credentials.sandboxApiKeyRef has been removed; BoxLite is embedded and does not use a sandbox daemon API key.",
   },
   {
     path: ["infrastructure", "contextBudget", "hardLimitPercent"],

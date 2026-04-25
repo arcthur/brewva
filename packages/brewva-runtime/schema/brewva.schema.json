@@ -487,6 +487,9 @@
                     }
                   }
                 },
+                "boxSecretsRef": {
+                  "type": "string"
+                },
                 "gatewayTokenRef": {
                   "type": "string"
                 },
@@ -494,9 +497,6 @@
                   "type": "string"
                 },
                 "path": {
-                  "type": "string"
-                },
-                "sandboxApiKeyRef": {
                   "type": "string"
                 }
               }
@@ -531,32 +531,71 @@
               "properties": {
                 "backend": {
                   "type": "string",
-                  "enum": ["host", "sandbox", "best_available"]
+                  "enum": ["host", "box"]
                 },
-                "enforceIsolation": {
-                  "type": "boolean"
-                },
-                "fallbackToHost": {
-                  "type": "boolean"
-                },
-                "sandbox": {
+                "box": {
                   "type": "object",
                   "additionalProperties": false,
                   "properties": {
+                    "autoSnapshotOnRelease": {
+                      "type": "boolean"
+                    },
                     "cpus": {
                       "type": "number"
                     },
-                    "defaultImage": {
-                      "type": "string"
+                    "detach": {
+                      "type": "boolean"
                     },
-                    "memory": {
+                    "diskGb": {
                       "type": "number"
                     },
-                    "serverUrl": {
+                    "gc": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "maxAgeDays": {
+                          "type": "number"
+                        },
+                        "maxStoppedBoxes": {
+                          "type": "number"
+                        }
+                      }
+                    },
+                    "home": {
                       "type": "string"
                     },
-                    "timeout": {
+                    "image": {
+                      "type": "string"
+                    },
+                    "memoryMib": {
                       "type": "number"
+                    },
+                    "network": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "allow": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "mode": {
+                          "type": "string",
+                          "enum": ["off", "allowlist"]
+                        }
+                      }
+                    },
+                    "perSessionLifetime": {
+                      "type": "string",
+                      "enum": ["session", "forever"]
+                    },
+                    "scopeDefault": {
+                      "type": "string",
+                      "enum": ["session", "task", "ephemeral"]
+                    },
+                    "workspaceGuestPath": {
+                      "type": "string"
                     }
                   }
                 }

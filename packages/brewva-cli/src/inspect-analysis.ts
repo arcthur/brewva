@@ -1,10 +1,10 @@
 import { existsSync, statSync } from "node:fs";
 import { posix as pathPosix, resolve } from "node:path";
 import {
+  BOX_BOOTSTRAP_FAILED_EVENT_TYPE,
+  BOX_EXEC_FAILED_EVENT_TYPE,
+  EXEC_FAILED_EVENT_TYPE,
   CONTEXT_COMPACTION_GATE_BLOCKED_TOOL_EVENT_TYPE,
-  EXEC_BLOCKED_ISOLATION_EVENT_TYPE,
-  EXEC_FALLBACK_HOST_EVENT_TYPE,
-  EXEC_SANDBOX_ERROR_EVENT_TYPE,
   FILE_SNAPSHOT_CAPTURED_EVENT_TYPE,
   SKILL_BUDGET_WARNING_EVENT_TYPE,
   SKILL_PARALLEL_WARNING_EVENT_TYPE,
@@ -30,9 +30,9 @@ import { formatISO } from "date-fns";
 const IGNORED_WORKSPACE_PREFIXES = [".orchestrator/", ".brewva/", "node_modules/"] as const;
 const PARALLEL_SLOT_REJECTED_EVENT_TYPE = "parallel_slot_rejected";
 const OPS_INSIGHT_EVENT_TYPES = new Set<string>([
-  EXEC_BLOCKED_ISOLATION_EVENT_TYPE,
-  EXEC_FALLBACK_HOST_EVENT_TYPE,
-  EXEC_SANDBOX_ERROR_EVENT_TYPE,
+  BOX_BOOTSTRAP_FAILED_EVENT_TYPE,
+  BOX_EXEC_FAILED_EVENT_TYPE,
+  EXEC_FAILED_EVENT_TYPE,
 ]);
 const RUNTIME_PRESSURE_EVENT_TYPES = new Set<string>([
   CONTEXT_COMPACTION_GATE_BLOCKED_TOOL_EVENT_TYPE,
@@ -609,8 +609,9 @@ function buildOpsEnvironmentFinding(events: BrewvaEventRecord[]): InspectFinding
 
   const severity = opsEvents.some(
     (event) =>
-      event.type === EXEC_SANDBOX_ERROR_EVENT_TYPE ||
-      event.type === EXEC_BLOCKED_ISOLATION_EVENT_TYPE,
+      event.type === BOX_BOOTSTRAP_FAILED_EVENT_TYPE ||
+      event.type === BOX_EXEC_FAILED_EVENT_TYPE ||
+      event.type === EXEC_FAILED_EVENT_TYPE,
   )
     ? "error"
     : "warn";

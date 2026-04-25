@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import type { BrewvaConfig, ToolActionClass, ToolAdmissionBehavior } from "../contracts/index.js";
 import {
   TOOL_ACTION_CLASSES,
@@ -16,12 +17,16 @@ import {
   normalizeStrictStringEnum,
   normalizeStringArray,
 } from "./normalization-shared.js";
+import { resolvePathInput } from "./paths.js";
 
 const VALID_SECURITY_MODES = new Set(["permissive", "standard", "strict"]);
 const VALID_SECURITY_ENFORCEMENT_MODES = new Set(["off", "warn", "enforce", "inherit"]);
 const VALID_BOUNDARY_NETWORK_MODES = new Set(["inherit", "deny", "allowlist"]);
 const VALID_EXACT_CALL_LOOP_MODES = new Set(["warn", "block"]);
-const VALID_EXECUTION_BACKENDS = new Set(["host", "sandbox", "best_available"]);
+const VALID_EXECUTION_BACKENDS = new Set(["host", "box"]);
+const VALID_BOX_SCOPE_KINDS = new Set(["session", "task", "ephemeral"]);
+const VALID_BOX_NETWORK_MODES = new Set(["off", "allowlist"]);
+const VALID_BOX_SESSION_LIFETIMES = new Set(["session", "forever"]);
 const VALID_ACTION_CLASSES = new Set<string>(TOOL_ACTION_CLASSES);
 const VALID_ADMISSION_BEHAVIORS = new Set<string>(TOOL_ADMISSION_BEHAVIORS);
 
@@ -111,6 +116,41 @@ function normalizeCredentialBindings(
   return normalized;
 }
 
+function normalizeBoxNetwork(
+  value: unknown,
+  fallback: BrewvaConfig["security"]["execution"]["box"]["network"],
+): BrewvaConfig["security"]["execution"]["box"]["network"] {
+  if (!isRecord(value)) {
+    return fallback.mode === "allowlist"
+      ? { mode: "allowlist", allow: [...fallback.allow] }
+      : { mode: "off" };
+  }
+  const mode = normalizeStrictStringEnum(
+    value.mode,
+    fallback.mode,
+    VALID_BOX_NETWORK_MODES,
+    "security.execution.box.network.mode",
+  );
+  if (mode === "allowlist") {
+    const allow = normalizeLowercaseStringArray(
+      value.allow,
+      fallback.mode === "allowlist" ? fallback.allow : [],
+    );
+    if (allow.length > 0) {
+      throw new Error(
+        "security.execution.box.network.allow is not supported by the current BoxLite adapter; use security.execution.box.network.mode='off'",
+      );
+    }
+    return { mode: "off" };
+  }
+  return { mode: "off" };
+}
+
+function normalizeBoxHomePath(input: unknown, fallback: string): string {
+  const candidate = normalizeOptionalNonEmptyString(input) ?? fallback;
+  return resolvePathInput(process.cwd(), candidate);
+}
+
 export function normalizeSecurityConfig(
   securityInput: Record<string, unknown>,
   defaults: BrewvaConfig["security"],
@@ -119,8 +159,11 @@ export function normalizeSecurityConfig(
     ? securityInput.enforcement
     : {};
   const securityExecutionInput = isRecord(securityInput.execution) ? securityInput.execution : {};
-  const securityExecutionSandboxInput = isRecord(securityExecutionInput.sandbox)
-    ? securityExecutionInput.sandbox
+  const securityExecutionBoxInput = isRecord(securityExecutionInput.box)
+    ? securityExecutionInput.box
+    : {};
+  const securityExecutionBoxGcInput = isRecord(securityExecutionBoxInput.gc)
+    ? securityExecutionBoxInput.gc
     : {};
   const securityBoundaryPolicyInput = isRecord(securityInput.boundaryPolicy)
     ? securityInput.boundaryPolicy
@@ -144,24 +187,18 @@ export function normalizeSecurityConfig(
   const normalizedSecurityMode = VALID_SECURITY_MODES.has(securityInput.mode as string)
     ? (securityInput.mode as BrewvaConfig["security"]["mode"])
     : defaults.mode;
-  const normalizedExecutionEnforceIsolation = normalizeBoolean(
-    securityExecutionInput.enforceIsolation,
-    defaults.execution.enforceIsolation,
+  const configuredExecutionBackend = normalizeStrictStringEnum(
+    securityExecutionInput.backend,
+    defaults.execution.backend,
+    VALID_EXECUTION_BACKENDS,
+    "security.execution.backend",
   );
-  const configuredExecutionBackend = VALID_EXECUTION_BACKENDS.has(
-    securityExecutionInput.backend as string,
-  )
-    ? (securityExecutionInput.backend as BrewvaConfig["security"]["execution"]["backend"])
-    : defaults.execution.backend;
-  const normalizedExecutionBackend = normalizedExecutionEnforceIsolation
-    ? "sandbox"
-    : normalizedSecurityMode === "strict"
-      ? "sandbox"
-      : configuredExecutionBackend;
-  const normalizedExecutionFallback =
-    normalizedExecutionEnforceIsolation || normalizedSecurityMode === "strict"
-      ? false
-      : normalizeBoolean(securityExecutionInput.fallbackToHost, defaults.execution.fallbackToHost);
+  if (normalizedSecurityMode === "strict" && configuredExecutionBackend === "host") {
+    throw new Error("security.mode=strict requires security.execution.backend='box'");
+  }
+  if (configuredExecutionBackend === "box") {
+    assertBoxBackendSupportedForCurrentPlatform();
+  }
 
   return {
     mode: normalizedSecurityMode,
@@ -264,9 +301,9 @@ export function normalizeSecurityConfig(
         securityCredentialsInput.allowDerivedKeyFallback,
         defaults.credentials.allowDerivedKeyFallback,
       ),
-      sandboxApiKeyRef:
-        normalizeOptionalNonEmptyString(securityCredentialsInput.sandboxApiKeyRef) ??
-        defaults.credentials.sandboxApiKeyRef,
+      boxSecretsRef:
+        normalizeOptionalNonEmptyString(securityCredentialsInput.boxSecretsRef) ??
+        defaults.credentials.boxSecretsRef,
       gatewayTokenRef:
         normalizeOptionalNonEmptyString(securityCredentialsInput.gatewayTokenRef) ??
         defaults.credentials.gatewayTokenRef,
@@ -276,29 +313,74 @@ export function normalizeSecurityConfig(
       ),
     },
     execution: {
-      backend: normalizedExecutionBackend,
-      enforceIsolation: normalizedExecutionEnforceIsolation,
-      fallbackToHost: normalizedExecutionFallback,
-      sandbox: {
-        serverUrl:
-          normalizeOptionalNonEmptyString(securityExecutionSandboxInput.serverUrl) ??
-          defaults.execution.sandbox.serverUrl,
-        defaultImage:
-          normalizeOptionalNonEmptyString(securityExecutionSandboxInput.defaultImage) ??
-          defaults.execution.sandbox.defaultImage,
-        memory: normalizePositiveInteger(
-          securityExecutionSandboxInput.memory,
-          defaults.execution.sandbox.memory,
+      backend: configuredExecutionBackend,
+      box: {
+        home: normalizeBoxHomePath(securityExecutionBoxInput.home, defaults.execution.box.home),
+        image:
+          normalizeOptionalNonEmptyString(securityExecutionBoxInput.image) ??
+          defaults.execution.box.image,
+        cpus: normalizePositiveInteger(securityExecutionBoxInput.cpus, defaults.execution.box.cpus),
+        memoryMib: normalizePositiveInteger(
+          securityExecutionBoxInput.memoryMib,
+          defaults.execution.box.memoryMib,
         ),
-        cpus: normalizePositiveInteger(
-          securityExecutionSandboxInput.cpus,
-          defaults.execution.sandbox.cpus,
+        diskGb: normalizePositiveInteger(
+          securityExecutionBoxInput.diskGb,
+          defaults.execution.box.diskGb,
         ),
-        timeout: normalizePositiveInteger(
-          securityExecutionSandboxInput.timeout,
-          defaults.execution.sandbox.timeout,
+        workspaceGuestPath:
+          normalizeOptionalNonEmptyString(securityExecutionBoxInput.workspaceGuestPath) ??
+          defaults.execution.box.workspaceGuestPath,
+        scopeDefault: normalizeStrictStringEnum(
+          securityExecutionBoxInput.scopeDefault,
+          defaults.execution.box.scopeDefault,
+          VALID_BOX_SCOPE_KINDS,
+          "security.execution.box.scopeDefault",
         ),
+        network: normalizeBoxNetwork(
+          securityExecutionBoxInput.network,
+          defaults.execution.box.network,
+        ),
+        detach: normalizeBoolean(securityExecutionBoxInput.detach, defaults.execution.box.detach),
+        autoSnapshotOnRelease: normalizeBoolean(
+          securityExecutionBoxInput.autoSnapshotOnRelease,
+          defaults.execution.box.autoSnapshotOnRelease,
+        ),
+        perSessionLifetime: normalizeStrictStringEnum(
+          securityExecutionBoxInput.perSessionLifetime,
+          defaults.execution.box.perSessionLifetime,
+          VALID_BOX_SESSION_LIFETIMES,
+          "security.execution.box.perSessionLifetime",
+        ),
+        gc: {
+          maxStoppedBoxes: normalizePositiveInteger(
+            securityExecutionBoxGcInput.maxStoppedBoxes,
+            defaults.execution.box.gc.maxStoppedBoxes,
+          ),
+          maxAgeDays: normalizePositiveInteger(
+            securityExecutionBoxGcInput.maxAgeDays,
+            defaults.execution.box.gc.maxAgeDays,
+          ),
+        },
       },
     },
   };
+}
+
+function assertBoxBackendSupportedForCurrentPlatform(): void {
+  if (process.platform === "linux" && !existsSync("/dev/kvm")) {
+    throw new Error(
+      "security.execution.backend='box' requires /dev/kvm on Linux. Enable KVM or set security.execution.backend='host' outside strict mode.",
+    );
+  }
+  if (
+    !(
+      (process.platform === "darwin" && process.arch === "arm64") ||
+      (process.platform === "linux" && (process.arch === "x64" || process.arch === "arm64"))
+    )
+  ) {
+    throw new Error(
+      `security.execution.backend='box' is not supported on ${process.platform}-${process.arch}. Use darwin-arm64, linux-x64-gnu, linux-arm64-gnu, or set security.execution.backend='host' outside strict mode.`,
+    );
+  }
 }

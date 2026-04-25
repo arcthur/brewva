@@ -1,4 +1,5 @@
 import { resolve } from "node:path";
+import { createInMemoryBoxPlane, type BoxPlane } from "@brewva/brewva-box";
 import { createToolRuntimePort } from "@brewva/brewva-runtime";
 import type { BrewvaToolContext } from "@brewva/brewva-substrate";
 import type { BrewvaBundledToolRuntime } from "@brewva/brewva-tools";
@@ -35,20 +36,18 @@ export function fakeContext(sessionId: string): BrewvaToolContext {
 
 export function createRuntimeForExecTests(input?: {
   mode?: "permissive" | "standard" | "strict";
-  backend?: "host" | "sandbox" | "best_available";
-  enforceIsolation?: boolean;
-  fallbackToHost?: boolean;
+  backend?: "host" | "box";
   commandDenyList?: string[];
   boundaryCommandDenyList?: string[];
-  serverUrl?: string;
   boundEnv?: Record<string, string>;
-  sandboxApiKey?: string;
+  boxPlane?: BoxPlane;
   cwd?: string;
   targetRoots?: string[];
+  boxDetach?: boolean;
 }) {
   const mode = input?.mode ?? "standard";
-  const enforceIsolation = input?.enforceIsolation ?? false;
   const events: RecordedExecTestEvent[] = [];
+  const clearStateListeners: Array<(sessionId: string) => void> = [];
   const cwd = resolve(input?.cwd ?? process.cwd());
   const targetRoots =
     input?.targetRoots && input.targetRoots.length > 0
@@ -81,20 +80,28 @@ export function createRuntimeForExecTests(input?: {
       path: ".brewva/credentials.vault",
       masterKeyEnv: "BREWVA_VAULT_KEY",
       allowDerivedKeyFallback: true,
-      sandboxApiKeyRef: "vault://sandbox/apiKey",
+      boxSecretsRef: "vault://box/secrets",
       gatewayTokenRef: "vault://gateway/token",
       bindings: [],
     };
     runtimeConfig.security.execution = {
-      backend: input?.backend ?? "sandbox",
-      enforceIsolation,
-      fallbackToHost: input?.fallbackToHost ?? false,
-      sandbox: {
-        serverUrl: input?.serverUrl ?? "http://127.0.0.1:5555",
-        defaultImage: "microsandbox/node",
-        memory: 64,
+      backend: input?.backend ?? "box",
+      box: {
+        home: "~/.brewva/boxes-test",
+        image: "ghcr.io/brewva/box-default:latest",
         cpus: 1,
-        timeout: 1,
+        memoryMib: 512,
+        diskGb: 4,
+        workspaceGuestPath: "/workspace",
+        scopeDefault: "session",
+        network: { mode: "off" },
+        detach: input?.boxDetach ?? true,
+        autoSnapshotOnRelease: false,
+        perSessionLifetime: "session",
+        gc: {
+          maxStoppedBoxes: 8,
+          maxAgeDays: 7,
+        },
       },
     };
   });
@@ -113,6 +120,7 @@ export function createRuntimeForExecTests(input?: {
 
   const runtime: BrewvaBundledToolRuntime = {
     ...createToolRuntimePort(runtimeFixture),
+    boxPlane: input?.boxPlane ?? createInMemoryBoxPlane(),
     internal: {
       recordEvent: (event) => {
         events.push({
@@ -125,10 +133,20 @@ export function createRuntimeForExecTests(input?: {
         });
         return undefined;
       },
+      onClearState: (listener) => {
+        clearStateListeners.push(listener);
+      },
       resolveCredentialBindings: () => ({ ...input?.boundEnv }),
-      resolveSandboxApiKey: () => input?.sandboxApiKey,
     },
   };
 
-  return { runtime, events };
+  return {
+    runtime,
+    events,
+    clearSession: (sessionId: string) => {
+      for (const listener of clearStateListeners) {
+        listener(sessionId);
+      }
+    },
+  };
 }

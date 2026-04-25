@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import { BREWVA_REGISTERED_EVENT_TYPES } from "@brewva/brewva-runtime";
 
 function collectDocumentedEventTypes(markdown: string): string[] {
-  const matches = markdown.matchAll(/`([a-z0-9_]+)`/g);
+  const matches = markdown.matchAll(/`([a-z0-9_.]+)`/g);
   const eventTypes = new Set<string>();
 
   for (const match of matches) {

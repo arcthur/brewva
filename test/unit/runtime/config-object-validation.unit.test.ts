@@ -77,9 +77,7 @@ describe("config object validation boundary", () => {
         },
         security: {
           execution: {
-            sandbox: {
-              apiKey: "inline-secret",
-            },
+            commandDenyList: ["node"],
           },
         },
         unexpectedTopLevelField: true,
@@ -90,9 +88,7 @@ describe("config object validation boundary", () => {
     expect(forensic.parsed).toEqual({
       skills: {},
       security: {
-        execution: {
-          sandbox: {},
-        },
+        execution: {},
       },
     });
     expect(forensic.warnings.map((warning) => warning.code)).toEqual([
@@ -100,7 +96,7 @@ describe("config object validation boundary", () => {
       "config_unknown_fields_stripped",
     ]);
     expect(forensic.warnings[0]?.fields).toEqual(
-      expect.arrayContaining(["/skills/selector", "/security/execution/sandbox/apiKey"]),
+      expect.arrayContaining(["/skills/selector", "/security/execution/commandDenyList"]),
     );
     expect(forensic.warnings[1]?.fields).toEqual(
       expect.arrayContaining(["/unexpectedTopLevelField"]),

@@ -51,8 +51,13 @@ export type ToolRecoveryPolicy =
   | { kind: "manual_recovery_evidence" }
   | { kind: "forward_correction" };
 
-export interface ToolSandboxPolicy {
-  kind: "none" | "host_effect" | "sandbox_required";
+export interface ToolBoxPolicy {
+  kind: "none" | "host_effect" | "box_required";
+  scopeKind?: "session" | "task" | "ephemeral";
+  imageOverride?: string;
+  networkAllowlist?: string[];
+  requiresSnapshotBefore?: boolean;
+  allowDetachedExecution?: boolean;
 }
 
 export interface ToolActionPolicySafetyGate {
@@ -68,7 +73,7 @@ export interface ToolActionPolicy {
   receiptPolicy: ToolReceiptPolicy;
   recoveryPolicy: ToolRecoveryPolicy;
   effectClasses: ToolEffectClass[];
-  sandboxPolicy?: ToolSandboxPolicy;
+  boxPolicy?: ToolBoxPolicy;
   budgetWeight?: number;
   requiredRoutingScopes?: SkillRoutingScope[];
   safetyGate?: ToolActionPolicySafetyGate;

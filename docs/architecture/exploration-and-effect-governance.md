@@ -294,8 +294,8 @@ Current implementation notes:
   and exec command-policy verdicts without executing the tool
 - `virtual_readonly` is an exploration backend only. Its v1 write barrier is a
   temporary materialized workspace subset with limits, not a full OverlayFS;
-  build/test verification claims still need sandbox or explicit host effect
-  receipts.
+  build/test verification claims still need stateful box execution or explicit
+  host effect receipts.
 
 ## Secret And Guard Ownership
 

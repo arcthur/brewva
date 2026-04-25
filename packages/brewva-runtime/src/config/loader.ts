@@ -12,7 +12,11 @@ import {
   forensicallyValidateLoadedBrewvaConfigObject,
   validateLoadedBrewvaConfigObject,
 } from "./object-validation.js";
-import { resolveGlobalBrewvaConfigPath, resolveProjectBrewvaConfigPath } from "./paths.js";
+import {
+  resolveGlobalBrewvaConfigPath,
+  resolvePathInput,
+  resolveProjectBrewvaConfigPath,
+} from "./paths.js";
 import { assertExplicitBrewvaConfigSemantics } from "./semantic-validation.js";
 
 export interface LoadConfigOptions {
@@ -115,6 +119,45 @@ function resolveConfigRelativeSkillRoots(
   };
 }
 
+function resolveConfigRelativeBoxHome(
+  config: Partial<BrewvaConfig>,
+  configPath: string,
+): Partial<BrewvaConfig> {
+  const security = config.security as Partial<BrewvaConfig["security"]> | undefined;
+  const execution = security?.execution as
+    | Partial<BrewvaConfig["security"]["execution"]>
+    | undefined;
+  const box = execution?.box as Partial<BrewvaConfig["security"]["execution"]["box"]> | undefined;
+  const home = box?.home;
+  if (typeof home !== "string" || home.trim().length === 0) {
+    return config;
+  }
+
+  return {
+    ...config,
+    security: {
+      ...security,
+      execution: {
+        ...execution,
+        box: {
+          ...box,
+          home: resolvePathInput(dirname(configPath), home),
+        },
+      },
+    },
+  } as Partial<BrewvaConfig>;
+}
+
+function resolveConfigRelativePaths(
+  config: Partial<BrewvaConfig>,
+  configPath: string,
+): Partial<BrewvaConfig> {
+  return resolveConfigRelativeBoxHome(
+    resolveConfigRelativeSkillRoots(config, configPath),
+    configPath,
+  );
+}
+
 export function normalizeExplicitBrewvaConfig(
   config: unknown,
   options: NormalizeExplicitBrewvaConfigOptions = {},
@@ -151,7 +194,7 @@ function readConfigFile(configPath: string): Partial<BrewvaConfig> | undefined {
   }
 
   const cleaned = validateLoadedBrewvaConfigObject(parsed, configPath);
-  return resolveConfigRelativeSkillRoots(cleaned as Partial<BrewvaConfig>, configPath);
+  return resolveConfigRelativePaths(cleaned as Partial<BrewvaConfig>, configPath);
 }
 
 function readConfigFileForInspect(configPath: string): {
@@ -220,7 +263,7 @@ function readConfigFileForInspect(configPath: string): {
   }
 
   return {
-    parsed: resolveConfigRelativeSkillRoots(
+    parsed: resolveConfigRelativePaths(
       forensicValidation.parsed as Partial<BrewvaConfig>,
       configPath,
     ),

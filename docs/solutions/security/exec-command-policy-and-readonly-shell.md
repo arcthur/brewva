@@ -15,7 +15,7 @@ source_artifacts:
 tags:
   - exec
   - command-policy
-  - sandbox
+  - box
   - audit
 updated_at: 2026-04-21
 ---
@@ -25,10 +25,9 @@ updated_at: 2026-04-21
 ## Context
 
 Brewva used to classify `exec` command risk primarily through command-token
-heuristics in boundary policy and a sandbox/host router. That made the
-deployment boundary responsible for shell semantics and left `best_available`
-too convenient: sandbox outage could become host execution when the operator had
-not made that downgrade explicit.
+heuristics in boundary policy and a short-lived execution router. That made the
+deployment boundary responsible for shell semantics and made backend downgrade
+policy too easy to blur.
 
 The `just-bash` comparison highlighted the stronger pattern: parse shell intent
 before execution, keep read-only exploration isolated, and make unsafe shell
@@ -63,10 +62,10 @@ Treat `local_exec_readonly` as a narrow class:
 Treat real execution as effectful:
 
 - `exec` remains approval-bound through action policy
-- sandbox is the default backend
-- `best_available` does not imply host fallback
-- host fallback requires `fallbackToHost=true` and records an explicit fallback
-  event reason
+- `box` is the default backend
+- `host` is explicit policy, never an automatic fallback
+- box execution records `box.*` lifecycle events and keeps state across
+  release/reacquire by scope
 
 ## Why This Matters
 
@@ -92,9 +91,9 @@ Use this precedent whenever changing:
 - `packages/brewva-runtime/src/security/command-policy.ts`
 - `packages/brewva-runtime/src/security/boundary-policy.ts`
 - `packages/brewva-tools/src/exec.ts`
-- `security.execution.*` defaults or sandbox fallback behavior
+- `security.execution.*` defaults or box lifecycle behavior
 - `local_exec_readonly` action policy admission
-- `exec_*` event payloads or command audit behavior
+- `box.*` event payloads or command audit behavior
 
 ## References
 
