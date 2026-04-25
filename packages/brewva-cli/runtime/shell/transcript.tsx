@@ -9,6 +9,7 @@ import type {
   CliShellTranscriptPart,
   CliShellTranscriptToolPart,
 } from "../../src/shell/transcript.js";
+import { formatTrustLoopTitle, type TrustLoopTone } from "../../src/shell/trust-loop/projection.js";
 import { DiffView, formatDiffFileTitle } from "./diff-view.js";
 import {
   SPLIT_BORDER_CHARS,
@@ -33,7 +34,6 @@ import {
   readToolWorkerSessionId,
   renderToolComponentLines,
   summarizeInput,
-  toolStatusText,
   type ToolRenderCache,
 } from "./tool-render.js";
 
@@ -53,6 +53,23 @@ export function TextLineBlock(input: {
       </For>
     </box>
   );
+}
+
+function trustToneColor(theme: SessionPalette, tone: TrustLoopTone): string {
+  switch (tone) {
+    case "error":
+      return theme.error;
+    case "warning":
+      return theme.warning;
+    case "success":
+      return theme.success;
+    case "info":
+      return theme.accent;
+    case "neutral":
+      return theme.textMuted;
+    default:
+      throw new Error(`Unsupported trust loop tone: ${String(tone)}`);
+  }
 }
 
 interface TranscriptTextBlock {
@@ -152,7 +169,7 @@ function InlineTool(input: {
     if (hovered() && actionable()) {
       return input.theme.accent;
     }
-    return input.complete ? input.theme.textMuted : input.theme.text;
+    return trustToneColor(input.theme, input.part.trust.tone);
   });
   return (
     <box
@@ -235,7 +252,9 @@ function BlockTool(input: {
       onMouseUp={handleSelect}
     >
       <box flexDirection="row" justifyContent="space-between" paddingRight={3}>
-        <text fg={input.titleColor ?? input.theme.textMuted}>{input.title}</text>
+        <text fg={input.titleColor ?? trustToneColor(input.theme, input.part.trust.tone)}>
+          {input.title}
+        </text>
         <Show when={hovered() && input.hint}>
           {(hint) => (
             <text fg={hovered() ? input.theme.accent : input.theme.textMuted}>{hint()}</text>
@@ -344,9 +363,9 @@ function ReadToolView(input: { part: CliShellTranscriptToolPart; theme: SessionP
   return (
     <InlineTool
       icon="→"
-      pending="Reading file..."
+      pending={input.part.trust.statusText}
       complete={input.part.status !== "pending"}
-      text={text()}
+      text={formatTrustLoopTitle(input.part.trust, text())}
       part={input.part}
       theme={input.theme}
       errorText={readToolErrorText(input.part)}
@@ -360,7 +379,11 @@ function WriteToolView(input: { part: CliShellTranscriptToolPart; theme: Session
   return (
     <Switch>
       <Match when={content().length > 0 && input.part.status === "completed"}>
-        <BlockTool title={`# Wrote ${path()}`} part={input.part} theme={input.theme}>
+        <BlockTool
+          title={formatTrustLoopTitle(input.part.trust, `Wrote ${path()}`)}
+          part={input.part}
+          theme={input.theme}
+        >
           <box paddingLeft={1}>
             <code
               fg={input.theme.text}
@@ -374,9 +397,9 @@ function WriteToolView(input: { part: CliShellTranscriptToolPart; theme: Session
       <Match when={true}>
         <InlineTool
           icon="←"
-          pending="Preparing write..."
+          pending={input.part.trust.statusText}
           complete={Boolean(readToolPath(input.part))}
-          text={`Write ${path()}`}
+          text={formatTrustLoopTitle(input.part.trust, `Write ${path()}`)}
           part={input.part}
           theme={input.theme}
           errorText={readToolErrorText(input.part)}
@@ -388,12 +411,12 @@ function WriteToolView(input: { part: CliShellTranscriptToolPart; theme: Session
 
 function formatDiffToolTitle(part: CliShellTranscriptToolPart, path: string): string {
   if (part.toolName === "edit") {
-    return `← Edit ${path}`;
+    return formatTrustLoopTitle(part.trust, `Edit ${path}`);
   }
   if (part.toolName === "apply_patch") {
-    return `← Patch ${path}`;
+    return formatTrustLoopTitle(part.trust, `Patch ${path}`);
   }
-  return `← ${part.toolName} ${path}`.trim();
+  return formatTrustLoopTitle(part.trust, `${part.toolName} ${path}`.trim());
 }
 
 function DiffToolView(input: {
@@ -435,7 +458,7 @@ function DiffToolView(input: {
           <For each={diffFiles()}>
             {(file, index) => (
               <BlockTool
-                title={formatDiffFileTitle(file)}
+                title={formatTrustLoopTitle(input.part.trust, formatDiffFileTitle(file))}
                 part={input.part}
                 theme={input.theme}
                 idSuffix={`file:${index()}`}
@@ -465,11 +488,12 @@ function DiffToolView(input: {
       <Match when={true}>
         <InlineTool
           icon="←"
-          pending={
-            input.part.toolName === "apply_patch" ? "Preparing patch..." : "Preparing edit..."
-          }
+          pending={input.part.trust.statusText}
           complete={Boolean(readToolPath(input.part))}
-          text={`${input.part.toolName === "apply_patch" ? "Patch" : "Edit"} ${path()} ${summarizeInput(input.part.args, ["path", "filePath", "file_path"])}`.trim()}
+          text={formatTrustLoopTitle(
+            input.part.trust,
+            `${input.part.toolName === "apply_patch" ? "Patch" : "Edit"} ${path()} ${summarizeInput(input.part.args, ["path", "filePath", "file_path"])}`.trim(),
+          )}
           part={input.part}
           theme={input.theme}
           errorText={readToolErrorText(input.part)}
@@ -594,9 +618,9 @@ function ExecToolView(input: {
         ? ((args.workdir as string | undefined) ?? (args.cwd as string | undefined))
         : undefined;
     if (!workdir || description.includes(workdir)) {
-      return `# ${description}`;
+      return formatTrustLoopTitle(input.part.trust, description);
     }
-    return `# ${description} in ${workdir}`;
+    return formatTrustLoopTitle(input.part.trust, `${description} in ${workdir}`);
   });
   return (
     <Switch>
@@ -629,9 +653,9 @@ function ExecToolView(input: {
       <Match when={true}>
         <InlineTool
           icon="$"
-          pending="Writing command..."
+          pending={input.part.trust.statusText}
           complete={command().length > 0}
-          text={command()}
+          text={formatTrustLoopTitle(input.part.trust, command())}
           part={input.part}
           theme={input.theme}
           errorText={readToolErrorText(input.part)}
@@ -766,10 +790,9 @@ function SkillLoadToolView(input: {
     <Switch>
       <Match when={input.showDetails && input.part.status === "completed"}>
         <BlockTool
-          title={`→ ${title()}`}
+          title={formatTrustLoopTitle(input.part.trust, title())}
           part={input.part}
           theme={input.theme}
-          titleColor={input.theme.success}
         >
           <TextLineBlock lines={detailLines()} color={input.theme.textMuted} />
         </BlockTool>
@@ -777,9 +800,9 @@ function SkillLoadToolView(input: {
       <Match when={true}>
         <InlineTool
           icon="→"
-          pending="Loading skill..."
+          pending={input.part.trust.statusText}
           complete={input.part.status !== "pending"}
-          text={title()}
+          text={formatTrustLoopTitle(input.part.trust, title())}
           part={input.part}
           theme={input.theme}
           errorText={readToolErrorText(input.part)}
@@ -831,9 +854,15 @@ function GenericToolView(input: {
   const inlineText = createMemo(() => {
     const summary = readToolDisplaySummaryText(input.part);
     if (summary) {
-      return firstNonEmptyLine(summary) ?? input.part.toolName;
+      return formatTrustLoopTitle(
+        input.part.trust,
+        firstNonEmptyLine(summary) ?? input.part.toolName,
+      );
     }
-    return `${input.part.toolName} ${summarizeInput(input.part.args)}`.trim();
+    return formatTrustLoopTitle(
+      input.part.trust,
+      `${input.part.toolName} ${summarizeInput(input.part.args)}`.trim(),
+    );
   });
   const callLines = createMemo(() =>
     renderToolComponentLines({
@@ -948,7 +977,7 @@ function GenericToolView(input: {
       <Match when={!input.showDetails && input.part.status === "completed"}>
         <InlineTool
           icon="⚙"
-          pending="Running tool..."
+          pending={input.part.trust.statusText}
           complete={true}
           text={inlineText()}
           part={input.part}
@@ -962,18 +991,11 @@ function GenericToolView(input: {
         when={resultText().trim().length > 0 || fallbackCallLines().length > 0 || hasDiffPayload()}
       >
         <BlockTool
-          title={`${input.part.toolName} · ${toolStatusText(input.part)}`}
+          title={input.part.trust.title}
           part={input.part}
           theme={input.theme}
           hint={selectHint()}
           onSelect={resultCollapsible() || workerSessionId() ? selectTool : undefined}
-          titleColor={
-            input.part.status === "error"
-              ? input.theme.error
-              : input.part.status === "completed"
-                ? input.theme.success
-                : input.theme.warning
-          }
         >
           <box flexDirection="column" gap={1}>
             <TextLineBlock lines={fallbackCallLines()} color={input.theme.text} />
@@ -1039,7 +1061,7 @@ function GenericToolView(input: {
       <Match when={true}>
         <InlineTool
           icon="⚙"
-          pending="Running tool..."
+          pending={input.part.trust.statusText}
           complete={input.part.status === "completed"}
           text={inlineText()}
           part={input.part}

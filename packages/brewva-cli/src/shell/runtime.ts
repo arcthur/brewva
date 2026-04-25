@@ -66,6 +66,10 @@ import {
 import { updateShellIntent } from "./shell-update.js";
 import { type CliShellAction, type CliShellViewState } from "./state/index.js";
 import { buildTextTranscriptMessage } from "./transcript.js";
+import {
+  buildTrustLoopIdleProjection,
+  buildTrustLoopSessionProjection,
+} from "./trust-loop/projection.js";
 import type {
   CliShellOverlayPayload,
   CliShellPromptPart,
@@ -167,12 +171,13 @@ function isShellCommitBatch(input: ShellCommitInput): input is ShellCommitBatch 
 
 type CliShellStatusAction = Extract<
   CliShellAction,
-  { type: "status.set" | "status.working" | "status.hiddenThinking" }
+  { type: "status.set" | "status.setTrust" | "status.working" | "status.hiddenThinking" }
 >;
 
 function isCliShellStatusAction(action: ShellAction): action is CliShellStatusAction {
   return (
     action.type === "status.set" ||
+    action.type === "status.setTrust" ||
     action.type === "status.working" ||
     action.type === "status.hiddenThinking"
   );
@@ -1164,23 +1169,43 @@ export class CliShellRuntime {
     }
     this.#operatorSnapshot = snapshot;
     this.syncSnapshotOverlay(snapshot);
-    this.commit([
-      {
-        type: "status.set",
-        key: "approvals",
-        text: String(snapshot.approvals.length),
-      },
-      {
-        type: "status.set",
-        key: "questions",
-        text: String(snapshot.questions.length),
-      },
-      {
-        type: "status.set",
-        key: "tasks",
-        text: String(snapshot.taskRuns.length),
-      },
-    ]);
+    const shouldClearApprovalTrust =
+      snapshot.approvals.length === 0 && this.#state.status.trust?.source === "approval";
+    const trustActions: CliShellAction[] = [];
+    if (snapshot.approvals.length > 0) {
+      trustActions.push({
+        type: "status.setTrust",
+        trust: buildTrustLoopSessionProjection({
+          pendingApprovalCount: snapshot.approvals.length,
+        }),
+      });
+    } else if (shouldClearApprovalTrust) {
+      trustActions.push({
+        type: "status.setTrust",
+        trust: buildTrustLoopIdleProjection(),
+      });
+    }
+    this.commit(
+      [
+        {
+          type: "status.set",
+          key: "approvals",
+          text: String(snapshot.approvals.length),
+        },
+        {
+          type: "status.set",
+          key: "questions",
+          text: String(snapshot.questions.length),
+        },
+        {
+          type: "status.set",
+          key: "tasks",
+          text: String(snapshot.taskRuns.length),
+        },
+        ...trustActions,
+      ],
+      { debounceStatus: false },
+    );
 
     const newApproval = snapshot.approvals.find((item) => !this.#seenApprovals.has(item.requestId));
     if (newApproval) {

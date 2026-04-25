@@ -75,6 +75,9 @@ export function PromptPanel(input: {
     if (input.status.hiddenThinkingLabel) {
       return input.status.hiddenThinkingLabel;
     }
+    if (input.status.trust?.statusText) {
+      return input.status.trust.statusText;
+    }
     const phase = input.status.entries.phase;
     const pressure = input.status.entries.pressure;
     const correction = input.status.entries.correction;

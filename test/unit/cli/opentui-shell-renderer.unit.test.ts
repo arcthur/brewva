@@ -1530,10 +1530,10 @@ describe("opentui solid shell runtime", () => {
 
       const frame = testSetup.captureCharFrame();
       expect(runtime.getViewState().overlay.active?.kind).toBe("approval");
-      expect(frame).toContain("No pending approvals.");
-      expect(frame).toContain(
-        "Brewva will show permission requests here when a tool needs approval.",
-      );
+      expect(frame).toContain("Authorize effects");
+      expect(frame).toContain("No pending effects to authorize.");
+      expect(frame).toContain("Brewva asks before crossing effect boundaries.");
+      expect(frame).not.toContain("permission");
     } finally {
       runtime.dispose();
       testSetup.renderer.destroy();
@@ -1712,7 +1712,7 @@ describe("opentui solid shell runtime", () => {
       expect(frame).toContain("ctrl+k");
       expect(frame).toContain("/help");
       expect(frame).toContain("ctrl+o");
-      expect(frame).toContain("idle");
+      expect(frame).toContain("Brewva keeps receipts you can inspect, replay, and undo from.");
       expect(frame).toContain("approvals=0");
       expect(frame).toContain("questions=0");
     } finally {
@@ -1770,9 +1770,16 @@ describe("opentui solid shell runtime", () => {
       await testSetup.renderOnce();
       const frame = testSetup.captureCharFrame();
       expect(frame).toContain("Write /tmp/output.ts");
-      expect(frame).toContain("Permission required");
+      expect(frame).toContain("Authorize effect");
+      expect(frame).toContain("Brewva asks before crossing effect boundaries.");
+      expect(frame).toContain(
+        "Every code-changing action gets a reason, a receipt, and a recovery path.",
+      );
+      expect(frame).toContain("Authorize once");
+      expect(frame).toContain("Summary: path=/tmp/output.ts");
       expect(frame).toContain("Tool: write");
       expect(frame).toContain("Boundary: effectful");
+      expect(frame).not.toContain("trust=authorize");
     } finally {
       runtime.dispose();
       testSetup.renderer.destroy();
@@ -2614,6 +2621,7 @@ describe("opentui solid shell runtime", () => {
       await testSetup.renderOnce();
       await testSetup.renderOnce();
       const frame = testSetup.captureCharFrame();
+      expect(frame).toContain("Record · Run unit tests");
       expect(frame).toContain("Run unit tests");
       expect(frame).toContain("$ bun test");
       expect(frame).toContain("1775 pass");
@@ -2815,10 +2823,10 @@ describe("opentui solid shell runtime", () => {
       await testSetup.renderOnce();
       await testSetup.renderOnce();
       const frame = testSetup.captureCharFrame();
-      expect(frame).toContain("structured_process · completed");
+      expect(frame).toContain("Inspect · structured_process");
       expect(frame).toContain("[mode=deep]");
       expect(frame).toContain("Structured process completed");
-      expect(findRenderedColumn(frame, "structured_process · completed")).toBe(
+      expect(findRenderedColumn(frame, "Inspect · structured_process")).toBe(
         findRenderedColumn(frame, "[mode=deep]"),
       );
       expect(findRenderedColumn(frame, "Structured process completed")).toBe(
@@ -2939,7 +2947,7 @@ describe("opentui solid shell runtime", () => {
       await testSetup.renderOnce();
       await testSetup.renderOnce();
       const frame = testSetup.captureCharFrame();
-      expect(frame).toContain("git_diff · completed");
+      expect(frame).toContain("Inspect · git_diff");
       expect(frame).toContain("Repository diff generated.");
       expect(frame).toContain("Diff");
       expect(frame).toContain("old");

@@ -1929,6 +1929,11 @@ describe("shell runtime", () => {
       "queued",
     );
 
+    expect(runtime.getViewState().status.trust).toMatchObject({
+      phase: "record",
+      source: "idle",
+    });
+
     const consumedCharacter = await runtime.handleInput({
       key: "character",
       text: "x",
@@ -1959,6 +1964,10 @@ describe("shell runtime", () => {
       },
     ]);
     expect(runtime.ui.getEditorText()).toBe("draft");
+    expect(runtime.getViewState().status.trust).toMatchObject({
+      phase: "record",
+      source: "idle",
+    });
     runtime.dispose();
   });
 

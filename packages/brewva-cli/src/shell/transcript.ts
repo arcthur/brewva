@@ -1,4 +1,5 @@
 import type { ToolOutputDisplayView } from "@brewva/brewva-runtime";
+import type { ToolExecutionPhase } from "@brewva/brewva-substrate";
 import {
   extractMessageError,
   extractVisibleTextFromMessage,
@@ -8,6 +9,10 @@ import {
   readToolResultMessage,
   type NormalizedMessageContentPart,
 } from "../message-content.js";
+import {
+  buildTrustLoopToolProjection,
+  type TrustLoopToolProjection,
+} from "./trust-loop/projection.js";
 
 export type CliShellTranscriptRole = "assistant" | "user" | "tool" | "custom" | "system";
 export type CliTranscriptRenderMode = "stable" | "streaming";
@@ -40,12 +45,27 @@ export interface CliShellTranscriptToolPart {
   id: string;
   toolCallId: string;
   toolName: string;
+  trust: TrustLoopToolProjection;
   args?: unknown;
-  phase?: string;
+  phase?: ToolExecutionPhase;
   status: CliShellTranscriptToolStatus;
   partialResult?: CliShellTranscriptToolResultPayload;
   result?: CliShellTranscriptToolResultPayload;
   renderMode: CliTranscriptRenderMode;
+}
+
+function buildToolTrustProjection(input: {
+  toolName: string;
+  args?: unknown;
+  phase?: ToolExecutionPhase;
+  status: CliShellTranscriptToolStatus;
+}): TrustLoopToolProjection {
+  return buildTrustLoopToolProjection({
+    toolName: input.toolName,
+    args: input.args,
+    executionPhase: input.phase,
+    status: input.status,
+  });
 }
 
 export type CliShellTranscriptPart =
@@ -70,7 +90,7 @@ export interface CliTranscriptToolExecutionUpdate {
   toolCallId: string;
   toolName?: string;
   args?: unknown;
-  phase?: string;
+  phase?: ToolExecutionPhase;
   partialResult?: unknown;
   result?: unknown;
   status?: CliShellTranscriptToolStatus;
@@ -177,14 +197,24 @@ function buildAssistantParts(
 
     if (part.type === "toolCall") {
       const previousToolPart = findToolPart(previousMessage, part.id);
+      const toolName = part.name;
+      const args = part.arguments;
+      const phase = previousToolPart?.phase;
+      const status = previousToolPart?.status ?? "pending";
       parts.push({
         type: "tool",
         id: `${messageId}:tool:${part.id}`,
         toolCallId: part.id,
-        toolName: part.name,
-        args: part.arguments,
-        phase: previousToolPart?.phase,
-        status: previousToolPart?.status ?? "pending",
+        toolName,
+        trust: buildToolTrustProjection({
+          toolName,
+          args,
+          phase,
+          status,
+        }),
+        args,
+        phase,
+        status,
         partialResult: previousToolPart?.partialResult,
         result: previousToolPart?.result,
         renderMode,
@@ -207,6 +237,16 @@ function buildToolFallbackMessage(
   const renderMode = update.renderMode ?? "stable";
   const partialResult = normalizeToolResultPayload(update.partialResult);
   const result = normalizeToolResultPayload(update.result);
+  const toolName = update.toolName ?? "tool";
+  const status =
+    update.status ??
+    (toolPayloadIndicatesError(result)
+      ? "error"
+      : update.result !== undefined
+        ? "completed"
+        : update.partialResult !== undefined
+          ? "running"
+          : "pending");
   return {
     id: update.fallbackMessageId ?? `tool:${update.toolCallId}`,
     role: "tool",
@@ -216,18 +256,16 @@ function buildToolFallbackMessage(
         type: "tool",
         id: `${update.fallbackMessageId ?? `tool:${update.toolCallId}`}:tool:${update.toolCallId}`,
         toolCallId: update.toolCallId,
-        toolName: update.toolName ?? "tool",
+        toolName,
+        trust: buildToolTrustProjection({
+          toolName,
+          args: update.args,
+          phase: update.phase,
+          status,
+        }),
         args: update.args,
         phase: update.phase,
-        status:
-          update.status ??
-          (toolPayloadIndicatesError(result)
-            ? "error"
-            : update.result !== undefined
-              ? "completed"
-              : update.partialResult !== undefined
-                ? "running"
-                : "pending"),
+        status,
         partialResult,
         result,
         renderMode,
@@ -402,12 +440,21 @@ export function upsertToolExecutionIntoTranscriptMessages(
         : update.partialResult !== undefined
           ? "running"
           : location.part.status);
+  const nextToolName = update.toolName ?? location.part.toolName;
+  const nextArgs = update.args ?? location.part.args;
+  const nextPhase = update.phase ?? location.part.phase;
 
   const nextPart: CliShellTranscriptToolPart = {
     ...location.part,
-    toolName: update.toolName ?? location.part.toolName,
-    args: update.args ?? location.part.args,
-    phase: update.phase ?? location.part.phase,
+    toolName: nextToolName,
+    trust: buildToolTrustProjection({
+      toolName: nextToolName,
+      args: nextArgs,
+      phase: nextPhase,
+      status: inferredStatus,
+    }),
+    args: nextArgs,
+    phase: nextPhase,
     status: inferredStatus,
     partialResult: update.result !== undefined ? undefined : nextPartialResult,
     result: nextResult,

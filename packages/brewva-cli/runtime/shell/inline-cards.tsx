@@ -13,6 +13,11 @@ import {
   questionTabCount,
 } from "../../src/shell/question-utils.js";
 import type { CliShellRuntime } from "../../src/shell/runtime.js";
+import {
+  buildTrustLoopApprovalEmptyProjection,
+  buildTrustLoopApprovalProjection,
+  type TrustLoopDetailKey,
+} from "../../src/shell/trust-loop/projection.js";
 import type {
   CliApprovalOverlayPayload,
   CliQuestionOverlayPayload,
@@ -151,6 +156,41 @@ export function InlineApprovalPrompt(input: {
   const shellContext = useShellRenderContext();
   const dimensions = useTerminalDimensions();
   const request = createMemo(() => input.payload.snapshot.approvals[input.payload.selectedIndex]);
+  const emptyTrust = buildTrustLoopApprovalEmptyProjection();
+  const trust = createMemo(() => {
+    const current = request();
+    return current ? buildTrustLoopApprovalProjection({ request: current }) : undefined;
+  });
+  const approvalSubject = createMemo(() => trust()?.subject ?? "effect");
+  const approvalActionText = createMemo(
+    () =>
+      `${trust()?.primaryActionLabel ?? "Authorize once"} · ${
+        trust()?.rejectActionLabel ?? "Reject"
+      }`,
+  );
+  const detailValue = (key: TrustLoopDetailKey): string | undefined =>
+    trust()?.details.find((row) => row.key === key)?.value;
+  const approvalDetailLines = createMemo(() => {
+    const currentTrust = trust();
+    const tool = currentTrust?.toolName;
+    const boundary = currentTrust?.boundary;
+    const summary = detailValue("summary");
+    const effects = detailValue("effects");
+    const receipt = detailValue("receipt");
+    const recovery = detailValue("recovery");
+    return [
+      summary ? `Summary: ${summary}` : undefined,
+      [
+        tool ? `Tool: ${tool}` : undefined,
+        boundary ? `Boundary: ${boundary}` : undefined,
+        effects ? `Effects: ${effects}` : undefined,
+        receipt ? `Receipt: ${receipt}` : undefined,
+        recovery ? `Recovery: ${recovery}` : undefined,
+      ]
+        .filter((value): value is string => Boolean(value))
+        .join(" · "),
+    ].filter((line): line is string => typeof line === "string" && line.length > 0);
+  });
   const previewRecord = createMemo(() => {
     const record = asRecord(request());
     return readDiffSourceRecordFromDetails(record);
@@ -186,11 +226,14 @@ export function InlineApprovalPrompt(input: {
   const hasPreviewBody = createMemo(
     () => Boolean(singleDiff()) || diffFiles().length > 0 || Boolean(previewError()),
   );
+  const previewToggleHint = createMemo(
+    () => `ctrl+f ${input.payload.previewExpanded ? "minimize" : "fullscreen"}`,
+  );
   const previewHeight = createMemo(() => {
     if (input.payload.previewExpanded) {
       return Math.max(6, dimensions().height - 12);
     }
-    return Math.max(5, Math.min(10, Math.floor(dimensions().height / 3)));
+    return Math.max(5, Math.min(10, Math.floor((dimensions().height - 24) / 3)));
   });
   createEffect(() => {
     const node = previewScrollbox;
@@ -204,15 +247,13 @@ export function InlineApprovalPrompt(input: {
       when={request()}
       fallback={
         <InlinePromptCard
-          title="Approvals"
+          title={emptyTrust.title}
           theme={input.theme}
           accentColor={input.theme.borderActive}
           body={
             <box paddingLeft={1} flexDirection="column" gap={1}>
-              <text fg={input.theme.text}>No pending approvals.</text>
-              <text fg={input.theme.textMuted}>
-                Brewva will show permission requests here when a tool needs approval.
-              </text>
+              <text fg={input.theme.text}>{emptyTrust.headline}</text>
+              <text fg={input.theme.textMuted}>{emptyTrust.subline}</text>
             </box>
           }
           actions={[]}
@@ -220,147 +261,153 @@ export function InlineApprovalPrompt(input: {
         />
       }
     >
-      {(entry) => (
-        <InlinePromptCard
-          title="Permission required"
-          theme={input.theme}
-          accentColor={input.theme.warning}
-          expanded={input.payload.previewExpanded}
-          header={
-            <box flexDirection="column" gap={0}>
-              <box flexDirection="row" gap={1} flexShrink={0}>
-                <text fg={input.theme.warning}>△</text>
-                <text fg={input.theme.text}>Permission required</text>
-              </box>
-              <box flexDirection="row" gap={1} paddingLeft={2} flexShrink={0}>
-                <text fg={input.theme.textMuted} flexShrink={0}>
-                  {hasPreviewBody() ? "→" : "•"}
-                </text>
-                <text fg={input.theme.text}>
-                  {hasPreviewBody() ? `Edit ${previewPath() ?? entry().subject}` : entry().subject}
-                </text>
-              </box>
-            </box>
-          }
-          body={
-            <box paddingLeft={1} flexDirection="column" gap={1}>
-              <Show
-                when={hasPreviewBody()}
-                fallback={
-                  <>
-                    <text fg={input.theme.textMuted}>Tool: {entry().toolName}</text>
-                    <text fg={input.theme.textMuted}>Boundary: {entry().boundary}</text>
-                    <text fg={input.theme.textMuted}>
-                      Effects: {entry().effects.length > 0 ? entry().effects.join(", ") : "none"}
-                    </text>
-                    <Show when={entry().argsSummary}>
-                      <text fg={input.theme.text}>{entry().argsSummary}</text>
-                    </Show>
-                  </>
-                }
-              >
-                <scrollbox
-                  ref={(node: OpenTuiScrollBoxHandle) => {
-                    previewScrollbox = node;
-                  }}
-                  height={previewHeight()}
-                  backgroundColor={input.theme.backgroundPanel}
-                  scrollAcceleration={DEFAULT_SCROLL_ACCELERATION}
-                  verticalScrollbarOptions={{
-                    trackOptions: {
-                      backgroundColor: input.theme.backgroundElement,
-                      foregroundColor: input.theme.borderActive,
-                    },
-                  }}
-                >
-                  <Show when={previewError()}>
-                    <box paddingLeft={1} paddingRight={1}>
-                      <text fg={input.theme.warning}>{previewError()}</text>
-                    </box>
-                  </Show>
-                  <Show when={singleDiff()}>
-                    <DiffView
-                      diff={singleDiff()?.diff ?? ""}
-                      filePath={singleDiff()?.path}
-                      width={input.transcriptWidth}
-                      style={shellContext.diffStyle()}
-                      wrapMode={shellContext.diffWrapMode()}
-                      theme={input.theme}
-                    />
-                  </Show>
-                  <Show when={diffFiles().length > 0}>
-                    <box flexDirection="column" gap={1}>
-                      <For each={diffFiles()}>
-                        {(file) => (
-                          <box flexDirection="column" gap={1}>
-                            <text fg={input.theme.textMuted}>{formatDiffFileTitle(file)}</text>
-                            <Show
-                              when={file.diff.length > 0}
-                              fallback={
-                                <text fg={input.theme.diffRemoved}>
-                                  -{file.deletions ?? 0} lines
-                                </text>
-                              }
-                            >
-                              <DiffView
-                                diff={file.diff}
-                                filePath={file.path}
-                                width={input.transcriptWidth}
-                                style={shellContext.diffStyle()}
-                                wrapMode={shellContext.diffWrapMode()}
-                                theme={input.theme}
-                              />
-                            </Show>
-                          </box>
-                        )}
-                      </For>
-                    </box>
-                  </Show>
-                </scrollbox>
-                <box flexDirection="row" gap={1} paddingLeft={1} flexShrink={0}>
-                  <text fg={input.theme.textMuted}>Tool: {entry().toolName}</text>
-                  <text fg={input.theme.textMuted}>Effects: {entry().effects.join(", ")}</text>
+      {(entry) => {
+        void entry;
+        return (
+          <InlinePromptCard
+            title={trust()?.title ?? "Authorize effect"}
+            theme={input.theme}
+            accentColor={input.theme.warning}
+            expanded={input.payload.previewExpanded}
+            header={
+              <box flexDirection="column" gap={0}>
+                <box flexDirection="row" gap={1} flexShrink={0}>
+                  <text fg={input.theme.warning}>△</text>
+                  <text fg={input.theme.text}>{trust()?.title ?? "Authorize effect"}</text>
                 </box>
-              </Show>
-            </box>
-          }
-          actions={[
-            {
-              label: "Allow once",
-              active: true,
-              onSelect: () => {
-                void input.runtime.handleInput({
-                  key: "enter",
-                  ctrl: false,
-                  meta: false,
-                  shift: false,
-                });
+                <Show when={trust()?.headline}>
+                  {(headline) => (
+                    <text fg={input.theme.text} paddingLeft={2}>
+                      {headline()}
+                    </text>
+                  )}
+                </Show>
+                <Show when={trust()?.subline}>
+                  {(subline) => (
+                    <text fg={input.theme.textMuted} paddingLeft={2}>
+                      {subline()}
+                    </text>
+                  )}
+                </Show>
+                <box flexDirection="row" gap={1} paddingLeft={2} flexShrink={0}>
+                  <text fg={input.theme.textMuted} flexShrink={0}>
+                    {hasPreviewBody() ? "→" : "•"}
+                  </text>
+                  <text fg={input.theme.text}>
+                    {hasPreviewBody()
+                      ? `Edit ${previewPath() ?? approvalSubject()} · ${previewToggleHint()}`
+                      : `${approvalSubject()} · ${approvalActionText()}`}
+                  </text>
+                </box>
+              </box>
+            }
+            body={
+              <box paddingLeft={1} flexDirection="column" gap={1}>
+                <box flexDirection="column" gap={0}>
+                  <Show when={!hasPreviewBody()}>
+                    <For each={approvalDetailLines()}>
+                      {(line) => <text fg={input.theme.textMuted}>{line}</text>}
+                    </For>
+                  </Show>
+                </box>
+                <Show when={hasPreviewBody()} fallback={<></>}>
+                  <scrollbox
+                    ref={(node: OpenTuiScrollBoxHandle) => {
+                      previewScrollbox = node;
+                    }}
+                    height={previewHeight()}
+                    backgroundColor={input.theme.backgroundPanel}
+                    scrollAcceleration={DEFAULT_SCROLL_ACCELERATION}
+                    verticalScrollbarOptions={{
+                      trackOptions: {
+                        backgroundColor: input.theme.backgroundElement,
+                        foregroundColor: input.theme.borderActive,
+                      },
+                    }}
+                  >
+                    <Show when={previewError()}>
+                      <box paddingLeft={1} paddingRight={1}>
+                        <text fg={input.theme.warning}>{previewError()}</text>
+                      </box>
+                    </Show>
+                    <Show when={singleDiff()}>
+                      <DiffView
+                        diff={singleDiff()?.diff ?? ""}
+                        filePath={singleDiff()?.path}
+                        width={input.transcriptWidth}
+                        style={shellContext.diffStyle()}
+                        wrapMode={shellContext.diffWrapMode()}
+                        theme={input.theme}
+                      />
+                    </Show>
+                    <Show when={diffFiles().length > 0}>
+                      <box flexDirection="column" gap={1}>
+                        <For each={diffFiles()}>
+                          {(file) => (
+                            <box flexDirection="column" gap={1}>
+                              <text fg={input.theme.textMuted}>{formatDiffFileTitle(file)}</text>
+                              <Show
+                                when={file.diff.length > 0}
+                                fallback={
+                                  <text fg={input.theme.diffRemoved}>
+                                    -{file.deletions ?? 0} lines
+                                  </text>
+                                }
+                              >
+                                <DiffView
+                                  diff={file.diff}
+                                  filePath={file.path}
+                                  width={input.transcriptWidth}
+                                  style={shellContext.diffStyle()}
+                                  wrapMode={shellContext.diffWrapMode()}
+                                  theme={input.theme}
+                                />
+                              </Show>
+                            </box>
+                          )}
+                        </For>
+                      </box>
+                    </Show>
+                  </scrollbox>
+                </Show>
+              </box>
+            }
+            actions={[
+              {
+                label: trust()?.primaryActionLabel ?? "Authorize once",
+                active: true,
+                onSelect: () => {
+                  void input.runtime.handleInput({
+                    key: "enter",
+                    ctrl: false,
+                    meta: false,
+                    shift: false,
+                  });
+                },
               },
-            },
-            {
-              label: "Reject",
-              onSelect: () => {
-                void input.runtime.handleInput({
-                  key: "character",
-                  text: "r",
-                  ctrl: false,
-                  meta: false,
-                  shift: false,
-                });
+              {
+                label: trust()?.rejectActionLabel ?? "Reject",
+                onSelect: () => {
+                  void input.runtime.handleInput({
+                    key: "character",
+                    text: "r",
+                    ctrl: false,
+                    meta: false,
+                    shift: false,
+                  });
+                },
               },
-            },
-          ]}
-          hints={[
-            hasPreviewBody()
-              ? `ctrl+f ${input.payload.previewExpanded ? "minimize" : "fullscreen"}`
-              : "",
-            "⇆ select",
-            "enter confirm",
-            "r reject",
-            "esc close",
-          ].filter(Boolean)}
-        />
-      )}
+            ]}
+            hints={[
+              hasPreviewBody() ? previewToggleHint() : "",
+              "⇆ select",
+              "enter confirm",
+              "r reject",
+              "esc close",
+            ].filter(Boolean)}
+          />
+        );
+      }}
     </Show>
   );
 }

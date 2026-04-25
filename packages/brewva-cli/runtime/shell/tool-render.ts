@@ -518,14 +518,4 @@ export function readToolErrorText(part: CliShellTranscriptToolPart): string | un
   return text.length > 0 ? text : "Tool execution failed.";
 }
 
-export function toolStatusText(part: CliShellTranscriptToolPart): string {
-  if (part.status === "error") {
-    return "failed";
-  }
-  if (part.status === "completed") {
-    return "completed";
-  }
-  return part.phase ?? part.status;
-}
-
 export type { SessionPalette };

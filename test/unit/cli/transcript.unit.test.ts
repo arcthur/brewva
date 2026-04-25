@@ -92,6 +92,10 @@ describe("cli transcript model", () => {
           type: "tool",
           toolCallId: "tool-read-1",
           toolName: "read",
+          trust: {
+            phase: "inspect",
+            label: "Inspect",
+          },
           status: "completed",
           result: {
             details: { firstLine: 1 },
@@ -131,6 +135,10 @@ describe("cli transcript model", () => {
 
     expect(messages[0]?.parts[0]).toMatchObject({
       type: "tool",
+      trust: {
+        phase: "inspect",
+        label: "Inspect",
+      },
       result: {
         display: {
           summaryText: "Process completed",
@@ -196,6 +204,10 @@ describe("cli transcript model", () => {
           type: "tool",
           toolCallId: "tool-edit-1",
           toolName: "edit",
+          trust: {
+            phase: "inspect",
+            label: "Inspect",
+          },
           status: "running",
           partialResult: {
             details: { phase: "partial" },
@@ -225,6 +237,10 @@ describe("cli transcript model", () => {
         {
           type: "tool",
           toolName: "skill_complete",
+          trust: {
+            phase: "commit",
+            label: "Commit",
+          },
           status: "error",
         },
       ],

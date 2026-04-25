@@ -2,6 +2,10 @@ import { DEFAULT_TUI_THEME, type TuiTheme } from "@brewva/brewva-tui";
 import { FocusManager, OverlayManager, type OverlayEntry } from "@brewva/brewva-tui";
 import type { ShellCompletionCandidate, ShellCompletionRange } from "../completion-provider.js";
 import type { CliShellTranscriptMessage } from "../transcript.js";
+import {
+  buildTrustLoopIdleProjection,
+  type TrustLoopSessionProjection,
+} from "../trust-loop/projection.js";
 import type { CliShellOverlayPayload, CliShellPromptPart } from "../types.js";
 
 export type ShellFocusOwner =
@@ -27,6 +31,7 @@ export interface CliShellNotification {
 
 export interface CliShellStatusState {
   entries: Record<string, string>;
+  trust?: TrustLoopSessionProjection;
   workingMessage?: string;
   hiddenThinkingLabel?: string;
 }
@@ -176,6 +181,10 @@ export type CliShellAction =
       text: string | undefined;
     }
   | {
+      type: "status.setTrust";
+      trust: TrustLoopSessionProjection | undefined;
+    }
+  | {
       type: "status.working";
       text: string | undefined;
     }
@@ -225,6 +234,7 @@ export function createCliShellState(): CliShellViewState {
     notifications: [],
     status: {
       entries: {},
+      trust: buildTrustLoopIdleProjection(),
     },
     diff: {
       style: "auto",
@@ -431,6 +441,14 @@ export function reduceCliShellState(
         },
       };
     }
+    case "status.setTrust":
+      return {
+        ...state,
+        status: {
+          ...state.status,
+          trust: action.trust,
+        },
+      };
     case "status.working":
       return {
         ...state,

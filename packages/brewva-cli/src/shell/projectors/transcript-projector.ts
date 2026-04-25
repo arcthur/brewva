@@ -1,4 +1,10 @@
-import type { BrewvaPromptSessionEvent } from "@brewva/brewva-substrate";
+import {
+  SESSION_CRASH_POINTS,
+  SESSION_TERMINATION_REASONS,
+  type BrewvaPromptSessionEvent,
+  type SessionPhase,
+  type ToolExecutionPhase,
+} from "@brewva/brewva-substrate";
 import {
   extractMessageError,
   readAssistantMessageEventPartial,
@@ -14,7 +20,14 @@ import {
   buildTranscriptMessageFromMessage,
   upsertToolExecutionIntoTranscriptMessages,
   type CliShellTranscriptMessage,
+  type CliShellTranscriptToolStatus,
 } from "../transcript.js";
+import {
+  buildTrustLoopSessionProjection,
+  buildTrustLoopToolProjection,
+  isTrustLoopToolExecutionPhase,
+  type TrustLoopToolProjection,
+} from "../trust-loop/projection.js";
 import type { CliShellUiPort } from "../types.js";
 
 export interface ShellTranscriptProjectorContext {
@@ -33,6 +46,54 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
   return value as Record<string, unknown>;
 }
 
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function isString(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0;
+}
+
+function isOneOf<T extends string>(value: unknown, values: readonly T[]): value is T {
+  return typeof value === "string" && values.includes(value as T);
+}
+
+function isSessionPhase(value: unknown): value is SessionPhase {
+  const phase = asRecord(value);
+  switch (phase?.kind) {
+    case "idle":
+      return true;
+    case "model_streaming":
+      return isString(phase.modelCallId) && isFiniteNumber(phase.turn);
+    case "tool_executing":
+      return isString(phase.toolCallId) && isString(phase.toolName) && isFiniteNumber(phase.turn);
+    case "waiting_approval":
+      return (
+        isString(phase.requestId) &&
+        isString(phase.toolCallId) &&
+        isString(phase.toolName) &&
+        isFiniteNumber(phase.turn)
+      );
+    case "recovering":
+      return (
+        isFiniteNumber(phase.turn) &&
+        (phase.recoveryAnchor === undefined || isString(phase.recoveryAnchor))
+      );
+    case "crashed":
+      return (
+        isOneOf(phase.crashAt, SESSION_CRASH_POINTS) &&
+        isFiniteNumber(phase.turn) &&
+        (phase.modelCallId === undefined || isString(phase.modelCallId)) &&
+        (phase.toolCallId === undefined || isString(phase.toolCallId)) &&
+        (phase.recoveryAnchor === undefined || isString(phase.recoveryAnchor))
+      );
+    case "terminated":
+      return isOneOf(phase.reason, SESSION_TERMINATION_REASONS);
+    default:
+      return false;
+  }
+}
+
 function toolResultStatus(input: { result?: unknown; isError?: boolean }): "completed" | "error" {
   if (input.isError === true) {
     return "error";
@@ -45,6 +106,8 @@ export class ShellTranscriptProjector {
   #assistantEntryId: string | undefined;
   #correctionTranscriptMarkerSequence = 0;
   readonly #correctionTranscriptMarkersBySessionId = new Map<string, CliShellTranscriptMessage>();
+  readonly #toolProjectionInputByCallId = new Map<string, ToolProjectionInputState>();
+  readonly #toolTrustByCallId = new Map<string, TrustLoopToolProjection>();
 
   constructor(private readonly context: ShellTranscriptProjectorContext) {}
 
@@ -78,7 +141,9 @@ export class ShellTranscriptProjector {
   }
 
   refreshFromSession(): void {
-    this.replaceMessages(this.buildMessagesFromSession());
+    const messages = this.buildMessagesFromSession();
+    this.rebuildToolTrustCache(messages);
+    this.replaceMessages(messages);
   }
 
   appendMessage(message: CliShellTranscriptMessage | null): void {
@@ -180,9 +245,11 @@ export class ShellTranscriptProjector {
     }
 
     if (event.type === "tool_execution_start") {
+      const toolCallId = typeof event.toolCallId === "string" ? event.toolCallId : undefined;
+      const toolName = typeof event.toolName === "string" ? event.toolName : undefined;
       this.upsertToolExecution({
-        toolCallId: typeof event.toolCallId === "string" ? event.toolCallId : undefined,
-        toolName: typeof event.toolName === "string" ? event.toolName : undefined,
+        toolCallId,
+        toolName,
         args: event.args,
         status: "running",
         renderMode: "streaming",
@@ -191,9 +258,11 @@ export class ShellTranscriptProjector {
     }
 
     if (event.type === "tool_execution_update") {
+      const toolCallId = typeof event.toolCallId === "string" ? event.toolCallId : undefined;
+      const toolName = typeof event.toolName === "string" ? event.toolName : undefined;
       this.upsertToolExecution({
-        toolCallId: typeof event.toolCallId === "string" ? event.toolCallId : undefined,
-        toolName: typeof event.toolName === "string" ? event.toolName : undefined,
+        toolCallId,
+        toolName,
         args: event.args,
         partialResult: event.partialResult,
         status: "running",
@@ -204,9 +273,10 @@ export class ShellTranscriptProjector {
 
     if (event.type === "tool_execution_end") {
       const toolCallId = typeof event.toolCallId === "string" ? event.toolCallId : undefined;
+      const toolName = typeof event.toolName === "string" ? event.toolName : undefined;
       this.upsertToolExecution({
         toolCallId,
-        toolName: typeof event.toolName === "string" ? event.toolName : undefined,
+        toolName,
         result: event.result,
         status: toolResultStatus({ result: event.result, isError: event.isError === true }),
         renderMode: "stable",
@@ -216,11 +286,13 @@ export class ShellTranscriptProjector {
     }
 
     if (event.type === "tool_execution_phase_change") {
+      const toolCallId = typeof event.toolCallId === "string" ? event.toolCallId : undefined;
+      const toolName = typeof event.toolName === "string" ? event.toolName : undefined;
       this.upsertToolExecution({
-        toolCallId: typeof event.toolCallId === "string" ? event.toolCallId : undefined,
-        toolName: typeof event.toolName === "string" ? event.toolName : undefined,
+        toolCallId,
+        toolName,
         args: event.args,
-        phase: typeof event.phase === "string" ? event.phase : undefined,
+        phase: isTrustLoopToolExecutionPhase(event.phase) ? event.phase : undefined,
         status: event.phase === "cleanup" ? "completed" : "running",
         renderMode: "streaming",
       });
@@ -234,6 +306,17 @@ export class ShellTranscriptProjector {
         key: "phase",
         text: typeof phase?.kind === "string" ? phase.kind : undefined,
       });
+      if (isSessionPhase(event.phase)) {
+        this.context.commit({
+          type: "status.setTrust",
+          trust: buildTrustLoopSessionProjection({
+            phase: event.phase,
+            activeTool: this.findToolTrustProjection(
+              typeof phase?.toolCallId === "string" ? phase.toolCallId : undefined,
+            ),
+          }),
+        });
+      }
       return;
     }
 
@@ -312,19 +395,21 @@ export class ShellTranscriptProjector {
     toolCallId?: string;
     toolName?: string;
     args?: unknown;
-    phase?: string;
+    phase?: ToolExecutionPhase;
     partialResult?: unknown;
     result?: unknown;
-    status?: "pending" | "running" | "completed" | "error";
+    status?: CliShellTranscriptToolStatus;
     renderMode?: "stable" | "streaming";
     fallbackMessageId?: string;
   }): void {
-    if (typeof update.toolCallId !== "string" || update.toolCallId.length === 0) {
+    const toolCallId = update.toolCallId;
+    if (typeof toolCallId !== "string" || toolCallId.length === 0) {
       return;
     }
+    this.updateToolTrustCache({ ...update, toolCallId });
     this.replaceMessages(
       upsertToolExecutionIntoTranscriptMessages(this.context.getMessages(), {
-        toolCallId: update.toolCallId,
+        toolCallId,
         toolName: update.toolName,
         args: update.args,
         phase: update.phase,
@@ -336,4 +421,58 @@ export class ShellTranscriptProjector {
       }),
     );
   }
+
+  private findToolTrustProjection(
+    toolCallId: string | undefined,
+  ): TrustLoopToolProjection | undefined {
+    return toolCallId ? this.#toolTrustByCallId.get(toolCallId) : undefined;
+  }
+
+  private updateToolTrustCache(update: {
+    toolCallId: string;
+    toolName?: string;
+    args?: unknown;
+    phase?: ToolExecutionPhase;
+    status?: CliShellTranscriptToolStatus;
+  }): void {
+    const previous = this.#toolProjectionInputByCallId.get(update.toolCallId);
+    const toolName = update.toolName ?? previous?.toolName;
+    if (!toolName) {
+      return;
+    }
+    const next: ToolProjectionInputState = {
+      toolName,
+      args: update.args ?? previous?.args,
+      executionPhase: update.phase ?? previous?.executionPhase,
+      status: update.status ?? previous?.status,
+    };
+    this.#toolProjectionInputByCallId.set(update.toolCallId, next);
+    this.#toolTrustByCallId.set(update.toolCallId, buildTrustLoopToolProjection(next));
+  }
+
+  private rebuildToolTrustCache(messages: readonly CliShellTranscriptMessage[]): void {
+    this.#toolProjectionInputByCallId.clear();
+    this.#toolTrustByCallId.clear();
+    for (const message of messages) {
+      for (const part of message.parts) {
+        if (part.type !== "tool") {
+          continue;
+        }
+        this.#toolProjectionInputByCallId.set(part.toolCallId, {
+          toolName: part.toolName,
+          args: part.args,
+          executionPhase: part.phase,
+          status: part.status,
+        });
+        this.#toolTrustByCallId.set(part.toolCallId, part.trust);
+      }
+    }
+  }
+}
+
+interface ToolProjectionInputState {
+  toolName: string;
+  args?: unknown;
+  executionPhase?: ToolExecutionPhase;
+  status?: CliShellTranscriptToolStatus;
 }
