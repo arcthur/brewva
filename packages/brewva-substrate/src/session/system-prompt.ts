@@ -6,6 +6,10 @@ export interface BrewvaSystemPromptSkill {
 }
 
 export interface BuildBrewvaSystemPromptOptions {
+  /**
+   * Custom base prompt text. Brewva-owned canonical sections such as
+   * Communication are still appended by the prompt builder.
+   */
   customPrompt?: string;
   selectedTools?: string[];
   toolSnippets?: Record<string, string>;
@@ -15,6 +19,15 @@ export interface BuildBrewvaSystemPromptOptions {
   contextFiles?: Array<{ path: string; content: string }>;
   skills?: BrewvaSystemPromptSkill[];
 }
+
+const DEFAULT_COMMUNICATION_SECTION = `Communication:
+- Start with one direct conclusion sentence.
+- Use Markdown tables for three or more comparable items.
+- Use Mermaid for flows, dependencies, state changes, timing, or replay analysis.
+- Put each table or diagram immediately after the sentence it supports.
+- Do not restate a table or diagram in prose.
+- If the channel cannot render a table or diagram, fall back to readable text or source.
+- Do not use emoji, praise openings, exclamation marks, or thanks for tool results.`;
 
 function formatSkillsForPrompt(skills: readonly BrewvaSystemPromptSkill[]): string {
   if (skills.length === 0) {
@@ -58,6 +71,7 @@ export function buildBrewvaSystemPrompt(options: BuildBrewvaSystemPromptOptions 
   }
 
   const appendSection = options.appendSystemPrompt ? `\n\n${options.appendSystemPrompt}` : "";
+  const communicationSection = `\n\n${DEFAULT_COMMUNICATION_SECTION}`;
 
   const contextFiles = options.contextFiles ?? [];
   const skills = options.skills ?? [];
@@ -67,6 +81,7 @@ export function buildBrewvaSystemPrompt(options: BuildBrewvaSystemPromptOptions 
     if (appendSection) {
       prompt += appendSection;
     }
+    prompt += communicationSection;
     if (contextFiles.length > 0) {
       prompt += "\n\n# Project Context\n\n";
       for (const contextFile of contextFiles) {
@@ -96,7 +111,7 @@ ${toolsList}
 In addition to the tools above, you may have access to other project-specific tools.
 
 Guidelines:
-${guidelines}`;
+${guidelines}${communicationSection}`;
 
   if (appendSection) {
     prompt += appendSection;

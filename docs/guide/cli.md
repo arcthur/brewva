@@ -39,6 +39,18 @@ concise action suggestions.
 The shell chooses a built-in dark or light theme from the terminal background
 at startup, and the operator can switch themes explicitly with `/theme <name>`.
 
+Assistant answers in the interactive transcript use a stable presentation
+boundary after streaming completes:
+
+- streaming assistant text stays on the code-renderer path to avoid layout
+  churn while chunks arrive
+- stable Markdown tables render through OpenTUI Markdown table support
+- standalone Mermaid fenced blocks render as bounded terminal-text diagrams
+  when the supported subset applies
+- unsupported Mermaid remains readable source text
+- presentation fallback is a renderer concern and does not fail the runtime
+  turn
+
 ### Keyboard And Completion
 
 The first-pass keyboard contract is:

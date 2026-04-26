@@ -25,6 +25,7 @@ evidence-ledger records.
 - skill activation, tool execution, and ledger / event persistence
 - `skill_complete` output validation and the verification gate
 - workflow inspection surfaces derived from session activity
+- final assistant-answer presentation in the interactive transcript
 
 ## Out Of Scope
 
@@ -81,6 +82,10 @@ flowchart TD
    `runtime.authority.verification.verify(...)`.
 10. After verification passes, the runtime completes the skill and exposes the
     resulting workflow posture through explicit inspection surfaces.
+11. When assistant text reaches stable transcript state, the CLI presentation
+    boundary renders Markdown tables and bounded Mermaid diagrams as terminal
+    presentation. This does not alter event tape, replay, or runtime
+    inspection truth.
 
 ## Execution Semantics
 
@@ -122,6 +127,8 @@ flowchart TD
   - session-wire receipts (`turn_input_recorded`, `turn_render_committed`) for
     frontend/session replay
   - ledger rows containing tool outcomes and verification evidence
+- presentation carriers such as Markdown tables and Mermaid diagrams are
+  transcript rendering, not durable runtime records
 
 ## Code Pointers
 

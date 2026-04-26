@@ -186,6 +186,14 @@ Current responsibilities:
     `docs/solutions/**`
   - presents provenance-bearing, freshness-aware recall as advisory context
     instead of as hidden long-term truth
+- answer presentation
+  - carries a canonical communication policy in the substrate system prompt
+  - chooses terse prose, Markdown tables, or Mermaid diagrams based on the
+    shape of the answer
+  - renders stable interactive transcript blocks through CLI-owned
+    presentation classification and OpenTUI primitives
+  - keeps tables and diagrams as presentation carriers, not runtime artifacts,
+    inspect surfaces, replay truth, or skill outputs
 
 This plane may read kernel state, but it does not mutate kernel state directly.
 

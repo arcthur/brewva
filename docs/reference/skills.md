@@ -250,6 +250,20 @@ This is intentionally prompt-side guidance, not kernel authority. Runtime
 enforces contracts, policy, replay, and commitment boundaries; skill-authored
 behavior improves specialist quality without creating a second control loop.
 
+## Skill Outputs vs Final Answers
+
+Skill output patterns and final-answer presentation are separate surfaces.
+
+- Skill artifacts use `intent.output_contracts`, `intent.semantic_bindings`,
+  templates, and examples when downstream tooling needs stable structure.
+- General assistant final answers follow the canonical communication policy
+  from the substrate system prompt.
+- Project or skill guidance may add scenario-specific maps, but it should not
+  redefine the global final-answer policy.
+- `skills/meta/skill-authoring/references/output-patterns.md` remains a skill
+  artifact authoring reference; it is not the authority for ordinary
+  final-answer prose, tables, or diagrams.
+
 ## Routing Scopes And Profiles
 
 This section covers stable routing enablement and activation boundaries.

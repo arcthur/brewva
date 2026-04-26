@@ -41,6 +41,7 @@ refresh the pointer summary and `Last reviewed` metadata here.
 
 ## Delegation, Product, And Knowledge
 
+- [`rfc-answer-presentation-policy-and-tui-diagram-rendering.md`](./rfc-answer-presentation-policy-and-tui-diagram-rendering.md)
 - [`rfc-cli-tui-dual-layer-operator-shell.md`](./rfc-cli-tui-dual-layer-operator-shell.md)
 - [`rfc-inspectable-operator-experience-overlays.md`](./rfc-inspectable-operator-experience-overlays.md)
 - [`rfc-kernel-level-reasoning-revert-and-branch-continuity.md`](./rfc-kernel-level-reasoning-revert-and-branch-continuity.md)

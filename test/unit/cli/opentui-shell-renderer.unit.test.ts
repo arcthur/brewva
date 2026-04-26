@@ -983,6 +983,211 @@ describe("opentui solid shell runtime", () => {
     }
   });
 
+  test("renders stable assistant Markdown tables through the OpenTUI Markdown renderer", async () => {
+    const { bundle } = createFakeBundle({
+      seedMessages: [
+        {
+          role: "assistant",
+          content:
+            "Runtime surfaces:\n\n| Surface | Role |\n| --- | --- |\n| authority | capability decisions |\n| inspect | read-only observation |\n| maintain | state maintenance |",
+        },
+      ],
+    });
+    const runtime = new CliShellRuntime(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+      operatorPollIntervalMs: 60_000,
+    });
+
+    await runtime.start();
+    const testSetup = await openTuiSolidTestRender(
+      createOpenTuiSolidElement(BrewvaOpenTuiShell, { runtime: runtime }),
+      {
+        width: 100,
+        height: 36,
+      },
+    );
+
+    try {
+      await testSetup.renderOnce();
+      await testSetup.renderOnce();
+
+      const message = runtime
+        .getViewState()
+        .transcript.messages.find((candidate) => candidate.role === "assistant");
+      const textPart = message?.parts.find((part) => part.type === "text");
+      expect(textPart).toBeDefined();
+
+      const rendererInspector = testSetup.renderer as unknown as OpenTuiTestRendererInspector;
+      const textBlock = rendererInspector.root.findDescendantById(`text-${textPart!.id}:block:1`);
+      const tableRenderable = textBlock?.getChildren()[0] as
+        | { constructor: { name: string } }
+        | undefined;
+
+      expect(tableRenderable?.constructor.name).toBe("MarkdownRenderable");
+      const frame = testSetup.captureCharFrame();
+      expect(frame).toContain("Runtime surfaces:");
+      expect(frame).toContain("authority");
+      expect(frame).toContain("capability decisions");
+      expect(frame).not.toContain("| Surface | Role |");
+    } finally {
+      runtime.dispose();
+      testSetup.renderer.destroy();
+    }
+  });
+
+  test("renders stable assistant non-table Markdown through the code fallback", async () => {
+    const { bundle } = createFakeBundle({
+      seedMessages: [
+        {
+          role: "assistant",
+          content:
+            "I checked the Brewva output.\n\n**Changes**\n- Split prose into readable sections.\n- Keep tool output visually separate.\n\n```ts\nconst value = 1;\n```",
+        },
+      ],
+    });
+    const runtime = new CliShellRuntime(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+      operatorPollIntervalMs: 60_000,
+    });
+
+    await runtime.start();
+    const testSetup = await openTuiSolidTestRender(
+      createOpenTuiSolidElement(BrewvaOpenTuiShell, { runtime: runtime }),
+      {
+        width: 100,
+        height: 36,
+      },
+    );
+
+    try {
+      await testSetup.renderOnce();
+      await testSetup.renderOnce();
+
+      const message = runtime
+        .getViewState()
+        .transcript.messages.find((candidate) => candidate.role === "assistant");
+      const textPart = message?.parts.find((part) => part.type === "text");
+      expect(textPart).toBeDefined();
+
+      const rendererInspector = testSetup.renderer as unknown as OpenTuiTestRendererInspector;
+      for (let index = 0; index < 3; index += 1) {
+        const textBlock = rendererInspector.root.findDescendantById(
+          `text-${textPart!.id}:block:${index}`,
+        );
+        const renderable = textBlock?.getChildren()[0] as
+          | {
+              constructor: { name: string };
+              drawUnstyledText?: boolean;
+              streaming?: boolean;
+            }
+          | undefined;
+
+        expect(renderable?.constructor.name).toBe("CodeRenderable");
+        expect(renderable?.drawUnstyledText).toBe(true);
+        expect(renderable?.streaming).toBe(false);
+      }
+
+      const frame = testSetup.captureCharFrame();
+      expect(frame).toContain("I checked the Brewva output.");
+      expect(frame).toContain("Changes");
+      expect(frame).toContain("const value = 1;");
+    } finally {
+      runtime.dispose();
+      testSetup.renderer.destroy();
+    }
+  });
+
+  test("renders supported Mermaid flowcharts as diagram blocks", async () => {
+    const { bundle } = createFakeBundle({
+      seedMessages: [
+        {
+          role: "assistant",
+          content: [
+            "The stable path is renderer-owned.",
+            "",
+            "```mermaid",
+            "flowchart LR",
+            "  CLI[CLI shell] -->|stable| Markdown[Markdown renderer]",
+            "```",
+          ].join("\n"),
+        },
+      ],
+    });
+    const runtime = new CliShellRuntime(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+      operatorPollIntervalMs: 60_000,
+    });
+
+    await runtime.start();
+    const testSetup = await openTuiSolidTestRender(
+      createOpenTuiSolidElement(BrewvaOpenTuiShell, { runtime: runtime }),
+      {
+        width: 96,
+        height: 36,
+      },
+    );
+
+    try {
+      const frame = await waitForRenderedFrame(testSetup, {
+        predicate: (candidate) => candidate.includes("Mermaid diagram"),
+      });
+
+      expect(frame).toContain("The stable path is renderer-owned.");
+      expect(frame).toContain("Mermaid diagram");
+      expect(frame).toContain("[CLI shell]");
+      expect(frame).toContain("stable");
+      expect(frame).not.toContain("```mermaid");
+    } finally {
+      runtime.dispose();
+      testSetup.renderer.destroy();
+    }
+  });
+
+  test("falls back to selectable source for unsupported Mermaid diagrams", async () => {
+    const { bundle } = createFakeBundle({
+      seedMessages: [
+        {
+          role: "assistant",
+          content: ["```mermaid", "pie title Work", '  "Done" : 10', "```"].join("\n"),
+        },
+      ],
+    });
+    const runtime = new CliShellRuntime(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+      operatorPollIntervalMs: 60_000,
+    });
+
+    await runtime.start();
+    const testSetup = await openTuiSolidTestRender(
+      createOpenTuiSolidElement(BrewvaOpenTuiShell, { runtime: runtime }),
+      {
+        width: 72,
+        height: 24,
+      },
+    );
+
+    try {
+      const frame = await waitForRenderedFrame(testSetup, {
+        predicate: (candidate) => candidate.includes("Mermaid source"),
+      });
+
+      expect(frame).toContain("Mermaid source");
+      expect(frame).toContain("pie title Work");
+      expect(frame).not.toContain("Mermaid diagram");
+    } finally {
+      runtime.dispose();
+      testSetup.renderer.destroy();
+    }
+  });
+
   test("hides reasoning blocks when thinking visibility is toggled off", async () => {
     const { bundle } = createFakeBundle({
       seedMessages: [
@@ -1119,7 +1324,18 @@ describe("opentui solid shell runtime", () => {
         type: "message_end",
         message: {
           role: "assistant",
-          content: [{ type: "text", text: "Streaming text done" }],
+          content: [
+            {
+              type: "text",
+              text: [
+                "Streaming table done:",
+                "",
+                "| Gate | Status |",
+                "| --- | --- |",
+                "| render | stable |",
+              ].join("\n"),
+            },
+          ],
           stopReason: "endTurn",
         },
       });
@@ -1127,21 +1343,17 @@ describe("opentui solid shell runtime", () => {
       await testSetup.renderOnce();
 
       const finalizedTextBlock = rendererInspector.root.findDescendantById(
-        `text-${textPart!.id}:block:0`,
+        `text-${textPart!.id}:block:1`,
       );
       const finalizedRenderable = finalizedTextBlock?.getChildren()[0];
-      expect(finalizedRenderable).toBe(streamingRenderable);
+      expect(finalizedRenderable).not.toBe(streamingRenderable);
       expect(
         (
           finalizedRenderable as
             | { constructor?: { name?: string }; streaming?: boolean }
             | undefined
         )?.constructor?.name,
-      ).toBe("CodeRenderable");
-      expect((finalizedRenderable as { streaming?: boolean } | undefined)?.streaming).toBe(true);
-      expect(
-        (finalizedRenderable as { drawUnstyledText?: boolean } | undefined)?.drawUnstyledText,
-      ).toBe(false);
+      ).toBe("MarkdownRenderable");
     } finally {
       runtime.dispose();
       testSetup.renderer.destroy();

@@ -35,6 +35,9 @@ Runtime boundary note:
 - prompt expansion, session persistence, and turn orchestration are substrate
   concerns that consume runtime authority rather than widening the runtime
   surface back into a mixed session-manager API
+- answer presentation policy and transcript rendering live in substrate and
+  CLI/TUI experience layers; they do not create runtime receipts, inspect
+  artifacts, WAL events, or replay authority
 - Pi compatibility remains import/export oriented and does not justify
   reintroducing runtime-path dependency on `Pi`
 

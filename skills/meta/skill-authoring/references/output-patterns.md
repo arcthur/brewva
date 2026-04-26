@@ -2,6 +2,12 @@
 
 Use these patterns when skills need to produce consistent, high-quality output.
 
+Scope note: this file is a skill artifact authoring reference. It is not the
+global authority for ordinary assistant final-answer presentation. Final
+answers follow the canonical communication policy in the substrate system
+prompt; skills may still use the patterns below for declared outputs,
+templates, examples, and machine-consumed artifacts.
+
 For ordinary authored outputs, pair each declared output with an explicit
 `intent.output_contracts` entry in frontmatter. Keep the contract just strong
 enough to reject placeholder output without over-constraining normal use.

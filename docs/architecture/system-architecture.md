@@ -108,6 +108,18 @@ Boundary rules:
 - Brewva currently pins `@opentui/core` to `0.1.100` and uses
   `@opentui/solid` as the only interactive renderer binding
 
+Assistant transcript presentation is part of this shell boundary, not the
+runtime boundary.
+
+- substrate owns the canonical model-visible communication policy
+- CLI owns transcript block classification for stable assistant text
+- OpenTUI owns native Markdown table rendering, viewport, selection, and layout
+- CLI-owned Mermaid rendering is bounded text rendering with source fallback
+- future graphics support must pass through `@brewva/brewva-tui` capability
+  detection before the shell uses Kitty graphics or Sixel
+- presentation rendering must not create runtime truth, inspect surfaces, WAL
+  content, or replay authority
+
 ## Substrate Boundary
 
 Between the kernel ring and the experience ring, Brewva now treats the

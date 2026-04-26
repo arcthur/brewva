@@ -11,6 +11,8 @@ import type {
 } from "../../src/shell/transcript.js";
 import { formatTrustLoopTitle, type TrustLoopTone } from "../../src/shell/trust-loop/projection.js";
 import { DiffView, formatDiffFileTitle } from "./diff-view.js";
+import { MarkdownTranscriptBlock } from "./markdown-transcript-block.js";
+import { MermaidBlock } from "./mermaid/mermaid-block.js";
 import {
   SPLIT_BORDER_CHARS,
   getReasoningSyntaxStyle,
@@ -36,6 +38,7 @@ import {
   summarizeInput,
   type ToolRenderCache,
 } from "./tool-render.js";
+import { classifyTranscriptTextBlock, splitTranscriptTextBlocks } from "./transcript-markdown.js";
 
 export function TextLineBlock(input: {
   lines: readonly string[];
@@ -72,64 +75,23 @@ function trustToneColor(theme: SessionPalette, tone: TrustLoopTone): string {
   }
 }
 
-interface TranscriptTextBlock {
-  content: string;
-}
-
-const MARKDOWN_FENCE_PATTERN = /^\s*(```|~~~)/u;
-const MARKDOWN_SECTION_PATTERN = /^\s*(#{1,6}\s+\S|\*\*[^*\n]{1,80}\*\*:?\s*)$/u;
-
-function splitTranscriptTextBlocks(text: string): TranscriptTextBlock[] {
-  const trimmed = text.trim();
-  if (trimmed.length === 0) {
-    return [];
-  }
-
-  const blocks: TranscriptTextBlock[] = [];
-  let current: string[] = [];
-  let openFence: string | undefined;
-
-  const flush = () => {
-    const content = current.join("\n").trim();
-    if (content.length > 0) {
-      blocks.push({ content });
-    }
-    current = [];
-  };
-
-  for (const line of trimmed.split(/\r?\n/u)) {
-    const fenceMatch = line.match(MARKDOWN_FENCE_PATTERN);
-
-    if (openFence) {
-      current.push(line);
-      if (fenceMatch?.[1] === openFence) {
-        openFence = undefined;
-        flush();
-      }
-      continue;
-    }
-
-    if (line.trim().length === 0) {
-      flush();
-      continue;
-    }
-
-    if (fenceMatch) {
-      flush();
-      openFence = fenceMatch[1];
-      current.push(line);
-      continue;
-    }
-
-    if (current.length > 0 && MARKDOWN_SECTION_PATTERN.test(line)) {
-      flush();
-    }
-
-    current.push(line);
-  }
-
-  flush();
-  return blocks;
+function StableTranscriptTextBlock(input: { content: string; theme: SessionPalette }) {
+  const renderer = useRenderer();
+  const mermaidSource = createMemo(() => {
+    const classified = classifyTranscriptTextBlock({ content: input.content });
+    return classified.kind === "mermaid" ? classified.source : undefined;
+  });
+  const maxBlockWidth = createMemo(() => Math.max(24, renderer.width - 12));
+  return (
+    <Show
+      when={mermaidSource()}
+      fallback={<MarkdownTranscriptBlock content={input.content} theme={input.theme} />}
+    >
+      {(source) => (
+        <MermaidBlock source={source()} theme={input.theme} maxWidth={maxBlockWidth()} />
+      )}
+    </Show>
+  );
 }
 
 function createPersistentStreamingCodePath(isStreaming: () => boolean): () => boolean {
@@ -279,7 +241,6 @@ function TextPartView(input: {
   const streaming = createMemo(
     () => input.message.renderMode === "streaming" || input.part.renderMode === "streaming",
   );
-  const useStreamingCodePath = createPersistentStreamingCodePath(streaming);
   const blocks = createMemo(() => splitTranscriptTextBlocks(input.part.text));
   return (
     <Show when={blocks().length > 0}>
@@ -294,14 +255,21 @@ function TextPartView(input: {
         <Index each={blocks()}>
           {(block, index) => (
             <box id={`text-${input.part.id}:block:${index}`} marginTop={index === 0 ? 0 : 1}>
-              <code
-                filetype="markdown"
-                drawUnstyledText={!useStreamingCodePath()}
-                streaming={useStreamingCodePath()}
-                syntaxStyle={getTranscriptSyntaxStyle(input.theme)}
-                content={block().content}
-                fg={input.theme.text}
-              />
+              <Show
+                when={streaming()}
+                fallback={
+                  <StableTranscriptTextBlock content={block().content} theme={input.theme} />
+                }
+              >
+                <code
+                  filetype="markdown"
+                  drawUnstyledText={false}
+                  streaming={true}
+                  syntaxStyle={getTranscriptSyntaxStyle(input.theme)}
+                  content={block().content}
+                  fg={input.theme.text}
+                />
+              </Show>
             </box>
           )}
         </Index>

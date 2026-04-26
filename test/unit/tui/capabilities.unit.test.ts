@@ -18,6 +18,8 @@ describe("tui capability detection", () => {
     expect(capabilities.interactive).toBe(false);
     expect(capabilities.fullScreen).toBe(false);
     expect(capabilities.colorLevel).toBe("none");
+    expect(capabilities.kittyGraphics).toBe(false);
+    expect(capabilities.sixel).toBe(false);
   });
 
   test("enables full-screen features for interactive terminals", () => {
@@ -40,5 +42,7 @@ describe("tui capability detection", () => {
     expect(capabilities.fullScreen).toBe(true);
     expect(capabilities.bracketedPaste).toBe(true);
     expect(capabilities.colorLevel).toBe("truecolor");
+    expect(capabilities.kittyGraphics).toBe(false);
+    expect(capabilities.sixel).toBe(false);
   });
 });
