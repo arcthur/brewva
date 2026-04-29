@@ -400,7 +400,7 @@ describe("skill_complete tool", () => {
 
   test("rejects placeholder outputs for built-in design artifacts", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-skill-complete-design-"));
-    writeSkill(join(workspace, ".brewva/skills/core/design-contract/SKILL.md"), {
+    writeSkill(join(workspace, ".brewva/skills/core/plan-contract/SKILL.md"), {
       name: "design-contract",
       outputs: [
         "design_spec",
@@ -481,7 +481,7 @@ describe("skill_complete tool", () => {
 
   test("accepts informative built-in design artifacts", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-skill-complete-design-valid-"));
-    writeSkill(join(workspace, ".brewva/skills/core/design-contract/SKILL.md"), {
+    writeSkill(join(workspace, ".brewva/skills/core/plan-contract/SKILL.md"), {
       name: "design-contract",
       outputs: [
         "design_spec",
@@ -607,7 +607,7 @@ describe("skill_complete tool", () => {
 
     await loadTool.execute(
       "tc-load-design-repair",
-      { name: "design" },
+      { name: "plan" },
       undefined,
       undefined,
       fakeContext(sessionId),
@@ -629,7 +629,7 @@ describe("skill_complete tool", () => {
 
     expect(extractTextContent(first)).toContain("Skill completion rejected.");
     expect(runtime.inspect.skills.getActiveState(sessionId)).toMatchObject({
-      skillName: "design",
+      skillName: "plan",
       phase: "repair_required",
       repairBudget: expect.objectContaining({
         maxAttempts: 2,
@@ -640,7 +640,7 @@ describe("skill_complete tool", () => {
       }),
     });
     expect(runtime.inspect.skills.getLatestFailure(sessionId)).toMatchObject({
-      skillName: "design",
+      skillName: "plan",
       phase: "repair_required",
       missing: ["execution_plan", "execution_mode_hint", "risk_register", "implementation_targets"],
       expectedOutputs: expect.objectContaining({
@@ -661,7 +661,7 @@ describe("skill_complete tool", () => {
     expect(extractTextContent(second)).toContain("Skill completion rejected.");
     expect(runtime.inspect.skills.getActiveState(sessionId)).toBeUndefined();
     expect(runtime.inspect.skills.getLatestFailure(sessionId)).toMatchObject({
-      skillName: "design",
+      skillName: "plan",
       phase: "failed_contract",
       repairBudget: expect.objectContaining({
         usedAttempts: 2,
@@ -686,7 +686,7 @@ describe("skill_complete tool", () => {
 
     await loadTool.execute(
       "tc-load-design-repair-budget",
-      { name: "design" },
+      { name: "plan" },
       undefined,
       undefined,
       fakeContext(sessionId),
@@ -725,14 +725,14 @@ describe("skill_complete tool", () => {
     expect(blockedSupportTool.allowed).toBe(false);
     expect(blockedSupportTool.reason).toContain("Repair posture exhausted maxToolCalls=6");
     expect(runtime.inspect.skills.getActiveState(sessionId)).toMatchObject({
-      skillName: "design",
+      skillName: "plan",
       phase: "repair_required",
       repairBudget: expect.objectContaining({
         remainingToolCalls: 0,
       }),
     });
     expect(runtime.inspect.skills.getLatestFailure(sessionId)).toMatchObject({
-      skillName: "design",
+      skillName: "plan",
       phase: "repair_required",
     });
 
@@ -764,7 +764,7 @@ describe("skill_complete tool", () => {
 
     await loadTool.execute(
       "tc-load-design-repair-token-budget",
-      { name: "design" },
+      { name: "plan" },
       undefined,
       undefined,
       fakeContext(sessionId),
@@ -803,7 +803,7 @@ describe("skill_complete tool", () => {
     expect(blockedSupportTool.reason).toContain("Repair posture exhausted tokenBudget=12000");
     expect(runtime.inspect.skills.getActiveState(sessionId)).toBeUndefined();
     expect(runtime.inspect.skills.getLatestFailure(sessionId)).toMatchObject({
-      skillName: "design",
+      skillName: "plan",
       phase: "failed_contract",
     });
     expect(
@@ -3079,7 +3079,7 @@ The WAL boundary must keep replay ordering deterministic.
       verification: { executeCommands: false },
     });
 
-    runtime.authority.skills.activate(sessionId, "design");
+    runtime.authority.skills.activate(sessionId, "plan");
     runtime.authority.skills.complete(sessionId, {
       design_spec: "Keep implementation scoped to the planned module boundary.",
       execution_plan: [
@@ -3160,7 +3160,7 @@ The WAL boundary must keep replay ordering deterministic.
       verification: { executeCommands: false },
     });
 
-    runtime.authority.skills.activate(sessionId, "design");
+    runtime.authority.skills.activate(sessionId, "plan");
     runtime.authority.skills.complete(sessionId, {
       design_spec: "Keep implementation targets concrete enough for runtime scope enforcement.",
       execution_plan: [
@@ -3238,7 +3238,7 @@ The WAL boundary must keep replay ordering deterministic.
       verification: { executeCommands: false },
     });
 
-    runtime.authority.skills.activate(sessionId, "design");
+    runtime.authority.skills.activate(sessionId, "plan");
     runtime.authority.skills.complete(sessionId, {
       design_spec: "Keep QA tied to explicit planning evidence.",
       execution_plan: [
@@ -3330,7 +3330,7 @@ The WAL boundary must keep replay ordering deterministic.
       verification: { executeCommands: false },
     });
 
-    runtime.authority.skills.activate(sessionId, "design");
+    runtime.authority.skills.activate(sessionId, "plan");
     runtime.authority.skills.complete(sessionId, {
       design_spec: "Allow QA to rely on fresh runtime verification for required evidence closure.",
       execution_plan: [

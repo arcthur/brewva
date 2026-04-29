@@ -18,12 +18,9 @@ execution_hints:
     - lsp_find_references
     - ast_grep_search
     - ledger_query
-    - skill_complete
 references:
   - skills/project/shared/package-boundaries.md
   - skills/project/shared/migration-priority-matrix.md
-scripts:
-  - skills/project/scripts/check-skill-dod.sh
 consumes:
   - change_set
   - files_changed
@@ -32,7 +29,6 @@ consumes:
   - impact_map
   - risk_register
   - planning_posture
-requires: []
 ---
 
 # Brewva Review Overlay
@@ -45,12 +41,12 @@ Review Brewva changes against project invariants, not just generic code quality.
 
 Use this overlay when reviewing changes in the Brewva monorepo.
 
-## Overlay Scripts
+## Overlay Invariants
 
-Run base review scripts before Brewva-specific judgment:
+Apply base review invariants before Brewva-specific judgment:
 
-- `scripts/activate_lanes.py` — activates review lanes from change categories. Run before step 1 using the base review helper.
-- `scripts/synthesize_lane_dispositions.py` — synthesizes lane outcomes into a merge decision. Run after all lanes report using the base review helper.
+- `invariants/review-lane-rules.md` — activates review lanes from change
+  categories and synthesizes lane outcomes into a merge decision.
 
 Additionally check Brewva invariants: package boundaries, CLI branding, dist safety.
 

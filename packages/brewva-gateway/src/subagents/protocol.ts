@@ -142,7 +142,7 @@ function buildJsonShapeExample(input: {
           ],
           verificationPlan: [
             "Contract-test consult payload parsing.",
-            "Verify parent design skill still emits canonical planning artifacts.",
+            "Verify parent plan skill still emits canonical planning artifacts.",
           ],
         },
         null,

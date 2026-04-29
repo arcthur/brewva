@@ -74,7 +74,7 @@ describe("effect governance policy modes", () => {
       "custom_network_tool",
       customActionPolicy(["external_network"]),
     );
-    expect(runtime.authority.skills.activate(sessionId, "design").ok).toBe(true);
+    expect(runtime.authority.skills.activate(sessionId, "plan").ok).toBe(true);
 
     expect(runtime.inspect.tools.checkAccess(sessionId, "task_add_item").allowed).toBe(true);
     expect(runtime.inspect.events.query(sessionId, { type: "tool_contract_warning" })).toHaveLength(
@@ -103,7 +103,7 @@ describe("effect governance policy modes", () => {
       customActionPolicy(["external_network"]),
     );
     runtime.maintain.context.onTurnStart(sessionId, 1);
-    expect(runtime.authority.skills.activate(sessionId, "design").ok).toBe(true);
+    expect(runtime.authority.skills.activate(sessionId, "plan").ok).toBe(true);
     expect(runtime.inspect.tools.checkAccess(sessionId, "task_add_item").allowed).toBe(true);
     expect(runtime.inspect.events.query(sessionId, { type: "tool_contract_warning" })).toHaveLength(
       0,
@@ -134,7 +134,7 @@ describe("effect governance policy modes", () => {
     const runtime = createRuntime(workspace, {
       security: { mode: "permissive" },
       skillOverrides: {
-        design: {
+        plan: {
           effects: {
             deniedEffects: ["workspace_read"],
           },
@@ -143,7 +143,7 @@ describe("effect governance policy modes", () => {
     });
     const sessionId = "effect-governance-permissive-denied-1";
 
-    expect(runtime.authority.skills.activate(sessionId, "design").ok).toBe(true);
+    expect(runtime.authority.skills.activate(sessionId, "plan").ok).toBe(true);
 
     const blocked = runtime.inspect.tools.checkAccess(sessionId, "grep");
     expect(blocked.allowed).toBe(false);
@@ -160,7 +160,7 @@ describe("effect governance policy modes", () => {
       "custom_network_tool",
       customActionPolicy(["external_network"]),
     );
-    expect(runtime.authority.skills.activate(sessionId, "design").ok).toBe(true);
+    expect(runtime.authority.skills.activate(sessionId, "plan").ok).toBe(true);
 
     const blocked = runtime.inspect.tools.checkAccess(sessionId, "custom_network_tool");
     expect(blocked.allowed).toBe(false);
@@ -199,7 +199,7 @@ describe("effect governance policy modes", () => {
       "custom_network_tool",
       customActionPolicy(["external_network"]),
     );
-    expect(runtime.authority.skills.activate(sessionId, "design").ok).toBe(true);
+    expect(runtime.authority.skills.activate(sessionId, "plan").ok).toBe(true);
     expect(runtime.inspect.tools.checkAccess(sessionId, "task_add_item").allowed).toBe(true);
     const blocked = runtime.inspect.tools.checkAccess(sessionId, "custom_network_tool");
     expect(blocked.allowed).toBe(false);
@@ -211,7 +211,7 @@ describe("effect governance policy modes", () => {
     const runtime = createRuntime(workspace, { security: { mode: "strict" } });
     const sessionId = "effect-governance-unknown-tool-1";
 
-    expect(runtime.authority.skills.activate(sessionId, "design").ok).toBe(true);
+    expect(runtime.authority.skills.activate(sessionId, "plan").ok).toBe(true);
 
     const access = runtime.inspect.tools.checkAccess(sessionId, "custom_tool");
     expect(access.allowed).toBe(false);
@@ -228,7 +228,7 @@ describe("effect governance policy modes", () => {
     const sessionId = "effect-governance-standard-missing-policy-1";
 
     runtime.maintain.context.onTurnStart(sessionId, 1);
-    expect(runtime.authority.skills.activate(sessionId, "design").ok).toBe(true);
+    expect(runtime.authority.skills.activate(sessionId, "plan").ok).toBe(true);
 
     const started = runtime.authority.tools.start({
       sessionId,
@@ -264,7 +264,7 @@ describe("effect governance policy modes", () => {
       customActionPolicy(["local_exec"]),
     );
     try {
-      expect(runtime.authority.skills.activate(sessionId, "design").ok).toBe(true);
+      expect(runtime.authority.skills.activate(sessionId, "plan").ok).toBe(true);
       const blocked = runtime.inspect.tools.checkAccess(sessionId, "custom_exec_tool");
       expect(blocked.allowed).toBe(false);
       expect(blocked.reason).toContain("local_exec");
@@ -300,7 +300,7 @@ describe("effect governance policy modes", () => {
       customActionPolicy(["local_exec"]),
     );
     try {
-      expect(runtime.authority.skills.activate(sessionId, "design").ok).toBe(true);
+      expect(runtime.authority.skills.activate(sessionId, "plan").ok).toBe(true);
       const explained = runtime.inspect.tools.explainAccess({
         sessionId,
         toolName: "custom_exec_tool",
@@ -441,7 +441,7 @@ describe("effect governance policy modes", () => {
     const runtime = createRuntime(workspace, { security: { mode: "strict" } });
     const sessionId = "effect-governance-hint-metadata-1";
 
-    expect(runtime.authority.skills.activate(sessionId, "design").ok).toBe(true);
+    expect(runtime.authority.skills.activate(sessionId, "plan").ok).toBe(true);
 
     const first = runtime.inspect.tools.checkAccess(sessionId, "custom_query_tool");
     const second = runtime.inspect.tools.checkAccess(sessionId, "custom_query_tool");
@@ -453,7 +453,7 @@ describe("effect governance policy modes", () => {
     const events = runtime.inspect.events.query(sessionId, { type: "governance_metadata_missing" });
     expect(events).toHaveLength(1);
     expect(events[0]?.payload).toMatchObject({
-      skill: "design",
+      skill: "plan",
       toolName: "custom_query_tool",
       resolution: "hint",
     });
@@ -464,7 +464,7 @@ describe("effect governance policy modes", () => {
     const runtime = createRuntime(workspace, { security: { mode: "strict" } });
     const sessionId = "effect-governance-hint-effectful-1";
 
-    expect(runtime.authority.skills.activate(sessionId, "design").ok).toBe(true);
+    expect(runtime.authority.skills.activate(sessionId, "plan").ok).toBe(true);
 
     const access = runtime.inspect.tools.checkAccess(sessionId, "custom_command_runner");
 
@@ -475,7 +475,7 @@ describe("effect governance policy modes", () => {
     });
     expect(metadataEvents).toHaveLength(1);
     expect(metadataEvents[0]?.payload).toMatchObject({
-      skill: "design",
+      skill: "plan",
       toolName: "custom_command_runner",
       resolution: "hint",
     });
@@ -488,7 +488,7 @@ describe("effect governance policy modes", () => {
 
     const runtime = createRuntime(workspace, options);
     runtime.maintain.context.onTurnStart(sessionId, 1);
-    expect(runtime.authority.skills.activate(sessionId, "design").ok).toBe(true);
+    expect(runtime.authority.skills.activate(sessionId, "plan").ok).toBe(true);
     const initial = runtime.inspect.tools.checkAccess(sessionId, "custom_query_tool");
     expect(initial.allowed).toBe(false);
     expect(initial.reason).toContain("exact action policy");
@@ -519,8 +519,8 @@ describe("effect governance policy modes", () => {
       customActionPolicy(["local_exec"]),
     );
     try {
-      expect(runtimeA.authority.skills.activate("runtime-a", "design").ok).toBe(true);
-      expect(runtimeB.authority.skills.activate("runtime-b", "design").ok).toBe(true);
+      expect(runtimeA.authority.skills.activate("runtime-a", "plan").ok).toBe(true);
+      expect(runtimeB.authority.skills.activate("runtime-b", "plan").ok).toBe(true);
 
       const blocked = runtimeA.inspect.tools.checkAccess("runtime-a", "custom_remote_tool");
       const warned = runtimeB.inspect.tools.checkAccess("runtime-b", "custom_remote_tool");
@@ -905,7 +905,7 @@ describe("resource lease negotiation", () => {
     const runtime = createRuntime(workspace, {
       security: { mode: "strict" },
       skillOverrides: {
-        design: {
+        plan: {
           resources: {
             defaultLease: { maxToolCalls: 1, maxTokens: 100000 },
             hardCeiling: { maxToolCalls: 2, maxTokens: 100000 },
@@ -919,12 +919,12 @@ describe("resource lease negotiation", () => {
       "custom_network_tool",
       customActionPolicy(["external_network"]),
     );
-    expect(runtime.authority.skills.activate(sessionId, "design").ok).toBe(true);
+    expect(runtime.authority.skills.activate(sessionId, "plan").ok).toBe(true);
     expect(runtime.inspect.tools.checkAccess(sessionId, "task_add_item").allowed).toBe(true);
     expect(runtime.inspect.tools.checkAccess(sessionId, "custom_network_tool").allowed).toBe(false);
 
     const lease = runtime.authority.tools.requestResourceLease(sessionId, {
-      reason: "Need one more read call while staying within the design skill boundary.",
+      reason: "Need one more read call while staying within the plan skill boundary.",
       budget: { maxToolCalls: 1 },
       ttlTurns: 2,
     });
@@ -939,7 +939,7 @@ describe("resource lease negotiation", () => {
     const runtime = createRuntime(workspace, {
       security: { mode: "strict" },
       skillOverrides: {
-        design: {
+        plan: {
           resources: {
             defaultLease: { maxToolCalls: 1, maxTokens: 100000 },
             hardCeiling: { maxToolCalls: 2, maxTokens: 100000 },
@@ -949,7 +949,7 @@ describe("resource lease negotiation", () => {
     });
     const sessionId = "resource-lease-budget-1";
 
-    expect(runtime.authority.skills.activate(sessionId, "design").ok).toBe(true);
+    expect(runtime.authority.skills.activate(sessionId, "plan").ok).toBe(true);
     runtime.authority.tools.markCall(sessionId, "read");
     expect(runtime.inspect.tools.checkAccess(sessionId, "grep").allowed).toBe(false);
 
@@ -967,7 +967,7 @@ describe("resource lease negotiation", () => {
     const runtime = createRuntime(workspace, {
       security: { mode: "strict" },
       skillOverrides: {
-        design: {
+        plan: {
           resources: {
             defaultLease: { maxToolCalls: 1, maxTokens: 100000 },
             hardCeiling: { maxToolCalls: 2, maxTokens: 100000 },
@@ -978,7 +978,7 @@ describe("resource lease negotiation", () => {
     const sessionId = "resource-lease-cancel-1";
     runtime.maintain.context.onTurnStart(sessionId, 1);
 
-    expect(runtime.authority.skills.activate(sessionId, "design").ok).toBe(true);
+    expect(runtime.authority.skills.activate(sessionId, "plan").ok).toBe(true);
     const granted = runtime.authority.tools.requestResourceLease(sessionId, {
       reason: "Need one additional read budget while wrapping the review.",
       budget: { maxToolCalls: 1 },
@@ -1022,7 +1022,7 @@ describe("resource lease negotiation", () => {
     const runtime = createRuntime(workspace, {
       security: { mode: "strict" },
       skillOverrides: {
-        design: {
+        plan: {
           resources: {
             defaultLease: { maxToolCalls: 1, maxTokens: 100000 },
             hardCeiling: { maxToolCalls: 1, maxTokens: 100000 },
@@ -1032,7 +1032,7 @@ describe("resource lease negotiation", () => {
     });
     const sessionId = "resource-lease-no-headroom-1";
 
-    expect(runtime.authority.skills.activate(sessionId, "design").ok).toBe(true);
+    expect(runtime.authority.skills.activate(sessionId, "plan").ok).toBe(true);
     const lease = runtime.authority.tools.requestResourceLease(sessionId, {
       reason: "Need one more call.",
       budget: { maxToolCalls: 1 },

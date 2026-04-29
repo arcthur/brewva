@@ -777,7 +777,7 @@ events and session state:
   - explicit repair-required contract failures with latest validation issues
 - `skill_contract_failed`
   - terminal contract failure after repair exhaustion
-  - discovery, strategy-review, design plus planning handoff artifacts
+  - discovery, strategy, design plus planning handoff artifacts
     (`design_spec`, `execution_plan`, `risk_register`,
     `implementation_targets`), implementation, review, QA, ship, and retro
     artifacts

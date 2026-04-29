@@ -101,4 +101,4 @@ Why:
 - Do not encode subjective states such as "looks done" or "seems stable".
 - Do not use `any_of` to hide ambiguity in the success definition.
 - Do not use `max_runs` as the only convergence definition unless the goal is explicitly time-boxed.
-- If no observable predicate fits the goal, route to `design` and redesign the contract first.
+- If no observable predicate fits the goal, route to `plan` and redesign the contract first.

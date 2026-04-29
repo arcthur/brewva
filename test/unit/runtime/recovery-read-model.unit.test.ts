@@ -51,7 +51,7 @@ describe("recovery read model", () => {
         timestamp: 1,
         turn: 1,
         payload: {
-          skillName: "design",
+          skillName: "plan",
         },
       },
     ]);

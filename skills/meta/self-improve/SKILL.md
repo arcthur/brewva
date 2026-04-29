@@ -56,11 +56,11 @@ execution_hints:
     - task_view_state
     - exec
     - process
-    - skill_complete
 references:
-  - skills/meta/skill-authoring/references/authored-behavior.md
   - references/promotion-targets.md
   - references/stuck-signals.md
+  - references/example.md
+  - references/rationalizations.md
 scripts:
   - scripts/activator.sh
   - scripts/error-detector.sh
@@ -74,7 +74,6 @@ consumes:
   - ship_report
   - runtime_trace
   - artifact_findings
-requires: []
 ---
 
 # Self Improve
@@ -175,65 +174,11 @@ If you catch yourself thinking any of these, STOP and return to Phase 1:
 
 ## Common Rationalizations
 
-| Excuse                                              | Reality                                                                   |
-| --------------------------------------------------- | ------------------------------------------------------------------------- |
-| "One bad incident proves a systemic flaw"           | One incident is a data point, not a pattern. Require repetition.          |
-| "Broad rewrite prevents future failures"            | Narrow, evidence-scoped fixes validate faster and break less.             |
-| "The pattern is obvious from context"               | Obvious patterns still need traceable evidence anchors.                   |
-| "Learning work can interrupt incident response"     | Active incidents need fixes, not retrospectives. Sequence matters.        |
-| "Iteration-fact events are just like skill outputs" | Fact events have different semantics — do not treat them interchangeably. |
+See `references/rationalizations.md` for the anti-pattern table.
 
 ## Concrete Example
 
-Input: "The same bounded loop has stalled 3 times on guard-check regression. Use
-iteration facts and review artifacts to decide what should change."
-
-Output:
-
-```json
-{
-  "improvement_hypothesis": {
-    "pattern": "Guard-check regression after metric improvement",
-    "occurrences": 3,
-    "evidence": [
-      {
-        "source": "goal-loop:perf-opt",
-        "iteration": 4,
-        "fact": "guard_regressed",
-        "metric": "p95_latency"
-      },
-      {
-        "source": "goal-loop:perf-opt",
-        "iteration": 7,
-        "fact": "guard_regressed",
-        "metric": "p95_latency"
-      },
-      {
-        "source": "goal-loop:perf-opt",
-        "iteration": 11,
-        "fact": "guard_regressed",
-        "metric": "p95_latency"
-      }
-    ],
-    "root_cause": "Optimization steps do not run guard checks before committing, only after. Regressions are detected one iteration late."
-  },
-  "learning_backlog": [
-    {
-      "rank": 1,
-      "fix": "Add pre-commit guard check to goal-loop optimization phase",
-      "effort": "small",
-      "evidence_refs": ["iter-4", "iter-7", "iter-11"]
-    },
-    {
-      "rank": 2,
-      "fix": "Add guard-regression counter to loop exit criteria",
-      "effort": "medium",
-      "evidence_refs": ["iter-7", "iter-11"]
-    }
-  ],
-  "improvement_plan": "Add pre-commit guard check in goal-loop skill Phase 3. Target home: skills/domain/goal-loop/SKILL.md. Falsification: if next 3 iterations show zero guard regressions, the fix is validated."
-}
-```
+See `references/example.md` for the grounded example output shape.
 
 ## Handoff Expectations
 
@@ -250,5 +195,3 @@ Output:
 - No traceable evidence anchors (fact references, report IDs, artifact paths).
 - The real need is immediate debugging or implementation, not learning.
 - Active incident response is in progress and the operator has not requested retrospective.
-
-Violating the letter is violating the spirit.

@@ -1,14 +1,14 @@
 ---
 name: discovery
-description: Reframe a request into the real problem, user pain, scope wedge, and
-  design-ready starting point before execution planning begins.
+description: Reframe an existing request into the real problem, user pain, scope
+  wedge, and plan-ready starting point before execution planning begins.
 stability: stable
 selection:
-  when_to_use: Use when the real problem, user pain, or scope wedge is still unclear and the next step should be reframing rather than execution.
+  when_to_use: Use when an existing product, repository, or operator request has unclear pain or scope and needs reframing rather than idea diagnosis or execution.
   examples:
     - Clarify the real problem behind this request.
     - Help me narrow the scope and non-goals first.
-    - Turn this rough idea into a crisp wedge.
+    - Turn this existing product request into a crisp wedge.
   phases:
     - align
 intent:
@@ -36,7 +36,6 @@ intent:
       min_length: 18
     open_questions:
       kind: json
-      min_items: 0
 effects:
   allowed_effects:
     - workspace_read
@@ -58,13 +57,16 @@ execution_hints:
   fallback_tools:
     - glob
     - ledger_query
-    - skill_complete
 references:
-  - skills/meta/skill-authoring/references/authored-behavior.md
   - references/framing-patterns.md
+  - references/example.md
+  - references/rationalizations.md
 consumes:
   - repository_snapshot
-requires: []
+  - office_hours_brief
+  - premise_challenge
+  - approach_options
+  - next_assignment
 ---
 
 # Discovery Skill
@@ -72,37 +74,43 @@ requires: []
 ## The Iron Law
 
 ```
-NO DESIGN WITHOUT A CLEAR PROBLEM FRAME FIRST
+NO PLAN WITHOUT A CLEAR PROBLEM FRAME FIRST
 ```
-
-Violating the letter of this rule is violating the spirit of this rule.
 
 ## When to Use / When NOT to Use
 
 Use when:
 
-- the user has an idea but the real problem is still fuzzy
+- the user has an existing repo, product, or operator request but the real
+  problem is still fuzzy
 - product pain, wedge, or non-goals are unclear
 - the next step should be better framing, not execution planning
 
 Do NOT use when:
 
+- the user brings a new product, startup, side-project, hackathon, or
+  "worth building" idea before a request exists (use `office-hours`)
 - the request is already a crisp, execution-ready problem statement
 - the real blocker is repository understanding, not problem framing (use `repository-analysis`)
-- the user is asking for implementation help on a well-defined task (use `design`)
+- the user is asking for implementation help on a well-defined task (use `plan`)
+- the wedge is clear and the remaining question is timing, sequencing, or scope
+  posture (use `strategy`)
 
 ## Workflow
 
 ### Question Escalation Rule
 
 - If the current turn is blocked on missing operator or user input, use the `question` tool now.
-- Use `open_questions` only for unresolved items that still matter for downstream design quality but do not block the current turn.
+- Use `open_questions` only for unresolved items that still matter for downstream plan quality but do not block the current turn.
 - Do not emit `open_questions` just to satisfy formatting. An empty list is valid when no non-blocking questions remain.
 
 ### Phase 1: Reconstruct the real problem
 
 Identify the user pain, current workaround, and why the stated request may be a proxy for a deeper need.
 
+**If the prompt is a new idea whose worth, audience, or demand is not yet
+diagnosed**: Stop and hand off to `office-hours`. Do not turn idea diagnosis
+into product framing prematurely.
 **If no concrete pain or workaround can be inferred and the current turn cannot proceed without operator input**: Use the `question` tool. Do not invent a problem frame from thin air.
 **If no concrete pain or workaround can be inferred but the current turn can still hand off useful framing context**: Record the gap in `open_questions`. Do not invent a problem frame from thin air.
 **If pain is clear**: Proceed to Phase 2.
@@ -114,7 +122,7 @@ Separate core need from tempting overreach. Identify the narrowest credible wedg
 **If the narrowest wedge is still too broad to act on**: Return to Phase 1 with sharper questions.
 **If wedge is bounded**: Proceed to Phase 3.
 
-### Phase 3: Emit design-ready artifacts
+### Phase 3: Emit plan-ready artifacts
 
 Produce `problem_frame`, `user_pains`, `scope_recommendation`, `design_seed`, and `open_questions`.
 
@@ -128,6 +136,8 @@ Produce `problem_frame`, `user_pains`, `scope_recommendation`, `design_seed`, an
 - What is the narrowest wedge that would still change user reality?
 - Which tempting scope expansion hides uncertainty rather than leverage?
 - Is the stated request a proxy for a different, deeper need?
+- Is this already an existing request, or is the upstream idea still untested
+  enough to need `office-hours` first?
 
 ## Red Flags — STOP
 
@@ -137,65 +147,32 @@ If you catch yourself thinking any of these, STOP and return to Phase 1:
 - "I'll restate the request in cleaner prose — that counts as framing"
 - "Let me just expand the scope to cover everything"
 - "I don't see a pain, but I'll assume one"
-- "Discovery is taking too long, let me jump to design"
+- "Discovery is taking too long, let me jump to plan"
+- "This new idea sounds promising, so I'll frame it as an existing request"
 
 ## Common Rationalizations
 
-| Excuse                                           | Reality                                                                                        |
-| ------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
-| "The request is clear enough to start designing" | If you cannot name the user pain separately from the feature label, the problem is not framed. |
-| "Scope will sort itself out during design"       | Unframed scope creates churn in design and review. Frame it now.                               |
-| "I'll just do a light reframe and move on"       | A reframe that restates the request in cleaner prose is not discovery.                         |
-| "The user wants speed, not a framing exercise"   | A wrong frame wastes more time than a clear one.                                               |
+See `references/rationalizations.md` for the anti-pattern table.
 
 ## Concrete Example
 
-Input: "I want to build a daily briefing app for my calendar."
-
-Output:
-
-```json
-{
-  "problem_frame": "Morning calendar review is manual and slow. Users open 2-3 apps to understand their day, miss conflicts, and lack a single surface that prioritizes what matters. The real problem is decision-ready daily context, not a new app.",
-  "user_pains": [
-    {
-      "pain": "Checking calendar, email, and tasks separately every morning",
-      "severity": "high",
-      "workaround": "Manual tab-switching routine that takes 10-15 minutes"
-    },
-    {
-      "pain": "Missing scheduling conflicts until they happen",
-      "severity": "medium",
-      "workaround": "None — discovered reactively"
-    }
-  ],
-  "scope_recommendation": "Build now: a read-only morning digest that pulls calendar events and flags conflicts. Defer: task integration, email triage, AI summarization. Non-goals: full calendar replacement, meeting scheduling.",
-  "design_seed": "Single daily digest endpoint that reads calendar events for the next 12 hours, detects time overlaps, and renders a priority-ordered briefing. No write operations in v1.",
-  "open_questions": [
-    {
-      "question": "Which calendar provider(s) must be supported in the first wedge?",
-      "why_it_matters": "Provider choice determines auth complexity and time-to-first-value"
-    },
-    {
-      "question": "Is the briefing push-based (notification) or pull-based (open app)?",
-      "why_it_matters": "Push requires background scheduling infrastructure that may be premature"
-    }
-  ]
-}
-```
+See `references/example.md` for the grounded example output shape.
 
 ## Handoff Expectations
 
-- `problem_frame` gives `design` a clean problem statement, not a raw brainstorm transcript.
+- `problem_frame` gives `plan` a clean problem statement, not a raw brainstorm transcript.
+- `office_hours_brief`, when present, should be converted into a plan-ready
+  product/request frame rather than repeated as founder or builder language.
 - `user_pains` are concrete enough that downstream skills can judge tradeoffs against real user friction.
 - `scope_recommendation` makes the recommended wedge and deferred scope explicit.
 - `design_seed` is the shortest useful handoff into execution planning.
-- `open_questions` include only non-blocking questions that still affect design quality, not generic curiosity.
+- `open_questions` include only non-blocking questions that still affect plan quality, not generic curiosity.
 - Blocking questions belong in the `question` tool, not in `open_questions`.
 
 ## Stop Conditions
 
-- The request is already framed well enough for direct design work.
+- The request is already framed well enough for direct planning work.
+- The request is upstream idea diagnosis rather than existing request framing.
 - No meaningful user or operator pain can be inferred from available context.
 - The real blocker is repository understanding, not problem framing.
 - Discovery is circling without producing a sharper frame after two passes.

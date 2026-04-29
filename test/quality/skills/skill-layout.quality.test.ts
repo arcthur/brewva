@@ -1,8 +1,10 @@
 import { describe, expect, it } from "bun:test";
-import { readdirSync, statSync } from "node:fs";
+import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { parseSkillDocument, type SkillCategory } from "@brewva/brewva-runtime";
 
 const LOADABLE_CATEGORIES = ["core", "domain", "operator", "meta", "internal"] as const;
+const MAX_SKILL_BODY_LINES = 150;
 
 function listMissingSkillDocuments(root: string): string[] {
   const missing: string[] = [];
@@ -33,10 +35,198 @@ function listMissingSkillDocuments(root: string): string[] {
   return missing.toSorted();
 }
 
+function collectSkillFiles(root: string): string[] {
+  const files: string[] = [];
+
+  for (const category of [...LOADABLE_CATEGORIES, "project/overlays"] as const) {
+    const categoryDir = join(root, category);
+    let entries: Array<import("node:fs").Dirent>;
+    try {
+      entries = readdirSync(categoryDir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const skillPath = join(categoryDir, entry.name, "SKILL.md");
+      try {
+        if (statSync(skillPath).isFile()) {
+          files.push(skillPath);
+        }
+      } catch {
+        // Ignore non-skill folders.
+      }
+    }
+  }
+
+  return files.toSorted();
+}
+
+function inferCategory(skillFile: string): SkillCategory {
+  if (skillFile.includes("/skills/core/")) return "core";
+  if (skillFile.includes("/skills/domain/")) return "domain";
+  if (skillFile.includes("/skills/operator/")) return "operator";
+  if (skillFile.includes("/skills/meta/")) return "meta";
+  if (skillFile.includes("/skills/internal/")) return "internal";
+  if (skillFile.includes("/skills/project/overlays/")) return "overlay";
+  throw new Error(`Unsupported skill path: ${skillFile}`);
+}
+
+function sectionBodyLines(content: string, heading: string): string[] {
+  const lines = content.split("\n");
+  const start = lines.findIndex((line) => line.trim() === heading);
+  if (start < 0) return [];
+  let end = lines.length;
+  for (let index = start + 1; index < lines.length; index += 1) {
+    if (/^##\s+/.test(lines[index] ?? "")) {
+      end = index;
+      break;
+    }
+  }
+  return lines.slice(start + 1, end).filter((line) => line.trim().length > 0);
+}
+
+function normalizeRoutingText(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
 describe("skill layout quality", () => {
   it("keeps every loadable skill directory anchored by SKILL.md", () => {
     const repoRoot = resolve(import.meta.dirname, "../../..");
     const missing = listMissingSkillDocuments(resolve(repoRoot, "skills"));
     expect(missing, `Directories missing SKILL.md: ${missing.join(", ")}`).toEqual([]);
+  });
+
+  it("does not list lifecycle completion as a fallback tool", () => {
+    const repoRoot = resolve(import.meta.dirname, "../../..");
+    const skillFiles = collectSkillFiles(resolve(repoRoot, "skills"));
+
+    for (const skillFile of skillFiles) {
+      const parsed = parseSkillDocument(skillFile, inferCategory(skillFile));
+      const fallbackTools = parsed.contract.executionHints?.fallbackTools ?? [];
+      expect(
+        fallbackTools,
+        `${skillFile} should not list skill_complete as fallback`,
+      ).not.toContain("skill_complete");
+    }
+  });
+
+  it("keeps executable scripts aligned with local_exec permission", () => {
+    const repoRoot = resolve(import.meta.dirname, "../../..");
+    const skillFiles = collectSkillFiles(resolve(repoRoot, "skills"));
+
+    for (const skillFile of skillFiles) {
+      const parsed = parseSkillDocument(skillFile, inferCategory(skillFile));
+      if (parsed.resources.scripts.length === 0) continue;
+
+      const allowedEffects = parsed.contract.effects?.allowedEffects ?? [];
+      expect(
+        allowedEffects,
+        `${skillFile} declares scripts but does not allow local_exec`,
+      ).toContain("local_exec");
+    }
+  });
+
+  it("omits empty requires arrays from authored skill frontmatter", () => {
+    const repoRoot = resolve(import.meta.dirname, "../../..");
+    const skillFiles = collectSkillFiles(resolve(repoRoot, "skills"));
+
+    for (const skillFile of skillFiles) {
+      const content = readFileSync(skillFile, "utf8");
+      expect(content, `${skillFile} should omit empty requires`).not.toMatch(
+        /^requires:\s*\[\]\s*$/m,
+      );
+    }
+  });
+
+  it("keeps authored skill bodies within the progressive-disclosure line cap", () => {
+    const repoRoot = resolve(import.meta.dirname, "../../..");
+    const skillFiles = collectSkillFiles(resolve(repoRoot, "skills"));
+
+    for (const skillFile of skillFiles) {
+      const parsed = parseSkillDocument(skillFile, inferCategory(skillFile));
+      const bodyLines = parsed.markdown.split("\n").length;
+      expect(
+        bodyLines,
+        `${skillFile} body has ${bodyLines} lines; move examples, tables, or protocol details to references/invariants/scripts`,
+      ).toBeLessThanOrEqual(MAX_SKILL_BODY_LINES);
+    }
+  });
+
+  it("keeps catalog descriptions distinct from routing triggers", () => {
+    const repoRoot = resolve(import.meta.dirname, "../../..");
+    const skillFiles = collectSkillFiles(resolve(repoRoot, "skills"));
+
+    for (const skillFile of skillFiles) {
+      const parsed = parseSkillDocument(skillFile, inferCategory(skillFile));
+      const whenToUse = parsed.contract.selection?.whenToUse;
+      if (!whenToUse) continue;
+
+      expect(
+        parsed.description,
+        `${skillFile} description should summarize catalog identity, not start with routing phrasing`,
+      ).not.toMatch(/^Use when\b/i);
+      expect(
+        normalizeRoutingText(parsed.description),
+        `${skillFile} description should not duplicate selection.when_to_use`,
+      ).not.toBe(normalizeRoutingText(whenToUse));
+    }
+  });
+
+  it("keeps heavyweight examples and rationalization tables in references", () => {
+    const repoRoot = resolve(import.meta.dirname, "../../..");
+    const skillFiles = collectSkillFiles(resolve(repoRoot, "skills")).filter(
+      (skillFile) => !skillFile.includes("/skills/project/overlays/"),
+    );
+
+    for (const skillFile of skillFiles) {
+      const content = readFileSync(skillFile, "utf8");
+      const concreteExample = sectionBodyLines(content, "## Concrete Example");
+      if (concreteExample.length > 0) {
+        expect(concreteExample, `${skillFile} should link to extracted example`).toEqual([
+          "See `references/example.md` for the grounded example output shape.",
+        ]);
+      }
+
+      const rationalizations = sectionBodyLines(content, "## Common Rationalizations");
+      if (rationalizations.length > 0) {
+        expect(rationalizations, `${skillFile} should link to extracted rationalizations`).toEqual([
+          "See `references/rationalizations.md` for the anti-pattern table.",
+        ]);
+      }
+    }
+  });
+
+  it("keeps shared authored behavior as runtime-inherited guidance", () => {
+    const repoRoot = resolve(import.meta.dirname, "../../..");
+    const skillFiles = collectSkillFiles(resolve(repoRoot, "skills"));
+    const allowedSource = resolve(
+      repoRoot,
+      "skills/meta/skill-authoring/references/authored-behavior.md",
+    );
+
+    for (const skillFile of skillFiles) {
+      const content = readFileSync(skillFile, "utf8");
+      if (skillFile.endsWith("/skills/meta/skill-authoring/SKILL.md")) {
+        continue;
+      }
+      expect(
+        content,
+        `${skillFile} should not explicitly reference authored-behavior`,
+      ).not.toContain("authored-behavior.md");
+    }
+
+    const occurrences = collectSkillFiles(resolve(repoRoot, "skills")).flatMap((skillFile) => {
+      const content = readFileSync(skillFile, "utf8");
+      return content.includes("Violating the letter") ? [skillFile] : [];
+    });
+    const referenceContent = readFileSync(allowedSource, "utf8");
+
+    expect(occurrences).toEqual([]);
+    expect(referenceContent).toContain("Violating the letter");
   });
 });

@@ -50,7 +50,7 @@ describe("operator question collection", () => {
       createdAt: Date.now(),
       sourceKind: "skill",
       sourceEventId: "event-1",
-      sourceLabel: "skill:design",
+      sourceLabel: "skill:plan",
       questions: [
         {
           questionId: "request-1:question:1",

@@ -46,6 +46,11 @@ const FRONTEND_KEYWORDS = [
 const DEEP_REASONING_KEYWORDS = [
   "architecture",
   "design",
+  "office hours",
+  "startup",
+  "demand",
+  "wedge",
+  "premise",
   "strategy",
   "tradeoff",
   "root cause",
@@ -149,7 +154,7 @@ const ROUTING_POLICIES: readonly DelegationRoutingPolicy[] = [
       }
       return (
         keywordMatches +
-        (effectiveSkillName === "design" || effectiveSkillName === "frontend" ? 2 : 0)
+        (effectiveSkillName === "plan" || effectiveSkillName === "frontend" ? 2 : 0)
       );
     },
   },
@@ -159,7 +164,8 @@ const ROUTING_POLICIES: readonly DelegationRoutingPolicy[] = [
     candidateModels: ["openai/gpt-5.5:high", "openai/gpt-5.4-mini:high"],
     score({ target, keywordText, effectiveSkillName }) {
       if (
-        effectiveSkillName === "design" ||
+        effectiveSkillName === "plan" ||
+        effectiveSkillName === "office-hours" ||
         target.consultKind === "design" ||
         target.consultKind === "diagnose"
       ) {

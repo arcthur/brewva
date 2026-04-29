@@ -22,9 +22,35 @@ intent:
       min_words: 3
       min_length: 18
     ui_spec:
-      kind: text
-      min_words: 4
-      min_length: 24
+      kind: json
+      required_fields:
+        - layout
+        - hierarchy
+        - state_behavior
+        - density
+        - breakpoints
+      field_contracts:
+        layout:
+          kind: text
+          min_words: 4
+          min_length: 24
+        hierarchy:
+          kind: text
+          min_words: 4
+          min_length: 24
+        state_behavior:
+          kind: json
+          required_fields:
+            - loading
+            - empty
+            - error
+        density:
+          kind: text
+          min_words: 3
+          min_length: 18
+        breakpoints:
+          kind: json
+          min_items: 1
 effects:
   allowed_effects:
     - workspace_read
@@ -45,15 +71,14 @@ execution_hints:
   fallback_tools:
     - look_at
     - grep
-    - skill_complete
 references:
-  - skills/meta/skill-authoring/references/authored-behavior.md
   - references/bento-paradigm.md
   - references/creative-arsenal.md
+  - references/example.md
+  - references/rationalizations.md
 consumes:
   - design_spec
   - browser_observations
-requires: []
 ---
 
 # Frontend Design Skill
@@ -80,6 +105,21 @@ NO UI SPEC WITHOUT STATE BEHAVIOR AND HIERARCHY
 
 ## Workflow
 
+### Phase 0: Lock direction and evidence
+
+Name the visual direction in one sentence before specifying layout. The
+direction must be tied to the user moment, not to generic adjectives.
+
+Check source evidence in this order:
+
+1. Existing app screens, components, tokens, and nearby product surfaces.
+2. Source repository examples or fixtures that show how this product already
+   expresses hierarchy, density, empty states, and controls.
+3. Provided screenshots or `browser_observations`.
+
+**If no visual evidence exists and the surface is not greenfield**: Stop or
+request screenshot/context handoff. Do not invent a detached style.
+
 ### Phase 1: Read the product context
 
 Identify the user goal, surface, interaction moment, and design system
@@ -100,7 +140,23 @@ new visual identity without justification.
 **If greenfield**: State the visual thesis and the product feeling it serves.
 Proceed to Phase 3.
 
-### Phase 3: Specify state behavior and implementation detail
+### Phase 3: Iterate against visual evidence
+
+Compare the direction against screenshot or source-repo evidence. Call out what
+must remain, what can change, and what would look imported from another app.
+
+Run an aesthetic review before writing final artifacts:
+
+- first-second hierarchy is obvious
+- spacing, density, and contrast match the product surface
+- controls look usable, not decorative
+- mobile and desktop breakpoints preserve the same priority order
+- no generic "AI app" tropes, ornamental gradients, or card grids unless the
+  product already uses them for a reason
+
+**If the direction fails this review**: Revise the direction before proceeding.
+
+### Phase 4: Specify state behavior and implementation detail
 
 For every significant view, specify: loading, empty, error, success, and
 any intermediate transition states. Define motion intent or explicitly omit it.
@@ -108,9 +164,9 @@ any intermediate transition states. Define motion intent or explicitly omit it.
 **If a state or breakpoint behavior cannot be specified without more product
 input**: Record the gap and proceed with what is concrete. Do not fill gaps
 with generic patterns.
-**If complete**: Proceed to Phase 4.
+**If complete**: Proceed to Phase 5.
 
-### Phase 4: Emit design artifacts
+### Phase 5: Emit design artifacts
 
 Produce:
 
@@ -130,6 +186,9 @@ Law applies.
 - What existing product language must remain intact so the output does not
   feel imported from another app?
 - What implementation detail must be specified now to prevent generic drift?
+- What screenshot or source-repo evidence proves this direction belongs here?
+- Would this still look intentional with real data, empty data, and narrow
+  viewport constraints?
 
 ## Red Flags — STOP
 
@@ -140,52 +199,16 @@ If you catch yourself thinking any of these, STOP and return to Phase 1:
 - "We can figure out the states during implementation"
 - "This follows common UI patterns"
 - "Nice polish pass at the end"
+- "I do not need a screenshot; the layout is obvious"
+- "A generic SaaS dashboard pattern is close enough"
 
 ## Common Rationalizations
 
-| Excuse                           | Reality                                                                                                 |
-| -------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| "States can be added later"      | Missing state specs are the top cause of generic fallback during implementation. Specify them now.      |
-| "The design system handles this" | Design systems handle components, not product moments. The hierarchy and behavior still need direction. |
-| "Keep it clean and minimal"      | "Clean" is not a direction. Name what is visible, what is hidden, and why.                              |
-| "Standard pattern works here"    | Standard patterns are defaults, not decisions. State why this pattern fits this moment.                 |
-| "Polish pass later"              | Polish language defers decisions. Specify the concrete visual and interaction behavior now.             |
+See `references/rationalizations.md` for the anti-pattern table.
 
 ## Concrete Example
 
-Input: "Define the v2 catalog page UI for skills taxonomy and routing profiles."
-
-Output:
-
-```
-ui_direction:
-  The catalog is a workspace tool, not a storefront. Visual weight goes to the
-  skill name, stability badge, and phase tags — the three things an operator
-  scans when choosing a skill. Routing profiles are secondary metadata, shown
-  inline but never competing with the skill identity. The page should feel
-  dense and scannable, like a well-organized reference table, not a marketing
-  grid. No cards. Use a compact list with inline expansion for details.
-
-ui_spec:
-  layout: single-column compact list, 720px max content width
-  primary_row: [stability_badge, skill_name, phase_tags] — left-aligned,
-    single line, 14px/600 name, 12px/400 tags
-  expansion: click row to expand inline panel showing description,
-    output_contracts summary, routing_profile, and references
-  states:
-    loading: skeleton rows matching primary_row shape, 8 rows
-    empty: centered text "No skills match the current filter" with
-      reset-filter link
-    error: inline banner above list, "Failed to load catalog — retry" with
-      action button
-    filtered: active filter chips above list with clear-all action
-  breakpoints:
-    <640px: phase_tags wrap below skill_name, stability_badge stays inline
-    >=1024px: optional second column for routing_profile summary without
-      expansion
-  motion: expand/collapse is 150ms ease-out height transition, no other
-    animation
-```
+See `references/example.md` for the grounded example output shape.
 
 ## Handoff Expectations
 
@@ -193,6 +216,8 @@ ui_spec:
   product feeling implementation must preserve. It is not a mood board.
 - `ui_spec` should be concrete enough that implementation can build the screen
   or component without reinventing layout, hierarchy, or state transitions.
+- The handoff should state the locked direction, screenshot/source evidence
+  used, and any aesthetic risks implementation must preserve or revisit.
 
 ## Stop Conditions
 
@@ -201,5 +226,3 @@ ui_spec:
 - The real blocker is missing product or repository context, not design
 - The spec is complete: hierarchy, states, density, and breakpoints are all
   specified
-
-Violating the letter of these rules is violating the spirit of these rules.

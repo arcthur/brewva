@@ -24,11 +24,9 @@ execution_hints:
     - tape_info
     - tape_search
     - cost_view
-    - skill_complete
 references:
   - skills/project/shared/runtime-artifacts.md
 consumes: []
-requires: []
 ---
 
 # Brewva Runtime Forensics Overlay

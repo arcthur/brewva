@@ -1,7 +1,7 @@
 ---
 name: telegram
-description: Use when output is delivered in Telegram and message structure, interaction
-  payloads, or CTA design must be channel-native.
+description: Telegram-native delivery guidance for message structure,
+  interaction payloads, and CTAs.
 stability: stable
 selection:
   when_to_use: Use when output is delivered in Telegram and message structure, interaction payloads, or CTA design must be channel-native.
@@ -45,15 +45,14 @@ execution_hints:
   fallback_tools:
     - grep
     - look_at
-    - skill_complete
-references:
-  - skills/meta/skill-authoring/references/authored-behavior.md
 consumes:
   - structured_payload
   - review_report
-requires: []
-scripts:
-  - scripts/validate_telegram_payload.py
+references:
+  - references/example.md
+  - references/rationalizations.md
+invariants:
+  - invariants/payload-constraints.md
 ---
 
 # Telegram Skill
@@ -96,7 +95,7 @@ Design text, buttons, and interaction constraints together as one unit.
 
 ### Phase 3: Validate constraints
 
-Run `scripts/validate_telegram_payload.py` with the draft payload on stdin.
+Apply `invariants/payload-constraints.md` to the draft payload.
 
 **If `valid` is false**: Fix every error before proceeding. Do not ship invalid payloads.
 **If warnings exist**: Evaluate each. Near-limit text is a design smell.
@@ -109,9 +108,11 @@ Produce:
 - `telegram_response_plan`: tone, density, CTA strategy, and intended user action
 - `telegram_payload`: channel-ready JSON structure validated against API constraints
 
-## Scripts
+## Invariants
 
-- `scripts/validate_telegram_payload.py` — Input: JSON on stdin with `text`, `buttons`, `parse_mode`. Output: JSON with `valid`, `errors`, `warnings`. Run at Phase 3 before emitting the final payload.
+- `invariants/payload-constraints.md` — Input: JSON with `text`, `buttons`,
+  `parse_mode`. Output: JSON with `valid`, `errors`, `warnings`. Apply at
+  Phase 3 before emitting the final payload.
 
 ## Decision Protocol
 
@@ -133,45 +134,11 @@ If you catch yourself thinking any of these, STOP and return to Phase 1:
 
 ## Common Rationalizations
 
-| Excuse                                     | Reality                                                                               |
-| ------------------------------------------ | ------------------------------------------------------------------------------------- |
-| "Slightly over 4096 chars is fine"         | Telegram silently drops or truncates. There is no graceful overflow.                  |
-| "More buttons means more choice"           | More buttons means more cognitive load on a small screen. Fewer, clearer.             |
-| "Skip validation for simple messages"      | Simple messages have constraints too. Validation is fast. Run it.                     |
-| "Copy this web UI pattern"                 | Web patterns assume mouse, large screen, and sustained attention. Telegram has none.  |
-| "Confirmation is overkill for this action" | If the action mutates state, the user deserves to see what happens before it happens. |
+See `references/rationalizations.md` for the anti-pattern table.
 
 ## Concrete Example
 
-Input: "Design a Telegram admin prompt with concise copy and two-step confirmation buttons."
-
-Output:
-
-```json
-{
-  "telegram_response_plan": {
-    "strategy": "workflow_guided",
-    "tone": "direct, low-density",
-    "primary_action": "Confirm deploy to production",
-    "confirmation_model": "two-step: preview then commit"
-  },
-  "telegram_payload": {
-    "text": "Deploy v2.4.1 to production?\n\nChanges: 3 files, auth token rotation fix.\nRisk: low — no schema migration.",
-    "parse_mode": null,
-    "buttons": [
-      [
-        { "text": "Preview changes", "callback_data": "deploy_preview_v2.4.1" },
-        { "text": "Cancel", "callback_data": "deploy_cancel_v2.4.1" }
-      ]
-    ]
-  },
-  "validation": {
-    "valid": true,
-    "errors": [],
-    "warnings": []
-  }
-}
-```
+See `references/example.md` for the grounded example output shape.
 
 ## Handoff Expectations
 
@@ -184,5 +151,3 @@ Output:
 - Upstream content is too ambiguous to shape into a safe interaction
 - The task is really about general UX, not Telegram delivery
 - API constraint validation fails and the payload cannot be restructured within limits
-
-Violating the letter of these rules is violating the spirit of these rules.

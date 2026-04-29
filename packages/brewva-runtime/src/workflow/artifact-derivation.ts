@@ -316,7 +316,7 @@ function extractSkillCompletedArtifacts(event: BrewvaEventRecord): WorkflowDraft
     strategyReview !== undefined ||
     scopeDecision !== undefined ||
     strategicRisks !== undefined ||
-    planningPosture
+    (skillName === "strategy" && planningPosture)
   ) {
     const riskCount = readStringArray(strategicRisks).length;
     const strategySummaryParts = [

@@ -155,7 +155,7 @@ afterEach(() => {
 
 describe("skill validation pipeline", () => {
   test("combines contract and semantic planning validation in one closed pass", () => {
-    writeSkill(join(workspace, ".brewva/skills/core/design-contract/SKILL.md"), {
+    writeSkill(join(workspace, ".brewva/skills/core/plan-contract/SKILL.md"), {
       name: "design-contract",
       outputs: [
         "design_spec",
@@ -204,7 +204,7 @@ describe("skill validation pipeline", () => {
   });
 
   test("keeps tier_c-only semantic drift ready while surfacing partial metadata", () => {
-    writeSkill(join(workspace, ".brewva/skills/core/design-advisory/SKILL.md"), {
+    writeSkill(join(workspace, ".brewva/skills/core/plan-advisory/SKILL.md"), {
       name: "design-advisory",
       outputs: [
         "design_spec",
@@ -391,8 +391,8 @@ describe("skill validation pipeline", () => {
   });
 
   test("contract validation ignores semantic bindings without authored contracts", () => {
-    writeSkill(join(workspace, ".brewva/skills/core/pre-implementation-contract/SKILL.md"), {
-      name: "pre-implementation-contract",
+    writeSkill(join(workspace, ".brewva/skills/core/prep-contract/SKILL.md"), {
+      name: "prep-contract",
       outputs: [
         "implementation_targets",
         "success_criteria",
@@ -407,14 +407,14 @@ describe("skill validation pipeline", () => {
       },
     });
     const registry = loadRegistry(workspace);
-    const skill = registry.get("pre-implementation-contract");
+    const skill = registry.get("prep-contract");
     expect(skill).toBeDefined();
     if (!skill) {
-      throw new Error("Expected pre-implementation-contract skill to load.");
+      throw new Error("Expected prep-contract skill to load.");
     }
 
     const context = buildValidationContext({
-      sessionId: "pipeline-pre-implementation-1",
+      sessionId: "pipeline-prep-1",
       skill,
       outputs: {
         implementation_targets: [

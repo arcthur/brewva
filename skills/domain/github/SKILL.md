@@ -1,7 +1,7 @@
 ---
 name: github
-description: Use when a request targets GitHub issues, pull requests, checks, or
-  repository metadata and should run through one coherent gh workflow.
+description: Coherent GitHub issue, pull request, check, and repository metadata
+  workflow.
 stability: stable
 selection:
   when_to_use: Use when a request targets GitHub issues, pull requests, checks, or repository metadata and should run through one coherent gh workflow.
@@ -54,14 +54,13 @@ execution_hints:
   fallback_tools:
     - grep
     - ledger_query
-    - skill_complete
-references:
-  - skills/meta/skill-authoring/references/authored-behavior.md
 consumes:
   - change_set
   - verification_evidence
   - review_report
-requires: []
+references:
+  - references/example.md
+  - references/rationalizations.md
 scripts:
   - scripts/resolve_github_context.sh
 ---
@@ -141,45 +140,11 @@ If you catch yourself thinking any of these, STOP and return to Phase 1:
 
 ## Common Rationalizations
 
-| Excuse                                         | Reality                                                            |
-| ---------------------------------------------- | ------------------------------------------------------------------ |
-| "Obvious which repo, skip context resolution"  | Wrong-repo writes are unrecoverable. Always resolve first.         |
-| "User said 'fix it' so I should push directly" | 'Fix it' is not write confirmation. Restate the target and action. |
-| "I'll batch issue + PR + CI in one workflow"   | Mixed modes drift. Pick one center of gravity per activation.      |
-| "Raw gh output is good enough"                 | Downstream skills need synthesized artifacts, not log dumps.       |
+See `references/rationalizations.md` for the anti-pattern table.
 
 ## Concrete Example
 
-Input: "Summarize the failing checks on PR #42 and draft a follow-up comment."
-
-Output:
-
-```json
-{
-  "github_context": {
-    "repo": "brewva",
-    "owner": "bytedance",
-    "authenticated": true,
-    "current_pr": 42,
-    "branch": "fix/type-check-regression"
-  },
-  "ci_findings": {
-    "failing_checks": [
-      { "name": "typecheck", "conclusion": "FAILURE" },
-      { "name": "lint", "conclusion": "FAILURE" }
-    ],
-    "passing_count": 5,
-    "failing_count": 2,
-    "pending_count": 0,
-    "likely_causes": ["Type error in packages/brewva-runtime/src/config/normalize.ts:47"],
-    "recommended_actions": ["Fix the type narrowing, rerun bun run check locally"]
-  },
-  "pr_brief": {
-    "summary": "Two checks failing: typecheck and lint. Root cause is a missing type guard in normalize.ts. Suggested comment drafts a fix path and asks for confirmation before pushing.",
-    "draft_comment": "CI shows typecheck + lint failures tracing to a missing type guard in `normalize.ts:47`. Proposed fix: add the narrowing guard and verify with `bun run check`. Want me to proceed?"
-  }
-}
-```
+See `references/example.md` for the grounded example output shape.
 
 ## Handoff Expectations
 
@@ -193,5 +158,3 @@ Output:
 - Repository permissions block the requested write action
 - The task needs browser-driven interaction rather than CLI workflows
 - The target object (issue number, PR number, workflow run) cannot be identified
-
-Violating the letter of these rules is violating the spirit of these rules.

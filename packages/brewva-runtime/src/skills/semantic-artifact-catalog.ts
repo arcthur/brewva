@@ -278,7 +278,7 @@ const SEMANTIC_ARTIFACT_SCHEMAS: Readonly<
           "Keep semantic schema ids consumer-facing without turning them into producer-side exact contracts.",
         owner: "runtime-contracts",
         exit_criteria:
-          "The active design skill emits raw planning outputs while runtime inspect surfaces derive the canonical view.",
+          "The active plan skill emits raw planning outputs while runtime inspect surfaces derive the canonical view.",
         verification_intent:
           "Contract and normalization tests prove semantic bindings stay consumer-facing and producer validation remains narrow.",
       },

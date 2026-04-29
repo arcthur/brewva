@@ -1,7 +1,7 @@
 ---
 name: debugging
-description: Use when tests or runtime behavior fail unexpectedly and causal confidence
-  is needed before any code change.
+description: Root-cause investigation for failing tests or runtime behavior
+  before patching.
 stability: stable
 selection:
   when_to_use: Use when tests or runtime behavior fail and the next step is to reproduce the problem, rank hypotheses, and confirm root cause before patching.
@@ -66,16 +66,15 @@ execution_hints:
     - lsp_diagnostics
     - ast_grep_search
     - ledger_query
-    - skill_complete
 references:
-  - skills/meta/skill-authoring/references/authored-behavior.md
   - references/failure-triage.md
+  - references/example.md
+  - references/rationalizations.md
 consumes:
   - repository_snapshot
   - impact_map
   - verification_evidence
   - runtime_trace
-requires: []
 scripts:
   - scripts/hypothesis_tracker.py
 composable_with:
@@ -114,13 +113,20 @@ Capture the failing command, first error line, and affected boundary.
 **If not reproducible**: Stop. Record the gap in `investigation_record`. Do not guess.
 **If reproducible**: Proceed to Phase 2.
 
+Before Phase 2, write a one-sentence root-cause candidate in plain language.
+This sentence is provisional, but it must name a mechanism, not a symptom.
+
 ### Phase 2: Rank hypotheses
 
 Keep at most 3 active hypotheses. Run `scripts/hypothesis_tracker.py` to validate.
 Falsify the strongest hypothesis first, not the easiest to patch.
 
-If the failure looks like a regression, check recent history with `git-ops` patterns.
+If the failure looks like a regression, check recent history with `git` patterns.
 If it resembles a prior repo pattern, query the precedent layer.
+
+Use bisect mode when the symptom has a known-good baseline or a recent change
+range. Bisect mode narrows the first bad commit, config change, or artifact
+transition before proposing a repair.
 
 **If tracker says `should_escalate`**: Stop. All hypotheses exhausted — escalate.
 **If active hypotheses remain**: Proceed to Phase 3.
@@ -145,6 +151,10 @@ Do not patch. Produce all five outputs:
 
 **If confirmation evidence is weak**: Return to Phase 1 with tighter reproduction.
 
+Same-symptom hard stop: if two attempted explanations produce the same symptom
+with no new falsifying evidence, stop and reset the investigation around the
+three best hypotheses. Do not make a third patch-shaped guess.
+
 ## Scripts
 
 - `scripts/hypothesis_tracker.py` — Input: hypotheses array with id/claim/status/evidence, optional max_active. Output: validation result with active_count and escalation signal. Run before and after each Phase 2 iteration.
@@ -156,6 +166,9 @@ Do not patch. Produce all five outputs:
 - What earlier state transition or input created that condition?
 - What single observation would falsify the current leading hypothesis?
 - If the proposed cause were repaired, what downstream symptom disappears immediately?
+- Can the root cause be stated in one sentence without reusing the symptom as
+  the explanation?
+- Is a bisect cheaper than another local inspection pass?
 
 ## Red Flags — STOP
 
@@ -168,57 +181,16 @@ If you catch yourself thinking any of these, STOP and return to Phase 1:
 - "It's probably X, let me fix that"
 - Proposing solutions before tracing data flow
 - Each fix reveals a new problem in a different place
+- Repeating the same symptom after two explanation attempts
+- Root-cause text that says what failed but not why it failed
 
 ## Common Rationalizations
 
-| Excuse                                     | Reality                                                              |
-| ------------------------------------------ | -------------------------------------------------------------------- |
-| "Issue is simple, don't need process"      | Simple issues have root causes too. Process is fast for simple bugs. |
-| "Emergency, no time for process"           | Systematic debugging is FASTER than guess-and-check thrashing.       |
-| "Just try this first, then investigate"    | First fix sets the pattern. Do it right from the start.              |
-| "I see the problem, let me fix it"         | Seeing symptoms ≠ understanding root cause.                          |
-| "One more fix attempt" (after 2+ failures) | 3+ failures = architectural problem. Question the pattern.           |
-| "Multiple fixes at once saves time"        | Cannot isolate what worked. Causes new bugs.                         |
+See `references/rationalizations.md` for the anti-pattern table.
 
 ## Concrete Example
 
-Input: "Provider fallback succeeds, but the session still behaves as if recovery is active on the next turn."
-
-Output:
-
-```json
-{
-  "root_cause": "A success branch in `packages/brewva-gateway/src/session/compaction-recovery.ts` returned from provider fallback without recording the matching `provider_fallback_retry` `completed` transition. The hosted transition snapshot therefore kept `pendingFamily=\"recovery\"`, and downstream recovery-aware posture checks continued to treat the session as mid-recovery.",
-  "fix_strategy": "Record a closing transition on every recovered provider-fallback path and add regression coverage around transition snapshot clearing plus the reduction gate that reads recovery posture.",
-  "failure_evidence": "Session history shows `provider_fallback_retry` with `status=entered` but no later `completed` or `failed` record for the same attempt; the next turn still reports recovery posture as active.",
-  "investigation_record": {
-    "hypotheses_tested": [
-      {
-        "id": 1,
-        "claim": "Fallback model selection is wrong, so recovery never actually succeeds",
-        "status": "falsified",
-        "evidence": "Fallback-model output renders successfully before the next turn begins"
-      },
-      {
-        "id": 2,
-        "claim": "Recovery posture looks stale only because `workflow_status` was derived from old artifacts",
-        "status": "falsified",
-        "evidence": "The hosted recovery snapshot itself still reports `pendingFamily=recovery` before workflow derivation runs"
-      },
-      {
-        "id": 3,
-        "claim": "The provider-fallback path never records the closing transition after a successful retry",
-        "status": "confirmed",
-        "evidence": "The event log contains `provider_fallback_retry entered` with no matching close event; the reduction gate keeps reading an active recovery posture"
-      }
-    ],
-    "failed_attempts": [],
-    "root_cause_boundary": "packages/brewva-gateway/src/session/compaction-recovery.ts",
-    "verification_linkage": "transition history inspection plus `test/unit/gateway/turn-transition.unit.test.ts` and `test/unit/gateway/provider-request-reduction.unit.test.ts`"
-  },
-  "planning_posture": "moderate"
-}
-```
+See `references/example.md` for the grounded example output shape.
 
 ## Handoff Expectations
 
@@ -227,9 +199,13 @@ Output:
 - `failure_evidence` preserves commands, traces, and conditions so implementation can continue from the failing state.
 - `investigation_record` keeps the debugging path replayable: hypotheses, evidence, disproof, final cause.
 - `planning_posture` tells downstream planning whether the repair is local, bounded, or high-risk.
+- If the repair is not obvious after confirmation, hand off the top three
+  hypotheses and rejected explanations so `plan` or `implementation` does not
+  restart from scratch.
 
 ## Stop Conditions
 
 - The issue cannot be reproduced with current information.
 - Three ranked hypotheses are exhausted with no confirmed cause (`hypothesis_tracker.py` returns `should_escalate: true`).
 - The real blocker is missing runtime or repository context that cannot be obtained.
+- The same symptom persists after two explanation attempts without new evidence.

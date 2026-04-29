@@ -1,7 +1,7 @@
 ---
 name: ci-iteration
-description: Use when failing checks, PR feedback, or repair loops need bounded iteration
-  with current CI state and local verification evidence.
+description: Bounded repair loop for failing checks, PR feedback, current CI
+  state, and local verification evidence.
 stability: experimental
 selection:
   when_to_use: Use when failing checks, PR feedback, or repair loops need bounded iteration with current CI state and local verification evidence.
@@ -57,16 +57,15 @@ execution_hints:
     - subagent_status
     - workflow_status
     - ledger_query
-    - skill_complete
-references:
-  - skills/meta/skill-authoring/references/authored-behavior.md
 consumes:
   - ci_findings
   - review_report
   - review_findings
   - verification_evidence
   - change_set
-requires: []
+references:
+  - references/example.md
+  - references/rationalizations.md
 scripts:
   - scripts/parse_ci_state.sh
   - scripts/check_loop_safety.sh
@@ -154,7 +153,7 @@ Produce `remaining_blockers` listing only concrete blockers with the next owner 
 ## Decision Protocol
 
 - Is the failing evidence current, or am I acting on stale state from a previous attempt?
-- Is this still a CI iteration problem, or has it drifted into design territory?
+- Is this still a CI iteration problem, or has it drifted into planning territory?
 - Can I falsify this fix with a single narrowly-scoped local verification?
 - If CI is green locally but red remotely, am I conflating "likely fixed" with "confirmed fixed"?
 
@@ -170,46 +169,11 @@ If you catch yourself thinking any of these, STOP and return to Phase 1:
 
 ## Common Rationalizations
 
-| Excuse                                   | Reality                                                             |
-| ---------------------------------------- | ------------------------------------------------------------------- |
-| "Same fix, just retry"                   | If it failed, something is different. Get fresh evidence.           |
-| "I'll batch these two failures together" | Multi-cause batching hides which fix worked. One cause per attempt. |
-| "Local green = remote green"             | Environment differences are real. Separate the two claims.          |
-| "Quick fix, skip the safety gate"        | The safety gate IS the quick path. Skipping it causes thrashing.    |
-| "This is still CI iteration"             | If you're redesigning interfaces, you left CI-iteration territory.  |
+See `references/rationalizations.md` for the anti-pattern table.
 
 ## Concrete Example
 
-Input: "Fix the failing typecheck on PR #42 and stop if it turns out to be an architecture issue."
-
-Output:
-
-```json
-{
-  "ci_snapshot": {
-    "pr": 42,
-    "branch": "fix/type-check-regression",
-    "failing_checks": [{ "name": "typecheck", "conclusion": "FAILURE" }],
-    "passing_count": 6,
-    "failing_count": 1,
-    "pending_count": 0
-  },
-  "iteration_plan": {
-    "mode": "repair_local",
-    "in_scope": ["typecheck"],
-    "verification": "bun run check",
-    "stop_condition": "typecheck passes locally OR root cause is a missing interface contract"
-  },
-  "iteration_report": {
-    "attempt": 1,
-    "change": "Added type guard in normalize.ts:47",
-    "local_verification": "bun run check — 0 errors",
-    "remote_status": "pending — pushed, awaiting CI",
-    "outcome": "done"
-  },
-  "remaining_blockers": []
-}
-```
+See `references/example.md` for the grounded example output shape.
 
 ## Handoff Expectations
 
@@ -225,5 +189,3 @@ Output:
 - Failing evidence is stale enough that a new baseline is required
 - The loop has become a deeper design or debugging problem
 - Two consecutive attempts produced no measurable progress
-
-Violating the letter of these rules is violating the spirit of these rules.

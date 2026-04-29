@@ -61,13 +61,13 @@ required artifacts. For example:
 At a high level, the families map like this:
 
 - core: delivery and engineering lifecycle surfaces such as
-  `repository-analysis`, `design`, `implementation`, `review`, `qa`, and
-  `ship`
+  `repository-analysis`, `office-hours`, `architecture`, `plan`,
+  `implementation`, `review`, `qa`, and `ship`
 - domain: specialized environments and bounded protocols such as
-  `agent-browser`, `github`, `telegram`, `structured-extraction`, and
+  `agent-browser`, `github`, `telegram`, `extract`, and
   `goal-loop`
 - operator: runtime and repository operations such as `runtime-forensics` and
-  `git-ops`
+  `git`
 - meta: authoring and learning surfaces such as `skill-authoring` and
   `self-improve`
 

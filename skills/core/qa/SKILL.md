@@ -1,7 +1,7 @@
 ---
 name: qa
-description: Use when shipped behavior must be validated through realistic flows and
-  executable evidence before release.
+description: Behavior validation through realistic flows, adversarial probes,
+  and executable evidence.
 stability: stable
 selection:
   when_to_use: Use when shipped behavior must be validated through realistic flows, adversarial probes, or executable evidence.
@@ -54,11 +54,11 @@ execution_hints:
   fallback_tools:
     - browser_get
     - grep
-    - skill_complete
 references:
-  - skills/meta/skill-authoring/references/authored-behavior.md
   - references/exploratory-regression-checklist.md
   - references/qa-taxonomy.md
+  - references/example.md
+  - references/rationalizations.md
 scripts:
   - scripts/classify_qa_verdict.py
 consumes:
@@ -73,7 +73,6 @@ consumes:
   - review_report
   - review_findings
   - merge_decision
-requires: []
 ---
 
 # QA Skill
@@ -86,8 +85,6 @@ NO PASS VERDICT WITHOUT EXECUTABLE EVIDENCE
 
 Test the actual behavior, not the intended diff. Turn real failures into
 concrete release blockers. Reading code is not verification.
-
-**Violating the letter of this rule is violating the spirit of this rule.**
 
 ## When to Use
 
@@ -181,51 +178,11 @@ If you catch yourself thinking any of these, STOP and return to Phase 1:
 
 ## Common Rationalizations
 
-| Excuse                                          | Reality                                                                                    |
-| ----------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| "Unit tests pass, so it works"                  | Unit tests are not QA. Real flows can fail with green unit tests.                          |
-| "I read the code and it's correct"              | Reading is not execution. Run the check.                                                   |
-| "Environment is too hard to set up"             | Record it as `inconclusive`. Do not fake a pass.                                           |
-| "The happy path works, edge cases are unlikely" | At least one adversarial probe is mandatory. Skip it and the verdict stays `inconclusive`. |
-| "Fixing it myself is faster"                    | QA does not patch product code. Hand off defects to implementation.                        |
+See `references/rationalizations.md` for the anti-pattern table.
 
 ## Concrete Example
 
-Input: "Exercise the staging onboarding flow, try to break the risky path, and tell me if this is safe to ship."
-
-```json
-{
-  "qa_verdict": "fail",
-  "qa_findings": [
-    {
-      "severity": "high",
-      "category": "functional",
-      "description": "Email validation accepts malformed addresses with double dots",
-      "evidence": "browser_snapshot: input 'user@test..com' accepted, form submitted",
-      "reproducible": true
-    }
-  ],
-  "qa_checks": [
-    {
-      "flow": "onboarding happy path",
-      "probe_type": "happy_path",
-      "tool": "browser_fill + browser_click",
-      "observed": "Form submits, welcome screen shown",
-      "status": "pass"
-    },
-    {
-      "flow": "onboarding email validation",
-      "probe_type": "adversarial",
-      "tool": "browser_fill",
-      "observed": "Malformed email accepted without error",
-      "status": "fail"
-    }
-  ],
-  "qa_missing_evidence": [],
-  "qa_confidence_gaps": ["Password strength meter not exercised"],
-  "qa_environment_limits": []
-}
-```
+See `references/example.md` for the grounded example output shape.
 
 ## Handoff Expectations
 

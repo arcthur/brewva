@@ -31,7 +31,6 @@ resources:
     max_tool_calls: 60
     max_tokens: 120000
 consumes: []
-requires: []
 ---
 
 # {skill_title}

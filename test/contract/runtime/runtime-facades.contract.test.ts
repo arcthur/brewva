@@ -160,7 +160,7 @@ describe("runtime facade coverage", () => {
       const runtime = new BrewvaRuntime({ cwd: workspace, config });
 
       runtime.maintain.context.onTurnStart(sessionId, 1);
-      expect(runtime.authority.skills.activate(sessionId, "design").ok).toBe(true);
+      expect(runtime.authority.skills.activate(sessionId, "plan").ok).toBe(true);
       recordRuntimeEvent(runtime, {
         sessionId,
         type: "tool_execution_start",
@@ -205,7 +205,7 @@ describe("runtime facade coverage", () => {
           }),
         ],
         activeSkill: expect.objectContaining({
-          skillName: "design",
+          skillName: "plan",
           phase: "active",
         }),
         latestEventType: "tool_execution_start",
@@ -588,7 +588,7 @@ describe("runtime facade coverage", () => {
           turnId: "turn-2",
         },
       });
-      expect(runtime.authority.skills.activate(sessionId, "design").ok).toBe(true);
+      expect(runtime.authority.skills.activate(sessionId, "plan").ok).toBe(true);
 
       now += 10_000;
       const reloaded = new BrewvaRuntime({ cwd: workspace, config });
@@ -606,7 +606,7 @@ describe("runtime facade coverage", () => {
           }),
         ],
         activeSkill: expect.objectContaining({
-          skillName: "design",
+          skillName: "plan",
           phase: "active",
         }),
         latestEventType: "skill_activated",

@@ -167,6 +167,37 @@ describe("skill output registry", () => {
     expect(implementationAvailable.outputs.fix_strategy).toBe("add continuity-aware filtering");
   });
 
+  test("getConsumedOutputs merges planning_posture by strictness across producers", async () => {
+    const runtime = createCleanRuntime();
+    const sessionId = "output-reg-planning-posture-lattice";
+
+    runtime.authority.skills.activate(sessionId, "repository-analysis");
+    runtime.authority.skills.complete(sessionId, {
+      repository_snapshot: "module map here",
+      impact_map: buildImpactMap("runtime contract and gateway routing"),
+      planning_posture: "high_risk",
+      unknowns: ["Public surface impact still needs review."],
+    });
+
+    runtime.authority.skills.activate(sessionId, "debugging");
+    runtime.authority.skills.complete(sessionId, {
+      root_cause: "local guard condition was inverted",
+      fix_strategy: "flip the guard and add a regression test",
+      failure_evidence: "repro and isolated failing assertion",
+      investigation_record: {
+        hypotheses_tried: ["public API mismatch", "local guard inversion"],
+        failed_attempts: ["Checked public API trace; it matched expectations."],
+        disconfirming_evidence: ["Gateway contract remained unchanged."],
+        final_root_cause: "local guard condition was inverted",
+        verification_linkage: "repro and isolated failing assertion",
+      },
+      planning_posture: "trivial",
+    });
+
+    const planAvailable = runtime.inspect.skills.getConsumedOutputs(sessionId, "plan");
+    expect(planAvailable.outputs.planning_posture).toBe("high_risk");
+  });
+
   test("getConsumedOutputs returns empty for unknown skill", async () => {
     const runtime = createCleanRuntime();
     const result = runtime.inspect.skills.getConsumedOutputs("any-session", "nonexistent");
@@ -192,7 +223,7 @@ describe("skill output registry", () => {
   });
 
   test("replays normalized outputs using the recorded semantic bindings even after local skill drift", async () => {
-    const skillPath = join(workspace, ".brewva/skills/core/design-recorded/SKILL.md");
+    const skillPath = join(workspace, ".brewva/skills/core/plan-recorded/SKILL.md");
     const consumerSkillPath = join(workspace, ".brewva/skills/core/planning-consumer/SKILL.md");
     writeSkill(skillPath, {
       name: "design-recorded",

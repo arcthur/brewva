@@ -7,7 +7,7 @@ step of a run or how to carry artifacts across the cascade boundary.
 
 | Situation                                            | Next owner                           | Carry forward                                               | Why                                                      |
 | ---------------------------------------------------- | ------------------------------------ | ----------------------------------------------------------- | -------------------------------------------------------- |
-| Goal contract is still fuzzy                         | `design`                             | goal statement, constraints, failed contract draft          | Loop should not own design ambiguity                     |
+| Goal contract is still fuzzy                         | `plan`                               | goal statement, constraints, failed contract draft          | Loop should not own planning ambiguity                   |
 | Plan exists and the next run is straightforward work | `implementation`                     | current run objective, scoped task items, design artifacts  | Keep happy-path work in the implementation boundary      |
 | Main question is whether the work is now proven      | `implementation` + verification gate | files changed, claimed success signal, prior evidence       | Verification is a runtime phase, not a public skill load |
 | Repeated failures or no new runtime evidence         | `runtime-forensics`                  | latest failure artifact, verification outcome, current plan | Reconstruct the trace before proposing more edits        |
@@ -18,7 +18,7 @@ step of a run or how to carry artifacts across the cascade boundary.
 ### Delivery-first loop
 
 ```text
-goal-loop -> design -> implementation -> runtime verification -> goal-loop
+goal-loop -> plan -> implementation -> runtime verification -> goal-loop
 ```
 
 Use when the loop repeatedly refines and ships bounded chunks with explicit proof.
@@ -34,7 +34,7 @@ Use when the loop encounters a concrete failure and should return only after a v
 ### Contract repair loop
 
 ```text
-goal-loop -> design -> goal-loop
+goal-loop -> plan -> goal-loop
 ```
 
 Use when the blocker is a bad goal contract rather than an implementation bug.
@@ -76,5 +76,5 @@ If none are true, stay in the owning skill instead of bouncing ownership back pr
 
 - handing off to `runtime-forensics` with no concrete runtime failure signal
 - treating verification as a public skill load instead of a runtime phase
-- using `goal-loop` as a generic container for unresolved design work
+- using `goal-loop` as a generic container for unresolved planning work
 - returning to `goal-loop` without changing evidence, plan, or ownership rationale

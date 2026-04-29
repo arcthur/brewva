@@ -1,7 +1,7 @@
 ---
 name: ship
-description: Use when implemented and reviewed work needs release readiness checks, merge-path
-  clarity, or operator-facing handoff.
+description: Release readiness, merge-path clarity, and operator-facing handoff
+  for implemented work.
 stability: stable
 selection:
   when_to_use: Use when implemented and reviewed work needs release readiness checks, merge-path clarity, or operator-facing handoff.
@@ -42,10 +42,10 @@ execution_hints:
   fallback_tools:
     - grep
     - ledger_query
-    - skill_complete
 references:
-  - skills/meta/skill-authoring/references/authored-behavior.md
   - references/release-readiness-checklist.md
+  - references/example.md
+  - references/rationalizations.md
 scripts:
   - scripts/check_release_gates.py
 consumes:
@@ -64,7 +64,6 @@ consumes:
   - qa_environment_limits
   - github_context
   - ci_findings
-requires: []
 ---
 
 # Ship Skill
@@ -78,8 +77,6 @@ NO SHIP DECISION WITHOUT CURRENT EVIDENCE FOR EVERY GATE
 Make release readiness explicit and operational. This skill is a read-only
 release engineer: it audits the release path and prepares operator handoff.
 It does not patch product code or perform release mutations.
-
-**Violating the letter of this rule is violating the spirit of this rule.**
 
 ## When to Use
 
@@ -158,40 +155,11 @@ If you catch yourself thinking any of these, STOP and return to Phase 1:
 
 ## Common Rationalizations
 
-| Excuse                                           | Reality                                                                                                     |
-| ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
-| "Review approved, so it's shippable"             | Review is one of four gates. Check all of them.                                                             |
-| "QA was mostly good"                             | `inconclusive` or `fail` blocks `ready`. Partial evidence is not full evidence.                             |
-| "CI is probably green by now"                    | Check. If unknown, the gate fails.                                                                          |
-| "Just a one-liner, faster than switching skills" | Ship is read-only. A one-liner during ship bypasses review and verification gates. Route to implementation. |
-| "We can fix it after merge"                      | That is a rollback story. Name it as a risk, not as a plan.                                                 |
+See `references/rationalizations.md` for the anti-pattern table.
 
 ## Concrete Example
 
-Input: "Check whether this branch is ready for a PR and tell me what still blocks release."
-
-```json
-{
-  "ship_decision": "needs_follow_up",
-  "ship_report": {
-    "release_path": "PR handoff",
-    "evidence_summary": {
-      "review": "ready — approved with no blocking findings",
-      "qa": "pass — onboarding flow exercised, adversarial probe passed",
-      "ci": "unknown — pipeline not yet triggered for latest push",
-      "branch": "clean — no uncommitted changes, up to date with target"
-    },
-    "blocking_gates": ["ci"],
-    "operator_next_step": "Trigger CI pipeline. Once green, PR is ready to open."
-  },
-  "release_checklist": [
-    { "gate": "review", "status": "clear", "detail": "Approved, no blocking findings" },
-    { "gate": "qa", "status": "clear", "detail": "Pass with adversarial coverage" },
-    { "gate": "ci", "status": "blocking", "detail": "Pipeline not yet run on latest commit" },
-    { "gate": "branch", "status": "clear", "detail": "Clean, up to date" }
-  ]
-}
-```
+See `references/example.md` for the grounded example output shape.
 
 ## Handoff Expectations
 

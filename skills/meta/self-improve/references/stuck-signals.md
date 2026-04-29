@@ -30,7 +30,7 @@ Likely routing:
 
 - `goal-loop` protocol tightening when the issue is fact discipline or loop
   setup
-- `design` guidance when the loop is pursuing the wrong wedge
+- `plan` guidance when the loop is pursuing the wrong wedge
 - targeted tooling when the same measurement or verification step keeps failing
 
 ### Guard Flakiness
@@ -42,7 +42,7 @@ Likely routing:
 
 - verification guidance when the guard itself is weak
 - runtime or observability docs when evidence collection is unstable
-- design or implementation follow-up when the loop is optimizing a brittle path
+- plan or implementation follow-up when the loop is optimizing a brittle path
 
 ### Convergence Stall
 
@@ -54,7 +54,7 @@ Likely routing:
 
 - `goal-loop` contract guidance when convergence predicates or cadence are too
   weak
-- `design` when the loop is trapped in a low-leverage local optimum
+- `plan` when the loop is trapped in a low-leverage local optimum
 - `predict-review` when competing explanations are needed before another run
 
 ### Repeated Escalation

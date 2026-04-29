@@ -118,7 +118,7 @@ describe("session hydration folds", () => {
         type: "skill_activated",
         timestamp: 100,
         turn: 1,
-        payload: { skillName: "design" },
+        payload: { skillName: "plan" },
       }),
       createEvent({
         id: "skill-2",
@@ -133,7 +133,7 @@ describe("session hydration folds", () => {
         timestamp: 120,
         turn: 1,
         payload: {
-          skill: "design",
+          skill: "plan",
           toolName: "custom_query_tool",
           resolution: "hint",
         },
@@ -141,9 +141,9 @@ describe("session hydration folds", () => {
     ]);
 
     expect(result.issues).toHaveLength(0);
-    expect(result.cell.activeSkill).toBe("design");
+    expect(result.cell.activeSkill).toBe("plan");
     expect(result.cell.toolCalls).toBe(1);
-    expect([...result.cell.governanceMetadataWarnings]).toEqual(["design:custom_query_tool"]);
+    expect([...result.cell.governanceMetadataWarnings]).toEqual(["plan:custom_query_tool"]);
   });
 
   test("verification fold restores write markers, authoritative outcomes, and check runs", () => {

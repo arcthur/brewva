@@ -74,7 +74,7 @@ Skill frontmatter supports intent, effect, resource, and execution metadata:
   - optional short summary; defaults to `<name> skill`
 - `intent.outputs/intent.output_contracts/intent.semantic_bindings`
 - optional `selection.when_to_use/selection.examples/selection.paths/selection.phases`
-- `requires` / `consumes`
+- optional `requires` / required `consumes`
 - `composable_with`
 - `effects.allowed_effects/effects.denied_effects`
 - `resources.default_lease/resources.hard_ceiling`
@@ -108,6 +108,30 @@ default cost hint as `medium`; that default is not an authored contract field.
 `execution_hints.suggested_chains` is not supported. Workflow sequencing that
 is not consumed by runtime code belongs in the skill markdown body.
 
+`execution_hints.fallback_tools` lists degraded execution tools only. Lifecycle
+control tools such as `skill_complete` are not fallback tools; they are exposed
+by the active skill lifecycle surface.
+
+`resources.scripts` is reserved for executable helper code and must align with
+`local_exec` permission on the effective skill contract. Read-only deterministic
+rules belong in `resources.invariants`, where the model can apply the rule set
+manually or consume host-provided results without implying local execution.
+
+Runtime distinguishes authored and inherited skill material:
+
+- `authoredMarkdown` / `authoredResources` come from the base skill plus project
+  overlays.
+- `inheritedMarkdown` / `inheritedResources` come from runtime-owned defaults
+  and project shared guidance.
+- `markdown` / `resources` remain the effective union that `skill_load`,
+  delegated skill prompts, and inspection surfaces render.
+
+Shared authored behavior is injected as runtime-inherited guidance from
+`skills/meta/skill-authoring/references/authored-behavior.md`. Individual
+skills should not repeat that reference in frontmatter. Cold-start
+`skill-first` recommendation scores only authored markdown and selection
+metadata, so inherited defaults do not create routing drift.
+
 Authoring vs runtime path semantics:
 
 - `parseSkillDocument(...)` preserves authored resource strings exactly
@@ -117,6 +141,8 @@ Authoring vs runtime path semantics:
   relative to the discovered skill root
 - the loaded runtime catalog resolves these resource entries to filesystem paths
   before exposing them through `runtime.inspect.skills.get(...)` or `skill_load`
+- inherited resources are added only after registry load; parser-level resource
+  checks remain scoped to authored frontmatter
 
 `selection` is the stable skill-authored control-plane signal for skill-first
 recommendation. It keeps selection ownership with the skill contract rather than
@@ -339,7 +365,15 @@ skill-sequencing API in the runtime.
 
 One common delivery chain now present in the catalog is:
 
-`repository-analysis -> discovery -> strategy-review -> learning-research -> design -> pre-implementation -> implementation -> review -> qa -> ship -> retro -> knowledge-capture`
+`repository-analysis -> discovery -> strategy -> learning-research -> plan -> prep -> implementation -> review -> qa -> ship -> retro -> knowledge-capture`
+
+New idea work starts before an existing request frame:
+
+`office-hours -> discovery -> strategy -> plan`
+
+Architecture improvement work uses an explicit deepening pass before planning:
+
+`repository-analysis -> architecture -> plan -> implementation -> review`
 
 This remains a prompt-side and control-plane convention. Runtime still owns
 verification, replay, derived workflow status, and effect governance.
@@ -351,8 +385,8 @@ Naming note:
   precedent records under `docs/solutions/**`
 
 `planning_posture` is an upstream handoff output, not a standalone skill. It is
-expected to exist before non-trivial `design`, typically from
-`repository-analysis`, `strategy-review`, or `debugging`.
+expected to exist before non-trivial `plan`, typically from
+`repository-analysis`, `strategy`, or `debugging`.
 
 ## Workflow Artifacts And Posture
 
@@ -413,7 +447,7 @@ runtime-owned planners:
   takes over
 - `learning-research` for explicit planning-time proof of consult against the
   repository-native precedent layer
-- `pre-implementation` for explicit scope, simplicity, and success-criteria
+- `prep` for explicit scope, simplicity, and success-criteria
   gating before mutation work begins
 
 Related control-plane products now sit beside those skills instead of hiding in
@@ -432,11 +466,13 @@ prompt-only behavior:
 ### Core
 
 - `repository-analysis`
+- `architecture`
+- `office-hours`
 - `discovery`
 - `learning-research`
-- `strategy-review`
-- `design`
-- `pre-implementation`
+- `strategy`
+- `plan`
+- `prep`
 - `implementation`
 - `debugging`
 - `review`
@@ -453,7 +489,7 @@ prompt-only behavior:
 - `github`
 - `predict-review`
 - `telegram`
-- `structured-extraction`
+- `extract`
 - `goal-loop`
 
 `goal-loop` should be treated as a bounded multi-run continuity skill with
@@ -481,9 +517,12 @@ verification.
 Default delegated routing is intentionally narrower than the public skill list:
 
 - `repository-analysis -> advisor (investigate)`
+- `architecture -> advisor (investigate)`
+- `office-hours -> advisor (investigate)`
 - `discovery -> advisor (investigate)`
+- `strategy -> advisor (investigate)`
 - `debugging -> advisor (diagnose)`
-- `design -> advisor (design)`
+- `plan -> advisor (design)`
 - `review -> advisor (review)`
 - `qa -> qa`
 - `implementation -> patch-worker`
@@ -493,10 +532,10 @@ Default delegated routing is intentionally narrower than the public skill list:
 Two stable contract reminders matter for downstream delegation and workflow
 posture:
 
-- `design` is expected to emit the full planning handoff set:
+- `plan` is expected to emit the full planning handoff set:
   `design_spec`, `execution_plan`, `execution_mode_hint`, `risk_register`, and
-  `implementation_targets`; advisor `design` consults inform this contract but
-  do not replace parent-owned `design` completion
+  `implementation_targets`; advisor `plan` consults inform this contract but
+  do not replace parent-owned `plan` completion
 - planning handoff precision is consumer-driven:
   path-scoped implementation targets and required evidence stay blocking where
   downstream consumers need them, while taxonomy-only fields such as
@@ -504,7 +543,7 @@ posture:
   metadata
 - `implementation` is expected to stay inside path-scoped
   `implementation_targets`; work that materially exceeds the planned boundary
-  should hand control back to `design` instead of silently widening scope
+  should hand control back to `plan` instead of silently widening scope
 - `implementation` may consume partial normalized planning outputs, but it may
   block explicitly when normalized `implementation_targets` do not resolve to a
   safe path-scoped owner boundary
@@ -556,7 +595,7 @@ Consumer declaration rule:
 ### Operator
 
 - `runtime-forensics`
-- `git-ops`
+- `git`
 
 ### Meta
 
@@ -581,7 +620,7 @@ repeat-backed, proposal-only passes rather than autonomous skill-file writes.
 ## Project Overlays
 
 - `repository-analysis`
-- `design`
+- `plan`
 - `implementation`
 - `debugging`
 - `review`

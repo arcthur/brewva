@@ -162,8 +162,8 @@ catalog:
 
 Authoring layout still uses the four directory families:
 
-- core: repository analysis, planning, implementation, review, QA, and ship
-  flows
+- core: repository analysis, idea diagnosis, architecture deepening, planning,
+  implementation, review, QA, and ship flows
 - domain: environment-specific or problem-specific specialties such as browser,
   GitHub, Telegram, structured extraction, and bounded goal loops
 - operator: replay, runtime, and git-operations oriented surfaces
@@ -186,11 +186,13 @@ For routing behavior, catalog layout, and the full skill inventory, use:
 Core capability skills:
 
 - `repository-analysis`
+- `architecture`
+- `office-hours`
 - `discovery`
 - `learning-research`
-- `strategy-review`
-- `design`
-- `pre-implementation`
+- `strategy`
+- `plan`
+- `prep`
 - `implementation`
 - `debugging`
 - `review`
@@ -206,14 +208,14 @@ Domain capability skills:
 - `frontend-design`
 - `github`
 - `telegram`
-- `structured-extraction`
+- `extract`
 - `goal-loop`
 - `predict-review`
 
 Operator skills:
 
 - `runtime-forensics`
-- `git-ops`
+- `git`
 
 Meta skills:
 
@@ -223,7 +225,7 @@ Meta skills:
 Project overlays:
 
 - `repository-analysis`
-- `design`
+- `plan`
 - `implementation`
 - `debugging`
 - `review`

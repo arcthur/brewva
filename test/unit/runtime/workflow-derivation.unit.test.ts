@@ -59,7 +59,7 @@ describe("workflow derivation", () => {
           sessionId: "workflow-expanded-stages",
           timestamp: 110,
           payload: {
-            skillName: "strategy-review",
+            skillName: "strategy",
             outputKeys: [
               "strategy_review",
               "scope_decision",
@@ -397,7 +397,7 @@ describe("workflow derivation", () => {
         type: "skill_completed",
         timestamp: 100,
         payload: {
-          skillName: "design",
+          skillName: "plan",
           outputKeys: ["design_spec"],
           outputs: {
             design_spec: "First design draft",
@@ -409,7 +409,7 @@ describe("workflow derivation", () => {
         type: "skill_completed",
         timestamp: 200,
         payload: {
-          skillName: "design",
+          skillName: "plan",
           outputKeys: ["design_spec"],
           outputs: {
             design_spec: "Revised design draft",
@@ -436,7 +436,7 @@ describe("workflow derivation", () => {
           type: "skill_completed",
           timestamp: 90,
           payload: {
-            skillName: "strategy-review",
+            skillName: "strategy",
             outputKeys: ["planning_posture"],
             outputs: {
               planning_posture: "high_risk",
@@ -448,7 +448,7 @@ describe("workflow derivation", () => {
           type: "skill_completed",
           timestamp: 100,
           payload: {
-            skillName: "design",
+            skillName: "plan",
             outputKeys: [
               "design_spec",
               "execution_plan",
@@ -540,6 +540,117 @@ describe("workflow derivation", () => {
     expect(status.posture.unsatisfied_required_evidence).toEqual([]);
   });
 
+  test("keeps the strictest planning posture when later posture outputs are weaker", () => {
+    const status = deriveWorkflowStatus({
+      sessionId: "workflow-planning-posture-lattice",
+      skillReadiness: [],
+      events: [
+        event({
+          id: "evt-debugging-posture",
+          type: "skill_completed",
+          timestamp: 80,
+          payload: {
+            skillName: "debugging",
+            outputKeys: ["planning_posture"],
+            outputs: {
+              planning_posture: "high_risk",
+            },
+          },
+        }),
+        event({
+          id: "evt-plan",
+          type: "skill_completed",
+          timestamp: 100,
+          payload: {
+            skillName: "plan",
+            outputKeys: [
+              "design_spec",
+              "execution_plan",
+              "execution_mode_hint",
+              "risk_register",
+              "implementation_targets",
+            ],
+            outputs: {
+              design_spec: "Keep the runtime contract stable while tightening routing metadata.",
+              execution_plan: [
+                {
+                  step: "Update the routing metadata reader.",
+                  intent: "Preserve contract shape while changing selection input.",
+                  owner: "runtime.skills",
+                  exit_criteria: "Reader returns the same public catalog keys.",
+                  verification_intent: "Runtime skill catalog tests pass.",
+                },
+              ],
+              execution_mode_hint: "direct_patch",
+              risk_register: [
+                {
+                  risk: "Routing metadata may appear optional to downstream callers.",
+                  category: "public_api",
+                  severity: "high",
+                  mitigation: "Keep catalog contract tests pinned.",
+                  required_evidence: ["runtime_skill_catalog_tests"],
+                  owner_lane: "qa",
+                },
+              ],
+              implementation_targets: [
+                {
+                  target: "packages/brewva-runtime/src/skills/registry.ts",
+                  kind: "source",
+                  owner_boundary: "runtime.skills",
+                  reason: "Catalog projection lives here.",
+                },
+              ],
+            },
+          },
+        }),
+        event({
+          id: "evt-strategy-posture",
+          type: "skill_completed",
+          timestamp: 120,
+          payload: {
+            skillName: "strategy",
+            outputKeys: ["planning_posture"],
+            outputs: {
+              planning_posture: "trivial",
+            },
+          },
+        }),
+      ],
+    });
+
+    expect(status.posture.plan_complete).toBe(true);
+    expect(status.posture.review_required).toBe(true);
+    expect(status.posture.qa_required).toBe(true);
+  });
+
+  test("does not treat posture-only upstream outputs as completed strategy", () => {
+    const events = [
+      event({
+        id: "evt-repository-posture",
+        type: "skill_completed",
+        timestamp: 80,
+        payload: {
+          skillName: "repository-analysis",
+          outputKeys: ["planning_posture"],
+          outputs: {
+            planning_posture: "high_risk",
+          },
+        },
+      }),
+    ];
+    const artifacts = deriveWorkflowArtifacts(events);
+    const status = deriveWorkflowStatus({
+      sessionId: "workflow-posture-only",
+      skillReadiness: [],
+      events,
+    });
+
+    expect(artifacts.some((artifact) => artifact.kind === "strategy_review")).toBe(false);
+    expect(status.posture.strategy).toBe("missing");
+    expect(status.posture.review_required).toBe(true);
+    expect(status.posture.qa_required).toBe(true);
+  });
+
   test("treats fresh runtime verification as valid required-evidence coverage even without QA artifacts", () => {
     const status = deriveWorkflowStatus({
       sessionId: "workflow-required-evidence-verification",
@@ -550,7 +661,7 @@ describe("workflow derivation", () => {
           type: "skill_completed",
           timestamp: 100,
           payload: {
-            skillName: "design",
+            skillName: "plan",
             outputKeys: [
               "design_spec",
               "execution_plan",

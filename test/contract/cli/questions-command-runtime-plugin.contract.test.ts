@@ -75,7 +75,7 @@ describe("questions interactive command runtime plugin", () => {
         sessionId,
         type: "skill_completed",
         payload: {
-          skillName: "design",
+          skillName: "plan",
           outputs: {
             open_questions: ["Which deployment target should the gateway use?"],
           },
@@ -133,7 +133,7 @@ describe("questions interactive command runtime plugin", () => {
         sessionId,
         type: "skill_completed",
         payload: {
-          skillName: "design",
+          skillName: "plan",
           outputs: {
             open_questions: ["Which deployment target should the gateway use?"],
           },

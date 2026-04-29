@@ -136,7 +136,7 @@ describe("cli shell session port", () => {
       sessionId,
       type: "skill_completed",
       payload: {
-        skillName: "design",
+        skillName: "plan",
         outputs: {
           question_requests: [
             {

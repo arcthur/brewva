@@ -1,7 +1,7 @@
 ---
 name: review
-description: Use when a diff or change plan needs findings-first risk review, merge
-  readiness assessment, or conformance checking.
+description: Findings-first risk review for diffs and change plans, including
+  merge readiness and conformance checks.
 stability: stable
 selection:
   when_to_use: Use when a diff or change plan needs findings-first risk review, merge readiness assessment, or conformance checking.
@@ -49,18 +49,15 @@ execution_hints:
     - lsp_find_references
     - ast_grep_search
     - ledger_query
-    - skill_complete
 references:
-  - skills/meta/skill-authoring/references/authored-behavior.md
   - references/boundary-failure.md
   - references/contract-drift.md
   - references/review-lanes.md
   - references/security-concurrency.md
-scripts:
-  - scripts/activate_lanes.py
-  - scripts/validate_lane_outcome.py
-  - scripts/detect_secret_exposure.py
-  - scripts/synthesize_lane_dispositions.py
+  - references/example.md
+  - references/rationalizations.md
+invariants:
+  - invariants/review-lane-rules.md
 consumes:
   - change_set
   - files_changed
@@ -71,7 +68,6 @@ consumes:
   - risk_register
   - implementation_targets
   - planning_posture
-requires: []
 ---
 
 # Review Skill
@@ -84,8 +80,6 @@ NO MERGE DECISION WITHOUT EVIDENCE FROM EVERY ACTIVATED LANE
 
 Judge risk, not style. Surface the highest-value findings first and make
 merge safety explicit.
-
-**Violating the letter of this rule is violating the spirit of this rule.**
 
 ## When to Use
 
@@ -108,60 +102,64 @@ Summarize scope, intent, critical paths, and available evidence. Treat
 **If planning evidence is missing or stale**: Widen the review lens. Missing
 evidence is itself a finding.
 
+Check scope drift before judging implementation quality:
+
+- Compare changed files and behavior against `implementation_targets`.
+- Treat extra public surface, persisted format, CLI behavior, or cross-package
+  movement as scope drift until the plan explicitly justifies it.
+- If the change solves a different problem than the plan, stop normal review
+  and emit a blocking scope finding.
+
 ### Phase 2: Activate review lanes
 
-Run `scripts/activate_lanes.py` with `change_categories`, `changed_file_classes`,
-and evidence availability flags. The script returns the exact lane set.
+Derive lanes with the inputs and mapping in
+`invariants/review-lane-rules.md`:
+`change_categories`, `changed_file_classes`, and evidence availability flags.
+This skill is read-only; use host-provided lane output when already available,
+otherwise apply the invariant manually.
 
 Always-on: `review-correctness`, `review-boundaries`, `review-operability`.
 Conditional: `review-security`, `review-concurrency`, `review-compatibility`,
-`review-performance` — activated deterministically by the script.
+`review-performance` — activated deterministically by the lane rules.
 
 For non-trivial review, fan out lanes via `subagent_fanout`.
 
-**If the script widens to full conditional set**: Review evidence is weak.
+**If the lane rules widen to the full conditional set**: Review evidence is weak.
 Proceed with all lanes rather than guessing which to skip.
 
 ### Phase 3: Security gate
 
-Run `scripts/detect_secret_exposure.py` on changed files. This is a gate,
-not a score — any finding blocks the review regardless of other lane outcomes.
+Apply the secret-exposure gate from `invariants/review-lane-rules.md`. Use
+host-provided scan results when already available; otherwise inspect the changed
+content directly without mutating files. This is a gate, not a score — any
+finding blocks the review regardless of other lane outcomes.
 
 **If `clean: false`**: Add a blocking finding. Do not proceed to merge readiness.
 
 ### Phase 4: Synthesize and decide
 
-Run `scripts/synthesize_lane_dispositions.py` with `activated_lanes` (from
-Phase 2) AND all `lane_outcomes`. The script blocks if any activated lane is
-unreported.
+Synthesize lane dispositions with the invariant inputs: `activated_lanes` from
+Phase 2 and all `lane_outcomes`. Use host-provided synthesis when available;
+otherwise apply the missing-lane rule manually.
 
 **If lanes disagree materially**: Keep the disagreement visible in
 `review_report`. Do not smooth it away.
 **If missing_lanes is non-empty**: The review is incomplete. Do not override.
 
+Autofix routing rule: this skill is read-only. If a fix is obvious, record it
+as a disposition or handoff target (`implementation` for parent-owned edits,
+`patch-worker` for delegated patch work). Do not mutate files from review.
+
 ### Phase 5: Emit findings-first output
 
 Produce `review_findings`, `review_report`, `merge_decision`.
 
-## Scripts
+## Invariants
 
-- `scripts/activate_lanes.py` — Input: change_categories, changed_file_classes,
-  evidence flags. Output: always_on lanes, conditional lanes, activation_basis.
-  Run before Phase 2 fan-out.
-- `scripts/validate_lane_outcome.py` — Input: lane outcome object or array.
-  Output: valid, errors. Enforces canonical child schema (lane, disposition,
-  primaryClaim, findings required when non-clear, optional missingEvidence /
-  followUpQuestions / strongestCounterpoint). Rejects removed legacy aliases and
-  old `openQuestions` naming; child review lanes must emit the canonical
-  camelCase fields. Run on each lane result before synthesis.
-- `scripts/detect_secret_exposure.py` — Input: files array with path + content.
-  Output: clean (bool), findings. Security GATE — any finding = blocked.
-  Run before Phase 4 synthesis.
-- `scripts/synthesize_lane_dispositions.py` — Input: activated_lanes + lane_outcomes.
-  Output: merge_decision, rationale, blocking/concern/missing lanes.
-  Blocks if activated_lanes missing or if any lane unreported. Treats
-  unresolved `missingEvidence` as inconclusive even when a lane otherwise says
-  `clear`.
+- `invariants/review-lane-rules.md` — Canonical lane activation, lane outcome
+  schema, secret exposure gate, and merge-decision synthesis rules. Use
+  host-provided output when available; otherwise apply the invariant manually
+  without crossing the read-only boundary.
 
 ## Decision Protocol
 
@@ -172,6 +170,9 @@ Use these questions to keep the review anchored in behavior, not style:
 - Where could persisted state or user-visible behavior drift partially?
 - What evidence is still missing but required before `merge_decision = ready`?
 - If this merged today, what rollback burden is most likely?
+- Has the diff drifted outside `implementation_targets` or the stated plan?
+- Is this review shallow because the target is too large, too stale, or missing
+  critical context?
 
 ## Red Flags — STOP
 
@@ -182,45 +183,16 @@ If you catch yourself thinking any of these, STOP:
 - "Merge is safe" — without evidence from every activated lane
 - "This lane has no findings" — when you didn't actually run the lane
 - "The disagreement isn't important" — if two lanes disagree, keep it visible
+- "I'll just fix it while reviewing" — fixes must be routed, not applied here
+- "Scope drift is fine because the code is better" — unplanned scope is a review finding
 
 ## Common Rationalizations
 
-| Excuse                              | Reality                                                                                |
-| ----------------------------------- | -------------------------------------------------------------------------------------- |
-| "Style issues are important"        | Not before behavior risk. Correctness first, style second.                             |
-| "Planning evidence is optional"     | Missing evidence means wider review, not narrower.                                     |
-| "One lane cleared so it's fine"     | Every activated lane must clear. One clear lane doesn't compensate for a blocked one.  |
-| "I'll note the concern but approve" | If the concern is material, `needs_changes`. Don't hide risk behind approval language. |
+See `references/rationalizations.md` for the anti-pattern table.
 
 ## Concrete Example
 
-Input: "Review the routing refactor for regressions."
-
-```json
-{
-  "review_findings": [
-    {
-      "condition": "Internal routing types exported from public entrypoint",
-      "impact": "Widens public API surface, creating semver commitment",
-      "evidence": "Diff adds export in contracts/index.ts",
-      "next_action": "Move to @brewva/brewva-runtime/internal"
-    }
-  ],
-  "review_report": {
-    "summary": "Boundary lane flagged public export widening. Compatibility lane flagged semver risk.",
-    "activated_lanes": [
-      "review-correctness",
-      "review-boundaries",
-      "review-operability",
-      "review-compatibility"
-    ],
-    "activation_basis": "category:public_api->review-compatibility; category:package_boundary->review-compatibility",
-    "missing_evidence": [],
-    "precedent_consult_status": "no_relevant_precedent_found"
-  },
-  "merge_decision": "needs_changes"
-}
-```
+See `references/example.md` for the grounded example output shape.
 
 ## Handoff Expectations
 
@@ -229,9 +201,13 @@ Input: "Review the routing refactor for regressions."
 - `review_report` records activated lanes, activation basis, blind spots, and
   precedent consult status.
 - `merge_decision` matches the findings. Never a detached summary label.
+- Fixes are never applied by this skill. They are handed off with enough context
+  for implementation or a patch worker to act.
 
 ## Stop Conditions
 
 - There is no concrete review target
 - Verification evidence is too weak to support a merge decision
 - The real work is debugging or repository analysis
+- Scope drift makes the target no longer match the plan being reviewed
+- Any activated lane, secret scan, or hard-stop gate is missing

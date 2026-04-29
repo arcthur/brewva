@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 describe("project overlay contracts", () => {
-  it("keeps the Brewva review overlay wired to project guidance and DoD tooling", () => {
+  it("keeps the Brewva review overlay wired to project guidance and read-only invariants", () => {
     const repoRoot = resolve(import.meta.dirname, "../../..");
     const markdown = readFileSync(
       resolve(repoRoot, "skills/project/overlays/review/SKILL.md"),
@@ -12,7 +12,7 @@ describe("project overlay contracts", () => {
 
     expect(markdown).toContain("skills/project/shared/package-boundaries.md");
     expect(markdown).toContain("skills/project/shared/migration-priority-matrix.md");
-    expect(markdown).toContain("skills/project/scripts/check-skill-dod.sh");
+    expect(markdown).toContain("invariants/review-lane-rules.md");
   });
 
   it("keeps runtime-forensics overlay pointed at canonical runtime artifact context", () => {

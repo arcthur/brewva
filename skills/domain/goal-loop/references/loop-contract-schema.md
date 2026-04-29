@@ -16,4 +16,4 @@ Every `loop_contract` must include these fields:
 | `max_runs`              | number   | yes      | Safety rail for the whole loop                                         |
 | `escalation_policy`     | object   | yes      | Named next owner plus the trigger for escalation                       |
 
-Use `scripts/validate_loop_contract.py` to check a contract before entering the loop.
+Use `../invariants/loop-contract.md` to check a contract before entering the loop.

@@ -561,7 +561,13 @@ describe("skill document parsing", () => {
 
     expect(parsed.category).toBe("overlay");
     expect(parsed.contract.routing).toBeUndefined();
-    expect(parsed.resources.scripts).toContain("skills/project/scripts/check-skill-dod.sh");
+    expect(parsed.resources.scripts).toEqual([]);
+    expect(parsed.resources.references).toEqual(
+      expect.arrayContaining([
+        "skills/project/shared/package-boundaries.md",
+        "skills/project/shared/migration-priority-matrix.md",
+      ]),
+    );
   });
 
   test("overlay parsing leaves omitted array fields undefined so base contracts can inherit them", () => {
@@ -649,7 +655,7 @@ describe("skill document parsing", () => {
         "  preferred_tools: [read]",
         "  fallback_tools: []",
         "  suggested_chains:",
-        "    - steps: [design, implementation]",
+        "    - steps: [plan, implementation]",
         "consumes: []",
         "---",
         "# suggested-chain",
@@ -933,7 +939,7 @@ describe("skill document parsing", () => {
   });
 
   test("parses semantic bindings for canonical first-party skills", () => {
-    const parsed = parseSkillDocument(`${repoRoot()}/skills/core/design/SKILL.md`, "core");
+    const parsed = parseSkillDocument(`${repoRoot()}/skills/core/plan/SKILL.md`, "core");
 
     expect(parsed.contract.intent?.semanticBindings).toEqual({
       design_spec: "planning.design_spec.v2",
@@ -952,11 +958,8 @@ describe("skill document parsing", () => {
     expect(parsed.contract.intent?.outputContracts).toBeUndefined();
   });
 
-  test("parses semantic bindings for pre-implementation skill", () => {
-    const parsed = parseSkillDocument(
-      `${repoRoot()}/skills/core/pre-implementation/SKILL.md`,
-      "core",
-    );
+  test("parses semantic bindings for prep skill", () => {
+    const parsed = parseSkillDocument(`${repoRoot()}/skills/core/prep/SKILL.md`, "core");
 
     expect(parsed.contract.intent?.semanticBindings).toEqual({
       implementation_targets: "planning.implementation_targets.v2",
@@ -976,11 +979,11 @@ describe("skill document parsing", () => {
   test("rejects authored output contracts for semantic-bound outputs", () => {
     const filePath = createTempSkillDocument(
       "brewva-semantic-bound-authored-contract-",
-      "skills/core/design/SKILL.md",
+      "skills/core/plan/SKILL.md",
       [
         "---",
-        "name: design",
-        "description: design skill",
+        "name: plan",
+        "description: plan skill",
         ...MINIMAL_SELECTION_LINES,
         "intent:",
         "  outputs: [design_spec]",
@@ -1005,7 +1008,7 @@ describe("skill document parsing", () => {
         "  fallback_tools: []",
         "consumes: []",
         "---",
-        "# design",
+        "# plan",
       ],
     );
 
@@ -1015,10 +1018,10 @@ describe("skill document parsing", () => {
   });
 
   test("rejects overlays that modify outputs for semantic-bound skills", () => {
-    const base = parseSkillDocument(`${repoRoot()}/skills/core/design/SKILL.md`, "core");
+    const base = parseSkillDocument(`${repoRoot()}/skills/core/plan/SKILL.md`, "core");
     const overlayPath = createTempSkillDocument(
       "brewva-semantic-bound-overlay-",
-      "skills/project/overlays/design/SKILL.md",
+      "skills/project/overlays/plan/SKILL.md",
       [
         "---",
         "intent:",
@@ -1034,7 +1037,7 @@ describe("skill document parsing", () => {
         "  fallback_tools: []",
         "consumes: []",
         "---",
-        "# design overlay",
+        "# plan overlay",
       ],
     );
     const overlay = parseSkillDocument(overlayPath, "overlay");
@@ -1064,11 +1067,11 @@ describe("skill document parsing", () => {
   test("parses recursive item_contract definitions for json array outputs", () => {
     const filePath = createTempSkillDocument(
       "brewva-skill-item-contract-",
-      "skills/core/design/SKILL.md",
+      "skills/core/plan/SKILL.md",
       [
         "---",
-        "name: design",
-        "description: design skill",
+        "name: plan",
+        "description: plan skill",
         ...MINIMAL_SELECTION_LINES,
         "intent:",
         "  outputs: [execution_plan]",
@@ -1102,7 +1105,7 @@ describe("skill document parsing", () => {
         "  fallback_tools: []",
         "consumes: []",
         "---",
-        "# design",
+        "# plan",
       ],
     );
 

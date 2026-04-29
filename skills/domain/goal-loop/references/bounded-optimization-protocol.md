@@ -53,7 +53,7 @@ Do not start the loop until all of these are true:
 6. escalation path is concrete
 7. baseline fact is recorded
 
-If any item fails, route back to `design` or stop and ask the user.
+If any item fails, route back to `plan` or stop and ask the user.
 
 ## Evidence Discipline
 

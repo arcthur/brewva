@@ -7,10 +7,10 @@ criteria:
     weight: 3
     description: Iteration report classifies outcome as below_noise_floor, not progress
     pass_condition: "output_contains:iteration_report:below_noise_floor"
-  - name: escalation_to_design
+  - name: escalation_to_plan
     weight: 2
-    description: Continuation plan hands off to design, not another loop run
-    pass_condition: "output_contains:continuation_plan:design"
+    description: Continuation plan hands off to plan, not another loop run
+    pass_condition: "output_contains:continuation_plan:plan"
   - name: loop_contract_complete
     weight: 2
     description: Loop contract has all required fields including escalation_policy

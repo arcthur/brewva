@@ -4,20 +4,20 @@ This is the canonical reference for writing and rewriting Brewva skills.
 
 ## Foundational Principle
 
-**Violating the letter of these rules is violating the spirit of these rules.**
-
 ## Three Content Types
 
 Before writing anything, classify every piece of content:
 
-| Type              | Where it lives | Examples                                                                           |
-| ----------------- | -------------- | ---------------------------------------------------------------------------------- |
-| **Deterministic** | `scripts/`     | Classification logic, validation, routing, convergence checks, payload constraints |
-| **Judgment**      | SKILL.md body  | When to ask, how to rank, what to recommend, when to stop                          |
-| **Knowledge**     | `references/`  | Taxonomies, schema tables, protocol details, field definitions (100+ lines)        |
+| Type                               | Where it lives | Examples                                                                           |
+| ---------------------------------- | -------------- | ---------------------------------------------------------------------------------- |
+| **Executable deterministic logic** | `scripts/`     | Classification logic, validation, routing, convergence checks, payload constraints |
+| **Read-only deterministic rules**  | `invariants/`  | Rule tables, gates, classifiers, and schemas for skills without `local_exec`       |
+| **Judgment**                       | SKILL.md body  | When to ask, how to rank, what to recommend, when to stop                          |
+| **Knowledge**                      | `references/`  | Taxonomies, schema tables, protocol details, field definitions (100+ lines)        |
 
-If content is deterministic, it MUST be a script. Do not describe executable
-logic in prose and ask the Agent to "follow" it.
+If deterministic content is executable and the skill allows `local_exec`, it
+MUST be a script. If the skill is read-only, put the rule set in `invariants/`
+instead of implying local execution.
 
 ## SKILL.md Anatomy
 
@@ -29,7 +29,7 @@ YAML frontmatter (contracts, effects, resources, output_contracts — unchanged)
 ## The Iron Law
 ## When to Use / When NOT to Use
 ## Workflow
-## Scripts
+## Invariants or Scripts
 ## Decision Protocol
 ## Red Flags — STOP
 ## Common Rationalizations
@@ -40,9 +40,9 @@ YAML frontmatter (contracts, effects, resources, output_contracts — unchanged)
 
 ### Body limit: 150 lines (excluding frontmatter)
 
-If the body exceeds 150 lines, content must move to `references/` or
-`scripts/`. Tables, schema definitions, and protocol details are the first
-candidates for extraction.
+If the body exceeds 150 lines, content must move to `references/`,
+`invariants/`, or `scripts/`. Tables, schema definitions, and protocol details
+are the first candidates for extraction.
 
 ## Section Patterns
 
@@ -86,18 +86,17 @@ Capture the failing command, first error line, and affected boundary.
 
 Every phase-to-phase transition must say what happens on failure.
 
-### Scripts
+### Invariants Or Scripts
 
-List each script with its purpose and invocation. The Agent calls scripts
-for deterministic work; it does not re-implement the logic mentally.
+List each invariant or script with its purpose. Use `scripts/` only when the
+skill can execute local code. Use `invariants/` when the deterministic rule must
+be applied manually or consumed from host-provided output.
 
 ```markdown
-## Scripts
+## Invariants
 
-- `scripts/activate-lanes.py` — Input: change_categories JSON, changed_file_classes JSON.
-  Output: activated lane list. Run before Step 2.
-- `scripts/synthesize-dispositions.py` — Input: lane outcomes array.
-  Output: merge_decision. Run after all lanes report.
+- `invariants/review-lane-rules.md` — Input: change categories, file classes,
+  lane outcomes. Output: activated lanes and merge decision.
 ```
 
 ### Decision Protocol
@@ -214,6 +213,15 @@ description: Use when a diff or change plan needs risk review, merge readiness, 
 3. Scripts handle their own error cases and return structured error JSON.
 4. Scripts are executable (`chmod +x`) and declare their interpreter.
 5. SKILL.md tells the Agent WHEN to call the script. The script does the WHAT.
+
+## Invariant Design Rules
+
+1. Invariants describe deterministic rules for skills that cannot execute local
+   code.
+2. Invariants define inputs, rules, and outputs explicitly.
+3. Invariants never say "run this file"; they say "apply this rule set".
+4. If a future host runner turns an invariant into executable code, the skill
+   must also gain the corresponding execution effect.
 
 ## What NOT to Do
 

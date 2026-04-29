@@ -572,7 +572,7 @@ describe("workflow_status contract", () => {
       type: "skill_completed",
       timestamp: 110,
       payload: {
-        skillName: "strategy-review",
+        skillName: "strategy",
         outputKeys: ["strategy_review", "scope_decision", "strategic_risks"],
         outputs: {
           strategy_review: "Hold scope around advisory workflow state first.",

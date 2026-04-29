@@ -56,13 +56,12 @@ execution_hints:
     - tape_info
     - tape_search
     - cost_view
-    - skill_complete
 references:
-  - skills/meta/skill-authoring/references/authored-behavior.md
+  - references/example.md
+  - references/rationalizations.md
 scripts:
   - scripts/locate_session_artifacts.sh
 consumes: []
-requires: []
 ---
 
 # Runtime Forensics
@@ -86,7 +85,7 @@ Do NOT use when:
 
 - the question is about source code design — route to review or debugging
 - the task requires writing fixes — route to implementation
-- the evidence is hypothetical ("what would happen if…") — route to design
+- the evidence is hypothetical ("what would happen if…") — route to plan
 
 ## Workflow
 
@@ -159,42 +158,11 @@ If you catch yourself thinking any of these, STOP and return to Phase 1:
 
 ## Common Rationalizations
 
-| Excuse                                            | Reality                                                            |
-| ------------------------------------------------- | ------------------------------------------------------------------ |
-| "Source code proves what happened at runtime"     | Source shows intent, artifacts show what actually executed.        |
-| "The projection is close enough to authoritative" | Projections are derived views; event store is the source of truth. |
-| "The gap in the trace is obvious from context"    | Obvious gaps produce wrong root causes. Name the missing artifact. |
-| "Raw JSONL dump is sufficient evidence"           | Raw dumps without causal interpretation are noise, not forensics.  |
-| "One session artifact tells the whole story"      | Cross-layer correlation catches what single-layer analysis misses. |
+See `references/rationalizations.md` for the anti-pattern table.
 
 ## Concrete Example
 
-Input: "Explain why the session still looked like it was recovering after provider fallback already succeeded."
-
-Output:
-
-```json
-{
-  "runtime_trace": "Turn 8 records `provider_fallback_retry` with `status=entered` and `attempt=1`. The fallback-model request then succeeds and output resumes, but no later `completed` or `failed` transition is present for that attempt. On the next turn, the hosted transition snapshot still reports `pendingFamily=recovery`, so posture-aware runtime plugins keep treating the session as mid-recovery.",
-  "session_summary": "Session `sess_abc123` is functionally resumed but still advertises recovery posture because the durable provider-fallback transition sequence never closed.",
-  "artifact_findings": [
-    {
-      "type": "anomaly",
-      "layer": "event_store",
-      "detail": "`provider_fallback_retry` has an `entered` record with no later `completed` or `failed` event for attempt=1",
-      "severity": "high",
-      "evidence_path": ".orchestrator/events/sess_c2Vzc19hYmMxMjM.jsonl"
-    },
-    {
-      "type": "divergence",
-      "layer": "derived_projection",
-      "detail": "Recovery posture stays active even though later output was rendered successfully",
-      "severity": "medium",
-      "evidence_path": ".orchestrator/projection"
-    }
-  ]
-}
-```
+See `references/example.md` for the grounded example output shape.
 
 ## Handoff Expectations
 
@@ -211,5 +179,3 @@ Output:
 - The question is about source design, not runtime behavior.
 - Session identity cannot be resolved from available evidence.
 - The investigation would require workspace writes (denied by effect governance).
-
-Violating the letter is violating the spirit.

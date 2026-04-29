@@ -56,9 +56,9 @@ execution_hints:
     - output_search
   fallback_tools:
     - subagent_fanout
-    - skill_complete
 references:
-  - skills/meta/skill-authoring/references/authored-behavior.md
+  - references/example.md
+  - references/rationalizations.md
 consumes:
   - investigation_record
   - review_findings
@@ -68,7 +68,6 @@ consumes:
   - verification_evidence
   - design_spec
   - change_set
-requires: []
 ---
 
 # Knowledge Capture Skill
@@ -78,8 +77,6 @@ requires: []
 ```
 NO SOLUTION RECORD WITHOUT AUTHORITATIVE SOURCE ARTIFACTS
 ```
-
-Violating the letter of this rule is violating the spirit of this rule.
 
 ## When to Use / When NOT to Use
 
@@ -145,48 +142,11 @@ If you catch yourself thinking any of these, STOP and return to Phase 1:
 
 ## Common Rationalizations
 
-| Excuse                                               | Reality                                                                                       |
-| ---------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| "The fix is fresh in memory, I don't need artifacts" | Memory is not authority. Solution records must cite typed artifacts, not recall.              |
-| "Failed attempts clutter the record"                 | Failed attempts are the most valuable part of a precedent — they prevent rework.              |
-| "A new record is cleaner than updating the old one"  | Duplicate records fragment the precedent layer. Update the canonical record.                  |
-| "Transcript is detailed enough as a source"          | Transcript is supplemental. investigation_record, review_report, and design_spec are primary. |
-| "Skipping feels like I didn't finish"                | A skipped capture with a reason is better than a weak record that misleads.                   |
+See `references/rationalizations.md` for the anti-pattern table.
 
 ## Concrete Example
 
-Input: "Record the stuck recovery-posture fix so the next planner can find the root cause, failed attempts, and prevention guidance."
-
-Output:
-
-```json
-{
-  "solution_record": {
-    "problem_class": "Hosted recovery posture remained active after successful provider fallback",
-    "boundary": "packages/brewva-gateway/src/session/compaction-recovery.ts",
-    "root_cause": "A provider fallback success path returned without recording `provider_fallback_retry` as `completed`, leaving the hosted transition snapshot in `pendingFamily=recovery`.",
-    "fix": "Record the closing transition on every recovered fallback path and add regression coverage for recovery snapshot clearing plus the reduction gate that reads recovery posture.",
-    "failed_attempts": [
-      {
-        "attempt": "Treat the issue as a `workflow_status` derivation bug",
-        "outcome": "Left the underlying recovery snapshot inconsistent and the next turn still looked active",
-        "lesson": "The durable transition sequence, not the advisory read model, owns recovery posture"
-      }
-    ],
-    "preventive_guidance": [
-      "Every hosted transition reason that emits `status=entered` must emit a closing `completed`, `failed`, or `skipped` event before normal turn flow resumes",
-      "Recovery regression tests must assert that `pendingFamily` clears after a successful fallback retry"
-    ],
-    "source_artifacts": [
-      "investigation_record:provider-fallback-stuck-recovery",
-      "verification_evidence:turn-transition-posture-regression"
-    ],
-    "derivative_links": ["docs/reference/events.md", "docs/reference/session-lifecycle.md"]
-  },
-  "solution_doc_path": "docs/solutions/provider-fallback-stuck-recovery-posture.md",
-  "capture_status": "created"
-}
-```
+See `references/example.md` for the grounded example output shape.
 
 ## Handoff Expectations
 

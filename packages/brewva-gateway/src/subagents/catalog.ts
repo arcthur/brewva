@@ -452,11 +452,13 @@ export const BUILTIN_AGENT_SPECS: Readonly<Record<string, HostedAgentSpec>> = {
 
 const DEFAULT_AGENT_SPEC_BY_SKILL_NAME: Readonly<Record<string, string>> = {
   "repository-analysis": "advisor",
+  architecture: "advisor",
+  "office-hours": "advisor",
   discovery: "advisor",
   "learning-research": "advisor",
   debugging: "advisor",
-  "strategy-review": "advisor",
-  design: "advisor",
+  strategy: "advisor",
+  plan: "advisor",
   review: "advisor",
   "predict-review": "advisor",
   qa: "qa",
@@ -465,11 +467,13 @@ const DEFAULT_AGENT_SPEC_BY_SKILL_NAME: Readonly<Record<string, string>> = {
 
 const DEFAULT_FALLBACK_RESULT_MODE_BY_SKILL_NAME: Readonly<Record<string, SubagentResultMode>> = {
   "repository-analysis": "consult",
+  architecture: "consult",
+  "office-hours": "consult",
   discovery: "consult",
   "learning-research": "consult",
   debugging: "consult",
-  "strategy-review": "consult",
-  design: "consult",
+  strategy: "consult",
+  plan: "consult",
   review: "consult",
   "predict-review": "consult",
   qa: "qa",

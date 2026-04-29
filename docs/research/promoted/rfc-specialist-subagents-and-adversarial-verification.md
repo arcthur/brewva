@@ -46,7 +46,7 @@ Stable implementation now includes:
 - public semantic skills route into explicit consult posture instead of
   expanding the public worker taxonomy:
   `discovery -> advisor (investigate)`, `debugging -> advisor (diagnose)`,
-  `design -> advisor (design)`, and `review -> advisor (review)`
+  `plan -> advisor (design)`, and `review -> advisor (review)`
 - `consult` is the first-class read-only delegated result posture, keyed by
   explicit `consultKind`, rather than a second public `explore` / `plan` /
   `review` worker surface

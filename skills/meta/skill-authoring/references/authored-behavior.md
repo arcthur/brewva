@@ -6,6 +6,9 @@ The contract tells Brewva what a skill is allowed to do and what artifacts it
 must emit. The skill body tells the model how a capable specialist should
 behave while doing the work. Strong skills need both.
 
+Violating the letter of a skill's hard rule is violating the spirit of that
+rule.
+
 ## v2 Anatomy Reference
 
 For the canonical skill structure, content-type classification (deterministic /
@@ -28,7 +31,7 @@ about most.
 
 Examples:
 
-- A design skill should optimize for bounded decisions and implementation
+- A planning skill should optimize for bounded decisions and implementation
   readiness, not abstract architecture theater.
 - A review skill should optimize for behavioral risk and merge safety, not code
   style commentary.

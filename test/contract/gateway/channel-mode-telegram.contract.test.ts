@@ -595,7 +595,7 @@ describe("gateway contract: telegram channel dispatch", () => {
             sessionId: hostedSession!.sessionId,
             type: "skill_completed",
             payload: {
-              skillName: "design",
+              skillName: "plan",
               outputs: {
                 open_questions: ["Should the update target the daemon or the print path?"],
               },
@@ -719,7 +719,7 @@ describe("gateway contract: telegram channel dispatch", () => {
             sessionId: hostedSession!.sessionId,
             type: "skill_completed",
             payload: {
-              skillName: "design",
+              skillName: "plan",
               outputs: {
                 open_questions: ["Should the update target the daemon or the print path?"],
               },
@@ -853,7 +853,7 @@ describe("gateway contract: telegram channel dispatch", () => {
             sessionId: defaultSession!.sessionId,
             type: "skill_completed",
             payload: {
-              skillName: "design",
+              skillName: "plan",
               outputs: {
                 open_questions: ["Should the update target the daemon or the print path?"],
               },
@@ -1034,7 +1034,7 @@ describe("gateway contract: telegram channel dispatch", () => {
             sessionId: defaultSession!.sessionId,
             type: "skill_completed",
             payload: {
-              skillName: "design",
+              skillName: "plan",
               outputs: {
                 open_questions: ["Should the update target the daemon or the print path?"],
               },

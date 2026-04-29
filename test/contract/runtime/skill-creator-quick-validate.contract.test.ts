@@ -28,7 +28,7 @@ describe("skill-authoring quick validator", () => {
     const result = runQuickValidate({
       scriptPath,
       cwd: repoRoot,
-      skillDirectory: join(repoRoot, "skills/core/design"),
+      skillDirectory: join(repoRoot, "skills/core/plan"),
     });
 
     expect(result.status).toBe(0);
@@ -258,7 +258,7 @@ describe("skill-authoring quick validator", () => {
           "  preferred_tools: [read]",
           "  fallback_tools: []",
           "  suggested_chains:",
-          "    - steps: [design, implementation]",
+          "    - steps: [plan, implementation]",
           "consumes: []",
           "---",
           "# chaincraft",

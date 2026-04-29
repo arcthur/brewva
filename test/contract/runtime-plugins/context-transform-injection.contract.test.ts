@@ -157,6 +157,8 @@ describe("context transform injection contract", () => {
       filePath: "/tmp/review/SKILL.md",
       baseDir: "/tmp/review",
       markdown: "# review",
+      authoredMarkdown: "# review",
+      inheritedMarkdown: "",
       contract: {
         name: "review",
         category: "core",
@@ -172,6 +174,18 @@ describe("context transform injection contract", () => {
         },
       },
       resources: {
+        references: [],
+        scripts: [],
+        heuristics: [],
+        invariants: [],
+      },
+      authoredResources: {
+        references: [],
+        scripts: [],
+        heuristics: [],
+        invariants: [],
+      },
+      inheritedResources: {
         references: [],
         scripts: [],
         heuristics: [],

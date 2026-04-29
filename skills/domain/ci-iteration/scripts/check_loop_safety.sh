@@ -45,7 +45,7 @@ if not data.get('stop_condition'):
     blocking.append('stop condition for this run is not explicit')
 
 if data.get('is_design_drift', False):
-    blocking.append('problem has drifted from CI iteration into design territory — route to design or debugging')
+    blocking.append('problem has drifted from CI iteration into planning territory — route to plan or debugging')
 
 safe = len(blocking) == 0
 print(json.dumps({'safe_to_continue': safe, 'blocking': blocking}))

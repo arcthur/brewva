@@ -14,6 +14,7 @@ interface SkillDiagnosisCatalogEntry {
   description: string;
   category: LoadableSkillCategory;
   markdown?: string;
+  authoredMarkdown?: string;
   contract: SkillContract;
 }
 
@@ -657,7 +658,7 @@ function scoreSkill(
   pushReason(reasons, exampleSignal.reason);
 
   const triggerSignal = scoreSignalSetAcrossSources(
-    extractMarkdownBullets(skill.markdown, "Trigger"),
+    extractMarkdownBullets(skill.authoredMarkdown ?? skill.markdown, "Trigger"),
     input,
     {
       spec: { exact: 1.55, strong: 1.25, partial: 1.0 },

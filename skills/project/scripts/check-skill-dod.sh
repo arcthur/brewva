@@ -70,10 +70,6 @@ while IFS= read -r file; do
     missing+=("consumes_field")
   fi
 
-  if ! grep -Eq '^requires:' "${file}"; then
-    missing+=("requires_field")
-  fi
-
   if ! grep -Eq '^effects:' "${file}"; then
     missing+=("effects_field")
   fi

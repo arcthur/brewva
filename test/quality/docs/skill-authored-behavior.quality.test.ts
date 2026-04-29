@@ -13,10 +13,12 @@ function readRepoFile(relativePath: string): string {
 describe("skill authored behavior coverage", () => {
   for (const relativePath of [
     "skills/core/repository-analysis/SKILL.md",
+    "skills/core/architecture/SKILL.md",
+    "skills/core/office-hours/SKILL.md",
     "skills/core/discovery/SKILL.md",
     "skills/core/learning-research/SKILL.md",
-    "skills/core/strategy-review/SKILL.md",
-    "skills/core/design/SKILL.md",
+    "skills/core/strategy/SKILL.md",
+    "skills/core/plan/SKILL.md",
     "skills/core/debugging/SKILL.md",
     "skills/core/implementation/SKILL.md",
     "skills/core/review/SKILL.md",
@@ -31,9 +33,9 @@ describe("skill authored behavior coverage", () => {
     "skills/domain/github/SKILL.md",
     "skills/domain/goal-loop/SKILL.md",
     "skills/domain/predict-review/SKILL.md",
-    "skills/domain/structured-extraction/SKILL.md",
+    "skills/domain/extract/SKILL.md",
     "skills/domain/telegram/SKILL.md",
-    "skills/operator/git-ops/SKILL.md",
+    "skills/operator/git/SKILL.md",
     "skills/meta/self-improve/SKILL.md",
     "skills/meta/skill-authoring/SKILL.md",
   ]) {
@@ -53,11 +55,46 @@ describe("skill authored behavior coverage", () => {
     expect(markdown).toContain("Author the behavior, not just the schema");
   });
 
-  test("strategy-review documents timing pressure and explicit scope ledgers", () => {
-    const markdown = readRepoFile("skills/core/strategy-review/SKILL.md");
+  test("strategy documents timing pressure and explicit scope ledgers", () => {
+    const markdown = readRepoFile("skills/core/strategy/SKILL.md");
 
     expect(markdown).toMatch(/why now/i);
     expect(markdown).toMatch(/accepted\s*\/\s*deferred\s*\/\s*non-goals scope ledger/);
+  });
+
+  test("architecture preserves deepening language and seam discipline", () => {
+    const markdown = readRepoFile("skills/core/architecture/SKILL.md");
+    const language = readRepoFile("skills/core/architecture/references/language.md");
+    const deepening = readRepoFile("skills/core/architecture/references/deepening.md");
+
+    expect(markdown).toContain("NO DEEPENING OPPORTUNITY WITHOUT A NAMED MODULE");
+    expect(markdown).toContain("deletion test");
+    expect(markdown).toContain("interface as the test surface");
+    expect(language).toContain("Module");
+    expect(language).toContain("Depth");
+    expect(deepening).toContain("One adapter is a hypothetical seam");
+    expect(deepening).toContain("Testing Through The Deepened Interface");
+  });
+
+  test("office-hours preserves diagnostic discipline from the source skill", () => {
+    const markdown = readRepoFile("skills/core/office-hours/SKILL.md");
+    const startup = readRepoFile("skills/core/office-hours/references/startup-diagnostic.md");
+    const builder = readRepoFile("skills/core/office-hours/references/builder-mode.md");
+    const alternatives = readRepoFile(
+      "skills/core/office-hours/references/premise-and-alternatives.md",
+    );
+
+    expect(markdown).toContain("NO OFFICE HOURS WITHOUT MODE, PREMISES, AND A NEXT ASSIGNMENT");
+    expect(markdown).toContain("Ask one question at a time");
+    expect(markdown).toContain("Office-hours compares bets, not task lists");
+    expect(startup).toContain("Interest is not demand");
+    expect(startup).toContain("The status quo is your real competitor");
+    expect(startup).toContain("Desperate Specificity");
+    expect(builder).toContain("Delight is the currency");
+    expect(builder).toContain("Ship something you can show people");
+    expect(alternatives).toContain("Minimal viable path");
+    expect(alternatives).toContain("Ideal architecture or fullest-value path");
+    expect(alternatives).toContain("Creative or lateral path");
   });
 
   test("qa documents diff-aware, browser-first, and rerun-after-fix behavior", () => {

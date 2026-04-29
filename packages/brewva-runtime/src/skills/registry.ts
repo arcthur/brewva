@@ -61,6 +61,11 @@ interface ProjectGuidanceSource extends ProjectGuidanceEntry {
   markdown: string;
 }
 
+interface DefaultSkillGuidanceSource {
+  filePath: string;
+  markdown: string;
+}
+
 interface LoadedSkillOrigin {
   base: SkillIndexOrigin;
   overlays: SkillIndexOrigin[];
@@ -416,6 +421,16 @@ function renderProjectGuidance(entries: ProjectGuidanceSource[]): string {
   return joinMarkdownSections(sections);
 }
 
+function renderDefaultSkillGuidance(entries: DefaultSkillGuidanceSource[]): string {
+  if (entries.length === 0) return "";
+  const sections = entries.map((entry) => {
+    const title = basename(entry.filePath).replace(/\.md$/i, "");
+    const markdown = demoteProjectGuidanceHeadings(entry.markdown.trim());
+    return `## Runtime Skill Guidance: ${title}\n\nMetadata: source=runtime_default; kind=authored_behavior\n\n${markdown}`;
+  });
+  return joinMarkdownSections(sections);
+}
+
 function cloneLoadReport(report: SkillRegistryLoadReport): SkillRegistryLoadReport {
   return {
     roots: report.roots.map(cloneSkillRegistryRoot),
@@ -456,6 +471,7 @@ export class SkillRegistry {
   };
   private skills = new Map<string, SkillDocument>();
   private projectGuidanceEntries: ProjectGuidanceSource[] = [];
+  private defaultSkillGuidanceEntries: DefaultSkillGuidanceSource[] = [];
   private skillOrigins = new Map<string, LoadedSkillOrigin>();
   private baseMarkdownBySkill = new Map<string, string>();
   private overlayMarkdownsBySkill = new Map<string, string[]>();
@@ -469,6 +485,7 @@ export class SkillRegistry {
   load(): void {
     this.skills.clear();
     this.projectGuidanceEntries = [];
+    this.defaultSkillGuidanceEntries = [];
     this.skillOrigins.clear();
     this.baseMarkdownBySkill.clear();
     this.overlayMarkdownsBySkill.clear();
@@ -495,7 +512,8 @@ export class SkillRegistry {
       skill.contract = tightenContract(skill.contract, override);
     }
 
-    this.applyProjectGuidance();
+    this.defaultSkillGuidanceEntries = this.loadDefaultSkillGuidance();
+    this.applyInheritedGuidance();
     this.lastLoadReport = this.buildLoadReport();
   }
 
@@ -678,6 +696,8 @@ export class SkillRegistry {
       this.skills.set(parsed.name, {
         ...parsed,
         resources: resolvedResources,
+        authoredResources: resolvedResources,
+        inheritedResources: createEmptySkillResources(),
       });
       this.baseMarkdownBySkill.set(parsed.name, parsed.markdown);
       this.overlayMarkdownsBySkill.set(parsed.name, []);
@@ -694,6 +714,23 @@ export class SkillRegistry {
 
   private loadProjectGuidance(dir: string): ProjectGuidanceSource[] {
     return listMarkdownFiles(dir).map((filePath) => parseProjectGuidanceFile(filePath));
+  }
+
+  private loadDefaultSkillGuidance(): DefaultSkillGuidanceSource[] {
+    const skillAuthoring = this.skills.get("skill-authoring");
+    if (!skillAuthoring) {
+      return [];
+    }
+    const authoredBehaviorPath = join(skillAuthoring.baseDir, "references", "authored-behavior.md");
+    if (!existsSync(authoredBehaviorPath)) {
+      return [];
+    }
+    return [
+      {
+        filePath: authoredBehaviorPath,
+        markdown: readFileSync(authoredBehaviorPath, "utf8"),
+      },
+    ];
   }
 
   private loadOverlays(dir: string, root: SkillRegistryRoot): void {
@@ -722,14 +759,20 @@ export class SkillRegistry {
       overlayMarkdowns.push(overlay.markdown);
       this.overlayMarkdownsBySkill.set(overlay.name, overlayMarkdowns);
 
-      const mergedMarkdown = joinMarkdownSections([baseMarkdown, ...overlayMarkdowns]);
-      const mergedResources = mergeSkillResources(baseSkill.resources, resolvedOverlayResources);
+      const authoredMarkdown = joinMarkdownSections([baseMarkdown, ...overlayMarkdowns]);
+      const authoredResources = mergeSkillResources(
+        baseSkill.authoredResources,
+        resolvedOverlayResources,
+      );
+      const mergedResources = mergeSkillResources(authoredResources, baseSkill.inheritedResources);
 
       this.skills.set(overlay.name, {
         ...baseSkill,
-        markdown: mergedMarkdown,
+        markdown: joinMarkdownSections([baseSkill.inheritedMarkdown, authoredMarkdown]),
+        authoredMarkdown,
         contract: mergeOverlayContract(baseSkill.contract, overlay.contract),
         resources: mergedResources,
+        authoredResources,
         overlayFiles: [...new Set([...baseSkill.overlayFiles, filePath])],
       });
       origin.overlays.push({
@@ -740,28 +783,47 @@ export class SkillRegistry {
     }
   }
 
-  private applyProjectGuidance(): void {
-    if (this.projectGuidanceEntries.length === 0) {
+  private applyInheritedGuidance(): void {
+    if (this.projectGuidanceEntries.length === 0 && this.defaultSkillGuidanceEntries.length === 0) {
       return;
     }
     const projectGuidanceMarkdown = renderProjectGuidance(this.projectGuidanceEntries);
-    const guidanceResources = {
+    const defaultSkillGuidanceMarkdown = renderDefaultSkillGuidance(
+      this.defaultSkillGuidanceEntries,
+    );
+    const projectGuidanceResources = {
       ...createEmptySkillResources(),
       references: this.projectGuidanceEntries.map((entry) => entry.filePath),
     };
+    const defaultSkillGuidanceResources = {
+      ...createEmptySkillResources(),
+      references: this.defaultSkillGuidanceEntries.map((entry) => entry.filePath),
+    };
+    const inheritedMarkdown = joinMarkdownSections([
+      projectGuidanceMarkdown,
+      defaultSkillGuidanceMarkdown,
+    ]);
+    const inheritedResources = mergeSkillResources(
+      projectGuidanceResources,
+      defaultSkillGuidanceResources,
+    );
     const projectGuidance = uniqueProjectGuidanceEntries(this.projectGuidanceEntries);
 
     for (const [name, skill] of this.skills.entries()) {
       const baseMarkdown = this.baseMarkdownBySkill.get(name) ?? skill.markdown;
       const overlayMarkdowns = this.overlayMarkdownsBySkill.get(name) ?? [];
+      const authoredMarkdown = joinMarkdownSections([baseMarkdown, ...overlayMarkdowns]);
+      const combinedInheritedResources = mergeSkillResources(
+        skill.inheritedResources,
+        inheritedResources,
+      );
       this.skills.set(name, {
         ...skill,
-        markdown: joinMarkdownSections([
-          projectGuidanceMarkdown,
-          baseMarkdown,
-          ...overlayMarkdowns,
-        ]),
-        resources: mergeSkillResources(skill.resources, guidanceResources),
+        markdown: joinMarkdownSections([inheritedMarkdown, authoredMarkdown]),
+        authoredMarkdown,
+        inheritedMarkdown,
+        resources: mergeSkillResources(skill.authoredResources, combinedInheritedResources),
+        inheritedResources: combinedInheritedResources,
         projectGuidance,
       });
     }

@@ -93,7 +93,21 @@ function buildReadinessSkill(input: {
     filePath: `/tmp/${input.name}/SKILL.md`,
     baseDir: `/tmp/${input.name}`,
     markdown: `# ${input.name}`,
+    authoredMarkdown: `# ${input.name}`,
+    inheritedMarkdown: "",
     resources: {
+      references: [],
+      scripts: [],
+      heuristics: [],
+      invariants: [],
+    },
+    authoredResources: {
+      references: [],
+      scripts: [],
+      heuristics: [],
+      invariants: [],
+    },
+    inheritedResources: {
       references: [],
       scripts: [],
       heuristics: [],

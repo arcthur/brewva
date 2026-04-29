@@ -273,7 +273,7 @@ describe("context source order integration", () => {
       type: "skill_completed",
       timestamp: 100,
       payload: {
-        skillName: "design",
+        skillName: "plan",
         outputKeys: ["design_spec"],
         outputs: {
           design_spec: "Deterministic workflow advisory for the active task.",

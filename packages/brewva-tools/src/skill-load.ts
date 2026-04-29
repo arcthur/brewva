@@ -32,6 +32,8 @@ function formatSkillOutput(input: {
   contract: SkillContract;
   routable: boolean;
   resources?: SkillResourceSet;
+  authoredResources?: SkillResourceSet;
+  inheritedResources?: SkillResourceSet;
   availableConsumedOutputs?: SkillConsumedOutputsView;
   skillReadiness?: SkillReadinessEntry;
 }): string {
@@ -92,6 +94,17 @@ function formatSkillOutput(input: {
     lines.push(`- scripts: ${input.resources.scripts.join(", ") || "(none)"}`);
     lines.push(`- heuristics: ${input.resources.heuristics.join(", ") || "(none)"}`);
     lines.push(`- invariants: ${input.resources.invariants.join(", ") || "(none)"}`);
+    if (input.authoredResources || input.inheritedResources) {
+      lines.push(
+        `- authored references: ${input.authoredResources?.references.join(", ") || "(none)"}`,
+      );
+      lines.push(
+        `- inherited references: ${input.inheritedResources?.references.join(", ") || "(none)"}`,
+      );
+      lines.push(
+        `- inherited invariants: ${input.inheritedResources?.invariants.join(", ") || "(none)"}`,
+      );
+    }
   }
 
   const consumedOutputs = input.availableConsumedOutputs?.outputs ?? {};
@@ -168,6 +181,8 @@ export function createSkillLoadTool(options: BrewvaToolOptions): ToolDefinition 
             contract: skill.contract,
             routable: loadReport.routableSkills.includes(skill.name),
             resources: skill.resources,
+            authoredResources: skill.authoredResources,
+            inheritedResources: skill.inheritedResources,
             availableConsumedOutputs,
             skillReadiness,
           }),

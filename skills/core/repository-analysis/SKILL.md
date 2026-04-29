@@ -86,11 +86,10 @@ execution_hints:
     - lsp_symbols
     - lsp_find_references
     - ledger_query
-    - skill_complete
-references:
-  - skills/meta/skill-authoring/references/authored-behavior.md
 consumes: []
-requires: []
+references:
+  - references/example.md
+  - references/rationalizations.md
 ---
 
 # Repository Analysis Skill
@@ -100,8 +99,6 @@ requires: []
 ```
 NO IMPACT MAP WITHOUT PATH-GROUNDED EVIDENCE
 ```
-
-Violating the letter of this rule is violating the spirit of this rule.
 
 ## When to Use / When NOT to Use
 
@@ -152,7 +149,7 @@ Once the hot path and boundary map are clear, stop expanding. Do not scan more f
 - Which entrypoint or public boundary is most likely to own this request?
 - What file or module would have to change if the user's complaint is real?
 - Which adjacent boundary is most likely to create hidden blast radius?
-- What unknown still blocks downstream design, review, or debugging work?
+- What unknown still blocks downstream planning, review, or debugging work?
 - What planning posture matches the actual blast radius and evidence depth?
 
 ## Red Flags — STOP
@@ -167,58 +164,11 @@ If you catch yourself thinking any of these, STOP and return to Phase 1:
 
 ## Common Rationalizations
 
-| Excuse                                     | Reality                                                                             |
-| ------------------------------------------ | ----------------------------------------------------------------------------------- |
-| "More files scanned means better analysis" | Scanning without a hypothesis is waste. Targeted reads beat breadth.                |
-| "I know this boundary from prior context"  | Path-grounded means verified this session, not remembered from last time.           |
-| "I'll mark it high_risk to be safe"        | Posture inflation wastes downstream planning effort. Classify from evidence.        |
-| "The directory listing tells me enough"    | Directory structure is a routing aid, not an impact analysis. Read the actual code. |
-| "I'll add the path and verify later"       | Unverified paths in the impact map mislead every downstream consumer.               |
+See `references/rationalizations.md` for the anti-pattern table.
 
 ## Concrete Example
 
-Input: "Map the runtime-to-gateway-to-cli path and identify high-risk coupling points."
-
-Output:
-
-```json
-{
-  "repository_snapshot": "Brewva monorepo: runtime (packages/brewva-runtime) exposes semantic ports consumed by gateway (packages/brewva-gateway) via @brewva/brewva-runtime and @brewva/brewva-runtime/internal. Gateway exposes host session creation and runtime plugins. CLI (packages/brewva-cli) consumes gateway's host entrypoint for session lifecycle. Three-package chain with two cross-package boundaries.",
-  "impact_map": {
-    "summary": "Runtime→gateway boundary is the primary coupling surface. Gateway→CLI boundary is narrow (host session factory only). Runtime internal imports in gateway are the highest risk touchpoint.",
-    "affected_paths": [
-      "packages/brewva-runtime/src/runtime.ts",
-      "packages/brewva-runtime/src/contracts/index.ts",
-      "packages/brewva-gateway/src/host/create-hosted-session.ts",
-      "packages/brewva-gateway/src/runtime-plugins/index.ts",
-      "packages/brewva-cli/src/index.ts"
-    ],
-    "boundaries": [
-      {
-        "from": "brewva-runtime",
-        "to": "brewva-gateway",
-        "surface": "@brewva/brewva-runtime, @brewva/brewva-runtime/internal"
-      },
-      { "from": "brewva-gateway", "to": "brewva-cli", "surface": "@brewva/brewva-gateway/host" }
-    ],
-    "high_risk_touchpoints": [
-      {
-        "path": "packages/brewva-gateway/src/host/create-hosted-session.ts",
-        "reason": "Imports @brewva/brewva-runtime/internal — changes to internal exports break gateway silently"
-      }
-    ],
-    "change_categories": ["cross_package_contract", "public_api_surface"],
-    "changed_file_classes": ["runtime_contract", "gateway_host", "cli_entrypoint"]
-  },
-  "planning_posture": "complex",
-  "unknowns": [
-    {
-      "gap": "Gateway runtime-plugin re-export surface not fully traced",
-      "impact": "May hide additional coupling if plugins depend on runtime internals"
-    }
-  ]
-}
-```
+See `references/example.md` for the grounded example output shape.
 
 ## Handoff Expectations
 

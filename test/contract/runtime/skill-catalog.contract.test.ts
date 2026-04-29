@@ -38,12 +38,17 @@ describe("repository catalog contracts", () => {
     expect(loadedSkillNames).toEqual(
       expect.arrayContaining([
         "repository-analysis",
+        "architecture",
+        "office-hours",
         "discovery",
         "learning-research",
-        "strategy-review",
-        "design",
+        "strategy",
+        "plan",
+        "prep",
         "implementation",
         "knowledge-capture",
+        "extract",
+        "git",
         "qa",
         "ship",
         "retro",
@@ -51,6 +56,15 @@ describe("repository catalog contracts", () => {
         "skill-authoring",
       ]),
     );
+  });
+
+  test("renamed skill identities load under their new public names", () => {
+    const runtime = createCleanRuntime();
+
+    for (const name of ["plan", "strategy", "prep", "extract", "git"]) {
+      expect(runtime.inspect.skills.get(name)?.name).toBe(name);
+      expect(runtime.authority.skills.activate(`skill-catalog-new-${name}`, name).ok).toBe(true);
+    }
   });
 
   test("review remains read_only and standalone by contract", () => {
@@ -94,7 +108,7 @@ describe("repository catalog contracts", () => {
   });
 
   test("semantic-bound base skills keep canonical schemas in semantic bindings instead of producer contracts", () => {
-    const design = parseSkillDocument(`${repoRoot()}/skills/core/design/SKILL.md`, "core");
+    const plan = parseSkillDocument(`${repoRoot()}/skills/core/plan/SKILL.md`, "core");
     const implementation = parseSkillDocument(
       `${repoRoot()}/skills/core/implementation/SKILL.md`,
       "core",
@@ -103,7 +117,7 @@ describe("repository catalog contracts", () => {
     const qa = parseSkillDocument(`${repoRoot()}/skills/core/qa/SKILL.md`, "core");
     const ship = parseSkillDocument(`${repoRoot()}/skills/core/ship/SKILL.md`, "core");
 
-    for (const parsed of [design, implementation, review, qa, ship]) {
+    for (const parsed of [plan, implementation, review, qa, ship]) {
       expect(parsed.contract.intent?.outputContracts).toBeUndefined();
       expect(Object.keys(parsed.contract.intent?.semanticBindings ?? {}).length).toBeGreaterThan(0);
       expect(getSkillOutputContracts(parsed.contract)).toEqual({});
@@ -132,21 +146,40 @@ describe("repository catalog contracts", () => {
     expect(missing).toEqual([]);
   });
 
+  test("runtime injects shared authored behavior as inherited skill guidance", () => {
+    const runtime = createCleanRuntime();
+    const plan = runtime.inspect.skills.get("plan");
+    expect(plan).toBeDefined();
+
+    const inheritedReferences = plan?.inheritedResources.references ?? [];
+    const authoredReferences = plan?.authoredResources.references ?? [];
+
+    expect(inheritedReferences.some((entry) => entry.endsWith("authored-behavior.md"))).toBe(true);
+    expect(authoredReferences.some((entry) => entry.endsWith("authored-behavior.md"))).toBe(false);
+    expect(plan?.markdown).toContain("Runtime Skill Guidance: authored-behavior");
+    expect(plan?.authoredMarkdown).not.toContain("Runtime Skill Guidance: authored-behavior");
+  });
+
   test("core workflow skills declare the documented handoff graph", () => {
     const discovery = parseSkillDocument(`${repoRoot()}/skills/core/discovery/SKILL.md`, "core");
     const repositoryAnalysis = parseSkillDocument(
       `${repoRoot()}/skills/core/repository-analysis/SKILL.md`,
       "core",
     );
-    const strategyReview = parseSkillDocument(
-      `${repoRoot()}/skills/core/strategy-review/SKILL.md`,
+    const architecture = parseSkillDocument(
+      `${repoRoot()}/skills/core/architecture/SKILL.md`,
       "core",
     );
+    const officeHours = parseSkillDocument(
+      `${repoRoot()}/skills/core/office-hours/SKILL.md`,
+      "core",
+    );
+    const strategy = parseSkillDocument(`${repoRoot()}/skills/core/strategy/SKILL.md`, "core");
     const learningResearch = parseSkillDocument(
       `${repoRoot()}/skills/core/learning-research/SKILL.md`,
       "core",
     );
-    const design = parseSkillDocument(`${repoRoot()}/skills/core/design/SKILL.md`, "core");
+    const plan = parseSkillDocument(`${repoRoot()}/skills/core/plan/SKILL.md`, "core");
     const qa = parseSkillDocument(`${repoRoot()}/skills/core/qa/SKILL.md`, "core");
     const ship = parseSkillDocument(`${repoRoot()}/skills/core/ship/SKILL.md`, "core");
     const retro = parseSkillDocument(`${repoRoot()}/skills/core/retro/SKILL.md`, "core");
@@ -162,11 +195,47 @@ describe("repository catalog contracts", () => {
     expect(listSkillOutputs(repositoryAnalysis.contract)).toEqual(
       expect.arrayContaining(["repository_snapshot", "impact_map", "planning_posture"]),
     );
+    expect(architecture.contract.consumes).toEqual(
+      expect.arrayContaining([
+        "repository_snapshot",
+        "impact_map",
+        "review_findings",
+        "retro_findings",
+      ]),
+    );
+    expect(listSkillOutputs(architecture.contract)).toEqual(
+      expect.arrayContaining([
+        "architecture_assessment",
+        "deepening_opportunities",
+        "interface_exploration_brief",
+      ]),
+    );
+    expect(listSkillOutputs(officeHours.contract)).toEqual(
+      expect.arrayContaining([
+        "office_hours_brief",
+        "mode_decision",
+        "premise_challenge",
+        "approach_options",
+        "next_assignment",
+      ]),
+    );
     expect(listSkillOutputs(discovery.contract)).toEqual(
       expect.arrayContaining(["problem_frame", "scope_recommendation", "design_seed"]),
     );
-    expect(strategyReview.contract.consumes).toEqual(
+    expect(discovery.contract.consumes).toEqual(
       expect.arrayContaining([
+        "office_hours_brief",
+        "premise_challenge",
+        "approach_options",
+        "next_assignment",
+      ]),
+    );
+    expect(strategy.contract.consumes).toEqual(
+      expect.arrayContaining([
+        "office_hours_brief",
+        "premise_challenge",
+        "approach_options",
+        "next_assignment",
         "problem_frame",
         "user_pains",
         "scope_recommendation",
@@ -174,7 +243,7 @@ describe("repository catalog contracts", () => {
         "open_questions",
       ]),
     );
-    expect(design.contract.consumes).toEqual(
+    expect(plan.contract.consumes).toEqual(
       expect.arrayContaining([
         "planning_posture",
         "strategy_review",
@@ -211,7 +280,7 @@ describe("repository catalog contracts", () => {
     expect(selfImprove.contract.consumes).toEqual(
       expect.arrayContaining(["retro_findings", "ship_report"]),
     );
-    expect(listSkillOutputs(strategyReview.contract)).toEqual(
+    expect(listSkillOutputs(strategy.contract)).toEqual(
       expect.arrayContaining([
         "strategy_review",
         "scope_decision",

@@ -19,7 +19,6 @@ execution_hints:
     - exec
     - lsp_diagnostics
     - ledger_query
-    - skill_complete
 references:
   - skills/project/shared/package-boundaries.md
   - skills/project/shared/migration-priority-matrix.md
@@ -29,7 +28,6 @@ consumes:
   - execution_mode_hint
   - root_cause
   - fix_strategy
-requires: []
 ---
 
 # Brewva Implementation Overlay

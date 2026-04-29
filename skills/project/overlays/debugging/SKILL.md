@@ -23,7 +23,6 @@ execution_hints:
     - ledger_query
     - recall_search
     - cost_view
-    - skill_complete
 references:
   - skills/project/shared/package-boundaries.md
   - skills/project/shared/runtime-artifacts.md
@@ -32,7 +31,6 @@ consumes:
   - impact_map
   - verification_evidence
   - runtime_trace
-requires: []
 ---
 
 # Brewva Debugging Overlay

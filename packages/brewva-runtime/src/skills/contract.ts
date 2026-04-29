@@ -1462,6 +1462,8 @@ export function parseSkillDocument(filePath: string, category: SkillCategory): P
   const inferredName = toString(data.name, basename(dirname(filePath)) ?? "skill");
   const description = toString(data.description, `${inferredName} skill`);
   const resources = normalizeResourceSet(data, filePath);
+  const markdown = body.trim();
+  const emptyResources = createEmptySkillResources();
 
   if (category === "overlay") {
     const contract = normalizeContract(inferredName, category, data, filePath);
@@ -1471,9 +1473,13 @@ export function parseSkillDocument(filePath: string, category: SkillCategory): P
       category,
       filePath,
       baseDir: dirname(filePath),
-      markdown: body.trim(),
+      markdown,
+      authoredMarkdown: markdown,
+      inheritedMarkdown: "",
       contract,
       resources,
+      authoredResources: resources,
+      inheritedResources: emptyResources,
       projectGuidance: [],
       overlayFiles: [],
     };
@@ -1486,9 +1492,13 @@ export function parseSkillDocument(filePath: string, category: SkillCategory): P
     category,
     filePath,
     baseDir: dirname(filePath),
-    markdown: body.trim(),
+    markdown,
+    authoredMarkdown: markdown,
+    inheritedMarkdown: "",
     contract,
     resources,
+    authoredResources: resources,
+    inheritedResources: emptyResources,
     projectGuidance: [],
     overlayFiles: [],
   };

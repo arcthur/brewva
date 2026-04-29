@@ -22,11 +22,9 @@ execution_hints:
     - lsp_symbols
     - lsp_find_references
     - ledger_query
-    - skill_complete
 references:
   - skills/project/shared/package-boundaries.md
 consumes: []
-requires: []
 ---
 
 # Brewva Repository Analysis Overlay

@@ -21,7 +21,7 @@ loop_contract:
   max_runs: 12
   escalation_policy:
     trigger: 3 consecutive below_noise_floor
-    next_owner: design
+    next_owner: plan
 iteration_report:
   iteration_key: coverage-raise-2026-04-06/run-4/iter-1
   metric_value: 72.1
@@ -39,6 +39,6 @@ convergence_report:
     - 72.1
   evidence: "Runs 2-4 all below min_delta. Remaining uncovered paths require architectural changes."
 continuation_plan:
-  next_owner: design
+  next_owner: plan
   next_objective: "Redesign test strategy — remaining uncovered paths are behind dependency injection boundaries"
   evidence_for_handoff: "Last 3 runs added tests but coverage gains are below noise floor. DI refactor needed."

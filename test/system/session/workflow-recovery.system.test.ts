@@ -30,7 +30,7 @@ describe("system: workflow recovery", () => {
         type: "skill_completed",
         timestamp: 100,
         payload: {
-          skillName: "design",
+          skillName: "plan",
           outputKeys: [
             "design_spec",
             "execution_plan",

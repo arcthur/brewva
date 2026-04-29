@@ -42,6 +42,11 @@ for routability. A skill is routable only when routing is enabled, its scope is
 included in `skills.routing.scopes`, and `selection` declares at least one of
 `when_to_use`, `examples`, `paths`, or `phases`.
 
+Cold-start diagnosis reads skill-authored selection signals and authored
+markdown trigger text. Runtime-inherited guidance, including shared authored
+behavior and project shared guidance, is visible after activation through
+`skill_load` but does not participate in the initial scoring surface.
+
 There is no authored `routable` field. `skills_index.json` exposes generated
 `routable` state for inspection only.
 
@@ -56,32 +61,31 @@ align ──→ investigate ──→ execute ──→ verify ──→ ready_f
   └── blocked ←┘──── blocked ←┘──── blocked ←┘──────── blocked ←┘
 ```
 
-| Phase                  | Purpose                                          | Typical skills                         |
-| ---------------------- | ------------------------------------------------ | -------------------------------------- |
-| `align`                | Frame the problem, challenge scope, set strategy | discovery, strategy-review             |
-| `investigate`          | Understand the repository, research approaches   | repository-analysis, learning-research |
-| `execute`              | Design, implement, iterate                       | design, implementation, goal-loop      |
-| `verify`               | Review, QA, and evidence gathering               | review, qa                             |
-| `ready_for_acceptance` | Final go/no-go and release posture               | ship                                   |
-| `blocked`              | Escalation, debugging, forensics                 | debugging, runtime-forensics           |
-| `done`                 | Retrospective, knowledge capture                 | retro, knowledge-capture               |
+| Phase                  | Purpose                                          | Typical skills                                             |
+| ---------------------- | ------------------------------------------------ | ---------------------------------------------------------- |
+| `align`                | Frame the problem, challenge scope, set strategy | office-hours, discovery, strategy, architecture, plan      |
+| `investigate`          | Understand the repository, research approaches   | repository-analysis, architecture, learning-research, plan |
+| `execute`              | Implement, extract, and iterate                  | prep, implementation, extract, goal-loop                   |
+| `verify`               | Review, QA, and evidence gathering               | review, qa                                                 |
+| `ready_for_acceptance` | Final go/no-go and release posture               | ship                                                       |
+| `blocked`              | Escalation, debugging, forensics                 | debugging, runtime-forensics                               |
+| `done`                 | Retrospective, knowledge capture                 | retro, knowledge-capture                                   |
 
 Phase membership is a routing signal, not a hard gate. A skill can activate
 outside its declared phases when the model has strong evidence.
 
 ## Consumption Graph
 
-Skills declare `consumes` and `requires` in their frontmatter. These define
-a directed graph of artifact flow:
+Skills declare `consumes` and may declare `requires` in their frontmatter.
+These define a directed graph of artifact flow:
 
 ```
-discovery ──→ strategy-review ──→ design ──→ implementation ──→ review ──→ ship
-  │                                  │              │               │
-  │  problem_frame                   │  design_spec │  change_set   │  review_report
-  │  user_pains                      │  exec_plan   │  files_changed│  merge_decision
-  │  scope_recommendation            │  risk_register│  verification │
-  │  design_seed                     │              │  _evidence     │
-  └──────────────────────────────────┘              └───────────────┘
+office-hours ──→ discovery ──→ strategy ──→ plan ──→ implementation ──→ review ──→ ship
+  │                 │              │              │               │
+  │ office_hours    │ problem_     │ strategy_    │ design_spec   │ review_report
+  │ brief/options   │ frame/pains  │ review/scope │ exec_plan     │ merge_decision
+  │ next_assignment │ design_seed  │ risks        │ risk_register │
+  └─────────────────┴──────────────┴──────────────┴───────────────┘
 ```
 
 A skill is **consumption-ready** when all of its `requires` outputs exist in
@@ -111,6 +115,12 @@ Runtime exposes the relevant warm-transition data through explicit surfaces:
 Missing `requires` never hard-blocks `skill_load`; the load output renders the
 blocked posture and the missing required inputs. `composable_with` remains a
 separate lifecycle gate for concurrent skill activation.
+
+For cold-start choice among `office-hours`, `discovery`, and `strategy`, use
+the three-way decision table in `docs/guide/skill-playbook.md`. The short rule
+is: new idea premise diagnosis goes to `office-hours`, fuzzy existing request
+framing goes to `discovery`, and wedge/timing/scope pressure goes to
+`strategy`.
 
 These surfaces inform the next choice; they do not auto-switch skills.
 
@@ -143,8 +153,8 @@ Some transitions are escalations, not progressions:
 | -------------- | ----------------- | ------------------------------------------------------------------- |
 | Any skill      | debugging         | Unexpected failure, test regression, unclear root cause             |
 | Any skill      | runtime-forensics | Runtime crash, artifact corruption, session anomaly                 |
-| goal-loop      | design            | 3+ consecutive `below_noise_floor` iterations                       |
-| implementation | design            | Scope drift detected (files_changed exceeds implementation_targets) |
+| goal-loop      | plan              | 3+ consecutive `below_noise_floor` iterations                       |
+| implementation | plan              | Scope drift detected (files_changed exceeds implementation_targets) |
 | review         | implementation    | Findings require code changes before merge                          |
 | qa             | debugging         | QA failure with unclear root cause                                  |
 
@@ -163,7 +173,20 @@ interrupted chain explicitly.
 ### Feature development (full)
 
 ```
-discovery → strategy-review → design → implementation → review → qa → ship
+discovery -> strategy -> plan -> implementation -> review -> qa -> ship
+```
+
+### New idea / office hours
+
+```
+office-hours -> discovery -> strategy -> plan
+```
+
+Skip `discovery` only when office-hours already produced a concrete wedge and
+the next decision is scope posture:
+
+```
+office-hours -> strategy -> plan
 ```
 
 ### Bug fix
@@ -184,13 +207,19 @@ materialization tool remains `knowledge_capture`.
 ### Performance optimization (iterative)
 
 ```
-design → goal-loop → [implementation ↔ review] → ship
+plan -> goal-loop -> [implementation <-> review] -> ship
 ```
 
 ### Repository onboarding
 
 ```
-repository-analysis → discovery → design
+repository-analysis -> discovery -> plan
+```
+
+### Architecture improvement
+
+```
+repository-analysis -> architecture -> plan -> implementation -> review
 ```
 
 Not every task uses every skill. The shortest chain that satisfies the task
@@ -198,13 +227,15 @@ is the correct chain.
 
 ## Anti-Patterns
 
-| Anti-pattern                                                          | Why it fails                                                                        |
-| --------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| Skipping `design` and jumping to `implementation` on complex tasks    | No design_spec means no scope boundary, no risk register, no implementation_targets |
-| Running `review` without `verification_evidence`                      | Review cannot assess merge readiness without execution evidence                     |
-| Restarting the lifecycle after an escalation                          | Wastes completed artifacts; return to the interrupted skill instead                 |
-| Loading a skill "just in case" without checking consumption readiness | Skill will lack required inputs and produce shallow outputs                         |
-| Ignoring `workflow_status` or consumed-output signals                 | Prompt-only routing misses the artifacts and posture already produced               |
+| Anti-pattern                                                          | Why it fails                                                                                    |
+| --------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| Skipping `plan` and jumping to `implementation` on complex tasks      | No design_spec means no scope boundary, no risk register, no implementation_targets             |
+| Running `review` without `verification_evidence`                      | Review cannot assess merge readiness without execution evidence                                 |
+| Restarting the lifecycle after an escalation                          | Wastes completed artifacts; return to the interrupted skill instead                             |
+| Loading a skill "just in case" without checking consumption readiness | Skill will lack required inputs and produce shallow outputs                                     |
+| Ignoring `workflow_status` or consumed-output signals                 | Prompt-only routing misses the artifacts and posture already produced                           |
+| Treating repository mapping as architecture judgment                  | Path impact is not the same as module depth, interface burden, or seam quality                  |
+| Using `strategy` before a wedge exists                                | Strategy reviews timing and scope posture; `office-hours` diagnoses whether an idea has a wedge |
 
 ## Relationship to `skill-first.ts`
 

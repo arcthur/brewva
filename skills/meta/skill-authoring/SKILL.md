@@ -55,12 +55,13 @@ execution_hints:
     - exec
     - glob
     - ledger_query
-    - skill_complete
 references:
   - references/authored-behavior.md
   - references/output-patterns.md
   - references/workflows.md
   - references/skill-anatomy-v2.md
+  - references/example.md
+  - references/rationalizations.md
 scripts:
   - scripts/init_skill.py
   - scripts/fork_skill.py
@@ -69,7 +70,6 @@ scripts:
 consumes:
   - repository_snapshot
   - design_spec
-requires: []
 ---
 
 # Skill Authoring
@@ -111,14 +111,28 @@ Run `scripts/quick_validate.py` against the target path. It must fail for the
 right reasons before you write the skill.
 
 **If you cannot articulate a failing test**: Stop. The skill boundary is not
-clear enough to author. Return to design.
+clear enough to author. Return to plan.
 
 ### Phase 2: Define territory
 
 State the semantic boundary, trigger conditions, and what stays out of scope.
 Classify every piece of content using the three-type rule from
-`references/skill-anatomy-v2.md`: deterministic → scripts, judgment → SKILL.md
-body, knowledge → references.
+`references/skill-anatomy-v2.md`: executable deterministic logic → `scripts/`
+when `local_exec` is allowed, read-only deterministic rules → `invariants/`,
+judgment → SKILL.md body, knowledge → references.
+
+Use the latent/deterministic split explicitly:
+
+| Content type                                                                  | Put it in     | Reason                                                                    |
+| ----------------------------------------------------------------------------- | ------------- | ------------------------------------------------------------------------- |
+| Executable checks, transformations, validators, and repeatable classification | `scripts/`    | Code gives the host a stable mechanism when the skill may execute locally |
+| Read-only deterministic rules, gates, and classifier tables                   | `invariants/` | The rule is stable without implying the active skill can run local code   |
+| Judgment, sequencing, stop rules, and failure-mode handling                   | `SKILL.md`    | The body should teach the model when and how to decide                    |
+| Background knowledge, examples, taxonomies, and large tables                  | `references/` | Reference material stays available without bloating the active protocol   |
+
+Do not encode deterministic behavior as "remember to..." prose. Use `scripts/`
+when the skill is allowed to execute locally; use `invariants/` when the skill
+is read-only.
 
 **If the territory overlaps an existing skill**: Stop. Prefer tightening the
 existing skill or creating an overlay.
@@ -133,11 +147,12 @@ Produce:
 - `skill_scaffold`: minimal SKILL.md skeleton following v2 anatomy
 
 Apply the v2 section order: Iron Law → When to Use → Workflow (with failure
-branches) → Scripts → Decision Protocol → Red Flags → Common Rationalizations →
-Concrete Example → Handoff Expectations → Stop Conditions.
+branches) → Invariants or Scripts → Decision Protocol → Red Flags → Common
+Rationalizations → Concrete Example → Handoff Expectations → Stop Conditions.
 
 **If the body exceeds 150 lines**: Extract tables, schemas, or protocol details
-to `references/`. Extract deterministic logic to `scripts/`.
+to `references/`. Extract executable deterministic logic to `scripts/` only
+when `local_exec` is allowed; otherwise extract the rule set to `invariants/`.
 
 ### Phase 4: Validate and package
 
@@ -175,39 +190,11 @@ If you catch yourself thinking any of these, STOP and return to Phase 1:
 
 ## Common Rationalizations
 
-| Excuse                                         | Reality                                                                   |
-| ---------------------------------------------- | ------------------------------------------------------------------------- |
-| "Contract-only skeleton is a good first step"  | Skeletons without behavior cause models to hallucinate workflow.          |
-| "Prose instructions are clearer than a script" | Models follow scripts deterministically; they interpret prose creatively. |
-| "One skill per task keeps things simple"       | Overlapping skills cause routing confusion. Territory must be exclusive.  |
-| "150 lines is too restrictive"                 | If the body is longer, content belongs in references/ or scripts/.        |
-| "Description can hint at the workflow"         | Models follow descriptions instead of reading the body. Trigger-only.     |
+See `references/rationalizations.md` for the anti-pattern table.
 
 ## Concrete Example
 
-Input: "Design a new runtime-forensics skill for Brewva."
-
-Output:
-
-```json
-{
-  "skill_spec": {
-    "name": "runtime-forensics",
-    "territory": "Runtime artifact inspection and causal trace reconstruction",
-    "trigger": "Task asks what happened at runtime from artifact evidence",
-    "non_goals": ["source-level debugging", "fix implementation", "hypothetical analysis"]
-  },
-  "skill_contract": {
-    "outputs": ["runtime_trace", "session_summary", "artifact_findings"],
-    "effects": {
-      "allowed": ["workspace_read", "local_exec", "runtime_observe"],
-      "denied": ["workspace_write"]
-    },
-    "default_lease": { "max_tool_calls": 80, "max_tokens": 160000 }
-  },
-  "skill_scaffold": "SKILL.md with v2 anatomy: Iron Law, 4-phase workflow with failure branches, 1 script, decision protocol, red flags, rationalizations table, concrete example with real JSON"
-}
-```
+See `references/example.md` for the grounded example output shape.
 
 ## Handoff Expectations
 
@@ -224,5 +211,3 @@ Output:
 - The skill duplicates existing semantic territory without justification.
 - There is no stable artifact contract to justify a new skill.
 - The failing test cannot be articulated — boundary is too vague.
-
-Violating the letter is violating the spirit.

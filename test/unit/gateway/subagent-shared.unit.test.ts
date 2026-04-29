@@ -194,6 +194,40 @@ describe("subagent shared execution resolution", () => {
     expect(resolved.target.consultKind).toBe("investigate");
   });
 
+  test("resolveDelegationTarget routes architecture through advisor when consultKind is explicit", async () => {
+    const catalog = await loadHostedDelegationCatalog(process.cwd());
+    const resolved = resolveDelegationTarget({
+      catalog,
+      request: {
+        skillName: "architecture",
+        consultKind: "investigate",
+      },
+    });
+
+    expect(resolved.delegate).toBe("advisor");
+    expect(resolved.target.agentSpecName).toBe("advisor");
+    expect(resolved.target.skillName).toBe("architecture");
+    expect(resolved.target.resultMode).toBe("consult");
+    expect(resolved.target.consultKind).toBe("investigate");
+  });
+
+  test("resolveDelegationTarget routes office-hours through advisor when consultKind is explicit", async () => {
+    const catalog = await loadHostedDelegationCatalog(process.cwd());
+    const resolved = resolveDelegationTarget({
+      catalog,
+      request: {
+        skillName: "office-hours",
+        consultKind: "investigate",
+      },
+    });
+
+    expect(resolved.delegate).toBe("advisor");
+    expect(resolved.target.agentSpecName).toBe("advisor");
+    expect(resolved.target.skillName).toBe("office-hours");
+    expect(resolved.target.resultMode).toBe("consult");
+    expect(resolved.target.consultKind).toBe("investigate");
+  });
+
   test("resolveDelegationTarget materializes a skill-first agent spec through the catalog", async () => {
     const catalog = await loadHostedDelegationCatalog(process.cwd());
     const resolved = resolveDelegationTarget({

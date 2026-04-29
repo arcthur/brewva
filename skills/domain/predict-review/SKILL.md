@@ -1,7 +1,7 @@
 ---
 name: predict-review
-description: Use when a hard problem needs competing explanations from multiple perspectives
-  before choosing the next action.
+description: Multi-perspective advisory review for hard problems before choosing
+  the next action.
 stability: experimental
 selection:
   when_to_use: Use when a hard problem needs multi-perspective advisory review and explicit disagreement before choosing the next action.
@@ -51,19 +51,18 @@ execution_hints:
     - read_spans
     - grep
     - task_view_state
-    - skill_complete
 references:
-  - skills/meta/skill-authoring/references/authored-behavior.md
   - references/perspectives.md
-scripts:
-  - scripts/validate_debate_setup.py
+  - references/example.md
+  - references/rationalizations.md
+invariants:
+  - invariants/debate-setup.md
 consumes:
   - design_spec
   - change_set
   - review_report
   - verification_evidence
   - runtime_trace
-requires: []
 ---
 
 # Predict Review Skill
@@ -93,9 +92,9 @@ NO ADVISORY CONSENSUS WITHOUT EXPLICIT DISAGREEMENT CHECK
 ### Phase 1: Frame the review target
 
 Name the exact target, scope, and decision the debate is meant to inform.
-Run `scripts/validate_debate_setup.py` with the setup conditions.
+Apply `invariants/debate-setup.md` with the setup conditions.
 
-**If the script returns `ready: false`**: Stop. Resolve every item in
+**If the invariant returns `ready: false`**: Stop. Resolve every item in
 `blocking` before proceeding. Do not skip validation.
 **If ready**: Proceed to Phase 2.
 
@@ -134,9 +133,9 @@ is violated. Force explicit disagreement.
 
 **If `ranked_hypotheses` lacks falsification conditions**: Return to Phase 3.
 
-## Scripts
+## Invariants
 
-- `scripts/validate_debate_setup.py` — Input: setup conditions JSON.
+- `invariants/debate-setup.md` — Input: setup conditions JSON.
   Output: `{"ready": bool, "blocking": [str]}`. Run before Phase 2.
 
 ## Decision Protocol
@@ -158,66 +157,11 @@ If you catch yourself thinking any of these, STOP and return to Phase 1:
 
 ## Common Rationalizations
 
-| Excuse                                   | Reality                                                                                                                 |
-| ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| "Perspectives agree, so we're done"      | Agreement without recorded dissent violates the Iron Law. Force the disagreement check.                                 |
-| "Devil's Advocate is performative"       | DA that finds nothing real is evidence of shallow analysis, not evidence of correctness. Dig harder or widen the frame. |
-| "Skip validation, the target is obvious" | Obvious targets still need bounded scope. Run the script.                                                               |
-| "More perspectives = better coverage"    | Shallow fan-out produces noise. Two strong perspectives beat five shallow ones.                                         |
-| "Consensus is strong enough to act on"   | Consensus is advisory evidence, not authority. Downstream still owns the decision.                                      |
+See `references/rationalizations.md` for the anti-pattern table.
 
 ## Concrete Example
 
-Input: "Before we run another bounded optimization pass, predict why the metric keeps stalling."
-
-Output:
-
-```json
-{
-  "perspective_findings": [
-    {
-      "perspective": "Reliability Engineer",
-      "profile": "review-operability",
-      "primary_claim": "Optimization loop silently drops iterations when WAL replay hits a stale epoch boundary, causing the metric to plateau at the pre-replay value.",
-      "evidence": [
-        "WAL replay logs show epoch=3 while optimizer expects epoch=5",
-        "Metric flatlines exactly at replay timestamp"
-      ],
-      "uncertainty": "Unknown whether epoch mismatch is from replay or optimizer checkpointing."
-    },
-    {
-      "perspective": "Devil's Advocate",
-      "profile": "explore",
-      "primary_claim": "The metric may have genuinely converged — the stall could be a real plateau, not a bug.",
-      "evidence": ["Loss curve shape matches typical convergence for this problem class"],
-      "uncertainty": "No controlled run exists to compare converged vs stalled behavior."
-    }
-  ],
-  "debate_summary": {
-    "converged": ["Stall correlates with WAL replay timing"],
-    "unresolved": [
-      "Genuine convergence vs epoch-boundary bug — no controlled baseline to distinguish"
-    ],
-    "missing_evidence": ["Controlled run without replay to establish true convergence baseline"]
-  },
-  "ranked_hypotheses": [
-    {
-      "rank": 1,
-      "claim": "Stale epoch after WAL replay causes silent iteration drops",
-      "confidence": "medium-high",
-      "validation": "Pin epoch to post-replay value and compare trajectory",
-      "falsification": "If metric still stalls after epoch fix, cause is genuine convergence"
-    },
-    {
-      "rank": 2,
-      "claim": "True convergence plateau",
-      "confidence": "medium",
-      "validation": "Run controlled baseline without replay on same input",
-      "falsification": "If controlled run improves past stall point, convergence is ruled out"
-    }
-  ]
-}
-```
+See `references/example.md` for the grounded example output shape.
 
 ## Handoff Expectations
 
@@ -231,5 +175,3 @@ Output:
 - There is no bounded review target
 - The debate would only restate one obvious conclusion
 - Required evidence is missing and no useful advisory judgment can be made
-
-Violating the letter of these rules is violating the spirit of these rules.

@@ -53,6 +53,7 @@ EFFECT_CLASSES = {
     "runtime_observe",
     "external_network",
     "external_side_effect",
+    "delegation",
     "schedule_mutation",
     "memory_write",
 }
@@ -65,6 +66,9 @@ SEMANTIC_ARTIFACT_SCHEMA_IDS = {
     "planning.execution_mode_hint.v2",
     "planning.risk_register.v2",
     "planning.implementation_targets.v2",
+    "planning.success_criteria.v2",
+    "planning.approach_simplicity_check.v2",
+    "planning.scope_declaration.v2",
     "implementation.change_set.v2",
     "implementation.files_changed.v2",
     "implementation.verification_evidence.v2",
@@ -660,7 +664,10 @@ V2_REQUIRED_SECTIONS_ALL = [
     "## Stop Conditions",
 ]
 
-V2_BODY_LINE_LIMIT = 200
+V2_BODY_LINE_LIMIT = 150
+CANONICAL_EXAMPLE_REFERENCE = (
+    "See `references/example.md` for the grounded example output shape."
+)
 
 
 def validate_v2_doctrine(
@@ -734,6 +741,8 @@ def validate_v2_doctrine(
     example_match = re.search(r"^## (?:Concrete )?Example\b.*?\n(.*?)(?=^## |\Z)", body, re.DOTALL | re.MULTILINE)
     if example_match:
         example_body = example_match.group(1).strip()
+        if example_body == CANONICAL_EXAMPLE_REFERENCE:
+            return True, None
         example_content_lines = [line for line in example_body.split("\n") if line.strip()]
         if len(example_content_lines) < 5:
             return (
@@ -762,9 +771,11 @@ def validate_file_references(
                     f"Declared script not found: {entry} (expected at {script_path})",
                 )
 
-    references = frontmatter.get("references")
-    if references is not None and isinstance(references, list):
-        for entry in references:
+    for resource_field in ("references", "heuristics", "invariants"):
+        entries = frontmatter.get(resource_field)
+        if entries is None or not isinstance(entries, list):
+            continue
+        for entry in entries:
             if not isinstance(entry, str):
                 continue
             if entry.startswith("skills/"):
@@ -780,7 +791,7 @@ def validate_file_references(
                 if not overlay:
                     return (
                         False,
-                        f"Declared reference not found: {entry} (expected at {ref_path})",
+                        f"Declared {resource_field[:-1]} not found: {entry} (expected at {ref_path})",
                     )
 
     return True, None

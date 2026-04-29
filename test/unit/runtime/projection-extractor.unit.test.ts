@@ -171,7 +171,7 @@ describe("projection extractor", () => {
         id: "evt-skill-complete-workflow",
         type: "skill_completed",
         payload: {
-          skillName: "design",
+          skillName: "plan",
           outputKeys: [
             "design_spec",
             "execution_plan",

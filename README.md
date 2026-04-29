@@ -86,9 +86,9 @@ Implementation detail and system boundaries:
 
 ## Skill Surface
 
-- Core skills: `repository-analysis`, `discovery`, `learning-research`, `strategy-review`, `design`, `pre-implementation`, `implementation`, `debugging`, `review`, `qa`, `ship`, `retro`, `knowledge-capture`
-- Domain skills: `agent-browser`, `ci-iteration`, `frontend-design`, `github`, `goal-loop`, `predict-review`, `structured-extraction`, `telegram`
-- Operator skills: `git-ops`, `runtime-forensics`
+- Core skills: `repository-analysis`, `architecture`, `office-hours`, `discovery`, `learning-research`, `strategy`, `plan`, `prep`, `implementation`, `debugging`, `review`, `qa`, `ship`, `retro`, `knowledge-capture`
+- Domain skills: `agent-browser`, `ci-iteration`, `frontend-design`, `github`, `goal-loop`, `predict-review`, `extract`, `telegram`
+- Operator skills: `git`, `runtime-forensics`
 - Meta skills: `self-improve`, `skill-authoring`
 
 Protocol-oriented skills:
@@ -97,11 +97,15 @@ Protocol-oriented skills:
   verification, and handoff posture
 - `goal-loop` coordinates bounded continuity, explicit cadence, and objective
   iteration facts across repeated runs
+- `architecture` identifies module-deepening opportunities by testing caller
+  burden, seam quality, locality, leverage, and test surface before planning
+- `office-hours` diagnoses new product, startup, side-project, hackathon, or
+  "worth building" ideas before they harden into discovery, strategy, or plans
 - `learning-research` performs explicit precedent retrieval before non-trivial
   planning or review
 - `knowledge-capture` materializes canonical repository precedents under
   `docs/solutions/**`
-- `pre-implementation` forces explicit targets, simplicity posture, and
+- `prep` forces explicit targets, simplicity posture, and
   verifiable success criteria before a coding task widens into edits
 - `predict-review` provides read-only multi-perspective debate and ranked
   hypotheses through public delegation tools
@@ -121,7 +125,15 @@ For taxonomy details and project overlays, see `docs/guide/features.md` and `doc
 
 One common delivery chain is:
 
-`repository-analysis -> discovery -> strategy-review -> learning-research -> design -> pre-implementation -> implementation -> review -> qa -> ship -> retro -> knowledge-capture`
+`repository-analysis -> discovery -> strategy -> learning-research -> plan -> prep -> implementation -> review -> qa -> ship -> retro -> knowledge-capture`
+
+New idea work starts further upstream:
+
+`office-hours -> discovery -> strategy -> plan`
+
+Architecture improvement work often inserts an explicit deepening pass:
+
+`repository-analysis -> architecture -> plan -> implementation -> review`
 
 This remains advisory and model-native. Runtime still owns verification,
 derived workflow inspection surfaces, replay, and effect governance rather

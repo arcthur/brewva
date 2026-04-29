@@ -53,7 +53,7 @@ describe("subagent structured outcome normalization", () => {
         ],
         verificationPlan: [
           "Contract-test consult payload parsing.",
-          "Verify parent design skill still emits canonical planning artifacts.",
+          "Verify parent plan skill still emits canonical planning artifacts.",
         ],
       }),
     });

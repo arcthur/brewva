@@ -165,7 +165,7 @@ describe("projection engine", () => {
         type: "skill_completed",
         timestamp: 100,
         payload: {
-          skillName: "design",
+          skillName: "plan",
           outputKeys: [
             "design_spec",
             "execution_plan",

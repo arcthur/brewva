@@ -52,6 +52,7 @@ function createSkillDocument(
   preferredTools: string[],
   options: {
     markdown?: string;
+    authoredMarkdown?: string;
     requires?: string[];
     consumes?: string[];
     selection?: {
@@ -67,6 +68,7 @@ function createSkillDocument(
     description: `${name} skill`,
     category: "domain" as const,
     markdown: options.markdown ?? "",
+    authoredMarkdown: options.authoredMarkdown ?? options.markdown ?? "",
     contract: {
       name,
       category: "domain" as const,
@@ -1379,6 +1381,60 @@ describe("tool surface runtime plugin", () => {
       }),
     );
     expect(diagnosis.toolAvailabilityPosture).toBe("require_execute");
+  });
+
+  test("skill-first diagnosis ignores runtime-inherited markdown triggers", () => {
+    const inheritedOnlySkill = createSkillDocument(
+      "inherited-only",
+      ["workspace_read", "runtime_observe"],
+      ["read"],
+      {
+        markdown: "## Trigger\n\n- diagnose inherited runtime guidance only\n",
+        authoredMarkdown: "",
+        selection: {
+          whenToUse: "Use when handling unrelated archive maintenance.",
+          phases: ["align"],
+        },
+      },
+    );
+    const authoredSkill = createSkillDocument(
+      "authored-trigger",
+      ["workspace_read", "runtime_observe"],
+      ["read"],
+      {
+        markdown: "## Trigger\n\n- diagnose authored routing text\n",
+        authoredMarkdown: "## Trigger\n\n- diagnose authored routing text\n",
+        selection: {
+          whenToUse: "Use when diagnosing authored routing text.",
+          phases: ["align"],
+        },
+      },
+    );
+    const runtime = createToolSurfaceRuntime({
+      listSkills: () => [inheritedOnlySkill, authoredSkill],
+      taskState: {
+        spec: {
+          goal: "Diagnose authored routing text.",
+          expectedBehavior: "Choose the skill whose authored trigger matches.",
+        },
+        status: { phase: "align" },
+        items: [],
+        blockers: [],
+        updatedAt: null,
+      },
+    });
+
+    const diagnosis = deriveSkillDiagnoses(runtime, {
+      sessionId: "tool-surface-authored-markdown-routing",
+      prompt: "Diagnose authored routing text.",
+    });
+
+    expect(diagnosis.candidates[0]).toEqual(
+      expect.objectContaining({
+        name: "authored-trigger",
+      }),
+    );
+    expect(diagnosis.candidates.map((entry) => entry.name)).not.toContain("inherited-only");
   });
 
   test("failed skill contracts block downstream routing and repository tools", async () => {

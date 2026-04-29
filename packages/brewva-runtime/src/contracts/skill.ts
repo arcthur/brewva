@@ -217,8 +217,12 @@ interface BaseSkillDocument<TCategory extends SkillCategory, TContract> {
   filePath: string;
   baseDir: string;
   markdown: string;
+  authoredMarkdown: string;
+  inheritedMarkdown: string;
   contract: TContract;
   resources: SkillResourceSet;
+  authoredResources: SkillResourceSet;
+  inheritedResources: SkillResourceSet;
   projectGuidance: ProjectGuidanceEntry[];
   overlayFiles: string[];
 }

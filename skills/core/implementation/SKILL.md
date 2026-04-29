@@ -1,7 +1,7 @@
 ---
 name: implementation
-description: Use when the task is ready for code changes and verification evidence
-  must be produced with the change.
+description: Code-change execution with scope discipline and fresh verification
+  evidence.
 stability: stable
 selection:
   when_to_use: Use when the task is ready for code changes and verification evidence must be produced with the change.
@@ -42,9 +42,6 @@ execution_hints:
     - exec
     - lsp_diagnostics
     - ledger_query
-    - skill_complete
-references:
-  - skills/meta/skill-authoring/references/authored-behavior.md
 composable_with:
   - debugging
   - runtime-forensics
@@ -58,7 +55,9 @@ consumes:
   - approach_simplicity_check
   - scope_declaration
   - success_criteria
-requires: []
+references:
+  - references/example.md
+  - references/rationalizations.md
 scripts:
   - scripts/check_scope_drift.py
 ---
@@ -81,14 +80,14 @@ NO COMPLETION CLAIM WITHOUT FRESH VERIFICATION EVIDENCE
 ## When NOT to Use
 
 - The root cause is still uncertain — use `debugging` first.
-- The change implies a larger design problem than the current plan covers.
+- The change implies a larger planning problem than the current plan covers.
 - No concrete `implementation_targets` exist yet.
 
 ## Workflow
 
 ### Phase 1: Choose mode
 
-If `approach_simplicity_check` is present and `verdict: over_engineered`, stop. Do not proceed. Return to `pre-implementation` to trim the approach first.
+If `approach_simplicity_check` is present and `verdict: over_engineered`, stop. Do not proceed. Return to `prep` to trim the approach first.
 
 Pick a mode based on evidence, not habit:
 
@@ -98,7 +97,7 @@ Pick a mode based on evidence, not habit:
 
 Respect `execution_mode_hint` when present. Override it if actual scope disagrees.
 
-**If no mode fits cleanly**: Stop. Return to design — scope is ambiguous.
+**If no mode fits cleanly**: Stop. Return to plan — scope is ambiguous.
 **If mode chosen**: Proceed to Phase 2.
 
 ### Phase 2: Apply the change
@@ -107,7 +106,7 @@ Read before editing. Keep the diff local. Avoid incidental cleanup.
 
 Run `scripts/check_scope_drift.py` with current `implementation_targets` and `files_changed`.
 
-**If `within_scope: false`**: Stop. Drifted files listed in output. Return to design instead of silently widening scope.
+**If `within_scope: false`**: Stop. Drifted files listed in output. Return to plan instead of silently widening scope.
 **If `within_scope: true`**: Proceed to Phase 3.
 
 ### Phase 3: Verify before claiming completion
@@ -137,7 +136,7 @@ Produce all three outputs:
 - Do the touched files fit within concrete `implementation_targets`?
 - Can the diff stay local instead of widening into incidental cleanup?
 - Does a concrete verification path exist for the risky behavior?
-- Is any unresolved ambiguity about execution detail, or missing design?
+- Is any unresolved ambiguity about execution detail, or missing planning?
 
 ## Red Flags — STOP
 
@@ -154,53 +153,11 @@ If you catch yourself thinking any of these, STOP and return to Phase 1:
 
 ## Common Rationalizations
 
-| Excuse                                       | Reality                                                                                                                   |
-| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| "Change is small, skip scope check"          | Small changes drift into large ones. The script takes seconds.                                                            |
-| "Tests passed last time, skip re-run"        | Last time is not this time. Fresh evidence or no completion claim.                                                        |
-| "Cleanup while I'm here saves a future PR"   | Incidental cleanup obscures the real diff and blocks review.                                                              |
-| "Mode doesn't matter for this"               | Wrong mode means wrong verification — a `safe` change verified as `effectful` skips the rollback gate. Pick deliberately. |
-| "Root cause is probably right, start coding" | Probably is not confirmed. Use debugging skill first.                                                                     |
-| "I'll verify after I finish all edits"       | Batch verification hides which edit broke what. Verify incrementally.                                                     |
+See `references/rationalizations.md` for the anti-pattern table.
 
 ## Concrete Example
 
-Input: "Expose overlay origins in `.brewva/skills_index.json` and verify generated skill artifacts stay out of subagent patch sets."
-
-Output:
-
-```json
-{
-  "change_set": {
-    "summary": "Extend the skill index contract with overlay provenance and emit it from the runtime registry write path.",
-    "rationale": "Inspect consumers need the generated index to explain where a loaded skill came from without re-scanning the workspace or widening runtime root exports.",
-    "intentional_non_changes": [
-      "Did not change routing-scope construction rules or make gateway recompute skill metadata."
-    ]
-  },
-  "files_changed": [
-    "packages/brewva-runtime/src/contracts/skill.ts",
-    "packages/brewva-runtime/src/skills/registry.ts",
-    "test/contract/runtime/skills-discovery.contract.test.ts",
-    "test/unit/gateway/subagent-workspace.unit.test.ts"
-  ],
-  "verification_evidence": {
-    "commands_run": [
-      { "cmd": "bun run check", "exit_code": 0, "note": "typecheck + lint clean" },
-      {
-        "cmd": "bun test test/contract/runtime/skills-discovery.contract.test.ts test/unit/gateway/subagent-workspace.unit.test.ts",
-        "exit_code": 0,
-        "note": "overlay provenance serialization and generated-artifact ignore behavior both pass"
-      }
-    ],
-    "scope_drift_check": {
-      "within_scope": true,
-      "drifted_files": [],
-      "target_coverage": 1.0
-    }
-  }
-}
-```
+See `references/example.md` for the grounded example output shape.
 
 ## Handoff Expectations
 
@@ -210,7 +167,7 @@ Output:
 
 ## Stop Conditions
 
-- The requested change implies a larger design problem than the current plan covers.
+- The requested change implies a larger planning problem than the current plan covers.
 - The root cause is still uncertain — hand back to debugging.
-- `check_scope_drift.py` reports `within_scope: false` and design has not approved the wider scope.
+- `check_scope_drift.py` reports `within_scope: false` and plan has not approved the wider scope.
 - Available verification is too weak to justify a completion claim.

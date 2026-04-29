@@ -1,4 +1,4 @@
-import type { TaskState } from "../contracts/index.js";
+import type { BrewvaEventRecord, TaskState } from "../contracts/index.js";
 import type { SkillReadinessEntry } from "../contracts/skill-readiness.js";
 import { deriveWorkflowArtifacts, latestArtifactByKind } from "./artifact-derivation.js";
 import { collectCoveredRequiredEvidence } from "./coverage-utils.js";
@@ -23,6 +23,15 @@ import type {
   WorkflowStatusSnapshot,
 } from "./types.js";
 import { resolveWorkspaceRevision } from "./workspace-revision.js";
+
+const PLANNING_POSTURE_RANK = {
+  trivial: 0,
+  moderate: 1,
+  complex: 2,
+  high_risk: 3,
+} as const;
+
+type PlanningPosture = keyof typeof PLANNING_POSTURE_RANK;
 
 function determinePlanningStatus(
   latestArtifacts: Partial<Record<WorkflowArtifactKind, WorkflowArtifact>>,
@@ -50,6 +59,46 @@ function determinePlanFresh(
     return false;
   }
   return candidates.every((artifact) => artifact.freshness !== "stale");
+}
+
+function readPlanningPosture(value: unknown): PlanningPosture | undefined {
+  const posture = readString(value);
+  if (!posture) return undefined;
+  return posture in PLANNING_POSTURE_RANK ? (posture as PlanningPosture) : undefined;
+}
+
+function deriveStrictestPlanningPosture(
+  artifacts: readonly WorkflowArtifact[],
+): PlanningPosture | undefined {
+  let strictest: PlanningPosture | undefined;
+  for (const artifact of artifacts) {
+    const posture = readPlanningPosture(artifact.metadata?.planningPosture);
+    if (!posture) continue;
+    if (!strictest || PLANNING_POSTURE_RANK[posture] > PLANNING_POSTURE_RANK[strictest]) {
+      strictest = posture;
+    }
+  }
+  return strictest;
+}
+
+function deriveStrictestPlanningPostureFromEvents(
+  events: readonly BrewvaEventRecord[],
+): PlanningPosture | undefined {
+  let strictest: PlanningPosture | undefined;
+  for (const event of events) {
+    if (event.type !== "skill_completed") {
+      continue;
+    }
+    const payload = event.payload as { outputs?: Record<string, unknown> };
+    const posture = readPlanningPosture(payload.outputs?.planning_posture);
+    if (!posture) {
+      continue;
+    }
+    if (!strictest || PLANNING_POSTURE_RANK[posture] > PLANNING_POSTURE_RANK[strictest]) {
+      strictest = posture;
+    }
+  }
+  return strictest;
 }
 
 function determinePresenceStatus(artifact: WorkflowArtifact | undefined): WorkflowPresenceStatus {
@@ -108,16 +157,14 @@ function determineAcceptanceStatus(
 
 function determineReviewRequired(input: {
   latestArtifacts: Partial<Record<WorkflowArtifactKind, WorkflowArtifact>>;
+  planningPosture: PlanningPosture | undefined;
   planComplete: boolean;
   implementation: WorkflowImplementationStatus;
 }): boolean {
-  const planningPosture = readString(
-    input.latestArtifacts.strategy_review?.metadata?.planningPosture,
-  );
   const ownerLanes = readStringArray(input.latestArtifacts.design?.metadata?.ownerLanes);
   return Boolean(
-    planningPosture === "high_risk" ||
-    planningPosture === "complex" ||
+    input.planningPosture === "high_risk" ||
+    input.planningPosture === "complex" ||
     !input.planComplete ||
     input.implementation !== "missing" ||
     ownerLanes.some((lane) => lane.startsWith("review-")) ||
@@ -127,17 +174,15 @@ function determineReviewRequired(input: {
 
 function determineQaRequired(input: {
   latestArtifacts: Partial<Record<WorkflowArtifactKind, WorkflowArtifact>>;
+  planningPosture: PlanningPosture | undefined;
   implementation: WorkflowImplementationStatus;
 }): boolean {
-  const planningPosture = readString(
-    input.latestArtifacts.strategy_review?.metadata?.planningPosture,
-  );
   const ownerLanes = readStringArray(input.latestArtifacts.design?.metadata?.ownerLanes);
   const requiredEvidence = readStringArray(
     input.latestArtifacts.design?.metadata?.requiredEvidence,
   );
   return Boolean(
-    planningPosture === "high_risk" ||
+    input.planningPosture === "high_risk" ||
     ownerLanes.includes("qa") ||
     requiredEvidence.length > 0 ||
     input.implementation !== "missing" ||
@@ -435,7 +480,7 @@ function deriveFinishView(input: {
 
 export function deriveWorkflowStatus(input: {
   sessionId: string;
-  events: readonly import("../contracts/index.js").BrewvaEventRecord[];
+  events: readonly BrewvaEventRecord[];
   blockers?: readonly { id: string; message: string }[];
   taskState?: Pick<TaskState, "spec" | "status" | "acceptance">;
   pendingWorkerResults?: number;
@@ -448,6 +493,9 @@ export function deriveWorkflowStatus(input: {
     : undefined;
   const artifacts = deriveWorkflowArtifacts(input.events);
   const latestArtifacts = latestArtifactByKind(artifacts);
+  const strictestPlanningPosture =
+    deriveStrictestPlanningPostureFromEvents(input.events) ??
+    deriveStrictestPlanningPosture(artifacts);
   const taskBlockers = input.blockers ?? [];
   const pendingWorkerResults = Math.max(0, input.pendingWorkerResults ?? 0);
   const pendingDelegationOutcomes = Math.max(0, input.pendingDelegationOutcomes ?? 0);
@@ -471,11 +519,13 @@ export function deriveWorkflowStatus(input: {
   }
   const reviewRequired = determineReviewRequired({
     latestArtifacts,
+    planningPosture: strictestPlanningPosture,
     planComplete,
     implementation,
   });
   const qaRequired = determineQaRequired({
     latestArtifacts,
+    planningPosture: strictestPlanningPosture,
     implementation,
   });
   const unsatisfiedRequiredEvidence = determineUnsatisfiedRequiredEvidence(

@@ -11,6 +11,14 @@ import { normalizePlanningArtifactSet } from "./planning-normalization.js";
 import { coerceReviewReportArtifact } from "./review-normalization.js";
 
 const SKILL_OUTPUT_NORMALIZER_VERSION = "skill-artifact-normalizer.v2";
+const PLANNING_POSTURE_RANK = {
+  trivial: 0,
+  moderate: 1,
+  complex: 2,
+  high_risk: 3,
+} as const;
+
+type PlanningPosture = keyof typeof PLANNING_POSTURE_RANK;
 
 function hasOwn(record: Record<string, unknown>, key: string): boolean {
   return Object.prototype.hasOwnProperty.call(record, key);
@@ -39,6 +47,25 @@ function normalizeToken(value: string): string {
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "_");
+}
+
+function normalizePlanningPosture(value: unknown): PlanningPosture | undefined {
+  const token = normalizeToken(readString(value) ?? "");
+  return token in PLANNING_POSTURE_RANK ? (token as PlanningPosture) : undefined;
+}
+
+function mergePlanningPosture(existing: unknown, next: unknown): unknown {
+  const existingPosture = normalizePlanningPosture(existing);
+  const nextPosture = normalizePlanningPosture(next);
+  if (!nextPosture) {
+    return existing ?? next;
+  }
+  if (!existingPosture) {
+    return nextPosture;
+  }
+  return PLANNING_POSTURE_RANK[nextPosture] > PLANNING_POSTURE_RANK[existingPosture]
+    ? nextPosture
+    : existingPosture;
 }
 
 function mergeBlockingState(
@@ -416,7 +443,10 @@ export function buildConsumedOutputsView(input: {
         continue;
       }
       if (hasOwn(normalized.canonical, key)) {
-        outputs[key] = normalized.canonical[key];
+        outputs[key] =
+          key === "planning_posture"
+            ? mergePlanningPosture(outputs[key], normalized.canonical[key])
+            : normalized.canonical[key];
         usedRecord = true;
         continue;
       }
@@ -424,7 +454,10 @@ export function buildConsumedOutputsView(input: {
         hasOwn(entry.record.outputs, key) &&
         !(entry.semanticBindings && key in entry.semanticBindings)
       ) {
-        outputs[key] = entry.record.outputs[key];
+        outputs[key] =
+          key === "planning_posture"
+            ? mergePlanningPosture(outputs[key], entry.record.outputs[key])
+            : entry.record.outputs[key];
         usedRecord = true;
       }
     }

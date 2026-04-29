@@ -54,7 +54,7 @@ function validateImplementationSemanticOutputs(
   return [
     {
       name: "files_changed",
-      reason: `files_changed exceeds implementation_targets and should return to design: ${uncoveredFiles.join(", ")}`,
+      reason: `files_changed exceeds implementation_targets and should return to plan: ${uncoveredFiles.join(", ")}`,
     },
   ];
 }

@@ -56,17 +56,16 @@ execution_hints:
     - read
     - look_at
     - grep
-    - skill_complete
 references:
-  - skills/meta/skill-authoring/references/authored-behavior.md
   - references/diff-verification.md
   - references/eval-safe-mode.md
   - references/security-baseline.md
   - references/semantic-locators.md
+  - references/example.md
+  - references/rationalizations.md
 consumes:
   - structured_payload
   - design_spec
-requires: []
 ---
 
 # Agent Browser Skill
@@ -161,34 +160,11 @@ If you catch yourself thinking any of these, STOP and return to Phase 1:
 
 ## Common Rationalizations
 
-| Excuse                                            | Reality                                                                                 |
-| ------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| "Quick look won't hurt"                           | Every action without an evidence target is noise. Define the target first.              |
-| "I'll figure out what I need once I see the page" | That is browsing, not investigation. Name the question before opening the browser.      |
-| "More screenshots = more evidence"                | Unanchored screenshots are clutter. Each capture must answer a specific question.       |
-| "The page changed, let me keep exploring"         | Changes are evidence only if they relate to the original target. Re-ground first.       |
-| "I should check the whole flow while I'm here"    | Scope creep. Finish the current evidence target, then decide if a new one is warranted. |
+See `references/rationalizations.md` for the anti-pattern table.
 
 ## Concrete Example
 
-Input: "Open the docs site, confirm the broken nav state, and capture the failing selector."
-
-Output:
-
-```json
-{
-  "browser_observations": "Navigation sidebar on /docs/reference/runtime renders an empty <ul> with class 'nav-tree'. Console shows 'TypeError: Cannot read properties of undefined (reading map)' at nav-tree.tsx:42. The sidebar data fetch returns 200 but payload.children is null when category is 'reference'. Other categories render correctly. The broken state is deterministic on page load, not a race condition.",
-  "browser_artifacts": {
-    "screenshots": ["docs-nav-broken-state.png"],
-    "snapshots": ["docs-nav-aria-snapshot.yaml"],
-    "console_errors": [
-      "TypeError: Cannot read properties of undefined (reading 'map') at NavTree (nav-tree.tsx:42)"
-    ],
-    "failing_selector": "ul.nav-tree > li (zero children when category=reference)",
-    "evidence_url": "http://localhost:3000/docs/reference/runtime"
-  }
-}
-```
+See `references/example.md` for the grounded example output shape.
 
 ## Handoff Expectations
 
@@ -204,5 +180,3 @@ Output:
 - The request can be answered confidently from code and docs alone
 - The evidence target has been answered and no follow-up question remains
 - Two consecutive browser actions produced no new information
-
-Violating the letter of these rules is violating the spirit of these rules.
