@@ -4,7 +4,10 @@
  */
 
 import type { Content, ThinkingConfig } from "@google/genai";
-import { parseGoogleGeminiCliCredential } from "../google-cached-content.js";
+import {
+  GOOGLE_CLOUD_CODE_ASSIST_CREDENTIAL_HINT,
+  parseGoogleGeminiCliCredential,
+} from "../google-cached-content.js";
 import { calculateCost } from "../models.js";
 import type {
   Api,
@@ -333,7 +336,7 @@ export const streamGoogleGeminiCli: StreamFunction<"google-gemini-cli", GoogleGe
       const apiKeyRaw = options?.apiKey;
       if (!apiKeyRaw) {
         throw new Error(
-          "Google Cloud Code Assist requires OAuth authentication. Use /login to authenticate.",
+          `Google Cloud Code Assist requires OAuth authentication. ${GOOGLE_CLOUD_CODE_ASSIST_CREDENTIAL_HINT}`,
         );
       }
 
@@ -820,7 +823,7 @@ export const streamSimpleGoogleGeminiCli: StreamFunction<
   const apiKey = options?.apiKey;
   if (!apiKey) {
     throw new Error(
-      "Google Cloud Code Assist requires OAuth authentication. Use /login to authenticate.",
+      `Google Cloud Code Assist requires OAuth authentication. ${GOOGLE_CLOUD_CODE_ASSIST_CREDENTIAL_HINT}`,
     );
   }
 

@@ -293,7 +293,7 @@ export class ShellProviderAuthFlow {
         methods.map((method) => ({
           id: method.id,
           label: method.label,
-          detail: method.kind === "oauth" ? "OAuth" : "API key",
+          detail: method.detail ?? (method.kind === "oauth" ? "OAuth" : "API key"),
           method,
         }));
       this.context.openOverlay(

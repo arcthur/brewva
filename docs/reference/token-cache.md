@@ -123,10 +123,23 @@ Google is the current hybrid example:
 
 - user-facing provider name: `Google`
 - transport/API envelope: Cloud Code Assist (`google-gemini-cli`)
+- authentication: `/model` exposes first-class `Sign in with Google` and
+  `Import existing Gemini CLI login` flows. Import reads the official
+  `~/.gemini/oauth_creds.json` file and the official encrypted file fallback at
+  `~/.gemini/gemini-credentials.json`. Both paths store a refreshable hosted
+  OAuth credential with the Google access token, refresh token, expiry, and Code
+  Assist project ID. At request time the auth store renders the provider-core
+  credential shape `{"token":"...","projectId":"..."}`. `GEMINI_API_KEY` and
+  `GOOGLE_API_KEY` are not accepted for this Cloud Code Assist provider route.
 - short retention: implicit prefix behavior only
 - long retention: may render explicit CachedContent if the gateway lifecycle
   manager can provision a region-specific Vertex resource and the request path
   continues to show cache reads
+- explicit CachedContent creation is gated by a cached-prefix token estimate:
+  Pro-family models require at least about 4,096 cached prefix tokens and other
+  Gemini models require at least about 1,024. Below that threshold, Brewva
+  degrades the turn to implicit prefix caching instead of creating a resource or
+  treating zero cache reads as an endpoint failure.
 - failure posture: fail closed; repeated zero-read explicit-cache observations or
   field-level cachedContent rejection signals (for example `cachedContent not
 supported` or `unknown field`) downgrade the endpoint capability instead of
@@ -134,6 +147,9 @@ supported` or `unknown field`) downgrade the endpoint capability instead of
 - lifecycle: the default gateway path uses a shared-or-injected manager because
   CachedContent resources are workspace-scoped, provider-external objects rather
   than purely session-local bytes
+- lifecycle HTTP calls are bounded by an internal timeout and use abortable
+  requests so a slow Vertex create/delete cannot hang the user turn before the
+  model request starts
 
 Optional local Vertex override environment variables:
 
@@ -143,7 +159,10 @@ Optional local Vertex override environment variables:
 The base URL, when set, must be a region-specific Vertex host such as
 `https://us-central1-aiplatform.googleapis.com`. A bare global
 `https://aiplatform.googleapis.com` value is rejected because CachedContent
-resources are region-bound.
+resources are region-bound. Invalid override configuration disables only the
+explicit CachedContent path for eligible long-retention turns; short retention
+and below-threshold long-retention turns continue to use implicit prefix
+caching.
 
 Kimi is the current guardrail example. Brewva exposes a single `Kimi` connect
 surface, but the provider families remain separate underneath:

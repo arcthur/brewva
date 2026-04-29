@@ -16,6 +16,8 @@ import { stableHash, stableStringify } from "./hash.js";
 
 const MAX_PENDING_DELETE_ATTEMPTS = 5;
 const PENDING_DELETE_BASE_DELAY_MS = 30 * 1000;
+const GOOGLE_CACHED_CONTENT_DEFAULT_MINIMUM_TOKENS = 1_024;
+const GOOGLE_CACHED_CONTENT_PRO_MINIMUM_TOKENS = 4_096;
 
 interface GoogleCachedContentPayload {
   model: string;
@@ -24,9 +26,11 @@ interface GoogleCachedContentPayload {
 
 interface GoogleCachedContentRecord {
   name: string;
+  model: string;
   ttlSeconds: number;
   expireAt: number;
   endpoint: GoogleCachedContentEndpointConfig;
+  estimatedCachedTokens: number;
   deleteAttempts: number;
   nextDeleteAt: number;
 }
@@ -100,27 +104,11 @@ export class GoogleCachedContentManager {
       return { payload: input.payload };
     }
     const workspaceKey = normalizeWorkspaceKey(input.workspaceRoot);
-    const endpoint = resolveGoogleCachedContentEndpoint({ baseUrl: input.modelBaseUrl });
     if (input.credential) {
       await this.#flushPendingDeletes(workspaceKey, input.credential);
     }
-    const capabilityState = input.credential
-      ? this.#maybeRecoverCapabilityAfterCredentialChange(workspaceKey, endpoint, input.credential)
-      : this.#getCapabilityState(workspaceKey, endpoint);
     const prefixHash = buildPrefixHash(payload);
     const boundPrefix = this.#getSessionBinding(workspaceKey, input.sessionId);
-
-    if (capabilityState.status === "unsupported") {
-      await this.#releaseBinding(workspaceKey, input.sessionId, input.credential);
-      return {
-        payload: input.payload,
-        render: unsupportedGoogleCachedContentRender({
-          sessionId: input.sessionId,
-          policy: input.cachePolicy,
-          reason: capabilityState.reason ?? "google_cached_content_unavailable",
-        }),
-      };
-    }
 
     if (boundPrefix && boundPrefix !== prefixHash) {
       await this.#releaseBinding(workspaceKey, input.sessionId, input.credential);
@@ -133,6 +121,50 @@ export class GoogleCachedContentManager {
         render: resolveGoogleGeminiCliCacheRender({
           sessionId: input.sessionId,
           policy: input.cachePolicy,
+        }),
+      };
+    }
+
+    const estimatedCachedTokens = estimateCachedContentTokens(payload);
+    if (estimatedCachedTokens < resolveGoogleCachedContentMinimumTokens(payload.model)) {
+      await this.#releaseBinding(workspaceKey, input.sessionId, input.credential);
+      return {
+        payload: input.payload,
+        render: degradedGoogleImplicitPrefixRender({
+          sessionId: input.sessionId,
+          policy: input.cachePolicy,
+          reason: "google_cached_content_below_minimum_tokens",
+        }),
+      };
+    }
+
+    const endpointResolution = tryResolveGoogleCachedContentEndpoint({
+      baseUrl: input.modelBaseUrl,
+    });
+    if (!endpointResolution.ok) {
+      await this.#releaseBinding(workspaceKey, input.sessionId, input.credential);
+      return {
+        payload: input.payload,
+        render: unsupportedGoogleCachedContentRender({
+          sessionId: input.sessionId,
+          policy: input.cachePolicy,
+          reason: endpointResolution.reason,
+        }),
+      };
+    }
+    const endpoint = endpointResolution.endpoint;
+    const capabilityState = input.credential
+      ? this.#maybeRecoverCapabilityAfterCredentialChange(workspaceKey, endpoint, input.credential)
+      : this.#getCapabilityState(workspaceKey, endpoint);
+
+    if (capabilityState.status === "unsupported") {
+      await this.#releaseBinding(workspaceKey, input.sessionId, input.credential);
+      return {
+        payload: input.payload,
+        render: unsupportedGoogleCachedContentRender({
+          sessionId: input.sessionId,
+          policy: input.cachePolicy,
+          reason: capabilityState.reason ?? "google_cached_content_unavailable",
         }),
       };
     }
@@ -179,6 +211,7 @@ export class GoogleCachedContentManager {
         credential: input.credential,
         payload,
         endpoint,
+        estimatedCachedTokens,
       });
       this.#bind(workspaceKey, input.sessionId, prefixHash);
       return {
@@ -223,7 +256,20 @@ export class GoogleCachedContentManager {
       return;
     }
     const workspaceKey = normalizeWorkspaceKey(input.workspaceRoot);
-    const endpoint = resolveGoogleCachedContentEndpoint({ baseUrl: input.modelBaseUrl });
+    const record = this.#lookupByName(workspaceKey, input.render.cachedContentName);
+    if (!record) {
+      return;
+    }
+    if (record.estimatedCachedTokens < resolveGoogleCachedContentMinimumTokens(record.model)) {
+      return;
+    }
+    const endpointResolution = tryResolveGoogleCachedContentEndpoint({
+      baseUrl: input.modelBaseUrl,
+    });
+    if (!endpointResolution.ok) {
+      return;
+    }
+    const endpoint = endpointResolution.endpoint;
     const state = this.#getCapabilityState(workspaceKey, endpoint);
     if (input.cacheRead > 0) {
       this.#markCapabilityAvailable(workspaceKey, endpoint, true);
@@ -247,13 +293,23 @@ export class GoogleCachedContentManager {
     reason: string;
   }): void {
     const workspaceKey = normalizeWorkspaceKey(input.workspaceRoot);
-    const endpoint = resolveGoogleCachedContentEndpoint({ baseUrl: input.modelBaseUrl });
+    const endpointResolution = tryResolveGoogleCachedContentEndpoint({
+      baseUrl: input.modelBaseUrl,
+    });
+    if (!endpointResolution.ok) {
+      return;
+    }
+    const endpoint = endpointResolution.endpoint;
     this.#markCapabilityUnsupported(workspaceKey, endpoint, normalizeReason(input.reason));
   }
 
   resetCapability(workspaceRoot: string, modelBaseUrl?: string): void {
     const workspaceKey = normalizeWorkspaceKey(workspaceRoot);
-    const endpoint = resolveGoogleCachedContentEndpoint({ baseUrl: modelBaseUrl });
+    const endpointResolution = tryResolveGoogleCachedContentEndpoint({ baseUrl: modelBaseUrl });
+    if (!endpointResolution.ok) {
+      return;
+    }
+    const endpoint = endpointResolution.endpoint;
     this.#resetCapabilityState(workspaceKey, endpoint);
     this.#maybeDropWorkspace(workspaceKey);
   }
@@ -291,6 +347,22 @@ export class GoogleCachedContentManager {
       return undefined;
     }
     return record;
+  }
+
+  #lookupByName(workspaceKey: string, name: string): GoogleCachedContentRecord | undefined {
+    const records = this.#getWorkspaceRecords(workspaceKey);
+    for (const [prefixHash, record] of records.entries()) {
+      if (record.name !== name) {
+        continue;
+      }
+      if (record.expireAt <= Date.now()) {
+        records.delete(prefixHash);
+        this.#maybeDropWorkspace(workspaceKey);
+        return undefined;
+      }
+      return record;
+    }
+    return undefined;
   }
 
   #store(workspaceKey: string, prefixHash: string, record: GoogleCachedContentRecord): void {
@@ -379,6 +451,7 @@ export class GoogleCachedContentManager {
     credential: string;
     payload: GoogleCachedContentPayload;
     endpoint: GoogleCachedContentEndpointConfig;
+    estimatedCachedTokens: number;
   }): Promise<GoogleCachedContentRecord> {
     const inflightCreates = this.#getInflightCreates(input.workspaceKey);
     const existing = inflightCreates.get(input.prefixHash);
@@ -401,9 +474,11 @@ export class GoogleCachedContentManager {
       }
       const record: GoogleCachedContentRecord = {
         name: created.name,
+        model: input.payload.model,
         ttlSeconds,
         expireAt: parseExpireAt(created.expireTime, ttlSeconds),
         endpoint: input.endpoint,
+        estimatedCachedTokens: input.estimatedCachedTokens,
         deleteAttempts: 0,
         nextDeleteAt: 0,
       };
@@ -601,15 +676,27 @@ function withCachedContent(
 function buildPrefixHash(payload: GoogleCachedContentPayload): string {
   // CachedContent identity is the stable prefix only. Generation controls intentionally stay
   // out of this hash so temperature/topP changes do not fragment reusable prefix resources.
-  return stableHash(
-    stableStringify({
-      model: payload.model,
-      systemInstruction:
-        payload.request["systemInstruction"] ?? payload.request["system_instruction"] ?? null,
-      tools: payload.request["tools"] ?? null,
-      toolConfig: payload.request["toolConfig"] ?? payload.request["tool_config"] ?? null,
-    }),
-  );
+  return stableHash(stableStringify(buildStablePrefixMaterial(payload)));
+}
+
+function estimateCachedContentTokens(payload: GoogleCachedContentPayload): number {
+  return Math.ceil(stableStringify(buildStablePrefixMaterial(payload)).length / 4);
+}
+
+function buildStablePrefixMaterial(payload: GoogleCachedContentPayload): Record<string, unknown> {
+  return {
+    model: payload.model,
+    systemInstruction:
+      payload.request["systemInstruction"] ?? payload.request["system_instruction"] ?? null,
+    tools: payload.request["tools"] ?? null,
+    toolConfig: payload.request["toolConfig"] ?? payload.request["tool_config"] ?? null,
+  };
+}
+
+function resolveGoogleCachedContentMinimumTokens(model: string): number {
+  return model.toLowerCase().includes("pro")
+    ? GOOGLE_CACHED_CONTENT_PRO_MINIMUM_TOKENS
+    : GOOGLE_CACHED_CONTENT_DEFAULT_MINIMUM_TOKENS;
 }
 
 function buildEndpointKey(endpoint: GoogleCachedContentEndpointConfig): string {
@@ -641,6 +728,18 @@ function normalizeErrorReason(error: unknown): string {
     }
   }
   return "google_cached_content_unknown_error";
+}
+
+function tryResolveGoogleCachedContentEndpoint(
+  input: Partial<GoogleCachedContentEndpointConfig>,
+):
+  | { ok: true; endpoint: GoogleCachedContentEndpointConfig }
+  | { ok: false; reason: "google_cached_content_invalid_endpoint_config" } {
+  try {
+    return { ok: true, endpoint: resolveGoogleCachedContentEndpoint(input) };
+  } catch {
+    return { ok: false, reason: "google_cached_content_invalid_endpoint_config" };
+  }
 }
 
 function normalizeReason(reason: string): string {
@@ -704,5 +803,24 @@ function unsupportedGoogleCachedContentRender(input: {
       retention: "none",
       writeMode: input.policy.writeMode,
     }),
+  };
+}
+
+function degradedGoogleImplicitPrefixRender(input: {
+  sessionId: string;
+  policy: ProviderCachePolicy;
+  reason: string;
+}): ProviderCacheRenderResult {
+  return {
+    ...resolveGoogleGeminiCliCacheRender({
+      sessionId: input.sessionId,
+      policy: {
+        ...input.policy,
+        retention: "short",
+        reason: "provider_fallback",
+      },
+    }),
+    status: "degraded",
+    reason: input.reason,
   };
 }

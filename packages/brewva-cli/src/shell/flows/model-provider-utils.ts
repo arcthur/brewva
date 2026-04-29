@@ -118,7 +118,7 @@ export function providerConnectionFooter(provider: ProviderConnection): string {
       return "OAuth/API key";
     }
     if (provider.id === "google") {
-      return "Gemini CLI";
+      return "OAuth/import";
     }
     if (provider.id === "kimi-coding") {
       return "Kimi Code/Moonshot API key";

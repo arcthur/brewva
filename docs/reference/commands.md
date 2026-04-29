@@ -410,6 +410,13 @@ out of normal CLI output.
 - `brewva credentials remove --ref <vault://...>`: delete a stored secret
 - `brewva credentials discover`: inspect common ambient provider env vars without importing them
 
+For Google, `/model` is the primary first-class auth surface: it can run the
+Google Gemini OAuth browser flow or import an existing official Gemini CLI
+credential from `~/.gemini/oauth_creds.json` or the official encrypted file
+fallback at `~/.gemini/gemini-credentials.json`. Both paths store a refreshable
+hosted OAuth credential and require a Google Cloud project ID from the prompt,
+`GOOGLE_CLOUD_PROJECT`, or `GOOGLE_CLOUD_PROJECT_ID`.
+
 Flags:
 
 - `--cwd`

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { GoogleCachedContentManager } from "../../../packages/brewva-gateway/src/cache/google-cached-content-manager.js";
-import { patchDateNow } from "../../helpers/global-state.js";
+import { patchDateNow, patchProcessEnv } from "../../helpers/global-state.js";
 
 const LONG_POLICY = {
   retention: "long" as const,
@@ -41,6 +41,14 @@ function createPayload(systemInstruction: string) {
       },
     },
   };
+}
+
+function createAboveMinimumSystemInstruction(systemInstruction = "large system prefix") {
+  return `${systemInstruction} ${"cacheable prefix ".repeat(5_000)}`;
+}
+
+function createAboveMinimumPayload(systemInstruction = "large system prefix") {
+  return createPayload(createAboveMinimumSystemInstruction(systemInstruction));
 }
 
 function createPayloadWithGenerationConfig(
@@ -100,7 +108,7 @@ describe("google cached content manager", () => {
       },
     });
 
-    const firstInput = createPayload("system one");
+    const firstInput = createAboveMinimumPayload("system one");
     const first = await manager.apply({
       workspaceRoot: "/workspace",
       sessionId: "session-1",
@@ -114,7 +122,7 @@ describe("google cached content manager", () => {
       sessionId: "session-2",
       cachePolicy: LONG_POLICY,
       credential: '{"token":"tok","projectId":"project-1"}',
-      payload: createPayload("system one"),
+      payload: createAboveMinimumPayload("system one"),
       modelBaseUrl: "https://cloudcode-pa.googleapis.com",
     });
 
@@ -166,7 +174,7 @@ describe("google cached content manager", () => {
       sessionId: "session-snake",
       cachePolicy: LONG_POLICY,
       credential: '{"token":"tok","projectId":"project-1"}',
-      payload: createSnakeCasePayload("system snake"),
+      payload: createSnakeCasePayload(createAboveMinimumSystemInstruction("system snake")),
       modelBaseUrl: "https://cloudcode-pa.googleapis.com",
     });
 
@@ -193,9 +201,12 @@ describe("google cached content manager", () => {
       sessionId: "session-generation-a",
       cachePolicy: LONG_POLICY,
       credential: '{"token":"tok","projectId":"project-1"}',
-      payload: createPayloadWithGenerationConfig("system generation", {
-        temperature: 0.2,
-      }),
+      payload: createPayloadWithGenerationConfig(
+        createAboveMinimumSystemInstruction("system generation"),
+        {
+          temperature: 0.2,
+        },
+      ),
       modelBaseUrl: "https://cloudcode-pa.googleapis.com",
     });
     const second = await manager.apply({
@@ -203,10 +214,13 @@ describe("google cached content manager", () => {
       sessionId: "session-generation-b",
       cachePolicy: LONG_POLICY,
       credential: '{"token":"tok","projectId":"project-1"}',
-      payload: createPayloadWithGenerationConfig("system generation", {
-        temperature: 0.9,
-        topP: 0.8,
-      }),
+      payload: createPayloadWithGenerationConfig(
+        createAboveMinimumSystemInstruction("system generation"),
+        {
+          temperature: 0.9,
+          topP: 0.8,
+        },
+      ),
       modelBaseUrl: "https://cloudcode-pa.googleapis.com",
     });
 
@@ -251,6 +265,84 @@ describe("google cached content manager", () => {
     );
   });
 
+  test("ignores invalid Vertex cache endpoint overrides for short retention", async () => {
+    let created = 0;
+    const restoreEnv = patchProcessEnv({
+      BREWVA_GOOGLE_VERTEX_CACHE_BASE_URL: "https://aiplatform.googleapis.com",
+    });
+    const manager = new GoogleCachedContentManager({
+      async create() {
+        created += 1;
+        return { name: "cachedContents/unexpected" };
+      },
+      async delete() {},
+    });
+
+    try {
+      const result = await manager.apply({
+        workspaceRoot: "/workspace",
+        sessionId: "session-short-invalid-endpoint",
+        cachePolicy: SHORT_POLICY,
+        credential: '{"token":"tok","projectId":"project-1"}',
+        payload: createPayload("system short"),
+        modelBaseUrl: "https://cloudcode-pa.googleapis.com",
+      });
+
+      expect(created).toBe(0);
+      expect(
+        (result.payload as { request: { cachedContent?: string } }).request.cachedContent,
+      ).toBeUndefined();
+      expect(result.render).toEqual(
+        expect.objectContaining({
+          status: "rendered",
+          reason: "rendered_google_implicit_prefix_cache",
+          renderedRetention: "short",
+        }),
+      );
+    } finally {
+      restoreEnv();
+    }
+  });
+
+  test("degrades explicit cache when the Vertex cache endpoint override is invalid", async () => {
+    let created = 0;
+    const restoreEnv = patchProcessEnv({
+      BREWVA_GOOGLE_VERTEX_CACHE_BASE_URL: "https://aiplatform.googleapis.com",
+    });
+    const manager = new GoogleCachedContentManager({
+      async create() {
+        created += 1;
+        return { name: "cachedContents/unexpected" };
+      },
+      async delete() {},
+    });
+
+    try {
+      const result = await manager.apply({
+        workspaceRoot: "/workspace",
+        sessionId: "session-long-invalid-endpoint",
+        cachePolicy: LONG_POLICY,
+        credential: '{"token":"tok","projectId":"project-1"}',
+        payload: createAboveMinimumPayload("system long"),
+        modelBaseUrl: "https://cloudcode-pa.googleapis.com",
+      });
+
+      expect(created).toBe(0);
+      expect(
+        (result.payload as { request: { cachedContent?: string } }).request.cachedContent,
+      ).toBeUndefined();
+      expect(result.render).toEqual(
+        expect.objectContaining({
+          status: "unsupported",
+          reason: "google_cached_content_invalid_endpoint_config",
+          renderedRetention: "none",
+        }),
+      );
+    } finally {
+      restoreEnv();
+    }
+  });
+
   test("deduplicates concurrent creates for the same workspace prefix", async () => {
     let createCount = 0;
     let resolveCreate: ((value: { name: string; expireTime: string }) => void) | undefined;
@@ -270,7 +362,7 @@ describe("google cached content manager", () => {
       sessionId: "session-concurrent-a",
       cachePolicy: LONG_POLICY,
       credential: '{"token":"tok","projectId":"project-1"}',
-      payload: createPayload("system concurrent"),
+      payload: createAboveMinimumPayload("system concurrent"),
       modelBaseUrl: "https://cloudcode-pa.googleapis.com",
     });
     const secondPromise = manager.apply({
@@ -278,7 +370,7 @@ describe("google cached content manager", () => {
       sessionId: "session-concurrent-b",
       cachePolicy: LONG_POLICY,
       credential: '{"token":"tok","projectId":"project-1"}',
-      payload: createPayload("system concurrent"),
+      payload: createAboveMinimumPayload("system concurrent"),
       modelBaseUrl: "https://cloudcode-pa.googleapis.com",
     });
 
@@ -324,7 +416,7 @@ describe("google cached content manager", () => {
         sessionId: "session-1",
         cachePolicy: LONG_POLICY,
         credential: '{"token":"tok","projectId":"project-1"}',
-        payload: createPayload("system one"),
+        payload: createAboveMinimumPayload("system one"),
         modelBaseUrl: "https://cloudcode-pa.googleapis.com",
       });
       await manager.apply({
@@ -332,7 +424,7 @@ describe("google cached content manager", () => {
         sessionId: "session-1",
         cachePolicy: LONG_POLICY,
         credential: '{"token":"tok","projectId":"project-1"}',
-        payload: createPayload("system two"),
+        payload: createAboveMinimumPayload("system two"),
         modelBaseUrl: "https://cloudcode-pa.googleapis.com",
       });
       await manager.apply({
@@ -340,7 +432,7 @@ describe("google cached content manager", () => {
         sessionId: "session-2",
         cachePolicy: LONG_POLICY,
         credential: '{"token":"tok","projectId":"project-1"}',
-        payload: createPayload("system three"),
+        payload: createAboveMinimumPayload("system three"),
         modelBaseUrl: "https://cloudcode-pa.googleapis.com",
       });
       expect(deletes).toEqual(["cachedContents/brewva-1"]);
@@ -351,7 +443,7 @@ describe("google cached content manager", () => {
         sessionId: "session-3",
         cachePolicy: LONG_POLICY,
         credential: '{"token":"tok","projectId":"project-1"}',
-        payload: createPayload("system four"),
+        payload: createAboveMinimumPayload("system four"),
         modelBaseUrl: "https://cloudcode-pa.googleapis.com",
       });
       expect(deletes).toEqual(["cachedContents/brewva-1", "cachedContents/brewva-1"]);
@@ -360,7 +452,63 @@ describe("google cached content manager", () => {
     }
   });
 
-  test("fails closed after repeated zero-read explicit cache usage", async () => {
+  test("degrades below-threshold prefixes without disabling later eligible cached content", async () => {
+    let createCount = 0;
+    const manager = new GoogleCachedContentManager({
+      async create() {
+        createCount += 1;
+        return { name: `cachedContents/brewva-${createCount}`, expireTime: "2030-01-01T00:00:00Z" };
+      },
+      async delete() {},
+    });
+
+    const first = await manager.apply({
+      workspaceRoot: "/workspace",
+      sessionId: "session-small",
+      cachePolicy: LONG_POLICY,
+      credential: '{"token":"tok","projectId":"project-1"}',
+      payload: createPayload("small system prefix"),
+      modelBaseUrl: "https://cloudcode-pa.googleapis.com",
+    });
+
+    expect(createCount).toBe(0);
+    expect(first.render).toEqual(
+      expect.objectContaining({
+        status: "degraded",
+        reason: "google_cached_content_below_minimum_tokens",
+        renderedRetention: "short",
+      }),
+    );
+    manager.observeUsage({
+      workspaceRoot: "/workspace",
+      modelBaseUrl: "https://cloudcode-pa.googleapis.com",
+      render: first.render,
+      cacheRead: 0,
+    });
+    manager.observeUsage({
+      workspaceRoot: "/workspace",
+      modelBaseUrl: "https://cloudcode-pa.googleapis.com",
+      render: first.render,
+      cacheRead: 0,
+    });
+
+    const reused = await manager.apply({
+      workspaceRoot: "/workspace",
+      sessionId: "session-large",
+      cachePolicy: LONG_POLICY,
+      credential: '{"token":"tok","projectId":"project-1"}',
+      payload: createAboveMinimumPayload("large system prefix"),
+      modelBaseUrl: "https://cloudcode-pa.googleapis.com",
+    });
+
+    expect(createCount).toBe(1);
+    expect((reused.payload as { request: { cachedContent?: string } }).request.cachedContent).toBe(
+      "cachedContents/brewva-1",
+    );
+    expect(reused.render).toEqual(expect.objectContaining({ status: "rendered" }));
+  });
+
+  test("fails closed after repeated zero-read explicit cache usage above the model threshold", async () => {
     const deletes: string[] = [];
     const manager = new GoogleCachedContentManager({
       async create() {
@@ -376,7 +524,7 @@ describe("google cached content manager", () => {
       sessionId: "session-1",
       cachePolicy: LONG_POLICY,
       credential: '{"token":"tok","projectId":"project-1"}',
-      payload: createPayload("system one"),
+      payload: createAboveMinimumPayload(),
       modelBaseUrl: "https://cloudcode-pa.googleapis.com",
     });
 
@@ -398,7 +546,7 @@ describe("google cached content manager", () => {
       sessionId: "session-1",
       cachePolicy: LONG_POLICY,
       credential: '{"token":"tok","projectId":"project-1"}',
-      payload: createPayload("system one"),
+      payload: createAboveMinimumPayload(),
       modelBaseUrl: "https://cloudcode-pa.googleapis.com",
     });
 
@@ -433,7 +581,7 @@ describe("google cached content manager", () => {
       sessionId: "session-a",
       cachePolicy: LONG_POLICY,
       credential: '{"token":"tok","projectId":"project-1"}',
-      payload: createPayload("system one"),
+      payload: createAboveMinimumPayload("system one"),
       modelBaseUrl: "https://cloudcode-pa.googleapis.com",
     });
     const second = await manager.apply({
@@ -441,7 +589,7 @@ describe("google cached content manager", () => {
       sessionId: "session-b",
       cachePolicy: LONG_POLICY,
       credential: '{"token":"tok","projectId":"project-1"}',
-      payload: createPayload("system two"),
+      payload: createAboveMinimumPayload("system two"),
       modelBaseUrl: "https://cloudcode-pa.googleapis.com",
     });
 
@@ -463,7 +611,7 @@ describe("google cached content manager", () => {
       sessionId: "session-c",
       cachePolicy: LONG_POLICY,
       credential: '{"token":"tok","projectId":"project-1"}',
-      payload: createPayload("system one"),
+      payload: createAboveMinimumPayload("system one"),
       modelBaseUrl: "https://cloudcode-pa.googleapis.com",
     });
 
@@ -493,7 +641,7 @@ describe("google cached content manager", () => {
       sessionId: "session-auth",
       cachePolicy: LONG_POLICY,
       credential: '{"token":"tok","projectId":"project-1"}',
-      payload: createPayload("system auth"),
+      payload: createAboveMinimumPayload("system auth"),
       modelBaseUrl: "https://cloudcode-pa.googleapis.com",
     });
     manager.markUnsupportedFromStreamError({
@@ -507,7 +655,7 @@ describe("google cached content manager", () => {
       sessionId: "session-auth",
       cachePolicy: LONG_POLICY,
       credential: '{"token":"tok","projectId":"project-1"}',
-      payload: createPayload("system auth"),
+      payload: createAboveMinimumPayload("system auth"),
       modelBaseUrl: "https://cloudcode-pa.googleapis.com",
     });
     await manager.apply({
@@ -515,7 +663,7 @@ describe("google cached content manager", () => {
       sessionId: "session-auth",
       cachePolicy: LONG_POLICY,
       credential: '{"token":"tok","projectId":"project-1"}',
-      payload: createPayload("system auth"),
+      payload: createAboveMinimumPayload("system auth"),
       modelBaseUrl: "https://cloudcode-pa.googleapis.com",
     });
 
@@ -540,7 +688,7 @@ describe("google cached content manager", () => {
       sessionId: "session-reauth",
       cachePolicy: LONG_POLICY,
       credential: '{"token":"tok-1","projectId":"project-1"}',
-      payload: createPayload("system reauth"),
+      payload: createAboveMinimumPayload("system reauth"),
       modelBaseUrl: "https://cloudcode-pa.googleapis.com",
     });
     manager.observeUsage({
@@ -561,7 +709,7 @@ describe("google cached content manager", () => {
       sessionId: "session-reauth",
       cachePolicy: LONG_POLICY,
       credential: '{"token":"tok-2","projectId":"project-1"}',
-      payload: createPayload("system reauth"),
+      payload: createAboveMinimumPayload("system reauth"),
       modelBaseUrl: "https://cloudcode-pa.googleapis.com",
     });
 

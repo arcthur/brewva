@@ -83,7 +83,10 @@ Codex continuation state are rendered only in
 `@brewva/brewva-provider-core`. See `docs/reference/token-cache.md` for the
 full cache contract. Google's explicit CachedContent lifecycle and any local
 Vertex cached-content endpoint overrides remain implementation-level or
-environment-level concerns, not top-level `BrewvaConfig` keys.
+environment-level concerns, not top-level `BrewvaConfig` keys. If a local
+Vertex CachedContent endpoint override is invalid, Brewva degrades only the
+explicit Google CachedContent path; short retention and implicit-prefix fallback
+remain available.
 
 ## Session Index Configuration
 
