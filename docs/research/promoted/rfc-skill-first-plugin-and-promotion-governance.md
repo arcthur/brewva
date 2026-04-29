@@ -26,7 +26,7 @@ The accepted decision is:
 - repo-owned internal plugins are manifest objects with declared write
   capabilities
 - local hooks use the narrow `LocalHookPort` phases:
-  `pre_classify`, `pre_tool`, `post_tool`, and `end_turn`
+  `pre_admission`, `pre_effect`, `post_receipt`, `post_rollback`, and `post_terminal`
 - local hooks may observe, recommend, block a tool call, or record advisory
   local information, but they may not rewrite prompts, provider payloads, tool
   results, message visibility, active tools, authority, or persisted truth
@@ -72,16 +72,16 @@ The promoted contract is:
    `internalRuntimePlugins?` for repo-owned plugins and `localHooks?` for safe
    local rules. The former raw `runtimePlugins?` public option is not kept as a
    compatibility alias.
-4. `LocalHookPort` is the public local-rule surface. `pre_classify` runs after
+4. `LocalHookPort` is the public local-rule surface. `pre_admission` runs after
    prompt normalization and before TaskSpec derivation, skill-first scoring,
    context composition, or tool-surface resolution. Classification hints remain
    advisory inputs.
-5. `pre_tool` may only block a tool call with a visible reason. It cannot grant
+5. `pre_effect` may only block a tool call with a visible reason. It cannot grant
    permission or widen authority.
-6. `post_tool` receives a cloned snapshot of normalized result content,
+6. `post_receipt` receives a cloned snapshot of normalized result content,
    details, and error posture. Mutating that snapshot or returning extra fields
    cannot rewrite the model-visible tool result.
-7. `end_turn` may observe and recommend after completion guard has run, but it
+7. `post_terminal` may observe and recommend after completion guard has run, but it
    cannot suppress assistant output or rewrite transcript visibility.
 8. Skill routing returns `SkillActivationPosture` and
    `ToolAvailabilityPosture` instead of a single gate-mode enum.
@@ -158,9 +158,9 @@ Promotion is backed by:
   declared write success paths
 - runtime-plugin entrypoint coverage proving only the new internal/local hook
   symbols are public on the runtime-plugin subpath
-- hosted turn-pipeline coverage proving `pre_classify` runs before tool-surface
+- hosted turn-pipeline coverage proving `pre_admission` runs before tool-surface
   resolution and local hook blocks are receipted before runtime authority starts
-- local `post_tool` coverage proving hook-visible result snapshots cannot
+- local `post_receipt` coverage proving hook-visible result snapshots cannot
   mutate normalized tool results
 - tool-surface contract coverage for advisory recommendations,
   `require_explore`, `require_execute`, failed-contract repair, operator

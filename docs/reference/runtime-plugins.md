@@ -79,7 +79,7 @@ Current factory option surface:
 
 - `runtime?`
 - `internalRuntimePlugins?` on `createHostedSession(...)` / `createBrewvaSession(...)` for composing repo-owned internal runtime plugins alongside the canonical hosted pipeline
-- `localHooks?` for safe local hooks at `pre_classify`, `pre_tool`, `post_tool`, and `end_turn`
+- `localHooks?` for safe local hooks at `pre_admission`, `pre_effect`, `post_receipt`, `post_rollback`, and `post_terminal`
 - `registerTools?` (default `true`)
 - `orchestration?`
 - `delegationStore?`
@@ -90,9 +90,27 @@ Current factory option surface:
 - `toolExecutionCoordinator?`
 - `hostedToolDefinitionsByName?`
 
-`post_tool` hooks receive a snapshot of the normalized tool result content,
+`post_receipt` hooks receive a snapshot of the normalized tool result content,
 details, and error posture. The snapshot is advisory input only; returning or
 mutating local hook data cannot rewrite the model-visible tool result.
+`post_rollback` hooks are driven by runtime rollback receipts such as
+`rollback`, `reversible_mutation_rolled_back`, and session rewind completion;
+they observe rollback posture after the kernel has recorded the receipt and
+cannot rewrite tape state.
+
+Only `pre_effect` hooks may block tool execution. Non-blocking phases are
+normalized to advisory receipts if an untyped hook implementation attempts to
+return a block result.
+
+Deprecated local hook method names remain accepted for one release window and
+are mapped onto the named gate phases with a warning:
+
+| Deprecated method | Canonical phase |
+| ----------------- | --------------- |
+| `preClassify`     | `pre_admission` |
+| `preTool`         | `pre_effect`    |
+| `postTool`        | `post_receipt`  |
+| `endTurn`         | `post_terminal` |
 
 Project guidance under `skills/project/shared/*.md` is even narrower than local
 hooks. Its `strength` and `scope` frontmatter are parsed only as context

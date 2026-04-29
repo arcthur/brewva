@@ -103,6 +103,70 @@ message machinery.
 Compatibility fallbacks may still exist during migration, but the stable rule
 is that runtime lifecycle owns aggregate posture semantics.
 
+## Turn Lifecycle Spine
+
+`TurnLifecycleSpine` is the runtime-internal ordering model for one accepted
+hosted turn. It is not a public status surface and it is not a replacement for
+the session lifecycle aggregate.
+
+One spine instance covers the path from accepted ingress to terminal receipt.
+Multiple model-to-tool iterations inside that accepted turn stay inside the same
+spine; each tool call still has its own single-tool-call effect transaction.
+
+| Concept                            | Granularity                | Durability                                         | Primary reader                    |
+| ---------------------------------- | -------------------------- | -------------------------------------------------- | --------------------------------- |
+| `TurnLifecycleSpine` gate          | per hosted turn            | internal ordering plus existing receipts           | runtime and gateway maintainers   |
+| `SessionLifecycleSnapshot.summary` | per session                | rebuildable runtime read model                     | host and gateway adapters         |
+| host `SessionPhase`                | per UI/controller session  | process-local controller state                     | host UI and interaction controls  |
+| `session_turn_transition`          | per hosted turn transition | durable/rebuildable hosted-flow receipt projection | gateway adapters and replay tools |
+
+Stable turn gates:
+
+| Gate                 | Meaning                                                     | Receipt or driver                                      |
+| -------------------- | ----------------------------------------------------------- | ------------------------------------------------------ |
+| `ingress_received`   | accepted hosted turn identity exists                        | `turn_input_recorded`                                  |
+| `admission_resolved` | turn-level admission, schedule prelude, and posture settled | hosted turn envelope pre-loop admission                |
+| `effect_authorized`  | effect authority was resolved for this turn's tool path     | `effect_authority_decided`                             |
+| `execution_recorded` | tool execution outcome was durably observed                 | `tool_result_recorded`                                 |
+| `recovery_settled`   | bounded recovery, rollback, or supersession posture settled | `session_turn_transition` or rollback/recovery receipt |
+| `terminal_recorded`  | accepted turn has terminal committed output                 | `turn_render_committed` or terminal shutdown receipt   |
+
+Gate movement is monotonic. Repeating the current gate is a no-op; moving to an
+earlier gate is an assertion failure. Recovery supersession may mark a turn as
+superseded, but it still advances only to the declared recovery gate and never
+rewrites event tape. The `superseded` marker is historical for the turn: it
+means the turn passed through a trusted recovery supersession at least once, not
+that the current terminal posture is still in recovery.
+
+Hydration folds remain federated. Their placement is declared against the spine
+so maintainers can see which hard gate a fold observes:
+
+| Fold                               | Observed gates                                                                      |
+| ---------------------------------- | ----------------------------------------------------------------------------------- |
+| `session_hydration_cost`           | `execution_recorded`, `terminal_recorded`                                           |
+| `session_hydration_ledger`         | `execution_recorded`, `terminal_recorded`                                           |
+| `session_hydration_resource_lease` | `admission_resolved`, `terminal_recorded`                                           |
+| `session_hydration_skill`          | `admission_resolved`, `execution_recorded`, `recovery_settled`, `terminal_recorded` |
+| `session_hydration_tool_lifecycle` | `effect_authorized`, `execution_recorded`, `recovery_settled`                       |
+| `session_hydration_verification`   | `execution_recorded`, `recovery_settled`, `terminal_recorded`                       |
+| `session_integrity`                | `ingress_received`, `recovery_settled`, `terminal_recorded`                         |
+| `task_watchdog`                    | `ingress_received`, `terminal_recorded`                                             |
+
+Recovery placement is also declared, not inferred from each coordinator:
+
+| Recovery reason           | Trusted gate         | Resume/supersede gate | Receipts that explain the move                                             |
+| ------------------------- | -------------------- | --------------------- | -------------------------------------------------------------------------- |
+| `wal_recovery_resume`     | `ingress_received`   | `recovery_settled`    | `session_turn_transition`, `recovery_wal_recovery_completed`               |
+| `reasoning_revert_resume` | `execution_recorded` | `recovery_settled`    | `session_turn_transition`, `reasoning_revert`, `reasoning_revert_recorded` |
+| `compaction_retry`        | `admission_resolved` | `recovery_settled`    | `session_turn_transition`, `session_compact`                               |
+| `provider_fallback_retry` | `admission_resolved` | `recovery_settled`    | `session_turn_transition`                                                  |
+| `max_output_recovery`     | `admission_resolved` | `recovery_settled`    | `session_turn_transition`                                                  |
+| `rollback_receipt`        | `execution_recorded` | `recovery_settled`    | `rollback`, `reversible_mutation_rolled_back`, `brewva.session.rewind.v1`  |
+| `session_shutdown`        | `ingress_received`   | `terminal_recorded`   | `session_shutdown`                                                         |
+
+Gateway hosted transitions project the spine. They remain useful for replay and
+operator explanation, but they are not a rival lifecycle state machine.
+
 ## Lifecycle Stages
 
 1. Parse CLI args, resolve mode/input, and apply terminal capability policy

@@ -16,6 +16,13 @@ import type {
 } from "./session-hydration-fold.js";
 import { readEventPayload } from "./session-hydration-fold.js";
 
+export const SESSION_HYDRATION_VERIFICATION_TURN_LIFECYCLE_PLACEMENT = {
+  foldId: "session_hydration_verification",
+  source: "packages/brewva-runtime/src/services/session-hydration-fold-verification.ts",
+  observes: ["execution_recorded", "recovery_settled", "terminal_recorded"],
+  role: "hydrate",
+} as const;
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }

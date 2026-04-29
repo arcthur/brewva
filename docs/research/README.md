@@ -158,6 +158,7 @@ None currently.
 - `docs/research/promoted/rfc-derived-session-wire-schema-and-frontend-session-protocol.md`
 - `docs/research/promoted/rfc-duckdb-session-query-plane.md`
 - `docs/research/promoted/rfc-durability-taxonomy-and-rebuildable-surface-narrowing.md`
+- `docs/research/promoted/rfc-effect-authority-manifest.md`
 - `docs/research/promoted/rfc-gateway-experience-ring-decomposition.md`
 - `docs/research/promoted/rfc-hosted-turn-transitions-and-bounded-recovery.md`
 - `docs/research/promoted/rfc-hosted-thread-loop-and-unified-recovery-decisions.md`
@@ -190,6 +191,7 @@ None currently.
 - `docs/research/promoted/rfc-stateful-box-plane-and-boxlite-execution-runtime.md`
 - `docs/research/promoted/rfc-tool-search-advisor-and-auto-broadened-discovery.md`
 - `docs/research/promoted/rfc-token-cache-fidelity-and-provider-prefix-stability.md`
+- `docs/research/promoted/rfc-turn-lifecycle-spine.md`
 - `docs/research/promoted/rfc-workflow-artifacts-and-posture-control-plane.md`
 
 See `docs/research/promoted/README.md` for thematic grouping and the

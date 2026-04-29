@@ -18,6 +18,13 @@ import type { BrewvaEventStore } from "../events/store.js";
 import { deriveRecoveryCanonicalization } from "../recovery/read-model.js";
 import { RuntimeSessionStateCell, RuntimeSessionStateStore } from "./session-state.js";
 
+export const SESSION_INTEGRITY_TURN_LIFECYCLE_PLACEMENT = {
+  foldId: "session_integrity",
+  source: "packages/brewva-runtime/src/services/session-integrity-coordinator.ts",
+  observes: ["ingress_received", "recovery_settled", "terminal_recorded"],
+  role: "integrity",
+} as const;
+
 const UNCLEAN_SHUTDOWN_RECONCILIATION_GRACE_MS = 5_000;
 
 export interface SessionIntegrityCoordinatorOptions {

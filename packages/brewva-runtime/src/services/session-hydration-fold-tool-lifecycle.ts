@@ -24,6 +24,13 @@ import type {
 } from "./session-hydration-fold.js";
 import { readNonNegativeNumber } from "./session-hydration-fold.js";
 
+export const SESSION_HYDRATION_TOOL_LIFECYCLE_TURN_LIFECYCLE_PLACEMENT = {
+  foldId: "session_hydration_tool_lifecycle",
+  source: "packages/brewva-runtime/src/services/session-hydration-fold-tool-lifecycle.ts",
+  observes: ["effect_authorized", "execution_recorded", "recovery_settled"],
+  role: "hydrate",
+} as const;
+
 function readToolCallId(
   payload: Record<string, unknown> | null,
 ): import("../contracts/index.js").BrewvaToolCallId | null {

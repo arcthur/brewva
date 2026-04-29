@@ -301,6 +301,21 @@ function localExecReadonly(): ToolActionPolicy {
   });
 }
 
+function removedShellTool(): ToolActionPolicy {
+  return buildPolicy({
+    actionClass: "local_exec_effectful",
+    riskLevel: "critical",
+    defaultAdmission: "deny",
+    maxAdmission: "deny",
+    receiptPolicy: { kind: "security_audit", required: true },
+    recoveryPolicy: { kind: "none" },
+    effectClasses: ["local_exec"],
+    safetyGate: {
+      reason: "removed_shell_tools_disabled",
+    },
+  });
+}
+
 function externalSideEffect(): ToolActionPolicy {
   return buildPolicy({
     actionClass: "external_side_effect",
@@ -483,6 +498,8 @@ export const TOOL_ACTION_POLICY_BY_NAME: Record<string, ToolActionPolicy> = {
   question: runtimeObserve(),
   exec: localExecEffectful(),
   local_exec_readonly: localExecReadonly(),
+  bash: removedShellTool(),
+  shell: removedShellTool(),
   browser_open: localExecEffectful({ riskLevel: "medium" }),
   browser_wait: localExecEffectful({ riskLevel: "low" }),
   browser_snapshot: localExecEffectful({

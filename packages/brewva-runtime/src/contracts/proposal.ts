@@ -1,4 +1,8 @@
-import type { ToolEffectClass, ToolGovernanceRisk } from "./governance.js";
+import type {
+  EffectAuthorityManifestBasis,
+  ToolEffectClass,
+  ToolGovernanceRisk,
+} from "./governance.js";
 import type { BrewvaToolCallId, BrewvaToolName } from "./identifiers.js";
 import type { RuntimeResult } from "./shared.js";
 
@@ -49,6 +53,7 @@ export interface EffectCommitmentProposalPayload {
   argsDigest: string;
   argsSummary?: string;
   diffPreview?: EffectCommitmentDiffPreview;
+  manifestBasis?: EffectAuthorityManifestBasis;
 }
 
 export interface EffectCommitmentProposal {
@@ -75,6 +80,7 @@ export interface DecisionReceipt {
   reasons: string[];
   committedEffects: DecisionEffect[];
   evidenceRefs: EvidenceRef[];
+  manifestBasis?: EffectAuthorityManifestBasis;
   turn: number;
   timestamp: number;
 }

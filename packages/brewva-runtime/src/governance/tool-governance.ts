@@ -44,6 +44,7 @@ export interface ResolvedToolAuthority {
   effectiveAdmission?: EffectiveToolActionPolicy["effectiveAdmission"];
   receiptPolicy?: ToolActionPolicy["receiptPolicy"];
   recoveryPolicy?: ToolActionPolicy["recoveryPolicy"];
+  policyBasis?: readonly string[];
 }
 
 function resolveAuthorityFromResolution(
@@ -72,6 +73,7 @@ function resolveAuthorityFromResolution(
     effectiveAdmission: effectivePolicy?.effectiveAdmission,
     receiptPolicy: effectivePolicy?.receiptPolicy,
     recoveryPolicy: effectivePolicy?.recoveryPolicy,
+    policyBasis: effectivePolicy?.safetyGate?.reason ? [effectivePolicy.safetyGate.reason] : [],
   };
 }
 

@@ -142,6 +142,9 @@ flowchart TD
   in-flight state
 - after compaction, the interrupted turn resumes from current task and evidence
   state instead of restarting as a blank session
+- compaction retry projects the runtime-internal turn spine to
+  `recovery_settled`; it does not create a separate context-owned lifecycle
+  state machine
 - after a reasoning revert, hosted recovery uses `branchWithSummary(...)` plus
   rebuilt session messages so compaction products from superseded branch tails
   do not stay model-visible

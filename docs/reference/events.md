@@ -389,6 +389,7 @@ gateway result, but they are not replay truth and are not a second event family.
 - `verification_outcome_recorded`
 - `verification_state_reset`
 - `event_listener_error`
+- `effect_authority_decided`
 - `tool_effect_gate_selected`
 - `reversible_mutation_prepared`
 - `reversible_mutation_recorded`
@@ -582,7 +583,8 @@ Current guard notes:
 - exact-call loop protection records `iteration_guard_recorded` with
   `guardKey=exact_call_loop`
 - when exact-call protection runs in `block` mode, runtime also emits
-  `tool_call_blocked` with the same reason text
+  one manifest-backed `tool_call_blocked` receipt with the same reason text and
+  `manifestBasis.runtimeBasis` containing `exact_call_loop`
 
 ### Proposal And Governance
 
@@ -925,8 +927,11 @@ inputs.
 
 ## Operational Semantics
 
-`tool_effect_gate_selected` records the chosen public boundary plus execution
-properties such as:
+`effect_authority_decided` records the chosen public boundary plus execution
+properties for every manifest-backed tool authority decision, including safe,
+read-only, and effectful boundaries. `tool_effect_gate_selected` remains a
+registered source-of-truth historical receipt so persisted tapes replay without
+reinterpretation; new writes use `effect_authority_decided`.
 
 - `boundary`
 - `requiresApproval`
@@ -937,6 +942,8 @@ properties such as:
 - `effectiveAdmission`
 - `receiptPolicy`
 - `recoveryPolicy`
+- `manifestBasis`, with separate invariant, overlay, runtime, and receipt
+  basis lists
 - `commandPolicy` for `exec` calls, containing readonly eligibility,
   normalized commands, filesystem intent, unsupported shell features, effects,
   and network target host/port details without secret values

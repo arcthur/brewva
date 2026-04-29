@@ -24,6 +24,13 @@ import { normalizeToolName } from "../utils/tool-name.js";
 import type { SessionHydrationFold, SkillHydrationState } from "./session-hydration-fold.js";
 import { readNonNegativeNumber, readSkillName } from "./session-hydration-fold.js";
 
+export const SESSION_HYDRATION_SKILL_TURN_LIFECYCLE_PLACEMENT = {
+  foldId: "session_hydration_skill",
+  source: "packages/brewva-runtime/src/services/session-hydration-fold-skill.ts",
+  observes: ["admission_resolved", "execution_recorded", "recovery_settled", "terminal_recorded"],
+  role: "hydrate",
+} as const;
+
 function readToolName(payload: Record<string, unknown> | null): string | null {
   if (!payload || typeof payload.toolName !== "string") return null;
   const normalized = normalizeToolName(payload.toolName);

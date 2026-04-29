@@ -148,6 +148,52 @@ Relevant implementation:
 - `packages/brewva-runtime/src/runtime.ts`
 - `packages/brewva-tools/src/task-ledger.ts`
 
+## 11) Effect Authority Manifest Invariant
+
+- High-risk effect authorization has one internal decision owner:
+  `EffectAuthorityManifest`.
+- Security classifiers, governance overlays, command policy, tool metadata,
+  runtime capability scope, skill posture, budget posture, and approval state
+  produce facts. They do not independently produce final allow/block/defer
+  meaning for a tool call.
+- Host overlays may preserve or tighten invariant outcomes. They must not relax
+  exact action-policy requirements, receipt requirements, runtime capability
+  denial, or the `local_exec_readonly` virtual-readonly route requirement.
+- `local_exec_readonly` auto-allow is valid only when command policy accepts the
+  command as read-only and execution is routed through `virtual_readonly`.
+- Proposal admission keeps pending/resume/delegation history, but the approval
+  requirement and authority basis come from the same manifest-backed decision as
+  direct tool execution.
+
+Relevant implementation:
+
+- `packages/brewva-runtime/src/authority/effect-authority-manifest.ts`
+- `packages/brewva-runtime/src/services/tool-gate.ts`
+- `packages/brewva-runtime/src/services/proposal-admission.ts`
+- `packages/brewva-runtime/src/security/command-policy.ts`
+- `packages/brewva-runtime/src/security/virtual-readonly-policy.ts`
+- `packages/brewva-tools/src/runtime-capability-scope.ts`
+
+## 12) Turn Lifecycle Monotonicity Invariant
+
+- `TurnLifecycleSpine` owns internal turn gate ordering for one accepted hosted
+  turn. It must not become a public status surface or a monolithic lifecycle
+  reducer.
+- Gate movement is monotonic:
+  `ingress_received -> admission_resolved -> effect_authorized -> execution_recorded -> recovery_settled -> terminal_recorded`.
+- Repeated advancement to the current gate is a no-op. Advancing or recovery
+  superseding to an earlier gate is an assertion failure.
+- Recovery supersession advances only spine posture. It never rewrites,
+  deletes, or reinterprets prior event tape entries.
+- Hydration folds and hosted transitions must declare which spine gate they
+  observe or project, while keeping their domain-local reducer logic.
+
+Relevant implementation:
+
+- `packages/brewva-runtime/src/lifecycle/turn-lifecycle-spine.ts`
+- `packages/brewva-gateway/src/session/turn-envelope.ts`
+- `packages/brewva-gateway/src/session/turn-transition.ts`
+
 ## Context Authority And Recall Ranking Model
 
 Context governance is three-axis, not a single trust ladder:

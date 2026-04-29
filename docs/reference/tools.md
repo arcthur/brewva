@@ -122,6 +122,13 @@ Boundary rule:
 - tool code must not rediscover a raw `BrewvaRuntime` or reach sideways into
   `runtime.maintain.*` as an implicit fallback path
 
+Managed-tool metadata feeds the runtime effect-authority manifest as fact input.
+`brewva.actionClass` contributes the action-policy class, and
+`brewva.requiredCapabilities` contributes deny-by-default runtime capability
+facts. Capability denial is rendered as an authority denial reason, but
+capability declarations do not become action-policy rows and do not change the
+effect-risk graph.
+
 ## Tool Result Display
 
 Managed tools may return display metadata alongside their canonical result
@@ -251,6 +258,10 @@ Scope notes:
   workspace subset into a temporary directory, enforces output/materialization
   limits, and discards the directory after execution. This evidence is suitable
   for exploration, but it is not a build/test/verification pass.
+- `local_exec_readonly` auto-allow requires both command-policy read-only
+  acceptance and the `virtual_readonly` route. That route requirement is an
+  effect-authority invariant, not a host overlay that deployment configuration
+  may relax.
 - `virtual_readonly` does not accept background execution, requested
   environment overlays, unsafe absolute or parent-relative path materialization,
   special files, or symlinks that resolve outside the target root.

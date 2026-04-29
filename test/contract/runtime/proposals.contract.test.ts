@@ -8,6 +8,7 @@ import {
   asBrewvaToolName,
   createTrustedLocalGovernancePort,
   type EffectCommitmentRecord,
+  type EffectAuthorityManifestBasis,
 } from "@brewva/brewva-runtime";
 import { createRuntimeConfig } from "../../helpers/runtime.js";
 import { cleanupWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
@@ -32,6 +33,13 @@ function createCleanRuntime(
   });
 }
 
+function readManifestBasis(payload: unknown): EffectAuthorityManifestBasis | undefined {
+  if (!payload || typeof payload !== "object" || !("manifestBasis" in payload)) {
+    return undefined;
+  }
+  return (payload as { manifestBasis?: EffectAuthorityManifestBasis }).manifestBasis;
+}
+
 describe("runtime proposals API", () => {
   test("approval-bound tool starts emit accepted effect_commitment receipts", () => {
     const runtime = createCleanRuntime({
@@ -50,10 +58,11 @@ describe("runtime proposals API", () => {
     expect(started.boundary).toBe("effectful");
     expect(started.commitmentReceipt?.decision).toBe("accept");
 
-    const effectGateEvent = runtime.inspect.events.query(sessionId, {
-      type: "tool_effect_gate_selected",
+    const effectAuthorityEvent = runtime.inspect.events.query(sessionId, {
+      type: "effect_authority_decided",
       last: 1,
     })[0];
+    const manifestBasis = readManifestBasis(effectAuthorityEvent?.payload);
     const listed = runtime.inspect.proposals.list(sessionId, {
       limit: 1,
     })[0] as EffectCommitmentRecord | undefined;
@@ -61,7 +70,9 @@ describe("runtime proposals API", () => {
     expect(listed?.proposal.payload.toolCallId).toBe(asBrewvaToolCallId("tc-exec-commitment"));
     expect(listed?.receipt.decision).toBe("accept");
     expect(listed?.receipt.committedEffects[0]?.kind).toBe("tool_commitment");
-    expect(listed?.proposal.evidenceRefs[0]?.locator).toBe(`event://${effectGateEvent?.id}`);
+    expect(listed?.proposal.evidenceRefs[0]?.locator).toBe(`event://${effectAuthorityEvent?.id}`);
+    expect(listed?.proposal.payload.manifestBasis).toEqual(manifestBasis);
+    expect(listed?.receipt.manifestBasis).toEqual(manifestBasis);
   });
 
   test("default runtime opens an operator approval request for approval-bound tools", () => {

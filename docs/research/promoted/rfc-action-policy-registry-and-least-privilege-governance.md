@@ -59,7 +59,7 @@ The accepted decision is:
   `registerActionPolicy(...)` and `registerActionPolicyResolver(...)`.
 - Managed tool metadata carries `surface`, `actionClass`, and
   `requiredCapabilities`; capability declarations do not become policy rows.
-- `tool_effect_gate_selected` telemetry records action class, admission,
+- `effect_authority_decided` telemetry records action class, admission,
   receipt policy, and recovery policy alongside the derived legacy descriptor
   fields.
 - Control-plane mutations and delegation are effectful actions with receipts;

@@ -1,5 +1,12 @@
 import type { LedgerHydrationState, SessionHydrationFold } from "./session-hydration-fold.js";
 
+export const SESSION_HYDRATION_LEDGER_TURN_LIFECYCLE_PLACEMENT = {
+  foldId: "session_hydration_ledger",
+  source: "packages/brewva-runtime/src/services/session-hydration-fold-ledger.ts",
+  observes: ["execution_recorded", "terminal_recorded"],
+  role: "hydrate",
+} as const;
+
 export function createLedgerHydrationFold(): SessionHydrationFold<LedgerHydrationState> {
   return {
     domain: "ledger",

@@ -210,6 +210,27 @@ describe("tool action policy", () => {
     });
   });
 
+  test("removed shell tool names are exact deny policies", () => {
+    for (const toolName of ["bash", "shell"]) {
+      const policy = requireDefined(
+        getExactToolActionPolicy(toolName),
+        `missing ${toolName} policy`,
+      );
+      const effective = resolveEffectiveToolActionPolicy(policy);
+
+      expect(policy).toMatchObject({
+        actionClass: "local_exec_effectful",
+        riskLevel: "critical",
+        defaultAdmission: "deny",
+        maxAdmission: "deny",
+        safetyGate: {
+          reason: "removed_shell_tools_disabled",
+        },
+      });
+      expect(effective.effectiveAdmission).toBe("deny");
+    }
+  });
+
   test("exec action policy selects readonly only when the virtual route is eligible", () => {
     expect(
       getToolActionPolicy("exec", undefined, {

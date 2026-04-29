@@ -288,8 +288,11 @@ need argument-aware classification.
 Current implementation notes:
 
 - `runtime.authority.tools.start(...)` remains the single shared authorization entrypoint
-- `ToolGateService` applies boundary-policy checks only for classified
-  high-risk tools such as `exec` and browser entrypoints
+- `ToolGateService` collects boundary, action-policy, skill, repair, budget,
+  command-policy, and virtual-readonly facts, then records the manifest-backed
+  `effect_authority_decided` receipt for safe, read-only, and effectful tools
+- duplicate-call protection, repair posture, and local-readonly routing feed
+  manifest runtime facts rather than writing independent allow/block receipts
 - `runtime.inspect.tools.explainAccess(...)` can explain boundary-policy decisions
   and exec command-policy verdicts without executing the tool
 - `virtual_readonly` is an exploration backend only. Its v1 write barrier is a

@@ -820,6 +820,13 @@ describe("runtime facade coverage", () => {
     const blocked = start("tc-8", "browser_snapshot", { interactive: true });
     expect(blocked.allowed).toBe(false);
     expect(blocked.reason).toContain("identical arguments 3 times consecutively");
+    const blockedEvents = runtime.inspect.events.query(sessionId, { type: "tool_call_blocked" });
+    expect(blockedEvents).toHaveLength(1);
+    expect(blockedEvents[0]?.payload?.manifestBasis).toMatchObject({
+      schema: "brewva.effect_authority_basis.v1",
+      toolName: "browser_snapshot",
+      runtimeBasis: expect.arrayContaining(["exact_call_loop"]),
+    });
 
     expect(
       runtime.inspect.events.listGuardResults(sessionId, { guardKey: "exact_call_loop" }),

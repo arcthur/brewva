@@ -1,16 +1,23 @@
 import { randomUUID } from "node:crypto";
+import {
+  decideEffectAuthorityManifest,
+  type EffectAuthorityFactDecision,
+  type EffectAuthorityManifestDecision,
+  type EffectAuthorityManifestFacts,
+} from "../authority/effect-authority-manifest.js";
 import { asBrewvaToolCallId, asBrewvaToolName } from "../contracts/index.js";
 import type {
   BrewvaEventRecord,
   ContextBudgetUsage,
   DecisionReceipt,
+  EffectAuthorityManifestBasis,
   EffectCommitmentDiffPreview,
   EffectCommitmentProposal,
-  SkillDocument,
 } from "../contracts/index.js";
 import {
+  EFFECT_AUTHORITY_DECIDED_EVENT_TYPE,
   ITERATION_GUARD_RECORDED_EVENT_TYPE,
-  TOOL_EFFECT_GATE_SELECTED_EVENT_TYPE,
+  TOOL_CALL_BLOCKED_EVENT_TYPE,
 } from "../events/event-types.js";
 import { type ResolvedToolAuthority } from "../governance/tool-governance.js";
 import { buildGuardResultPayload, coerceGuardResultPayload } from "../iteration/facts.js";
@@ -57,6 +64,7 @@ export interface StartToolCallInput {
   recordLifecycleEvent?: boolean;
   effectCommitmentRequestId?: string;
   diffPreview?: EffectCommitmentDiffPreview;
+  runtimeCapabilityAccess?: EffectAuthorityFactDecision;
 }
 
 export interface FinishToolCallInput {
@@ -105,8 +113,11 @@ export interface ToolGateServiceOptions {
   getCurrentTurn: RuntimeKernelContext["getCurrentTurn"];
   recordEvent: RuntimeKernelContext["recordEvent"];
   resolveToolAuthority: (toolName: string, args?: Record<string, unknown>) => ResolvedToolAuthority;
-  toolAccessPolicyService: Pick<ToolAccessPolicyService, "checkToolAccess" | "explainToolAccess">;
-  skillLifecycleService: Pick<SkillLifecycleService, "getActiveSkill" | "consumeRepairToolAccess">;
+  toolAccessPolicyService: Pick<
+    ToolAccessPolicyService,
+    "checkToolAccess" | "explainToolAccess" | "collectToolAuthorityFacts"
+  >;
+  skillLifecycleService: Pick<SkillLifecycleService, "consumeRepairToolAccess">;
   proposalAdmissionService: Pick<ProposalAdmissionService, "submitProposal">;
   effectCommitmentDeskService: Pick<
     EffectCommitmentDeskService,
@@ -122,7 +133,6 @@ export class ToolGateService {
     toolName: string,
     args?: Record<string, unknown>,
   ) => ResolvedToolAuthority;
-  private readonly getActiveSkill: (sessionId: string) => SkillDocument | undefined;
   private readonly consumeRepairToolAccess: (
     sessionId: string,
     toolName: string,
@@ -139,6 +149,7 @@ export class ToolGateService {
   }) => BrewvaEventRecord | undefined;
   private readonly checkToolAccessPolicy: ToolAccessPolicyService["checkToolAccess"];
   private readonly explainToolAccessPolicy: ToolAccessPolicyService["explainToolAccess"];
+  private readonly collectToolAuthorityFacts: ToolAccessPolicyService["collectToolAuthorityFacts"];
   private readonly submitProposal: (
     sessionId: string,
     proposal: EffectCommitmentProposal,
@@ -154,7 +165,6 @@ export class ToolGateService {
     this.securityConfig = options.securityConfig;
     this.sessionState = options.sessionState;
     this.resolveToolAuthority = (toolName, args) => options.resolveToolAuthority(toolName, args);
-    this.getActiveSkill = (sessionId) => options.skillLifecycleService.getActiveSkill(sessionId);
     this.consumeRepairToolAccess = (sessionId, toolName, usage) =>
       options.skillLifecycleService.consumeRepairToolAccess(sessionId, toolName, usage);
     this.getCurrentTurn = (sessionId) => options.getCurrentTurn(sessionId);
@@ -163,12 +173,44 @@ export class ToolGateService {
       options.toolAccessPolicyService.checkToolAccess(sessionId, toolName, args);
     this.explainToolAccessPolicy = (sessionId, toolName, args) =>
       options.toolAccessPolicyService.explainToolAccess(sessionId, toolName, args);
+    this.collectToolAuthorityFacts = (sessionId, toolName, args, collectOptions) =>
+      options.toolAccessPolicyService.collectToolAuthorityFacts(
+        sessionId,
+        toolName,
+        args,
+        collectOptions,
+      );
     this.submitProposal = (sessionId, proposal) =>
       options.proposalAdmissionService.submitProposal(sessionId, proposal);
     this.prepareEffectCommitmentResume = (input) =>
       options.effectCommitmentDeskService.prepareResume(input);
     this.getEffectCommitmentRequestIdForProposal = (sessionId, proposalId) =>
       options.effectCommitmentDeskService.getRequestIdForProposal(sessionId, proposalId);
+  }
+
+  private recordToolCallBlocked(input: {
+    sessionId: string;
+    toolName: string;
+    reason: string;
+    manifestBasis?: EffectAuthorityManifestBasis;
+    requestId?: string | null;
+    decision?: string | null;
+    proposalId?: string | null;
+  }): void {
+    this.recordEvent({
+      sessionId: input.sessionId,
+      type: TOOL_CALL_BLOCKED_EVENT_TYPE,
+      turn: this.getCurrentTurn(input.sessionId),
+      payload: {
+        schema: "brewva.tool_call_blocked.v1",
+        toolName: normalizeToolName(input.toolName),
+        reason: input.reason,
+        decision: input.decision ?? null,
+        proposalId: input.proposalId ?? null,
+        requestId: input.requestId ?? null,
+        manifestBasis: input.manifestBasis ?? null,
+      },
+    });
   }
 
   checkToolAccess(
@@ -320,15 +362,6 @@ export class ToolGateService {
       };
     }
 
-    this.recordEvent({
-      sessionId: input.sessionId,
-      type: "tool_call_blocked",
-      turn: this.getCurrentTurn(input.sessionId),
-      payload: {
-        toolName: normalizedToolName,
-        reason,
-      },
-    });
     return {
       allowed: false,
       reason,
@@ -391,6 +424,7 @@ export class ToolGateService {
     authority: ResolvedToolAuthority,
     evidenceEvent: BrewvaEventRecord,
     argsIdentity: { digest: string; summary?: string },
+    manifestBasis: EffectAuthorityManifestBasis,
   ): EffectCommitmentProposal | undefined {
     const normalizedToolName = normalizeToolName(input.toolName);
     const descriptor = authority.descriptor;
@@ -418,6 +452,7 @@ export class ToolGateService {
         argsDigest: argsIdentity.digest,
         argsSummary: argsIdentity.summary,
         diffPreview: cloneDiffPreview(input.diffPreview),
+        manifestBasis,
       },
       evidenceRefs: [
         {
@@ -435,23 +470,22 @@ export class ToolGateService {
     input: StartToolCallInput,
     authority: ResolvedToolAuthority,
     evidenceEvent: BrewvaEventRecord | undefined,
+    manifestBasis: EffectAuthorityManifestBasis,
   ): ToolAccessDecision {
     const argsIdentity = this.resolveArgsIdentity(input.args);
     if (!argsIdentity) {
       const reason = `Commitment tool '${normalizeToolName(input.toolName)}' requires serializable args for exact authorization binding.`;
-      this.recordEvent({
+      this.recordToolCallBlocked({
         sessionId: input.sessionId,
-        type: "tool_call_blocked",
-        turn: this.getCurrentTurn(input.sessionId),
-        payload: {
-          toolName: normalizeToolName(input.toolName),
-          reason,
-        },
+        toolName: input.toolName,
+        reason,
+        manifestBasis,
       });
       return {
         allowed: false,
         boundary: "effectful",
         reason,
+        manifestBasis,
       };
     }
 
@@ -464,21 +498,19 @@ export class ToolGateService {
         argsDigest: argsIdentity.digest,
       });
       if (!resumed.ok) {
-        this.recordEvent({
+        this.recordToolCallBlocked({
           sessionId: input.sessionId,
-          type: "tool_call_blocked",
-          turn: this.getCurrentTurn(input.sessionId),
-          payload: {
-            toolName: normalizeToolName(input.toolName),
-            reason: resumed.reason,
-            requestId: resumed.requestId,
-          },
+          toolName: input.toolName,
+          reason: resumed.reason,
+          requestId: resumed.requestId,
+          manifestBasis,
         });
         return {
           allowed: false,
           boundary: "effectful",
           reason: resumed.reason,
           effectCommitmentRequestId: resumed.requestId,
+          manifestBasis,
         };
       }
 
@@ -487,17 +519,14 @@ export class ToolGateService {
         const reason =
           resumedReceipt.reasons.join(", ") ||
           `Commitment rejected for tool '${normalizeToolName(input.toolName)}'.`;
-        this.recordEvent({
+        this.recordToolCallBlocked({
           sessionId: input.sessionId,
-          type: "tool_call_blocked",
-          turn: this.getCurrentTurn(input.sessionId),
-          payload: {
-            toolName: normalizeToolName(input.toolName),
-            reason,
-            decision: resumedReceipt.decision,
-            proposalId: resumedReceipt.proposalId,
-            requestId: resumed.requestId,
-          },
+          toolName: input.toolName,
+          reason,
+          decision: resumedReceipt.decision,
+          proposalId: resumedReceipt.proposalId,
+          requestId: resumed.requestId,
+          manifestBasis,
         });
         return {
           allowed: false,
@@ -505,6 +534,7 @@ export class ToolGateService {
           reason,
           commitmentReceipt: resumedReceipt,
           effectCommitmentRequestId: resumed.requestId,
+          manifestBasis,
         };
       }
 
@@ -518,38 +548,40 @@ export class ToolGateService {
 
     if (!evidenceEvent) {
       const reason = `Commitment tool '${normalizeToolName(input.toolName)}' is missing auditable evidence.`;
-      this.recordEvent({
+      this.recordToolCallBlocked({
         sessionId: input.sessionId,
-        type: "tool_call_blocked",
-        turn: this.getCurrentTurn(input.sessionId),
-        payload: {
-          toolName: normalizeToolName(input.toolName),
-          reason,
-        },
+        toolName: input.toolName,
+        reason,
+        manifestBasis,
       });
       return {
         allowed: false,
         boundary: "effectful",
         reason,
+        manifestBasis,
       };
     }
 
-    const proposal = this.buildCommitmentProposal(input, authority, evidenceEvent, argsIdentity);
+    const proposal = this.buildCommitmentProposal(
+      input,
+      authority,
+      evidenceEvent,
+      argsIdentity,
+      manifestBasis,
+    );
     if (!proposal) {
       const reason = `Commitment tool '${normalizeToolName(input.toolName)}' is missing governance metadata.`;
-      this.recordEvent({
+      this.recordToolCallBlocked({
         sessionId: input.sessionId,
-        type: "tool_call_blocked",
-        turn: this.getCurrentTurn(input.sessionId),
-        payload: {
-          toolName: normalizeToolName(input.toolName),
-          reason,
-        },
+        toolName: input.toolName,
+        reason,
+        manifestBasis,
       });
       return {
         allowed: false,
         boundary: "effectful",
         reason,
+        manifestBasis,
       };
     }
 
@@ -562,17 +594,14 @@ export class ToolGateService {
       const reason =
         receipt.reasons.join(", ") ||
         `Commitment rejected for tool '${normalizeToolName(input.toolName)}'.`;
-      this.recordEvent({
+      this.recordToolCallBlocked({
         sessionId: input.sessionId,
-        type: "tool_call_blocked",
-        turn: this.getCurrentTurn(input.sessionId),
-        payload: {
-          toolName: normalizeToolName(input.toolName),
-          reason,
-          decision: receipt.decision,
-          proposalId: receipt.proposalId,
-          requestId: effectCommitmentRequestId ?? null,
-        },
+        toolName: input.toolName,
+        reason,
+        decision: receipt.decision,
+        proposalId: receipt.proposalId,
+        requestId: effectCommitmentRequestId ?? null,
+        manifestBasis,
       });
       return {
         allowed: false,
@@ -580,6 +609,7 @@ export class ToolGateService {
         reason,
         commitmentReceipt: receipt,
         effectCommitmentRequestId,
+        manifestBasis,
       };
     }
 
@@ -596,35 +626,6 @@ export class ToolGateService {
     const boundary = authority.boundary;
     const normalizedToolName = authority.normalizedToolName;
     const state = this.sessionState.getCell(input.sessionId);
-    const requestedEffectCommitmentRequestId = input.effectCommitmentRequestId?.trim();
-    const execPolicy = this.resolveExecPolicyExplanation(input.toolName, input.args);
-
-    const effectGateEvent =
-      boundary === "effectful"
-        ? this.recordEvent({
-            sessionId: input.sessionId,
-            type: TOOL_EFFECT_GATE_SELECTED_EVENT_TYPE,
-            turn: this.getCurrentTurn(input.sessionId),
-            payload: {
-              toolCallId: input.toolCallId,
-              toolName: normalizedToolName,
-              boundary,
-              effects: authority.descriptor?.effects ?? [],
-              defaultRisk: authority.descriptor?.defaultRisk ?? null,
-              requiresApproval: authority.requiresApproval,
-              rollbackable: authority.rollbackable,
-              actionClass: authority.actionClass ?? null,
-              riskLevel: authority.riskLevel ?? null,
-              defaultAdmission: authority.defaultAdmission ?? null,
-              maxAdmission: authority.maxAdmission ?? null,
-              effectiveAdmission: authority.effectiveAdmission ?? null,
-              receiptPolicy: authority.receiptPolicy ?? null,
-              recoveryPolicy: authority.recoveryPolicy ?? null,
-              commandPolicy: execPolicy.commandPolicy ?? null,
-              virtualReadonly: execPolicy.virtualReadonly ?? null,
-            },
-          })
-        : undefined;
 
     if (input.recordLifecycleEvent) {
       this.recordEvent({
@@ -639,31 +640,7 @@ export class ToolGateService {
       });
     }
 
-    if (
-      requestedEffectCommitmentRequestId &&
-      state.inflightEffectCommitmentRequestIds.has(requestedEffectCommitmentRequestId)
-    ) {
-      const reason = `effect_commitment_request_in_flight:${requestedEffectCommitmentRequestId}`;
-      this.recordEvent({
-        sessionId: input.sessionId,
-        type: "tool_call_blocked",
-        turn: this.getCurrentTurn(input.sessionId),
-        payload: {
-          toolName: normalizedToolName,
-          reason,
-          requestId: requestedEffectCommitmentRequestId,
-        },
-      });
-      return {
-        allowed: false,
-        boundary,
-        reason,
-        effectCommitmentRequestId: requestedEffectCommitmentRequestId,
-        authority,
-      };
-    }
-
-    const gateDecision = this.evaluateEffectGate(input, authority, effectGateEvent);
+    const gateDecision = this.evaluateEffectGate(input, authority);
     if (!gateDecision.allowed) {
       return {
         ...gateDecision,
@@ -671,29 +648,7 @@ export class ToolGateService {
       };
     }
 
-    const repairConsumption = this.consumeRepairToolAccess(
-      input.sessionId,
-      normalizedToolName,
-      input.usage,
-    );
-    if (!repairConsumption.allowed) {
-      this.recordEvent({
-        sessionId: input.sessionId,
-        type: "tool_call_blocked",
-        turn: this.getCurrentTurn(input.sessionId),
-        payload: {
-          toolName: normalizedToolName,
-          skill: this.getActiveSkill(input.sessionId)?.name ?? null,
-          reason: repairConsumption.reason ?? "Tool call blocked by repair posture.",
-        },
-      });
-      return {
-        allowed: false,
-        boundary,
-        reason: repairConsumption.reason,
-        authority,
-      };
-    }
+    this.commitRepairToolAccess(input.sessionId, normalizedToolName, input.usage);
 
     const effectCommitmentRequestId = gateDecision.effectCommitmentRequestId?.trim();
     if (
@@ -701,21 +656,19 @@ export class ToolGateService {
       state.inflightEffectCommitmentRequestIds.has(effectCommitmentRequestId)
     ) {
       const reason = `effect_commitment_request_in_flight:${effectCommitmentRequestId}`;
-      this.recordEvent({
+      this.recordToolCallBlocked({
         sessionId: input.sessionId,
-        type: "tool_call_blocked",
-        turn: this.getCurrentTurn(input.sessionId),
-        payload: {
-          toolName: normalizedToolName,
-          reason,
-          requestId: effectCommitmentRequestId,
-        },
+        toolName: normalizedToolName,
+        reason,
+        requestId: effectCommitmentRequestId,
+        manifestBasis: gateDecision.manifestBasis,
       });
       return {
         allowed: false,
         boundary,
         reason,
         effectCommitmentRequestId,
+        manifestBasis: gateDecision.manifestBasis,
         authority,
       };
     }
@@ -738,69 +691,187 @@ export class ToolGateService {
   private evaluateEffectGate(
     input: StartToolCallInput,
     authority: ResolvedToolAuthority,
-    effectGateEvent: BrewvaEventRecord | undefined,
   ): ToolAccessDecision {
     const boundary = authority.boundary;
-    const access = this.checkToolAccessPolicy(input.sessionId, input.toolName, input.args);
-    if (!access.allowed) {
-      return {
-        ...access,
-        boundary,
-      };
-    }
-
+    const facts = this.collectToolAuthorityFacts(input.sessionId, input.toolName, input.args, {
+      emitEvents: true,
+      usage: input.usage,
+      capabilityAccess: input.runtimeCapabilityAccess,
+    });
     const deduplication = this.checkCallDeduplication(input);
-    if (!deduplication.allowed) {
-      return {
-        ...deduplication,
-        boundary,
-      };
-    }
-    const advisoryMessages = [deduplication.advisory].filter(
-      (value): value is string => typeof value === "string" && value.trim().length > 0,
-    );
-
     const boundaryDecision = this.evaluateBoundaryPolicy(
       input.sessionId,
       input.toolName,
       input.args,
       input.cwd,
     );
-    if (!boundaryDecision.allowed) {
-      this.recordEvent({
+
+    const manifestFacts: EffectAuthorityManifestFacts = {
+      ...facts,
+      boundaryAccess: {
+        allowed: boundaryDecision.allowed,
+        basis: "boundary_policy",
+        reason: boundaryDecision.reason,
+        advisory: boundaryDecision.advisory,
+      },
+      deduplicationAccess: {
+        allowed: deduplication.allowed,
+        basis: "exact_call_loop",
+        reason: deduplication.reason,
+        advisory: deduplication.advisory,
+      },
+      commandPolicy: boundaryDecision.commandPolicy ?? facts.commandPolicy,
+      virtualReadonly: boundaryDecision.virtualReadonly ?? facts.virtualReadonly,
+      inflightEffectAccess: this.resolveInflightEffectAccess(input),
+    };
+    const manifestDecision = decideEffectAuthorityManifest(manifestFacts);
+    const effectAuthorityEvent = this.recordEffectAuthorityDecision(
+      input,
+      authority,
+      manifestFacts,
+      manifestDecision,
+    );
+
+    if (!manifestDecision.allowed) {
+      this.settleTerminalRepairBlock(
+        input.sessionId,
+        authority.normalizedToolName,
+        input.usage,
+        manifestFacts.repairAccess,
+      );
+      this.recordToolCallBlocked({
         sessionId: input.sessionId,
-        type: "tool_call_blocked",
-        turn: this.getCurrentTurn(input.sessionId),
-        payload: {
-          toolName: normalizeToolName(input.toolName),
-          reason: boundaryDecision.reason ?? "Tool call blocked by boundary policy.",
-        },
+        toolName: input.toolName,
+        reason: manifestDecision.reason ?? "Tool call blocked.",
+        manifestBasis: manifestDecision.manifestBasis,
       });
       return {
-        ...boundaryDecision,
+        allowed: false,
         boundary,
+        reason: manifestDecision.reason,
+        advisory: manifestDecision.advisory,
+        manifestBasis: manifestDecision.manifestBasis,
       };
     }
 
-    if (boundary === "effectful" && authority.requiresApproval) {
-      const commitment = this.authorizeEffectCommitment(input, authority, effectGateEvent);
+    if (manifestDecision.decision === "defer") {
+      if (boundary !== "effectful") {
+        return {
+          allowed: false,
+          boundary,
+          reason: "Only effectful tools may defer for effect commitment approval.",
+          advisory: manifestDecision.advisory,
+          manifestBasis: manifestDecision.manifestBasis,
+        };
+      }
+      const commitment = this.authorizeEffectCommitment(
+        input,
+        authority,
+        effectAuthorityEvent,
+        manifestDecision.manifestBasis,
+      );
       if (!commitment.allowed) {
-        return commitment;
+        return {
+          ...commitment,
+          manifestBasis: manifestDecision.manifestBasis,
+        };
       }
       return {
         allowed: true,
         boundary,
-        advisory: advisoryMessages.join("; ") || undefined,
+        advisory: manifestDecision.advisory,
         commitmentReceipt: commitment.commitmentReceipt,
         effectCommitmentRequestId: commitment.effectCommitmentRequestId,
+        manifestBasis: manifestDecision.manifestBasis,
       };
     }
 
     return {
       allowed: true,
       boundary,
-      advisory: advisoryMessages.join("; ") || undefined,
+      advisory: manifestDecision.advisory,
+      manifestBasis: manifestDecision.manifestBasis,
     };
+  }
+
+  private resolveInflightEffectAccess(input: StartToolCallInput): EffectAuthorityFactDecision {
+    const requestId = input.effectCommitmentRequestId?.trim();
+    if (
+      requestId &&
+      this.sessionState.getCell(input.sessionId).inflightEffectCommitmentRequestIds.has(requestId)
+    ) {
+      return {
+        allowed: false,
+        basis: "effect_commitment_inflight",
+        reason: `effect_commitment_request_in_flight:${requestId}`,
+      };
+    }
+    return {
+      allowed: true,
+      basis: "effect_commitment_inflight",
+    };
+  }
+
+  private commitRepairToolAccess(
+    sessionId: string,
+    toolName: string,
+    usage?: ContextBudgetUsage,
+  ): void {
+    const repairConsumption = this.consumeRepairToolAccess(sessionId, toolName, usage);
+    if (!repairConsumption.allowed) {
+      throw new Error(
+        `effect_authority_repair_fact_drift:${toolName}:${repairConsumption.reason ?? "unknown"}`,
+      );
+    }
+  }
+
+  private settleTerminalRepairBlock(
+    sessionId: string,
+    toolName: string,
+    usage: ContextBudgetUsage | undefined,
+    repairAccess: EffectAuthorityFactDecision | undefined,
+  ): void {
+    if (repairAccess?.allowed !== false || repairAccess.terminalFailure !== true) {
+      return;
+    }
+    const repairConsumption = this.consumeRepairToolAccess(sessionId, toolName, usage);
+    if (repairConsumption.allowed) {
+      throw new Error(`effect_authority_repair_fact_drift:${toolName}:terminal_failure_cleared`);
+    }
+  }
+
+  private recordEffectAuthorityDecision(
+    input: StartToolCallInput,
+    authority: ResolvedToolAuthority,
+    facts: EffectAuthorityManifestFacts,
+    decision: EffectAuthorityManifestDecision,
+  ): BrewvaEventRecord | undefined {
+    return this.recordEvent({
+      sessionId: input.sessionId,
+      type: EFFECT_AUTHORITY_DECIDED_EVENT_TYPE,
+      turn: this.getCurrentTurn(input.sessionId),
+      payload: {
+        toolCallId: input.toolCallId,
+        toolName: authority.normalizedToolName,
+        boundary: facts.boundary,
+        effects: [...facts.effects],
+        defaultRisk: authority.descriptor?.defaultRisk ?? null,
+        decision: decision.decision,
+        reason: decision.reason ?? null,
+        requiresApproval: decision.requiresApproval,
+        rollbackable: facts.rollbackable,
+        actionClass: facts.actionClass ?? null,
+        riskLevel: facts.riskLevel ?? null,
+        defaultAdmission: authority.defaultAdmission ?? null,
+        maxAdmission: authority.maxAdmission ?? null,
+        effectiveAdmission: facts.effectiveAdmission ?? null,
+        receiptPolicy: facts.receiptPolicy ?? null,
+        recoveryPolicy: facts.recoveryPolicy ?? null,
+        commandPolicy: facts.commandPolicy ?? null,
+        virtualReadonly: facts.virtualReadonly ?? null,
+        manifestBasis: decision.manifestBasis,
+      },
+    });
   }
 
   resolveToolCompletion(input: {

@@ -11,6 +11,13 @@ import type {
 } from "./session-hydration-fold.js";
 import { readEventPayload, readNonNegativeNumber } from "./session-hydration-fold.js";
 
+export const SESSION_HYDRATION_RESOURCE_LEASE_TURN_LIFECYCLE_PLACEMENT = {
+  foldId: "session_hydration_resource_lease",
+  source: "packages/brewva-runtime/src/services/session-hydration-fold-resource-lease.ts",
+  observes: ["admission_resolved", "terminal_recorded"],
+  role: "hydrate",
+} as const;
+
 function readLeaseBudget(value: unknown): ResourceLeaseBudget {
   const payload =
     value && typeof value === "object" && !Array.isArray(value)

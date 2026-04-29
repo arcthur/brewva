@@ -184,6 +184,14 @@ parallel truth source. When runtime lifecycle is available, gateway seeds
 back to bounded frame-history reduction for compatibility or replay bootstrap
 cases that the aggregate cannot yet represent directly.
 
+Gateway turn transitions also project the runtime-internal turn spine rather
+than defining a rival lifecycle. Recovery transitions such as
+`wal_recovery_resume`, `reasoning_revert_resume`, `compaction_retry`,
+`provider_fallback_retry`, and `max_output_recovery` carry hosted-flow
+explanation and replay provenance; the turn spine maps them to the declared
+`recovery_settled` gate, while `SessionLifecycleSnapshot.summary` remains the
+session-level posture read model.
+
 Important protocol rules:
 
 - `turn.committed` is the only terminal turn frame.

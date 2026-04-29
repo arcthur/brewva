@@ -168,8 +168,16 @@ catalog.
 
 - boundary classification
 - governance resolution
+- manifest-backed effect authority decision
 - approval-bearing exact resume
 - mutation receipt creation
+
+The internal decision owner is `EffectAuthorityManifest`. Tool access policy,
+security classification, command policy, managed-tool metadata, runtime
+capability scope, skill posture, budget posture, and effect-commitment state
+feed facts into the manifest. `ToolGateService` gathers those facts, calls the
+manifest, emits `effect_authority_decided`, and executes the required receipt or
+commitment path.
 
 Raw tape append is not part of this public tool authority surface.
 
@@ -562,6 +570,9 @@ Stable rules:
   local surface genuinely needs more precision
 - host-local `SessionPhase` remains a controller FSM for interaction and UI
   orchestration; it does not outrank the runtime lifecycle snapshot
+- the internal `TurnLifecycleSpine` orders one accepted hosted turn; it feeds
+  maintainability and gateway projection, but it is not a public runtime
+  surface and does not replace `SessionLifecycleSnapshot.summary`
 - there is currently no separate public lifecycle subscription surface;
   long-lived transport products still compose live behavior through
   `inspect.sessionWire`, local cache, and runtime events

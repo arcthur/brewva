@@ -153,6 +153,101 @@ describe("Runtime plugin gaps: quality gate", () => {
     expect(calls[0].usage.contextWindow).toBe(4096);
   });
 
+  test("given managed tool metadata, when quality gate starts a tool, then runtime capability facts reach authority", () => {
+    const { api, handlers } = createMockRuntimePluginApi();
+    const calls: any[] = [];
+    const runtime = createRuntimeFixture({
+      tools: {
+        start: (input: any) => {
+          calls.push(input);
+          return { allowed: true };
+        },
+      },
+      context: {
+        sanitizeInput: (text: string) => text,
+      },
+    });
+    const scheduleIntentTool = createScheduleIntentTool({ runtime });
+
+    registerQualityGate(api, runtime, {
+      toolDefinitionsByName: new Map([[scheduleIntentTool.name, scheduleIntentTool]]),
+    });
+
+    invokeHandler(
+      handlers,
+      "tool_call",
+      {
+        toolCallId: "tc-capability-fact",
+        toolName: "schedule_intent",
+        input: { action: "list" },
+      },
+      {
+        sessionManager: { getSessionId: () => "qg-capability-fact" },
+        getContextUsage: () => ({ tokens: 1, contextWindow: 4096, percent: 0.001 }),
+      },
+    );
+
+    expect(calls[0].runtimeCapabilityAccess).toMatchObject({
+      allowed: true,
+      basis: "runtime_capability_scope",
+    });
+    expect(calls[0].runtimeCapabilityAccess.advisory).toContain("authority.schedule.createIntent");
+  });
+
+  test("given malformed tool capability metadata, when quality gate starts a tool, then manifest receives a denial fact", () => {
+    const { api, handlers } = createMockRuntimePluginApi();
+    const calls: any[] = [];
+    const runtime = createRuntimeFixture({
+      tools: {
+        start: (input: any) => {
+          calls.push(input);
+          return { allowed: false, reason: input.runtimeCapabilityAccess.reason };
+        },
+      },
+      context: {
+        sanitizeInput: (text: string) => text,
+      },
+    });
+
+    registerQualityGate(api, runtime, {
+      toolDefinitionsByName: new Map([
+        [
+          "bad_tool",
+          {
+            name: "bad_tool",
+            brewva: {
+              requiredCapabilities: ["authority.task.setSpec", 42],
+            },
+          } as any,
+        ],
+      ]),
+    });
+
+    const result = invokeHandler<{ block?: boolean; reason?: string }>(
+      handlers,
+      "tool_call",
+      {
+        toolCallId: "tc-bad-capability",
+        toolName: "bad_tool",
+        input: {},
+      },
+      {
+        sessionManager: { getSessionId: () => "qg-bad-capability" },
+        getContextUsage: () => ({ tokens: 1, contextWindow: 4096, percent: 0.001 }),
+      },
+    );
+
+    expect(calls[0].runtimeCapabilityAccess).toEqual({
+      allowed: false,
+      basis: "runtime_capability_scope",
+      reason: "runtime_capability_scope_invalid:bad_tool",
+    });
+    expect(result).toEqual({
+      block: true,
+      reason: "runtime_capability_scope_invalid:bad_tool",
+    });
+  });
+
   test("given runtime.authority.tools.start denial, when tool_call hook runs, then runtime plugin blocks call with reason", () => {
     const { api, handlers } = createMockRuntimePluginApi();
     const runtime = createRuntimeFixture({

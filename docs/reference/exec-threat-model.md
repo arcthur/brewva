@@ -61,6 +61,10 @@ There is no automatic host fallback. `security.execution.backend` is either
   length, argument count, argument length, pipeline width, and explicit network
   target count.
 - Unsupported shell features fail closed for `local_exec_readonly`.
+- `local_exec_readonly` auto-allow is an effect-authority invariant: command
+  policy must classify the command as read-only and execution must route through
+  `virtual_readonly`. Boundary policy may tighten or block it, but it may not
+  relax a non-virtual route into read-only auto-allow.
 - Deployment boundary policy remains responsible for filesystem roots,
   command deny lists, and network allowlists.
 - `exec.*` and `box.*` events record `commandHash`, `commandRedacted`, and structured

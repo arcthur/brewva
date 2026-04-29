@@ -206,6 +206,13 @@ turn, while effect authority still stays at the receipt-bearing tool boundary.
 Kernel-level turn transactions or cross-agent compensation still require a new
 focused RFC.
 
+`TurnLifecycleSpine` is the internal turn-ordering seam under that hosted
+control plane. It orders one accepted turn through
+`ingress_received -> admission_resolved -> effect_authorized -> execution_recorded -> recovery_settled -> terminal_recorded`.
+It observes existing receipts and hosted transitions; it does not create a
+public lifecycle surface, does not replace `SessionLifecycleSnapshot`, and does
+not move the transaction boundary above a single tool call.
+
 Platform-growth rule:
 
 - new orchestration breadth that widens the default hosted or runtime-plugin
@@ -520,10 +527,16 @@ Interpretation rules:
 
 ### Boundary Layer
 
+- `EffectAuthorityManifest`
+  - single internal authority basis for effect allow, block, and defer decisions
+  - hard invariants, host overlays, runtime facts, and receipt requirements are
+    separated in one manifest basis
+  - exact-call loop, repair posture, capability scope, boundary policy, and
+    virtual-readonly facts all report through this basis before execution
 - `ToolGateService`
-  - effect authorization
-  - approval requirements
-  - rollback receipt creation
+  - fact collection
+  - manifest execution receipt
+  - approval and rollback receipt handoff
 - `SessionCostTracker` + `CostService`
 - `ContextBudgetManager` + compaction gate
 

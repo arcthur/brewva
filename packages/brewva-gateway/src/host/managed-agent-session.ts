@@ -86,6 +86,7 @@ import {
   deriveSessionPhaseFromRuntimeFactHistory,
   type RuntimeFactSessionPhaseProjection,
 } from "../session/session-phase-runtime-facts.js";
+import { clearDefaultTurnLifecycleSpine } from "../session/turn-envelope.js";
 import {
   createHostedAgentEngine,
   supportsHostedExtendedThinking,
@@ -1817,6 +1818,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     this.#unsubscribeSessionWire?.();
     this.#unsubscribeSessionWire = null;
     this.#onDispose?.();
+    clearDefaultTurnLifecycleSpine(this, this.sessionManager.getSessionId());
     this.sessionManager.dispose?.();
     this.#listeners.clear();
     void this.#runner.emit(

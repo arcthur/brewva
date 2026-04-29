@@ -4,6 +4,8 @@ import {
   createHostedTurnPipeline,
   type LocalHookPort,
 } from "@brewva/brewva-gateway/runtime-plugins";
+import { ROLLBACK_EVENT_TYPE } from "@brewva/brewva-runtime";
+import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import {
   createMockRuntimePluginApi,
   invokeHandlerAsync,
@@ -297,13 +299,13 @@ describe("hosted turn pipeline", () => {
     expect(calls.observedContext[0]?.sessionId).toBe("hosted-before-start");
   });
 
-  test("runs local pre_classify hooks before hosted tool-surface resolution", async () => {
+  test("runs local pre_admission hooks before hosted tool-surface resolution", async () => {
     const { api, handlers } = createMockRuntimePluginApi();
     const { runtime, calls } = createRuntimeFixture();
     const seenInputs: string[] = [];
     const localHook: LocalHookPort = {
       name: "local-classification-hint",
-      preClassify(input) {
+      preAdmission(input) {
         seenInputs.push(`${input.phase}:${input.sessionId}:${input.prompt}`);
         return {
           kind: "recommend",
@@ -338,12 +340,12 @@ describe("hosted turn pipeline", () => {
     );
 
     expect(seenInputs).toEqual([
-      "pre_classify:hosted-local-hook-classify:Analyze repository boundaries before changing code.",
+      "pre_admission:hosted-local-hook-classify:Analyze repository boundaries before changing code.",
     ]);
 
     const governanceIndex = calls.events.findIndex((event) => {
       const payload = readEventPayload(event);
-      return event.type === "turn_governance_decision" && payload.phase === "pre_classify";
+      return event.type === "turn_governance_decision" && payload.phase === "pre_admission";
     });
     const toolSurfaceIndex = calls.events.findIndex(
       (event) => event.type === "tool_surface_resolved",
@@ -388,13 +390,13 @@ describe("hosted turn pipeline", () => {
     expect(calls.started[0]?.toolCallId).toBe("tool-call-1");
   });
 
-  test("local pre_tool blocks narrow execution before runtime authority starts", async () => {
+  test("local pre_effect blocks narrow execution before runtime authority starts", async () => {
     const { api, handlers } = createMockRuntimePluginApi();
     const { runtime, calls } = createRuntimeFixture();
     const localHook: LocalHookPort = {
       name: "local-tool-blocker",
-      preTool(input) {
-        expect(input.phase).toBe("pre_tool");
+      preEffect(input) {
+        expect(input.phase).toBe("pre_effect");
         expect(input.toolName).toBe("exec");
         return {
           kind: "block_tool",
@@ -435,14 +437,70 @@ describe("hosted turn pipeline", () => {
         const payload = readEventPayload(event);
         return (
           event.type === "turn_governance_decision" &&
-          payload.phase === "pre_tool" &&
+          payload.phase === "pre_effect" &&
           payload.hookName === "local-tool-blocker"
         );
       }),
     ).toBe(true);
   });
 
-  test("local post_tool recommendations do not rewrite normalized tool results", async () => {
+  test("maps deprecated local preTool hooks onto pre_effect", async () => {
+    const { api, handlers } = createMockRuntimePluginApi();
+    const { runtime, calls } = createRuntimeFixture();
+    const warnings: string[] = [];
+    const originalWarn = console.warn;
+    const localHook: LocalHookPort = {
+      name: "legacy-local-tool-blocker",
+      preTool(input) {
+        expect(input.phase).toBe("pre_effect");
+        return {
+          kind: "block_tool",
+          reason: "legacy local policy denies exec",
+        };
+      },
+    };
+
+    console.warn = (message?: unknown) => {
+      warnings.push(String(message));
+    };
+    try {
+      await createHostedTurnPipeline({
+        runtime,
+        registerTools: false,
+        localHooks: [localHook],
+      }).register(api);
+
+      let result: { block?: boolean; reason?: string } | undefined;
+      for (const handler of handlers.get("tool_call") ?? []) {
+        result = (await handler(
+          {
+            type: "tool_call",
+            toolCallId: "tool-call-legacy-local-block",
+            toolName: "exec",
+            input: { command: "pwd" },
+          },
+          createSessionContext("hosted-legacy-local-hook-tool"),
+        )) as { block?: boolean; reason?: string } | undefined;
+        if (result?.block) {
+          break;
+        }
+      }
+
+      expect(result).toEqual({
+        block: true,
+        reason: "legacy local policy denies exec",
+      });
+    } finally {
+      console.warn = originalWarn;
+    }
+
+    expect(calls.started).toHaveLength(0);
+    expect(warnings).toContain(
+      "Local hook 'legacy-local-tool-blocker' uses deprecated preTool; use preEffect.",
+    );
+  });
+
+  test("local post_receipt recommendations do not rewrite normalized tool results", async () => {
     const { api, handlers } = createMockRuntimePluginApi();
     const { runtime } = createRuntimeFixture();
     const observed: Array<{
@@ -450,9 +508,9 @@ describe("hosted turn pipeline", () => {
       detailValue: string | undefined;
     }> = [];
     const localHook: LocalHookPort = {
-      name: "local-post-tool-observer",
-      postTool(input) {
-        expect(input.phase).toBe("post_tool");
+      name: "local-post-receipt-observer",
+      postReceipt(input) {
+        expect(input.phase).toBe("post_receipt");
         const contentText = input.content[0]?.type === "text" ? input.content[0].text : undefined;
         const detailValue = (input.details as { nested?: { value?: string } } | undefined)?.nested
           ?.value;
@@ -491,7 +549,7 @@ describe("hosted turn pipeline", () => {
         content,
         details,
       },
-      createSessionContext("hosted-local-hook-post-tool"),
+      createSessionContext("hosted-local-hook-post-receipt"),
     );
 
     expect(observed).toEqual([
@@ -503,6 +561,213 @@ describe("hosted turn pipeline", () => {
     expect(content[0]?.text).toBe("original");
     expect(details.nested.value).toBe("original-detail");
     expect(results.some((result) => result?.content !== undefined)).toBe(false);
+  });
+
+  test("runs local post_rollback hooks from runtime rollback receipts", async () => {
+    const { api } = createMockRuntimePluginApi();
+    const { runtime, calls } = createRuntimeFixture();
+    const observed: string[] = [];
+    const localHook: LocalHookPort = {
+      name: "local-rollback-observer",
+      postRollback(input) {
+        observed.push(`${input.phase}:${input.sessionId}:${input.reason}`);
+        return {
+          kind: "observe",
+          notes: [{ message: "Rollback observed." }],
+        };
+      },
+    };
+
+    await createHostedTurnPipeline({
+      runtime,
+      registerTools: false,
+      localHooks: [localHook],
+    }).register(api);
+
+    recordRuntimeEvent(runtime, {
+      sessionId: "hosted-local-hook-rollback",
+      type: ROLLBACK_EVENT_TYPE,
+      payload: {
+        ok: true,
+        reason: "manual_rollback",
+      },
+    });
+    await Promise.resolve();
+
+    expect(observed).toEqual(["post_rollback:hosted-local-hook-rollback:manual_rollback"]);
+    expect(
+      calls.events.some((event) => {
+        const payload = readEventPayload(event);
+        return (
+          event.type === "turn_governance_decision" &&
+          payload.phase === "post_rollback" &&
+          payload.hookName === "local-rollback-observer"
+        );
+      }),
+    ).toBe(true);
+  });
+
+  test("unbinds local post_rollback event subscription when the session ends", async () => {
+    const { api, handlers } = createMockRuntimePluginApi();
+    const { runtime } = createRuntimeFixture();
+    const observed: string[] = [];
+    const localHook: LocalHookPort = {
+      name: "local-rollback-lifecycle-observer",
+      postRollback(input) {
+        observed.push(`${input.sessionId}:${input.reason}`);
+        return { kind: "observe" };
+      },
+    };
+
+    await createHostedTurnPipeline({
+      runtime,
+      registerTools: false,
+      localHooks: [localHook],
+    }).register(api);
+
+    await invokeHandlersAsync(
+      handlers,
+      "before_agent_start",
+      {
+        type: "before_agent_start",
+        prompt: "start session",
+        systemPrompt: "base prompt",
+      },
+      createSessionContext("hosted-local-hook-dispose"),
+    );
+    recordRuntimeEvent(runtime, {
+      sessionId: "hosted-local-hook-dispose",
+      type: ROLLBACK_EVENT_TYPE,
+      payload: {
+        ok: true,
+        reason: "before_shutdown",
+      },
+    });
+    await Promise.resolve();
+
+    await invokeHandlersAsync(
+      handlers,
+      "session_shutdown",
+      { type: "session_shutdown" },
+      createSessionContext("hosted-local-hook-dispose"),
+    );
+    recordRuntimeEvent(runtime, {
+      sessionId: "hosted-local-hook-dispose",
+      type: ROLLBACK_EVENT_TYPE,
+      payload: {
+        ok: true,
+        reason: "after_shutdown",
+      },
+    });
+    await Promise.resolve();
+
+    expect(observed).toEqual(["hosted-local-hook-dispose:before_shutdown"]);
+  });
+
+  test("isolates local post_rollback hook failures as governance receipts", async () => {
+    const { api } = createMockRuntimePluginApi();
+    const { runtime, calls } = createRuntimeFixture();
+    const localHook: LocalHookPort = {
+      name: "local-rollback-failing-observer",
+      postRollback() {
+        throw new Error("rollback observer failed");
+      },
+    };
+
+    await createHostedTurnPipeline({
+      runtime,
+      registerTools: false,
+      localHooks: [localHook],
+    }).register(api);
+
+    recordRuntimeEvent(runtime, {
+      sessionId: "hosted-local-hook-rollback-failure",
+      type: ROLLBACK_EVENT_TYPE,
+      payload: {
+        ok: true,
+        reason: "manual_rollback",
+      },
+    });
+    await Promise.resolve();
+
+    expect(
+      calls.events.some((event) => {
+        const payload = readEventPayload(event);
+        const result =
+          payload.result && typeof payload.result === "object" && !Array.isArray(payload.result)
+            ? (payload.result as Record<string, unknown>)
+            : {};
+        const notes = Array.isArray(result.notes) ? result.notes : [];
+        const firstNote =
+          notes[0] && typeof notes[0] === "object" && !Array.isArray(notes[0])
+            ? (notes[0] as Record<string, unknown>)
+            : {};
+        return (
+          event.type === "turn_governance_decision" &&
+          payload.phase === "post_rollback" &&
+          payload.hookName === "local-rollback-failing-observer" &&
+          result.kind === "observe" &&
+          firstNote.severity === "error"
+        );
+      }),
+    ).toBe(true);
+  });
+
+  test("downgrades local post_rollback block attempts to advisory receipts", async () => {
+    const { api } = createMockRuntimePluginApi();
+    const { runtime, calls } = createRuntimeFixture();
+    const localHook: LocalHookPort = {
+      name: "local-rollback-block-attempt",
+      postRollback() {
+        return {
+          kind: "block_tool",
+          reason: "rollback observer cannot block",
+        } as never;
+      },
+    };
+
+    await createHostedTurnPipeline({
+      runtime,
+      registerTools: false,
+      localHooks: [localHook],
+    }).register(api);
+
+    recordRuntimeEvent(runtime, {
+      sessionId: "hosted-local-hook-rollback-block-attempt",
+      type: ROLLBACK_EVENT_TYPE,
+      payload: {
+        ok: true,
+        reason: "manual_rollback",
+      },
+    });
+    await Promise.resolve();
+
+    const governanceEvent = calls.events.find((event) => {
+      const payload = readEventPayload(event);
+      return (
+        event.type === "turn_governance_decision" &&
+        payload.phase === "post_rollback" &&
+        payload.hookName === "local-rollback-block-attempt"
+      );
+    });
+    const payload = readEventPayload(governanceEvent ?? {});
+    const result =
+      payload.result && typeof payload.result === "object" && !Array.isArray(payload.result)
+        ? (payload.result as Record<string, unknown>)
+        : {};
+    const notes = Array.isArray(result.notes) ? result.notes : [];
+
+    expect(result.kind).toBe("observe");
+    expect(
+      notes.some((note) => {
+        if (!note || typeof note !== "object" || Array.isArray(note)) {
+          return false;
+        }
+        return String((note as Record<string, unknown>).message).includes(
+          "only pre_effect hooks may block tool execution",
+        );
+      }),
+    ).toBe(true);
   });
 
   test("uses tool_execution_end only as fallback finalize source", async () => {

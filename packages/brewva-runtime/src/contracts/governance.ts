@@ -102,6 +102,24 @@ export interface ToolGovernanceDescriptor {
   requiredRoutingScopes?: SkillRoutingScope[];
 }
 
+export interface EffectAuthorityManifestBasis {
+  schema: "brewva.effect_authority_basis.v1";
+  toolName: string;
+  boundary: ToolExecutionBoundary;
+  authoritySource: string;
+  actionClass?: ToolActionClass;
+  riskLevel?: ToolRiskLevel;
+  effectiveAdmission?: ToolAdmissionBehavior;
+  effects: ToolEffectClass[];
+  requiresApproval: boolean;
+  rollbackable: boolean;
+  receiptRequired: boolean;
+  invariantBasis: string[];
+  overlayBasis: string[];
+  runtimeBasis: string[];
+  receiptBasis: string[];
+}
+
 export type ToolMutationStrategy = "workspace_patchset";
 
 export type ToolMutationRollbackKind = "patchset";

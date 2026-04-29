@@ -33,6 +33,16 @@ This keeps the kernel boundary focused on one question:
 
 There is no fallback path that silently recreates approval state in memory.
 
+Effect proposals share the same authority basis as direct tool execution.
+`EffectAuthorityManifest` owns the approval requirement, receipt requirement,
+and authority-basis explanation. Proposal admission owns waiting, resume,
+delegation, request history, and operator-decision lifecycle. This split keeps
+approval state replayable without creating a second effect-policy model.
+
+Both direct execution and proposal admission attach `manifestBasis` to their
+decision receipts. A mismatch means the implementation has split authority and
+must fail closed rather than silently reconciling divergent policy meanings.
+
 ## Core Objects
 
 ### `EvidenceRef`
@@ -104,6 +114,8 @@ Current flow:
   `runtime.authority.tools.start({ ..., effectCommitmentRequestId })`
 - exact resume binds to the approved `requestId`, original `toolCallId`, and
   canonical `argsDigest`
+- exact resume reuses the original manifest authority basis; it does not
+  recompute a different action-policy meaning during approval consumption
 - only that approved exact-resume path returns `accept`
 - approval is consumed only after a durable linked tool result is recorded
 

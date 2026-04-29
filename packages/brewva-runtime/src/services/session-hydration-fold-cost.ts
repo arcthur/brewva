@@ -1,6 +1,13 @@
 import type { SessionHydrationFold } from "./session-hydration-fold.js";
 import { readEventPayload } from "./session-hydration-fold.js";
 
+export const SESSION_HYDRATION_COST_TURN_LIFECYCLE_PLACEMENT = {
+  foldId: "session_hydration_cost",
+  source: "packages/brewva-runtime/src/services/session-hydration-fold-cost.ts",
+  observes: ["execution_recorded", "terminal_recorded"],
+  role: "hydrate",
+} as const;
+
 export function createCostHydrationFold(): SessionHydrationFold<null> {
   return {
     domain: "cost",

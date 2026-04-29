@@ -16,6 +16,13 @@ import {
   toTaskWatchdogEventPayload,
 } from "../task/watchdog.js";
 
+export const TASK_WATCHDOG_TURN_LIFECYCLE_PLACEMENT = {
+  foldId: "task_watchdog",
+  source: "packages/brewva-runtime/src/services/task-watchdog.ts",
+  observes: ["ingress_received", "terminal_recorded"],
+  role: "watchdog",
+} as const;
+
 const DEFAULT_THRESHOLD_MS = 5 * 60_000;
 
 function sanitizeDelayMs(value: number | undefined, fallbackMs: number): number {

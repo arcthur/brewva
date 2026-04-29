@@ -240,12 +240,17 @@ describe("effect governance policy modes", () => {
     expect(started.allowed).toBe(false);
     expect(started.reason).toContain("exact action policy");
     expect(
-      runtime.inspect.events.query(sessionId, { type: "tool_effect_gate_selected" }).at(-1)
-        ?.payload,
+      runtime.inspect.events.query(sessionId, { type: "effect_authority_decided" }).at(-1)?.payload,
     ).toMatchObject({
       toolName: "custom_tool",
       actionClass: null,
-      requiresApproval: true,
+      decision: "block",
+      requiresApproval: false,
+      manifestBasis: {
+        schema: "brewva.effect_authority_basis.v1",
+        authoritySource: "missing",
+        invariantBasis: ["exact_action_policy_required"],
+      },
     });
   });
 
@@ -354,8 +359,7 @@ describe("effect governance policy modes", () => {
     expect(readonlyStart.boundary).toBe("effectful");
     expect(readonlyStart.commitmentReceipt).toBeUndefined();
     expect(
-      runtime.inspect.events.query(sessionId, { type: "tool_effect_gate_selected" }).at(-1)
-        ?.payload,
+      runtime.inspect.events.query(sessionId, { type: "effect_authority_decided" }).at(-1)?.payload,
     ).toMatchObject({
       toolName: "exec",
       actionClass: "local_exec_readonly",
@@ -382,8 +386,7 @@ describe("effect governance policy modes", () => {
     expect(effectfulStart.allowed).toBe(false);
     expect(effectfulStart.reason).toContain("effect_commitment_pending_operator_approval:");
     expect(
-      runtime.inspect.events.query(sessionId, { type: "tool_effect_gate_selected" }).at(-1)
-        ?.payload,
+      runtime.inspect.events.query(sessionId, { type: "effect_authority_decided" }).at(-1)?.payload,
     ).toMatchObject({
       toolName: "exec",
       actionClass: "local_exec_effectful",

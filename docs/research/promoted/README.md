@@ -32,6 +32,7 @@ refresh the pointer summary and `Last reviewed` metadata here.
 - [`rfc-context-dependency-layering-and-admission-lanes.md`](./rfc-context-dependency-layering-and-admission-lanes.md)
 - [`rfc-default-path-re-hardening-and-advisory-surface-narrowing.md`](./rfc-default-path-re-hardening-and-advisory-surface-narrowing.md)
 - [`rfc-durability-taxonomy-and-rebuildable-surface-narrowing.md`](./rfc-durability-taxonomy-and-rebuildable-surface-narrowing.md)
+- [`rfc-effect-authority-manifest.md`](./rfc-effect-authority-manifest.md)
 - [`rfc-iteration-facts-and-model-native-optimization-protocols.md`](./rfc-iteration-facts-and-model-native-optimization-protocols.md)
 - [`rfc-kernel-first-subtraction-and-control-plane-deferral.md`](./rfc-kernel-first-subtraction-and-control-plane-deferral.md)
 - [`rfc-repository-fitness-plane-and-runtime-boundary.md`](./rfc-repository-fitness-plane-and-runtime-boundary.md)
@@ -76,6 +77,7 @@ refresh the pointer summary and `Last reviewed` metadata here.
 - [`rfc-schedule-intent-hardening-and-control-plane-ergonomics.md`](./rfc-schedule-intent-hardening-and-control-plane-ergonomics.md)
 - [`rfc-session-rewind-as-conversation-fork-primitive.md`](./rfc-session-rewind-as-conversation-fork-primitive.md)
 - [`rfc-token-cache-fidelity-and-provider-prefix-stability.md`](./rfc-token-cache-fidelity-and-provider-prefix-stability.md)
+- [`rfc-turn-lifecycle-spine.md`](./rfc-turn-lifecycle-spine.md)
 
 ## Reading Rule
 

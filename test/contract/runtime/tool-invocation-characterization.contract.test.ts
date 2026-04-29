@@ -34,7 +34,7 @@ function summarizeEvents(events: BrewvaEventRecord[]): EventSummary[] {
 
 function summarizeEvent(event: BrewvaEventRecord): EventSummary {
   switch (event.type) {
-    case "tool_effect_gate_selected":
+    case "effect_authority_decided":
       return {
         type: event.type,
         payload: pick(event.payload, [
@@ -245,16 +245,16 @@ describe("Tool invocation characterization", () => {
     expect(started).toMatchObject({
       allowed: false,
       boundary: "effectful",
-      reason: "Tool 'shell' has been removed. Use 'exec' with 'process' for command execution.",
+      reason: "Tool 'shell' is denied by action admission policy.",
     });
     expect(summarizeEvents(runtime.inspect.events.query(sessionId))).toEqual([
       {
-        type: "tool_effect_gate_selected",
+        type: "effect_authority_decided",
         payload: {
           toolCallId: "tc-shell",
           toolName: "shell",
           boundary: "effectful",
-          requiresApproval: true,
+          requiresApproval: false,
           rollbackable: false,
         },
       },
@@ -262,7 +262,7 @@ describe("Tool invocation characterization", () => {
         type: "tool_call_blocked",
         payload: {
           toolName: "shell",
-          reason: "Tool 'shell' has been removed. Use 'exec' with 'process' for command execution.",
+          reason: "Tool 'shell' is denied by action admission policy.",
           decision: null,
           requestIdPresent: false,
         },
@@ -288,7 +288,7 @@ describe("Tool invocation characterization", () => {
     expect(started.commitmentReceipt?.decision).toBe("accept");
     expect(summarizeEvents(runtime.inspect.events.query(sessionId))).toEqual([
       {
-        type: "tool_effect_gate_selected",
+        type: "effect_authority_decided",
         payload: {
           toolCallId: "tc-exec-accept",
           toolName: "exec",
@@ -331,7 +331,7 @@ describe("Tool invocation characterization", () => {
     ]);
   });
 
-  test("effect gate telemetry records semantic action policy evidence", () => {
+  test("effect authority telemetry records semantic action policy evidence", () => {
     const runtime = createRuntime({
       governancePort: createTrustedLocalGovernancePort(),
     });
@@ -347,7 +347,7 @@ describe("Tool invocation characterization", () => {
     expect(started.allowed).toBe(true);
     const effectGateEvent = runtime.inspect.events
       .query(sessionId)
-      .find((event) => event.type === "tool_effect_gate_selected");
+      .find((event) => event.type === "effect_authority_decided");
     expect(effectGateEvent?.payload).toMatchObject({
       actionClass: "local_exec_effectful",
       riskLevel: "high",
@@ -376,7 +376,7 @@ describe("Tool invocation characterization", () => {
     expect(typeof started.effectCommitmentRequestId).toBe("string");
     expect(summarizeEvents(runtime.inspect.events.query(sessionId))).toEqual([
       {
-        type: "tool_effect_gate_selected",
+        type: "effect_authority_decided",
         payload: {
           toolCallId: "tc-exec-defer",
           toolName: "exec",
@@ -474,7 +474,7 @@ describe("Tool invocation characterization", () => {
         type: "effect_commitment_approval_decided",
       },
       {
-        type: "tool_effect_gate_selected",
+        type: "effect_authority_decided",
         payload: {
           toolCallId: "tc-exec-mismatch",
           toolName: "exec",
@@ -624,7 +624,7 @@ describe("Tool invocation characterization", () => {
     });
     expect(summarizeEvents(runtime.inspect.events.query(sessionId))).toEqual([
       {
-        type: "tool_effect_gate_selected",
+        type: "effect_authority_decided",
         payload: {
           toolCallId: "tc-edit",
           toolName: "edit",

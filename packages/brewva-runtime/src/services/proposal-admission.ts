@@ -257,6 +257,9 @@ export class ProposalAdmissionService {
       reasons,
       committedEffects,
       evidenceRefs: structuredClone(proposal.evidenceRefs),
+      manifestBasis: proposal.payload.manifestBasis
+        ? structuredClone(proposal.payload.manifestBasis)
+        : undefined,
       turn,
       timestamp: Date.now(),
     };

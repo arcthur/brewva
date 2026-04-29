@@ -331,6 +331,13 @@ export interface BrewvaRuntimeMethodGroups {
       recordLifecycleEvent?: boolean;
       effectCommitmentRequestId?: string;
       diffPreview?: EffectCommitmentDiffPreview;
+      runtimeCapabilityAccess?: {
+        allowed: boolean;
+        basis: string;
+        reason?: string;
+        advisory?: string;
+        terminalFailure?: boolean;
+      };
     }): {
       allowed: boolean;
       reason?: string;

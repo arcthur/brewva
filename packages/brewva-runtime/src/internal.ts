@@ -1,4 +1,12 @@
 export * from "./context/arena.js";
+export {
+  buildEffectAuthorityManifestBasis,
+  decideEffectAuthorityManifest,
+  type EffectAuthorityDecisionKind,
+  type EffectAuthorityFactDecision,
+  type EffectAuthorityManifestDecision,
+  type EffectAuthorityManifestFacts,
+} from "./authority/effect-authority-manifest.js";
 export * from "./context/budget.js";
 export * from "./context/injection.js";
 export * from "./context/injection-orchestrator.js";
@@ -27,6 +35,22 @@ export * from "./state/patch-history.js";
 export * from "./state/workspace-paths.js";
 export * from "./channels/recovery-wal.js";
 export * from "./channels/recovery-wal-recovery.js";
+export {
+  TurnLifecycleSpine,
+  compareTurnLifecycleGates,
+  getTurnLifecycleFoldPlacements,
+  getTurnLifecycleRecoveryPlacement,
+  getTurnLifecycleRecoveryPlacements,
+  type TurnLifecycleAdvanceInput,
+  type TurnLifecycleFoldId,
+  type TurnLifecycleFoldPlacement,
+  type TurnLifecycleGate,
+  type TurnLifecycleIdentity,
+  type TurnLifecycleRecoveryPlacement,
+  type TurnLifecycleRecoveryReason,
+  type TurnLifecycleRecoverySupersedeInput,
+  type TurnLifecycleSnapshot,
+} from "./lifecycle/turn-lifecycle-spine.js";
 export * from "./tape/replay-engine.js";
 export * from "./verification/classifier.js";
 export * from "./verification/gate.js";

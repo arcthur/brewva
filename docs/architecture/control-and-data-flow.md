@@ -120,6 +120,37 @@ The hosted path does not use a separate provider-compatibility seam. Runtime
 authority begins at admitted hosted events such as `tool_call`; permission and
 governance remain kernel-owned.
 
+## Hosted Turn Spine Flow
+
+`TurnLifecycleSpine` is the internal turn-ordering model under the canonical
+hosted turn envelope. It observes existing receipts instead of creating a new
+public lifecycle event family.
+
+```mermaid
+flowchart LR
+  A["turn_input_recorded"] --> B["ingress_received"]
+  B --> C["admission_resolved"]
+  C --> D["effect_authority_decided"]
+  D --> E["effect_authorized"]
+  E --> F["tool_result_recorded"]
+  F --> G["execution_recorded"]
+  G --> H["session_turn_transition / rollback receipts"]
+  H --> I["recovery_settled"]
+  I --> J["turn_render_committed / session_shutdown"]
+  J --> K["terminal_recorded"]
+```
+
+The `effect_authorized` gate is manifest-backed. Security classifiers,
+governance overlays, command policy, managed-tool metadata, runtime capability
+scope, skill posture, and budget state produce facts; the
+`EffectAuthorityManifest` produces the single allow/block/defer decision and
+receipt basis.
+
+Gateway transitions such as `wal_recovery_resume`, `reasoning_revert_resume`,
+`compaction_retry`, provider fallback, and max-output recovery project to the
+declared `recovery_settled` gate. They explain hosted control flow, but they do
+not replace runtime lifecycle or tape replay truth.
+
 ## Working Projection Flow
 
 ```mermaid

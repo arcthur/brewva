@@ -29,6 +29,13 @@ interface QualityGateToolResultResult {
   content?: ToolResultEvent["content"];
 }
 
+interface RuntimeCapabilityAccessFact {
+  allowed: boolean;
+  basis: string;
+  reason?: string;
+  advisory?: string;
+}
+
 export interface QualityGateLifecycle {
   toolCall: (event: unknown, ctx: unknown) => QualityGateToolCallResult | undefined;
   toolResult: (event: unknown, ctx: unknown) => QualityGateToolResultResult | undefined;
@@ -59,6 +66,58 @@ function truncateText(value: string, maxChars: number): string {
 function isPathInside(basePath: string, targetPath: string): boolean {
   const relativePath = relative(resolve(basePath), resolve(targetPath));
   return relativePath.length === 0 || (!relativePath.startsWith("..") && !isAbsolute(relativePath));
+}
+
+function readRuntimeRequiredCapabilities(value: unknown): {
+  valid: boolean;
+  requiredCapabilities: string[];
+} {
+  if (value === undefined) {
+    return { valid: true, requiredCapabilities: [] };
+  }
+  if (!Array.isArray(value)) {
+    return { valid: false, requiredCapabilities: [] };
+  }
+  const capabilities = value
+    .filter((entry): entry is string => typeof entry === "string")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
+  if (capabilities.length !== value.length) {
+    return { valid: false, requiredCapabilities: [] };
+  }
+  return {
+    valid: true,
+    requiredCapabilities: [...new Set(capabilities)].toSorted(),
+  };
+}
+
+function resolveRuntimeCapabilityAccess(input: {
+  toolName: string;
+  toolDefinitionsByName?: ReadonlyMap<string, Parameters<typeof getBrewvaAgentParameters>[0]>;
+}): RuntimeCapabilityAccessFact {
+  const toolDefinition = input.toolDefinitionsByName?.get(input.toolName);
+  const metadata = isRecord((toolDefinition as { brewva?: unknown } | undefined)?.brewva)
+    ? ((toolDefinition as { brewva?: Record<string, unknown> }).brewva ?? {})
+    : undefined;
+  const required = readRuntimeRequiredCapabilities(metadata?.requiredCapabilities);
+  if (!required.valid) {
+    return {
+      allowed: false,
+      basis: "runtime_capability_scope",
+      reason: `runtime_capability_scope_invalid:${input.toolName}`,
+    };
+  }
+  if (required.requiredCapabilities.length === 0) {
+    return {
+      allowed: true,
+      basis: "runtime_capability_scope",
+    };
+  }
+  return {
+    allowed: true,
+    basis: "runtime_capability_scope",
+    advisory: `runtime_capabilities:${required.requiredCapabilities.join(",")}`,
+  };
 }
 
 export function createQualityGateLifecycle(
@@ -257,6 +316,10 @@ export function createQualityGateLifecycle(
         cwd,
         usage,
         diffPreview: buildDiffPreview({ toolName, args, cwd }),
+        runtimeCapabilityAccess: resolveRuntimeCapabilityAccess({
+          toolName,
+          toolDefinitionsByName: options.toolDefinitionsByName,
+        }),
       });
       if (!started.allowed) {
         deletePendingToolState(sessionId, toolCallId);

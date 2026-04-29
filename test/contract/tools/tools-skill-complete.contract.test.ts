@@ -748,6 +748,76 @@ describe("skill_complete tool", () => {
     expect(completionStart.allowed).toBe(true);
   });
 
+  test("repair token budget exhaustion is decided by manifest before tool execution", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-skill-complete-repair-token-budget-"));
+    const config = structuredClone(DEFAULT_BREWVA_CONFIG);
+    config.infrastructure.events.enabled = true;
+    config.ledger.path = ".orchestrator/ledger/evidence.jsonl";
+    config.infrastructure.events.dir = ".orchestrator/events";
+    const runtime = new BrewvaRuntime({ cwd: workspace, config });
+    const sessionId = "skill-complete-repair-token-budget";
+    const loadTool = createSkillLoadTool({ runtime });
+    const completeTool = createSkillCompleteTool({
+      runtime,
+      verification: { executeCommands: false },
+    });
+
+    await loadTool.execute(
+      "tc-load-design-repair-token-budget",
+      { name: "design" },
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+    runtime.maintain.context.observeUsage(sessionId, {
+      tokens: 1_000,
+      contextWindow: 20_000,
+      percent: 0.05,
+    });
+
+    const invalidOutputs = {
+      design_spec: "todo",
+    };
+    await completeTool.execute(
+      "tc-complete-design-repair-token-budget-1",
+      {
+        outputs: invalidOutputs,
+      },
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+
+    const blockedSupportTool = runtime.authority.tools.start({
+      sessionId,
+      toolCallId: "tc-repair-token-exhausted",
+      toolName: "ledger_query",
+      args: { last: 1 },
+      usage: {
+        tokens: 13_000,
+        contextWindow: 20_000,
+        percent: 0.65,
+      },
+    });
+    expect(blockedSupportTool.allowed).toBe(false);
+    expect(blockedSupportTool.reason).toContain("Repair posture exhausted tokenBudget=12000");
+    expect(runtime.inspect.skills.getActiveState(sessionId)).toBeUndefined();
+    expect(runtime.inspect.skills.getLatestFailure(sessionId)).toMatchObject({
+      skillName: "design",
+      phase: "failed_contract",
+    });
+    expect(
+      runtime.inspect.events.query(sessionId, { type: "tool_call_blocked" }).at(-1)?.payload,
+    ).toEqual(
+      expect.objectContaining({
+        manifestBasis: expect.objectContaining({
+          schema: "brewva.effect_authority_basis.v1",
+          runtimeBasis: expect.arrayContaining(["repair_posture"]),
+        }),
+      }),
+    );
+  });
+
   test("records non-canonical planning taxonomy as advisory normalization drift for semantic-bound custom skills", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-skill-complete-planning-taxonomy-"));
     writeSkill(join(workspace, ".brewva/skills/core/planning-loose/SKILL.md"), {
