@@ -387,6 +387,67 @@ describe("in-flight steer control primitive", () => {
     }
   });
 
+  test("applies a steer queued after turn_end before the next model call", async () => {
+    const events: BrewvaAgentEngineEvent[] = [];
+    let streamCalls = 0;
+    let secondCallSawGuidance = false;
+    const streamFn: BrewvaAgentEngineStreamFunction = async (_model, context) => {
+      streamCalls += 1;
+      if (streamCalls === 1) {
+        return createStream(
+          createAssistantMessage(
+            [{ type: "toolCall", id: "tool-late", name: "late", arguments: {} }],
+            "toolUse",
+          ),
+        );
+      }
+      const lastMessage = context.messages[context.messages.length - 1] as
+        | BrewvaAgentEngineLlmMessage
+        | undefined;
+      secondCallSawGuidance =
+        lastMessage?.role === "toolResult" &&
+        JSON.stringify(lastMessage).includes("User guidance: before next model call");
+      return createStream(createAssistantMessage([{ type: "text", text: "final" }]));
+    };
+
+    const engine = createEngine(streamFn);
+    engine.setTools([
+      {
+        name: "late",
+        label: "Late",
+        description: "Late steer test tool",
+        parameters: Type.Object({}),
+        async execute() {
+          return { content: [{ type: "text", text: "late result" }], details: { ok: true } };
+        },
+      },
+    ]);
+    const unsubscribe = engine.subscribe((event) => {
+      events.push(event);
+      if (event.type === "turn_end" && event.toolResults.length > 0) {
+        expect(engine.steer("before next model call")).toBe(true);
+      }
+    });
+
+    try {
+      await engine.prompt(createUserPrompt("run late tool"));
+
+      const toolResult = findToolResultMessages(events)[0];
+      const dropped = events.find((event) => event.type === "steer_dropped");
+      const applied = events.find(
+        (event): event is Extract<BrewvaAgentEngineEvent, { type: "steer_applied" }> =>
+          event.type === "steer_applied",
+      );
+
+      expect(secondCallSawGuidance).toBe(true);
+      expect(JSON.stringify(toolResult)).toContain("User guidance: before next model call");
+      expect(dropped).toBeUndefined();
+      expect(applied?.toolCallId).toBe("tool-late");
+    } finally {
+      unsubscribe();
+    }
+  });
+
   test("joins multiple steers before drain into one appended guidance block", async () => {
     const events: BrewvaAgentEngineEvent[] = [];
     const releaseTool = createDeferred();
@@ -548,6 +609,37 @@ describe("in-flight steer control primitive", () => {
     }
   });
 
+  test("drops a steer queued during the final turn_end when no next model call exists", async () => {
+    const events: BrewvaAgentEngineEvent[] = [];
+    const engine = createEngine(async () =>
+      createStream(createAssistantMessage([{ type: "text", text: "done" }])),
+    );
+    const unsubscribe = engine.subscribe((event) => {
+      events.push(event);
+      if (event.type === "turn_end") {
+        expect(engine.steer("too late for this turn")).toBe(true);
+      }
+    });
+
+    try {
+      await engine.prompt(createUserPrompt("answer directly"));
+
+      const dropped = events.find(
+        (event): event is Extract<BrewvaAgentEngineEvent, { type: "steer_dropped" }> =>
+          event.type === "steer_dropped",
+      );
+
+      expect(dropped).toMatchObject({
+        type: "steer_dropped",
+        text: "too late for this turn",
+        reason: "no_tool_boundary",
+      });
+      expect(engine.hasPendingSteer()).toBe(false);
+    } finally {
+      unsubscribe();
+    }
+  });
+
   test("returns no_active_run for direct session steers when the run is idle", async () => {
     const fixture = await createManagedSessionFixture("steer-no-active-run");
 
@@ -567,6 +659,8 @@ describe("in-flight steer control primitive", () => {
   test("routes channel steers straight to the live session without queue dispatch", async () => {
     const replies: Array<{ text: string; meta?: Record<string, unknown> }> = [];
     const steers: string[] = [];
+    let steerListener: ((event: BrewvaPromptSessionEvent) => void) | undefined;
+    let unsubscribed = false;
     const router = createChannelControlRouter({
       runtime: createRuntimeFixture(),
       registry: {
@@ -595,6 +689,19 @@ describe("in-flight steer control primitive", () => {
       renderAgentsSnapshot: () => "agents snapshot",
       openLiveSession: () =>
         ({
+          scopeKey: "scope-1",
+          agentId: "worker",
+          agentSessionId: "agent-session:worker",
+          runtime: createRuntimeFixture(),
+          subscribe: (listener: (event: BrewvaPromptSessionEvent) => void) => {
+            steerListener = listener;
+            return () => {
+              unsubscribed = true;
+              if (steerListener === listener) {
+                steerListener = undefined;
+              }
+            };
+          },
           steer: async (text: string) => {
             steers.push(text);
             return { status: "queued", chars: text.length };
@@ -627,6 +734,20 @@ describe("in-flight steer control primitive", () => {
     expect(replies[0]?.meta).toMatchObject({
       command: "steer",
       status: "queued",
+      agentSessionId: "agent-session:worker",
+    });
+    steerListener?.({
+      type: "steer_dropped",
+      text: "stay focused",
+      reason: "no_tool_boundary",
+    });
+    expect(unsubscribed).toBe(true);
+    expect(replies[1]?.text).toContain("Steer dropped for @worker");
+    expect(replies[1]?.meta).toMatchObject({
+      command: "steer",
+      status: "dropped",
+      reason: "no_tool_boundary",
+      agentSessionId: "agent-session:worker",
     });
   });
 
@@ -876,7 +997,7 @@ describe("in-flight steer control primitive", () => {
     }
   });
 
-  test("treats message_end content replacement as authoritative after steer append", async () => {
+  test("drops steer when message_end replacement removes appended guidance", async () => {
     const recordedEvents: BrewvaAgentEngineEvent[] = [];
     const releaseTool = createDeferred();
     const toolStarted = createDeferred();
@@ -933,15 +1054,18 @@ describe("in-flight steer control primitive", () => {
       await running;
 
       const committedToolResult = findToolResultMessages(recordedEvents)[0];
-      const steerApplied = recordedEvents.find(
-        (event): event is Extract<BrewvaAgentEngineEvent, { type: "steer_applied" }> =>
-          event.type === "steer_applied",
+      const steerDropped = recordedEvents.find(
+        (event): event is Extract<BrewvaAgentEngineEvent, { type: "steer_dropped" }> =>
+          event.type === "steer_dropped",
       );
 
       expect(committedToolResult?.content).toEqual([{ type: "text", text: "plugin override" }]);
       expect(JSON.stringify(committedToolResult)).not.toContain("User guidance:");
-      expect(steerApplied?.message).toEqual(committedToolResult);
-      expect(JSON.stringify(steerApplied?.message)).not.toContain("User guidance:");
+      expect(steerDropped).toMatchObject({
+        type: "steer_dropped",
+        text: "this guidance gets overwritten",
+        reason: "overwritten",
+      });
     } finally {
       unsubscribeRecord();
       unsubscribeTransform();

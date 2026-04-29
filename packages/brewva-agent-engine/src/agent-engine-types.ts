@@ -90,7 +90,11 @@ export interface BrewvaAgentEngineUsage {
 }
 
 export type BrewvaAgentEngineStopReason = "stop" | "length" | "toolUse" | "error" | "aborted";
-export type BrewvaAgentEngineSteerDropReason = "aborted" | "failed" | "no_tool_boundary";
+export type BrewvaAgentEngineSteerDropReason =
+  | "aborted"
+  | "failed"
+  | "no_tool_boundary"
+  | "overwritten";
 
 export interface BrewvaAgentEngineUserMessage extends BrewvaAgentEngineMessageVisibility {
   role: "user";

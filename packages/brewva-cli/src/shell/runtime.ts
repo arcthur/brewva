@@ -2,6 +2,7 @@ import { type SessionQuestionRequest } from "@brewva/brewva-gateway";
 import { normalizeQuestionPrompt } from "@brewva/brewva-substrate";
 import type {
   BrewvaInteractiveQuestionRequest,
+  BrewvaPromptSessionEvent,
   BrewvaQueuedPromptView,
   BrewvaUiDialogOptions,
 } from "@brewva/brewva-substrate";
@@ -102,6 +103,21 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
     return undefined;
   }
   return value as Record<string, unknown>;
+}
+
+function formatSteerDropReason(reason: unknown): string {
+  switch (reason) {
+    case "aborted":
+      return "the turn was aborted";
+    case "failed":
+      return "the turn failed";
+    case "no_tool_boundary":
+      return "no tool-result boundary was reached";
+    case "overwritten":
+      return "the committed tool result replaced the guidance";
+    default:
+      return "the steer could not be applied";
+  }
 }
 
 function readQuestionOption(value: unknown): { label: string; description?: string } | null {
@@ -844,6 +860,20 @@ export class CliShellRuntime {
     this.#overlayFlow.syncQueueOverlay(projectedItems);
   }
 
+  private notifySteerOutcome(event: BrewvaPromptSessionEvent): void {
+    if (event.type === "steer_applied") {
+      const toolName = typeof event.toolName === "string" ? event.toolName : undefined;
+      this.ui.notify(
+        toolName ? `Steer applied to ${toolName}.` : "Steer applied to the current turn.",
+        "info",
+      );
+      return;
+    }
+    if (event.type === "steer_dropped") {
+      this.ui.notify(`Steer dropped: ${formatSteerDropReason(event.reason)}.`, "warning");
+    }
+  }
+
   private projectQueuedPrompts(
     items: ReturnType<SessionViewPort["getQueuedPrompts"]>,
   ): ReturnType<SessionViewPort["getQueuedPrompts"]> {
@@ -1041,6 +1071,7 @@ export class CliShellRuntime {
       case "session.projectEvent":
         try {
           this.#transcriptProjector.handleSessionEvent(effect.event);
+          this.notifySteerOutcome(effect.event);
         } catch (error) {
           const message =
             error instanceof Error ? error.message : "Failed to render the latest session event.";

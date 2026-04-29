@@ -28,6 +28,9 @@ export const AGENT_END_EVENT_TYPE = "agent_end" as const;
 export const BUDGET_ALERT_EVENT_TYPE = "budget_alert" as const;
 export const CHANNEL_COMMAND_RECEIVED_EVENT_TYPE = "channel_command_received" as const;
 export const OPERATOR_QUESTION_ANSWERED_EVENT_TYPE = "operator_question_answered" as const;
+export const STEER_QUEUED_EVENT_TYPE = "steer_queued" as const;
+export const STEER_APPLIED_EVENT_TYPE = "steer_applied" as const;
+export const STEER_DROPPED_EVENT_TYPE = "steer_dropped" as const;
 export const CHANNEL_SESSION_BOUND_EVENT_TYPE = "channel_session_bound" as const;
 export const GATEWAY_SESSION_BOUND_EVENT_TYPE = "gateway_session_bound" as const;
 export const CHANNEL_UPDATE_LOCK_BLOCKED_EVENT_TYPE = "channel_update_lock_blocked" as const;
@@ -223,6 +226,9 @@ export const BREWVA_REGISTERED_EVENT_TYPES = [
   BUDGET_ALERT_EVENT_TYPE,
   CHANNEL_COMMAND_RECEIVED_EVENT_TYPE,
   OPERATOR_QUESTION_ANSWERED_EVENT_TYPE,
+  STEER_QUEUED_EVENT_TYPE,
+  STEER_APPLIED_EVENT_TYPE,
+  STEER_DROPPED_EVENT_TYPE,
   CHANNEL_SESSION_BOUND_EVENT_TYPE,
   GATEWAY_SESSION_BOUND_EVENT_TYPE,
   CHANNEL_UPDATE_LOCK_BLOCKED_EVENT_TYPE,

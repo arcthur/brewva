@@ -7,7 +7,7 @@ import type { BrewvaPromptEnvelope } from "./session-host.js";
 
 export type BrewvaPromptQueueBehavior = "queue" | "followUp";
 export type BrewvaPromptInputSource = "interactive" | "extension" | (string & {});
-export type BrewvaSteerDropReason = "aborted" | "failed" | "no_tool_boundary";
+export type BrewvaSteerDropReason = "aborted" | "failed" | "no_tool_boundary" | "overwritten";
 export type BrewvaSteerOutcome =
   | { status: "queued"; chars: number }
   | { status: "no_active_run" }

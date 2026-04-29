@@ -162,6 +162,9 @@ those identifiers to the underlying `reasoning_checkpoint` and
 
 - `channel_command_received`
 - `operator_question_answered`
+- `steer_queued`
+- `steer_applied`
+- `steer_dropped`
 - `channel_session_bound`
 - `gateway_session_bound`
 - `channel_update_requested`
@@ -277,6 +280,14 @@ segment. Gateway session replay uses this control-tape binding instead of
 process-local registry state. The receipt is recorded under the gateway control
 session `gateway:session-bindings`; it is replay-critical for public
 session-history lookup, but it is not itself a frontend session-wire frame.
+
+`steer_queued`, `steer_applied`, and `steer_dropped` are durable operator-control
+evidence for in-flight `/steer`. They explain when guidance was accepted,
+attached to a tool-result boundary, or discarded before it could affect the
+next model request. They are not transcript authority: the committed
+`message_end` tool result remains the replay source for the exact model-facing
+content. Payloads carry `chars`, `hash`, and optional fields such as `source`,
+`toolCallId`, `toolName`, or `reason`.
 
 Typical hosted recovery reasons include:
 

@@ -1,7 +1,7 @@
 import { BrewvaRuntime, type ManagedToolMode } from "@brewva/brewva-runtime";
 import type { TurnEnvelope } from "@brewva/brewva-runtime/channels";
 import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
-import type { BrewvaSteerOutcome } from "@brewva/brewva-substrate";
+import type { BrewvaPromptSessionEvent, BrewvaSteerOutcome } from "@brewva/brewva-substrate";
 import { ConversationBindingStore } from "../conversations/binding-store.js";
 import { createHostedSession, type HostedSessionResult } from "../host/create-hosted-session.js";
 import { waitForAllSettledWithTimeout } from "../utils/async.js";
@@ -52,6 +52,7 @@ export interface ChannelRuntimeSessionPort {
   readonly agentId: string;
   readonly runtime: BrewvaRuntime;
   readonly agentSessionId: string;
+  subscribe(listener: (event: BrewvaPromptSessionEvent) => void): () => void;
   steer(text: string): Promise<BrewvaSteerOutcome>;
 }
 
@@ -191,6 +192,9 @@ export function createChannelSessionCoordinator(input: {
     agentId: state.agentId,
     runtime: state.runtime,
     agentSessionId: state.agentSessionId,
+    subscribe(listener) {
+      return state.result.session.subscribe(listener);
+    },
     steer(text) {
       return state.result.session.steer(text, { source: "channel" });
     },

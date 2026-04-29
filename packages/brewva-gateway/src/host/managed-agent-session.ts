@@ -18,6 +18,11 @@ import type {
   SessionLifecycleSnapshot,
   SessionWireFrame,
 } from "@brewva/brewva-runtime";
+import {
+  STEER_APPLIED_EVENT_TYPE,
+  STEER_DROPPED_EVENT_TYPE,
+  STEER_QUEUED_EVENT_TYPE,
+} from "@brewva/brewva-runtime";
 import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import {
   DEFAULT_CONTEXT_STATE,
@@ -150,10 +155,6 @@ function normalizePromptSource(
   const normalized = source.trim();
   return normalized.length > 0 ? normalized : undefined;
 }
-
-const STEER_QUEUED_EVENT_TYPE = "steer_queued" as const;
-const STEER_APPLIED_EVENT_TYPE = "steer_applied" as const;
-const STEER_DROPPED_EVENT_TYPE = "steer_dropped" as const;
 
 function buildSteerAuditPayload(
   text: string,

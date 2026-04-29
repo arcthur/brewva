@@ -17,6 +17,7 @@ import {
   type BrewvaPromptSessionEvent,
   type BrewvaShellViewPreferences,
   type BrewvaSessionModelDescriptor,
+  type BrewvaSteerOutcome,
   type BrewvaToolUiPort,
 } from "@brewva/brewva-substrate";
 import { DEFAULT_TUI_THEME } from "@brewva/brewva-tui";
@@ -69,6 +70,7 @@ function createFakeBundle(
     ) => Promise<ProviderOAuthAuthorization | undefined>;
     completeOAuth?: (provider: string, methodId: string, code?: string) => Promise<void>;
     queuedPrompts?: BrewvaQueuedPromptView[];
+    steerHandler?: (text: string) => Promise<BrewvaSteerOutcome>;
   } = {},
 ) {
   let attachedUi: BrewvaToolUiPort | undefined;
@@ -199,6 +201,9 @@ function createFakeBundle(
     },
     async prompt(parts: readonly BrewvaPromptContentPart[]) {
       await options.promptHandler?.(buildBrewvaPromptText(parts));
+    },
+    async steer(text: string) {
+      return options.steerHandler?.(text) ?? { status: "no_active_run" };
     },
     getQueuedPrompts() {
       return queuedPrompts;
@@ -3388,6 +3393,72 @@ describe("shell runtime", () => {
             ),
         ),
     ).toBe(true);
+
+    runtime.dispose();
+  });
+
+  test("/steer reports later applied and dropped outcomes", async () => {
+    const steers: string[] = [];
+    const fixture = createFakeBundle({
+      steerHandler: async (text) => {
+        steers.push(text);
+        return { status: "queued", chars: text.length };
+      },
+    });
+    const { bundle } = fixture;
+
+    const runtime = new CliShellRuntime(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+    });
+    await runtime.start();
+
+    runtime.ui.setEditorText("/steer keep this boundary in mind");
+    await runtime.handleInput({
+      key: "enter",
+      ctrl: false,
+      meta: false,
+      shift: false,
+    });
+
+    expect(steers).toEqual(["keep this boundary in mind"]);
+    expect(runtime.getViewState().notifications.at(-1)).toMatchObject({
+      level: "info",
+      message: "Queued steer for the current turn.",
+    });
+
+    fixture.emitSessionEvent({
+      type: "steer_applied",
+      text: "keep this boundary in mind",
+      toolCallId: "tool-1",
+      toolName: "read",
+      message: {
+        role: "toolResult",
+        toolCallId: "tool-1",
+        toolName: "read",
+        content: [{ type: "text", text: "result\n\nUser guidance: keep this boundary in mind" }],
+        isError: false,
+      },
+    });
+    await Bun.sleep(0);
+
+    expect(runtime.getViewState().notifications.at(-1)).toMatchObject({
+      level: "info",
+      message: "Steer applied to read.",
+    });
+
+    fixture.emitSessionEvent({
+      type: "steer_dropped",
+      text: "too late",
+      reason: "no_tool_boundary",
+    });
+    await Bun.sleep(0);
+
+    expect(runtime.getViewState().notifications.at(-1)).toMatchObject({
+      level: "warning",
+      message: "Steer dropped: no tool-result boundary was reached.",
+    });
 
     runtime.dispose();
   });

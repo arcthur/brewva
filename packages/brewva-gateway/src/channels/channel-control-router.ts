@@ -69,6 +69,72 @@ function indentBlock(text: string): string {
     .join("\n");
 }
 
+function formatSteerDropReason(reason: unknown): string {
+  switch (reason) {
+    case "aborted":
+      return "the turn was aborted";
+    case "failed":
+      return "the turn failed";
+    case "no_tool_boundary":
+      return "no tool-result boundary was reached";
+    case "overwritten":
+      return "the committed tool result replaced the guidance";
+    default:
+      return "the steer could not be applied";
+  }
+}
+
+function subscribeChannelSteerOutcome(input: {
+  session: ChannelRuntimeSessionPort;
+  replyWriter: ChannelReplyWriter;
+  turn: TurnEnvelope;
+  scopeKey: string;
+  agentId: string;
+}): () => void {
+  let unsubscribe: (() => void) | undefined;
+  const close = () => {
+    unsubscribe?.();
+    unsubscribe = undefined;
+  };
+  unsubscribe = input.session.subscribe((event) => {
+    if (event.type !== "steer_applied" && event.type !== "steer_dropped") {
+      return;
+    }
+    close();
+    if (event.type === "steer_applied") {
+      void input.replyWriter.sendControllerReply(
+        input.turn,
+        input.scopeKey,
+        `Steer applied for @${input.agentId}.`,
+        {
+          command: "steer",
+          agentId: input.agentId,
+          status: "applied",
+          agentSessionId: input.session.agentSessionId,
+          toolCallId: event.toolCallId,
+          toolName: event.toolName,
+        },
+      );
+      return;
+    }
+    if (event.type === "steer_dropped") {
+      void input.replyWriter.sendControllerReply(
+        input.turn,
+        input.scopeKey,
+        `Steer dropped for @${input.agentId}: ${formatSteerDropReason(event.reason)}.`,
+        {
+          command: "steer",
+          agentId: input.agentId,
+          status: "dropped",
+          reason: event.reason,
+          agentSessionId: input.session.agentSessionId,
+        },
+      );
+    }
+  });
+  return close;
+}
+
 function formatStatusSummaryText(input: {
   targetAgentId: string;
   focusedAgentId: string;
@@ -496,7 +562,20 @@ export function createChannelControlRouter(input: {
           );
           return { handled: true };
         }
-        const outcome = await targetSession.steer(match.text);
+        const unsubscribeSteerOutcome = subscribeChannelSteerOutcome({
+          session: targetSession,
+          replyWriter: input.replyWriter,
+          turn,
+          scopeKey,
+          agentId: targetAgentId,
+        });
+        let outcome: Awaited<ReturnType<ChannelRuntimeSessionPort["steer"]>>;
+        try {
+          outcome = await targetSession.steer(match.text);
+        } catch (error) {
+          unsubscribeSteerOutcome();
+          throw error;
+        }
         if (outcome.status === "queued") {
           await input.replyWriter.sendControllerReply(
             turn,
@@ -512,6 +591,7 @@ export function createChannelControlRouter(input: {
           );
           return { handled: true };
         }
+        unsubscribeSteerOutcome();
         await input.replyWriter.sendControllerReply(
           turn,
           scopeKey,

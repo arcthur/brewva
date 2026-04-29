@@ -10,6 +10,7 @@ import type {
   BrewvaAgentEngineStreamContext,
   BrewvaAgentEngineStreamFunction,
   BrewvaAgentEngineStreamOptions,
+  BrewvaAgentEngineSteerDropReason,
   BrewvaAgentEngineThinkingBudgets,
   BrewvaAgentEngineThinkingLevel,
   BrewvaAgentEngineTool,
@@ -163,6 +164,8 @@ async function runLoop(
         firstTurn = false;
       }
 
+      await applyPendingSteerToLastCommittedToolResult(currentContext, config, emit);
+
       if (pendingMessages.length > 0) {
         for (const message of pendingMessages) {
           await emit({ type: "message_start", message });
@@ -180,15 +183,10 @@ async function runLoop(
       newMessages.push(message);
 
       if (message.stopReason === "error" || message.stopReason === "aborted") {
-        const pendingSteer = await config.consumePendingSteer?.();
-        if (pendingSteer) {
-          await emit({
-            type: "steer_dropped",
-            text: pendingSteer,
-            reason: message.stopReason === "aborted" ? "aborted" : "failed",
-          });
-        }
+        const dropReason = message.stopReason === "aborted" ? "aborted" : "failed";
+        await dropPendingSteer(config, emit, dropReason);
         await emit({ type: "turn_end", message, toolResults: [] });
+        await dropPendingSteer(config, emit, dropReason);
         await emit({ type: "agent_end", messages: newMessages });
         return;
       }
@@ -237,13 +235,21 @@ async function runLoop(
           const committedMessage = await emitToolCallMessageOutcome(outcome, emit);
           toolResults.push(committedMessage);
           if (appliedSteer && outcome.toolCall.id === appliedSteer.toolCallId) {
-            await emit({
-              type: "steer_applied",
-              text: appliedSteer.text,
-              toolCallId: appliedSteer.toolCallId,
-              toolName: appliedSteer.toolName,
-              message: committedMessage,
-            });
+            if (toolResultMessageContainsSteer(committedMessage, appliedSteer.text)) {
+              await emit({
+                type: "steer_applied",
+                text: appliedSteer.text,
+                toolCallId: appliedSteer.toolCallId,
+                toolName: appliedSteer.toolName,
+                message: committedMessage,
+              });
+            } else {
+              await emit({
+                type: "steer_dropped",
+                text: appliedSteer.text,
+                reason: "overwritten",
+              });
+            }
             appliedSteer = undefined;
           }
         }
@@ -252,21 +258,17 @@ async function runLoop(
           newMessages.push(result);
         }
       } else {
-        const pendingSteer = await config.consumePendingSteer?.();
-        if (pendingSteer) {
-          await emit({
-            type: "steer_dropped",
-            text: pendingSteer,
-            reason: "no_tool_boundary",
-          });
-        }
+        await dropPendingSteer(config, emit, "no_tool_boundary");
       }
 
       await emit({ type: "turn_end", message, toolResults });
-      if (
-        toolResults.length > 0 &&
-        (await config.shouldStopAfterToolResults?.(toolResults)) === true
-      ) {
+      if (!hasMoreToolCalls) {
+        await dropPendingSteer(config, emit, "no_tool_boundary");
+      }
+      const shouldStopAfterToolResults =
+        toolResults.length > 0 && (await config.shouldStopAfterToolResults?.(toolResults)) === true;
+      if (shouldStopAfterToolResults) {
+        await dropPendingSteer(config, emit, "no_tool_boundary");
         await emit({ type: "agent_end", messages: newMessages });
         return;
       }
@@ -282,6 +284,60 @@ async function runLoop(
     await emit({ type: "agent_end", messages: newMessages });
     return;
   }
+}
+
+async function dropPendingSteer(
+  config: BrewvaAgentLoopConfig,
+  emit: BrewvaAgentEventSink,
+  reason: BrewvaAgentEngineSteerDropReason,
+): Promise<void> {
+  const pendingSteer = await config.consumePendingSteer?.();
+  if (!pendingSteer) {
+    return;
+  }
+  await emit({
+    type: "steer_dropped",
+    text: pendingSteer,
+    reason,
+  });
+}
+
+async function applyPendingSteerToLastCommittedToolResult(
+  currentContext: BrewvaAgentLoopContext,
+  config: BrewvaAgentLoopConfig,
+  emit: BrewvaAgentEventSink,
+): Promise<void> {
+  const target = findLastToolResultMessage(currentContext.messages);
+  if (!target) {
+    return;
+  }
+  const pendingSteer = await config.consumePendingSteer?.();
+  if (!pendingSteer) {
+    return;
+  }
+  appendSteerToToolResultMessage(target, pendingSteer);
+  await emit({
+    type: "steer_applied",
+    text: pendingSteer,
+    toolCallId: target.toolCallId,
+    toolName: target.toolName,
+    message: target,
+  });
+}
+
+function findLastToolResultMessage(
+  messages: BrewvaAgentEngineMessage[],
+): BrewvaAgentEngineToolResultMessage | undefined {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message?.role === "toolResult") {
+      return message;
+    }
+    if (message?.role === "user" || message?.role === "assistant") {
+      return undefined;
+    }
+  }
+  return undefined;
 }
 
 function refreshCurrentContext(
@@ -815,6 +871,15 @@ function appendSteerToToolResultMessage(
       text: `\n\nUser guidance: ${text}`,
     },
   ];
+}
+
+function toolResultMessageContainsSteer(
+  message: BrewvaAgentEngineToolResultMessage,
+  text: string,
+): boolean {
+  return message.content.some(
+    (part) => part.type === "text" && part.text.includes(`User guidance: ${text}`),
+  );
 }
 
 async function emitToolExecutionPhaseChange(
