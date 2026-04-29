@@ -174,12 +174,13 @@ supports:
 - `brewva credentials discover`
 
 The interactive shell uses `/model` as the primary provider-auth and
-model-selection experience. For Google, `/model` can either open the Google
-Gemini OAuth browser flow or import an existing official Gemini CLI credential
-from `~/.gemini/oauth_creds.json` or the official encrypted file fallback at
-`~/.gemini/gemini-credentials.json`. Both paths require a Google Cloud project
-ID, entered in the prompt or supplied through `GOOGLE_CLOUD_PROJECT` or
-`GOOGLE_CLOUD_PROJECT_ID`.
+model-selection experience. For Google, `/model` can import an existing
+official Gemini CLI credential from `~/.gemini/oauth_creds.json` or the official
+encrypted file fallback at `~/.gemini/gemini-credentials.json`. The Google
+Gemini OAuth browser flow is available when the host process has
+`BREWVA_GOOGLE_OAUTH_CLIENT_ID` and `BREWVA_GOOGLE_OAUTH_CLIENT_SECRET`.
+Both paths require a Google Cloud project ID, entered in the prompt or supplied
+through `GOOGLE_CLOUD_PROJECT` or `GOOGLE_CLOUD_PROJECT_ID`.
 The root `brewva credentials` command remains the lower-level operational entry
 for listing, importing, or removing vault refs outside the TUI.
 

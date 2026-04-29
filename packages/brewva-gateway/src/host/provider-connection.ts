@@ -19,6 +19,7 @@ import {
   GOOGLE_OAUTH_PROVIDER,
   GOOGLE_OAUTH_SCOPES,
   GOOGLE_OAUTH_TOKEN_URL,
+  hasGoogleOAuthClientConfig,
   loadGeminiCliOAuthCredential,
   parseGoogleOAuthTokenResponse,
   resolveGoogleOAuthClientConfig,
@@ -1568,36 +1569,36 @@ function createGoogleGeminiAuthHandler(): ProviderAuthHandler {
     message: "Google Cloud project ID",
     placeholder: "Leave empty to use GOOGLE_CLOUD_PROJECT or GOOGLE_CLOUD_PROJECT_ID",
   };
-  const methods: readonly ProviderOAuthAuthMethod[] = [
-    {
-      id: "gemini_oauth_browser",
-      kind: "oauth",
-      type: "oauth",
-      label: "Sign in with Google",
-      detail: "Recommended OAuth",
-      prompts: [projectPrompt],
-    },
-    {
-      id: "gemini_cli_import",
-      kind: "oauth",
-      type: "oauth",
-      label: "Import existing Gemini CLI login",
-      detail: "Local import",
-      prompts: [
-        projectPrompt,
-        {
-          type: "text",
-          key: "credentialPath",
-          message: "Gemini CLI OAuth credential file",
-          placeholder: "Leave empty for ~/.gemini/oauth_creds.json",
-        },
-      ],
-    },
-  ];
+  const browserOAuthMethod: ProviderOAuthAuthMethod = {
+    id: "gemini_oauth_browser",
+    kind: "oauth",
+    type: "oauth",
+    label: "Sign in with Google",
+    detail: "Recommended OAuth",
+    prompts: [projectPrompt],
+  };
+  const cliImportMethod: ProviderOAuthAuthMethod = {
+    id: "gemini_cli_import",
+    kind: "oauth",
+    type: "oauth",
+    label: "Import existing Gemini CLI login",
+    detail: "Local import",
+    prompts: [
+      projectPrompt,
+      {
+        type: "text",
+        key: "credentialPath",
+        message: "Gemini CLI OAuth credential file",
+        placeholder: "Leave empty for ~/.gemini/oauth_creds.json",
+      },
+    ],
+  };
   return {
     provider: GOOGLE_PROVIDER,
     listAuthMethods() {
-      return methods;
+      return hasGoogleOAuthClientConfig()
+        ? [browserOAuthMethod, cliImportMethod]
+        : [cliImportMethod];
     },
     async authorizeOAuth(methodId, inputs = {}) {
       if (methodId === "gemini_oauth_browser") {

@@ -6,8 +6,6 @@ import { isAbsolute, join, resolve } from "node:path";
 export const GOOGLE_OAUTH_PROVIDER = "google";
 export const GOOGLE_OAUTH_CLIENT_ID_ENV = "BREWVA_GOOGLE_OAUTH_CLIENT_ID";
 export const GOOGLE_OAUTH_CLIENT_SECRET_ENV = "BREWVA_GOOGLE_OAUTH_CLIENT_SECRET";
-export const GOOGLE_OAUTH_CLIENT_ID = "";
-export const GOOGLE_OAUTH_CLIENT_SECRET = "";
 export const GOOGLE_OAUTH_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 export const GOOGLE_OAUTH_TOKEN_URL = "https://oauth2.googleapis.com/token";
 export const GOOGLE_GEMINI_CLI_OAUTH_FILE = "oauth_creds.json";
@@ -74,15 +72,22 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
 export function resolveGoogleOAuthClientConfig(
   env: Record<string, string | undefined> = process.env,
 ): GoogleOAuthClientConfig {
-  const clientId = readString(env[GOOGLE_OAUTH_CLIENT_ID_ENV]) ?? GOOGLE_OAUTH_CLIENT_ID;
-  const clientSecret =
-    readString(env[GOOGLE_OAUTH_CLIENT_SECRET_ENV]) ?? GOOGLE_OAUTH_CLIENT_SECRET;
+  const clientId = readString(env[GOOGLE_OAUTH_CLIENT_ID_ENV]);
+  const clientSecret = readString(env[GOOGLE_OAUTH_CLIENT_SECRET_ENV]);
   if (!clientId || !clientSecret) {
     throw new Error(
       `Google OAuth browser flow requires ${GOOGLE_OAUTH_CLIENT_ID_ENV} and ${GOOGLE_OAUTH_CLIENT_SECRET_ENV}.`,
     );
   }
   return { clientId, clientSecret };
+}
+
+export function hasGoogleOAuthClientConfig(
+  env: Record<string, string | undefined> = process.env,
+): boolean {
+  return Boolean(
+    readString(env[GOOGLE_OAUTH_CLIENT_ID_ENV]) && readString(env[GOOGLE_OAUTH_CLIENT_SECRET_ENV]),
+  );
 }
 
 function resolvePathLike(pathText: string, baseDir = process.cwd()): string {

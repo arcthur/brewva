@@ -312,15 +312,6 @@ describe("provider connection port", () => {
       });
       expect(port.listAuthMethods("google")).toMatchObject([
         {
-          id: "gemini_oauth_browser",
-          kind: "oauth",
-          type: "oauth",
-          label: "Sign in with Google",
-          detail: "Recommended OAuth",
-          credentialProvider: "google",
-          modelProviderFilter: "google",
-        },
-        {
           id: "gemini_cli_import",
           kind: "oauth",
           type: "oauth",
@@ -332,6 +323,36 @@ describe("provider connection port", () => {
       ]);
     } finally {
       restoreEnv();
+      rmSync(workspace, { recursive: true, force: true });
+    }
+  });
+
+  test("exposes Google browser OAuth only when client credentials are configured", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-provider-connection-"));
+    try {
+      const runtime = new BrewvaRuntime({ cwd: workspace });
+      const authStore = HostedAuthStore.inMemory();
+      const registry = HostedModelRegistry.inMemory(authStore);
+      registerSingleModelProvider(registry, "google", "gemini-2.5-pro");
+      const port = createProviderConnectionPort({ runtime, modelRegistry: registry, authStore });
+
+      expect(port.listAuthMethods("google").map((method) => method.id)).toEqual([
+        "gemini_cli_import",
+      ]);
+
+      const restoreEnv = patchProcessEnv({
+        BREWVA_GOOGLE_OAUTH_CLIENT_ID: "brewva-google-oauth-client-id-for-tests",
+        BREWVA_GOOGLE_OAUTH_CLIENT_SECRET: "brewva-google-oauth-client-secret-for-tests",
+      });
+      try {
+        expect(port.listAuthMethods("google").map((method) => method.id)).toEqual([
+          "gemini_oauth_browser",
+          "gemini_cli_import",
+        ]);
+      } finally {
+        restoreEnv();
+      }
+    } finally {
       rmSync(workspace, { recursive: true, force: true });
     }
   });

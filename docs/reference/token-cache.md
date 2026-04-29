@@ -123,8 +123,10 @@ Google is the current hybrid example:
 
 - user-facing provider name: `Google`
 - transport/API envelope: Cloud Code Assist (`google-gemini-cli`)
-- authentication: `/model` exposes first-class `Sign in with Google` and
-  `Import existing Gemini CLI login` flows. Import reads the official
+- authentication: `/model` always exposes `Import existing Gemini CLI login`.
+  It exposes `Sign in with Google` only when
+  `BREWVA_GOOGLE_OAUTH_CLIENT_ID` and `BREWVA_GOOGLE_OAUTH_CLIENT_SECRET` are
+  configured for the host process. Import reads the official
   `~/.gemini/oauth_creds.json` file and the official encrypted file fallback at
   `~/.gemini/gemini-credentials.json`. Both paths store a refreshable hosted
   OAuth credential with the Google access token, refresh token, expiry, and Code
