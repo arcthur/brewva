@@ -101,16 +101,15 @@ Completion and overlays are part of the stable command contract:
 - `darwin-x64`, Windows, and musl targets are not published while the BoxLite
   native runtime lacks supported bindings for those targets
 
-## Interactive Runtime-Plugin Commands
+## Runtime-Plugin Commands
 
-Embedded interactive sessions register a small operator command set through
+Managed or headless sessions can register a small operator command set through
 runtime plugins:
 
 - `/inspect [dir]`
 - `/insights [dir]`
 - `/questions`
 - `/answer <question-id> <answer>`
-- `/theme | /theme list | /theme <name>`
 - `/agent-overlays | /agent-overlays validate | /agent-overlays <name>`
 - `/update [operator hints]`
 
@@ -118,7 +117,14 @@ These commands are thin session-local veneers over existing replay, workflow,
 delegation, authored-overlay, and update surfaces. They do not introduce hidden
 planner state or generic self-command injection.
 
-Interactive shell turn control also exposes:
+Interactive TUI slash is shell-owned and intentionally narrower. It promotes
+high-frequency shell commands such as `/model`, `/inbox`, `/inspect`, `/answer`,
+`/rewind`, `/steer`, session navigation, approvals, tasks, and `/theme`.
+Runtime-owned names such as `/questions`, `/insights`, `/agent-overlays`, and
+`/update` are reserved in the shell so they are not silently treated as model
+prompts or reoccupied by future shell commands.
+
+Interactive shell turn control exposes:
 
 - `/steer <text>`
 
@@ -141,8 +147,8 @@ Queued prompt delivery remains separate from `/steer`:
 - `/steer` does **not** silently fall back to either queued mode
 
 `/inspect` and `/insights` are read-only operator products built from existing
-`runtime.inspect.*` data. The slash forms here describe invocation and
-interactive-session UX, not a second inspection API.
+`runtime.inspect.*` data. The runtime-plugin slash forms here describe
+headless/managed invocation, not a second inspection API.
 
 `/inspect` is scoped to the current embedded session or the targeted active
 channel session. It follows live conversation focus and does not perform the
@@ -161,23 +167,24 @@ When `channels.orchestration.enabled=true`, channel hosts expose a small
 control-plane command set:
 
 - `/agents`
-- `/status [@agent] [dir] [top=N]`
+- `/status [@agent] [dir] [top=N] [details]`
 - `/steer [@agent] <text>`
 - `/answer [@agent] <question-id> <answer>`
-- `/update [operator hints]`
+- `/update [operator hints]` (owner-only)
 - `/agent new <name> [model=<exact-id[:thinking]>]`
 - `/agent delete <name>`
-- `/agent status [@agent] [dir] [top=N]`
+- `/agent status [@agent] [dir] [top=N] [details]`
 - `/focus @agent`
 - `/run @a,@b <task>`
 - `/discuss @a,@b [maxRounds=N] <topic>`
 - `@agent <task>`
 
-`/status` is the canonical channel inspection summary. It composes cost,
-operator inbox, inspect, and insights output into one controller reply without
-introducing a second durable read model. `/steer` is the live-session in-flight
-control-plane path and bypasses queued prompt delivery. `/answer` remains the
-only write path for durable operator-input resolution.
+`/status` is the canonical channel summary. By default it stays compact and
+returns cost plus pending operator input. Passing `details`, `--details`, `full`,
+`--full`, or a directory scope expands it with inspect and insights output
+without introducing a second durable read model. `/steer` is the live-session
+in-flight control-plane path and bypasses queued prompt delivery. `/answer`
+remains the only write path for durable operator-input resolution.
 
 These channel commands are transport veneers over the same underlying runtime
 surfaces. `@agent` routing, focus resolution, and inline delivery are channel
@@ -473,9 +480,10 @@ smoothness, work type, verification state, scope discipline) and aggregating
 them into friction hotspots, verification quality summaries, guidance
 suggestions, and notable session highlights.
 
-Slash `/insights` is the interactive-session veneer over this inspection
-family; this subcommand remains the canonical standalone CLI entrypoint for
-project-level aggregation.
+Runtime-plugin `/insights` is the managed/headless veneer over this inspection
+family. Interactive TUI sessions reserve that slash name instead of promoting it;
+the standalone `brewva insights` subcommand remains the canonical CLI entrypoint
+for project-level aggregation.
 
 `brewva insights` selects its recent-session window through the local session
 query plane. Text output includes a `Session index` diagnostic; JSON output
@@ -560,8 +568,8 @@ channel text commands are available:
 - `/agent new <name>` or `/agent new name=<name> model=<exact-id[:thinking]>`
 - `/agent delete <name>` (soft delete)
 - `/agents`
-- `/status [@agent] [dir] [top=N]` (focused-agent status veneer over cost, operator inbox, inspect, and insights)
-- `/update [operator hints]` (route the focused agent through the shared Brewva upgrade workflow; changelog review and validation are required before completion)
+- `/status [@agent] [dir] [top=N] [details]` (focused-agent status veneer; compact by default, diagnostics when detailed)
+- `/update [operator hints]` (owner-only route through the shared Brewva upgrade workflow; changelog review and validation are required before completion)
 - `/focus @<agent>`
 - `/run @a,@b <task>`
 - `/discuss @a,@b [maxRounds=N] <topic>`

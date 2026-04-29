@@ -75,10 +75,10 @@ function formatStatusSummaryText(input: {
   liveSessionId?: string;
   costText: string;
   questionsText: string;
-  inspectText: string;
-  insightsText: string;
+  inspectText?: string;
+  insightsText?: string;
 }): string {
-  return [
+  const lines = [
     `Status @${input.targetAgentId}${input.targetAgentId === input.focusedAgentId ? "" : ` (focus @${input.focusedAgentId})`}`,
     `Live session: ${input.liveSessionId ?? "none"}`,
     "",
@@ -87,13 +87,14 @@ function formatStatusSummaryText(input: {
     "",
     "Operator input",
     indentBlock(input.questionsText),
-    "",
-    "Inspect",
-    indentBlock(input.inspectText),
-    "",
-    "Insights",
-    indentBlock(input.insightsText),
-  ].join("\n");
+  ];
+  if (input.inspectText !== undefined) {
+    lines.push("", "Inspect", indentBlock(input.inspectText));
+  }
+  if (input.insightsText !== undefined) {
+    lines.push("", "Insights", indentBlock(input.insightsText));
+  }
+  return lines.join("\n");
 }
 
 function buildStatusSectionFailure(
@@ -333,6 +334,8 @@ export function createChannelControlRouter(input: {
         }
         const targetSession = input.openLiveSession(scopeKey, targetAgentId);
         const top = typeof operatorAction.top === "number" ? operatorAction.top : 5;
+        const includeDiagnostics =
+          operatorAction.details === true || typeof operatorAction.directory === "string";
         let questionSurface: ChannelQuestionSurface | undefined;
         let questionsResult: ChannelQuestionsCommandResult | undefined;
         try {
@@ -365,56 +368,60 @@ export function createChannelControlRouter(input: {
             };
           }
         }
-        const inspectResult = input.dependencies?.handleInspectCommand
-          ? await input.dependencies
-              .handleInspectCommand({
-                directory: operatorAction.directory,
-                turn,
-                scopeKey,
-                focusedAgentId,
-                targetAgentId,
-                targetSession: targetSession
-                  ? {
-                      agentId: targetSession.agentId,
-                      runtime: createOperatorRuntimePort(targetSession.runtime),
-                      sessionId: targetSession.agentSessionId,
-                    }
-                  : undefined,
-              })
-              .catch((error) =>
-                buildStatusSectionFailure(
-                  "inspect",
-                  `Inspect unavailable: failed to build the inspect summary for @${targetAgentId} (${toErrorMessage(error)}).`,
-                ),
-              )
-          : {
-              text: "Inspect is unavailable in this host.",
-            };
-        const insightsResult = input.dependencies?.handleInsightsCommand
-          ? await input.dependencies
-              .handleInsightsCommand({
-                directory: operatorAction.directory,
-                turn,
-                scopeKey,
-                focusedAgentId,
-                targetAgentId,
-                targetSession: targetSession
-                  ? {
-                      agentId: targetSession.agentId,
-                      runtime: createOperatorRuntimePort(targetSession.runtime),
-                      sessionId: targetSession.agentSessionId,
-                    }
-                  : undefined,
-              })
-              .catch((error) =>
-                buildStatusSectionFailure(
-                  "insights",
-                  `Insights unavailable: failed to build the insights summary for @${targetAgentId} (${toErrorMessage(error)}).`,
-                ),
-              )
-          : {
-              text: "Insights are unavailable in this host.",
-            };
+        const inspectResult = includeDiagnostics
+          ? input.dependencies?.handleInspectCommand
+            ? await input.dependencies
+                .handleInspectCommand({
+                  directory: operatorAction.directory,
+                  turn,
+                  scopeKey,
+                  focusedAgentId,
+                  targetAgentId,
+                  targetSession: targetSession
+                    ? {
+                        agentId: targetSession.agentId,
+                        runtime: createOperatorRuntimePort(targetSession.runtime),
+                        sessionId: targetSession.agentSessionId,
+                      }
+                    : undefined,
+                })
+                .catch((error) =>
+                  buildStatusSectionFailure(
+                    "inspect",
+                    `Inspect unavailable: failed to build the inspect summary for @${targetAgentId} (${toErrorMessage(error)}).`,
+                  ),
+                )
+            : {
+                text: "Inspect is unavailable in this host.",
+              }
+          : undefined;
+        const insightsResult = includeDiagnostics
+          ? input.dependencies?.handleInsightsCommand
+            ? await input.dependencies
+                .handleInsightsCommand({
+                  directory: operatorAction.directory,
+                  turn,
+                  scopeKey,
+                  focusedAgentId,
+                  targetAgentId,
+                  targetSession: targetSession
+                    ? {
+                        agentId: targetSession.agentId,
+                        runtime: createOperatorRuntimePort(targetSession.runtime),
+                        sessionId: targetSession.agentSessionId,
+                      }
+                    : undefined,
+                })
+                .catch((error) =>
+                  buildStatusSectionFailure(
+                    "insights",
+                    `Insights unavailable: failed to build the insights summary for @${targetAgentId} (${toErrorMessage(error)}).`,
+                  ),
+                )
+            : {
+                text: "Insights are unavailable in this host.",
+              }
+          : undefined;
         const costText = targetSession
           ? formatCostViewText(
               targetSession.runtime.inspect.cost.getSummary(targetSession.agentSessionId),
@@ -426,6 +433,7 @@ export function createChannelControlRouter(input: {
           agentId: targetAgentId,
           top,
           directory: operatorAction.directory,
+          details: includeDiagnostics,
           liveSessionId: targetSession?.agentSessionId ?? null,
           sections: {
             cost: {
@@ -433,8 +441,16 @@ export function createChannelControlRouter(input: {
               liveSessionId: targetSession?.agentSessionId ?? null,
             },
             questions: questionsResult.meta ?? null,
-            inspect: inspectResult.meta ?? null,
-            insights: insightsResult.meta ?? null,
+            ...(inspectResult
+              ? {
+                  inspect: inspectResult.meta ?? null,
+                }
+              : {}),
+            ...(insightsResult
+              ? {
+                  insights: insightsResult.meta ?? null,
+                }
+              : {}),
           },
         } satisfies Record<string, unknown>;
         const text = formatStatusSummaryText({
@@ -443,8 +459,8 @@ export function createChannelControlRouter(input: {
           liveSessionId: targetSession?.agentSessionId,
           costText,
           questionsText: questionsResult.text,
-          inspectText: inspectResult.text,
-          insightsText: insightsResult.text,
+          inspectText: inspectResult?.text,
+          insightsText: insightsResult?.text,
         });
         await input.replyWriter.sendControllerReply(turn, scopeKey, text, statusMeta);
         return { handled: true };

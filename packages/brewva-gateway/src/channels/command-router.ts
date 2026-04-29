@@ -4,7 +4,7 @@ export type ChannelCommandMatch =
   | { kind: "none" }
   | { kind: "error"; message: string }
   | { kind: "agents" }
-  | { kind: "status"; agentId?: string; directory?: string; top?: number }
+  | { kind: "status"; agentId?: string; directory?: string; top?: number; details?: boolean }
   | { kind: "steer"; agentId?: string; text: string }
   | { kind: "answer"; agentId?: string; questionId: string; answerText: string }
   | { kind: "update"; instructions?: string }
@@ -71,8 +71,19 @@ function parseStatusCommand(body: string, usage: string): ChannelCommandMatch {
   }
 
   let top: number | undefined;
+  let details = false;
   const directoryTokens: string[] = [];
   for (const token of tokens.slice(tokenIndex)) {
+    const normalizedToken = token.toLowerCase();
+    if (
+      normalizedToken === "details" ||
+      normalizedToken === "--details" ||
+      normalizedToken === "full" ||
+      normalizedToken === "--full"
+    ) {
+      details = true;
+      continue;
+    }
     const topMatch = /^top=(.+)$/u.exec(token);
     if (topMatch?.[1]) {
       const parsedTop = parsePositiveInteger(topMatch[1]);
@@ -84,9 +95,11 @@ function parseStatusCommand(body: string, usage: string): ChannelCommandMatch {
     }
     const directoryMatch = /^dir=(.+)$/u.exec(token);
     if (directoryMatch?.[1]) {
+      details = true;
       directoryTokens.push(directoryMatch[1]);
       continue;
     }
+    details = true;
     directoryTokens.push(token);
   }
 
@@ -95,6 +108,7 @@ function parseStatusCommand(body: string, usage: string): ChannelCommandMatch {
     agentId,
     top,
     directory: directoryTokens.join(" ").trim() || undefined,
+    details: details ? true : undefined,
   };
 }
 
@@ -131,7 +145,7 @@ export class CommandRouter {
     }
 
     if (command === "/status") {
-      return parseStatusCommand(body, "Usage: /status [@agent] [dir] [top=N]");
+      return parseStatusCommand(body, "Usage: /status [@agent] [dir] [top=N] [details]");
     }
 
     if (command === "/steer") {
@@ -201,13 +215,16 @@ export class CommandRouter {
       if (firstToken.startsWith("@") && secondToken.toLowerCase() === "status") {
         return parseStatusCommand(
           [firstToken, ...subcommandTokens].join(" ").trim(),
-          "Usage: /agent status [@agent] [dir] [top=N]",
+          "Usage: /agent status [@agent] [dir] [top=N] [details]",
         );
       }
       const subcommand = firstToken.toLowerCase();
       const subcommandBody = [secondToken, ...subcommandTokens].join(" ").trim();
       if (subcommand === "status") {
-        return parseStatusCommand(subcommandBody, "Usage: /agent status [@agent] [dir] [top=N]");
+        return parseStatusCommand(
+          subcommandBody,
+          "Usage: /agent status [@agent] [dir] [top=N] [details]",
+        );
       }
       if (subcommand === "new") {
         if (!subcommandBody) {
@@ -309,7 +326,7 @@ export class CommandRouter {
     return {
       kind: "error",
       message:
-        "Unknown command. Use /status, /steer, /answer, /agents, /agent, /update, /focus, /run, or /discuss.",
+        "Unknown command. Use /status, /steer, /answer, /agents, /agent, /focus, /run, or /discuss.",
     };
   }
 }

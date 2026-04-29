@@ -41,48 +41,63 @@ describe("channel command router", () => {
       agentId: undefined,
       directory: undefined,
       top: undefined,
+      details: undefined,
     });
     expect(router.match("/status src/runtime")).toEqual({
       kind: "status",
       agentId: undefined,
       directory: "src/runtime",
       top: undefined,
+      details: true,
     });
     expect(router.match("/status @jack")).toEqual({
       kind: "status",
       agentId: "jack",
       directory: undefined,
       top: undefined,
+      details: undefined,
     });
     expect(router.match("/status @jack src/runtime")).toEqual({
       kind: "status",
       agentId: "jack",
       directory: "src/runtime",
       top: undefined,
+      details: true,
     });
     expect(router.match("/status @jack top=3")).toEqual({
       kind: "status",
       agentId: "jack",
       directory: undefined,
       top: 3,
+      details: undefined,
     });
     expect(router.match("/status dir=src/runtime top=7")).toEqual({
       kind: "status",
       agentId: undefined,
       directory: "src/runtime",
       top: 7,
+      details: true,
+    });
+    expect(router.match("/status @jack details top=2")).toEqual({
+      kind: "status",
+      agentId: "jack",
+      directory: undefined,
+      top: 2,
+      details: true,
     });
     expect(router.match("/agent status @jack src/runtime")).toEqual({
       kind: "status",
       agentId: "jack",
       directory: "src/runtime",
       top: undefined,
+      details: true,
     });
     expect(router.match("/agent @jack status top=2")).toEqual({
       kind: "status",
       agentId: "jack",
       directory: undefined,
       top: 2,
+      details: undefined,
     });
     expect(router.match("/answer skill:event-1:1 use node 22")).toEqual({
       kind: "answer",
@@ -141,11 +156,11 @@ describe("channel command router", () => {
     });
     expect(router.match("/status @")).toEqual({
       kind: "error",
-      message: "Usage: /status [@agent] [dir] [top=N]",
+      message: "Usage: /status [@agent] [dir] [top=N] [details]",
     });
     expect(router.match("/status @jack top=foo")).toEqual({
       kind: "error",
-      message: "Usage: /status [@agent] [dir] [top=N]",
+      message: "Usage: /status [@agent] [dir] [top=N] [details]",
     });
     expect(router.match("/answer")).toEqual({
       kind: "error",
@@ -154,7 +169,7 @@ describe("channel command router", () => {
     expect(router.match("/unknown")).toEqual({
       kind: "error",
       message:
-        "Unknown command. Use /status, /steer, /answer, /agents, /agent, /update, /focus, /run, or /discuss.",
+        "Unknown command. Use /status, /steer, /answer, /agents, /agent, /focus, /run, or /discuss.",
     });
     expect(router.match("/steer @jack stay focused")).toEqual({
       kind: "steer",

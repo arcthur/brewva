@@ -401,6 +401,53 @@ describe("shell runtime", () => {
     runtime.dispose();
   });
 
+  test("unknown slash commands stay out of prompt submission in the interactive shell", async () => {
+    const prompts: string[] = [];
+    const { bundle } = createFakeBundle({
+      promptHandler: async (text) => {
+        prompts.push(text);
+      },
+    });
+
+    const runtime = new CliShellRuntime(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+    });
+
+    runtime.ui.setEditorText("/models");
+    await runtime.handleInput({
+      key: "enter",
+      ctrl: false,
+      meta: false,
+      shift: false,
+    });
+
+    expect(prompts).toEqual([]);
+    expect(runtime.ui.getEditorText()).toBe("/models");
+    expect(runtime.getViewState().notifications.at(-1)).toMatchObject({
+      level: "warning",
+      message: "Unknown slash command: /models. Type /help or press Ctrl+K for commands.",
+    });
+
+    runtime.ui.setEditorText("/ ");
+    await runtime.handleInput({
+      key: "enter",
+      ctrl: false,
+      meta: false,
+      shift: false,
+    });
+
+    expect(prompts).toEqual([]);
+    expect(runtime.ui.getEditorText()).toBe("/ ");
+    expect(runtime.getViewState().notifications.at(-1)).toMatchObject({
+      level: "warning",
+      message: "Unknown slash command. Type /help or press Ctrl+K for commands.",
+    });
+
+    runtime.dispose();
+  });
+
   test("slash completion exposes only promoted shell commands", () => {
     const { bundle } = createFakeBundle();
 

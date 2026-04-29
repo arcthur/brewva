@@ -46,6 +46,16 @@ interface ParsedRewindCommand {
   summary?: SessionRewindSummary;
 }
 
+function parseLeadingSlashCommand(prompt: string): { name?: string } | undefined {
+  const trimmed = prompt.trim();
+  if (!trimmed.startsWith("/")) {
+    return undefined;
+  }
+  const match = /^\/(?<name>[^\s]*)/u.exec(trimmed);
+  const name = match?.groups?.name;
+  return name ? { name } : {};
+}
+
 export interface ShellSessionWorkflowContext {
   cwd: string;
   getState(): CliShellViewState;
@@ -170,10 +180,6 @@ export class ShellSessionWorkflow {
       }
     }
 
-    this.context.promptMemory.appendHistory({
-      text: promptText,
-      parts: promptParts,
-    });
     this.#preserveComposerAfterShellCommand = false;
     const handled = await this.context.handleShellCommand(prompt);
     if (handled) {
@@ -187,6 +193,22 @@ export class ShellSessionWorkflow {
       this.#preserveComposerAfterShellCommand = false;
       return;
     }
+    const unknownSlashCommand = parseLeadingSlashCommand(prompt);
+    if (unknownSlashCommand) {
+      const commandLabel = unknownSlashCommand.name ? `: /${unknownSlashCommand.name}` : "";
+      this.context
+        .getUi()
+        .notify(
+          `Unknown slash command${commandLabel}. Type /help or press Ctrl+K for commands.`,
+          "warning",
+        );
+      return;
+    }
+
+    this.context.promptMemory.appendHistory({
+      text: promptText,
+      parts: promptParts,
+    });
 
     type RewindPromptParts = NonNullable<
       Parameters<SessionViewPort["recordRewindCheckpoint"]>[0]["prompt"]

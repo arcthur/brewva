@@ -330,12 +330,13 @@ When `channels.orchestration.enabled=true`, channel orchestration commands
 include:
 
 - `/agents`
-- `/status [@agent] [dir] [top=N]`
+- `/status [@agent] [dir] [top=N] [details]`
+- `/steer [@agent] <text>`
 - `/answer [@agent] <question-id> <answer>`
-- `/update [operator hints]`
+- `/update [operator hints]` (owner-only)
 - `/agent new <name> [model=<exact-id[:thinking]>]`
 - `/agent delete <name>`
-- `/agent status [@agent] [dir] [top=N]`
+- `/agent status [@agent] [dir] [top=N] [details]`
 - `/focus @agent`
 - `/run @a,@b <task>`
 - `/discuss @a,@b [maxRounds=N] <topic>`
@@ -344,11 +345,12 @@ include:
 These are thin control-plane veneers over replay-visible session state. They do
 not create hidden planner state or a second command authority model.
 
-`/status` is the operator summary wrapper for cost, pending operator input,
-inspect, and insights. Its reply meta preserves the section-level structured
-payloads from those underlying products. `/questions` remains available as a
-runtime-plugin command, while the interactive shell promotes `/inbox` for the
-same underlying operator-input truth. `/answer` records
+`/status` is the operator summary wrapper for cost and pending operator input.
+Passing `details`, `--details`, `full`, `--full`, or a directory scope expands
+the reply with inspect and insights. Its reply meta preserves the section-level
+structured payloads from those underlying products. `/questions` remains
+available as a runtime-plugin command, while the interactive shell promotes
+`/inbox` for the same underlying operator-input truth. `/answer` records
 `operator_question_answered` before routing the answer back into the target
 session as explicit operator input.
 

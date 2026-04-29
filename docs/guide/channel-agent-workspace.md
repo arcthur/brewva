@@ -11,7 +11,7 @@ the full command or runtime-plugin contract.
 
 - Multi-agent registry under `.brewva/agents/<agentId>/`
 - Per-agent runtime state isolation (`.brewva/agents/<agentId>/state/*`)
-- In-channel command routing (`/agents`, `/status`, `/answer`, `/update`,
+- In-channel command routing (`/agents`, `/status`, `/steer`, `/answer`, `/update`,
   `/agent new`, `/agent delete`, `/agent status`, `/focus`, `/run`,
   `/discuss`, `@agent ...`)
 - Fan-out and bounded discussion loops

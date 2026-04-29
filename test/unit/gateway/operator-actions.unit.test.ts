@@ -9,6 +9,7 @@ describe("channel operator actions", () => {
         agentId: "reviewer",
         directory: "src/runtime",
         top: 7,
+        details: true,
       }),
     ).toEqual({
       kind: "status_summary",
@@ -16,6 +17,7 @@ describe("channel operator actions", () => {
       agentId: "reviewer",
       directory: "src/runtime",
       top: 7,
+      details: true,
     });
   });
 

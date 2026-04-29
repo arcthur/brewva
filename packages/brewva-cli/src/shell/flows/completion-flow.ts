@@ -125,7 +125,13 @@ export class ShellCompletionFlow {
       return;
     }
     const selected = completion.items[completion.selectedIndex];
-    if (!selected || selected.accept.type !== "runCommand") {
+    if (!selected) {
+      if (completion.trigger === "/") {
+        await this.context.submitComposer();
+      }
+      return;
+    }
+    if (selected.accept.type !== "runCommand") {
       this.accept();
       return;
     }

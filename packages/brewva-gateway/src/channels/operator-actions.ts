@@ -7,6 +7,7 @@ export type ChannelOperatorAction =
       agentId?: string;
       directory?: string;
       top?: number;
+      details?: boolean;
     }
   | {
       kind: "answer_question";
@@ -26,6 +27,7 @@ export function resolveChannelOperatorAction(
       agentId: match.agentId,
       directory: match.directory,
       top: match.top,
+      details: match.details,
     };
   }
   if (match.kind === "answer") {

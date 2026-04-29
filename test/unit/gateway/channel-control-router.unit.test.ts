@@ -224,7 +224,7 @@ describe("channel control router ownership", () => {
     });
 
     const result = await router.handleCommand(
-      { kind: "status", directory: "src/runtime", top: 3 },
+      { kind: "status", directory: "src/runtime", top: 3, details: true },
       createUserTurn("/status src/runtime top=3"),
       "scope-1",
     );
@@ -237,6 +237,7 @@ describe("channel control router ownership", () => {
       agentId: "worker",
       top: 3,
       directory: "src/runtime",
+      details: true,
       sections: {
         cost: {
           top: 3,
@@ -247,6 +248,98 @@ describe("channel control router ownership", () => {
         insights: { command: "insights", analyzedSessions: 2 },
       },
     });
+  });
+
+  test("given a compact status command, when component handlers are available, then the router skips diagnostic sections by default", async () => {
+    const replies: Array<{ text: string; meta?: Record<string, unknown> }> = [];
+    let inspectCalls = 0;
+    let insightsCalls = 0;
+    const router = createChannelControlRouter({
+      runtime: createRuntimeFixture(),
+      registry: {
+        resolveFocus: () => "worker",
+        isActive: () => true,
+      } as never,
+      orchestrationConfig: {
+        enabled: true,
+        owners: { telegram: [] },
+        aclModeWhenOwnersEmpty: "open",
+      } as never,
+      replyWriter: {
+        sendControllerReply: async (_turn, _scopeKey, text, meta) => {
+          replies.push({ text, meta });
+        },
+        sendAgentOutputs: async () => 0,
+      },
+      coordinator: {
+        fanOut: async () => ({ ok: true, results: [] }),
+        discuss: async () => ({ ok: true, rounds: [], stoppedEarly: false }),
+      },
+      renderAgentsSnapshot: () => "active agents snapshot",
+      openLiveSession: () => undefined,
+      resolveQuestionSurface: async () => undefined,
+      cleanupAgentSessions: async () => undefined,
+      disposeAgentRuntime: () => true,
+      updateLock: createChannelUpdateLockManager({
+        updateExecutionScope: {
+          lockKey: "workspace-update",
+          lockTarget: "workspace",
+        },
+      }),
+      updateExecutionScope: {
+        lockKey: "workspace-update",
+        lockTarget: "workspace",
+      },
+      dependencies: {
+        handleQuestionsCommand: async () => ({
+          text: "No pending questions",
+          meta: { command: "questions", pending: 0 },
+        }),
+        handleInspectCommand: async () => {
+          inspectCalls += 1;
+          return {
+            text: "Inspect summary",
+            meta: { command: "inspect" },
+          };
+        },
+        handleInsightsCommand: async () => {
+          insightsCalls += 1;
+          return {
+            text: "Insights summary",
+            meta: { command: "insights" },
+          };
+        },
+      },
+    });
+
+    const result = await router.handleCommand(
+      { kind: "status" },
+      createUserTurn("/status"),
+      "scope-1",
+    );
+
+    expect(result).toEqual({ handled: true });
+    expect(inspectCalls).toBe(0);
+    expect(insightsCalls).toBe(0);
+    expect(replies).toHaveLength(1);
+    expect(replies[0]?.text).toContain("Status @worker");
+    expect(replies[0]?.text).toContain("Cost");
+    expect(replies[0]?.text).toContain("Operator input");
+    expect(replies[0]?.text).not.toContain("Inspect");
+    expect(replies[0]?.text).not.toContain("Insights");
+    expect(replies[0]?.meta).toMatchObject({
+      command: "status",
+      details: false,
+      sections: {
+        cost: {
+          top: 5,
+          liveSessionId: null,
+        },
+        questions: { command: "questions", pending: 0 },
+      },
+    });
+    expect(replies[0]?.meta?.sections).not.toHaveProperty("inspect");
+    expect(replies[0]?.meta?.sections).not.toHaveProperty("insights");
   });
 
   test("given a mention from a non-owner, when the router routes it, then it does not persist workspace focus", async () => {
@@ -429,7 +522,7 @@ describe("channel control router ownership", () => {
     });
 
     const result = await router.handleCommand(
-      { kind: "status" },
+      { kind: "status", details: true },
       createUserTurn("/status"),
       "scope-1",
     );
@@ -441,6 +534,7 @@ describe("channel control router ownership", () => {
     );
     expect(replies[0]?.meta).toMatchObject({
       command: "status",
+      details: true,
       sections: {
         questions: { command: "questions", pending: 0 },
         inspect: { command: "inspect", status: "dependency_failed" },
