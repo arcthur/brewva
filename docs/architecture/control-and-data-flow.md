@@ -142,17 +142,17 @@ flowchart TD
   E -->|no| G["replay tape through ProjectionEngine and rebuild projection state"]
 ```
 
-## Correction And Rollback Flow
+## Session Rewind And Rollback Flow
 
-### User correction transaction (`--undo` / `--redo`)
+### User rewind transaction (`--undo` / `--redo` / `/rewind`)
 
 ```mermaid
 flowchart TD
-  A["operator submits prompt"] --> B["record correction checkpoint"]
+  A["operator submits prompt"] --> B["record session rewind checkpoint"]
   B --> C["turn records reasoning and patch receipts"]
-  C --> D["--undo restores patch window and reasoning checkpoint"]
+  C --> D["--undo or /rewind rewinds patch window and/or reasoning branch"]
   D --> E["composer receives restored prompt"]
-  E --> F["--redo reapplies patch window and branches to redo leaf"]
+  E --> F["--redo reapplies the abandoned rewind branch tip"]
 ```
 
 ### Patchset-based rollback (`rollback_last_patch`)

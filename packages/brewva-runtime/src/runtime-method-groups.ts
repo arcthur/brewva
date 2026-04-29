@@ -12,11 +12,6 @@ import type {
   BuildContextInjectionOptions,
   ContextCompactionGateStatus,
   ContextCompactionReason,
-  CorrectionRedoInput,
-  CorrectionRedoResult,
-  CorrectionState,
-  CorrectionUndoInput,
-  CorrectionUndoResult,
   ContextBudgetUsage,
   ContextPressureLevel,
   ContextPressureStatus,
@@ -46,7 +41,7 @@ import type {
   ReasoningRevertInput,
   ReasoningRevertRecord,
   RecordReasoningCheckpointInput,
-  RecordCorrectionCheckpointInput,
+  RecordSessionRewindCheckpointInput,
   RecoveryPostureSnapshot,
   RecoveryWalRecord,
   RecoveryWalRecoveryResult,
@@ -59,6 +54,13 @@ import type {
   ResourceLeaseResult,
   RollbackResult,
   RedoResult,
+  SessionRedoInput,
+  SessionRedoResult,
+  SessionRewindCheckpointRecord,
+  SessionRewindInput,
+  SessionRewindResult,
+  SessionRewindState,
+  SessionRewindTargetView,
   ScheduleIntentCancelInput,
   ScheduleIntentCancelResult,
   ScheduleIntentCreateInput,
@@ -129,7 +131,6 @@ import type {
 import type { CommandPolicySummary } from "./security/command-policy.js";
 import type { VirtualReadonlyPolicySummary } from "./security/virtual-readonly-policy.js";
 import type { ContextService } from "./services/context.js";
-import type { CorrectionService } from "./services/correction.js";
 import type { CostService } from "./services/cost.js";
 import type { CredentialVaultService } from "./services/credential-vault.js";
 import type { EventPipelineService, RuntimeRecordEvent } from "./services/event-pipeline.js";
@@ -141,6 +142,7 @@ import type { ReasoningService } from "./services/reasoning.js";
 import type { ResourceLeaseService } from "./services/resource-lease.js";
 import type { ScheduleIntentService } from "./services/schedule-intent.js";
 import type { SessionLifecycleService } from "./services/session-lifecycle.js";
+import type { SessionRewindService } from "./services/session-rewind.js";
 import type { SessionWireService } from "./services/session-wire.js";
 import type { SkillLifecycleService } from "./services/skill-lifecycle.js";
 import type { TapeService } from "./services/tape.js";
@@ -213,15 +215,6 @@ export interface BrewvaRuntimeMethodGroups {
     getCheckpoint(sessionId: string, checkpointId: string): ReasoningCheckpointRecord | undefined;
     listReverts(sessionId: string): ReasoningRevertRecord[];
     canRevertTo(sessionId: string, checkpointId: string): boolean;
-  };
-  correction: {
-    recordCheckpoint(
-      sessionId: string,
-      input?: RecordCorrectionCheckpointInput,
-    ): CorrectionState["checkpoints"][number];
-    undo(sessionId: string, input?: CorrectionUndoInput): CorrectionUndoResult;
-    redo(sessionId: string, input?: CorrectionRedoInput): CorrectionRedoResult;
-    getState(sessionId: string): CorrectionState;
   };
   context: {
     onTurnStart(sessionId: string, turnIndex: number): void;
@@ -563,6 +556,14 @@ export interface BrewvaRuntimeMethodGroups {
     onClearState(listener: (sessionId: string) => void): () => void;
     getHydration(sessionId: string): SessionHydrationState;
     getIntegrity(sessionId: string): IntegrityStatus;
+    recordRewindCheckpoint(
+      sessionId: string,
+      input?: RecordSessionRewindCheckpointInput,
+    ): SessionRewindCheckpointRecord;
+    rewind(sessionId: string, input?: SessionRewindInput): SessionRewindResult;
+    redo(sessionId: string, input?: SessionRedoInput): SessionRedoResult;
+    getRewindState(sessionId: string): SessionRewindState;
+    listRewindTargets(sessionId: string): SessionRewindTargetView[];
     commitCompaction(sessionId: string, input: SessionCompactionCommitInput): BrewvaEventRecord;
     resolveCredentialBindings(sessionId: string, toolName: string): Record<string, string>;
   };
@@ -608,7 +609,7 @@ export interface RuntimeMethodGroupsDependencies {
   costService: CostService;
   actionPolicyRegistry: ActionPolicyRegistryLike;
   getReasoningService(): ReasoningService;
-  getCorrectionService(): CorrectionService;
+  getSessionRewindService(): SessionRewindService;
   getToolGateService(): ToolGateService;
   getToolInvocationSpine(): ToolInvocationSpine;
   getParallelService(): ParallelService;
@@ -714,17 +715,6 @@ export function createRuntimeMethodGroups(
       listReverts: (sessionId: string) => deps.getReasoningService().listReverts(sessionId),
       canRevertTo: (sessionId: string, checkpointId: string) =>
         deps.getReasoningService().canRevertTo(sessionId, checkpointId),
-    },
-    correction: {
-      recordCheckpoint: (
-        sessionId: string,
-        input?: Parameters<CorrectionService["recordCheckpoint"]>[1],
-      ) => deps.getCorrectionService().recordCheckpoint(sessionId, input),
-      undo: (sessionId: string, input?: Parameters<CorrectionService["undo"]>[1]) =>
-        deps.getCorrectionService().undo(sessionId, input),
-      redo: (sessionId: string, input?: Parameters<CorrectionService["redo"]>[1]) =>
-        deps.getCorrectionService().redo(sessionId, input),
-      getState: (sessionId: string) => deps.getCorrectionService().getState(sessionId),
     },
     context: {
       onTurnStart: (sessionId: string, turnIndex: number) => {
@@ -1049,6 +1039,18 @@ export function createRuntimeMethodGroups(
         deps.sessionLifecycleService.ensureHydrated(sessionId);
         return deps.sessionLifecycleService.getIntegrityStatus(sessionId);
       },
+      recordRewindCheckpoint: (
+        sessionId: string,
+        input?: Parameters<SessionRewindService["recordCheckpoint"]>[1],
+      ) => deps.getSessionRewindService().recordCheckpoint(sessionId, input),
+      rewind: (sessionId: string, input?: Parameters<SessionRewindService["rewind"]>[1]) =>
+        deps.getSessionRewindService().rewind(sessionId, input),
+      redo: (sessionId: string, input?: Parameters<SessionRewindService["redo"]>[1]) =>
+        deps.getSessionRewindService().redo(sessionId, input),
+      getRewindState: (sessionId: string) =>
+        deps.getSessionRewindService().getRewindState(sessionId),
+      listRewindTargets: (sessionId: string) =>
+        deps.getSessionRewindService().listRewindTargets(sessionId),
       commitCompaction: (sessionId: string, input: SessionCompactionCommitInput) =>
         deps.contextService.markContextCompacted(sessionId, input),
       resolveCredentialBindings: (sessionId: string, toolName: string) => {

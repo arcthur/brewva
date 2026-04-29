@@ -217,4 +217,71 @@ describe("reasoning revert recovery controller", () => {
 
     expect(prepared).toBeNull();
   });
+
+  test("uses a clean branch reset for summary-free conversation rewind recovery", async () => {
+    const eventBridge = createRuntimeEventBridge();
+    const branchCalls: Array<string> = [];
+    const replacedMessages: unknown[] = [];
+    const rebuiltMessages = [
+      {
+        role: "user",
+        content: [{ type: "text", text: "clean rewind branch" }],
+      },
+    ];
+
+    eventBridge.runtime.maintain.context.onTurnStart("agent-session-clean-rewind", 3);
+    const checkpointA = eventBridge.runtime.authority.session.recordRewindCheckpoint(
+      "agent-session-clean-rewind",
+      {
+        leafEntryId: "leaf-clean-1",
+        prompt: { text: "first prompt", parts: [] },
+      },
+    );
+    eventBridge.runtime.authority.session.recordRewindCheckpoint("agent-session-clean-rewind", {
+      leafEntryId: "leaf-clean-2",
+      prompt: { text: "second prompt", parts: [] },
+    });
+    const rewind = eventBridge.runtime.authority.session.rewind("agent-session-clean-rewind", {
+      checkpointId: checkpointA.checkpointId,
+      mode: "conversation",
+      summary: "none",
+      returnLeafEntryId: "leaf-clean-2",
+    });
+    if (!rewind.ok || !rewind.reasoningRevert) {
+      throw new Error("expected clean conversation rewind to produce a reasoning revert");
+    }
+
+    const prepared = await preparePendingSessionReasoningRevertResume(
+      {
+        isStreaming: false,
+        sessionManager: {
+          getSessionId: () => "agent-session-clean-rewind",
+          branch: (targetLeafEntryId: string) => {
+            branchCalls.push(targetLeafEntryId);
+          },
+          branchWithSummary: () => {
+            throw new Error("clean rewind recovery should not inject a branch summary");
+          },
+          buildSessionContext: () => ({ messages: rebuiltMessages }),
+        },
+        async waitForIdle(): Promise<void> {
+          return;
+        },
+        replaceMessages(messages: unknown): void {
+          replacedMessages.push(messages);
+        },
+      } as any,
+      {
+        runtime: eventBridge.runtime,
+        sessionId: "agent-session-clean-rewind",
+        turn: 3,
+      },
+    );
+
+    expect(prepared?.prompt).toBe(
+      REASONING_REVERT_RECOVERY_TEST_ONLY.REASONING_REVERT_RESUME_PROMPT,
+    );
+    expect(branchCalls).toEqual([rewind.reasoningRevert.targetLeafEntryId ?? ""]);
+    expect(replacedMessages).toEqual([rebuiltMessages]);
+  });
 });

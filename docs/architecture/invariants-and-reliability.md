@@ -231,7 +231,7 @@ Relevant implementation:
 ## Failure Modes and Containment
 
 - Missing verification evidence: gate must block completion.
-- Missing correction checkpoint state: root `--undo` / `--redo` return explicit
+- Missing rewind checkpoint state: root `--undo` / `--redo` return explicit
   `no_checkpoint`.
 - Missing patch rollback state: patchset rollback tools return explicit
   `no_patchset`.

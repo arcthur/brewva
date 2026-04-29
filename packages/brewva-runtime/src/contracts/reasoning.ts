@@ -52,6 +52,21 @@ export interface ReasoningRevertRecord {
   timestamp: number;
 }
 
+export function buildReasoningRevertSummaryDetails(
+  revert: Pick<
+    ReasoningRevertRecord,
+    "continuityPacket" | "revertId" | "toCheckpointId" | "trigger" | "linkedRollbackReceiptIds"
+  >,
+): Record<string, unknown> {
+  return {
+    schema: revert.continuityPacket.schema,
+    revertId: revert.revertId,
+    toCheckpointId: revert.toCheckpointId,
+    trigger: revert.trigger,
+    linkedRollbackReceiptIds: [...revert.linkedRollbackReceiptIds],
+  };
+}
+
 export interface ActiveReasoningBranchState {
   sessionId: BrewvaSessionId;
   rootBranchId: string;

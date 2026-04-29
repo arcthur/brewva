@@ -94,6 +94,7 @@ export interface BrewvaPromptSessionManagerView {
   getSessionId(): string;
   getLeafId?(): string | null | undefined;
   branch?(entryId: string): void;
+  resetLeaf?(): void;
   branchWithSummary?(
     targetLeafEntryId: string | null,
     summaryText: string,

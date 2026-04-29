@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import {
   MESSAGE_END_EVENT_TYPE,
   REASONING_REVERT_EVENT_TYPE,
+  SESSION_REWIND_DIVERGENCE_SCHEMA,
+  SESSION_REWIND_COMPLETED_EVENT_TYPE,
   type BrewvaEventRecord,
   type BrewvaRuntime,
   type SessionLifecycleSnapshot,
@@ -20,6 +22,10 @@ import {
   type BrewvaSessionMessageEntry,
   type BrewvaThinkingLevelChangeEntry,
 } from "@brewva/brewva-substrate";
+import {
+  readSessionRewindCompletedPayload,
+  readSessionRewindDivergenceNote,
+} from "../session/rewind-event-payloads.js";
 import {
   SESSION_BRANCH_SUMMARY_RECORDED_EVENT_TYPE,
   THINKING_LEVEL_SELECTED_EVENT_TYPE,
@@ -239,6 +245,7 @@ export class HostedRuntimeTapeSessionStore {
   readonly #entries: BrewvaSessionEntry[] = [];
   readonly #byId = new Map<string, BrewvaSessionEntry>();
   readonly #seenEventIds = new Set<string>();
+  readonly #rewindSummaryModeByRevertEventId = new Map<string, "carry" | "none">();
   #leafId: string | null = null;
   #unsubscribeEvents: (() => void) | null = null;
 
@@ -537,6 +544,7 @@ export class HostedRuntimeTapeSessionStore {
     this.#entries.length = 0;
     this.#byId.clear();
     this.#seenEventIds.clear();
+    this.#rewindSummaryModeByRevertEventId.clear();
     this.#leafId = null;
 
     const initialEvents = sortEvents(this.runtime.inspect.events.list(this.sessionId));
@@ -549,15 +557,41 @@ export class HostedRuntimeTapeSessionStore {
 
     const events = sortEvents(this.runtime.inspect.events.list(this.sessionId));
     for (const event of events) {
-      this.#ingestRuntimeEvent(event);
+      const rewind =
+        event.type === SESSION_REWIND_COMPLETED_EVENT_TYPE
+          ? readSessionRewindCompletedPayload(event.payload)
+          : null;
+      if (rewind) {
+        this.#rewindSummaryModeByRevertEventId.set(rewind.revertEventId, rewind.summary);
+      }
+    }
+    for (const event of events) {
+      this.#ingestRuntimeEvent(event, { fromHydration: true });
     }
   }
 
-  #ingestRuntimeEvent(event: BrewvaEventRecord): void {
+  #ingestRuntimeEvent(event: BrewvaEventRecord, options: { fromHydration?: boolean } = {}): void {
     if (this.#seenEventIds.has(event.id)) {
       return;
     }
     this.#seenEventIds.add(event.id);
+    if (event.type === SESSION_REWIND_COMPLETED_EVENT_TYPE) {
+      const rewind = readSessionRewindCompletedPayload(event.payload);
+      if (rewind) {
+        this.#rewindSummaryModeByRevertEventId.set(rewind.revertEventId, rewind.summary);
+        if (rewind.summary === "none" && options.fromHydration !== true) {
+          this.#hydrateFromRuntime();
+          return;
+        }
+      }
+    }
+    if (event.type === REASONING_REVERT_EVENT_TYPE) {
+      const revert = readReasoningRevertPayload(event.payload);
+      if (revert && this.#rewindSummaryModeByRevertEventId.get(event.id) === "none") {
+        this.#leafId = revert.targetLeafEntryId;
+        return;
+      }
+    }
     const entry = this.#canonicalEventToEntry(event);
     if (!entry) {
       return;
@@ -633,6 +667,27 @@ export class HostedRuntimeTapeSessionStore {
           toCheckpointId: revert.toCheckpointId,
           trigger: revert.trigger,
           linkedRollbackReceiptIds: revert.linkedRollbackReceiptIds,
+        },
+        fromHook: true,
+      } satisfies BrewvaBranchSummaryEntry;
+    }
+
+    if (event.type === SESSION_REWIND_COMPLETED_EVENT_TYPE) {
+      const divergenceNote = readSessionRewindDivergenceNote(payload);
+      if (!divergenceNote) {
+        return undefined;
+      }
+      return {
+        type: "branch_summary",
+        id: event.id,
+        parentId: this.#leafId,
+        timestamp,
+        fromId: this.#leafId ?? "root",
+        summary: divergenceNote.text,
+        details: {
+          schema: SESSION_REWIND_DIVERGENCE_SCHEMA,
+          kind: divergenceNote.kind,
+          patchSetCount: divergenceNote.patchSetCount,
         },
         fromHook: true,
       } satisfies BrewvaBranchSummaryEntry;

@@ -15,14 +15,18 @@ import {
   type Stats,
 } from "node:fs";
 import { dirname, join, resolve, sep } from "node:path";
-import type {
-  BrewvaEventQuery,
-  BrewvaEventRecord,
-  BrewvaStructuredEvent,
+import {
+  type BrewvaEventQuery,
+  type BrewvaEventRecord,
+  type BrewvaStructuredEvent,
 } from "@brewva/brewva-runtime";
+import {
+  buildSessionRewindProjection,
+  listSessionRewindTargets,
+} from "@brewva/brewva-runtime/internal";
 import { tokenizeSearchText } from "@brewva/brewva-search";
 
-export const SESSION_INDEX_SCHEMA_VERSION = 1;
+export const SESSION_INDEX_SCHEMA_VERSION = 2;
 export const SESSION_INDEX_UNAVAILABLE = "session_index_unavailable" as const;
 
 const DEFAULT_DB_RELATIVE_PATH = join(".brewva", "session-index", "session-index.duckdb");
@@ -127,6 +131,21 @@ export interface SessionIndexBox {
   snapshotRefs: string[];
 }
 
+export interface SessionIndexRewindTarget {
+  sessionId: string;
+  checkpointId: string;
+  turn: number;
+  timestamp: number;
+  promptPreview: string;
+  patchSetCountAfter: number;
+  fileSummary: {
+    added: number;
+    modified: number;
+    deleted: number;
+  };
+  lineage: { kind: "active" } | { kind: "abandoned"; rewoundBy: string; rewoundAt: number };
+}
+
 export type SessionIndexStatus =
   | {
       ok: true;
@@ -163,6 +182,7 @@ export interface SessionIndex {
   }): Promise<SessionIndexTapeEvidence | undefined>;
   listRecentSessions(input: QueryRecentSessionsInput): Promise<SessionIndexRecentSession[]>;
   listSessionBoxes(input?: { sessionId?: string }): Promise<SessionIndexBox[]>;
+  listSessionRewindTargets(input: { sessionId: string }): Promise<SessionIndexRewindTarget[]>;
   close(): Promise<void>;
 }
 
@@ -268,6 +288,19 @@ interface SessionBoxRow {
   last_exec_at: number;
   fingerprint: string | null;
   snapshot_refs_json: string;
+}
+
+interface SessionRewindTargetRow {
+  session_id: string;
+  checkpoint_id: string;
+  turn: number;
+  timestamp: number;
+  prompt_preview: string;
+  patch_set_count_after: number;
+  file_summary_json: string;
+  lineage_kind: string;
+  rewound_by: string | null;
+  rewound_at: number | null;
 }
 
 let duckdbModulePromise: Promise<DuckDBModule> | undefined;
@@ -393,6 +426,10 @@ class UnavailableSessionIndex implements SessionIndex {
   }
 
   async listSessionBoxes(): Promise<SessionIndexBox[]> {
+    throw new SessionIndexUnavailableError(this.message);
+  }
+
+  async listSessionRewindTargets(): Promise<SessionIndexRewindTarget[]> {
     throw new SessionIndexUnavailableError(this.message);
   }
 
@@ -823,6 +860,33 @@ class DuckDBSessionIndex implements SessionIndex {
     return rows.map(mapSessionBoxRow);
   }
 
+  async listSessionRewindTargets(input: {
+    sessionId: string;
+  }): Promise<SessionIndexRewindTarget[]> {
+    const status = await this.catchUp();
+    if (!status.ok) throw new SessionIndexUnavailableError(status.message);
+    const rows = await this.selectRows<SessionRewindTargetRow>(
+      `
+        select
+          session_id,
+          checkpoint_id,
+          turn,
+          timestamp,
+          prompt_preview,
+          patch_set_count_after,
+          file_summary_json,
+          lineage_kind,
+          rewound_by,
+          rewound_at
+        from session_rewind_targets
+        where session_id = $sessionId
+        order by timestamp desc, checkpoint_id desc
+      `,
+      { sessionId: input.sessionId },
+    );
+    return rows.map(mapSessionRewindTargetRow);
+  }
+
   async close(): Promise<void> {
     if (this.closed) return;
     this.closed = true;
@@ -861,6 +925,19 @@ class DuckDBSessionIndex implements SessionIndex {
         last_exec_at double not null,
         fingerprint varchar,
         snapshot_refs_json varchar not null
+      );
+
+      create table if not exists session_rewind_targets (
+        session_id varchar not null,
+        checkpoint_id varchar not null,
+        turn integer not null,
+        timestamp double not null,
+        prompt_preview varchar not null,
+        patch_set_count_after integer not null,
+        file_summary_json varchar not null,
+        lineage_kind varchar not null,
+        rewound_by varchar,
+        rewound_at double
       );
 
       create table if not exists events (
@@ -906,6 +983,10 @@ class DuckDBSessionIndex implements SessionIndex {
         on session_target_roots(target_root);
       create index if not exists session_box_box_idx
         on session_box(box_id);
+      create index if not exists session_rewind_targets_session_idx
+        on session_rewind_targets(session_id);
+      create index if not exists session_rewind_targets_checkpoint_idx
+        on session_rewind_targets(checkpoint_id);
       create index if not exists event_tokens_token_idx
         on event_tokens(token);
       create index if not exists event_tokens_session_idx
@@ -971,6 +1052,9 @@ class DuckDBSessionIndex implements SessionIndex {
     await this.connection.run("delete from session_box where session_id = $sessionId", {
       sessionId,
     });
+    await this.connection.run("delete from session_rewind_targets where session_id = $sessionId", {
+      sessionId,
+    });
     await this.connection.run("delete from events where session_id = $sessionId", { sessionId });
     await this.connection.run("delete from sessions where session_id = $sessionId", { sessionId });
     await this.connection.run("delete from index_state where session_id = $sessionId", {
@@ -990,6 +1074,7 @@ class DuckDBSessionIndex implements SessionIndex {
       await this.connection.run("delete from session_tokens");
       await this.connection.run("delete from session_target_roots");
       await this.connection.run("delete from session_box");
+      await this.connection.run("delete from session_rewind_targets");
       await this.connection.run("delete from events");
       await this.connection.run("delete from sessions");
       await this.connection.run("delete from index_state");
@@ -1193,6 +1278,7 @@ class DuckDBSessionIndex implements SessionIndex {
     });
     await this.insertSessionTargetRoots(sessionId, targetRoots);
     await this.rebuildSessionBoxProjection(sessionId, records);
+    await this.rebuildSessionRewindTargetProjection(sessionId, records);
 
     await this.connection.run("delete from session_tokens where session_id = $sessionId", {
       sessionId,
@@ -1276,6 +1362,63 @@ class DuckDBSessionIndex implements SessionIndex {
         snapshotRefsJson: JSON.stringify(projection.snapshotRefs),
       },
     );
+  }
+
+  private async rebuildSessionRewindTargetProjection(
+    sessionId: string,
+    records: readonly BrewvaEventRecord[],
+  ): Promise<void> {
+    const projections = extractSessionRewindTargetProjection(sessionId, records);
+    await this.connection.run("delete from session_rewind_targets where session_id = $sessionId", {
+      sessionId,
+    });
+    if (projections.length === 0) return;
+    for (const chunk of chunkArray(projections, 100)) {
+      const params: SqlParams = {};
+      const values = chunk.map((projection, index) => {
+        params[`sessionId${index}`] = projection.sessionId;
+        params[`checkpointId${index}`] = projection.checkpointId;
+        params[`turn${index}`] = projection.turn;
+        params[`timestamp${index}`] = String(projection.timestamp);
+        params[`promptPreview${index}`] = projection.promptPreview;
+        params[`patchSetCountAfter${index}`] = projection.patchSetCountAfter;
+        params[`fileSummaryJson${index}`] = JSON.stringify(projection.fileSummary);
+        params[`lineageKind${index}`] = projection.lineage.kind;
+        params[`rewoundBy${index}`] =
+          projection.lineage.kind === "abandoned" ? projection.lineage.rewoundBy : null;
+        params[`rewoundAt${index}`] =
+          projection.lineage.kind === "abandoned" ? String(projection.lineage.rewoundAt) : null;
+        return `(
+          $sessionId${index},
+          $checkpointId${index},
+          $turn${index},
+          cast($timestamp${index} as double),
+          $promptPreview${index},
+          $patchSetCountAfter${index},
+          $fileSummaryJson${index},
+          $lineageKind${index},
+          $rewoundBy${index},
+          cast($rewoundAt${index} as double)
+        )`;
+      });
+      await this.connection.run(
+        `
+          insert into session_rewind_targets (
+            session_id,
+            checkpoint_id,
+            turn,
+            timestamp,
+            prompt_preview,
+            patch_set_count_after,
+            file_summary_json,
+            lineage_kind,
+            rewound_by,
+            rewound_at
+          ) values ${values.join(", ")}
+        `,
+        params,
+      );
+    }
   }
 
   private async insertSessionTargetRoots(
@@ -1853,6 +1996,78 @@ function extractSessionBoxProjection(
   return projection;
 }
 
+function mapSessionRewindTargetRow(row: SessionRewindTargetRow): SessionIndexRewindTarget {
+  const fileSummary = normalizeFileSummary(parsePayload(row.file_summary_json));
+  if (row.lineage_kind === "abandoned" && row.rewound_by && typeof row.rewound_at === "number") {
+    return {
+      sessionId: row.session_id,
+      checkpointId: row.checkpoint_id,
+      turn: row.turn,
+      timestamp: row.timestamp,
+      promptPreview: row.prompt_preview,
+      patchSetCountAfter: row.patch_set_count_after,
+      fileSummary,
+      lineage: {
+        kind: "abandoned",
+        rewoundBy: row.rewound_by,
+        rewoundAt: row.rewound_at,
+      },
+    };
+  }
+  return {
+    sessionId: row.session_id,
+    checkpointId: row.checkpoint_id,
+    turn: row.turn,
+    timestamp: row.timestamp,
+    promptPreview: row.prompt_preview,
+    patchSetCountAfter: row.patch_set_count_after,
+    fileSummary,
+    lineage: { kind: "active" },
+  };
+}
+
+function extractSessionRewindTargetProjection(
+  sessionId: string,
+  records: readonly BrewvaEventRecord[],
+): SessionIndexRewindTarget[] {
+  return listSessionRewindTargets(
+    buildSessionRewindProjection({
+      sessionId,
+      events: records,
+    }),
+  ).map((target) => ({
+    sessionId,
+    checkpointId: target.checkpointId,
+    turn: target.turn,
+    timestamp: target.timestamp,
+    promptPreview: target.promptPreview,
+    patchSetCountAfter: target.patchSetCountAfter,
+    fileSummary: {
+      added: target.fileSummary.added,
+      modified: target.fileSummary.modified,
+      deleted: target.fileSummary.deleted,
+    },
+    lineage:
+      target.lineage.kind === "abandoned"
+        ? {
+            kind: "abandoned",
+            rewoundBy: target.lineage.rewoundBy,
+            rewoundAt: target.lineage.rewoundAt,
+          }
+        : { kind: "active" },
+  }));
+}
+
+function normalizeFileSummary(
+  value: Record<string, unknown>,
+): SessionIndexRewindTarget["fileSummary"] {
+  return {
+    added: normalizeInteger(value.added),
+    modified: normalizeInteger(value.modified),
+    deleted: normalizeInteger(value.deleted),
+  };
+}
+
 function parsePayload(value: string): Record<string, unknown> {
   try {
     const parsed = JSON.parse(value) as unknown;
@@ -1874,6 +2089,10 @@ function readString(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
   const normalized = value.trim();
   return normalized.length > 0 ? normalized : undefined;
+}
+
+function normalizeInteger(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : 0;
 }
 
 function compactText(value: string, maxChars = 220): string {

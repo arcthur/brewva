@@ -72,6 +72,10 @@ across both files.
 - `checkpoint`
 - `reasoning_checkpoint`
 - `reasoning_revert`
+- `brewva.session.rewind.checkpoint.v1`
+- `brewva.session.rewind.v1`
+- `brewva.session.rewind.redo.v1`
+- `brewva.session.rewind.superseded.v1`
 - `task_event`
 - `truth_event`
 - `schedule_intent`
@@ -127,6 +131,32 @@ mutation rollback.
 `continuityPacket` is itself schema-bound
 (`brewva.reasoning.continuity.v1`) and its UTF-8 text payload is hard-capped
 at `1200` bytes before the receipt is admitted.
+
+Session rewind events layer the product-level conversation-fork transaction
+above reasoning checkpoints/reverts and receipt-tracked patch rollback:
+
+- `brewva.session.rewind.checkpoint.v1` records the rewindable turn marker:
+  `schema`, `checkpointId`, `turnId`, `reasoningCheckpointId`,
+  `leafEntryId`, and optional `prompt`.
+- `brewva.session.rewind.v1` records a rewind or undo attempt. Successful
+  payloads carry `ok=true`, `checkpointId`, `trigger`, `mode`, `summary`,
+  optional `reasoningRevertId`, optional `reasoningRevertEventId`, optional
+  `divergenceNote`, `abandonedCheckpointIds`, `patchSetIds`, `rollbackResults`,
+  and `returnLeafEntryId`. Failure payloads carry `ok=false`, the same
+  transaction coordinates, `reason`, and any partial rollback or compensation
+  receipts.
+- `brewva.session.rewind.redo.v1` records redo of an undone rewind window with
+  `schema`, `ok`, `checkpointId`, `mode`, `patchSetIds`, `redoResults`,
+  `returnLeafEntryId`, optional `reasoningCheckpointId`, and optional
+  `reasoningCheckpointEventId`.
+- `brewva.session.rewind.superseded.v1` records redo-stack abandonment when a
+  new checkpoint or branch supersedes prior redoable checkpoints.
+
+Replay treats these events as the authoritative session-rewind projection
+source. Rewind and redo events store reasoning receipt identifiers only; they do
+not embed reasoning records. Replay hydrates public rewind state by joining
+those identifiers to the underlying `reasoning_checkpoint` and
+`reasoning_revert` receipts on the same tape.
 
 ### Session, Turn, And Hosted Lifecycle
 
@@ -431,10 +461,10 @@ The read-path warning shape carries recovery-specific fields such as
 `reason=path_discovery_required_after_missing_path_failures`.
 
 - `reversible_mutation_rolled_back`
-- `correction_checkpoint_recorded`
-- `correction_undo_completed`
-- `correction_redo_completed`
-- `correction_window_superseded`
+- `brewva.session.rewind.checkpoint.v1`
+- `brewva.session.rewind.v1`
+- `brewva.session.rewind.redo.v1`
+- `brewva.session.rewind.superseded.v1`
 - `redo`
 - `rollback`
 - `patch_recorded`

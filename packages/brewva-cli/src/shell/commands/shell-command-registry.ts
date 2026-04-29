@@ -92,6 +92,13 @@ const builtInShellCommands: readonly ShellCommand[] = [
     slash: { name: "redo" },
   },
   {
+    id: "session.rewind",
+    title: "Rewind to checkpoint",
+    description: "Pick an earlier checkpoint on the active branch and fork from it.",
+    category: "Session",
+    slash: { name: "rewind", argumentMode: "optional" },
+  },
+  {
     id: "agent.model",
     title: "Switch model",
     description: "Select a model for the current session.",

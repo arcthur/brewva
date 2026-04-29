@@ -120,8 +120,9 @@ export type ShellEffect =
   | { type: "session.abort"; notification?: string }
   | { type: "session.create" }
   | { type: "session.steer"; sessionGeneration: number; text: string }
-  | { type: "session.undoCorrection" }
-  | { type: "session.redoCorrection" }
+  | { type: "session.undo" }
+  | { type: "session.rewind"; argument?: string }
+  | { type: "session.redo" }
   | { type: "model.open"; query?: string }
   | { type: "model.cycleRecent" }
   | { type: "provider.openConnect"; query?: string }

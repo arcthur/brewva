@@ -121,6 +121,40 @@ interface InspectReport {
     tapePressure: string;
     entriesSinceAnchor: number;
   };
+  rewind: {
+    checkpointCount: number;
+    rewindAvailable: boolean;
+    redoAvailable: boolean;
+    redoDepth: number;
+    latestCheckpointId: string | null;
+    latestCheckpointTurn: number | null;
+    latestCheckpointStatus: string | null;
+    latestRewind: {
+      checkpointId: string;
+      trigger: string;
+      mode: string;
+      summary: string;
+      timestamp: string | null;
+    } | null;
+    nextRedoCheckpointId: string | null;
+    targetCount: number;
+    activeTargetCount: number;
+    abandonedTargetCount: number;
+    activeTargets: Array<{
+      checkpointId: string;
+      turn: number;
+      promptPreview: string;
+      patchSetCountAfter: number;
+    }>;
+    abandonedTargets: Array<{
+      checkpointId: string;
+      turn: number;
+      promptPreview: string;
+      patchSetCountAfter: number;
+      rewoundBy: string;
+      rewoundAt: string | null;
+    }>;
+  };
   bootstrap: {
     managedToolMode: "runtime_plugin" | "direct" | null;
     workspaceRoot: string | null;
@@ -448,6 +482,8 @@ function buildInspectReport(
   const tapeStatus = runtime.inspect.events.getTapeStatus(sessionId);
   const hydration = runtime.inspect.session.getHydration(sessionId);
   const integrity = runtime.inspect.session.getIntegrity(sessionId);
+  const rewindState = runtime.inspect.session.getRewindState(sessionId);
+  const rewindTargets = runtime.inspect.session.listRewindTargets(sessionId);
   const bootstrap = readLatestEventPayload<InspectBootstrapPayload>(
     runtime,
     sessionId,
@@ -550,6 +586,55 @@ function buildInspectReport(
         .length,
       tapePressure: tapeStatus.tapePressure,
       entriesSinceAnchor: tapeStatus.entriesSinceAnchor,
+    },
+    rewind: {
+      checkpointCount: rewindState.checkpoints.length,
+      rewindAvailable: rewindState.rewindAvailable,
+      redoAvailable: rewindState.redoAvailable,
+      redoDepth: rewindState.redoStack.length,
+      latestCheckpointId: rewindState.checkpoints.at(-1)?.checkpointId ?? null,
+      latestCheckpointTurn: rewindState.checkpoints.at(-1)?.turn ?? null,
+      latestCheckpointStatus: rewindState.checkpoints.at(-1)?.status ?? null,
+      latestRewind: rewindState.latestRewind
+        ? {
+            checkpointId: rewindState.latestRewind.checkpointId,
+            trigger: rewindState.latestRewind.trigger,
+            mode: rewindState.latestRewind.mode,
+            summary: rewindState.latestRewind.summary,
+            timestamp: toIso(rewindState.latestRewind.timestamp),
+          }
+        : null,
+      nextRedoCheckpointId: rewindState.nextRedoable?.checkpointId ?? null,
+      targetCount: rewindTargets.length,
+      activeTargetCount: rewindTargets.filter((target) => target.lineage.kind === "active").length,
+      abandonedTargetCount: rewindTargets.filter((target) => target.lineage.kind === "abandoned")
+        .length,
+      activeTargets: rewindTargets.flatMap((target) =>
+        target.lineage.kind === "active"
+          ? [
+              {
+                checkpointId: target.checkpointId,
+                turn: target.turn,
+                promptPreview: target.promptPreview,
+                patchSetCountAfter: target.patchSetCountAfter,
+              },
+            ]
+          : [],
+      ),
+      abandonedTargets: rewindTargets.flatMap((target) =>
+        target.lineage.kind === "abandoned"
+          ? [
+              {
+                checkpointId: target.checkpointId,
+                turn: target.turn,
+                promptPreview: target.promptPreview,
+                patchSetCountAfter: target.patchSetCountAfter,
+                rewoundBy: target.lineage.rewoundBy,
+                rewoundAt: toIso(target.lineage.rewoundAt),
+              },
+            ]
+          : [],
+      ),
     },
     bootstrap: {
       managedToolMode:
@@ -693,6 +778,8 @@ function formatInspectText(report: InspectReport): string {
     `Integrity: status=${report.integrity.status} issues=${report.integrity.issueCount}`,
     `Replay: events=${report.replay.eventCount} first=${report.replay.firstEventAt ?? "n/a"} last=${report.replay.lastEventAt ?? "n/a"}`,
     `Replay: anchors=${report.replay.anchorCount} checkpoints=${report.replay.checkpointCount} tapePressure=${report.replay.tapePressure} entriesSinceAnchor=${report.replay.entriesSinceAnchor}`,
+    `Rewind: checkpoints=${report.rewind.checkpointCount} targets=${report.rewind.targetCount} active=${report.rewind.activeTargetCount} abandoned=${report.rewind.abandonedTargetCount}`,
+    `Rewind: available=${report.rewind.rewindAvailable ? "yes" : "no"} redo=${report.rewind.redoAvailable ? "yes" : "no"} redoDepth=${report.rewind.redoDepth} latestCheckpoint=${report.rewind.latestCheckpointId ?? "n/a"} status=${report.rewind.latestCheckpointStatus ?? "n/a"}`,
     `Bootstrap: routingEnabled=${renderNullableBoolean(report.bootstrap.routingEnabled)} scopes=${renderList(report.bootstrap.routingScopes)}`,
     `Task: phase=${report.task.phase ?? "n/a"} health=${report.task.health ?? "n/a"} items=${report.task.items} blockers=${report.task.blockers} updatedAt=${report.task.updatedAt ?? "n/a"}`,
     `Task: goal=${report.task.goal ?? "n/a"}`,
@@ -713,6 +800,24 @@ function formatInspectText(report: InspectReport): string {
   }
   if (report.hydration.latestEventId) {
     lines.push(`Hydration latestEventId: ${report.hydration.latestEventId}`);
+  }
+  if (report.rewind.latestRewind) {
+    lines.push(
+      `Latest rewind: checkpoint=${report.rewind.latestRewind.checkpointId} trigger=${report.rewind.latestRewind.trigger} mode=${report.rewind.latestRewind.mode} summary=${report.rewind.latestRewind.summary} at=${report.rewind.latestRewind.timestamp ?? "n/a"}`,
+    );
+  }
+  if (report.rewind.nextRedoCheckpointId) {
+    lines.push(`Next redo checkpoint: ${report.rewind.nextRedoCheckpointId}`);
+  }
+  for (const target of report.rewind.activeTargets.slice(0, 5)) {
+    lines.push(
+      `Rewind target: active turn=${target.turn} checkpoint=${target.checkpointId} patchSetsAfter=${target.patchSetCountAfter} prompt=${target.promptPreview || "n/a"}`,
+    );
+  }
+  for (const target of report.rewind.abandonedTargets.slice(0, 5)) {
+    lines.push(
+      `Rewind target: abandoned turn=${target.turn} checkpoint=${target.checkpointId} patchSetsAfter=${target.patchSetCountAfter} rewoundBy=${target.rewoundBy} rewoundAt=${target.rewoundAt ?? "n/a"} prompt=${target.promptPreview || "n/a"}`,
+    );
   }
   if (report.hydration.issues.length > 0) {
     for (const issue of report.hydration.issues.slice(0, 5)) {

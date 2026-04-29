@@ -14,6 +14,7 @@ export * from "./parallel/budget.js";
 export * from "./parallel/results.js";
 export * from "./schedule/projection.js";
 export * from "./schedule/service.js";
+export * from "./projection/session-rewind.js";
 export * from "./services/credential-vault.js";
 export * from "./services/session-wire.js";
 export * from "./skills/planning-normalization.js";

@@ -1,4 +1,10 @@
 import type { BrewvaEventCategory, TaskState } from "./contracts/index.js";
+import {
+  SESSION_REWIND_CHECKPOINT_RECORDED_EVENT_TYPE,
+  SESSION_REWIND_COMPLETED_EVENT_TYPE,
+  SESSION_REWIND_REDO_COMPLETED_EVENT_TYPE,
+  SESSION_REWIND_SUPERSEDED_EVENT_TYPE,
+} from "./events/event-types.js";
 import { TAPE_ANCHOR_EVENT_TYPE, TAPE_CHECKPOINT_EVENT_TYPE } from "./tape/events.js";
 import {
   REASONING_CHECKPOINT_EVENT_TYPE,
@@ -11,7 +17,11 @@ export function inferEventCategory(type: string): BrewvaEventCategory {
     type === TAPE_ANCHOR_EVENT_TYPE ||
     type === TAPE_CHECKPOINT_EVENT_TYPE ||
     type === REASONING_CHECKPOINT_EVENT_TYPE ||
-    type === REASONING_REVERT_EVENT_TYPE
+    type === REASONING_REVERT_EVENT_TYPE ||
+    type === SESSION_REWIND_CHECKPOINT_RECORDED_EVENT_TYPE ||
+    type === SESSION_REWIND_COMPLETED_EVENT_TYPE ||
+    type === SESSION_REWIND_REDO_COMPLETED_EVENT_TYPE ||
+    type === SESSION_REWIND_SUPERSEDED_EVENT_TYPE
   ) {
     return "state";
   }
@@ -26,7 +36,6 @@ export function inferEventCategory(type: string): BrewvaEventCategory {
     return "session";
   if (type.startsWith("turn_") || type.startsWith("channel_turn_")) return "turn";
   if (type.startsWith("iteration_")) return "state";
-  if (type.startsWith("correction_")) return "state";
   if (type.startsWith("task_stall_") || type.startsWith("task_stuck_")) return "state";
   if (type.includes("tool") || type.startsWith("patch_") || type === "rollback" || type === "redo")
     return "tool";

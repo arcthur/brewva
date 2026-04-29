@@ -6,6 +6,8 @@ export type RuntimeResult<T extends Record<string, unknown> = {}, E extends stri
   | RuntimeSuccess<T>
   | RuntimeFailure<E>;
 
+export type { JsonValue } from "../utils/json.js";
+
 export type DeepReadonly<T> = T extends (...args: never[]) => unknown
   ? T
   : T extends readonly (infer TValue)[]

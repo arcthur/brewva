@@ -1,7 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { BrewvaRuntime, VERIFICATION_STATE_RESET_EVENT_TYPE } from "@brewva/brewva-runtime";
+import {
+  BrewvaRuntime,
+  SESSION_REWIND_COMPLETED_EVENT_TYPE,
+  SESSION_REWIND_REDO_COMPLETED_EVENT_TYPE,
+  VERIFICATION_STATE_RESET_EVENT_TYPE,
+} from "@brewva/brewva-runtime";
+import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import {
   GAP_REMEDIATION_CONFIG_PATH,
   createGapRemediationConfig as createConfig,
@@ -32,6 +38,13 @@ function removePatchSnapshot(input: {
     throw new Error(`Missing ${input.snapshotKey} for ${input.path}`);
   }
   rmSync(join(snapshotDir, snapshotFile), { force: true });
+}
+
+function expectRecord(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Expected an object payload");
+  }
+  return value as Record<string, unknown>;
 }
 
 describe("Gap remediation: rollback safety net", () => {
@@ -83,19 +96,19 @@ describe("Gap remediation: rollback safety net", () => {
     );
   });
 
-  test("correction checkpoints undo and redo the full turn patch window", async () => {
-    const workspace = createWorkspace("correction-undo-redo");
+  test("session rewind checkpoints undo and redo the full turn patch window", async () => {
+    const workspace = createWorkspace("session-rewind-undo-redo");
     writeConfig(workspace, createConfig({}));
     mkdirSync(join(workspace, "src"), { recursive: true });
 
-    const sessionId = "correction-undo-redo-1";
-    const filePath = join(workspace, "src/correction.ts");
+    const sessionId = "session-rewind-undo-redo-1";
+    const filePath = join(workspace, "src/session-rewind.ts");
     writeFileSync(filePath, "export const value = 1;\n", "utf8");
 
     const runtime = new BrewvaRuntime({ cwd: workspace, configPath: GAP_REMEDIATION_CONFIG_PATH });
     runtime.maintain.context.onTurnStart(sessionId, 1);
 
-    const checkpoint = runtime.authority.correction.recordCheckpoint(sessionId, {
+    const checkpoint = runtime.authority.session.recordRewindCheckpoint(sessionId, {
       leafEntryId: "leaf-before-turn",
       prompt: {
         text: "Change value to 2",
@@ -106,10 +119,10 @@ describe("Gap remediation: rollback safety net", () => {
 
     const started = runtime.authority.tools.start({
       sessionId,
-      toolCallId: "tool-correction",
+      toolCallId: "tool-session-rewind",
       toolName: "edit",
       args: {
-        file_path: "src/correction.ts",
+        file_path: "src/session-rewind.ts",
         old_string: "value = 1",
         new_string: "value = 2",
       },
@@ -119,10 +132,10 @@ describe("Gap remediation: rollback safety net", () => {
     writeFileSync(filePath, "export const value = 2;\n", "utf8");
     runtime.authority.tools.finish({
       sessionId,
-      toolCallId: "tool-correction",
+      toolCallId: "tool-session-rewind",
       toolName: "edit",
       args: {
-        file_path: "src/correction.ts",
+        file_path: "src/session-rewind.ts",
         old_string: "value = 1",
         new_string: "value = 2",
       },
@@ -131,48 +144,568 @@ describe("Gap remediation: rollback safety net", () => {
       verdict: "pass",
     });
 
-    const undo = runtime.authority.correction.undo(sessionId, {
-      redoLeafEntryId: "leaf-after-turn",
+    const undo = runtime.authority.session.rewind(sessionId, {
+      mode: "both",
+      summary: "carry",
+      returnLeafEntryId: "leaf-after-turn",
     });
     expect(undo.ok).toBe(true);
     if (!undo.ok) {
-      throw new Error(`Correction undo failed: ${undo.reason}`);
+      throw new Error(`Session undo failed: ${undo.reason}`);
     }
     expect(undo.restoredPrompt?.text).toBe("Change value to 2");
     expect(undo.patchSetIds).toHaveLength(1);
     const rollbackReceiptId = undo.rollbackResults[0]?.mutationReceiptId;
     if (!rollbackReceiptId) {
-      throw new Error("Correction undo did not link the rollback mutation receipt");
+      throw new Error("Session undo did not link the rollback mutation receipt");
+    }
+    if (!undo.reasoningRevert) {
+      throw new Error("Session undo did not record a reasoning revert");
     }
     expect(undo.reasoningRevert.linkedRollbackReceiptIds).toEqual([rollbackReceiptId]);
     expect(undo.reasoningRevert.linkedRollbackReceiptIds).not.toEqual(undo.patchSetIds);
     expect(readFileSync(filePath, "utf8")).toBe("export const value = 1;\n");
 
-    const undoneState = runtime.inspect.correction.getState(sessionId);
+    const undoneState = runtime.inspect.session.getRewindState(sessionId);
     expect(undoneState.redoAvailable).toBe(true);
     expect(undoneState.nextRedoable?.checkpointId).toBe(checkpoint.checkpointId);
-    expect(undoneState.nextRedoable?.redoLeafEntryId).toBe("leaf-after-turn");
+    expect(undoneState.nextRedoable?.returnLeafEntryId).toBe("leaf-after-turn");
 
-    const redo = runtime.authority.correction.redo(sessionId);
+    const redo = runtime.authority.session.redo(sessionId);
     expect(redo.ok).toBe(true);
     if (!redo.ok) {
-      throw new Error(`Correction redo failed: ${redo.reason}`);
+      throw new Error(`Session redo failed: ${redo.reason}`);
     }
     expect(redo.patchSetIds).toEqual(undo.patchSetIds);
     expect(readFileSync(filePath, "utf8")).toBe("export const value = 2;\n");
 
-    const redoneState = runtime.inspect.correction.getState(sessionId);
-    expect(redoneState.undoAvailable).toBe(true);
+    const redoneState = runtime.inspect.session.getRewindState(sessionId);
+    expect(redoneState.rewindAvailable).toBe(true);
     expect(redoneState.redoAvailable).toBe(false);
-    expect(redoneState.latestUndoable?.checkpointId).toBe(checkpoint.checkpointId);
+    expect(redoneState.latestRewindable?.checkpointId).toBe(checkpoint.checkpointId);
   });
 
-  test("correction undo compensates successful patch rollbacks when a later rollback fails", async () => {
-    const workspace = createWorkspace("correction-undo-compensation");
+  test("rewind refuses to mutate reasoning or workspace while the session is streaming", async () => {
+    const workspace = createWorkspace("rewind-streaming-guard");
     writeConfig(workspace, createConfig({}));
     mkdirSync(join(workspace, "src"), { recursive: true });
 
-    const sessionId = "correction-undo-compensation-1";
+    const sessionId = "rewind-streaming-guard-1";
+    const filePath = join(workspace, "src/streaming.ts");
+    writeFileSync(filePath, "export const value = 1;\n", "utf8");
+
+    const runtime = new BrewvaRuntime({ cwd: workspace, configPath: GAP_REMEDIATION_CONFIG_PATH });
+    runtime.maintain.context.onTurnStart(sessionId, 1);
+    runtime.authority.session.recordRewindCheckpoint(sessionId, {
+      prompt: { text: "Change value while streaming", parts: [] },
+    });
+    runtime.authority.tools.trackCallStart({
+      sessionId,
+      toolCallId: "tool-streaming-edit",
+      toolName: "edit",
+      args: { file_path: "src/streaming.ts" },
+    });
+    writeFileSync(filePath, "export const value = 2;\n", "utf8");
+    runtime.authority.tools.trackCallEnd({
+      sessionId,
+      toolCallId: "tool-streaming-edit",
+      toolName: "edit",
+      channelSuccess: true,
+    });
+
+    recordRuntimeEvent(runtime, {
+      sessionId,
+      turn: 1,
+      type: "tool_execution_start",
+      payload: {
+        toolCallId: "streaming-tool",
+        toolName: "read",
+      },
+    });
+
+    expect(runtime.inspect.lifecycle.getSnapshot(sessionId).execution.kind).toBe("tool_executing");
+
+    const rewind = runtime.authority.session.rewind(sessionId, {
+      mode: "both",
+      summary: "carry",
+    });
+
+    expect(rewind.ok).toBe(false);
+    if (rewind.ok) {
+      throw new Error("Streaming rewind unexpectedly succeeded");
+    }
+    expect(rewind.reason).toBe("streaming");
+    expect(readFileSync(filePath, "utf8")).toBe("export const value = 2;\n");
+    expect(runtime.inspect.session.getRewindState(sessionId).redoAvailable).toBe(false);
+  });
+
+  test("rewind enforces mode-specific governance before mutating workspace", async () => {
+    const workspace = createWorkspace("rewind-governance");
+    writeConfig(
+      workspace,
+      createConfig({
+        security: {
+          actionAdmissionOverrides: {
+            workspace_patch: "deny",
+          },
+        },
+      }),
+    );
+    mkdirSync(join(workspace, "src"), { recursive: true });
+
+    const runtime = new BrewvaRuntime({ cwd: workspace, configPath: GAP_REMEDIATION_CONFIG_PATH });
+
+    const bothSessionId = "rewind-governance-both";
+    const bothFilePath = join(workspace, "src/governance-both.ts");
+    writeFileSync(bothFilePath, "export const value = 1;\n", "utf8");
+    runtime.maintain.context.onTurnStart(bothSessionId, 1);
+    runtime.authority.session.recordRewindCheckpoint(bothSessionId, {
+      prompt: { text: "Change value with workspace gate", parts: [] },
+    });
+    runtime.authority.tools.trackCallStart({
+      sessionId: bothSessionId,
+      toolCallId: "tool-governance-both",
+      toolName: "edit",
+      args: { file_path: "src/governance-both.ts" },
+    });
+    writeFileSync(bothFilePath, "export const value = 2;\n", "utf8");
+    runtime.authority.tools.trackCallEnd({
+      sessionId: bothSessionId,
+      toolCallId: "tool-governance-both",
+      toolName: "edit",
+      channelSuccess: true,
+    });
+
+    const blocked = runtime.authority.session.rewind(bothSessionId, {
+      mode: "both",
+      summary: "carry",
+    });
+    expect(blocked.ok).toBe(false);
+    if (blocked.ok) {
+      throw new Error("Workspace-governed rewind unexpectedly succeeded");
+    }
+    expect(blocked.reason).toBe("policy_denied");
+    expect(readFileSync(bothFilePath, "utf8")).toBe("export const value = 2;\n");
+
+    const conversationSessionId = "rewind-governance-conversation";
+    const conversationFilePath = join(workspace, "src/governance-conversation.ts");
+    writeFileSync(conversationFilePath, "export const value = 1;\n", "utf8");
+    runtime.maintain.context.onTurnStart(conversationSessionId, 1);
+    runtime.authority.session.recordRewindCheckpoint(conversationSessionId, {
+      prompt: { text: "Change value with conversation gate", parts: [] },
+    });
+    runtime.authority.tools.trackCallStart({
+      sessionId: conversationSessionId,
+      toolCallId: "tool-governance-conversation",
+      toolName: "edit",
+      args: { file_path: "src/governance-conversation.ts" },
+    });
+    writeFileSync(conversationFilePath, "export const value = 2;\n", "utf8");
+    runtime.authority.tools.trackCallEnd({
+      sessionId: conversationSessionId,
+      toolCallId: "tool-governance-conversation",
+      toolName: "edit",
+      channelSuccess: true,
+    });
+
+    const allowed = runtime.authority.session.rewind(conversationSessionId, {
+      mode: "conversation",
+      summary: "carry",
+    });
+    expect(allowed.ok).toBe(true);
+    if (!allowed.ok) {
+      throw new Error(`Conversation-only rewind unexpectedly failed: ${allowed.reason}`);
+    }
+    expect(readFileSync(conversationFilePath, "utf8")).toBe("export const value = 2;\n");
+  });
+
+  test("rewind scopes rollback to the active reasoning lineage after a branch supersedes redo", async () => {
+    const workspace = createWorkspace("rewind-active-lineage-patch-scope");
+    writeConfig(workspace, createConfig({}));
+    mkdirSync(join(workspace, "src"), { recursive: true });
+
+    const sessionId = "rewind-active-lineage-patch-scope-1";
+    const filePath = join(workspace, "src/lineage.ts");
+    writeFileSync(filePath, "export const value = 1;\n", "utf8");
+
+    const runtime = new BrewvaRuntime({ cwd: workspace, configPath: GAP_REMEDIATION_CONFIG_PATH });
+    runtime.maintain.context.onTurnStart(sessionId, 1);
+    const firstCheckpoint = runtime.authority.session.recordRewindCheckpoint(sessionId, {
+      leafEntryId: "leaf-before-first",
+      prompt: { text: "Set value to 2", parts: [] },
+    });
+    runtime.authority.tools.trackCallStart({
+      sessionId,
+      toolCallId: "tool-lineage-first",
+      toolName: "edit",
+      args: { file_path: "src/lineage.ts" },
+    });
+    writeFileSync(filePath, "export const value = 2;\n", "utf8");
+    runtime.authority.tools.trackCallEnd({
+      sessionId,
+      toolCallId: "tool-lineage-first",
+      toolName: "edit",
+      channelSuccess: true,
+    });
+
+    runtime.maintain.context.onTurnStart(sessionId, 2);
+    runtime.authority.session.recordRewindCheckpoint(sessionId, {
+      leafEntryId: "leaf-before-second",
+      prompt: { text: "Set value to 3", parts: [] },
+    });
+    runtime.authority.tools.trackCallStart({
+      sessionId,
+      toolCallId: "tool-lineage-second",
+      toolName: "edit",
+      args: { file_path: "src/lineage.ts" },
+    });
+    writeFileSync(filePath, "export const value = 3;\n", "utf8");
+    runtime.authority.tools.trackCallEnd({
+      sessionId,
+      toolCallId: "tool-lineage-second",
+      toolName: "edit",
+      channelSuccess: true,
+    });
+
+    const firstRewind = runtime.authority.session.rewind(sessionId, {
+      checkpointId: firstCheckpoint.checkpointId,
+      mode: "both",
+      summary: "none",
+      returnLeafEntryId: "leaf-after-first-rewind",
+    });
+    expect(firstRewind.ok).toBe(true);
+    if (!firstRewind.ok) {
+      throw new Error(`First lineage rewind failed: ${firstRewind.reason}`);
+    }
+    expect(firstRewind.patchSetIds).toHaveLength(2);
+    expect(readFileSync(filePath, "utf8")).toBe("export const value = 1;\n");
+
+    runtime.maintain.context.onTurnStart(sessionId, 3);
+    runtime.authority.session.recordRewindCheckpoint(sessionId, {
+      leafEntryId: "leaf-before-third",
+      prompt: { text: "Set value to 4", parts: [] },
+    });
+    runtime.authority.tools.trackCallStart({
+      sessionId,
+      toolCallId: "tool-lineage-third",
+      toolName: "edit",
+      args: { file_path: "src/lineage.ts" },
+    });
+    writeFileSync(filePath, "export const value = 4;\n", "utf8");
+    runtime.authority.tools.trackCallEnd({
+      sessionId,
+      toolCallId: "tool-lineage-third",
+      toolName: "edit",
+      channelSuccess: true,
+    });
+
+    const secondRewind = runtime.authority.session.rewind(sessionId, {
+      checkpointId: firstCheckpoint.checkpointId,
+      mode: "both",
+      summary: "none",
+      returnLeafEntryId: "leaf-after-second-rewind",
+    });
+
+    expect(secondRewind.ok).toBe(true);
+    if (!secondRewind.ok) {
+      throw new Error(`Second lineage rewind failed: ${secondRewind.reason}`);
+    }
+    expect(secondRewind.patchSetIds).toHaveLength(1);
+    expect(
+      secondRewind.rollbackResults.map((result) =>
+        "reason" in result ? result.reason : undefined,
+      ),
+    ).not.toContain("patchset_not_latest");
+    expect(readFileSync(filePath, "utf8")).toBe("export const value = 1;\n");
+  });
+
+  test("replayed rewind and redo events hydrate reasoning records from receipt ids", async () => {
+    const workspace = createWorkspace("rewind-replay-reasoning-payload");
+    writeConfig(workspace, createConfig({}));
+    mkdirSync(join(workspace, "src"), { recursive: true });
+
+    const sessionId = "rewind-replay-reasoning-payload-1";
+    const filePath = join(workspace, "src/replay.ts");
+    writeFileSync(filePath, "export const value = 1;\n", "utf8");
+
+    const runtime = new BrewvaRuntime({ cwd: workspace, configPath: GAP_REMEDIATION_CONFIG_PATH });
+    runtime.maintain.context.onTurnStart(sessionId, 1);
+    const checkpoint = runtime.authority.session.recordRewindCheckpoint(sessionId, {
+      leafEntryId: "leaf-before-replay",
+      prompt: { text: "Change value for replay", parts: [] },
+    });
+    runtime.authority.tools.trackCallStart({
+      sessionId,
+      toolCallId: "tool-replay",
+      toolName: "edit",
+      args: { file_path: "src/replay.ts" },
+    });
+    writeFileSync(filePath, "export const value = 2;\n", "utf8");
+    runtime.authority.tools.trackCallEnd({
+      sessionId,
+      toolCallId: "tool-replay",
+      toolName: "edit",
+      channelSuccess: true,
+    });
+
+    const rewind = runtime.authority.session.rewind(sessionId, {
+      checkpointId: checkpoint.checkpointId,
+      mode: "both",
+      summary: "carry",
+      returnLeafEntryId: "leaf-after-rewind",
+    });
+    expect(rewind.ok).toBe(true);
+    if (!rewind.ok || !rewind.reasoningRevert) {
+      throw new Error("Expected rewind to record a reasoning revert");
+    }
+    const rewindEvent = runtime.inspect.events.query(sessionId, {
+      type: SESSION_REWIND_COMPLETED_EVENT_TYPE,
+      last: 1,
+    })[0];
+    const rewindPayload = expectRecord(rewindEvent?.payload);
+    expect(rewindPayload.reasoningRevert).toBeUndefined();
+    expect(rewindPayload.reasoningRevertId).toBe(rewind.reasoningRevert.revertId);
+    expect(rewindPayload.reasoningRevertEventId).toBe(rewind.reasoningRevert.eventId);
+
+    const reloadedAfterRewind = new BrewvaRuntime({
+      cwd: workspace,
+      configPath: GAP_REMEDIATION_CONFIG_PATH,
+    });
+    expect(
+      reloadedAfterRewind.inspect.session.getRewindState(sessionId).latestRewind?.reasoningRevert
+        ?.revertId,
+    ).toBe(rewind.reasoningRevert.revertId);
+
+    const redo = runtime.authority.session.redo(sessionId, {
+      returnLeafEntryId: "leaf-after-redo",
+    });
+    expect(redo.ok).toBe(true);
+    if (!redo.ok || !redo.reasoningCheckpoint) {
+      throw new Error("Expected redo to record a reasoning checkpoint");
+    }
+    const redoEvent = runtime.inspect.events.query(sessionId, {
+      type: SESSION_REWIND_REDO_COMPLETED_EVENT_TYPE,
+      last: 1,
+    })[0];
+    const redoPayload = expectRecord(redoEvent?.payload);
+    expect(redoPayload.reasoningCheckpoint).toBeUndefined();
+    expect(redoPayload.reasoningCheckpointId).toBe(redo.reasoningCheckpoint.checkpointId);
+    expect(redoPayload.reasoningCheckpointEventId).toBe(redo.reasoningCheckpoint.eventId);
+
+    const reloadedAfterRedo = new BrewvaRuntime({
+      cwd: workspace,
+      configPath: GAP_REMEDIATION_CONFIG_PATH,
+    });
+    const replayedCheckpoint = reloadedAfterRedo.inspect.session
+      .getRewindState(sessionId)
+      .checkpoints.find((entry) => entry.checkpointId === checkpoint.checkpointId);
+    expect(replayedCheckpoint?.patchSetIds).toEqual(rewind.patchSetIds);
+    expect(replayedCheckpoint?.status).toBe("redone");
+  });
+
+  test("code-mode rewind rolls back patch sets without changing reasoning lineage", async () => {
+    const workspace = createWorkspace("rewind-code-mode");
+    writeConfig(workspace, createConfig({}));
+    mkdirSync(join(workspace, "src"), { recursive: true });
+
+    const sessionId = "rewind-code-mode-1";
+    const filePath = join(workspace, "src/code-mode.ts");
+    writeFileSync(filePath, "export const value = 1;\n", "utf8");
+
+    const runtime = new BrewvaRuntime({ cwd: workspace, configPath: GAP_REMEDIATION_CONFIG_PATH });
+    runtime.maintain.context.onTurnStart(sessionId, 1);
+
+    const checkpoint = runtime.authority.session.recordRewindCheckpoint(sessionId, {
+      leafEntryId: "leaf-code-before",
+      prompt: {
+        text: "Change value to 2",
+        parts: [],
+      },
+    });
+    const reasoningBefore = runtime.inspect.reasoning.getActiveState(sessionId);
+
+    runtime.authority.tools.trackCallStart({
+      sessionId,
+      toolCallId: "tool-code-mode",
+      toolName: "edit",
+      args: { file_path: "src/code-mode.ts" },
+    });
+    writeFileSync(filePath, "export const value = 2;\n", "utf8");
+    runtime.authority.tools.trackCallEnd({
+      sessionId,
+      toolCallId: "tool-code-mode",
+      toolName: "edit",
+      channelSuccess: true,
+    });
+
+    const rewind = runtime.authority.session.rewind(sessionId, {
+      checkpointId: checkpoint.checkpointId,
+      mode: "code",
+      summary: "none",
+      returnLeafEntryId: "leaf-code-after",
+    });
+    expect(rewind.ok).toBe(true);
+    if (!rewind.ok) {
+      throw new Error(`Code-mode rewind failed: ${rewind.reason}`);
+    }
+    expect(rewind.reasoningRevert).toBeUndefined();
+    expect(rewind.divergenceNote).toMatchObject({
+      kind: "conversation_ahead",
+      patchSetCount: 1,
+    });
+    expect(readFileSync(filePath, "utf8")).toBe("export const value = 1;\n");
+
+    const reasoningAfter = runtime.inspect.reasoning.getActiveState(sessionId);
+    expect(reasoningAfter.activeCheckpointId).toBe(reasoningBefore.activeCheckpointId);
+    expect(reasoningAfter.latestRevert?.eventId).toBe(reasoningBefore.latestRevert?.eventId);
+
+    const rewindState = runtime.inspect.session.getRewindState(sessionId);
+    expect(rewindState.latestRewind).toMatchObject({
+      checkpointId: checkpoint.checkpointId,
+      mode: "code",
+      summary: "none",
+      divergenceNote: {
+        kind: "conversation_ahead",
+      },
+    });
+
+    const redo = runtime.authority.session.redo(sessionId);
+    expect(redo.ok).toBe(true);
+    if (!redo.ok) {
+      throw new Error(`Code-mode redo failed: ${redo.reason}`);
+    }
+    expect(redo.reasoningCheckpoint).toBeUndefined();
+    expect(readFileSync(filePath, "utf8")).toBe("export const value = 2;\n");
+  });
+
+  test("default undo skips checkpoints already sitting in the redo stack", async () => {
+    const workspace = createWorkspace("rewind-skip-undone-checkpoint");
+    writeConfig(workspace, createConfig({}));
+    mkdirSync(join(workspace, "src"), { recursive: true });
+
+    const sessionId = "rewind-skip-undone-checkpoint-1";
+    const filePath = join(workspace, "src/skip.ts");
+    writeFileSync(filePath, "export const value = 1;\n", "utf8");
+
+    const runtime = new BrewvaRuntime({ cwd: workspace, configPath: GAP_REMEDIATION_CONFIG_PATH });
+    runtime.maintain.context.onTurnStart(sessionId, 1);
+    const firstCheckpoint = runtime.authority.session.recordRewindCheckpoint(sessionId, {
+      leafEntryId: "leaf-1",
+      prompt: { text: "Set value to 2", parts: [] },
+    });
+    runtime.authority.tools.trackCallStart({
+      sessionId,
+      toolCallId: "tool-skip-1",
+      toolName: "edit",
+      args: { file_path: "src/skip.ts" },
+    });
+    writeFileSync(filePath, "export const value = 2;\n", "utf8");
+    runtime.authority.tools.trackCallEnd({
+      sessionId,
+      toolCallId: "tool-skip-1",
+      toolName: "edit",
+      channelSuccess: true,
+    });
+
+    runtime.maintain.context.onTurnStart(sessionId, 2);
+    const secondCheckpoint = runtime.authority.session.recordRewindCheckpoint(sessionId, {
+      leafEntryId: "leaf-2",
+      prompt: { text: "Set value to 3", parts: [] },
+    });
+    runtime.authority.tools.trackCallStart({
+      sessionId,
+      toolCallId: "tool-skip-2",
+      toolName: "edit",
+      args: { file_path: "src/skip.ts" },
+    });
+    writeFileSync(filePath, "export const value = 3;\n", "utf8");
+    runtime.authority.tools.trackCallEnd({
+      sessionId,
+      toolCallId: "tool-skip-2",
+      toolName: "edit",
+      channelSuccess: true,
+    });
+
+    const firstUndo = runtime.authority.session.rewind(sessionId, {
+      mode: "both",
+      summary: "carry",
+    });
+    expect(firstUndo.ok).toBe(true);
+    if (!firstUndo.ok) {
+      throw new Error(`First undo failed: ${firstUndo.reason}`);
+    }
+    expect(firstUndo.checkpoint.checkpointId).toBe(secondCheckpoint.checkpointId);
+    expect(readFileSync(filePath, "utf8")).toBe("export const value = 2;\n");
+
+    const undoneState = runtime.inspect.session.getRewindState(sessionId);
+    expect(undoneState.latestRewindable?.checkpointId).toBe(firstCheckpoint.checkpointId);
+    expect(undoneState.nextRedoable?.checkpointId).toBe(secondCheckpoint.checkpointId);
+
+    const secondUndo = runtime.authority.session.rewind(sessionId, {
+      mode: "both",
+      summary: "carry",
+    });
+    expect(secondUndo.ok).toBe(true);
+    if (!secondUndo.ok) {
+      throw new Error(`Second undo failed: ${secondUndo.reason}`);
+    }
+    expect(secondUndo.checkpoint.checkpointId).toBe(firstCheckpoint.checkpointId);
+    expect(readFileSync(filePath, "utf8")).toBe("export const value = 1;\n");
+
+    const stackedState = runtime.inspect.session.getRewindState(sessionId);
+    expect(stackedState.redoStack.map((entry) => entry.checkpointId)).toEqual([
+      secondCheckpoint.checkpointId,
+      firstCheckpoint.checkpointId,
+    ]);
+    expect(stackedState.nextRedoable?.checkpointId).toBe(firstCheckpoint.checkpointId);
+  });
+
+  test("active checkpoints do not expose supersede metadata after redo history is cleared", async () => {
+    const workspace = createWorkspace("rewind-active-supersede-metadata");
+    writeConfig(workspace, createConfig({}));
+
+    const sessionId = "rewind-active-supersede-metadata-1";
+    const runtime = new BrewvaRuntime({ cwd: workspace, configPath: GAP_REMEDIATION_CONFIG_PATH });
+    runtime.maintain.context.onTurnStart(sessionId, 1);
+    const checkpoint = runtime.authority.session.recordRewindCheckpoint(sessionId, {
+      leafEntryId: "leaf-before",
+      prompt: { text: "Prepare a branch", parts: [] },
+    });
+
+    const rewind = runtime.authority.session.rewind(sessionId, {
+      checkpointId: checkpoint.checkpointId,
+      mode: "both",
+      summary: "carry",
+      returnLeafEntryId: "leaf-after",
+    });
+    expect(rewind.ok).toBe(true);
+    if (!rewind.ok) {
+      throw new Error(`Rewind failed: ${rewind.reason}`);
+    }
+
+    runtime.maintain.context.onTurnStart(sessionId, 2);
+    runtime.authority.session.recordRewindCheckpoint(sessionId, {
+      leafEntryId: "leaf-next",
+      prompt: { text: "Continue from the rewound branch", parts: [] },
+    });
+
+    const rewoundCheckpoint = runtime.inspect.session
+      .getRewindState(sessionId)
+      .checkpoints.find((entry) => entry.checkpointId === checkpoint.checkpointId);
+    expect(rewoundCheckpoint).toMatchObject({
+      checkpointId: checkpoint.checkpointId,
+      status: "active",
+    });
+    expect(rewoundCheckpoint?.supersededAt).toBeUndefined();
+    expect(rewoundCheckpoint?.supersededByEventId).toBeUndefined();
+  });
+
+  test("session undo compensates successful patch rollbacks when a later rollback fails", async () => {
+    const workspace = createWorkspace("session-rewind-undo-compensation");
+    writeConfig(workspace, createConfig({}));
+    mkdirSync(join(workspace, "src"), { recursive: true });
+
+    const sessionId = "session-rewind-undo-compensation-1";
     const firstPath = join(workspace, "src/first.ts");
     const secondPath = join(workspace, "src/second.ts");
     writeFileSync(firstPath, "export const first = 1;\n", "utf8");
@@ -180,7 +713,7 @@ describe("Gap remediation: rollback safety net", () => {
 
     const runtime = new BrewvaRuntime({ cwd: workspace, configPath: GAP_REMEDIATION_CONFIG_PATH });
     runtime.maintain.context.onTurnStart(sessionId, 1);
-    runtime.authority.correction.recordCheckpoint(sessionId, {
+    runtime.authority.session.recordRewindCheckpoint(sessionId, {
       prompt: {
         text: "Change two files",
         parts: [],
@@ -222,10 +755,13 @@ describe("Gap remediation: rollback safety net", () => {
       snapshotKey: "beforeSnapshotFile",
     });
 
-    const undo = runtime.authority.correction.undo(sessionId);
+    const undo = runtime.authority.session.rewind(sessionId, {
+      mode: "both",
+      summary: "carry",
+    });
     expect(undo.ok).toBe(false);
     if (undo.ok) {
-      throw new Error("Correction undo unexpectedly succeeded");
+      throw new Error("Session undo unexpectedly succeeded");
     }
     expect(undo.reason).toBe("rollback_failed");
     expect(undo.rollbackResults).toHaveLength(2);
@@ -234,17 +770,17 @@ describe("Gap remediation: rollback safety net", () => {
     expect(readFileSync(firstPath, "utf8")).toBe("export const first = 2;\n");
     expect(readFileSync(secondPath, "utf8")).toBe("export const second = 2;\n");
 
-    const state = runtime.inspect.correction.getState(sessionId);
-    expect(state.undoAvailable).toBe(true);
+    const state = runtime.inspect.session.getRewindState(sessionId);
+    expect(state.rewindAvailable).toBe(true);
     expect(state.redoAvailable).toBe(false);
   });
 
-  test("correction redo compensates successful patch replays when a later redo fails", async () => {
-    const workspace = createWorkspace("correction-redo-compensation");
+  test("session redo compensates successful patch replays when a later redo fails", async () => {
+    const workspace = createWorkspace("session-rewind-redo-compensation");
     writeConfig(workspace, createConfig({}));
     mkdirSync(join(workspace, "src"), { recursive: true });
 
-    const sessionId = "correction-redo-compensation-1";
+    const sessionId = "session-rewind-redo-compensation-1";
     const firstPath = join(workspace, "src/first.ts");
     const secondPath = join(workspace, "src/second.ts");
     writeFileSync(firstPath, "export const first = 1;\n", "utf8");
@@ -252,7 +788,7 @@ describe("Gap remediation: rollback safety net", () => {
 
     const runtime = new BrewvaRuntime({ cwd: workspace, configPath: GAP_REMEDIATION_CONFIG_PATH });
     runtime.maintain.context.onTurnStart(sessionId, 1);
-    runtime.authority.correction.recordCheckpoint(sessionId, {
+    runtime.authority.session.recordRewindCheckpoint(sessionId, {
       prompt: {
         text: "Change two files",
         parts: [],
@@ -287,7 +823,10 @@ describe("Gap remediation: rollback safety net", () => {
       channelSuccess: true,
     });
 
-    const undo = runtime.authority.correction.undo(sessionId);
+    const undo = runtime.authority.session.rewind(sessionId, {
+      mode: "both",
+      summary: "carry",
+    });
     expect(undo.ok).toBe(true);
     expect(readFileSync(firstPath, "utf8")).toBe("export const first = 1;\n");
     expect(readFileSync(secondPath, "utf8")).toBe("export const second = 1;\n");
@@ -299,10 +838,10 @@ describe("Gap remediation: rollback safety net", () => {
       snapshotKey: "afterSnapshotFile",
     });
 
-    const redo = runtime.authority.correction.redo(sessionId);
+    const redo = runtime.authority.session.redo(sessionId);
     expect(redo.ok).toBe(false);
     if (redo.ok) {
-      throw new Error("Correction redo unexpectedly succeeded");
+      throw new Error("Session redo unexpectedly succeeded");
     }
     expect(redo.reason).toBe("redo_failed");
     expect(redo.redoResults).toHaveLength(2);
@@ -311,8 +850,8 @@ describe("Gap remediation: rollback safety net", () => {
     expect(readFileSync(firstPath, "utf8")).toBe("export const first = 1;\n");
     expect(readFileSync(secondPath, "utf8")).toBe("export const second = 1;\n");
 
-    const state = runtime.inspect.correction.getState(sessionId);
-    expect(state.undoAvailable).toBe(false);
+    const state = runtime.inspect.session.getRewindState(sessionId);
+    expect(state.rewindAvailable).toBe(false);
     expect(state.redoAvailable).toBe(true);
   });
 

@@ -178,6 +178,7 @@ None currently.
 - `docs/research/promoted/rfc-repository-fitness-plane-and-runtime-boundary.md`
 - `docs/research/promoted/rfc-repository-native-compound-knowledge-and-review-ensemble.md`
 - `docs/research/promoted/rfc-schedule-intent-hardening-and-control-plane-ergonomics.md`
+- `docs/research/promoted/rfc-session-rewind-as-conversation-fork-primitive.md`
 - `docs/research/promoted/rfc-skill-compounding-loop-completeness-and-parameterization-model.md`
 - `docs/research/promoted/rfc-skill-contract-precision-and-advisory-artifact-boundaries.md`
 - `docs/research/promoted/rfc-skill-contract-layering-project-context-and-explicit-activation.md`

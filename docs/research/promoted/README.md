@@ -74,6 +74,7 @@ refresh the pointer summary and `Last reviewed` metadata here.
 - [`rfc-preparse-normalization-model-capability-and-live-audit-split.md`](./rfc-preparse-normalization-model-capability-and-live-audit-split.md)
 - [`rfc-runtime-owned-session-lifecycle-aggregate-and-authority-gate.md`](./rfc-runtime-owned-session-lifecycle-aggregate-and-authority-gate.md)
 - [`rfc-schedule-intent-hardening-and-control-plane-ergonomics.md`](./rfc-schedule-intent-hardening-and-control-plane-ergonomics.md)
+- [`rfc-session-rewind-as-conversation-fork-primitive.md`](./rfc-session-rewind-as-conversation-fork-primitive.md)
 - [`rfc-token-cache-fidelity-and-provider-prefix-stability.md`](./rfc-token-cache-fidelity-and-provider-prefix-stability.md)
 
 ## Reading Rule

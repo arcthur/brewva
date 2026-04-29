@@ -790,22 +790,22 @@ export class CliShellRuntime {
       },
       {
         type: "status.set",
-        key: "correction",
-        text: this.buildCorrectionStatusText(),
+        key: "rewind",
+        text: this.buildRewindStatusText(),
       },
     ];
   }
 
-  private buildCorrectionStatusText(): string | undefined {
-    const state = this.#sessionPort.getCorrectionState();
-    if (state.undoAvailable && state.redoAvailable) {
-      return "undo: /undo · redo: /redo";
+  private buildRewindStatusText(): string | undefined {
+    const state = this.#sessionPort.getRewindState();
+    if (state.rewindAvailable && state.redoAvailable) {
+      return "undo: /undo · rewind: /rewind · redo: /redo";
     }
     if (state.redoAvailable) {
       return "redo: /redo";
     }
-    if (state.undoAvailable) {
-      return "undo: /undo";
+    if (state.rewindAvailable) {
+      return "undo: /undo · rewind: /rewind";
     }
     return undefined;
   }
@@ -1077,11 +1077,14 @@ export class CliShellRuntime {
           this.ui.notify("Queued steer for the current turn.", "info");
         }
         return;
-      case "session.undoCorrection":
-        await this.#sessionWorkflow.undoLastCorrection();
+      case "session.undo":
+        await this.#sessionWorkflow.undoLastTurn();
         return;
-      case "session.redoCorrection":
-        await this.#sessionWorkflow.redoLastCorrection();
+      case "session.rewind":
+        await this.#sessionWorkflow.rewindSession(effect.argument);
+        return;
+      case "session.redo":
+        await this.#sessionWorkflow.redoLastTurn();
         return;
       case "model.open":
         await this.#modelSelectionFlow.openModelsDialog(

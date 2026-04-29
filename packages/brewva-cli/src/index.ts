@@ -129,29 +129,27 @@ function cliValueError(error: string): CliValueResult<never> {
   return { ok: false, error };
 }
 
-function resolveCorrectionSession(
+function resolveSessionRewindSession(
   runtime: BrewvaRuntime,
   operation: "undo" | "redo",
   preferredSessionId?: string,
 ): string | undefined {
   if (preferredSessionId) {
-    const state = runtime.inspect.correction.getState(preferredSessionId);
-    if (state.checkpoints.length > 0 || state.undoAvailable || state.redoAvailable) {
+    const state = runtime.inspect.session.getRewindState(preferredSessionId);
+    if (state.checkpoints.length > 0 || state.rewindAvailable || state.redoAvailable) {
       return preferredSessionId;
     }
     return undefined;
   }
   let selected: { sessionId: string; timestamp: number } | undefined;
   for (const sessionId of runtime.inspect.events.listSessionIds()) {
-    const state = runtime.inspect.correction.getState(sessionId);
-    const candidate = operation === "redo" ? state.nextRedoable : state.latestUndoable;
+    const state = runtime.inspect.session.getRewindState(sessionId);
+    const candidate = operation === "redo" ? state.nextRedoable : state.latestRewindable;
     if (!candidate) {
       continue;
     }
     const timestamp =
-      operation === "redo"
-        ? (candidate.undoneAt ?? candidate.timestamp)
-        : (candidate.redoneAt ?? candidate.timestamp);
+      operation === "redo" ? (candidate.undoneAt ?? candidate.timestamp) : candidate.timestamp;
     if (!selected || timestamp > selected.timestamp) {
       selected = { sessionId, timestamp };
     }
@@ -191,8 +189,8 @@ Options:
   --mode <text|json>    One-shot output mode
   --backend <kind>      Session backend: auto | embedded | gateway (default: auto)
   --json                Alias for --mode json
-  --undo                Undo the latest correction checkpoint in this session
-  --redo                Redo the latest undone correction checkpoint in this session
+  --undo                Undo the latest session rewind checkpoint in this session
+  --redo                Redo the latest undone session rewind checkpoint in this session
   --replay              Replay persisted runtime events
   --daemon              Run scheduler daemon (no interactive session)
   --channel <name>      Run channel host mode (currently: telegram)
@@ -903,26 +901,26 @@ async function run(): Promise<void> {
       configPath: parsed.configPath,
       governancePort: createTrustedLocalGovernancePort(CLI_TRUSTED_LOCAL_GOVERNANCE),
     });
-    const targetSessionId = resolveCorrectionSession(
+    const targetSessionId = resolveSessionRewindSession(
       runtime,
       parsed.redo ? "redo" : "undo",
       parsed.sessionId,
     );
     if (!targetSessionId) {
-      console.log(`No correction ${parsed.redo ? "redo" : "undo"} applied (no_checkpoint).`);
+      console.log(`No session ${parsed.redo ? "redo" : "undo"} applied (no_checkpoint).`);
       return;
     }
     const result = parsed.redo
-      ? runtime.authority.correction.redo(targetSessionId)
-      : runtime.authority.correction.undo(targetSessionId);
+      ? runtime.authority.session.redo(targetSessionId)
+      : runtime.authority.session.rewind(targetSessionId, { mode: "both", summary: "carry" });
     if (!result.ok) {
-      console.log(`No correction ${parsed.redo ? "redo" : "undo"} applied (${result.reason}).`);
+      console.log(`No session ${parsed.redo ? "redo" : "undo"} applied (${result.reason}).`);
     } else {
       const promptSuffix = result.restoredPrompt?.text
         ? ` Restored prompt: ${result.restoredPrompt.text.trim()}`
         : "";
       console.log(
-        `Correction ${parsed.redo ? "redo" : "undo"} applied in session ${targetSessionId} (${result.patchSetIds.length} patch set(s)).${promptSuffix}`,
+        `Session ${parsed.redo ? "redo" : "undo"} applied in session ${targetSessionId} (${result.patchSetIds.length} patch set(s)).${promptSuffix}`,
       );
     }
     return;

@@ -9,6 +9,7 @@ import type { ToolOutputDistillationEntry } from "./context/tool-output-distille
 import type {
   BrewvaConfig,
   SessionCostSummary,
+  SessionLifecycleSnapshot,
   ToolGovernanceDescriptor,
   VerificationLevel,
   VerificationReport,
@@ -30,7 +31,6 @@ import {
   CONTROL_PLANE_TOOLS,
 } from "./security/control-plane-tools.js";
 import { ContextService } from "./services/context.js";
-import { CorrectionService } from "./services/correction.js";
 import { CostService } from "./services/cost.js";
 import { createCredentialVaultServiceFromSecurityConfig } from "./services/credential-vault.js";
 import type { CredentialVaultService } from "./services/credential-vault.js";
@@ -47,6 +47,7 @@ import { ResourceLeaseService } from "./services/resource-lease.js";
 import { ReversibleMutationService } from "./services/reversible-mutation.js";
 import { ScheduleIntentService } from "./services/schedule-intent.js";
 import { SessionLifecycleService } from "./services/session-lifecycle.js";
+import { SessionRewindService } from "./services/session-rewind.js";
 import type { RuntimeSessionStateStore } from "./services/session-state.js";
 import { SessionWireService } from "./services/session-wire.js";
 import { SkillLifecycleService } from "./services/skill-lifecycle.js";
@@ -115,7 +116,7 @@ export interface RuntimeServiceDependencies {
 
 export interface RuntimeLazyServiceFactories {
   createCredentialVaultService(): CredentialVaultService;
-  createCorrectionService(): CorrectionService;
+  createSessionRewindService(): SessionRewindService;
   createFileChangeService(): FileChangeService;
   createMutationRollbackService(): MutationRollbackService;
   createParallelService(): ParallelService;
@@ -188,6 +189,7 @@ interface RuntimeLazyServiceAssemblyOptions {
   ledgerService: LedgerService;
   reversibleMutationService: ReversibleMutationService;
   resolveToolAuthority: (toolName: string, args?: Record<string, unknown>) => ResolvedToolAuthority;
+  getSessionLifecycleSnapshot(sessionId: string): SessionLifecycleSnapshot;
 }
 
 interface RuntimeProjectionSubscriberBootstrapOptions {
@@ -704,16 +706,18 @@ export function createRuntimeLazyServiceFactories(
     return reasoningService;
   };
 
-  let correctionService: CorrectionService | undefined;
-  const getCorrectionService = (): CorrectionService => {
-    correctionService ??= new CorrectionService({
+  let sessionRewindService: SessionRewindService | undefined;
+  const getSessionRewindService = (): SessionRewindService => {
+    sessionRewindService ??= new SessionRewindService({
       eventStore: options.coreDependencies.eventStore,
       reasoningService: getReasoningService(),
       fileChangeService: getFileChangeService(),
       getCurrentTurn: (sessionId) => options.kernel.getCurrentTurn(sessionId),
       recordEvent: (input) => options.kernel.recordEvent(input),
+      getSessionLifecycleSnapshot: (sessionId) => options.getSessionLifecycleSnapshot(sessionId),
+      resolveToolAuthority: (toolName, args) => options.resolveToolAuthority(toolName, args),
     });
-    return correctionService;
+    return sessionRewindService;
   };
 
   let parallelService: ParallelService | undefined;
@@ -813,7 +817,7 @@ export function createRuntimeLazyServiceFactories(
         options.workspaceRoot,
         options.config.security,
       ),
-    createCorrectionService: () => getCorrectionService(),
+    createSessionRewindService: () => getSessionRewindService(),
     createFileChangeService: () => getFileChangeService(),
     createMutationRollbackService: () => getMutationRollbackService(),
     createParallelService: () => getParallelService(),

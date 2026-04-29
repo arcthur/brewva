@@ -1,4 +1,9 @@
 import { recordSessionShutdownIfMissing } from "@brewva/brewva-gateway";
+import type {
+  SessionRewindMode,
+  SessionRewindSummary,
+  SessionRewindTargetView,
+} from "@brewva/brewva-runtime";
 import type { BrewvaPromptContentPart } from "@brewva/brewva-substrate";
 import {
   buildCliShellPromptContentParts,
@@ -21,9 +26,9 @@ interface PromptMemoryDelegate {
 }
 
 interface TranscriptProjectorDelegate {
-  clearCorrectionMarker(sessionId: string): void;
+  clearRewindMarker(sessionId: string): void;
   appendMessage(message: ReturnType<typeof buildTextTranscriptMessage>): void;
-  setCorrectionMarker(text: string): void;
+  setRewindMarker(text: string): void;
   refreshFromSession(): void;
 }
 
@@ -33,6 +38,12 @@ interface ModelSelectionDelegate {
 
 interface ProviderAuthDelegate {
   openConnectDialog(query?: string): Promise<void>;
+}
+
+interface ParsedRewindCommand {
+  checkpointOrdinal?: number;
+  mode?: SessionRewindMode;
+  summary?: SessionRewindSummary;
 }
 
 export interface ShellSessionWorkflowContext {
@@ -70,6 +81,55 @@ export class ShellSessionWorkflow {
   #preserveComposerAfterShellCommand = false;
 
   constructor(private readonly context: ShellSessionWorkflowContext) {}
+
+  #listRewindChoices(): SessionRewindTargetView[] {
+    return this.context
+      .getSessionPort()
+      .listRewindTargets()
+      .filter((target) => target.lineage.kind === "active")
+      .toSorted((left, right) => right.timestamp - left.timestamp);
+  }
+
+  #formatRewindChoice(target: SessionRewindTargetView, index: number): string {
+    const preview = target.promptPreview.trim() || "(prompt unavailable)";
+    const fileSummary = `${target.fileSummary.added}+ ${target.fileSummary.modified}~ ${target.fileSummary.deleted}-`;
+    return `${index + 1}. Turn ${target.turn} — ${preview} · ${target.patchSetCountAfter} patch set(s) · ${fileSummary}`;
+  }
+
+  #parseRewindCommand(argument: string | undefined): ParsedRewindCommand | undefined {
+    const tokens =
+      argument
+        ?.trim()
+        .split(/\s+/)
+        .filter((token) => token.length > 0) ?? [];
+    let checkpointOrdinal: number | undefined;
+    let mode: SessionRewindMode | undefined;
+    let summary: SessionRewindSummary | undefined;
+    for (const token of tokens) {
+      if (token === "conversation" || token === "code" || token === "both") {
+        mode = token;
+        continue;
+      }
+      if (token === "carry" || token === "--carry") {
+        summary = "carry";
+        continue;
+      }
+      if (/^-\d+$/.test(token)) {
+        const parsed = Number.parseInt(token.slice(1), 10);
+        if (!Number.isInteger(parsed) || parsed < 1) {
+          return undefined;
+        }
+        checkpointOrdinal = parsed;
+        continue;
+      }
+      return undefined;
+    }
+    return {
+      ...(checkpointOrdinal !== undefined ? { checkpointOrdinal } : {}),
+      ...(mode ? { mode } : {}),
+      ...(summary ? { summary } : {}),
+    };
+  }
 
   getDraftsBySessionId(): ReadonlyMap<
     string,
@@ -128,17 +188,17 @@ export class ShellSessionWorkflow {
       return;
     }
 
-    type CorrectionPromptParts = NonNullable<
-      Parameters<SessionViewPort["recordCorrectionCheckpoint"]>[0]["prompt"]
+    type RewindPromptParts = NonNullable<
+      Parameters<SessionViewPort["recordRewindCheckpoint"]>[0]["prompt"]
     >["parts"];
-    this.context.getSessionPort().recordCorrectionCheckpoint({
+    this.context.getSessionPort().recordRewindCheckpoint({
       turnId: `interactive:${Date.now()}:${++this.#interactiveTurnSequence}`,
       prompt: {
         text: promptText,
-        parts: structuredClone(promptParts) as unknown as CorrectionPromptParts,
+        parts: structuredClone(promptParts) as unknown as RewindPromptParts,
       },
     });
-    this.context.transcriptProjector.clearCorrectionMarker(
+    this.context.transcriptProjector.clearRewindMarker(
       this.context.getSessionPort().getSessionId(),
     );
     this.context.commit(this.context.buildSessionStatusActions(), { debounceStatus: false });
@@ -170,18 +230,18 @@ export class ShellSessionWorkflow {
     ]);
   }
 
-  async undoLastCorrection(): Promise<void> {
+  async undoLastTurn(): Promise<void> {
     if (this.context.getBundle().session.isStreaming) {
       await this.context.getSessionPort().abort();
       await this.context.getSessionPort().waitForIdle();
     }
-    const result = this.context.getSessionPort().undoCorrection();
+    const result = this.context.getSessionPort().rewindSession();
     if (!result.ok) {
       this.context.getUi().notify(`Undo unavailable (${result.reason}).`, "warning");
       return;
     }
-    this.context.transcriptProjector.setCorrectionMarker(
-      `Correction undo applied: reverted ${result.patchSetIds.length} patch set(s) and restored the submitted prompt. Use /redo to restore the undone turn.`,
+    this.context.transcriptProjector.setRewindMarker(
+      `Session undo applied: reverted ${result.patchSetIds.length} patch set(s) and restored the submitted prompt. Use /redo to restore the undone turn.`,
     );
     this.context.transcriptProjector.refreshFromSession();
     if (result.restoredPrompt) {
@@ -201,24 +261,104 @@ export class ShellSessionWorkflow {
     this.context
       .getUi()
       .notify(
-        `Undid ${result.patchSetIds.length} patch set(s); prompt restored for correction.`,
+        `Undid ${result.patchSetIds.length} patch set(s); prompt restored for session rewind.`,
         "info",
       );
     this.context.commit(this.context.buildSessionStatusActions(), { debounceStatus: false });
   }
 
-  async redoLastCorrection(): Promise<void> {
+  async rewindSession(argument?: string): Promise<void> {
+    if (this.context.getBundle().session.isStreaming) {
+      await this.context.getSessionPort().abort();
+      await this.context.getSessionPort().waitForIdle();
+    }
+
+    const targets = this.#listRewindChoices();
+    if (targets.length === 0) {
+      this.context.getUi().notify("No rewind target is available on the active branch.", "warning");
+      return;
+    }
+
+    const parsedCommand = this.#parseRewindCommand(argument);
+    if (argument?.trim() && !parsedCommand) {
+      this.context
+        .getUi()
+        .notify("Usage: /rewind [conversation|code|both] [carry] [-<index>]", "warning");
+      return;
+    }
+    let target: SessionRewindTargetView | undefined;
+    if (parsedCommand?.checkpointOrdinal !== undefined) {
+      if (parsedCommand.checkpointOrdinal > targets.length) {
+        this.context
+          .getUi()
+          .notify("Usage: /rewind [conversation|code|both] [carry] [-<index>]", "warning");
+        return;
+      }
+      target = targets[parsedCommand.checkpointOrdinal - 1];
+    } else {
+      const options = targets.map((candidate, index) => this.#formatRewindChoice(candidate, index));
+      const selected = await this.context.getUi().select("Rewind conversation", options);
+      if (!selected) {
+        return;
+      }
+      const selectedIndex = options.indexOf(selected);
+      target = selectedIndex >= 0 ? targets[selectedIndex] : undefined;
+    }
+
+    if (!target) {
+      this.context.getUi().notify("Unable to resolve the selected rewind target.", "warning");
+      return;
+    }
+
+    const result = this.context.getSessionPort().rewindSession({
+      checkpointId: target.checkpointId,
+      mode: parsedCommand?.mode ?? "both",
+      summary: parsedCommand?.summary ?? "none",
+    });
+    if (!result.ok) {
+      this.context.getUi().notify(`Rewind unavailable (${result.reason}).`, "warning");
+      return;
+    }
+
+    this.context.transcriptProjector.setRewindMarker(
+      `Session rewind applied: rewound to turn ${result.checkpoint.turn} and reverted ${result.patchSetIds.length} patch set(s). Use /redo to restore the abandoned branch tip.`,
+    );
+    this.context.transcriptProjector.refreshFromSession();
+    if (result.restoredPrompt) {
+      this.context.commit(
+        {
+          type: "composer.setPromptState",
+          text: result.restoredPrompt.text,
+          cursor: result.restoredPrompt.text.length,
+          parts: cloneCliShellPromptParts(
+            result.restoredPrompt.parts as unknown as CliShellPromptPart[],
+          ),
+        },
+        { debounceStatus: false },
+      );
+      this.#preserveComposerAfterShellCommand = true;
+    }
+    this.context
+      .getUi()
+      .notify(
+        `Rewound to turn ${result.checkpoint.turn}; reverted ${result.patchSetIds.length} patch set(s).`,
+        "info",
+      );
+    this.context.commit(this.context.buildSessionStatusActions(), { debounceStatus: false });
+  }
+
+  async redoLastTurn(): Promise<void> {
     if (this.context.getBundle().session.isStreaming) {
       this.context.getUi().notify("Cannot redo while agent is running.", "warning");
       return;
     }
-    const result = this.context.getSessionPort().redoCorrection();
+    const result = this.context.getSessionPort().redoSession();
     if (!result.ok) {
       this.context.getUi().notify(`Redo unavailable (${result.reason}).`, "warning");
       return;
     }
-    this.context.transcriptProjector.setCorrectionMarker(
-      `Correction redo applied: restored the undone turn and reapplied ${result.patchSetIds.length} patch set(s).`,
+    this.context.transcriptProjector.setRewindMarker(
+      `Session redo applied: restored the undone turn and reapplied ${result.patchSetIds.length} patch set(s).`,
     );
     this.context.transcriptProjector.refreshFromSession();
     this.context.commit(

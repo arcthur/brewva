@@ -1,9 +1,12 @@
 import {
   REASONING_REVERT_EVENT_TYPE,
+  SESSION_REWIND_COMPLETED_EVENT_TYPE,
+  buildReasoningRevertSummaryDetails,
   type BrewvaRuntime,
   type ReasoningRevertRecord,
 } from "@brewva/brewva-runtime";
 import { normalizeRuntimeError } from "./error-classification.js";
+import { readSessionRewindCompletedPayload } from "./rewind-event-payloads.js";
 import { recordSessionTurnTransition } from "./turn-transition.js";
 
 export const REASONING_REVERT_RESUME_PROMPT =
@@ -21,12 +24,14 @@ export interface PreparedSessionReasoningRevertResume {
 interface ReasoningRevertRecoverySessionLike {
   sessionManager?: {
     getSessionId?(): string;
+    branch?(targetLeafEntryId: string): void;
     branchWithSummary?(
       targetLeafEntryId: string | null,
       summaryText: string,
       summaryDetails: Record<string, unknown>,
       replaceCurrent: boolean,
     ): void;
+    resetLeaf?(): void;
     buildSessionContext?(): {
       messages: unknown;
     };
@@ -37,12 +42,14 @@ interface ReasoningRevertRecoverySessionLike {
 
 interface RequiredReasoningRevertRecoverySessionManager {
   getSessionId(): string;
+  branch?(targetLeafEntryId: string): void;
   branchWithSummary(
     targetLeafEntryId: string | null,
     summaryText: string,
     summaryDetails: Record<string, unknown>,
     replaceCurrent: boolean,
   ): void;
+  resetLeaf?(): void;
   buildSessionContext(): {
     messages: unknown;
   };
@@ -73,15 +80,30 @@ function applyHostedReasoningBranchReset(
     targetLeafEntryId: string | null;
     summaryText: string;
     summaryDetails: Record<string, unknown>;
+    summaryMode: "carry" | "none";
   },
 ): void {
   const sessionManager = requireReasoningRecoverySessionManager(session);
-  sessionManager.branchWithSummary(
-    input.targetLeafEntryId,
-    input.summaryText,
-    input.summaryDetails,
-    true,
-  );
+  if (input.summaryMode === "carry") {
+    sessionManager.branchWithSummary(
+      input.targetLeafEntryId,
+      input.summaryText,
+      input.summaryDetails,
+      true,
+    );
+  } else if (input.targetLeafEntryId) {
+    if (typeof sessionManager.branch !== "function") {
+      throw new Error("hosted reasoning revert requires sessionManager.branch() for clean rewind");
+    }
+    sessionManager.branch(input.targetLeafEntryId);
+  } else {
+    if (typeof sessionManager.resetLeaf !== "function") {
+      throw new Error(
+        "hosted reasoning revert requires sessionManager.resetLeaf() for root rewind",
+      );
+    }
+    sessionManager.resetLeaf();
+  }
   const sessionContext = sessionManager.buildSessionContext();
   if (typeof session.replaceMessages !== "function") {
     throw new Error("hosted reasoning revert requires session.replaceMessages()");
@@ -89,14 +111,16 @@ function applyHostedReasoningBranchReset(
   session.replaceMessages(sessionContext.messages);
 }
 
-function buildReasoningSummaryDetails(revert: ReasoningRevertRecord): Record<string, unknown> {
-  return {
-    schema: revert.continuityPacket.schema,
-    revertId: revert.revertId,
-    toCheckpointId: revert.toCheckpointId,
-    trigger: revert.trigger,
-    linkedRollbackReceiptIds: revert.linkedRollbackReceiptIds,
-  };
+function resolveHostedRewindSummaryMode(
+  runtime: BrewvaRuntime,
+  sessionId: string,
+  revert: ReasoningRevertRecord,
+): "carry" | "none" {
+  const matchingRewind = runtime.inspect.events
+    .list(sessionId, { type: SESSION_REWIND_COMPLETED_EVENT_TYPE })
+    .map((event) => ({ event, payload: readSessionRewindCompletedPayload(event.payload) }))
+    .find((candidate) => candidate.payload?.revertEventId === revert.eventId);
+  return matchingRewind?.payload?.summary === "none" ? "none" : "carry";
 }
 
 function readReasoningRevertResumeStatus(
@@ -191,10 +215,12 @@ export async function applySessionReasoningRevertResume(
 
   try {
     await waitForSessionIdle(session);
+    const summaryMode = resolveHostedRewindSummaryMode(input.runtime, sessionId, revert);
     applyHostedReasoningBranchReset(session, {
       targetLeafEntryId: revert.targetLeafEntryId,
       summaryText: revert.continuityPacket.text,
-      summaryDetails: buildReasoningSummaryDetails(revert),
+      summaryDetails: buildReasoningRevertSummaryDetails(revert),
+      summaryMode,
     });
   } catch (error) {
     recordReasoningRevertResumeTransition(input.runtime, sessionId, revert, {

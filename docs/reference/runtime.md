@@ -251,8 +251,30 @@ Verification semantics to preserve:
 
 ### `authority.session`
 
+- `recordRewindCheckpoint(sessionId, input?)`
+- `rewind(sessionId, { checkpointId?, mode, summary, summaryHint?, returnLeafEntryId? })`
+- `redo(sessionId, { checkpointId?, returnLeafEntryId? })`
 - `commitCompaction(sessionId, input)`
 - `applyMergedWorkerResults(sessionId, { toolName, toolCallId? })`
+
+Session rewind is now the public conversation-fork contract. `/undo` and
+`/rewind` are product entrances into the same runtime transaction: `/undo`
+targets the latest active checkpoint with `summary = "carry"` by default, while
+`/rewind` can target any active-lineage checkpoint and defaults to
+`summary = "none"`.
+
+The rewind modes are explicit:
+
+- `conversation`: fork the reasoning branch and leave receipt-tracked workspace
+  changes applied.
+- `code`: roll back receipt-tracked patch sets and leave the reasoning branch
+  in place.
+- `both`: fork reasoning and roll back the active-lineage patch window.
+
+Runtime authority enforces the same guardrails for CLI, SDK, and headless
+callers. Rewind and redo reject non-idle sessions before mutation. Governance is
+mode-aware: `conversation` uses the session/control mutation policy, while
+`code` and `both` additionally require workspace-write effects.
 
 `applyMergedWorkerResults(...)` does not accept an arbitrary merged patch report
 from the caller. The runtime recomputes merge state from the session's recorded
@@ -604,6 +626,8 @@ It is a replay inventory, not a registry of currently attached live sessions.
 
 ### `inspect.session`
 
+- `getRewindState(sessionId)`
+- `listRewindTargets(sessionId)`
 - `listWorkerResults(sessionId)`
 - `getOpenToolCalls(sessionId)`
 - `getUncleanShutdownDiagnostic(sessionId)`
@@ -615,6 +639,14 @@ This surface is the operator diagnostic view over current hydrated session
 state, unclean-shutdown explainability, and artifact integrity. It is not the
 raw event chronology (`inspect.events`) and it is not the frontend/gateway
 replay compiler (`inspect.sessionWire`).
+
+`getRewindState(...)` and `listRewindTargets(...)` are the runtime read model for
+session forks. Both are derived through the shared session-rewind projector, not
+from transcript scraping. Targets are filtered to active reasoning lineage, and
+rewind state carries redo stack state plus any divergence note the runtime had
+to record for `conversation` or `code` mode. The DuckDB session index mirrors
+the same target shape in `session_rewind_targets` for ad-hoc query consumers;
+the event tape remains authoritative.
 
 ### `inspect.sessionWire`
 

@@ -2788,12 +2788,16 @@ describe("shell runtime", () => {
     runtime.dispose();
   });
 
-  test("records interactive correction checkpoints with monotonic turn ids", async () => {
+  test("records interactive rewind checkpoints with monotonic turn ids", async () => {
     const turnIds: string[] = [];
     const { bundle } = createFakeBundle();
-    Object.assign(bundle.runtime.authority.correction, {
-      recordCheckpoint(_sessionId: string, input: { turnId?: string }) {
+    Object.assign(bundle.runtime.authority.session, {
+      recordRewindCheckpoint(
+        _sessionId: string,
+        input: { turnId?: string },
+      ): ReturnType<typeof bundle.runtime.authority.session.recordRewindCheckpoint> {
         turnIds.push(input.turnId ?? "");
+        return {} as ReturnType<typeof bundle.runtime.authority.session.recordRewindCheckpoint>;
       },
     });
     const restoreDateNow = patchDateNow(() => 1_710_000_000_000);
@@ -2831,10 +2835,10 @@ describe("shell runtime", () => {
   test("blocks redo while the current session is streaming", async () => {
     const { bundle } = createFakeBundle();
     let redoCalls = 0;
-    Object.assign(bundle.runtime.authority.correction, {
-      redo() {
+    Object.assign(bundle.runtime.authority.session, {
+      redo(): ReturnType<typeof bundle.runtime.authority.session.redo> {
         redoCalls += 1;
-        return { ok: false, reason: "no_undone_checkpoint" };
+        return { ok: false, reason: "no_redo" };
       },
     });
     (bundle.session as unknown as { isStreaming: boolean }).isStreaming = true;
@@ -2865,7 +2869,7 @@ describe("shell runtime", () => {
     runtime.dispose();
   });
 
-  test("surfaces correction undo and redo as transcript notes and prompt status", async () => {
+  test("surfaces session undo and redo as transcript notes and prompt status", async () => {
     const { bundle } = createFakeBundle();
     const session = bundle.session as unknown as {
       replaceMessages(messages: unknown[]): void;
@@ -2890,47 +2894,98 @@ describe("shell runtime", () => {
 
     let undoAvailable = true;
     let redoAvailable = false;
-    Object.assign(bundle.runtime.inspect.correction, {
-      getState() {
+    Object.assign(bundle.runtime.inspect.session, {
+      getRewindState(): ReturnType<typeof bundle.runtime.inspect.session.getRewindState> {
         return {
           checkpoints: [],
-          undoAvailable,
+          rewindAvailable: undoAvailable,
           redoAvailable,
-          nextRedoable: redoAvailable ? { redoLeafEntryId: "leaf-redo" } : undefined,
+          latestRewindable: undoAvailable
+            ? ({
+                checkpointId: "checkpoint-1",
+              } as ReturnType<
+                typeof bundle.runtime.inspect.session.getRewindState
+              >["latestRewindable"])
+            : undefined,
+          nextRedoable: redoAvailable
+            ? ({
+                checkpointId: "checkpoint-1",
+                returnLeafEntryId: "leaf-redo",
+              } as ReturnType<typeof bundle.runtime.inspect.session.getRewindState>["nextRedoable"])
+            : undefined,
+          redoStack: [],
         };
       },
     });
-    Object.assign(bundle.runtime.authority.correction, {
-      undo() {
+    Object.assign(bundle.runtime.authority.session, {
+      rewind(): ReturnType<typeof bundle.runtime.authority.session.rewind> {
         undoAvailable = false;
         redoAvailable = true;
         return {
           ok: true,
-          checkpoint: {},
+          checkpoint: {
+            checkpointId: "checkpoint-1",
+            turn: 1,
+          } as ReturnType<typeof bundle.runtime.authority.session.rewind> extends infer T
+            ? T extends { ok: true; checkpoint: infer C }
+              ? C
+              : never
+            : never,
           reasoningRevert: {
             revertId: "revert-1",
+            revertSequence: 1,
             toCheckpointId: "checkpoint-1",
+            fromCheckpointId: null,
+            fromBranchId: "branch-1",
+            newBranchId: "branch-2",
+            newBranchSequence: 2,
             targetLeafEntryId: "leaf-before",
-            trigger: "correction_undo",
+            trigger: "operator_request",
             linkedRollbackReceiptIds: [],
-            continuityPacket: { text: "Undo summary" },
+            continuityPacket: { schema: "brewva.reasoning.continuity.v1", text: "Undo summary" },
+            turn: 1,
+            eventId: "revert-event-1",
+            timestamp: 1,
           },
+          abandonedCheckpointIds: [],
           patchSetIds: ["patch-1"],
           rollbackResults: [],
           restoredPrompt: { text: "fix this", parts: [] },
-          redoLeafEntryId: "leaf-redo",
+          returnLeafEntryId: "leaf-redo",
+          trigger: "undo",
+          mode: "both",
+          summary: "carry",
         };
       },
-      redo() {
+      redo(): ReturnType<typeof bundle.runtime.authority.session.redo> {
         undoAvailable = true;
         redoAvailable = false;
         return {
           ok: true,
-          checkpoint: {},
+          checkpoint: {
+            checkpointId: "checkpoint-1",
+            turn: 1,
+          } as ReturnType<typeof bundle.runtime.authority.session.redo> extends infer T
+            ? T extends { ok: true; checkpoint: infer C }
+              ? C
+              : never
+            : never,
           patchSetIds: ["patch-1"],
           redoResults: [],
           restoredPrompt: { text: "fix this", parts: [] },
-          redoLeafEntryId: "leaf-redo",
+          returnLeafEntryId: "leaf-redo",
+          reasoningCheckpoint: {
+            checkpointId: "reasoning-checkpoint-redo",
+            checkpointSequence: 2,
+            branchId: "branch-2",
+            branchSequence: 2,
+            parentCheckpointId: "checkpoint-1",
+            boundary: "operator_marker",
+            turn: 1,
+            eventId: "reasoning-checkpoint-event-redo",
+            timestamp: 2,
+            leafEntryId: "leaf-redo",
+          },
         };
       },
     });
@@ -2943,7 +2998,7 @@ describe("shell runtime", () => {
     });
 
     await runtime.start();
-    expect(runtime.getViewState().status.entries.correction).toBe("undo: /undo");
+    expect(runtime.getViewState().status.entries.rewind).toBe("undo: /undo · rewind: /rewind");
 
     runtime.ui.setEditorText("/undo");
     await runtime.handleInput({
@@ -2954,7 +3009,7 @@ describe("shell runtime", () => {
     });
 
     expect(runtime.ui.getEditorText()).toBe("fix this");
-    expect(runtime.getViewState().status.entries.correction).toBe("redo: /redo");
+    expect(runtime.getViewState().status.entries.rewind).toBe("redo: /redo");
     expect(runtime.getViewState().transcript.messages.at(-1)).toMatchObject({
       role: "custom",
       parts: [
@@ -2975,13 +3030,151 @@ describe("shell runtime", () => {
 
     expect(branches).toEqual(["leaf-before", "leaf-redo"]);
     expect(runtime.ui.getEditorText()).toBe("");
-    expect(runtime.getViewState().status.entries.correction).toBe("undo: /undo");
+    expect(runtime.getViewState().status.entries.rewind).toBe("undo: /undo · rewind: /rewind");
     expect(runtime.getViewState().transcript.messages.at(-1)).toMatchObject({
       role: "custom",
       parts: [
         {
           type: "text",
-          text: expect.stringContaining("Correction redo applied"),
+          text: expect.stringContaining("Session redo applied"),
+        },
+      ],
+    });
+    runtime.dispose();
+  });
+
+  test("rewinds to a selected active checkpoint from the slash command", async () => {
+    const { bundle } = createFakeBundle();
+    const session = bundle.session as unknown as {
+      replaceMessages(messages: unknown[]): void;
+      sessionManager: {
+        branch?(entryId: string): void;
+        branchWithSummary?(
+          entryId: string | null,
+          text: string,
+          details: Record<string, unknown>,
+          replace?: boolean,
+        ): void;
+        getLeafId?(): string | null;
+      };
+    };
+    const branches: string[] = [];
+    const branchSummaries: Array<{
+      entryId: string | null;
+      text: string;
+      details: Record<string, unknown>;
+      replace?: boolean;
+    }> = [];
+    const rewinds: Array<{ checkpointId?: string; mode?: string; summary?: string }> = [];
+    session.replaceMessages = () => {};
+    session.sessionManager.getLeafId = () => "leaf-before";
+    session.sessionManager.branch = (entryId) => {
+      branches.push(entryId);
+    };
+    session.sessionManager.branchWithSummary = (entryId, text, details, replace) => {
+      branchSummaries.push({ entryId, text, details, replace });
+    };
+
+    Object.assign(bundle.runtime.inspect.session, {
+      listRewindTargets(): ReturnType<typeof bundle.runtime.inspect.session.listRewindTargets> {
+        return [
+          {
+            checkpointId: "checkpoint-newer",
+            turn: 2,
+            timestamp: 200,
+            promptPreview: "newer prompt",
+            patchSetCountAfter: 1,
+            fileSummary: { added: 0, modified: 1, deleted: 0 },
+            lineage: { kind: "active" },
+          },
+          {
+            checkpointId: "checkpoint-older",
+            turn: 1,
+            timestamp: 100,
+            promptPreview: "older prompt",
+            patchSetCountAfter: 2,
+            fileSummary: { added: 1, modified: 0, deleted: 0 },
+            lineage: { kind: "active" },
+          },
+        ];
+      },
+    });
+    Object.assign(bundle.runtime.authority.session, {
+      rewind(
+        _sessionId: string,
+        input: Parameters<typeof bundle.runtime.authority.session.rewind>[1],
+      ): ReturnType<typeof bundle.runtime.authority.session.rewind> {
+        rewinds.push({
+          checkpointId: input?.checkpointId,
+          mode: input?.mode,
+          summary: input?.summary,
+        });
+        return {
+          ok: true,
+          checkpoint: {
+            checkpointId: input?.checkpointId ?? "checkpoint-newer",
+            turn: input?.checkpointId === "checkpoint-older" ? 1 : 2,
+          } as ReturnType<typeof bundle.runtime.authority.session.rewind> extends infer T
+            ? T extends { ok: true; checkpoint: infer C }
+              ? C
+              : never
+            : never,
+          abandonedCheckpointIds: [],
+          patchSetIds: ["patch-1", "patch-2"],
+          rollbackResults: [],
+          divergenceNote: {
+            kind: "conversation_ahead",
+            text: "Conversation divergence: 2 patch set(s) were rewound.",
+            patchSetCount: 2,
+            parentLeafEntryId: "leaf-before",
+          },
+          restoredPrompt: { text: "older prompt body", parts: [] },
+          returnLeafEntryId: "leaf-before",
+          trigger: "rewind",
+          mode: "code",
+          summary: "none",
+        };
+      },
+    });
+
+    const runtime = new CliShellRuntime(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+      operatorPollIntervalMs: 60_000,
+    });
+
+    await runtime.start();
+    runtime.ui.setEditorText("/rewind code -2");
+    await runtime.handleInput({
+      key: "enter",
+      ctrl: false,
+      meta: false,
+      shift: false,
+    });
+
+    expect(rewinds).toEqual([{ checkpointId: "checkpoint-older", mode: "code", summary: "none" }]);
+    expect(branches).toEqual([]);
+    expect(branchSummaries).toEqual([
+      {
+        entryId: "leaf-before",
+        text: "Conversation divergence: 2 patch set(s) were rewound.",
+        details: {
+          schema: "brewva.session.rewind.divergence.v1",
+          kind: "conversation_ahead",
+          patchSetCount: 2,
+          parentLeafEntryId: "leaf-before",
+        },
+        replace: true,
+      },
+    ]);
+    expect(runtime.ui.getEditorText()).toBe("older prompt body");
+    expect(runtime.getViewState().transcript.messages.at(-1)).toMatchObject({
+      role: "custom",
+      parts: [
+        {
+          type: "text",
+          text: expect.stringContaining("Session rewind applied"),
         },
       ],
     });

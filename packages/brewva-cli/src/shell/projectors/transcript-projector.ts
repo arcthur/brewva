@@ -104,8 +104,8 @@ function toolResultStatus(input: { result?: unknown; isError?: boolean }): "comp
 
 export class ShellTranscriptProjector {
   #assistantEntryId: string | undefined;
-  #correctionTranscriptMarkerSequence = 0;
-  readonly #correctionTranscriptMarkersBySessionId = new Map<string, CliShellTranscriptMessage>();
+  #rewindTranscriptMarkerSequence = 0;
+  readonly #rewindTranscriptMarkersBySessionId = new Map<string, CliShellTranscriptMessage>();
   readonly #toolProjectionInputByCallId = new Map<string, ToolProjectionInputState>();
   readonly #toolTrustByCallId = new Map<string, TrustLoopToolProjection>();
 
@@ -115,29 +115,27 @@ export class ShellTranscriptProjector {
     this.#assistantEntryId = undefined;
   }
 
-  clearCorrectionMarker(sessionId: string): void {
-    this.#correctionTranscriptMarkersBySessionId.delete(sessionId);
+  clearRewindMarker(sessionId: string): void {
+    this.#rewindTranscriptMarkersBySessionId.delete(sessionId);
   }
 
-  setCorrectionMarker(text: string): void {
+  setRewindMarker(text: string): void {
     const sessionId = this.context.getSessionId();
     const message = buildTextTranscriptMessage({
-      id: `correction:${sessionId}:${++this.#correctionTranscriptMarkerSequence}`,
+      id: `rewind:${sessionId}:${++this.#rewindTranscriptMarkerSequence}`,
       role: "custom",
       text,
     });
     if (!message) {
       return;
     }
-    this.#correctionTranscriptMarkersBySessionId.set(sessionId, message);
+    this.#rewindTranscriptMarkersBySessionId.set(sessionId, message);
   }
 
   buildMessagesFromSession(): CliShellTranscriptMessage[] {
     const messages = buildSeedTranscriptMessages(this.context.getTranscriptSeed());
-    const correctionMarker = this.#correctionTranscriptMarkersBySessionId.get(
-      this.context.getSessionId(),
-    );
-    return correctionMarker ? [...messages, correctionMarker] : messages;
+    const rewindMarker = this.#rewindTranscriptMarkersBySessionId.get(this.context.getSessionId());
+    return rewindMarker ? [...messages, rewindMarker] : messages;
   }
 
   refreshFromSession(): void {

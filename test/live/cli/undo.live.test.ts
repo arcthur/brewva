@@ -89,11 +89,11 @@ describe("live: undo", () => {
       assertCliSuccess(undo, "undo-cmd");
       const restored = readFileSync(fixturePath, "utf8") === baseline;
 
-      expect(undo.stdout).toContain("Correction undo applied");
+      expect(undo.stdout).toContain("Session undo applied");
       if (!restored) {
         throw new Error(
           [
-            "[undo.live] fixture was not restored to baseline after correction undo.",
+            "[undo.live] fixture was not restored to baseline after session undo.",
             `[undo.live] current=${JSON.stringify(readFileSync(fixturePath, "utf8"))}`,
             `[undo.live] expected=${JSON.stringify(baseline)}`,
             `[undo.live] undoOutput=${JSON.stringify(undo.stdout.trim())}`,
@@ -112,7 +112,7 @@ describe("live: undo", () => {
     try {
       const undo = runCliSync(workspace, ["--undo"]);
       assertCliSuccess(undo, "undo-empty");
-      expect(undo.stdout).toContain("No correction undo applied (no_checkpoint).");
+      expect(undo.stdout).toContain("No session undo applied (no_checkpoint).");
     } finally {
       cleanupWorkspace(workspace);
     }

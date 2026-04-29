@@ -11,6 +11,11 @@ import {
   validateSingleQuestionAnswer,
 } from "@brewva/brewva-gateway";
 import { runHostedPromptTurn } from "@brewva/brewva-gateway/host";
+import {
+  SESSION_REWIND_DIVERGENCE_SCHEMA,
+  buildReasoningRevertSummaryDetails,
+  type SessionRewindDivergenceNote,
+} from "@brewva/brewva-runtime";
 import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import type { BrewvaPromptThinkingLevel } from "@brewva/brewva-substrate";
 import type {
@@ -21,30 +26,43 @@ import type {
 } from "../types.js";
 export { createCliShellPromptStore } from "../prompt-store.js";
 
-function buildReasoningSummaryDetails(input: {
-  revertId: string;
-  toCheckpointId: string;
-  trigger: string;
-  linkedRollbackReceiptIds: readonly string[];
-}): Record<string, unknown> {
+function buildDivergenceSummaryDetails(note: SessionRewindDivergenceNote): Record<string, unknown> {
   return {
-    schema: "brewva.reasoning.continuity.v1",
-    revertId: input.revertId,
-    toCheckpointId: input.toCheckpointId,
-    trigger: input.trigger,
-    linkedRollbackReceiptIds: [...input.linkedRollbackReceiptIds],
+    schema: SESSION_REWIND_DIVERGENCE_SCHEMA,
+    kind: note.kind,
+    patchSetCount: note.patchSetCount,
+    parentLeafEntryId: note.parentLeafEntryId,
   };
 }
 
 function replaceSessionMessagesFromCurrentContext(bundle: CliShellSessionBundle): void {
   const context = bundle.session.sessionManager.buildSessionContext?.();
   if (!context || !Array.isArray(context.messages)) {
-    throw new Error("Correction undo/redo requires sessionManager.buildSessionContext().");
+    throw new Error("Session rewind requires sessionManager.buildSessionContext().");
   }
   if (typeof bundle.session.replaceMessages !== "function") {
-    throw new Error("Correction undo/redo requires session.replaceMessages().");
+    throw new Error("Session rewind requires session.replaceMessages().");
   }
   bundle.session.replaceMessages(context.messages);
+}
+
+function appendRewindDivergenceSummary(
+  bundle: CliShellSessionBundle,
+  note: SessionRewindDivergenceNote,
+  fallbackLeafEntryId: string | null,
+): void {
+  const sessionManager = bundle.session.sessionManager;
+  if (typeof sessionManager.branchWithSummary !== "function") {
+    throw new Error("Session rewind divergence requires sessionManager.branchWithSummary().");
+  }
+  const parentLeafEntryId =
+    sessionManager.getLeafId?.() ?? note.parentLeafEntryId ?? fallbackLeafEntryId;
+  sessionManager.branchWithSummary(
+    parentLeafEntryId,
+    note.text,
+    buildDivergenceSummaryDetails(note),
+    true,
+  );
 }
 
 export function createSessionViewPort(bundle: CliShellSessionBundle): SessionViewPort {
@@ -162,8 +180,8 @@ export function createSessionViewPort(bundle: CliShellSessionBundle): SessionVie
       const messages = bundle.session.sessionManager.buildSessionContext?.().messages;
       return Array.isArray(messages) ? messages : [];
     },
-    recordCorrectionCheckpoint(input) {
-      bundle.runtime.authority.correction.recordCheckpoint(
+    recordRewindCheckpoint(input) {
+      bundle.runtime.authority.session.recordRewindCheckpoint(
         bundle.session.sessionManager.getSessionId(),
         {
           ...input,
@@ -171,59 +189,85 @@ export function createSessionViewPort(bundle: CliShellSessionBundle): SessionVie
         },
       );
     },
-    undoCorrection() {
+    rewindSession(input) {
       const sessionId = bundle.session.sessionManager.getSessionId();
-      const redoLeafEntryId = bundle.session.sessionManager.getLeafId?.() ?? null;
-      if (typeof bundle.session.sessionManager.branchWithSummary !== "function") {
-        throw new Error("Correction undo requires sessionManager.branchWithSummary().");
-      }
+      const returnLeafEntryId =
+        input?.returnLeafEntryId ?? bundle.session.sessionManager.getLeafId?.() ?? null;
       if (typeof bundle.session.replaceMessages !== "function") {
-        throw new Error("Correction undo requires session.replaceMessages().");
+        throw new Error("Session rewind requires session.replaceMessages().");
       }
-      const result = bundle.runtime.authority.correction.undo(sessionId, {
-        redoLeafEntryId,
+      const result = bundle.runtime.authority.session.rewind(sessionId, {
+        ...input,
+        returnLeafEntryId,
       });
       if (!result.ok) {
         return result;
       }
-      bundle.session.sessionManager.branchWithSummary(
-        result.reasoningRevert.targetLeafEntryId,
-        result.reasoningRevert.continuityPacket.text,
-        buildReasoningSummaryDetails({
-          revertId: result.reasoningRevert.revertId,
-          toCheckpointId: result.reasoningRevert.toCheckpointId,
-          trigger: result.reasoningRevert.trigger,
-          linkedRollbackReceiptIds: result.reasoningRevert.linkedRollbackReceiptIds,
-        }),
-        true,
-      );
+      if (result.reasoningRevert) {
+        const sessionManager = bundle.session.sessionManager;
+        if (result.summary === "carry") {
+          if (typeof sessionManager.branchWithSummary !== "function") {
+            throw new Error(
+              "Session rewind with summary requires sessionManager.branchWithSummary().",
+            );
+          }
+          sessionManager.branchWithSummary(
+            result.reasoningRevert.targetLeafEntryId,
+            result.reasoningRevert.continuityPacket.text,
+            buildReasoningRevertSummaryDetails(result.reasoningRevert),
+            true,
+          );
+        } else if (result.reasoningRevert.targetLeafEntryId) {
+          if (typeof sessionManager.branch !== "function") {
+            throw new Error("Session rewind requires sessionManager.branch() for clean rewind.");
+          }
+          sessionManager.branch(result.reasoningRevert.targetLeafEntryId);
+        } else {
+          if (typeof sessionManager.resetLeaf !== "function") {
+            throw new Error("Session rewind to root requires sessionManager.resetLeaf().");
+          }
+          sessionManager.resetLeaf();
+        }
+      }
+      if (result.divergenceNote) {
+        appendRewindDivergenceSummary(bundle, result.divergenceNote, returnLeafEntryId);
+      }
       replaceSessionMessagesFromCurrentContext(bundle);
       return result;
     },
-    redoCorrection() {
+    redoSession(input) {
       const sessionId = bundle.session.sessionManager.getSessionId();
-      const pendingRedo = bundle.runtime.inspect.correction.getState(sessionId).nextRedoable;
-      if (
-        pendingRedo?.redoLeafEntryId &&
-        typeof bundle.session.sessionManager.branch !== "function"
-      ) {
-        throw new Error("Correction redo requires sessionManager.branch().");
-      }
       if (typeof bundle.session.replaceMessages !== "function") {
-        throw new Error("Correction redo requires session.replaceMessages().");
+        throw new Error("Session redo requires session.replaceMessages().");
       }
-      const result = bundle.runtime.authority.correction.redo(sessionId);
+      const result = bundle.runtime.authority.session.redo(sessionId, input);
       if (!result.ok) {
         return result;
       }
-      if (result.redoLeafEntryId) {
-        bundle.session.sessionManager.branch?.(result.redoLeafEntryId);
+      if (result.reasoningCheckpoint) {
+        const sessionManager = bundle.session.sessionManager;
+        if (result.returnLeafEntryId) {
+          if (typeof sessionManager.branch !== "function") {
+            throw new Error("Session redo requires sessionManager.branch().");
+          }
+          sessionManager.branch(result.returnLeafEntryId);
+        } else {
+          if (typeof sessionManager.resetLeaf !== "function") {
+            throw new Error("Session redo to root requires sessionManager.resetLeaf().");
+          }
+          sessionManager.resetLeaf();
+        }
       }
       replaceSessionMessagesFromCurrentContext(bundle);
       return result;
     },
-    getCorrectionState() {
-      return bundle.runtime.inspect.correction.getState(
+    getRewindState() {
+      return bundle.runtime.inspect.session.getRewindState(
+        bundle.session.sessionManager.getSessionId(),
+      );
+    },
+    listRewindTargets() {
+      return bundle.runtime.inspect.session.listRewindTargets(
         bundle.session.sessionManager.getSessionId(),
       );
     },

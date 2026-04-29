@@ -5,6 +5,7 @@ import { BrewvaRuntime } from "@brewva/brewva-runtime";
 import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import { readSessionBundleArtifact, replayImportedSessionEntries } from "@brewva/brewva-substrate";
 import { HostedRuntimeTapeSessionStore } from "../../../packages/brewva-gateway/src/host/runtime-projection-session-store.js";
+import type { StoredSessionMessage } from "../../../packages/brewva-gateway/src/session/runtime-session-transcript.js";
 import { patchDateNow } from "../../helpers/global-state.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
@@ -26,6 +27,13 @@ function createUsage() {
 }
 
 describe("hosted runtime tape session store", () => {
+  type BranchSummaryMessage = StoredSessionMessage & {
+    role: "branchSummary";
+    summary: string;
+    fromId: string;
+    timestamp: number;
+  };
+
   test("replays canonical transcript entries from runtime events without private projection events", () => {
     const restoreDateNow = patchDateNow(() => 1_700_000_000_000);
 
@@ -150,6 +158,79 @@ describe("hosted runtime tape session store", () => {
         display: true,
       },
     ]);
+  });
+
+  test("projects clean conversation rewind without replaying the discarded branch summary", () => {
+    const workspace = createTestWorkspace("runtime-projection-session-store-clean-rewind");
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionId = "agent-session:clean-rewind";
+    const store = new HostedRuntimeTapeSessionStore(runtime, workspace, sessionId);
+
+    store.appendMessage({
+      role: "user",
+      content: [{ type: "text", text: "first prompt" }],
+      timestamp: Date.now(),
+    } as StoredSessionMessage);
+    const checkpointA = runtime.authority.session.recordRewindCheckpoint(sessionId, {
+      leafEntryId: store.getLeafId(),
+      prompt: {
+        text: "first prompt",
+        parts: [],
+      },
+    });
+    store.appendMessage({
+      role: "assistant",
+      content: [{ type: "text", text: "first answer" }],
+      api: "openai-responses",
+      provider: "openai",
+      model: "gpt-5.4",
+      usage: createUsage(),
+      stopReason: "stop",
+      timestamp: Date.now() + 1,
+    } as StoredSessionMessage);
+    store.appendMessage({
+      role: "user",
+      content: [{ type: "text", text: "second prompt" }],
+      timestamp: Date.now() + 2,
+    } as StoredSessionMessage);
+    runtime.authority.session.recordRewindCheckpoint(sessionId, {
+      leafEntryId: store.getLeafId(),
+      prompt: {
+        text: "second prompt",
+        parts: [],
+      },
+    });
+
+    const rewind = runtime.authority.session.rewind(sessionId, {
+      checkpointId: checkpointA.checkpointId,
+      mode: "conversation",
+      summary: "none",
+      returnLeafEntryId: store.getLeafId(),
+    });
+    if (!rewind.ok) {
+      throw new Error(`expected clean rewind to succeed, got ${rewind.reason}`);
+    }
+
+    const restored = new HostedRuntimeTapeSessionStore(runtime, workspace, sessionId);
+    const branchSummaryMessages = restored
+      .buildSessionContext()
+      .messages.filter(
+        (message): message is BranchSummaryMessage =>
+          typeof message === "object" &&
+          message !== null &&
+          "role" in message &&
+          (message as { role?: string }).role === "branchSummary" &&
+          typeof (message as { summary?: unknown }).summary === "string",
+      );
+
+    expect(branchSummaryMessages.map((message) => message.summary)).toEqual([
+      expect.stringContaining("Workspace divergence:"),
+    ]);
+    expect(
+      branchSummaryMessages.some((message) =>
+        message.summary.includes("Treat the abandoned branch"),
+      ),
+    ).toBe(false);
   });
 
   test("replays imported legacy Pi entries through the hosted runtime tape store", () => {

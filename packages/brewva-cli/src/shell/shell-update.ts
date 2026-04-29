@@ -146,9 +146,13 @@ function updateCommandIntent(
     case "session.queue":
       return handled({ effects: [{ type: "overlay.openQueue" }] });
     case "session.undo":
-      return handled({ effects: [{ type: "session.undoCorrection" }] });
+      return handled({ effects: [{ type: "session.undo" }] });
+    case "session.rewind":
+      return handled({
+        effects: [{ type: "session.rewind", argument: intent.args.trim() || undefined }],
+      });
     case "session.redo":
-      return handled({ effects: [{ type: "session.redoCorrection" }] });
+      return handled({ effects: [{ type: "session.redo" }] });
     case "agent.model":
       return intent.args.trim() === "recent"
         ? handled({ effects: [{ type: "model.cycleRecent" }] })

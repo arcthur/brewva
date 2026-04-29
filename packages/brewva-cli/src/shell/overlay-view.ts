@@ -94,6 +94,18 @@ export function resolveOverlayFocusOwner(
 
 export function buildInspectSections(report: SessionInspectReport): CliOverlaySection[] {
   const base = report.base;
+  const activeRewindTargets = base.rewind.activeTargets
+    .slice(0, 5)
+    .map(
+      (target) =>
+        `Active target: turn=${target.turn} checkpoint=${target.checkpointId} patchSetsAfter=${target.patchSetCountAfter} prompt=${target.promptPreview || "n/a"}`,
+    );
+  const abandonedRewindTargets = base.rewind.abandonedTargets
+    .slice(0, 5)
+    .map(
+      (target) =>
+        `Abandoned target: turn=${target.turn} checkpoint=${target.checkpointId} patchSetsAfter=${target.patchSetCountAfter} rewoundBy=${target.rewoundBy} prompt=${target.promptPreview || "n/a"}`,
+    );
   const sections: CliOverlaySection[] = [
     {
       id: "summary",
@@ -115,6 +127,34 @@ export function buildInspectSections(report: SessionInspectReport): CliOverlaySe
         `Replay: events=${base.replay.eventCount} anchors=${base.replay.anchorCount} checkpoints=${base.replay.checkpointCount}`,
         `Tape pressure: ${base.replay.tapePressure}`,
         `Entries since anchor: ${base.replay.entriesSinceAnchor}`,
+      ],
+    },
+    {
+      id: "rewind",
+      title: "Rewind",
+      lines: [
+        `Checkpoints: ${base.rewind.checkpointCount}`,
+        `Targets: total=${base.rewind.targetCount} active=${base.rewind.activeTargetCount} abandoned=${base.rewind.abandonedTargetCount}`,
+        `Available: rewind=${base.rewind.rewindAvailable ? "yes" : "no"} redo=${base.rewind.redoAvailable ? "yes" : "no"} redoDepth=${base.rewind.redoDepth}`,
+        `Latest checkpoint: ${base.rewind.latestCheckpointId ?? "n/a"} turn=${base.rewind.latestCheckpointTurn ?? "n/a"} status=${base.rewind.latestCheckpointStatus ?? "n/a"}`,
+        `Latest rewind: ${
+          base.rewind.latestRewind
+            ? `${base.rewind.latestRewind.trigger}/${base.rewind.latestRewind.mode}/${base.rewind.latestRewind.summary} -> ${base.rewind.latestRewind.checkpointId}`
+            : "none"
+        }`,
+        `Next redo checkpoint: ${base.rewind.nextRedoCheckpointId ?? "none"}`,
+        ...activeRewindTargets,
+        ...(base.rewind.activeTargets.length > activeRewindTargets.length
+          ? [
+              `Active target: +${base.rewind.activeTargets.length - activeRewindTargets.length} more`,
+            ]
+          : []),
+        ...abandonedRewindTargets,
+        ...(base.rewind.abandonedTargets.length > abandonedRewindTargets.length
+          ? [
+              `Abandoned target: +${base.rewind.abandonedTargets.length - abandonedRewindTargets.length} more`,
+            ]
+          : []),
       ],
     },
     {

@@ -679,8 +679,8 @@ Channel mode examples:
 - If stdin/stdout is not a TTY and no explicit mode is set, CLI falls back to text print mode.
 - Explicit `--interactive` requires a TTY terminal.
 - `--replay` uses `--session` when provided; otherwise it replays the latest replayable session.
-- `--undo` uses `--session` when provided; otherwise it resolves the latest session with an undoable correction checkpoint.
-- `--redo` uses `--session` when provided; otherwise it resolves the latest session with a redoable correction checkpoint.
+- `--undo` uses `--session` when provided; otherwise it resolves the latest session with a rewindable active checkpoint. Semantically it is the latest-carry-summary session rewind special case.
+- `--redo` uses `--session` when provided; otherwise it resolves the latest session with a redoable rewind checkpoint.
 - `--replay`, `--undo`, and `--redo` are mutually exclusive.
 - `--replay`/`--undo`/`--redo` cannot be combined with `--task`/`--task-file`.
 - Prompt text is ignored in `--replay`, `--undo`, and `--redo` flows.

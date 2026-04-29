@@ -233,6 +233,21 @@ function controlStateMutation(): ToolActionPolicy {
   });
 }
 
+const SESSION_REWIND_CONVERSATION_POLICY = controlStateMutation();
+// Workspace-changing rewind is a compound session mutation, but keeping the
+// action class at workspace_patch preserves the operator admission gate for
+// every action that can write the workspace. The effect classes carry the
+// full semantic shape: session/control state plus workspace writes.
+const SESSION_REWIND_WORKSPACE_POLICY = buildPolicy({
+  actionClass: "workspace_patch",
+  riskLevel: "high",
+  defaultAdmission: "allow",
+  maxAdmission: "allow",
+  receiptPolicy: { kind: "mutation", required: true },
+  recoveryPolicy: { kind: "exact_patch", strategy: "workspace_patchset" },
+  effectClasses: ["control_state_mutation", "workspace_write"],
+});
+
 function budgetMutation(): ToolActionPolicy {
   return buildPolicy({
     actionClass: "budget_mutation",
@@ -380,9 +395,19 @@ function resolveExecPolicy(input: ToolActionPolicyResolverInput): ToolActionPoli
     : TOOL_ACTION_POLICY_BY_NAME.exec;
 }
 
+function resolveSessionRewindPolicy(
+  input: ToolActionPolicyResolverInput,
+): ToolActionPolicy | undefined {
+  if (normalizeToolName(input.toolName) !== "session_rewind") return undefined;
+  return input.args?.mode === "conversation"
+    ? SESSION_REWIND_CONVERSATION_POLICY
+    : SESSION_REWIND_WORKSPACE_POLICY;
+}
+
 const EXACT_TOOL_ACTION_POLICY_RESOLVERS_BY_NAME: Record<string, ToolActionPolicyResolver> = {
   exec: resolveExecPolicy,
   narrative_memory: resolveNarrativeMemoryPolicy,
+  session_rewind: resolveSessionRewindPolicy,
 };
 
 export const TOOL_ACTION_POLICY_BY_NAME: Record<string, ToolActionPolicy> = {
@@ -433,6 +458,7 @@ export const TOOL_ACTION_POLICY_BY_NAME: Record<string, ToolActionPolicy> = {
   reasoning_checkpoint: controlStateMutation(),
   reasoning_revert: controlStateMutation(),
   session_compact: controlStateMutation(),
+  session_rewind: SESSION_REWIND_WORKSPACE_POLICY,
   cost_view: runtimeObserve(),
   deliberation_memory: runtimeObserve(),
   narrative_memory: NARRATIVE_MEMORY_DEFAULT_POLICY,

@@ -92,7 +92,6 @@ import {
 import { BREWVA_RUNTIME_METHOD_GROUPS } from "./runtime-symbols.js";
 import { sanitizeContextText } from "./security/sanitize.js";
 import { ContextService } from "./services/context.js";
-import { CorrectionService } from "./services/correction.js";
 import { CostService } from "./services/cost.js";
 import type { CredentialVaultService } from "./services/credential-vault.js";
 import { EffectCommitmentDeskService } from "./services/effect-commitment-desk.js";
@@ -107,6 +106,7 @@ import { ResourceLeaseService } from "./services/resource-lease.js";
 import { ReversibleMutationService } from "./services/reversible-mutation.js";
 import { ScheduleIntentService } from "./services/schedule-intent.js";
 import { SessionLifecycleService } from "./services/session-lifecycle.js";
+import { SessionRewindService } from "./services/session-rewind.js";
 import { RuntimeSessionStateStore } from "./services/session-state.js";
 import { SessionWireService } from "./services/session-wire.js";
 import { SkillLifecycleService } from "./services/skill-lifecycle.js";
@@ -207,10 +207,6 @@ export interface BrewvaAuthorityPort {
     "submit" | "decideEffectCommitment"
   >;
   readonly reasoning: Pick<BrewvaRuntimeMethodGroups["reasoning"], "recordCheckpoint" | "revert">;
-  readonly correction: Pick<
-    BrewvaRuntimeMethodGroups["correction"],
-    "recordCheckpoint" | "undo" | "redo"
-  >;
   readonly tools: Pick<
     BrewvaRuntimeMethodGroups["tools"],
     | "start"
@@ -245,7 +241,7 @@ export interface BrewvaAuthorityPort {
   readonly cost: Pick<BrewvaRuntimeMethodGroups["cost"], "recordAssistantUsage">;
   readonly session: Pick<
     BrewvaRuntimeMethodGroups["session"],
-    "commitCompaction" | "applyMergedWorkerResults"
+    "recordRewindCheckpoint" | "rewind" | "redo" | "commitCompaction" | "applyMergedWorkerResults"
   >;
 }
 
@@ -272,7 +268,6 @@ export interface BrewvaInspectionPort {
     BrewvaRuntimeMethodGroups["reasoning"],
     "getActiveState" | "listCheckpoints" | "getCheckpoint" | "listReverts" | "canRevertTo"
   >;
-  readonly correction: Pick<BrewvaRuntimeMethodGroups["correction"], "getState">;
   readonly context: Pick<
     BrewvaRuntimeMethodGroups["context"],
     | "sanitizeInput"
@@ -342,6 +337,8 @@ export interface BrewvaInspectionPort {
     | "mergeWorkerResults"
     | "getHydration"
     | "getIntegrity"
+    | "getRewindState"
+    | "listRewindTargets"
   >;
   readonly sessionWire: Pick<BrewvaRuntimeMethodGroups["sessionWire"], "query" | "subscribe">;
 }
@@ -442,7 +439,7 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
   private readonly proposalAdmissionServiceGetter: () => ProposalAdmissionService;
   private verificationService: VerificationService | undefined;
   private fileChangeService: FileChangeService | undefined;
-  private correctionService: CorrectionService | undefined;
+  private sessionRewindService: SessionRewindService | undefined;
   private mutationRollbackService: MutationRollbackService | undefined;
   private parallelService: ParallelService | undefined;
   private resourceLeaseService: ResourceLeaseService | undefined;
@@ -675,6 +672,7 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
           args,
           this.runtimeConfig.security.actionAdmissionOverrides,
         ),
+      getSessionLifecycleSnapshot: (sessionId) => this.getSessionLifecycleSnapshot(sessionId),
     });
   }
 
@@ -720,9 +718,9 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
     return this.fileChangeService;
   }
 
-  private getCorrectionService(): CorrectionService {
-    this.correctionService ??= this.lazyServiceFactories.createCorrectionService();
-    return this.correctionService;
+  private getSessionRewindService(): SessionRewindService {
+    this.sessionRewindService ??= this.lazyServiceFactories.createSessionRewindService();
+    return this.sessionRewindService;
   }
 
   private getMutationRollbackService(): MutationRollbackService {
@@ -770,7 +768,7 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
       costService: this.costService,
       actionPolicyRegistry: this.actionPolicyRegistry,
       getReasoningService: () => this.getReasoningService(),
-      getCorrectionService: () => this.getCorrectionService(),
+      getSessionRewindService: () => this.getSessionRewindService(),
       getToolGateService: () => this.getToolGateService(),
       getToolInvocationSpine: () => this.getToolInvocationSpine(),
       getParallelService: () => this.getParallelService(),
@@ -834,11 +832,6 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
           "decideEffectCommitment",
         ] as const),
         reasoning: bindMethods(methodGroups.reasoning, ["recordCheckpoint", "revert"] as const),
-        correction: bindMethods(methodGroups.correction, [
-          "recordCheckpoint",
-          "undo",
-          "redo",
-        ] as const),
         tools: bindMethods(methodGroups.tools, [
           "start",
           "finish",
@@ -877,6 +870,9 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
         verification: methodGroups.verification,
         cost: bindMethods(methodGroups.cost, ["recordAssistantUsage"] as const),
         session: bindMethods(methodGroups.session, [
+          "recordRewindCheckpoint",
+          "rewind",
+          "redo",
           "commitCompaction",
           "applyMergedWorkerResults",
         ] as const),
@@ -907,7 +903,6 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
           "listReverts",
           "canRevertTo",
         ] as const),
-        correction: bindMethods(methodGroups.correction, ["getState"] as const),
         context: bindMethods(methodGroups.context, [
           "sanitizeInput",
           "getUsage",
@@ -974,6 +969,8 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
           "mergeWorkerResults",
           "getHydration",
           "getIntegrity",
+          "getRewindState",
+          "listRewindTargets",
         ] as const),
         sessionWire: bindMethods(methodGroups.sessionWire, ["query", "subscribe"] as const),
       },

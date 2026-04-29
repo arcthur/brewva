@@ -85,6 +85,12 @@ Completion remains keyboard-first:
 - `/inbox` opens pending operator questions and shell notifications in one
   overlay
 - `/inspect` opens the replay-first inspect overlay for the current session
+- `/undo` rewinds the latest active checkpoint with summary carry and restores
+  the original prompt
+- `/rewind` opens the rewind picker, or accepts
+  `[conversation|code|both] [carry] [-N]` to target an earlier active
+  checkpoint with explicit mode/summary defaults
+- `/redo` restores the most recent rewound branch tip
 - `/answer <question-id> <answer>` resolves one pending operator prompt
 - `/theme` lists or switches the interactive shell theme
 - provider connection, thinking selection, view toggles, and prompt-stash

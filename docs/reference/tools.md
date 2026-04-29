@@ -524,8 +524,8 @@ Behavior:
 
 `rollback_last_patch` is the stable agent-facing tool id for rolling back the
 latest tracked `PatchSet`. It maps to `runtime.authority.tools.rollbackLastPatchSet(...)`.
-Operator-facing root `--undo` is correction-checkpoint based and uses the
-runtime correction surface instead of this tool veneer.
+Operator-facing root `--undo` is session-rewind-checkpoint based and uses the
+runtime session rewind surface instead of this tool veneer.
 
 ## `subagent_run` And `subagent_fanout`
 

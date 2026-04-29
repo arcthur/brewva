@@ -110,6 +110,48 @@ describe("tool action policy", () => {
     });
   });
 
+  test("session rewind policy keeps workspace-changing modes behind workspace patch admission", () => {
+    const conversationPolicy = requireDefined(
+      getToolActionPolicy("session_rewind", undefined, { mode: "conversation" }),
+      "missing conversation session_rewind policy",
+    );
+    const codePolicy = requireDefined(
+      getToolActionPolicy("session_rewind", undefined, { mode: "code" }),
+      "missing code session_rewind policy",
+    );
+    const defaultPolicy = requireDefined(
+      getToolActionPolicy("session_rewind"),
+      "missing default session_rewind policy",
+    );
+
+    expect(conversationPolicy).toMatchObject({
+      actionClass: "control_state_mutation",
+      receiptPolicy: { kind: "control_plane", required: true },
+      recoveryPolicy: { kind: "forward_correction" },
+      effectClasses: ["control_state_mutation"],
+    });
+    expect(deriveToolGovernanceDescriptor(conversationPolicy)).toEqual({
+      effects: ["control_state_mutation"],
+      defaultRisk: "medium",
+      boundary: "effectful",
+      rollbackable: false,
+    });
+
+    for (const policy of [codePolicy, defaultPolicy]) {
+      expect(policy).toMatchObject({
+        actionClass: "workspace_patch",
+        receiptPolicy: { kind: "mutation", required: true },
+        recoveryPolicy: { kind: "exact_patch", strategy: "workspace_patchset" },
+        effectClasses: ["control_state_mutation", "workspace_write"],
+      });
+      expect(deriveToolGovernanceDescriptor(policy)).toEqual({
+        effects: ["control_state_mutation", "workspace_write"],
+        defaultRisk: "high",
+        boundary: "effectful",
+      });
+    }
+  });
+
   test("rejects critical action policy that can be relaxed below ask", () => {
     const unsafePolicy: ToolActionPolicy = {
       actionClass: "credential_access",

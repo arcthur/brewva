@@ -365,13 +365,13 @@ function createFakeBundle(
     toolDefinitions: options.toolDefinitions ?? new Map(),
     runtime: {
       authority: {
-        correction: {
-          recordCheckpoint() {},
-          undo() {
+        session: {
+          recordRewindCheckpoint() {},
+          rewind() {
             return { ok: false, reason: "no_checkpoint" };
           },
           redo() {
-            return { ok: false, reason: "no_undone_checkpoint" };
+            return { ok: false, reason: "no_redo" };
           },
         },
         proposals: {
@@ -379,13 +379,17 @@ function createFakeBundle(
         },
       },
       inspect: {
-        correction: {
-          getState() {
+        session: {
+          getRewindState() {
             return {
               checkpoints: [],
-              undoAvailable: false,
+              rewindAvailable: false,
               redoAvailable: false,
+              redoStack: [],
             };
+          },
+          listRewindTargets() {
+            return [];
           },
         },
         proposals: {

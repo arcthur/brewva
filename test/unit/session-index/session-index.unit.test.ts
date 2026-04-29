@@ -8,7 +8,7 @@ import {
 } from "@brewva/brewva-runtime";
 import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import { tokenizeSearchText } from "@brewva/brewva-search";
-import { createSessionIndex } from "@brewva/brewva-session-index";
+import { SESSION_INDEX_SCHEMA_VERSION, createSessionIndex } from "@brewva/brewva-session-index";
 import { DuckDBInstance } from "@duckdb/node-api";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
@@ -102,7 +102,7 @@ describe("session index", () => {
       const status = await index.status();
       expect(status.ok).toBe(true);
       if (!status.ok) return;
-      expect(status.schemaVersion).toBe(1);
+      expect(status.schemaVersion).toBe(SESSION_INDEX_SCHEMA_VERSION);
       expect(status.writer).toBe(true);
       expect(status.indexedSessions).toBe(2);
 
@@ -645,6 +645,99 @@ describe("session index", () => {
         limit: 5,
       });
       expect(sessions.map((entry) => entry.sessionId)).toContain("indexed-rebuild");
+    } finally {
+      await index.close();
+    }
+  });
+
+  test("materializes session rewind targets from tape", async () => {
+    const { workspace, runtime } = createIndexedRuntime("session-index-rewind-targets");
+    mkdirSync(join(workspace, "src"), { recursive: true });
+    const filePath = join(workspace, "src", "rewind.ts");
+    writeFileSync(filePath, "export const value = 1;\n", "utf8");
+
+    const sessionId = "indexed-rewind-session";
+    runtime.maintain.context.onTurnStart(sessionId, 1);
+    const checkpointA = runtime.authority.session.recordRewindCheckpoint(sessionId, {
+      leafEntryId: "leaf-a",
+      prompt: { text: "Set value to 2", parts: [] },
+    });
+    runtime.authority.tools.trackCallStart({
+      sessionId,
+      toolCallId: "tool-rewind-a",
+      toolName: "edit",
+      args: { file_path: "src/rewind.ts" },
+    });
+    writeFileSync(filePath, "export const value = 2;\n", "utf8");
+    runtime.authority.tools.trackCallEnd({
+      sessionId,
+      toolCallId: "tool-rewind-a",
+      toolName: "edit",
+      channelSuccess: true,
+    });
+
+    runtime.maintain.context.onTurnStart(sessionId, 2);
+    const checkpointB = runtime.authority.session.recordRewindCheckpoint(sessionId, {
+      leafEntryId: "leaf-b",
+      prompt: { text: "Set value to 3", parts: [] },
+    });
+    runtime.authority.tools.trackCallStart({
+      sessionId,
+      toolCallId: "tool-rewind-b",
+      toolName: "edit",
+      args: { file_path: "src/rewind.ts" },
+    });
+    writeFileSync(filePath, "export const value = 3;\n", "utf8");
+    runtime.authority.tools.trackCallEnd({
+      sessionId,
+      toolCallId: "tool-rewind-b",
+      toolName: "edit",
+      channelSuccess: true,
+    });
+
+    const rewind = runtime.authority.session.rewind(sessionId, {
+      checkpointId: checkpointA.checkpointId,
+      mode: "both",
+      summary: "none",
+      returnLeafEntryId: "leaf-rewound",
+    });
+    expect(rewind.ok).toBe(true);
+    if (!rewind.ok) {
+      throw new Error(`Session rewind failed: ${rewind.reason}`);
+    }
+
+    const index = await createSessionIndex({
+      workspaceRoot: workspace,
+      events: runtime.inspect.events,
+      task: runtime.inspect.task,
+    });
+    try {
+      await index.catchUp();
+      const targets = await index.listSessionRewindTargets({ sessionId });
+      const runtimeTargets = runtime.inspect.session.listRewindTargets(sessionId);
+      expect(targets).toHaveLength(2);
+      expect(targets[0]).toMatchObject({
+        checkpointId: checkpointB.checkpointId,
+        promptPreview: "Set value to 3",
+        lineage: { kind: "abandoned" },
+      });
+      expect(targets[1]).toMatchObject({
+        checkpointId: checkpointA.checkpointId,
+        promptPreview: "Set value to 2",
+        lineage: { kind: "active" },
+      });
+      expect(targets).toEqual(
+        runtimeTargets.map((target) => ({
+          sessionId,
+          checkpointId: target.checkpointId,
+          turn: target.turn,
+          timestamp: target.timestamp,
+          promptPreview: target.promptPreview,
+          patchSetCountAfter: target.patchSetCountAfter,
+          fileSummary: target.fileSummary,
+          lineage: target.lineage,
+        })),
+      );
     } finally {
       await index.close();
     }
