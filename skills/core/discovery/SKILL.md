@@ -5,12 +5,6 @@ description: Reframe an existing request into the real problem, user pain, scope
 stability: stable
 selection:
   when_to_use: Use when an existing product, repository, or operator request has unclear pain or scope and needs reframing rather than idea diagnosis or execution.
-  examples:
-    - Clarify the real problem behind this request.
-    - Help me narrow the scope and non-goals first.
-    - Turn this existing product request into a crisp wedge.
-  phases:
-    - align
 intent:
   outputs:
     - problem_frame

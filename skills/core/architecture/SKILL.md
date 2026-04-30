@@ -6,13 +6,6 @@ description: Find deepening opportunities in a codebase by assessing module dept
 stability: stable
 selection:
   when_to_use: Use when a task asks for architecture improvement, refactoring opportunities, shallow module detection, seam quality, testability improvement, or AI-navigability of a codebase.
-  examples:
-    - Find the highest-leverage architecture improvements in this repository.
-    - Identify shallow modules and better seams before we plan implementation.
-    - Improve this codebase's testability and AI navigability through deeper modules.
-  phases:
-    - align
-    - investigate
 intent:
   outputs:
     - architecture_assessment

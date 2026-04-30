@@ -5,13 +5,6 @@ description: Bounded planning for multi-approach, cross-boundary, or
 stability: stable
 selection:
   when_to_use: Use when a request needs a bounded plan, explicit trade-offs, or an executable implementation path before code changes.
-  examples:
-    - Plan the approach before implementing it.
-    - Compare the viable options for this change.
-    - Write an execution plan for this cross-package work.
-  phases:
-    - align
-    - investigate
 intent:
   outputs:
     - design_spec

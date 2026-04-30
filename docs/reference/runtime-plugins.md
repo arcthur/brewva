@@ -356,6 +356,8 @@ Resolution inputs:
 - current TaskSpec state
 - routing scopes
 - generated routability from the runtime load report
+- skill-first lifecycle profiles: selection for hit-rate scoring and handoff
+  readiness for shortlist gating
 - explicit `$tool_name` requests
 
 This updates only the visible surface. Runtime policy still decides whether a
@@ -370,6 +372,13 @@ Current interactive protocol is TaskSpec-first:
 - after `task_set_spec`, the hosted path re-evaluates the routed skill
   candidates from TaskSpec-first intent signals rather than from raw prompt
   scoring
+- candidate scoring reads only the selection profile. Handoff readiness can
+  block or demote a shortlisted candidate but cannot add a new candidate or
+  positively score an unrelated ready skill
+- `require_skill_inputs.boundary` may be `explore`, `execute`, or `verify`.
+  `explore` means the best selected skill is missing required inputs before an
+  execution boundary has been reached, so the turn should produce or inspect
+  those inputs instead of forcing immediate `skill_load`
 - when that re-evaluation changes the routed posture in the same turn, hosted
   telemetry emits a fresh `skill_diagnosis_derived` receipt for the new posture
 - any retained post-TaskSpec diagnosis narrows the turn again so the next

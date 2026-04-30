@@ -250,6 +250,7 @@ export interface BrewvaInspectionPort {
     BrewvaRuntimeMethodGroups["skills"],
     | "getLoadReport"
     | "list"
+    | "listForRouting"
     | "get"
     | "getActive"
     | "getActiveState"
@@ -881,6 +882,7 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
         skills: bindMethods(methodGroups.skills, [
           "getLoadReport",
           "list",
+          "listForRouting",
           "get",
           "getActive",
           "getActiveState",

@@ -303,6 +303,7 @@ follow-up questions, not a separate runtime state machine.
 
 - `getLoadReport()`
 - `list()`
+- `listForRouting()`
 - `get(name)`
 - `getActive(sessionId)`
 - `getActiveState(sessionId)`
@@ -311,11 +312,18 @@ follow-up questions, not a separate runtime state machine.
 - `getRawOutputs(sessionId, skillName)`
 - `getNormalizedOutputs(sessionId, skillName)`
 - `getConsumedOutputs(sessionId, targetSkillName)`
+- `getReadiness(sessionId, query?)`
 
 `validateOutputs(...)` is the preview surface for the same runtime-owned
 validator composition used by `authority.skills.complete(...)`. It does not
 cache commit decisions or transfer caller-owned validation state across the
 verification boundary, and it requires an active skill.
+
+`listForRouting()` is the narrow runtime-owned routing catalog. It returns only
+the compiled selection profile plus handoff source fields needed by hosted
+skill-first diagnosis. Consumers that need full markdown, resources, effects,
+or tool hints must use `list()` or `get(name)` instead; those fields do not
+participate in hit-rate scoring.
 
 `getRawOutputs(...)` returns the durable producer payload recorded by
 `skill_completed`. `getNormalizedOutputs(...)` returns the runtime-owned

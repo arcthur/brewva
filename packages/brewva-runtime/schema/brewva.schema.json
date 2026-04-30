@@ -929,22 +929,10 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "examples": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            },
             "paths": {
               "type": "array",
               "items": {
                 "type": "string"
-              }
-            },
-            "phases": {
-              "type": "array",
-              "items": {
-                "$ref": "#/definitions/TaskPhase"
               }
             },
             "whenToUse": {
@@ -1074,18 +1062,6 @@
       "additionalProperties": {
         "$ref": "#/definitions/SemanticArtifactSchemaId"
       }
-    },
-    "TaskPhase": {
-      "type": "string",
-      "enum": [
-        "align",
-        "investigate",
-        "execute",
-        "verify",
-        "ready_for_acceptance",
-        "blocked",
-        "done"
-      ]
     },
     "ToolActionAdmissionOverrides": {
       "type": "object",

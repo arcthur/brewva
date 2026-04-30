@@ -21,22 +21,11 @@ import type {
   SkillResourceSet,
   SkillRoutingPolicy,
   SkillSelectionPolicy,
-  TaskPhase,
   ToolEffectClass,
 } from "../contracts/index.js";
 import { isSemanticArtifactSchemaId } from "../contracts/index.js";
 import { parseMarkdownFrontmatter } from "../markdown/frontmatter.js";
 import { normalizeToolName } from "../utils/tool-name.js";
-
-const TASK_PHASE_VALUES: TaskPhase[] = [
-  "align",
-  "investigate",
-  "execute",
-  "verify",
-  "ready_for_acceptance",
-  "blocked",
-  "done",
-];
 
 function failSkillContract(filePath: string, message: string): never {
   throw new Error(`[skill_contract] ${filePath}: ${message}`);
@@ -931,38 +920,20 @@ function normalizeSelectionPolicy(
   if (Object.prototype.hasOwnProperty.call(selection, "whenToUse")) {
     failSkillContract(filePath, "selection.whenToUse is not supported. Use 'when_to_use'.");
   }
-  assertAllowedKeys(
-    selection,
-    ["when_to_use", "examples", "paths", "phases"],
-    filePath,
-    "selection",
-  );
+  assertAllowedKeys(selection, ["when_to_use", "paths"], filePath, "selection");
 
   const whenToUse = Object.prototype.hasOwnProperty.call(selection, "when_to_use")
     ? requireStringField(selection, "when_to_use", filePath, "selection")
     : undefined;
-  const examples = readOptionalStringArrayField(selection, "examples", filePath);
   const paths = readOptionalStringArrayField(selection, "paths", filePath);
-  const phases = readOptionalEnumStringArrayField(
-    selection,
-    "phases",
-    filePath,
-    TASK_PHASE_VALUES,
-    "selection",
-  );
 
-  if (!whenToUse && examples.length === 0 && paths.length === 0 && (phases?.length ?? 0) === 0) {
-    failSkillContract(
-      filePath,
-      "selection must declare at least one of 'when_to_use', 'examples', 'paths', or 'phases'.",
-    );
+  if (!whenToUse && paths.length === 0) {
+    failSkillContract(filePath, "selection must declare at least one of 'when_to_use' or 'paths'.");
   }
 
   return {
     ...(whenToUse ? { whenToUse } : {}),
-    ...(examples.length > 0 ? { examples: [...new Set(examples)] } : {}),
     ...(paths.length > 0 ? { paths: [...new Set(paths)] } : {}),
-    ...(phases && phases.length > 0 ? { phases: [...new Set(phases)] } : {}),
   };
 }
 
@@ -998,13 +969,13 @@ function normalizeRoutingPolicy(
   if (Object.prototype.hasOwnProperty.call(routing, "matchHints")) {
     failSkillContract(
       filePath,
-      "routing.matchHints has been removed. Use selection.when_to_use/examples/paths/phases.",
+      "routing.matchHints has been removed. Use selection.when_to_use or selection.paths.",
     );
   }
   if (Object.prototype.hasOwnProperty.call(routing, "match_hints")) {
     failSkillContract(
       filePath,
-      "routing.match_hints has been removed. Use selection.when_to_use/examples/paths/phases.",
+      "routing.match_hints has been removed. Use selection.when_to_use or selection.paths.",
     );
   }
   if (Object.prototype.hasOwnProperty.call(routing, "scope")) {
@@ -1209,23 +1180,13 @@ function mergeSelectionPolicy(
     return undefined;
   }
   const whenToUse = patch?.whenToUse ?? base?.whenToUse;
-  const examples =
-    patch?.examples !== undefined
-      ? [...new Set([...(base?.examples ?? []), ...patch.examples])]
-      : base?.examples;
   const paths =
     patch?.paths !== undefined
       ? [...new Set([...(base?.paths ?? []), ...patch.paths])]
       : base?.paths;
-  const phases =
-    patch?.phases !== undefined
-      ? [...new Set([...(base?.phases ?? []), ...patch.phases])]
-      : base?.phases;
   const merged = {
     ...(whenToUse ? { whenToUse } : {}),
-    ...(examples && examples.length > 0 ? { examples } : {}),
     ...(paths && paths.length > 0 ? { paths } : {}),
-    ...(phases && phases.length > 0 ? { phases } : {}),
   } satisfies SkillSelectionPolicy;
   return Object.keys(merged).length > 0 ? merged : undefined;
 }

@@ -114,8 +114,6 @@ name: budgetcraft
 description: budget test skill
 selection:
   when_to_use: Use when the task needs the routed test skill.
-  examples: [test skill]
-  phases: [align]
 intent:
   outputs: []
 effects:

@@ -11,7 +11,7 @@ import {
   type ContextBudgetUsage,
   type ContextCompactionGateStatus,
 } from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
+import { buildSkillRoutingCatalogEntry, recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import { createMockRuntimePluginApi } from "../../helpers/runtime-plugin.js";
 import { createRuntimeFixture } from "../../helpers/runtime.js";
 
@@ -37,11 +37,19 @@ const HARD_GATE_STATUS: ContextCompactionGateStatus = {
 };
 
 function installRuntimeForensicsSkill(runtime: ReturnType<typeof createRuntimeFixture>): void {
-  const skill = {
+  const skill: Parameters<typeof buildSkillRoutingCatalogEntry>[0] & {
+    description: string;
+    filePath: string;
+    baseDir: string;
+    markdown: string;
+  } = {
     name: "runtime-forensics",
     description: "Investigate runtime traces, sessions, events, ledgers, and projections.",
     category: "domain" as const,
+    filePath: "/tmp/skills/domain/runtime-forensics/SKILL.md",
+    baseDir: "/tmp/skills/domain/runtime-forensics",
     markdown: "## Trigger\n\n- investigating runtime traces, sessions, or ledgers\n",
+    authoredMarkdown: "## Trigger\n\n- investigating runtime traces, sessions, or ledgers\n",
     contract: {
       name: "runtime-forensics",
       category: "domain" as const,
@@ -51,12 +59,7 @@ function installRuntimeForensicsSkill(runtime: ReturnType<typeof createRuntimeFi
       selection: {
         whenToUse:
           "Use when the task asks what happened at runtime and the answer must come from traces, ledgers, projections, or artifacts.",
-        examples: [
-          "Analyze this session trace.",
-          "Explain the runtime events and ledger evidence.",
-        ],
         paths: [".orchestrator", ".brewva"],
-        phases: ["investigate", "verify"],
       },
       effects: {
         allowedEffects: ["workspace_read", "runtime_observe"],
@@ -74,6 +77,7 @@ function installRuntimeForensicsSkill(runtime: ReturnType<typeof createRuntimeFi
   };
   Object.assign(runtime.inspect.skills, {
     list: () => [skill],
+    listForRouting: () => [buildSkillRoutingCatalogEntry(skill)],
     getActive: () => undefined,
     getLoadReport: () => ({
       roots: [],

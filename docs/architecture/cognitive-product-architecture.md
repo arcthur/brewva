@@ -164,6 +164,14 @@ Current responsibilities:
     visible to the model instead of relying on hidden prompt-only heuristics
   - narrows the visible tool surface without auto-activating skills or
     introducing a second planning state machine
+- skill lifecycle profile presentation
+  - treats one `SKILL.md` as four product projections: discovery, selection,
+    activation, and handoff
+  - keeps cold-start hit rate owned by the selection projection only
+  - lets handoff readiness gate already-shortlisted candidates without adding
+    positive routing score or introducing unrelated candidates
+  - renders explicit activation through the `skill_load` envelope instead of
+    turning catalog or authority metadata into default model context
 - closure presentation
   - keeps verification and acceptance separate
   - keeps delegated executable QA separate from `runtime.authority.verification.*`

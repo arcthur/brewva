@@ -17,11 +17,7 @@ import type {
   BrewvaHostToolResultEvent,
   BrewvaHostTurnEndEvent,
 } from "@brewva/brewva-substrate";
-import {
-  buildSkillDiagnosisPolicyBlock,
-  deriveSkillDiagnoses,
-  type SkillClassificationHint,
-} from "./skill-first.js";
+import { buildSkillDiagnosisPolicyBlock, deriveSkillDiagnoses } from "./skill-first.js";
 
 const MAX_STEERS_PER_PROMPT = 2;
 
@@ -201,10 +197,6 @@ export interface CompletionGuardLifecycle {
   sessionShutdown: (event: BrewvaHostSessionShutdownEvent, ctx: BrewvaHostContext) => undefined;
 }
 
-export interface CompletionGuardOptions {
-  resolveClassificationHints?: (sessionId: string) => readonly SkillClassificationHint[];
-}
-
 function isTerminalAssistantTurn(event: BrewvaHostTurnEndEvent): boolean {
   const message = event.message as { role?: unknown; stopReason?: unknown } | undefined;
   if (message?.role !== "assistant") {
@@ -219,7 +211,6 @@ function isTerminalAssistantTurn(event: BrewvaHostTurnEndEvent): boolean {
 export function createCompletionGuardLifecycle(
   extensionApi: InternalHostPluginApi,
   runtime: BrewvaHostedRuntimePort,
-  options: CompletionGuardOptions = {},
 ): CompletionGuardLifecycle {
   const steerCounts = new Map<string, number>();
   const latestPromptBySession = new Map<string, string>();
@@ -271,7 +262,6 @@ export function createCompletionGuardLifecycle(
       const diagnosis = deriveSkillDiagnoses(runtime, {
         sessionId,
         prompt: latestPromptBySession.get(sessionId) ?? "",
-        classificationHints: options.resolveClassificationHints?.(sessionId),
       });
       const latestFailure = runtime.inspect.skills.getLatestFailure(sessionId);
       if (diagnosis.activationPosture.kind === "repair_failed_contract") {
@@ -379,7 +369,6 @@ export function createCompletionGuardLifecycle(
       const diagnosis = deriveSkillDiagnoses(runtime, {
         sessionId,
         prompt: latestPromptBySession.get(sessionId) ?? "",
-        classificationHints: options.resolveClassificationHints?.(sessionId),
       });
       if (diagnosis.activationPosture.kind === "repair_failed_contract") {
         enqueueFailedContractNotice(sessionId, runtime.inspect.skills.getLatestFailure(sessionId));

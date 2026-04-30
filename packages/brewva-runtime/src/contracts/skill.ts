@@ -1,6 +1,5 @@
 import type { ToolEffectClass } from "./governance.js";
 import type { RuntimeSuccess, VerificationLevel } from "./shared.js";
-import type { TaskPhase } from "./task.js";
 
 export type LoadableSkillCategory = "core" | "domain" | "operator" | "meta" | "internal";
 export type SkillOverlayCategory = "overlay";
@@ -86,9 +85,7 @@ export interface SkillRoutingPolicy {
 
 export interface SkillSelectionPolicy {
   whenToUse?: string;
-  examples?: string[];
   paths?: string[];
-  phases?: TaskPhase[];
 }
 
 export interface SkillResourceSet {

@@ -5,13 +5,6 @@ description: Multi-perspective advisory review for hard problems before choosing
 stability: experimental
 selection:
   when_to_use: Use when a hard problem needs multi-perspective advisory review and explicit disagreement before choosing the next action.
-  examples:
-    - Give me multiple competing explanations for this issue.
-    - Run a multi-perspective review before we act.
-    - Surface disagreement across architecture, reliability, and performance views.
-  phases:
-    - investigate
-    - verify
 intent:
   outputs:
     - perspective_findings

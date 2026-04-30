@@ -5,14 +5,6 @@ description: Distill recurring failures, weak heuristics, or loop friction into
 stability: experimental
 selection:
   when_to_use: Use when recurring failures or loop friction should be turned into concrete heuristics, guardrails, or process changes.
-  examples:
-    - Turn this repeated failure into a better heuristic.
-    - Why does this loop keep failing and how should we improve it?
-    - Capture the systemic fix for this recurring weakness.
-  phases:
-    - blocked
-    - verify
-    - done
 intent:
   outputs:
     - improvement_hypothesis

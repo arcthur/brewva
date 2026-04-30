@@ -57,7 +57,6 @@ function classifySkillReadiness(input: {
     issues: [...input.issues],
     sourceSkillNames: [...input.sourceSkillNames],
     sourceEventIds: [...input.sourceEventIds],
-    phases: [...(input.skill.contract.selection?.phases ?? [])],
   };
 }
 

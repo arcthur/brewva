@@ -4,6 +4,7 @@ Implementation anchors:
 
 - `packages/brewva-gateway/src/runtime-plugins/skill-first.ts`
 - `packages/brewva-gateway/src/runtime-plugins/hosted-context-injection-pipeline.ts`
+- `packages/brewva-runtime/src/skills/profiles.ts`
 - `packages/brewva-tools/src/skill-load.ts`
 - `packages/brewva-tools/src/workflow-status.ts`
 - `packages/brewva-runtime/src/services/skill-lifecycle.ts`
@@ -39,21 +40,28 @@ completion).
 Selection metadata is the data substrate for cold-start diagnosis. A
 directory-derived `routing.scope` is only scope provenance; it is not sufficient
 for routability. A skill is routable only when routing is enabled, its scope is
-included in `skills.routing.scopes`, and `selection` declares at least one of
-`when_to_use`, `examples`, `paths`, or `phases`.
+included in `skills.routing.scopes`, and its compiled selection profile exposes
+at least one signal from `name`, `selection.when_to_use`, `selection.paths`, or
+authored `## Trigger` bullets.
 
 Cold-start diagnosis reads skill-authored selection signals and authored
 markdown trigger text. Runtime-inherited guidance, including shared authored
 behavior and project shared guidance, is visible after activation through
-`skill_load` but does not participate in the initial scoring surface.
+`skill_load` but does not participate in the initial scoring surface. There is
+no fallback from effective markdown to authored `## Trigger` bullets for
+selection scoring.
+Fields outside the selection profile, such as outputs, effects, resources,
+tool hints, description, and cost hints, do not affect hit rate.
+Hosted diagnosis gets its candidate catalog from
+`runtime.inspect.skills.listForRouting()`, not from full skill documents.
 
 There is no authored `routable` field. `skills_index.json` exposes generated
 `routable` state for inspection only.
 
 ## Phase Lifecycle
 
-Every task moves through phases. Skills may declare which phases they serve via
-`selection.phases` in their frontmatter.
+Every task moves through phases. Task phase remains a session and workflow
+posture, not structured skill selection metadata.
 
 ```
 align ──→ investigate ──→ execute ──→ verify ──→ ready_for_acceptance ──→ done
@@ -71,8 +79,8 @@ align ──→ investigate ──→ execute ──→ verify ──→ ready_f
 | `blocked`              | Escalation, debugging, forensics                 | debugging, runtime-forensics                               |
 | `done`                 | Retrospective, knowledge capture                 | retro, knowledge-capture                                   |
 
-Phase membership is a routing signal, not a hard gate. A skill can activate
-outside its declared phases when the model has strong evidence.
+Phase may help the model reason after a skill is active, but it is not part of
+the cold-start scorer and it is not a hard gate.
 
 ## Consumption Graph
 
@@ -108,7 +116,9 @@ Runtime exposes the relevant warm-transition data through explicit surfaces:
 
 - `runtime.inspect.skills.getReadiness(sessionId, query?)` exposes structured
   `blocked` / `available` / `ready` candidate posture and deterministic scores
-- `skill_load` previews `availableConsumedOutputs` for the chosen candidate skill
+- `skill_load` renders an activation envelope for the chosen candidate skill,
+  including required inputs, missing required inputs, bounded consumed outputs,
+  normalization issues, effect posture, budgets, and effective instructions
 - `workflow_status` surfaces derived workflow posture and `skillReadiness`
 - `runtime.inspect.skills.getConsumedOutputs(sessionId, targetSkillName)` exposes the exact consumed-output materialization for a target skill
 
@@ -140,10 +150,10 @@ When a skill completes via `skill_complete`:
 The model should usually prefer a candidate whose `requires` are fully
 satisfied and whose `consumes` now materialize concrete prior outputs, unless
 the user's intent or task spec clearly points elsewhere.
-Hosted skill diagnosis applies the same rule inside the semantic shortlist:
-`ready` candidates outrank `available`, `unknown`, and `blocked` candidates for
-the selected position, so a nearby actionable skill is not hidden behind a
-blocked semantic leader.
+Hosted skill diagnosis applies handoff readiness only inside the semantic
+selection shortlist. `blocked` candidates can be skipped or require input
+production before load; `ready` candidates cannot enter the shortlist or gain
+positive hit-rate score from warm artifact state alone.
 
 ### Escalation transitions
 
@@ -246,9 +256,10 @@ skill-routing context.
 
 `packages/brewva-gateway/src/runtime-plugins/skill-first.ts` scores only the
 routable names reported by the runtime load report. It matches prompt tokens,
-TaskSpec content, optional `selection.when_to_use`, selection examples, phase
-alignment, and path patterns. It runs on hosted turns when no skill is active
-and may produce the `[Brewva Skill-First Policy]` block.
+TaskSpec content, skill names, `selection.when_to_use`, `selection.paths`, and
+authored `## Trigger` bullets through the compiled selection profile. It runs on
+hosted turns when no skill is active and may produce the
+`[Brewva Skill-First Policy]` block.
 
 Warm transitions remain model-native decisions, but they are informed by
 structured runtime readiness, `workflow_status`, consumed outputs, and the

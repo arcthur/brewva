@@ -30,7 +30,6 @@ import {
   buildSkillDiagnosisPolicyBlock,
   resolveShortestNextAction,
   type SkillActivationPosture,
-  type SkillClassificationHint,
   type ToolAvailabilityPosture,
   type SkillDiagnosisSet,
 } from "./skill-first.js";
@@ -103,7 +102,6 @@ export interface HostedContextInjectionPipeline {
 export interface HostedContextInjectionPipelineOptions {
   delegationStore?: HostedDelegationStore;
   contextProfile?: "minimal" | "standard" | "full";
-  resolveClassificationHints?: (sessionId: string) => readonly SkillClassificationHint[];
 }
 
 function providerSelectedByHostedProfile(
@@ -447,7 +445,6 @@ export function createHostedContextInjectionPipeline(
           sessionId: input.sessionId,
           prompt: input.prompt,
           usage: input.usage,
-          classificationHints: options.resolveClassificationHints?.(input.sessionId),
         });
 
       if (gateStatus.required) {
@@ -543,7 +540,6 @@ export function createHostedContextInjectionPipeline(
         sessionId: input.sessionId,
         prompt: input.prompt,
         usage: input.usage,
-        classificationHints: options.resolveClassificationHints?.(input.sessionId),
       });
       const gateStatusAfterInjection = supportAfterInjection.gateStatus;
       if (!gateStatus.required && gateStatusAfterInjection.required) {

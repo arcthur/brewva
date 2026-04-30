@@ -5,12 +5,6 @@ description: Evidence-backed structured data extraction from noisy or free-form
 stability: stable
 selection:
   when_to_use: Use when noisy or free-form input must be converted into validated structured data with stable keys.
-  examples:
-    - Extract this text into a schema.
-    - Normalize this free-form input into structured JSON.
-    - Turn these notes into validated fields.
-  phases:
-    - execute
 intent:
   outputs:
     - structured_payload

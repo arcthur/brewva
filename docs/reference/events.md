@@ -663,14 +663,16 @@ proposal objects and they do not themselves create approval-bearing requests.
 posture while no skill is active yet. The payload records the semantic
 `activationPosture`, the derived `toolAvailabilityPosture`, whether TaskSpec is
 already present, the selected candidate, nearby rejected candidates, readiness
-basis, missing required inputs, satisfied consumed inputs, shallow-output risk,
-and the shortest next action. The hosted path may emit another receipt in the
-same turn after `task_set_spec` or other task-state mutations if the routed
-posture changes.
+state, selection basis, missing required inputs, satisfied consumed inputs,
+shallow-output risk, and the shortest next action. The hosted path may emit
+another receipt in the same turn after `task_set_spec` or other task-state
+mutations if the routed posture changes.
 
 When the best candidate is blocked by missing required inputs, the posture uses
 `require_skill_inputs` and the tool surface stays in `require_explore` rather
-than forcing immediate `skill_load`.
+than forcing immediate `skill_load`. Its boundary is `explore` before effectful
+work starts, `execute` during mutation/execution posture, and `verify` during
+verification posture.
 
 `turn_governance_decision` is the aggregate explanation receipt for local hook,
 skill-first, tool-surface, completion guard, and plugin-capability governance

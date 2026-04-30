@@ -152,6 +152,7 @@ import type { ToolGateService } from "./services/tool-gate.js";
 import type { ToolInvocationSpine } from "./services/tool-invocation-spine.js";
 import type { TruthService } from "./services/truth.js";
 import type { VerificationService } from "./services/verification.js";
+import type { SkillRoutingCatalogEntry } from "./skills/profiles.js";
 import type { SkillRegistry } from "./skills/registry.js";
 
 interface ActionPolicyRegistryLike {
@@ -166,6 +167,7 @@ export interface BrewvaRuntimeMethodGroups {
     refresh(input?: SkillRefreshInput): SkillRefreshResult;
     getLoadReport(): SkillRegistryLoadReport;
     list(): SkillDocument[];
+    listForRouting(): SkillRoutingCatalogEntry[];
     get(name: string): SkillDocument | undefined;
     activate(sessionId: string, name: string): SkillActivationResult;
     getActive(sessionId: string): SkillDocument | undefined;
@@ -661,6 +663,7 @@ export function createRuntimeMethodGroups(
       refresh: (input?: SkillRefreshInput) => deps.refreshSkillsState(input),
       getLoadReport: () => deps.skillRegistry.getLoadReport(),
       list: () => deps.skillRegistry.list(),
+      listForRouting: () => deps.skillRegistry.listForRouting(),
       get: (name: string) => deps.skillRegistry.get(name),
       activate: (sessionId: string, name: string) =>
         deps.skillLifecycleService.activateSkill(sessionId, name),

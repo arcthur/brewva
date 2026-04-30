@@ -304,7 +304,7 @@ describe("hosted turn pipeline", () => {
     const { runtime, calls } = createRuntimeFixture();
     const seenInputs: string[] = [];
     const localHook: LocalHookPort = {
-      name: "local-classification-hint",
+      name: "local-pre-admission-recommendation",
       preAdmission(input) {
         seenInputs.push(`${input.phase}:${input.sessionId}:${input.prompt}`);
         return {
@@ -312,11 +312,6 @@ describe("hosted turn pipeline", () => {
           recommendations: [
             {
               message: "Treat this as repository analysis.",
-              classificationHint: {
-                skillName: "repository-analysis",
-                scoreBoost: 0.2,
-                reason: "Local rule matched repository-analysis wording.",
-              },
             },
           ],
         };

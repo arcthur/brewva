@@ -5,12 +5,6 @@ description: Scope, simplicity, and success-criteria gate for coding tasks befor
 stability: stable
 selection:
   when_to_use: Use when a coding task needs explicit scope, simplicity verdict, and success criteria before any file is edited.
-  examples:
-    - Scope this change and declare success criteria before touching any file.
-    - Check whether this approach is too complicated for what was asked.
-    - Turn this request into bounded implementation targets.
-  phases:
-    - align
 intent:
   outputs:
     - implementation_targets

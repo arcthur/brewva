@@ -9,11 +9,15 @@ import type {
   SkillCompletionFailureRecord,
   SkillRegistryLoadReport,
   SkillRoutingScope,
-  TaskPhase,
   ToolEffectClass,
   ToolActionPolicy,
 } from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
+import {
+  buildSkillRoutingCatalogEntry,
+  buildSkillSelectionProfile,
+  hasSelectionProfileSignals,
+  recordRuntimeEvent,
+} from "@brewva/brewva-runtime/internal";
 import type { BrewvaToolDefinition } from "@brewva/brewva-substrate";
 import { Type } from "@sinclair/typebox";
 import { createMockRuntimePluginApi, invokeHandlerAsync } from "../../helpers/runtime-plugin.js";
@@ -57,9 +61,7 @@ function createSkillDocument(
     consumes?: string[];
     selection?: {
       whenToUse: string;
-      examples?: string[];
       paths?: string[];
-      phases?: TaskPhase[];
     };
   } = {},
 ) {
@@ -67,6 +69,8 @@ function createSkillDocument(
     name,
     description: `${name} skill`,
     category: "domain" as const,
+    filePath: `/tmp/skills/domain/${name}/SKILL.md`,
+    baseDir: `/tmp/skills/domain/${name}`,
     markdown: options.markdown ?? "",
     authoredMarkdown: options.authoredMarkdown ?? options.markdown ?? "",
     contract: {
@@ -125,22 +129,15 @@ function createToolSurfaceRuntime(options: ToolSurfaceRuntimeOptions = {}): Tool
   }
   const listSkills = options.listSkills ?? (() => []);
   const routingScopes = options.routingScopes ?? ["core", "domain"];
+  const isRoutableSkill = (skill: ReturnType<typeof listSkills>[number]): boolean => {
+    const scope = skill.contract.routing?.scope;
+    const hasSelectionSignal = hasSelectionProfileSignals(buildSkillSelectionProfile(skill));
+    return typeof scope === "string" && routingScopes.includes(scope) && hasSelectionSignal;
+  };
   const buildLoadReport = (): SkillRegistryLoadReport => {
     const skills = listSkills();
     const loadedSkills = skills.map((skill) => skill.name);
-    const routableSkills = skills
-      .filter((skill) => {
-        const scope = skill.contract.routing?.scope;
-        const selection = skill.contract.selection;
-        const hasSelectionSignal = Boolean(
-          selection?.whenToUse ||
-          (selection?.examples?.length ?? 0) > 0 ||
-          (selection?.paths?.length ?? 0) > 0 ||
-          (selection?.phases?.length ?? 0) > 0,
-        );
-        return typeof scope === "string" && routingScopes.includes(scope) && hasSelectionSignal;
-      })
-      .map((skill) => skill.name);
+    const routableSkills = skills.filter(isRoutableSkill).map((skill) => skill.name);
     return {
       roots: [],
       loadedSkills,
@@ -161,6 +158,7 @@ function createToolSurfaceRuntime(options: ToolSurfaceRuntimeOptions = {}): Tool
   };
   Object.assign(runtime.inspect.skills, {
     list: listSkills,
+    listForRouting: () => listSkills().filter(isRoutableSkill).map(buildSkillRoutingCatalogEntry),
     getActive: options.getActive ?? (() => undefined),
     getActiveState: options.getActiveState ?? (() => undefined),
     getReadiness: options.getReadiness,
@@ -816,12 +814,7 @@ describe("tool surface runtime plugin", () => {
             selection: {
               whenToUse:
                 "Use when the task asks what happened at runtime and the answer must come from traces, ledgers, projections, or artifacts.",
-              examples: [
-                "Analyze this session trace.",
-                "Explain the runtime events and ledger evidence.",
-              ],
               paths: [".orchestrator", ".brewva"],
-              phases: ["investigate", "verify"],
             },
           },
         ),
@@ -833,11 +826,6 @@ describe("tool surface runtime plugin", () => {
             selection: {
               whenToUse:
                 "Use when the task needs repository orientation, impact analysis, or boundary mapping before implementation.",
-              examples: [
-                "Analyze this repository before changing code.",
-                "Map the impacted modules and boundaries.",
-              ],
-              phases: ["align", "investigate"],
             },
           },
         ),
@@ -931,12 +919,6 @@ describe("tool surface runtime plugin", () => {
             selection: {
               whenToUse:
                 "Use when a non-trivial task needs repository precedents, prior failure patterns, or preventive guidance before deeper execution.",
-              examples: [
-                "Find prior repository solutions for this problem.",
-                "Look up precedent before we implement this.",
-                "Gather repository-specific guidance for this debugging task.",
-              ],
-              phases: ["align", "investigate"],
             },
           },
         ),
@@ -1065,12 +1047,6 @@ describe("tool surface runtime plugin", () => {
             selection: {
               whenToUse:
                 "Use when the task needs repository orientation, impact analysis, or boundary mapping before design, debugging, review, or execution.",
-              examples: [
-                "Analyze this repository before changing code.",
-                "Map the impacted modules and boundaries for this task.",
-                "Explain which files are likely affected by this request.",
-              ],
-              phases: ["align", "investigate"],
             },
           },
         ),
@@ -1078,11 +1054,6 @@ describe("tool surface runtime plugin", () => {
           selection: {
             whenToUse:
               "Use when a request needs a bounded design, explicit trade-offs, or an executable plan before code changes.",
-            examples: [
-              "Design the approach before implementing it.",
-              "Compare the viable options for this change.",
-            ],
-            phases: ["align", "investigate"],
           },
         }),
       ],
@@ -1174,11 +1145,9 @@ describe("tool surface runtime plugin", () => {
       ["edit"],
       {
         requires: ["design_spec"],
+        authoredMarkdown: "## Trigger\n\n- Implement the selected fix now.\n",
         selection: {
-          whenToUse:
-            "Use when the task has a design and is ready to implement the selected change.",
-          examples: ["Implement the selected fix.", "Apply the planned code change."],
-          phases: ["execute"],
+          whenToUse: "Implement the selected fix now.",
         },
       },
     );
@@ -1198,7 +1167,6 @@ describe("tool surface runtime plugin", () => {
           issues: [],
           sourceSkillNames: [],
           sourceEventIds: [],
-          phases: ["execute"],
         },
       ],
       taskState: {
@@ -1271,18 +1239,16 @@ describe("tool surface runtime plugin", () => {
     );
   });
 
-  test("artifact-ready diagnosis candidate outranks a blocked semantic leader", () => {
+  test("handoff gate selects a nearby actionable candidate after a blocked semantic leader", () => {
     const blockedSkill = createSkillDocument(
       "implementation",
       ["workspace_read", "workspace_write", "runtime_observe"],
       ["edit"],
       {
+        authoredMarkdown: "## Trigger\n\n- selected design handoff ready\n",
         requires: ["design_spec"],
         selection: {
-          whenToUse:
-            "Use when the task has a design and is ready to implement the selected change.",
-          examples: ["Implement the selected fix.", "Apply the planned code change."],
-          phases: ["execute"],
+          whenToUse: "Implement the selected fix now.",
         },
       },
     );
@@ -1293,10 +1259,7 @@ describe("tool surface runtime plugin", () => {
       {
         consumes: ["design_spec"],
         selection: {
-          whenToUse:
-            "Use when the task has a design and is ready to implement the selected change.",
-          examples: ["Implement the selected fix.", "Apply the planned code change."],
-          phases: ["execute"],
+          whenToUse: "Apply the planned code change safely.",
         },
       },
     );
@@ -1316,7 +1279,6 @@ describe("tool surface runtime plugin", () => {
           issues: [],
           sourceSkillNames: [],
           sourceEventIds: [],
-          phases: ["execute"],
         },
         {
           name: "implementation-ready",
@@ -1331,7 +1293,149 @@ describe("tool surface runtime plugin", () => {
           issues: [],
           sourceSkillNames: ["design"],
           sourceEventIds: ["event-design-complete"],
-          phases: ["execute"],
+        },
+      ],
+      taskState: {
+        spec: {
+          goal: "Implement the selected fix now.",
+          expectedBehavior:
+            "Apply the planned code change safely after selected design handoff ready.",
+        },
+        status: { phase: "execute" },
+        items: [],
+        blockers: [],
+        updatedAt: null,
+      },
+    });
+
+    const diagnosis = deriveSkillDiagnoses(runtime, {
+      sessionId: "tool-surface-actionable-diagnosis",
+      prompt: "Implement the selected fix now.",
+    });
+
+    const blockedCandidate = diagnosis.candidates.find((entry) => entry.name === "implementation");
+
+    expect(diagnosis.candidates[0]).toEqual(
+      expect.objectContaining({
+        name: "implementation-ready",
+        readiness: "ready",
+        missingRequires: [],
+        satisfiedConsumes: ["design_spec"],
+      }),
+    );
+    expect(blockedCandidate).toEqual(
+      expect.objectContaining({
+        basis: "selection_profile",
+        readiness: "blocked",
+        missingRequires: ["design_spec"],
+      }),
+    );
+    expect(blockedCandidate!.score).toBeGreaterThan(diagnosis.candidates[0]!.score);
+    expect(diagnosis.activationPosture).toEqual(
+      expect.objectContaining({
+        kind: "require_skill_load",
+        skillNames: ["implementation-ready", "implementation"],
+      }),
+    );
+    expect(diagnosis.toolAvailabilityPosture).toBe("require_execute");
+  });
+
+  test("blocked selection candidate gates skill load even before execution", () => {
+    const blockedSkill = createSkillDocument(
+      "implementation",
+      ["workspace_read", "workspace_write", "runtime_observe"],
+      ["edit"],
+      {
+        requires: ["design_spec"],
+        selection: {
+          whenToUse: "Assess selected design handoff.",
+        },
+      },
+    );
+    const runtime = createToolSurfaceRuntime({
+      listSkills: () => [blockedSkill],
+      getReadiness: () => [
+        {
+          name: "implementation",
+          category: "domain",
+          readiness: "blocked",
+          score: -1,
+          requires: ["design_spec"],
+          consumes: [],
+          satisfiedRequires: [],
+          missingRequires: ["design_spec"],
+          satisfiedConsumes: [],
+          issues: [],
+          sourceSkillNames: [],
+          sourceEventIds: [],
+        },
+      ],
+      taskState: {
+        spec: {
+          goal: "Assess selected design handoff.",
+          expectedBehavior: "Clarify what evidence is still missing.",
+        },
+        status: { phase: "align" },
+        items: [],
+        blockers: [],
+        updatedAt: null,
+      },
+    });
+
+    const diagnosis = deriveSkillDiagnoses(runtime, {
+      sessionId: "tool-surface-blocked-align-diagnosis",
+      prompt: "Assess selected design handoff.",
+    });
+
+    expect(diagnosis.activationPosture).toEqual(
+      expect.objectContaining({
+        kind: "require_skill_inputs",
+        skillName: "implementation",
+        boundary: "explore",
+        missingRequires: ["design_spec"],
+      }),
+    );
+    expect(diagnosis.toolAvailabilityPosture).toBe("require_explore");
+  });
+
+  test("handoff ready state cannot introduce a candidate outside the selection shortlist", () => {
+    const implementationSkill = createSkillDocument(
+      "implementation",
+      ["workspace_read", "workspace_write", "runtime_observe"],
+      ["edit"],
+      {
+        selection: {
+          whenToUse: "Implement the selected fix now.",
+        },
+      },
+    );
+    const unrelatedReadySkill = createSkillDocument(
+      "release-notes",
+      ["workspace_read", "runtime_observe"],
+      ["read"],
+      {
+        consumes: ["design_spec"],
+        selection: {
+          whenToUse: "Use when preparing release notes after a ship decision.",
+        },
+      },
+    );
+    const runtime = createToolSurfaceRuntime({
+      listSkills: () => [implementationSkill, unrelatedReadySkill],
+      getReadiness: () => [
+        {
+          name: "release-notes",
+          category: "domain",
+          readiness: "ready",
+          score: 12,
+          requires: [],
+          consumes: ["design_spec"],
+          satisfiedRequires: [],
+          missingRequires: [],
+          satisfiedConsumes: ["design_spec"],
+          issues: [],
+          sourceSkillNames: ["plan"],
+          sourceEventIds: ["event-plan-complete"],
         },
       ],
       taskState: {
@@ -1347,40 +1451,12 @@ describe("tool surface runtime plugin", () => {
     });
 
     const diagnosis = deriveSkillDiagnoses(runtime, {
-      sessionId: "tool-surface-actionable-diagnosis",
+      sessionId: "tool-surface-ready-not-selection-signal",
       prompt: "Implement the selected fix now.",
-      classificationHints: [
-        {
-          skillNames: ["implementation"],
-          reason: "semantic leader from local classifier",
-        },
-      ],
     });
 
-    const blockedCandidate = diagnosis.candidates.find((entry) => entry.name === "implementation");
-
-    expect(diagnosis.candidates[0]).toEqual(
-      expect.objectContaining({
-        name: "implementation-ready",
-        readiness: "ready",
-        missingRequires: [],
-        satisfiedConsumes: ["design_spec"],
-      }),
-    );
-    expect(blockedCandidate).toEqual(
-      expect.objectContaining({
-        readiness: "blocked",
-        missingRequires: ["design_spec"],
-      }),
-    );
-    expect(blockedCandidate!.score).toBeGreaterThan(diagnosis.candidates[0]!.score);
-    expect(diagnosis.activationPosture).toEqual(
-      expect.objectContaining({
-        kind: "require_skill_load",
-        skillNames: ["implementation-ready", "implementation"],
-      }),
-    );
-    expect(diagnosis.toolAvailabilityPosture).toBe("require_execute");
+    expect(diagnosis.candidates[0]?.name).toBe("implementation");
+    expect(diagnosis.candidates.map((entry) => entry.name)).not.toContain("release-notes");
   });
 
   test("skill-first diagnosis ignores runtime-inherited markdown triggers", () => {
@@ -1393,7 +1469,6 @@ describe("tool surface runtime plugin", () => {
         authoredMarkdown: "",
         selection: {
           whenToUse: "Use when handling unrelated archive maintenance.",
-          phases: ["align"],
         },
       },
     );
@@ -1406,7 +1481,6 @@ describe("tool surface runtime plugin", () => {
         authoredMarkdown: "## Trigger\n\n- diagnose authored routing text\n",
         selection: {
           whenToUse: "Use when diagnosing authored routing text.",
-          phases: ["align"],
         },
       },
     );
@@ -1486,16 +1560,12 @@ describe("tool surface runtime plugin", () => {
             selection: {
               whenToUse:
                 "Use when the task needs repository orientation, impact analysis, or boundary mapping before implementation.",
-              examples: ["Analyze this repository before changing code."],
-              phases: ["investigate"],
             },
           },
         ),
         createSkillDocument("implementation", ["workspace_read", "runtime_observe"], ["edit"], {
           selection: {
             whenToUse: "Use when the task has completed planning and is ready for implementation.",
-            examples: ["Implement the selected fix."],
-            phases: ["execute"],
           },
         }),
       ],
@@ -1607,8 +1677,6 @@ describe("tool surface runtime plugin", () => {
             selection: {
               whenToUse:
                 "Use when a non-trivial task needs repository precedents, prior failure patterns, or preventive guidance before deeper execution.",
-              examples: ["Look up precedent before we implement this."],
-              phases: ["investigate"],
             },
           },
         ),
@@ -1695,7 +1763,6 @@ describe("tool surface runtime plugin", () => {
             selection: {
               whenToUse:
                 "Use when repository precedents and prior solutions should be consulted before implementation.",
-              phases: ["investigate"],
             },
           },
         ),
@@ -1776,8 +1843,6 @@ describe("tool surface runtime plugin", () => {
             selection: {
               whenToUse:
                 "Use when a non-trivial task needs repository precedents, prior failure patterns, or preventive guidance before deeper execution.",
-              examples: ["Find prior repository solutions for this problem."],
-              phases: ["investigate"],
             },
           },
         ),

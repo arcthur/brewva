@@ -5,13 +5,6 @@ description: Handle commit shaping, history inspection, and non-destructive bran
 stability: stable
 selection:
   when_to_use: Use when the task centers on commits, history inspection, branch operations, or other non-destructive git workflow management.
-  examples:
-    - Shape the commits for this branch.
-    - Inspect git history to explain what changed.
-    - Handle the safe git operations for this task.
-  phases:
-    - execute
-    - ready_for_acceptance
 intent:
   outputs:
     - git_context

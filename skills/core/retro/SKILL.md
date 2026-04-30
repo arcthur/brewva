@@ -5,13 +5,6 @@ description: Distill a delivery cycle into concrete lessons, recurring friction,
 stability: stable
 selection:
   when_to_use: Use when a completed or blocked delivery cycle should be distilled into concrete lessons, repeated friction, and next-step improvements.
-  examples:
-    - Run a retro on this delivery cycle.
-    - Capture what slowed this rollout down.
-    - Name the recurring waste before the next iteration.
-  phases:
-    - blocked
-    - done
 intent:
   outputs:
     - retro_summary

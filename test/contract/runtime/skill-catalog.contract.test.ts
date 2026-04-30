@@ -8,7 +8,11 @@ import {
   parseSkillDocument,
   resolveSkillEffectLevel,
 } from "@brewva/brewva-runtime";
-import { getSemanticArtifactOutputContract } from "@brewva/brewva-runtime/internal";
+import {
+  buildSkillSelectionProfile,
+  getSemanticArtifactOutputContract,
+  hasSelectionProfileSignals,
+} from "@brewva/brewva-runtime/internal";
 import { createRuntimeConfig } from "../../helpers/runtime.js";
 import { cleanupWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
 import { repoRoot } from "./skill-contract.helpers.js";
@@ -124,20 +128,13 @@ describe("repository catalog contracts", () => {
     }
   });
 
-  test("all routable built-in skills declare at least one selection signal", () => {
+  test("all routable built-in skills expose at least one selection profile signal", () => {
     const runtime = createCleanRuntime();
     const missing = runtime.inspect.skills.list().flatMap((skill) => {
       if (!runtime.inspect.skills.getLoadReport().routableSkills.includes(skill.name)) {
         return [];
       }
-      const selection = skill.contract.selection;
-      const hasSignal = Boolean(
-        selection?.whenToUse ||
-        (selection?.examples?.length ?? 0) > 0 ||
-        (selection?.paths?.length ?? 0) > 0 ||
-        (selection?.phases?.length ?? 0) > 0,
-      );
-      if (!hasSignal) {
+      if (!hasSelectionProfileSignals(buildSkillSelectionProfile(skill))) {
         return [`${skill.name}:selection`];
       }
       return [];

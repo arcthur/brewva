@@ -5,12 +5,6 @@ description: Pressure-test the wedge, scope, and product leverage before detaile
 stability: stable
 selection:
   when_to_use: Use when a wedge, scope, or product leverage decision needs strategic pressure before detailed implementation planning.
-  examples:
-    - Pressure-test this wedge before we build it.
-    - Review the scope quality and leverage here.
-    - Challenge the sequencing and product value of this plan.
-  phases:
-    - align
 intent:
   outputs:
     - strategy_review

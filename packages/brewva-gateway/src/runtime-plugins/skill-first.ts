@@ -1,22 +1,15 @@
 import {
-  listSkillFallbackTools,
-  listSkillOutputs,
-  listSkillPreferredTools,
-  type LoadableSkillCategory,
   type SkillCompletionFailureRecord,
-  type SkillContract,
   type SkillReadinessEntry,
   type TaskPhase,
 } from "@brewva/brewva-runtime";
+import {
+  buildSkillHandoffProfile,
+  type SkillHandoffProfile,
+  type SkillRoutingCatalogEntry,
+} from "@brewva/brewva-runtime/internal";
 
-interface SkillDiagnosisCatalogEntry {
-  name: string;
-  description: string;
-  category: LoadableSkillCategory;
-  markdown?: string;
-  authoredMarkdown?: string;
-  contract: SkillContract;
-}
+type SkillDiagnosisCatalogEntry = SkillRoutingCatalogEntry;
 
 type TaskStateLike = {
   spec?: unknown;
@@ -57,7 +50,7 @@ interface SignalWeights {
 export interface SkillFirstRuntimeLike {
   inspect: {
     skills: {
-      list(): SkillDiagnosisCatalogEntry[];
+      listForRouting(): SkillRoutingCatalogEntry[];
       getActive(sessionId: string): Pick<SkillDiagnosisCatalogEntry, "name"> | null | undefined;
       getReadiness?(sessionId: string): readonly SkillReadinessEntry[];
       getLatestFailure?(sessionId: string): SkillCompletionFailureRecord | undefined;
@@ -75,12 +68,7 @@ export interface SkillFirstRuntimeLike {
   };
 }
 
-export interface SkillClassificationHint {
-  readonly skillNames?: readonly string[];
-  readonly reason?: string;
-}
-
-export type SkillDiagnosisBasis = "cold_start" | "artifact_aware" | "classification_hint";
+export type SkillDiagnosisBasis = "selection_profile";
 export type SkillDiagnosisReadiness = SkillReadinessEntry["readiness"] | "unknown";
 
 export interface SkillDiagnosisCandidate {
@@ -127,7 +115,7 @@ export type SkillActivationPosture =
       readonly kind: "require_skill_inputs";
       readonly skillName: string;
       readonly missingRequires: readonly string[];
-      readonly boundary: "execute" | "verify";
+      readonly boundary: "explore" | "execute" | "verify";
       readonly reason: string;
     }
   | { readonly kind: "repair_failed_contract"; readonly failedSkillNames: readonly string[] };
@@ -313,25 +301,6 @@ function tokenizeSignalText(value: string): string[] {
     .split(/[^a-z0-9]+/g)
     .map((part) => normalizeEnglishToken(part.trim()))
     .filter((part) => part.length > 2 && !STOP_WORDS.has(part));
-}
-
-function extractMarkdownSection(markdown: string | undefined, heading: string): string {
-  if (!markdown) {
-    return "";
-  }
-  const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const pattern = new RegExp(`(?:^|\\n)##\\s+${escaped}\\s*\\n([\\s\\S]*?)(?=\\n##\\s+|$)`, "i");
-  const match = markdown.match(pattern);
-  return (match?.[1] ?? "").trim();
-}
-
-function extractMarkdownBullets(markdown: string | undefined, heading: string): string[] {
-  return extractMarkdownSection(markdown, heading)
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line.startsWith("- "))
-    .map((line) => line.slice(2).trim())
-    .filter(Boolean);
 }
 
 function summarizeReasonText(value: string): string {
@@ -610,34 +579,15 @@ function scoreSelectionPaths(
   return { score: -0.9 };
 }
 
-function scoreSelectionPhases(
-  phases: readonly TaskPhase[] | undefined,
-  input: TaskIntentSignals,
-): ScoredSignal {
-  if (!phases || phases.length === 0 || !input.phase) {
-    return { score: 0 };
-  }
-  if (phases.includes(input.phase)) {
-    return {
-      score: 0.9,
-      reason: `phase:${input.phase}`,
-    };
-  }
-  return { score: -1.1 };
-}
-
 function scoreSkill(
   skill: SkillDiagnosisCatalogEntry,
   input: TaskIntentSignals,
 ): SkillDiagnosisCandidate | null {
-  if (!skill.contract.routing?.scope || !skill.contract.selection) {
-    return null;
-  }
-
+  const scorer = skill.selection.forScorer;
   let score = 0;
   const reasons: string[] = [];
 
-  const whenToUse = scoreSignalAcrossSources(skill.contract.selection.whenToUse, input, {
+  const whenToUse = scoreSignalAcrossSources(scorer.whenToUse, input, {
     spec: { exact: 2.95, strong: 2.6, partial: 2.1 },
     taskContext: { exact: 1.9, strong: 1.55, partial: 1.25 },
     prompt: { exact: 0.8, strong: 0.65, partial: 0.45 },
@@ -645,73 +595,28 @@ function scoreSkill(
   score += whenToUse.score;
   pushReason(reasons, whenToUse.reason);
 
-  const exampleSignal = scoreSignalSetAcrossSources(
-    skill.contract.selection.examples ?? [],
-    input,
-    {
-      spec: { exact: 1.75, strong: 1.5, partial: 1.2 },
-      taskContext: { exact: 1.1, strong: 0.9, partial: 0.7 },
-      prompt: { exact: 0.45, strong: 0.35, partial: 0.25 },
-    },
-  );
-  score += exampleSignal.score;
-  pushReason(reasons, exampleSignal.reason);
-
-  const triggerSignal = scoreSignalSetAcrossSources(
-    extractMarkdownBullets(skill.authoredMarkdown ?? skill.markdown, "Trigger"),
-    input,
-    {
-      spec: { exact: 1.55, strong: 1.25, partial: 1.0 },
-      taskContext: { exact: 0.95, strong: 0.75, partial: 0.55 },
-      prompt: { exact: 0.35, strong: 0.25, partial: 0.18 },
-    },
-  );
+  const triggerSignal = scoreSignalSetAcrossSources(scorer.triggerBullets, input, {
+    spec: { exact: 1.55, strong: 1.25, partial: 1.0 },
+    taskContext: { exact: 0.95, strong: 0.75, partial: 0.55 },
+    prompt: { exact: 0.35, strong: 0.25, partial: 0.18 },
+  });
   score += triggerSignal.score;
   pushReason(reasons, triggerSignal.reason);
 
-  const pathSignal = scoreSelectionPaths(skill.contract.selection.paths, input);
+  const pathSignal = scoreSelectionPaths(scorer.paths, input);
   score += pathSignal.score;
   pushReason(reasons, pathSignal.reason);
 
-  const phaseSignal = scoreSelectionPhases(skill.contract.selection.phases, input);
-  score += phaseSignal.score;
-  pushReason(reasons, phaseSignal.reason);
-
-  const normalizedName = normalizeText(skill.name);
+  const normalizedName = normalizeText(scorer.name);
   if (normalizedName && input.combinedNormalizedText.includes(normalizedName)) {
     score += 1.5;
     pushReason(reasons, skill.name);
   } else {
-    for (const token of tokenizeName(skill.name)) {
+    for (const token of tokenizeName(scorer.name)) {
       if (input.combinedEnglishTokens.has(token)) {
         score += 0.5;
         pushReason(reasons, token);
       }
-    }
-  }
-
-  for (const token of tokenizeSignalText(skill.description).slice(0, 8)) {
-    if (input.combinedEnglishTokens.has(token)) {
-      score += 0.25;
-      pushReason(reasons, token);
-    }
-  }
-
-  for (const token of listSkillOutputs(skill.contract).flatMap((entry) => tokenizeName(entry))) {
-    if (input.combinedEnglishTokens.has(token)) {
-      score += 0.24;
-      pushReason(reasons, token);
-    }
-  }
-
-  for (const toolName of [
-    ...listSkillPreferredTools(skill.contract),
-    ...listSkillFallbackTools(skill.contract),
-  ]) {
-    const normalizedTool = normalizeText(toolName);
-    if (normalizedTool && input.combinedNormalizedText.includes(normalizedTool)) {
-      score += 0.2;
-      pushReason(reasons, normalizedTool);
     }
   }
 
@@ -725,7 +630,7 @@ function scoreSkill(
     score: Number(score.toFixed(2)),
     reasons,
     primary: false,
-    basis: "cold_start",
+    basis: "selection_profile",
     readiness: "unknown",
     missingRequires: [],
     satisfiedConsumes: [],
@@ -740,7 +645,7 @@ function resolveRoutableSkills(runtime: SkillFirstRuntimeLike): SkillDiagnosisCa
   }
   const routableNames = new Set(loadReport.routableSkills);
   return runtime.inspect.skills
-    .list()
+    .listForRouting()
     .filter((skill) => routableNames.has(skill.name))
     .toSorted((left, right) => left.name.localeCompare(right.name));
 }
@@ -763,55 +668,23 @@ function candidateSkillNames(candidates: readonly SkillDiagnosisCandidate[]): re
 
 function applyReadinessToCandidate(
   candidate: SkillDiagnosisCandidate,
-  readiness: SkillReadinessEntry | undefined,
-  hinted: boolean,
+  handoff: SkillHandoffProfile,
 ): SkillDiagnosisCandidate {
-  const basis: SkillDiagnosisBasis =
-    readiness &&
-    (readiness.missingRequires.length > 0 ||
-      readiness.satisfiedRequires.length > 0 ||
-      readiness.satisfiedConsumes.length > 0)
-      ? "artifact_aware"
-      : hinted
-        ? "classification_hint"
-        : candidate.basis;
   const shallowOutputRisk =
-    readiness && readiness.missingRequires.length > 0
-      ? `missing required inputs: ${readiness.missingRequires.join(", ")}`
+    handoff.missingRequiredInputs.length > 0
+      ? `missing required inputs: ${handoff.missingRequiredInputs.join(", ")}`
       : null;
   return {
     ...candidate,
-    basis,
-    readiness: readiness?.readiness ?? candidate.readiness,
-    missingRequires: readiness?.missingRequires ?? [],
-    satisfiedConsumes: readiness?.satisfiedConsumes ?? [],
+    readiness: handoff.actionability,
+    missingRequires: handoff.missingRequiredInputs,
+    satisfiedConsumes: handoff.satisfiedConsumedInputs,
     shallowOutputRisk,
   };
 }
 
-const READINESS_SELECTION_WEIGHT: Record<SkillDiagnosisReadiness, number> = {
-  ready: 3,
-  available: 2,
-  unknown: 1,
-  blocked: 0,
-};
-
-function compareActionableCandidates(
-  left: SkillDiagnosisCandidate,
-  right: SkillDiagnosisCandidate,
-): number {
-  const readinessDelta =
-    READINESS_SELECTION_WEIGHT[right.readiness] - READINESS_SELECTION_WEIGHT[left.readiness];
-  if (readinessDelta !== 0) {
-    return readinessDelta;
-  }
-
-  const consumedDelta = right.satisfiedConsumes.length - left.satisfiedConsumes.length;
-  if (consumedDelta !== 0) {
-    return consumedDelta;
-  }
-
-  return right.score - left.score || left.name.localeCompare(right.name);
+function isActionableCandidate(candidate: SkillDiagnosisCandidate): boolean {
+  return candidate.readiness !== "blocked" && candidate.missingRequires.length === 0;
 }
 
 function rejectedCandidateReason(input: {
@@ -830,28 +703,6 @@ function rejectedCandidateReason(input: {
 
 function hasMissingRequiredInputs(candidate: SkillDiagnosisCandidate | undefined): boolean {
   return Boolean(candidate && candidate.missingRequires.length > 0);
-}
-
-function normalizeHintSkillNames(
-  hints: readonly SkillClassificationHint[] | undefined,
-): Set<string> {
-  const names = new Set<string>();
-  for (const hint of hints ?? []) {
-    for (const skillName of hint.skillNames ?? []) {
-      const normalized = skillName.trim();
-      if (normalized.length > 0) {
-        names.add(normalized);
-      }
-    }
-  }
-  return names;
-}
-
-function firstHintReasonForSkill(
-  hints: readonly SkillClassificationHint[] | undefined,
-  skillName: string,
-): string | undefined {
-  return (hints ?? []).find((hint) => hint.skillNames?.includes(skillName))?.reason;
 }
 
 export function buildSkillDiagnosisReceiptPayload(
@@ -943,7 +794,6 @@ export function deriveSkillDiagnoses(
   input: {
     sessionId: string;
     prompt: string;
-    classificationHints?: readonly SkillClassificationHint[];
   },
 ): SkillDiagnosisSet {
   const taskState = runtime.inspect.task.getState(input.sessionId);
@@ -1031,7 +881,6 @@ export function deriveSkillDiagnoses(
     };
   }
 
-  const hintedSkillNames = normalizeHintSkillNames(input.classificationHints);
   const readinessByName = new Map(
     (runtime.inspect.skills.getReadiness?.(input.sessionId) ?? []).map((entry) => [
       entry.name,
@@ -1042,25 +891,16 @@ export function deriveSkillDiagnoses(
     .map((skill) => {
       const scoredSkill = scoreSkill(skill, signals);
       const readiness = readinessByName.get(skill.name);
-      if (!hintedSkillNames.has(skill.name)) {
-        return scoredSkill ? applyReadinessToCandidate(scoredSkill, readiness, false) : scoredSkill;
-      }
-      const hintReason = firstHintReasonForSkill(input.classificationHints, skill.name);
-      const base = scoredSkill ?? {
-        name: skill.name,
-        category: skill.category,
-        score: MIN_DIAGNOSIS_SCORE,
-        reasons: [],
-        primary: false,
-        basis: "classification_hint" as const,
-        readiness: "unknown" as const,
-        missingRequires: [],
-        satisfiedConsumes: [],
-        shallowOutputRisk: null,
-      };
-      pushReason(base.reasons, hintReason ? `local_hook:${hintReason}` : "local_hook");
-      base.score = Number(Math.max(base.score + 1, MIN_DIAGNOSIS_SCORE).toFixed(2));
-      return applyReadinessToCandidate(base, readiness, true);
+      const handoff = buildSkillHandoffProfile(
+        {
+          name: skill.name,
+          category: skill.category,
+          requires: skill.requires,
+          consumes: skill.consumes,
+        },
+        readiness,
+      );
+      return scoredSkill ? applyReadinessToCandidate(scoredSkill, handoff) : scoredSkill;
     })
     .filter((entry): entry is SkillDiagnosisCandidate => entry !== null)
     .toSorted((left, right) => right.score - left.score || left.name.localeCompare(right.name));
@@ -1077,15 +917,19 @@ export function deriveSkillDiagnoses(
     };
   }
 
-  const retained = scored
-    .filter((entry, index) => {
-      if (index === 0) {
-        return true;
-      }
-      return semanticLeader.score - entry.score <= SCORE_DELTA_WINDOW;
-    })
-    .toSorted(compareActionableCandidates)
-    .slice(0, MAX_DIAGNOSIS_CANDIDATES);
+  const selectionShortlist = scored.filter((entry, index) => {
+    if (index === 0) {
+      return true;
+    }
+    return semanticLeader.score - entry.score <= SCORE_DELTA_WINDOW;
+  });
+  const selectedCandidate =
+    selectionShortlist.find((candidate) => isActionableCandidate(candidate)) ??
+    selectionShortlist[0];
+  const retained = [
+    ...(selectedCandidate ? [selectedCandidate] : []),
+    ...selectionShortlist.filter((candidate) => candidate !== selectedCandidate),
+  ].slice(0, MAX_DIAGNOSIS_CANDIDATES);
 
   retained.forEach((entry, index) => {
     entry.primary = index === 0;
@@ -1111,32 +955,34 @@ export function deriveSkillDiagnoses(
 
   return {
     activeSkillName: null,
-    activationPosture:
-      needsInputBeforeSkillLoad && effectfulBoundary
+    activationPosture: needsInputBeforeSkillLoad
+      ? {
+          kind: "require_skill_inputs",
+          skillName: retained[0]!.name,
+          missingRequires: retained[0]!.missingRequires,
+          boundary: isVerificationPhase(signals.phase)
+            ? "verify"
+            : effectfulBoundary
+              ? "execute"
+              : "explore",
+          reason: "The best matched skill is blocked by missing required inputs.",
+        }
+      : effectfulBoundary
         ? {
-            kind: "require_skill_inputs",
-            skillName: retained[0]!.name,
-            missingRequires: retained[0]!.missingRequires,
+            kind: "require_skill_load",
+            skillNames: candidateSkillNames(retained),
             boundary: isVerificationPhase(signals.phase) ? "verify" : "execute",
-            reason: "The best matched skill is blocked by missing required inputs.",
           }
-        : effectfulBoundary
-          ? {
-              kind: "require_skill_load",
-              skillNames: candidateSkillNames(retained),
-              boundary: isVerificationPhase(signals.phase) ? "verify" : "execute",
-            }
-          : {
-              kind: "recommend_skill_load",
-              skillNames: candidateSkillNames(retained),
-              reason: "TaskSpec strongly matches routable loaded skills.",
-            },
-    toolAvailabilityPosture:
-      needsInputBeforeSkillLoad && effectfulBoundary
-        ? "require_explore"
-        : effectfulBoundary
-          ? "require_execute"
-          : "recommend",
+        : {
+            kind: "recommend_skill_load",
+            skillNames: candidateSkillNames(retained),
+            reason: "TaskSpec strongly matches routable loaded skills.",
+          },
+    toolAvailabilityPosture: needsInputBeforeSkillLoad
+      ? "require_explore"
+      : effectfulBoundary
+        ? "require_execute"
+        : "recommend",
     taskSpecReady: true,
     candidates: retained,
     rejectedCandidates,

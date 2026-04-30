@@ -132,7 +132,6 @@ export const MANAGED_BREWVA_TOOL_METADATA_BY_NAME = {
   skill_load: metadata("control_plane", "control_state_mutation", [
     "authority.skills.activate",
     "inspect.skills.getConsumedOutputs",
-    "inspect.skills.getLoadReport",
     "inspect.skills.getReadiness",
   ]),
   tape_handoff: metadata("skill", "control_state_mutation", [

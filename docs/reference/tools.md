@@ -758,9 +758,16 @@ Current semantic-output rule:
   outputs, `skill_load`, and `workflow_status` rather than retried as a
   producer-boundary contract error
 
-`skill_load` and `runtime.inspect.skills.getConsumedOutputs(...)` expose the
-normalized consumer view for prior outputs, including unresolved normalization
-issues and named blocking consumers where relevant. This keeps warm transitions
+`skill_load` renders the activation envelope for the selected skill. The
+envelope includes the active skill identity, effect posture, budget summary,
+required outputs, required and missing inputs, bounded normalized prior outputs,
+normalization issues, and effective instructions. It does not render discovery
+metadata such as routing scope, routable state, preferred/fallback tool dumps,
+or cost hints.
+
+`runtime.inspect.skills.getConsumedOutputs(...)` exposes the normalized
+consumer view for prior outputs, including unresolved normalization issues and
+named blocking consumers where relevant. This keeps warm transitions
 consumer-driven instead of forcing every upstream producer to emit the final
 canonical read model directly.
 

@@ -5,12 +5,6 @@ description: Code-change execution with scope discipline and fresh verification
 stability: stable
 selection:
   when_to_use: Use when the task is ready for code changes and verification evidence must be produced with the change.
-  examples:
-    - Implement the requested change.
-    - Patch this bug in the codebase.
-    - Refactor this path and verify it.
-  phases:
-    - execute
 intent:
   outputs:
     - change_set

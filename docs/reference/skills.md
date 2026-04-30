@@ -73,7 +73,7 @@ Skill frontmatter supports intent, effect, resource, and execution metadata:
 - `description`
   - optional short summary; defaults to `<name> skill`
 - `intent.outputs/intent.output_contracts/intent.semantic_bindings`
-- optional `selection.when_to_use/selection.examples/selection.paths/selection.phases`
+- optional `selection.when_to_use/selection.paths`
 - optional `requires` / required `consumes`
 - `composable_with`
 - `effects.allowed_effects/effects.denied_effects`
@@ -84,26 +84,43 @@ Skill frontmatter supports intent, effect, resource, and execution metadata:
 Structured metadata is only strong when runtime or control-plane code consumes
 it directly:
 
-| Metadata family                                      | Contract strength                       | Consumer                                                                                    |
-| ---------------------------------------------------- | --------------------------------------- | ------------------------------------------------------------------------------------------- |
-| `description` and markdown body                      | descriptive                             | model and operator judgment                                                                 |
-| `selection.*`                                        | routing input                           | gateway cold-start `skill-first` recommendation                                             |
-| `requires` / `consumes`                              | artifact-readiness contract             | runtime skill readiness, `workflow_status`, `skill_load`, skill-routing context             |
-| `composable_with`                                    | lifecycle contract                      | `SkillLifecycleService` activation gate                                                     |
-| `intent.*`                                           | producer and semantic-consumer contract | completion validation, normalization, downstream consumed outputs                           |
-| `effects.*` and `resources.*`                        | authority and budget contract           | tool policy, resource lease, execution boundary                                             |
-| `execution_hints.preferred_tools` / `fallback_tools` | control-plane tool guidance             | `skill_load`, skill index, gateway subagent prompt assembly, gateway tool-surface narrowing |
-| `execution_hints.cost_hint`                          | advisory surfaced metadata              | `skill_load` and skill index; no runtime budget decision unless a consumer is added         |
+| Metadata family                                      | Contract strength                       | Consumer                                                                        |
+| ---------------------------------------------------- | --------------------------------------- | ------------------------------------------------------------------------------- |
+| `description` and markdown body                      | descriptive                             | model and operator judgment                                                     |
+| `selection.*`                                        | routing input                           | gateway cold-start `skill-first` recommendation                                 |
+| `requires` / `consumes`                              | artifact-readiness contract             | runtime skill readiness, `workflow_status`, `skill_load`, skill-routing context |
+| `composable_with`                                    | lifecycle contract                      | `SkillLifecycleService` activation gate                                         |
+| `intent.*`                                           | producer and semantic-consumer contract | completion validation, normalization, downstream consumed outputs               |
+| `effects.*` and `resources.*`                        | authority and budget contract           | tool policy, resource lease, execution boundary                                 |
+| `execution_hints.preferred_tools` / `fallback_tools` | control-plane tool guidance             | skill index, gateway subagent prompt assembly, gateway tool-surface narrowing   |
+| `execution_hints.cost_hint`                          | advisory surfaced metadata              | skill index; no runtime budget decision unless a consumer is added              |
 
-`selection` is optional. When present, it must declare at least one signal:
-`when_to_use`, `examples`, `paths`, or `phases`. A skill with a directory-derived
-`routing.scope` but no `selection` signals is loaded and inspectable but not
-routable. There is no authored `routable` field.
+`selection` is optional. When present, it must declare at least one structured
+signal: `when_to_use` or `paths`. A skill with a directory-derived
+`routing.scope` but no selection profile signals is loaded and inspectable but
+not routable. There is no authored `routable` field.
+
+The selection profile is narrower than the full skill contract. Cold-start
+routing may read only:
+
+- `name`
+- `selection.when_to_use`
+- `selection.paths`
+- authored `## Trigger` bullets from the skill body
+
+`## Trigger` is read only from the skill's authored markdown. Runtime-inherited
+guidance, shared project guidance, and effective markdown assembled for
+activation do not fall back into the selection profile.
+
+Fields such as `description`, `intent.outputs`, `effects`, `resources`, and
+`execution_hints` do not affect hit rate. Warm artifact state can gate a
+shortlisted skill through handoff readiness, but it cannot add a new candidate
+or raise an unrelated skill above the selection shortlist.
 
 `execution_hints` is optional. When present, each child field is optional.
 Empty `preferred_tools: []` and `fallback_tools: []` normalize away. If no
-`cost_hint` is authored, `skill_load` and the generated index display the
-default cost hint as `medium`; that default is not an authored contract field.
+`cost_hint` is authored, the generated index displays the default cost hint as
+`medium`; that default is not an authored contract field.
 
 `execution_hints.suggested_chains` is not supported. Workflow sequencing that
 is not consumed by runtime code belongs in the skill markdown body.
@@ -123,8 +140,9 @@ Runtime distinguishes authored and inherited skill material:
   overlays.
 - `inheritedMarkdown` / `inheritedResources` come from runtime-owned defaults
   and project shared guidance.
-- `markdown` / `resources` remain the effective union that `skill_load`,
-  delegated skill prompts, and inspection surfaces render.
+- `markdown` / `resources` remain the effective union. `skill_load` renders the
+  effective markdown through the activation envelope; inspection surfaces own
+  resource inventory.
 
 Shared authored behavior is injected as runtime-inherited guidance from
 `skills/meta/skill-authoring/references/authored-behavior.md`. Individual
@@ -140,32 +158,30 @@ Authoring vs runtime path semantics:
 - root-scoped entries such as `skills/project/shared/*.md` are interpreted
   relative to the discovered skill root
 - the loaded runtime catalog resolves these resource entries to filesystem paths
-  before exposing them through `runtime.inspect.skills.get(...)` or `skill_load`
+  before exposing them through `runtime.inspect.skills.get(...)`
 - inherited resources are added only after registry load; parser-level resource
   checks remain scoped to authored frontmatter
 
 `selection` is the stable skill-authored control-plane signal for skill-first
 recommendation. It keeps selection ownership with the skill contract rather than
-hardcoding per-skill routing heuristics in the gateway. Current authored fields
-are:
+hardcoding per-skill routing heuristics in the gateway. Current authored
+frontmatter fields are:
 
 - `selection.when_to_use`
   - concise natural-language intent statement for when the skill should own the task
-- `selection.examples`
-  - optional task or user-utterance examples that make the selection intent concrete
 - `selection.paths`
   - optional structured path hints used as path-aware boosts or penalties when explicit targets exist
-- `selection.phases`
-  - optional structured task-phase hints
-  - vocabulary is closed and aligned to runtime `TaskPhase`:
-    `align`, `investigate`, `execute`, `verify`, `ready_for_acceptance`, `blocked`, `done`
+
+Authored `## Trigger` bullets in the skill body are also part of the selection
+projection. They are prose for the model and scorer, not a separate metadata
+field.
 
 Operator and meta skills may omit `selection` when they are inspect-only. They
 become routable only when routing is enabled, their directory-derived scope is
-included, and `selection` carries at least one signal.
+included, and the compiled selection profile carries at least one signal.
 
-Runtime compiles internal selection features from authored `selection`,
-`description`, and markdown trigger text at load time. Authors do not maintain a
+Runtime compiles internal selection features from `name`, authored `selection`,
+and authored markdown trigger text at load time. Authors do not maintain a
 second keyword-only routing table.
 
 ## Parameterizing Skill Invocations Via `task_set_spec`

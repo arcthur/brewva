@@ -35,8 +35,6 @@ function writeSkill(
       `description: ${input.name} skill`,
       "selection:",
       "  when_to_use: Use when the task needs the routed test skill.",
-      "  examples: [test skill]",
-      "  phases: [align]",
       "intent:",
       `  outputs: [${input.outputs.join(", ")}]`,
       ...(input.semanticBindings && Object.keys(input.semanticBindings).length > 0
@@ -113,7 +111,7 @@ function buildImpactMap(input: {
 }
 
 describe("skill_complete tool", () => {
-  test("skill_load separates routing scope and routability while defaulting omitted tool guidance", async () => {
+  test("skill_load renders the activation envelope without discovery or tool-hint dumps", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-skill-load-compressed-guidance-"));
     writeSkill(join(workspace, ".brewva/skills/core/compressed/SKILL.md"), {
       name: "compressed",
@@ -135,11 +133,14 @@ describe("skill_complete tool", () => {
     );
 
     const text = extractTextContent(result as { content: Array<{ type: string; text?: string }> });
-    expect(text).toContain("- preferred tools: (none)");
-    expect(text).toContain("- fallback tools: (none)");
-    expect(text).toContain("- cost hint: medium");
-    expect(text).toContain("- routing scope: core");
-    expect(text).toContain("- routable: yes");
+    expect(text).toContain("## Activation Envelope");
+    expect(text).toContain("- effect level: read_only");
+    expect(text).toContain("- required outputs: (none)");
+    expect(text).not.toContain("- preferred tools:");
+    expect(text).not.toContain("- fallback tools:");
+    expect(text).not.toContain("- cost hint:");
+    expect(text).not.toContain("- routing scope:");
+    expect(text).not.toContain("- routable:");
   });
 
   test("loads a skill with missing required inputs and renders blocked readiness", async () => {

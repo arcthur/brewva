@@ -5,12 +5,6 @@ description: Behavior validation through realistic flows, adversarial probes,
 stability: stable
 selection:
   when_to_use: Use when shipped behavior must be validated through realistic flows, adversarial probes, or executable evidence.
-  examples:
-    - QA this feature in realistic usage.
-    - Try to break this flow and record evidence.
-    - Verify the behavior end to end, not just statically.
-  phases:
-    - verify
 intent:
   outputs:
     - qa_report

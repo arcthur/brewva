@@ -108,8 +108,6 @@ description: test implementation skill
 tags: [implementation]
 selection:
   when_to_use: Use when the task needs the routed test skill.
-  examples: [test skill]
-  phases: [execute]
 intent:
   outputs: [change_set]
   output_contracts:

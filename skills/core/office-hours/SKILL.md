@@ -5,13 +5,6 @@ description: Diagnose new product, feature, startup, side-project, hackathon,
 stability: stable
 selection:
   when_to_use: Use when a new idea or "is this worth building" question needs diagnosis before discovery, strategy, planning, or implementation.
-  examples:
-    - Run office hours on this product idea.
-    - Help me decide if this side project is worth building.
-    - Brainstorm this startup concept before we plan implementation.
-    - Pressure-test this hackathon idea before code.
-  phases:
-    - align
 intent:
   outputs:
     - office_hours_brief

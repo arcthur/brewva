@@ -185,6 +185,7 @@ None currently.
 - `docs/research/promoted/rfc-skill-contract-layering-project-context-and-explicit-activation.md`
 - `docs/research/promoted/rfc-skill-metadata-as-runtime-contract-and-routing-substrate.md`
 - `docs/research/promoted/rfc-skill-first-plugin-and-promotion-governance.md`
+- `docs/research/promoted/rfc-skill-lifecycle-profile-subtraction.md`
 - `docs/research/promoted/rfc-skill-distribution-refresh-and-catalog-surface.md`
 - `docs/research/promoted/rfc-skill-surface-compression-and-project-guidance-boundaries.md`
 - `docs/research/promoted/rfc-specialist-subagents-and-adversarial-verification.md`

@@ -53,8 +53,6 @@ function writeSkill(filePath: string, input: SkillFixtureInput): void {
       `description: ${input.name} skill`,
       "selection:",
       "  when_to_use: Use when the task needs the local registry skill.",
-      "  examples: [test skill]",
-      "  phases: [align]",
       "intent:",
       `  outputs: [${input.outputs.join(", ")}]`,
       ...(input.semanticBindings && Object.keys(input.semanticBindings).length > 0
@@ -251,8 +249,6 @@ describe("skill output registry", () => {
         "description: planning-consumer skill",
         "selection:",
         "  when_to_use: Use when the task needs a downstream planning consumer.",
-        "  examples: [planning consumer]",
-        "  phases: [align]",
         "intent:",
         "  outputs: [summary]",
         "  output_contracts:",

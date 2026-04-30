@@ -26,6 +26,7 @@ export * from "./projection/session-rewind.js";
 export * from "./services/credential-vault.js";
 export * from "./services/session-wire.js";
 export * from "./skills/planning-normalization.js";
+export * from "./skills/profiles.js";
 export * from "./skills/review-normalization.js";
 export * from "./skills/semantic-artifact-catalog.js";
 export * from "./skills/registry.js";

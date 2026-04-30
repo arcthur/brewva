@@ -33,8 +33,6 @@ function writeSkill(
       `description: ${input.name} skill`,
       "selection:",
       "  when_to_use: Use when the task needs the routed test skill.",
-      "  examples: [test skill]",
-      "  phases: [align]",
       "intent:",
       `  outputs: [${outputs.join(", ")}]`,
       ...(input.semanticBindings && Object.keys(input.semanticBindings).length > 0
@@ -120,7 +118,6 @@ function buildReadinessSkill(input: {
       category: "core",
       selection: {
         whenToUse: "Use when testing readiness derivation.",
-        phases: ["align"],
       },
       intent: {
         outputs: [],

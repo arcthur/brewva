@@ -12,6 +12,7 @@ function writeSkill(
     name: string;
     selection?: "default" | "examples_only" | false;
     executionHints?: boolean;
+    trigger?: boolean;
   },
 ): void {
   mkdirSync(dirname(filePath), { recursive: true });
@@ -20,6 +21,7 @@ function writeSkill(
     normalizedPath.includes(segment),
   );
   const selectionMode = input.selection ?? "default";
+  const includeTrigger = input.trigger ?? true;
   writeFileSync(
     filePath,
     [
@@ -27,12 +29,7 @@ function writeSkill(
       `name: ${input.name}`,
       `description: ${input.name} skill`,
       ...(routedCategory && selectionMode === "default"
-        ? [
-            "selection:",
-            "  when_to_use: Use when the task needs the routed test skill.",
-            "  examples: [test skill]",
-            "  phases: [align]",
-          ]
+        ? ["selection:", "  when_to_use: Use when the task needs the routed test skill."]
         : []),
       ...(routedCategory && selectionMode === "examples_only"
         ? ["selection:", "  examples: [test skill]"]
@@ -59,10 +56,7 @@ function writeSkill(
       "",
       "Test skill.",
       "",
-      "## Trigger",
-      "",
-      "Use for tests.",
-      "",
+      ...(includeTrigger ? ["## Trigger", "", "- Use for tests.", ""] : []),
       "## Workflow",
       "",
       "### Step 1",
@@ -139,6 +133,46 @@ describe("skill discovery and loading", () => {
       roots.find((entry) => entry.source === "system_root"),
       "expected system skill root to be discovered",
     );
+  });
+
+  test("exposes a narrow routing catalog instead of full skill documents", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-skill-routing-catalog-"));
+    writeSkill(join(workspace, ".brewva/skills/core/foo/SKILL.md"), {
+      name: "foo",
+      executionHints: true,
+    });
+
+    const config = structuredClone(DEFAULT_BREWVA_CONFIG);
+    config.skills.routing.enabled = true;
+    config.skills.routing.scopes = ["core"];
+    const runtime = new BrewvaRuntime({ cwd: workspace, config });
+
+    const fullSkill = requireDefined(runtime.inspect.skills.get("foo"), "expected foo skill");
+    expect(fullSkill.description).toBe("foo skill");
+    expect(fullSkill.contract.executionHints?.preferredTools).toEqual(["read"]);
+
+    const routingEntry = requireDefined(
+      runtime.inspect.skills.listForRouting().find((entry) => entry.name === "foo"),
+      "expected foo routing entry",
+    );
+    expect(Object.keys(routingEntry).toSorted()).toEqual([
+      "category",
+      "consumes",
+      "name",
+      "requires",
+      "selection",
+    ]);
+    expect(routingEntry.selection.forScorer).toMatchObject({
+      name: "foo",
+      whenToUse: "Use when the task needs the routed test skill.",
+      triggerBullets: ["Use for tests."],
+    });
+
+    const serialized = JSON.stringify(routingEntry);
+    expect(serialized).not.toContain("foo skill");
+    expect(serialized).not.toContain(fullSkill.filePath);
+    expect(serialized).not.toContain("preferredTools");
+    expect(serialized).not.toContain("workspace_read");
   });
 
   test("does not load ancestor .brewva skills when running from nested cwd", () => {
@@ -293,6 +327,7 @@ describe("skill discovery and loading", () => {
     writeSkill(join(workspace, ".brewva/skills/core/hidden-helper/SKILL.md"), {
       name: "hidden-helper",
       selection: false,
+      trigger: false,
     });
 
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
@@ -314,7 +349,22 @@ describe("skill discovery and loading", () => {
     });
   });
 
-  test("examples-only selection makes an allowed-scope skill routable", () => {
+  test("authored trigger bullets make an allowed-scope skill routable", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-skill-trigger-routable-"));
+    writeSkill(join(workspace, ".brewva/skills/core/trigger-only/SKILL.md"), {
+      name: "trigger-only",
+      selection: false,
+      trigger: true,
+    });
+
+    const config = structuredClone(DEFAULT_BREWVA_CONFIG);
+    config.skills.routing.enabled = true;
+    const runtime = new BrewvaRuntime({ cwd: workspace, config });
+    const report = runtime.inspect.skills.getLoadReport();
+    expect(report.routableSkills).toContain("trigger-only");
+  });
+
+  test("examples-only selection fails closed", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-skill-examples-only-routable-"));
     writeSkill(join(workspace, ".brewva/skills/core/examples-only/SKILL.md"), {
       name: "examples-only",
@@ -323,9 +373,9 @@ describe("skill discovery and loading", () => {
 
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
     config.skills.routing.enabled = true;
-    const runtime = new BrewvaRuntime({ cwd: workspace, config });
-    const report = runtime.inspect.skills.getLoadReport();
-    expect(report.routableSkills).toContain("examples-only");
+    expect(() => new BrewvaRuntime({ cwd: workspace, config })).toThrow(
+      "selection contains unsupported field(s): examples",
+    );
   });
 
   test("applies project overlays and project guidance to an existing skill", () => {
@@ -742,8 +792,6 @@ describe("skill discovery and loading", () => {
         "description: foo skill",
         "selection:",
         "  when_to_use: Use when the task needs the routed test skill.",
-        "  examples: [test skill]",
-        "  phases: [align]",
         "intent:",
         "  outputs: []",
         "effects:",
@@ -835,8 +883,6 @@ describe("skill discovery and loading", () => {
         "description: foo skill",
         "selection:",
         "  when_to_use: Use when the task needs the routed test skill.",
-        "  examples: [test skill]",
-        "  phases: [align]",
         "intent:",
         "  outputs: []",
         "effects:",

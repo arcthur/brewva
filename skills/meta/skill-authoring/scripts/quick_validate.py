@@ -87,17 +87,6 @@ SEMANTIC_ARTIFACT_SCHEMA_IDS = {
     "ship.ship_decision.v2",
 }
 OUTPUT_CONTRACT_KINDS = {"text", "enum", "json"}
-TASK_PHASES = {
-    "align",
-    "investigate",
-    "execute",
-    "verify",
-    "ready_for_acceptance",
-    "blocked",
-    "done",
-}
-
-
 def is_overlay_skill(skill_dir: Path) -> bool:
     parts = skill_dir.resolve().parts
     return len(parts) >= 3 and parts[-3:-1] == ("project", "overlays")
@@ -518,7 +507,7 @@ def validate_selection(
     if "whenToUse" in selection:
         return False, "Field 'selection.whenToUse' has been removed; use 'selection.when_to_use'"
 
-    allowed_keys = {"when_to_use", "examples", "paths", "phases"}
+    allowed_keys = {"when_to_use", "paths"}
     unexpected_keys = set(selection.keys()) - allowed_keys
     if unexpected_keys:
         return False, (
@@ -531,30 +520,16 @@ def validate_selection(
         if not isinstance(when_to_use, str) or not when_to_use.strip():
             return False, "Field 'selection.when_to_use' must be a non-empty string"
 
-    for key in ("examples", "paths", "phases"):
+    for key in ("paths",):
         if key not in selection:
             continue
         ok, message = validate_string_array_value(selection[key], f"selection.{key}")
         if not ok:
             return ok, message
 
-    for phase in selection.get("phases", []) if isinstance(selection.get("phases"), list) else []:
-        if phase not in TASK_PHASES:
-            return (
-                False,
-                "Field 'selection.phases' contains unsupported phase '"
-                + str(phase)
-                + "'",
-            )
-
-    if (
-        when_to_use is None
-        and not selection.get("examples")
-        and not selection.get("paths")
-        and not selection.get("phases")
-    ):
+    if when_to_use is None and not selection.get("paths"):
         return False, (
-            "Field 'selection' must declare at least one of: when_to_use, examples, paths, phases"
+            "Field 'selection' must declare at least one of: when_to_use, paths"
         )
 
     return True, None

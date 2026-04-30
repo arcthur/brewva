@@ -13,6 +13,7 @@ import {
   type SkillReadinessEntry,
   type ToolEffectClass,
 } from "@brewva/brewva-runtime";
+import type { SkillRoutingCatalogEntry } from "@brewva/brewva-runtime/internal";
 import type {
   InternalHostPluginApi as ExtensionAPI,
   BrewvaHostToolInfo as ToolInfo,
@@ -33,7 +34,6 @@ import {
   buildSkillDiagnosisPolicyBlock,
   computeSkillDiagnosisReceiptKey,
   deriveSkillDiagnoses,
-  type SkillClassificationHint,
   type SkillDiagnosisSet,
   type ToolAvailabilityPosture,
 } from "./skill-first.js";
@@ -90,7 +90,14 @@ const TOOL_SURFACE_REFRESH_TOOL_NAMES = new Set([
 
 type ToolSurfaceSkill = Pick<
   SkillDocument,
-  "name" | "description" | "category" | "markdown" | "contract"
+  | "name"
+  | "description"
+  | "category"
+  | "filePath"
+  | "baseDir"
+  | "authoredMarkdown"
+  | "markdown"
+  | "contract"
 >;
 
 type ToolSurfaceSkillState = {
@@ -127,6 +134,7 @@ export interface ToolSurfaceRuntime {
     };
     skills: {
       list(): ToolSurfaceSkill[];
+      listForRouting(): SkillRoutingCatalogEntry[];
       getActive(sessionId: string): ToolSurfaceSkill | null | undefined;
       getActiveState(sessionId: string): ToolSurfaceSkillState | undefined;
       getReadiness?(sessionId: string): readonly SkillReadinessEntry[];
@@ -484,7 +492,6 @@ function resolveTurnSurfacePlan(input: {
   sessionId: string;
   prompt: string;
   dynamicToolDefinitions?: ReadonlyMap<string, ToolDefinition>;
-  classificationHints?: readonly SkillClassificationHint[];
 }): TurnSurfacePlan {
   const requestedToolNames = extractRequestedToolNames(input.prompt);
   const requestedManagedToolNames = requestedToolNames.filter((toolName) =>
@@ -497,7 +504,6 @@ function resolveTurnSurfacePlan(input: {
   const diagnosisSet = deriveSkillDiagnoses(input.runtime, {
     sessionId: input.sessionId,
     prompt: input.prompt,
-    classificationHints: input.classificationHints,
   });
   const skillManagedToolNames = collectSkillToolNames(
     input.runtime,
@@ -865,7 +871,6 @@ function computeSkillEnforcementKey(
 
 export interface RegisterToolSurfaceOptions {
   dynamicToolDefinitions?: ReadonlyMap<string, ToolDefinition>;
-  resolveClassificationHints?: (sessionId: string) => readonly SkillClassificationHint[];
 }
 
 export interface ToolSurfaceLifecycle {
@@ -888,7 +893,6 @@ function resolveAndActivateToolSurface(input: {
   prompt: string;
   hasUI: boolean;
   dynamicToolDefinitions?: ReadonlyMap<string, ToolDefinition>;
-  resolveClassificationHints?: (sessionId: string) => readonly SkillClassificationHint[];
 }): ResolvedToolSurface | undefined {
   const allToolsGetter = (input.extensionApi as { getAllTools?: () => ToolInfo[] }).getAllTools;
   const activeToolsGetter = (input.extensionApi as { getActiveTools?: () => string[] })
@@ -913,7 +917,6 @@ function resolveAndActivateToolSurface(input: {
     sessionId: input.sessionId,
     prompt: input.prompt,
     dynamicToolDefinitions: input.dynamicToolDefinitions,
-    classificationHints: input.resolveClassificationHints?.(input.sessionId),
   });
   const knownToolNames = new Set(allTools.map((tool) => normalizeToolName(tool.name)));
   registerMissingManagedTools({
@@ -1055,7 +1058,6 @@ export function createToolSurfaceLifecycle(
         prompt,
         hasUI: (ctx as { hasUI?: boolean }).hasUI === true,
         dynamicToolDefinitions: options.dynamicToolDefinitions,
-        resolveClassificationHints: options.resolveClassificationHints,
       });
       if (resolved) {
         skillEnforcementKeyBySession.set(sessionId, computeSkillEnforcementKey(resolved));
@@ -1102,7 +1104,6 @@ export function createToolSurfaceLifecycle(
         prompt,
         hasUI: (ctx as { hasUI?: boolean }).hasUI === true,
         dynamicToolDefinitions: options.dynamicToolDefinitions,
-        resolveClassificationHints: options.resolveClassificationHints,
       });
       if (!resolved) {
         return undefined;

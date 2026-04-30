@@ -142,7 +142,6 @@ function registerHostedPipeline(
     delegationStore,
     turnClock,
     contextProfile,
-    resolveClassificationHints: (sessionId) => localHookManager.getClassificationHints(sessionId),
   });
   const deliberationMaintenance = createDeliberationMaintenanceLifecycle(runtime);
   const narrativeMemory = createNarrativeMemoryLifecycle(runtime, semanticReranker);
@@ -151,11 +150,8 @@ function registerHostedPipeline(
   });
   const toolSurface = createToolSurfaceLifecycle(runtimePluginApi, toolSurfaceRuntime, {
     dynamicToolDefinitions: registerTools ? toolDefinitionsByName : undefined,
-    resolveClassificationHints: (sessionId) => localHookManager.getClassificationHints(sessionId),
   });
-  const completionGuard = createCompletionGuardLifecycle(runtimePluginApi, hostedRuntime, {
-    resolveClassificationHints: (sessionId) => localHookManager.getClassificationHints(sessionId),
-  });
+  const completionGuard = createCompletionGuardLifecycle(runtimePluginApi, hostedRuntime);
   const readPathRecovery = createReadPathRecoveryLifecycle(hostedRuntime);
 
   runtimePluginApi.on("tool_call", qualityGate.toolCall);
@@ -315,7 +311,6 @@ export {
   buildSkillDiagnosisPolicyBlock,
   deriveSkillDiagnoses,
   type SkillActivationPosture,
-  type SkillClassificationHint,
   type SkillDiagnosisCandidate,
   type SkillDiagnosisReadiness,
   type SkillDiagnosisSet,

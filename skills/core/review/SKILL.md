@@ -5,13 +5,6 @@ description: Findings-first risk review for diffs and change plans, including
 stability: stable
 selection:
   when_to_use: Use when a diff or change plan needs findings-first risk review, merge readiness assessment, or conformance checking.
-  examples:
-    - Review this diff for risks and regressions.
-    - Assess whether this change is ready to merge.
-    - Find review findings in this patch.
-  phases:
-    - investigate
-    - verify
 intent:
   outputs:
     - review_report

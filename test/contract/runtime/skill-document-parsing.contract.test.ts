@@ -16,8 +16,6 @@ import { createContract, createTempSkillDocument, repoRoot } from "./skill-contr
 const MINIMAL_SELECTION_LINES = [
   "selection:",
   "  when_to_use: Use when the task needs the routed test skill.",
-  "  examples: [test skill]",
-  "  phases: [align]",
 ] as const;
 
 describe("skill document parsing", () => {
@@ -121,8 +119,6 @@ describe("skill document parsing", () => {
 
     expect(parseSkillDocument(filePath, "core").contract.selection).toEqual({
       whenToUse: "Use when the task needs the routed test skill.",
-      examples: ["test skill"],
-      phases: ["align"],
     });
   });
 
@@ -251,9 +247,7 @@ describe("skill document parsing", () => {
         "description: review skill",
         "selection:",
         "  when_to_use: Use when reviewing a change plan or diff.",
-        "  examples: [review this change, assess merge readiness]",
         "  paths: [packages/brewva-runtime]",
-        "  phases: [investigate, verify]",
         "intent:",
         "  outputs: []",
         "effects:",
@@ -280,9 +274,7 @@ describe("skill document parsing", () => {
     });
     expect(parsed.contract.selection).toEqual({
       whenToUse: "Use when reviewing a change plan or diff.",
-      examples: ["review this change", "assess merge readiness"],
       paths: ["packages/brewva-runtime"],
-      phases: ["investigate", "verify"],
     });
   });
 
@@ -317,9 +309,9 @@ describe("skill document parsing", () => {
     expect(getSkillCostHint(parsed.contract)).toBe("medium");
   });
 
-  test("parses examples-only selection as a routing signal", () => {
+  test("rejects selection.examples as removed hit-rate metadata", () => {
     const filePath = createTempSkillDocument(
-      "brewva-skill-examples-only-selection-",
+      "brewva-skill-examples-removed-",
       "skills/core/examples-only/SKILL.md",
       [
         "---",
@@ -344,9 +336,41 @@ describe("skill document parsing", () => {
       ],
     );
 
-    expect(parseSkillDocument(filePath, "core").contract.selection).toEqual({
-      examples: ["review a pull request", "inspect a diff"],
-    });
+    expect(() => parseSkillDocument(filePath, "core")).toThrow(
+      "selection contains unsupported field(s): examples",
+    );
+  });
+
+  test("rejects selection.phases as removed hit-rate metadata", () => {
+    const filePath = createTempSkillDocument(
+      "brewva-skill-phases-removed-",
+      "skills/core/phases-only/SKILL.md",
+      [
+        "---",
+        "name: phases-only",
+        "description: phases-only skill",
+        "selection:",
+        "  phases: [investigate, verify]",
+        "intent:",
+        "  outputs: []",
+        "effects:",
+        "  allowed_effects: [workspace_read]",
+        "resources:",
+        "  default_lease:",
+        "    max_tool_calls: 10",
+        "    max_tokens: 10000",
+        "  hard_ceiling:",
+        "    max_tool_calls: 20",
+        "    max_tokens: 20000",
+        "consumes: []",
+        "---",
+        "# phases-only",
+      ],
+    );
+
+    expect(() => parseSkillDocument(filePath, "core")).toThrow(
+      "selection contains unsupported field(s): phases",
+    );
   });
 
   test("rejects empty selection objects", () => {
@@ -459,7 +483,6 @@ describe("skill document parsing", () => {
         "description: review skill",
         "selection:",
         "  whenToUse: Use when reviewing a change plan or diff.",
-        "  examples: [review this change]",
         "intent:",
         "  outputs: []",
         "effects:",
@@ -639,7 +662,6 @@ describe("skill document parsing", () => {
         "description: suggested chain skill",
         "selection:",
         "  when_to_use: Use when the task needs the routed test skill.",
-        "  examples: [test skill]",
         "intent:",
         "  outputs: []",
         "effects:",

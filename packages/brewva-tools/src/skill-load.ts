@@ -1,22 +1,8 @@
-import type {
-  SkillConsumedOutputsView,
-  SkillContract,
-  SkillReadinessEntry,
-  SkillResourceSet,
-  ToolEffectClass,
-} from "@brewva/brewva-runtime";
+import type { ToolEffectClass } from "@brewva/brewva-runtime";
 import {
-  getSkillCostHint,
-  getSkillOutputContracts,
-  listSkillAllowedEffects,
-  listSkillDeniedEffects,
-  listSkillFallbackTools,
-  listSkillOutputs,
-  listSkillPreferredTools,
-  resolveSkillDefaultLease,
-  resolveSkillEffectLevel,
-  resolveSkillHardCeiling,
-} from "@brewva/brewva-runtime";
+  buildSkillActivationEnvelope,
+  type SkillActivationEnvelope,
+} from "@brewva/brewva-runtime/internal";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate";
 import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "./types.js";
@@ -24,34 +10,10 @@ import { failTextResult, textResult } from "./utils/result.js";
 import { createRuntimeBoundBrewvaToolFactory } from "./utils/runtime-bound-tool.js";
 import { getSessionId } from "./utils/session.js";
 
-function formatSkillOutput(input: {
-  name: string;
-  category: string;
-  baseDir: string;
-  markdown: string;
-  contract: SkillContract;
-  routable: boolean;
-  resources?: SkillResourceSet;
-  authoredResources?: SkillResourceSet;
-  inheritedResources?: SkillResourceSet;
-  availableConsumedOutputs?: SkillConsumedOutputsView;
-  skillReadiness?: SkillReadinessEntry;
-}): string {
-  const outputsList = listSkillOutputs(input.contract);
-  const outputs = outputsList.length > 0 ? outputsList.join(", ") : "(none)";
-  const requires = input.contract.requires?.length ? input.contract.requires.join(", ") : "(none)";
-  const consumes = input.contract.consumes?.length ? input.contract.consumes.join(", ") : "(none)";
-  const outputContracts = getSkillOutputContracts(input.contract);
-  const defaultLease = resolveSkillDefaultLease(input.contract);
-  const hardCeiling = resolveSkillHardCeiling(input.contract);
-  const preferredTools = listSkillPreferredTools(input.contract);
-  const fallbackTools = listSkillFallbackTools(input.contract);
-  const allowedEffects = listSkillAllowedEffects(input.contract);
-  const deniedEffects = listSkillDeniedEffects(input.contract);
-
+function formatSkillActivationEnvelope(envelope: SkillActivationEnvelope): string {
   const formatEffects = (effects: ToolEffectClass[]): string =>
     effects.length > 0 ? effects.join(", ") : "(none)";
-  const formatBudget = (budget: typeof defaultLease): string =>
+  const formatBudget = (budget: SkillActivationEnvelope["budget"]["defaultLease"]): string =>
     budget
       ? [
           `max_tool_calls=${budget.maxToolCalls ?? "(unset)"}`,
@@ -59,69 +21,42 @@ function formatSkillOutput(input: {
           `max_parallel=${budget.maxParallel ?? "(unset)"}`,
         ].join(", ")
       : "(none)";
+  const formatList = (values: readonly string[]): string =>
+    values.length > 0 ? values.join(", ") : "(none)";
 
   const lines = [
-    `# Skill Loaded: ${input.name}`,
-    `Category: ${input.category}`,
-    `Base directory: ${input.baseDir}`,
+    `# Skill Loaded: ${envelope.activeSkill.name}`,
+    `Category: ${envelope.activeSkill.category}`,
+    `Base directory: ${envelope.activeSkill.baseDir}`,
     "",
-    "## Contract",
-    `- effect level: ${resolveSkillEffectLevel(input.contract)}`,
-    `- allowed effects: ${formatEffects(allowedEffects)}`,
-    `- denied effects: ${formatEffects(deniedEffects)}`,
-    `- preferred tools: ${preferredTools.join(", ") || "(none)"}`,
-    `- fallback tools: ${fallbackTools.join(", ") || "(none)"}`,
-    `- cost hint: ${getSkillCostHint(input.contract)}`,
-    `- default lease: ${formatBudget(defaultLease)}`,
-    `- hard ceiling: ${formatBudget(hardCeiling)}`,
-    `- required outputs: ${outputs}`,
-    `- output contracts: ${Object.keys(outputContracts).join(", ") || "(none)"}`,
-    `- required inputs: ${requires}`,
-    `- optional inputs: ${consumes}`,
-    `- readiness: ${input.skillReadiness?.readiness ?? "unknown"}`,
-    `- routing scope: ${input.contract.routing?.scope ?? "(none)"}`,
-    `- routable: ${input.routable ? "yes" : "no"}`,
+    "## Activation Envelope",
+    `- effect level: ${envelope.effectPosture.level}`,
+    `- allowed effects: ${formatEffects(envelope.effectPosture.allowedEffects)}`,
+    `- denied effects: ${formatEffects(envelope.effectPosture.deniedEffects)}`,
+    `- default lease: ${formatBudget(envelope.budget.defaultLease)}`,
+    `- hard ceiling: ${formatBudget(envelope.budget.hardCeiling)}`,
+    `- required outputs: ${formatList(envelope.requiredOutputs)}`,
+    `- required inputs: ${formatList(envelope.requiredInputs)}`,
+    `- optional inputs: ${formatList(envelope.optionalInputs)}`,
+    `- readiness: ${envelope.readiness}`,
   ];
 
-  if (input.skillReadiness && input.skillReadiness.missingRequires.length > 0) {
-    lines.push(`- missing required inputs: ${input.skillReadiness.missingRequires.join(", ")}`);
+  if (envelope.missingRequiredInputs.length > 0) {
+    lines.push(`- missing required inputs: ${envelope.missingRequiredInputs.join(", ")}`);
   }
 
-  if (input.resources) {
-    lines.push("");
-    lines.push("## Resources");
-    lines.push(`- references: ${input.resources.references.join(", ") || "(none)"}`);
-    lines.push(`- scripts: ${input.resources.scripts.join(", ") || "(none)"}`);
-    lines.push(`- heuristics: ${input.resources.heuristics.join(", ") || "(none)"}`);
-    lines.push(`- invariants: ${input.resources.invariants.join(", ") || "(none)"}`);
-    if (input.authoredResources || input.inheritedResources) {
-      lines.push(
-        `- authored references: ${input.authoredResources?.references.join(", ") || "(none)"}`,
-      );
-      lines.push(
-        `- inherited references: ${input.inheritedResources?.references.join(", ") || "(none)"}`,
-      );
-      lines.push(
-        `- inherited invariants: ${input.inheritedResources?.invariants.join(", ") || "(none)"}`,
-      );
-    }
-  }
-
-  const consumedOutputs = input.availableConsumedOutputs?.outputs ?? {};
-  if (Object.keys(consumedOutputs).length > 0) {
+  if (envelope.consumedOutputs.length > 0) {
     lines.push("");
     lines.push("## Normalized Data from Prior Skills");
-    for (const [key, value] of Object.entries(consumedOutputs)) {
-      const valueStr = typeof value === "string" ? value : JSON.stringify(value);
-      const truncated = valueStr.length > 500 ? `${valueStr.slice(0, 497)}...` : valueStr;
-      lines.push(`- ${key}: ${truncated}`);
+    for (const output of envelope.consumedOutputs) {
+      lines.push(`- ${output.key}: ${output.value}`);
     }
   }
 
-  if (input.availableConsumedOutputs && input.availableConsumedOutputs.issues.length > 0) {
+  if (envelope.normalizationIssues.length > 0) {
     lines.push("");
     lines.push("## Unresolved Normalization Issues");
-    for (const issue of input.availableConsumedOutputs.issues.slice(0, 8)) {
+    for (const issue of envelope.normalizationIssues.slice(0, 8)) {
       const blocking = issue.blockingConsumer ? ` -> ${issue.blockingConsumer}` : "";
       lines.push(`- ${issue.path} [${issue.tier}]${blocking}: ${issue.reason}`);
     }
@@ -129,7 +64,7 @@ function formatSkillOutput(input: {
 
   lines.push("");
   lines.push("## Instructions");
-  lines.push(input.markdown);
+  lines.push(envelope.instructions);
 
   return lines.join("\n");
 }
@@ -141,9 +76,9 @@ export function createSkillLoadTool(options: BrewvaToolOptions): ToolDefinition 
       name: "skill_load",
       label: "Skill Load",
       description:
-        "Load a skill by name, activate its contract, and return full skill instructions.",
+        "Load a skill by name, activate its contract, and return its activation envelope.",
       promptSnippet:
-        "Load the selected skill contract and working instructions before executing the skill.",
+        "Load the selected skill activation envelope and working instructions before executing the skill.",
       promptGuidelines: [
         "When a pending skill recommendation exists, load the selected skill before implementation.",
         "Use the exact selected skill name.",
@@ -162,7 +97,6 @@ export function createSkillLoadTool(options: BrewvaToolOptions): ToolDefinition 
           });
         }
         const skill = result.skill;
-        const loadReport = runtime.inspect.skills.getLoadReport();
 
         const availableConsumedOutputs = runtime.inspect.skills.getConsumedOutputs(
           sessionId,
@@ -171,34 +105,22 @@ export function createSkillLoadTool(options: BrewvaToolOptions): ToolDefinition 
         const skillReadiness = runtime.inspect.skills.getReadiness(sessionId, {
           targetSkillName: params.name,
         })[0];
+        const envelope = buildSkillActivationEnvelope(skill, {
+          consumedOutputs: availableConsumedOutputs,
+          readiness: skillReadiness,
+        });
 
-        return textResult(
-          formatSkillOutput({
-            name: skill.name,
-            category: skill.category,
-            baseDir: skill.baseDir,
-            markdown: skill.markdown,
-            contract: skill.contract,
-            routable: loadReport.routableSkills.includes(skill.name),
-            resources: skill.resources,
-            authoredResources: skill.authoredResources,
-            inheritedResources: skill.inheritedResources,
-            availableConsumedOutputs,
-            skillReadiness,
-          }),
-          {
-            ok: true,
-            sessionId,
-            skill: skill.name,
-            skillReadiness,
-          },
-        );
+        return textResult(formatSkillActivationEnvelope(envelope), {
+          ok: true,
+          sessionId,
+          skill: skill.name,
+          skillReadiness,
+        });
       },
     },
     {
       requiredCapabilities: [
         "authority.skills.activate",
-        "inspect.skills.getLoadReport",
         "inspect.skills.getConsumedOutputs",
         "inspect.skills.getReadiness",
       ],

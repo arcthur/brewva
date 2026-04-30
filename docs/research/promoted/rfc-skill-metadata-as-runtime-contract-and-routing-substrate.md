@@ -49,11 +49,12 @@ Stable references:
 5. `effects.*`, `resources.*`, and `intent.*` remain contract metadata for
    authority, budget, completion, and normalized artifact consumers.
 6. `execution_hints.preferred_tools` and `execution_hints.fallback_tools`
-   remain structured metadata because `skill_load`, skill index generation,
-   and gateway subagent orchestration consume them for prompt assembly and
-   tool-surface narrowing. `execution_hints.cost_hint` remains advisory surfaced
-   metadata until a runtime budget or scheduler consumer makes it behaviorally
-   active.
+   remain structured metadata because skill index generation, gateway subagent
+   orchestration, and gateway tool-surface narrowing consume them. The later
+   promoted lifecycle-profile subtraction removed them from default
+   `skill_load` rendering. `execution_hints.cost_hint` remains advisory
+   surfaced metadata until a runtime budget or scheduler consumer makes it
+   behaviorally active.
 
 ## Validation Status
 

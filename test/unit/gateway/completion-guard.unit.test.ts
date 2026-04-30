@@ -4,6 +4,7 @@ import type {
   SkillCompletionFailureRecord,
   SkillDocument,
 } from "@brewva/brewva-runtime";
+import { buildSkillRoutingCatalogEntry } from "@brewva/brewva-runtime/internal";
 import type { BrewvaHostContext, InternalHostPluginApi } from "@brewva/brewva-substrate";
 import { createCompletionGuardLifecycle } from "../../../packages/brewva-gateway/src/runtime-plugins/completion-guard.js";
 
@@ -13,6 +14,7 @@ function createSkillDocument(): SkillDocument {
     description: "Analyze repository state.",
     category: "core",
     markdown: "",
+    authoredMarkdown: "",
     filePath: "/tmp/repository-analysis/SKILL.md",
     baseDir: "/tmp/repository-analysis",
     contract: {
@@ -99,13 +101,26 @@ function createFailedContractHarness() {
       minimumContractState: "Provide every required output with non-empty values.",
     },
   } as unknown as SkillCompletionFailureRecord;
+  const skill = createSkillDocument();
+  const routingSkill = {
+    ...skill,
+    contract: {
+      ...skill.contract,
+      routing: { scope: "core" },
+      selection: {
+        whenToUse:
+          "Use when the task needs repository orientation, impact analysis, or boundary mapping before design, debugging, review, or execution.",
+      },
+    },
+  } as SkillDocument;
   const runtime = {
     inspect: {
       skills: {
         getActive: () => undefined,
         getActiveState: () => undefined,
         getLatestFailure: () => failure,
-        list: () => [createSkillDocument()],
+        list: () => [routingSkill],
+        listForRouting: () => [buildSkillRoutingCatalogEntry(routingSkill)],
         getLoadReport: () => ({
           loadedSkills: ["repository-analysis"],
           routingEnabled: true,
@@ -161,28 +176,26 @@ function createSkillFirstHarness() {
   }> = [];
   const notifications: Array<{ message: string; level: string }> = [];
   const skill = createSkillDocument();
+  const routingSkill = {
+    ...skill,
+    description: "Build a reliable repository snapshot, impact map, and planning posture.",
+    contract: {
+      ...skill.contract,
+      routing: { scope: "core" },
+      selection: {
+        whenToUse:
+          "Use when the task needs repository orientation, impact analysis, or boundary mapping before design, debugging, review, or execution.",
+      },
+    },
+  } as SkillDocument;
   const runtime = {
     inspect: {
       skills: {
         getActive: () => undefined,
         getActiveState: () => undefined,
         getLatestFailure: () => undefined,
-        list: () => [
-          {
-            ...skill,
-            description: "Build a reliable repository snapshot, impact map, and planning posture.",
-            contract: {
-              ...skill.contract,
-              routing: { scope: "core" },
-              selection: {
-                whenToUse:
-                  "Use when the task needs repository orientation, impact analysis, or boundary mapping before design, debugging, review, or execution.",
-                examples: ["Analyze this repository before changing code."],
-                phases: ["investigate"],
-              },
-            },
-          },
-        ],
+        list: () => [routingSkill],
+        listForRouting: () => [buildSkillRoutingCatalogEntry(routingSkill)],
         getLoadReport: () => ({
           loadedSkills: ["repository-analysis"],
           routingEnabled: true,
@@ -240,28 +253,26 @@ function createRequiredSkillFirstHarness() {
   }> = [];
   const notifications: Array<{ message: string; level: string }> = [];
   const skill = createSkillDocument();
+  const routingSkill = {
+    ...skill,
+    description: "Build a reliable repository snapshot, impact map, and planning posture.",
+    contract: {
+      ...skill.contract,
+      routing: { scope: "core" },
+      selection: {
+        whenToUse:
+          "Use when the task needs repository orientation, impact analysis, or boundary mapping before design, debugging, review, or execution.",
+      },
+    },
+  } as SkillDocument;
   const runtime = {
     inspect: {
       skills: {
         getActive: () => undefined,
         getActiveState: () => undefined,
         getLatestFailure: () => undefined,
-        list: () => [
-          {
-            ...skill,
-            description: "Build a reliable repository snapshot, impact map, and planning posture.",
-            contract: {
-              ...skill.contract,
-              routing: { scope: "core" },
-              selection: {
-                whenToUse:
-                  "Use when the task needs repository orientation, impact analysis, or boundary mapping before design, debugging, review, or execution.",
-                examples: ["Analyze this repository before changing code."],
-                phases: ["execute"],
-              },
-            },
-          },
-        ],
+        list: () => [routingSkill],
+        listForRouting: () => [buildSkillRoutingCatalogEntry(routingSkill)],
         getLoadReport: () => ({
           loadedSkills: ["repository-analysis"],
           routingEnabled: true,

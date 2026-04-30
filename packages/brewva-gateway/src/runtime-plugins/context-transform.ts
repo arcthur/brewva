@@ -13,14 +13,12 @@ import {
 } from "./hosted-context-injection-pipeline.js";
 import { createHostedContextTelemetry } from "./hosted-context-telemetry.js";
 import { createRuntimeTurnClockStore, type RuntimeTurnClockStore } from "./runtime-turn-clock.js";
-import type { SkillClassificationHint } from "./skill-first.js";
 
 export interface ContextTransformOptions {
   autoCompactionWatchdogMs?: number;
   delegationStore?: HostedDelegationStore;
   turnClock?: RuntimeTurnClockStore;
   contextProfile?: "minimal" | "standard" | "full";
-  resolveClassificationHints?: (sessionId: string) => readonly SkillClassificationHint[];
 }
 
 export interface ContextTransformLifecycle {
@@ -93,7 +91,6 @@ export function createContextTransformLifecycle(
     {
       delegationStore: options.delegationStore,
       contextProfile: options.contextProfile,
-      resolveClassificationHints: options.resolveClassificationHints,
     },
   );
 

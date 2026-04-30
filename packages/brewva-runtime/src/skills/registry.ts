@@ -40,6 +40,12 @@ import {
   listSkillPreferredTools,
   resolveSkillEffectLevel,
 } from "./facets.js";
+import {
+  buildSkillRoutingCatalogEntry,
+  buildSkillSelectionProfile,
+  hasSelectionProfileSignals,
+  type SkillRoutingCatalogEntry,
+} from "./profiles.js";
 import { resolveBundledSystemSkillsRoot } from "./system-install.js";
 
 const LOADABLE_SKILL_CATEGORIES: LoadableSkillCategory[] = [
@@ -337,16 +343,8 @@ function resolveSkillResources(
   };
 }
 
-function hasSelectionSignals(
-  selection: SkillDocument["contract"]["selection"] | undefined,
-): boolean {
-  if (!selection) return false;
-  return Boolean(
-    selection.whenToUse ||
-    (selection.examples?.length ?? 0) > 0 ||
-    (selection.paths?.length ?? 0) > 0 ||
-    (selection.phases?.length ?? 0) > 0,
-  );
+function hasSelectionSignals(skill: SkillDocument): boolean {
+  return hasSelectionProfileSignals(buildSkillSelectionProfile(skill));
 }
 
 function failProjectGuidance(filePath: string, message: string): never {
@@ -521,6 +519,12 @@ export class SkillRegistry {
     return [...this.skills.values()].toSorted((left, right) => left.name.localeCompare(right.name));
   }
 
+  listForRouting(): SkillRoutingCatalogEntry[] {
+    return this.list()
+      .filter((skill) => this.isRoutable(skill))
+      .map((skill) => buildSkillRoutingCatalogEntry(skill));
+  }
+
   get(name: string): SkillDocument | undefined {
     return this.skills.get(name);
   }
@@ -567,14 +571,8 @@ export class SkillRegistry {
                 ...(skill.contract.selection.whenToUse
                   ? { whenToUse: skill.contract.selection.whenToUse }
                   : {}),
-                ...(skill.contract.selection.examples
-                  ? { examples: [...skill.contract.selection.examples] }
-                  : {}),
                 ...(skill.contract.selection.paths
                   ? { paths: [...skill.contract.selection.paths] }
-                  : {}),
-                ...(skill.contract.selection.phases
-                  ? { phases: [...skill.contract.selection.phases] }
                   : {}),
               }
             : undefined,
@@ -618,7 +616,7 @@ export class SkillRegistry {
     const scope = skill.contract.routing?.scope;
     if (!scope) return false;
     if (!this.config.skills.routing.scopes.includes(scope)) return false;
-    return hasSelectionSignals(skill.contract.selection);
+    return hasSelectionSignals(skill);
   }
 
   private buildLoadReport(): SkillRegistryLoadReport {

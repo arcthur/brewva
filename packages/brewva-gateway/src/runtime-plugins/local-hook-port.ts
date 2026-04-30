@@ -13,7 +13,6 @@ import type {
   BrewvaToolContentPart,
   InternalHostPluginApi,
 } from "@brewva/brewva-substrate";
-import type { SkillClassificationHint } from "./skill-first.js";
 import type { TurnLifecyclePort } from "./turn-lifecycle-port.js";
 
 export type LocalHookPhase =
@@ -30,7 +29,6 @@ export interface LocalHookNote {
 
 export interface LocalHookRecommendation {
   readonly message: string;
-  readonly classificationHint?: SkillClassificationHint;
 }
 
 export interface LocalHookPreAdmissionInput {
@@ -138,7 +136,6 @@ export interface LocalHookPort {
 
 export interface LocalHookManager {
   readonly lifecycle: TurnLifecyclePort;
-  getClassificationHints(sessionId: string): readonly SkillClassificationHint[];
   clear(sessionId: string): void;
   dispose(): void;
 }
@@ -158,14 +155,6 @@ const LEGACY_HOOK_ALIAS_WARNINGS = new Set<string>();
 
 function getSessionId(ctx: BrewvaHostContext): string {
   return ctx.sessionManager.getSessionId();
-}
-
-function extractClassificationHints(
-  recommendations: readonly LocalHookRecommendation[] | undefined,
-): SkillClassificationHint[] {
-  return (recommendations ?? [])
-    .map((entry) => entry.classificationHint)
-    .filter((entry): entry is SkillClassificationHint => Boolean(entry));
 }
 
 function cloneToolContentParts(content: readonly BrewvaToolContentPart[]): BrewvaToolContentPart[] {
@@ -327,7 +316,6 @@ export function createLocalHookManager(input: {
   runtime: BrewvaHostedRuntimePort;
   hooks: readonly LocalHookPort[];
 }): LocalHookManager {
-  const hintsBySession = new Map<string, SkillClassificationHint[]>();
   const activeSessions = new Set<string>();
   let unsubscribePostRollbackEvents: (() => void) | undefined;
 
@@ -464,7 +452,6 @@ export function createLocalHookManager(input: {
         activeSessions.add(sessionId);
         ensurePostRollbackSubscription();
         const prompt = event.prompt;
-        const collected: SkillClassificationHint[] = [];
         for (const hook of input.hooks) {
           const preAdmission = resolvePreAdmissionHook(hook);
           if (!preAdmission) {
@@ -488,11 +475,7 @@ export function createLocalHookManager(input: {
             hookName: hook.name,
             result,
           });
-          if (result.kind === "recommend") {
-            collected.push(...extractClassificationHints(result.recommendations));
-          }
         }
-        hintsBySession.set(sessionId, collected);
         return undefined;
       },
       async turnEnd(_event, ctx) {
@@ -523,7 +506,6 @@ export function createLocalHookManager(input: {
       },
       sessionShutdown(_event, ctx) {
         const sessionId = getSessionId(ctx);
-        hintsBySession.delete(sessionId);
         activeSessions.delete(sessionId);
         if (activeSessions.size === 0) {
           disposePostRollbackSubscription();
@@ -531,18 +513,13 @@ export function createLocalHookManager(input: {
         return undefined;
       },
     },
-    getClassificationHints(sessionId) {
-      return hintsBySession.get(sessionId) ?? [];
-    },
     clear(sessionId) {
-      hintsBySession.delete(sessionId);
       activeSessions.delete(sessionId);
       if (activeSessions.size === 0) {
         disposePostRollbackSubscription();
       }
     },
     dispose() {
-      hintsBySession.clear();
       activeSessions.clear();
       disposePostRollbackSubscription();
     },

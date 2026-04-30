@@ -52,9 +52,10 @@ The accepted decision is:
 1. Loadable skills may omit `selection`. Missing `selection` makes the skill
    loaded and inspectable but not routable.
 2. `selection.when_to_use` is not required. Any non-empty
-   `selection.when_to_use`, `selection.examples`, `selection.paths`, or
-   `selection.phases` signal is enough for routing eligibility when scope is
-   enabled.
+   `selection.when_to_use`, `selection.paths`, or authored `## Trigger` signal
+   is enough for routing eligibility when scope is enabled. The later promoted
+   lifecycle-profile subtraction removed `selection.examples` and
+   `selection.phases` from the authored contract.
 3. `execution_hints` is optional. Empty `preferred_tools` and `fallback_tools`
    normalize away. Omitted `cost_hint` reads as `medium` through
    `getSkillCostHint(...)`.
