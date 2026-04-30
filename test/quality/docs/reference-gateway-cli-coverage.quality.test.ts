@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { collectInlineCodeValues, extractGeneratedSegment } from "./generated-segments.shared.js";
 
 const GATEWAY_OPTION_BLOCKS = [
   "START_PARSE_OPTIONS",
@@ -41,6 +42,8 @@ describe("docs/reference gateway CLI coverage", () => {
       "utf-8",
     );
     const docs = readFileSync(resolve(repoRoot, "docs/reference/commands.md"), "utf-8");
+    const segment = extractGeneratedSegment(docs, "cli-flags");
+    const documented = collectInlineCodeValues(segment);
 
     const expectedCommands = [
       "start",
@@ -55,7 +58,7 @@ describe("docs/reference gateway CLI coverage", () => {
       "logs",
     ];
 
-    const missingCommands = expectedCommands.filter((name) => !docs.includes(`\`${name}\``));
+    const missingCommands = expectedCommands.filter((name) => !documented.has(name));
 
     const flags = new Set<string>();
     for (const block of GATEWAY_OPTION_BLOCKS) {
@@ -63,15 +66,15 @@ describe("docs/reference gateway CLI coverage", () => {
         flags.add(`--${key}`);
       }
     }
-    const missingFlags = [...flags.values()].filter((flag) => !docs.includes(`\`${flag}\``));
+    const missingFlags = [...flags.values()].filter((flag) => !documented.has(flag));
 
     expect(
       missingCommands,
-      `Missing gateway subcommands in docs/reference/commands.md: ${missingCommands.join(", ")}`,
+      `Missing gateway subcommands in generated command inventory: ${missingCommands.join(", ")}`,
     ).toEqual([]);
     expect(
       missingFlags,
-      `Missing gateway flags in docs/reference/commands.md: ${missingFlags.join(", ")}`,
+      `Missing gateway flags in generated command inventory: ${missingFlags.join(", ")}`,
     ).toEqual([]);
   });
 });

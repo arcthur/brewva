@@ -1,63 +1,13 @@
 import { describe, expect, it } from "bun:test";
-import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join, resolve } from "node:path";
-
-function collectSkillNames(root: string, relativeDirs: string[]): string[] {
-  const names: string[] = [];
-
-  for (const relativeDir of relativeDirs) {
-    const tierDir = join(root, relativeDir);
-    let entries: Array<import("node:fs").Dirent>;
-    try {
-      entries = readdirSync(tierDir, { withFileTypes: true });
-    } catch {
-      continue;
-    }
-    for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
-      const skillPath = join(tierDir, entry.name, "SKILL.md");
-      try {
-        if (statSync(skillPath).isFile()) {
-          names.push(entry.name);
-        }
-      } catch {
-        // Ignore non-skill folders.
-      }
-    }
-  }
-
-  return names.toSorted();
-}
-
-function collectProjectGuidanceNames(root: string): string[] {
-  const sharedDir = join(root, "project/shared");
-  try {
-    return readdirSync(sharedDir, { withFileTypes: true })
-      .filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
-      .map((entry) => entry.name.replace(/\.md$/i, ""))
-      .toSorted();
-  } catch {
-    return [];
-  }
-}
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 describe("docs/guide skills coverage", () => {
-  it("mentions all skills in features guide", () => {
+  it("routes exact skill inventory readers to the reference inventory", () => {
     const repoRoot = resolve(import.meta.dirname, "../../..");
-    const names = collectSkillNames(resolve(repoRoot, "skills"), [
-      "core",
-      "domain",
-      "operator",
-      "meta",
-      "project/overlays",
-    ]);
-    const projectGuidanceNames = collectProjectGuidanceNames(resolve(repoRoot, "skills"));
     const markdown = readFileSync(resolve(repoRoot, "docs/guide/features.md"), "utf-8");
 
-    const missing = [...names, ...projectGuidanceNames].filter((name) => {
-      return !markdown.includes(`\`${name}\``) && !markdown.includes(`**${name}**`);
-    });
-
-    expect(missing, `Missing skills in docs/guide/features.md: ${missing.join(", ")}`).toEqual([]);
+    expect(markdown).toContain("docs/reference/skills.md");
+    expect(markdown).not.toContain("## Current Skill Name Index");
   });
 });

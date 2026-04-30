@@ -43,6 +43,6 @@ runtime, product, and session contracts.
 
 ## Reading Rule
 
-When an archived note conflicts with a promoted research note, stable docs, or
-current code, the archived note loses. Open a new focused RFC if a historical
+When an archived note conflicts with an accepted decision, stable docs, or
+current code, the archived note loses. Open a new active note if a historical
 decision needs to be revisited.

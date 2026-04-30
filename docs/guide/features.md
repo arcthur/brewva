@@ -1,247 +1,88 @@
 # Features
 
-This guide summarizes the major Brewva capability areas. It is intentionally
-high-level. For the authoritative tool and skill inventories, use
-`docs/reference/tools.md` and `docs/reference/skills.md`.
+This guide is the capability map for Brewva. It explains the shape of the
+system and where to inspect exact inventories without repeating code-derived
+catalogs.
+
+For generated inventories, use:
+
+- tools: `docs/reference/tools.md`
+- skills: `docs/reference/skills.md`
+- runtime surface: `docs/reference/runtime.md`
+- events: `docs/reference/events/README.md`
+- CLI flags: `docs/reference/commands.md`
 
 ## Runtime Capabilities
 
-- Skill contract activation, validation, and completion tracking
-- Tool access policy checks, effect boundaries, and budget checks
-- Evidence ledger recording and replay-visible governance receipts
-- Task and truth state management with event-sourced replay
-- Verification gates (`quick`, `standard`, `strict`)
-- Receipt-bearing rollback and approval surfaces for reversible mutation flows
-- Context budget tracking, pressure reporting, and compaction signaling
-- Event-first runtime persistence, replay, and deterministic recovery
-- Cost observability and threshold-based budget alerts
-- Derived workflow artifacts and advisory workflow inspection surfaces
-- Typed planning and delegated-worker handoff artifacts
-- Durable stall adjudication surfaced through explicit inspection, not hidden
-  planning loops
-- Iteration-fact persistence and lineage-aware query for bounded optimization
-  loops
-- Typed narrative and deliberation memory inspection surfaces
-- Repository-native precedent retrieval and write-back under `docs/solutions/**`
+Brewva is organized around replay-visible runtime capabilities:
 
-## Operator And Delivery Surfaces
+- skill activation, validation, completion, and readiness
+- tool access policy, effect boundaries, and budget gates
+- evidence ledger recording and replay-visible governance receipts
+- task and truth state through event-sourced replay
+- verification gates and command-backed verification reports
+- receipt-bearing rollback and approval surfaces for reversible mutations
+- context budget tracking, pressure reporting, and compaction signaling
+- event-first persistence, replay, and deterministic recovery
+- cost observability and budget alerts
+- derived workflow artifacts and advisory workflow inspection
+- typed planning and delegated-worker handoff artifacts
+- durable stall adjudication through explicit inspection
+- iteration-fact persistence for bounded optimization loops
+- narrative, deliberation, recall, and precedent surfaces with provenance
 
-- Interactive CLI and one-shot CLI entrypoints
-- Replay-first session inspection through `brewva inspect`
-- Multi-session project analysis through `brewva insights`
-- Gateway control-plane daemon for local hosted-session orchestration
-- Scheduler daemon mode for intent execution
-- Telegram channel host mode and webhook ingress integration
-- Multi-agent channel orchestration when `channels.orchestration.enabled=true`
+## Operator Surfaces
+
+Operators interact with those capabilities through:
+
+- the interactive shell and one-shot CLI modes
+- `brewva inspect` for replay-first session inspection
+- `brewva insights` for multi-session workspace analysis
+- the gateway daemon for local hosted-session orchestration
+- scheduler daemon mode for intent execution
+- Telegram channel mode and webhook ingress
+- multi-agent channel orchestration when enabled
+
+These surfaces are product/host layers over runtime receipts. They do not
+create a second authority model.
 
 ## Managed Tool Families
 
-The default managed tool bundle covers these families:
+Managed tools are grouped by behavior rather than listed in this guide:
 
-- code navigation and structural search: `lsp_*`, `toc_*`, `grep`,
-  `ast_grep_*`, `git_*`
-- command and browser execution: `exec`, `process`, `browser_*`
-- replay and observability inspection: `cost_view`, `obs_*`, `ledger_query`,
-  `workflow_status`, `tape_*`, `output_search`
-- memory and precedent surfaces: `deliberation_memory`, `narrative_memory`,
-  `knowledge_search`, `knowledge_capture`, `precedent_audit`,
-  `precedent_sweep`, `iteration_fact`, `optimization_continuity`
-- delegation and workflow control: `skill_*`, `subagent_*`,
-  `worker_results_*`, `task_*`, `follow_up`, `schedule_intent`,
-  `resource_lease`, `session_compact`, `rollback_last_patch`
+- navigation and read-only repository inspection
+- command, browser, verification, mutation, and rollback execution
+- memory, recall, precedent, output search, and observability
+- skill, subagent, worker-result, and task delegation
+- workflow, scheduling, leases, tape, and resource coordination
 
-Channel-specific A2A tools (`agent_send`, `agent_broadcast`, `agent_list`) are
-not part of the default bundle. They are registered by channel runtime plugins
-when orchestration is enabled.
-
-For the exact tool names and surface classification, use
-`docs/reference/tools.md`.
-
-## Current Tool Name Index
-
-The exact current managed tool names are:
-
-- `lsp_goto_definition`
-- `lsp_find_references`
-- `lsp_symbols`
-- `lsp_diagnostics`
-- `lsp_prepare_rename`
-- `lsp_rename`
-- `toc_document`
-- `toc_search`
-- `ast_grep_search`
-- `ast_grep_replace`
-- `look_at`
-- `read_spans`
-- `grep`
-- `git_status`
-- `git_diff`
-- `git_log`
-- `exec`
-- `browser_open`
-- `browser_wait`
-- `browser_snapshot`
-- `browser_click`
-- `browser_fill`
-- `browser_get`
-- `browser_screenshot`
-- `browser_pdf`
-- `browser_diff_snapshot`
-- `browser_state_load`
-- `browser_state_save`
-- `browser_close`
-- `process`
-- `cost_view`
-- `narrative_memory`
-- `deliberation_memory`
-- `knowledge_capture`
-- `recall_search`
-- `recall_curate`
-- `knowledge_search`
-- `precedent_audit`
-- `precedent_sweep`
-- `obs_query`
-- `obs_slo_assert`
-- `obs_snapshot`
-- `ledger_query`
-- `iteration_fact`
-- `output_search`
-- `workflow_status`
-- `follow_up`
-- `schedule_intent`
-- `optimization_continuity`
-- `tape_handoff`
-- `tape_info`
-- `tape_search`
-- `reasoning_checkpoint`
-- `reasoning_revert`
-- `session_compact`
-- `rollback_last_patch`
-- `worker_results_merge`
-- `worker_results_apply`
-- `skill_load`
-- `skill_complete`
-- `skill_promotion_inspect`, `skill_promotion_review`, and `skill_promotion_promote`
-- `subagent_run`
-- `subagent_fanout`
-- `subagent_fork`
-- `subagent_run_diagnostic`
-- `subagent_status`
-- `subagent_cancel`
-- `task_set_spec`
-- `task_add_item`
-- `task_update_item`
-- `task_record_acceptance`
-- `task_record_blocker`
-- `task_resolve_blocker`
-- `task_view_state`
-- `resource_lease`
-
-`recall_search` is the default prior-work recall surface. Its optional `intent`
-hint can bias ranking toward repository precedent, current-session evidence, or
-durable runtime receipts while preserving source-family provenance.
-`tape_search` remains available for session-local tape forensics, and
-`recall_curate` remains an operator-only curation surface.
-
-Channel-conditional A2A tools:
-
-- `agent_send`
-- `agent_broadcast`
-- `agent_list`
+Channel-specific A2A tools are registered by channel runtime plugins when
+orchestration is enabled. They are not part of the default bundle.
 
 ## Skill And Delegation Model
 
-Skill taxonomy is now split by role rather than exposing one flat public
-catalog:
+Skills define semantic work contracts. Delegated workers define execution
+envelopes. The parent session owns active skill state, completion, task truth,
+and patch adoption.
 
-- public routable semantic territory is primarily carried by `core` and
-  `domain` skills
-- `operator` and `meta` skills are still loaded catalog entries, but they are
-  usually hidden from the standard routable index unless routing scopes
-  explicitly include them
-- runtime/control-plane workflow semantics such as verification, finishing, and
-  recovery are not public skills
+Skill taxonomy is split by role:
 
-Authoring layout still uses the four directory families:
+- `core` and `domain` carry most public routable territory
+- `operator` and `meta` skills are loaded and inspectable, but usually hidden
+  from default routing scopes
+- project overlays tighten behavior for this repository
+- shared project guidance adds repo-local context and provenance
 
-- core: repository analysis, idea diagnosis, architecture deepening, planning,
-  implementation, review, QA, and ship flows
-- domain: environment-specific or problem-specific specialties such as browser,
-  GitHub, Telegram, structured extraction, and bounded goal loops
-- operator: replay, runtime, and git-operations oriented surfaces
-- meta: skill-authoring and self-improvement surfaces
+Delegated public specialist roles remain narrow: advisor, QA, and patch-worker
+postures. Internal review lanes are control-plane implementation detail.
 
-Project overlays tighten skill-specific behavior. Shared project guidance adds
-repo-local context/provenance without creating a second public catalog.
+## Where To Inspect Exact State
 
-Delegated workers are a separate control-plane surface from skills. The stable
-public specialist set is `advisor`, `qa`, and `patch-worker`; internal review
-lanes remain control-plane implementation detail rather than public taxonomy.
-
-For routing behavior, catalog layout, and the full skill inventory, use:
-
-- `docs/guide/category-and-skills.md`
-- `docs/reference/skills.md`
-
-## Current Skill Name Index
-
-Core capability skills:
-
-- `repository-analysis`
-- `architecture`
-- `office-hours`
-- `discovery`
-- `learning-research`
-- `strategy`
-- `plan`
-- `prep`
-- `implementation`
-- `debugging`
-- `review`
-- `qa`
-- `ship`
-- `retro`
-- `knowledge-capture`
-
-Domain capability skills:
-
-- `agent-browser`
-- `ci-iteration`
-- `frontend-design`
-- `github`
-- `telegram`
-- `extract`
-- `goal-loop`
-- `predict-review`
-
-Operator skills:
-
-- `runtime-forensics`
-- `git`
-
-Meta skills:
-
-- `skill-authoring`
-- `self-improve`
-
-Project overlays:
-
-- `repository-analysis`
-- `plan`
-- `implementation`
-- `debugging`
-- `review`
-- `runtime-forensics`
-
-Shared project guidance:
-
-- `anti-patterns`
-- `critical-rules`
-- `migration-priority-matrix`
-- `package-boundaries`
-- `runtime-artifacts`
-- `source-map`
-- `workflow-gates`
+- Run `bun run docs:inventory` after code-derived inventory changes.
+- Read generated blocks in reference docs for exact names.
+- Use `brewva inspect` for persisted session truth.
+- Use `docs/guide/category-and-skills.md` for skill category orientation.
+- Use `docs/reference/skill-routing.md` for routing and handoff semantics.
 
 ## Related Docs
 

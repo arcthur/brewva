@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { collectInlineCodeValues, extractGeneratedSegment } from "./generated-segments.shared.js";
 
 function collectSkillNames(root: string, relativeDirs: string[]): string[] {
   const names: string[] = [];
@@ -42,7 +43,7 @@ function collectProjectGuidanceNames(root: string): string[] {
 }
 
 describe("docs/reference skills coverage", () => {
-  it("documents all skill names", () => {
+  it("generates all skill and project guidance names", () => {
     const repoRoot = resolve(import.meta.dirname, "../../..");
     const skillNames = collectSkillNames(resolve(repoRoot, "skills"), [
       "core",
@@ -53,12 +54,14 @@ describe("docs/reference skills coverage", () => {
     ]);
     const projectGuidanceNames = collectProjectGuidanceNames(resolve(repoRoot, "skills"));
     const markdown = readFileSync(resolve(repoRoot, "docs/reference/skills.md"), "utf-8");
+    const segment = extractGeneratedSegment(markdown, "skills-inventory");
+    const documented = collectInlineCodeValues(segment);
 
     const missing = [...skillNames, ...projectGuidanceNames].filter(
-      (name) => !markdown.includes(`\`${name}\``),
+      (name) => !documented.has(name),
     );
 
-    expect(missing, `Missing skills in docs/reference/skills.md: ${missing.join(", ")}`).toEqual(
+    expect(missing, `Missing skills in generated skills inventory: ${missing.join(", ")}`).toEqual(
       [],
     );
   });

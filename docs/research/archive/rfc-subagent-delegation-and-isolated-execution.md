@@ -10,7 +10,7 @@
   - `docs/architecture/cognitive-product-architecture.md`
   - `docs/reference/runtime.md`
   - `docs/reference/tools.md`
-  - `docs/reference/events.md`
+  - `docs/reference/events/README.md`
   - `docs/reference/skills.md`
   - `docs/journeys/operator/background-and-parallelism.md`
 
@@ -54,7 +54,7 @@ authority.
 - `docs/architecture/cognitive-product-architecture.md`
 - `docs/reference/runtime.md`
 - `docs/reference/tools.md`
-- `docs/reference/events.md`
+- `docs/reference/events/README.md`
 - `docs/reference/skills.md`
 - `docs/journeys/operator/background-and-parallelism.md`
 - `docs/research/archive/rfc-skill-first-delegation-and-execution-envelopes.md`

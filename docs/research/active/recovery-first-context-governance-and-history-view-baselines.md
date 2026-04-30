@@ -539,7 +539,7 @@ pipeline keeps its existing kernel entry point.
 - Working projection contract:
   `docs/reference/working-projection.md`
 - Narrative memory contract:
-  `docs/research/promoted/rfc-narrative-memory-product-and-bounded-semantic-recall.md`
+  `docs/research/decisions/narrative-memory-product-and-bounded-semantic-recall.md`
 - Active prompt-shaping RFC:
   `docs/research/active/prefix-stable-context-management-and-progressive-compaction.md`
 - Recovery working set implementation:
@@ -612,4 +612,4 @@ Additional validation coverage for this contract includes:
   vocabulary.**
   Future work should either implement the Phase 3 and Phase 4 inspection /
   metric signals or explicitly move those ideas into separate focused RFCs
-  before this note collapses into a promoted pointer.
+  before this note becomes a short accepted decision record.

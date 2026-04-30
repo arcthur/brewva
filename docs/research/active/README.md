@@ -1,16 +1,17 @@
 # Active Research Notes
 
 `docs/research/active/` holds incubation work that still has open validation or
-contract questions. Keep each note focused enough that it can be promoted or
-archived on its own instead of turning back into a catch-all roadmap file.
+contract questions. Keep each note focused enough that it can become an
+accepted decision or be archived on its own instead of turning back into a
+catch-all roadmap file.
 
 Read `docs/research/README.md` for lifecycle rules. Use this directory when you
 need the current open questions, source anchors, and promotion criteria for an
 active theme.
 
 Governance rule: `active/` is for unresolved design work only. When the target
-stable docs already carry the accepted contract, move the note out of this
-directory rather than keeping it as a shadow reference.
+stable docs already carry the accepted contract, convert the note to
+`docs/research/decisions/` rather than keeping it as a shadow reference.
 
 ## Runtime Fidelity
 

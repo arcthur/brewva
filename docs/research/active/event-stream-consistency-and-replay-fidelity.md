@@ -7,7 +7,7 @@
 - Last reviewed: `2026-04-06`
 - Promotion target:
   - `docs/architecture/invariants-and-reliability.md`
-  - `docs/reference/events.md`
+  - `docs/reference/events/README.md`
   - `docs/journeys/operator/inspect-replay-and-recovery.md`
 
 ## Problem Statement And Scope Boundaries

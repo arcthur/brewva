@@ -65,7 +65,7 @@ Implementation detail and system boundaries:
 - `docs/architecture/control-and-data-flow.md`
 - `docs/reference/proposal-boundary.md`
 - `docs/reference/runtime.md`
-- `docs/reference/events.md`
+- `docs/reference/events/README.md`
 - `docs/reference/token-cache.md`
 - `docs/reference/exec-threat-model.md`
 - `docs/reference/working-projection.md`
@@ -86,42 +86,20 @@ Implementation detail and system boundaries:
 
 ## Skill Surface
 
-- Core skills: `repository-analysis`, `architecture`, `office-hours`, `discovery`, `learning-research`, `strategy`, `plan`, `prep`, `implementation`, `debugging`, `review`, `qa`, `ship`, `retro`, `knowledge-capture`
-- Domain skills: `agent-browser`, `ci-iteration`, `frontend-design`, `github`, `goal-loop`, `predict-review`, `extract`, `telegram`
-- Operator skills: `git`, `runtime-forensics`
-- Meta skills: `self-improve`, `skill-authoring`
+Skills define semantic work contracts. Delegated workers define execution
+envelopes. The parent runtime owns active skill state, completion, task truth,
+and patch adoption.
 
-Protocol-oriented skills:
+The stable taxonomy is role-based:
 
-- `ci-iteration` keeps PR and CI repair loops bounded with explicit retry,
-  verification, and handoff posture
-- `goal-loop` coordinates bounded continuity, explicit cadence, and objective
-  iteration facts across repeated runs
-- `architecture` identifies module-deepening opportunities by testing caller
-  burden, seam quality, locality, leverage, and test surface before planning
-- `office-hours` diagnoses new product, startup, side-project, hackathon, or
-  "worth building" ideas before they harden into discovery, strategy, or plans
-- `learning-research` performs explicit precedent retrieval before non-trivial
-  planning or review
-- `knowledge-capture` materializes canonical repository precedents under
-  `docs/solutions/**`
-- `prep` forces explicit targets, simplicity posture, and
-  verifiable success criteria before a coding task widens into edits
-- `predict-review` provides read-only multi-perspective debate and ranked
-  hypotheses through public delegation tools
-- `self-improve` distills repeated evidence, including loop-history facts, into
-  improvement hypotheses and backlog items
+- `core` and `domain` carry most routable work territory
+- `operator` and `meta` are loaded and inspectable, but usually hidden from
+  default routing scopes
+- project overlays and shared guidance tighten repository behavior without
+  creating a second public catalog
 
-Adjacent repository-knowledge tools:
-
-- `knowledge_search` is the explicit repository-native precedent retrieval
-  surface used before non-trivial planning, debugging, and review
-- `precedent_audit` performs explicit repository-precedent maintenance checks
-  before a record is displaced or refreshed
-- `precedent_sweep` performs explicit repository-wide precedent maintenance
-  sweeps without turning stale-document cleanup into a default path
-
-For taxonomy details and project overlays, see `docs/guide/features.md` and `docs/reference/skills.md`.
+For taxonomy and exact generated inventories, see `docs/guide/features.md` and
+`docs/reference/skills.md`.
 
 One common delivery chain is:
 

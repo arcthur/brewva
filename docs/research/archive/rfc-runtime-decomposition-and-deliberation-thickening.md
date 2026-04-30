@@ -10,7 +10,7 @@
   - `docs/architecture/design-axioms.md`
   - `docs/architecture/invariants-and-reliability.md`
   - `docs/reference/runtime.md`
-  - `docs/reference/events.md`
+  - `docs/reference/events/README.md`
   - `docs/reference/configuration.md`
 
 ## Archive Summary
@@ -53,10 +53,10 @@ Important parts of this draft were later narrowed or replaced:
 - `docs/architecture/design-axioms.md`
 - `docs/architecture/invariants-and-reliability.md`
 - `docs/reference/runtime.md`
-- `docs/reference/events.md`
+- `docs/reference/events/README.md`
 - `docs/reference/configuration.md`
-- `docs/research/promoted/rfc-boundary-first-subtraction-and-model-native-recovery.md`
-- `docs/research/promoted/rfc-authority-surface-narrowing-and-runtime-facade-compression.md`
+- `docs/research/decisions/boundary-first-subtraction-and-model-native-recovery.md`
+- `docs/research/decisions/authority-surface-narrowing-and-runtime-facade-compression.md`
 
 ## Why Keep This File
 

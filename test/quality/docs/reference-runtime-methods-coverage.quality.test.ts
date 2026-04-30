@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { collectInlineCodeValues, extractGeneratedSegment } from "./generated-segments.shared.js";
 
 function collectPublicRuntimeMethods(source: string): string[] {
   const lines = source.split("\n");
@@ -40,20 +41,22 @@ function collectPublicRuntimeMethods(source: string): string[] {
 }
 
 describe("docs/reference runtime coverage", () => {
-  it("documents public runtime methods", () => {
+  it("generates public runtime methods in the runtime surface segment", () => {
     const repoRoot = resolve(import.meta.dirname, "../../..");
     const runtimeSource = readFileSync(
       resolve(repoRoot, "packages/brewva-runtime/src/runtime.ts"),
       "utf-8",
     );
     const markdown = readFileSync(resolve(repoRoot, "docs/reference/runtime.md"), "utf-8");
+    const segment = extractGeneratedSegment(markdown, "runtime-surface");
+    const documented = collectInlineCodeValues(segment);
 
     const methods = collectPublicRuntimeMethods(runtimeSource);
-    const missing = methods.filter((name) => !markdown.includes(`\`${name}\``));
+    const missing = methods.filter((name) => !documented.has(`runtime.${name}`));
 
     expect(
       missing,
-      `Missing runtime methods in docs/reference/runtime.md: ${missing.join(", ")}`,
+      `Missing runtime methods in generated runtime inventory: ${missing.join(", ")}`,
     ).toEqual([]);
   });
 });

@@ -10,7 +10,7 @@
   - `docs/architecture/control-and-data-flow.md`
   - `docs/reference/runtime.md`
   - `docs/reference/context-composer.md`
-  - `docs/reference/events.md`
+  - `docs/reference/events/README.md`
 
 ## Archive Summary
 
@@ -41,8 +41,8 @@ Read current behavior from:
 - `docs/architecture/control-and-data-flow.md`
 - `docs/reference/runtime.md`
 - `docs/reference/context-composer.md`
-- `docs/reference/events.md`
-- `docs/research/promoted/rfc-boundary-first-subtraction-and-model-native-recovery.md`
+- `docs/reference/events/README.md`
+- `docs/research/decisions/boundary-first-subtraction-and-model-native-recovery.md`
 
 The stable contract now speaks in terms of:
 

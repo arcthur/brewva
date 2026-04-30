@@ -1,62 +1,170 @@
 import { describe, expect, it } from "bun:test";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { relative, resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
 
-type ResearchStatus = "proposed" | "active" | "promoted" | "archived";
+type IncubationStatus = "active" | "archived";
 
-const SECTION_HEADERS: Record<ResearchStatus, string> = {
-  proposed: "## Proposed notes",
-  active: "## Active notes",
-  promoted: "## Promoted notes (status pointers)",
-  archived: "## Archived / superseded notes",
-};
+const FORBIDDEN_DECISION_HEADINGS = [
+  "## Surface Budget",
+  "## Validation Status",
+  "## Promoted Contract Checklist",
+  "## Closed Posture",
+] as const;
 
-const VALID_STATUSES = new Set<ResearchStatus>(["proposed", "active", "promoted", "archived"]);
-const ROOT_INDEXED_STATUSES = new Set<ResearchStatus>(["proposed", "active"]);
+const FORBIDDEN_DECISION_PHRASES = [
+  "promoted status pointer",
+  "promoted pointer",
+  "status pointer",
+  "the promoted decision is:",
+] as const;
 
-function parseReadmeLists(markdown: string): Record<ResearchStatus, string[]> {
-  const lists: Record<ResearchStatus, string[]> = {
-    proposed: [],
-    active: [],
-    promoted: [],
-    archived: [],
-  };
+const FORBIDDEN_DECISION_BOILERPLATE = [
+  "The accepted contract is implemented in code and stable docs; this record preserves the decision provenance without duplicating the full specification.",
+  "Future changes should update the stable docs and open a new active note when the decision changes materially.",
+  "This record is not a second normative contract or a long-form RFC.",
+  "It does not preserve deprecated validation tables, surface budgets, or implementation checklists.",
+] as const;
 
-  let currentSection: ResearchStatus | null = null;
+const FORBIDDEN_ACTIVE_LIFECYCLE_PHRASES = ["promoted status pointer", "promoted pointer"] as const;
 
-  for (const line of markdown.split("\n")) {
-    const matchedSection = (
-      Object.entries(SECTION_HEADERS) as Array<[ResearchStatus, string]>
-    ).find(([, header]) => line === header);
-    if (matchedSection) {
-      currentSection = matchedSection[0];
-      continue;
-    }
+const INCOMPLETE_TRAILING_STOP_WORDS = [
+  "a",
+  "an",
+  "the",
+  "to",
+  "of",
+  "in",
+  "on",
+  "at",
+  "by",
+  "for",
+  "with",
+  "from",
+  "into",
+  "onto",
+  "upon",
+  "over",
+  "under",
+  "as",
+  "about",
+  "against",
+  "between",
+  "among",
+  "through",
+  "during",
+  "before",
+  "after",
+  "since",
+  "until",
+  "via",
+  "per",
+  "and",
+  "or",
+  "but",
+  "nor",
+  "yet",
+  "so",
+  "because",
+  "although",
+  "though",
+  "while",
+  "whereas",
+  "whether",
+  "if",
+  "unless",
+  "that",
+  "which",
+  "not",
+  "no",
+  "is",
+  "are",
+  "was",
+  "were",
+  "be",
+  "been",
+  "being",
+  "am",
+  "do",
+  "does",
+  "did",
+  "has",
+  "have",
+  "had",
+  "can",
+  "could",
+  "should",
+  "would",
+  "may",
+  "might",
+  "must",
+  "will",
+  "shall",
+  "this",
+  "these",
+  "those",
+  "its",
+  "their",
+  "our",
+  "your",
+  "my",
+  "his",
+  "her",
+] as const;
 
-    if (line.startsWith("## ")) {
-      currentSection = null;
-      continue;
-    }
-
-    if (!currentSection) continue;
-
-    const match = line.match(/^- `([^`]+)`$/);
-    if (!match?.[1]) continue;
-    lists[currentSection].push(match[1]);
-  }
-
-  return lists;
-}
-
-function readResearchStatus(markdown: string): ResearchStatus | null {
-  const match = markdown.match(/^- Status: `([^`]+)`/m);
-  const value = match?.[1];
-  return value && VALID_STATUSES.has(value as ResearchStatus) ? (value as ResearchStatus) : null;
-}
+const INCOMPLETE_TRAILING_PATTERN = new RegExp(
+  `(?:[,;]|\\b(?:${INCOMPLETE_TRAILING_STOP_WORDS.join("|")}))\\s*$`,
+  "i",
+);
 
 function readMetadataLine(markdown: string, label: string): string | null {
   const match = markdown.match(new RegExp(`^- ${label}:\\s+(.+)$`, "m"));
   return match?.[1]?.trim() ?? null;
+}
+
+function readHeadingSection(markdown: string, heading: string): string | null {
+  const escapedHeading = heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const startMatch = new RegExp(`^## ${escapedHeading}\\s*$`, "m").exec(markdown);
+  if (!startMatch) return null;
+
+  const sectionStart = startMatch.index + startMatch[0].length;
+  const rest = markdown.slice(sectionStart);
+  const nextHeading = /^## /m.exec(rest);
+  return (nextHeading ? rest.slice(0, nextHeading.index) : rest).trim();
+}
+
+function readDecisionSummaryBullets(markdown: string): string[] {
+  const section = readHeadingSection(markdown, "Decision Summary");
+  if (!section) return [];
+
+  const bullets: string[] = [];
+  let current: string | null = null;
+  for (const rawLine of section.split("\n")) {
+    const line = rawLine.trimEnd();
+    const bulletMatch = /^- (.+)$/.exec(line);
+    if (bulletMatch) {
+      if (current) {
+        bullets.push(current.trim().replace(/\s+/g, " "));
+      }
+      current = bulletMatch[1] ?? "";
+      continue;
+    }
+    if (!current) continue;
+    const continuation = line.trim();
+    if (continuation) {
+      current += ` ${continuation}`;
+    }
+  }
+
+  if (current) {
+    bullets.push(current.trim().replace(/\s+/g, " "));
+  }
+  return bullets;
+}
+
+function readIncubationStatus(markdown: string): IncubationStatus | null {
+  const value = readMetadataLine(markdown, "Status")?.replaceAll("`", "");
+  if (value === "active" || value === "archived") return value;
+  return null;
 }
 
 function readPromotionTargets(markdown: string): string[] {
@@ -69,20 +177,10 @@ function readPromotionTargets(markdown: string): string[] {
   );
 }
 
-function listResearchNotePaths(researchDir: string): string[] {
-  const directories = ["active", "promoted", "archive"];
-  const files: string[] = [];
-
-  for (const directory of directories) {
-    const absoluteDir = resolve(researchDir, directory);
-    for (const fileName of readdirSync(absoluteDir).filter(
-      (entry) => entry.endsWith(".md") && entry !== "README.md",
-    )) {
-      files.push(relative(resolve(researchDir, "..", ".."), resolve(absoluteDir, fileName)));
-    }
-  }
-
-  return files.toSorted((left, right) => left.localeCompare(right));
+function listMarkdownFiles(directory: string): string[] {
+  return readdirSync(directory)
+    .filter((entry) => entry.endsWith(".md") && entry !== "README.md")
+    .toSorted((left, right) => left.localeCompare(right));
 }
 
 function parseDirectoryReadmeLinks(markdown: string): string[] {
@@ -91,91 +189,150 @@ function parseDirectoryReadmeLinks(markdown: string): string[] {
     .toSorted((left, right) => left.localeCompare(right));
 }
 
+function walkMarkdownFiles(directory: string): string[] {
+  const files: string[] = [];
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const fullPath = join(directory, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...walkMarkdownFiles(fullPath));
+      continue;
+    }
+    if (entry.isFile() && entry.name.endsWith(".md")) {
+      files.push(fullPath);
+    }
+  }
+  return files;
+}
+
 describe("docs/research index consistency", () => {
-  it("keeps README sections aligned with research note status metadata", () => {
+  it("keeps active, decision, and archive indexes aligned with note metadata", () => {
     const repoRoot = resolve(import.meta.dirname, "../../..");
     const researchDir = resolve(repoRoot, "docs/research");
-    const readmePath = resolve(researchDir, "README.md");
-    const readmeMarkdown = readFileSync(readmePath, "utf-8");
-    const readmeLists = parseReadmeLists(readmeMarkdown);
     const errors: string[] = [];
-    const listedStatusByPath = new Map<string, ResearchStatus>();
 
-    for (const [status, header] of Object.entries(SECTION_HEADERS) as Array<
-      [ResearchStatus, string]
-    >) {
-      if (!readmeMarkdown.includes(header)) {
-        errors.push(`docs/research/README.md is missing section "${header}"`);
-      }
-
-      for (const relativePath of readmeLists[status]) {
-        const resolvedPath = resolve(repoRoot, relativePath);
-
-        if (!existsSync(resolvedPath)) {
-          errors.push(`docs/research/README.md lists missing file ${relativePath}`);
-          continue;
-        }
-
-        const previousStatus = listedStatusByPath.get(relativePath);
-        if (previousStatus) {
-          errors.push(
-            `${relativePath} is listed in both "${previousStatus}" and "${status}" sections of docs/research/README.md`,
-          );
-          continue;
-        }
-        listedStatusByPath.set(relativePath, status);
-
-        const actualStatus = readResearchStatus(readFileSync(resolvedPath, "utf-8"));
-        if (actualStatus !== status) {
-          errors.push(
-            `${relativePath} has Status=${actualStatus ?? "<missing>"} but is listed under ${status}`,
-          );
-        }
+    const rootReadme = readFileSync(resolve(researchDir, "README.md"), "utf-8");
+    for (const requiredPath of [
+      "docs/research/active/README.md",
+      "docs/research/decisions/README.md",
+      "docs/research/archive/README.md",
+    ]) {
+      if (!rootReadme.includes(requiredPath)) {
+        errors.push(`docs/research/README.md does not link ${requiredPath}`);
       }
     }
 
-    for (const repoRelativePath of listResearchNotePaths(researchDir)) {
-      const markdown = readFileSync(resolve(repoRoot, repoRelativePath), "utf-8");
-      const status = readResearchStatus(markdown);
-      const owner = readMetadataLine(markdown, "Owner");
-      const lastReviewed = readMetadataLine(markdown, "Last reviewed");
-      const promotionTargets = readPromotionTargets(markdown);
-
-      if (!status) {
-        errors.push(`${repoRelativePath} is missing a valid Status metadata line`);
-        continue;
-      }
-
-      if (!owner) {
-        errors.push(`${repoRelativePath} is missing an Owner metadata line`);
-      }
-      if (!lastReviewed) {
-        errors.push(`${repoRelativePath} is missing a Last reviewed metadata line`);
-      }
-      if (promotionTargets.length === 0) {
-        errors.push(`${repoRelativePath} is missing at least one Promotion target entry`);
-      }
-
-      const listedStatus = listedStatusByPath.get(repoRelativePath);
-      if (ROOT_INDEXED_STATUSES.has(status) && listedStatus !== status) {
-        errors.push(
-          `${repoRelativePath} has Status=${status} but README groups it as ${listedStatus ?? "<unlisted>"}`,
-        );
-      }
+    if (existsSync(resolve(researchDir, "promoted"))) {
+      errors.push("docs/research/promoted/ must not exist");
     }
 
-    for (const directory of ["active", "promoted", "archive"] as const) {
+    for (const directory of ["active", "decisions", "archive"] as const) {
       const directoryReadmePath = resolve(researchDir, directory, "README.md");
       const directoryReadmeMarkdown = readFileSync(directoryReadmePath, "utf-8");
       const linkedFiles = new Set(parseDirectoryReadmeLinks(directoryReadmeMarkdown));
-      const actualFiles = readdirSync(resolve(researchDir, directory))
-        .filter((entry) => entry.endsWith(".md") && entry !== "README.md")
-        .toSorted((left, right) => left.localeCompare(right));
+      const actualFiles = listMarkdownFiles(resolve(researchDir, directory));
 
       for (const fileName of actualFiles) {
         if (!linkedFiles.has(fileName)) {
           errors.push(`docs/research/${directory}/README.md does not list ${fileName}`);
         }
+      }
+    }
+
+    for (const directory of ["active", "archive"] as const) {
+      const expectedStatus: IncubationStatus = directory === "active" ? "active" : "archived";
+      for (const fileName of listMarkdownFiles(resolve(researchDir, directory))) {
+        const repoRelativePath = `docs/research/${directory}/${fileName}`;
+        const markdown = readFileSync(resolve(repoRoot, repoRelativePath), "utf-8");
+        const status = readIncubationStatus(markdown);
+        const owner = readMetadataLine(markdown, "Owner");
+        const lastReviewed = readMetadataLine(markdown, "Last reviewed");
+        const promotionTargets = readPromotionTargets(markdown);
+
+        if (status !== expectedStatus) {
+          errors.push(`${repoRelativePath} has Status=${status ?? "<missing>"}`);
+        }
+        if (!owner) {
+          errors.push(`${repoRelativePath} is missing an Owner metadata line`);
+        }
+        if (!lastReviewed) {
+          errors.push(`${repoRelativePath} is missing a Last reviewed metadata line`);
+        }
+        if (promotionTargets.length === 0) {
+          errors.push(`${repoRelativePath} is missing at least one Promotion target entry`);
+        }
+        if (directory === "active") {
+          const normalized = markdown.toLowerCase();
+          for (const phrase of FORBIDDEN_ACTIVE_LIFECYCLE_PHRASES) {
+            if (normalized.includes(phrase)) {
+              errors.push(`${repoRelativePath} still references removed lifecycle: ${phrase}`);
+            }
+          }
+        }
+      }
+    }
+
+    for (const fileName of listMarkdownFiles(resolve(researchDir, "decisions"))) {
+      const repoRelativePath = `docs/research/decisions/${fileName}`;
+      const markdown = readFileSync(resolve(repoRoot, repoRelativePath), "utf-8");
+      const lineCount = markdown.trimEnd().split("\n").length;
+
+      for (const requiredLine of [
+        "- Decision:",
+        "- Date:",
+        "- Status: accepted",
+        "- Stable docs:",
+        "- Code anchors:",
+      ]) {
+        if (!markdown.includes(requiredLine)) {
+          errors.push(`${repoRelativePath} is missing ${requiredLine}`);
+        }
+      }
+      if (lineCount > 80) {
+        errors.push(
+          `${repoRelativePath} has ${lineCount} lines; accepted decisions must stay under 80`,
+        );
+      }
+
+      const decisionValue = readMetadataLine(markdown, "Decision");
+      if (decisionValue && INCOMPLETE_TRAILING_PATTERN.test(decisionValue)) {
+        errors.push(`${repoRelativePath} has a truncated Decision metadata line`);
+      }
+
+      const summaryBullets = readDecisionSummaryBullets(markdown);
+      if (summaryBullets.length === 0) {
+        errors.push(`${repoRelativePath} is missing Decision Summary bullets`);
+      }
+      for (const bullet of summaryBullets) {
+        if (INCOMPLETE_TRAILING_PATTERN.test(bullet)) {
+          errors.push(`${repoRelativePath} has a truncated Decision Summary bullet: ${bullet}`);
+        }
+      }
+
+      for (const heading of FORBIDDEN_DECISION_HEADINGS) {
+        if (markdown.includes(heading)) {
+          errors.push(`${repoRelativePath} must not contain ${heading}`);
+        }
+      }
+      for (const boilerplate of FORBIDDEN_DECISION_BOILERPLATE) {
+        if (markdown.includes(boilerplate)) {
+          errors.push(`${repoRelativePath} repeats generic decision boilerplate`);
+        }
+      }
+      const normalized = markdown.toLowerCase();
+      for (const phrase of FORBIDDEN_DECISION_PHRASES) {
+        if (normalized.includes(phrase)) {
+          errors.push(`${repoRelativePath} still contains migration placeholder: ${phrase}`);
+        }
+      }
+      if (/^- - /m.test(markdown)) {
+        errors.push(`${repoRelativePath} contains a malformed migrated bullet`);
+      }
+    }
+
+    for (const markdownPath of walkMarkdownFiles(resolve(repoRoot, "docs"))) {
+      const markdown = readFileSync(markdownPath, "utf-8");
+      if (markdown.includes("docs/research/promoted/") || markdown.includes("Status: `promoted`")) {
+        errors.push(`${relative(repoRoot, markdownPath)} still references promoted research state`);
       }
     }
 

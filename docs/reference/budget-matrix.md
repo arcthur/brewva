@@ -4,7 +4,7 @@ This document summarizes Brewva budget pipelines, their units, enforcement bound
 and replay/observability sources.
 
 This page is the enforcement summary. Full event-family semantics live in
-`docs/reference/events.md`, and config-key meaning stays in
+`docs/reference/events/README.md`, and config-key meaning stays in
 `docs/reference/configuration.md`.
 
 ## Runtime Budget Pipelines
@@ -31,7 +31,7 @@ Skill contract budgets are enforced at tool gate and are separate from session U
 
 For compaction, this matrix lists the primary advisory, hard-gate, and durable
 receipt events only. Hosted auto-compaction controller telemetry
-(`context_compaction_auto_*`) is covered in `docs/reference/events.md`.
+(`context_compaction_auto_*`) is covered in `docs/reference/events/README.md`.
 
 When `infrastructure.costTracking.enabled=false`:
 

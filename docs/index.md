@@ -8,14 +8,15 @@ This repository uses a layered documentation system:
 - `journeys`: operator entrypoints and cross-package review flows
 - `solutions`: repository-native engineering precedents and compound knowledge
 - `troubleshooting`: failure patterns and remediation
-- `research`: incubating design notes with explicit promotion targets
+- `research`: active design notes, accepted decisions, and historical archive
 
 ## How To Navigate
 
 - Use `guide` when you want operator-facing setup, deployment, or conceptual
   orientation.
-- Use `reference` when you need the exact current command, config, runtime, or
-  tool contract.
+- Use `reference` when you need stable contracts. Generated segments inside
+  reference pages carry exact inventories for tools, skills, runtime methods,
+  CLI flags, event types, and config keys.
 - Use `architecture` when you need implemented boundaries, invariants, or
   rationale.
 - Use `journeys` when you want step-by-step operator flows across multiple
@@ -24,8 +25,8 @@ This repository uses a layered documentation system:
   fastest operator entrypoint first.
 - Use `solutions` when you want repository-specific engineering precedent or
   proof of what worked before.
-- Use `research` when a design is still incubating and has not yet been
-  promoted into stable docs.
+- Use `research` when a design is still incubating or you need accepted
+  decision provenance after stable docs absorbed the contract.
 
 ## Getting Started
 
@@ -76,15 +77,29 @@ Workflow walkthroughs:
 
 - Configuration: `docs/reference/configuration.md`
 - Tools: `docs/reference/tools.md`
+  - Navigation tools: `docs/reference/tools/navigation.md`
+  - Execution tools: `docs/reference/tools/execution.md`
+  - Memory and recall tools: `docs/reference/tools/memory-and-recall.md`
+  - Delegation tools: `docs/reference/tools/delegation.md`
+  - Workflow and scheduling tools: `docs/reference/tools/workflow-and-scheduling.md`
 - Skills: `docs/reference/skills.md`
 - Runtime contract and ports: `docs/reference/runtime.md`
 - Context composer: `docs/reference/context-composer.md`
 - Token cache: `docs/reference/token-cache.md`
 - Proactivity (removed, explicit heartbeat remains): `docs/reference/proactivity-engine.md`
 - Proposal boundary: `docs/reference/proposal-boundary.md`
-- Events: `docs/reference/events.md`
+- Events: `docs/reference/events/README.md`
+  - Runtime event families: `docs/reference/events/runtime.md`
+  - Session event families: `docs/reference/events/session.md`
+  - Tool event families: `docs/reference/events/tools.md`
+  - Skill and memory event families: `docs/reference/events/skills-and-memory.md`
+  - Worker event families: `docs/reference/events/workers.md`
 - Runtime plugins: `docs/reference/runtime-plugins.md`
-- Commands (CLI surface): `docs/reference/commands.md`
+- Commands: `docs/reference/commands.md`
+  - Interactive shell: `docs/reference/commands/interactive.md`
+  - Gateway commands: `docs/reference/commands/gateway.md`
+  - Credentials, inspect, and insights: `docs/reference/commands/credentials-inspect-insights.md`
+  - Channel commands: `docs/reference/commands/channel.md`
 - Gateway control-plane protocol: `docs/reference/gateway-control-plane-protocol.md`
 - Session lifecycle: `docs/reference/session-lifecycle.md`
 - Budget matrix: `docs/reference/budget-matrix.md`
@@ -101,11 +116,11 @@ Workflow walkthroughs:
 
 - Solutions overview: `docs/solutions/README.md`
 
-## Research (Incubation Layer)
+## Research
 
 - Research playbook: `docs/research/README.md`
 - Active research notes: `docs/research/active/README.md`
-- Promoted research notes: `docs/research/promoted/README.md`
+- Accepted decisions: `docs/research/decisions/README.md`
 - Archived / superseded research notes: `docs/research/archive/README.md`
 
 ## Source of Truth

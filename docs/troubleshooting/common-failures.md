@@ -37,7 +37,7 @@ runtime contract.
   - `packages/brewva-tools/src/utils/parallel-read.ts`
   - `packages/brewva-tools/src/lsp.ts`
   - `packages/brewva-tools/src/ast-grep.ts`
-  - `docs/reference/events.md` (`tool_parallel_read`)
+  - `docs/reference/events/README.md` (`tool_parallel_read`)
 - Action:
   - Start with `brewva inspect --session <id>` to confirm tape/projection health, then inspect session events for `tool_parallel_read` payloads.
   - If `mode=sequential` with `reason=parallel_disabled`, enable runtime `parallel.enabled`.
@@ -49,6 +49,6 @@ runtime contract.
 
 - CLI and operator entrypoints: `docs/guide/cli.md`
 - Inspect / replay / recovery walkthrough: `docs/journeys/operator/inspect-replay-and-recovery.md`
-- Runtime event contract: `docs/reference/events.md`
+- Runtime event contract: `docs/reference/events/README.md`
 - Session lifecycle and artifacts: `docs/reference/session-lifecycle.md`,
   `docs/reference/artifacts-and-paths.md`

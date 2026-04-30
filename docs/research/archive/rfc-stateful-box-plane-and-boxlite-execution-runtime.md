@@ -9,12 +9,12 @@
   - `docs/architecture/invariants-and-reliability.md`
   - `docs/architecture/system-architecture.md`
   - `docs/reference/configuration.md`
-  - `docs/reference/events.md`
+  - `docs/reference/events/README.md`
   - `docs/reference/exec-threat-model.md`
   - `docs/reference/runtime.md`
   - `docs/reference/tools.md`
   - `docs/solutions/security/exec-command-policy-and-readonly-shell.md`
-  - `docs/research/promoted/rfc-stateful-box-plane-and-boxlite-execution-runtime.md`
+  - `docs/research/decisions/stateful-box-plane-and-boxlite-execution-runtime.md`
 
 ## Archive Summary
 
@@ -47,12 +47,12 @@ Read current behavior from:
 - `docs/architecture/invariants-and-reliability.md`
 - `docs/architecture/system-architecture.md`
 - `docs/reference/configuration.md`
-- `docs/reference/events.md`
+- `docs/reference/events/README.md`
 - `docs/reference/exec-threat-model.md`
 - `docs/reference/runtime.md`
 - `docs/reference/tools.md`
 - `docs/solutions/security/exec-command-policy-and-readonly-shell.md`
-- `docs/research/promoted/rfc-stateful-box-plane-and-boxlite-execution-runtime.md`
+- `docs/research/decisions/stateful-box-plane-and-boxlite-execution-runtime.md`
 
 Current stable docs and code now carry the contract that this RFC migrated
 toward:

@@ -10,11 +10,11 @@ function readRepoMarkdown(relativePath: string): string {
 
 describe("canonical hosted turn envelope RFC", () => {
   it("closes the envelope diagnostics durable projection decision", () => {
-    const rfc = readRepoMarkdown("docs/research/promoted/rfc-canonical-hosted-turn-envelope.md");
+    const rfc = readRepoMarkdown("docs/research/decisions/canonical-hosted-turn-envelope.md");
     const hostedLoopRfc = readRepoMarkdown(
-      "docs/research/promoted/rfc-hosted-thread-loop-and-unified-recovery-decisions.md",
+      "docs/research/decisions/hosted-thread-loop-and-unified-recovery-decisions.md",
     );
-    const eventsReference = readRepoMarkdown("docs/reference/events.md");
+    const eventsReference = readRepoMarkdown("docs/reference/events/README.md");
 
     expect(rfc).toContain("Envelope diagnostics stay process-local");
     expect(rfc).toMatch(/No durable\s+envelope-diagnostics event should be added/u);

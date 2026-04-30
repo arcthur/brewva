@@ -8,7 +8,7 @@
 - Promotion target:
   - `docs/reference/gateway-control-plane-protocol.md`
   - `docs/reference/runtime.md`
-  - `docs/reference/events.md`
+  - `docs/reference/events/README.md`
   - `docs/reference/session-lifecycle.md`
 
 ## Archive Summary
@@ -32,9 +32,9 @@ Read current behavior from:
 
 - `docs/reference/gateway-control-plane-protocol.md`
 - `docs/reference/runtime.md`
-- `docs/reference/events.md`
+- `docs/reference/events/README.md`
 - `docs/reference/session-lifecycle.md`
-- `docs/research/promoted/rfc-derived-session-wire-schema-and-frontend-session-protocol.md`
+- `docs/research/decisions/derived-session-wire-schema-and-frontend-session-protocol.md`
 
 The stable contract now treats live tool frames as inspectable, attempt-aware
 session traffic without widening replay truth or durable event projection.

@@ -12,7 +12,7 @@ The public proposal boundary is now intentionally small.
 
 This page owns approval-bearing commitment semantics and replay-visible receipt
 flow. Public runtime surface listing stays in `docs/reference/runtime.md`, and
-the event-family catalog stays in `docs/reference/events.md`.
+the event-family catalog stays in `docs/reference/events/README.md`.
 
 Current rule:
 

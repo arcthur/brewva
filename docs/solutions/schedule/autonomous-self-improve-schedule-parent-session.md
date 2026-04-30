@@ -67,7 +67,7 @@ maintenance, retrospection, or evidence-gated improvement work.
 
 ## References
 
-- `docs/research/promoted/rfc-skill-compounding-loop-completeness-and-parameterization-model.md`
+- `docs/research/decisions/skill-compounding-loop-completeness-and-parameterization-model.md`
 - `packages/brewva-gateway/src/daemon/schedule-runner.ts`
 - `packages/brewva-gateway/src/session/schedule-trigger.ts`
 - `packages/brewva-gateway/src/daemon/gateway-daemon.ts`

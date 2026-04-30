@@ -58,7 +58,7 @@ Port reading:
 The port mapping above is the wiring boundary. User-facing command syntax lives
 in `docs/reference/commands.md`; the underlying `inspect.*` and event
 semantics live in `docs/reference/runtime.md` and
-`docs/reference/events.md`.
+`docs/reference/events/README.md`.
 
 ## Factory API
 

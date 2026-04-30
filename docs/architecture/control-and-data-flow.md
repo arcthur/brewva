@@ -1,219 +1,79 @@
 # Control And Data Flow
 
-This document models governance-first runtime flow and persistence boundaries.
-It is a descriptive wiring view, not the source of truth for public methods,
-event schemas, or CLI/session contracts.
+This is a diagram-only companion for current wiring. It does not define public
+methods, event schemas, authority, or persistence semantics. If a diagram
+conflicts with `design-axioms`, `invariants-and-reliability`, `system-architecture`,
+or reference docs, the narrower contract wins.
 
-Interpretation rule:
-
-- these diagrams are descriptive snapshots of the current runtime shape
-- they do not override architectural invariants or public contracts
-- if the implementation changes, this file should be updated rather than used
-  to infer new authority
-- host-specific branches, deleted paths, or optional integrations may be omitted
-  here without changing the authority model
-
-Use this file to understand current wiring. Use `docs/architecture/*.md`,
-`docs/reference/*.md`, and runtime code to decide what authority or persistence
-semantics are actually allowed.
-
-## Default Session Flow (Runtime Plugins Enabled)
+## Hosted Tool Turn
 
 ```mermaid
 sequenceDiagram
   participant U as User
-  participant CLI as brewva-cli
-  participant HOST as "Hosted Session"
-  participant RT as "Brewva runtime ports"
-  participant EXT as brewva-gateway/runtime-plugins
-  participant TOOLS as brewva-tools
-  participant STORE as Event/Ledger/Projection Stores
+  participant CLI as CLI/TUI
+  participant GW as Gateway/Substrate
+  participant RT as Runtime Ports
+  participant TOOL as Managed Tool
+  participant STORE as Event/Ledger/Projection
 
   U->>CLI: submit turn
-  CLI->>EXT: before_agent_start
-  EXT->>RT: inspect task/skills + maintain.context.observeUsage + maintain.context.buildInjection
-  RT->>STORE: read/update working projection state + record hosted routing posture receipts
-  CLI->>HOST: provider request + assistant completion
-  HOST-->>CLI: hosted completion event
-  CLI->>EXT: tool_call
-  EXT->>RT: authority.tools.start (policy + budget + compaction gate)
-  CLI->>TOOLS: execute
-  TOOLS-->>EXT: tool_result
-  EXT->>RT: authority.tools.finish + authority.tools.recordResult
-  RT->>STORE: event tape + evidence ledger + snapshots
+  CLI->>GW: hosted prompt
+  GW->>RT: inspect + maintain context
+  GW->>RT: authority.tools.start
+  RT->>STORE: decision + lifecycle evidence
+  GW->>TOOL: execute admitted call
+  TOOL-->>GW: result
+  GW->>RT: authority.tools.finish + recordResult
+  RT->>STORE: tool outcome + receipts
 ```
 
-Hosted wiring narrows a root runtime into hosted, tool, and operator ports plus
-repo-owned internal hooks where required. It does not hand a raw implementation
-bag to every lifecycle adapter.
-
-Before the provider request, the hosted control plane resolves the current
-TaskSpec-first posture. If no skill is active and no TaskSpec exists, the turn
-stays on the bootstrap tool surface so the next semantic decision is
-`task_set_spec`. If TaskSpec is present and a routed skill is retained, the
-visible surface narrows again so the next semantic decision is explicit
-`skill_load`. These posture changes are experience-ring shaping plus durable
-control-plane receipts; they do not create automatic skill activation.
-
-## Direct Managed Tools Flow (`--managed-tools direct`)
-
-```mermaid
-flowchart TD
-  A["create runtime"] --> B["create hosted turn pipeline"]
-  B --> C["host provides managed tools directly"]
-  C --> D["before_agent_start: TaskSpec-first context + tool surface"]
-  D --> E["provider request + assistant completion"]
-  E --> F["tool_call: quality gate + invocation spine"]
-  F --> G["tool_result: ledger + event stream + distillation"]
-```
-
-Hosted context ownership is intentionally split:
-
-- lifecycle shell: `packages/brewva-gateway/src/runtime-plugins/context-transform.ts`
-- compaction policy: `packages/brewva-gateway/src/runtime-plugins/hosted-compaction-controller.ts`
-- before-start injection assembly:
-  `packages/brewva-gateway/src/runtime-plugins/hosted-context-injection-pipeline.ts`
-- telemetry emission: `packages/brewva-gateway/src/runtime-plugins/hosted-context-telemetry.ts`
-
-## Persistence Flow
+## Persistence Roles
 
 ```mermaid
 flowchart LR
-  IN["Prompt / Tool IO / Usage"] --> RT["BrewvaRuntime"]
-  RT --> EV["event tape (.orchestrator/events/*.jsonl)"]
-  RT --> LD["evidence ledger (.orchestrator/ledger/evidence.jsonl)"]
-  RT --> MEM["working projection cache/export (.orchestrator/projection/units.jsonl + state.json + sessions/sess_<id>/working.md)"]
-  RT --> SNAP["rollback snapshots (.orchestrator/snapshots/<session>/*)"]
+  RT["Runtime authority"] --> EV["event tape"]
+  RT --> WAL["Recovery WAL"]
+  RT --> LEDGER["evidence ledger"]
+  EV --> PROJ["working projection"]
+  EV --> WIRE["session wire/read models"]
 ```
 
-## Hosted Event Surfaces
-
-```mermaid
-flowchart LR
-  LIVE["Hosted live stream"] --> L1["message_update"]
-  LIVE --> L2["tool_execution_update"]
-  LIVE --> L3["assistant text/thinking deltas"]
-
-  AUDIT["Durable audit tape"] --> A1["message_end summary"]
-  AUDIT --> A2["tool_execution_end summary"]
-  AUDIT --> A3["tool_result_recorded outcome truth"]
-  AUDIT --> A4["approval + delegation lifecycle"]
-```
-
-Live activity stays channel-oriented and ephemeral. Durable tape keeps replay,
-evidence, and recovery semantics. Hosted summaries such as `message_end` and
-`tool_execution_end` stay distinct from runtime-owned durable outcome truth
-such as `tool_result_recorded`.
-
-## Hosted Admission Flow
-
-```mermaid
-flowchart TD
-  A["hosted session bootstrap"] --> B["register hosted pipeline + runtime hooks"]
-  B --> C["provider request / model response"]
-  C --> D{"structured tool call admitted?"}
-  D -->|yes| E["quality-gate tool_call admission"]
-  D -->|no| F["hosted session error to caller"]
-```
-
-The hosted path does not use a separate provider-compatibility seam. Runtime
-authority begins at admitted hosted events such as `tool_call`; permission and
-governance remain kernel-owned.
-
-## Hosted Turn Spine Flow
-
-`TurnLifecycleSpine` is the internal turn-ordering model under the canonical
-hosted turn envelope. It observes existing receipts instead of creating a new
-public lifecycle event family.
+## Hosted Turn Gates
 
 ```mermaid
 flowchart LR
   A["turn_input_recorded"] --> B["ingress_received"]
   B --> C["admission_resolved"]
-  C --> D["effect_authority_decided"]
-  D --> E["effect_authorized"]
-  E --> F["tool_result_recorded"]
-  F --> G["execution_recorded"]
-  G --> H["session_turn_transition / rollback receipts"]
-  H --> I["recovery_settled"]
-  I --> J["turn_render_committed / session_shutdown"]
-  J --> K["terminal_recorded"]
+  C --> D["effect_authorized"]
+  D --> E["execution_recorded"]
+  E --> F["recovery_settled"]
+  F --> G["terminal_recorded"]
 ```
 
-The `effect_authorized` gate is manifest-backed. Security classifiers,
-governance overlays, command policy, managed-tool metadata, runtime capability
-scope, skill posture, and budget state produce facts; the
-`EffectAuthorityManifest` produces the single allow/block/defer decision and
-receipt basis.
-
-Gateway transitions such as `wal_recovery_resume`, `reasoning_revert_resume`,
-`compaction_retry`, provider fallback, and max-output recovery project to the
-declared `recovery_settled` gate. They explain hosted control flow, but they do
-not replace runtime lifecycle or tape replay truth.
-
-## Working Projection Flow
-
-```mermaid
-flowchart TD
-  EVT["event append"] --> EX["ProjectionExtractor (deterministic rules)"]
-  EX --> U["rebuildable projection cache upsert/resolve"]
-  U --> W["session working snapshot refresh/export"]
-  W --> INJ["inject brewva.projection-working"]
-```
-
-## Recovery Flow
+## Recovery
 
 ```mermaid
 flowchart TD
   A["startup"] --> B["load event tape"]
-  B --> C["TurnReplayEngine (checkpoint + delta)"]
-  C --> D["hydrate task/truth/cost/verification replay state"]
-  D --> E{"projection units already present?"}
-  E -->|yes| F["refresh working snapshot from projection state"]
-  E -->|no| G["replay tape through ProjectionEngine and rebuild projection state"]
+  B --> C["checkpoint + delta replay"]
+  C --> D["hydrate task/truth/cost/verification"]
+  D --> E{"projection present?"}
+  E -->|yes| F["refresh working snapshot"]
+  E -->|no| G["rebuild projection from tape"]
 ```
 
-## Session Rewind And Rollback Flow
-
-### User rewind transaction (`--undo` / `--redo` / `/rewind`)
+## Rewind And Rollback
 
 ```mermaid
 flowchart TD
-  A["operator submits prompt"] --> B["record session rewind checkpoint"]
-  B --> C["turn records reasoning and patch receipts"]
-  C --> D["--undo or /rewind rewinds patch window and/or reasoning branch"]
-  D --> E["composer receives restored prompt"]
-  E --> F["--redo reapplies the abandoned rewind branch tip"]
-```
-
-### Patchset-based rollback (`rollback_last_patch`)
-
-```mermaid
-flowchart TD
-  A["rollback_last_patch"] --> B["resolve session"]
-  B --> C["restore tracked snapshot set"]
-  C --> D{"restore ok?"}
-  D -->|yes| E["emit rollback + verification_state_reset"]
-  D -->|no| F["emit no_patchset or restore_failed"]
-```
-
-### Receipt-based mutation rollback (`runtime.authority.tools.rollbackLastMutation(...)`)
-
-```mermaid
-flowchart TD
-  A["rollbackLastMutation(sessionId)"] --> B["resolve latest rollback candidate"]
-  B --> C{"strategy?"}
-  C -->|workspace_patchset| D["rollback tracked PatchSet"]
-  C -->|none available| E["return no_mutation_receipt"]
-  D --> F["emit rollback event trail"]
+  A["operator undo/rewind"] --> B["select checkpoint or mutation receipt"]
+  B --> C["runtime authority records rewind/rollback"]
+  C --> D["verification state reset"]
+  D --> E["inspect surfaces show branch/posture"]
 ```
 
 ## Related Docs
 
 - `docs/architecture/system-architecture.md`
-- `docs/reference/runtime.md`
-- `docs/reference/runtime-plugins.md`
-- `docs/reference/session-lifecycle.md`
-- `docs/reference/events.md`
-- `docs/journeys/operator/interactive-session.md`
-- `docs/journeys/operator/inspect-replay-and-recovery.md`
+- `docs/architecture/invariants-and-reliability.md`
+- `docs/reference/events/README.md`

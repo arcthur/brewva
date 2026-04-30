@@ -58,16 +58,16 @@ source typing, auto-activating skills, or reintroducing hidden runtime planners.
 
 This note extends the subtraction direction already promoted in:
 
-- `docs/research/promoted/rfc-boundary-first-subtraction-and-model-native-recovery.md`
-- `docs/research/promoted/rfc-kernel-first-subtraction-and-control-plane-deferral.md`
-- `docs/research/promoted/rfc-authority-surface-narrowing-and-runtime-facade-compression.md`
-- `docs/research/promoted/rfc-model-native-product-reconstruction-and-closure-vnext.md`
-- `docs/research/promoted/rfc-skill-contract-layering-project-context-and-explicit-activation.md`
-- `docs/research/promoted/rfc-skill-metadata-as-runtime-contract-and-routing-substrate.md`
-- `docs/research/promoted/rfc-skill-surface-compression-and-project-guidance-boundaries.md`
-- `docs/research/promoted/rfc-recall-first-compounding-intelligence-and-experience-products.md`
-- `docs/research/promoted/rfc-repository-native-compound-knowledge-and-review-ensemble.md`
-- `docs/research/promoted/rfc-context-dependency-layering-and-admission-lanes.md`
+- `docs/research/decisions/boundary-first-subtraction-and-model-native-recovery.md`
+- `docs/research/decisions/kernel-first-subtraction-and-control-plane-deferral.md`
+- `docs/research/decisions/authority-surface-narrowing-and-runtime-facade-compression.md`
+- `docs/research/decisions/model-native-product-reconstruction-and-closure-vnext.md`
+- `docs/research/decisions/skill-contract-layering-project-context-and-explicit-activation.md`
+- `docs/research/decisions/skill-metadata-as-runtime-contract-and-routing-substrate.md`
+- `docs/research/decisions/skill-surface-compression-and-project-guidance-boundaries.md`
+- `docs/research/decisions/recall-first-compounding-intelligence-and-experience-products.md`
+- `docs/research/decisions/repository-native-compound-knowledge-and-review-ensemble.md`
+- `docs/research/decisions/context-dependency-layering-and-admission-lanes.md`
 
 The prior RFCs establish why certain complexity must remain:
 
@@ -464,14 +464,14 @@ Architecture and research anchors:
 - `docs/architecture/cognitive-product-architecture.md`
 - `docs/architecture/system-architecture.md`
 - `docs/research/README.md`
-- `docs/research/promoted/rfc-boundary-first-subtraction-and-model-native-recovery.md`
-- `docs/research/promoted/rfc-model-native-product-reconstruction-and-closure-vnext.md`
-- `docs/research/promoted/rfc-recall-first-compounding-intelligence-and-experience-products.md`
-- `docs/research/promoted/rfc-repository-native-compound-knowledge-and-review-ensemble.md`
-- `docs/research/promoted/rfc-skill-contract-layering-project-context-and-explicit-activation.md`
-- `docs/research/promoted/rfc-skill-metadata-as-runtime-contract-and-routing-substrate.md`
-- `docs/research/promoted/rfc-skill-surface-compression-and-project-guidance-boundaries.md`
-- `docs/research/promoted/rfc-context-dependency-layering-and-admission-lanes.md`
+- `docs/research/decisions/boundary-first-subtraction-and-model-native-recovery.md`
+- `docs/research/decisions/model-native-product-reconstruction-and-closure-vnext.md`
+- `docs/research/decisions/recall-first-compounding-intelligence-and-experience-products.md`
+- `docs/research/decisions/repository-native-compound-knowledge-and-review-ensemble.md`
+- `docs/research/decisions/skill-contract-layering-project-context-and-explicit-activation.md`
+- `docs/research/decisions/skill-metadata-as-runtime-contract-and-routing-substrate.md`
+- `docs/research/decisions/skill-surface-compression-and-project-guidance-boundaries.md`
+- `docs/research/decisions/context-dependency-layering-and-admission-lanes.md`
 
 Runtime and gateway anchors:
 
@@ -710,7 +710,7 @@ Once validation passes, promote the accepted product semantics into stable docs:
 - update `docs/reference/context-composer.md`
 - update `docs/reference/tools.md`
 - add or update an operator journey document for the five-label mental model
-- reduce this research note to a promoted status pointer
+- record the accepted decision under `docs/research/decisions/`
 
 ## Validation Signals
 

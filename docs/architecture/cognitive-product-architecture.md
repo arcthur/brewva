@@ -1,315 +1,52 @@
 # Cognitive Product Architecture
 
-This document describes Brewva's product-facing cognitive shape without
-changing the constitutional line:
+This page is a product-facing companion. It describes how Brewva presents
+model, operator, and kernel boundaries without redefining authority. If wording
+here conflicts with axioms, invariants, system architecture, or reference docs,
+the narrower contract wins.
 
-`Intelligence proposes. Kernel commits. Tape remembers.`
-
-Interpretation rule:
-
-- this document explains model-facing product behavior
-- it does not redefine kernel authority or replay contracts
-- if wording here conflicts with `design-axioms`, `invariants-and-reliability`,
-  or `system-architecture`, those narrower authority documents win
-
-Normative status:
-
-- this file describes product-facing shape and presentation, not authority
-- it must not be used as the sole justification for default-path injections,
-  hidden phase logic, or durable control-state growth
-- if the product shape changes, this file should be updated instead of being
-  treated as an implicit contract expander
-
-## Taxonomy
-
-Brewva keeps two taxonomies separate:
-
-- `Rings` define authority boundaries
-- `Planes` define cross-cutting product concerns
-
-### Rings
-
-- `Kernel Ring`
-  - authoritative commitments
-  - effect authorization
-  - verification, replay, WAL, receipts
-- `Deliberation Ring`
-  - evidence-backed artifact folding and retrieval
-  - deliberation memory, promotion, and continuity products
-  - optional search or delegation assistance outside kernel authority
-  - future multi-model reasoning products
-- `Experience Ring`
-  - CLI
-  - gateway
-  - channels
-  - operator UX
-
-### Planes
-
-- `Working State Plane`
-  - projection-backed readable working snapshot
-  - context-budget trimming and deduplication
-  - current visible tool surface
-- `Cognitive Product Plane`
-  - context composition for the model
-  - persona/profile rendering
-  - capability disclosure
-  - recovery-facing presentation
-- `Control Plane`
-  - heartbeat
-  - explicit wake triggers
-  - scheduling triggers
-  - delegation orchestration
-
-## Core Principle
-
-The product rule is:
+## Product Boundary
 
 `Model sees narrative. Operator sees telemetry. Kernel sees receipts.`
 
-Consequences:
+- The model receives context, skill contracts, task framing, tool affordances,
+  and recovery hints.
+- The operator sees approvals, questions, task state, inspect views, session
+  posture, cost, and diagnostics.
+- The kernel records decisions, effects, verification, rollback, recovery, and
+  replay truth.
 
-- kernel state remains authoritative and replayable
-- operator telemetry does not become default model context
-- model-facing context is composed from admitted sources, not raw dashboards
-- review and repair remain product behavior without becoming kernel planning
-- repository merge or release authority remains outside the default cognitive
-  plane unless a host explicitly imports external fitness evidence
+## Context Product
 
-## Exploration Lane And Commitment Lane
+Context composition is a product layer over runtime facts. It may combine
+stable contracts, active task state, working projection, recall, skill
+contracts, and advisory memory, but it must preserve provenance and conflict
+posture.
 
-The product still distinguishes two lanes.
+## Operator Product
 
-These lanes are explanatory product language, not first-class runtime
-authority objects. They must not be implemented as hidden stage machines or
-default path prescriptions.
+The CLI/TUI shell is an experience ring surface. It owns overlays, keybindings,
+transcript rendering, model selection, provider connection flows, inbox,
+approvals, and drill-down views. These surfaces render runtime truth; they do
+not create it.
 
-Concrete non-goals:
+## Kernel Product
 
-- default injected workflow lane briefs
-- hidden phase resolution or required-next-step controllers
-- runtime-owned convergence blockers that decide when exploration should stop
-- model-writable durable hints that feed back into later control logic
+The kernel product is intentionally boring: effect gates, receipts, replay,
+verification, rollback, Recovery WAL, and durable event families. If a feature
+needs durable authority, it should enter through `runtime.authority` rather
+than through model-facing prompt shape.
 
-### `exploration lane`
+## Explicit Non-Goals
 
-Responsibilities:
-
-- discover paths
-- choose tools
-- decide when to verify, review, repair, or delegate
-- negotiate more context or budget
-
-Typical carriers:
-
-- current prompt
-- visible tool surface
-- projection
-- supplemental context
-- delegation packets and child-run outcomes
-- lease requests
-
-### `commitment lane`
-
-Responsibilities:
-
-- authorize effects
-- record receipts
-- preserve replayable durability
-- keep verification evidence durable
-
-The point of separating the lanes is to keep the kernel from prescribing thought
-paths while still enforcing safety.
-
-## Cognitive Product Plane
-
-The cognitive plane owns model-facing behavior that should not become kernel
-authority.
-
-Current responsibilities:
-
-- `ContextComposer`
-  - arranges admitted context into narrative, constraint, and diagnostic blocks
-- `CapabilityView`
-  - typed build/render surface (`buildCapabilityView(...)` / `renderCapabilityView(...)`) that turns exact governance metadata into model-facing tool disclosure
-- `PersonaProfile`
-  - rendered profile surface (`readPersonaProfile(...)`) for stable identity/workstyle signals from
-    `packages/brewva-runtime/src/context/identity.ts`
-- agent self bundle presentation
-  - exposes `identity.md`, `constitution.md`, and `memory.md` as explicit,
-    provenance-bearing narrative providers
-  - keeps editable self narration outside kernel authority
-- recovery presentation
-  - exposes verification, rollbackability, approval requirements, and worker
-    outcomes without prescribing the next step
-- delegation posture presentation
-  - exposes public delegation through `skillName` intent packets while the
-    resolver owns agent spec, envelope, consult kind, result kind, model route,
-    visibility, and adoption contract selection
-  - keeps diagnostic low-level routing on maintainer-only control-plane tools
-    rather than ordinary model-facing guidance
-  - presents the stable public specialist surface (`advisor`, `qa`,
-    `patch-worker`) while keeping review-lane fan-out behind the internal
-    review ensemble
-  - treats `subagent_fork` as an execution primitive with parent lineage rather
-    than a hosted specialist identity
-  - projects `subagent_status` by default so low-level routing fields require
-    explicit internal or diagnostic inspection
-  - keeps execution identity singular for read-only consultation while leaving
-    semantic workflow lanes in parent-owned skills
-- workflow inspection presentation
-  - exposes explicit pull-based workflow surfaces such as `workflow_status`
-    and working projection entries
-  - summarizes derived workflow artifact signals, planning assurance posture,
-    and blockers without default turn-time injection
-  - stays explicit and advisory-only instead of turning product UX into a hidden planner
-- TaskSpec-first routing presentation
-  - exposes hosted routing posture through explicit constraint blocks and
-    durable receipts such as `skill_diagnosis_derived`
-  - keeps pre-skill bootstrap and retained post-TaskSpec `skill_load` guidance
-    visible to the model instead of relying on hidden prompt-only heuristics
-  - narrows the visible tool surface without auto-activating skills or
-    introducing a second planning state machine
-- skill lifecycle profile presentation
-  - treats one `SKILL.md` as four product projections: discovery, selection,
-    activation, and handoff
-  - keeps cold-start hit rate owned by the selection projection only
-  - lets handoff readiness gate already-shortlisted candidates without adding
-    positive routing score or introducing unrelated candidates
-  - renders explicit activation through the `skill_load` envelope instead of
-    turning catalog or authority metadata into default model context
-- closure presentation
-  - keeps verification and acceptance separate
-  - keeps delegated executable QA separate from `runtime.authority.verification.*`
-  - exposes acceptance as an operator-visible closure posture rather than a
-    model self-approval path
-- optimization protocol presentation
-  - exposes objective iteration facts such as metric observations, guard
-    results
-  - may present broker-first hosted recall after kernel admission, while
-    preserving source typing across narrative memory, deliberation artifacts,
-    optimization continuity, promotion drafts, tape evidence, and repository
-    precedent
-  - keeps loop strategy and any optional sequencing decisions in the
-    model-native layer rather than moving them into kernel authority
-- narrative memory presentation
-  - exposes `narrative_memory` as the explicit inspection and management surface
-    for typed collaboration semantics
-  - keeps `brewva.narrative-memory` distinct from `brewva.agent-memory`
-    self-bundle input and distinct from repository precedent under
-    `docs/solutions/**`
-  - presents provenance-bearing, freshness-aware recall as advisory context
-    instead of as hidden long-term truth
-- answer presentation
-  - carries a canonical communication policy in the substrate system prompt
-  - chooses terse prose, Markdown tables, or Mermaid diagrams based on the
-    shape of the answer
-  - renders stable interactive transcript blocks through CLI-owned
-    presentation classification and OpenTUI primitives
-  - keeps tables and diagrams as presentation carriers, not runtime artifacts,
-    inspect surfaces, replay truth, or skill outputs
-
-This plane may read kernel state, but it does not mutate kernel state directly.
-
-## Workflow Inspection Surfaces
-
-Workflow chaining is productized as an explicit inspection surface, not as a
-new kernel authority object.
-
-Current product surfaces:
-
-- `workflow_status` as an explicit inspection tool
-- `recall_search` as the default cross-session prior-work recall tool, with
-  typed intent hints for repository precedent, current-session evidence, and
-  durable runtime receipts
-- `knowledge_search` as an explicit repository-native precedent retrieval tool
-- `precedent_audit` as an explicit repository-precedent maintenance tool
-- `precedent_sweep` as an explicit repository-wide precedent maintenance tool
-- working projection entries such as `workflow.discovery`, `workflow.strategy_review`,
-  `workflow.learning_research`, `workflow.design`, `workflow.execution_plan`,
-  `workflow.review`, `workflow.qa`, `workflow.ship`,
-  `workflow.iteration_metric`, and `workflow.iteration_guard`
-
-Related productized repository-precedent surfaces also include:
-
-- `knowledge_capture` as terminal materialization into `docs/solutions/**`
-- `recall_curate` as the operator-only recall ranking feedback surface
-- internal review-lane fan-out behind the single public `advisor`
-  consultation boundary, while `review` remains a parent-owned semantic skill
-
-These surfaces are derived from durable events and session state such as:
-
-- `skill_completed` outputs
-- verification outcome and write-mark events
-- iteration fact events such as metric observations and guard results
-- worker patch adoption or failure events
-- pending delegated worker results
-- pending delegation outcomes awaiting a parent turn
-
-The product goal is visibility and recovery guidance. The product must not
-convert those signals into a mandatory stage machine or a default injected lane
-brief.
-
-Interpretation reminder:
-
-- these workflow surfaces may summarize session-local state
-- they do not grant new authority to projection, context composition, or
-  product-facing adapters
-
-Those surfaces are also narrower than repository change fitness:
-
-- `workflow_status`
-- projection-level posture summaries
-- session-derived `ship_posture`
-
-They describe session-local advisory state. They do not declare that a
-repository diff is approved to merge or ready to release.
-
-## ContextComposer Boundary
-
-`ContextComposer` is not a replacement for kernel admission.
-
-Responsibilities:
-
-- consume already-admitted context entries from `runtime.maintain.context.buildInjection(...)`
-- classify them as `narrative`, `constraint`, or `diagnostic`
-- order visible blocks for the turn
-- emit composition metrics such as narrative ratio
-
-Non-responsibilities:
-
-- source registration
-- source admission
-- budget planning
-- replay
-- hidden planning hints
-
-That split remains:
-
-- runtime admission decides what may enter
-- runtime plugins shape how admitted context is shown
-- the model decides what to do next
-
-## Control-Plane Triggers
-
-Heartbeat and schedule triggers are explicit control-plane prompts.
-
-Current rule:
-
-- operators author the trigger
-- gateway opens or resumes the target session
-- the model receives the explicit prompt
-- no hidden wake plan or cognition-driven suppression layer sits in between
-
-This keeps the boundary honest:
-
-- control plane may schedule and deliver explicit prompts
-- kernel authority is unchanged
+- no prompt-only authority
+- no hidden runtime planner inferred from product lanes
+- no model-writable durable control state
+- no UI presentation object that changes replay truth
 
 ## Related Docs
 
 - `docs/architecture/system-architecture.md`
-- `docs/guide/understanding-runtime-system.md`
-- `docs/guide/orchestration.md`
 - `docs/reference/context-composer.md`
 - `docs/reference/runtime.md`
+- `docs/reference/commands/interactive.md`

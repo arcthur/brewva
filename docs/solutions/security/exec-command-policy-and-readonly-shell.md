@@ -100,7 +100,7 @@ Use this precedent whenever changing:
 - `docs/reference/exec-threat-model.md`
 - `docs/reference/configuration.md`
 - `docs/reference/tools.md`
-- `docs/reference/events.md`
+- `docs/reference/events/README.md`
 - `packages/brewva-runtime/src/security/command-policy.ts`
 - `packages/brewva-tools/src/exec.ts`
 - `test/unit/runtime/command-policy.unit.test.ts`
