@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import {
   MESSAGE_END_EVENT_TYPE,
+  MODEL_SELECT_EVENT_TYPE,
   type BrewvaEventRecord,
   type BrewvaRuntime,
 } from "@brewva/brewva-runtime";
@@ -13,8 +14,6 @@ import {
 } from "../session/runtime-session-transcript.js";
 
 type CustomMessageContentPart = { type: string };
-
-const MODEL_SELECT_EVENT_TYPE = "model_select";
 
 const HOSTED_SESSION_PROJECTION_MESSAGE_EVENT_TYPE = "hosted_session_projection_message";
 const HOSTED_SESSION_PROJECTION_CUSTOM_MESSAGE_EVENT_TYPE =

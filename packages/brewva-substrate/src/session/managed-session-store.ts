@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { BrewvaPromptThinkingLevel } from "./prompt-session.js";
+import type { BrewvaModelPreset, BrewvaPromptThinkingLevel } from "./prompt-session.js";
 
 export interface BrewvaTextContent {
   type: "text";
@@ -81,6 +81,16 @@ export interface BrewvaModelChangeEntry extends BrewvaSessionEntryBase {
   modelId: string;
 }
 
+export interface BrewvaModelPresetSelectEntry extends BrewvaSessionEntryBase {
+  type: "model_preset_select";
+  presetName: string;
+  previousPresetName?: string;
+  source?: string;
+  mainModel?: string;
+  subagentModels?: Record<string, string>;
+  synthetic?: boolean;
+}
+
 export interface BrewvaCompactionEntry<TDetails = unknown> extends BrewvaSessionEntryBase {
   type: "compaction";
   summary: string;
@@ -110,6 +120,7 @@ export type BrewvaSessionEntry =
   | BrewvaSessionMessageEntry
   | BrewvaThinkingLevelChangeEntry
   | BrewvaModelChangeEntry
+  | BrewvaModelPresetSelectEntry
   | BrewvaCompactionEntry
   | BrewvaBranchSummaryEntry
   | BrewvaCustomMessageEntry;
@@ -118,6 +129,29 @@ export interface BrewvaSessionContext {
   messages: BrewvaStoredAgentMessage[];
   thinkingLevel: BrewvaPromptThinkingLevel;
   model: { provider: string; modelId: string } | null;
+  activeModelPresetName: string;
+  activeModelPreset: BrewvaModelPreset;
+}
+
+function createSyntheticDefaultModelPreset(): BrewvaModelPreset {
+  return {
+    name: "Default",
+    subagentModels: {},
+    synthetic: true,
+  };
+}
+
+function cloneSubagentModels(value: Record<string, string> | undefined): Record<string, string> {
+  return value ? { ...value } : {};
+}
+
+function modelPresetFromSelectionEntry(entry: BrewvaModelPresetSelectEntry): BrewvaModelPreset {
+  return {
+    name: entry.presetName,
+    mainModel: entry.mainModel,
+    subagentModels: cloneSubagentModels(entry.subagentModels),
+    synthetic: entry.synthetic,
+  };
 }
 
 function createBranchSummaryMessage(
@@ -208,7 +242,13 @@ export function buildManagedSessionContext(
     byId ?? new Map<string, BrewvaSessionEntry>(entries.map((entry) => [entry.id, entry] as const));
 
   if (leafId === null) {
-    return { messages: [], thinkingLevel: "off", model: null };
+    return {
+      messages: [],
+      thinkingLevel: "off",
+      model: null,
+      activeModelPresetName: "Default",
+      activeModelPreset: createSyntheticDefaultModelPreset(),
+    };
   }
 
   let leaf = leafId ? entryIndex.get(leafId) : undefined;
@@ -217,7 +257,13 @@ export function buildManagedSessionContext(
   }
 
   if (!leaf) {
-    return { messages: [], thinkingLevel: "off", model: null };
+    return {
+      messages: [],
+      thinkingLevel: "off",
+      model: null,
+      activeModelPresetName: "Default",
+      activeModelPreset: createSyntheticDefaultModelPreset(),
+    };
   }
 
   const path: BrewvaSessionEntry[] = [];
@@ -229,6 +275,8 @@ export function buildManagedSessionContext(
 
   let thinkingLevel: BrewvaPromptThinkingLevel = "off";
   let model: { provider: string; modelId: string } | null = null;
+  let activeModelPresetName = "Default";
+  let activeModelPreset = createSyntheticDefaultModelPreset();
   let compaction: BrewvaCompactionEntry | null = null;
 
   for (const entry of path) {
@@ -238,6 +286,10 @@ export function buildManagedSessionContext(
         break;
       case "model_change":
         model = { provider: entry.provider, modelId: entry.modelId };
+        break;
+      case "model_preset_select":
+        activeModelPresetName = entry.presetName;
+        activeModelPreset = modelPresetFromSelectionEntry(entry);
         break;
       case "message":
         if (
@@ -306,6 +358,8 @@ export function buildManagedSessionContext(
     messages,
     thinkingLevel,
     model,
+    activeModelPresetName,
+    activeModelPreset,
   };
 }
 
@@ -455,6 +509,30 @@ export class BrewvaManagedSessionStore {
       timestamp: new Date().toISOString(),
       provider,
       modelId,
+    };
+    this.#append(entry);
+    return entry.id;
+  }
+
+  appendModelPresetSelection(input: {
+    presetName: string;
+    previousPresetName?: string;
+    source?: string;
+    mainModel?: string;
+    subagentModels?: Record<string, string>;
+    synthetic?: boolean;
+  }): string {
+    const entry: BrewvaModelPresetSelectEntry = {
+      type: "model_preset_select",
+      id: createEntryId(this.#byId),
+      parentId: this.#leafId,
+      timestamp: new Date().toISOString(),
+      presetName: input.presetName,
+      previousPresetName: input.previousPresetName,
+      source: input.source,
+      mainModel: input.mainModel,
+      subagentModels: input.subagentModels ? { ...input.subagentModels } : undefined,
+      synthetic: input.synthetic,
     };
     this.#append(entry);
     return entry.id;

@@ -32,9 +32,9 @@ operator model:
   inline prompts instead of a persistent side rail
 
 The bottom status bar is the primary runtime hint surface. It carries the
-current mode, selected model / thinking posture, follow state (`live` vs
-`scrolled`), pending approval or question badges, background-task hints, and
-concise action suggestions.
+current mode, active model preset, selected model / thinking posture, follow
+state (`live` vs `scrolled`), pending approval or question badges,
+background-task hints, and concise action suggestions.
 
 When the current turn is still streaming, submitting another composer prompt
 queues it automatically for the next turn. The shell then renders a compact
@@ -70,6 +70,9 @@ The first-pass keyboard contract is:
   composer this overrides the familiar readline-style backward-char behavior
 - `Ctrl-A` / `Ctrl-O` / `Ctrl-T` / `Ctrl-G` / `Ctrl-I` / `Ctrl-N` open
   approvals, questions, tasks, sessions, inspect, and the inbox
+- `Shift-Tab` cycles the current session model preset; during streaming it
+  queues the preset for the next user turn and shows `current -> next` in the
+  status bar
 - `PageUp` / `PageDown` move the transcript or the active detail surface by a
   half-page
 - `Esc` dismisses completion or leaves the active overlay layer
@@ -192,6 +195,7 @@ session. It summarizes:
 - folded task and truth state
 - latest verification outcome
 - hosted transition snapshot
+- active model preset and unmatched preset subagent keys
 - ledger and runtime artifact paths
 - deterministic directory-scoped diagnostics and evidence gaps
 

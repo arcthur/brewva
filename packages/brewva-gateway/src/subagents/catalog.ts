@@ -33,7 +33,6 @@ export interface HostedExecutionEnvelope {
   name: string;
   description: string;
   boundary?: SubagentExecutionBoundary;
-  model?: string;
   builtinToolNames?: HostedDelegationBuiltinToolName[];
   managedToolNames?: string[];
   defaultContextBudget?: SubagentContextBudget;
@@ -217,6 +216,9 @@ function toExecutionEnvelope(
   source: Record<string, unknown>,
   defaults?: HostedExecutionEnvelope,
 ): HostedExecutionEnvelope | undefined {
+  if ("model" in source) {
+    throw new Error("Execution envelope model pins are no longer supported. Use modelPresets.");
+  }
   const name = asString(source.name) ?? defaults?.name;
   const description = asString(source.description) ?? defaults?.description;
   if (!name || !description) {
@@ -226,7 +228,6 @@ function toExecutionEnvelope(
     name,
     description,
     boundary: asBoundary(source.boundary) ?? defaults?.boundary ?? "safe",
-    model: asString(source.model) ?? defaults?.model,
     builtinToolNames: asBuiltinToolArray(source.builtinToolNames) ?? defaults?.builtinToolNames,
     managedToolNames: asStringArray(source.managedToolNames) ?? defaults?.managedToolNames,
     defaultContextBudget:
@@ -254,6 +255,9 @@ function toAgentSpec(
   source: Record<string, unknown>,
   defaults?: HostedAgentSpec,
 ): HostedAgentSpec | undefined {
+  if ("model" in source) {
+    throw new Error("Agent spec model pins are no longer supported. Use modelPresets.");
+  }
   const name = asString(source.name) ?? defaults?.name;
   const description = asString(source.description) ?? defaults?.description;
   const envelope = asString(source.envelope) ?? defaults?.envelope;
@@ -632,7 +636,6 @@ export function buildHostedDelegationTargetFromAgentSpec(input: {
     executorPreamble: input.agentSpec.executorPreamble,
     instructionsMarkdown: input.agentSpec.instructionsMarkdown,
     boundary: input.envelope.boundary ?? "safe",
-    model: input.envelope.model,
     skillName: input.agentSpec.skillName,
     consultKind,
     reviewLane: input.agentSpec.reviewLane,
@@ -669,7 +672,6 @@ export function buildSyntheticHostedDelegationTarget(input: {
     executorPreamble: input.executorPreamble,
     instructionsMarkdown: input.instructionsMarkdown,
     boundary: input.envelope.boundary ?? "safe",
-    model: input.envelope.model,
     skillName: input.skillName,
     consultKind,
     reviewLane: input.reviewLane,

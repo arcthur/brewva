@@ -24,6 +24,7 @@ import {
   MANAGED_AGENT_SESSION_TEST_ONLY,
   createBrewvaManagedAgentSession,
 } from "../../../packages/brewva-gateway/src/host/managed-agent-session.js";
+import { runHostedPromptTurn } from "../../../packages/brewva-gateway/src/host/run-hosted-prompt-turn.js";
 import { HostedRuntimeTapeSessionStore } from "../../../packages/brewva-gateway/src/host/runtime-projection-session-store.js";
 import { createHostedTurnPipeline } from "../../../packages/brewva-gateway/src/runtime-plugins/index.js";
 import {
@@ -155,7 +156,6 @@ function createSettingsStub() {
     getRetrySettings() {
       return undefined;
     },
-    setDefaultModelAndProvider() {},
     setDefaultThinkingLevel() {},
     getModelPreferences() {
       return { recent: [], favorite: [] };
@@ -2517,6 +2517,96 @@ describe("managed agent session compaction", () => {
         await session.waitForIdle();
       } finally {
         unsubscribe();
+        session.dispose();
+      }
+    } finally {
+      fauxProvider.unregister();
+    }
+  });
+
+  test("applies queued model preset before hosted prompt turn dispatches an interactive attempt", async () => {
+    const fauxProvider = registerFauxProvider({
+      provider: "faux-preset-dispatch",
+      api: "faux",
+      models: [{ id: "preset-dispatch-model" }],
+    });
+
+    try {
+      const workspace = createTestWorkspace("managed-session-queued-preset-dispatch");
+      const runtime = new BrewvaRuntime({ cwd: workspace });
+      const sessionStore = new HostedRuntimeTapeSessionStore(
+        runtime,
+        workspace,
+        "managed-session-queued-preset-dispatch",
+      );
+      const modelCatalog = createInMemoryModelCatalog();
+      const model: BrewvaRegisteredModel = {
+        provider: "faux-preset-dispatch",
+        id: "preset-dispatch-model",
+        name: "Preset Dispatch Model",
+        api: "faux",
+        baseUrl: "http://localhost:0",
+        reasoning: false,
+        input: ["text"],
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        contextWindow: 32000,
+        maxTokens: 4096,
+      };
+      registerModelCatalogProvider(modelCatalog, model);
+      sessionStore.appendModelChange(model.provider, model.id);
+      sessionStore.appendThinkingLevelChange("off");
+      fauxProvider.setResponses([fauxAssistantMessage("done")]);
+
+      const session = await createBrewvaManagedAgentSession({
+        cwd: workspace,
+        agentDir: join(workspace, ".brewva-agent"),
+        sessionStore,
+        settings: createSettingsStub(),
+        runtime,
+        modelCatalog,
+        resourceLoader: await createResourceLoader(workspace),
+        customTools: [],
+        runtimePlugins: [createHostedTurnPipeline({ runtime, registerTools: false })],
+        initialModel: model,
+        initialThinkingLevel: "off",
+        initialModelPresetState: {
+          activeName: "Default",
+          defaultName: "Default",
+          presets: [
+            { name: "Default", subagentModels: {}, synthetic: true },
+            { name: "Claude Lead", subagentModels: { advisor: "faux-preset-dispatch/advisor" } },
+          ],
+          pendingName: "Claude Lead",
+        },
+      });
+
+      try {
+        const output = await runHostedPromptTurn({
+          session,
+          parts: textPrompt("Next interactive turn"),
+          source: "interactive",
+          runtime,
+          sessionId: sessionStore.getSessionId(),
+        });
+
+        expect(output.status).toBe("completed");
+        expect(session.getModelPresetState?.()).toMatchObject({
+          activeName: "Claude Lead",
+          pendingName: undefined,
+        });
+        expect(
+          runtime.inspect.events
+            .query(sessionStore.getSessionId(), { type: "model_preset_select" })
+            .at(-1)?.payload,
+        ).toMatchObject({
+          presetName: "Claude Lead",
+          previousPresetName: "Default",
+          source: "queued",
+          subagentModels: {
+            advisor: "faux-preset-dispatch/advisor",
+          },
+        });
+      } finally {
         session.dispose();
       }
     } finally {

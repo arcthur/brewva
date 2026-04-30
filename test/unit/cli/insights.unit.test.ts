@@ -5,10 +5,80 @@ import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
 import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import { buildProjectInsightsReport } from "../../../packages/brewva-cli/src/insights.js";
 import { resolveInspectDirectory } from "../../../packages/brewva-cli/src/inspect-analysis.js";
-import { buildSessionInspectReport } from "../../../packages/brewva-cli/src/inspect.js";
+import {
+  buildInspectReport,
+  buildSessionInspectReport,
+  formatInspectText,
+} from "../../../packages/brewva-cli/src/inspect.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 describe("project insights aggregation", () => {
+  test("exposes the active model preset from replayed session events", () => {
+    const workspace = createTestWorkspace("inspect-model-preset");
+    writeFileSync(join(workspace, ".brewva", "brewva.json"), "{}\n", "utf8");
+    const runtime = new BrewvaRuntime({
+      cwd: workspace,
+      config: structuredClone(DEFAULT_BREWVA_CONFIG),
+    });
+    const sessionId = "inspect-model-preset-session";
+
+    recordRuntimeEvent(runtime, {
+      sessionId,
+      type: "model_preset_select",
+      payload: {
+        presetName: "Claude Lead",
+        previousPresetName: "Default",
+        source: "tui",
+        mainModel: "anthropic/claude-main:high",
+        subagentModels: {
+          advisor: "openai/gpt-5.5:medium",
+        },
+      },
+    });
+
+    const report = buildInspectReport(runtime, sessionId);
+
+    expect(report.modelPreset).toMatchObject({
+      activeName: "Claude Lead",
+      previousName: "Default",
+      source: "tui",
+      mainModel: "anthropic/claude-main:high",
+      subagentModels: {
+        advisor: "openai/gpt-5.5:medium",
+      },
+    });
+  });
+
+  test("surfaces unmatched model preset subagent keys in inspect output", () => {
+    const workspace = createTestWorkspace("inspect-model-preset-unmatched-subagents");
+    writeFileSync(join(workspace, ".brewva", "brewva.json"), "{}\n", "utf8");
+    const runtime = new BrewvaRuntime({
+      cwd: workspace,
+      config: structuredClone(DEFAULT_BREWVA_CONFIG),
+    });
+    const sessionId = "inspect-model-preset-unmatched-subagents-session";
+
+    recordRuntimeEvent(runtime, {
+      sessionId,
+      type: "model_preset_select",
+      payload: {
+        presetName: "Mixed Stack",
+        source: "tui",
+        subagentModels: {
+          advisor: "openai/gpt-5.5:medium",
+          "ghost-reviewer": "anthropic/claude-main:high",
+        },
+      },
+    });
+
+    const report = buildInspectReport(runtime, sessionId);
+
+    expect(report.modelPreset.unmatchedSubagentModelKeys).toEqual(["ghost-reviewer"]);
+    expect(formatInspectText(report)).toContain(
+      "Model preset diagnostic: unmatchedSubagentModels=ghost-reviewer",
+    );
+  });
+
   test("tracks failed session analyses separately from excluded sessions", async () => {
     const workspace = createTestWorkspace("insights-failure-accounting");
     writeFileSync(join(workspace, ".brewva", "brewva.json"), "{}\n", "utf8");

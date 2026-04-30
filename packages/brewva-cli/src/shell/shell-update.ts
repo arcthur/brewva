@@ -164,6 +164,8 @@ function updateCommandIntent(
               },
             ],
           });
+    case "agent.preset.next":
+      return handled({ effects: [{ type: "modelPreset.cycleNext" }] });
     case "agent.connect":
       return handled({
         effects: [{ type: "provider.openConnect", query: intent.args.trim() || undefined }],

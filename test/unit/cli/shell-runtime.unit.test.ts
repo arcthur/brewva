@@ -16,6 +16,7 @@ import {
   type BrewvaQueuedPromptView,
   type BrewvaPromptSessionEvent,
   type BrewvaShellViewPreferences,
+  type BrewvaModelPresetState,
   type BrewvaSessionModelDescriptor,
   type BrewvaSteerOutcome,
   type BrewvaToolUiPort,
@@ -71,6 +72,8 @@ function createFakeBundle(
     completeOAuth?: (provider: string, methodId: string, code?: string) => Promise<void>;
     queuedPrompts?: BrewvaQueuedPromptView[];
     steerHandler?: (text: string) => Promise<BrewvaSteerOutcome>;
+    modelPresetState?: BrewvaModelPresetState;
+    isStreaming?: boolean;
   } = {},
 ) {
   let attachedUi: BrewvaToolUiPort | undefined;
@@ -122,6 +125,12 @@ function createFakeBundle(
   const availableModelKeys = new Set(options.availableModelKeys ?? allModels.map(modelKey));
   let currentModel = allModels[0] ?? defaultModel;
   let thinkingLevel = "high";
+  let isStreaming = options.isStreaming ?? false;
+  let modelPresetState: BrewvaModelPresetState = options.modelPresetState ?? {
+    activeName: "Default",
+    defaultName: "Default",
+    presets: [{ name: "Default", subagentModels: {}, synthetic: true }],
+  };
   let modelPreferences = { recent: [], favorite: [] } as {
     recent: Array<{ provider: string; id: string }>;
     favorite: Array<{ provider: string; id: string }>;
@@ -142,7 +151,12 @@ function createFakeBundle(
     get thinkingLevel() {
       return thinkingLevel;
     },
-    isStreaming: false,
+    get isStreaming() {
+      return isStreaming;
+    },
+    set isStreaming(next: boolean) {
+      isStreaming = next;
+    },
     sessionManager: {
       getSessionId() {
         return sessionId;
@@ -185,6 +199,45 @@ function createFakeBundle(
     async setModel(model: BrewvaSessionModelDescriptor) {
       currentModel = model;
     },
+    getModelPresetState() {
+      return structuredClone(modelPresetState);
+    },
+    selectModelPreset(request: { name: string }) {
+      const preset = modelPresetState.presets.find((candidate) => candidate.name === request.name);
+      if (!preset) {
+        throw new Error(`Unknown model preset: ${request.name}`);
+      }
+      const previousName = modelPresetState.activeName;
+      modelPresetState = {
+        ...modelPresetState,
+        activeName: preset.name,
+        pendingName: undefined,
+      };
+      return {
+        selectedName: preset.name,
+        previousName,
+        modelChanged: false,
+        queued: false,
+        effectiveMainModel: preset.mainModel,
+      };
+    },
+    queueModelPresetForNextTurn(name: string) {
+      const preset = modelPresetState.presets.find((candidate) => candidate.name === name);
+      if (!preset) {
+        throw new Error(`Unknown model preset: ${name}`);
+      }
+      modelPresetState = {
+        ...modelPresetState,
+        pendingName: preset.name,
+      };
+      return {
+        selectedName: preset.name,
+        previousName: modelPresetState.activeName,
+        modelChanged: false,
+        queued: true,
+        effectiveMainModel: preset.mainModel,
+      };
+    },
     getAvailableThinkingLevels() {
       return currentModel.reasoning ? ["off", "minimal", "low", "medium", "high"] : ["off"];
     },
@@ -200,6 +253,13 @@ function createFakeBundle(
       };
     },
     async prompt(parts: readonly BrewvaPromptContentPart[]) {
+      if (modelPresetState.pendingName) {
+        modelPresetState = {
+          ...modelPresetState,
+          activeName: modelPresetState.pendingName,
+          pendingName: undefined,
+        };
+      }
       await options.promptHandler?.(buildBrewvaPromptText(parts));
     },
     async steer(text: string) {
@@ -281,6 +341,10 @@ function createFakeBundle(
     getDiffPreferences: () => diffPreferences,
     getShellViewPreferences: () => shellViewPreferences,
     getCurrentModel: () => currentModel,
+    getModelPresetState: () => structuredClone(modelPresetState),
+    setStreaming: (next: boolean) => {
+      isStreaming = next;
+    },
   };
 }
 
@@ -764,6 +828,158 @@ describe("shell runtime", () => {
 
     expect(runtime.ui.getEditorText()).toBe("/model ");
     expect(runtime.getViewState().overlay.active).toBeUndefined();
+
+    runtime.dispose();
+  });
+
+  test("shift-tab cycles model presets and updates session status", async () => {
+    const fixture = createFakeBundle({
+      modelPresetState: {
+        activeName: "Default",
+        defaultName: "Default",
+        presets: [
+          { name: "Default", subagentModels: {}, synthetic: true },
+          { name: "Claude Lead", mainModel: "anthropic/claude-main:high", subagentModels: {} },
+        ],
+      },
+    });
+    const runtime = new CliShellRuntime(fixture.bundle, {
+      cwd: process.cwd(),
+      openSession: async () => fixture.bundle,
+      createSession: async () => fixture.bundle,
+    });
+
+    await runtime.handleInput({
+      key: "tab",
+      ctrl: false,
+      meta: false,
+      shift: true,
+    });
+
+    expect(fixture.getModelPresetState().activeName).toBe("Claude Lead");
+    expect(runtime.getViewState().status.entries.preset).toBe("Claude Lead");
+    expect(runtime.getViewState().notifications.at(-1)).toMatchObject({
+      level: "info",
+      message: "Model preset: Claude Lead",
+    });
+
+    runtime.dispose();
+  });
+
+  test("shift-tab is a no-op when only the synthetic default preset is available", async () => {
+    const fixture = createFakeBundle();
+    const runtime = new CliShellRuntime(fixture.bundle, {
+      cwd: process.cwd(),
+      openSession: async () => fixture.bundle,
+      createSession: async () => fixture.bundle,
+    });
+
+    await runtime.handleInput({
+      key: "tab",
+      ctrl: false,
+      meta: false,
+      shift: true,
+    });
+
+    expect(fixture.getModelPresetState().activeName).toBe("Default");
+    expect(runtime.getViewState().notifications.at(-1)).toMatchObject({
+      level: "info",
+      message: "Only one model preset is available.",
+    });
+
+    runtime.dispose();
+  });
+
+  test("shift-tab queues model preset changes while a turn is streaming", async () => {
+    const prompts: string[] = [];
+    const fixture = createFakeBundle({
+      isStreaming: true,
+      promptHandler: async (text) => {
+        prompts.push(text);
+      },
+      modelPresetState: {
+        activeName: "Default",
+        defaultName: "Default",
+        presets: [
+          { name: "Default", subagentModels: {}, synthetic: true },
+          { name: "Claude Lead", mainModel: "anthropic/claude-main:high", subagentModels: {} },
+        ],
+      },
+    });
+    const runtime = new CliShellRuntime(fixture.bundle, {
+      cwd: process.cwd(),
+      openSession: async () => fixture.bundle,
+      createSession: async () => fixture.bundle,
+    });
+
+    await runtime.handleInput({
+      key: "tab",
+      ctrl: false,
+      meta: false,
+      shift: true,
+    });
+
+    expect(fixture.getModelPresetState()).toMatchObject({
+      activeName: "Default",
+      pendingName: "Claude Lead",
+    });
+    expect(runtime.getViewState().status.entries.preset).toBe("Default -> Claude Lead");
+
+    fixture.setStreaming(false);
+    runtime.ui.setEditorText("next turn");
+    await runtime.handleInput({
+      key: "enter",
+      ctrl: false,
+      meta: false,
+      shift: false,
+    });
+
+    expect(prompts).toEqual(["next turn"]);
+    expect(fixture.getModelPresetState()).toMatchObject({
+      activeName: "Claude Lead",
+      pendingName: undefined,
+    });
+
+    runtime.dispose();
+  });
+
+  test("shift-tab advances queued preset selection while a turn is streaming", async () => {
+    const fixture = createFakeBundle({
+      isStreaming: true,
+      modelPresetState: {
+        activeName: "Default",
+        defaultName: "Default",
+        presets: [
+          { name: "Default", subagentModels: {}, synthetic: true },
+          { name: "Claude Lead", mainModel: "anthropic/claude-main:high", subagentModels: {} },
+          { name: "OpenAI Stack", mainModel: "openai/gpt-5.5:high", subagentModels: {} },
+        ],
+      },
+    });
+    const runtime = new CliShellRuntime(fixture.bundle, {
+      cwd: process.cwd(),
+      openSession: async () => fixture.bundle,
+      createSession: async () => fixture.bundle,
+    });
+
+    await runtime.handleInput({
+      key: "tab",
+      ctrl: false,
+      meta: false,
+      shift: true,
+    });
+    await runtime.handleInput({
+      key: "tab",
+      ctrl: false,
+      meta: false,
+      shift: true,
+    });
+
+    expect(fixture.getModelPresetState()).toMatchObject({
+      activeName: "Default",
+      pendingName: "OpenAI Stack",
+    });
+    expect(runtime.getViewState().status.entries.preset).toBe("Default -> OpenAI Stack");
 
     runtime.dispose();
   });

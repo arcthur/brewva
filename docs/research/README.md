@@ -129,7 +129,7 @@ Governance default:
 
 ## Proposed notes
 
-None currently.
+- `docs/research/active/rfc-preset-based-agent-model-routing.md`
 
 ## Active notes
 

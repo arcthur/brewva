@@ -793,11 +793,20 @@ export class CliShellRuntime {
 
   private buildSessionStatusActions(): CliShellAction[] {
     const modelLabel = this.#sessionPort.getModelLabel();
+    const presetState = this.#sessionPort.getModelPresetState();
+    const presetLabel = presetState.pendingName
+      ? `${presetState.activeName} -> ${presetState.pendingName}`
+      : presetState.activeName;
     return [
       {
         type: "status.set",
         key: "model",
         text: modelLabel,
+      },
+      {
+        type: "status.set",
+        key: "preset",
+        text: presetLabel,
       },
       {
         type: "status.set",
@@ -1125,6 +1134,20 @@ export class CliShellRuntime {
       case "model.cycleRecent":
         await this.#modelSelectionFlow.cycleRecentModel();
         return;
+      case "modelPreset.cycleNext": {
+        const state = this.#sessionPort.getModelPresetState();
+        if (state.presets.length <= 1) {
+          this.ui.notify("Only one model preset is available.", "info");
+          return;
+        }
+        const result = await this.#sessionPort.selectNextModelPreset({
+          queueOnly: this.#bundle.session.isStreaming === true,
+        });
+        const verb = result.queued ? "Queued model preset" : "Model preset";
+        this.ui.notify(`${verb}: ${result.selectedName}`, "info");
+        this.commit(this.buildSessionStatusActions(), { debounceStatus: false });
+        return;
+      }
       case "provider.openConnect":
         await this.#providerAuthFlow.openConnectDialog(effect.query ?? "");
         return;

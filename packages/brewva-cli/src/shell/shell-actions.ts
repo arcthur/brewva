@@ -125,6 +125,7 @@ export type ShellEffect =
   | { type: "session.redo" }
   | { type: "model.open"; query?: string }
   | { type: "model.cycleRecent" }
+  | { type: "modelPreset.cycleNext" }
   | { type: "provider.openConnect"; query?: string }
   | { type: "thinking.open" }
   | { type: "view.toggleThinking" }

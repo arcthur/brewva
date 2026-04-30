@@ -138,6 +138,21 @@ describe("shell runtime architecture", () => {
     });
   });
 
+  test("shell update maps preset cycling commands to a model preset effect", () => {
+    expect(
+      updateShellIntent(createUpdateContext(), {
+        type: "command.invoke",
+        commandId: "agent.preset.next",
+        args: "",
+        source: "keybinding",
+      }),
+    ).toEqual({
+      handled: true,
+      actions: [],
+      effects: [{ type: "modelPreset.cycleNext" }],
+    });
+  });
+
   test("shell update opens operator overlays through data actions", () => {
     const context = createUpdateContext({
       operatorSnapshot: {

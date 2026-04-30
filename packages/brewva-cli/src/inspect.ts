@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parseArgs as parseNodeArgs } from "node:util";
 import {
+  BUILTIN_AGENT_SPECS,
   projectHostedTransitionSnapshot,
   type HostedTransitionSnapshot,
 } from "@brewva/brewva-gateway";
@@ -9,7 +10,10 @@ import {
   BrewvaRuntime,
   createOperatorRuntimePort,
   loadBrewvaInspectConfigResolution,
+  MODEL_PRESET_SELECT_EVENT_TYPE,
   TASK_EVENT_TYPE,
+  SUBAGENT_RUNNING_EVENT_TYPE,
+  SUBAGENT_SPAWNED_EVENT_TYPE,
   TAPE_ANCHOR_EVENT_TYPE,
   TAPE_CHECKPOINT_EVENT_TYPE,
   TRUTH_EVENT_TYPE,
@@ -120,6 +124,16 @@ interface InspectReport {
     checkpointCount: number;
     tapePressure: string;
     entriesSinceAnchor: number;
+  };
+  modelPreset: {
+    activeName: string;
+    previousName: string | null;
+    source: string | null;
+    mainModel: string | null;
+    subagentModels: Record<string, string>;
+    unmatchedSubagentModelKeys: string[];
+    eventId: string | null;
+    selectedAt: string | null;
   };
   rewind: {
     checkpointCount: number;
@@ -264,6 +278,58 @@ function sanitizeSessionIdForPath(sessionId: string): string {
 
 function toIso(timestamp: number | null | undefined): string | null {
   return typeof timestamp === "number" && Number.isFinite(timestamp) ? formatISO(timestamp) : null;
+}
+
+function readPayloadString(payload: unknown, key: string): string | null {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return null;
+  }
+  const value = (payload as Record<string, unknown>)[key];
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+function readPayloadStringRecord(payload: unknown, key: string): Record<string, string> {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return {};
+  }
+  const value = (payload as Record<string, unknown>)[key];
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+  const record: Record<string, string> = {};
+  for (const [entryKey, entryValue] of Object.entries(value)) {
+    if (typeof entryValue === "string" && entryValue.trim().length > 0) {
+      record[entryKey] = entryValue;
+    }
+  }
+  return record;
+}
+
+function readEventPayloadString(event: BrewvaEventRecord, key: string): string | null {
+  if (!event.payload || typeof event.payload !== "object" || Array.isArray(event.payload)) {
+    return null;
+  }
+  const value = (event.payload as Record<string, unknown>)[key];
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+function resolveUnmatchedPresetSubagentModelKeys(input: {
+  subagentModels: Record<string, string>;
+  events: BrewvaEventRecord[];
+}): string[] {
+  const knownAgentSpecs = new Set(Object.keys(BUILTIN_AGENT_SPECS));
+  for (const event of input.events) {
+    if (event.type !== SUBAGENT_SPAWNED_EVENT_TYPE && event.type !== SUBAGENT_RUNNING_EVENT_TYPE) {
+      continue;
+    }
+    const agentSpec = readEventPayloadString(event, "agentSpec");
+    if (agentSpec) {
+      knownAgentSpecs.add(agentSpec);
+    }
+  }
+  return Object.keys(input.subagentModels)
+    .filter((key) => !knownAgentSpecs.has(key))
+    .toSorted((left, right) => left.localeCompare(right));
 }
 
 function readLatestEventPayload<T extends object>(
@@ -509,6 +575,13 @@ function buildInspectReport(
   const verification = buildVerificationInspection(runtime, sessionId);
   const ledgerIntegrity = runtime.inspect.ledger.verifyIntegrity(sessionId);
   const ledgerRows = runtime.inspect.ledger.listRows(sessionId);
+  const latestModelPresetEvent = events
+    .toReversed()
+    .find((event) => event.type === MODEL_PRESET_SELECT_EVENT_TYPE);
+  const modelPresetSubagentModels = readPayloadStringRecord(
+    latestModelPresetEvent?.payload,
+    "subagentModels",
+  );
 
   const projectionRoot = resolve(runtime.workspaceRoot, effectiveProjectionDir);
   const projectionWorkingPath = join(
@@ -586,6 +659,19 @@ function buildInspectReport(
         .length,
       tapePressure: tapeStatus.tapePressure,
       entriesSinceAnchor: tapeStatus.entriesSinceAnchor,
+    },
+    modelPreset: {
+      activeName: readPayloadString(latestModelPresetEvent?.payload, "presetName") ?? "Default",
+      previousName: readPayloadString(latestModelPresetEvent?.payload, "previousPresetName"),
+      source: readPayloadString(latestModelPresetEvent?.payload, "source"),
+      mainModel: readPayloadString(latestModelPresetEvent?.payload, "mainModel"),
+      subagentModels: modelPresetSubagentModels,
+      unmatchedSubagentModelKeys: resolveUnmatchedPresetSubagentModelKeys({
+        subagentModels: modelPresetSubagentModels,
+        events,
+      }),
+      eventId: latestModelPresetEvent?.id ?? null,
+      selectedAt: toIso(latestModelPresetEvent?.timestamp),
     },
     rewind: {
       checkpointCount: rewindState.checkpoints.length,
@@ -778,6 +864,7 @@ function formatInspectText(report: InspectReport): string {
     `Integrity: status=${report.integrity.status} issues=${report.integrity.issueCount}`,
     `Replay: events=${report.replay.eventCount} first=${report.replay.firstEventAt ?? "n/a"} last=${report.replay.lastEventAt ?? "n/a"}`,
     `Replay: anchors=${report.replay.anchorCount} checkpoints=${report.replay.checkpointCount} tapePressure=${report.replay.tapePressure} entriesSinceAnchor=${report.replay.entriesSinceAnchor}`,
+    `Model preset: active=${report.modelPreset.activeName} main=${report.modelPreset.mainModel ?? "none"} subagents=${renderList(Object.keys(report.modelPreset.subagentModels))} source=${report.modelPreset.source ?? "synthetic"} selectedAt=${report.modelPreset.selectedAt ?? "n/a"}`,
     `Rewind: checkpoints=${report.rewind.checkpointCount} targets=${report.rewind.targetCount} active=${report.rewind.activeTargetCount} abandoned=${report.rewind.abandonedTargetCount}`,
     `Rewind: available=${report.rewind.rewindAvailable ? "yes" : "no"} redo=${report.rewind.redoAvailable ? "yes" : "no"} redoDepth=${report.rewind.redoDepth} latestCheckpoint=${report.rewind.latestCheckpointId ?? "n/a"} status=${report.rewind.latestCheckpointStatus ?? "n/a"}`,
     `Bootstrap: routingEnabled=${renderNullableBoolean(report.bootstrap.routingEnabled)} scopes=${renderList(report.bootstrap.routingScopes)}`,
@@ -795,6 +882,11 @@ function formatInspectText(report: InspectReport): string {
     `Consistency: ledger=${report.consistency.ledgerIntegrity} pendingRecoveryWal=${report.consistency.pendingRecoveryWal}`,
   ];
 
+  if (report.modelPreset.unmatchedSubagentModelKeys.length > 0) {
+    lines.push(
+      `Model preset diagnostic: unmatchedSubagentModels=${renderList(report.modelPreset.unmatchedSubagentModelKeys)}`,
+    );
+  }
   if (report.ledger.integrityReason) {
     lines.push(`Ledger reason: ${report.ledger.integrityReason}`);
   }

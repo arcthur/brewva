@@ -22,6 +22,7 @@ directory rather than keeping it as a shadow reference.
 
 ## Operator And Control Surfaces
 
+- [`rfc-preset-based-agent-model-routing.md`](./rfc-preset-based-agent-model-routing.md)
 - [`product-semantic-compression-and-decision-surface-subtraction.md`](./product-semantic-compression-and-decision-surface-subtraction.md)
 - [`cost-observability-and-budget-governance.md`](./cost-observability-and-budget-governance.md)
 - [`rollback-ergonomics-and-patch-lifecycle-safety.md`](./rollback-ergonomics-and-patch-lifecycle-safety.md)

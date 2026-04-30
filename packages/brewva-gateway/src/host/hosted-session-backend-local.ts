@@ -1,9 +1,12 @@
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { BrewvaRuntime, MODEL_PRESET_SELECT_EVENT_TYPE } from "@brewva/brewva-runtime";
 import {
   createHostedResourceLoader,
   type InternalHostPlugin,
   type BrewvaMutableModelCatalog,
+  type BrewvaModelPreset,
+  type BrewvaModelPresetState,
 } from "@brewva/brewva-substrate";
+import { resolveBrewvaModelSelection } from "@brewva/brewva-tools";
 import { createHostedTurnPipeline } from "../runtime-plugins/index.js";
 import {
   createHostedModelServices as createLocalHostedModelServices,
@@ -16,7 +19,6 @@ import type {
   HostedSessionModelServices,
   HostedSessionPersistenceBackend,
   HostedSessionServicesBundle,
-  HostedSessionSettingsBackend,
 } from "./hosted-session-backend-contract.js";
 import type {
   CreateHostedManagedSessionOptions,
@@ -28,6 +30,12 @@ import {
   readHostedSettingsHandle,
 } from "./hosted-settings-backend.js";
 import { createBrewvaManagedAgentSession } from "./managed-agent-session.js";
+import {
+  cloneModelPreset,
+  cloneModelPresetState,
+  createSyntheticDefaultModelPreset,
+  findModelPreset,
+} from "./model-presets.js";
 import { HostedRuntimeTapeSessionStore } from "./runtime-projection-session-store.js";
 
 const DEFAULT_THINKING_LEVEL = "medium";
@@ -51,12 +59,13 @@ type HostedRegisteredModel = NonNullable<
 
 async function resolveHostedInitialModel(
   modelRegistry: HostedSessionBackendModelRegistry,
-  settingsManager: HostedSessionSettingsBackend,
   sessionManager: HostedSessionPersistenceBackend,
   requestedModel: HostedRegisteredModel | undefined,
+  modelPresetState: BrewvaModelPresetState,
 ): Promise<{
   model: HostedRegisteredModel | undefined;
   modelFallbackMessage?: string;
+  presetThinkingLevel?: string;
   hasExistingSession: boolean;
   hasThinkingEntry: boolean;
   existingThinkingLevel?: string;
@@ -85,6 +94,29 @@ async function resolveHostedInitialModel(
     modelFallbackMessage = `Could not use requested model ${requestedModel.provider}/${requestedModel.id}: provider auth is not connected`;
   }
 
+  const activePreset = findModelPreset(modelPresetState);
+  const presetMainModel = activePreset?.mainModel?.trim();
+  if (presetMainModel) {
+    try {
+      const presetSelection = resolveBrewvaModelSelection(presetMainModel, modelRegistry);
+      if (presetSelection.model && modelRegistry.hasConfiguredAuth(presetSelection.model)) {
+        return {
+          model: presetSelection.model,
+          presetThinkingLevel: presetSelection.thinkingLevel,
+          modelFallbackMessage,
+          hasExistingSession,
+          hasThinkingEntry,
+          existingThinkingLevel,
+        };
+      }
+      if (presetSelection.model) {
+        modelFallbackMessage = `Could not use preset model ${presetSelection.model.provider}/${presetSelection.model.id}: provider auth is not connected`;
+      }
+    } catch (error) {
+      modelFallbackMessage = error instanceof Error ? error.message : "Could not use preset model";
+    }
+  }
+
   if (hasExistingSession && existingSession.model) {
     const restoredModel = modelRegistry.find(
       existingSession.model.provider,
@@ -102,21 +134,6 @@ async function resolveHostedInitialModel(
   }
 
   const availableModels = await Promise.resolve(modelRegistry.getAvailable());
-  const defaultProvider = settingsManager.getDefaultProvider();
-  const defaultModelId = settingsManager.getDefaultModel();
-
-  if (defaultProvider && defaultModelId) {
-    const explicitDefaultModel = modelRegistry.find(defaultProvider, defaultModelId);
-    if (explicitDefaultModel && modelRegistry.hasConfiguredAuth(explicitDefaultModel)) {
-      return {
-        model: explicitDefaultModel,
-        modelFallbackMessage,
-        hasExistingSession,
-        hasThinkingEntry,
-        existingThinkingLevel,
-      };
-    }
-  }
 
   for (const [provider, defaultId] of Object.entries(DEFAULT_MODEL_PER_PROVIDER)) {
     const preferredModel = availableModels.find(
@@ -158,6 +175,39 @@ async function resolveHostedInitialModel(
     hasExistingSession,
     hasThinkingEntry,
     existingThinkingLevel,
+  };
+}
+
+function stateWithReplayActivePreset(
+  settingsState: BrewvaModelPresetState,
+  activePreset: BrewvaModelPreset,
+): BrewvaModelPresetState {
+  const replayPreset = cloneModelPreset(activePreset);
+  const presets = settingsState.presets.some((preset) => preset.name === replayPreset.name)
+    ? settingsState.presets.map((preset) =>
+        preset.name === replayPreset.name ? replayPreset : cloneModelPreset(preset),
+      )
+    : [replayPreset, ...settingsState.presets.map((preset) => cloneModelPreset(preset))];
+  return {
+    activeName: replayPreset.name,
+    defaultName: settingsState.defaultName,
+    presets,
+  };
+}
+
+function stateWithHistoricalSyntheticDefault(
+  settingsState: BrewvaModelPresetState,
+): BrewvaModelPresetState {
+  const defaultPreset = createSyntheticDefaultModelPreset();
+  return {
+    activeName: defaultPreset.name,
+    defaultName: settingsState.defaultName,
+    presets: [
+      defaultPreset,
+      ...settingsState.presets
+        .filter((preset) => preset.name !== defaultPreset.name)
+        .map((preset) => cloneModelPreset(preset)),
+    ],
   };
 }
 
@@ -231,22 +281,45 @@ async function createHostedLocalSessionResult(input: {
   const sessionManager = input.services.sessionManager;
   const resourceLoader = input.services.resourceLoader;
   const customTools: HostedSessionCustomTool[] = input.options.customTools ?? [];
+  const settingsPresetState = input.services.settingsManager.getModelPresetState();
+  const restoredContext = sessionManager.buildSessionContext();
+  const restoredBranch = sessionManager.getBranch();
+  const hasPresetSelectionEntry = restoredBranch.some(
+    (entry) => entry.type === MODEL_PRESET_SELECT_EVENT_TYPE,
+  );
+  const modelPresetState = cloneModelPresetState(
+    hasPresetSelectionEntry
+      ? stateWithReplayActivePreset(settingsPresetState, restoredContext.activeModelPreset)
+      : restoredBranch.length > 0
+        ? stateWithHistoricalSyntheticDefault(settingsPresetState)
+        : settingsPresetState,
+  );
   const sessionResolution = await resolveHostedInitialModel(
     input.modelRegistry,
-    input.services.settingsManager,
     sessionManager,
     input.options.model,
+    modelPresetState,
   );
   const thinkingLevel = resolveHostedThinkingLevel({
     requestedThinkingLevel: input.options.thinkingLevel,
     hasExistingSession: sessionResolution.hasExistingSession,
     hasThinkingEntry: sessionResolution.hasThinkingEntry,
     existingThinkingLevel: sessionResolution.existingThinkingLevel,
-    defaultThinkingLevel: input.services.settingsManager.getDefaultThinkingLevel() ?? undefined,
+    defaultThinkingLevel:
+      sessionResolution.presetThinkingLevel ??
+      input.services.settingsManager.getDefaultThinkingLevel() ??
+      undefined,
     model: sessionResolution.model,
   });
 
   if (!sessionResolution.hasExistingSession) {
+    sessionManager.appendModelPresetSelection({
+      presetName: modelPresetState.activeName,
+      source: "startup",
+      mainModel: findModelPreset(modelPresetState)?.mainModel,
+      subagentModels: findModelPreset(modelPresetState)?.subagentModels,
+      synthetic: findModelPreset(modelPresetState)?.synthetic,
+    });
     if (sessionResolution.model) {
       sessionManager.appendModelChange(
         sessionResolution.model.provider,
@@ -273,6 +346,7 @@ async function createHostedLocalSessionResult(input: {
       logger: input.options.logger,
       initialModel: sessionResolution.model,
       initialThinkingLevel: thinkingLevel,
+      initialModelPresetState: modelPresetState,
     }),
     modelFallbackMessage: sessionResolution.modelFallbackMessage,
   };

@@ -88,6 +88,60 @@ Vertex CachedContent endpoint override is invalid, Brewva degrades only the
 explicit Google CachedContent path; short retention and implicit-prefix fallback
 remain available.
 
+## Hosted Model Presets
+
+Hosted model defaults are configured through session model presets in hosted
+settings files, not top-level `BrewvaConfig`. The gateway reads global hosted
+settings from `<agentDir>/settings.json` and project hosted settings from
+`<workspace>/.pi/settings.json`.
+
+Supported hosted model-preset fields:
+
+- `modelPresets`: object keyed by preset label
+- `defaultModelPreset`: optional preset label, defaulting to `Default`
+- `modelPresets.<name>.mainModel`: optional main-session model string
+- `modelPresets.<name>.subagentModels`: optional object keyed by resolved
+  delegated agent-spec identity
+
+Model strings use the same syntax as `executionShape.model`, including an
+optional thinking suffix such as `openai/gpt-5.5:high`.
+
+Preset labels, `defaultModelPreset`, `mainModel`, `subagentModels` keys, and
+`subagentModels` values must be non-empty trimmed strings. Malformed preset
+objects fail settings validation instead of being silently ignored. Unknown
+`subagentModels` keys are allowed at settings load because workspace agent specs
+may be registered later; `brewva inspect` reports keys that do not match
+built-in agent specs and have not appeared as session agent specs.
+
+Example:
+
+```json
+{
+  "defaultModelPreset": "Claude Lead",
+  "modelPresets": {
+    "Default": {},
+    "Claude Lead": {
+      "mainModel": "anthropic/claude-opus-4-6:high",
+      "subagentModels": {
+        "qa": "openai/gpt-5.5:medium",
+        "patch-worker": "openai/gpt-5.3-codex-spark:high"
+      }
+    }
+  }
+}
+```
+
+Normalization always exposes `Default` first. If no authored `Default` exists,
+the gateway synthesizes a no-op `Default` preset with no `mainModel` and no
+`subagentModels`; routing then falls through to restored session state and
+provider/catalog fallback.
+
+Legacy hosted `defaultProvider` and `defaultModel` are rejected during settings
+load. Use `modelPresets.Default.mainModel` or set `defaultModelPreset` to an
+authored preset instead. The interactive `/model` picker is session-local and
+does not rewrite hosted settings; preset thinking suffixes are session-local and
+do not rewrite `defaultThinkingLevel`.
+
 ## Session Index Configuration
 
 There is no public session-index config key in v1. The local DuckDB-backed

@@ -19,6 +19,7 @@ import type {
   SessionWireFrame,
 } from "@brewva/brewva-runtime";
 import {
+  MODEL_SELECT_EVENT_TYPE,
   STEER_APPLIED_EVENT_TYPE,
   STEER_DROPPED_EVENT_TYPE,
   STEER_QUEUED_EVENT_TYPE,
@@ -47,6 +48,9 @@ import {
   type BrewvaDiffPreferences,
   type BrewvaShellViewPreferences,
   type BrewvaModelPreferences,
+  type BrewvaModelPresetSelectionRequest,
+  type BrewvaModelPresetSelectionResult,
+  type BrewvaModelPresetState,
   type BrewvaMutableModelCatalog,
   type BrewvaCompactionRequest,
   type BrewvaSteerOptions,
@@ -69,6 +73,7 @@ import {
   BrewvaToolResult,
   type BrewvaToolUiPort,
 } from "@brewva/brewva-substrate";
+import { resolveBrewvaModelSelection } from "@brewva/brewva-tools";
 import {
   GoogleCachedContentManager,
   ProviderCacheBreakDetector,
@@ -104,8 +109,46 @@ import {
   type BrewvaAgentEngineTransport,
 } from "./hosted-agent-engine.js";
 import type { HostedSessionLogger } from "./logger.js";
+import {
+  cloneModelPresetState,
+  DEFAULT_MODEL_PRESET_NAME,
+  findModelPreset,
+} from "./model-presets.js";
 
 const DEFAULT_GOOGLE_CACHED_CONTENT_MANAGER = new GoogleCachedContentManager();
+
+function createFallbackModelPresetState(
+  activeName = DEFAULT_MODEL_PRESET_NAME,
+): BrewvaModelPresetState {
+  return {
+    activeName,
+    defaultName: DEFAULT_MODEL_PRESET_NAME,
+    presets: [
+      {
+        name: DEFAULT_MODEL_PRESET_NAME,
+        subagentModels: {},
+        synthetic: true,
+      },
+    ],
+  };
+}
+
+function resolvePresetModelSelection(
+  modelText: string,
+  catalog: BrewvaMutableModelCatalog,
+): { model: BrewvaRegisteredModel; thinkingLevel?: BrewvaPromptThinkingLevel; modelText: string } {
+  const selection = resolveBrewvaModelSelection(modelText, catalog);
+  if (!selection.model) {
+    throw new Error(`Model "${modelText}" was not found in the configured Brewva model registry.`);
+  }
+  return {
+    model: selection.model,
+    thinkingLevel: selection.thinkingLevel as BrewvaPromptThinkingLevel | undefined,
+    modelText: selection.thinkingLevel
+      ? `${selection.model.provider}/${selection.model.id}:${selection.thinkingLevel}`
+      : `${selection.model.provider}/${selection.model.id}`,
+  };
+}
 
 function applyMessageEndTransform(
   original: BrewvaAgentEngineMessage,
@@ -478,7 +521,7 @@ export interface BrewvaManagedAgentSessionSettingsPort {
   getCachePolicy(): BrewvaAgentEngineCachePolicy;
   getThinkingBudgets(): BrewvaAgentEngineThinkingBudgets | undefined;
   getRetrySettings(): { maxDelayMs: number } | undefined;
-  setDefaultModelAndProvider(provider: string, modelId: string): void;
+  getModelPresetState?(): BrewvaModelPresetState;
   setDefaultThinkingLevel(thinkingLevel: string): void;
   getModelPreferences(): BrewvaModelPreferences;
   setModelPreferences(preferences: BrewvaModelPreferences): void;
@@ -500,6 +543,7 @@ export interface CreateBrewvaManagedAgentSessionOptions {
   customTools?: readonly BrewvaToolDefinition[];
   initialModel?: BrewvaRegisteredModel;
   initialThinkingLevel?: BrewvaPromptThinkingLevel;
+  initialModelPresetState?: BrewvaModelPresetState;
   ui?: BrewvaToolUiPort;
   logger?: HostedSessionLogger;
   googleCachedContentManager?: GoogleCachedContentManager;
@@ -520,6 +564,7 @@ type ManagedAgentSessionStoreCore = Pick<
   | "buildSessionContext"
   | "appendThinkingLevelChange"
   | "appendModelChange"
+  | "appendModelPresetSelection"
   | "appendMessage"
   | "appendCustomMessageEntry"
   | "appendCompaction"
@@ -1094,6 +1139,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
   readonly #runtime: BrewvaRuntime | undefined;
   readonly #settings: BrewvaManagedAgentSessionSettingsPort;
   readonly #catalog: BrewvaMutableModelCatalog;
+  #modelPresetState: BrewvaModelPresetState;
   readonly #resourceLoader: BrewvaHostedResourceLoader;
   readonly #agent: BrewvaAgentEngine;
   readonly #runner: BrewvaHostPluginRunner;
@@ -1138,6 +1184,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     catalog: BrewvaMutableModelCatalog;
     resourceLoader: BrewvaHostedResourceLoader;
     sessionStore: ManagedAgentSessionStore;
+    modelPresetState?: BrewvaModelPresetState;
     customTools: readonly BrewvaToolDefinition[];
     runner: BrewvaHostPluginRunner;
     agent: BrewvaAgentEngine;
@@ -1152,6 +1199,13 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     this.#runtime = input.runtime;
     this.#settings = input.settings;
     this.#catalog = input.catalog;
+    this.#modelPresetState = cloneModelPresetState(
+      input.modelPresetState ??
+        input.settings.getModelPresetState?.() ??
+        createFallbackModelPresetState(
+          input.sessionStore.buildSessionContext().activeModelPresetName,
+        ),
+    );
     this.#resourceLoader = input.resourceLoader;
     this.#ui = input.ui ?? NOOP_UI;
     this.sessionManager = input.sessionStore;
@@ -1437,6 +1491,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
       catalog: options.modelCatalog,
       resourceLoader: options.resourceLoader,
       sessionStore: options.sessionStore,
+      modelPresetState: options.initialModelPresetState,
       customTools: toolDefinitions,
       runner,
       agent,
@@ -1549,6 +1604,104 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     return this.#isCompacting;
   }
 
+  getModelPresetState(): BrewvaModelPresetState {
+    return cloneModelPresetState(this.#modelPresetState);
+  }
+
+  queueModelPresetForNextTurn(name: string): BrewvaModelPresetSelectionResult {
+    const preset = findModelPreset(this.#modelPresetState, name);
+    if (!preset) {
+      throw new Error(`Unknown model preset: ${name}`);
+    }
+    this.#modelPresetState = {
+      ...this.#modelPresetState,
+      pendingName: preset.name,
+    };
+    return {
+      selectedName: preset.name,
+      previousName: this.#modelPresetState.activeName,
+      modelChanged: false,
+      queued: true,
+      effectiveMainModel: preset.mainModel,
+    };
+  }
+
+  async selectModelPreset(
+    request: BrewvaModelPresetSelectionRequest,
+  ): Promise<BrewvaModelPresetSelectionResult> {
+    const preset = findModelPreset(this.#modelPresetState, request.name);
+    if (!preset) {
+      throw new Error(`Unknown model preset: ${request.name}`);
+    }
+    const selection = preset.mainModel
+      ? resolvePresetModelSelection(preset.mainModel, this.#catalog)
+      : undefined;
+    if (selection && !this.#catalog.hasConfiguredAuth(selection.model)) {
+      throw new Error(`No API key for ${selection.model.provider}/${selection.model.id}`);
+    }
+    const previousName = this.#modelPresetState.activeName;
+    const previousModel = this.model;
+    this.#modelPresetState = {
+      ...this.#modelPresetState,
+      activeName: preset.name,
+      pendingName: undefined,
+    };
+    // Preserve every explicit preset selection in the tape, including same-name
+    // reselects, so replay can reconstruct user-visible switching moments.
+    this.sessionManager.appendModelPresetSelection({
+      presetName: preset.name,
+      previousPresetName: previousName,
+      source: request.source ?? "session",
+      mainModel: preset.mainModel,
+      subagentModels: preset.subagentModels,
+      synthetic: preset.synthetic,
+    });
+
+    let modelChanged = false;
+    if (selection) {
+      this.#agent.setModel(selection.model);
+      this.applyThinkingLevel(selection.thinkingLevel ?? this.thinkingLevel, {
+        persistDefault: false,
+      });
+      modelChanged =
+        !previousModel ||
+        previousModel.provider !== selection.model.provider ||
+        previousModel.id !== selection.model.id;
+      if (modelChanged) {
+        this.clearProviderCacheSessionState();
+        this.sessionManager.appendModelChange(selection.model.provider, selection.model.id);
+        await this.#runner.emit(
+          MODEL_SELECT_EVENT_TYPE,
+          {
+            type: MODEL_SELECT_EVENT_TYPE,
+            model: { provider: selection.model.provider, id: selection.model.id },
+            previousModel: previousModel
+              ? { provider: previousModel.provider, id: previousModel.id }
+              : undefined,
+            source: "preset",
+          },
+          this.createHostContext(),
+        );
+      }
+    }
+
+    return {
+      selectedName: preset.name,
+      previousName,
+      modelChanged,
+      queued: false,
+      effectiveMainModel: preset.mainModel,
+    };
+  }
+
+  private async applyQueuedModelPreset(): Promise<void> {
+    const pendingName = this.#modelPresetState.pendingName;
+    if (!pendingName) {
+      return;
+    }
+    await this.selectModelPreset({ name: pendingName, source: "queued" });
+  }
+
   getContextState(): ContextState {
     return { ...this.#contextState };
   }
@@ -1595,6 +1748,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     parts: readonly BrewvaPromptContentPart[],
     options?: BrewvaPromptOptions,
   ): Promise<void> {
+    await this.applyQueuedModelPreset();
     const expandPromptTemplates = options?.expandPromptTemplates ?? true;
     let currentParts = cloneBrewvaPromptContentParts(parts);
     const command =
@@ -1737,7 +1891,6 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
 
     const previousModel = this.model;
     this.#agent.setModel(resolved);
-    this.#settings.setDefaultModelAndProvider(resolved.provider, resolved.id);
     this.setThinkingLevel(this.thinkingLevel);
 
     if (
@@ -1748,9 +1901,9 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
       this.clearProviderCacheSessionState();
       this.sessionManager.appendModelChange(resolved.provider, resolved.id);
       await this.#runner.emit(
-        "model_select",
+        MODEL_SELECT_EVENT_TYPE,
         {
-          type: "model_select",
+          type: MODEL_SELECT_EVENT_TYPE,
           model: { provider: resolved.provider, id: resolved.id },
           previousModel: previousModel
             ? { provider: previousModel.provider, id: previousModel.id }
@@ -1763,6 +1916,13 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
   }
 
   setThinkingLevel(level: BrewvaPromptThinkingLevel): void {
+    this.applyThinkingLevel(level, { persistDefault: true });
+  }
+
+  private applyThinkingLevel(
+    level: BrewvaPromptThinkingLevel,
+    options: { persistDefault: boolean },
+  ): void {
     const available = this.getAvailableThinkingLevels();
     const effective = available.includes(level)
       ? level
@@ -1772,7 +1932,9 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     this.#agent.setThinkingLevel(effective as BrewvaAgentEngineThinkingLevel);
     if (changed) {
       this.sessionManager.appendThinkingLevelChange(effective);
-      this.#settings.setDefaultThinkingLevel(effective);
+      if (options.persistDefault) {
+        this.#settings.setDefaultThinkingLevel(effective);
+      }
       void this.#runner
         .emit(
           "thinking_level_select",

@@ -8,6 +8,7 @@ import type {
   BrewvaModelPreferences,
   BrewvaMutableModelCatalog,
   BrewvaRegisteredModel,
+  BrewvaModelPresetState,
 } from "@brewva/brewva-substrate";
 import type { HostedAuthCredential } from "./hosted-auth-store.js";
 import type {
@@ -28,9 +29,8 @@ export interface HostedSessionSettingsBackend extends BrewvaManagedAgentSessionS
   getQuietStartup(): boolean;
   reload(): Promise<void> | void;
   getBlockImages(): boolean;
-  getDefaultProvider(): string | undefined;
-  getDefaultModel(): string | undefined;
   getDefaultThinkingLevel(): string | undefined;
+  getModelPresetState(): BrewvaModelPresetState;
   getModelPreferences(): BrewvaModelPreferences;
   setModelPreferences(preferences: BrewvaModelPreferences): void;
   getDiffPreferences(): BrewvaDiffPreferences;

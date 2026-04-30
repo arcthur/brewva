@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import {
   MESSAGE_END_EVENT_TYPE,
+  MODEL_PRESET_SELECT_EVENT_TYPE,
+  MODEL_SELECT_EVENT_TYPE,
   REASONING_REVERT_EVENT_TYPE,
   SESSION_REWIND_DIVERGENCE_SCHEMA,
   SESSION_REWIND_COMPLETED_EVENT_TYPE,
@@ -17,6 +19,7 @@ import {
   type BrewvaCompactionEntry,
   type ContextState,
   type BrewvaModelChangeEntry,
+  type BrewvaModelPresetSelectEntry,
   type BrewvaSessionContext,
   type BrewvaSessionEntry,
   type BrewvaSessionMessageEntry,
@@ -40,7 +43,6 @@ import {
 
 type CustomMessageContentPart = { type: string };
 
-const MODEL_SELECT_EVENT_TYPE = "model_select";
 const SESSION_COMPACT_EVENT_TYPE = "session_compact";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -49,6 +51,19 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function readOptionalString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim().length > 0 ? value : undefined;
+}
+
+function readOptionalStringRecord(value: unknown): Record<string, string> | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  const record: Record<string, string> = {};
+  for (const [key, rawValue] of Object.entries(value)) {
+    if (typeof rawValue === "string" && rawValue.trim().length > 0) {
+      record[key] = rawValue;
+    }
+  }
+  return Object.keys(record).length > 0 ? record : {};
 }
 
 function readOptionalNumber(value: unknown): number | undefined {
@@ -428,6 +443,33 @@ export class HostedRuntimeTapeSessionStore {
     return event.id;
   }
 
+  appendModelPresetSelection(input: {
+    presetName: string;
+    previousPresetName?: string;
+    source?: string;
+    mainModel?: string;
+    subagentModels?: Record<string, string>;
+    synthetic?: boolean;
+  }): string {
+    const event = recordRuntimeEvent(this.runtime, {
+      sessionId: this.sessionId,
+      type: MODEL_PRESET_SELECT_EVENT_TYPE,
+      payload: {
+        presetName: input.presetName,
+        previousPresetName: input.previousPresetName,
+        source: input.source ?? "session_store",
+        mainModel: input.mainModel,
+        subagentModels: input.subagentModels ? { ...input.subagentModels } : undefined,
+        synthetic: input.synthetic,
+      },
+    });
+    if (!event) {
+      throw new Error("failed to record model preset selection");
+    }
+    this.#ingestRuntimeEvent(event);
+    return event.id;
+  }
+
   appendCustomMessageEntry(
     customType: string,
     content: string | CustomMessageContentPart[],
@@ -633,6 +675,25 @@ export class HostedRuntimeTapeSessionStore {
         provider,
         modelId,
       } satisfies BrewvaModelChangeEntry;
+    }
+
+    if (event.type === MODEL_PRESET_SELECT_EVENT_TYPE) {
+      const presetName = readOptionalString(payload.presetName);
+      if (!presetName) {
+        return undefined;
+      }
+      return {
+        type: MODEL_PRESET_SELECT_EVENT_TYPE,
+        id: event.id,
+        parentId: this.#leafId,
+        timestamp,
+        presetName,
+        previousPresetName: readOptionalString(payload.previousPresetName),
+        source: readOptionalString(payload.source),
+        mainModel: readOptionalString(payload.mainModel),
+        subagentModels: readOptionalStringRecord(payload.subagentModels),
+        synthetic: payload.synthetic === true ? true : undefined,
+      } satisfies BrewvaModelPresetSelectEntry;
     }
 
     if (event.type === THINKING_LEVEL_SELECTED_EVENT_TYPE) {

@@ -1,39 +1,58 @@
 import { describe, expect, test } from "bun:test";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { BrewvaRuntime } from "@brewva/brewva-runtime";
 import { HostedModelRegistry } from "../../../packages/brewva-gateway/src/host/hosted-model-registry.js";
 import {
   createHostedSessionDriver,
   createHostedSettingsManager,
 } from "../../../packages/brewva-gateway/src/host/hosted-session-driver.js";
 import { readHostedSettingsHandle } from "../../../packages/brewva-gateway/src/host/hosted-settings-backend.js";
+import { HostedRuntimeTapeSessionStore } from "../../../packages/brewva-gateway/src/host/runtime-projection-session-store.js";
+import type { StoredSessionMessage } from "../../../packages/brewva-gateway/src/session/runtime-session-transcript.js";
 import { patchProcessEnv } from "../../helpers/global-state.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
-function writeHostedSettings(
-  agentDir: string,
-  settings: {
-    defaultProvider?: string;
-    defaultModel?: string;
-    defaultThinkingLevel?: string;
-    modelPreferences?: {
-      recent?: Array<{ provider: string; id: string }>;
-      favorite?: Array<{ provider: string; id: string }>;
-    };
-  },
-): void {
+function writeHostedSettings(agentDir: string, settings: Record<string, unknown>): void {
   mkdirSync(agentDir, { recursive: true });
   writeFileSync(join(agentDir, "settings.json"), JSON.stringify(settings, null, 2), "utf8");
 }
 
+function registerAnthropicModels(
+  driver: ReturnType<typeof createHostedSessionDriver>,
+  modelIds: readonly string[],
+): void {
+  driver.modelCatalog.registerProvider("anthropic", {
+    baseUrl: "https://anthropic.example.com/v1",
+    apiKey: "ANTHROPIC_KEY",
+    models: modelIds.map((id) => ({
+      id,
+      name: id,
+      api: "anthropic-messages",
+      reasoning: true,
+      input: ["text"],
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+      contextWindow: 200_000,
+      maxTokens: 16_384,
+    })),
+  });
+}
+
 describe("hosted session driver", () => {
-  test("creates a hosted runtime from the configured default model and thinking level", async () => {
-    const workspace = createTestWorkspace("hosted-session-driver-bootstrap-default");
+  test("creates a hosted runtime from the configured default model preset", async () => {
+    const workspace = createTestWorkspace("hosted-session-driver-bootstrap-preset");
     const agentDir = join(workspace, ".brewva-agent");
     writeHostedSettings(agentDir, {
-      defaultProvider: "anthropic",
-      defaultModel: "restore-model",
-      defaultThinkingLevel: "high",
+      defaultModelPreset: "Claude Lead",
+      defaultThinkingLevel: "low",
+      modelPresets: {
+        "Claude Lead": {
+          mainModel: "anthropic/preset-main:high",
+          subagentModels: {
+            advisor: "openai/gpt-5.5:medium",
+          },
+        },
+      },
     });
 
     const driver = createHostedSessionDriver(agentDir);
@@ -42,8 +61,8 @@ describe("hosted session driver", () => {
       apiKey: "ANTHROPIC_KEY",
       models: [
         {
-          id: "restore-model",
-          name: "Restore Model",
+          id: "preset-main",
+          name: "Preset Main",
           api: "anthropic-messages",
           reasoning: true,
           input: ["text"],
@@ -61,9 +80,204 @@ describe("hosted session driver", () => {
     });
 
     expect(result.session.model?.provider).toBe("anthropic");
-    expect(result.session.model?.id).toBe("restore-model");
+    expect(result.session.model?.id).toBe("preset-main");
     expect(result.session.thinkingLevel).toBe("high");
+    expect(result.session.getModelPresetState?.().activeName).toBe("Claude Lead");
     expect(result.modelFallbackMessage).toBeUndefined();
+
+    await result.session.abort();
+    result.session.dispose();
+  });
+
+  test("rejects unknown default model preset settings", () => {
+    const workspace = createTestWorkspace("hosted-session-driver-unknown-preset");
+    const agentDir = join(workspace, ".brewva-agent");
+    writeHostedSettings(agentDir, {
+      defaultModelPreset: "Missing",
+      modelPresets: {
+        "Claude Lead": {
+          mainModel: "anthropic/preset-main:high",
+        },
+      },
+    });
+
+    const settings = readHostedSettingsHandle(createHostedSettingsManager(workspace, agentDir));
+
+    expect(() => settings.getModelPresetState()).toThrow("Unknown default model preset: Missing");
+  });
+
+  test("rejects malformed model preset settings", () => {
+    const workspace = createTestWorkspace("hosted-session-driver-malformed-preset");
+    const agentDir = join(workspace, ".brewva-agent");
+    writeHostedSettings(agentDir, {
+      defaultModelPreset: "Claude Lead",
+      modelPresets: {
+        " Claude Lead ": {
+          mainModel: "anthropic/preset-main:high",
+        },
+      },
+    });
+
+    const settings = readHostedSettingsHandle(createHostedSettingsManager(workspace, agentDir));
+
+    expect(() => settings.getModelPresetState()).toThrow("Model preset names must be trimmed");
+  });
+
+  test("rejects removed legacy default model settings", () => {
+    const workspace = createTestWorkspace("hosted-session-driver-legacy-default-model");
+    const agentDir = join(workspace, ".brewva-agent");
+    writeHostedSettings(agentDir, {
+      defaultProvider: "anthropic",
+      defaultModel: "restore-model",
+      defaultThinkingLevel: "high",
+    });
+
+    expect(() => createHostedSettingsManager(workspace, agentDir)).toThrow(
+      "Removed hosted model default settings",
+    );
+  });
+
+  test("replays historical sessions as synthetic Default instead of authored Default", async () => {
+    const workspace = createTestWorkspace("hosted-session-driver-historical-default");
+    const agentDir = join(workspace, ".brewva-agent");
+    const sessionId = "agent-session:historical-default";
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const store = new HostedRuntimeTapeSessionStore(runtime, workspace, sessionId);
+    const historicalMessage = {
+      role: "user",
+      content: [{ type: "text", text: "historical prompt" }],
+      timestamp: Date.now(),
+    } as StoredSessionMessage;
+    store.appendModelChange("anthropic", "restored-main");
+    store.appendMessage(historicalMessage);
+    writeHostedSettings(agentDir, {
+      modelPresets: {
+        Default: {
+          mainModel: "anthropic/current-default:high",
+        },
+      },
+    });
+
+    const driver = createHostedSessionDriver(agentDir);
+    registerAnthropicModels(driver, ["restored-main", "current-default"]);
+    const settings = createHostedSettingsManager(workspace, agentDir);
+    const result = await driver.createRuntime({
+      cwd: workspace,
+      settings,
+      runtime,
+      sessionId,
+      customTools: [],
+    });
+
+    expect(result.session.model?.id).toBe("restored-main");
+    expect(result.session.getModelPresetState?.().activeName).toBe("Default");
+    expect(result.session.getModelPresetState?.().presets[0]).toMatchObject({
+      name: "Default",
+      synthetic: true,
+      mainModel: undefined,
+    });
+
+    await result.session.abort();
+    result.session.dispose();
+  });
+
+  test("replays selected preset model from session tape instead of current settings", async () => {
+    const workspace = createTestWorkspace("hosted-session-driver-preset-replay-snapshot");
+    const agentDir = join(workspace, ".brewva-agent");
+    const sessionId = "agent-session:preset-replay-snapshot";
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const store = new HostedRuntimeTapeSessionStore(runtime, workspace, sessionId);
+    const replayedMessage = {
+      role: "user",
+      content: [{ type: "text", text: "replayed prompt" }],
+      timestamp: Date.now(),
+    } as StoredSessionMessage;
+    store.appendModelPresetSelection({
+      presetName: "Claude Lead",
+      previousPresetName: "Default",
+      source: "tui",
+      mainModel: "anthropic/replayed-main:high",
+      subagentModels: {
+        advisor: "anthropic/replayed-advisor:medium",
+      },
+    });
+    store.appendModelChange("anthropic", "replayed-main");
+    store.appendMessage(replayedMessage);
+    writeHostedSettings(agentDir, {
+      defaultModelPreset: "Claude Lead",
+      modelPresets: {
+        "Claude Lead": {
+          mainModel: "anthropic/current-main:low",
+          subagentModels: {
+            advisor: "anthropic/current-advisor:low",
+          },
+        },
+      },
+    });
+
+    const driver = createHostedSessionDriver(agentDir);
+    registerAnthropicModels(driver, [
+      "replayed-main",
+      "replayed-advisor",
+      "current-main",
+      "current-advisor",
+    ]);
+    const settings = createHostedSettingsManager(workspace, agentDir);
+    const result = await driver.createRuntime({
+      cwd: workspace,
+      settings,
+      runtime,
+      sessionId,
+      customTools: [],
+    });
+
+    expect(result.session.model?.id).toBe("replayed-main");
+    expect(result.session.thinkingLevel).toBe("high");
+    expect(result.session.getModelPresetState?.().presets).toContainEqual(
+      expect.objectContaining({
+        name: "Claude Lead",
+        mainModel: "anthropic/replayed-main:high",
+        subagentModels: {
+          advisor: "anthropic/replayed-advisor:medium",
+        },
+      }),
+    );
+
+    await result.session.abort();
+    result.session.dispose();
+  });
+
+  test("keeps preset thinking suffix session-local when switching presets", async () => {
+    const workspace = createTestWorkspace("hosted-session-driver-preset-thinking-local");
+    const agentDir = join(workspace, ".brewva-agent");
+    writeHostedSettings(agentDir, {
+      defaultThinkingLevel: "low",
+      modelPresets: {
+        Default: {
+          mainModel: "anthropic/default-main:low",
+        },
+        "Claude Lead": {
+          mainModel: "anthropic/claude-main:high",
+        },
+      },
+    });
+
+    const driver = createHostedSessionDriver(agentDir);
+    registerAnthropicModels(driver, ["default-main", "claude-main"]);
+    const settings = createHostedSettingsManager(workspace, agentDir);
+    const result = await driver.createRuntime({
+      cwd: workspace,
+      settings,
+      customTools: [],
+    });
+
+    await result.session.selectModelPreset?.({ name: "Claude Lead", source: "session" });
+
+    const persistedSettings = JSON.parse(readFileSync(join(agentDir, "settings.json"), "utf8")) as {
+      defaultThinkingLevel?: string;
+    };
+    expect(result.session.thinkingLevel).toBe("high");
+    expect(persistedSettings.defaultThinkingLevel).toBe("low");
 
     await result.session.abort();
     result.session.dispose();
@@ -73,8 +287,6 @@ describe("hosted session driver", () => {
     const workspace = createTestWorkspace("hosted-session-driver-explicit-model");
     const agentDir = join(workspace, ".brewva-agent");
     writeHostedSettings(agentDir, {
-      defaultProvider: "openai",
-      defaultModel: "gpt-5.4",
       defaultThinkingLevel: "low",
     });
 
@@ -242,9 +454,12 @@ describe("hosted session driver", () => {
     });
 
     writeHostedSettings(agentDir, {
-      defaultProvider: "demo",
-      defaultModel: "alpha",
       defaultThinkingLevel: "high",
+      modelPresets: {
+        Default: {
+          mainModel: "demo/alpha",
+        },
+      },
     });
 
     const settings = createHostedSettingsManager(workspace, agentDir);

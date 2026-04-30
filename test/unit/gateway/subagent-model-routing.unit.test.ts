@@ -66,6 +66,84 @@ function makeTarget(overrides: Partial<HostedDelegationTarget> = {}): HostedDele
 }
 
 describe("subagent model routing", () => {
+  test("prefers active preset subagent model before policy routes", () => {
+    const resolved = resolveDelegationModelRoute({
+      target: makeTarget({
+        agentSpecName: "advisor",
+        resultMode: "patch",
+      }),
+      packet: {
+        objective: "Fix the React component layout without broad refactors.",
+      },
+      modelRouting: {
+        availableModels: [...AVAILABLE_MODELS],
+        activePreset: {
+          name: "Claude Lead",
+          subagentModels: {
+            advisor: "anthropic/claude-opus-4.1",
+          },
+        },
+      } as unknown as Parameters<typeof resolveDelegationModelRoute>[0]["modelRouting"],
+    });
+
+    expect(resolved.model).toBe("anthropic/claude-opus-4.1");
+    expect(resolved.modelRoute).toMatchObject({
+      selectedModel: "anthropic/claude-opus-4.1",
+      requestedModel: "anthropic/claude-opus-4.1",
+      source: "preset",
+      mode: "explicit",
+      presetName: "Claude Lead",
+    });
+  });
+
+  test("inherits active preset main model when no subagent-specific model is configured", () => {
+    const resolved = resolveDelegationModelRoute({
+      target: makeTarget({
+        agentSpecName: "qa",
+        consultKind: "review",
+      }),
+      packet: {
+        objective: "Review the runtime change.",
+      },
+      modelRouting: {
+        availableModels: [...AVAILABLE_MODELS],
+        activePreset: {
+          name: "OpenAI Stack",
+          mainModel: "openai/gpt-5.5:high",
+          subagentModels: {
+            advisor: "anthropic/claude-opus-4.1",
+          },
+        },
+      } as unknown as Parameters<typeof resolveDelegationModelRoute>[0]["modelRouting"],
+    });
+
+    expect(resolved.model).toBe("openai/gpt-5.5:high");
+    expect(resolved.modelRoute).toMatchObject({
+      selectedModel: "openai/gpt-5.5:high",
+      requestedModel: "openai/gpt-5.5:high",
+      source: "preset",
+      mode: "explicit",
+      presetName: "OpenAI Stack",
+    });
+  });
+
+  test("does not route from target model pins", () => {
+    const resolved = resolveDelegationModelRoute({
+      target: makeTarget({
+        model: "anthropic/claude-opus-4.1",
+      } as Partial<HostedDelegationTarget> & { model: string }),
+      packet: {
+        objective: "Inspect the prefix handling in the router before changing anything.",
+      },
+      modelRouting: {
+        availableModels: [...AVAILABLE_MODELS],
+      },
+    });
+
+    expect(resolved.model).toBeUndefined();
+    expect(resolved.modelRoute).toBeUndefined();
+  });
+
   test("keeps explicit executionShape model selections inspectable", () => {
     const resolved = resolveDelegationModelRoute({
       target: makeTarget({

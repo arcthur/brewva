@@ -269,6 +269,15 @@ describe("shell command provider", () => {
     expect(provider.searchPaletteCommands("connect").map((command) => command.id)).toContain(
       "agent.connect",
     );
+    expect(provider.keyboundCommands()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "command.agent.preset.next",
+          action: "command:agent.preset.next",
+          trigger: { key: "tab", ctrl: false, meta: false, shift: true },
+        }),
+      ]),
+    );
     expect(
       provider.keyboundCommands().some((command) => command.action === "command:app.exit"),
     ).toBe(true);

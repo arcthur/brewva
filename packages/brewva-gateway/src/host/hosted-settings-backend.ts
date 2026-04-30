@@ -11,6 +11,7 @@ import type {
   BrewvaDiffPreferences,
   BrewvaShellViewPreferences,
   BrewvaModelPreferences,
+  BrewvaModelPresetState,
 } from "@brewva/brewva-substrate";
 import type { HostedSessionSettingsBackend } from "./hosted-session-backend-contract.js";
 import type {
@@ -18,6 +19,10 @@ import type {
   HostedSessionSettings,
   HostedSessionUiOverrides,
 } from "./hosted-session-driver.js";
+import {
+  normalizeHostedModelPresetState,
+  type HostedModelPresetSettingsShape,
+} from "./model-presets.js";
 
 const PROJECT_SETTINGS_DIR = ".pi";
 
@@ -26,9 +31,9 @@ type HostedThinkingLevel =
   | undefined;
 
 interface HostedSettingsData {
-  defaultProvider?: string;
-  defaultModel?: string;
   defaultThinkingLevel?: HostedThinkingLevel;
+  defaultModelPreset?: unknown;
+  modelPresets?: Record<string, unknown>;
   transport?: "sse" | "websocket";
   queueMode?: "all" | "one-at-a-time";
   followUpMode?: "all" | "one-at-a-time";
@@ -69,11 +74,32 @@ function readSettingsFile(path: string): HostedSettingsData {
   if (!existsSync(path)) {
     return {};
   }
+  let parsed: unknown;
   try {
-    return JSON.parse(readFileSync(path, "utf8")) as HostedSettingsData;
+    parsed = JSON.parse(readFileSync(path, "utf8")) as unknown;
   } catch {
     return {};
   }
+  rejectRemovedModelDefaultSettings(path, parsed);
+  return parsed as HostedSettingsData;
+}
+
+function rejectRemovedModelDefaultSettings(path: string, parsed: unknown): void {
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return;
+  }
+  const record = parsed as Record<string, unknown>;
+  const removedKeys = ["defaultProvider", "defaultModel"].filter((key) =>
+    Object.prototype.hasOwnProperty.call(record, key),
+  );
+  if (removedKeys.length === 0) {
+    return;
+  }
+  throw new Error(
+    `Removed hosted model default settings in ${path}: ${removedKeys.join(
+      ", ",
+    )}. Use modelPresets and defaultModelPreset instead.`,
+  );
 }
 
 function mergeSettings(base: HostedSettingsData, override: HostedSettingsData): HostedSettingsData {
@@ -99,6 +125,10 @@ function mergeSettings(base: HostedSettingsData, override: HostedSettingsData): 
     modelPreferences: {
       ...base.modelPreferences,
       ...override.modelPreferences,
+    },
+    modelPresets: {
+      ...base.modelPresets,
+      ...override.modelPresets,
     },
     diffPreferences: {
       ...base.diffPreferences,
@@ -242,16 +272,12 @@ class BrewvaHostedSettingsHandle implements HostedSessionSettings, HostedSession
     return this.settings.images?.blockImages ?? false;
   }
 
-  getDefaultProvider(): string | undefined {
-    return this.settings.defaultProvider;
-  }
-
-  getDefaultModel(): string | undefined {
-    return this.settings.defaultModel;
-  }
-
   getDefaultThinkingLevel(): HostedThinkingLevel {
     return this.settings.defaultThinkingLevel;
+  }
+
+  getModelPresetState(): BrewvaModelPresetState {
+    return normalizeHostedModelPresetState(this.settings as HostedModelPresetSettingsShape);
   }
 
   getQueueMode(): "all" | "one-at-a-time" {
@@ -291,12 +317,6 @@ class BrewvaHostedSettingsHandle implements HostedSessionSettings, HostedSession
     return {
       maxDelayMs: this.settings.retry?.maxDelayMs ?? 60_000,
     };
-  }
-
-  setDefaultModelAndProvider(provider: string, modelId: string): void {
-    this.#globalSettings.defaultProvider = provider;
-    this.#globalSettings.defaultModel = modelId;
-    this.persistGlobalSettings();
   }
 
   setDefaultThinkingLevel(thinkingLevel: string): void {

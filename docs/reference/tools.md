@@ -636,8 +636,14 @@ Semantics:
 - `safe` is the default execution boundary
 - `effectful` is reserved for isolated write-capable child runners
 - delegated child model selection is inspectable: explicit
-  `executionShape.model`, target-pinned models, and policy-backed auto routes
-  all persist route metadata on the run record
+  `executionShape.model`, active preset subagent/main inheritance, and
+  policy-backed auto routes all persist route metadata on the run record
+- delegated model route precedence is replay/preselected `modelRoute`,
+  explicit `executionShape.model`, active preset
+  `subagentModels[resolvedAgentSpec]`, active preset `mainModel`, policy auto
+  route, then parent/default fallback
+- workspace subagent envelope/agent-spec/target `model` pins are no longer
+  supported; put subagent model choices under hosted `modelPresets`
 - `contextRefs` are typed refs and may include `sourceSessionId` and advisory
   `hash`
 - when `skillName` is present, the child prompt includes delegated semantic

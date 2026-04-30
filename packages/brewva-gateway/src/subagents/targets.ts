@@ -18,7 +18,6 @@ export interface HostedDelegationTarget {
   executorPreamble?: string;
   instructionsMarkdown?: string;
   boundary?: SubagentExecutionBoundary;
-  model?: string;
   skillName?: string;
   consultKind?: AdvisorConsultKind;
   reviewLane?: ReviewLaneName;

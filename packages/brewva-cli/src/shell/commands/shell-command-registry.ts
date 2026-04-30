@@ -107,6 +107,14 @@ const builtInShellCommands: readonly ShellCommand[] = [
     suggested: true,
   },
   {
+    id: "agent.preset.next",
+    title: "Next model preset",
+    description: "Cycle the model preset for the current session.",
+    category: "Agent",
+    keybinding: { key: "tab", ctrl: false, meta: false, shift: true },
+    discovery: { help: false },
+  },
+  {
     id: "agent.connect",
     title: "Connect provider",
     description: "Connect a model provider.",

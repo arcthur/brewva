@@ -15,7 +15,7 @@ export type DelegationConsultKind = "investigate" | "diagnose" | "design" | "rev
 export type DelegationOutcomeKind = "consult" | "qa" | "patch";
 export type DelegationDeliveryMode = "text_only" | "supplemental";
 export type DelegationDeliveryHandoffState = "none" | "pending_parent_turn" | "surfaced";
-export type DelegationModelRouteSource = "execution_shape" | "target" | "policy";
+export type DelegationModelRouteSource = "execution_shape" | "preset" | "policy";
 export type DelegationModelRouteMode = "explicit" | "auto";
 
 export interface DelegationArtifactRef {
@@ -65,6 +65,7 @@ export interface DelegationModelRouteRecord {
   reason: string;
   policyId?: string;
   requestedModel?: string;
+  presetName?: string;
 }
 
 export interface DelegationDeliveryRecord {

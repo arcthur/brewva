@@ -172,6 +172,8 @@ those identifiers to the underlying `reasoning_checkpoint` and
 - `session_bootstrap`
 - `session_start`
 - `session_shutdown`
+- `model_select`
+- `model_preset_select`
 - `unclean_shutdown_reconciled`
 - `session_turn_transition`
 - `turn_input_recorded`
@@ -194,6 +196,26 @@ those identifiers to the underlying `reasoning_checkpoint` and
 - `turn_end`
 - `message_end`
 - `agent_end`
+
+`model_select` records hosted main-model changes. Preset-backed switches emit it
+only when the effective provider/model changes; preset selections that only
+change the active label are represented by `model_preset_select`.
+
+`model_preset_select` is the replay authority for the active hosted model
+preset. Payloads carry:
+
+- `presetName`
+- `previousPresetName?`
+- `source`
+- `mainModel?`
+- `subagentModels?`
+
+Replay reconstructs the active preset snapshot from these events alone. Current
+settings may add future switch targets, but they do not rewrite the active
+preset for a replayed session. Delegated `modelRoute.presetName` is denormalized
+provenance copied when a child run is created; it is not consulted when replay
+decides the active preset. Sessions without `model_preset_select` inspect and
+route as synthetic `Default`.
 
 `session_turn_transition` is the rebuildable hosted-flow contract for bounded
 recovery, compaction retry, interrupt, approval-pending, delegation handoff,

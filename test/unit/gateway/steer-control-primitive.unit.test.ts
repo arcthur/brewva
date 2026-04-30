@@ -201,7 +201,6 @@ function createSettingsStub() {
     getRetrySettings() {
       return undefined;
     },
-    setDefaultModelAndProvider() {},
     setDefaultThinkingLevel() {},
     getModelPreferences() {
       return { recent: [], favorite: [] };

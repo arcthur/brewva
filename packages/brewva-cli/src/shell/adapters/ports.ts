@@ -10,14 +10,14 @@ import {
   validateQuestionRequestAnswers,
   validateSingleQuestionAnswer,
 } from "@brewva/brewva-gateway";
-import { runHostedPromptTurn } from "@brewva/brewva-gateway/host";
+import { runHostedPromptTurn, selectNextModelPresetName } from "@brewva/brewva-gateway/host";
 import {
   SESSION_REWIND_DIVERGENCE_SCHEMA,
   buildReasoningRevertSummaryDetails,
   type SessionRewindDivergenceNote,
 } from "@brewva/brewva-runtime";
 import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
-import type { BrewvaPromptThinkingLevel } from "@brewva/brewva-substrate";
+import type { BrewvaModelPresetState, BrewvaPromptThinkingLevel } from "@brewva/brewva-substrate";
 import type {
   CliShellSessionBundle,
   OperatorSurfacePort,
@@ -66,6 +66,11 @@ function appendRewindDivergenceSummary(
 }
 
 export function createSessionViewPort(bundle: CliShellSessionBundle): SessionViewPort {
+  const fallbackPresetState = (): BrewvaModelPresetState => ({
+    activeName: "Default",
+    defaultName: "Default",
+    presets: [{ name: "Default", subagentModels: {}, synthetic: true }],
+  });
   return {
     session: bundle.session,
     getSessionId() {
@@ -93,6 +98,34 @@ export function createSessionViewPort(bundle: CliShellSessionBundle): SessionVie
         throw new Error("This session does not support model switching.");
       }
       await bundle.session.setModel(model);
+    },
+    getModelPresetState() {
+      return bundle.session.getModelPresetState?.() ?? fallbackPresetState();
+    },
+    async selectNextModelPreset(options) {
+      const state = bundle.session.getModelPresetState?.() ?? fallbackPresetState();
+      if (state.presets.length <= 1) {
+        return {
+          selectedName: state.activeName,
+          previousName: state.activeName,
+          modelChanged: false,
+          queued: false,
+          effectiveMainModel: state.presets[0]?.mainModel,
+        };
+      }
+      const nextName = selectNextModelPresetName(
+        options?.queueOnly ? state : { ...state, pendingName: undefined },
+      );
+      if (options?.queueOnly) {
+        if (typeof bundle.session.queueModelPresetForNextTurn !== "function") {
+          throw new Error("This session does not support model preset selection.");
+        }
+        return bundle.session.queueModelPresetForNextTurn(nextName);
+      }
+      if (typeof bundle.session.selectModelPreset !== "function") {
+        throw new Error("This session does not support model preset selection.");
+      }
+      return bundle.session.selectModelPreset({ name: nextName, source: "tui" });
     },
     getAvailableThinkingLevels() {
       return (

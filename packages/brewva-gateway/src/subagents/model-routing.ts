@@ -1,6 +1,6 @@
 import type { DelegationModelRouteRecord } from "@brewva/brewva-runtime";
 import { resolveBrewvaAgentDir } from "@brewva/brewva-runtime";
-import type { BrewvaModelCatalog } from "@brewva/brewva-substrate";
+import type { BrewvaModelCatalog, BrewvaModelPreset } from "@brewva/brewva-substrate";
 import type { DelegationPacket, SubagentExecutionShape } from "@brewva/brewva-tools";
 import { resolveBrewvaModelSelection } from "@brewva/brewva-tools";
 import { createHostedSessionDriver } from "../host/hosted-session-driver.js";
@@ -22,6 +22,8 @@ interface DelegationRoutingPolicy {
 
 export interface DelegationModelRoutingContext {
   availableModels: RegisteredModel[];
+  activePreset?: BrewvaModelPreset;
+  getActivePreset?: () => BrewvaModelPreset | undefined;
 }
 
 export interface ResolvedDelegationModelRoute {
@@ -216,9 +218,13 @@ const ROUTING_POLICIES: readonly DelegationRoutingPolicy[] = [
 
 export function createDelegationModelRoutingContext(
   registry: Pick<BrewvaModelCatalog, "getAll">,
+  options: {
+    getActivePreset?: () => BrewvaModelPreset | undefined;
+  } = {},
 ): DelegationModelRoutingContext {
   return {
     availableModels: registry.getAll(),
+    getActivePreset: options.getActivePreset,
   };
 }
 
@@ -258,17 +264,26 @@ export function resolveDelegationModelRoute(input: {
     };
   }
 
-  const targetModel = input.target.model?.trim();
-  if (targetModel) {
-    const selectedModel = resolveModelTextAgainstInventory(targetModel, input.modelRouting);
+  const activePreset = input.modelRouting?.getActivePreset?.() ?? input.modelRouting?.activePreset;
+  const agentSpecIdentity = input.target.agentSpecName ?? input.target.name;
+  const presetModel =
+    (agentSpecIdentity ? activePreset?.subagentModels[agentSpecIdentity] : undefined) ??
+    activePreset?.mainModel;
+  if (activePreset && presetModel) {
+    const selectedModel = resolveModelTextAgainstInventory(presetModel, input.modelRouting);
+    const subagentSpecific =
+      Boolean(agentSpecIdentity) && activePreset.subagentModels[agentSpecIdentity] === presetModel;
     return {
       model: selectedModel,
       modelRoute: {
         selectedModel,
-        requestedModel: targetModel,
-        source: "target",
+        requestedModel: presetModel,
+        source: "preset",
         mode: "explicit",
-        reason: "Model pinned by the delegated target envelope.",
+        reason: subagentSpecific
+          ? `Model selected by preset "${activePreset.name}" for delegated agent "${agentSpecIdentity}".`
+          : `Model inherited from preset "${activePreset.name}" mainModel.`,
+        presetName: activePreset.name,
       },
     };
   }

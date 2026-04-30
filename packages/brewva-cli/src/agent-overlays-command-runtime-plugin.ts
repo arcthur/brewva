@@ -91,7 +91,6 @@ function formatOverlayDetail(
   }
   if (envelope) {
     lines.push(`Boundary: ${envelope.boundary ?? "safe"}`);
-    lines.push(`Model: ${envelope.model ?? "none"}`);
     lines.push(`Builtin tools: ${(envelope.builtinToolNames ?? []).join(", ") || "none"}`);
     lines.push(`Managed tools: ${(envelope.managedToolNames ?? []).join(", ") || "none"}`);
   }

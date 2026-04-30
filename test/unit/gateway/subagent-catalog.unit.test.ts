@@ -170,6 +170,69 @@ describe("subagent delegation catalog", () => {
     expect(catalog.workspaceAgentSpecNames.has("jsonc-advisor")).toBe(true);
   });
 
+  test("rejects workspace envelope model pins", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-subagent-catalog-model-pin-"));
+    const subagentDir = join(workspace, ".brewva", "subagents");
+    mkdirSync(subagentDir, { recursive: true });
+    writeFileSync(
+      join(subagentDir, "model-pinned.json"),
+      JSON.stringify(
+        {
+          kind: "envelope",
+          name: "model-pinned",
+          description: "Invalid model-pinned envelope",
+          extends: "readonly-advisor",
+          model: "anthropic/claude-opus-4-6",
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    try {
+      await loadHostedDelegationCatalog(workspace);
+      throw new Error("expected loadHostedDelegationCatalog to reject");
+    } catch (error) {
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toContain(
+        "Execution envelope model pins are no longer supported. Use modelPresets.",
+      );
+    }
+  });
+
+  test("rejects workspace agent spec model pins", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-subagent-catalog-agent-model-pin-"));
+    const subagentDir = join(workspace, ".brewva", "subagents");
+    mkdirSync(subagentDir, { recursive: true });
+    writeFileSync(
+      join(subagentDir, "model-pinned-agent.json"),
+      JSON.stringify(
+        {
+          kind: "agentSpec",
+          name: "model-pinned-agent",
+          description: "Invalid model-pinned agent spec",
+          extends: "advisor",
+          envelope: "readonly-advisor",
+          model: "anthropic/claude-opus-4-6",
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    try {
+      await loadHostedDelegationCatalog(workspace);
+      throw new Error("expected loadHostedDelegationCatalog to reject");
+    } catch (error) {
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toContain(
+        "Agent spec model pins are no longer supported. Use modelPresets.",
+      );
+    }
+  });
+
   test("rejects workspace envelopes that widen a base envelope", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-subagent-catalog-widen-envelope-"));
     const subagentDir = join(workspace, ".brewva", "subagents");

@@ -25,6 +25,8 @@ import type {
   BrewvaDiffPreferences,
   BrewvaShellViewPreferences,
   BrewvaModelPreferences,
+  BrewvaModelPresetSelectionResult,
+  BrewvaModelPresetState,
   BrewvaSteerOptions,
   BrewvaSteerOutcome,
   BrewvaPromptContentPart,
@@ -120,6 +122,10 @@ export interface SessionViewPort {
     includeUnavailable?: boolean;
   }): Promise<readonly NonNullable<BrewvaManagedPromptSession["model"]>[]>;
   setModel(model: NonNullable<BrewvaManagedPromptSession["model"]>): Promise<void>;
+  getModelPresetState(): BrewvaModelPresetState;
+  selectNextModelPreset(options?: {
+    queueOnly?: boolean;
+  }): Promise<BrewvaModelPresetSelectionResult>;
   getAvailableThinkingLevels(): string[];
   setThinkingLevel(level: string): void;
   getModelPreferences(): BrewvaModelPreferences;

@@ -59,6 +59,15 @@ describe("hosted runtime tape session store", () => {
         timestamp: Date.now() + 1,
       };
 
+      store.appendModelPresetSelection({
+        presetName: "Claude Lead",
+        previousPresetName: "Default",
+        source: "tui",
+        mainModel: "anthropic/claude-main:high",
+        subagentModels: {
+          advisor: "openai/gpt-5.5:medium",
+        },
+      });
       store.appendModelChange("openai", "gpt-5.4");
       store.appendThinkingLevelChange("high");
       store.appendMessage(userMessage);
@@ -73,6 +82,7 @@ describe("hosted runtime tape session store", () => {
       expect(restored.getLeafId()).toBe(store.getLeafId());
       expect(eventTypes).toEqual(
         expect.arrayContaining([
+          "model_preset_select",
           "model_select",
           "thinking_level_select",
           "message_end",
@@ -80,6 +90,14 @@ describe("hosted runtime tape session store", () => {
         ]),
       );
       expect(eventTypes.some((type) => type.startsWith("hosted_session_projection_"))).toBe(false);
+      expect(context.activeModelPresetName).toBe("Claude Lead");
+      expect(context.activeModelPreset).toEqual({
+        name: "Claude Lead",
+        mainModel: "anthropic/claude-main:high",
+        subagentModels: {
+          advisor: "openai/gpt-5.5:medium",
+        },
+      });
       expect(context.thinkingLevel).toBe("high");
       expect(context.model).toEqual({ provider: "openai", modelId: "gpt-5.4" });
       expect(context.messages).toMatchObject([
@@ -248,9 +266,19 @@ describe("hosted runtime tape session store", () => {
           cwd: workspace,
         }),
         JSON.stringify({
+          type: "model_preset_select",
+          id: "p1",
+          parentId: null,
+          timestamp: "2026-04-10T00:00:00.500Z",
+          presetName: "Claude Lead",
+          previousPresetName: "Default",
+          source: "import",
+          mainModel: "anthropic/claude-main:high",
+        }),
+        JSON.stringify({
           type: "model_change",
           id: "m1",
-          parentId: null,
+          parentId: "p1",
           timestamp: "2026-04-10T00:00:01.000Z",
           provider: "openai",
           modelId: "gpt-5.4",
@@ -303,6 +331,7 @@ describe("hosted runtime tape session store", () => {
     replayImportedSessionEntries(store, artifact.entries);
 
     expect(store.buildSessionContext()).toMatchObject({
+      activeModelPresetName: "Claude Lead",
       model: { provider: "openai", modelId: "gpt-5.4" },
       messages: [
         {
@@ -316,7 +345,12 @@ describe("hosted runtime tape session store", () => {
       ],
     });
     expect(runtime.inspect.events.list(artifact.sessionId).map((event) => event.type)).toEqual(
-      expect.arrayContaining(["model_select", "message_end", "branch_summary_recorded"]),
+      expect.arrayContaining([
+        "model_preset_select",
+        "model_select",
+        "message_end",
+        "branch_summary_recorded",
+      ]),
     );
   });
 });

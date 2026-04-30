@@ -127,6 +127,7 @@ function cloneModelRoute(route: DelegationModelRouteRecord): DelegationModelRout
     reason: route.reason,
     policyId: route.policyId,
     requestedModel: route.requestedModel,
+    presetName: route.presetName,
   };
 }
 
@@ -192,7 +193,7 @@ function readModelRoute(
   const reason = readString((raw as { reason?: unknown }).reason);
   if (
     !selectedModel ||
-    (source !== "execution_shape" && source !== "target" && source !== "policy") ||
+    (source !== "execution_shape" && source !== "preset" && source !== "policy") ||
     (mode !== "explicit" && mode !== "auto") ||
     !reason
   ) {
@@ -205,6 +206,7 @@ function readModelRoute(
     reason,
     policyId: readString((raw as { policyId?: unknown }).policyId),
     requestedModel: readString((raw as { requestedModel?: unknown }).requestedModel),
+    presetName: readString((raw as { presetName?: unknown }).presetName),
   };
 }
 

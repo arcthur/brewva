@@ -70,6 +70,33 @@ export interface BrewvaModelPreferences {
   favorite: BrewvaModelPreferenceRef[];
 }
 
+export interface BrewvaModelPreset {
+  name: string;
+  mainModel?: string;
+  subagentModels: Record<string, string>;
+  synthetic?: boolean;
+}
+
+export interface BrewvaModelPresetState {
+  activeName: string;
+  defaultName: string;
+  presets: BrewvaModelPreset[];
+  pendingName?: string;
+}
+
+export interface BrewvaModelPresetSelectionRequest {
+  name: string;
+  source?: "startup" | "tui" | "session" | "queued";
+}
+
+export interface BrewvaModelPresetSelectionResult {
+  selectedName: string;
+  previousName?: string;
+  modelChanged: boolean;
+  queued: boolean;
+  effectiveMainModel?: string;
+}
+
 export type BrewvaDiffStyle = "auto" | "stacked";
 export type BrewvaDiffWrapMode = "word" | "none";
 
@@ -137,6 +164,13 @@ export interface BrewvaPromptDispatchSession {
   getContextState?(): ContextState;
   waitForIdle?(): Promise<void>;
   setModel?(model: BrewvaSessionModelDescriptor): Promise<void> | void;
+  getModelPresetState?(): BrewvaModelPresetState;
+  selectModelPreset?(
+    request: BrewvaModelPresetSelectionRequest,
+  ): Promise<BrewvaModelPresetSelectionResult> | BrewvaModelPresetSelectionResult;
+  queueModelPresetForNextTurn?(
+    name: string,
+  ): Promise<BrewvaModelPresetSelectionResult> | BrewvaModelPresetSelectionResult;
   setThinkingLevel?(level: BrewvaPromptThinkingLevel): void;
   replaceMessages?(messages: unknown): void;
   getAvailableThinkingLevels?(): BrewvaPromptThinkingLevel[];

@@ -6,6 +6,7 @@ import {
   type BrewvaCompactionEntry,
   type BrewvaManagedSessionStore,
   type BrewvaModelChangeEntry,
+  type BrewvaModelPresetSelectEntry,
   type BrewvaSessionContext,
   type BrewvaSessionEntry,
   type BrewvaSessionMessageEntry,
@@ -70,6 +71,7 @@ type ReplayableSessionStore = Pick<
   | "appendMessage"
   | "appendThinkingLevelChange"
   | "appendModelChange"
+  | "appendModelPresetSelection"
   | "appendCustomMessageEntry"
   | "appendCompaction"
   | "appendBranchSummaryEntry"
@@ -92,6 +94,20 @@ function readNonEmptyString(
 
 function readOptionalString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+function readOptionalStringRecord(value: unknown): Record<string, string> | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  const record: Record<string, string> = {};
+  for (const [key, rawValue] of Object.entries(value)) {
+    const stringValue = readOptionalString(rawValue);
+    if (key.trim().length > 0 && stringValue) {
+      record[key] = stringValue;
+    }
+  }
+  return Object.keys(record).length > 0 ? record : {};
 }
 
 function ensureTimestamp(value: unknown, fallback: string): string {
@@ -301,6 +317,27 @@ function toImportedSessionEntry(
     } satisfies BrewvaModelChangeEntry;
   }
 
+  if (type === "model_preset_select") {
+    const presetName = readOptionalString(entry.presetName);
+    if (!presetName) {
+      throw new Error(
+        `invalid Pi session artifact ${sourcePath}: malformed model_preset_select ${id}`,
+      );
+    }
+    return {
+      type: "model_preset_select",
+      id,
+      parentId,
+      timestamp,
+      presetName,
+      previousPresetName: readOptionalString(entry.previousPresetName),
+      source: readOptionalString(entry.source),
+      mainModel: readOptionalString(entry.mainModel),
+      subagentModels: readOptionalStringRecord(entry.subagentModels),
+      synthetic: entry.synthetic === true ? true : undefined,
+    } satisfies BrewvaModelPresetSelectEntry;
+  }
+
   if (type === "custom_message") {
     const customType = readOptionalString(entry.customType);
     if (!customType) {
@@ -497,6 +534,16 @@ export function replayImportedSessionEntries(
         break;
       case "model_change":
         nextId = store.appendModelChange(entry.provider, entry.modelId);
+        break;
+      case "model_preset_select":
+        nextId = store.appendModelPresetSelection({
+          presetName: entry.presetName,
+          previousPresetName: entry.previousPresetName,
+          source: entry.source,
+          mainModel: entry.mainModel,
+          subagentModels: entry.subagentModels,
+          synthetic: entry.synthetic,
+        });
         break;
       case "custom_message":
         nextId = store.appendCustomMessageEntry(

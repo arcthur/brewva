@@ -183,6 +183,8 @@ export const SUBAGENT_FAILED_EVENT_TYPE = "subagent_failed" as const;
 export const SUBAGENT_CANCELLED_EVENT_TYPE = "subagent_cancelled" as const;
 export const SUBAGENT_OUTCOME_PARSE_FAILED_EVENT_TYPE = "subagent_outcome_parse_failed" as const;
 export const SUBAGENT_DELIVERY_SURFACED_EVENT_TYPE = "subagent_delivery_surfaced" as const;
+export const MODEL_SELECT_EVENT_TYPE = "model_select" as const;
+export const MODEL_PRESET_SELECT_EVENT_TYPE = "model_preset_select" as const;
 export const WORKER_RESULTS_APPLIED_EVENT_TYPE = "worker_results_applied" as const;
 export const WORKER_RESULTS_APPLY_FAILED_EVENT_TYPE = "worker_results_apply_failed" as const;
 
@@ -228,6 +230,8 @@ export const BREWVA_REGISTERED_EVENT_TYPES = [
   CHANNEL_COMMAND_RECEIVED_EVENT_TYPE,
   OPERATOR_QUESTION_ANSWERED_EVENT_TYPE,
   STEER_QUEUED_EVENT_TYPE,
+  MODEL_SELECT_EVENT_TYPE,
+  MODEL_PRESET_SELECT_EVENT_TYPE,
   STEER_APPLIED_EVENT_TYPE,
   STEER_DROPPED_EVENT_TYPE,
   CHANNEL_SESSION_BOUND_EVENT_TYPE,

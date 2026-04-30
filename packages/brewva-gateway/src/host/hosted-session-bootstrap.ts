@@ -17,6 +17,7 @@ import { createToolRuntimeInternalPort, recordRuntimeEvent } from "@brewva/brewv
 import type {
   BrewvaManagedPromptSession,
   BrewvaModelCatalog,
+  BrewvaModelPreset,
   BrewvaRegisteredModel,
   BrewvaToolUiPort,
 } from "@brewva/brewva-substrate";
@@ -67,6 +68,7 @@ import {
   type HostedSessionSettingsView,
 } from "./hosted-session-driver.js";
 import type { HostedSessionLogger } from "./logger.js";
+import { findModelPreset } from "./model-presets.js";
 import type { ProviderConnectionPort } from "./provider-connection.js";
 import { DEFAULT_HOSTED_ROUTING_SCOPES } from "./routing-defaults.js";
 import { createHostedSemanticReranker } from "./semantic-reranker.js";
@@ -753,22 +755,26 @@ function createHostedOrchestration(input: {
   delegationStore: HostedDelegationStore | undefined;
   cwd: string;
   modelCatalog: Pick<BrewvaModelCatalog, "getAll">;
+  getActiveModelPreset?: () => BrewvaModelPreset | undefined;
 }): BrewvaToolOrchestration | undefined {
-  const { options, runtime, delegationStore, cwd, modelCatalog } = input;
+  const { options, runtime, delegationStore, cwd, modelCatalog, getActiveModelPreset } = input;
   if (options.enableSubagents === false || options.orchestration?.subagents) {
     return options.orchestration;
   }
+  const modelRouting = createDelegationModelRoutingContext(modelCatalog, {
+    getActivePreset: getActiveModelPreset,
+  });
 
   const subagents = createHostedSubagentAdapter({
     runtime,
-    modelRouting: createDelegationModelRoutingContext(modelCatalog),
+    modelRouting,
     delegationStore,
     backgroundController: createDetachedSubagentBackgroundController({
       runtime,
       delegationStore,
       configPath: options.configPath,
       routingScopes: options.routingScopes,
-      modelRouting: createDelegationModelRoutingContext(modelCatalog),
+      modelRouting,
     }),
     createChildSession: (childOptions) =>
       createHostedSession({
@@ -895,16 +901,20 @@ export async function createHostedSession(
 
   const autoSubagentsEnabled = options.enableSubagents !== false;
   const delegationStore = createDelegationStore(runtime, autoSubagentsEnabled);
+  const settings = createHostedSettingsManager(environment.cwd, environment.agentDir);
+  applyRuntimeUiSettings(settings.view, runtime.config.ui);
+  let activeSession: BrewvaManagedPromptSession | undefined;
   const orchestration = createHostedOrchestration({
     options,
     runtime,
     delegationStore,
     cwd: environment.cwd,
     modelCatalog: environment.sessionDriver.modelCatalog,
+    getActiveModelPreset: () => {
+      const state = activeSession?.getModelPresetState?.();
+      return state ? findModelPreset(state) : undefined;
+    },
   });
-
-  const settings = createHostedSettingsManager(environment.cwd, environment.agentDir);
-  applyRuntimeUiSettings(settings.view, runtime.config.ui);
 
   const managedToolMode = resolveManagedToolMode(options.managedToolMode);
   let activeSemanticModel = environment.requestedModelSelection.model;
@@ -959,6 +969,7 @@ export async function createHostedSession(
     ui: options.ui,
     logger: options.logger,
   });
+  activeSession = sessionRuntime.session;
   activeSemanticModel =
     toRegisteredSemanticModel(
       sessionRuntime.session.model,
