@@ -124,6 +124,8 @@ The exact current managed tool names are:
 - `skill_promotion_inspect`, `skill_promotion_review`, and `skill_promotion_promote`
 - `subagent_run`
 - `subagent_fanout`
+- `subagent_fork`
+- `subagent_run_diagnostic`
 - `subagent_status`
 - `subagent_cancel`
 - `task_set_spec`

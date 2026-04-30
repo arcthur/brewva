@@ -1,4 +1,9 @@
-import { normalizeReviewLaneName, type ManagedToolMode } from "@brewva/brewva-runtime";
+import {
+  normalizeReviewLaneName,
+  type DelegationIsolationStrategy,
+  type DelegationVisibility,
+  type ManagedToolMode,
+} from "@brewva/brewva-runtime";
 import type {
   AdvisorConsultKind,
   ReviewLaneName,
@@ -7,14 +12,6 @@ import type {
   SubagentResultMode,
 } from "@brewva/brewva-tools";
 import {
-  asConsultKind,
-  asBoundary,
-  asBoolean,
-  asBuiltinToolArray,
-  asContextProfile,
-  asContextBudget,
-  asManagedToolMode,
-  asResultMode,
   asString,
   asStringArray,
   type HostedContextProfile,
@@ -33,6 +30,7 @@ export interface HostedExecutionEnvelope {
   name: string;
   description: string;
   boundary?: SubagentExecutionBoundary;
+  isolationStrategy: DelegationIsolationStrategy;
   builtinToolNames?: HostedDelegationBuiltinToolName[];
   managedToolNames?: string[];
   defaultContextBudget?: SubagentContextBudget;
@@ -44,11 +42,15 @@ export interface HostedExecutionEnvelope {
 export interface HostedAgentSpec {
   name: string;
   description: string;
+  visibility: DelegationVisibility;
   envelope: string;
   skillName?: string;
   defaultConsultKind?: AdvisorConsultKind;
   reviewLane?: ReviewLaneName;
   fallbackResultMode?: SubagentResultMode;
+  modelPreset?: string;
+  reasoningEffort?: string;
+  managedToolNames?: string[];
   executorPreamble?: string;
   instructionsMarkdown?: string;
 }
@@ -69,6 +71,7 @@ function buildReviewLaneAgentSpec(input: {
   return {
     name: input.name,
     description: input.description,
+    visibility: "internal",
     envelope: "readonly-advisor",
     defaultConsultKind: "review",
     reviewLane: normalizeReviewLaneName(input.name) ?? undefined,
@@ -91,6 +94,28 @@ const CONTEXT_PROFILE_RANK: Record<HostedContextProfile, number> = {
   standard: 1,
   full: 2,
 };
+
+const ISOLATION_STRATEGY_RANK: Record<DelegationIsolationStrategy, number> = {
+  shared: 0,
+  ephemeral: 1,
+  snapshot: 2,
+  worktree: 3,
+  container: 4,
+};
+
+const PUBLIC_AGENT_SPEC_NAMES = new Set(["advisor", "qa", "patch-worker"] as const);
+
+const FORBIDDEN_WORKSPACE_AGENT_FIELDS = [
+  "kind",
+  "model",
+  "envelope",
+  "skillName",
+  "defaultConsultKind",
+  "reviewLane",
+  "fallbackResultMode",
+  "executorPreamble",
+  "visibility",
+] as const;
 
 function assertSubset(
   context: string,
@@ -155,6 +180,12 @@ export function assertHostedExecutionEnvelopeTightening(
   if (CONTEXT_PROFILE_RANK[candidate.contextProfile] > CONTEXT_PROFILE_RANK[base.contextProfile]) {
     throw new Error(`${context}:contextProfile cannot widen beyond the base envelope`);
   }
+  if (
+    ISOLATION_STRATEGY_RANK[candidate.isolationStrategy] <
+    ISOLATION_STRATEGY_RANK[base.isolationStrategy]
+  ) {
+    throw new Error(`${context}:isolationStrategy cannot widen beyond the base envelope`);
+  }
 }
 
 function assertHostedAgentSpecTightening(input: {
@@ -200,6 +231,12 @@ function assertHostedAgentSpecTightening(input: {
       `${context}:instructionsMarkdown exceeds ${MAX_AGENT_INSTRUCTIONS_MARKDOWN_LENGTH} characters`,
     );
   }
+  assertSubset(
+    context,
+    "managedToolNames",
+    resolveHostedExecutionEnvelope(catalog, base.envelope)?.managedToolNames,
+    candidate.managedToolNames,
+  );
 
   const baseEnvelope = resolveHostedExecutionEnvelope(catalog, base.envelope);
   const candidateEnvelope = resolveHostedExecutionEnvelope(catalog, candidate.envelope);
@@ -212,55 +249,25 @@ function assertHostedAgentSpecTightening(input: {
   assertHostedExecutionEnvelopeTightening(baseEnvelope, candidateEnvelope, `${context}:envelope`);
 }
 
-function toExecutionEnvelope(
-  source: Record<string, unknown>,
-  defaults?: HostedExecutionEnvelope,
-): HostedExecutionEnvelope | undefined {
-  if ("model" in source) {
-    throw new Error("Execution envelope model pins are no longer supported. Use modelPresets.");
-  }
-  const name = asString(source.name) ?? defaults?.name;
-  const description = asString(source.description) ?? defaults?.description;
-  if (!name || !description) {
-    return undefined;
-  }
-  return {
-    name,
-    description,
-    boundary: asBoundary(source.boundary) ?? defaults?.boundary ?? "safe",
-    builtinToolNames: asBuiltinToolArray(source.builtinToolNames) ?? defaults?.builtinToolNames,
-    managedToolNames: asStringArray(source.managedToolNames) ?? defaults?.managedToolNames,
-    defaultContextBudget:
-      asContextBudget(source.defaultContextBudget) ?? defaults?.defaultContextBudget,
-    managedToolMode: asManagedToolMode(source.managedToolMode) ?? defaults?.managedToolMode,
-    producesPatches: (() => {
-      const resolvedBoundary = asBoundary(source.boundary) ?? defaults?.boundary ?? "safe";
-      const producesPatches = asBoolean(source.producesPatches) ?? defaults?.producesPatches;
-      if (producesPatches !== undefined) {
-        return producesPatches;
-      }
-      if (resolvedBoundary === "safe") {
-        return false;
-      }
-      throw new Error(
-        `invalid_execution_envelope:${name}:effectful envelopes must declare producesPatches`,
-      );
-    })(),
-    contextProfile:
-      asContextProfile(source.contextProfile) ?? defaults?.contextProfile ?? "standard",
-  };
-}
-
 function toAgentSpec(
   source: Record<string, unknown>,
   defaults?: HostedAgentSpec,
+  options: { workspace?: boolean } = {},
 ): HostedAgentSpec | undefined {
   if ("model" in source) {
     throw new Error("Agent spec model pins are no longer supported. Use modelPresets.");
   }
+  if (options.workspace) {
+    const forbidden = FORBIDDEN_WORKSPACE_AGENT_FIELDS.filter((field) =>
+      Object.prototype.hasOwnProperty.call(source, field),
+    );
+    if (forbidden.length > 0) {
+      throw new Error(`workspace agent spec fields are not supported: ${forbidden.join(", ")}`);
+    }
+  }
   const name = asString(source.name) ?? defaults?.name;
   const description = asString(source.description) ?? defaults?.description;
-  const envelope = asString(source.envelope) ?? defaults?.envelope;
+  const envelope = defaults?.envelope;
   if (!name || !description || !envelope) {
     return undefined;
   }
@@ -283,14 +290,15 @@ function toAgentSpec(
   return {
     name,
     description,
+    visibility: defaults?.visibility ?? "diagnostic",
     envelope,
-    skillName: asString(source.skillName) ?? defaults?.skillName,
-    defaultConsultKind: asConsultKind(source.defaultConsultKind) ?? defaults?.defaultConsultKind,
-    reviewLane:
-      normalizeReviewLaneName(source.reviewLane) ??
-      normalizeReviewLaneName(defaults?.reviewLane) ??
-      undefined,
-    fallbackResultMode: asResultMode(source.fallbackResultMode) ?? defaults?.fallbackResultMode,
+    skillName: defaults?.skillName,
+    defaultConsultKind: defaults?.defaultConsultKind,
+    reviewLane: defaults?.reviewLane,
+    fallbackResultMode: defaults?.fallbackResultMode,
+    modelPreset: asString(source.modelPreset) ?? defaults?.modelPreset,
+    reasoningEffort: asString(source.reasoningEffort) ?? defaults?.reasoningEffort,
+    managedToolNames: asStringArray(source.tools) ?? defaults?.managedToolNames,
     executorPreamble,
     instructionsMarkdown,
   };
@@ -337,6 +345,7 @@ export const BUILTIN_EXECUTION_ENVELOPES: Readonly<Record<string, HostedExecutio
     description:
       "Read-only advisor envelope for bounded investigation, diagnosis, design, and review.",
     boundary: "safe",
+    isolationStrategy: "shared",
     builtinToolNames: ["read"],
     managedToolNames: [...READONLY_MANAGED_TOOLS],
     defaultContextBudget: {
@@ -352,6 +361,7 @@ export const BUILTIN_EXECUTION_ENVELOPES: Readonly<Record<string, HostedExecutio
     description:
       "Effectful but non-patch-producing QA envelope for executable checks and adversarial probes.",
     boundary: "effectful",
+    isolationStrategy: "ephemeral",
     builtinToolNames: ["read"],
     managedToolNames: [...QA_MANAGED_TOOLS],
     defaultContextBudget: {
@@ -366,6 +376,7 @@ export const BUILTIN_EXECUTION_ENVELOPES: Readonly<Record<string, HostedExecutio
     name: "patch-worker",
     description: "Isolated patch-worker envelope with editable snapshot-backed workspace access.",
     boundary: "effectful",
+    isolationStrategy: "snapshot",
     builtinToolNames: ["read", "edit", "write"],
     managedToolNames: [...PATCH_WORKER_TOOLS],
     defaultContextBudget: {
@@ -383,6 +394,7 @@ export const BUILTIN_AGENT_SPECS: Readonly<Record<string, HostedAgentSpec>> = {
     name: "advisor",
     description:
       "Read-only advisor for repository investigation, debugging diagnosis, design judgment, and second-opinion review.",
+    visibility: "public",
     envelope: "readonly-advisor",
     fallbackResultMode: "consult",
     executorPreamble:
@@ -436,6 +448,7 @@ export const BUILTIN_AGENT_SPECS: Readonly<Record<string, HostedAgentSpec>> = {
     name: "qa",
     description:
       "Executable QA delegate for adversarial verification without parent-source mutation.",
+    visibility: "public",
     envelope: "qa-runner",
     skillName: "qa",
     fallbackResultMode: "qa",
@@ -446,6 +459,7 @@ export const BUILTIN_AGENT_SPECS: Readonly<Record<string, HostedAgentSpec>> = {
   "patch-worker": {
     name: "patch-worker",
     description: "Execution-first isolated patch worker preset.",
+    visibility: "public",
     envelope: "patch-worker",
     fallbackResultMode: "patch",
     executorPreamble:
@@ -484,6 +498,29 @@ const DEFAULT_FALLBACK_RESULT_MODE_BY_SKILL_NAME: Readonly<Record<string, Subage
   implementation: "patch",
 } as const;
 
+const DEFAULT_CONSULT_KIND_BY_SKILL_NAME: Readonly<Record<string, AdvisorConsultKind>> = {
+  "repository-analysis": "investigate",
+  architecture: "design",
+  "office-hours": "design",
+  discovery: "investigate",
+  "learning-research": "investigate",
+  debugging: "diagnose",
+  strategy: "design",
+  plan: "design",
+  review: "review",
+  "predict-review": "review",
+} as const;
+
+export function isKnownDelegationSkillName(skillName: string | undefined): boolean {
+  if (!skillName) {
+    return false;
+  }
+  return (
+    Object.hasOwn(DEFAULT_AGENT_SPEC_BY_SKILL_NAME, skillName) ||
+    Object.hasOwn(DEFAULT_FALLBACK_RESULT_MODE_BY_SKILL_NAME, skillName)
+  );
+}
+
 export async function loadHostedDelegationCatalog(
   workspaceRoot: string,
 ): Promise<HostedDelegationCatalog> {
@@ -501,45 +538,10 @@ export async function loadHostedDelegationCatalog(
   };
 
   const entries = await readHostedWorkspaceSubagentConfigFiles(workspaceRoot);
-  const pendingEnvelopes = entries.filter((entry) => entry.kind === "envelope");
-  while (pendingEnvelopes.length > 0) {
-    let progressed = false;
-    for (let index = 0; index < pendingEnvelopes.length; ) {
-      const entry = pendingEnvelopes[index]!;
-      const explicitBaseName = asString(entry.parsed.extends);
-      const implicitBase = asString(entry.parsed.name)
-        ? resolveHostedExecutionEnvelope(catalog, asString(entry.parsed.name))
-        : undefined;
-      const baseEnvelope = explicitBaseName
-        ? resolveHostedExecutionEnvelope(catalog, explicitBaseName)
-        : implicitBase;
-      if (explicitBaseName && !baseEnvelope) {
-        index += 1;
-        continue;
-      }
-      const envelope = toExecutionEnvelope(entry.parsed, baseEnvelope);
-      if (!envelope) {
-        throw new Error(`invalid_execution_envelope:${entry.fileName}:missing required fields`);
-      }
-      if (baseEnvelope) {
-        assertHostedExecutionEnvelopeTightening(
-          baseEnvelope,
-          envelope,
-          `invalid_execution_envelope:${envelope.name}`,
-        );
-      }
-      catalog.envelopes.set(envelope.name, envelope);
-      catalog.workspaceEnvelopeNames.add(envelope.name);
-      pendingEnvelopes.splice(index, 1);
-      progressed = true;
-    }
-    if (progressed) {
-      continue;
-    }
-    const unresolved = pendingEnvelopes[0]!;
-    const missingBase = asString(unresolved.parsed.extends) ?? "unknown";
+  const forbiddenEnvelope = entries.find((entry) => entry.kind === "envelope");
+  if (forbiddenEnvelope) {
     throw new Error(
-      `invalid_execution_envelope:${unresolved.fileName}:unknown base '${missingBase}'`,
+      `invalid_subagent_config:${forbiddenEnvelope.fileName}:workspace execution envelopes are no longer supported`,
     );
   }
 
@@ -549,17 +551,20 @@ export async function loadHostedDelegationCatalog(
     for (let index = 0; index < pendingAgentSpecs.length; ) {
       const entry = pendingAgentSpecs[index]!;
       const explicitBaseName = asString(entry.parsed.extends);
-      const sameNameBase = asString(entry.parsed.name)
-        ? catalog.agentSpecs.get(asString(entry.parsed.name)!)
-        : undefined;
-      const baseAgentSpec = explicitBaseName
-        ? catalog.agentSpecs.get(explicitBaseName)
-        : sameNameBase;
-      if (explicitBaseName && !baseAgentSpec) {
+      if (!explicitBaseName) {
+        throw new Error(`invalid_agent_spec:${entry.fileName}:extends is required`);
+      }
+      if (!PUBLIC_AGENT_SPEC_NAMES.has(explicitBaseName as "advisor" | "qa" | "patch-worker")) {
+        throw new Error(
+          `invalid_agent_spec:${entry.fileName}:extends must be advisor, qa, or patch-worker`,
+        );
+      }
+      const baseAgentSpec = catalog.agentSpecs.get(explicitBaseName);
+      if (!baseAgentSpec) {
         index += 1;
         continue;
       }
-      const agentSpec = toAgentSpec(entry.parsed, baseAgentSpec);
+      const agentSpec = toAgentSpec(entry.parsed, baseAgentSpec, { workspace: true });
       if (!agentSpec) {
         throw new Error(`invalid_agent_spec:${entry.fileName}:missing required fields`);
       }
@@ -611,6 +616,15 @@ export function deriveFallbackResultModeForSkillName(
   return DEFAULT_FALLBACK_RESULT_MODE_BY_SKILL_NAME[skillName];
 }
 
+export function deriveDefaultConsultKindForSkillName(
+  skillName: string | undefined,
+): AdvisorConsultKind | undefined {
+  if (!skillName) {
+    return undefined;
+  }
+  return DEFAULT_CONSULT_KIND_BY_SKILL_NAME[skillName];
+}
+
 export function deriveDefaultAgentSpecNameForSkillName(
   skillName: string | undefined,
 ): string | undefined {
@@ -632,6 +646,7 @@ export function buildHostedDelegationTargetFromAgentSpec(input: {
   return {
     name: input.agentSpec.name,
     description: input.agentSpec.description,
+    visibility: input.agentSpec.visibility,
     resultMode,
     executorPreamble: input.agentSpec.executorPreamble,
     instructionsMarkdown: input.agentSpec.instructionsMarkdown,
@@ -643,46 +658,12 @@ export function buildHostedDelegationTargetFromAgentSpec(input: {
     agentSpecName: input.agentSpec.name,
     envelopeName: input.envelope.name,
     builtinToolNames: input.envelope.builtinToolNames,
-    managedToolNames: input.envelope.managedToolNames,
+    managedToolNames: input.agentSpec.managedToolNames ?? input.envelope.managedToolNames,
     defaultContextBudget: input.envelope.defaultContextBudget,
     managedToolMode: input.envelope.managedToolMode,
     producesPatches: input.envelope.producesPatches,
     contextProfile: input.envelope.contextProfile,
-  };
-}
-
-export function buildSyntheticHostedDelegationTarget(input: {
-  name: string;
-  description: string;
-  envelope: HostedExecutionEnvelope;
-  skillName?: string;
-  consultKind?: AdvisorConsultKind;
-  reviewLane?: ReviewLaneName;
-  fallbackResultMode?: SubagentResultMode;
-  executorPreamble?: string;
-  instructionsMarkdown?: string;
-}): HostedDelegationTarget {
-  const resultMode =
-    input.fallbackResultMode ?? deriveFallbackResultModeForSkillName(input.skillName) ?? "consult";
-  const consultKind = resultMode === "consult" ? input.consultKind : undefined;
-  return {
-    name: input.name,
-    description: input.description,
-    resultMode,
-    executorPreamble: input.executorPreamble,
-    instructionsMarkdown: input.instructionsMarkdown,
-    boundary: input.envelope.boundary ?? "safe",
-    skillName: input.skillName,
-    consultKind,
-    reviewLane: input.reviewLane,
-    fallbackResultMode: resultMode,
-    envelopeName: input.envelope.name,
-    builtinToolNames: input.envelope.builtinToolNames,
-    managedToolNames: input.envelope.managedToolNames,
-    defaultContextBudget: input.envelope.defaultContextBudget,
-    managedToolMode: input.envelope.managedToolMode,
-    producesPatches: input.envelope.producesPatches,
-    contextProfile: input.envelope.contextProfile,
+    isolationStrategy: input.envelope.isolationStrategy,
   };
 }
 

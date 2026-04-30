@@ -37,7 +37,11 @@ import {
   cloneDelegationRunRecord,
 } from "./delegation-store.js";
 import type { DelegationModelRoutingContext } from "./model-routing.js";
-import { resolveDelegationExecutionPlan, type ResolvedDelegationExecutionPlan } from "./shared.js";
+import {
+  buildDelegationRunRecordSeed,
+  resolveDelegationExecutionPlan,
+  type ResolvedDelegationExecutionPlan,
+} from "./shared.js";
 import type { HostedDelegationTarget } from "./targets.js";
 
 export interface HostedSubagentBackgroundController {
@@ -345,44 +349,34 @@ export function createDetachedSubagentBackgroundController(
         });
       } catch (error) {
         return writeTerminalFailure(
-          {
+          buildDelegationRunRecordSeed({
             runId,
+            target: input.target,
             delegate,
-            agentSpec: input.target.agentSpecName,
-            envelope: input.target.envelopeName,
-            skillName: input.target.skillName,
             parentSessionId: asBrewvaSessionId(input.parentSessionId),
             status: "failed",
             createdAt,
             updatedAt: createdAt,
             label: input.label,
             parentSkill,
-            kind: input.target.resultMode,
-            consultKind: input.target.consultKind,
             delivery: buildDeliveryRecord(input.delivery, createdAt),
-          },
+          }),
           "failed",
           error instanceof Error ? error.message : String(error),
         );
       }
-      const initialRecord: DelegationRunRecord = {
+      const initialRecord: DelegationRunRecord = buildDelegationRunRecordSeed({
         runId,
+        target: input.target,
         delegate,
-        agentSpec: input.target.agentSpecName,
-        envelope: input.target.envelopeName,
-        skillName: input.target.skillName,
         parentSessionId: asBrewvaSessionId(input.parentSessionId),
-        status: "pending",
         createdAt,
-        updatedAt: createdAt,
         label: input.label,
         parentSkill,
-        kind: input.target.resultMode,
-        consultKind: input.target.consultKind,
         boundary: executionPlan.boundary,
         modelRoute: executionPlan.modelRoute,
         delivery: buildDeliveryRecord(input.delivery, createdAt),
-      };
+      });
       if (
         input.packet.completionPredicate &&
         evaluateCompletionPredicate({

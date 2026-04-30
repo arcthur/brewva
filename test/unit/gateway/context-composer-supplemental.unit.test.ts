@@ -1,7 +1,21 @@
 import { describe, expect, test } from "bun:test";
-import { asBrewvaSessionId } from "@brewva/brewva-runtime";
+import { CURRENT_DELEGATION_CONTRACT_VERSION, asBrewvaSessionId } from "@brewva/brewva-runtime";
 import { buildCapabilityView } from "../../../packages/brewva-gateway/src/runtime-plugins/capability-view.js";
 import { resolveSupplementalContextBlocks } from "../../../packages/brewva-gateway/src/runtime-plugins/context-composer-supplemental.js";
+
+function delegationContractFields() {
+  return {
+    contractVersion: CURRENT_DELEGATION_CONTRACT_VERSION,
+    executionPrimitive: "named" as const,
+    visibility: "public" as const,
+    isolationStrategy: "shared" as const,
+    adoption: {
+      contractId: "context-composer-supplemental-test",
+      decision: "require_human" as const,
+      reason: "Fixture record has not reached parent adoption.",
+    },
+  };
+}
 
 describe("context composer supplemental", () => {
   test("derives delegation and diagnostics blocks from runtime state", () => {
@@ -20,6 +34,7 @@ describe("context composer supplemental", () => {
             if (query?.statuses?.includes("pending")) {
               return [
                 {
+                  ...delegationContractFields(),
                   runId: "run-pending",
                   delegate: "worker",
                   label: "search",
@@ -32,6 +47,7 @@ describe("context composer supplemental", () => {
             }
             return [
               {
+                ...delegationContractFields(),
                 runId: "run-done",
                 delegate: "worker",
                 label: "summarize",
@@ -106,6 +122,7 @@ describe("context composer supplemental", () => {
             if (query?.statuses?.includes("pending")) {
               return [
                 {
+                  ...delegationContractFields(),
                   runId: "run-z",
                   delegate: "worker",
                   label: "search",
@@ -115,6 +132,7 @@ describe("context composer supplemental", () => {
                   updatedAt: 2,
                 },
                 {
+                  ...delegationContractFields(),
                   runId: "run-a",
                   delegate: "worker",
                   label: "review",
@@ -127,6 +145,7 @@ describe("context composer supplemental", () => {
             }
             return [
               {
+                ...delegationContractFields(),
                 runId: "run-y",
                 delegate: "worker",
                 label: "summarize",
@@ -143,6 +162,7 @@ describe("context composer supplemental", () => {
                 },
               },
               {
+                ...delegationContractFields(),
                 runId: "run-b",
                 delegate: "worker",
                 label: "patch",

@@ -8,6 +8,7 @@ import {
 import type {
   AdvisorConsultBrief,
   BrewvaToolOptions,
+  SubagentStartResult,
   DelegationPacket,
   DelegationTaskPacket,
   DelegationCompletionPredicate,
@@ -16,6 +17,7 @@ import type {
   SubagentReturnMode,
   SubagentOutcome,
   SubagentRunRequest,
+  SubagentRunResult,
   SubagentExecutionBoundary,
 } from "./types.js";
 import { buildStringEnumSchema } from "./utils/input-alias.js";
@@ -28,6 +30,16 @@ const SUBAGENT_BOUNDARY_VALUES = ["safe", "effectful"] as const;
 const SUBAGENT_RETURN_MODE_VALUES = ["text_only", "supplemental"] as const;
 const SUBAGENT_WAIT_MODE_VALUES = ["completion", "start"] as const;
 const LEGACY_DELEGATION_FIELDS = new Set(["profile", "entrySkill", "requiredOutputs"] as const);
+const PUBLIC_DELEGATION_FORBIDDEN_FIELDS = new Set([
+  "agentSpec",
+  "envelope",
+  "consultKind",
+  "fallbackResultMode",
+  "executionShape",
+  "mode",
+  "activeSkillName",
+  "consultBrief",
+] as const);
 
 const ModeSchema = buildStringEnumSchema(SUBAGENT_MODE_VALUES, {
   guidance: "Use single for one delegated run and parallel for fan-out execution.",
@@ -194,7 +206,61 @@ const TaskPacketSchema = Type.Object({
 
 const SharedPacketSchema = Type.Object(PacketFields);
 
+const PublicBriefSchema = PacketFields.consultBrief;
+
+const PublicTaskPacketSchema = Type.Object({
+  label: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
+  objective: Type.String({ minLength: 1, maxLength: 4000 }),
+  deliverable: PacketFields.deliverable,
+  constraints: PacketFields.constraints,
+  sharedNotes: PacketFields.sharedNotes,
+  executionHints: PacketFields.executionHints,
+  contextRefs: PacketFields.contextRefs,
+  contextBudget: PacketFields.contextBudget,
+  completionPredicate: PacketFields.completionPredicate,
+  effectCeiling: PacketFields.effectCeiling,
+});
+
 const SubagentRunParamsSchema = Type.Object({
+  skillName: Type.String({ minLength: 1, maxLength: 200 }),
+  objective: Type.String({ minLength: 1, maxLength: 4000 }),
+  deliverable: PacketFields.deliverable,
+  brief: Type.Optional(PublicBriefSchema),
+  constraints: PacketFields.constraints,
+  sharedNotes: PacketFields.sharedNotes,
+  executionHints: PacketFields.executionHints,
+  contextRefs: PacketFields.contextRefs,
+  contextBudget: PacketFields.contextBudget,
+  completionPredicate: PacketFields.completionPredicate,
+  effectCeiling: PacketFields.effectCeiling,
+  waitMode: Type.Optional(WaitModeSchema),
+  timeoutMs: Type.Optional(Type.Integer({ minimum: 1 })),
+  returnMode: Type.Optional(ReturnModeSchema),
+  returnLabel: Type.Optional(Type.String({ minLength: 1, maxLength: 240 })),
+  returnScopeId: Type.Optional(Type.String({ minLength: 1, maxLength: 240 })),
+});
+
+const SubagentFanoutParamsSchema = Type.Object({
+  skillName: Type.String({ minLength: 1, maxLength: 200 }),
+  objective: PacketFields.objective,
+  deliverable: PacketFields.deliverable,
+  brief: Type.Optional(PublicBriefSchema),
+  constraints: PacketFields.constraints,
+  sharedNotes: PacketFields.sharedNotes,
+  executionHints: PacketFields.executionHints,
+  contextRefs: PacketFields.contextRefs,
+  contextBudget: PacketFields.contextBudget,
+  completionPredicate: PacketFields.completionPredicate,
+  effectCeiling: PacketFields.effectCeiling,
+  waitMode: Type.Optional(WaitModeSchema),
+  timeoutMs: Type.Optional(Type.Integer({ minimum: 1 })),
+  returnMode: Type.Optional(ReturnModeSchema),
+  returnLabel: Type.Optional(Type.String({ minLength: 1, maxLength: 240 })),
+  returnScopeId: Type.Optional(Type.String({ minLength: 1, maxLength: 240 })),
+  tasks: Type.Array(PublicTaskPacketSchema, { minItems: 1, maxItems: 12 }),
+});
+
+const DiagnosticSubagentRunParamsSchema = Type.Object({
   agentSpec: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
   envelope: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
   skillName: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
@@ -221,7 +287,7 @@ const SubagentRunParamsSchema = Type.Object({
   tasks: Type.Optional(Type.Array(TaskPacketSchema, { minItems: 1, maxItems: 12 })),
 });
 
-const SubagentFanoutParamsSchema = Type.Object({
+const DiagnosticSubagentFanoutParamsSchema = Type.Object({
   agentSpec: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
   envelope: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
   skillName: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
@@ -251,8 +317,11 @@ type SharedPacketInput = Static<typeof SharedPacketSchema>;
 type ExecutionShapeInput = Static<typeof ExecutionShapeSchema>;
 type CompletionPredicateInput = Static<typeof CompletionPredicateSchema>;
 type TaskPacketInput = Static<typeof TaskPacketSchema>;
+type PublicTaskPacketInput = Static<typeof PublicTaskPacketSchema>;
 type SubagentRunParams = Static<typeof SubagentRunParamsSchema>;
 type SubagentFanoutParams = Static<typeof SubagentFanoutParamsSchema>;
+type DiagnosticSubagentRunParams = Static<typeof DiagnosticSubagentRunParamsSchema>;
+type DiagnosticSubagentFanoutParams = Static<typeof DiagnosticSubagentFanoutParamsSchema>;
 
 function decodeToolParams<TSchemaValue extends TSchema>(
   schema: TSchemaValue,
@@ -295,9 +364,39 @@ function collectLegacyDelegationFieldPaths(value: unknown): string[] {
   return paths;
 }
 
+function collectForbiddenPublicDelegationFieldPaths(value: unknown): string[] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return [];
+  }
+  const record = value as Record<string, unknown>;
+  const paths: string[] = [];
+  for (const field of PUBLIC_DELEGATION_FORBIDDEN_FIELDS) {
+    if (Object.prototype.hasOwnProperty.call(record, field)) {
+      paths.push(field);
+    }
+  }
+  if (Array.isArray(record.tasks)) {
+    for (const [index, task] of record.tasks.entries()) {
+      if (!task || typeof task !== "object" || Array.isArray(task)) {
+        continue;
+      }
+      for (const field of PUBLIC_DELEGATION_FORBIDDEN_FIELDS) {
+        if (Object.prototype.hasOwnProperty.call(task, field)) {
+          paths.push(`tasks[${index}].${field}`);
+        }
+      }
+    }
+  }
+  return paths;
+}
+
 function legacyDelegationFieldMessage(paths: readonly string[]): string {
   const rendered = paths.join(", ");
-  return `Error: removed legacy delegation fields are not supported (${rendered}). Use agentSpec, envelope, skillName, consultKind, fallbackResultMode, and canonical packet fields.`;
+  return `Error: removed legacy delegation fields are not supported (${rendered}). Use skillName and canonical packet fields.`;
+}
+
+function forbiddenPublicDelegationFieldMessage(paths: readonly string[]): string {
+  return `Error: public subagent delegation does not support diagnostic fields (${paths.join(", ")}). Use skillName, objective/tasks, brief, and packet fields.`;
 }
 
 function hasSinglePacketInput(params: SharedPacketInput): boolean {
@@ -404,6 +503,55 @@ function buildPacket(packet: SharedPacketInput): DelegationPacket | undefined {
     contextBudget,
     completionPredicate: buildCompletionPredicate(packet.completionPredicate),
     effectCeiling,
+  };
+}
+
+function buildPublicPacket(input: {
+  skillName: string;
+  packet: Omit<
+    SubagentRunParams,
+    "waitMode" | "timeoutMs" | "returnMode" | "returnLabel" | "returnScopeId"
+  >;
+}): DelegationPacket | undefined {
+  return buildPacket({
+    objective: input.packet.objective,
+    deliverable: input.packet.deliverable,
+    consultBrief: input.packet.brief,
+    constraints: input.packet.constraints,
+    sharedNotes: input.packet.sharedNotes,
+    activeSkillName: input.skillName,
+    executionHints: input.packet.executionHints,
+    contextRefs: input.packet.contextRefs,
+    contextBudget: input.packet.contextBudget,
+    completionPredicate: input.packet.completionPredicate,
+    effectCeiling: input.packet.effectCeiling,
+  });
+}
+
+function buildPublicTask(input: {
+  skillName: string;
+  task: PublicTaskPacketInput;
+  brief?: AdvisorConsultBrief;
+}): DelegationTaskPacket {
+  const packet = buildPacket({
+    objective: input.task.objective,
+    deliverable: input.task.deliverable,
+    constraints: input.task.constraints,
+    sharedNotes: input.task.sharedNotes,
+    consultBrief: input.brief,
+    activeSkillName: input.skillName,
+    executionHints: input.task.executionHints,
+    contextRefs: input.task.contextRefs,
+    contextBudget: input.task.contextBudget,
+    completionPredicate: input.task.completionPredicate,
+    effectCeiling: input.task.effectCeiling,
+  });
+  if (!packet) {
+    throw new Error("parallel task objective is required");
+  }
+  return {
+    label: input.task.label,
+    ...packet,
   };
 }
 
@@ -540,6 +688,124 @@ function summarizeStartedRun(run: {
   return `- ${prefix}: ${parts.join(" ")}`;
 }
 
+const PUBLIC_RESULT_DETAIL_FORBIDDEN_KEYS: ReadonlySet<string> = new Set([
+  "agentSpec",
+  "envelope",
+  "skillName",
+  "consultKind",
+  "fallbackResultMode",
+  "executionShape",
+  "workerSessionId",
+  "modelRoute",
+  "lane",
+  "reviewLane",
+] as const);
+
+function sanitizePublicResultData(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((entry) => sanitizePublicResultData(entry));
+  }
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .filter(([key]) => !PUBLIC_RESULT_DETAIL_FORBIDDEN_KEYS.has(key))
+      .map(([key, entry]) => [key, sanitizePublicResultData(entry)]),
+  );
+}
+
+function projectSubagentOutcomeForPublicDetails(
+  outcome: SubagentOutcome,
+  delegate: string,
+): Record<string, unknown> {
+  if (!outcome.ok) {
+    return Object.fromEntries(
+      Object.entries({
+        ok: outcome.ok,
+        runId: outcome.runId,
+        delegate,
+        label: outcome.label,
+        status: outcome.status,
+        error: outcome.error,
+        metrics: outcome.metrics,
+        artifactRefs: outcome.artifactRefs,
+      }).filter(([, value]) => value !== undefined),
+    );
+  }
+  return Object.fromEntries(
+    Object.entries({
+      ok: outcome.ok,
+      runId: outcome.runId,
+      delegate,
+      label: outcome.label,
+      kind: outcome.kind,
+      status: outcome.status,
+      summary: outcome.summary,
+      data: sanitizePublicResultData(outcome.data),
+      metrics: outcome.metrics,
+      evidenceRefs: outcome.evidenceRefs,
+      patches: outcome.patches,
+      artifactRefs: outcome.artifactRefs,
+    }).filter(([, value]) => value !== undefined),
+  );
+}
+
+function projectRunRecordForPublicDetails(
+  run: SubagentStartResult["runs"][number],
+  delegate: string,
+): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries({
+      contractVersion: run.contractVersion,
+      runId: run.runId,
+      delegate,
+      executionPrimitive: run.executionPrimitive,
+      visibility: run.visibility,
+      isolationStrategy: run.isolationStrategy,
+      adoption: run.adoption,
+      lineage: run.lineage,
+      parentSessionId: run.parentSessionId,
+      status: run.status,
+      createdAt: run.createdAt,
+      updatedAt: run.updatedAt,
+      label: run.label,
+      parentSkill: run.parentSkill,
+      kind: run.kind,
+      summary: run.summary,
+      error: run.error,
+      artifactRefs: run.artifactRefs,
+      delivery: run.delivery,
+      totalTokens: run.totalTokens,
+      costUsd: run.costUsd,
+    }).filter(([, value]) => value !== undefined),
+  );
+}
+
+function projectRunResultForPublicDetails(
+  result: SubagentRunResult,
+  delegate: string,
+): Record<string, unknown> {
+  return {
+    ...result,
+    delegate,
+    outcomes: result.outcomes.map((outcome) =>
+      projectSubagentOutcomeForPublicDetails(outcome, delegate),
+    ),
+  };
+}
+
+function projectStartResultForPublicDetails(
+  result: SubagentStartResult,
+  delegate: string,
+): Record<string, unknown> {
+  return {
+    ...result,
+    delegate,
+    runs: result.runs.map((run) => projectRunRecordForPublicDetails(run, delegate)),
+  };
+}
+
 function deliverSubagentOutcome(input: {
   runtime: BrewvaToolOptions["runtime"];
   sessionId: string;
@@ -646,7 +912,7 @@ function resolveDelegationLabel(
 }
 
 function buildRunRequestFromParams(input: {
-  params: SubagentRunParams | SubagentFanoutParams;
+  params: DiagnosticSubagentRunParams | DiagnosticSubagentFanoutParams;
   mode: SubagentDelegationMode;
 }): { ok: true; request: SubagentRunRequest } | { ok: false; message: string } {
   const { params } = input;
@@ -740,11 +1006,68 @@ function buildRunRequestFromParams(input: {
   return { ok: true, request };
 }
 
+function buildPublicRunRequestFromParams(input: {
+  params: SubagentRunParams;
+}): { ok: true; request: SubagentRunRequest } | { ok: false; message: string } {
+  const skillName = input.params.skillName.trim();
+  const packet = buildPublicPacket({ skillName, packet: input.params });
+  if (!packet) {
+    return {
+      ok: false,
+      message: "Error: objective is required for subagent_run.",
+    };
+  }
+  return {
+    ok: true,
+    request: {
+      skillName,
+      mode: "single",
+      timeoutMs: input.params.timeoutMs,
+      packet,
+    },
+  };
+}
+
+function buildPublicFanoutRequestFromParams(input: {
+  params: SubagentFanoutParams;
+}): { ok: true; request: SubagentRunRequest } | { ok: false; message: string } {
+  const skillName = input.params.skillName.trim();
+  const sharedPacket = input.params.objective
+    ? buildPublicPacket({
+        skillName,
+        packet: {
+          ...input.params,
+          objective: input.params.objective,
+        },
+      })
+    : undefined;
+  try {
+    return {
+      ok: true,
+      request: {
+        skillName,
+        mode: "parallel",
+        timeoutMs: input.params.timeoutMs,
+        packet: sharedPacket,
+        tasks: input.params.tasks.map((task) =>
+          buildPublicTask({ skillName, task, brief: input.params.brief }),
+        ),
+      },
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      message: `Error: ${error instanceof Error ? error.message : String(error)}.`,
+    };
+  }
+}
+
 async function executeSubagentToolWithRequest(input: {
   options: BrewvaToolOptions;
   sessionId: string;
   delegate: string;
   mode: SubagentDelegationMode;
+  detailsMode: "public" | "diagnostic";
   waitMode: "completion" | "start";
   returnMode: SubagentReturnMode;
   request: SubagentRunRequest;
@@ -791,9 +1114,13 @@ async function executeSubagentToolWithRequest(input: {
         }),
       ),
     ];
+    const details =
+      input.detailsMode === "public"
+        ? projectStartResultForPublicDetails(started, input.delegate)
+        : started;
     return textResult(
       lines.join("\n"),
-      started.ok ? toolDetails(started) : withVerdict(toolDetails(started), "fail"),
+      started.ok ? toolDetails(details) : withVerdict(toolDetails(details), "fail"),
     );
   }
 
@@ -835,10 +1162,36 @@ async function executeSubagentToolWithRequest(input: {
     );
   }
   const details = {
-    ...toolDetails(result),
+    ...toolDetails(
+      input.detailsMode === "public"
+        ? projectRunResultForPublicDetails(result, input.delegate)
+        : result,
+    ),
     delivery,
   };
   return textResult(lines.join("\n"), failures.length > 0 ? withVerdict(details, "fail") : details);
+}
+
+function failIfPublicForbiddenFields(
+  params: unknown,
+): { ok: true } | { ok: false; message: string } {
+  const legacyFieldPaths = collectLegacyDelegationFieldPaths(params);
+  if (legacyFieldPaths.length > 0) {
+    return { ok: false, message: legacyDelegationFieldMessage(legacyFieldPaths) };
+  }
+  const forbiddenFieldPaths = collectForbiddenPublicDelegationFieldPaths(params);
+  if (forbiddenFieldPaths.length > 0) {
+    return { ok: false, message: forbiddenPublicDelegationFieldMessage(forbiddenFieldPaths) };
+  }
+  return { ok: true };
+}
+
+function failIfLegacyFields(params: unknown): { ok: true } | { ok: false; message: string } {
+  const legacyFieldPaths = collectLegacyDelegationFieldPaths(params);
+  if (legacyFieldPaths.length > 0) {
+    return { ok: false, message: legacyDelegationFieldMessage(legacyFieldPaths) };
+  }
+  return { ok: true };
 }
 
 export function createSubagentRunTool(options: BrewvaToolOptions): ToolDefinition {
@@ -848,15 +1201,13 @@ export function createSubagentRunTool(options: BrewvaToolOptions): ToolDefinitio
       name: "subagent_run",
       label: "Subagent Run",
       description:
-        "Delegate a bounded task to an isolated worker configuration and return structured results.",
+        "Delegate a bounded task by semantic skill intent and return structured results.",
       promptSnippet:
-        "Use isolated delegated runs for focused advisor consults, QA, or patch work without polluting the main context window.",
+        "Use delegated runs for focused advisor consults, QA, or patch work without exposing low-level worker configuration.",
       promptGuidelines: [
-        "Prefer canonical public agent specs advisor, qa, and patch-worker for the default delegated posture.",
-        "For advisor runs, declare consultKind explicitly and provide a consultBrief with the decision and success criteria.",
+        "Use skillName to express intent; Brewva resolves advisor, qa, or patch-worker internally.",
+        "For consult-style skills, provide brief with the decision and success criteria.",
         "Delegate when the task needs cross-3+-file investigation, diagnosis, a second-opinion review pass, or parallel slice analysis.",
-        "Use single for one delegated run and parallel to fan out multiple independent slices.",
-        "Use agentSpec for named reusable workers, envelope for runtime posture, and skillName for explicit semantic contracts.",
         "Keep objectives specific, pass only the context references the child needs, and avoid broad parent-context dumps.",
       ],
       parameters: Type.Object({
@@ -870,22 +1221,18 @@ export function createSubagentRunTool(options: BrewvaToolOptions): ToolDefinitio
           });
         }
 
-        const legacyFieldPaths = collectLegacyDelegationFieldPaths(params);
-        if (legacyFieldPaths.length > 0) {
-          return failTextResult(legacyDelegationFieldMessage(legacyFieldPaths), { ok: false });
+        const publicValidation = failIfPublicForbiddenFields(params);
+        if (!publicValidation.ok) {
+          return failTextResult(publicValidation.message, { ok: false });
         }
         const decodedParams = decodeToolParams(SubagentRunParamsSchema, params);
-        const mode = resolveMode(decodedParams.mode, decodedParams.tasks);
         const waitMode = resolveWaitMode(decodedParams.waitMode);
         const returnMode = resolveReturnMode(decodedParams.returnMode);
         const deliveryValidation = validateDeliveryConfiguration(runtime, returnMode);
         if (!deliveryValidation.ok) {
           return failTextResult(deliveryValidation.message, { ok: false });
         }
-        const builtRequest = buildRunRequestFromParams({
-          params: decodedParams,
-          mode,
-        });
+        const builtRequest = buildPublicRunRequestFromParams({ params: decodedParams });
         if (!builtRequest.ok) {
           return failTextResult(builtRequest.message, { ok: false });
         }
@@ -894,7 +1241,8 @@ export function createSubagentRunTool(options: BrewvaToolOptions): ToolDefinitio
           options: { ...options, runtime },
           sessionId,
           delegate: resolveDelegationLabel(builtRequest.request),
-          mode,
+          mode: "single",
+          detailsMode: "public",
           waitMode,
           returnMode,
           request: builtRequest.request,
@@ -921,15 +1269,14 @@ export function createSubagentFanoutTool(options: BrewvaToolOptions): ToolDefini
       name: "subagent_fanout",
       label: "Subagent Fanout",
       description:
-        "Launch multiple isolated delegated runs under one worker configuration for independent slices of work.",
+        "Launch multiple delegated runs under one semantic skill intent for independent slices of work.",
       promptSnippet:
-        "Use this for explicit fan-out when several repository slices or internal review lanes can run independently under the same delegated setup.",
+        "Use this for explicit fan-out when several repository slices can run independently under the same skill intent.",
       promptGuidelines: [
-        "Prefer canonical public agent specs advisor, qa, and patch-worker unless a narrower internal worker is explicitly required.",
-        "For advisor fan-out, keep consultKind explicit and share one consultBrief across the delegated slices unless a lane-specific brief is required.",
+        "Use skillName to express intent; Brewva resolves advisor, qa, or patch-worker internally.",
+        "For consult-style fan-out, provide one shared brief unless the parent can safely complete without advisory framing.",
         "Use this when tasks are independent and a shared packet plus per-task objectives is clearer than one large delegated run.",
         "Keep each task label and objective specific so the parent can inspect outcomes separately.",
-        "Prefer read-only envelopes unless the workflow is explicitly ready to inspect and merge isolated patch results.",
       ],
       parameters: Type.Object({
         ...SubagentFanoutParamsSchema.properties,
@@ -942,9 +1289,9 @@ export function createSubagentFanoutTool(options: BrewvaToolOptions): ToolDefini
           });
         }
 
-        const legacyFieldPaths = collectLegacyDelegationFieldPaths(params);
-        if (legacyFieldPaths.length > 0) {
-          return failTextResult(legacyDelegationFieldMessage(legacyFieldPaths), { ok: false });
+        const publicValidation = failIfPublicForbiddenFields(params);
+        if (!publicValidation.ok) {
+          return failTextResult(publicValidation.message, { ok: false });
         }
         const decodedParams = decodeToolParams(SubagentFanoutParamsSchema, params);
         const waitMode = resolveWaitMode(decodedParams.waitMode);
@@ -953,10 +1300,7 @@ export function createSubagentFanoutTool(options: BrewvaToolOptions): ToolDefini
         if (!deliveryValidation.ok) {
           return failTextResult(deliveryValidation.message, { ok: false });
         }
-        const builtRequest = buildRunRequestFromParams({
-          params: { ...decodedParams, mode: "parallel" },
-          mode: "parallel",
-        });
+        const builtRequest = buildPublicFanoutRequestFromParams({ params: decodedParams });
         if (!builtRequest.ok) {
           return failTextResult(builtRequest.message, { ok: false });
         }
@@ -966,12 +1310,84 @@ export function createSubagentFanoutTool(options: BrewvaToolOptions): ToolDefini
           sessionId,
           delegate: resolveDelegationLabel(builtRequest.request),
           mode: "parallel",
+          detailsMode: "public",
           waitMode,
           returnMode,
           request: builtRequest.request,
           adapter,
           completionVerb: "subagent_fanout",
           startVerb: "subagent_fanout started",
+          delivery: buildDeliveryRequest(returnMode, decodedParams),
+        });
+      },
+    },
+    {
+      requiredCapabilities: ["internal.appendGuardedSupplementalBlocks"],
+    },
+  );
+}
+
+export function createSubagentRunDiagnosticTool(options: BrewvaToolOptions): ToolDefinition {
+  const { runtime, define } = createRuntimeBoundBrewvaToolFactory(
+    options.runtime,
+    "subagent_run_diagnostic",
+  );
+  return define(
+    {
+      name: "subagent_run_diagnostic",
+      label: "Subagent Run Diagnostic",
+      description:
+        "Maintainer-only delegated run with explicit low-level target, envelope, result, and model fields.",
+      promptSnippet:
+        "Use only for maintainer diagnostics when the public skillName-based delegation interface cannot express the routing probe.",
+      promptGuidelines: [
+        "Prefer public subagent_run for ordinary work.",
+        "Use explicit agentSpec, envelope, consultKind, fallbackResultMode, and executionShape only to diagnose routing or envelope behavior.",
+        "Do not present diagnostic lane invocation as normal workflow guidance.",
+      ],
+      parameters: Type.Object({
+        ...DiagnosticSubagentRunParamsSchema.properties,
+      }),
+      async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+        const adapter = runtime.orchestration?.subagents;
+        if (!adapter) {
+          return failTextResult("Subagent orchestration is unavailable in this session.", {
+            ok: false,
+          });
+        }
+
+        const legacyValidation = failIfLegacyFields(params);
+        if (!legacyValidation.ok) {
+          return failTextResult(legacyValidation.message, { ok: false });
+        }
+        const decodedParams = decodeToolParams(DiagnosticSubagentRunParamsSchema, params);
+        const mode = resolveMode(decodedParams.mode, decodedParams.tasks);
+        const waitMode = resolveWaitMode(decodedParams.waitMode);
+        const returnMode = resolveReturnMode(decodedParams.returnMode);
+        const deliveryValidation = validateDeliveryConfiguration(runtime, returnMode);
+        if (!deliveryValidation.ok) {
+          return failTextResult(deliveryValidation.message, { ok: false });
+        }
+        const builtRequest = buildRunRequestFromParams({
+          params: decodedParams,
+          mode,
+        });
+        if (!builtRequest.ok) {
+          return failTextResult(builtRequest.message, { ok: false });
+        }
+        const sessionId = getSessionId(ctx);
+        return executeSubagentToolWithRequest({
+          options: { ...options, runtime },
+          sessionId,
+          delegate: resolveDelegationLabel(builtRequest.request),
+          mode,
+          detailsMode: "diagnostic",
+          waitMode,
+          returnMode,
+          request: builtRequest.request,
+          adapter,
+          completionVerb: "subagent_run_diagnostic",
+          startVerb: "subagent_run_diagnostic started",
           delivery: buildDeliveryRequest(returnMode, decodedParams),
         });
       },

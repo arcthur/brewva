@@ -1,7 +1,8 @@
 import { existsSync, readdirSync } from "node:fs";
 import { readFile } from "node:fs/promises";
+import { homedir } from "node:os";
 import { basename, resolve } from "node:path";
-import { parseJsonc, type ManagedToolMode } from "@brewva/brewva-runtime";
+import type { DelegationIsolationStrategy, ManagedToolMode } from "@brewva/brewva-runtime";
 import { parseMarkdownFrontmatter } from "@brewva/brewva-runtime/internal";
 import type {
   AdvisorConsultKind,
@@ -79,6 +80,16 @@ export function asContextProfile(value: unknown): HostedContextProfile | undefin
   return value === "minimal" || value === "standard" || value === "full" ? value : undefined;
 }
 
+export function asIsolationStrategy(value: unknown): DelegationIsolationStrategy | undefined {
+  return value === "shared" ||
+    value === "ephemeral" ||
+    value === "snapshot" ||
+    value === "worktree" ||
+    value === "container"
+    ? value
+    : undefined;
+}
+
 export function asContextBudget(value: unknown): SubagentContextBudget | undefined {
   if (!isRecord(value)) {
     return undefined;
@@ -150,7 +161,7 @@ function parseHostedWorkspaceAgentMarkdownConfig(input: {
 
 async function readHostedWorkspaceConfigDirectory(input: {
   directory: string;
-  extension: ".json" | ".md";
+  extension: ".md";
   source: HostedWorkspaceSubagentConfigSource;
 }): Promise<HostedWorkspaceSubagentConfigFile[]> {
   if (!existsSync(input.directory)) {
@@ -172,13 +183,10 @@ async function readHostedWorkspaceConfigDirectory(input: {
     }
     let parsed: unknown;
     try {
-      parsed =
-        input.extension === ".json"
-          ? parseJsonc(raw)
-          : parseHostedWorkspaceAgentMarkdownConfig({
-              fileName: entry.name,
-              raw,
-            });
+      parsed = parseHostedWorkspaceAgentMarkdownConfig({
+        fileName: entry.name,
+        raw,
+      });
     } catch (error) {
       throw new Error(
         `invalid_subagent_config:${entry.name}:${error instanceof Error ? error.message : String(error)}`,
@@ -191,7 +199,7 @@ async function readHostedWorkspaceConfigDirectory(input: {
     let kind: HostedWorkspaceSubagentConfigKind;
     try {
       kind = classifyHostedWorkspaceSubagentConfig(parsed, {
-        defaultKind: input.extension === ".md" ? "agentSpec" : undefined,
+        defaultKind: "agentSpec",
       });
     } catch (error) {
       throw new Error(
@@ -211,22 +219,52 @@ async function readHostedWorkspaceConfigDirectory(input: {
   return files;
 }
 
+function rejectUnsupportedWorkspaceConfigFiles(input: {
+  directory: string;
+  extension: ".json" | ".md";
+  reason: string;
+}): void {
+  if (!existsSync(input.directory)) {
+    return;
+  }
+  const unsupported = readdirSync(input.directory, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && entry.name.endsWith(input.extension))
+    .map((entry) => entry.name)
+    .toSorted((left, right) => left.localeCompare(right));
+  if (unsupported.length === 0) {
+    return;
+  }
+  throw new Error(`invalid_subagent_config:[${unsupported.join(",")}]:${input.reason}`);
+}
+
 export async function readHostedWorkspaceSubagentConfigFiles(
   workspaceRoot: string,
 ): Promise<HostedWorkspaceSubagentConfigFile[]> {
+  rejectUnsupportedWorkspaceConfigFiles({
+    directory: resolve(workspaceRoot, ".brewva", "subagents"),
+    extension: ".json",
+    reason: "JSON subagent configs are no longer supported; use .brewva/subagents/*.md",
+  });
+  rejectUnsupportedWorkspaceConfigFiles({
+    directory: resolve(workspaceRoot, ".brewva", "agents"),
+    extension: ".md",
+    reason:
+      "legacy .brewva/agents subagent configs are no longer supported; use .brewva/subagents/*.md",
+  });
+  rejectUnsupportedWorkspaceConfigFiles({
+    directory: resolve(workspaceRoot, ".config", "brewva", "agents"),
+    extension: ".md",
+    reason:
+      "legacy .config/brewva/agents subagent configs are no longer supported; use .brewva/subagents/*.md",
+  });
   const files = await Promise.all([
     readHostedWorkspaceConfigDirectory({
       directory: resolve(workspaceRoot, ".brewva", "subagents"),
-      extension: ".json",
-      source: "json",
-    }),
-    readHostedWorkspaceConfigDirectory({
-      directory: resolve(workspaceRoot, ".brewva", "agents"),
       extension: ".md",
       source: "markdown",
     }),
     readHostedWorkspaceConfigDirectory({
-      directory: resolve(workspaceRoot, ".config", "brewva", "agents"),
+      directory: resolve(homedir(), ".brewva", "subagents"),
       extension: ".md",
       source: "markdown",
     }),

@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { HostedDelegationStore } from "@brewva/brewva-gateway";
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { BrewvaRuntime, CURRENT_DELEGATION_CONTRACT_VERSION } from "@brewva/brewva-runtime";
 import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import { createWorkflowStatusTool } from "@brewva/brewva-tools";
 import { buildCanonicalReviewReport } from "../../helpers/semantic-artifacts.js";
@@ -400,6 +400,10 @@ describe("workflow_status contract", () => {
       sessionId,
       type: "subagent_completed",
       payload: {
+        contractVersion: CURRENT_DELEGATION_CONTRACT_VERSION,
+        executionPrimitive: "named",
+        visibility: "public",
+        isolationStrategy: "shared",
         runId: "delegation-handoff-1",
         delegate: "advisor",
         status: "completed",
@@ -410,6 +414,12 @@ describe("workflow_status contract", () => {
         deliveryHandoffState: "pending_parent_turn",
         deliveryReadyAt: 2,
         deliveryUpdatedAt: 2,
+        adoption: {
+          contractId: "delegation.consult.review",
+          decision: "require_human",
+          reason: "consult_adoption_requires_parent_judgment",
+          requiredEvidence: ["consult_evidence"],
+        },
       },
     });
 

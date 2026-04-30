@@ -555,6 +555,8 @@ export const TOOL_ACTION_POLICY_BY_NAME: Record<string, ToolActionPolicy> = {
   worker_results_apply: workspacePatch(),
   subagent_run: delegation(),
   subagent_fanout: delegation(),
+  subagent_fork: delegation(),
+  subagent_run_diagnostic: delegation("high"),
   subagent_status: delegation("low"),
   subagent_cancel: delegation(),
   task_view_state: runtimeObserve(),

@@ -1,10 +1,5 @@
+import { loadHostedDelegationCatalog, type HostedAgentSpec } from "./subagents/catalog.js";
 import {
-  loadHostedDelegationCatalog,
-  type HostedAgentSpec,
-  type HostedExecutionEnvelope,
-} from "./subagents/catalog.js";
-import {
-  asBuiltinToolArray,
   asString,
   asStringArray,
   readHostedWorkspaceSubagentConfigFiles,
@@ -20,13 +15,9 @@ export interface AuthoredOverlaySummary {
   name?: string;
   extends?: string;
   description?: string;
-  envelope?: string;
-  skillName?: string;
-  fallbackResultMode?: string;
-  boundary?: string;
-  model?: string;
-  builtinToolNames?: string[];
-  managedToolNames?: string[];
+  modelPreset?: string;
+  reasoningEffort?: string;
+  tools?: string[];
   hasInstructionsMarkdown: boolean;
 }
 
@@ -35,8 +26,7 @@ export interface HostedDelegationCatalogInspection {
   status: "valid" | "invalid";
   error?: string;
   authoredFiles: AuthoredOverlaySummary[];
-  workspaceEnvelopes: HostedExecutionEnvelope[];
-  workspaceAgentSpecs: HostedAgentSpec[];
+  customSpecialists: HostedAgentSpec[];
 }
 
 function summarizeAuthoredOverlay(
@@ -50,13 +40,9 @@ function summarizeAuthoredOverlay(
     name: asString(entry.parsed.name),
     extends: asString(entry.parsed.extends),
     description: asString(entry.parsed.description),
-    envelope: asString(entry.parsed.envelope),
-    skillName: asString(entry.parsed.skillName),
-    fallbackResultMode: asString(entry.parsed.fallbackResultMode),
-    boundary: asString(entry.parsed.boundary),
-    model: asString(entry.parsed.model),
-    builtinToolNames: asBuiltinToolArray(entry.parsed.builtinToolNames),
-    managedToolNames: asStringArray(entry.parsed.managedToolNames),
+    modelPreset: asString(entry.parsed.modelPreset),
+    reasoningEffort: asString(entry.parsed.reasoningEffort),
+    tools: asStringArray(entry.parsed.tools),
     hasInstructionsMarkdown: typeof asString(entry.parsed.instructionsMarkdown) === "string",
   };
 }
@@ -74,18 +60,13 @@ export async function inspectHostedDelegationCatalog(
       status: "invalid",
       error: toErrorMessage(error),
       authoredFiles: [],
-      workspaceEnvelopes: [],
-      workspaceAgentSpecs: [],
+      customSpecialists: [],
     };
   }
 
   try {
     const catalog = await loadHostedDelegationCatalog(workspaceRoot);
-    const workspaceEnvelopes = [...catalog.workspaceEnvelopeNames]
-      .map((name) => catalog.envelopes.get(name))
-      .filter((entry): entry is HostedExecutionEnvelope => Boolean(entry))
-      .toSorted((left, right) => left.name.localeCompare(right.name));
-    const workspaceAgentSpecs = [...catalog.workspaceAgentSpecNames]
+    const customSpecialists = [...catalog.workspaceAgentSpecNames]
       .map((name) => catalog.agentSpecs.get(name))
       .filter((entry): entry is HostedAgentSpec => Boolean(entry))
       .toSorted((left, right) => left.name.localeCompare(right.name));
@@ -93,8 +74,7 @@ export async function inspectHostedDelegationCatalog(
       workspaceRoot,
       status: "valid",
       authoredFiles,
-      workspaceEnvelopes,
-      workspaceAgentSpecs,
+      customSpecialists,
     };
   } catch (error) {
     return {
@@ -102,8 +82,7 @@ export async function inspectHostedDelegationCatalog(
       status: "invalid",
       error: toErrorMessage(error),
       authoredFiles,
-      workspaceEnvelopes: [],
-      workspaceAgentSpecs: [],
+      customSpecialists: [],
     };
   }
 }

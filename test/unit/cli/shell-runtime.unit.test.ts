@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   BrewvaRuntime,
+  CURRENT_DELEGATION_CONTRACT_VERSION,
   asBrewvaSessionId,
   asBrewvaToolCallId,
   asBrewvaToolName,
@@ -3994,8 +3995,17 @@ describe("shell runtime", () => {
         questions: [],
         taskRuns: [
           {
+            contractVersion: CURRENT_DELEGATION_CONTRACT_VERSION,
             runId: "run-1",
             delegate: "worker-1",
+            executionPrimitive: "named",
+            visibility: "public",
+            isolationStrategy: "shared",
+            adoption: {
+              contractId: "cli-overlay-test",
+              decision: "require_human",
+              reason: "Fixture record has not reached parent adoption.",
+            },
             parentSessionId: asBrewvaSessionId("session-1"),
             status: "completed",
             createdAt: Date.now(),

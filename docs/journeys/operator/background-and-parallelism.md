@@ -2,8 +2,8 @@
 
 ## Audience
 
-- operators using `subagent_run`, `subagent_fanout`, `subagent_status`,
-  `subagent_cancel`, and `worker_results_*`
+- operators using `subagent_run`, `subagent_fanout`, `subagent_fork`,
+  `subagent_status`, `subagent_cancel`, and `worker_results_*`
 - developers reviewing delegated workers, parallel-budget policy, and
   merge/apply flows
 
@@ -11,6 +11,7 @@
 
 - `subagent_run`
 - `subagent_fanout`
+- `subagent_fork`
 - `subagent_status`
 - `subagent_cancel`
 - `worker_results_merge`
@@ -66,10 +67,9 @@ flowchart TD
 1. The parent session acquires parallel budget through the runtime slot gate.
 2. Child work can only start through explicit `subagent_*` tools; there is no
    hidden auto-spawn path.
-3. `advisor` consultation returns typed `consult` results keyed by an explicit
-   `consultKind` and required `consultBrief`; those results may be used through
-   same-turn supplemental injection, but replay-visible delivery state is still
-   tracked separately through the delegation handoff record.
+3. Public `subagent_run` and `subagent_fanout` take `skillName` plus packet
+   fields. The resolver derives advisor consult kind, QA posture, or
+   patch-worker posture from that intent.
 4. Executable `qa` runs may use isolated execution and artifact capture, but
    they do not produce `WorkerResult` and never enter merge/apply posture.
 5. `PatchSet`-producing delegation runs inside an isolated snapshot workspace
@@ -81,21 +81,25 @@ flowchart TD
 7. Pending patch worker outcomes flow into `workflow_status` until the parent
    resolves the adoption step; QA outcomes surface as delegation outcomes and
    `workflow.qa`, not as pending patch adoption work.
+8. `subagent_fork` records a fork primitive with parent lineage and context
+   policy. It is not a catalog specialist and cannot expand authority beyond
+   the parent ceiling.
 
 ## Execution Semantics
 
-- delegated workers resolve through `agentSpec` and `ExecutionEnvelope`, not
-  through arbitrary prompt text
+- public delegated workers resolve through `skillName` intent, not through
+  public `agentSpec` or envelope fields
 - the stable public delegated surface is `advisor`, `qa`, and `patch-worker`
 - `advisor` is the only public read-only consultation identity and runs under
   the minimal-context `readonly-advisor` envelope
-- `consultKind` selects `investigate`, `diagnose`, `design`, or `review`;
-  `skillName` does not implicitly select a consult posture
+- consult kind is derived by the resolver for public skills; diagnostic tools
+  may still select it explicitly for maintainer probes
 - when `skillName` is present, the child prompt is assembled from authored
   specialist instructions, delegated skill body, task packet, context
   references, and output contracts
-- internal review lanes remain explicit parent-orchestrated fan-out and run as
-  `consult/review` delegates under the advisor envelope family
+- internal review lanes remain parent-orchestrated fan-out behind the review
+  ensemble and run as `consult/review` delegates under the advisor envelope
+  family
 - same-turn `returnMode=supplemental` and durable handoff state are separate:
   - same-turn supplemental append affects the current parent-turn hidden tail
   - detached delivery still remains durable control-plane state with

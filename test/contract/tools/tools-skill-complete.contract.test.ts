@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import {
   BrewvaRuntime,
+  CURRENT_DELEGATION_CONTRACT_VERSION,
   DEFAULT_BREWVA_CONFIG,
   asBrewvaSessionId,
   type DelegationRunRecord,
@@ -88,6 +89,20 @@ function fakeContext(sessionId: string): ToolExecutionContext {
       },
     },
   } as unknown as ToolExecutionContext;
+}
+
+function reviewLaneContractFields() {
+  return {
+    contractVersion: CURRENT_DELEGATION_CONTRACT_VERSION,
+    executionPrimitive: "named" as const,
+    visibility: "internal" as const,
+    isolationStrategy: "shared" as const,
+    adoption: {
+      contractId: "review-ensemble",
+      decision: "require_human" as const,
+      reason: "Review lane outcome requires ensemble synthesis.",
+    },
+  };
 }
 
 function createIsolatedRuntime(name: string): BrewvaRuntime {
@@ -1402,6 +1417,7 @@ The WAL boundary must keep replay ordering deterministic.
 
     const reviewRuns: DelegationRunRecord[] = [
       {
+        ...reviewLaneContractFields(),
         runId: "lane-correctness",
         delegate: "review-correctness",
         agentSpec: "review-correctness",
@@ -1424,6 +1440,7 @@ The WAL boundary must keep replay ordering deterministic.
         },
       },
       {
+        ...reviewLaneContractFields(),
         runId: "lane-boundaries",
         delegate: "review-boundaries",
         agentSpec: "review-boundaries",
@@ -1446,6 +1463,7 @@ The WAL boundary must keep replay ordering deterministic.
         },
       },
       {
+        ...reviewLaneContractFields(),
         runId: "lane-operability",
         delegate: "review-operability",
         agentSpec: "review-operability",
@@ -1957,6 +1975,7 @@ The WAL boundary must keep replay ordering deterministic.
     const activationTimestamp = Date.now();
     const reviewRuns: DelegationRunRecord[] = [
       {
+        ...reviewLaneContractFields(),
         runId: "lane-correctness-derived",
         delegate: "review-correctness",
         agentSpec: "review-correctness",
@@ -1979,6 +1998,7 @@ The WAL boundary must keep replay ordering deterministic.
         },
       },
       {
+        ...reviewLaneContractFields(),
         runId: "lane-boundaries-derived",
         delegate: "review-boundaries",
         agentSpec: "review-boundaries",
@@ -2001,6 +2021,7 @@ The WAL boundary must keep replay ordering deterministic.
         },
       },
       {
+        ...reviewLaneContractFields(),
         runId: "lane-operability-derived",
         delegate: "review-operability",
         agentSpec: "review-operability",
@@ -2023,6 +2044,7 @@ The WAL boundary must keep replay ordering deterministic.
         },
       },
       {
+        ...reviewLaneContractFields(),
         runId: "lane-compatibility-derived",
         delegate: "review-compatibility",
         agentSpec: "review-compatibility",
@@ -2357,28 +2379,30 @@ The WAL boundary must keep replay ordering deterministic.
       "review-performance",
     ] as const;
     const activationTimestamp = Date.now();
-    const reviewRuns: DelegationRunRecord[] = allReviewLanes.map((lane, index) => ({
-      runId: `${lane}-stale-verification`,
-      delegate: lane,
-      agentSpec: lane,
-      parentSessionId: asBrewvaSessionId(sessionId),
-      status: "completed",
-      createdAt: activationTimestamp + index * 2,
-      updatedAt: activationTimestamp + index * 2 + 1,
-      label: lane,
-      parentSkill: "review-contract",
-      kind: "consult",
-      consultKind: "review",
-      summary: `${lane} cleared the change.`,
-      resultData: {
-        kind: "consult",
-        consultKind: "review",
-        conclusion: `${lane} cleared the current scope.`,
-        lane,
-        disposition: "clear",
-        primaryClaim: `${lane} cleared the current scope.`,
-      },
-    }));
+    const reviewRuns: DelegationRunRecord[] = allReviewLanes.map((lane, index) =>
+      Object.assign(reviewLaneContractFields(), {
+        runId: `${lane}-stale-verification`,
+        delegate: lane,
+        agentSpec: lane,
+        parentSessionId: asBrewvaSessionId(sessionId),
+        status: "completed" as const,
+        createdAt: activationTimestamp + index * 2,
+        updatedAt: activationTimestamp + index * 2 + 1,
+        label: lane,
+        parentSkill: "review-contract",
+        kind: "consult" as const,
+        consultKind: "review" as const,
+        summary: `${lane} cleared the change.`,
+        resultData: {
+          kind: "consult",
+          consultKind: "review",
+          conclusion: `${lane} cleared the current scope.`,
+          lane,
+          disposition: "clear",
+          primaryClaim: `${lane} cleared the current scope.`,
+        },
+      }),
+    );
     const completeTool = createSkillCompleteTool({
       runtime: Object.assign(runtime, {
         delegation: {
@@ -2582,28 +2606,30 @@ The WAL boundary must keep replay ordering deterministic.
       "review-performance",
     ] as const;
     const activationTimestamp = Date.now();
-    const reviewRuns: DelegationRunRecord[] = allReviewLanes.map((lane, index) => ({
-      runId: `${lane}-missing-verification-receipt`,
-      delegate: lane,
-      agentSpec: lane,
-      parentSessionId: asBrewvaSessionId(sessionId),
-      status: "completed",
-      createdAt: activationTimestamp + index * 2,
-      updatedAt: activationTimestamp + index * 2 + 1,
-      label: lane,
-      parentSkill: "review-contract",
-      kind: "consult",
-      consultKind: "review",
-      summary: `${lane} cleared the current scope.`,
-      resultData: {
-        kind: "consult",
-        consultKind: "review",
-        conclusion: `${lane} cleared the current scope.`,
-        lane,
-        disposition: "clear",
-        primaryClaim: `${lane} cleared the current scope.`,
-      },
-    }));
+    const reviewRuns: DelegationRunRecord[] = allReviewLanes.map((lane, index) =>
+      Object.assign(reviewLaneContractFields(), {
+        runId: `${lane}-missing-verification-receipt`,
+        delegate: lane,
+        agentSpec: lane,
+        parentSessionId: asBrewvaSessionId(sessionId),
+        status: "completed" as const,
+        createdAt: activationTimestamp + index * 2,
+        updatedAt: activationTimestamp + index * 2 + 1,
+        label: lane,
+        parentSkill: "review-contract",
+        kind: "consult" as const,
+        consultKind: "review" as const,
+        summary: `${lane} cleared the current scope.`,
+        resultData: {
+          kind: "consult",
+          consultKind: "review",
+          conclusion: `${lane} cleared the current scope.`,
+          lane,
+          disposition: "clear",
+          primaryClaim: `${lane} cleared the current scope.`,
+        },
+      }),
+    );
 
     const completeTool = createSkillCompleteTool({
       runtime: Object.assign(runtime, {
@@ -3002,28 +3028,30 @@ The WAL boundary must keep replay ordering deterministic.
       "review-performance",
     ] as const;
     const activationTimestamp = Date.now();
-    const reviewRuns: DelegationRunRecord[] = allReviewLanes.map((lane, index) => ({
-      runId: `${lane}-stale-plan`,
-      delegate: lane,
-      agentSpec: lane,
-      parentSessionId: asBrewvaSessionId(sessionId),
-      status: "completed",
-      createdAt: activationTimestamp + index * 2,
-      updatedAt: activationTimestamp + index * 2 + 1,
-      label: lane,
-      parentSkill: "review-contract",
-      kind: "consult",
-      consultKind: "review",
-      summary: `${lane} cleared the current scope.`,
-      resultData: {
-        kind: "consult",
-        consultKind: "review",
-        conclusion: `${lane} cleared the current scope.`,
-        lane,
-        disposition: "clear",
-        primaryClaim: `${lane} cleared the current scope.`,
-      },
-    }));
+    const reviewRuns: DelegationRunRecord[] = allReviewLanes.map((lane, index) =>
+      Object.assign(reviewLaneContractFields(), {
+        runId: `${lane}-stale-plan`,
+        delegate: lane,
+        agentSpec: lane,
+        parentSessionId: asBrewvaSessionId(sessionId),
+        status: "completed" as const,
+        createdAt: activationTimestamp + index * 2,
+        updatedAt: activationTimestamp + index * 2 + 1,
+        label: lane,
+        parentSkill: "review-contract",
+        kind: "consult" as const,
+        consultKind: "review" as const,
+        summary: `${lane} cleared the current scope.`,
+        resultData: {
+          kind: "consult",
+          consultKind: "review",
+          conclusion: `${lane} cleared the current scope.`,
+          lane,
+          disposition: "clear",
+          primaryClaim: `${lane} cleared the current scope.`,
+        },
+      }),
+    );
     const completeTool = createSkillCompleteTool({
       runtime: Object.assign(runtime, {
         delegation: {

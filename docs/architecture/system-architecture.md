@@ -155,7 +155,8 @@ Kernel boundary reminder:
 - `Control Plane`
   - heartbeat triggers
   - scheduling triggers
-  - subagent orchestration
+  - subagent orchestration through intent-first public tools, diagnostic
+    control-plane tools, and fork execution primitives
   - hosted TaskSpec-first bootstrap and routing-posture guidance
   - hosted turn transitions and bounded recovery posture
   - replayable delegation outcome handoff

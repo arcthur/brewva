@@ -31,9 +31,9 @@ function createCommandApiMock(): {
 describe("agent-overlays interactive command runtime plugin", () => {
   test("renders validation state and authored overlay details", async () => {
     const workspace = createTestWorkspace("agent-overlays-command-runtime-plugin");
-    mkdirSync(join(workspace, ".brewva", "agents"), { recursive: true });
+    mkdirSync(join(workspace, ".brewva", "subagents"), { recursive: true });
     writeFileSync(
-      join(workspace, ".brewva", "agents", "reviewer.md"),
+      join(workspace, ".brewva", "subagents", "reviewer.md"),
       `---
 name: reviewer
 extends: advisor
@@ -68,10 +68,10 @@ Keep findings short and concrete.
     await command.handler("validate", ctx);
 
     const rendered = notifications.at(-1)?.message ?? "";
-    expect(rendered).toContain("Agent overlay validation passed.");
-    expect(rendered).toContain("Agent overlays — valid");
+    expect(rendered).toContain("Custom subagent validation passed.");
+    expect(rendered).toContain("Custom subagents — valid");
     expect(rendered).toContain("reviewer");
-    expect(rendered).toContain(".brewva/agents/reviewer.md");
+    expect(rendered).toContain(".brewva/subagents/reviewer.md");
     expect(notifications.at(-1)?.level).toBe("info");
   });
 });

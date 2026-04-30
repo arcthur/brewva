@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { asBrewvaSessionId } from "@brewva/brewva-runtime";
+import { CURRENT_DELEGATION_CONTRACT_VERSION, asBrewvaSessionId } from "@brewva/brewva-runtime";
 import type { ReviewLaneName, SubagentOutcome } from "@brewva/brewva-tools";
 import {
   ALL_REVIEW_LANES,
@@ -56,6 +56,20 @@ function buildReviewOutcome(
       durationMs: 5,
     },
     evidenceRefs: [],
+  };
+}
+
+function reviewLaneContractFields() {
+  return {
+    contractVersion: CURRENT_DELEGATION_CONTRACT_VERSION,
+    executionPrimitive: "named" as const,
+    visibility: "internal" as const,
+    isolationStrategy: "shared" as const,
+    adoption: {
+      contractId: "review-ensemble",
+      decision: "require_human" as const,
+      reason: "Review lane outcome requires ensemble synthesis.",
+    },
   };
 }
 
@@ -250,6 +264,7 @@ describe("review ensemble protocol", () => {
   test("materializes durable review lane runs into review outcomes", () => {
     const outcomes = materializeReviewLaneOutcomes([
       {
+        ...reviewLaneContractFields(),
         runId: "lane-clear",
         delegate: "review-boundaries",
         agentSpec: "review-boundaries",
@@ -272,6 +287,7 @@ describe("review ensemble protocol", () => {
         },
       },
       {
+        ...reviewLaneContractFields(),
         runId: "lane-failed",
         delegate: "review-concurrency",
         agentSpec: "review-concurrency",

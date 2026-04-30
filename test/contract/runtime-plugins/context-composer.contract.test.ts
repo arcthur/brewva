@@ -4,7 +4,11 @@ import {
   composeContextBlocks,
   type ContextComposerInput,
 } from "@brewva/brewva-gateway/runtime-plugins";
-import { CONTEXT_SOURCES, asBrewvaSessionId } from "@brewva/brewva-runtime";
+import {
+  CONTEXT_SOURCES,
+  CURRENT_DELEGATION_CONTRACT_VERSION,
+  asBrewvaSessionId,
+} from "@brewva/brewva-runtime";
 import type { ContextInjectionEntry } from "@brewva/brewva-runtime/internal";
 
 function resolveBudgetClass(source: string): "core" | "working" | "recall" {
@@ -47,6 +51,20 @@ function makeEntry(
   };
 }
 
+function delegationContractFields() {
+  return {
+    contractVersion: CURRENT_DELEGATION_CONTRACT_VERSION,
+    executionPrimitive: "named" as const,
+    visibility: "public" as const,
+    isolationStrategy: "shared" as const,
+    adoption: {
+      contractId: "context-composer-test",
+      decision: "require_human" as const,
+      reason: "Fixture record has not reached parent adoption.",
+    },
+  };
+}
+
 function createComposerRuntime(
   tapePressure: "low" | "medium" | "high",
   entriesSinceAnchor: number,
@@ -79,29 +97,33 @@ function createComposerRuntime(
         query: { statuses?: string[]; limit?: number } | undefined,
       ) => {
         const records = [
-          ...(options.pendingDelegations ?? []).map((run, index) => ({
-            runId: run.runId,
-            delegate: run.delegate,
-            parentSessionId: asBrewvaSessionId("compose-session"),
-            status: run.status,
-            createdAt: index + 1,
-            updatedAt: index + 1,
-          })),
-          ...(options.pendingDelegationOutcomes ?? []).map((run, index) => ({
-            runId: run.runId,
-            delegate: run.delegate,
-            parentSessionId: asBrewvaSessionId("compose-session"),
-            status: run.status,
-            createdAt: index + 11,
-            updatedAt: index + 11,
-            summary: run.summary,
-            delivery: {
-              mode: "text_only" as const,
-              handoffState: "pending_parent_turn" as const,
+          ...(options.pendingDelegations ?? []).map((run, index) =>
+            Object.assign(delegationContractFields(), {
+              runId: run.runId,
+              delegate: run.delegate,
+              parentSessionId: asBrewvaSessionId("compose-session"),
+              status: run.status,
+              createdAt: index + 1,
+              updatedAt: index + 1,
+            }),
+          ),
+          ...(options.pendingDelegationOutcomes ?? []).map((run, index) =>
+            Object.assign(delegationContractFields(), {
+              runId: run.runId,
+              delegate: run.delegate,
+              parentSessionId: asBrewvaSessionId("compose-session"),
+              status: run.status,
+              createdAt: index + 11,
               updatedAt: index + 11,
-              readyAt: index + 11,
-            },
-          })),
+              summary: run.summary,
+              delivery: {
+                mode: "text_only" as const,
+                handoffState: "pending_parent_turn" as const,
+                updatedAt: index + 11,
+                readyAt: index + 11,
+              },
+            }),
+          ),
         ];
         const filtered =
           query?.statuses && query.statuses.length > 0

@@ -22,7 +22,8 @@ describe("JSONC config surface guard", () => {
     expect(runtimeConfigLoader).toContain("parseJsonc(raw)");
     expect(runtimeConfigLoader).not.toContain("JSON.parse(raw)");
 
-    expect(subagentConfigLoader).toContain("parseJsonc(raw)");
+    expect(subagentConfigLoader).toContain("parseMarkdownFrontmatter(input.raw)");
+    expect(subagentConfigLoader).toContain("JSON subagent configs are no longer supported");
     expect(subagentConfigLoader).not.toContain("JSON.parse(raw)");
 
     expect(agentRuntimeManager).toContain("parseJsonc(raw)");

@@ -229,6 +229,10 @@ export const MANAGED_BREWVA_TOOL_METADATA_BY_NAME = {
   skill_promotion_promote: metadata("skill", "workspace_patch"),
   subagent_run: metadata("skill", "delegation", ["internal.appendGuardedSupplementalBlocks"]),
   subagent_fanout: metadata("skill", "delegation", ["internal.appendGuardedSupplementalBlocks"]),
+  subagent_fork: metadata("skill", "delegation"),
+  subagent_run_diagnostic: metadata("control_plane", "delegation", [
+    "internal.appendGuardedSupplementalBlocks",
+  ]),
   subagent_status: metadata("skill", "delegation"),
   subagent_cancel: metadata("skill", "delegation"),
   task_add_item: metadata("control_plane", "memory_write", ["authority.task.addItem"]),

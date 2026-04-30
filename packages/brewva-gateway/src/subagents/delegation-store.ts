@@ -8,13 +8,19 @@ import {
   SUBAGENT_SPAWNED_EVENT_TYPE,
   WORKER_RESULTS_APPLIED_EVENT_TYPE,
   type BrewvaRuntime,
+  CURRENT_DELEGATION_CONTRACT_VERSION,
+  type DelegationAdoptionRecord,
+  type DelegationExecutionPrimitive,
+  type DelegationLineageRecord,
   type BrewvaStructuredEvent,
   type DelegationArtifactRef,
   type DelegationDeliveryRecord,
+  type DelegationIsolationStrategy,
   type DelegationModelRouteRecord,
   type DelegationRunQuery,
   type DelegationRunRecord,
   type DelegationRunStatus,
+  type DelegationVisibility,
   type PendingDelegationOutcomeQuery,
   type ToolExecutionBoundary,
 } from "@brewva/brewva-runtime";
@@ -62,6 +68,35 @@ function readHandoffState(value: unknown): DelegationDeliveryRecord["handoffStat
 
 function readBoundary(value: unknown): ToolExecutionBoundary | undefined {
   return value === "safe" || value === "effectful" ? value : undefined;
+}
+
+function readContractVersion(value: unknown): typeof CURRENT_DELEGATION_CONTRACT_VERSION {
+  if (value !== CURRENT_DELEGATION_CONTRACT_VERSION) {
+    const rendered =
+      typeof value === "string" || typeof value === "number" || typeof value === "boolean"
+        ? String(value)
+        : "missing";
+    throw new Error(`unsupported_delegation_contract_version:${rendered}`);
+  }
+  return CURRENT_DELEGATION_CONTRACT_VERSION;
+}
+
+function readExecutionPrimitive(value: unknown): DelegationExecutionPrimitive | undefined {
+  return value === "named" || value === "fork" ? value : undefined;
+}
+
+function readVisibility(value: unknown): DelegationVisibility | undefined {
+  return value === "public" || value === "internal" || value === "diagnostic" ? value : undefined;
+}
+
+function readIsolationStrategy(value: unknown): DelegationIsolationStrategy | undefined {
+  return value === "shared" ||
+    value === "ephemeral" ||
+    value === "snapshot" ||
+    value === "worktree" ||
+    value === "container"
+    ? value
+    : undefined;
 }
 
 function readNonNegativeNumber(value: unknown): number | undefined {
@@ -131,9 +166,27 @@ function cloneModelRoute(route: DelegationModelRouteRecord): DelegationModelRout
   };
 }
 
+function cloneAdoption(adoption: DelegationAdoptionRecord): DelegationAdoptionRecord {
+  return {
+    contractId: adoption.contractId,
+    decision: adoption.decision,
+    reason: adoption.reason,
+    requiredEvidence: adoption.requiredEvidence ? [...adoption.requiredEvidence] : undefined,
+  };
+}
+
+function cloneLineage(lineage: DelegationLineageRecord): DelegationLineageRecord {
+  return {
+    parentSessionId: lineage.parentSessionId,
+    contextPolicy: lineage.contextPolicy,
+  };
+}
+
 export function cloneDelegationRunRecord(record: DelegationRunRecord): DelegationRunRecord {
   return {
     ...record,
+    adoption: cloneAdoption(record.adoption),
+    lineage: record.lineage ? cloneLineage(record.lineage) : undefined,
     modelRoute: record.modelRoute ? cloneModelRoute(record.modelRoute) : undefined,
     resultData: cloneJsonRecord(record.resultData),
     artifactRefs: record.artifactRefs?.map((ref) => cloneArtifactRef(ref)),
@@ -150,6 +203,56 @@ export function cloneDelegationRunRecord(record: DelegationRunRecord): Delegatio
         }
       : undefined,
   };
+}
+
+function readLineage(
+  payload: Record<string, unknown> | null,
+  existing: DelegationRunRecord | undefined,
+): DelegationLineageRecord | undefined {
+  const raw = payload?.lineage;
+  if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+    const record = raw as Record<string, unknown>;
+    const parentSessionId = readSessionId(record.parentSessionId);
+    const contextPolicy = record.contextPolicy;
+    if (
+      parentSessionId &&
+      (contextPolicy === "lineage_only" || contextPolicy === "working_snapshot")
+    ) {
+      return {
+        parentSessionId,
+        contextPolicy,
+      };
+    }
+  }
+  return existing?.lineage;
+}
+
+function readAdoption(
+  payload: Record<string, unknown> | null,
+  runId: string,
+): DelegationAdoptionRecord {
+  const raw = payload?.adoption;
+  if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+    const record = raw as Record<string, unknown>;
+    const contractId = readString(record.contractId);
+    const decision = record.decision;
+    const reason = readString(record.reason);
+    if (
+      contractId &&
+      (decision === "allow" || decision === "block" || decision === "require_human") &&
+      reason
+    ) {
+      return {
+        contractId,
+        decision,
+        reason,
+        requiredEvidence: Array.isArray(record.requiredEvidence)
+          ? record.requiredEvidence.filter((entry): entry is string => typeof entry === "string")
+          : undefined,
+      };
+    }
+  }
+  throw new Error(`invalid_delegation_contract:${runId}:missing_adoption`);
 }
 
 function readArtifactRefs(
@@ -303,8 +406,14 @@ export function buildDelegationLifecyclePayload(
   record: DelegationRunRecord,
 ): Record<string, unknown> {
   return {
+    contractVersion: record.contractVersion,
     runId: record.runId,
     delegate: record.delegate,
+    executionPrimitive: record.executionPrimitive,
+    visibility: record.visibility,
+    isolationStrategy: record.isolationStrategy,
+    adoption: record.adoption,
+    lineage: record.lineage ?? null,
     agentSpec: record.agentSpec ?? null,
     envelope: record.envelope ?? null,
     skillName: record.skillName ?? null,
@@ -345,9 +454,22 @@ function applyDelegationEvent(
       return;
     }
     const existing = runs.get(runId);
+    const contractVersion = readContractVersion(payload?.contractVersion);
+    const executionPrimitive = readExecutionPrimitive(payload?.executionPrimitive);
+    const visibility = readVisibility(payload?.visibility);
+    const isolationStrategy = readIsolationStrategy(payload?.isolationStrategy);
+    if (!executionPrimitive || !visibility || !isolationStrategy) {
+      throw new Error(`invalid_delegation_contract:${runId}`);
+    }
     upsertRun(runs, {
+      contractVersion,
       runId,
       delegate,
+      executionPrimitive,
+      visibility,
+      isolationStrategy,
+      adoption: readAdoption(payload, runId),
+      lineage: readLineage(payload, existing),
       ...readRunMetadata(payload, existing),
       parentSessionId: event.sessionId,
       status:
@@ -379,9 +501,22 @@ function applyDelegationEvent(
       return;
     }
     const existing = runs.get(runId);
+    const contractVersion = readContractVersion(payload?.contractVersion);
+    const executionPrimitive = readExecutionPrimitive(payload?.executionPrimitive);
+    const visibility = readVisibility(payload?.visibility);
+    const isolationStrategy = readIsolationStrategy(payload?.isolationStrategy);
+    if (!executionPrimitive || !visibility || !isolationStrategy) {
+      throw new Error(`invalid_delegation_contract:${runId}`);
+    }
     upsertRun(runs, {
+      contractVersion,
       runId,
       delegate: readString(payload?.delegate) ?? existing?.delegate ?? "unknown",
+      executionPrimitive,
+      visibility,
+      isolationStrategy,
+      adoption: readAdoption(payload, runId),
+      lineage: readLineage(payload, existing),
       ...readRunMetadata(payload, existing),
       parentSessionId: event.sessionId,
       status: "completed",
@@ -452,6 +587,13 @@ function applyDelegationEvent(
       return;
     }
     const existing = runs.get(runId);
+    const contractVersion = readContractVersion(payload?.contractVersion);
+    const executionPrimitive = readExecutionPrimitive(payload?.executionPrimitive);
+    const visibility = readVisibility(payload?.visibility);
+    const isolationStrategy = readIsolationStrategy(payload?.isolationStrategy);
+    if (!executionPrimitive || !visibility || !isolationStrategy) {
+      throw new Error(`invalid_delegation_contract:${runId}`);
+    }
     const statusFromPayload = readRunStatus(payload?.status);
     const fallbackError =
       statusFromPayload === "timeout"
@@ -460,8 +602,14 @@ function applyDelegationEvent(
           ? "cancelled"
           : "failed";
     upsertRun(runs, {
+      contractVersion,
       runId,
       delegate: readString(payload?.delegate) ?? existing?.delegate ?? "unknown",
+      executionPrimitive,
+      visibility,
+      isolationStrategy,
+      adoption: readAdoption(payload, runId),
+      lineage: readLineage(payload, existing),
       ...readRunMetadata(payload, existing),
       parentSessionId: event.sessionId,
       status:

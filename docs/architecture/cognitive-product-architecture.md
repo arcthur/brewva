@@ -143,12 +143,18 @@ Current responsibilities:
   - exposes verification, rollbackability, approval requirements, and worker
     outcomes without prescribing the next step
 - delegation posture presentation
-  - exposes delegation through a thin execution shape (`resultMode`,
-    `boundary`, optional model and managed-tool hints)
-  - keeps named profiles as stable presets rather than the primary
-    orchestration contract
+  - exposes public delegation through `skillName` intent packets while the
+    resolver owns agent spec, envelope, consult kind, result kind, model route,
+    visibility, and adoption contract selection
+  - keeps diagnostic low-level routing on maintainer-only control-plane tools
+    rather than ordinary model-facing guidance
   - presents the stable public specialist surface (`advisor`, `qa`,
-    `patch-worker`) while keeping internal review lanes explicit and internal
+    `patch-worker`) while keeping review-lane fan-out behind the internal
+    review ensemble
+  - treats `subagent_fork` as an execution primitive with parent lineage rather
+    than a hosted specialist identity
+  - projects `subagent_status` by default so low-level routing fields require
+    explicit internal or diagnostic inspection
   - keeps execution identity singular for read-only consultation while leaving
     semantic workflow lanes in parent-owned skills
 - workflow inspection presentation

@@ -70,6 +70,7 @@ Default tools registered by `buildBrewvaTools()`:
 - `skill_promotion_inspect`, `skill_promotion_review`, and `skill_promotion_promote`
 - `subagent_run`
 - `subagent_fanout`
+- `subagent_fork`
 - `subagent_status`
 - `subagent_cancel`
 - `task_set_spec`
@@ -367,6 +368,7 @@ Current posture:
 - `skill_promotion_inspect`, `skill_promotion_review`, and `skill_promotion_promote`
 - `subagent_run`
 - `subagent_fanout`
+- `subagent_fork`
 - `subagent_status`
 - `subagent_cancel`
 - `worker_results_merge`
@@ -538,112 +540,85 @@ latest tracked `PatchSet`. It maps to `runtime.authority.tools.rollbackLastPatch
 Operator-facing root `--undo` is session-rewind-checkpoint based and uses the
 runtime session rewind surface instead of this tool veneer.
 
-## `subagent_run` And `subagent_fanout`
+## `subagent_run`, `subagent_fanout`, And `subagent_fork`
 
 Delegation entrypoints:
 
-- `subagent_run` for one run
-- `subagent_fanout` for parallel runs
+- `subagent_run` for one intent-first run
+- `subagent_fanout` for parallel intent-first tasks
+- `subagent_fork` for same-parent-lineage exploration without selecting a
+  catalog specialist
 
-Current packet contract:
+Public `subagent_run` packet contract:
 
+- `skillName`
 - `objective`
 - `deliverable?`
-- `consultBrief?`
-  - required for all `consult` delegation, including `agentSpec=advisor`
+- `brief?`
+  - required for consult-style skills
 - `constraints?`
 - `sharedNotes?`
-- `activeSkillName?`
 - `executionHints?`
 - `contextRefs?`
 - `contextBudget?`
 - `completionPredicate?`
 - `effectCeiling.boundary?` (`safe` | `effectful`)
   - optional per-run boundary narrowing only
-
-Current delegation selector contract:
-
-- `agentSpec?`
-  - named delegated worker configuration
-- `envelope?`
-  - explicit runtime posture override or ad hoc runtime posture
-- `skillName?`
-  - parent-owned semantic skill context
-  - does not implicitly select `consultKind`
-- `consultKind?` (`investigate` | `diagnose` | `design` | `review`)
-  - required for consult delegation
-- `fallbackResultMode?`
-  - transport-level fallback schema for ad hoc runs without `skillName`
-- `executionShape.resultMode?` (`consult` | `qa` | `patch`)
-- `executionShape.boundary?` (`safe` | `effectful`)
-  - optional preset narrowing only
-- `executionShape.model?`
-- `executionShape.managedToolMode?` (`direct` | `runtime_plugin`)
-
-When `skillName` is present, it supplies semantic context for the delegated
-prompt. QA runs may still validate `skillOutputs` against the delegated skill
-contract, but consult runs do not make the child own semantic completion.
-There is no separate packet-level required-output list.
-
-Current delivery contract:
-
-- `returnMode` (`text_only` | `supplemental`)
+- `waitMode?` (`completion` | `start`)
+- `returnMode?` (`text_only` | `supplemental`)
 - `returnLabel?`
 - `returnScopeId?`
+- `timeoutMs?`
 
-Current wait contract:
+Public `subagent_fanout` uses the same shared packet fields plus `tasks`.
+Each task supplies its own `label?`, `objective`, and optional packet
+narrowing. Fanout is always parallel; callers do not pass `mode`.
 
-- `waitMode` (`completion` | `start`)
+Public callers do not pass low-level routing fields. `agentSpec`, `envelope`,
+`consultKind`, `fallbackResultMode`, `executionShape`, `mode`,
+`activeSkillName`, and `consultBrief` are diagnostic-only fields. Supplying any
+of them to `subagent_run` or `subagent_fanout` fails hard.
 
-Current mode contract:
+Maintainer diagnostics use `subagent_run_diagnostic`, a control-plane tool that
+retains explicit `agentSpec`, `envelope`, `consultKind`,
+`fallbackResultMode`, `executionShape`, and `mode`. It is not normal operator
+guidance and should not be presented as the public workflow. A diagnostic
+`envelope` may only narrow an explicit `agentSpec`; envelope-only ad hoc
+delegates are not supported.
 
-- `mode` (`single` | `parallel`)
+`subagent_fork` is an execution primitive, not a specialist. It records
+`executionPrimitive=fork`, parent lineage, and `contextPolicy`, uses a
+read-only ceiling unless the runtime can prove a narrower parent ceiling, and
+does not enter the hosted agent catalog.
 
 Semantics:
 
 - built-in public agent specs remain stable presets: `advisor`, `qa`, and
   `patch-worker`
-- built-in review-lane delegates are also available for internal review fan-out:
-  `review-correctness`, `review-boundaries`, `review-operability`,
-  `review-security`, `review-concurrency`, `review-compatibility`, and
-  `review-performance`; they are internal ensemble lanes, not part of the
-  stable public taxonomy
+- built-in review-lane delegates are internal review-ensemble lanes and are not
+  part of the stable public taxonomy
 - built-in execution envelopes are:
   `readonly-advisor`, `qa-runner`, and `patch-worker`
+- built-in execution envelopes carry explicit `isolationStrategy`:
+  `readonly-advisor=shared`, `qa-runner=ephemeral`, and
+  `patch-worker=snapshot`
 - `advisor` is the only public read-only consultation identity; `qa` resolves
   to an effectful but non-patch-producing verifier; `patch-worker` remains the
   only patch-producing built-in worker
-- `review-operability` is the internal review lane that audits evidence quality,
-  rollback posture, missing probes, and operator burden; it complements `qa`
-  instead of duplicating executable verification
 - built-in envelopes also carry internal context narrowing posture:
   `advisor` and `qa` default to a minimal profile, while
   `patch-worker` keeps a broader standard profile for isolated execution
-- `agentSpec` supplies execution identity, envelope, and executor posture
-- public `advisor` does not imply a `consultKind`; only specialized internal
-  review-lane delegates pin `consultKind=review`
-- `envelope` may be used alone for ad hoc objective-only delegation, but such
-  runs should also supply `fallbackResultMode`, `consultKind`, and
-  `consultBrief` for consult delegation
-- when both `agentSpec` and `envelope` are supplied, the request envelope may
-  only narrow the agent spec envelope; widening is rejected
-- when no explicit worker is supplied, the gateway resolves a default agent
-  spec from `skillName`, `fallbackResultMode`, or `executionShape.resultMode`
-- resolving a default agent spec from `skillName` does not infer `consultKind`;
-  consult routing stays explicit
-- unmatched `skillName` or `resultMode` now fail fast instead of falling
-  through to a generic helper
+- the resolver maps public `skillName` intent to the internal target, consult
+  kind, result contract, envelope, context profile, visibility, and adoption
+  contract
+- registered public intents include `discovery`, `repository-analysis`,
+  `learning-research`, `debugging`, `plan`, `strategy`, `architecture`,
+  `office-hours`, `review`, `predict-review`, `qa`, and `implementation`
+- unmatched public `skillName` fails as `unknown_delegation_skill`
 - `safe` is the default execution boundary
 - `effectful` is reserved for isolated write-capable child runners
-- delegated child model selection is inspectable: explicit
-  `executionShape.model`, active preset subagent/main inheritance, and
-  policy-backed auto routes all persist route metadata on the run record
-- delegated model route precedence is replay/preselected `modelRoute`,
-  explicit `executionShape.model`, active preset
-  `subagentModels[resolvedAgentSpec]`, active preset `mainModel`, policy auto
-  route, then parent/default fallback
-- workspace subagent envelope/agent-spec/target `model` pins are no longer
-  supported; put subagent model choices under hosted `modelPresets`
+- delegated child model selection is inspectable through resolver-selected
+  model routes and active preset policy
 - `contextRefs` are typed refs and may include `sourceSessionId` and advisory
   `hash`
 - when `skillName` is present, the child prompt includes delegated semantic
@@ -671,19 +646,26 @@ Semantics:
 - `waitMode=start` does not support `returnMode=supplemental`; background
   delegated runs must use `text_only` and surface outcomes later through
   durable delegation state
+- `DelegationRunRecord` requires `contractVersion`,
+  `executionPrimitive`, `visibility`, `isolationStrategy`, and `adoption`
+- missing or unknown delegation contract versions are unsupported
 - delegated runs are a control-plane product, not a distributed transaction
   protocol; current stable semantics do not include cross-agent saga behavior,
   generalized compensation, or automatic partial-failure repair
 - late detached outcomes surface through replay-visible
   `handoffState=pending_parent_turn|surfaced` delegation state instead of a
   proposal-backed return mode
-- workspace-defined delegated workers live under `.brewva/subagents/*.json`
-  and are parsed as JSONC, so comments and trailing commas are accepted
-  and must declare `kind: "envelope"` or `kind: "agentSpec"` with `extends`
-  support; markdown worker files under the workspace-relative directories
-  `.brewva/agents/*.md` and `.config/brewva/agents/*.md` default to
-  `agentSpec`; their frontmatter compiles into the hosted worker spec and the
-  body becomes additive authored instructions; overrides remain narrowing-only
+- workspace-defined custom specialists live under `.brewva/subagents/*.md`
+  and user-level custom specialists live under `~/.brewva/subagents/*.md`
+- custom specialists must `extends` one of `advisor`, `qa`, or `patch-worker`
+- allowed custom frontmatter is `name`, `description`, `extends`,
+  `modelPreset`, `reasoningEffort`, and `tools`; the Markdown body becomes
+  additive authored instructions
+- custom specialists cannot declare `model`, `envelope`, `skillName`,
+  `defaultConsultKind`, `reviewLane`, `fallbackResultMode`, or
+  `executorPreamble`
+- custom tools must be a subset of the base envelope tools; invalid
+  frontmatter is a hard error
 
 `task_record_acceptance` is an operator-visible closure write. It only succeeds
 when the active `TaskSpec` explicitly requires acceptance, and it does not
@@ -695,10 +677,11 @@ These tools inspect or stop existing delegated runs.
 
 `subagent_status` returns run state plus:
 
-- `agentSpec?`
-- `envelope?`
-- `skillName?`
-- `modelRoute?`
+- `detailMode?` (`public` | `internal` | `diagnostic`)
+- `visibility`
+- `isolationStrategy`
+- `executionPrimitive`
+- `adoption`
 - `live?`
 - `cancelable?`
 - `delivery.handoffState?`
@@ -706,10 +689,22 @@ These tools inspect or stop existing delegated runs.
 - `delivery.surfacedAt?`
 - `artifactRefs?`
 
+With the default `detailMode=public`, status output is a projected public view:
+it includes stable delegate identity, execution primitive, isolation strategy,
+adoption decision, delivery state, summary, and artifact refs. It does not
+include low-level routing fields such as `agentSpec`, `envelope`,
+`skillName`, `consultKind`, or `modelRoute`.
+
 `live?` and `cancelable?` are live orchestration enrichments when a hosted
 adapter can answer current child-run state. They are not durable delegation-ledger
 fields returned by `runtime.delegation.listRuns(...)`, while `delivery.*` and
 artifact refs are replay-visible run record data.
+
+`detailMode` defaults to `public`, which hides internal review lanes and
+diagnostic-only records. `internal` includes public plus internal lane records.
+`diagnostic` includes every record and the full low-level routing projection,
+including `agentSpec`, `envelope`, `skillName`, `consultKind`, and
+`modelRoute`.
 
 `subagent_cancel` records explicit cancellation intent. It does not erase run
 history.

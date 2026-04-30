@@ -20,6 +20,7 @@ describe("delegation prompt and catalog composition", () => {
       target: {
         name: "advisor",
         description: "Read-only advisor",
+        visibility: "public",
         resultMode: "consult",
         consultKind: "investigate",
         executorPreamble: "Investigate and summarize.",
@@ -27,6 +28,7 @@ describe("delegation prompt and catalog composition", () => {
         envelopeName: "readonly-advisor",
         producesPatches: false,
         contextProfile: "minimal",
+        isolationStrategy: "shared",
       },
       packet: {
         objective: "Inspect the current architecture",
@@ -57,6 +59,7 @@ describe("delegation prompt and catalog composition", () => {
       target: {
         name: "advisor",
         description: "Read-only advisor",
+        visibility: "public",
         resultMode: "consult",
         consultKind: "review",
         executorPreamble: "Review and summarize.",
@@ -64,6 +67,7 @@ describe("delegation prompt and catalog composition", () => {
         envelopeName: "readonly-advisor",
         producesPatches: false,
         contextProfile: "minimal",
+        isolationStrategy: "shared",
       },
       packet: {
         objective: "Review the runtime merge path",
@@ -92,6 +96,7 @@ describe("delegation prompt and catalog composition", () => {
       target: {
         name: "advisor",
         description: "Read-only advisor",
+        visibility: "public",
         resultMode: "consult",
         consultKind: "review",
         executorPreamble: "Operate as a strict read-only advisor.",
@@ -99,6 +104,7 @@ describe("delegation prompt and catalog composition", () => {
         envelopeName: "readonly-advisor",
         producesPatches: false,
         contextProfile: "minimal",
+        isolationStrategy: "shared",
       },
       packet: {
         objective: "Review the runtime merge path",
@@ -138,6 +144,7 @@ describe("delegation prompt and catalog composition", () => {
       target: {
         name: "qa",
         description: "Adversarial QA verifier",
+        visibility: "public",
         resultMode: "qa",
         executorPreamble: "Operate as an adversarial QA verifier.",
         skillName: "qa",
@@ -145,6 +152,7 @@ describe("delegation prompt and catalog composition", () => {
         envelopeName: "qa-runner",
         producesPatches: false,
         contextProfile: "minimal",
+        isolationStrategy: "ephemeral",
       },
       packet: {
         objective: "Try to break the delegated change and preserve the evidence.",
@@ -174,7 +182,7 @@ describe("delegation prompt and catalog composition", () => {
     expect(target.builtinToolNames).toEqual(["read", "edit", "write"]);
   });
 
-  test("rejects workspace subagent files without an explicit kind", async () => {
+  test("rejects JSON workspace subagent files", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-subagent-config-kind-"));
     const subagentDir = join(workspace, ".brewva", "subagents");
     mkdirSync(subagentDir, { recursive: true });
@@ -198,14 +206,14 @@ describe("delegation prompt and catalog composition", () => {
     } catch (error) {
       expect(error).toBeInstanceOf(Error);
       expect((error as Error).message).toContain(
-        "invalid_subagent_config:explore.json:missing required kind",
+        "invalid_subagent_config:[explore.json]:JSON subagent configs are no longer supported",
       );
     }
   });
 
-  test("defaults markdown workspace subagent files to agentSpec", async () => {
+  test("loads markdown workspace custom specialists from .brewva/subagents", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-subagent-markdown-kind-"));
-    const agentDir = join(workspace, ".brewva", "agents");
+    const agentDir = join(workspace, ".brewva", "subagents");
     mkdirSync(agentDir, { recursive: true });
     writeFileSync(
       join(agentDir, "reviewer.md"),
@@ -213,8 +221,7 @@ describe("delegation prompt and catalog composition", () => {
         "---",
         'name: "reviewer"',
         'description: "Markdown-backed advisor"',
-        'envelope: "readonly-advisor"',
-        'defaultConsultKind: "review"',
+        'extends: "advisor"',
         "---",
         "",
         "Operate as a strict advisor and summarize the highest-risk findings.",
@@ -228,8 +235,9 @@ describe("delegation prompt and catalog composition", () => {
       expect.objectContaining({
         name: "reviewer",
         description: "Markdown-backed advisor",
+        visibility: "public",
         envelope: "readonly-advisor",
-        defaultConsultKind: "review",
+        fallbackResultMode: "consult",
         instructionsMarkdown:
           "Operate as a strict advisor and summarize the highest-risk findings.",
       }),

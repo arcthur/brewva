@@ -24,7 +24,7 @@ import {
   type HostedModelPresetSettingsShape,
 } from "./model-presets.js";
 
-const PROJECT_SETTINGS_DIR = ".pi";
+const PROJECT_SETTINGS_PATH = [".brewva", "agent", "settings.json"] as const;
 
 type HostedThinkingLevel =
   | NonNullable<CreateHostedManagedSessionOptions["thinkingLevel"]>
@@ -232,7 +232,7 @@ class BrewvaHostedSettingsHandle implements HostedSessionSettings, HostedSession
 
   constructor(cwd: string, agentDir: string) {
     this.#globalPath = join(agentDir, "settings.json");
-    this.#projectPath = join(cwd, PROJECT_SETTINGS_DIR, "settings.json");
+    this.#projectPath = join(cwd, ...PROJECT_SETTINGS_PATH);
     this.reload();
     this.view = {
       applyOverrides: (overrides) => {

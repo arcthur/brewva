@@ -39,7 +39,12 @@ import {
   createSkillPromotionReviewTool,
 } from "./skill-promotion.js";
 import { createSubagentCancelTool, createSubagentStatusTool } from "./subagent-control.js";
-import { createSubagentFanoutTool, createSubagentRunTool } from "./subagent-run.js";
+import { createSubagentForkTool } from "./subagent-fork.js";
+import {
+  createSubagentFanoutTool,
+  createSubagentRunDiagnosticTool,
+  createSubagentRunTool,
+} from "./subagent-run.js";
 import { createTapeTools } from "./tape.js";
 import { createTaskLedgerTools } from "./task-ledger.js";
 import { createTocTools } from "./toc.js";
@@ -99,6 +104,8 @@ export function buildDefaultBundledBrewvaTools(
     createSkillPromotionPromoteTool({ runtime }),
     createSubagentRunTool({ runtime }),
     createSubagentFanoutTool({ runtime }),
+    createSubagentForkTool({ runtime }),
+    createSubagentRunDiagnosticTool({ runtime }),
     createSubagentStatusTool({ runtime }),
     createSubagentCancelTool({ runtime }),
     ...createTaskLedgerTools({ runtime }),

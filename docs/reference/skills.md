@@ -42,7 +42,9 @@ separate.
 
 Current rules:
 
-- a child run may bind a delegated skill directly or through an `agentSpec`
+- public delegated runs start from a `skillName` intent packet; the delegation
+  resolver maps that intent to the internal specialist, envelope, consult kind,
+  result contract, and adoption contract
 - when `skillName` is present, the runner injects the skill body and output
   contract into the child prompt rather than relying on a follow-up `skill_load`
   call
@@ -57,7 +59,8 @@ Current rules:
   `patch-worker`; internal review lanes remain internal fan-out
   helpers rather than public taxonomy
 - delegated `consult` is the first-class read-only result posture with
-  canonical `consultKind`-specific typed data
+  canonical typed outcome data; consult-kind routing is resolver-owned rather
+  than a public caller choice
 - patch-producing child runs return `WorkerResult` / patch artifacts for the
   parent-controlled `worker_results_merge` -> `worker_results_apply` flow
 - delegated QA runs do not produce `WorkerResult`; they persist canonical
@@ -533,13 +536,15 @@ verification.
 Default delegated routing is intentionally narrower than the public skill list:
 
 - `repository-analysis -> advisor (investigate)`
-- `architecture -> advisor (investigate)`
-- `office-hours -> advisor (investigate)`
+- `architecture -> advisor (design)`
+- `office-hours -> advisor (design)`
 - `discovery -> advisor (investigate)`
-- `strategy -> advisor (investigate)`
+- `learning-research -> advisor (investigate)`
+- `strategy -> advisor (design)`
 - `debugging -> advisor (diagnose)`
 - `plan -> advisor (design)`
 - `review -> advisor (review)`
+- `predict-review -> advisor (review)`
 - `qa -> qa`
 - `implementation -> patch-worker`
 - other delegated skills stay explicit-only unless a stable public mapping is

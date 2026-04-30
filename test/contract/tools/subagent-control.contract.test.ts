@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { HostedDelegationStore } from "@brewva/brewva-gateway";
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { BrewvaRuntime, CURRENT_DELEGATION_CONTRACT_VERSION } from "@brewva/brewva-runtime";
 import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import {
   createSubagentCancelTool,
@@ -50,8 +50,17 @@ describe("subagent control tools", () => {
       sessionId: "session-status",
       type: "subagent_spawned",
       payload: {
+        contractVersion: CURRENT_DELEGATION_CONTRACT_VERSION,
         runId: "run-status-1",
         delegate: "advisor",
+        executionPrimitive: "named",
+        visibility: "public",
+        isolationStrategy: "shared",
+        adoption: {
+          contractId: "status-test",
+          decision: "require_human",
+          reason: "Fixture record has not reached parent adoption.",
+        },
         agentSpec: "advisor",
         envelope: "readonly-advisor",
         skillName: "review",
@@ -82,10 +91,26 @@ describe("subagent control tools", () => {
     expect(extractText(result)).toContain("# Subagent Status");
     expect(extractText(result)).toContain("run-status-1");
     expect(extractText(result)).toContain("status=running");
-    expect(extractText(result)).toContain(
-      "delegate: agentSpec=advisor envelope=readonly-advisor delegatedSkill=review",
+    expect(extractText(result)).toContain("adoption: decision=require_human");
+    expect(extractText(result)).not.toContain("agentSpec=advisor");
+    expect(extractText(result)).not.toContain("envelope=readonly-advisor");
+    expect(extractText(result)).not.toContain("delegatedSkill=review");
+    expect(extractText(result)).not.toContain("model: openai/gpt-5.4:medium");
+    expect(JSON.stringify(result.details)).not.toContain("agentSpec");
+    expect(JSON.stringify(result.details)).not.toContain("readonly-advisor");
+    expect(JSON.stringify(result.details)).not.toContain("consultKind");
+
+    const diagnosticResult = await tool.execute(
+      "tc-subagent-status-diagnostic",
+      { detailMode: "diagnostic" },
+      undefined,
+      undefined,
+      fakeContext("session-status"),
     );
-    expect(extractText(result)).toContain(
+    expect(extractText(diagnosticResult)).toContain(
+      "delegate: agentSpec=advisor envelope=readonly-advisor delegatedSkill=review consultKind=review",
+    );
+    expect(extractText(diagnosticResult)).toContain(
       "model: openai/gpt-5.4:medium source=policy mode=auto policy=review-and-verification requested=gpt-5.4:medium",
     );
   });
@@ -99,8 +124,17 @@ describe("subagent control tools", () => {
       sessionId: "session-status-handoff",
       type: "subagent_completed",
       payload: {
+        contractVersion: CURRENT_DELEGATION_CONTRACT_VERSION,
         runId: "run-status-handoff-1",
         delegate: "advisor",
+        executionPrimitive: "named",
+        visibility: "public",
+        isolationStrategy: "shared",
+        adoption: {
+          contractId: "status-test",
+          decision: "require_human",
+          reason: "Fixture record has not reached parent adoption.",
+        },
         status: "completed",
         kind: "consult",
         consultKind: "review",
@@ -125,6 +159,77 @@ describe("subagent control tools", () => {
     expect(extractText(result)).toContain("delivery: mode=text_only handoff=pending_parent_turn");
   });
 
+  test("subagent_status folds internal lanes by default and exposes them in internal detail mode", async () => {
+    const runtime = new BrewvaRuntime({
+      cwd: createTestWorkspace("subagent-status-detail-mode-runtime"),
+    });
+    const store = new HostedDelegationStore(runtime);
+    recordRuntimeEvent(runtime, {
+      sessionId: "session-status-detail-mode",
+      type: "subagent_completed",
+      payload: {
+        contractVersion: CURRENT_DELEGATION_CONTRACT_VERSION,
+        runId: "run-public",
+        delegate: "advisor",
+        executionPrimitive: "named",
+        visibility: "public",
+        isolationStrategy: "shared",
+        adoption: {
+          contractId: "status-test",
+          decision: "require_human",
+          reason: "Fixture record has not reached parent adoption.",
+        },
+        status: "completed",
+        kind: "consult",
+        consultKind: "review",
+        summary: "Public review summary.",
+      },
+    });
+    recordRuntimeEvent(runtime, {
+      sessionId: "session-status-detail-mode",
+      type: "subagent_completed",
+      payload: {
+        contractVersion: CURRENT_DELEGATION_CONTRACT_VERSION,
+        runId: "run-internal-lane",
+        delegate: "review-security",
+        agentSpec: "review-security",
+        executionPrimitive: "named",
+        visibility: "internal",
+        isolationStrategy: "shared",
+        adoption: {
+          contractId: "status-test",
+          decision: "require_human",
+          reason: "Fixture record has not reached parent adoption.",
+        },
+        status: "completed",
+        kind: "consult",
+        consultKind: "review",
+        summary: "Internal lane summary.",
+      },
+    });
+
+    const tool = createSubagentStatusTool({ runtime: buildStatusRuntime(runtime, store) as any });
+    const publicResult = await tool.execute(
+      "tc-subagent-status-public-detail",
+      {},
+      undefined,
+      undefined,
+      fakeContext("session-status-detail-mode"),
+    );
+    const internalResult = await tool.execute(
+      "tc-subagent-status-internal-detail",
+      { detailMode: "internal" },
+      undefined,
+      undefined,
+      fakeContext("session-status-detail-mode"),
+    );
+
+    expect(extractText(publicResult)).toContain("run-public");
+    expect(extractText(publicResult)).not.toContain("run-internal-lane");
+    expect(extractText(publicResult)).toContain("hidden internal/diagnostic runs=1");
+    expect(extractText(internalResult)).toContain("run-internal-lane");
+  });
+
   test("subagent_cancel delegates cancellation to the orchestration adapter", async () => {
     const tool = createSubagentCancelTool({
       runtime: {
@@ -139,8 +244,17 @@ describe("subagent control tools", () => {
             cancel: async (input: { fromSessionId: string; runId: string; reason?: string }) => ({
               ok: true,
               run: {
+                contractVersion: CURRENT_DELEGATION_CONTRACT_VERSION,
                 runId: input.runId,
                 delegate: "explore",
+                executionPrimitive: "named" as const,
+                visibility: "public" as const,
+                isolationStrategy: "shared" as const,
+                adoption: {
+                  contractId: "subagent-cancel-test",
+                  decision: "require_human" as const,
+                  reason: "Fixture record has not reached parent adoption.",
+                },
                 parentSessionId: input.fromSessionId,
                 status: "cancelled" as const,
                 createdAt: 1,

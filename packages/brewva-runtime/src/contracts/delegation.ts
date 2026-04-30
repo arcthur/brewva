@@ -17,6 +17,17 @@ export type DelegationDeliveryMode = "text_only" | "supplemental";
 export type DelegationDeliveryHandoffState = "none" | "pending_parent_turn" | "surfaced";
 export type DelegationModelRouteSource = "execution_shape" | "preset" | "policy";
 export type DelegationModelRouteMode = "explicit" | "auto";
+export type DelegationExecutionPrimitive = "named" | "fork";
+export type DelegationVisibility = "public" | "internal" | "diagnostic";
+export type DelegationIsolationStrategy =
+  | "shared"
+  | "ephemeral"
+  | "snapshot"
+  | "worktree"
+  | "container";
+export type DelegationAdoptionDecision = "allow" | "block" | "require_human";
+
+export const CURRENT_DELEGATION_CONTRACT_VERSION = 2 as const;
 
 export interface DelegationArtifactRef {
   kind: string;
@@ -79,9 +90,27 @@ export interface DelegationDeliveryRecord {
   updatedAt?: number;
 }
 
+export interface DelegationAdoptionRecord {
+  contractId: string;
+  decision: DelegationAdoptionDecision;
+  reason: string;
+  requiredEvidence?: string[];
+}
+
+export interface DelegationLineageRecord {
+  parentSessionId: BrewvaSessionId;
+  contextPolicy: "lineage_only" | "working_snapshot";
+}
+
 export interface DelegationRunRecord {
+  contractVersion: typeof CURRENT_DELEGATION_CONTRACT_VERSION;
   runId: string;
   delegate: string;
+  executionPrimitive: DelegationExecutionPrimitive;
+  visibility: DelegationVisibility;
+  isolationStrategy: DelegationIsolationStrategy;
+  adoption: DelegationAdoptionRecord;
+  lineage?: DelegationLineageRecord;
   agentSpec?: string;
   envelope?: string;
   skillName?: string;

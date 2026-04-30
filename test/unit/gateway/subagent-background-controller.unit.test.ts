@@ -18,6 +18,7 @@ function createTempWorkspace(prefix: string): string {
 const ADVISOR_TARGET: HostedDelegationTarget = {
   name: "advisor",
   description: "Repository investigation advisor.",
+  visibility: "public",
   resultMode: "consult",
   consultKind: "investigate",
   executorPreamble: "Inspect the repository and summarize the strongest evidence-backed findings.",
@@ -27,6 +28,7 @@ const ADVISOR_TARGET: HostedDelegationTarget = {
   builtinToolNames: ["read"],
   producesPatches: false,
   contextProfile: "minimal",
+  isolationStrategy: "shared",
 };
 
 function buildAdvisorPacket(

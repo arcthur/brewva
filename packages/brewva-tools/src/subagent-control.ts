@@ -16,10 +16,17 @@ const SUBAGENT_STATUS_VALUES = [
   "cancelled",
   "merged",
 ] as const;
+const SUBAGENT_DETAIL_MODE_VALUES = ["public", "internal", "diagnostic"] as const;
+type SubagentDetailMode = (typeof SUBAGENT_DETAIL_MODE_VALUES)[number];
 
 const StatusSchema = buildStringEnumSchema(SUBAGENT_STATUS_VALUES, {
   guidance:
     "Use pending or running for active delegation only. Include completed, failed, timeout, cancelled, or merged when inspecting terminal history.",
+});
+
+const DetailModeSchema = buildStringEnumSchema(SUBAGENT_DETAIL_MODE_VALUES, {
+  guidance:
+    "public hides internal review lanes, internal includes public and internal records, diagnostic includes every run.",
 });
 
 function normalizeStatuses(value: unknown): DelegationRunStatus[] | undefined {
@@ -44,29 +51,43 @@ function summarizeRun(
     live?: boolean;
     cancelable?: boolean;
   },
+  detailMode: SubagentDetailMode,
 ): string {
   const head = [
     `status=${run.status}`,
     run.kind ? `kind=${run.kind}` : null,
-    run.parentSkill ? `skill=${run.parentSkill}` : null,
+    `primitive=${run.executionPrimitive}`,
+    `isolation=${run.isolationStrategy}`,
+    run.parentSkill ? `parentSkill=${run.parentSkill}` : null,
     run.live ? "live=yes" : "live=no",
     run.cancelable ? "cancelable=yes" : "cancelable=no",
   ].filter(Boolean);
   const lines = [`- ${run.label ?? run.runId} (${run.delegate}): ${head.join(" ")}`];
-  const delegateIdentity = [
-    run.agentSpec ? `agentSpec=${run.agentSpec}` : null,
-    run.envelope ? `envelope=${run.envelope}` : null,
-    run.skillName ? `delegatedSkill=${run.skillName}` : null,
-  ].filter(Boolean);
-  if (delegateIdentity.length > 0) {
-    lines.push(`  delegate: ${delegateIdentity.join(" ")}`);
+  if (detailMode !== "public") {
+    const delegateIdentity = [
+      run.agentSpec ? `agentSpec=${run.agentSpec}` : null,
+      run.envelope ? `envelope=${run.envelope}` : null,
+      run.skillName ? `delegatedSkill=${run.skillName}` : null,
+      run.consultKind ? `consultKind=${run.consultKind}` : null,
+    ].filter(Boolean);
+    if (delegateIdentity.length > 0) {
+      lines.push(`  delegate: ${delegateIdentity.join(" ")}`);
+    }
+  }
+  if (run.adoption) {
+    const adoption = [
+      `decision=${run.adoption.decision}`,
+      detailMode !== "public" ? `contract=${run.adoption.contractId}` : null,
+      `reason=${run.adoption.reason}`,
+    ].filter(Boolean);
+    lines.push(`  adoption: ${adoption.join(" ")}`);
   }
   if (run.summary) {
     lines.push(`  ${run.summary}`);
   } else if (run.error) {
     lines.push(`  error: ${run.error}`);
   }
-  if (run.modelRoute) {
+  if (run.modelRoute && detailMode === "diagnostic") {
     const route = [
       run.modelRoute.selectedModel,
       `source=${run.modelRoute.source}`,
@@ -77,7 +98,7 @@ function summarizeRun(
     lines.push(`  model: ${route.join(" ")}`);
     lines.push(`  routeReason: ${run.modelRoute.reason}`);
   }
-  if (run.workerSessionId) {
+  if (run.workerSessionId && detailMode !== "public") {
     lines.push(`  workerSessionId: ${run.workerSessionId}`);
   }
   if (run.artifactRefs && run.artifactRefs.length > 0) {
@@ -95,6 +116,67 @@ function summarizeRun(
     }
   }
   return lines.join("\n");
+}
+
+function shouldIncludeRunForDetailMode(
+  run: DelegationRunRecord,
+  detailMode: SubagentDetailMode,
+): boolean {
+  const visibility = run.visibility;
+  if (detailMode === "diagnostic") {
+    return true;
+  }
+  if (detailMode === "internal") {
+    return visibility === "public" || visibility === "internal";
+  }
+  return visibility === "public";
+}
+
+function projectRunForDetailMode(
+  run: DelegationRunRecord & {
+    live?: boolean;
+    cancelable?: boolean;
+  },
+  detailMode: SubagentDetailMode,
+): Record<string, unknown> {
+  if (detailMode === "diagnostic") {
+    return { ...run };
+  }
+  const projected: Record<string, unknown> = {
+    contractVersion: run.contractVersion,
+    runId: run.runId,
+    delegate: run.delegate,
+    executionPrimitive: run.executionPrimitive,
+    visibility: run.visibility,
+    isolationStrategy: run.isolationStrategy,
+    adoption: run.adoption,
+    parentSessionId: run.parentSessionId,
+    status: run.status,
+    createdAt: run.createdAt,
+    updatedAt: run.updatedAt,
+    label: run.label,
+    parentSkill: run.parentSkill,
+    kind: run.kind,
+    summary: run.summary,
+    error: run.error,
+    artifactRefs: run.artifactRefs,
+    delivery: run.delivery,
+    totalTokens: run.totalTokens,
+    costUsd: run.costUsd,
+    live: run.live,
+    cancelable: run.cancelable,
+  };
+  if (detailMode === "internal") {
+    projected.agentSpec = run.agentSpec;
+    projected.envelope = run.envelope;
+    projected.skillName = run.skillName;
+    projected.consultKind = run.consultKind;
+    projected.boundary = run.boundary;
+    projected.workerSessionId = run.workerSessionId;
+    projected.resultData = run.resultData;
+  }
+  // Model route exposes provider and policy internals, so it stays diagnostic-tier.
+  return Object.fromEntries(Object.entries(projected).filter(([, value]) => value !== undefined));
 }
 
 export function createSubagentStatusTool(options: BrewvaToolOptions): ToolDefinition {
@@ -117,6 +199,7 @@ export function createSubagentStatusTool(options: BrewvaToolOptions): ToolDefini
       statuses: Type.Optional(Type.Array(StatusSchema, { minItems: 1, maxItems: 7 })),
       includeTerminal: Type.Optional(Type.Boolean()),
       limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 50 })),
+      detailMode: Type.Optional(DetailModeSchema),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const sessionId = getSessionId(ctx);
@@ -128,6 +211,10 @@ export function createSubagentStatusTool(options: BrewvaToolOptions): ToolDefini
           typeof params.includeTerminal === "boolean" ? params.includeTerminal : true,
         limit: typeof params.limit === "number" ? params.limit : undefined,
       };
+      const detailMode =
+        params.detailMode === "internal" || params.detailMode === "diagnostic"
+          ? params.detailMode
+          : "public";
       const readModelRuns = runtime.delegation?.listRuns?.(sessionId, query);
       let readModelResult:
         | {
@@ -186,10 +273,40 @@ export function createSubagentStatusTool(options: BrewvaToolOptions): ToolDefini
       if (resolved.runs.length === 0) {
         return textResult("No matching subagent runs.", toolDetails(resolved));
       }
+      const visibleRuns = resolved.runs.filter((run) =>
+        shouldIncludeRunForDetailMode(run, detailMode),
+      );
+      const hiddenCount = resolved.runs.length - visibleRuns.length;
+      if (visibleRuns.length === 0) {
+        const hiddenSuffix =
+          hiddenCount > 0
+            ? ` ${hiddenCount} internal/diagnostic run(s) hidden by detailMode=${detailMode}.`
+            : "";
+        return textResult(
+          `No matching subagent runs.${hiddenSuffix}`,
+          toolDetails({
+            ...resolved,
+            runs: visibleRuns.map((run) => projectRunForDetailMode(run, detailMode)),
+            hiddenCount,
+            detailMode,
+          }),
+        );
+      }
 
       return textResult(
-        ["# Subagent Status", ...resolved.runs.map((run) => summarizeRun(run))].join("\n"),
-        toolDetails(resolved),
+        [
+          "# Subagent Status",
+          hiddenCount > 0
+            ? `detailMode=${detailMode}; hidden internal/diagnostic runs=${hiddenCount}`
+            : `detailMode=${detailMode}`,
+          ...visibleRuns.map((run) => summarizeRun(run, detailMode)),
+        ].join("\n"),
+        toolDetails({
+          ...resolved,
+          runs: visibleRuns.map((run) => projectRunForDetailMode(run, detailMode)),
+          hiddenCount,
+          detailMode,
+        }),
       );
     },
   });
@@ -231,9 +348,15 @@ export function createSubagentCancelTool(options: BrewvaToolOptions): ToolDefini
 
       if (!cancelled.ok) {
         const text = cancelled.run
-          ? `subagent_cancel failed: ${cancelled.error}\n${summarizeRun(cancelled.run)}`
+          ? `subagent_cancel failed: ${cancelled.error}\n${summarizeRun(cancelled.run, "public")}`
           : `subagent_cancel failed: ${cancelled.error}`;
-        return failTextResult(text, toolDetails(cancelled));
+        return failTextResult(
+          text,
+          toolDetails({
+            ...cancelled,
+            run: cancelled.run ? projectRunForDetailMode(cancelled.run, "public") : undefined,
+          }),
+        );
       }
 
       if (!cancelled.run) {
@@ -243,10 +366,19 @@ export function createSubagentCancelTool(options: BrewvaToolOptions): ToolDefini
       }
 
       return textResult(
-        ["Subagent cancelled.", summarizeRun(cancelled.run)].join("\n"),
+        ["Subagent cancelled.", summarizeRun(cancelled.run, "public")].join("\n"),
         cancelled.run.status === "cancelled" || cancelled.run.status === "timeout"
-          ? toolDetails(cancelled)
-          : withVerdict(toolDetails(cancelled), "fail"),
+          ? toolDetails({
+              ...cancelled,
+              run: projectRunForDetailMode(cancelled.run, "public"),
+            })
+          : withVerdict(
+              toolDetails({
+                ...cancelled,
+                run: projectRunForDetailMode(cancelled.run, "public"),
+              }),
+              "fail",
+            ),
       );
     },
   });

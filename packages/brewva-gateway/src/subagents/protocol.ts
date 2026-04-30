@@ -42,6 +42,26 @@ export function getCanonicalSubagentPrompt(
   return CANONICAL_PROMPT_BY_RESULT_MODE[resultMode];
 }
 
+export function getCanonicalForkPrompt(input: {
+  contextPolicy: "lineage_only" | "working_snapshot";
+  objective: string;
+  deliverable?: string;
+}): string {
+  return [
+    getCanonicalSubagentPrompt("consult", "investigate"),
+    "",
+    "You are executing as a fork of the parent session.",
+    `Context policy: ${input.contextPolicy}`,
+    "Do not exceed the parent's authority. This fork is read-only unless a narrower runtime grants less.",
+    "",
+    "Objective:",
+    input.objective,
+    input.deliverable ? ["", "Deliverable:", input.deliverable].join("\n") : "",
+  ]
+    .filter((line) => line.length > 0)
+    .join("\n");
+}
+
 export function getDefaultAgentSpecNameForResultMode(resultMode: SubagentResultMode): string {
   return DEFAULT_AGENT_SPEC_BY_RESULT_MODE[resultMode];
 }

@@ -25,14 +25,15 @@ with `Default` as a synthetic no-op preset.
 +-----------+-----------------------+------------+
             | session main          | delegated children
             v                       v
-        /model picker           executionShape.model
-        session-local override  caller override, still wins
+        /model picker           resolver-selected modelRoute
+        session-local override  preset, policy, or diagnostic override
 ```
 
 The diagram shows the override surfaces beside the preset outputs:
-`/model` can still override the session main model, and
-`executionShape.model` remains the highest caller override for delegated child
-runs.
+`/model` can still override the session main model. Public delegation callers
+do not pass delegated model overrides; the resolver records the selected child
+route. Maintainer diagnostics may still probe explicit low-level model routing
+through the diagnostic delegation tool.
 
 ## Problem Statement And Scope Boundaries
 
@@ -82,9 +83,9 @@ This RFC does not cover:
   policy and parent/default behavior.
 - A preset should be named by its settings key. This avoids adding a required
   `name` field while still giving the TUI a stable display label.
-- If an active preset has only `mainModel`, every subagent should inherit that
-  main model unless the subagent invocation supplied an explicit
-  `executionShape.model`.
+- If an active preset has only `mainModel`, every public delegated run should
+  inherit that main model unless a maintainer diagnostic invocation explicitly
+  probes a lower-level model route.
 - If an active preset has `subagentModels`, a matching subagent entry should
   override main-model inheritance for that delegated worker.
 - Preset decisions must remain visible in route receipts. A child run should not
@@ -96,8 +97,8 @@ This RFC does not cover:
 ### Hosted Settings Shape
 
 Preset definitions belong beside hosted model defaults in the hosted settings
-files. Model strings use the same provider/model text accepted by delegated
-`executionShape.model`, including an optional thinking-level suffix.
+files. Model strings use hosted provider/model text plus an optional
+thinking-level suffix.
 
 The following values are illustrative model identifiers. This example authors a
 concrete `Default`; if `Default` is omitted, normalization creates a synthetic
@@ -149,7 +150,7 @@ The effective model contract is the two precedence columns below.
 | Rank | Main session                                  | Delegated subagent                                |
 | ---- | --------------------------------------------- | ------------------------------------------------- |
 | 1    | explicit launch or constructor model override | replayed or preselected `modelRoute`              |
-| 2    | active preset `mainModel`                     | explicit `executionShape.model`                   |
+| 2    | active preset `mainModel`                     | diagnostic explicit model route                   |
 | 3    | restored session model when resuming          | active preset `subagentModels[resolvedAgentSpec]` |
 | 4    | provider-default and catalog fallback         | active preset `mainModel` inheritance             |
 | 5    | none                                          | policy-backed auto route                          |
@@ -159,7 +160,7 @@ The key facts are:
 
 - preset `mainModel` is rank 2 for the main session path
 - preset-backed delegated routing is ranks 3 and 4 for child runs
-- explicit delegated `executionShape.model` still outranks preset routing
+- maintainer diagnostic explicit model routes still outrank preset routing
 - synthetic `Default` contributes no rank 2, 3, or 4 value, so it falls through
   to restored/catalog and policy fallback behavior
 - hosted `defaultProvider`/`defaultModel` and delegated target/envelope `model`
@@ -319,7 +320,7 @@ Recommended path: Option A.
   `packages/brewva-gateway/src/subagents/model-routing.ts`
 - Delegated route contract:
   `packages/brewva-runtime/src/contracts/delegation.ts`
-- Subagent execution shape and `executionShape.model`:
+- Diagnostic subagent execution shape:
   `packages/brewva-tools/src/subagent-run.ts`
 - Subagent reference documentation:
   `docs/reference/tools.md`
@@ -342,13 +343,12 @@ Implementation should add or update tests that prove:
 
 - settings normalization always exposes a `Default` preset
 - `defaultModelPreset` rejects unknown preset names
-- preset model strings resolve through the same catalog path as
-  `executionShape.model`
+- preset model strings resolve through the hosted model catalog path
 - a preset with only `mainModel` routes `advisor`, `qa`, and `patch-worker` to
   that main model
 - a preset `subagentModels` entry overrides main-model inheritance for the
   matching resolved agent spec
-- explicit `executionShape.model` still outranks preset routing
+- diagnostic explicit model routes still outrank preset routing
 - policy-backed routes still work when the active preset does not configure a
   main model
 - target/envelope/agent-spec model pins are rejected and must move to
@@ -456,7 +456,8 @@ Mitigation:
 - document the breaking configuration change explicitly
 - fail loudly when workspace subagent configs declare envelope/target `model`
   pins
-- keep explicit `executionShape.model` as the highest operator/caller override
+- keep diagnostic explicit model routing available for maintainer probes while
+  keeping it out of the public delegation interface
 
 ### Risk: TUI Shortcut Conflicts With Terminal Input
 

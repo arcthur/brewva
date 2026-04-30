@@ -2,8 +2,10 @@ import { readFile } from "node:fs/promises";
 import { relative } from "node:path";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
 import {
+  CURRENT_DELEGATION_CONTRACT_VERSION,
   SUBAGENT_RUNNING_EVENT_TYPE,
   asBrewvaSessionId,
+  evaluateDelegationAdoption,
   type DelegationRunRecord,
   type SkillRoutingScope,
 } from "@brewva/brewva-runtime";
@@ -33,6 +35,8 @@ import { prepareSubagentEntry } from "./entry.js";
 import { createDelegationModelRoutingContextFromAgentDir } from "./model-routing.js";
 import {
   aggregateChildCost,
+  buildCompletedDelegationAdoption,
+  buildDelegationRunRecordSeed,
   buildPatchArtifactRefs,
   buildWorkerResult,
   formatSkillValidationError,
@@ -177,8 +181,13 @@ async function main(): Promise<void> {
   if (!target) {
     const failed = {
       ...(existing ?? {
+        contractVersion: CURRENT_DELEGATION_CONTRACT_VERSION,
         runId: spec.runId,
         delegate: spec.delegate,
+        executionPrimitive: "named" as const,
+        visibility: "diagnostic" as const,
+        isolationStrategy: "shared" as const,
+        adoption: evaluateDelegationAdoption({ outcomeKind: "consult" }),
         parentSessionId: specParentSessionId,
         status: "failed" as const,
         createdAt: spec.createdAt,
@@ -204,8 +213,13 @@ async function main(): Promise<void> {
   if (!packet) {
     const failed = {
       ...(existing ?? {
+        contractVersion: CURRENT_DELEGATION_CONTRACT_VERSION,
         runId: spec.runId,
         delegate: spec.delegate,
+        executionPrimitive: "named" as const,
+        visibility: "diagnostic" as const,
+        isolationStrategy: "shared" as const,
+        adoption: evaluateDelegationAdoption({ outcomeKind: "consult" }),
         parentSessionId: specParentSessionId,
         status: "failed" as const,
         createdAt: spec.createdAt,
@@ -282,22 +296,19 @@ async function main(): Promise<void> {
     childSessionId = asBrewvaSessionId(childSession.session.sessionManager.getSessionId());
 
     const runningRecord: DelegationRunRecord = {
-      ...(delegationStore.getRun(spec.parentSessionId, spec.runId) ?? {
-        runId: spec.runId,
-        delegate: spec.delegate,
-        agentSpec: targetRecord.agentSpecName,
-        envelope: targetRecord.envelopeName,
-        skillName: targetRecord.skillName,
-        parentSessionId: specParentSessionId,
-        createdAt: spec.createdAt,
-        label: spec.label,
-        parentSkill: parentRuntime.inspect.skills.getActive(spec.parentSessionId)?.name,
-        kind: targetRecord.resultMode,
-        consultKind: targetRecord.consultKind,
-        boundary: executionPlan.boundary,
-        modelRoute: executionPlan.modelRoute,
-        delivery: existing?.delivery,
-      }),
+      ...(delegationStore.getRun(spec.parentSessionId, spec.runId) ??
+        buildDelegationRunRecordSeed({
+          runId: spec.runId,
+          target: targetRecord,
+          delegate: spec.delegate,
+          parentSessionId: specParentSessionId,
+          createdAt: spec.createdAt,
+          label: spec.label,
+          parentSkill: parentRuntime.inspect.skills.getActive(spec.parentSessionId)?.name,
+          boundary: executionPlan.boundary,
+          modelRoute: executionPlan.modelRoute,
+          delivery: existing?.delivery,
+        })),
       status: "running",
       updatedAt: Date.now(),
       workerSessionId: childSessionId,
@@ -493,17 +504,19 @@ async function main(): Promise<void> {
       outcome,
       delivery: spec.delivery,
     });
+    const resultData = outcome.data
+      ? (structuredClone(outcome.data) as unknown as DelegationRunRecord["resultData"])
+      : undefined;
     const completedRecord: DelegationRunRecord = {
-      ...(delegationStore.getRun(spec.parentSessionId, spec.runId) ?? {
-        runId: spec.runId,
-        delegate: spec.delegate,
-        agentSpec: targetRecord.agentSpecName,
-        envelope: targetRecord.envelopeName,
-        skillName: delegatedSkill,
-        consultKind: targetRecord.consultKind,
-        parentSessionId: specParentSessionId,
-        createdAt: spec.createdAt,
-      }),
+      ...(delegationStore.getRun(spec.parentSessionId, spec.runId) ??
+        buildDelegationRunRecordSeed({
+          runId: spec.runId,
+          target: targetRecord,
+          delegate: spec.delegate,
+          delegatedSkillName: delegatedSkill,
+          parentSessionId: specParentSessionId,
+          createdAt: spec.createdAt,
+        })),
       status: "completed",
       updatedAt: Date.now(),
       workerSessionId: childSessionId,
@@ -513,10 +526,14 @@ async function main(): Promise<void> {
       consultKind: targetRecord.consultKind,
       boundary: executionPlan.boundary,
       modelRoute: executionPlan.modelRoute,
+      adoption: buildCompletedDelegationAdoption({
+        target: targetRecord,
+        resultData,
+        patchChangeCount: patches?.changes.length,
+        skillValidationOk: skillValidation?.ok,
+      }),
       summary,
-      resultData: outcome.data
-        ? (structuredClone(outcome.data) as unknown as DelegationRunRecord["resultData"])
-        : undefined,
+      resultData,
       artifactRefs: outcome.artifactRefs?.map((ref) => ({ ...ref })),
       totalTokens: childCostSummary.totalTokens,
       costUsd: childCostSummary.totalCostUsd,
@@ -587,16 +604,14 @@ async function main(): Promise<void> {
       delivery: spec.delivery,
     });
     const failedRecord: DelegationRunRecord = {
-      ...(delegationStore.getRun(spec.parentSessionId, spec.runId) ?? {
-        runId: spec.runId,
-        delegate: spec.delegate,
-        agentSpec: targetRecord.agentSpecName,
-        envelope: targetRecord.envelopeName,
-        skillName: targetRecord.skillName,
-        consultKind: targetRecord.consultKind,
-        parentSessionId: specParentSessionId,
-        createdAt: spec.createdAt,
-      }),
+      ...(delegationStore.getRun(spec.parentSessionId, spec.runId) ??
+        buildDelegationRunRecordSeed({
+          runId: spec.runId,
+          target: targetRecord,
+          delegate: spec.delegate,
+          parentSessionId: specParentSessionId,
+          createdAt: spec.createdAt,
+        })),
       status: terminalStatus,
       updatedAt: Date.now(),
       workerSessionId: childSessionId,
@@ -606,6 +621,12 @@ async function main(): Promise<void> {
       consultKind: targetRecord.consultKind,
       boundary: executionPlan.boundary,
       modelRoute: executionPlan.modelRoute,
+      adoption: buildCompletedDelegationAdoption({
+        target: targetRecord,
+        resultData: undefined,
+        patchChangeCount: patches?.changes.length,
+        skillValidationOk: false,
+      }),
       summary: message,
       error: message,
       artifactRefs,

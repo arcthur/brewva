@@ -73,40 +73,43 @@ Platform-growth rule:
 - Tape replay engine: `packages/brewva-runtime/src/tape/replay-engine.ts`
 - Cost tracker: `packages/brewva-runtime/src/cost/tracker.ts`
 
-## Delegated Worker Overlays
+## Custom Delegated Specialists
 
 Delegated worker authoring now has two layers:
 
-- runtime postures remain JSONC-backed under `.brewva/subagents/*.json`
-- authored worker overlays live under `.brewva/agents/*.md` or
-  `.config/brewva/agents/*.md`
+- built-in runtime postures live in the hosted catalog
+- custom specialists live under `.brewva/subagents/*.md` or
+  `~/.brewva/subagents/*.md`
 
-Markdown worker files compile into the existing hosted `agentSpec` surface. The
-frontmatter controls the structural fields (`name`, `extends`, `envelope`,
-`skillName`, `defaultConsultKind`, `reviewLane`, `fallbackResultMode`,
-`executorPreamble`), while the Markdown body becomes additive authored
-instructions rendered in the delegated prompt.
+Markdown worker files narrow one of the existing public specialists. The
+allowed frontmatter fields are `name`, `description`, `extends`, `modelPreset`,
+`reasoningEffort`, and `tools`. `extends` must be `advisor`, `qa`, or
+`patch-worker`; tools must be a subset of the base envelope tools. The Markdown
+body becomes additive authored instructions rendered in the delegated prompt.
 Built-in specialists now follow the same authored-behavior model through
 catalog-backed constitutions instead of relying only on thin preambles.
 Authority still comes from the normalized hosted catalog, not from ad hoc
 prompt text outside the narrowing rules.
 
-Overlay frontmatter is canonical-only. Worker kind values, envelope names, and
-goal-loop style protocol fields do not keep compatibility aliases in this
-surface.
+Custom specialists cannot declare `model`, `envelope`, `skillName`,
+`defaultConsultKind`, `reviewLane`, `fallbackResultMode`, or
+`executorPreamble`. Invalid frontmatter is a hard error, not a warning.
 
 ## Inspectable Delegation Routing
 
 Delegated model routing stays in the hosted control plane rather than the
 runtime kernel.
 
-- explicit `executionShape.model` remains the highest-priority override
-- envelope-pinned models remain explicit target defaults
-- when neither is present, the gateway may auto-apply a policy-backed route for
-  child sessions
+- public callers provide `skillName` intent and packet fields
+- the resolver derives internal agent spec, envelope, result kind, consult kind,
+  context profile, adoption contract, and model route
+- maintainer-only `subagent_run_diagnostic` can still probe explicit low-level
+  routing fields
+- active presets and policy routes select child-session models
 - route decisions are persisted on the delegation record so
-  `subagent_status` can report the selected model, source, policy id, and
-  rationale
+  `subagent_status(detailMode=diagnostic)` can report the selected model,
+  source, policy id, and rationale without leaking those fields into the
+  default public view
 
 This keeps delegated routing visible and reviewable instead of turning it into a
 hidden planner.
@@ -116,17 +119,15 @@ hidden planner.
 The current stable built-in specialist surface is:
 
 - public specialists: `advisor`, `qa`, `patch-worker`
-- internal review fan-out lanes:
-  `review-correctness`, `review-boundaries`, `review-operability`,
-  `review-security`, `review-concurrency`, `review-compatibility`, and
-  `review-performance`
+- internal review fan-out lanes remain behind the review ensemble and are not
+  part of the public specialist taxonomy
 
 Execution posture is intentionally split:
 
 - `advisor` is the single public read-only consultation identity and runs under
   the minimal-context `readonly-advisor` envelope
-- `consult` is the canonical read-only result posture; `consultKind`
-  distinguishes `investigate`, `diagnose`, `design`, and `review`
+- public consult intent derives `investigate`, `diagnose`, `design`, or
+  `review` internally; only diagnostics select consult kind directly
 - consult runs do not make the child own semantic skill completion; parent
   skills still emit semantic workflow artifacts such as `workflow.design` and
   `workflow.review`
@@ -135,13 +136,19 @@ Execution posture is intentionally split:
 - `qa` is intentionally adversarial: a `pass` posture depends on evidence-backed
   executed checks, not static code reading or inherited implementer confidence
 - `patch-worker` is the isolated patch-producing specialist
+- `subagent_fork` is an execution primitive rather than a specialist; it
+  records parent lineage, context policy, and `executionPrimitive=fork`
 - hosted envelopes also pin `contextProfile`; `advisor` and `qa`
   default to `minimal`, while `patch-worker` uses `standard`
+- hosted envelopes also pin `isolationStrategy`:
+  `readonly-advisor=shared`, `qa-runner=ephemeral`, and
+  `patch-worker=snapshot`
 - `minimal` still keeps the recovery-critical baseline pair
   (`historyViewBaseline` + `recoveryWorkingSet`); it only drops the broader
   runtime-status and working-projection narrative set
-- `review-operability` remains the internal audit lane for stale evidence,
-  missing probes, rollback posture, and operator-visible recovery burden
+- the review ensemble keeps internal evidence-audit coverage for stale
+  evidence, missing probes, rollback posture, and operator-visible recovery
+  burden
 
 `runtime.authority.verification.*` remains kernel authority over evidence sufficiency and
 freshness. It is not a delegated specialist.

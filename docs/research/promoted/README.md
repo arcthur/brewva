@@ -61,6 +61,7 @@ refresh the pointer summary and `Last reviewed` metadata here.
 - [`rfc-skill-lifecycle-profile-subtraction.md`](./rfc-skill-lifecycle-profile-subtraction.md)
 - [`rfc-skill-surface-compression-and-project-guidance-boundaries.md`](./rfc-skill-surface-compression-and-project-guidance-boundaries.md)
 - [`rfc-specialist-subagents-and-adversarial-verification.md`](./rfc-specialist-subagents-and-adversarial-verification.md)
+- [`rfc-subagent-interface-depth-and-review-ensemble-surface.md`](./rfc-subagent-interface-depth-and-review-ensemble-surface.md)
 - [`rfc-tool-search-advisor-and-auto-broadened-discovery.md`](./rfc-tool-search-advisor-and-auto-broadened-discovery.md)
 
 ## Gateway, Session, And Scheduling

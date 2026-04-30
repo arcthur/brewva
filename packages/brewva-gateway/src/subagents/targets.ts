@@ -1,4 +1,8 @@
-import type { ManagedToolMode } from "@brewva/brewva-runtime";
+import type {
+  DelegationIsolationStrategy,
+  DelegationVisibility,
+  ManagedToolMode,
+} from "@brewva/brewva-runtime";
 import type {
   AdvisorConsultKind,
   DelegationPacket,
@@ -14,6 +18,7 @@ export type { HostedDelegationBuiltinToolName } from "./config-files.js";
 export interface HostedDelegationTarget {
   name: string;
   description: string;
+  visibility: DelegationVisibility;
   resultMode: SubagentResultMode;
   executorPreamble?: string;
   instructionsMarkdown?: string;
@@ -30,6 +35,7 @@ export interface HostedDelegationTarget {
   managedToolMode?: ManagedToolMode;
   producesPatches: boolean;
   contextProfile: HostedContextProfile;
+  isolationStrategy: DelegationIsolationStrategy;
 }
 
 export function mergeDelegationPacketWithTargetDefaults(

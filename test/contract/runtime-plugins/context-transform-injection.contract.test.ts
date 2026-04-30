@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { HostedDelegationStore } from "@brewva/brewva-gateway";
-import type { SkillDocument } from "@brewva/brewva-runtime";
+import { CURRENT_DELEGATION_CONTRACT_VERSION, type SkillDocument } from "@brewva/brewva-runtime";
 import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import {
   CONTEXT_SOURCES,
@@ -261,6 +261,10 @@ describe("context transform injection contract", () => {
       sessionId,
       type: "subagent_completed",
       payload: {
+        contractVersion: CURRENT_DELEGATION_CONTRACT_VERSION,
+        executionPrimitive: "named",
+        visibility: "public",
+        isolationStrategy: "shared",
         runId: "run-completed-1",
         delegate: "advisor",
         status: "completed",
@@ -271,6 +275,12 @@ describe("context transform injection contract", () => {
         deliveryHandoffState: "pending_parent_turn",
         deliveryReadyAt: 2,
         deliveryUpdatedAt: 2,
+        adoption: {
+          contractId: "delegation.consult.review",
+          decision: "require_human",
+          reason: "consult_adoption_requires_parent_judgment",
+          requiredEvidence: ["consult_evidence"],
+        },
       },
     });
 

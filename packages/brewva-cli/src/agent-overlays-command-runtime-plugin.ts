@@ -38,27 +38,26 @@ function findAuthoredOverlay(
 
 function formatOverlayList(inspection: HostedDelegationCatalogInspection): string {
   const lines = [
-    `Agent overlays — ${inspection.status}`,
+    `Custom subagents — ${inspection.status}`,
     `Authored files: ${inspection.authoredFiles.length}`,
-    `Workspace envelopes: ${inspection.workspaceEnvelopes.length}`,
-    `Workspace agent specs: ${inspection.workspaceAgentSpecs.length}`,
+    `Custom specialists: ${inspection.customSpecialists.length}`,
   ];
   if (inspection.error) {
     lines.push(`Validation error: ${inspection.error}`);
   }
   if (inspection.authoredFiles.length === 0) {
-    lines.push("No authored overlays found under .brewva/agents or .config/brewva/agents.");
+    lines.push(
+      "No authored custom subagents found under .brewva/subagents or ~/.brewva/subagents.",
+    );
     return lines.join("\n");
   }
-  lines.push("Authored overlays:");
+  lines.push("Authored custom subagents:");
   for (const entry of inspection.authoredFiles) {
     const detail = [
-      entry.kind,
       entry.extends ? `extends=${entry.extends}` : null,
-      entry.envelope ? `envelope=${entry.envelope}` : null,
-      entry.skillName ? `skill=${entry.skillName}` : null,
-      entry.boundary ? `boundary=${entry.boundary}` : null,
-      entry.model ? `model=${entry.model}` : null,
+      entry.modelPreset ? `modelPreset=${entry.modelPreset}` : null,
+      entry.reasoningEffort ? `reasoningEffort=${entry.reasoningEffort}` : null,
+      entry.tools?.length ? `tools=${entry.tools.join(",")}` : null,
     ].filter(Boolean);
     lines.push(`- ${entry.name ?? entry.fileName} (${detail.join(" ") || entry.source})`);
     lines.push(`  ${entry.filePath}`);
@@ -72,27 +71,23 @@ function formatOverlayDetail(
 ): string {
   const authored = findAuthoredOverlay(inspection, overlayName);
   if (!authored) {
-    return `No authored overlay named '${overlayName}' was found.`;
+    return `No authored custom subagent named '${overlayName}' was found.`;
   }
-  const envelope = inspection.workspaceEnvelopes.find((entry) => entry.name === overlayName);
-  const agentSpec = inspection.workspaceAgentSpecs.find((entry) => entry.name === overlayName);
+  const agentSpec = inspection.customSpecialists.find((entry) => entry.name === overlayName);
   const lines = [
-    `Agent overlay ${overlayName} — ${inspection.status}`,
+    `Custom subagent ${overlayName} — ${inspection.status}`,
     `File: ${authored.filePath}`,
-    `Kind: ${authored.kind}`,
     authored.extends ? `Extends: ${authored.extends}` : "Extends: none",
     authored.description ? `Description: ${authored.description}` : "Description: none",
+    authored.modelPreset ? `Model preset: ${authored.modelPreset}` : "Model preset: inherited",
+    authored.reasoningEffort
+      ? `Reasoning effort: ${authored.reasoningEffort}`
+      : "Reasoning effort: inherited",
+    `Tools: ${(authored.tools ?? []).join(", ") || "inherited"}`,
   ];
   if (agentSpec) {
     lines.push(`Compiled envelope: ${agentSpec.envelope}`);
-    lines.push(`Compiled skill: ${agentSpec.skillName ?? "none"}`);
-    lines.push(`Compiled result mode: ${agentSpec.fallbackResultMode ?? "none"}`);
     lines.push(`Instructions markdown: ${agentSpec.instructionsMarkdown ? "present" : "absent"}`);
-  }
-  if (envelope) {
-    lines.push(`Boundary: ${envelope.boundary ?? "safe"}`);
-    lines.push(`Builtin tools: ${(envelope.builtinToolNames ?? []).join(", ") || "none"}`);
-    lines.push(`Managed tools: ${(envelope.managedToolNames ?? []).join(", ") || "none"}`);
   }
   if (inspection.error) {
     lines.push(`Validation error: ${inspection.error}`);
@@ -109,7 +104,7 @@ export function createAgentOverlaysCommandRuntimePlugin(
     register(runtimePluginApi: InternalRuntimePluginApi) {
       runtimePluginApi.registerCommand("agent-overlays", {
         description:
-          "Inspect or validate authored delegated-worker overlays (usage: /agent-overlays | /agent-overlays validate | /agent-overlays <name>)",
+          "Inspect or validate authored custom subagents (usage: /agent-overlays | /agent-overlays validate | /agent-overlays <name>)",
         handler: async (args, ctx) => {
           const normalizedArgs = normalizeArgs(args);
           const inspection = await inspectHostedDelegationCatalog(runtime.workspaceRoot);
@@ -121,9 +116,9 @@ export function createAgentOverlaysCommandRuntimePlugin(
             const summary =
               inspection.status === "valid"
                 ? normalizedArgs === "validate"
-                  ? "Agent overlay validation passed."
-                  : "Agent overlay inspection report."
-                : "Agent overlay inspection found validation errors.";
+                  ? "Custom subagent validation passed."
+                  : "Custom subagent inspection report."
+                : "Custom subagent inspection found validation errors.";
             ctx.ui.notify(
               toNotificationMessage(summary, text),
               inspection.status === "valid" ? "info" : "warning",

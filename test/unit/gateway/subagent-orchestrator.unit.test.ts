@@ -157,6 +157,85 @@ describe("hosted subagent orchestrator", () => {
     await rm(workspaceRoot, { recursive: true, force: true });
   });
 
+  test("carries consult briefs through parallel task packet merging", async () => {
+    const workspaceRoot = createTempWorkspace("brewva-subagent-fanout-brief-");
+    const runtime = new BrewvaRuntime({ cwd: workspaceRoot });
+    const parentSessionId = "parent-session-fanout-brief";
+    let childIndex = 0;
+
+    const adapter = createHostedSubagentAdapter({
+      runtime,
+      async createChildSession() {
+        childIndex += 1;
+        const childRuntime = new BrewvaRuntime({ cwd: workspaceRoot });
+        const childSessionId = `child-fanout-brief-${childIndex}`;
+        const listeners = new Set<(event: BrewvaPromptSessionEvent) => void>();
+
+        return {
+          runtime: childRuntime,
+          session: {
+            dispose() {},
+            async prompt() {
+              for (const listener of listeners) {
+                listener({
+                  type: "message_end",
+                  message: {
+                    role: "assistant",
+                    content: [{ type: "text", text: `Consult ${childSessionId} completed.` }],
+                  },
+                } as BrewvaPromptSessionEvent);
+              }
+            },
+            async waitForIdle() {},
+            sessionManager: {
+              getSessionId() {
+                return childSessionId;
+              },
+            },
+            subscribe(listener) {
+              listeners.add(listener);
+              return () => {
+                listeners.delete(listener);
+              };
+            },
+          },
+        };
+      },
+    });
+
+    const result = await adapter.run({
+      fromSessionId: parentSessionId,
+      request: {
+        skillName: "discovery",
+        mode: "parallel",
+        tasks: [
+          {
+            label: "gateway",
+            objective: "Inspect gateway delegation entrypoints.",
+            consultBrief: {
+              decision: "Which gateway entrypoints matter?",
+              successCriteria: "Return one concrete gateway finding.",
+            },
+          },
+          {
+            label: "runtime",
+            objective: "Inspect runtime delegation records.",
+            consultBrief: {
+              decision: "Which runtime records matter?",
+              successCriteria: "Return one concrete runtime finding.",
+            },
+          },
+        ],
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.outcomes).toHaveLength(2);
+    expect(result.outcomes.every((outcome) => outcome.ok)).toBe(true);
+
+    await rm(workspaceRoot, { recursive: true, force: true });
+  });
+
   test("allows packet boundary to narrow a patch-worker target back to safe", async () => {
     const workspaceRoot = createTempWorkspace("brewva-subagent-narrow-");
     const runtimeConfig = structuredClone(DEFAULT_BREWVA_CONFIG);
@@ -736,7 +815,7 @@ describe("hosted subagent orchestrator", () => {
     await rm(workspaceRoot, { recursive: true, force: true });
   });
 
-  test("keeps the run successful when the structured outcome block is missing", async () => {
+  test("rejects prose-only QA output when the structured outcome block is missing", async () => {
     const workspaceRoot = createTempWorkspace("brewva-subagent-structured-fallback-");
     const runtime = new BrewvaRuntime({ cwd: workspaceRoot });
     const parentSessionId = "parent-session-structured-fallback";
@@ -788,7 +867,7 @@ describe("hosted subagent orchestrator", () => {
     const result = await adapter.run({
       fromSessionId: parentSessionId,
       request: {
-        envelope: "qa-runner",
+        agentSpec: "qa",
         executionShape: {
           resultMode: "qa",
         },
@@ -799,19 +878,20 @@ describe("hosted subagent orchestrator", () => {
       },
     });
 
-    expect(result.ok).toBe(true);
+    expect(result.ok).toBe(false);
     const outcome = result.outcomes[0];
-    expect(outcome?.ok).toBe(true);
-    if (!outcome || !outcome.ok) {
-      throw new Error("expected a successful QA outcome");
+    expect(outcome?.ok).toBe(false);
+    if (!outcome || outcome.ok) {
+      throw new Error("expected a failed QA outcome");
     }
 
-    expect(outcome.kind).toBe("qa");
-    expect(outcome.data).toBeUndefined();
-    expect(outcome.summary).toBe("QA completed, but only a prose summary is available.");
+    expect(outcome.error).toContain("subagent_skill_outputs_invalid:qa");
     expect(
       runtime.inspect.events.list(parentSessionId, { type: "subagent_outcome_parse_failed" }),
     ).toHaveLength(1);
+    expect(runtime.inspect.events.list(parentSessionId, { type: "subagent_failed" })).toHaveLength(
+      1,
+    );
 
     await rm(workspaceRoot, { recursive: true, force: true });
   });
@@ -1030,7 +1110,7 @@ describe("hosted subagent orchestrator", () => {
     const started = await adapter.start({
       fromSessionId: parentSessionId,
       request: {
-        envelope: "readonly-advisor",
+        agentSpec: "advisor",
         consultKind: "investigate",
         executionShape: {
           resultMode: "consult",
@@ -1039,8 +1119,8 @@ describe("hosted subagent orchestrator", () => {
         packet: {
           objective: "Inspect the runtime boundary changes.",
           consultBrief: {
-            decision: "What should this ad hoc advisor inspect first?",
-            successCriteria: "Launch an ad hoc consult run without an agent spec.",
+            decision: "What should this advisor inspect first?",
+            successCriteria: "Launch a diagnostic consult run through an explicit agent spec.",
           },
         },
         delivery: {

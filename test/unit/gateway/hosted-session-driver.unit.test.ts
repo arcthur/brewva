@@ -18,6 +18,12 @@ function writeHostedSettings(agentDir: string, settings: Record<string, unknown>
   writeFileSync(join(agentDir, "settings.json"), JSON.stringify(settings, null, 2), "utf8");
 }
 
+function writeProjectHostedSettings(workspace: string, settings: Record<string, unknown>): void {
+  const settingsDir = join(workspace, ".brewva", "agent");
+  mkdirSync(settingsDir, { recursive: true });
+  writeFileSync(join(settingsDir, "settings.json"), JSON.stringify(settings, null, 2), "utf8");
+}
+
 function registerAnthropicModels(
   driver: ReturnType<typeof createHostedSessionDriver>,
   modelIds: readonly string[],
@@ -121,6 +127,46 @@ describe("hosted session driver", () => {
     const settings = readHostedSettingsHandle(createHostedSettingsManager(workspace, agentDir));
 
     expect(() => settings.getModelPresetState()).toThrow("Model preset names must be trimmed");
+  });
+
+  test("loads project hosted settings from the Brewva agent directory", () => {
+    const workspace = createTestWorkspace("hosted-session-driver-project-settings");
+    const agentDir = join(workspace, ".brewva-agent");
+    writeHostedSettings(agentDir, {
+      defaultModelPreset: "Global",
+      modelPresets: {
+        Global: {
+          mainModel: "anthropic/global-main:low",
+        },
+      },
+    });
+    writeProjectHostedSettings(workspace, {
+      defaultModelPreset: "Project",
+      modelPresets: {
+        Project: {
+          mainModel: "anthropic/project-main:high",
+          subagentModels: {
+            advisor: "anthropic/project-advisor:medium",
+          },
+        },
+      },
+    });
+
+    const settings = readHostedSettingsHandle(createHostedSettingsManager(workspace, agentDir));
+
+    expect(settings.getModelPresetState()).toMatchObject({
+      activeName: "Project",
+      defaultName: "Project",
+      presets: expect.arrayContaining([
+        expect.objectContaining({
+          name: "Project",
+          mainModel: "anthropic/project-main:high",
+          subagentModels: {
+            advisor: "anthropic/project-advisor:medium",
+          },
+        }),
+      ]),
+    });
   });
 
   test("rejects removed legacy default model settings", () => {
@@ -377,7 +423,7 @@ describe("hosted session driver", () => {
     }
   });
 
-  test("uses Pi-aligned provider defaults when no explicit model exists", async () => {
+  test("uses Brewva-hosted provider defaults when no explicit model exists", async () => {
     const workspace = createTestWorkspace("hosted-session-driver-provider-default");
     const agentDir = join(workspace, ".brewva-agent");
     const driver = createHostedSessionDriver(agentDir);
@@ -477,7 +523,7 @@ describe("hosted session driver", () => {
     result.session.dispose();
   });
 
-  test("keeps Pi model handles internal to the driver surface", () => {
+  test("keeps hosted model handles internal to the driver surface", () => {
     const workspace = createTestWorkspace("hosted-session-driver-model-services");
     const agentDir = join(workspace, ".brewva-agent");
     const driver = createHostedSessionDriver(agentDir);
@@ -491,7 +537,7 @@ describe("hosted session driver", () => {
     expect("createSession" in driver).toBe(false);
   });
 
-  test("keeps Pi settings and hosted session services handles internal", async () => {
+  test("keeps hosted settings and session services handles internal", async () => {
     const workspace = createTestWorkspace("hosted-session-driver-settings");
     const agentDir = join(workspace, ".brewva-agent");
     const settings = createHostedSettingsManager(workspace, agentDir);
@@ -516,7 +562,7 @@ describe("hosted session driver", () => {
 
     expect(typeof settings.view.getImageAutoResize()).toBe("boolean");
     expect(typeof settings.view.getQuietStartup()).toBe("boolean");
-    expect("piSettingsManager" in settings).toBe(false);
+    expect("hostedSettingsManager" in settings).toBe(false);
 
     const result = await driver.createRuntime({
       cwd: workspace,
@@ -654,7 +700,7 @@ describe("hosted session driver", () => {
     result.session.dispose();
   });
 
-  test("wraps the Pi session in a Brewva-owned managed session surface", async () => {
+  test("wraps the hosted session in a Brewva-owned managed session surface", async () => {
     const workspace = createTestWorkspace("hosted-session-driver-session-wrapper");
     const agentDir = join(workspace, ".brewva-agent");
     const driver = createHostedSessionDriver(agentDir);

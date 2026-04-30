@@ -21,7 +21,6 @@ export {
   BUILTIN_AGENT_SPECS,
   BUILTIN_EXECUTION_ENVELOPES,
   buildHostedDelegationTargetFromAgentSpec,
-  buildSyntheticHostedDelegationTarget,
   deriveDefaultAgentSpecNameForResultMode,
   deriveDefaultAgentSpecNameForSkillName,
   deriveFallbackResultModeForSkillName,

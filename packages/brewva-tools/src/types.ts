@@ -180,6 +180,7 @@ export type DelegationRefKind =
   | "tool_result";
 export type SubagentContextRefKind = Exclude<DelegationRefKind, "tool_result"> | "tool_result";
 export type SubagentExecutionBoundary = ToolExecutionBoundary;
+export type SubagentForkContextPolicy = "lineage_only" | "working_snapshot";
 
 export interface SubagentContextBudget {
   maxInjectionTokens?: number;
@@ -262,6 +263,18 @@ export interface SubagentRunRequest {
   mode: SubagentDelegationMode;
   packet?: DelegationPacket;
   tasks?: DelegationTaskPacket[];
+  timeoutMs?: number;
+  delivery?: {
+    returnMode: SubagentReturnMode;
+    returnLabel?: string;
+    returnScopeId?: string;
+  };
+}
+
+export interface SubagentForkRequest {
+  objective: string;
+  deliverable?: string;
+  contextPolicy?: SubagentForkContextPolicy;
   timeoutMs?: number;
   delivery?: {
     returnMode: SubagentReturnMode;
@@ -515,6 +528,19 @@ export type SubagentCancelFailureResult = {
 
 export type SubagentCancelResult = SubagentCancelSuccessResult | SubagentCancelFailureResult;
 
+export type SubagentForkSuccessResult = {
+  ok: true;
+  run: DelegationRunRecord;
+};
+
+export type SubagentForkFailureResult = {
+  ok: false;
+  error: string;
+  run?: DelegationRunRecord;
+};
+
+export type SubagentForkResult = SubagentForkSuccessResult | SubagentForkFailureResult;
+
 export type A2ASendSuccessResult = {
   ok: true;
   toAgentId: string;
@@ -586,6 +612,10 @@ export interface BrewvaToolOrchestration {
       runId: string;
       reason?: string;
     }): Promise<SubagentCancelResult>;
+    fork?(input: {
+      fromSessionId: string;
+      request: SubagentForkRequest;
+    }): Promise<SubagentForkResult>;
   };
 }
 

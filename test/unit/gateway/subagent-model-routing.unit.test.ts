@@ -56,11 +56,13 @@ function makeTarget(overrides: Partial<HostedDelegationTarget> = {}): HostedDele
   return {
     name: "advisor",
     description: "Repository advisor",
+    visibility: "public",
     resultMode: "consult",
     consultKind: "investigate",
     boundary: "safe",
     producesPatches: false,
     contextProfile: "minimal",
+    isolationStrategy: "shared",
     ...overrides,
   };
 }

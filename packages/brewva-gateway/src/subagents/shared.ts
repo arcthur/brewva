@@ -1,6 +1,11 @@
 import type {
   BrewvaRuntime,
+  DelegationRunRecord,
   DelegationModelRouteRecord,
+  DelegationAdoptionRecord,
+  DelegationIsolationStrategy,
+  DelegationLineageRecord,
+  DelegationVisibility,
   ManagedToolMode,
   PatchSet,
   SessionCostSummary,
@@ -8,7 +13,9 @@ import type {
   WorkerResult,
 } from "@brewva/brewva-runtime";
 import {
+  CURRENT_DELEGATION_CONTRACT_VERSION,
   deriveToolGovernanceDescriptor,
+  evaluateDelegationAdoption,
   listSkillFallbackTools,
   listSkillPreferredTools,
   resolveSkillEffectLevel,
@@ -23,10 +30,12 @@ import type {
 import {
   assertHostedExecutionEnvelopeTightening,
   buildHostedDelegationTargetFromAgentSpec,
-  buildSyntheticHostedDelegationTarget,
+  deriveDefaultConsultKindForSkillName,
   deriveDefaultAgentSpecNameForResultMode,
   deriveDefaultAgentSpecNameForSkillName,
+  deriveFallbackResultModeForSkillName,
   resolveHostedExecutionEnvelope,
+  isKnownDelegationSkillName,
   type HostedDelegationCatalog,
 } from "./catalog.js";
 import {
@@ -81,6 +90,8 @@ export interface ResolvedDelegationExecutionPlan {
   managedToolNames: string[];
   producesPatches: boolean;
   contextProfile: HostedDelegationTarget["contextProfile"];
+  visibility: DelegationVisibility;
+  isolationStrategy: DelegationIsolationStrategy;
   prompt: string;
 }
 
@@ -103,6 +114,132 @@ function summarizeAssistantText(text: string): string {
 export function resolveRunSummary(text: string, fallback: string): string {
   const summary = summarizeAssistantText(text);
   return summary || fallback;
+}
+
+export function buildInitialDelegationAdoption(
+  target: Pick<HostedDelegationTarget, "resultMode">,
+): DelegationAdoptionRecord {
+  return evaluateDelegationAdoption({
+    outcomeKind: target.resultMode,
+  });
+}
+
+export function buildDelegationContractRecordFields(
+  target: Pick<HostedDelegationTarget, "resultMode" | "visibility" | "isolationStrategy">,
+): {
+  contractVersion: typeof CURRENT_DELEGATION_CONTRACT_VERSION;
+  executionPrimitive: "named";
+  visibility: DelegationVisibility;
+  isolationStrategy: DelegationIsolationStrategy;
+  adoption: DelegationAdoptionRecord;
+} {
+  return {
+    contractVersion: CURRENT_DELEGATION_CONTRACT_VERSION,
+    executionPrimitive: "named",
+    visibility: target.visibility,
+    isolationStrategy: target.isolationStrategy,
+    adoption: buildInitialDelegationAdoption(target),
+  };
+}
+
+export function buildForkDelegationContractRecordFields(input: {
+  parentSessionId: DelegationLineageRecord["parentSessionId"];
+  contextPolicy: DelegationLineageRecord["contextPolicy"];
+  isolationStrategy?: DelegationIsolationStrategy;
+}): {
+  contractVersion: typeof CURRENT_DELEGATION_CONTRACT_VERSION;
+  executionPrimitive: "fork";
+  visibility: "public";
+  isolationStrategy: DelegationIsolationStrategy;
+  adoption: DelegationAdoptionRecord;
+  lineage: DelegationLineageRecord;
+} {
+  return {
+    contractVersion: CURRENT_DELEGATION_CONTRACT_VERSION,
+    executionPrimitive: "fork",
+    visibility: "public",
+    isolationStrategy: input.isolationStrategy ?? "shared",
+    adoption: evaluateDelegationAdoption({
+      outcomeKind: "consult",
+      executionPrimitive: "fork",
+    }),
+    lineage: {
+      parentSessionId: input.parentSessionId,
+      contextPolicy: input.contextPolicy,
+    },
+  };
+}
+
+export function buildCompletedDelegationAdoption(input: {
+  target: Pick<HostedDelegationTarget, "resultMode">;
+  executionPrimitive?: DelegationRunRecord["executionPrimitive"];
+  resultData?: Record<string, unknown>;
+  patchChangeCount?: number;
+  skillValidationOk?: boolean;
+}): DelegationAdoptionRecord {
+  return evaluateDelegationAdoption({
+    outcomeKind: input.target.resultMode,
+    executionPrimitive: input.executionPrimitive,
+    resultData: input.resultData,
+    patchChangeCount: input.patchChangeCount,
+    skillValidationOk: input.skillValidationOk,
+  });
+}
+
+export function resolveDelegationRecordIdentity(input: {
+  target: HostedDelegationTarget;
+  delegate?: string;
+  delegatedSkillName?: string;
+}): Pick<DelegationRunRecord, "delegate" | "agentSpec" | "envelope" | "skillName" | "consultKind"> {
+  return {
+    delegate:
+      input.delegate ??
+      input.target.agentSpecName ??
+      input.target.envelopeName ??
+      input.target.name,
+    agentSpec: input.target.agentSpecName,
+    envelope: input.target.envelopeName,
+    skillName: input.delegatedSkillName ?? input.target.skillName,
+    consultKind: input.target.consultKind,
+  };
+}
+
+export function buildDelegationRunRecordSeed(input: {
+  runId: string;
+  target: HostedDelegationTarget;
+  parentSessionId: DelegationRunRecord["parentSessionId"];
+  createdAt: number;
+  updatedAt?: number;
+  delegate?: string;
+  delegatedSkillName?: string;
+  status?: DelegationRunRecord["status"];
+  label?: string;
+  parentSkill?: string;
+  boundary?: ToolExecutionBoundary;
+  modelRoute?: DelegationModelRouteRecord;
+  delivery?: DelegationRunRecord["delivery"];
+  workerSessionId?: DelegationRunRecord["workerSessionId"];
+}): DelegationRunRecord {
+  return {
+    runId: input.runId,
+    ...buildDelegationContractRecordFields(input.target),
+    ...resolveDelegationRecordIdentity({
+      target: input.target,
+      delegate: input.delegate,
+      delegatedSkillName: input.delegatedSkillName,
+    }),
+    parentSessionId: input.parentSessionId,
+    status: input.status ?? "pending",
+    createdAt: input.createdAt,
+    updatedAt: input.updatedAt ?? input.createdAt,
+    label: input.label,
+    parentSkill: input.parentSkill,
+    kind: input.target.resultMode,
+    boundary: input.boundary,
+    modelRoute: input.modelRoute,
+    delivery: input.delivery,
+    workerSessionId: input.workerSessionId,
+  };
 }
 
 export function formatSkillValidationError(input: {
@@ -294,6 +431,8 @@ export function resolveManagedToolNamesForRun(
     if (
       toolName === "subagent_run" ||
       toolName === "subagent_fanout" ||
+      toolName === "subagent_fork" ||
+      toolName === "subagent_run_diagnostic" ||
       toolName === "subagent_status" ||
       toolName === "subagent_cancel"
     ) {
@@ -315,9 +454,22 @@ export function resolveDelegationTarget(input: {
     input.request.executionShape?.resultMode ?? input.request.fallbackResultMode;
   let resolvedAgentSpecName = requestedAgentSpec;
   const derivedFromSkillName = !requestedAgentSpec && Boolean(input.request.skillName);
+  const skillNameAgentSpec = input.request.skillName
+    ? input.catalog.agentSpecs.get(input.request.skillName)
+    : undefined;
+  if (
+    input.request.skillName &&
+    !requestedAgentSpec &&
+    !input.request.envelope &&
+    !isKnownDelegationSkillName(input.request.skillName) &&
+    !skillNameAgentSpec
+  ) {
+    throw new Error(`unknown_delegation_skill:${input.request.skillName}`);
+  }
   if (!resolvedAgentSpecName && !input.request.envelope) {
     if (input.request.skillName) {
-      resolvedAgentSpecName = deriveDefaultAgentSpecNameForSkillName(input.request.skillName);
+      resolvedAgentSpecName =
+        deriveDefaultAgentSpecNameForSkillName(input.request.skillName) ?? skillNameAgentSpec?.name;
       if (!resolvedAgentSpecName) {
         throw new Error(`missing_default_agent_spec_for_skill:${input.request.skillName}`);
       }
@@ -348,6 +500,19 @@ export function resolveDelegationTarget(input: {
     }
     const baseEnvelope = resolveHostedExecutionEnvelope(input.catalog, resolvedAgentSpec.envelope);
     const requestedEnvelope = resolveHostedExecutionEnvelope(input.catalog, input.request.envelope);
+    const resolvedSkillName =
+      input.request.skillName && isKnownDelegationSkillName(input.request.skillName)
+        ? input.request.skillName
+        : resolvedAgentSpec.skillName;
+    const derivedConsultKind =
+      input.request.consultKind ??
+      resolvedAgentSpec.defaultConsultKind ??
+      deriveDefaultConsultKindForSkillName(input.request.skillName) ??
+      (derivedFromSkillName &&
+      !isKnownDelegationSkillName(input.request.skillName) &&
+      (resolvedAgentSpec.fallbackResultMode ?? "consult") === "consult"
+        ? "investigate"
+        : undefined);
     if (!baseEnvelope) {
       throw new Error(`unknown_envelope:${resolvedAgentSpec.envelope}`);
     }
@@ -365,11 +530,12 @@ export function resolveDelegationTarget(input: {
     const target = buildHostedDelegationTargetFromAgentSpec({
       agentSpec: {
         ...resolvedAgentSpec,
-        skillName: input.request.skillName ?? resolvedAgentSpec.skillName,
-        defaultConsultKind: input.request.consultKind ?? resolvedAgentSpec.defaultConsultKind,
+        skillName: resolvedSkillName,
+        defaultConsultKind: derivedConsultKind,
         fallbackResultMode:
           input.request.fallbackResultMode ??
           input.request.executionShape?.resultMode ??
+          deriveFallbackResultModeForSkillName(input.request.skillName) ??
           resolvedAgentSpec.fallbackResultMode,
       },
       envelope,
@@ -388,34 +554,10 @@ export function resolveDelegationTarget(input: {
   }
 
   if (input.request.envelope) {
-    const envelope = resolveHostedExecutionEnvelope(input.catalog, input.request.envelope);
-    if (!envelope) {
-      throw new Error(`unknown_envelope:${input.request.envelope}`);
-    }
-    const target = buildSyntheticHostedDelegationTarget({
-      name: input.request.skillName
-        ? `adhoc-${sanitizeFragment(input.request.skillName)}`
-        : `adhoc-${envelope.name}`,
-      description: input.request.skillName
-        ? `Ad hoc delegated worker for skill=${input.request.skillName} on envelope=${envelope.name}.`
-        : `Ad hoc delegated worker on envelope=${envelope.name}.`,
-      envelope,
-      skillName: input.request.skillName,
-      consultKind: input.request.consultKind,
-      fallbackResultMode:
-        input.request.fallbackResultMode ?? input.request.executionShape?.resultMode,
-    });
-    if (target.resultMode === "consult" && !target.consultKind) {
-      throw new Error("missing_consult_kind");
-    }
-    assertDelegationShapeNarrowing(target, input.request.executionShape);
-    return {
-      target,
-      delegate: target.envelopeName ?? target.name,
-    };
+    throw new Error("envelope_requires_agent_spec");
   }
 
-  throw new Error("missing_agent_spec_or_envelope");
+  throw new Error("missing_agent_spec_or_skill_name");
 }
 
 export function resolveDelegationExecutionPlan(input: {
@@ -478,6 +620,8 @@ export function resolveDelegationExecutionPlan(input: {
     ),
     producesPatches: input.target.producesPatches,
     contextProfile: input.target.contextProfile,
+    visibility: input.target.visibility,
+    isolationStrategy: input.target.isolationStrategy,
     prompt,
   };
 }

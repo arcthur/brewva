@@ -15,6 +15,7 @@ export * from "./session.js";
 export * from "./session-lifecycle.js";
 export * from "./session-wire.js";
 export * from "./delegation.js";
+export * from "./delegation-adoption.js";
 export * from "./context.js";
 export * from "./patching.js";
 export * from "./events.js";

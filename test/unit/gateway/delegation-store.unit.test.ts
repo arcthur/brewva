@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { HostedDelegationStore } from "@brewva/brewva-gateway";
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { BrewvaRuntime, CURRENT_DELEGATION_CONTRACT_VERSION } from "@brewva/brewva-runtime";
 import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import { cleanupWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
 
@@ -31,6 +31,7 @@ function recordCompletedRun(input: {
     type: "subagent_completed",
     timestamp: input.updatedAt,
     payload: {
+      ...delegationLifecycleFields(),
       runId: input.runId,
       delegate: input.delegate ?? "advisor",
       status: "completed",
@@ -44,6 +45,20 @@ function recordCompletedRun(input: {
       deliverySurfacedAt: input.handoffState === "surfaced" ? input.updatedAt : null,
     },
   });
+}
+
+function delegationLifecycleFields() {
+  return {
+    contractVersion: CURRENT_DELEGATION_CONTRACT_VERSION,
+    executionPrimitive: "named" as const,
+    visibility: "public" as const,
+    isolationStrategy: "shared" as const,
+    adoption: {
+      contractId: "delegation-store-test",
+      decision: "require_human" as const,
+      reason: "Fixture record has not reached parent adoption.",
+    },
+  };
 }
 
 describe("HostedDelegationStore", () => {
@@ -76,7 +91,7 @@ describe("HostedDelegationStore", () => {
     expect(pending[0]?.delivery?.handoffState).toBe("pending_parent_turn");
   });
 
-  test("replays subagent_running as the live lifecycle transition while keeping older spawned events compatible", () => {
+  test("replays subagent_running as the live lifecycle transition", () => {
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const store = new HostedDelegationStore(runtime);
     const sessionId = "delegation-store-running";
@@ -86,6 +101,7 @@ describe("HostedDelegationStore", () => {
       type: "subagent_spawned",
       timestamp: 100,
       payload: {
+        ...delegationLifecycleFields(),
         runId: "run-1",
         delegate: "review",
         status: "pending",
@@ -96,6 +112,7 @@ describe("HostedDelegationStore", () => {
       type: "subagent_running",
       timestamp: 110,
       payload: {
+        ...delegationLifecycleFields(),
         runId: "run-1",
         delegate: "review",
         status: "running",
@@ -120,6 +137,7 @@ describe("HostedDelegationStore", () => {
       type: "subagent_completed",
       timestamp: 100,
       payload: {
+        ...delegationLifecycleFields(),
         runId: "run-legacy-kind",
         delegate: "qa",
         status: "completed",
@@ -133,6 +151,81 @@ describe("HostedDelegationStore", () => {
       status: "completed",
       kind: undefined,
     });
+  });
+
+  test("rejects missing delegation contract versions", () => {
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const store = new HostedDelegationStore(runtime);
+    const sessionId = "delegation-store-missing-contract-version";
+
+    recordRuntimeEvent(runtime, {
+      sessionId,
+      type: "subagent_spawned",
+      timestamp: 100,
+      payload: {
+        runId: "run-missing-version",
+        delegate: "advisor",
+        status: "pending",
+      },
+    });
+
+    expect(() => store.getRun(sessionId, "run-missing-version")).toThrow(
+      "unsupported_delegation_contract_version:missing",
+    );
+  });
+
+  test("rejects current-version records without adoption payloads", () => {
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const store = new HostedDelegationStore(runtime);
+    const sessionId = "delegation-store-missing-adoption";
+
+    recordRuntimeEvent(runtime, {
+      sessionId,
+      type: "subagent_spawned",
+      timestamp: 100,
+      payload: {
+        contractVersion: CURRENT_DELEGATION_CONTRACT_VERSION,
+        executionPrimitive: "named",
+        visibility: "public",
+        isolationStrategy: "shared",
+        runId: "run-missing-adoption",
+        delegate: "advisor",
+        status: "pending",
+      },
+    });
+
+    expect(() => store.getRun(sessionId, "run-missing-adoption")).toThrow(
+      "invalid_delegation_contract:run-missing-adoption:missing_adoption",
+    );
+  });
+
+  test("rejects current-version records with malformed adoption payloads", () => {
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const store = new HostedDelegationStore(runtime);
+    const sessionId = "delegation-store-malformed-adoption";
+
+    recordRuntimeEvent(runtime, {
+      sessionId,
+      type: "subagent_spawned",
+      timestamp: 100,
+      payload: {
+        contractVersion: CURRENT_DELEGATION_CONTRACT_VERSION,
+        executionPrimitive: "named",
+        visibility: "public",
+        isolationStrategy: "shared",
+        adoption: {
+          contractId: "delegation.test",
+          decision: "allow",
+        },
+        runId: "run-malformed-adoption",
+        delegate: "advisor",
+        status: "pending",
+      },
+    });
+
+    expect(() => store.getRun(sessionId, "run-malformed-adoption")).toThrow(
+      "invalid_delegation_contract:run-malformed-adoption:missing_adoption",
+    );
   });
 
   test("preserves canonical design consult kinds in read models", () => {

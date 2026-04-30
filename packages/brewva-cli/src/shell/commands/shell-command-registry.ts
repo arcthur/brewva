@@ -258,7 +258,7 @@ const reservedShellSlashNames: readonly ShellSlashReservation[] = [
     name: "agent-overlays",
     owner: "runtime.agent-overlays",
     message:
-      "/agent-overlays is reserved for runtime overlay inspection; it is not an interactive shell slash command.",
+      "/agent-overlays is reserved for custom subagent inspection; it is not an interactive shell slash command.",
   },
 ];
 

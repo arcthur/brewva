@@ -93,7 +93,7 @@ remain available.
 Hosted model defaults are configured through session model presets in hosted
 settings files, not top-level `BrewvaConfig`. The gateway reads global hosted
 settings from `<agentDir>/settings.json` and project hosted settings from
-`<workspace>/.pi/settings.json`.
+`<workspace>/.brewva/agent/settings.json`.
 
 Supported hosted model-preset fields:
 
@@ -101,10 +101,10 @@ Supported hosted model-preset fields:
 - `defaultModelPreset`: optional preset label, defaulting to `Default`
 - `modelPresets.<name>.mainModel`: optional main-session model string
 - `modelPresets.<name>.subagentModels`: optional object keyed by resolved
-  delegated agent-spec identity
+  delegated specialist identity
 
-Model strings use the same syntax as `executionShape.model`, including an
-optional thinking suffix such as `openai/gpt-5.5:high`.
+Model strings use hosted provider model ids plus the optional reasoning suffix
+used by the interactive model picker, such as `openai/gpt-5.5:high`.
 
 Preset labels, `defaultModelPreset`, `mainModel`, `subagentModels` keys, and
 `subagentModels` values must be non-empty trimmed strings. Malformed preset
