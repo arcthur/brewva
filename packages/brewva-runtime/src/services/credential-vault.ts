@@ -51,6 +51,7 @@ const DISCOVERY_MAPPINGS: Array<{
   credentialRef: string;
 }> = [
   { provider: "openai", envVar: "OPENAI_API_KEY", credentialRef: "vault://openai/apiKey" },
+  { provider: "deepseek", envVar: "DEEPSEEK_API_KEY", credentialRef: "vault://deepseek/apiKey" },
   { provider: "anthropic", envVar: "ANTHROPIC_API_KEY", credentialRef: "vault://anthropic/apiKey" },
   { provider: "github", envVar: "GITHUB_TOKEN", credentialRef: "vault://github/token" },
   { provider: "github", envVar: "GH_TOKEN", credentialRef: "vault://github/token" },

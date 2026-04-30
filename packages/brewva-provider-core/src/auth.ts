@@ -32,6 +32,7 @@ export function getEnvApiKey(
 
   const envMap: Record<string, string> = {
     openai: "OPENAI_API_KEY",
+    deepseek: "DEEPSEEK_API_KEY",
     openrouter: "OPENROUTER_API_KEY",
     "kimi-coding": "KIMI_API_KEY",
   };

@@ -4,6 +4,7 @@ import {
   normalizeProviderCachePolicy,
   resolveAnthropicCacheRender,
   resolveGoogleGeminiCliCacheRender,
+  resolveOpenAICompletionsCacheRender,
   resolveProviderCacheCapability,
   resolveOpenAIResponsesCacheRender,
 } from "../../../packages/brewva-provider-core/src/cache-policy.js";
@@ -216,6 +217,25 @@ describe("provider cache policy", () => {
         reason: "google_gemini_context_caching",
       }),
     );
+
+    expect(
+      resolveProviderCacheCapability({
+        api: "openai-completions",
+        provider: "deepseek",
+        modelId: "deepseek-v4-flash",
+        baseUrl: "https://api.deepseek.com",
+        transport: "sse",
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        strategies: ["implicitPrefix"],
+        cacheCounters: "readOnly",
+        shortRetention: true,
+        longRetention: "none",
+        readOnlyWriteMode: "unsupported",
+        reason: "deepseek_context_disk_cache",
+      }),
+    );
   });
 
   test("reports read-only cache mode as unsupported when providers cannot honor it", () => {
@@ -421,5 +441,82 @@ describe("provider cache policy", () => {
         },
       }).reason,
     ).toBe("kimi_code_cache_contract_not_verified");
+  });
+
+  test("renders DeepSeek OpenAI-compatible cache as provider-side implicit prefix cache", () => {
+    expect(
+      resolveOpenAICompletionsCacheRender({
+        provider: "deepseek",
+        modelId: "deepseek-v4-flash",
+        baseUrl: "https://api.deepseek.com",
+        sessionId: "session-deepseek-short",
+        policy: {
+          retention: "short",
+          writeMode: "readWrite",
+          scope: "session",
+          reason: "default",
+        },
+      }),
+    ).toEqual({
+      status: "rendered",
+      reason: "rendered_openai_completions_implicit_prefix_cache",
+      renderedRetention: "short",
+      bucketKey:
+        "openai-completions|session=session-deepseek-short|retention=short|writeMode=readWrite",
+      capability: expect.objectContaining({
+        strategies: ["implicitPrefix"],
+        cacheCounters: "readOnly",
+        reason: "deepseek_context_disk_cache",
+      }),
+    });
+
+    expect(
+      resolveOpenAICompletionsCacheRender({
+        provider: "deepseek",
+        modelId: "deepseek-v4-pro",
+        baseUrl: "https://api.deepseek.com",
+        sessionId: "session-deepseek-long",
+        policy: {
+          retention: "long",
+          writeMode: "readWrite",
+          scope: "session",
+          reason: "config",
+        },
+      }),
+    ).toEqual({
+      status: "degraded",
+      reason: "long_retention_not_supported_for_provider_model",
+      renderedRetention: "short",
+      bucketKey:
+        "openai-completions|session=session-deepseek-long|retention=short|writeMode=readWrite",
+      capability: expect.objectContaining({
+        strategies: ["implicitPrefix"],
+        longRetention: "none",
+      }),
+    });
+
+    expect(
+      resolveOpenAICompletionsCacheRender({
+        provider: "deepseek",
+        modelId: "deepseek-v4-flash",
+        baseUrl: "https://api.deepseek.com",
+        sessionId: "session-deepseek-read-only",
+        policy: {
+          retention: "short",
+          writeMode: "readOnly",
+          scope: "session",
+          reason: "config",
+        },
+      }),
+    ).toEqual({
+      status: "unsupported",
+      reason: "cache_write_mode_read_only_not_supported",
+      renderedRetention: "none",
+      bucketKey:
+        "openai-completions|session=session-deepseek-read-only|retention=none|writeMode=readOnly",
+      capability: expect.objectContaining({
+        readOnlyWriteMode: "unsupported",
+      }),
+    });
   });
 });

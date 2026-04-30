@@ -83,4 +83,46 @@ describe("provider core model catalog", () => {
       },
     });
   });
+
+  test("exposes only the official direct DeepSeek v4 models", () => {
+    const deepseekModels = getModels("deepseek");
+    const deepseekModelIds = deepseekModels.map((model) => model.id).toSorted();
+
+    expect(deepseekModelIds).toEqual(["deepseek-v4-flash", "deepseek-v4-pro"]);
+    expect(deepseekModelIds).not.toContain("deepseek-chat");
+    expect(deepseekModelIds).not.toContain("deepseek-reasoner");
+
+    const flash = getModel("deepseek", "deepseek-v4-flash");
+    expect(flash).toMatchObject({
+      name: "DeepSeek V4 Flash",
+      api: "openai-completions",
+      provider: "deepseek",
+      baseUrl: "https://api.deepseek.com",
+      reasoning: true,
+      input: ["text"],
+      cost: {
+        input: 0.14,
+        output: 0.28,
+        cacheRead: 0.0028,
+        cacheWrite: 0,
+      },
+      contextWindow: 1_000_000,
+      maxTokens: 384_000,
+      compat: expect.objectContaining({
+        maxTokensField: "max_tokens",
+        thinkingFormat: "deepseek",
+        supportsStore: false,
+        supportsDeveloperRole: false,
+        supportsStrictMode: false,
+      }),
+    });
+
+    const pro = getModel("deepseek", "deepseek-v4-pro");
+    expect(pro.cost).toEqual({
+      input: 1.74,
+      output: 3.48,
+      cacheRead: 0.0145,
+      cacheWrite: 0,
+    });
+  });
 });

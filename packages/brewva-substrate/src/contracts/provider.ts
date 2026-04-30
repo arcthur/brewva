@@ -24,7 +24,7 @@ export interface BrewvaOpenAICompletionsCompat {
   requiresToolResultName?: boolean;
   requiresAssistantAfterToolResult?: boolean;
   requiresThinkingAsText?: boolean;
-  thinkingFormat?: "openai" | "openrouter" | "qwen" | "qwen-chat-template";
+  thinkingFormat?: "openai" | "openrouter" | "qwen" | "qwen-chat-template" | "deepseek";
   openRouterRouting?: BrewvaOpenRouterRouting;
   supportsStrictMode?: boolean;
 }

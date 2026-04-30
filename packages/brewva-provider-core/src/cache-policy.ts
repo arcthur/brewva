@@ -46,7 +46,10 @@ export interface GoogleGeminiCliCacheRender extends ProviderCacheRenderResult {
   cachedContentTtlSeconds?: number;
 }
 
+export interface OpenAICompletionsCacheRender extends ProviderCacheRenderResult {}
+
 const KIMI_CODE_CACHE_REASON = "kimi_code_cache_contract_not_verified";
+const DEEPSEEK_CACHE_REASON = "deepseek_context_disk_cache";
 
 export function normalizeProviderCachePolicy(
   policy: ProviderCachePolicy | undefined,
@@ -187,6 +190,17 @@ export function resolveProviderCacheCapability(
     };
   }
 
+  if (api === "openai-completions" && isDeepSeekRoute({ provider, baseUrl })) {
+    return {
+      strategies: ["implicitPrefix"],
+      cacheCounters: "readOnly",
+      shortRetention: true,
+      longRetention: "none",
+      readOnlyWriteMode: "unsupported",
+      reason: DEEPSEEK_CACHE_REASON,
+    };
+  }
+
   if (api === "anthropic-messages") {
     return {
       strategies: ["explicitCacheMarker"],
@@ -285,6 +299,18 @@ function isKimiCodeCacheRoute(input: { provider: string; baseUrl: string }): boo
   }
 }
 
+function isDeepSeekRoute(input: { provider: string; baseUrl: string }): boolean {
+  if (input.provider === "deepseek") {
+    return true;
+  }
+  try {
+    const url = new URL(input.baseUrl);
+    return url.hostname === "api.deepseek.com" || url.hostname.endsWith(".deepseek.com");
+  } catch {
+    return input.baseUrl.includes("deepseek.com");
+  }
+}
+
 function modelSupportsOpenAIPromptCacheKey(modelId: string): boolean {
   if (!modelId) {
     return false;
@@ -365,6 +391,67 @@ export function resolveOpenAIResponsesCacheRender(input: {
     capability,
     promptCacheKey: input.sessionId,
     promptCacheRetention: renderedRetention === "long" ? "24h" : undefined,
+  };
+}
+
+export function resolveOpenAICompletionsCacheRender(input: {
+  api?: Api;
+  baseUrl: string;
+  provider?: string;
+  modelId?: string;
+  transport?: Transport;
+  sessionId?: string;
+  policy?: ProviderCachePolicy;
+}): OpenAICompletionsCacheRender {
+  const policy = normalizeProviderCachePolicy(input.policy);
+  const api = input.api ?? "openai-completions";
+  const capability = resolveProviderCacheCapability({
+    api,
+    provider: input.provider,
+    modelId: input.modelId,
+    baseUrl: input.baseUrl,
+    transport: input.transport,
+  });
+  if (policy.retention === "none") {
+    return disabledRender({
+      api,
+      sessionId: input.sessionId,
+      writeMode: policy.writeMode,
+      capability,
+    }) as OpenAICompletionsCacheRender;
+  }
+  if (policy.writeMode === "readOnly") {
+    return unsupportedReadOnlyRender({
+      api,
+      sessionId: input.sessionId,
+      capability,
+    }) as OpenAICompletionsCacheRender;
+  }
+  if (!capability.strategies.includes("implicitPrefix")) {
+    return unsupportedCapabilityRender({
+      api,
+      sessionId: input.sessionId,
+      writeMode: policy.writeMode,
+      capability,
+    }) as OpenAICompletionsCacheRender;
+  }
+
+  const renderedRetention =
+    policy.retention === "long" && capability.longRetention === "none" ? "short" : policy.retention;
+  return {
+    status: policy.retention === renderedRetention ? "rendered" : "degraded",
+    reason:
+      policy.retention === renderedRetention
+        ? "rendered_openai_completions_implicit_prefix_cache"
+        : "long_retention_not_supported_for_provider_model",
+    renderedRetention,
+    bucketKey: buildRenderBucketKey({
+      api,
+      sessionId: input.sessionId,
+      retention: renderedRetention,
+      writeMode: policy.writeMode,
+    }),
+    capability,
   };
 }
 

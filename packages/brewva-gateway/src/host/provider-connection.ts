@@ -162,6 +162,7 @@ const POPULAR_PROVIDER_ORDER = [
   "anthropic",
   "github-copilot",
   "google",
+  "deepseek",
   "kimi-coding",
   "openrouter",
 ] as const;
@@ -203,6 +204,7 @@ const GOOGLE_OAUTH_TIMEOUT_MS = 5 * 60 * 1000;
 
 const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
   anthropic: "Anthropic",
+  deepseek: "DeepSeek",
   "github-copilot": "GitHub Copilot",
   google: "Google",
   "kimi-coding": "Kimi",
@@ -215,6 +217,7 @@ const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
 
 const PROVIDER_DESCRIPTIONS: Record<string, string> = {
   anthropic: "API key",
+  deepseek: "API key",
   "github-copilot": "GitHub OAuth or token",
   google: "Google OAuth or Gemini CLI import",
   "kimi-coding": "Kimi Code or Moonshot API key",
@@ -1928,6 +1931,7 @@ export function createProviderConnectionPort(input: {
               provider,
               connected,
             }),
+            modelProviders: [provider],
             modelCount: models.length,
             availableModelCount,
             credentialRef: getProviderCredentialRef(provider),

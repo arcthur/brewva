@@ -117,6 +117,7 @@ describe("hosted session driver", () => {
       ANTHROPIC_API_KEY: undefined,
       ANTHROPIC_OAUTH_TOKEN: undefined,
       COPILOT_GITHUB_TOKEN: undefined,
+      DEEPSEEK_API_KEY: undefined,
       GH_TOKEN: undefined,
       GITHUB_TOKEN: undefined,
       KIMI_API_KEY: undefined,

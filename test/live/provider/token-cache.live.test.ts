@@ -30,6 +30,7 @@ const CACHE_ANCHOR = Array.from(
 const MODEL = getModel("openai-codex", LIVE_MODEL_ID as never) as Model<"openai-codex-responses">;
 const KIMI_CODE_MODEL = getModel("kimi-coding", "kimi-for-coding");
 const MOONSHOT_CN_MODEL = getModel("moonshot-cn", "kimi-k2.6");
+const DEEPSEEK_MODEL = getModel("deepseek", "deepseek-v4-flash");
 const GOOGLE_CACHE_MODEL_ID = process.env.BREWVA_LIVE_GOOGLE_CACHE_MODEL || "gemini-2.5-pro";
 const GOOGLE_CACHE_MODEL = getModel(
   "google",
@@ -268,6 +269,7 @@ async function runOpenAICompatTurn(input: {
   apiKey: string;
   model: Model<"openai-completions">;
   marker: string;
+  systemPrompt?: string;
 }): Promise<{
   message: AssistantMessage;
   payload: unknown;
@@ -278,7 +280,9 @@ async function runOpenAICompatTurn(input: {
   const message = await complete(
     input.model,
     {
-      systemPrompt: "Reply with the exact marker requested by the user and no extra text.",
+      systemPrompt:
+        input.systemPrompt ??
+        "Reply with the exact marker requested by the user and no extra text.",
       messages: [userMessage(`Reply exactly: ${input.marker}`)],
     },
     {
@@ -505,6 +509,81 @@ describe("live: provider token cache", () => {
       expect(second.responseId).toEqual(expect.any(String));
       expect(second.responseId).not.toBe(first.responseId);
       expect(messageText(second)).toContain("CONTINUATION-LIVE-TWO");
+    },
+    180_000,
+  );
+
+  runLive(
+    "DeepSeek V4 Flash reports context cache reads after a stable prefix is warmed",
+    async () => {
+      const apiKey = process.env.DEEPSEEK_API_KEY?.trim();
+      if (!apiKey) {
+        console.warn("[token-cache.live] skipped because DEEPSEEK_API_KEY is unavailable");
+        return;
+      }
+
+      const systemPrompt = [
+        "You are a DeepSeek context cache verification responder.",
+        "Follow the user's exact reply instruction and do not add extra text.",
+        CACHE_ANCHOR,
+      ].join("\n");
+
+      let warmup: AssistantMessage;
+      try {
+        warmup = (
+          await runOpenAICompatTurn({
+            apiKey,
+            model: DEEPSEEK_MODEL,
+            marker: "DEEPSEEK-CACHE-WARMED",
+            systemPrompt,
+          })
+        ).message;
+      } catch (error) {
+        const skipMessage = formatProviderSkip("token-cache.live DeepSeek warmup", error);
+        if (skipMessage) {
+          console.warn(skipMessage);
+          return;
+        }
+        throw error;
+      }
+      expect(messageText(warmup)).toContain("DEEPSEEK-CACHE-WARMED");
+
+      const attempts: AssistantMessage[] = [];
+      for (const marker of [
+        "DEEPSEEK-CACHE-HIT-1",
+        "DEEPSEEK-CACHE-HIT-2",
+        "DEEPSEEK-CACHE-HIT-3",
+      ]) {
+        try {
+          const result = await runOpenAICompatTurn({
+            apiKey,
+            model: DEEPSEEK_MODEL,
+            marker,
+            systemPrompt,
+          });
+          attempts.push(result.message);
+          expect(hasExplicitProviderCacheField(result.payload)).toBe(false);
+          expect(result.metadata?.cacheRender).toMatchObject({
+            status: "rendered",
+            renderedRetention: "short",
+            reason: "rendered_openai_completions_implicit_prefix_cache",
+          });
+          expect(result.metadata?.cacheCapability?.reason).toBe("deepseek_context_disk_cache");
+          if (result.message.usage.cacheRead > 0) {
+            break;
+          }
+        } catch (error) {
+          const skipMessage = formatProviderSkip(`token-cache.live ${marker}`, error);
+          if (skipMessage) {
+            console.warn(skipMessage);
+            return;
+          }
+          throw error;
+        }
+      }
+
+      expect(attempts.length).toBeGreaterThan(0);
+      expect(Math.max(...attempts.map((message) => message.usage.cacheRead))).toBeGreaterThan(0);
     },
     180_000,
   );

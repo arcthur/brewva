@@ -291,6 +291,62 @@ describe("provider connection port", () => {
     }
   });
 
+  test("exposes DeepSeek as a direct API-key provider", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-provider-connection-"));
+    const restoreEnv = patchProcessEnv({
+      BREWVA_VAULT_KEY: "provider-connection-test-key",
+      DEEPSEEK_API_KEY: undefined,
+    });
+    try {
+      const runtime = new BrewvaRuntime({ cwd: workspace });
+      const authStore = HostedAuthStore.inMemory();
+      configureCredentialVaultModelAuth({ runtime, authStore });
+      const registry = HostedModelRegistry.inMemory(authStore);
+      registerSingleModelProvider(registry, "deepseek", "deepseek-v4-flash");
+      const port = createProviderConnectionPort({ runtime, modelRegistry: registry });
+
+      const providers = await port.listProviders();
+      const deepseek = providers.find((provider) => provider.id === "deepseek");
+
+      expect(deepseek).toMatchObject({
+        name: "DeepSeek",
+        description: "API key",
+        group: "popular",
+        modelProviders: ["deepseek"],
+        modelCount: 1,
+        availableModelCount: 0,
+        credentialRef: "vault://deepseek/apiKey",
+      });
+      expect(port.listAuthMethods("deepseek")).toEqual([
+        expect.objectContaining({
+          id: "api_key",
+          kind: "api_key",
+          type: "api",
+          credentialProvider: "deepseek",
+          modelProviderFilter: "deepseek",
+          credentialRef: "vault://deepseek/apiKey",
+        }),
+      ]);
+
+      await port.connectApiKey("deepseek", "deepseek-secret");
+
+      expect(registry.getAvailable().some((model) => model.provider === "deepseek")).toBe(true);
+      expect(
+        (await port.listProviders()).find((provider) => provider.id === "deepseek"),
+      ).toMatchObject({
+        connected: true,
+        connectionSource: "vault",
+        availableModelCount: 1,
+      });
+
+      await port.disconnect("deepseek");
+      expect(registry.getAvailable().some((model) => model.provider === "deepseek")).toBe(false);
+    } finally {
+      restoreEnv();
+      rmSync(workspace, { recursive: true, force: true });
+    }
+  });
+
   test("exposes a usable Gemini CLI credential path for the Google provider", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-provider-connection-"));
     const restoreEnv = patchProcessEnv({ BREWVA_VAULT_KEY: "provider-connection-test-key" });

@@ -132,6 +132,142 @@ describe("fetch provider completion driver", () => {
     });
   });
 
+  test("uses DeepSeek max_tokens and provider-native cache hit counters", async () => {
+    const calls: Array<{ input: RequestInfo | URL; init?: RequestInit }> = [];
+    const driver: BrewvaProviderCompletionDriver = createFetchProviderCompletionDriver({
+      fetchImpl: async (input, init) => {
+        calls.push({ input, init });
+        return new Response(
+          JSON.stringify({
+            id: "chatcmpl_deepseek",
+            model: "deepseek-v4-flash",
+            choices: [
+              {
+                finish_reason: "stop",
+                message: {
+                  role: "assistant",
+                  content: "ok",
+                },
+              },
+            ],
+            usage: {
+              prompt_tokens: 1200,
+              completion_tokens: 300,
+              total_tokens: 1500,
+              prompt_cache_hit_tokens: 800,
+              prompt_cache_miss_tokens: 400,
+              completion_tokens_details: {
+                reasoning_tokens: 200,
+              },
+            },
+          }),
+          {
+            status: 200,
+            headers: {
+              "content-type": "application/json",
+            },
+          },
+        );
+      },
+    });
+
+    const response = await driver.complete({
+      model: createModel({
+        provider: "deepseek",
+        id: "deepseek-v4-flash",
+        name: "DeepSeek V4 Flash",
+        baseUrl: "https://api.deepseek.com",
+        compat: {
+          maxTokensField: "max_tokens",
+        },
+      }),
+      systemPrompt: "Return text only.",
+      userText: "Say ok.",
+      auth: {
+        apiKey: "DEEPSEEK_KEY",
+      },
+    });
+
+    expect(parseJsonRequestBody(calls[0]!.init?.body)).toMatchObject({
+      model: "deepseek-v4-flash",
+      max_tokens: 1024,
+      thinking: { type: "disabled" },
+    });
+    expect(parseJsonRequestBody(calls[0]!.init?.body)).not.toHaveProperty("max_completion_tokens");
+    expect(parseJsonRequestBody(calls[0]!.init?.body)).not.toHaveProperty("reasoning_effort");
+    expect(parseJsonRequestBody(calls[0]!.init?.body)).not.toHaveProperty("store");
+    expect(response.usage).toEqual({
+      input: 400,
+      output: 300,
+      cacheRead: 800,
+      cacheWrite: 0,
+      totalTokens: 1500,
+    });
+  });
+
+  test("keeps OpenAI-compatible fallback cache accounting on non-cached input tokens", async () => {
+    const driver: BrewvaProviderCompletionDriver = createFetchProviderCompletionDriver({
+      fetchImpl: async () =>
+        new Response(
+          JSON.stringify({
+            id: "chatcmpl_deepseek_fallback",
+            model: "deepseek-v4-flash",
+            choices: [
+              {
+                finish_reason: "stop",
+                message: {
+                  role: "assistant",
+                  content: "ok",
+                },
+              },
+            ],
+            usage: {
+              prompt_tokens: 1000,
+              completion_tokens: 120,
+              total_tokens: 1120,
+              prompt_tokens_details: {
+                cached_tokens: 250,
+              },
+              completion_tokens_details: {
+                reasoning_tokens: 50,
+              },
+            },
+          }),
+          {
+            status: 200,
+            headers: {
+              "content-type": "application/json",
+            },
+          },
+        ),
+    });
+
+    const response = await driver.complete({
+      model: createModel({
+        provider: "deepseek",
+        id: "deepseek-v4-flash",
+        name: "DeepSeek V4 Flash",
+        baseUrl: "https://api.deepseek.com",
+        compat: {
+          maxTokensField: "max_tokens",
+        },
+      }),
+      systemPrompt: "Return text only.",
+      userText: "Say ok.",
+      auth: {
+        apiKey: "DEEPSEEK_KEY",
+      },
+    });
+
+    expect(response.usage).toEqual({
+      input: 750,
+      output: 120,
+      cacheRead: 250,
+      cacheWrite: 0,
+      totalTokens: 1120,
+    });
+  });
+
   test("uses Anthropic headers and content shape without Pi ai helpers", async () => {
     const calls: Array<{ input: RequestInfo | URL; init?: RequestInit }> = [];
     const driver = createFetchProviderCompletionDriver({

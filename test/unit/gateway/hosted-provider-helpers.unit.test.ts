@@ -23,6 +23,12 @@ describe("hosted provider helpers", () => {
     ).toBe("openai-key");
 
     expect(
+      getHostedEnvApiKey("deepseek", {
+        DEEPSEEK_API_KEY: "deepseek-key",
+      }),
+    ).toBe("deepseek-key");
+
+    expect(
       getHostedEnvApiKey("moonshot-cn", {
         MOONSHOT_CN_API_KEY: "moonshot-cn-key",
       }),
@@ -50,6 +56,8 @@ describe("hosted provider helpers", () => {
   test("reports xhigh support for the same model families as Pi", () => {
     expect(supportsHostedExtendedThinkingModel({ id: "gpt-5.5" })).toBe(true);
     expect(supportsHostedExtendedThinkingModel({ id: "gpt-5.4" })).toBe(true);
+    expect(supportsHostedExtendedThinkingModel({ id: "deepseek-v4-flash" })).toBe(true);
+    expect(supportsHostedExtendedThinkingModel({ id: "deepseek-v4-pro" })).toBe(true);
     expect(supportsHostedExtendedThinkingModel({ id: "claude-opus-4-6" })).toBe(true);
     expect(supportsHostedExtendedThinkingModel({ id: "claude-3-5-sonnet" })).toBe(false);
   });

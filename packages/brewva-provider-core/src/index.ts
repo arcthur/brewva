@@ -25,6 +25,7 @@ export {
   normalizeProviderCachePolicy,
   resolveAnthropicCacheRender,
   resolveGoogleGeminiCliCacheRender,
+  resolveOpenAICompletionsCacheRender,
   resolveOpenAIResponsesCacheRender,
   resolveProviderCacheCapability,
 } from "./cache-policy.js";

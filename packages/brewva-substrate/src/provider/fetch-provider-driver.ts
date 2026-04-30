@@ -61,20 +61,25 @@ class FetchProviderCompletionDriver implements BrewvaProviderCompletionDriver {
   async #completeOpenAIChat(
     input: BrewvaProviderCompletionRequest,
   ): Promise<BrewvaProviderCompletionResponse> {
+    const payload: Record<string, unknown> = {
+      model: input.model.id,
+      messages: [
+        { role: "system", content: input.systemPrompt },
+        { role: "user", content: input.userText },
+      ],
+      temperature: 0,
+      [resolveOpenAIChatMaxTokensField(input.model)]: resolveMaxOutputTokens(
+        input.model,
+        this.#maxOutputTokens,
+      ),
+    };
+    if (isDeepSeekModel(input.model)) {
+      payload.thinking = { type: "disabled" };
+    }
+
     const response = await this.#postJson(
       resolveOpenAIChatCompletionsUrl(input.model.baseUrl),
-      {
-        model: input.model.id,
-        messages: [
-          { role: "system", content: input.systemPrompt },
-          { role: "user", content: input.userText },
-        ],
-        temperature: 0,
-        [resolveOpenAIChatMaxTokensField(input.model)]: resolveMaxOutputTokens(
-          input.model,
-          this.#maxOutputTokens,
-        ),
-      },
+      payload,
       buildOpenAIHeaders(input),
     );
     const choice = firstRecord(readArray(response.choices));
@@ -225,6 +230,18 @@ function resolveOpenAIChatMaxTokensField(model: BrewvaRegisteredModel): string {
     : "max_completion_tokens";
 }
 
+function isDeepSeekModel(model: BrewvaRegisteredModel): boolean {
+  if (model.provider === "deepseek") {
+    return true;
+  }
+  try {
+    const url = new URL(model.baseUrl);
+    return url.hostname === "api.deepseek.com" || url.hostname.endsWith(".deepseek.com");
+  } catch {
+    return model.baseUrl.includes("deepseek.com");
+  }
+}
+
 function normalizeBaseUrl(baseUrl: string): string {
   return baseUrl.replace(/\/+$/u, "");
 }
@@ -363,12 +380,26 @@ function buildOpenAIUsage(usage: unknown): BrewvaProviderCompletionUsage {
       totalTokens: 0,
     };
   }
-  const input = readNumber(usage.prompt_tokens) ?? readNumber(usage.input_tokens) ?? 0;
+  const promptTokens = readNumber(usage.prompt_tokens) ?? readNumber(usage.input_tokens) ?? 0;
+  const deepSeekCacheHitTokens = readNumber(usage.prompt_cache_hit_tokens);
+  const deepSeekCacheMissTokens = readNumber(usage.prompt_cache_miss_tokens);
   const output = readNumber(usage.completion_tokens) ?? readNumber(usage.output_tokens) ?? 0;
+  if (deepSeekCacheHitTokens !== undefined || deepSeekCacheMissTokens !== undefined) {
+    const cacheRead = deepSeekCacheHitTokens ?? 0;
+    const input = deepSeekCacheMissTokens ?? Math.max(0, promptTokens - cacheRead);
+    return {
+      input,
+      output,
+      cacheRead,
+      cacheWrite: 0,
+      totalTokens: readNumber(usage.total_tokens) ?? input + output + cacheRead,
+    };
+  }
   const cacheRead = isRecord(usage.prompt_tokens_details)
     ? (readNumber(usage.prompt_tokens_details.cached_tokens) ?? 0)
     : 0;
-  const totalTokens = readNumber(usage.total_tokens) ?? input + output;
+  const input = Math.max(0, promptTokens - cacheRead);
+  const totalTokens = readNumber(usage.total_tokens) ?? input + output + cacheRead;
   return {
     input,
     output,

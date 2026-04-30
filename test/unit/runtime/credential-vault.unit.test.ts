@@ -48,6 +48,29 @@ describe("credential vault", () => {
     expect(discovered.some((entry) => entry.envVar === "MOONSHOT_API_KEY")).toBe(false);
   });
 
+  test("discovers DeepSeek credentials from its provider-specific env var", () => {
+    const workspace = createTestWorkspace("credential-vault-deepseek-discovery");
+    const vault = new CredentialVaultService({
+      vaultPath: join(workspace, "credentials.vault"),
+      allowDerivedKeyFallback: true,
+      env: {},
+      machineHostname: "test-host",
+      machineHomeDir: workspace,
+    });
+
+    expect(
+      vault.discover({
+        DEEPSEEK_API_KEY: "sk-deepseek",
+      }),
+    ).toEqual([
+      expect.objectContaining({
+        provider: "deepseek",
+        envVar: "DEEPSEEK_API_KEY",
+        credentialRef: "vault://deepseek/apiKey",
+      }),
+    ]);
+  });
+
   test("does not discover credentials for removed connect-only providers", () => {
     const workspace = createTestWorkspace("credential-vault-removed-connect-discovery");
     const vault = new CredentialVaultService({

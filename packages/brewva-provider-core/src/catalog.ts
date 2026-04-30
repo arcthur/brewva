@@ -73,6 +73,10 @@ export function supportsXhighModelId(modelId: string): boolean {
     return true;
   }
 
+  if (modelId === "deepseek-v4-flash" || modelId === "deepseek-v4-pro") {
+    return true;
+  }
+
   return false;
 }
 

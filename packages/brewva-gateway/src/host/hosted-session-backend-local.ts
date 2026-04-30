@@ -37,6 +37,7 @@ const DEFAULT_MODEL_PER_PROVIDER: Record<string, string> = {
   openai: "gpt-5.5",
   "openai-codex": "gpt-5.3-codex",
   google: "gemini-2.5-pro",
+  deepseek: "deepseek-v4-flash",
   "github-copilot": "gpt-4o",
   openrouter: "openai/gpt-5.1-codex",
   "kimi-coding": "kimi-for-coding",

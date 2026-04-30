@@ -7,6 +7,7 @@ Implementation anchors:
 - `packages/brewva-provider-core/src/providers/payload-metadata.ts`
 - `packages/brewva-provider-core/src/providers/anthropic.ts`
 - `packages/brewva-provider-core/src/providers/google-gemini-cli.ts`
+- `packages/brewva-provider-core/src/providers/openai-completions.ts`
 - `packages/brewva-provider-core/src/providers/openai-responses.ts`
 - `packages/brewva-provider-core/src/providers/openai-codex-responses.ts`
 - `packages/brewva-gateway/src/cache/`
@@ -189,6 +190,42 @@ Code cache adapter, Kimi Code should report degraded or unsupported cache
 rendering with a readable reason. The current safe-degraded implementation uses
 `kimi_code_cache_contract_not_verified` and does not render inherited cache
 markers for Kimi Code.
+
+DeepSeek is a direct provider-family adapter, not an OpenRouter route or an
+Anthropic-compatible shim:
+
+- user-facing provider name: `DeepSeek`
+- transport/API envelope: OpenAI-compatible Chat Completions at
+  `https://api.deepseek.com`
+- supported built-in models: `deepseek-v4-flash` and `deepseek-v4-pro`
+- authentication: `DEEPSEEK_API_KEY` or `vault://deepseek/apiKey`
+- short retention: provider-side implicit prefix context cache
+- long retention: degraded to short retention because DeepSeek does not expose
+  an explicit long-lived cache resource or lifecycle API
+- read-only mode: unsupported because DeepSeek does not expose a request-level
+  read-only cache control
+- rendered fields: none. Brewva must not send `cache_control`,
+  `prompt_cache_key`, `cachePoint`, beta prefix-completion fields, or
+  Anthropic-compatible cache fields for normal DeepSeek chat requests.
+- usage counters: provider-core maps `prompt_cache_hit_tokens` to
+  `usage.cacheRead`, `prompt_cache_miss_tokens` to `usage.input`, and keeps
+  `usage.cacheWrite=0`. DeepSeek `completion_tokens` is the output count;
+  `completion_tokens_details.reasoning_tokens` is diagnostic detail and must
+  not be added again.
+- failure posture: cache is observable through usage counters only. Repeated
+  zero cache reads on a valid live test should fail the live cache check instead
+  of being treated as a rendered explicit cache failure.
+
+DeepSeek prompt bytes should follow the stable-prefix boundary strictly:
+system instructions, tool schema snapshots, and stable capability declarations
+belong before dynamic recall, channel context, time-sensitive state, and cache
+diagnostics. Cache diagnostics must remain outside the provider-visible stable
+prefix.
+
+DeepSeek prefix completion remains out of this adapter. The beta endpoint uses
+provider-specific request semantics that need a provider-neutral prefix
+completion abstraction before Brewva can expose it without coupling ordinary
+chat turns to a beta feature.
 
 ## GPT And Codex Continuation
 
