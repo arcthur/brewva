@@ -129,8 +129,6 @@ Governance default:
 
 ## Proposed notes
 
-- `docs/research/active/rfc-preset-based-agent-model-routing.md`
-
 ## Active notes
 
 - `docs/research/active/event-stream-consistency-and-replay-fidelity.md`
@@ -175,6 +173,7 @@ Governance default:
 - `docs/research/promoted/rfc-narrative-memory-product-and-bounded-semantic-recall.md`
 - `docs/research/promoted/rfc-opentui-adoption-for-brewva-cli-shell-and-native-boundary.md`
 - `docs/research/promoted/rfc-preparse-normalization-model-capability-and-live-audit-split.md`
+- `docs/research/promoted/rfc-preset-based-agent-model-routing.md`
 - `docs/research/promoted/rfc-recall-first-compounding-intelligence-and-experience-products.md`
 - `docs/research/promoted/rfc-repository-fitness-plane-and-runtime-boundary.md`
 - `docs/research/promoted/rfc-repository-native-compound-knowledge-and-review-ensemble.md`

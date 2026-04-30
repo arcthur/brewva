@@ -75,6 +75,7 @@ refresh the pointer summary and `Last reviewed` metadata here.
 - [`rfc-interactive-prompt-queue-and-pending-strip.md`](./rfc-interactive-prompt-queue-and-pending-strip.md)
 - [`rfc-kimi-code-token-cache-adapter.md`](./rfc-kimi-code-token-cache-adapter.md)
 - [`rfc-preparse-normalization-model-capability-and-live-audit-split.md`](./rfc-preparse-normalization-model-capability-and-live-audit-split.md)
+- [`rfc-preset-based-agent-model-routing.md`](./rfc-preset-based-agent-model-routing.md)
 - [`rfc-runtime-owned-session-lifecycle-aggregate-and-authority-gate.md`](./rfc-runtime-owned-session-lifecycle-aggregate-and-authority-gate.md)
 - [`rfc-schedule-intent-hardening-and-control-plane-ergonomics.md`](./rfc-schedule-intent-hardening-and-control-plane-ergonomics.md)
 - [`rfc-session-rewind-as-conversation-fork-primitive.md`](./rfc-session-rewind-as-conversation-fork-primitive.md)
