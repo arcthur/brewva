@@ -12,7 +12,7 @@ import { patchProcessEnv } from "../../helpers/global-state.js";
 const TEST_ENV_KEY = "BREWVA_HOSTED_MODEL_REGISTRY_TEST_KEY";
 
 describe("hosted model registry", () => {
-  test("resolves provider config values with Pi-aligned env-or-literal semantics", async () => {
+  test("uses literal hosted provider config values without reading ambient env", async () => {
     const restoreEnv = patchProcessEnv({ [TEST_ENV_KEY]: "resolved-token" });
     try {
       const authStore = HostedAuthStore.inMemory();
@@ -45,10 +45,10 @@ describe("hosted model registry", () => {
       const auth = await registry.getApiKeyAndHeaders(model!);
       expect(auth).toEqual({
         ok: true,
-        apiKey: "resolved-token",
+        apiKey: TEST_ENV_KEY,
         headers: {
-          "x-provider-token": "resolved-token",
-          Authorization: "Bearer resolved-token",
+          "x-provider-token": TEST_ENV_KEY,
+          Authorization: `Bearer ${TEST_ENV_KEY}`,
         },
       });
     } finally {
@@ -56,7 +56,7 @@ describe("hosted model registry", () => {
     }
   });
 
-  test("resolves auth-store api_key entries with Pi-aligned env-or-literal semantics", async () => {
+  test("uses literal auth-store api_key values without reading ambient env", async () => {
     const restoreEnv = patchProcessEnv({ [TEST_ENV_KEY]: "stored-token" });
     try {
       const authStore = HostedAuthStore.inMemory({
@@ -67,7 +67,29 @@ describe("hosted model registry", () => {
       });
 
       const apiKey = await authStore.getApiKey("demo");
-      expect(apiKey).toBe("stored-token");
+      expect(apiKey).toBe(TEST_ENV_KEY);
+    } finally {
+      restoreEnv();
+    }
+  });
+
+  test("ignores ambient provider env until credentials are stored in Brewva", async () => {
+    const restoreEnv = patchProcessEnv({ DEEPSEEK_API_KEY: "ambient-deepseek-key" });
+    try {
+      const authStore = HostedAuthStore.inMemory();
+      const registry = HostedModelRegistry.inMemory(authStore);
+      const model = registry.find("deepseek", "deepseek-v4-flash");
+      expect(model).toBeDefined();
+
+      expect(authStore.hasAuth("deepseek")).toBe(false);
+      expect(await authStore.getApiKey("deepseek")).toBeUndefined();
+      expect(registry.hasConfiguredAuth(model!)).toBe(false);
+      const auth = await registry.getApiKeyAndHeaders(model!);
+      expect(auth).toEqual({
+        ok: true,
+        apiKey: undefined,
+        headers: undefined,
+      });
     } finally {
       restoreEnv();
     }

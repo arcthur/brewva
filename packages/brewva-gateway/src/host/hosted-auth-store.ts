@@ -7,7 +7,6 @@ import {
   type GoogleHostedOAuthCredential,
 } from "./google-oauth.js";
 import { resolveHostedConfigValue } from "./hosted-config-value.js";
-import { getHostedEnvApiKey } from "./hosted-provider-helpers.js";
 
 const OPENAI_OAUTH_CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann";
 const OPENAI_OAUTH_ISSUER = "https://auth.openai.com";
@@ -136,7 +135,6 @@ export class HostedAuthStore {
       (provider === GOOGLE_OAUTH_PROVIDER
         ? hasUsableGoogleOAuthCredential(storedCredential)
         : storedCredential !== undefined) ||
-      getHostedEnvApiKey(provider) !== undefined ||
       this.#fallbackResolver?.(provider) !== undefined
     );
   }
@@ -171,11 +169,6 @@ export class HostedAuthStore {
         return this.resolveGoogleOAuthApiKey(provider, credential);
       }
       return this.resolveOAuthAccessToken(provider, credential);
-    }
-
-    const envKey = getHostedEnvApiKey(provider);
-    if (envKey) {
-      return envKey;
     }
 
     if (options?.includeFallback !== false) {

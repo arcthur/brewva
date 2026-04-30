@@ -347,6 +347,34 @@ describe("provider connection port", () => {
     }
   });
 
+  test("does not connect DeepSeek from ambient provider env", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-provider-connection-"));
+    const restoreEnv = patchProcessEnv({
+      BREWVA_VAULT_KEY: "provider-connection-test-key",
+      DEEPSEEK_API_KEY: "ambient-deepseek-key",
+    });
+    try {
+      const runtime = new BrewvaRuntime({ cwd: workspace });
+      const authStore = HostedAuthStore.inMemory();
+      configureCredentialVaultModelAuth({ runtime, authStore });
+      const registry = HostedModelRegistry.inMemory(authStore);
+      registerSingleModelProvider(registry, "deepseek", "deepseek-v4-flash");
+      const port = createProviderConnectionPort({ runtime, modelRegistry: registry, authStore });
+
+      expect(registry.getAvailable().some((model) => model.provider === "deepseek")).toBe(false);
+      expect(
+        (await port.listProviders()).find((provider) => provider.id === "deepseek"),
+      ).toMatchObject({
+        connected: false,
+        connectionSource: "none",
+        availableModelCount: 0,
+      });
+    } finally {
+      restoreEnv();
+      rmSync(workspace, { recursive: true, force: true });
+    }
+  });
+
   test("exposes a usable Gemini CLI credential path for the Google provider", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-provider-connection-"));
     const restoreEnv = patchProcessEnv({ BREWVA_VAULT_KEY: "provider-connection-test-key" });

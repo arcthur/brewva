@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { getModel, type Context } from "@brewva/brewva-provider-core";
+import { getEnvApiKey, getModel, type Context } from "@brewva/brewva-provider-core";
 import { Type } from "@sinclair/typebox";
 import {
   buildOpenAICompletionsParams,
@@ -21,6 +21,21 @@ function userText(text: string): Context["messages"][number] {
 }
 
 describe("OpenAI completions DeepSeek compatibility", () => {
+  test("reads DeepSeek credentials only from explicit discovery input", () => {
+    const restoreEnv = patchProcessEnv({
+      DEEPSEEK_API_KEY: "ambient-deepseek-key-must-not-be-used",
+    });
+    try {
+      expect(
+        getEnvApiKey("deepseek", {
+          DEEPSEEK_API_KEY: "explicit-discovery-key",
+        }),
+      ).toBe("explicit-discovery-key");
+    } finally {
+      restoreEnv();
+    }
+  });
+
   test("fails closed on DeepSeek auth instead of falling back to OPENAI_API_KEY", async () => {
     const restoreEnv = patchProcessEnv({
       DEEPSEEK_API_KEY: undefined,

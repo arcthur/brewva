@@ -5,7 +5,6 @@ import type {
   MessageParam,
 } from "@anthropic-ai/sdk/resources/messages.js";
 import { resolveAnthropicCacheRender } from "../cache-policy.js";
-import { getEnvApiKey } from "../env-api-keys.js";
 import { calculateCost } from "../models.js";
 import type {
   Api,
@@ -212,7 +211,7 @@ export const streamAnthropic: StreamFunction<"anthropic-messages", AnthropicOpti
         isOAuth = false;
         requestHeaders = options.headers;
       } else {
-        const apiKey = options?.apiKey ?? getEnvApiKey(model.provider) ?? "";
+        const apiKey = options?.apiKey ?? "";
 
         let copilotDynamicHeaders: Record<string, string> | undefined;
         if (model.provider === "github-copilot") {
@@ -498,7 +497,7 @@ export const streamSimpleAnthropic: StreamFunction<"anthropic-messages", SimpleS
   context: Context,
   options?: SimpleStreamOptions,
 ): AssistantMessageEventStream => {
-  const apiKey = options?.apiKey || getEnvApiKey(model.provider);
+  const apiKey = options?.apiKey;
   if (!apiKey) {
     throw new Error(`No API key for provider: ${model.provider}`);
   }

@@ -24,14 +24,14 @@ export function resolveHostedConfigValue(config: string): string | undefined {
     }
     return commandResultCache.get(config);
   }
-  return process.env[config] || config;
+  return config;
 }
 
 export function resolveHostedConfigValueUncached(config: string): string | undefined {
   if (config.startsWith("!")) {
     return executeCommandUncached(config);
   }
-  return process.env[config] || config;
+  return config;
 }
 
 export function resolveHostedConfigValueOrThrow(config: string, description: string): string {

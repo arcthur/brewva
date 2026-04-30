@@ -198,7 +198,9 @@ Anthropic-compatible shim:
 - transport/API envelope: OpenAI-compatible Chat Completions at
   `https://api.deepseek.com`
 - supported built-in models: `deepseek-v4-flash` and `deepseek-v4-pro`
-- authentication: `DEEPSEEK_API_KEY` or `vault://deepseek/apiKey`
+- runtime authentication source: `vault://deepseek/apiKey`. `DEEPSEEK_API_KEY`
+  is only an explicit credential discovery/import input; provider requests do
+  not read ambient provider environment variables.
 - short retention: provider-side implicit prefix context cache
 - long retention: degraded to short retention because DeepSeek does not expose
   an explicit long-lived cache resource or lifecycle API

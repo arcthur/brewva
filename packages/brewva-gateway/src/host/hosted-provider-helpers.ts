@@ -1,5 +1,4 @@
 import {
-  getEnvApiKey,
   getModels,
   getProviders,
   supportsXhighModelId,
@@ -41,13 +40,6 @@ function cloneBuiltInModel(model: ProviderCoreModel<ProviderCoreApi>): BrewvaReg
     headers: model.headers ? { ...model.headers } : undefined,
     compat: cloneCompat(model.compat),
   };
-}
-
-export function getHostedEnvApiKey(
-  provider: string,
-  env: Record<string, string | undefined> = process.env,
-): string | undefined {
-  return getEnvApiKey(provider, env);
 }
 
 function isBuiltInProvider(provider: string): provider is ProviderCoreKnownProvider {

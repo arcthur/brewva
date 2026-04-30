@@ -1,7 +1,6 @@
 import OpenAI from "openai";
 import type { ResponseCreateParamsStreaming } from "openai/resources/responses/responses.js";
 import { resolveOpenAIResponsesCacheRender } from "../cache-policy.js";
-import { getEnvApiKey } from "../env-api-keys.js";
 import { supportsXhigh } from "../models.js";
 import type {
   Api,
@@ -64,7 +63,7 @@ export const streamOpenAIResponses: StreamFunction<"openai-responses", OpenAIRes
 
     try {
       // Create OpenAI client
-      const apiKey = options?.apiKey || getEnvApiKey(model.provider) || "";
+      const apiKey = options?.apiKey || "";
       const client = createClient(model, context, apiKey, options?.headers);
       let params = buildParams(model, context, options);
       const nextParams = await options?.onPayload?.(
@@ -116,7 +115,7 @@ export const streamSimpleOpenAIResponses: StreamFunction<
   context: Context,
   options?: SimpleStreamOptions,
 ): AssistantMessageEventStream => {
-  const apiKey = options?.apiKey || getEnvApiKey(model.provider);
+  const apiKey = options?.apiKey;
   if (!apiKey) {
     throw new Error(`No API key for provider: ${model.provider}`);
   }
@@ -139,12 +138,7 @@ function createClient(
   optionsHeaders?: Record<string, string>,
 ) {
   if (!apiKey) {
-    if (!process.env.OPENAI_API_KEY) {
-      throw new Error(
-        "OpenAI API key is required. Set OPENAI_API_KEY environment variable or pass it as an argument.",
-      );
-    }
-    apiKey = process.env.OPENAI_API_KEY;
+    throw new Error(`No API key for provider: ${model.provider}`);
   }
 
   const headers = { ...model.headers };

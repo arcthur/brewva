@@ -9,7 +9,6 @@ import type {
   ChatCompletionToolMessageParam,
 } from "openai/resources/chat/completions.js";
 import { resolveOpenAICompletionsCacheRender } from "../cache-policy.js";
-import { getEnvApiKey } from "../env-api-keys.js";
 import { calculateCost, supportsXhigh } from "../models.js";
 import type {
   AssistantMessage,
@@ -90,7 +89,7 @@ export const streamOpenAICompletions: StreamFunction<
     };
 
     try {
-      const apiKey = options?.apiKey || getEnvApiKey(model.provider) || "";
+      const apiKey = options?.apiKey || "";
       const client = createClient(model, context, apiKey, options?.headers);
       const cacheRender = resolveOpenAICompletionsCacheRender({
         provider: model.provider,
@@ -340,7 +339,7 @@ export const streamSimpleOpenAICompletions: StreamFunction<
   context: Context,
   options?: SimpleStreamOptions,
 ): AssistantMessageEventStream => {
-  const apiKey = options?.apiKey || getEnvApiKey(model.provider);
+  const apiKey = options?.apiKey;
   if (!apiKey) {
     throw new Error(`No API key for provider: ${model.provider}`);
   }

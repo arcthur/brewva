@@ -3,56 +3,10 @@ import { getModels, getProviders } from "@brewva/brewva-provider-core";
 import {
   getHostedBuiltInModels,
   getHostedBuiltInProviders,
-  getHostedEnvApiKey,
   supportsHostedExtendedThinkingModel,
 } from "../../../packages/brewva-gateway/src/host/hosted-provider-helpers.js";
 
 describe("hosted provider helpers", () => {
-  test("resolves provider auth from env using Pi-aligned semantics", () => {
-    expect(
-      getHostedEnvApiKey("anthropic", {
-        ANTHROPIC_API_KEY: "anthropic-key",
-        ANTHROPIC_OAUTH_TOKEN: "anthropic-oauth",
-      }),
-    ).toBe("anthropic-oauth");
-
-    expect(
-      getHostedEnvApiKey("openai", {
-        OPENAI_API_KEY: "openai-key",
-      }),
-    ).toBe("openai-key");
-
-    expect(
-      getHostedEnvApiKey("deepseek", {
-        DEEPSEEK_API_KEY: "deepseek-key",
-      }),
-    ).toBe("deepseek-key");
-
-    expect(
-      getHostedEnvApiKey("moonshot-cn", {
-        MOONSHOT_CN_API_KEY: "moonshot-cn-key",
-      }),
-    ).toBe("moonshot-cn-key");
-
-    expect(
-      getHostedEnvApiKey("moonshot-ai", {
-        MOONSHOT_AI_API_KEY: "moonshot-ai-key",
-      }),
-    ).toBe("moonshot-ai-key");
-
-    expect(
-      getHostedEnvApiKey("moonshot-cn", {
-        MOONSHOT_API_KEY: "moonshot-generic-key",
-      }),
-    ).toBeUndefined();
-
-    expect(
-      getHostedEnvApiKey("moonshot-ai", {
-        MOONSHOT_API_KEY: "moonshot-generic-key",
-      }),
-    ).toBeUndefined();
-  });
-
   test("reports xhigh support for the same model families as Pi", () => {
     expect(supportsHostedExtendedThinkingModel({ id: "gpt-5.5" })).toBe(true);
     expect(supportsHostedExtendedThinkingModel({ id: "gpt-5.4" })).toBe(true);

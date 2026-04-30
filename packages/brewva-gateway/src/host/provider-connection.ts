@@ -28,15 +28,9 @@ import {
   toGoogleHostedOAuthCredential,
 } from "./google-oauth.js";
 import type { HostedAuthCredential } from "./hosted-auth-store.js";
-import { getHostedEnvApiKey } from "./hosted-provider-helpers.js";
 
 export type ProviderConnectionGroup = "popular" | "other";
-export type ProviderConnectionSource =
-  | "oauth"
-  | "vault"
-  | "environment"
-  | "provider_config"
-  | "none";
+export type ProviderConnectionSource = "oauth" | "vault" | "provider_config" | "none";
 
 export interface ProviderConnection {
   id: string;
@@ -1657,8 +1651,6 @@ function providerConnectionSourceRank(source: ProviderConnectionSource): number 
       return 5;
     case "vault":
       return 4;
-    case "environment":
-      return 3;
     case "provider_config":
       return 2;
     case "none":
@@ -1796,9 +1788,6 @@ function resolveConnectionSource(input: {
   }
   if (hasVaultCredential(input.vault, input.provider)) {
     return "vault";
-  }
-  if (getHostedEnvApiKey(input.provider) !== undefined) {
-    return "environment";
   }
   return input.connected ? "provider_config" : "none";
 }

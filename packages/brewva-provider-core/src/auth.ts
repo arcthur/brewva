@@ -1,7 +1,5 @@
 import type { KnownProvider } from "./types.js";
 
-export function getEnvApiKey(provider: KnownProvider): string | undefined;
-export function getEnvApiKey(provider: string): string | undefined;
 export function getEnvApiKey(
   provider: KnownProvider,
   env: Record<string, string | undefined>,
@@ -12,7 +10,7 @@ export function getEnvApiKey(
 ): string | undefined;
 export function getEnvApiKey(
   provider: string,
-  env: Record<string, string | undefined> = process.env,
+  env: Record<string, string | undefined>,
 ): string | undefined {
   if (provider === "github-copilot") {
     return env.COPILOT_GITHUB_TOKEN || env.GH_TOKEN || env.GITHUB_TOKEN;

@@ -133,8 +133,6 @@ export function providerConnectionFooter(provider: ProviderConnection): string {
       return "OAuth";
     case "vault":
       return "Vault";
-    case "environment":
-      return "Env";
     case "provider_config":
       return "Config";
     case "none":
