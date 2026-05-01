@@ -12,14 +12,14 @@
   - `docs/reference/runtime.md`
   - `docs/reference/session-lifecycle.md`
 - Code anchors:
-  - `packages/brewva-runtime/src/contracts/proposal.ts`
-  - `packages/brewva-runtime/src/contracts/governance.ts`
-  - `packages/brewva-runtime/src/ledger/evidence-ledger.ts`
-  - `packages/brewva-runtime/src/projection/engine.ts`
-  - `packages/brewva-runtime/src/services/effect-commitment-desk.ts`
-  - `packages/brewva-runtime/src/services/event-pipeline.ts`
-  - `packages/brewva-runtime/src/services/reversible-mutation.ts`
-  - `packages/brewva-runtime/src/services/session-lifecycle.ts`
+  - `packages/brewva-runtime/src/domain/proposals/types.ts`
+  - `packages/brewva-runtime/src/domain/governance/types.ts`
+  - `packages/brewva-runtime/src/domain/ledger/evidence-ledger.ts`
+  - `packages/brewva-runtime/src/domain/projection/engine.ts`
+  - `packages/brewva-runtime/src/domain/proposals/effect-commitment-desk.ts`
+  - `packages/brewva-runtime/src/domain/sessions/event-pipeline.ts`
+  - `packages/brewva-runtime/src/domain/governance/reversible-mutation.ts`
+  - `packages/brewva-runtime/src/domain/sessions/session-lifecycle.ts`
 
 ## Decision Summary
 

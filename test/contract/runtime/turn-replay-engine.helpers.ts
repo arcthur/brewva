@@ -1,13 +1,16 @@
 import {
-  TASK_EVENT_TYPE,
-  TAPE_CHECKPOINT_EVENT_TYPE,
-  TRUTH_EVENT_TYPE,
   asBrewvaSessionId,
   buildItemAddedEvent,
   buildTapeCheckpointPayload,
   buildTruthFactUpsertedEvent,
 } from "@brewva/brewva-runtime";
-import type { BrewvaEventRecord, TaskState } from "@brewva/brewva-runtime";
+import type { TaskState } from "@brewva/brewva-runtime";
+import {
+  TASK_EVENT_TYPE,
+  TAPE_CHECKPOINT_EVENT_TYPE,
+  TRUTH_EVENT_TYPE,
+} from "@brewva/brewva-runtime/events";
+import type { BrewvaEventRecord } from "@brewva/brewva-runtime/events";
 
 export function taskEvent(input: {
   sessionId: string;
@@ -142,6 +145,8 @@ export function toolResultFailureEvent(input: {
       toolName: input.toolName,
       verdict: "fail",
       channelSuccess: false,
+      ledgerId: `ledger:${input.id}`,
+      failureClass: input.failureClass ?? null,
       failureContext: {
         args: {
           command: "bun test",

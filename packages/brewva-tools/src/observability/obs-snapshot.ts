@@ -1,7 +1,5 @@
-import {
-  formatTaskVerificationLevelForSurface,
-  VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
-} from "@brewva/brewva-runtime";
+import { formatTaskVerificationLevelForSurface } from "@brewva/brewva-runtime";
+import { VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate";
 import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "../types.js";
@@ -23,7 +21,7 @@ export function createObsSnapshotTool(options: BrewvaToolOptions): ToolDefinitio
     parameters: Type.Object({}),
     async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
       const sessionId = getSessionId(ctx);
-      const tape = obsSnapshotTool.runtime.inspect.events.getTapeStatus(sessionId);
+      const tape = obsSnapshotTool.runtime.inspect.tape.getTapeStatus(sessionId);
       const usage = obsSnapshotTool.runtime.inspect.context.getUsage(sessionId);
       const promptStability = obsSnapshotTool.runtime.inspect.context.getPromptStability(sessionId);
       const transientReduction =

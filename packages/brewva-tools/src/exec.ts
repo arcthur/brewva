@@ -1,4 +1,12 @@
 import {
+  analyzeVirtualReadonlyEligibility,
+  classifyToolBoundaryRequest,
+  evaluateBoundaryClassification,
+  getToolActionPolicy,
+  summarizeShellCommandAnalysis,
+  summarizeVirtualReadonlyEligibility,
+} from "@brewva/brewva-runtime";
+import {
   BOX_ACQUIRED_EVENT_TYPE,
   BOX_BOOTSTRAP_COMPLETED_EVENT_TYPE,
   BOX_BOOTSTRAP_FAILED_EVENT_TYPE,
@@ -11,13 +19,7 @@ import {
   BOX_SNAPSHOT_CREATED_EVENT_TYPE,
   EXEC_FAILED_EVENT_TYPE,
   EXEC_STARTED_EVENT_TYPE,
-  analyzeVirtualReadonlyEligibility,
-  classifyToolBoundaryRequest,
-  evaluateBoundaryClassification,
-  getToolActionPolicy,
-  summarizeShellCommandAnalysis,
-  summarizeVirtualReadonlyEligibility,
-} from "@brewva/brewva-runtime";
+} from "@brewva/brewva-runtime/events";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate";
 import { Type } from "@sinclair/typebox";
 import {
@@ -55,7 +57,7 @@ import {
   executeVirtualReadonlyCommand,
   VirtualReadonlyMaterializationError,
 } from "./exec/virtual-readonly-lane.js";
-import { resolveToolRuntimeCredentialBindings } from "./runtime-internal.js";
+import { resolveToolRuntimeCredentialBindings } from "./runtime-extensions.js";
 import { isPathInsideRoots, resolveToolTargetScope } from "./target-scope.js";
 import { textResult, withVerdict } from "./utils/result.js";
 import { createRuntimeBoundBrewvaToolFactory } from "./utils/runtime-bound-tool.js";
@@ -619,9 +621,9 @@ export function createExecTool(options?: ExecToolOptions): ToolDefinition {
     {
       requiredCapabilities: [
         "inspect.task.getTargetDescriptor",
-        "internal.onClearState",
-        "internal.recordEvent",
-        "internal.resolveCredentialBindings",
+        "extensions.tools.onClearState",
+        "extensions.tools.recordEvent",
+        "extensions.tools.resolveCredentialBindings",
       ],
     },
   );

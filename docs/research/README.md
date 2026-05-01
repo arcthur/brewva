@@ -82,7 +82,7 @@ metadata, or historical summaries become misleading.
 - Handwritten docs explain boundaries, contract semantics, and why. Generated
   segments or inspect tools carry enumerations, full field lists, and exact
   inventories.
-- Each page should be independently readable and target 300 lines or less.
+- Each page should be independently readable and target 400 lines or less.
 - Stable reference pages own contracts; research notes own provenance.
 - Avoid new parallel directories when a generated segment, split file, or
   provenance footnote can solve the duplication.

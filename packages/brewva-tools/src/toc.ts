@@ -1,12 +1,12 @@
 import { existsSync, statSync } from "node:fs";
-import { TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE } from "@brewva/brewva-runtime";
+import { TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate";
 import { Type } from "@sinclair/typebox";
 import { buildReadPathDiscoveryObservationPayload } from "./read-path-discovery.js";
 import {
   recordToolRuntimeEvent,
   registerToolRuntimeClearStateListener,
-} from "./runtime-internal.js";
+} from "./runtime-extensions.js";
 import {
   attachSearchIntentPreviewCandidates,
   normalizeSearchAdvisorPath,

@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import { handleInspectChannelCommand } from "../../../packages/brewva-cli/src/inspect-channel-command.js";
 import { cleanupTestWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
 
@@ -19,7 +18,7 @@ describe("inspect channel command", () => {
     const sessionId = "inspect-channel-approval-session";
 
     try {
-      recordRuntimeEvent(runtime, {
+      runtime.extensions.hosted.events.record({
         sessionId,
         type: "session_bootstrap",
         payload: {

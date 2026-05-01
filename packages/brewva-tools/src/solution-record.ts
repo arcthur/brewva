@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { parseMarkdownFrontmatter } from "@brewva/brewva-runtime/internal";
+import { parseMarkdownFrontmatter } from "@brewva/brewva-runtime/markdown";
 import { Type } from "@sinclair/typebox";
 import { buildStringEnumSchema } from "./utils/input-alias.js";
 import { readLiteral } from "./utils/literal.js";

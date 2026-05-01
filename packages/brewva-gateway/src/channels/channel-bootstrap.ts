@@ -7,7 +7,6 @@ import {
   type ChannelTurnBridge,
   type TurnEnvelope,
 } from "@brewva/brewva-runtime/channels";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import { createRuntimeTelegramChannelBridge } from "../runtime-plugins/index.js";
 
 export interface TelegramChannelModeConfig {
@@ -377,7 +376,7 @@ export const DEFAULT_CHANNEL_LAUNCHERS: Record<SupportedChannel, ChannelModeLaun
         if (ingressStarted) return;
         await listenServer(ingressServer, webhookIngress.host, webhookIngress.port);
         ingressStarted = true;
-        recordRuntimeEvent(input.runtime, {
+        input.runtime.extensions.hosted.events.record({
           sessionId: "channel:system",
           type: "channel_ingress_started",
           payload: {
@@ -394,7 +393,7 @@ export const DEFAULT_CHANNEL_LAUNCHERS: Record<SupportedChannel, ChannelModeLaun
         if (!ingressStarted) return;
         await closeServer(ingressServer);
         ingressStarted = false;
-        recordRuntimeEvent(input.runtime, {
+        input.runtime.extensions.hosted.events.record({
           sessionId: "channel:system",
           type: "channel_ingress_stopped",
           payload: {

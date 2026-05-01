@@ -200,21 +200,23 @@ describe("subagent_run public surface", () => {
     }> = [];
     const tool = createSubagentRunTool({
       runtime: {
-        internal: {
-          appendGuardedSupplementalBlocks(
-            sessionId: string,
-            blocks: readonly { familyId: string; content: string }[],
-            scopeId?: string,
-          ) {
-            return blocks.map(({ familyId, content }) => {
-              appendCalls.push({ sessionId, familyId, text: content, scopeId });
-              return {
-                familyId,
-                accepted: true,
-                finalTokens: 12,
-                truncated: false,
-              };
-            });
+        extensions: {
+          tools: {
+            appendGuardedSupplementalBlocks(
+              sessionId: string,
+              blocks: readonly { familyId: string; content: string }[],
+              scopeId?: string,
+            ) {
+              return blocks.map(({ familyId, content }) => {
+                appendCalls.push({ sessionId, familyId, text: content, scopeId });
+                return {
+                  familyId,
+                  accepted: true,
+                  finalTokens: 12,
+                  truncated: false,
+                };
+              });
+            },
           },
         },
         orchestration: {

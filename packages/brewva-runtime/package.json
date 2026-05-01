@@ -18,11 +18,83 @@
       "import": "./dist/channels.js",
       "default": "./dist/channels.js"
     },
-    "./internal": {
-      "types": "./dist/internal.d.ts",
-      "bun": "./src/internal.ts",
-      "import": "./dist/internal.js",
-      "default": "./dist/internal.js"
+    "./core": {
+      "types": "./dist/core.d.ts",
+      "bun": "./src/core.ts",
+      "import": "./dist/core.js",
+      "default": "./dist/core.js"
+    },
+    "./credentials": {
+      "types": "./dist/credentials.d.ts",
+      "bun": "./src/credentials.ts",
+      "import": "./dist/credentials.js",
+      "default": "./dist/credentials.js"
+    },
+    "./context": {
+      "types": "./dist/context.d.ts",
+      "bun": "./src/context.ts",
+      "import": "./dist/context.js",
+      "default": "./dist/context.js"
+    },
+    "./event-log": {
+      "types": "./dist/event-log.d.ts",
+      "bun": "./src/event-log.ts",
+      "import": "./dist/event-log.js",
+      "default": "./dist/event-log.js"
+    },
+    "./evidence": {
+      "types": "./dist/evidence.d.ts",
+      "bun": "./src/evidence.ts",
+      "import": "./dist/evidence.js",
+      "default": "./dist/evidence.js"
+    },
+    "./events": {
+      "types": "./dist/events.d.ts",
+      "bun": "./src/events.ts",
+      "import": "./dist/events.js",
+      "default": "./dist/events.js"
+    },
+    "./markdown": {
+      "types": "./dist/markdown.d.ts",
+      "bun": "./src/markdown.ts",
+      "import": "./dist/markdown.js",
+      "default": "./dist/markdown.js"
+    },
+    "./patch-history": {
+      "types": "./dist/patch-history.d.ts",
+      "bun": "./src/patch-history.ts",
+      "import": "./dist/patch-history.js",
+      "default": "./dist/patch-history.js"
+    },
+    "./parallel": {
+      "types": "./dist/parallel.d.ts",
+      "bun": "./src/parallel.ts",
+      "import": "./dist/parallel.js",
+      "default": "./dist/parallel.js"
+    },
+    "./semantic-artifacts": {
+      "types": "./dist/semantic-artifacts.d.ts",
+      "bun": "./src/semantic-artifacts.ts",
+      "import": "./dist/semantic-artifacts.js",
+      "default": "./dist/semantic-artifacts.js"
+    },
+    "./replay": {
+      "types": "./dist/replay.d.ts",
+      "bun": "./src/replay.ts",
+      "import": "./dist/replay.js",
+      "default": "./dist/replay.js"
+    },
+    "./recovery": {
+      "types": "./dist/recovery.d.ts",
+      "bun": "./src/recovery.ts",
+      "import": "./dist/recovery.js",
+      "default": "./dist/recovery.js"
+    },
+    "./runtime-extensions": {
+      "types": "./dist/runtime/runtime-extensions.d.ts",
+      "bun": "./src/runtime/runtime-extensions.ts",
+      "import": "./dist/runtime/runtime-extensions.js",
+      "default": "./dist/runtime/runtime-extensions.js"
     },
     "./schema/brewva.schema.json": "./schema/brewva.schema.json"
   },

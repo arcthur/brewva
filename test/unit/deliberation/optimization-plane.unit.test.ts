@@ -8,10 +8,9 @@ import {
 import {
   BrewvaRuntime,
   CONTEXT_SOURCES,
-  SKILL_COMPLETED_EVENT_TYPE,
   buildScheduleIntentFiredEvent,
 } from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
+import { recordHostedSkillCompleted } from "../../helpers/events.js";
 import { patchDateNow } from "../../helpers/global-state.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
@@ -28,64 +27,62 @@ function recordGoalLoopCompletion(input: {
   nextTrigger?: string;
   nextTiming?: string;
 }): void {
-  recordRuntimeEvent(input.runtime, {
+  recordHostedSkillCompleted({
+    runtime: input.runtime,
     sessionId: input.sessionId,
-    type: SKILL_COMPLETED_EVENT_TYPE,
     timestamp: input.timestamp,
-    payload: {
-      skillName: "goal-loop",
-      outputs: {
-        loop_contract: {
-          goal: "Raise coverage with bounded iterations.",
-          scope: ["packages/brewva-runtime/src/runtime.ts"],
-          cadence: {
-            mode: "scheduler",
-            delay: "1d",
-          },
-          continuity_mode: "inherit",
-          loop_key: input.loopKey,
-          baseline: {
-            value: 72,
-            source: `goal-loop:${input.loopKey}`,
-          },
-          metric: {
-            key: "coverage_pct",
-            direction: "increase",
-            unit: "%",
-            min_delta: 1,
-          },
-          guard: {
-            key: "unit-tests",
-          },
-          convergence_condition: {
-            kind: "max_runs",
-            limit: 5,
-          },
-          max_runs: 5,
-          escalation_policy: {
-            owner: "design",
-            trigger: "three flat runs",
-          },
+    skillName: "goal-loop",
+    outputs: {
+      loop_contract: {
+        goal: "Raise coverage with bounded iterations.",
+        scope: ["packages/brewva-runtime/src/runtime/runtime.ts"],
+        cadence: {
+          mode: "scheduler",
+          delay: "1d",
         },
-        iteration_report: {
-          run_key: input.runKey,
-          iteration_key: input.iterationKey,
-          outcome: "progress",
-          summary: "Coverage improved while the guard stayed green.",
+        continuity_mode: "inherit",
+        loop_key: input.loopKey,
+        baseline: {
+          value: 72,
+          source: `goal-loop:${input.loopKey}`,
         },
-        convergence_report: {
-          run_key: input.runKey,
-          status: input.convergenceStatus ?? "continue",
-          reason_code: input.convergenceReason ?? "progress",
-          metric_trajectory_summary: "Trajectory is positive and another bounded run is justified.",
+        metric: {
+          key: "coverage_pct",
+          direction: "increase",
+          unit: "%",
+          min_delta: 1,
         },
-        continuation_plan: {
-          loop_key: input.loopKey,
-          next_owner: input.nextOwner ?? "implementation",
-          next_run_trigger: input.nextTrigger ?? "schedule",
-          next_run_timing: input.nextTiming ?? "tomorrow morning",
-          next_run_objective: "Tighten coverage on the same runtime surface.",
+        guard: {
+          key: "unit-tests",
         },
+        convergence_condition: {
+          kind: "max_runs",
+          limit: 5,
+        },
+        max_runs: 5,
+        escalation_policy: {
+          owner: "design",
+          trigger: "three flat runs",
+        },
+      },
+      iteration_report: {
+        run_key: input.runKey,
+        iteration_key: input.iterationKey,
+        outcome: "progress",
+        summary: "Coverage improved while the guard stayed green.",
+      },
+      convergence_report: {
+        run_key: input.runKey,
+        status: input.convergenceStatus ?? "continue",
+        reason_code: input.convergenceReason ?? "progress",
+        metric_trajectory_summary: "Trajectory is positive and another bounded run is justified.",
+      },
+      continuation_plan: {
+        loop_key: input.loopKey,
+        next_owner: input.nextOwner ?? "implementation",
+        next_run_trigger: input.nextTrigger ?? "schedule",
+        next_run_timing: input.nextTiming ?? "tomorrow morning",
+        next_run_objective: "Tighten coverage on the same runtime surface.",
       },
     },
   });
@@ -96,22 +93,20 @@ describe("optimization continuity plane", () => {
     const workspace = createTestWorkspace("optimization-continuity-canonical-fields");
     const runtime = new BrewvaRuntime({ cwd: workspace });
 
-    recordRuntimeEvent(runtime, {
+    recordHostedSkillCompleted({
+      runtime,
       sessionId: "legacy-goal-loop-session",
-      type: SKILL_COMPLETED_EVENT_TYPE,
       timestamp: 1_710_000_000_100,
-      payload: {
-        skillName: "goal-loop",
-        outputs: {
-          loopContract: {
-            loopKey: "coverage-raise-legacy",
-            continuityMode: "inherit",
-          },
-          iterationReport: {
-            runKey: "coverage-raise-legacy/run-1",
-            iterationKey: "coverage-raise-legacy/run-1/iter-1",
-            outcome: "progress",
-          },
+      skillName: "goal-loop",
+      outputs: {
+        loopContract: {
+          loopKey: "coverage-raise-legacy",
+          continuityMode: "inherit",
+        },
+        iterationReport: {
+          runKey: "coverage-raise-legacy/run-1",
+          iterationKey: "coverage-raise-legacy/run-1/iter-1",
+          outcome: "progress",
         },
       },
     });
@@ -137,7 +132,7 @@ describe("optimization continuity plane", () => {
       const loopKey = "coverage-raise-2026-03-23";
       const loopSource = `goal-loop:${loopKey}`;
 
-      recordRuntimeEvent(runtime, {
+      runtime.extensions.hosted.events.record({
         sessionId: parentSessionId,
         type: "schedule_intent",
         timestamp: 1_710_000_000_010,
@@ -156,7 +151,7 @@ describe("optimization continuity plane", () => {
           }),
         },
       });
-      recordRuntimeEvent(runtime, {
+      runtime.extensions.hosted.events.record({
         sessionId: parentSessionId,
         type: "schedule_intent",
         timestamp: 1_710_000_000_020,

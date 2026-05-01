@@ -239,9 +239,9 @@ export function createScheduleIntentTool(options: BrewvaToolOptions): ToolDefini
           });
 
           if (!created.ok) {
-            return failTextResult(`Schedule intent rejected (${created.error}).`, {
+            return failTextResult(`Schedule intent rejected (${created.reason}).`, {
               ok: false,
-              error: created.error,
+              error: created.reason,
             });
           }
 
@@ -328,9 +328,9 @@ export function createScheduleIntentTool(options: BrewvaToolOptions): ToolDefini
 
           const updated = await runtime.authority.schedule.updateIntent(sessionId, updateInput);
           if (!updated.ok) {
-            return failTextResult(`Schedule intent update rejected (${updated.error}).`, {
+            return failTextResult(`Schedule intent update rejected (${updated.reason}).`, {
               ok: false,
-              error: updated.error,
+              error: updated.reason,
             });
           }
 
@@ -366,10 +366,10 @@ export function createScheduleIntentTool(options: BrewvaToolOptions): ToolDefini
           });
           if (!cancelled.ok) {
             return failTextResult(
-              `Schedule intent cancel rejected (${cancelled.error ?? "unknown_error"}).`,
+              `Schedule intent cancel rejected (${cancelled.reason ?? "unknown_error"}).`,
               {
                 ok: false,
-                error: cancelled.error ?? "unknown_error",
+                error: cancelled.reason ?? "unknown_error",
               },
             );
           }

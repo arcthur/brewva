@@ -2,7 +2,7 @@ import {
   type ContextCompactionGateStatus,
   type ContextInjectionCategory,
 } from "@brewva/brewva-runtime";
-import type { ContextInjectionEntry } from "@brewva/brewva-runtime/internal";
+import type { ContextInjectionEntry } from "@brewva/brewva-runtime/context";
 import {
   renderCapabilityView,
   type BuildCapabilityViewResult,

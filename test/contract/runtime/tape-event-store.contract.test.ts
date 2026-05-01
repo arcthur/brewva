@@ -6,14 +6,14 @@ import {
   buildTapeAnchorPayload,
   buildTapeCheckpointPayload,
 } from "@brewva/brewva-runtime";
-import { BrewvaEventStore } from "@brewva/brewva-runtime/internal";
+import { createBrewvaEventStore } from "@brewva/brewva-runtime/event-log";
 import { requireDefined } from "../../helpers/assertions.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 describe("BrewvaEventStore tape helpers", () => {
   test("writes and queries anchor/checkpoint events via dedicated methods", () => {
     const workspace = createTestWorkspace("tape-store");
-    const store = new BrewvaEventStore(DEFAULT_BREWVA_CONFIG.infrastructure.events, workspace);
+    const store = createBrewvaEventStore(DEFAULT_BREWVA_CONFIG.infrastructure.events, workspace);
     const sessionId = "tape-store-1";
 
     store.appendAnchor({
@@ -86,7 +86,7 @@ describe("BrewvaEventStore tape helpers", () => {
 
   test("keeps incremental cache synchronized for external append and file truncation", () => {
     const workspace = createTestWorkspace("tape-store-incremental");
-    const store = new BrewvaEventStore(DEFAULT_BREWVA_CONFIG.infrastructure.events, workspace);
+    const store = createBrewvaEventStore(DEFAULT_BREWVA_CONFIG.infrastructure.events, workspace);
     const sessionId = "tape-store-incremental-1";
     store.append({
       sessionId,
@@ -130,7 +130,7 @@ describe("BrewvaEventStore tape helpers", () => {
 
   test("generates unique event ids for high-frequency appends", () => {
     const workspace = createTestWorkspace("tape-store-id");
-    const store = new BrewvaEventStore(DEFAULT_BREWVA_CONFIG.infrastructure.events, workspace);
+    const store = createBrewvaEventStore(DEFAULT_BREWVA_CONFIG.infrastructure.events, workspace);
     const sessionId = "tape-store-id-1";
 
     const ids = new Set<string>();
@@ -155,7 +155,7 @@ describe("BrewvaEventStore tape helpers", () => {
 
   test("skips malformed rows with non-record payloads during cache sync", () => {
     const workspace = createTestWorkspace("tape-store-malformed-payload");
-    const store = new BrewvaEventStore(DEFAULT_BREWVA_CONFIG.infrastructure.events, workspace);
+    const store = createBrewvaEventStore(DEFAULT_BREWVA_CONFIG.infrastructure.events, workspace);
     const sessionId = "tape-store-malformed-payload-1";
 
     store.append({
@@ -190,7 +190,7 @@ describe("BrewvaEventStore tape helpers", () => {
 
   test("returns immutable cached event rows", () => {
     const workspace = createTestWorkspace("tape-store-immutable");
-    const store = new BrewvaEventStore(DEFAULT_BREWVA_CONFIG.infrastructure.events, workspace);
+    const store = createBrewvaEventStore(DEFAULT_BREWVA_CONFIG.infrastructure.events, workspace);
     const sessionId = "tape-store-immutable-1";
 
     store.append({
@@ -214,7 +214,7 @@ describe("BrewvaEventStore tape helpers", () => {
 
   test("supports time-range, tail, offset, and limit filters together", () => {
     const workspace = createTestWorkspace("tape-store-query-window");
-    const store = new BrewvaEventStore(DEFAULT_BREWVA_CONFIG.infrastructure.events, workspace);
+    const store = createBrewvaEventStore(DEFAULT_BREWVA_CONFIG.infrastructure.events, workspace);
     const sessionId = "tape-store-query-window-1";
 
     store.append({
@@ -264,7 +264,7 @@ describe("BrewvaEventStore tape helpers", () => {
 
   test("falls back to scan semantics when timestamps are not monotonic", () => {
     const workspace = createTestWorkspace("tape-store-query-non-monotonic");
-    const store = new BrewvaEventStore(DEFAULT_BREWVA_CONFIG.infrastructure.events, workspace);
+    const store = createBrewvaEventStore(DEFAULT_BREWVA_CONFIG.infrastructure.events, workspace);
     const sessionId = "tape-store-query-non-monotonic-1";
 
     store.append({
@@ -299,7 +299,7 @@ describe("BrewvaEventStore tape helpers", () => {
 
   test("treats zero limit and empty time windows as empty results", () => {
     const workspace = createTestWorkspace("tape-store-query-empty");
-    const store = new BrewvaEventStore(DEFAULT_BREWVA_CONFIG.infrastructure.events, workspace);
+    const store = createBrewvaEventStore(DEFAULT_BREWVA_CONFIG.infrastructure.events, workspace);
     const sessionId = "tape-store-query-empty-1";
 
     store.append({

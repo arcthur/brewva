@@ -1,4 +1,4 @@
-import { CONTEXT_SOURCES } from "../context/sources.js";
+import { CONTEXT_SOURCES } from "../domain/context/sources.js";
 
 /**
  * Patterns that indicate direct prompt-injection attempts.

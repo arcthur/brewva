@@ -60,7 +60,7 @@ async function main(): Promise<void> {
   const scriptDir = dirname(fileURLToPath(import.meta.url));
   const repoRoot = resolve(scriptDir, "..");
   const tsconfig = resolve(repoRoot, "packages/brewva-runtime/tsconfig.schema.json");
-  const typesPath = resolve(repoRoot, "packages/brewva-runtime/src/contracts/config.ts");
+  const typesPath = resolve(repoRoot, "packages/brewva-runtime/src/config/types.ts");
   const outputPath = resolve(repoRoot, "packages/brewva-runtime/schema/brewva.schema.json");
 
   const schema = createGenerator({

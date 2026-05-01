@@ -17,7 +17,7 @@
 - Brewva's public runtime contract is organized around semantic root surfaces: `authority`, `inspect`, and `maintain`
 - the default coupling surface follows authority boundaries rather than implementation breadth
 - `public width is not authority width` is the interpretation rule for runtime APIs and docs
-- repo-owned implementation helpers stay under `@brewva/brewva-runtime/internal`, not the root public entrypoint
+- repo-owned implementation helpers stay under dedicated runtime subpaths and controlled extension ports, not the root public entrypoint
 - future public APIs must explain which semantic surface they belong to before widening the root contract
 
 ## Superseded by

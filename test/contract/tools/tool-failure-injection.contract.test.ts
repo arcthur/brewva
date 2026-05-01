@@ -1,9 +1,49 @@
 import { describe, expect, test } from "bun:test";
 import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import { setStaticContextInjectionBudget } from "../../fixtures/config.js";
 import { requireDefined } from "../../helpers/assertions.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
+
+function recordToolOutputDistilled(input: {
+  runtime: BrewvaRuntime;
+  sessionId: string;
+  toolName?: string;
+  strategy?: string;
+  summaryText: string;
+  rawChars?: number;
+  rawBytes?: number;
+  rawTokens?: number;
+  summaryChars?: number;
+  summaryBytes?: number;
+  summaryTokens?: number;
+  compressionRatio?: number;
+  artifactRef?: string | null;
+  isError?: boolean;
+  truncated?: boolean;
+  verdict?: "pass" | "fail" | "inconclusive";
+}): void {
+  input.runtime.extensions.hosted.events.record({
+    sessionId: input.sessionId,
+    type: "tool_output_distilled",
+    payload: {
+      toolName: input.toolName ?? "exec",
+      strategy: input.strategy ?? "exec_heuristic",
+      summaryText: input.summaryText,
+      rawChars: input.rawChars ?? 480,
+      rawBytes: input.rawBytes ?? 480,
+      rawTokens: input.rawTokens ?? 120,
+      summaryChars: input.summaryChars ?? 120,
+      summaryBytes: input.summaryBytes ?? 120,
+      summaryTokens: input.summaryTokens ?? 24,
+      compressionRatio: input.compressionRatio ?? 0.2,
+      artifactRef:
+        input.artifactRef ?? ".orchestrator/tool-output-artifacts/sess/tool-output-distilled.txt",
+      isError: input.isError ?? false,
+      truncated: input.truncated ?? false,
+      ...(input.verdict ? { verdict: input.verdict } : {}),
+    },
+  });
+}
 
 describe("Tool failure context injection", () => {
   test("injects recent failure details for self-correction", async () => {
@@ -93,19 +133,14 @@ describe("Tool failure context injection", () => {
     const runtime = new BrewvaRuntime({ cwd: workspace, config });
     const sessionId = "tool-output-distilled-inject-1";
 
-    recordRuntimeEvent(runtime, {
+    recordToolOutputDistilled({
+      runtime,
       sessionId,
-      type: "tool_output_distilled",
-      payload: {
-        toolName: "exec",
-        strategy: "exec_heuristic",
-        summaryText: "[ExecDistilled]\nstatus: failed\n- Error: test suite failed",
-        rawTokens: 160,
-        summaryTokens: 32,
-        compressionRatio: 0.2,
-        artifactRef: ".orchestrator/tool-output-artifacts/sess/tc-exec-distill.txt",
-        isError: true,
-      },
+      summaryText: "[ExecDistilled]\nstatus: failed\n- Error: test suite failed",
+      rawTokens: 160,
+      summaryTokens: 32,
+      artifactRef: ".orchestrator/tool-output-artifacts/sess/tc-exec-distill.txt",
+      isError: true,
     });
 
     const injection = await runtime.maintain.context.buildInjection(sessionId, "continue");
@@ -128,20 +163,15 @@ describe("Tool failure context injection", () => {
     const runtime = new BrewvaRuntime({ cwd: workspace, config });
     const sessionId = "tool-output-distilled-verdict-1";
 
-    recordRuntimeEvent(runtime, {
+    recordToolOutputDistilled({
+      runtime,
       sessionId,
-      type: "tool_output_distilled",
-      payload: {
-        toolName: "exec",
-        strategy: "exec_heuristic",
-        summaryText: "[ExecDistilled]\nstatus: failed\n- FAIL src/foo.test.ts",
-        rawTokens: 120,
-        summaryTokens: 24,
-        compressionRatio: 0.2,
-        artifactRef: ".orchestrator/tool-output-artifacts/sess/tc-exec-verdict.txt",
-        isError: false,
-        verdict: "fail",
-      },
+      summaryText: "[ExecDistilled]\nstatus: failed\n- FAIL src/foo.test.ts",
+      rawTokens: 120,
+      summaryTokens: 24,
+      artifactRef: ".orchestrator/tool-output-artifacts/sess/tc-exec-verdict.txt",
+      isError: false,
+      verdict: "fail",
     });
 
     const injection = await runtime.maintain.context.buildInjection(sessionId, "continue");
@@ -158,35 +188,28 @@ describe("Tool failure context injection", () => {
     const runtime = new BrewvaRuntime({ cwd: workspace, config });
     const sessionId = "tool-output-distilled-limits-1";
 
-    recordRuntimeEvent(runtime, {
+    recordToolOutputDistilled({
+      runtime,
       sessionId,
-      type: "tool_output_distilled",
-      payload: {
-        toolName: "exec",
-        strategy: "exec_heuristic",
-        summaryText:
-          "[ExecDistilled]\nstatus: failed\n- first summary should be dropped by maxEntries",
-        rawTokens: 120,
-        summaryTokens: 30,
-        compressionRatio: 0.25,
-        artifactRef: ".orchestrator/tool-output-artifacts/sess/tc-1.txt",
-        isError: true,
-      },
+      summaryText:
+        "[ExecDistilled]\nstatus: failed\n- first summary should be dropped by maxEntries",
+      rawTokens: 120,
+      summaryTokens: 30,
+      compressionRatio: 0.25,
+      artifactRef: ".orchestrator/tool-output-artifacts/sess/tc-1.txt",
+      isError: true,
     });
-    recordRuntimeEvent(runtime, {
+    recordToolOutputDistilled({
+      runtime,
       sessionId,
-      type: "tool_output_distilled",
-      payload: {
-        toolName: "lsp_diagnostics",
-        strategy: "lsp_heuristic",
-        summaryText:
-          "[LspDistilled] errors=2 warnings=1\n- src/main.ts:12:3 very long summary detail that should be truncated",
-        rawTokens: 90,
-        summaryTokens: 18,
-        compressionRatio: 0.2,
-        artifactRef: ".orchestrator/tool-output-artifacts/sess/tc-2.txt",
-        isError: false,
-      },
+      toolName: "lsp_diagnostics",
+      strategy: "lsp_heuristic",
+      summaryText:
+        "[LspDistilled] errors=2 warnings=1\n- src/main.ts:12:3 very long summary detail that should be truncated",
+      rawTokens: 90,
+      summaryTokens: 18,
+      artifactRef: ".orchestrator/tool-output-artifacts/sess/tc-2.txt",
+      isError: false,
     });
 
     const injection = await runtime.maintain.context.buildInjection(sessionId, "continue");

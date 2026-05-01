@@ -4,7 +4,7 @@ import type {
   SkillCompletionFailureRecord,
   SkillDocument,
 } from "@brewva/brewva-runtime";
-import { buildSkillRoutingCatalogEntry } from "@brewva/brewva-runtime/internal";
+import { buildSkillRoutingCatalogEntry } from "@brewva/brewva-runtime";
 import type { BrewvaHostContext, InternalHostPluginApi } from "@brewva/brewva-substrate";
 import { createCompletionGuardLifecycle } from "../../../packages/brewva-gateway/src/runtime-plugins/completion-guard.js";
 

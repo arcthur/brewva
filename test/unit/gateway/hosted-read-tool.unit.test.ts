@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, readFileSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import {
   createBrewvaReadToolDefinition,
   type BrewvaReadToolOptions,
@@ -83,7 +82,7 @@ describe("hosted compact read tool", () => {
         channelSuccess: false,
       });
     }
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: TOOL_READ_PATH_GATE_ARMED_EVENT_TYPE,
       payload: {
@@ -140,7 +139,7 @@ describe("hosted compact read tool", () => {
     const templateTool = createBrewvaReadToolDefinition(workspace);
     let delegateCalls = 0;
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: TOOL_READ_PATH_GATE_ARMED_EVENT_TYPE,
       payload: {
@@ -192,7 +191,7 @@ describe("hosted compact read tool", () => {
     const templateTool = createBrewvaReadToolDefinition(workspace);
     let delegateCalls = 0;
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: TOOL_READ_PATH_GATE_ARMED_EVENT_TYPE,
       payload: {
@@ -200,7 +199,7 @@ describe("hosted compact read tool", () => {
         failedPaths: ["src/missing-a.ts", "src/missing-b.ts"],
       },
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE,
       payload: {

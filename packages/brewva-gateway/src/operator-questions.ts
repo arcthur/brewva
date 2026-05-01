@@ -1,12 +1,14 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { type BrewvaRuntime } from "@brewva/brewva-runtime";
+import { type BrewvaEventRecord } from "@brewva/brewva-runtime/events";
 import {
   OPERATOR_QUESTION_ANSWERED_EVENT_TYPE,
   SKILL_COMPLETED_EVENT_TYPE,
   SUBAGENT_COMPLETED_EVENT_TYPE,
-  type BrewvaEventRecord,
-  type BrewvaRuntime,
-} from "@brewva/brewva-runtime";
+  readDelegationLifecycleEventPayload,
+  readSkillCompletedEventPayload,
+} from "@brewva/brewva-runtime/events";
 import { validateQuestionAnswers, type BrewvaQuestionAnswerSpec } from "@brewva/brewva-substrate";
 import type { SubagentOutcome } from "@brewva/brewva-tools";
 
@@ -160,8 +162,7 @@ function readCanonicalQuestionTexts(
   return undefined;
 }
 
-function readArtifactPath(payload: Record<string, unknown> | null): string | undefined {
-  const artifactRefs = payload?.artifactRefs;
+function readArtifactPath(artifactRefs: unknown): string | undefined {
   if (!Array.isArray(artifactRefs)) {
     return undefined;
   }
@@ -330,12 +331,12 @@ function extractStructuredQuestionRequests(input: {
 }
 
 function extractSkillQuestions(event: BrewvaEventRecord): SessionOpenQuestion[] {
-  const payload = isRecord(event.payload) ? event.payload : null;
-  const outputs = payload && isRecord(payload.outputs) ? payload.outputs : null;
-  if (!outputs) {
+  const payload = readSkillCompletedEventPayload(event);
+  if (!payload) {
     return [];
   }
-  const skillName = readString(payload?.skillName);
+  const outputs = payload.outputs;
+  const skillName = payload.skillName;
   const sourceLabel = buildSkillSourceLabel(skillName);
   const structured = extractStructuredQuestionRequests({
     requestDefinitions: outputs.question_requests,
@@ -374,9 +375,9 @@ async function extractDelegationQuestions(
   event: BrewvaEventRecord,
   runtime: BrewvaRuntime,
 ): Promise<{ questions: SessionOpenQuestion[]; warning?: string }> {
-  const payload = isRecord(event.payload) ? event.payload : null;
-  const runId = readString(payload?.runId);
-  const artifactPath = readArtifactPath(payload);
+  const payload = readDelegationLifecycleEventPayload(event);
+  const runId = payload?.runId;
+  const artifactPath = readArtifactPath(payload?.artifactRefs);
   if (!runId || !artifactPath) {
     return { questions: [] };
   }
@@ -390,11 +391,11 @@ async function extractDelegationQuestions(
   if (!outcome.ok || outcome.data?.kind !== "consult") {
     return { questions: [] };
   }
-  const delegate = readString(payload?.delegate) ?? outcome.delegate;
-  const label = readString(payload?.label) ?? outcome.label;
-  const skillName = readString(payload?.skillName) ?? outcome.skillName;
-  const agentSpec = readString(payload?.agentSpec) ?? outcome.agentSpec;
-  const envelope = readString(payload?.envelope) ?? outcome.envelope;
+  const delegate = payload?.delegate ?? outcome.delegate;
+  const label = payload?.label ?? outcome.label;
+  const skillName = payload?.skillName ?? outcome.skillName;
+  const agentSpec = payload?.agentSpec ?? outcome.agentSpec;
+  const envelope = payload?.envelope ?? outcome.envelope;
   const sourceLabel = buildDelegationSourceLabel({
     delegate,
     label,

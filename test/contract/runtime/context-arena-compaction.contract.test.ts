@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { ContextInjectionCollector } from "@brewva/brewva-runtime/internal";
+import { createContextInjectionCollector } from "@brewva/brewva-runtime/context";
 
 function makeRegistration(content: string) {
   return {
@@ -16,7 +16,7 @@ function makeRegistration(content: string) {
 
 describe("ContextInjectionCollector compaction lifecycle", () => {
   test("compaction resets epoch and once-per-session guard", () => {
-    const collector = new ContextInjectionCollector();
+    const collector = createContextInjectionCollector();
     const sessionId = "ctx-arena-compaction";
 
     collector.register(sessionId, makeRegistration("identity-v1"));

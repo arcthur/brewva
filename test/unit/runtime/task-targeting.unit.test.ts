@@ -5,7 +5,7 @@ import { join } from "node:path";
 import {
   resolvePrimaryTaskTargetRoot,
   resolveTaskTargetRoots,
-} from "../../../packages/brewva-runtime/src/task/targeting.js";
+} from "../../../packages/brewva-runtime/src/domain/task/targeting.js";
 
 describe("task targeting", () => {
   test("bounds in-workspace ancestor resolution to the workspace root", () => {

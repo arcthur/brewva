@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 describe("Output health guard disabled by default", () => {
@@ -9,7 +8,7 @@ describe("Output health guard disabled by default", () => {
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionId = "output-health-guard-1";
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "message_end",
       payload: {
@@ -31,7 +30,7 @@ describe("Output health guard disabled by default", () => {
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionId = "output-health-guard-ok-1";
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "message_end",
       payload: {

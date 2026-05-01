@@ -6,14 +6,13 @@ import { createRecallContextProvider } from "@brewva/brewva-recall";
 import {
   BrewvaRuntime,
   CONTEXT_SOURCES,
-  TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE,
   createToolRuntimePort,
   createTrustedLocalGovernancePort,
   resolveBrewvaAgentDir,
   type CreateBrewvaSessionOptions as RuntimeCreateBrewvaSessionOptions,
   type ManagedToolMode,
 } from "@brewva/brewva-runtime";
-import { createToolRuntimeInternalPort, recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
+import { TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
 import type {
   BrewvaManagedPromptSession,
   BrewvaModelCatalog,
@@ -417,7 +416,7 @@ export function createCompactReadTool(input: CompactReadToolInput): HostedSessio
           observedPaths: [requestedPath],
         });
         if (discoveryPayload) {
-          recordRuntimeEvent(input.runtime, {
+          input.runtime.extensions.hosted.events.record({
             sessionId,
             type: TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE,
             payload: discoveryPayload,
@@ -845,7 +844,6 @@ function createDirectManagedTools(input: {
   return buildBrewvaTools({
     runtime: {
       ...createToolRuntimePort(input.runtime),
-      internal: createToolRuntimeInternalPort(input.runtime),
       ...(input.semanticReranker ? { semanticReranker: input.semanticReranker } : {}),
     },
     orchestration: input.orchestration,
@@ -862,7 +860,7 @@ function recordHostedBootstrap(input: {
   managedToolMode: ManagedToolMode;
 }): void {
   const skillLoadReport = input.runtime.inspect.skills.getLoadReport();
-  recordRuntimeEvent(input.runtime, {
+  input.runtime.extensions.hosted.events.record({
     sessionId: input.sessionId,
     type: "session_bootstrap",
     payload: {

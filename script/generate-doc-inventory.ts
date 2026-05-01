@@ -2,7 +2,8 @@ import { readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import { BREWVA_REGISTERED_EVENT_TYPES, DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
+import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
+import { BREWVA_REGISTERED_EVENT_TYPES } from "@brewva/brewva-runtime/events";
 
 type InventoryBlock = {
   name: string;
@@ -144,15 +145,16 @@ function extractRootSubcommands(source: string): string[] {
   return [...names].toSorted((left, right) => left.localeCompare(right));
 }
 
-function extractInterfaceBody(source: string, interfaceName: string): string {
-  const marker = `export interface ${interfaceName} `;
-  const start = source.indexOf(marker);
+function extractConstObjectBody(source: string, constName: string): string {
+  const markers = [`export const ${constName} = {`, `const ${constName} = {`];
+  const start =
+    markers.map((marker) => source.indexOf(marker)).find((candidate) => candidate >= 0) ?? -1;
   if (start < 0) {
-    throw new Error(`Unable to find ${interfaceName}`);
+    throw new Error(`Unable to find const object ${constName}`);
   }
   const bodyStart = source.indexOf("{", start);
   if (bodyStart < 0) {
-    throw new Error(`Unable to find ${interfaceName} body`);
+    throw new Error(`Unable to find const object ${constName} body`);
   }
 
   let depth = 0;
@@ -165,96 +167,75 @@ function extractInterfaceBody(source: string, interfaceName: string): string {
     }
   }
 
-  throw new Error(`Unable to close ${interfaceName}`);
+  throw new Error(`Unable to close const object ${constName}`);
 }
 
-function collectRuntimeMethodGroups(): Map<string, string[]> {
-  const source = readRepoFile("packages/brewva-runtime/src/runtime-method-groups.ts");
-  const body = extractInterfaceBody(source, "BrewvaRuntimeMethodGroups");
-  const groups = new Map<string, string[]>();
+function collectSurfaceContributionDefinitions(): Map<string, Map<string, string[]>> {
+  const runtimeRoot = resolve(repoRoot, "packages/brewva-runtime/src");
+  const contributions = new Map<string, Map<string, string[]>>();
 
-  for (const match of body.matchAll(/^\s{2}([a-zA-Z][a-zA-Z0-9]*): \{/gm)) {
-    const groupName = match[1];
-    if (!groupName) continue;
-    const groupStart = match.index ?? 0;
-    const braceStart = body.indexOf("{", groupStart);
-    let depth = 0;
-    let groupEnd = -1;
-    for (let index = braceStart; index < body.length; index += 1) {
-      const char = body[index];
-      if (char === "{") depth += 1;
-      if (char === "}") depth -= 1;
-      if (depth === 0) {
-        groupEnd = index;
-        break;
-      }
-    }
-    if (groupEnd < 0) continue;
-    const groupBody = body.slice(braceStart + 1, groupEnd);
-    const methods = new Set<string>();
-    for (const methodMatch of groupBody.matchAll(/^\s{4}([a-zA-Z][a-zA-Z0-9]*)\(/gm)) {
-      const methodName = methodMatch[1];
-      if (methodName) {
-        methods.add(methodName);
-      }
-    }
-    for (const propertyMatch of groupBody.matchAll(
-      /^\s{4}([a-zA-Z][a-zA-Z0-9]*):\s*[A-Z][A-Za-z0-9_<>[\] |.&"']*;/gm,
+  for (const filePath of walkFiles(runtimeRoot, ".ts")) {
+    const text = readFileSync(filePath, "utf-8");
+    for (const match of text.matchAll(
+      /export const ([A-Za-z][A-Za-z0-9]*SurfaceContribution) = \{/g,
     )) {
-      const propertyName = propertyMatch[1];
-      if (propertyName) {
-        methods.add(propertyName);
+      const contributionName = match[1];
+      if (!contributionName || contributions.has(contributionName)) {
+        continue;
       }
+      const body = extractConstObjectBody(text, contributionName);
+      const surfaces = new Map<string, string[]>();
+      const lines = body.split("\n");
+      for (let index = 0; index < lines.length; index += 1) {
+        const line = lines[index] ?? "";
+        const headerMatch = /^\s{2}(authority|inspect|maintain): \[(.*)$/.exec(line);
+        const surfaceName = headerMatch?.[1];
+        if (!surfaceName) {
+          continue;
+        }
+        let surfaceBody = headerMatch[2] ?? "";
+        let bracketDepth = (surfaceBody.match(/\[/g) ?? []).length + 1;
+        bracketDepth -= (surfaceBody.match(/\]/g) ?? []).length;
+        while (bracketDepth > 0 && index + 1 < lines.length) {
+          index += 1;
+          const nextLine = lines[index] ?? "";
+          surfaceBody += `\n${nextLine}`;
+          bracketDepth += (nextLine.match(/\[/g) ?? []).length;
+          bracketDepth -= (nextLine.match(/\]/g) ?? []).length;
+        }
+        const methods = [...surfaceBody.matchAll(/"([a-zA-Z][a-zA-Z0-9]*)"/g)]
+          .map((entry) => entry[1])
+          .filter((value): value is string => Boolean(value))
+          .toSorted((left, right) => left.localeCompare(right));
+        surfaces.set(surfaceName, methods);
+      }
+      contributions.set(contributionName, surfaces);
     }
-    groups.set(
-      groupName,
-      [...methods].toSorted((left, right) => left.localeCompare(right)),
-    );
   }
 
-  return groups;
+  return contributions;
 }
 
 function collectRuntimePortPaths(): string[] {
-  const runtimeSource = readRepoFile("packages/brewva-runtime/src/runtime.ts");
-  const methodGroups = collectRuntimeMethodGroups();
-  const interfaceNames = [
-    ["authority", "BrewvaAuthorityPort"],
-    ["inspect", "BrewvaInspectionPort"],
-    ["maintain", "BrewvaMaintenancePort"],
-  ] as const;
+  const runtimeSource = readRepoFile("packages/brewva-runtime/src/runtime/runtime.ts");
+  const contributions = collectSurfaceContributionDefinitions();
   const paths = new Set<string>();
+  const runtimeRoot = resolve(repoRoot, "packages/brewva-runtime/src/domain");
 
-  for (const [surface, interfaceName] of interfaceNames) {
-    const body = extractInterfaceBody(runtimeSource, interfaceName);
-
-    for (const match of body.matchAll(
-      /readonly\s+([a-zA-Z][a-zA-Z0-9]*):\s*Pick<\s*BrewvaRuntimeMethodGroups\["([^"]+)"\]\s*,\s*([\s\S]*?)>;/g,
+  for (const filePath of walkFiles(runtimeRoot, ".ts")) {
+    const source = readFileSync(filePath, "utf-8");
+    for (const moduleMatch of source.matchAll(
+      /export const [A-Za-z][A-Za-z0-9]*RuntimeSurface = defineRuntimeSurfaceModule\(\{\s*name: "([a-zA-Z][a-zA-Z0-9]*)",[\s\S]*?contribution: ([A-Za-z][A-Za-z0-9]*SurfaceContribution),/g,
     )) {
-      const property = match[1];
-      const group = match[2];
-      const picked = match[3] ?? "";
-      for (const methodMatch of picked.matchAll(/"([a-zA-Z][a-zA-Z0-9]*)"/g)) {
-        const method = methodMatch[1];
-        if (property && method) {
-          paths.add(`${surface}.${property}.${method}`);
+      const domainName = moduleMatch[1];
+      const contributionName = moduleMatch[2];
+      if (!domainName || !contributionName) continue;
+      const surfaceDefinitions = contributions.get(contributionName);
+      if (!surfaceDefinitions) continue;
+      for (const surfaceName of ["authority", "inspect", "maintain"] as const) {
+        for (const method of surfaceDefinitions.get(surfaceName) ?? []) {
+          paths.add(`${surfaceName}.${domainName}.${method}`);
         }
-      }
-      if (property && group && !picked.match(/"/)) {
-        for (const method of methodGroups.get(group) ?? []) {
-          paths.add(`${surface}.${property}.${method}`);
-        }
-      }
-    }
-
-    for (const match of body.matchAll(
-      /readonly\s+([a-zA-Z][a-zA-Z0-9]*):\s*BrewvaRuntimeMethodGroups\["([^"]+)"\];/g,
-    )) {
-      const property = match[1];
-      const group = match[2];
-      if (!property || !group) continue;
-      for (const method of methodGroups.get(group) ?? []) {
-        paths.add(`${surface}.${property}.${method}`);
       }
     }
   }
@@ -384,7 +365,7 @@ function renderCliFlags(): string {
   ].join("\n");
 }
 
-function renderEventTypes(): string {
+function renderEventCatalog(): string {
   return [
     "> Generated by `bun run docs:inventory`. Do not edit this block by hand.",
     "",
@@ -445,9 +426,9 @@ function buildBlocks(): InventoryBlock[] {
       content: renderCliFlags(),
     },
     {
-      name: "event-types",
+      name: "event-catalog",
       path: "docs/reference/events/README.md",
-      content: renderEventTypes(),
+      content: renderEventCatalog(),
     },
     {
       name: "config-keys",

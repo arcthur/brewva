@@ -9,7 +9,6 @@ import {
   asBrewvaSessionId,
   type DelegationRunRecord,
 } from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import { createSkillCompleteTool, createSkillLoadTool } from "@brewva/brewva-tools";
 
 type ToolExecutionContext = Parameters<ReturnType<typeof createSkillLoadTool>["execute"]>[4];
@@ -117,7 +116,7 @@ function buildImpactMap(input: {
 }) {
   return {
     summary: input.summary,
-    affected_paths: ["packages/brewva-runtime/src/services/event-pipeline.ts"],
+    affected_paths: ["packages/brewva-runtime/src/domain/sessions/event-pipeline.ts"],
     boundaries: ["runtime.authority.events"],
     high_risk_touchpoints: ["review lane classification"],
     change_categories: input.changeCategories ?? [],
@@ -589,7 +588,7 @@ describe("skill_complete tool", () => {
           ],
           implementation_targets: [
             {
-              target: "packages/brewva-runtime/src/services/skill-lifecycle.ts",
+              target: "packages/brewva-runtime/src/domain/skills/skill-lifecycle.ts",
               kind: "module",
               owner_boundary: "runtime.authority.skills",
               reason: "Skill output validation is enforced here.",
@@ -901,7 +900,7 @@ describe("skill_complete tool", () => {
           ],
           implementation_targets: [
             {
-              target: "packages/brewva-runtime/src/contracts/planning.ts",
+              target: "packages/brewva-runtime/src/domain/skills/planning.ts",
               kind: "module",
               owner_boundary: "runtime.contracts",
               reason: "Shared planning contract validation lives here.",
@@ -1959,8 +1958,8 @@ The WAL boundary must keep replay ordering deterministic.
       change_set:
         "Updated runtime coordination around the event pipeline and persisted review disclosure records.",
       files_changed: [
-        "packages/brewva-runtime/src/services/event-pipeline.ts",
-        "packages/brewva-runtime/src/contracts/review.ts",
+        "packages/brewva-runtime/src/domain/sessions/event-pipeline.ts",
+        "packages/brewva-runtime/src/domain/skills/review.ts",
       ],
     });
 
@@ -2315,7 +2314,7 @@ The WAL boundary must keep replay ordering deterministic.
       ],
       implementation_targets: [
         {
-          target: "packages/brewva-runtime/src/services/skill-lifecycle.ts",
+          target: "packages/brewva-runtime/src/domain/skills/skill-lifecycle.ts",
           kind: "module",
           owner_boundary: "runtime.review",
           reason: "The review scope is bounded to the runtime validation path.",
@@ -2327,11 +2326,11 @@ The WAL boundary must keep replay ordering deterministic.
     runtime.authority.skills.complete(sessionId, {
       change_set:
         "Updated the runtime validation path and preserved executable verification evidence.",
-      files_changed: ["packages/brewva-runtime/src/services/skill-lifecycle.ts"],
+      files_changed: ["packages/brewva-runtime/src/domain/skills/skill-lifecycle.ts"],
       verification_evidence: ["runtime_verification_freshness passed before the next mutation"],
     });
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "verification_outcome_recorded",
       timestamp: 100,
@@ -2352,7 +2351,7 @@ The WAL boundary must keep replay ordering deterministic.
       },
     });
     const laterWriteTimestamp = Date.now() + 1_000;
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "verification_write_marked",
       timestamp: laterWriteTimestamp,
@@ -2570,7 +2569,7 @@ The WAL boundary must keep replay ordering deterministic.
       ],
       implementation_targets: [
         {
-          target: "packages/brewva-runtime/src/skills/validation",
+          target: "packages/brewva-runtime/src/domain/skills/validation",
           kind: "module",
           owner_boundary: "runtime.review",
           reason: "Review scope is bounded to the runtime validation evidence path.",
@@ -2582,7 +2581,7 @@ The WAL boundary must keep replay ordering deterministic.
     runtime.authority.skills.complete(sessionId, {
       change_set:
         "Implementation recorded a verification_evidence artifact without appending a runtime verification receipt.",
-      files_changed: ["packages/brewva-runtime/src/skills/validation/evidence.ts"],
+      files_changed: ["packages/brewva-runtime/src/domain/skills/validation/evidence.ts"],
       verification_evidence: [
         "runtime verification artifact text without an authoritative receipt",
       ],
@@ -2800,7 +2799,7 @@ The WAL boundary must keep replay ordering deterministic.
       ],
       implementation_targets: [
         {
-          target: "packages/brewva-runtime/src/services/skill-lifecycle.ts",
+          target: "packages/brewva-runtime/src/domain/skills/skill-lifecycle.ts",
           kind: "module",
           owner_boundary: "runtime.review",
           reason: "Review validation stays scoped to the lifecycle contract.",
@@ -2811,11 +2810,11 @@ The WAL boundary must keep replay ordering deterministic.
     runtime.authority.skills.activate(sessionId, "implementation-producer");
     runtime.authority.skills.complete(sessionId, {
       change_set: "Updated review validation and preserved runtime verification evidence.",
-      files_changed: ["packages/brewva-runtime/src/services/skill-lifecycle.ts"],
+      files_changed: ["packages/brewva-runtime/src/domain/skills/skill-lifecycle.ts"],
       verification_evidence: ["runtime_verification_freshness passed before the next mutation"],
     });
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "verification_outcome_recorded",
       timestamp: 100,
@@ -2836,7 +2835,7 @@ The WAL boundary must keep replay ordering deterministic.
       },
     });
     const laterWriteTimestamp = Date.now() + 1_000;
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "verification_write_marked",
       timestamp: laterWriteTimestamp,
@@ -2992,7 +2991,7 @@ The WAL boundary must keep replay ordering deterministic.
       ],
       implementation_targets: [
         {
-          target: "packages/brewva-runtime/src/services/skill-lifecycle.ts",
+          target: "packages/brewva-runtime/src/domain/skills/skill-lifecycle.ts",
           kind: "module",
           owner_boundary: "runtime.review",
           reason: "Review planning freshness is enforced in the runtime lifecycle path.",
@@ -3001,7 +3000,7 @@ The WAL boundary must keep replay ordering deterministic.
     });
 
     const laterWriteTimestamp = Date.now() + 1_000;
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "verification_write_marked",
       timestamp: laterWriteTimestamp,
@@ -3140,7 +3139,7 @@ The WAL boundary must keep replay ordering deterministic.
       ],
       implementation_targets: [
         {
-          target: "packages/brewva-runtime/src/services/skill-lifecycle.ts",
+          target: "packages/brewva-runtime/src/domain/skills/skill-lifecycle.ts",
           kind: "module",
           owner_boundary: "runtime.authority.skills",
           reason: "Only skill lifecycle validation should change.",
@@ -3162,7 +3161,7 @@ The WAL boundary must keep replay ordering deterministic.
         outputs: {
           change_set: "Updated the lifecycle validator and also touched an unrelated gateway path.",
           files_changed: [
-            "packages/brewva-runtime/src/services/skill-lifecycle.ts",
+            "packages/brewva-runtime/src/domain/skills/skill-lifecycle.ts",
             "packages/brewva-gateway/src/subagents/structured-outcome.ts",
           ],
           verification_evidence: ["typecheck passed"],
@@ -3243,7 +3242,7 @@ The WAL boundary must keep replay ordering deterministic.
       {
         outputs: {
           change_set: "Touched the runtime skill lifecycle path.",
-          files_changed: ["packages/brewva-runtime/src/services/skill-lifecycle.ts"],
+          files_changed: ["packages/brewva-runtime/src/domain/skills/skill-lifecycle.ts"],
           verification_evidence: ["implementation_target_concreteness asserted"],
         },
       },
@@ -3256,6 +3255,79 @@ The WAL boundary must keep replay ordering deterministic.
     expect(text).toContain("Skill completion rejected.");
     expect(text).toContain("implementation_targets");
     expect(runtime.inspect.skills.getActive(sessionId)?.name).toBe("implementation");
+  });
+
+  test("blocks non-review completion when verification evidence is missing and commands are deferred", async () => {
+    const workspace = mkdtempSync(
+      join(tmpdir(), "brewva-skill-complete-implementation-deferred-verification-"),
+    );
+    writeSkill(join(workspace, ".brewva/skills/core/implementation-contract/SKILL.md"), {
+      name: "implementation-contract",
+      outputs: ["change_set", "files_changed", "verification_evidence"],
+      outputContracts: [
+        "  change_set:",
+        "    kind: text",
+        "    min_words: 3",
+        "    min_length: 18",
+        "  files_changed:",
+        "    kind: json",
+        "    min_items: 1",
+        "  verification_evidence:",
+        "    kind: json",
+        "    min_items: 1",
+      ],
+    });
+
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionId = "skill-complete-implementation-deferred-verification";
+    const loadTool = createSkillLoadTool({ runtime });
+    const completeTool = createSkillCompleteTool({
+      runtime,
+      verification: { executeCommands: false },
+    });
+
+    await loadTool.execute(
+      "tc-load-implementation-deferred-verification",
+      { name: "implementation-contract" },
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+
+    runtime.extensions.hosted.events.record({
+      sessionId,
+      type: "verification_write_marked",
+      timestamp: Date.now(),
+      payload: {
+        toolName: "edit",
+      },
+    });
+
+    const result = await completeTool.execute(
+      "tc-complete-implementation-deferred-verification",
+      {
+        outputs: {
+          change_set:
+            "Updated the implementation path without refreshing the authoritative verification receipt.",
+          files_changed: ["packages/brewva-runtime/src/domain/skills/skill-lifecycle.ts"],
+          verification_evidence: ["local notes without a fresh runtime verification receipt"],
+        },
+      },
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+
+    const text = extractTextContent(result as { content: Array<{ type: string; text?: string }> });
+    expect(text).toContain("Verification gate blocked.");
+    expect(runtime.inspect.skills.getActive(sessionId)?.name).toBe("implementation-contract");
+    expect(
+      (result.details as { verification?: { passed?: boolean; missingEvidence?: string[] } })
+        .verification,
+    ).toMatchObject({
+      passed: false,
+      missingEvidence: expect.any(Array),
+    });
   });
 
   test("rejects QA pass verdicts that do not cover plan required_evidence", async () => {
@@ -3299,7 +3371,7 @@ The WAL boundary must keep replay ordering deterministic.
       ],
       implementation_targets: [
         {
-          target: "packages/brewva-runtime/src/services/skill-lifecycle.ts",
+          target: "packages/brewva-runtime/src/domain/skills/skill-lifecycle.ts",
           kind: "module",
           owner_boundary: "runtime.authority.skills",
           reason: "QA completion validation is enforced here.",
@@ -3392,7 +3464,7 @@ The WAL boundary must keep replay ordering deterministic.
       ],
       implementation_targets: [
         {
-          target: "packages/brewva-runtime/src/services/skill-lifecycle.ts",
+          target: "packages/brewva-runtime/src/domain/skills/skill-lifecycle.ts",
           kind: "module",
           owner_boundary: "runtime.authority.skills",
           reason: "The required evidence closure logic lives here.",
@@ -3400,7 +3472,7 @@ The WAL boundary must keep replay ordering deterministic.
       ],
     });
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "verification_outcome_recorded",
       timestamp: 100,

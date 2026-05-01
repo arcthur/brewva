@@ -1,14 +1,12 @@
 import { describe, expect, test } from "bun:test";
+import { TASK_LEDGER_SCHEMA, TRUTH_LEDGER_SCHEMA, asBrewvaSessionId } from "@brewva/brewva-runtime";
+import { type BrewvaEventRecord } from "@brewva/brewva-runtime/events";
 import {
   TASK_EVENT_TYPE,
-  TASK_LEDGER_SCHEMA,
   TRUTH_EVENT_TYPE,
-  TRUTH_LEDGER_SCHEMA,
   asBrewvaEventType,
-  asBrewvaSessionId,
-  type BrewvaEventRecord,
-} from "@brewva/brewva-runtime";
-import { extractProjectionFromEvent } from "../../../packages/brewva-runtime/src/projection/extractor.js";
+} from "@brewva/brewva-runtime/events";
+import { extractProjectionFromEvent } from "../../../packages/brewva-runtime/src/domain/projection/extractor.js";
 
 function event(input: {
   id: string;
@@ -17,12 +15,31 @@ function event(input: {
   timestamp?: number;
   payload?: Record<string, unknown>;
 }): BrewvaEventRecord {
+  const timestamp = input.timestamp ?? 1_700_000_000_000;
+  const payload =
+    input.type === "skill_completed" && input.payload
+      ? {
+          ...input.payload,
+          ...(Object.prototype.hasOwnProperty.call(input.payload, "completedAt")
+            ? {}
+            : { completedAt: timestamp }),
+          ...(input.payload.outputs &&
+          typeof input.payload.outputs === "object" &&
+          !Array.isArray(input.payload.outputs)
+            ? {
+                outputKeys: Object.keys(
+                  input.payload.outputs as Record<string, unknown>,
+                ).toSorted(),
+              }
+            : {}),
+        }
+      : input.payload;
   return {
     id: input.id,
     sessionId: asBrewvaSessionId(input.sessionId ?? "projection-extractor-session"),
     type: asBrewvaEventType(input.type),
-    timestamp: input.timestamp ?? 1_700_000_000_000,
-    payload: input.payload as BrewvaEventRecord["payload"],
+    timestamp,
+    payload: payload as BrewvaEventRecord["payload"],
   };
 }
 
@@ -211,7 +228,7 @@ describe("projection extractor", () => {
             ],
             implementation_targets: [
               {
-                target: "packages/brewva-runtime/src/workflow/artifact-derivation.ts",
+                target: "packages/brewva-runtime/src/domain/workflow/artifact-derivation.ts",
                 kind: "module",
                 owner_boundary: "runtime.workflow",
                 reason: "Projection extraction depends on workflow derivation helpers.",

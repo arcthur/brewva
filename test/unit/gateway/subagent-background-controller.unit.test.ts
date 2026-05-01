@@ -8,7 +8,6 @@ import {
   type HostedDelegationTarget,
 } from "@brewva/brewva-gateway";
 import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import type { DelegationPacket } from "@brewva/brewva-tools";
 
 function createTempWorkspace(prefix: string): string {
@@ -167,7 +166,7 @@ describe("detached subagent background controller", () => {
       },
     });
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId: "parent-bg-predicate-event",
       type: "worker_results_applied",
       payload: {
@@ -244,7 +243,7 @@ describe("detached subagent background controller", () => {
         changes: [{ path: "src/background.ts", action: "modify" }],
       },
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId: "parent-bg-predicate-worker",
       type: "worker_results_applied",
       payload: {
@@ -493,7 +492,7 @@ describe("detached subagent background controller", () => {
       },
     });
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId: "parent-bg-predicate-preflight",
       type: "worker_results_applied",
       payload: {
@@ -577,7 +576,7 @@ describe("detached subagent background controller", () => {
       },
     });
 
-    recordRuntimeEvent(restartedRuntime, {
+    restartedRuntime.extensions.hosted.events.record({
       sessionId: "parent-bg-predicate-restart",
       type: "worker_results_applied",
       payload: {

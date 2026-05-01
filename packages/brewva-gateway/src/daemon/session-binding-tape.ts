@@ -1,10 +1,10 @@
 import { resolve } from "node:path";
-import { GATEWAY_SESSION_BOUND_EVENT_TYPE } from "@brewva/brewva-runtime";
 import {
   readBrewvaEventRecordsFromLogPath,
   appendBrewvaEventRecordToLog,
   resolveBrewvaEventLogPath,
-} from "@brewva/brewva-runtime/internal";
+} from "@brewva/brewva-runtime/event-log";
+import { GATEWAY_SESSION_BOUND_EVENT_TYPE } from "@brewva/brewva-runtime/events";
 
 export const GATEWAY_SESSION_BINDING_CONTROL_SESSION_ID = "gateway:session-bindings" as const;
 

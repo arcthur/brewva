@@ -2,7 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BrewvaRuntime, REASONING_REVERT_EVENT_TYPE } from "@brewva/brewva-runtime";
+import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { REASONING_REVERT_EVENT_TYPE } from "@brewva/brewva-runtime/events";
 import {
   REASONING_REVERT_RECOVERY_TEST_ONLY,
   preparePendingSessionReasoningRevertResume,

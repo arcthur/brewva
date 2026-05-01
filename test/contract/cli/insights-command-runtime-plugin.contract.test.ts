@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { createInsightsCommandRuntimePlugin } from "@brewva/brewva-cli";
 import type { InternalRuntimePluginApi } from "@brewva/brewva-gateway/runtime-plugins";
 import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import { requireDefined } from "../../helpers/assertions.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
@@ -53,7 +52,7 @@ function recordWriteSession(
     content: string;
   },
 ): void {
-  recordRuntimeEvent(runtime, {
+  runtime.extensions.hosted.events.record({
     sessionId: input.sessionId,
     type: "session_bootstrap",
     payload: {

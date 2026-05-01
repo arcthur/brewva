@@ -1,6 +1,5 @@
 import type { BrewvaRuntime } from "@brewva/brewva-runtime";
-import { CHANNEL_SESSION_BOUND_EVENT_TYPE } from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
+import { CHANNEL_SESSION_BOUND_EVENT_TYPE } from "@brewva/brewva-runtime/events";
 import { AgentRegistry } from "./agent-registry.js";
 import { AgentRuntimeManager } from "./agent-runtime-manager.js";
 import type {
@@ -131,7 +130,7 @@ export function createChannelSessionQueries(input: {
         )} active_sessions=${input.listLiveSessions().length}`,
       );
 
-      recordRuntimeEvent(input.runtime, {
+      input.runtime.extensions.hosted.events.record({
         sessionId: input.recoveryWalScope,
         type: "channel_workspace_cost_summary",
         payload: {

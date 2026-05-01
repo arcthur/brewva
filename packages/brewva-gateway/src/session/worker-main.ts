@@ -1,5 +1,4 @@
 import { type ContextPressureView, type SessionWireFrame } from "@brewva/brewva-runtime";
-import { recordRuntimeEvent, resolveRuntimeEventLogPath } from "@brewva/brewva-runtime/internal";
 import type { HostedSessionLogger } from "../host/logger.js";
 import { createRuntimeTurnClockStore } from "../runtime-plugins/runtime-turn-clock.js";
 import { recordSessionShutdownIfMissing } from "../utils/runtime.js";
@@ -81,7 +80,7 @@ function recordFakeTurnLifecycle(
     type: "session_start",
   });
   if (existingSessionStart.length === 0) {
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId: agentSessionId,
       type: "session_start",
       payload: {
@@ -94,7 +93,7 @@ function recordFakeTurnLifecycle(
     type: "agent_start",
   });
   if (existingAgentStart.length === 0) {
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId: agentSessionId,
       type: "agent_start",
     });
@@ -108,7 +107,7 @@ function recordFakeTurnLifecycle(
   const message = summarizeFakeAssistantMessage(assistantText, timestamp);
 
   runtime.maintain.context.onTurnStart(agentSessionId, runtimeTurn);
-  recordRuntimeEvent(runtime, {
+  runtime.extensions.hosted.events.record({
     sessionId: agentSessionId,
     type: "turn_start",
     turn: runtimeTurn,
@@ -117,18 +116,18 @@ function recordFakeTurnLifecycle(
       timestamp,
     },
   });
-  recordRuntimeEvent(runtime, {
+  runtime.extensions.hosted.events.record({
     sessionId: agentSessionId,
     type: "message_start",
     payload: message,
   });
-  recordRuntimeEvent(runtime, {
+  runtime.extensions.hosted.events.record({
     sessionId: agentSessionId,
     type: "message_end",
     payload: message,
   });
   runtime.maintain.context.onTurnEnd(agentSessionId);
-  recordRuntimeEvent(runtime, {
+  runtime.extensions.hosted.events.record({
     sessionId: agentSessionId,
     type: "turn_end",
     turn: runtimeTurn,
@@ -138,7 +137,7 @@ function recordFakeTurnLifecycle(
       toolResults: 0,
     },
   });
-  recordRuntimeEvent(runtime, {
+  runtime.extensions.hosted.events.record({
     sessionId: agentSessionId,
     type: "agent_end",
     payload: {
@@ -353,7 +352,8 @@ async function handleInit(
       logger: hostedSessionLogger,
     });
     const agentSessionId = sessionResult.session.sessionManager.getSessionId();
-    const agentEventLogPath = resolveRuntimeEventLogPath(sessionResult.runtime, agentSessionId);
+    const agentEventLogPath =
+      sessionResult.runtime.extensions.hosted.events.resolveLogPath(agentSessionId);
     const watchdogOverrides = workerTestHarness.watchdog;
     if (watchdogOverrides.taskGoal) {
       sessionResult.runtime.authority.task.setSpec(agentSessionId, {

@@ -55,7 +55,9 @@ export function getHostedBuiltInModels(provider: string): BrewvaRegisteredModel[
     return [];
   }
 
-  return getModels(provider).map((model) => cloneBuiltInModel(model));
+  return getModels(provider).map((model: ProviderCoreModel<ProviderCoreApi>) =>
+    cloneBuiltInModel(model),
+  );
 }
 
 export function supportsHostedExtendedThinkingModel(

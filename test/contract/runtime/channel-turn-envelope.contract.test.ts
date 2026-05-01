@@ -36,7 +36,7 @@ describe("turn envelope coercion", () => {
 
     expect(result).toEqual({
       ok: false,
-      error:
+      reason:
         "invalid_turn_envelope:missing_sessionId,missing_turnId,missing_channel,missing_conversationId",
     });
   });

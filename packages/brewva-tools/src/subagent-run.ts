@@ -4,7 +4,7 @@ import { Value } from "@sinclair/typebox/value";
 import {
   appendToolRuntimeGuardedSupplementalBlocks,
   canAppendToolRuntimeGuardedSupplementalBlocks,
-} from "./runtime-internal.js";
+} from "./runtime-extensions.js";
 import type {
   AdvisorConsultBrief,
   BrewvaToolOptions,
@@ -1254,7 +1254,7 @@ export function createSubagentRunTool(options: BrewvaToolOptions): ToolDefinitio
       },
     },
     {
-      requiredCapabilities: ["internal.appendGuardedSupplementalBlocks"],
+      requiredCapabilities: ["extensions.tools.appendGuardedSupplementalBlocks"],
     },
   );
 }
@@ -1322,7 +1322,7 @@ export function createSubagentFanoutTool(options: BrewvaToolOptions): ToolDefini
       },
     },
     {
-      requiredCapabilities: ["internal.appendGuardedSupplementalBlocks"],
+      requiredCapabilities: ["extensions.tools.appendGuardedSupplementalBlocks"],
     },
   );
 }
@@ -1393,7 +1393,7 @@ export function createSubagentRunDiagnosticTool(options: BrewvaToolOptions): Too
       },
     },
     {
-      requiredCapabilities: ["internal.appendGuardedSupplementalBlocks"],
+      requiredCapabilities: ["extensions.tools.appendGuardedSupplementalBlocks"],
     },
   );
 }

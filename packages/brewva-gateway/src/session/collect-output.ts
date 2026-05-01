@@ -4,11 +4,6 @@ import {
 } from "@brewva/brewva-gateway/runtime-plugins";
 import {
   SESSION_WIRE_SCHEMA,
-  SESSION_TURN_TRANSITION_EVENT_TYPE,
-  TOOL_ATTEMPT_BINDING_MISSING_EVENT_TYPE,
-  TOOL_CALL_EVENT_TYPE,
-  TOOL_EXECUTION_END_EVENT_TYPE,
-  TOOL_EXECUTION_START_EVENT_TYPE,
   asBrewvaSessionId,
   asBrewvaToolCallId,
   asBrewvaToolName,
@@ -19,7 +14,15 @@ import {
   type SessionWireFrame,
   type ToolOutputView,
 } from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
+import {
+  readSessionTurnTransitionEventPayload,
+  readToolLifecycleEventPayload,
+  SESSION_TURN_TRANSITION_EVENT_TYPE,
+  TOOL_ATTEMPT_BINDING_MISSING_EVENT_TYPE,
+  TOOL_CALL_EVENT_TYPE,
+  TOOL_EXECUTION_END_EVENT_TYPE,
+  TOOL_EXECUTION_START_EVENT_TYPE,
+} from "@brewva/brewva-runtime/events";
 import type {
   BrewvaPromptContentPart,
   BrewvaPromptOptions,
@@ -374,7 +377,7 @@ export async function streamAndCollectAttempt(
     if (!options?.runtime || !normalizedSessionId || !normalizedTurnId) {
       return;
     }
-    recordRuntimeEvent(options.runtime, {
+    options.runtime.extensions.hosted.events.record({
       sessionId: normalizedSessionId,
       type: TOOL_ATTEMPT_BINDING_MISSING_EVENT_TYPE,
       payload: {
@@ -636,18 +639,12 @@ export async function streamAndCollectAttempt(
             return;
           }
           if (
-            (event.type === TOOL_CALL_EVENT_TYPE ||
-              event.type === TOOL_EXECUTION_START_EVENT_TYPE ||
-              event.type === TOOL_EXECUTION_END_EVENT_TYPE) &&
-            event.payload &&
-            typeof event.payload === "object"
+            event.type === TOOL_CALL_EVENT_TYPE ||
+            event.type === TOOL_EXECUTION_START_EVENT_TYPE ||
+            event.type === TOOL_EXECUTION_END_EVENT_TYPE
           ) {
-            const payload = event.payload as {
-              toolCallId?: unknown;
-              toolName?: unknown;
-              attempt?: unknown;
-            };
-            if (typeof payload.toolCallId === "string" && typeof payload.toolName === "string") {
+            const payload = readToolLifecycleEventPayload(event);
+            if (payload) {
               toolAttemptBindings.bindFromAttemptSequence(
                 payload.toolCallId,
                 payload.toolName,
@@ -655,17 +652,13 @@ export async function streamAndCollectAttempt(
               );
             }
           }
-          if (
-            event.type !== SESSION_TURN_TRANSITION_EVENT_TYPE ||
-            !event.payload ||
-            typeof event.payload !== "object"
-          ) {
+          if (event.type !== SESSION_TURN_TRANSITION_EVENT_TYPE) {
             return;
           }
-          const payload = event.payload as {
-            reason?: unknown;
-            status?: unknown;
-          };
+          const payload = readSessionTurnTransitionEventPayload(event);
+          if (!payload) {
+            return;
+          }
           if (payload.status !== "entered") {
             return;
           }

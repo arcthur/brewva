@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import { BrewvaRuntime, buildTaskStuckDetectedPayload } from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import {
   adjudicateTaskStallPacket,
   buildTaskStallInspectionPacket,
@@ -35,7 +34,7 @@ describe("task stall adjudication", () => {
         changes: [{ path: "src/task-stall.ts", action: "modify" }],
       },
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "tool_result_recorded",
       timestamp: 150,
@@ -43,10 +42,11 @@ describe("task stall adjudication", () => {
         toolName: "exec",
         verdict: "fail",
         channelSuccess: false,
+        ledgerId: "ledger-stall-1",
         failureClass: "execution",
       },
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "verification_outcome_recorded",
       timestamp: 160,
@@ -91,14 +91,14 @@ describe("task stall adjudication", () => {
       config: createOpsRuntimeConfig(),
     });
     const sessionId = "stall-compact-recommended-1";
-    const highThreshold = runtime.inspect.events.getTapePressureThresholds().high;
+    const highThreshold = runtime.inspect.tape.getTapePressureThresholds().high;
 
     runtime.authority.task.setSpec(sessionId, {
       schema: "brewva.task.v1",
       goal: "Exercise high-pressure stall adjudication",
     });
     for (let index = 0; index <= highThreshold; index += 1) {
-      recordRuntimeEvent(runtime, {
+      runtime.extensions.hosted.events.record({
         sessionId,
         type: "custom_probe_event",
         payload: { index },
@@ -139,7 +139,7 @@ describe("task stall adjudication", () => {
       message: "Need user confirmation before retrying the fix",
       source: "unit_test",
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "task_stuck_detected",
       timestamp: 400_100,
@@ -192,7 +192,7 @@ describe("task stall adjudication", () => {
       goal: "Recover missing verification evidence",
     });
     runtime.authority.tools.markCall(sessionId, "edit");
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "verification_outcome_recorded",
       timestamp: 160,
@@ -234,7 +234,7 @@ describe("task stall adjudication", () => {
       schema: "brewva.task.v1",
       goal: "Prefer canonical missing checks over display-only missing evidence",
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "verification_outcome_recorded",
       timestamp: 160,

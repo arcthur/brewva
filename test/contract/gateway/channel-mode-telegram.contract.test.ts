@@ -7,7 +7,6 @@ import {
   handleQuestionsChannelCommand,
 } from "@brewva/brewva-cli";
 import {
-  OPERATOR_QUESTION_ANSWERED_EVENT_TYPE,
   DEFAULT_TELEGRAM_SKILL_NAME,
   runChannelMode,
   type ChannelModeLauncher,
@@ -16,7 +15,9 @@ import {
 import { createHostedSession } from "@brewva/brewva-gateway/host";
 import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
 import { type ChannelTurnBridge, type TurnEnvelope } from "@brewva/brewva-runtime/channels";
-import { RecoveryWalStore, recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
+import { OPERATOR_QUESTION_ANSWERED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
+import { createRecoveryWalStore } from "@brewva/brewva-runtime/recovery";
+import { recordHostedSkillCompleted } from "../../helpers/events.js";
 import { waitUntil } from "../../helpers/process.js";
 import { cleanupTestWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
 
@@ -75,7 +76,7 @@ describe("gateway contract: telegram channel dispatch", () => {
   test("recovers telegram polling offset from the existing channel wal before launcher startup", async () => {
     const workspace = createTestWorkspace("channel-telegram-polling-offset");
     const configPath = writeChannelConfig(workspace);
-    const store = new RecoveryWalStore({
+    const store = createRecoveryWalStore({
       workspaceRoot: workspace,
       config: DEFAULT_BREWVA_CONFIG.infrastructure.recoveryWal,
       scope: "channel-telegram",
@@ -154,7 +155,7 @@ describe("gateway contract: telegram channel dispatch", () => {
     const workspace = createTestWorkspace("channel-telegram-polling-offset-compacted");
     const configPath = writeChannelConfig(workspace);
     let nowMs = 10_000;
-    const store = new RecoveryWalStore({
+    const store = createRecoveryWalStore({
       workspaceRoot: workspace,
       config: {
         ...DEFAULT_BREWVA_CONFIG.infrastructure.recoveryWal,
@@ -591,14 +592,12 @@ describe("gateway contract: telegram channel dispatch", () => {
             5_000,
             "timed out waiting for agent session bootstrap",
           );
-          recordRuntimeEvent(hostedSession!.runtime, {
+          recordHostedSkillCompleted({
+            runtime: hostedSession!.runtime,
             sessionId: hostedSession!.sessionId,
-            type: "skill_completed",
-            payload: {
-              skillName: "plan",
-              outputs: {
-                open_questions: ["Should the update target the daemon or the print path?"],
-              },
+            skillName: "plan",
+            outputs: {
+              open_questions: ["Should the update target the daemon or the print path?"],
             },
           });
           await input.onInboundTurn(
@@ -715,14 +714,12 @@ describe("gateway contract: telegram channel dispatch", () => {
             5_000,
             "timed out waiting for agent session bootstrap",
           );
-          const questionEvent = recordRuntimeEvent(hostedSession!.runtime, {
+          const questionEvent = recordHostedSkillCompleted({
+            runtime: hostedSession!.runtime,
             sessionId: hostedSession!.sessionId,
-            type: "skill_completed",
-            payload: {
-              skillName: "plan",
-              outputs: {
-                open_questions: ["Should the update target the daemon or the print path?"],
-              },
+            skillName: "plan",
+            outputs: {
+              open_questions: ["Should the update target the daemon or the print path?"],
             },
           });
           hostedSession!.questionId = `skill:${questionEvent?.id}:1`;
@@ -849,14 +846,12 @@ describe("gateway contract: telegram channel dispatch", () => {
             5_000,
             "timed out waiting for default agent session bootstrap",
           );
-          const questionEvent = recordRuntimeEvent(defaultSession!.runtime, {
+          const questionEvent = recordHostedSkillCompleted({
+            runtime: defaultSession!.runtime,
             sessionId: defaultSession!.sessionId,
-            type: "skill_completed",
-            payload: {
-              skillName: "plan",
-              outputs: {
-                open_questions: ["Should the update target the daemon or the print path?"],
-              },
+            skillName: "plan",
+            outputs: {
+              open_questions: ["Should the update target the daemon or the print path?"],
             },
           });
           defaultSession!.questionId = `skill:${questionEvent?.id}:1`;
@@ -1030,14 +1025,12 @@ describe("gateway contract: telegram channel dispatch", () => {
             5_000,
             "timed out waiting for default session bootstrap",
           );
-          const questionEvent = recordRuntimeEvent(defaultSession!.runtime, {
+          const questionEvent = recordHostedSkillCompleted({
+            runtime: defaultSession!.runtime,
             sessionId: defaultSession!.sessionId,
-            type: "skill_completed",
-            payload: {
-              skillName: "plan",
-              outputs: {
-                open_questions: ["Should the update target the daemon or the print path?"],
-              },
+            skillName: "plan",
+            outputs: {
+              open_questions: ["Should the update target the daemon or the print path?"],
             },
           });
           defaultSession!.questionId = `skill:${questionEvent?.id}:1`;

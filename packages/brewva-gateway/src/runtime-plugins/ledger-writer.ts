@@ -1,14 +1,13 @@
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
+import { type BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import {
   TOOL_OUTPUT_ARTIFACT_PERSIST_FAILED_EVENT_TYPE,
   TOOL_OUTPUT_ARTIFACT_PERSISTED_EVENT_TYPE,
   TOOL_OUTPUT_DISTILLED_EVENT_TYPE,
   TOOL_OUTPUT_OBSERVED_EVENT_TYPE,
-  type BrewvaHostedRuntimePort,
-} from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
+} from "@brewva/brewva-runtime/events";
 import type { InternalHostPluginApi } from "@brewva/brewva-substrate";
 import { LRUCache } from "lru-cache";
 import { persistToolOutputArtifact } from "./tool-output-artifact-store.js";
@@ -288,7 +287,7 @@ function recordArtifactFailure(
     artifactRef?: string | null;
   },
 ): void {
-  recordRuntimeEvent(runtime, {
+  runtime.extensions.hosted.events.record({
     sessionId: input.sessionId,
     type: TOOL_OUTPUT_ARTIFACT_PERSIST_FAILED_EVENT_TYPE,
     payload: {
@@ -348,7 +347,7 @@ function recordToolOutcome(
     verdict: input.verdict,
   });
 
-  recordRuntimeEvent(runtime, {
+  runtime.extensions.hosted.events.record({
     sessionId: input.sessionId,
     type: TOOL_OUTPUT_OBSERVED_EVENT_TYPE,
     payload: {
@@ -371,7 +370,7 @@ function recordToolOutcome(
     });
   }
   if (outputArtifact) {
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId: input.sessionId,
       type: TOOL_OUTPUT_ARTIFACT_PERSISTED_EVENT_TYPE,
       payload: {
@@ -386,7 +385,7 @@ function recordToolOutcome(
     });
   }
   if (outputDistillation.distillationApplied) {
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId: input.sessionId,
       type: TOOL_OUTPUT_DISTILLED_EVENT_TYPE,
       payload: {

@@ -218,11 +218,11 @@ flowchart TD
 
 ## Code Pointers
 
-- Runtime context service: `packages/brewva-runtime/src/services/context.ts`
-- Pressure / gate logic: `packages/brewva-runtime/src/services/context-pressure.ts`
+- Runtime context service: `packages/brewva-runtime/src/domain/context/context.ts`
+- Pressure / gate logic: `packages/brewva-runtime/src/domain/context/context-pressure.ts`
 - Context-critical allowlist: `packages/brewva-runtime/src/security/control-plane-tools.ts`
-- Context budget policy: `packages/brewva-runtime/src/context/budget.ts`
-- Compaction integrity: `packages/brewva-runtime/src/services/context-compaction.ts`
+- Context budget policy: `packages/brewva-runtime/src/domain/context/budget.ts`
+- Compaction integrity: `packages/brewva-runtime/src/domain/context/context-compaction.ts`
 - Hosted compaction controller: `packages/brewva-gateway/src/runtime-plugins/hosted-compaction-controller.ts`
 - Hosted context shell: `packages/brewva-gateway/src/runtime-plugins/context-transform.ts`
 - Context evidence sidecar/report: `packages/brewva-gateway/src/runtime-plugins/context-evidence.ts`

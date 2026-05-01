@@ -2,9 +2,9 @@
 
 Skill parsing, merge, routing, and runtime lifecycle anchors:
 
-- `packages/brewva-runtime/src/skills/contract.ts`
-- `packages/brewva-runtime/src/skills/registry.ts`
-- `packages/brewva-runtime/src/services/skill-lifecycle.ts`
+- `packages/brewva-runtime/src/domain/skills/contract.ts`
+- `packages/brewva-runtime/src/domain/skills/registry.ts`
+- `packages/brewva-runtime/src/domain/skills/skill-lifecycle.ts`
 - `packages/brewva-gateway/src/runtime-plugins/skill-first.ts`
 
 This page owns skill taxonomy, contract metadata, routing/profile semantics,

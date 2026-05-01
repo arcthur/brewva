@@ -16,7 +16,7 @@ import {
   buildSkillRoutingCatalogEntry,
   buildSkillSelectionProfile,
   hasSelectionProfileSignals,
-} from "@brewva/brewva-runtime/internal";
+} from "@brewva/brewva-runtime";
 import { createContract } from "../runtime/skill-contract.helpers.js";
 
 type RoutingSkillInput = {

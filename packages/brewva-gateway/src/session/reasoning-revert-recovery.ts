@@ -1,12 +1,14 @@
 import {
-  REASONING_REVERT_EVENT_TYPE,
-  SESSION_REWIND_COMPLETED_EVENT_TYPE,
   buildReasoningRevertSummaryDetails,
   type BrewvaRuntime,
   type ReasoningRevertRecord,
 } from "@brewva/brewva-runtime";
+import {
+  REASONING_REVERT_EVENT_TYPE,
+  SESSION_REWIND_COMPLETED_EVENT_TYPE,
+  readSessionRewindCompletedEventPayload,
+} from "@brewva/brewva-runtime/events";
 import { normalizeRuntimeError } from "./error-classification.js";
-import { readSessionRewindCompletedPayload } from "./rewind-event-payloads.js";
 import { recordSessionTurnTransition } from "./turn-transition.js";
 
 export const REASONING_REVERT_RESUME_PROMPT =
@@ -118,9 +120,9 @@ function resolveHostedRewindSummaryMode(
 ): "carry" | "none" {
   const matchingRewind = runtime.inspect.events
     .list(sessionId, { type: SESSION_REWIND_COMPLETED_EVENT_TYPE })
-    .map((event) => ({ event, payload: readSessionRewindCompletedPayload(event.payload) }))
-    .find((candidate) => candidate.payload?.revertEventId === revert.eventId);
-  return matchingRewind?.payload?.summary === "none" ? "none" : "carry";
+    .map((event) => readSessionRewindCompletedEventPayload(event))
+    .find((payload) => payload?.ok === true && payload.reasoningRevertEventId === revert.eventId);
+  return matchingRewind?.summary === "none" ? "none" : "carry";
 }
 
 function readReasoningRevertResumeStatus(

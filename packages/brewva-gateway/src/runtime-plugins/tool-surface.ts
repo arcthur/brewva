@@ -1,7 +1,5 @@
 import {
   SKILL_REPAIR_ALLOWED_TOOL_NAMES,
-  SKILL_DIAGNOSIS_DERIVED_EVENT_TYPE,
-  TOOL_SURFACE_RESOLVED_EVENT_TYPE,
   deriveToolGovernanceDescriptor,
   getToolActionPolicy,
   listSkillAllowedEffects,
@@ -13,7 +11,11 @@ import {
   type SkillReadinessEntry,
   type ToolEffectClass,
 } from "@brewva/brewva-runtime";
-import type { SkillRoutingCatalogEntry } from "@brewva/brewva-runtime/internal";
+import { SkillRoutingCatalogEntry } from "@brewva/brewva-runtime";
+import {
+  SKILL_DIAGNOSIS_DERIVED_EVENT_TYPE,
+  TOOL_SURFACE_RESOLVED_EVENT_TYPE,
+} from "@brewva/brewva-runtime/events";
 import type {
   InternalHostPluginApi as ExtensionAPI,
   BrewvaHostToolInfo as ToolInfo,

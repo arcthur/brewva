@@ -47,7 +47,7 @@ event tape, WAL state, and runtime inspect surfaces.
 
 ## Implementation Anchors
 
-- `packages/brewva-runtime/src/services/session-lifecycle.ts`
-- `packages/brewva-runtime/src/services/session-rewind.ts`
-- `packages/brewva-runtime/src/channels/recovery-wal.ts`
-- `packages/brewva-runtime/src/services/session-wire.ts`
+- `packages/brewva-runtime/src/domain/sessions/session-lifecycle.ts`
+- `packages/brewva-runtime/src/domain/sessions/session-rewind.ts`
+- `packages/brewva-runtime/src/domain/recovery/wal-store.ts`
+- `packages/brewva-runtime/src/domain/sessions/session-wire.ts`

@@ -2,7 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { chmodSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BrewvaRuntime, PATCH_RECORDED_EVENT_TYPE } from "@brewva/brewva-runtime";
+import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { PATCH_RECORDED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
 import { createGrepTool } from "@brewva/brewva-tools";
 import { runRipgrep } from "../../../packages/brewva-tools/src/grep.js";
 import { createBundledToolRuntime } from "../../helpers/runtime.js";
@@ -314,7 +315,7 @@ describe("grep tool", () => {
     const bundledRuntime = createBundledToolRuntime(runtime);
     const sessionId = "grep-rerank-1";
     const now = Date.now();
-    bundledRuntime.internal?.recordEvent?.({
+    bundledRuntime.extensions?.tools?.recordEvent?.({
       sessionId,
       type: PATCH_RECORDED_EVENT_TYPE,
       timestamp: now,
@@ -434,7 +435,7 @@ describe("grep tool", () => {
     const bundledRuntime = createBundledToolRuntime(runtime);
     const sessionId = "grep-suggest-1";
     const now = Date.now();
-    bundledRuntime.internal?.recordEvent?.({
+    bundledRuntime.extensions?.tools?.recordEvent?.({
       sessionId,
       type: PATCH_RECORDED_EVENT_TYPE,
       timestamp: now,

@@ -195,7 +195,7 @@ describe("deliberation memory plane", () => {
       },
       constraints: ["no backward compatibility"],
       targets: {
-        files: ["packages/brewva-runtime/src/runtime.ts"],
+        files: ["packages/brewva-runtime/src/runtime/runtime.ts"],
       },
     });
 
@@ -323,7 +323,7 @@ describe("deliberation memory plane", () => {
             goal: "Implement deliberation home",
             verificationCommands: ["bun run check", "bun test"],
             constraints: ["no backward compatibility"],
-            files: ["packages/brewva-runtime/src/runtime.ts"],
+            files: ["packages/brewva-runtime/src/runtime/runtime.ts"],
           }),
         ],
         workflowArtifacts: [

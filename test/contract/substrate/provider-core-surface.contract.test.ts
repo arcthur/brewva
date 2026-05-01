@@ -26,9 +26,9 @@ describe("provider core surface contract", () => {
     expect(Object.keys(packageJson.exports ?? {})).toEqual(["."]);
     expect(indexSource).toContain('from "./stream.js"');
     expect(indexSource).toContain('from "./types.js"');
-    expect(indexSource).toContain('from "./catalog.js"');
     expect(indexSource).toContain('from "./auth.js"');
     expect(indexSource).toContain('from "./api-registry.js"');
+    expect(indexSource).toContain('from "./catalog.js"');
     expect(indexSource).not.toContain('from "./models.js"');
     expect(indexSource).not.toContain('from "./env-api-keys.js"');
 

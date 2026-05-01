@@ -14,11 +14,11 @@
   - `docs/reference/session-lifecycle.md`
   - `docs/journeys/internal/context-and-compaction.md`
 - Code anchors:
-  - `packages/brewva-runtime/src/contracts/reasoning.ts`
-  - `packages/brewva-runtime/src/tape/reasoning-events.ts`
-  - `packages/brewva-runtime/src/tape/reasoning-replay.ts`
-  - `packages/brewva-runtime/src/services/reasoning.ts`
-  - `packages/brewva-runtime/src/events/event-types.ts`
+  - `packages/brewva-runtime/src/domain/reasoning/types.ts`
+  - `packages/brewva-runtime/src/domain/reasoning/events.ts`
+  - `packages/brewva-runtime/src/domain/tape/reasoning-replay.ts`
+  - `packages/brewva-runtime/src/domain/reasoning/reasoning.ts`
+  - `packages/brewva-runtime/src/events/registry.ts`
   - `packages/brewva-tools/src/reasoning-checkpoint.ts`
   - `packages/brewva-tools/src/reasoning-revert.ts`
   - `packages/brewva-tools/src/tape.ts`

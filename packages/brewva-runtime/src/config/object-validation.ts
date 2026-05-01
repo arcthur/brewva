@@ -122,10 +122,10 @@ export function validateLoadedBrewvaConfigObject(
 
   const validation = validateBrewvaConfigFile(parsed);
   if (!validation.ok) {
-    if ("error" in validation) {
+    if ("reason" in validation) {
       throw new BrewvaConfigLoadError({
         code: "config_schema_unavailable",
-        message: `Schema validation is unavailable: ${validation.error}`,
+        message: `Schema validation is unavailable: ${validation.reason}`,
         configPath,
       });
     }
@@ -193,8 +193,8 @@ export function forensicallyValidateLoadedBrewvaConfigObject(
       message: `Skipped inspect config after forensic stripping because validation still failed: ${
         validation.errors.length > 0
           ? formatSchemaInvalidMessage(validation.errors)
-          : "error" in validation
-            ? validation.error
+          : "reason" in validation
+            ? validation.reason
             : "schema validation unavailable"
       }`,
     });

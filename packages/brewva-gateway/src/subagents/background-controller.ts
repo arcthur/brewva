@@ -2,7 +2,6 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import type {
-  BrewvaStructuredEvent,
   BrewvaConfig,
   BrewvaRuntime,
   DelegationRunQuery,
@@ -10,7 +9,8 @@ import type {
   SkillRoutingScope,
 } from "@brewva/brewva-runtime";
 import { asBrewvaSessionId, isDelegationRunTerminalStatus } from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
+import type { BrewvaStructuredEvent } from "@brewva/brewva-runtime/events";
+import { readWorkerResultsAppliedEventPayload } from "@brewva/brewva-runtime/events";
 import type {
   DelegationPacket,
   SubagentCancelResult,
@@ -161,25 +161,7 @@ function matchesWorkerResultPredicate(
 }
 
 function readEventWorkerIds(event: BrewvaStructuredEvent): string[] {
-  if (event.type !== "worker_results_applied") {
-    return [];
-  }
-  const payload =
-    typeof event.payload === "object" && event.payload !== null && !Array.isArray(event.payload)
-      ? (event.payload as Record<string, unknown>)
-      : {};
-  const workerIds = new Set<string>();
-  if (typeof payload.workerId === "string" && payload.workerId.trim().length > 0) {
-    workerIds.add(payload.workerId.trim());
-  }
-  if (Array.isArray(payload.workerIds)) {
-    for (const workerId of payload.workerIds) {
-      if (typeof workerId === "string" && workerId.trim().length > 0) {
-        workerIds.add(workerId.trim());
-      }
-    }
-  }
-  return [...workerIds];
+  return readWorkerResultsAppliedEventPayload(event)?.workerIds ?? [];
 }
 
 function evaluateCompletionPredicate(input: {
@@ -259,7 +241,7 @@ export function createDetachedSubagentBackgroundController(
     };
     trackedPredicates.delete(record.runId);
     options.runtime.authority.tools.releaseParallelSlot(record.parentSessionId, record.runId);
-    recordRuntimeEvent(options.runtime, {
+    options.runtime.extensions.hosted.events.record({
       sessionId: record.parentSessionId,
       type: terminalStatus === "cancelled" ? "subagent_cancelled" : "subagent_failed",
       payload: {
@@ -391,7 +373,7 @@ export function createDetachedSubagentBackgroundController(
           updatedAt: createdAt,
           summary: "completion_predicate_satisfied",
         };
-        recordRuntimeEvent(options.runtime, {
+        options.runtime.extensions.hosted.events.record({
           sessionId: input.parentSessionId,
           type: "subagent_cancelled",
           payload: {
@@ -414,7 +396,7 @@ export function createDetachedSubagentBackgroundController(
         );
       }
 
-      recordRuntimeEvent(options.runtime, {
+      options.runtime.extensions.hosted.events.record({
         sessionId: input.parentSessionId,
         type: "subagent_spawned",
         payload: buildDelegationLifecyclePayload(initialRecord),

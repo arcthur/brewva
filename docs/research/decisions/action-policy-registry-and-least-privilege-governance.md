@@ -15,7 +15,7 @@
   - `docs/reference/runtime.md`
   - `docs/reference/tools.md`
 - Code anchors:
-  - `packages/brewva-runtime/src/governance/action-policy.ts`
+  - `packages/brewva-runtime/src/domain/governance/action-policy.ts`
   - `packages/brewva-runtime/src/security/command-policy.ts`
 
 ## Decision Summary

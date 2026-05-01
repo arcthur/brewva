@@ -6,7 +6,7 @@ import type {
   ProviderConnectionPort,
   ProviderOAuthAuthorization,
 } from "@brewva/brewva-gateway/host";
-import type { BrewvaReplaySession, BrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaRuntime } from "@brewva/brewva-runtime";
 import type {
   DecideEffectCommitmentInput,
   PendingEffectCommitmentRequest,
@@ -19,6 +19,7 @@ import type {
   SessionRewindTargetView,
 } from "@brewva/brewva-runtime";
 import type { DelegationRunRecord } from "@brewva/brewva-runtime";
+import type { BrewvaReplaySession } from "@brewva/brewva-runtime/events";
 import type { BrewvaInteractiveQuestionRequest } from "@brewva/brewva-substrate";
 import type {
   BrewvaManagedPromptSession,

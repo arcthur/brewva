@@ -1,17 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import {
   BrewvaRuntime,
-  SCHEDULE_EVENT_TYPE,
   asBrewvaIntentId,
   asBrewvaSessionId,
   buildScheduleIntentCreatedEvent,
   parseScheduleIntentEvent,
 } from "@brewva/brewva-runtime";
-import {
-  SchedulerService,
-  recordRuntimeEvent,
-  type SchedulerRuntimePort,
-} from "@brewva/brewva-runtime/internal";
+import { SCHEDULE_EVENT_TYPE } from "@brewva/brewva-runtime/events";
+import { createSchedulerService, type SchedulerRuntimePort } from "@brewva/brewva-runtime/recovery";
 import { createWorkspace, schedulerRuntimePort } from "./scheduler-service.helpers.js";
 
 describe("scheduler service execution contract", () => {
@@ -26,13 +22,13 @@ describe("scheduler service execution contract", () => {
       scheduleConfig: runtime.config.schedule,
       listSessionIds: () => runtime.inspect.events.listSessionIds(),
       listEvents: (targetSessionId, query) => runtime.inspect.events.list(targetSessionId, query),
-      recordEvent: (input) => recordRuntimeEvent(runtime, input),
+      recordEvent: (input) => runtime.extensions.hosted.events.record(input),
       subscribeEvents: (listener) => runtime.inspect.events.subscribe(listener),
       getTruthState: (targetSessionId) => runtime.inspect.truth.getState(targetSessionId),
       getTaskState: (targetSessionId) => runtime.inspect.task.getState(targetSessionId),
     };
 
-    const scheduler = new SchedulerService({
+    const scheduler = createSchedulerService({
       runtime: runtimePort,
       enableExecution: false,
     });
@@ -64,7 +60,7 @@ describe("scheduler service execution contract", () => {
     const now = Date.now();
     const sessionId = asBrewvaSessionId("scheduler-no-executor-session");
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: SCHEDULE_EVENT_TYPE,
       payload: buildScheduleIntentCreatedEvent({
@@ -79,7 +75,7 @@ describe("scheduler service execution contract", () => {
       skipTapeCheckpoint: true,
     });
 
-    const scheduler = new SchedulerService({ runtime: schedulerRuntimePort(runtime) });
+    const scheduler = createSchedulerService({ runtime: schedulerRuntimePort(runtime) });
     await scheduler.recover();
     const stats = scheduler.getStats();
     scheduler.stop();
@@ -95,7 +91,7 @@ describe("scheduler service execution contract", () => {
   test("rejects duplicate intentId on create", async () => {
     const workspace = createWorkspace("duplicate-id");
     const runtime = new BrewvaRuntime({ cwd: workspace });
-    const scheduler = new SchedulerService({
+    const scheduler = createSchedulerService({
       runtime: schedulerRuntimePort(runtime),
       enableExecution: false,
     });
@@ -120,7 +116,7 @@ describe("scheduler service execution contract", () => {
     });
     expect(second.ok).toBe(false);
     if (!second.ok) {
-      expect(second.error).toBe("intent_id_already_exists");
+      expect(second.reason).toBe("intent_id_already_exists");
     }
 
     scheduler.stop();
@@ -132,7 +128,7 @@ describe("scheduler service execution contract", () => {
     const sessionId = "scheduler-predicate-session";
     const now = Date.now();
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: SCHEDULE_EVENT_TYPE,
       payload: buildScheduleIntentCreatedEvent({
@@ -151,7 +147,7 @@ describe("scheduler service execution contract", () => {
       skipTapeCheckpoint: true,
     });
 
-    const scheduler = new SchedulerService({
+    const scheduler = createSchedulerService({
       runtime: schedulerRuntimePort(runtime),
       executeIntent: async (intent) => {
         const evaluationSessionId = `${intent.parentSessionId}-child`;
@@ -194,7 +190,7 @@ describe("scheduler service execution contract", () => {
     const sessionId = "scheduler-pause-resume-session";
     let nowMs = Date.UTC(2026, 0, 1, 0, 0, 0, 0);
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: SCHEDULE_EVENT_TYPE,
       payload: buildScheduleIntentCreatedEvent({
@@ -216,7 +212,7 @@ describe("scheduler service execution contract", () => {
       resolveExecution = resolve;
     });
     let paused = true;
-    const scheduler = new SchedulerService({
+    const scheduler = createSchedulerService({
       runtime: schedulerRuntimePort(runtime),
       now: () => nowMs,
       shouldExecute: () => !paused,
@@ -256,7 +252,7 @@ describe("scheduler service execution contract", () => {
     const scheduledCallbacks: Array<() => void> = [];
     let clearCount = 0;
 
-    const scheduler = new SchedulerService({
+    const scheduler = createSchedulerService({
       runtime: schedulerRuntimePort(runtime),
       now: () => nowMs,
       enableExecution: true,

@@ -16,6 +16,8 @@ function createToolRuntimeFixture(): BrewvaToolRuntime {
         recordGuardResult(sessionId: string) {
           return { id: "guard-1", sessionId };
         },
+      },
+      tape: {
         recordTapeHandoff(sessionId: string) {
           return { ok: true, eventId: "anchor-1", sessionId };
         },
@@ -140,6 +142,24 @@ function createToolRuntimeFixture(): BrewvaToolRuntime {
       },
     } as unknown as BrewvaToolRuntime["authority"],
     inspect: {
+      tape: {
+        getTapeStatus(sessionId: string) {
+          return {
+            sessionId,
+            totalEntries: 0,
+            entriesSinceAnchor: 0,
+            entriesSinceCheckpoint: 0,
+            tapePressure: "none",
+            thresholds: { low: 80, medium: 160, high: 280 },
+          };
+        },
+        getTapePressureThresholds() {
+          return { low: 80, medium: 160, high: 280 };
+        },
+        searchTape(sessionId: string) {
+          return { sessionId, scannedEvents: 0, matches: [] };
+        },
+      },
       tools: {
         listResourceLeases(sessionId: string) {
           return [{ id: "lease-1", sessionId }];
@@ -151,12 +171,14 @@ function createToolRuntimeFixture(): BrewvaToolRuntime {
         },
       },
     } as unknown as BrewvaToolRuntime["inspect"],
-    internal: {
-      appendGuardedSupplementalBlocks() {
-        return [{ familyId: "test-family", accepted: true }];
-      },
-      resolveCredentialBindings() {
-        return { API_TOKEN: "token" };
+    extensions: {
+      tools: {
+        appendGuardedSupplementalBlocks() {
+          return [{ familyId: "test-family", accepted: true }];
+        },
+        resolveCredentialBindings() {
+          return { API_TOKEN: "token" };
+        },
       },
     },
   };
@@ -242,11 +264,13 @@ describe("tool runtime capability scope", () => {
       "managed Brewva tool 'task_set_spec' attempted to access protected runtime capability 'authority.schedule.createIntent' without declaring it.",
     );
 
-    expect(execScoped.internal?.resolveCredentialBindings?.("session-1", "exec")).toEqual({
+    expect(execScoped.extensions?.tools?.resolveCredentialBindings?.("session-1", "exec")).toEqual({
       API_TOKEN: "token",
     });
-    expect(() => execScoped.internal?.appendGuardedSupplementalBlocks?.("session-1", [])).toThrow(
-      "managed Brewva tool 'exec' attempted to access protected runtime capability 'internal.appendGuardedSupplementalBlocks' without declaring it.",
+    expect(() =>
+      execScoped.extensions?.tools?.appendGuardedSupplementalBlocks?.("session-1", []),
+    ).toThrow(
+      "managed Brewva tool 'exec' attempted to access protected runtime capability 'extensions.tools.appendGuardedSupplementalBlocks' without declaring it.",
     );
 
     const skillScoped = createCapabilityScopedToolRuntime(runtime, "skill_complete");

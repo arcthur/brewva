@@ -77,7 +77,7 @@ export function createCapabilityScopedToolRuntime<T extends BrewvaToolRuntime>(
   let changed = false;
   let authority = runtime.authority;
   let inspect = runtime.inspect;
-  let internal = runtime.internal;
+  let extensions = runtime.extensions;
 
   if (runtime.authority && typeof runtime.authority === "object") {
     const scopedAuthority = createScopedNestedGroup(
@@ -105,15 +105,18 @@ export function createCapabilityScopedToolRuntime<T extends BrewvaToolRuntime>(
     }
   }
 
-  if (runtime.internal && typeof runtime.internal === "object") {
-    const scopedInternal = createScopedMethodPort(
+  if (runtime.extensions?.tools && typeof runtime.extensions.tools === "object") {
+    const scopedToolsExtension = createScopedMethodPort(
       toolName,
-      runtime.internal,
-      "internal",
+      runtime.extensions.tools,
+      "extensions.tools",
       allowedCapabilities,
     );
-    if (scopedInternal !== runtime.internal) {
-      internal = scopedInternal;
+    if (scopedToolsExtension !== runtime.extensions.tools) {
+      extensions = {
+        ...runtime.extensions,
+        tools: scopedToolsExtension,
+      };
       changed = true;
     }
   }
@@ -125,6 +128,6 @@ export function createCapabilityScopedToolRuntime<T extends BrewvaToolRuntime>(
     ...runtime,
     authority,
     inspect,
-    ...(internal ? { internal } : {}),
+    ...(extensions ? { extensions } : {}),
   };
 }

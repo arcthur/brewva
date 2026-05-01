@@ -9,7 +9,6 @@ import {
   type HostedSubagentSessionOptions,
 } from "@brewva/brewva-gateway";
 import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import type { BrewvaPromptSessionEvent } from "@brewva/brewva-substrate";
 
 function createTempWorkspace(prefix: string): string {
@@ -355,7 +354,7 @@ describe("hosted subagent orchestrator", () => {
                 } as BrewvaPromptSessionEvent);
               }
 
-              recordRuntimeEvent(childRuntime, {
+              childRuntime.extensions.hosted.events.record({
                 sessionId: childSessionId,
                 type: "session_turn_transition",
                 payload: {

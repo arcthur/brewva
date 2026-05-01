@@ -9,13 +9,17 @@ import {
   RECALL_CURATION_HALFLIFE_DAYS,
   type RecallBrokerRuntime,
 } from "@brewva/brewva-recall";
+import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { type BrewvaEventRecord } from "@brewva/brewva-runtime/events";
 import {
-  BrewvaRuntime,
   CONTEXT_INJECTED_EVENT_TYPE,
   PROJECTION_REFRESHED_EVENT_TYPE,
   RECALL_RESULTS_SURFACED_EVENT_TYPE,
-} from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
+} from "@brewva/brewva-runtime/events";
+import {
+  buildToolResultRecordedPayload,
+  buildVerificationOutcomeRecordedPayload,
+} from "../../helpers/events.js";
 
 describe("recall broker", () => {
   test("context injection does not create self-reinforcing curation signals", async () => {
@@ -33,7 +37,7 @@ describe("recall broker", () => {
         files: ["packages/gateway"],
       },
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId: priorSessionId,
       type: "task_event",
       payload: {
@@ -83,7 +87,7 @@ describe("recall broker", () => {
     const priorSessionId = "recall-broker-noise-prior";
     const currentSessionId = "recall-broker-noise-current";
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId: priorSessionId,
       type: RECALL_RESULTS_SURFACED_EVENT_TYPE,
       payload: {
@@ -91,7 +95,7 @@ describe("recall broker", () => {
         stableIds: ["poisoned gateway recall marker"],
       } as Record<string, unknown>,
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId: priorSessionId,
       type: CONTEXT_INJECTED_EVENT_TYPE,
       payload: {
@@ -99,7 +103,7 @@ describe("recall broker", () => {
         text: "poisoned gateway context marker",
       } as Record<string, unknown>,
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId: priorSessionId,
       type: PROJECTION_REFRESHED_EVENT_TYPE,
       payload: {
@@ -151,7 +155,7 @@ describe("recall broker", () => {
         files: ["packages/gateway"],
       },
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId: priorSessionId,
       type: "task_event",
       payload: {
@@ -164,14 +168,12 @@ describe("recall broker", () => {
         },
       } as Record<string, unknown>,
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId: priorSessionId,
       type: "verification_outcome_recorded",
-      payload: {
-        schema: "brewva.verification.outcome.v1",
-        passed: true,
-        summary: "Gamma authority ranking verified evidence",
-      } as Record<string, unknown>,
+      payload: buildVerificationOutcomeRecordedPayload({
+        evidence: "Gamma authority ranking verified evidence",
+      }),
     });
 
     getOrCreateNarrativeMemoryPlane(runtime).addRecord({
@@ -262,7 +264,7 @@ describe("recall broker", () => {
         files: ["packages/gateway"],
       },
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId: priorSessionId,
       type: "truth_event",
       payload: {
@@ -270,7 +272,7 @@ describe("recall broker", () => {
         summary: "Epsilon durable receipt marker entered kernel truth.",
       } as Record<string, unknown>,
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId: priorSessionId,
       type: "patch_recorded",
       payload: {
@@ -353,7 +355,7 @@ describe("recall broker", () => {
         files: ["packages/gateway"],
       },
     });
-    const priorEvent = recordRuntimeEvent(runtime, {
+    const priorEvent = runtime.extensions.hosted.events.record({
       sessionId: priorSessionId,
       type: "task_event",
       payload: {
@@ -375,7 +377,7 @@ describe("recall broker", () => {
         files: ["packages/gateway"],
       },
     });
-    const currentEvent = recordRuntimeEvent(runtime, {
+    const currentEvent = runtime.extensions.hosted.events.record({
       sessionId: currentSessionId,
       type: "task_event",
       payload: {
@@ -434,7 +436,7 @@ describe("recall broker", () => {
         files: ["packages/gateway"],
       },
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "task_event",
       payload: {
@@ -492,7 +494,7 @@ describe("recall broker", () => {
         files: ["packages/gateway"],
       },
     });
-    const sourceEvent = recordRuntimeEvent(runtime, {
+    const sourceEvent = runtime.extensions.hosted.events.record({
       sessionId: priorSessionId,
       type: "task_event",
       payload: {
@@ -517,7 +519,7 @@ describe("recall broker", () => {
     });
 
     const stableId = `tape:${priorSessionId}:${sourceEvent!.id}`;
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId: currentSessionId,
       type: "recall_curation_recorded",
       timestamp: Date.now() - RECALL_CURATION_HALFLIFE_DAYS * 24 * 60 * 60 * 1000 * 2,
@@ -570,7 +572,7 @@ describe("recall broker", () => {
         files: ["packages/gateway/bootstrap.ts"],
       },
     });
-    const priorEvent = recordRuntimeEvent(runtime, {
+    const priorEvent = runtime.extensions.hosted.events.record({
       sessionId: priorSessionId,
       type: "task_event",
       payload: {
@@ -628,19 +630,17 @@ describe("recall broker", () => {
       },
     });
 
-    let lateEvent: ReturnType<typeof recordRuntimeEvent> | undefined;
+    let lateEvent: BrewvaEventRecord | undefined;
     for (let index = 0; index < 25; index += 1) {
-      const event = recordRuntimeEvent(runtime, {
+      const event = runtime.extensions.hosted.events.record({
         sessionId: priorSessionId,
         type: "tool_result_recorded",
-        payload: {
-          toolName: "exec",
+        payload: buildToolResultRecordedPayload({
           outputText:
             index === 24
               ? "rareanchor durable indexed receipt"
               : `generic maintenance output ${index}`,
-          verdict: "success",
-        } as Record<string, unknown>,
+        }),
       });
       if (index === 24) {
         lateEvent = event;
@@ -688,7 +688,7 @@ describe("recall broker", () => {
         files: ["packages/gateway"],
       },
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "task_event",
       payload: {
@@ -722,7 +722,7 @@ describe("recall broker", () => {
     await broker.sync();
     const afterInitialSync = listSessionIdsCalls;
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: RECALL_RESULTS_SURFACED_EVENT_TYPE,
       payload: {
@@ -733,7 +733,7 @@ describe("recall broker", () => {
     await broker.sync();
     expect(listSessionIdsCalls).toBe(afterInitialSync);
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "recall_curation_recorded",
       payload: {
@@ -761,7 +761,7 @@ describe("recall broker", () => {
         files: ["packages/gateway"],
       },
     });
-    const priorEvent = recordRuntimeEvent(runtime, {
+    const priorEvent = runtime.extensions.hosted.events.record({
       sessionId: priorSessionId,
       type: "task_event",
       payload: {

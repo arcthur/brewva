@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
+import { BrewvaRuntime } from "@brewva/brewva-runtime";
 import {
   COST_UPDATE_EVENT_TYPE,
   SEMANTIC_EXTRACTION_INVOKED_EVENT_TYPE,
   SEMANTIC_RERANK_INVOKED_EVENT_TYPE,
-  BrewvaRuntime,
-} from "@brewva/brewva-runtime";
+} from "@brewva/brewva-runtime/events";
 import type { BrewvaRegisteredModel } from "@brewva/brewva-substrate";
 import { createHostedSemanticReranker } from "../../../packages/brewva-gateway/src/host/semantic-reranker.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";

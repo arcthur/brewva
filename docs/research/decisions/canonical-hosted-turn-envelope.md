@@ -15,8 +15,8 @@
   - `packages/brewva-gateway/src/session/thread-loop-types.ts`
   - `packages/brewva-gateway/src/session/hosted-thread-loop.ts`
   - `packages/brewva-gateway/src/subagents/entry.ts`
-  - `packages/brewva-runtime/src/contracts/session-wire.ts`
-  - `packages/brewva-runtime/src/services/session-wire.ts`
+  - `packages/brewva-runtime/src/domain/sessions/wire.ts`
+  - `packages/brewva-runtime/src/domain/sessions/session-wire.ts`
   - `packages/brewva-gateway/src/session/worker-main.ts`
 
 ## Decision Summary

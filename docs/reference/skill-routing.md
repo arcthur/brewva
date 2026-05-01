@@ -4,10 +4,10 @@ Implementation anchors:
 
 - `packages/brewva-gateway/src/runtime-plugins/skill-first.ts`
 - `packages/brewva-gateway/src/runtime-plugins/hosted-context-injection-pipeline.ts`
-- `packages/brewva-runtime/src/skills/profiles.ts`
+- `packages/brewva-runtime/src/domain/skills/profiles.ts`
 - `packages/brewva-tools/src/skill-load.ts`
 - `packages/brewva-tools/src/workflow-status.ts`
-- `packages/brewva-runtime/src/services/skill-lifecycle.ts`
+- `packages/brewva-runtime/src/domain/skills/skill-lifecycle.ts`
 
 This document describes how Brewva routes tasks to skills and how skills
 transition to one another during a session. It is the canonical reference for
@@ -249,7 +249,7 @@ is the correct chain.
 
 ## Relationship to `skill-first.ts`
 
-`packages/brewva-runtime/src/context/skill-routing.ts` uses produced skill
+`packages/brewva-runtime/src/domain/context/skill-routing.ts` uses produced skill
 outputs, `requires`, and `consumes` to classify candidates as `blocked`,
 `available`, or `ready`, then ranks non-blocked candidates for the warm
 skill-routing context.

@@ -1,23 +1,24 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { asBrewvaSessionId, type BrewvaEventRecord } from "@brewva/brewva-runtime";
-import { RuntimeSessionStateStore } from "../../../packages/brewva-runtime/src/services/session-state.js";
+import { asBrewvaSessionId } from "@brewva/brewva-runtime";
+import { type BrewvaEventRecord } from "@brewva/brewva-runtime/events";
+import { RuntimeSessionStateStore } from "../../../packages/brewva-runtime/src/domain/sessions/session-state.js";
 import {
   getSkillOutputContracts,
   getSkillSemanticBindings,
-} from "../../../packages/brewva-runtime/src/skills/facets.js";
-import { normalizeSkillOutputs } from "../../../packages/brewva-runtime/src/skills/normalization.js";
-import { SkillRegistry } from "../../../packages/brewva-runtime/src/skills/registry.js";
-import { SkillValidationContextBuilder } from "../../../packages/brewva-runtime/src/skills/validation/builders/validation-context-builder.js";
-import type { SkillValidationContext } from "../../../packages/brewva-runtime/src/skills/validation/context.js";
-import { resolveSkillVerificationEvidenceContext } from "../../../packages/brewva-runtime/src/skills/validation/evidence.js";
-import { SkillOutputValidationPipeline } from "../../../packages/brewva-runtime/src/skills/validation/pipeline.js";
-import { ConsumedOutputBlockingValidator } from "../../../packages/brewva-runtime/src/skills/validation/validators/consumed-output-blocking-validator.js";
-import { ContractValidator } from "../../../packages/brewva-runtime/src/skills/validation/validators/contract-validator.js";
-import { PlanningOutputValidator } from "../../../packages/brewva-runtime/src/skills/validation/validators/planning-validator.js";
-import { ReviewOutputValidator } from "../../../packages/brewva-runtime/src/skills/validation/validators/review-validator.js";
-import { ShipOutputValidator } from "../../../packages/brewva-runtime/src/skills/validation/validators/ship-validator.js";
+} from "../../../packages/brewva-runtime/src/domain/skills/facets.js";
+import { normalizeSkillOutputs } from "../../../packages/brewva-runtime/src/domain/skills/output-normalization.js";
+import { SkillRegistry } from "../../../packages/brewva-runtime/src/domain/skills/registry.js";
+import { SkillValidationContextBuilder } from "../../../packages/brewva-runtime/src/domain/skills/validation/builders/validation-context-builder.js";
+import type { SkillValidationContext } from "../../../packages/brewva-runtime/src/domain/skills/validation/context.js";
+import { resolveSkillVerificationEvidenceContext } from "../../../packages/brewva-runtime/src/domain/skills/validation/evidence.js";
+import { SkillOutputValidationPipeline } from "../../../packages/brewva-runtime/src/domain/skills/validation/pipeline.js";
+import { ConsumedOutputBlockingValidator } from "../../../packages/brewva-runtime/src/domain/skills/validation/validators/consumed-output-blocking-validator.js";
+import { ContractValidator } from "../../../packages/brewva-runtime/src/domain/skills/validation/validators/contract-validator.js";
+import { PlanningOutputValidator } from "../../../packages/brewva-runtime/src/domain/skills/validation/validators/planning-validator.js";
+import { ReviewOutputValidator } from "../../../packages/brewva-runtime/src/domain/skills/validation/validators/review-validator.js";
+import { ShipOutputValidator } from "../../../packages/brewva-runtime/src/domain/skills/validation/validators/ship-validator.js";
 import { createRuntimeConfig } from "../../helpers/runtime.js";
 import { buildCanonicalReviewReport } from "../../helpers/semantic-artifacts.js";
 import { cleanupWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
@@ -253,7 +254,7 @@ describe("skill validation pipeline", () => {
         ],
         implementation_targets: [
           {
-            target: "packages/brewva-runtime/src/contracts/planning.ts",
+            target: "packages/brewva-runtime/src/domain/skills/planning.ts",
             kind: "module",
             owner_boundary: "runtime.contracts",
             reason: "Planning normalization lives here.",
@@ -340,7 +341,7 @@ describe("skill validation pipeline", () => {
       skill,
       outputs: {
         change_set: "Applied the lifecycle fix to the runtime-owned boundary.",
-        files_changed: ["packages/brewva-runtime/src/services/skill-lifecycle.ts"],
+        files_changed: ["packages/brewva-runtime/src/domain/skills/skill-lifecycle.ts"],
       },
       consumedOutputView: {
         outputs: {},

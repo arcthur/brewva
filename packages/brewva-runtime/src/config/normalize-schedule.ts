@@ -1,5 +1,4 @@
-import type { BrewvaConfig } from "../contracts/index.js";
-import { asBrewvaIntentId, asBrewvaSessionId } from "../contracts/index.js";
+import { asBrewvaIntentId, asBrewvaSessionId } from "../core/index.js";
 import {
   isRecord,
   normalizeBoolean,
@@ -10,6 +9,7 @@ import {
   normalizeStringArray,
   type AnyRecord,
 } from "./normalization-shared.js";
+import type { BrewvaConfig } from "./types.js";
 
 const VALID_SCHEDULE_CONTINUITY_MODES = new Set(["inherit", "fresh"]);
 

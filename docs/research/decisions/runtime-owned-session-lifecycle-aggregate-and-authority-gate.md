@@ -12,10 +12,10 @@
   - `docs/reference/events/README.md`
   - `docs/reference/gateway-control-plane-protocol.md`
 - Code anchors:
-  - `packages/brewva-runtime/src/contracts/session-lifecycle.ts`
-  - `packages/brewva-runtime/src/lifecycle/session-lifecycle-snapshot.ts`
-  - `packages/brewva-runtime/src/runtime.ts`
-  - `packages/brewva-runtime/src/recovery/read-model.ts`
+  - `packages/brewva-runtime/src/domain/sessions/lifecycle.ts`
+  - `packages/brewva-runtime/src/domain/lifecycle/session-lifecycle-snapshot.ts`
+  - `packages/brewva-runtime/src/runtime/runtime.ts`
+  - `packages/brewva-runtime/src/domain/recovery/read-model.ts`
   - `packages/brewva-gateway/src/host/managed-agent-session.ts`
   - `packages/brewva-gateway/src/daemon/session-wire-status.ts`
   - `packages/brewva-gateway/src/runtime-plugins/provider-request-reduction.ts`

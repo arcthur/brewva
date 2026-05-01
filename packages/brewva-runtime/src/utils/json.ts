@@ -29,6 +29,10 @@ export function stableJsonStringify(value: unknown): string {
   return JSON.stringify(sortJsonValue(value));
 }
 
+export function cloneJsonValue<T extends JsonValue>(value: T): T {
+  return structuredClone(value);
+}
+
 export function toJsonValue(value: unknown): JsonValue {
   if (value === null) {
     return null;

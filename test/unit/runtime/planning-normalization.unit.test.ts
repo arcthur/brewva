@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   normalizePlanningArtifactSet,
   PLANNING_NORMALIZER_VERSION,
-} from "../../../packages/brewva-runtime/src/skills/planning-normalization.js";
+} from "../../../packages/brewva-runtime/src/domain/skills/planning-normalization.js";
 
 describe("planning normalization", () => {
   test("accepts canonical planning artifact shapes without issues", () => {
@@ -30,7 +30,7 @@ describe("planning normalization", () => {
       ],
       implementation_targets: [
         {
-          target: "packages/brewva-runtime/src/skills/planning-normalization.ts",
+          target: "packages/brewva-runtime/src/domain/skills/planning-normalization.ts",
           kind: "module",
           owner_boundary: "runtime.skills",
           reason: "Canonical-only normalization lives here.",
@@ -70,7 +70,7 @@ describe("planning normalization", () => {
       ],
       implementation_targets: [
         {
-          file: "packages/brewva-runtime/src/contracts/planning.ts",
+          file: "packages/brewva-runtime/src/domain/skills/planning.ts",
           type: "module",
           boundary: "runtime.contracts",
           rationale: "Old aliases should not be accepted.",

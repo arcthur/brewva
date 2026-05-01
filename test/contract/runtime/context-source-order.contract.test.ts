@@ -16,9 +16,10 @@ import {
   type ContextSourceProvider,
   type ContextSourceProviderDescriptor,
 } from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import { createSkillPromotionContextProvider } from "@brewva/brewva-skill-broker";
 import { setStaticContextInjectionBudget } from "../../fixtures/config.js";
+import { recordHostedSkillCompleted } from "../../helpers/events.js";
+import { getRuntimeInternals } from "../../helpers/runtime-internals.js";
 import { buildCanonicalReviewReport } from "../../helpers/semantic-artifacts.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
@@ -55,7 +56,7 @@ function createContextOrderWorkspace(name: string): string {
 }
 
 function patchProjection(runtime: BrewvaRuntime): void {
-  const runtimeWithInternals = runtime as unknown as RuntimeWithInternals;
+  const runtimeWithInternals = getRuntimeInternals(runtime) as RuntimeWithInternals;
   runtimeWithInternals.projectionEngine.refreshIfNeeded = () => undefined;
   runtimeWithInternals.projectionEngine.getWorkingProjection = () => ({
     content: "[WorkingProjection]\nsummary: deterministic working projection block",
@@ -268,17 +269,14 @@ describe("context source order integration", () => {
       message: "tool failure blocks completion",
       source: "test",
     });
-    recordRuntimeEvent(runtime, {
+    recordHostedSkillCompleted({
+      runtime,
       sessionId,
-      type: "skill_completed",
       timestamp: 100,
-      payload: {
-        skillName: "plan",
-        outputKeys: ["design_spec"],
-        outputs: {
-          design_spec: "Deterministic workflow advisory for the active task.",
-        },
-      } as Record<string, unknown>,
+      skillName: "plan",
+      outputs: {
+        design_spec: "Deterministic workflow advisory for the active task.",
+      },
     });
     runtime.authority.tools.recordResult({
       sessionId,
@@ -320,19 +318,16 @@ describe("context source order integration", () => {
       schema: "brewva.task.v1",
       goal: "Validate externally registered provider order",
     });
-    recordRuntimeEvent(runtime, {
+    recordHostedSkillCompleted({
+      runtime,
       sessionId,
-      type: "skill_completed",
       timestamp: 100,
-      payload: {
-        skillName: "review",
-        outputKeys: ["review_report", "review_findings", "merge_decision"],
-        outputs: {
-          review_report: buildCanonicalReviewReport("Review is green."),
-          review_findings: [],
-          merge_decision: "ready",
-        },
-      } as Record<string, unknown>,
+      skillName: "review",
+      outputs: {
+        review_report: buildCanonicalReviewReport("Review is green."),
+        review_findings: [],
+        merge_decision: "ready",
+      },
     });
     runtime.authority.tools.recordResult({
       sessionId,

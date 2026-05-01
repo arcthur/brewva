@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import { BrewvaRuntime, createTrustedLocalGovernancePort } from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import { AgentRegistry } from "../../../packages/brewva-gateway/src/channels/agent-registry.js";
 import { AgentRuntimeManager } from "../../../packages/brewva-gateway/src/channels/agent-runtime-manager.js";
 import { createChannelSessionQueries } from "../../../packages/brewva-gateway/src/channels/channel-session-queries.js";
@@ -33,7 +32,7 @@ describe("channel session queries", () => {
     });
 
     try {
-      recordRuntimeEvent(runtime, {
+      runtime.extensions.hosted.events.record({
         sessionId: "agent-session:archived",
         type: "channel_session_bound",
         payload: {
@@ -41,7 +40,7 @@ describe("channel session queries", () => {
           agentId: "worker",
         },
       });
-      recordRuntimeEvent(runtime, {
+      runtime.extensions.hosted.events.record({
         sessionId: "agent-session:other",
         type: "channel_session_bound",
         payload: {
@@ -86,7 +85,7 @@ describe("channel session queries", () => {
     });
 
     try {
-      recordRuntimeEvent(runtime, {
+      runtime.extensions.hosted.events.record({
         sessionId: "agent-session:archived",
         type: "channel_session_bound",
         payload: {

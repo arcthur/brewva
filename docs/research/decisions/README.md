@@ -28,6 +28,7 @@ Every accepted decision inherits these rules:
 - [iteration-facts-and-model-native-optimization-protocols](./iteration-facts-and-model-native-optimization-protocols.md)
 - [kernel-first-subtraction-and-control-plane-deferral](./kernel-first-subtraction-and-control-plane-deferral.md)
 - [repository-fitness-plane-and-runtime-boundary](./repository-fitness-plane-and-runtime-boundary.md)
+- [runtime-domain-slicing-and-controlled-extension-ports](./runtime-domain-slicing-and-controlled-extension-ports.md)
 - [skill-first-plugin-and-promotion-governance](./skill-first-plugin-and-promotion-governance.md)
 - [stateful-box-plane-and-boxlite-execution-runtime](./stateful-box-plane-and-boxlite-execution-runtime.md)
 - [workflow-artifacts-and-posture-control-plane](./workflow-artifacts-and-posture-control-plane.md)

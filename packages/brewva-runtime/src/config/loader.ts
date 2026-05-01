@@ -1,8 +1,13 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import type { BrewvaConfig } from "../contracts/index.js";
 import { DEFAULT_BREWVA_CONFIG } from "./defaults.js";
-export * from "./errors.js";
+import type { BrewvaConfig } from "./types.js";
+export {
+  BrewvaConfigLoadError,
+  type BrewvaConfigLoadErrorCode,
+  type BrewvaForensicConfigWarning,
+  type BrewvaForensicConfigWarningCode,
+} from "./errors.js";
 import type { BrewvaForensicConfigWarning } from "./errors.js";
 import { BrewvaConfigLoadError } from "./errors.js";
 import { parseJsonc } from "./jsonc.js";

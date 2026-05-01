@@ -1,12 +1,5 @@
 import {
-  EFFECT_AUTHORITY_DECIDED_EVENT_TYPE,
-  SCHEDULE_TRIGGER_APPLY_WARNING_EVENT_TYPE,
-  SESSION_TURN_TRANSITION_EVENT_TYPE,
-  TOOL_RESULT_RECORDED_EVENT_TYPE,
-  TURN_INPUT_RECORDED_EVENT_TYPE,
-  TURN_RENDER_COMMITTED_EVENT_TYPE,
   type BrewvaRuntime,
-  type BrewvaStructuredEvent,
   type SessionWireFrame,
   type ToolOutputView,
   type TurnInputRecordedPayload,
@@ -16,10 +9,19 @@ import {
   TurnLifecycleSpine,
   compareTurnLifecycleGates,
   getTurnLifecycleRecoveryPlacement,
-  recordRuntimeEvent,
   type TurnLifecycleGate,
   type TurnLifecycleRecoveryReason,
-} from "@brewva/brewva-runtime/internal";
+} from "@brewva/brewva-runtime";
+import { type BrewvaStructuredEvent } from "@brewva/brewva-runtime/events";
+import {
+  EFFECT_AUTHORITY_DECIDED_EVENT_TYPE,
+  SCHEDULE_TRIGGER_APPLY_WARNING_EVENT_TYPE,
+  readSessionTurnTransitionEventPayload,
+  SESSION_TURN_TRANSITION_EVENT_TYPE,
+  TOOL_RESULT_RECORDED_EVENT_TYPE,
+  TURN_INPUT_RECORDED_EVENT_TYPE,
+  TURN_RENDER_COMMITTED_EVENT_TYPE,
+} from "@brewva/brewva-runtime/events";
 import { buildBrewvaPromptText } from "@brewva/brewva-substrate";
 import type { SchedulePromptTrigger } from "../daemon/session-backend.js";
 import type { CollectSessionPromptOutputSession, SessionPromptInput } from "./collect-output.js";
@@ -210,7 +212,7 @@ function recordTurnInputReceipt(input: {
   trigger: TurnInputRecordedPayload["trigger"];
   promptText: string;
 }): void {
-  recordRuntimeEvent(input.runtime, {
+  input.runtime.extensions.hosted.events.record({
     sessionId: input.sessionId,
     turn: input.runtimeTurn,
     type: TURN_INPUT_RECORDED_EVENT_TYPE,
@@ -232,7 +234,7 @@ function recordTurnCommittedReceipt(input: {
   assistantText: string;
   toolOutputs: readonly ToolOutputView[];
 }): void {
-  recordRuntimeEvent(input.runtime, {
+  input.runtime.extensions.hosted.events.record({
     sessionId: input.sessionId,
     turn: input.runtimeTurn,
     type: TURN_RENDER_COMMITTED_EVENT_TYPE,
@@ -286,23 +288,19 @@ function advanceTurnSpineIfBefore(input: {
   });
 }
 
-function readTurnLifecycleRecoveryReason(payload: unknown): TurnLifecycleRecoveryReason | null {
-  if (typeof payload !== "object" || payload === null) {
+function readTurnLifecycleRecoveryReason(
+  event: Pick<BrewvaStructuredEvent, "type" | "payload">,
+): TurnLifecycleRecoveryReason | null {
+  const payload = readSessionTurnTransitionEventPayload(event);
+  if (!payload) {
     return null;
   }
-  const reason = "reason" in payload ? payload.reason : undefined;
-  if (typeof reason !== "string") {
-    return null;
-  }
-  const placement = getTurnLifecycleRecoveryPlacement(reason);
+  const placement = getTurnLifecycleRecoveryPlacement(payload.reason);
   return placement?.reason ?? null;
 }
 
-function isSkippedTransition(payload: unknown): boolean {
-  if (typeof payload !== "object" || payload === null || !("status" in payload)) {
-    return false;
-  }
-  return payload.status === "skipped";
+function isSkippedTransition(event: Pick<BrewvaStructuredEvent, "type" | "payload">): boolean {
+  return readSessionTurnTransitionEventPayload(event)?.status === "skipped";
 }
 
 function shouldApplyRecoveryTransition(input: {
@@ -347,10 +345,10 @@ function createTurnSpineEventBridge(input: {
       return;
     }
     if (event.type === SESSION_TURN_TRANSITION_EVENT_TYPE) {
-      const reason = readTurnLifecycleRecoveryReason(event.payload);
+      const reason = readTurnLifecycleRecoveryReason(event);
       if (
         reason &&
-        !isSkippedTransition(event.payload) &&
+        !isSkippedTransition(event) &&
         shouldApplyRecoveryTransition({
           eventTurn: event.turn,
           runtimeTurn: input.runtimeTurn,
@@ -407,7 +405,7 @@ function applyEnvelopeSchedulePrelude(input: {
   const appliedTrigger = applySchedulePromptTrigger(input.runtime, input.sessionId, input.trigger);
   let scheduleTriggerWarningRecorded = false;
   if (input.trigger.activeSkillName && !appliedTrigger.skillApplied) {
-    recordRuntimeEvent(input.runtime, {
+    input.runtime.extensions.hosted.events.record({
       sessionId: input.sessionId,
       type: SCHEDULE_TRIGGER_APPLY_WARNING_EVENT_TYPE,
       payload: {

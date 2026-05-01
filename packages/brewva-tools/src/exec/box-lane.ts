@@ -209,13 +209,14 @@ export async function executeBoxCommand(input: {
   const bootstrapStartedAt = Date.now();
   input.onBootstrapStarted?.(scope);
   input.onBootstrapProgress?.(scope, "acquire");
-  let box: BoxHandle | undefined;
-  try {
-    box = await plane.acquire(scope);
-  } catch (error) {
-    input.onBootstrapFailed?.(scope, error, Date.now() - bootstrapStartedAt);
-    throw error;
-  }
+  const box = await (async (): Promise<BoxHandle> => {
+    try {
+      return await plane.acquire(scope);
+    } catch (error) {
+      input.onBootstrapFailed?.(scope, error, Date.now() - bootstrapStartedAt);
+      throw error;
+    }
+  })();
   input.onBootstrapCompleted?.(box, Date.now() - bootstrapStartedAt);
   input.onAcquired?.(box);
 

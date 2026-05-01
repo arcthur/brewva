@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type { ProjectionUnit } from "../../../packages/brewva-runtime/src/projection/types.js";
-import { buildWorkingProjectionSnapshot } from "../../../packages/brewva-runtime/src/projection/working-projection.js";
+import type { ProjectionUnit } from "../../../packages/brewva-runtime/src/domain/projection/types.js";
+import { buildWorkingProjectionSnapshot } from "../../../packages/brewva-runtime/src/domain/projection/working-projection.js";
 
 function unit(input: {
   id: string;

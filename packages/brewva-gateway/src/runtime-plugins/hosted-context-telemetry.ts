@@ -10,8 +10,7 @@ import {
   CONTEXT_COMPOSED_EVENT_TYPE,
   CRITICAL_WITHOUT_COMPACT_EVENT_TYPE,
   SESSION_COMPACT_EVENT_TYPE,
-} from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
+} from "@brewva/brewva-runtime/events";
 import {
   buildContextComposedEventPayload,
   type ContextComposerResult,
@@ -83,7 +82,7 @@ export function createHostedContextTelemetry(
     type: string;
     payload: Record<string, unknown>;
   }): void => {
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId: input.sessionId,
       turn: input.turn,
       type: input.type,

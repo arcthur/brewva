@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { ParallelBudgetManager } from "@brewva/brewva-runtime/internal";
+import { createParallelBudgetManager } from "@brewva/brewva-runtime/parallel";
 
 describe("S-007 parallel budget control", () => {
   test("given configured parallel limits, when acquiring and releasing runs, then maxConcurrent and maxTotal are enforced", async () => {
-    const manager = new ParallelBudgetManager({
+    const manager = createParallelBudgetManager({
       enabled: true,
       maxConcurrent: 1,
       maxTotalPerSession: 10,
@@ -28,7 +28,7 @@ describe("S-007 parallel budget control", () => {
   });
 
   test("given custom maxTotalPerSession, when limit is reached, then max_total is returned", async () => {
-    const manager = new ParallelBudgetManager({
+    const manager = createParallelBudgetManager({
       enabled: true,
       maxConcurrent: 5,
       maxTotalPerSession: 3,
@@ -45,7 +45,7 @@ describe("S-007 parallel budget control", () => {
   });
 
   test("given maxConcurrent is saturated, when acquireAsync waits and a slot is released, then the waiter is resumed", async () => {
-    const manager = new ParallelBudgetManager({
+    const manager = createParallelBudgetManager({
       enabled: true,
       maxConcurrent: 1,
       maxTotalPerSession: 10,
@@ -61,7 +61,7 @@ describe("S-007 parallel budget control", () => {
   });
 
   test("given queued waiters exist, when the session is cleared, then acquireAsync is cancelled", async () => {
-    const manager = new ParallelBudgetManager({
+    const manager = createParallelBudgetManager({
       enabled: true,
       maxConcurrent: 1,
       maxTotalPerSession: 10,
@@ -75,7 +75,7 @@ describe("S-007 parallel budget control", () => {
   });
 
   test("given waiters time out, when no slot opens before the deadline, then acquireAsync resolves timeout", async () => {
-    const manager = new ParallelBudgetManager({
+    const manager = createParallelBudgetManager({
       enabled: true,
       maxConcurrent: 1,
       maxTotalPerSession: 10,
@@ -89,7 +89,7 @@ describe("S-007 parallel budget control", () => {
   });
 
   test("given duplicate waiters for the same runId, when capacity opens, then only one waiter acquires the slot", async () => {
-    const manager = new ParallelBudgetManager({
+    const manager = createParallelBudgetManager({
       enabled: true,
       maxConcurrent: 1,
       maxTotalPerSession: 10,

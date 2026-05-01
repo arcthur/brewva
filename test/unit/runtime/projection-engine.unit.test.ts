@@ -1,14 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync } from "node:fs";
+import { rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  TASK_EVENT_TYPE,
-  TASK_LEDGER_SCHEMA,
-  asBrewvaSessionId,
-  type BrewvaEventRecord,
-} from "@brewva/brewva-runtime";
-import { ProjectionEngine } from "../../../packages/brewva-runtime/src/projection/engine.js";
+import { TASK_LEDGER_SCHEMA, asBrewvaSessionId } from "@brewva/brewva-runtime";
+import { type BrewvaEventRecord } from "@brewva/brewva-runtime/events";
+import { TASK_EVENT_TYPE } from "@brewva/brewva-runtime/events";
+import { ProjectionEngine } from "../../../packages/brewva-runtime/src/domain/projection/engine.js";
 import { buildCanonicalReviewReport } from "../../helpers/semantic-artifacts.js";
 
 function taskSpecEvent(input: {
@@ -33,6 +31,27 @@ function taskSpecEvent(input: {
         goal: input.goal,
       },
     },
+  };
+}
+
+function skillCompletedEvent(input: {
+  id: string;
+  sessionId: string;
+  timestamp: number;
+  skillName: string;
+  outputs: Record<string, unknown>;
+}): BrewvaEventRecord {
+  return {
+    id: input.id,
+    sessionId: asBrewvaSessionId(input.sessionId),
+    type: "skill_completed",
+    timestamp: input.timestamp,
+    payload: {
+      skillName: input.skillName,
+      outputKeys: Object.keys(input.outputs).toSorted(),
+      outputs: input.outputs,
+      completedAt: input.timestamp,
+    } as BrewvaEventRecord["payload"],
   };
 }
 
@@ -159,62 +178,51 @@ describe("projection engine", () => {
 
     const sessionId = asBrewvaSessionId("projection-engine-workflow");
     const events: BrewvaEventRecord[] = [
-      {
+      skillCompletedEvent({
         id: "evt-workflow-design",
         sessionId,
-        type: "skill_completed",
         timestamp: 100,
-        payload: {
-          skillName: "plan",
-          outputKeys: [
-            "design_spec",
-            "execution_plan",
-            "execution_mode_hint",
-            "risk_register",
-            "implementation_targets",
+        skillName: "plan",
+        outputs: {
+          design_spec: "Lock the workflow artifact contract.",
+          execution_plan: [
+            {
+              step: "Derive posture",
+              intent: "Project canonical workflow state from durable events.",
+              owner: "runtime.workflow",
+              exit_criteria: "Workflow posture is derived without hidden control flow.",
+              verification_intent: "Unit coverage proves posture derivation remains advisory-only.",
+            },
+            {
+              step: "Expose advisory context",
+              intent: "Publish the workflow state through working projection surfaces.",
+              owner: "runtime.context",
+              exit_criteria: "Working projection contains stable workflow artifact statements.",
+              verification_intent:
+                "Projection rebuild tests preserve workflow artifact statements after replay.",
+            },
           ],
-          outputs: {
-            design_spec: "Lock the workflow artifact contract.",
-            execution_plan: [
-              {
-                step: "Derive posture",
-                intent: "Project canonical workflow state from durable events.",
-                owner: "runtime.workflow",
-                exit_criteria: "Workflow posture is derived without hidden control flow.",
-                verification_intent:
-                  "Unit coverage proves posture derivation remains advisory-only.",
-              },
-              {
-                step: "Expose advisory context",
-                intent: "Publish the workflow state through working projection surfaces.",
-                owner: "runtime.context",
-                exit_criteria: "Working projection contains stable workflow artifact statements.",
-                verification_intent:
-                  "Projection rebuild tests preserve workflow artifact statements after replay.",
-              },
-            ],
-            execution_mode_hint: "coordinated_rollout",
-            risk_register: [
-              {
-                risk: "Workflow projection could drift into hidden choreography.",
-                category: "public_api",
-                severity: "high",
-                mitigation: "Keep workflow status advisory-only and inspectable.",
-                required_evidence: ["workflow_projection_tests"],
-                owner_lane: "review-boundaries",
-              },
-            ],
-            implementation_targets: [
-              {
-                target: "packages/brewva-runtime/src/workflow/artifact-derivation.ts",
-                kind: "module",
-                owner_boundary: "runtime.workflow",
-                reason: "Workflow artifact derivation is implemented here.",
-              },
-            ],
-          },
+          execution_mode_hint: "coordinated_rollout",
+          risk_register: [
+            {
+              risk: "Workflow projection could drift into hidden choreography.",
+              category: "public_api",
+              severity: "high",
+              mitigation: "Keep workflow status advisory-only and inspectable.",
+              required_evidence: ["workflow_projection_tests"],
+              owner_lane: "review-boundaries",
+            },
+          ],
+          implementation_targets: [
+            {
+              target: "packages/brewva-runtime/src/domain/workflow/artifact-derivation.ts",
+              kind: "module",
+              owner_boundary: "runtime.workflow",
+              reason: "Workflow artifact derivation is implemented here.",
+            },
+          ],
         },
-      },
+      }),
       {
         id: "evt-workflow-write",
         sessionId,
@@ -224,21 +232,17 @@ describe("projection engine", () => {
           toolName: "edit",
         },
       },
-      {
+      skillCompletedEvent({
         id: "evt-workflow-review",
         sessionId,
-        type: "skill_completed",
         timestamp: 120,
-        payload: {
-          skillName: "review",
-          outputKeys: ["review_report", "review_findings", "merge_decision"],
-          outputs: {
-            review_report: buildCanonicalReviewReport("Workflow chain is ready."),
-            review_findings: [],
-            merge_decision: "ready",
-          },
+        skillName: "review",
+        outputs: {
+          review_report: buildCanonicalReviewReport("Workflow chain is ready."),
+          review_findings: [],
+          merge_decision: "ready",
         },
-      },
+      }),
     ];
 
     const rebuilt = engine.rebuildSessionFromTape({

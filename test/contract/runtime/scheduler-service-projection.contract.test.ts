@@ -3,13 +3,13 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   BrewvaRuntime,
-  SCHEDULE_EVENT_TYPE,
   asBrewvaIntentId,
   buildScheduleIntentCancelledEvent,
   buildScheduleIntentCreatedEvent,
   parseScheduleIntentEvent,
 } from "@brewva/brewva-runtime";
-import { SchedulerService, recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
+import { SCHEDULE_EVENT_TYPE } from "@brewva/brewva-runtime/events";
+import { createSchedulerService } from "@brewva/brewva-runtime/recovery";
 import {
   computeExpectedRecurringJitteredNextRunAt,
   createSchedulerConfig,
@@ -63,7 +63,7 @@ describe("scheduler service projection contract", () => {
     );
     writeFileSync(eventsFilePath, `${JSON.stringify(createRow)}\n${JSON.stringify(cancelRow)}\n`);
 
-    const scheduler = new SchedulerService({
+    const scheduler = createSchedulerService({
       runtime: schedulerRuntimePort(runtime),
       enableExecution: false,
     });
@@ -84,7 +84,7 @@ describe("scheduler service projection contract", () => {
         config.schedule.minIntervalMs = 60_000;
       }),
     });
-    const scheduler = new SchedulerService({
+    const scheduler = createSchedulerService({
       runtime: schedulerRuntimePort(runtime),
       enableExecution: false,
     });
@@ -148,7 +148,7 @@ describe("scheduler service projection contract", () => {
     });
 
     const nowMs = Date.UTC(2026, 0, 1, 0, 30, 0, 0);
-    const scheduler = new SchedulerService({
+    const scheduler = createSchedulerService({
       runtime: schedulerRuntimePort(runtime),
       now: () => nowMs,
       enableExecution: false,
@@ -203,7 +203,7 @@ describe("scheduler service projection contract", () => {
     const sessionId = "session-replay-authoritative-next-run";
     const forcedNextRunAt = Date.UTC(2026, 0, 1, 12, 34, 56, 789);
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: SCHEDULE_EVENT_TYPE,
       payload: buildScheduleIntentCreatedEvent({
@@ -219,7 +219,7 @@ describe("scheduler service projection contract", () => {
       skipTapeCheckpoint: true,
     });
 
-    const scheduler = new SchedulerService({
+    const scheduler = createSchedulerService({
       runtime: schedulerRuntimePort(runtime),
       enableExecution: false,
     });
@@ -239,7 +239,7 @@ describe("scheduler service projection contract", () => {
     const sessionId = "session-replay-missing-next-run";
     const runAt = Date.UTC(2026, 0, 1, 0, 5, 0, 0);
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: SCHEDULE_EVENT_TYPE,
       payload: {
@@ -255,7 +255,7 @@ describe("scheduler service projection contract", () => {
       skipTapeCheckpoint: true,
     });
 
-    const scheduler = new SchedulerService({
+    const scheduler = createSchedulerService({
       runtime: schedulerRuntimePort(runtime),
       enableExecution: false,
     });
@@ -272,7 +272,7 @@ describe("scheduler service projection contract", () => {
   test("rejects updates when the target intent is not active", async () => {
     const workspace = createWorkspace("update-not-active");
     const runtime = new BrewvaRuntime({ cwd: workspace });
-    const scheduler = new SchedulerService({
+    const scheduler = createSchedulerService({
       runtime: schedulerRuntimePort(runtime),
       enableExecution: false,
     });
@@ -306,14 +306,14 @@ describe("scheduler service projection contract", () => {
 
     expect(updated.ok).toBe(false);
     if (!updated.ok) {
-      expect(updated.error).toBe("intent_not_active");
+      expect(updated.reason).toBe("intent_not_active");
     }
   });
 
   test("rejects timeZone-only updates for runAt intents", async () => {
     const workspace = createWorkspace("update-timezone-runat-guard");
     const runtime = new BrewvaRuntime({ cwd: workspace });
-    const scheduler = new SchedulerService({
+    const scheduler = createSchedulerService({
       runtime: schedulerRuntimePort(runtime),
       enableExecution: false,
     });
@@ -341,7 +341,7 @@ describe("scheduler service projection contract", () => {
 
     expect(updated.ok).toBe(false);
     if (!updated.ok) {
-      expect(updated.error).toBe("timeZone_requires_cron");
+      expect(updated.reason).toBe("timeZone_requires_cron");
     }
   });
 });

@@ -2,12 +2,6 @@ import { createHash } from "node:crypto";
 import type { TaskSpec, TruthState, WorkflowArtifact } from "@brewva/brewva-runtime";
 import {
   CONTEXT_SOURCES,
-  ITERATION_GUARD_RECORDED_EVENT_TYPE,
-  ITERATION_METRIC_OBSERVED_EVENT_TYPE,
-  SKILL_COMPLETED_EVENT_TYPE,
-  TASK_EVENT_TYPE,
-  TRUTH_EVENT_TYPE,
-  VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
   coerceGuardResultPayload,
   coerceTaskLedgerPayload,
   coerceTruthLedgerPayload,
@@ -15,10 +9,18 @@ import {
   deriveWorkflowArtifacts,
   defineContextSourceProvider,
   foldTruthLedgerEvents,
-  type BrewvaEventRecord,
   type BrewvaInspectionPort,
   type ContextSourceProvider,
 } from "@brewva/brewva-runtime";
+import {
+  ITERATION_GUARD_RECORDED_EVENT_TYPE,
+  ITERATION_METRIC_OBSERVED_EVENT_TYPE,
+  SKILL_COMPLETED_EVENT_TYPE,
+  TASK_EVENT_TYPE,
+  TRUTH_EVENT_TYPE,
+  VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
+} from "@brewva/brewva-runtime/events";
+import { type BrewvaEventRecord } from "@brewva/brewva-runtime/events";
 import { tokenizeSearchText } from "@brewva/brewva-search";
 import { FileDeliberationMemoryStore } from "./file-store.js";
 import {
@@ -58,7 +60,7 @@ const DELIBERATION_MEMORY_MIN_RETENTION_SCORE: Record<DeliberationMemoryArtifact
     agent_capability_profile: 0.4,
     loop_memory: 0.3,
   };
-const DELIBERATION_MEMORY_RELEVANT_EVENT_TYPES = new Set([
+const DELIBERATION_MEMORY_RELEVANT_EVENT_TYPES = new Set<string>([
   SKILL_COMPLETED_EVENT_TYPE,
   ITERATION_METRIC_OBSERVED_EVENT_TYPE,
   ITERATION_GUARD_RECORDED_EVENT_TYPE,

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import { recordToolRuntimeEvent, resolveToolRuntimeAuthorityTools } from "../runtime-internal.js";
+import { recordToolRuntimeEvent, resolveToolRuntimeAuthorityTools } from "../runtime-extensions.js";
 import type { BrewvaToolRuntime } from "../types.js";
 
 const DEFAULT_PARALLEL_READ_BATCH_SIZE = 16;

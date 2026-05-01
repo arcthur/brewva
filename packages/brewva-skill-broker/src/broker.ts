@@ -10,18 +10,20 @@ import {
 import {
   BrewvaRuntime,
   CONTEXT_SOURCES,
+  defineContextSourceProvider,
+  type BrewvaInspectionPort,
+  type ContextSourceProvider,
+  type SkillDocument,
+} from "@brewva/brewva-runtime";
+import { coerceReviewReportArtifact } from "@brewva/brewva-runtime";
+import { type BrewvaEventRecord } from "@brewva/brewva-runtime/events";
+import {
   SKILL_COMPLETED_EVENT_TYPE,
   SKILL_PROMOTION_DRAFT_DERIVED_EVENT_TYPE,
   SKILL_PROMOTION_MATERIALIZED_EVENT_TYPE,
   SKILL_PROMOTION_PROMOTED_EVENT_TYPE,
   SKILL_PROMOTION_REVIEWED_EVENT_TYPE,
-  defineContextSourceProvider,
-  type BrewvaEventRecord,
-  type BrewvaInspectionPort,
-  type ContextSourceProvider,
-  type SkillDocument,
-} from "@brewva/brewva-runtime";
-import { coerceReviewReportArtifact, recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
+} from "@brewva/brewva-runtime/events";
 import { tokenizeSearchText } from "@brewva/brewva-search";
 import { FileSkillPromotionStore } from "./file-store.js";
 import { isRecord, readString } from "./parse.js";
@@ -57,6 +59,15 @@ const PROMOTION_TRIGGER_TOKENS = new Set([
   "workflow",
 ]);
 
+interface SkillPromotionEventInput {
+  sessionId: string;
+  type: string;
+  turn?: number;
+  payload?: object;
+  timestamp?: number;
+  skipTapeCheckpoint?: boolean;
+}
+
 function compactText(value: string, maxChars = 280): string {
   const normalized = value.replace(/\s+/g, " ").trim();
   if (normalized.length <= maxChars) return normalized;
@@ -90,20 +101,18 @@ function buildEvidence(event: BrewvaEventRecord): SkillPromotionEvidenceRef {
 
 function recordSkillPromotionEvent(
   runtime: SkillPromotionRuntime,
-  input: {
-    sessionId: string;
-    type: string;
-    turn?: number;
-    payload?: object;
-    timestamp?: number;
-    skipTapeCheckpoint?: boolean;
-  },
+  input: SkillPromotionEventInput,
 ): void {
   if (runtime instanceof BrewvaRuntime) {
-    recordRuntimeEvent(runtime, input);
+    runtime.extensions.hosted.events.record(input);
     return;
   }
-  runtime.internal?.recordEvent?.(input);
+  const toolRecordEvent = runtime.extensions?.tools?.recordEvent;
+  if (toolRecordEvent) {
+    toolRecordEvent(input);
+    return;
+  }
+  runtime.extensions?.hosted?.events?.record?.(input);
 }
 
 function normalizeDecisionStatus(
@@ -1069,14 +1078,14 @@ export interface SkillPromotionRuntime {
     readonly events: Pick<BrewvaInspectionPort["events"], "list" | "listSessionIds" | "subscribe">;
     readonly skills: Pick<BrewvaInspectionPort["skills"], "list">;
   };
-  readonly internal?: {
-    recordEvent?: (input: {
-      sessionId: string;
-      type: string;
-      turn?: number;
-      payload?: object;
-      timestamp?: number;
-      skipTapeCheckpoint?: boolean;
-    }) => unknown;
+  readonly extensions?: {
+    readonly tools?: {
+      recordEvent?: (input: SkillPromotionEventInput) => unknown;
+    };
+    readonly hosted?: {
+      readonly events?: {
+        record?: (input: SkillPromotionEventInput) => unknown;
+      };
+    };
   };
 }

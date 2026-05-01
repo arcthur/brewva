@@ -1,14 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import {
-  OPERATOR_QUESTION_ANSWERED_EVENT_TYPE,
-  SKILL_COMPLETED_EVENT_TYPE,
-} from "@brewva/brewva-runtime";
 import type { TurnEnvelope } from "@brewva/brewva-runtime/channels";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
+import { OPERATOR_QUESTION_ANSWERED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
 import { createChannelControlRouter } from "../../../packages/brewva-gateway/src/channels/channel-control-router.js";
 import { createChannelUpdateLockManager } from "../../../packages/brewva-gateway/src/channels/channel-update-lock.js";
 import type { ChannelCommandMatch } from "../../../packages/brewva-gateway/src/channels/command-router.js";
 import { collectOpenSessionQuestions } from "../../../packages/brewva-gateway/src/operator-questions.js";
+import { recordHostedSkillCompleted } from "../../helpers/events.js";
 import { createRuntimeFixture } from "../../helpers/runtime.js";
 
 function createUserTurn(text: string, meta?: TurnEnvelope["meta"]): TurnEnvelope {
@@ -613,14 +610,12 @@ describe("channel control router ownership", () => {
     const runtime = createRuntimeFixture();
     const sessionId = "agent-session:worker";
 
-    recordRuntimeEvent(runtime, {
+    recordHostedSkillCompleted({
+      runtime,
       sessionId,
-      type: SKILL_COMPLETED_EVENT_TYPE,
-      payload: {
-        skillName: "discovery",
-        outputs: {
-          open_questions: ["Which deployment target should the gateway use?"],
-        },
+      skillName: "discovery",
+      outputs: {
+        open_questions: ["Which deployment target should the gateway use?"],
       },
     });
 

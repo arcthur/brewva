@@ -3,8 +3,8 @@ import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { registerEventStream, registerLedgerWriter } from "@brewva/brewva-gateway/runtime-plugins";
-import { BrewvaRuntime, VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE } from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
+import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
 import {
   createObsQueryTool,
   createObsSloAssertTool,
@@ -50,7 +50,7 @@ describe("Runtime plugin integration: observability ledger", () => {
       },
     };
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       turn: 1,
       type: "turn_input_recorded",
@@ -141,7 +141,7 @@ describe("Runtime plugin integration: observability ledger", () => {
       },
     };
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       turn: 1,
       type: "turn_input_recorded",
@@ -151,7 +151,7 @@ describe("Runtime plugin integration: observability ledger", () => {
         promptText: "test prompt",
       },
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       turn: 1,
       type: "session_turn_transition",
@@ -242,7 +242,7 @@ describe("Runtime plugin integration: observability ledger", () => {
       },
     );
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       turn: 1,
       type: VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
@@ -622,7 +622,7 @@ describe("Runtime plugin integration: observability ledger", () => {
       },
       ctx,
     );
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "session_turn_transition",
       payload: {
@@ -679,7 +679,7 @@ describe("Runtime plugin integration: observability ledger", () => {
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionId = "ext-obs-query-1";
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "startup_sample",
       payload: {
@@ -687,7 +687,7 @@ describe("Runtime plugin integration: observability ledger", () => {
         startupMs: 780,
       },
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "startup_sample",
       payload: {
@@ -782,7 +782,7 @@ describe("Runtime plugin integration: observability ledger", () => {
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionId = "ext-obs-assert-1";
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "startup_sample",
       payload: {
@@ -790,7 +790,7 @@ describe("Runtime plugin integration: observability ledger", () => {
         startupMs: 910,
       },
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "startup_sample",
       payload: {

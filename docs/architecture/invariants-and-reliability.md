@@ -66,12 +66,12 @@ recovery, and bounded execution.
 
 ## Implementation Anchors
 
-- `packages/brewva-runtime/src/runtime.ts`
+- `packages/brewva-runtime/src/runtime/runtime.ts`
 - `packages/brewva-runtime/src/events/store.ts`
-- `packages/brewva-runtime/src/tape/replay-engine.ts`
-- `packages/brewva-runtime/src/services/tool-gate.ts`
-- `packages/brewva-runtime/src/services/reversible-mutation.ts`
-- `packages/brewva-runtime/src/authority/effect-authority-manifest.ts`
+- `packages/brewva-runtime/src/domain/tape/replay-engine.ts`
+- `packages/brewva-runtime/src/domain/tools/tool-gate.ts`
+- `packages/brewva-runtime/src/domain/governance/reversible-mutation.ts`
+- `packages/brewva-runtime/src/domain/governance/effect-authority-manifest.ts`
 - `packages/brewva-gateway/src/session/turn-envelope.ts`
 
 ## Related Docs

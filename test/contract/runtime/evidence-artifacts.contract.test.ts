@@ -131,7 +131,7 @@ describe("Evidence artifact extraction", () => {
     const failureClass = classifyToolFailure({
       toolName: "read",
       args: {
-        path: "packages/brewva-runtime/src/runtime.ts",
+        path: "packages/brewva-runtime/src/runtime/runtime.ts",
       },
       outputText:
         "Repair posture only allows: skill_complete, workflow_status, task_view_state, ledger_query, tape_info, reasoning_checkpoint, reasoning_revert, session_compact.",

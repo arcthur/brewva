@@ -14,7 +14,7 @@ Implementation anchors:
 - `packages/brewva-gateway/src/host/managed-agent-session.ts`
 - `packages/brewva-gateway/src/host/hosted-session-bootstrap.ts`
 - `packages/brewva-gateway/src/runtime-plugins/provider-request-reduction.ts`
-- `packages/brewva-runtime/src/contracts/context.ts`
+- `packages/brewva-runtime/src/domain/context/types.ts`
 
 ## Role
 

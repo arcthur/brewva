@@ -9,8 +9,8 @@ import {
   type BrewvaConfig,
   type ContextSourceProvider,
 } from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import { setStaticContextInjectionBudget } from "../../fixtures/config.js";
+import { buildReasoningRevertRecordedPayload } from "../../helpers/events.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 function createConfig(): BrewvaConfig {
@@ -150,7 +150,7 @@ describe("recovery context baseline integration", () => {
       toTokens: 300,
       origin: "extension_api",
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "session_turn_transition",
       payload: {
@@ -283,7 +283,7 @@ describe("recovery context baseline integration", () => {
       schema: "brewva.task.v1",
       goal: "Resume after compaction retry",
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "session_turn_transition",
       payload: {
@@ -327,20 +327,30 @@ describe("recovery context baseline integration", () => {
       schema: "brewva.task.v1",
       goal: "Resume safely without replaying an already-consumed effect commitment",
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "tool_call_blocked",
       payload: {
+        schema: "brewva.tool_call_blocked.v1",
         toolName: "exec",
         reason: "effect_commitment_request_in_flight:req-1",
+        decision: null,
+        proposalId: null,
+        requestId: null,
+        manifestBasis: null,
       } as Record<string, unknown>,
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "tool_call_blocked",
       payload: {
+        schema: "brewva.tool_call_blocked.v1",
         toolName: "exec",
         reason: "effect_commitment_operator_approval_consumed:req-1",
+        decision: null,
+        proposalId: null,
+        requestId: null,
+        manifestBasis: null,
       } as Record<string, unknown>,
     });
 
@@ -352,7 +362,7 @@ describe("recovery context baseline integration", () => {
     );
     expect(runtime.inspect.recovery.getWorkingSet(sessionId)).toBeUndefined();
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "session_turn_transition",
       payload: {
@@ -391,7 +401,7 @@ describe("recovery context baseline integration", () => {
     });
     const sessionId = "recovery-context-persisted-diagnostic-superseded";
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "unclean_shutdown_reconciled",
       payload: {
@@ -417,7 +427,7 @@ describe("recovery context baseline integration", () => {
       }),
     );
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "session_turn_transition",
       payload: {
@@ -450,17 +460,17 @@ describe("recovery context baseline integration", () => {
     });
     const sessionId = "recovery-context-exact-history";
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       turn: 1,
       type: "turn_input_recorded",
       payload: {
         turnId: "turn-1",
-        trigger: "user_submit",
+        trigger: "user",
         promptText: "Resume from the exact durable transcript.",
       } as Record<string, unknown>,
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       turn: 1,
       type: "turn_render_committed",
@@ -498,17 +508,17 @@ describe("recovery context baseline integration", () => {
     });
     const sessionId = "recovery-context-digest-mismatch";
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       turn: 1,
       type: "turn_input_recorded",
       payload: {
         turnId: "turn-1",
-        trigger: "user_submit",
+        trigger: "user",
         promptText: "Recover from the corrupted compaction receipt.",
       } as Record<string, unknown>,
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       turn: 1,
       type: "turn_render_committed",
@@ -521,7 +531,7 @@ describe("recovery context baseline integration", () => {
       } as Record<string, unknown>,
     });
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "session_compact",
       payload: {
@@ -560,27 +570,10 @@ describe("recovery context baseline integration", () => {
     });
     const sessionId = "recovery-context-diagnostic-only";
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "reasoning_revert",
-      payload: {
-        schema: "brewva.reasoning.revert.v1",
-        revertId: "revert-1",
-        revertSequence: 1,
-        toCheckpointId: "checkpoint-1",
-        fromCheckpointId: null,
-        fromBranchId: "branch-0",
-        newBranchId: "branch-1",
-        newBranchSequence: 1,
-        trigger: "operator_request",
-        continuityPacket: {
-          schema: "brewva.reasoning.continuity.v1",
-          text: "resume from diagnostic state",
-        },
-        linkedRollbackReceiptIds: [],
-        targetLeafEntryId: "leaf-1",
-        createdAt: new Date(0).toISOString(),
-      } as Record<string, unknown>,
+      payload: buildReasoningRevertRecordedPayload(),
     });
 
     expect(runtime.inspect.context.getHistoryViewBaseline(sessionId)).toBeUndefined();
@@ -602,17 +595,17 @@ describe("recovery context baseline integration", () => {
     });
     const sessionId = "recovery-context-exact-history-over-budget";
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       turn: 1,
       type: "turn_input_recorded",
       payload: {
         turnId: "turn-1",
-        trigger: "user_submit",
+        trigger: "user",
         promptText: "x".repeat(2_000),
       } as Record<string, unknown>,
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       turn: 1,
       type: "turn_render_committed",
@@ -647,17 +640,17 @@ describe("recovery context baseline integration", () => {
       schema: "brewva.task.v1",
       goal: "Resume only when the baseline remains admissible",
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       turn: 1,
       type: "turn_input_recorded",
       payload: {
         turnId: "turn-1",
-        trigger: "user_submit",
+        trigger: "user",
         promptText: "x".repeat(2_000),
       } as Record<string, unknown>,
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       turn: 1,
       type: "turn_render_committed",
@@ -669,7 +662,7 @@ describe("recovery context baseline integration", () => {
         toolOutputs: [],
       } as Record<string, unknown>,
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       turn: 1,
       type: "session_turn_transition",

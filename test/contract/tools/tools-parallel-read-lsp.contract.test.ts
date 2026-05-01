@@ -152,9 +152,11 @@ describe("tool parallel read lsp integration", () => {
           },
         },
       },
-      internal: {
-        recordEvent() {
-          return undefined;
+      extensions: {
+        tools: {
+          recordEvent() {
+            return undefined;
+          },
         },
       },
     } as unknown as BrewvaBundledToolRuntime;

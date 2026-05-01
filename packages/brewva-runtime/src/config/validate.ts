@@ -21,15 +21,15 @@ function formatError(error: ErrorObject): string {
 
 function getValidator():
   | { ok: true; validate: ValidateFunction; schemaPath: string }
-  | { ok: false; error: Error } {
+  | { ok: false; cause: Error } {
   if (cachedValidator)
     return { ok: true, validate: cachedValidator.validate, schemaPath: cachedValidator.schemaPath };
-  if (cachedError) return { ok: false, error: cachedError };
+  if (cachedError) return { ok: false, cause: cachedError };
 
   const schemaLoad = loadBrewvaConfigSchema();
   if (!schemaLoad.ok) {
-    cachedError = schemaLoad.error;
-    return { ok: false, error: cachedError };
+    cachedError = schemaLoad.cause;
+    return { ok: false, cause: cachedError };
   }
 
   try {
@@ -45,7 +45,7 @@ function getValidator():
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     cachedError = new Error(`Failed to compile config schema validator: ${message}`);
-    return { ok: false, error: cachedError };
+    return { ok: false, cause: cachedError };
   }
 }
 
@@ -63,13 +63,13 @@ export type BrewvaConfigFileValidationResult =
   | {
       ok: false;
       errors: [];
-      error: string;
+      reason: string;
     };
 
 export function validateBrewvaConfigFile(value: unknown): BrewvaConfigFileValidationResult {
   const validator = getValidator();
   if (!validator.ok) {
-    return { ok: false, errors: [], error: validator.error.message };
+    return { ok: false, errors: [], reason: validator.cause.message };
   }
 
   const ok = validator.validate(value);

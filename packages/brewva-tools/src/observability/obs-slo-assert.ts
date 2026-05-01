@@ -1,10 +1,10 @@
 import {
   OBSERVABILITY_ASSERTION_RECORDED_EVENT_TYPE,
   OBSERVABILITY_QUERY_EXECUTED_EVENT_TYPE,
-} from "@brewva/brewva-runtime";
+} from "@brewva/brewva-runtime/events";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate";
 import { Type } from "@sinclair/typebox";
-import { recordToolRuntimeEvent } from "../runtime-internal.js";
+import { recordToolRuntimeEvent } from "../runtime-extensions.js";
 import type { BrewvaBundledToolOptions } from "../types.js";
 import { buildStringEnumSchema } from "../utils/input-alias.js";
 import { inconclusiveTextResult, textResult } from "../utils/result.js";

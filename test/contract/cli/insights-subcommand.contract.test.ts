@@ -3,7 +3,6 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { runInsightsCli } from "@brewva/brewva-cli";
 import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 async function runInsights(
@@ -50,7 +49,7 @@ function recordWriteSession(
     content: string;
   },
 ): void {
-  recordRuntimeEvent(runtime, {
+  runtime.extensions.hosted.events.record({
     sessionId: input.sessionId,
     type: "session_bootstrap",
     payload: {

@@ -38,8 +38,8 @@ This note does not reopen:
 ## Source Anchors
 
 - Context transform hook: `packages/brewva-gateway/src/runtime-plugins/context-transform.ts`
-- Runtime context budget service: `packages/brewva-runtime/src/context/budget.ts`
-- Runtime context API wiring: `packages/brewva-runtime/src/runtime.ts`
+- Runtime context budget service: `packages/brewva-runtime/src/domain/context/budget.ts`
+- Runtime context API wiring: `packages/brewva-runtime/src/runtime/runtime.ts`
 
 ## Validation Signals
 

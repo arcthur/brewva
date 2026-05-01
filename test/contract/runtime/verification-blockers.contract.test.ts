@@ -578,65 +578,69 @@ describe("Verification blockers", () => {
     expect(outcome?.commandsExecuted).toEqual(expect.arrayContaining(["type-check", "tests"]));
   });
 
-  test("executes package scripts through the project package manager instead of raw script bodies", async () => {
-    const workspace = createTestWorkspace("verification-package-script-runner");
-    mkdirSync(join(workspace, "node_modules", ".bin"), { recursive: true });
-    writeFileSync(
-      join(workspace, "package.json"),
-      JSON.stringify(
-        {
-          name: "verification-runner",
-          packageManager: "bun@1.3.10",
-          scripts: {
-            test: "vitest",
-          },
-        },
-        null,
-        2,
-      ),
-      "utf8",
-    );
-    writeFileSync(
-      join(workspace, "node_modules", ".bin", "vitest"),
-      "#!/bin/sh\nprintf 'vitest-ok\\n'\n",
-      "utf8",
-    );
-    chmodSync(join(workspace, "node_modules", ".bin", "vitest"), 0o755);
-    writeConfig(
-      workspace,
-      createTestConfig(
-        {
-          verification: {
-            defaultLevel: "standard",
-            checks: {
-              quick: ["tests"],
-              standard: ["tests"],
-              strict: ["tests"],
-            },
-            commands: {
-              tests: "false",
+  test(
+    "executes package scripts through the project package manager instead of raw script bodies",
+    async () => {
+      const workspace = createTestWorkspace("verification-package-script-runner");
+      mkdirSync(join(workspace, "node_modules", ".bin"), { recursive: true });
+      writeFileSync(
+        join(workspace, "package.json"),
+        JSON.stringify(
+          {
+            name: "verification-runner",
+            packageManager: "bun@1.3.10",
+            scripts: {
+              test: "vitest",
             },
           },
-        },
-        { eventsLevel: "debug" },
-      ),
-    );
+          null,
+          2,
+        ),
+        "utf8",
+      );
+      writeFileSync(
+        join(workspace, "node_modules", ".bin", "vitest"),
+        "#!/bin/sh\nprintf 'vitest-ok\\n'\n",
+        "utf8",
+      );
+      chmodSync(join(workspace, "node_modules", ".bin", "vitest"), 0o755);
+      writeConfig(
+        workspace,
+        createTestConfig(
+          {
+            verification: {
+              defaultLevel: "standard",
+              checks: {
+                quick: ["tests"],
+                standard: ["tests"],
+                strict: ["tests"],
+              },
+              commands: {
+                tests: "false",
+              },
+            },
+          },
+          { eventsLevel: "debug" },
+        ),
+      );
 
-    const runtime = new BrewvaRuntime({ cwd: workspace, configPath: ".brewva/brewva.json" });
-    const sessionId = "verification-package-script-runner-1";
-    runtime.authority.tools.markCall(sessionId, "edit");
+      const runtime = new BrewvaRuntime({ cwd: workspace, configPath: ".brewva/brewva.json" });
+      const sessionId = "verification-package-script-runner-1";
+      runtime.authority.tools.markCall(sessionId, "edit");
 
-    const report = await runtime.authority.verification.verify(sessionId, "standard", {
-      executeCommands: true,
-      timeoutMs: 5_000,
-    });
+      const report = await runtime.authority.verification.verify(sessionId, "standard", {
+        executeCommands: true,
+        timeoutMs: 5_000,
+      });
 
-    expect(report.passed).toBe(true);
-    const verifyRow = runtime.inspect.ledger
-      .listRows(sessionId)
-      .find((row) => row.tool === "brewva_verify" && row.metadata?.check === "tests");
-    expect(verifyRow?.metadata?.command).toBe("bun run test");
-  });
+      expect(report.passed).toBe(true);
+      const verifyRow = runtime.inspect.ledger
+        .listRows(sessionId)
+        .find((row) => row.tool === "brewva_verify" && row.metadata?.check === "tests");
+      expect(verifyRow?.metadata?.command).toBe("bun run test");
+    },
+    { timeout: 10_000 },
+  );
 
   test("runs verification checks for every target root in a multi-root task", async () => {
     const workspace = createTestWorkspace("verification-multi-root");

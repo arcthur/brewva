@@ -5,11 +5,12 @@ import { join } from "node:path";
 import {
   DEFAULT_BREWVA_CONFIG,
   BrewvaRuntime,
-  TAPE_CHECKPOINT_EVENT_TYPE,
   buildTapeCheckpointPayload,
   resolveSkillDefaultLease,
 } from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
+import { TAPE_CHECKPOINT_EVENT_TYPE } from "@brewva/brewva-runtime/events";
+import { recordHostedSkillCompleted } from "../../helpers/events.js";
+import { getRuntimeInternals } from "../../helpers/runtime-internals.js";
 import { buildCanonicalReviewReport } from "../../helpers/semantic-artifacts.js";
 
 describe("tape checkpoint automation", () => {
@@ -20,7 +21,7 @@ describe("tape checkpoint automation", () => {
     const sessionId = "tape-counter-1";
     const runtime = new BrewvaRuntime({ cwd: workspace, config });
 
-    const runtimePrivate = runtime as unknown as {
+    const runtimePrivate = getRuntimeInternals(runtime) as {
       eventStore: {
         list: (sessionId: string, query?: Record<string, unknown>) => unknown[];
       };
@@ -33,7 +34,7 @@ describe("tape checkpoint automation", () => {
     };
 
     for (let index = 0; index < 24; index += 1) {
-      recordRuntimeEvent(runtime, {
+      runtime.extensions.hosted.events.record({
         sessionId,
         type: "tool_call",
         payload: {
@@ -270,62 +271,53 @@ requires: []
       schema: "brewva.task.v1",
       goal: "Promote workflow artifacts and posture",
     });
-    recordRuntimeEvent(runtime, {
+    recordHostedSkillCompleted({
+      runtime,
       sessionId,
-      type: "skill_completed",
       timestamp: 100,
-      payload: {
-        skillName: "plan",
-        outputKeys: [
-          "design_spec",
-          "execution_plan",
-          "execution_mode_hint",
-          "risk_register",
-          "implementation_targets",
+      skillName: "plan",
+      outputs: {
+        design_spec: "Define the workflow artifact contract.",
+        execution_plan: [
+          {
+            step: "Derive posture",
+            intent: "Rebuild workflow posture from durable events after restart.",
+            owner: "runtime.workflow",
+            exit_criteria: "Workflow posture matches the pre-restart advisory state.",
+            verification_intent:
+              "Restart contract tests compare workflow posture before and after replay.",
+          },
+          {
+            step: "Publish advisory context",
+            intent: "Expose the derived posture through context injection surfaces.",
+            owner: "runtime.context",
+            exit_criteria: "Working projection includes workflow artifacts after restart.",
+            verification_intent:
+              "Context injection tests confirm workflow advisory context survives restart.",
+          },
         ],
-        outputs: {
-          design_spec: "Define the workflow artifact contract.",
-          execution_plan: [
-            {
-              step: "Derive posture",
-              intent: "Rebuild workflow posture from durable events after restart.",
-              owner: "runtime.workflow",
-              exit_criteria: "Workflow posture matches the pre-restart advisory state.",
-              verification_intent:
-                "Restart contract tests compare workflow posture before and after replay.",
-            },
-            {
-              step: "Publish advisory context",
-              intent: "Expose the derived posture through context injection surfaces.",
-              owner: "runtime.context",
-              exit_criteria: "Working projection includes workflow artifacts after restart.",
-              verification_intent:
-                "Context injection tests confirm workflow advisory context survives restart.",
-            },
-          ],
-          execution_mode_hint: "coordinated_rollout",
-          risk_register: [
-            {
-              risk: "Workflow posture may not survive tape replay with the new design contract.",
-              category: "wal_replay",
-              severity: "high",
-              mitigation: "Persist canonical planning artifacts and rebuild them from tape.",
-              required_evidence: ["workflow_rehydrate_restart_test"],
-              owner_lane: "review-concurrency",
-            },
-          ],
-          implementation_targets: [
-            {
-              target: "packages/brewva-runtime/src/workflow/status-derivation.ts",
-              kind: "module",
-              owner_boundary: "runtime.workflow",
-              reason: "Workflow posture is rebuilt here during restart.",
-            },
-          ],
-        },
+        execution_mode_hint: "coordinated_rollout",
+        risk_register: [
+          {
+            risk: "Workflow posture may not survive tape replay with the new design contract.",
+            category: "wal_replay",
+            severity: "high",
+            mitigation: "Persist canonical planning artifacts and rebuild them from tape.",
+            required_evidence: ["workflow_rehydrate_restart_test"],
+            owner_lane: "review-concurrency",
+          },
+        ],
+        implementation_targets: [
+          {
+            target: "packages/brewva-runtime/src/domain/workflow/status-derivation.ts",
+            kind: "module",
+            owner_boundary: "runtime.workflow",
+            reason: "Workflow posture is rebuilt here during restart.",
+          },
+        ],
       },
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "verification_write_marked",
       timestamp: 110,
@@ -333,21 +325,18 @@ requires: []
         toolName: "edit",
       },
     });
-    recordRuntimeEvent(runtime, {
+    recordHostedSkillCompleted({
+      runtime,
       sessionId,
-      type: "skill_completed",
       timestamp: 120,
-      payload: {
-        skillName: "review",
-        outputKeys: ["review_report", "review_findings", "merge_decision"],
-        outputs: {
-          review_report: buildCanonicalReviewReport("Workflow chain looks ready."),
-          review_findings: [],
-          merge_decision: "ready",
-        },
+      skillName: "review",
+      outputs: {
+        review_report: buildCanonicalReviewReport("Workflow chain looks ready."),
+        review_findings: [],
+        merge_decision: "ready",
       },
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "verification_outcome_recorded",
       timestamp: 130,
@@ -390,21 +379,18 @@ requires: []
 
     const runtime = new BrewvaRuntime({ cwd: workspace, config });
     runtime.maintain.context.onTurnStart(sessionId, 1);
-    recordRuntimeEvent(runtime, {
+    recordHostedSkillCompleted({
+      runtime,
       sessionId,
-      type: "skill_completed",
       timestamp: 100,
-      payload: {
-        skillName: "review",
-        outputKeys: ["review_report", "review_findings", "merge_decision"],
-        outputs: {
-          review_report: buildCanonicalReviewReport("Workflow chain looks ready."),
-          review_findings: [],
-          merge_decision: "ready",
-        },
+      skillName: "review",
+      outputs: {
+        review_report: buildCanonicalReviewReport("Workflow chain looks ready."),
+        review_findings: [],
+        merge_decision: "ready",
       },
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "verification_outcome_recorded",
       timestamp: 110,
@@ -415,7 +401,7 @@ requires: []
         evidenceFreshness: "fresh",
       },
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "subagent_completed",
       timestamp: 120,
@@ -451,7 +437,7 @@ requires: []
     const runtime = new BrewvaRuntime({ cwd: workspace, config });
 
     const recordSyntheticEvent = (index: number): void => {
-      recordRuntimeEvent(runtime, {
+      runtime.extensions.hosted.events.record({
         sessionId,
         type: "tool_call",
         payload: {
@@ -468,7 +454,7 @@ requires: []
     ).toHaveLength(0);
 
     const replay = (
-      runtime as unknown as {
+      getRuntimeInternals(runtime) as {
         turnReplay: {
           getCheckpointEvidenceState: (sessionId: string) => unknown;
           getCheckpointProjectionState: (sessionId: string) => unknown;
@@ -488,7 +474,7 @@ requires: []
       >[0]["projectionState"],
       reason: "manual_test",
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: TAPE_CHECKPOINT_EVENT_TYPE,
       payload: payload as unknown as Record<string, unknown>,

@@ -2,14 +2,11 @@ import { describe, expect, test } from "bun:test";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import {
-  BrewvaRuntime,
-  DEFAULT_BREWVA_CONFIG,
-  type BrewvaEventRecord,
-} from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
+import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
+import { type BrewvaEventRecord } from "@brewva/brewva-runtime/events";
 import { tokenizeSearchText } from "@brewva/brewva-search";
 import { createSessionIndex } from "@brewva/brewva-session-index";
+import { buildVerificationOutcomeRecordedPayload } from "../../helpers/events.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 async function openExternalDuckDBWriter(dbPath: string): Promise<{
@@ -109,15 +106,11 @@ function recordTaskSession(
       files: [input.targetFile],
     },
   });
-  return recordRuntimeEvent(runtime, {
+  return runtime.extensions.hosted.events.record({
     sessionId: input.sessionId,
     type: "verification_outcome_recorded",
     timestamp: input.timestamp,
-    payload: {
-      schema: "brewva.verification.outcome.v1",
-      passed: true,
-      summary: input.evidenceText,
-    },
+    payload: buildVerificationOutcomeRecordedPayload({ evidence: input.evidenceText }),
   }) as BrewvaEventRecord;
 }
 
@@ -126,7 +119,7 @@ describe("session index concurrency contract", () => {
     const { workspace, runtime } = createIndexedRuntime("session-index-box-projection");
     const sessionId = "indexed-box-session";
     runtime.maintain.context.onTurnStart(sessionId, 1);
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "box.acquired",
       timestamp: 1_700_000_000_000,
@@ -136,7 +129,7 @@ describe("session index concurrency contract", () => {
         fingerprint: "fingerprint-01",
       },
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "box.exec.completed",
       timestamp: 1_700_000_000_500,
@@ -145,7 +138,7 @@ describe("session index concurrency contract", () => {
         exitCode: 0,
       },
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "box.snapshot.created",
       timestamp: 1_700_000_001_000,

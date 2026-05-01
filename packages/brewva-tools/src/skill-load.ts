@@ -1,8 +1,5 @@
 import type { ToolEffectClass } from "@brewva/brewva-runtime";
-import {
-  buildSkillActivationEnvelope,
-  type SkillActivationEnvelope,
-} from "@brewva/brewva-runtime/internal";
+import { buildSkillActivationEnvelope, type SkillActivationEnvelope } from "@brewva/brewva-runtime";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate";
 import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "./types.js";

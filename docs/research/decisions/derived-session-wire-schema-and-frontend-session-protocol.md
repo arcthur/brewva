@@ -13,10 +13,10 @@
   - `docs/reference/session-lifecycle.md`
   - `docs/journeys/operator/interactive-session.md`
 - Code anchors:
-  - `packages/brewva-runtime/src/contracts/session-wire.ts`
-  - `packages/brewva-runtime/src/runtime.ts`
-  - `packages/brewva-runtime/src/services/session-wire.ts`
-  - `packages/brewva-runtime/src/events/event-types.ts`
+  - `packages/brewva-runtime/src/domain/sessions/wire.ts`
+  - `packages/brewva-runtime/src/runtime/runtime.ts`
+  - `packages/brewva-runtime/src/domain/sessions/session-wire.ts`
+  - `packages/brewva-runtime/src/events/registry.ts`
   - `packages/brewva-gateway/src/daemon/gateway-daemon.ts`
   - `packages/brewva-gateway/src/daemon/session-supervisor.ts`
   - `packages/brewva-gateway/src/daemon/session-binding-tape.ts`

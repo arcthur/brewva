@@ -5,7 +5,6 @@ import type {
   TurnEnvelope,
 } from "@brewva/brewva-runtime/channels";
 import { ChannelTurnBridge as RuntimeChannelTurnBridge } from "@brewva/brewva-runtime/channels";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 
 export interface CreateRuntimeChannelTurnBridgeOptions {
   runtime: BrewvaHostedRuntimePort;
@@ -25,7 +24,7 @@ function recordBridgeEvent(
     payload: Record<string, unknown>;
   },
 ): void {
-  recordRuntimeEvent(runtime, input);
+  runtime.extensions.hosted.events.record(input);
 }
 
 function summarizeTurn(turn: TurnEnvelope): Record<string, unknown> {

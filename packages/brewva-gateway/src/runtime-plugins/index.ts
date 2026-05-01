@@ -5,7 +5,6 @@ import {
   createTrustedLocalGovernancePort,
   type BrewvaRuntimeOptions,
 } from "@brewva/brewva-runtime";
-import { createToolRuntimeInternalPort, recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import type {
   InternalHostPlugin,
   InternalHostPluginApi,
@@ -100,7 +99,6 @@ function buildManagedTools(
   return buildBrewvaTools({
     runtime: {
       ...createToolRuntimePort(runtime),
-      internal: createToolRuntimeInternalPort(runtime),
       ...(options.semanticReranker ? { semanticReranker: options.semanticReranker } : {}),
     },
     orchestration: options.orchestration,
@@ -131,7 +129,7 @@ function registerHostedPipeline(
     config: hostedRuntime.config,
     inspect: hostedRuntime.inspect,
     recordEvent: (input: { sessionId: string; type: string; payload?: object }) =>
-      recordRuntimeEvent(hostedRuntime, input),
+      hostedRuntime.extensions.hosted.events.record(input),
   };
   const localHookManager = createLocalHookManager({
     extensionApi: runtimePluginApi,

@@ -1,6 +1,9 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { CredentialVaultService } from "@brewva/brewva-runtime/internal";
+import {
+  createCredentialVaultService,
+  type CredentialVaultService,
+} from "@brewva/brewva-runtime/credentials";
 
 export interface ChildRegistryEntry {
   sessionId: string;
@@ -175,7 +178,7 @@ export class FileGatewayStateStore implements GatewayStateStore {
   }
 
   private createVault(options: GatewayTokenVaultOptions): CredentialVaultService {
-    return new CredentialVaultService({
+    return createCredentialVaultService({
       vaultPath: options.vaultPath,
       masterKeyEnv: options.masterKeyEnv,
       allowDerivedKeyFallback: options.allowDerivedKeyFallback,

@@ -4,15 +4,17 @@ import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import {
   BrewvaRuntime,
+  asBrewvaIntentId,
+  asBrewvaSessionId,
+  parseScheduleIntentEvent,
+} from "@brewva/brewva-runtime";
+import {
   SCHEDULE_EVENT_TYPE,
   SCHEDULE_CHILD_SESSION_FINISHED_EVENT_TYPE,
   SCHEDULE_CHILD_SESSION_STARTED_EVENT_TYPE,
   SCHEDULE_WAKEUP_EVENT_TYPE,
   SKILL_ACTIVATED_EVENT_TYPE,
-  asBrewvaIntentId,
-  asBrewvaSessionId,
-  parseScheduleIntentEvent,
-} from "@brewva/brewva-runtime";
+} from "@brewva/brewva-runtime/events";
 import { writeMinimalConfig } from "../../helpers/config.js";
 import { buildGatewayWorkerHarnessEnv, startGatewayDaemonHarness } from "../../helpers/gateway.js";
 import { cleanupWorkspace, createWorkspace, repoRoot } from "../../helpers/workspace.js";
@@ -204,7 +206,7 @@ describe("system: scheduler daemon", () => {
         severity: "warn",
         summary: truthSummary,
       });
-      setupRuntime.authority.events.recordTapeHandoff(parentSessionId, {
+      setupRuntime.authority.tape.recordTapeHandoff(parentSessionId, {
         name: "release-checkpoint",
         summary: "Release prep is partially complete.",
         nextSteps: "Resolve the final reviewer comment.",
@@ -303,7 +305,7 @@ describe("system: scheduler daemon", () => {
           ]),
         );
 
-        const childTapeStatus = persisted.inspect.events.getTapeStatus(childSessionId);
+        const childTapeStatus = persisted.inspect.tape.getTapeStatus(childSessionId);
         expect(childTapeStatus.lastAnchor?.name).toBe("schedule:inherit:release-checkpoint");
 
         const scheduleKinds = persisted.inspect.events

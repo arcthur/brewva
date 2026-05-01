@@ -1,11 +1,9 @@
 import { createHash } from "node:crypto";
+import { recordAssistantUsageFromMessage, type BrewvaRuntime } from "@brewva/brewva-runtime";
 import {
   SEMANTIC_EXTRACTION_INVOKED_EVENT_TYPE,
   SEMANTIC_RERANK_INVOKED_EVENT_TYPE,
-  recordAssistantUsageFromMessage,
-  type BrewvaRuntime,
-} from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
+} from "@brewva/brewva-runtime/events";
 import type {
   BrewvaModelCatalog,
   BrewvaProviderCompletionDriver,
@@ -362,7 +360,7 @@ class HostedSemanticReranker implements BrewvaSemanticReranker {
       recordClass: string | null;
     },
   ): void {
-    recordRuntimeEvent(this.options.runtime, {
+    this.options.runtime.extensions.hosted.events.record({
       sessionId: input.sessionId,
       type: SEMANTIC_EXTRACTION_INVOKED_EVENT_TYPE,
       payload: {
@@ -386,7 +384,7 @@ class HostedSemanticReranker implements BrewvaSemanticReranker {
       orderedIds: readonly string[];
     },
   ): void {
-    recordRuntimeEvent(this.options.runtime, {
+    this.options.runtime.extensions.hosted.events.record({
       sessionId: input.sessionId,
       type: SEMANTIC_RERANK_INVOKED_EVENT_TYPE,
       payload: {

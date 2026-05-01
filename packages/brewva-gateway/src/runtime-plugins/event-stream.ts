@@ -1,5 +1,11 @@
 import {
   recordAssistantUsageFromMessage,
+  type BrewvaHostedRuntimePort,
+  type JsonValue,
+} from "@brewva/brewva-runtime";
+import { type ToolLifecycleEventPayload } from "@brewva/brewva-runtime/events";
+import {
+  readSessionTurnTransitionEventPayload,
   SESSION_SHUTDOWN_EVENT_TYPE,
   SESSION_TURN_TRANSITION_EVENT_TYPE,
   TOOL_CALL_EVENT_TYPE,
@@ -8,9 +14,7 @@ import {
   TURN_INPUT_RECORDED_EVENT_TYPE,
   TURN_RENDER_COMMITTED_EVENT_TYPE,
   VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
-  type BrewvaHostedRuntimePort,
-} from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
+} from "@brewva/brewva-runtime/events";
 import type { InternalHostPluginApi, BrewvaToolDefinition } from "@brewva/brewva-substrate";
 import { resolveBrewvaToolExecutionTraits } from "@brewva/brewva-tools";
 import { buildTranscriptMessagePayload } from "../session/runtime-session-transcript.js";
@@ -218,7 +222,7 @@ function resolveExecutionTraitsPayload(input: {
   toolName: string;
   args: unknown;
   cwd?: string | null;
-}): Record<string, unknown> | undefined {
+}): Record<string, JsonValue> | undefined {
   const toolDefinition = input.toolDefinitionsByName?.get(input.toolName);
   if (!toolDefinition) {
     return undefined;
@@ -321,7 +325,7 @@ export function registerEventStream(
       toolName,
       attemptSequence,
     );
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: TOOL_CALL_EVENT_TYPE,
       payload: {
@@ -329,7 +333,7 @@ export function registerEventStream(
         toolName,
         attempt: attemptSequence,
         lifecycleFallbackReason: "tool_result_without_tool_call",
-      },
+      } satisfies ToolLifecycleEventPayload,
     });
     observedToolCalls.add(toolCallId);
   };
@@ -339,7 +343,7 @@ export function registerEventStream(
     if (!pendingToolResults || pendingToolResults.size === 0) return;
 
     for (const [toolCallId, pending] of pendingToolResults) {
-      recordRuntimeEvent(runtime, {
+      runtime.extensions.hosted.events.record({
         sessionId,
         type: TOOL_EXECUTION_END_EVENT_TYPE,
         payload: {
@@ -350,7 +354,7 @@ export function registerEventStream(
           terminalReason: pending.isError
             ? ("failed_after_tool_result" satisfies ToolExecutionTerminalReason)
             : ("completed_after_tool_result" satisfies ToolExecutionTerminalReason),
-        },
+        } satisfies ToolLifecycleEventPayload,
       });
       observedToolCallsBySession.get(sessionId)?.delete(toolCallId);
       activeToolExecutionsBySession.get(sessionId)?.delete(toolCallId);
@@ -373,7 +377,7 @@ export function registerEventStream(
 
     for (const [toolCallId, activeExecution] of activeExecutions) {
       ensureObservedToolCall(sessionId, toolCallId, activeExecution.toolName);
-      recordRuntimeEvent(runtime, {
+      runtime.extensions.hosted.events.record({
         sessionId,
         type: TOOL_EXECUTION_END_EVENT_TYPE,
         payload: {
@@ -382,7 +386,7 @@ export function registerEventStream(
           isError: true,
           attempt: activeExecution.attemptSequence,
           terminalReason,
-        },
+        } satisfies ToolLifecycleEventPayload,
       });
       observedToolCallsBySession.get(sessionId)?.delete(toolCallId);
     }
@@ -450,17 +454,13 @@ export function registerEventStream(
     if (event.type === SESSION_TURN_TRANSITION_EVENT_TYPE) {
       syncCurrentAttemptSequence(event.sessionId);
     }
-    if (
-      event.type !== SESSION_TURN_TRANSITION_EVENT_TYPE ||
-      !event.payload ||
-      typeof event.payload !== "object"
-    ) {
+    if (event.type !== SESSION_TURN_TRANSITION_EVENT_TYPE) {
       return;
     }
-    const payload = event.payload as {
-      reason?: unknown;
-      status?: unknown;
-    };
+    const payload = readSessionTurnTransitionEventPayload(event);
+    if (!payload) {
+      return;
+    }
     if (
       payload.status === "completed" &&
       (payload.reason === "user_submit_interrupt" ||
@@ -474,7 +474,7 @@ export function registerEventStream(
   extensionApi.on("session_start", (_event, ctx) => {
     const sessionId = ctx.sessionManager.getSessionId();
     rememberLeafEntryId(sessionId, ctx);
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "session_start",
       payload: {
@@ -503,7 +503,7 @@ export function registerEventStream(
   });
 
   extensionApi.on("agent_start", (_event, ctx) => {
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId: ctx.sessionManager.getSessionId(),
       type: "agent_start",
     });
@@ -513,7 +513,7 @@ export function registerEventStream(
   extensionApi.on("agent_end", (event, ctx) => {
     const sessionId = ctx.sessionManager.getSessionId();
     flushPendingToolResults(sessionId);
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "agent_end",
       payload: {
@@ -534,7 +534,7 @@ export function registerEventStream(
       boundary: "turn_start",
       leafEntryId,
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "turn_start",
       turn: runtimeTurn,
@@ -551,7 +551,7 @@ export function registerEventStream(
     const runtimeTurn = turnClock.getCurrentTurn(sessionId);
     flushPendingToolResults(sessionId);
     runtime.maintain.context.onTurnEnd(sessionId);
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "turn_end",
       turn: runtimeTurn,
@@ -568,7 +568,7 @@ export function registerEventStream(
     const sessionId = ctx.sessionManager.getSessionId();
     lastAssistantTextBySession.delete(sessionId);
     assistantWindowBySession.delete(sessionId);
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "message_start",
       payload: buildTranscriptMessagePayload(event.message),
@@ -609,7 +609,7 @@ export function registerEventStream(
     );
     lastAssistantTextBySession.delete(sessionId);
     assistantWindowBySession.delete(sessionId);
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "message_end",
       payload: {
@@ -642,7 +642,7 @@ export function registerEventStream(
       toolName: event.toolName,
       attemptSequence: boundAttemptSequence,
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: TOOL_EXECUTION_START_EVENT_TYPE,
       payload: {
@@ -650,7 +650,7 @@ export function registerEventStream(
         toolName: event.toolName,
         attempt: boundAttemptSequence,
         executionTraits: executionTraits ?? null,
-      },
+      } satisfies ToolLifecycleEventPayload,
     });
     return undefined;
   });
@@ -690,7 +690,7 @@ export function registerEventStream(
         event.toolName,
         attemptSequence,
       );
-      recordRuntimeEvent(runtime, {
+      runtime.extensions.hosted.events.record({
         sessionId,
         type: TOOL_CALL_EVENT_TYPE,
         payload: {
@@ -698,7 +698,7 @@ export function registerEventStream(
           toolName: event.toolName,
           attempt: attemptSequence,
           lifecycleFallbackReason: "tool_execution_end_without_tool_call",
-        },
+        } satisfies ToolLifecycleEventPayload,
       });
       observedToolCalls.add(event.toolCallId);
     }
@@ -707,7 +707,7 @@ export function registerEventStream(
       getToolAttemptBindings(sessionId).resolveAttemptSequence(event.toolCallId) ??
       getActiveToolExecutions(sessionId).get(event.toolCallId)?.attemptSequence ??
       null;
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: TOOL_EXECUTION_END_EVENT_TYPE,
       payload: {
@@ -718,7 +718,7 @@ export function registerEventStream(
         terminalReason: event.isError
           ? ("failed" satisfies ToolExecutionTerminalReason)
           : ("completed" satisfies ToolExecutionTerminalReason),
-      },
+      } satisfies ToolLifecycleEventPayload,
     });
     clearTrackedToolCall(sessionId, event.toolCallId);
     return undefined;
@@ -741,7 +741,7 @@ export function registerEventStream(
       attemptSequence,
     );
     getObservedToolCalls(sessionId).add(event.toolCallId);
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: TOOL_CALL_EVENT_TYPE,
       payload: {
@@ -749,7 +749,7 @@ export function registerEventStream(
         toolName: event.toolName,
         attempt: attemptSequence,
         executionTraits: executionTraits ?? null,
-      },
+      } satisfies ToolLifecycleEventPayload,
     });
     return undefined;
   });
@@ -760,7 +760,7 @@ export function registerEventStream(
     clearPendingInterruptFlush(sessionId);
     flushPendingToolResults(sessionId);
     flushActiveToolExecutions(sessionId, "cancelled_by_retry_supersession");
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "session_before_compact",
       payload: {
@@ -782,7 +782,7 @@ export function registerEventStream(
   });
 
   extensionApi.on("model_select", (event, ctx) => {
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId: ctx.sessionManager.getSessionId(),
       type: "model_select",
       payload: {
@@ -795,7 +795,7 @@ export function registerEventStream(
   });
 
   extensionApi.on("input", (event, ctx) => {
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId: ctx.sessionManager.getSessionId(),
       type: "input",
       payload: {

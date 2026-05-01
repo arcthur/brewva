@@ -1,12 +1,10 @@
 import { createHash } from "node:crypto";
+import { homedir } from "node:os";
+import { isAbsolute, join, resolve } from "node:path";
 import { createBoxPlane, type BoxPlane, type BoxPlaneOptions } from "@brewva/brewva-box";
 import { stableStringify } from "@brewva/brewva-box/internal/stable-json";
-import {
-  BOX_RELEASED_EVENT_TYPE,
-  DEFAULT_BREWVA_CONFIG,
-  resolvePathInput,
-  type BrewvaConfig,
-} from "@brewva/brewva-runtime";
+import { DEFAULT_BREWVA_CONFIG, type BrewvaConfig } from "@brewva/brewva-runtime";
+import { BOX_RELEASED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
 import type { BrewvaBundledToolRuntime } from "./types.js";
 
 export type RuntimeBoxConfig = BrewvaConfig["security"]["execution"]["box"];
@@ -28,13 +26,27 @@ export function resolveRuntimeBoxConfig(runtime?: BrewvaBundledToolRuntime): Run
 export function cloneBoxConfig(box: RuntimeBoxConfig): RuntimeBoxConfig {
   return {
     ...box,
-    home: resolvePathInput(process.cwd(), box.home),
+    home: resolveRuntimePathInput(process.cwd(), box.home),
     network:
       box.network.mode === "allowlist"
         ? { mode: "allowlist", allow: [...box.network.allow] }
         : { mode: "off" },
     gc: { ...box.gc },
   };
+}
+
+function resolveRuntimePathInput(baseDir: string, pathText: string): string {
+  const trimmed = pathText.trim();
+  if (!trimmed) {
+    return trimmed;
+  }
+  const normalized =
+    trimmed === "~"
+      ? homedir()
+      : trimmed.startsWith("~/")
+        ? join(homedir(), trimmed.slice(2))
+        : trimmed;
+  return isAbsolute(normalized) ? resolve(normalized) : resolve(baseDir, normalized);
 }
 
 export function resolveConfiguredBoxPlane(
@@ -79,7 +91,7 @@ function registerRuntimeBoxPlaneHooks(
   runtime: BrewvaBundledToolRuntime | undefined,
   plane: BoxPlane,
 ): void {
-  if (!runtime?.internal?.onClearState) return;
+  if (!runtime?.extensions?.tools?.onClearState) return;
   const runtimeKey = runtime as object;
   let planes = runtimeHookRegistrations.get(runtimeKey);
   if (!planes) {
@@ -88,7 +100,7 @@ function registerRuntimeBoxPlaneHooks(
   }
   if (planes.has(plane)) return;
   planes.add(plane);
-  runtime.internal.onClearState((sessionId) => {
+  runtime.extensions.tools.onClearState((sessionId) => {
     void releaseSessionBoxes(runtime, plane, sessionId).catch(() => {});
   });
 }
@@ -104,7 +116,7 @@ async function releaseSessionBoxes(
   );
   await plane.releaseScope({ kind: "session", id: sessionId }, "session_closed");
   for (const box of matchingBoxes) {
-    runtime.internal?.recordEvent?.({
+    runtime.extensions?.tools?.recordEvent?.({
       sessionId,
       type: BOX_RELEASED_EVENT_TYPE,
       payload: {

@@ -6,18 +6,18 @@ context:
     Review this diff that refactors skill routing types. Some internal types
     were moved to the public package entrypoint.
   workspace_state: |
-    packages/brewva-runtime/src/contracts/index.ts modified.
-    packages/brewva-runtime/src/skills/registry.ts modified.
+    packages/brewva-runtime/src/public/index.ts modified.
+    packages/brewva-runtime/src/domain/skills/registry.ts modified.
   available_artifacts:
     change_set: "Moved SkillRouteMatch and SkillRouteContext from internal to public exports."
     files_changed:
       [
-        "packages/brewva-runtime/src/contracts/index.ts",
-        "packages/brewva-runtime/src/skills/registry.ts",
+        "packages/brewva-runtime/src/public/index.ts",
+        "packages/brewva-runtime/src/domain/skills/registry.ts",
       ]
     impact_map:
       summary: "Public export surface widened with internal routing types"
-      affected_paths: ["packages/brewva-runtime/src/contracts/index.ts"]
+      affected_paths: ["packages/brewva-runtime/src/public/index.ts"]
       boundaries: ["runtime public API"]
       high_risk_touchpoints: ["public export map"]
       change_categories: ["public_api", "package_boundary"]

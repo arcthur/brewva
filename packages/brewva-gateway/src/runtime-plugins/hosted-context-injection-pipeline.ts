@@ -1,10 +1,10 @@
 import {
-  SKILL_DIAGNOSIS_DERIVED_EVENT_TYPE,
   type BrewvaHostedRuntimePort,
   type ContextSourceProviderDescriptor,
   type ContextBudgetUsage,
 } from "@brewva/brewva-runtime";
-import { type ContextInjectionEntry, recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
+import type { ContextInjectionEntry } from "@brewva/brewva-runtime/context";
+import { SKILL_DIAGNOSIS_DERIVED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
 import type { InternalHostPluginApi } from "@brewva/brewva-substrate";
 import { stableHash, stableStringify } from "../cache/hash.js";
 import type { HostedDelegationStore } from "../subagents/delegation-store.js";
@@ -138,6 +138,7 @@ function createContextComposerRuntime(
 ): ContextComposerRuntime {
   return {
     inspect: {
+      tape: runtime.inspect.tape,
       events: runtime.inspect.events,
     },
     delegation: delegationStore
@@ -334,7 +335,7 @@ function buildSkillDiagnosisBlocks(
     if (!payload) {
       return [];
     }
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId: input.sessionId,
       type: SKILL_DIAGNOSIS_DERIVED_EVENT_TYPE,
       payload,

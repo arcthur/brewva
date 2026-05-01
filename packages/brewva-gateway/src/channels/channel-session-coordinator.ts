@@ -1,6 +1,5 @@
 import { BrewvaRuntime, type ManagedToolMode } from "@brewva/brewva-runtime";
 import type { TurnEnvelope } from "@brewva/brewva-runtime/channels";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import type { BrewvaPromptSessionEvent, BrewvaSteerOutcome } from "@brewva/brewva-substrate";
 import { ConversationBindingStore } from "../conversations/binding-store.js";
 import { createHostedSession, type HostedSessionResult } from "../host/create-hosted-session.js";
@@ -161,7 +160,7 @@ export function createChannelSessionCoordinator(input: {
       conversationId: turn.conversationId,
       threadId: turn.threadId,
     });
-    recordRuntimeEvent(input.runtime, {
+    input.runtime.extensions.hosted.events.record({
       sessionId: input.recoveryWalScope,
       type: "channel_conversation_bound",
       payload: {
@@ -345,7 +344,7 @@ export function createChannelSessionCoordinator(input: {
     if (!candidate) return null;
     const disposed = await evictAgentRuntime(candidate);
     if (!disposed) return null;
-    recordRuntimeEvent(input.runtime, {
+    input.runtime.extensions.hosted.events.record({
       sessionId: input.recoveryWalScope,
       type: "channel_runtime_evicted",
       payload: {
@@ -466,7 +465,7 @@ export function createChannelSessionCoordinator(input: {
             };
             sessions.set(key, state);
             sessionByAgentSessionId.set(state.agentSessionId, state);
-            recordRuntimeEvent(workerRuntime, {
+            workerRuntime.extensions.hosted.events.record({
               sessionId: state.agentSessionId,
               type: "channel_session_bound",
               payload: {
@@ -610,7 +609,7 @@ export function createChannelSessionCoordinator(input: {
         }
       }
       if (evicted.length > 0) {
-        recordRuntimeEvent(input.runtime, {
+        input.runtime.extensions.hosted.events.record({
           sessionId: input.recoveryWalScope,
           type: "channel_runtime_evicted",
           payload: {

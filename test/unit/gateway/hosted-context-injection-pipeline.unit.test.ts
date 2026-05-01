@@ -6,12 +6,13 @@ import {
 } from "@brewva/brewva-gateway/runtime-plugins";
 import {
   CONTEXT_SOURCES,
-  TOOL_READ_PATH_GATE_ARMED_EVENT_TYPE,
   type ContextSourceProviderDescriptor,
   type ContextBudgetUsage,
   type ContextCompactionGateStatus,
 } from "@brewva/brewva-runtime";
-import { buildSkillRoutingCatalogEntry, recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
+import { buildSkillRoutingCatalogEntry } from "@brewva/brewva-runtime";
+import { TOOL_READ_PATH_GATE_ARMED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
+import { buildToolResultRecordedPayload } from "../../helpers/events.js";
 import { createMockRuntimePluginApi } from "../../helpers/runtime-plugin.js";
 import { createRuntimeFixture } from "../../helpers/runtime.js";
 
@@ -741,7 +742,7 @@ describe("hosted context injection pipeline", () => {
       schema: "brewva.task.v1",
       goal: "Continue the interrupted task",
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "session_turn_transition",
       payload: {
@@ -825,22 +826,19 @@ describe("hosted context injection pipeline", () => {
     });
     const sessionId = "s-read-path-recovery";
     for (const path of ["src/ghost-a.ts", "src/ghost-b.ts"]) {
-      recordRuntimeEvent(runtime, {
+      runtime.extensions.hosted.events.record({
         sessionId,
         type: "tool_result_recorded",
-        payload: {
+        payload: buildToolResultRecordedPayload({
           toolName: "read",
           verdict: "fail",
-          failureContext: {
-            args: { path },
-            outputText: `ENOENT: no such file or directory, open '${path}'`,
-            failureClass: "execution",
-            turn: 1,
-          },
-        },
+          channelSuccess: false,
+          outputText: `ENOENT: no such file or directory, open '${path}'`,
+          turn: 1,
+        }),
       });
     }
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: TOOL_READ_PATH_GATE_ARMED_EVENT_TYPE,
       payload: {

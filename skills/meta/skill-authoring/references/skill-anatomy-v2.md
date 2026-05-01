@@ -168,7 +168,7 @@ Output:
       }
     ],
     "failed_attempts": [],
-    "root_cause_boundary": "packages/brewva-runtime/src/services/replay.ts"
+    "root_cause_boundary": "packages/brewva-runtime/src/domain/tape/replay-engine.ts"
   }
 }
 ```

@@ -7,9 +7,9 @@ import {
   DEFAULT_BREWVA_CONFIG,
   buildScheduleIntentFiredEvent,
 } from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import { setStaticContextPressureThresholds } from "../../fixtures/config.js";
 import { patchDateNow } from "../../helpers/global-state.js";
+import { getRuntimeInternals } from "../../helpers/runtime-internals.js";
 import { createOpsRuntimeConfig } from "../../helpers/runtime.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
@@ -122,7 +122,7 @@ describe("runtime facade coverage", () => {
     mkdirSync(walDir, { recursive: true });
     writeFileSync(join(walDir, "runtime.jsonl"), '{"broken":\n', "utf8");
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "tool_output_artifact_persist_failed",
       payload: {
@@ -161,7 +161,7 @@ describe("runtime facade coverage", () => {
 
       runtime.maintain.context.onTurnStart(sessionId, 1);
       expect(runtime.authority.skills.activate(sessionId, "plan").ok).toBe(true);
-      recordRuntimeEvent(runtime, {
+      runtime.extensions.hosted.events.record({
         sessionId,
         type: "tool_execution_start",
         turn: 1,
@@ -236,6 +236,60 @@ describe("runtime facade coverage", () => {
     }
   });
 
+  test("hosted event recording rejects non-canonical skill_completed payloads", () => {
+    const runtime = new BrewvaRuntime({
+      cwd: createTestWorkspace("runtime-facade-skill-completed"),
+    });
+    const sessionId = "runtime-facade-skill-completed-1";
+
+    expect(() =>
+      runtime.extensions.hosted.events.record({
+        sessionId,
+        timestamp: 1_740_000_123_456,
+        type: "skill_completed",
+        payload: {
+          skillName: "plan",
+          outputs: {
+            planning_posture: "complex",
+            open_questions: ["What deployment constraint is still unresolved?"],
+          },
+        },
+      }),
+    ).toThrow(/invalid_recorded_event_payload:skill_completed/);
+  });
+
+  test("hosted event recording rejects non-canonical tool_output_distilled payloads", () => {
+    const runtime = new BrewvaRuntime({
+      cwd: createTestWorkspace("runtime-facade-tool-output-distilled"),
+    });
+    const sessionId = "runtime-facade-tool-output-distilled-1";
+
+    expect(() =>
+      runtime.extensions.hosted.events.record({
+        sessionId,
+        timestamp: 1_740_000_200_000,
+        type: "tool_output_distilled",
+        payload: {
+          toolCallId: " tc-1 ",
+          toolName: " Exec ",
+          isError: false,
+          verdict: "pass",
+          strategy: " exec_heuristic ",
+          rawChars: 240.9,
+          rawBytes: 241.1,
+          rawTokens: 81.7,
+          summaryChars: 96.4,
+          summaryBytes: 97.8,
+          summaryTokens: 30.2,
+          compressionRatio: 1.4,
+          truncated: false,
+          summaryText: "Distilled summary",
+          artifactRef: " artifacts/tool-output.txt ",
+        },
+      }),
+    ).toThrow(/invalid_recorded_event_payload:tool_output_distilled/);
+  });
+
   test("inspect.lifecycle exposes blocked approval posture from durable approval state", () => {
     const runtime = new BrewvaRuntime({
       cwd: createTestWorkspace("runtime-facade-lifecycle-approval"),
@@ -284,7 +338,7 @@ describe("runtime facade coverage", () => {
     const sessionId = "runtime-facade-lifecycle-recovery-1";
 
     runtime.maintain.context.onTurnStart(sessionId, 8);
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       turn: 8,
       type: "turn_input_recorded",
@@ -294,7 +348,7 @@ describe("runtime facade coverage", () => {
         promptText: "Resume the interrupted attempt",
       },
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       turn: 8,
       type: "session_turn_transition",
@@ -350,7 +404,7 @@ describe("runtime facade coverage", () => {
     expect(cachedSnapshot.summary.kind).toBe("idle");
     expect(cachedSnapshot.execution.kind).toBe("idle");
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       turn: 1,
       type: "tool_execution_start",
@@ -434,7 +488,7 @@ describe("runtime facade coverage", () => {
     const sessionId = "runtime-facade-lifecycle-transition-window-1";
 
     for (let index = 0; index < 16; index += 1) {
-      recordRuntimeEvent(runtime, {
+      runtime.extensions.hosted.events.record({
         sessionId,
         turn: 3,
         type: "session_turn_transition",
@@ -474,7 +528,7 @@ describe("runtime facade coverage", () => {
     const sessionId = "runtime-facade-tool-recovery-wal-1";
     const runtime = new BrewvaRuntime({ cwd: workspace, config });
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "tool_execution_start",
       turn: 1,
@@ -494,7 +548,7 @@ describe("runtime facade coverage", () => {
       ]),
     );
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "tool_execution_end",
       turn: 1,
@@ -579,7 +633,7 @@ describe("runtime facade coverage", () => {
       const runtime = new BrewvaRuntime({ cwd: workspace, config });
 
       runtime.maintain.context.onTurnStart(sessionId, 2);
-      recordRuntimeEvent(runtime, {
+      runtime.extensions.hosted.events.record({
         sessionId,
         type: "turn_start",
         turn: 2,
@@ -628,7 +682,7 @@ describe("runtime facade coverage", () => {
     });
     const sessionId = "runtime-facade-structured-events-1";
 
-    const recorded = recordRuntimeEvent(runtime, {
+    const recorded = runtime.extensions.hosted.events.record({
       sessionId,
       type: "governance_cost_anomaly_detected",
       turn: 3,
@@ -721,7 +775,7 @@ describe("runtime facade coverage", () => {
     })[0];
     expect(structuredMetric).toMatchObject({
       type: "iteration_metric_observed",
-      category: "state",
+      category: "control",
       payload: {
         schema: "brewva.iteration-facts.v1",
         kind: "metric_observation",
@@ -851,7 +905,7 @@ describe("runtime facade coverage", () => {
     const freshChildSessionId = "runtime-facade-iteration-lineage-fresh";
     const loopSource = "goal-loop:coverage-raise-2026-03-22";
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId: parentSessionId,
       type: "schedule_intent",
       timestamp: 10,
@@ -870,7 +924,7 @@ describe("runtime facade coverage", () => {
         }),
       },
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId: parentSessionId,
       type: "schedule_intent",
       timestamp: 11,
@@ -889,7 +943,7 @@ describe("runtime facade coverage", () => {
         }),
       },
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId: parentSessionId,
       type: "schedule_intent",
       timestamp: 12,
@@ -1120,7 +1174,7 @@ describe("runtime facade coverage", () => {
     });
     const sessionId = "runtime-facade-context-lifecycle-1";
     const sessionState = (
-      runtime as unknown as {
+      getRuntimeInternals(runtime) as {
         sessionState: {
           getExistingCell(sessionId: string):
             | {

@@ -119,10 +119,10 @@ flowchart TD
 
 - Tool contracts: `packages/brewva-tools/src/follow-up.ts`,
   `packages/brewva-tools/src/schedule-intent.ts`
-- Scheduler service: `packages/brewva-runtime/src/schedule/service.ts`
-- Schedule events: `packages/brewva-runtime/src/schedule/events.ts`
-- Schedule projection: `packages/brewva-runtime/src/schedule/projection.ts`
-- Cron / timezone: `packages/brewva-runtime/src/schedule/cron.ts`
+- Scheduler service: `packages/brewva-runtime/src/domain/schedule/service.ts`
+- Schedule events: `packages/brewva-runtime/src/domain/schedule/events.ts`
+- Schedule projection: `packages/brewva-runtime/src/domain/schedule/projection.ts`
+- Cron / timezone: `packages/brewva-runtime/src/domain/schedule/cron.ts`
 - Continuity inspection tool: `packages/brewva-tools/src/optimization-continuity.ts`
 - Scheduler daemon dispatch: `packages/brewva-cli/src/index.ts`
 - Scheduler daemon implementation: `packages/brewva-cli/src/daemon-mode.ts`

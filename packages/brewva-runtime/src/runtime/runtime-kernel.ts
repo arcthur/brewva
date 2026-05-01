@@ -1,0 +1,54 @@
+import type { BrewvaConfig } from "../config/types.js";
+import type { ContextBudgetManager } from "../domain/context/api.js";
+import type { ContextInjectionCollector } from "../domain/context/api.js";
+import type { VerificationOutcomeSnapshot } from "../domain/context/api.js";
+import type { ToolOutputDistillationEntry } from "../domain/context/api.js";
+import type { ContextBudgetUsage } from "../domain/context/api.js";
+import type { SessionCostTracker } from "../domain/cost/api.js";
+import type { GovernancePort } from "../domain/governance/api.js";
+import type { EvidenceLedger } from "../domain/ledger/api.js";
+import type { ParallelBudgetManager } from "../domain/parallel/api.js";
+import type { ParallelResultStore } from "../domain/parallel/api.js";
+import type { FileChangeTracker } from "../domain/patching/api.js";
+import type { ProjectionEngine } from "../domain/projection/api.js";
+import type { RuntimeRecordEvent } from "../domain/sessions/api.js";
+import type { RuntimeSessionStateStore } from "../domain/sessions/api.js";
+import type { ReasoningReplayEngine } from "../domain/tape/api.js";
+import type { TurnReplayEngine } from "../domain/tape/api.js";
+import type { TaskState } from "../domain/task/api.js";
+import type { TruthState } from "../domain/truth/api.js";
+import type { VerificationGate } from "../domain/verification/api.js";
+import type { BrewvaEventStore } from "../events/store.js";
+
+export interface RuntimeKernelContext {
+  cwd: string;
+  workspaceRoot: string;
+  agentId: string;
+  config: BrewvaConfig;
+  governancePort?: GovernancePort;
+  sessionState: RuntimeSessionStateStore;
+  contextBudget: ContextBudgetManager;
+  contextInjection: ContextInjectionCollector;
+  projectionEngine: ProjectionEngine;
+  turnReplay: TurnReplayEngine;
+  reasoningReplay: ReasoningReplayEngine;
+  eventStore: BrewvaEventStore;
+  evidenceLedger: EvidenceLedger;
+  verificationGate: VerificationGate;
+  parallel: ParallelBudgetManager;
+  parallelResults: ParallelResultStore;
+  fileChanges: FileChangeTracker;
+  costTracker: SessionCostTracker;
+  getCurrentTurn(sessionId: string): number;
+  getTaskState(sessionId: string): TaskState;
+  getTruthState(sessionId: string): TruthState;
+  recordEvent: RuntimeRecordEvent;
+  sanitizeInput(text: string): string;
+  getRecentToolOutputDistillations(
+    sessionId: string,
+    maxEntries?: number,
+  ): ToolOutputDistillationEntry[];
+  getLatestVerificationOutcome(sessionId: string): VerificationOutcomeSnapshot | undefined;
+  isContextBudgetEnabled(): boolean;
+  observeContextUsage?(sessionId: string, usage: ContextBudgetUsage | undefined): void;
+}

@@ -1,14 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { asBrewvaEventType, asBrewvaSessionId } from "@brewva/brewva-runtime";
-import type {
-  BrewvaEventRecord,
-  SkillDocument,
-} from "../../../packages/brewva-runtime/src/contracts/index.js";
+import { asBrewvaSessionId } from "@brewva/brewva-runtime";
+import { asBrewvaEventType } from "@brewva/brewva-runtime/events";
 import {
   commitSessionCompaction,
   type ContextCompactionDeps,
-} from "../../../packages/brewva-runtime/src/services/context-compaction.js";
-import { RuntimeSessionStateStore } from "../../../packages/brewva-runtime/src/services/session-state.js";
+} from "../../../packages/brewva-runtime/src/domain/context/context-compaction.js";
+import { RuntimeSessionStateStore } from "../../../packages/brewva-runtime/src/domain/sessions/session-state.js";
+import type { SkillDocument } from "../../../packages/brewva-runtime/src/domain/skills/types.js";
+import type { BrewvaEventRecord } from "../../../packages/brewva-runtime/src/events/types.js";
 
 async function flushAsyncEvents(): Promise<void> {
   await Promise.resolve();

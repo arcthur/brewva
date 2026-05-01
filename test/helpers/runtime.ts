@@ -10,7 +10,6 @@ import {
   type BrewvaInspectionPort,
   type BrewvaMaintenancePort,
 } from "@brewva/brewva-runtime";
-import { createToolRuntimeInternalPort } from "@brewva/brewva-runtime/internal";
 import type { BrewvaBundledToolRuntime } from "@brewva/brewva-tools";
 
 type DeepPartial<T> = {
@@ -175,7 +174,6 @@ export function createBundledToolRuntime(
 ): BrewvaBundledToolRuntime {
   return {
     ...createToolRuntimePort(runtime),
-    internal: createToolRuntimeInternalPort(runtime),
     ...extras,
   };
 }

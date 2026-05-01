@@ -5,14 +5,14 @@ import {
   getOrCreateNarrativeMemoryPlane,
   type NarrativeMemoryRecord,
 } from "@brewva/brewva-deliberation";
+import { BrewvaRuntime } from "@brewva/brewva-runtime";
 import {
   NARRATIVE_MEMORY_ARCHIVED_EVENT_TYPE,
   NARRATIVE_MEMORY_FORGOTTEN_EVENT_TYPE,
   NARRATIVE_MEMORY_PROMOTED_EVENT_TYPE,
   NARRATIVE_MEMORY_RECORDED_EVENT_TYPE,
   NARRATIVE_MEMORY_REVIEWED_EVENT_TYPE,
-  BrewvaRuntime,
-} from "@brewva/brewva-runtime";
+} from "@brewva/brewva-runtime/events";
 import { createNarrativeMemoryTool } from "@brewva/brewva-tools";
 import { createBundledToolRuntime } from "../../helpers/runtime.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";

@@ -637,8 +637,8 @@ stay separate:
 
 1. **Durable iteration facts**
 
-- `packages/brewva-runtime/src/runtime.ts`
-- payload schema in `packages/brewva-runtime/src/iteration/facts.ts`
+- `packages/brewva-runtime/src/runtime/runtime.ts`
+- payload schema in `packages/brewva-runtime/src/domain/iteration/facts.ts`
 - appropriate only for selected normalized numeric facts worth retaining as
   replayable evidence
 
@@ -673,7 +673,7 @@ Brewva parser.
 Recommended placement:
 
 - runtime session-local state under
-  `packages/brewva-runtime/src/services/session-state.ts`
+  `packages/brewva-runtime/src/domain/sessions/session-state.ts`
 - exposed through `runtime.maintain.context.observePromptStability(...)` and
   `runtime.inspect.context.getPromptStability(...)`
 - written from the same hosted `before_agent_start` path that already owns
@@ -886,12 +886,12 @@ Provider cache counters already enter Brewva through the normal Pi event flow:
 - receives upstream assistant `message_end`
 - forwards the message into `recordAssistantUsageFromMessage(...)`
 
-1. `packages/brewva-runtime/src/cost/assistant-usage.ts`
+1. `packages/brewva-runtime/src/domain/cost/assistant-usage.ts`
 
 - copies `usage.input`, `usage.output`, `usage.cacheRead`,
   `usage.cacheWrite`, and `usage.totalTokens`
 
-1. `packages/brewva-runtime/src/services/cost.ts`
+1. `packages/brewva-runtime/src/domain/cost/cost.ts`
 
 - normalizes those values
 - keeps Brewva budget semantics explicit: tracked tokens exclude

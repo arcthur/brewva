@@ -1,8 +1,5 @@
-import type {
-  BrewvaConfig,
-  SecurityEnforcementMode,
-  SecurityEnforcementPreference,
-} from "../contracts/index.js";
+import type { BrewvaConfig } from "../config/types.js";
+import type { SecurityEnforcementMode, SecurityEnforcementPreference } from "../core/shared.js";
 
 function toBaseSecurityPolicy(mode: BrewvaConfig["security"]["mode"]): EffectiveSecurityPolicy {
   // Denied effects are a hard contract boundary, so they remain enforced across all modes.

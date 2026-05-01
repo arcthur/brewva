@@ -1,10 +1,10 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { extname } from "node:path";
-import { TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE } from "@brewva/brewva-runtime";
+import { TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate";
 import { Type } from "@sinclair/typebox";
 import { buildReadPathDiscoveryObservationPayload } from "./read-path-discovery.js";
-import { recordToolRuntimeEvent } from "./runtime-internal.js";
+import { recordToolRuntimeEvent } from "./runtime-extensions.js";
 import { resolveScopedPath, resolveToolTargetScope } from "./target-scope.js";
 import type { BrewvaToolRuntime } from "./types.js";
 import { getToolSessionId } from "./utils/parallel-read.js";

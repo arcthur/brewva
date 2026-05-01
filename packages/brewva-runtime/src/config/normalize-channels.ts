@@ -1,4 +1,3 @@
-import type { BrewvaConfig } from "../contracts/index.js";
 import {
   isRecord,
   normalizeBoolean,
@@ -6,6 +5,7 @@ import {
   normalizeStringArray,
   type AnyRecord,
 } from "./normalization-shared.js";
+import type { BrewvaConfig } from "./types.js";
 
 const VALID_CHANNEL_SCOPE_STRATEGIES = new Set(["chat", "thread"]);
 const VALID_CHANNEL_ACL_MODES = new Set(["open", "closed"]);

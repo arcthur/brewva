@@ -7,7 +7,7 @@ reference.
 
 ## Package Boundaries
 
-- Runtime core: `packages/brewva-runtime/src/runtime.ts`
+- Runtime core: `packages/brewva-runtime/src/runtime/runtime.ts`
 - Telegram channel adapter: `packages/brewva-channels-telegram/src/index.ts`
 - Ingress adapters: `packages/brewva-ingress/src/index.ts`
 - Gateway control plane: `packages/brewva-gateway/src/index.ts`

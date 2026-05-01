@@ -1,7 +1,7 @@
 loop_contract:
   goal: "Raise test coverage to 85%"
   scope:
-    - packages/brewva-runtime/src/services/
+    - packages/brewva-runtime/src/domain/
   cadence:
     type: delay
     value: 900000

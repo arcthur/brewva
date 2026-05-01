@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { ContextArena } from "@brewva/brewva-runtime/internal";
+import { createContextArena } from "@brewva/brewva-runtime/context";
 
 function makeEntry(source: string, id: string, content: string) {
   return {
@@ -17,7 +17,7 @@ describe("ContextArena SLO enforcement", () => {
   const sessionId = "context-arena-slo-session";
 
   test("rejects append when arena is full and cannot compact below maxEntries", () => {
-    const arena = new ContextArena({
+    const arena = createContextArena({
       maxEntriesPerSession: 2,
     });
 

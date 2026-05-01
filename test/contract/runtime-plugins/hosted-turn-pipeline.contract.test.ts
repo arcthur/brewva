@@ -4,8 +4,7 @@ import {
   createHostedTurnPipeline,
   type LocalHookPort,
 } from "@brewva/brewva-gateway/runtime-plugins";
-import { ROLLBACK_EVENT_TYPE } from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
+import { ROLLBACK_EVENT_TYPE } from "@brewva/brewva-runtime/events";
 import {
   createMockRuntimePluginApi,
   invokeHandlerAsync,
@@ -579,7 +578,7 @@ describe("hosted turn pipeline", () => {
       localHooks: [localHook],
     }).register(api);
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId: "hosted-local-hook-rollback",
       type: ROLLBACK_EVENT_TYPE,
       payload: {
@@ -630,7 +629,7 @@ describe("hosted turn pipeline", () => {
       },
       createSessionContext("hosted-local-hook-dispose"),
     );
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId: "hosted-local-hook-dispose",
       type: ROLLBACK_EVENT_TYPE,
       payload: {
@@ -646,7 +645,7 @@ describe("hosted turn pipeline", () => {
       { type: "session_shutdown" },
       createSessionContext("hosted-local-hook-dispose"),
     );
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId: "hosted-local-hook-dispose",
       type: ROLLBACK_EVENT_TYPE,
       payload: {
@@ -675,7 +674,7 @@ describe("hosted turn pipeline", () => {
       localHooks: [localHook],
     }).register(api);
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId: "hosted-local-hook-rollback-failure",
       type: ROLLBACK_EVENT_TYPE,
       payload: {
@@ -727,7 +726,7 @@ describe("hosted turn pipeline", () => {
       localHooks: [localHook],
     }).register(api);
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId: "hosted-local-hook-rollback-block-attempt",
       type: ROLLBACK_EVENT_TYPE,
       payload: {

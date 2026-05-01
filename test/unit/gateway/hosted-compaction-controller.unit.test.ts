@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import type { ContextBudgetUsage } from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import {
   HOSTED_COMPACTION_LADDER_TEST_ONLY,
   createHostedCompactionController,
@@ -295,7 +294,7 @@ describe("hosted compaction controller", () => {
     });
     const sessionId = "s-auto-breaker-hydrated";
     for (let attempt = 0; attempt < 3; attempt += 1) {
-      recordRuntimeEvent(runtime, {
+      runtime.extensions.hosted.events.record({
         sessionId,
         type: "context_compaction_auto_failed",
         payload: {

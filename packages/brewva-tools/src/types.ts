@@ -1,5 +1,7 @@
 import type { BoxPlane } from "@brewva/brewva-box";
 import type {
+  BrewvaToolRuntimeExtensions as RuntimeToolRuntimeExtensions,
+  BrewvaToolRuntimeExtensionMethods,
   BrewvaToolRuntimePort as RuntimeToolRuntimePort,
   DelegationConsultKind as RuntimeDelegationConsultKind,
   DesignExecutionStep as RuntimeDesignExecutionStep,
@@ -30,7 +32,7 @@ export type BrewvaToolInterruptBehavior = "cancel" | "block" | "allow_completion
 export type BrewvaToolRequiredCapability =
   | "authority.events.recordGuardResult"
   | "authority.events.recordMetricObservation"
-  | "authority.events.recordTapeHandoff"
+  | "authority.tape.recordTapeHandoff"
   | "authority.reasoning.recordCheckpoint"
   | "authority.reasoning.revert"
   | "authority.schedule.cancelIntent"
@@ -63,14 +65,14 @@ export type BrewvaToolRequiredCapability =
   | "inspect.context.getUsage"
   | "inspect.cost.getSummary"
   | "inspect.events.getLogPath"
-  | "inspect.events.getTapeStatus"
+  | "inspect.tape.getTapeStatus"
   | "inspect.events.list"
   | "inspect.events.listSessionIds"
   | "inspect.events.listGuardResults"
   | "inspect.events.listMetricObservations"
   | "inspect.events.query"
   | "inspect.events.queryStructured"
-  | "inspect.events.searchTape"
+  | "inspect.tape.searchTape"
   | "inspect.events.subscribe"
   | "inspect.ledger.query"
   | "inspect.reasoning.getActiveState"
@@ -94,10 +96,10 @@ export type BrewvaToolRequiredCapability =
   | "inspect.task.getTargetDescriptor"
   | "inspect.tools.explainAccess"
   | "inspect.tools.listResourceLeases"
-  | "internal.recordEvent"
-  | "internal.onClearState"
-  | "internal.appendGuardedSupplementalBlocks"
-  | "internal.resolveCredentialBindings";
+  | "extensions.tools.recordEvent"
+  | "extensions.tools.onClearState"
+  | "extensions.tools.appendGuardedSupplementalBlocks"
+  | "extensions.tools.resolveCredentialBindings";
 
 export interface BrewvaToolExecutionTraits {
   concurrencySafe: boolean;
@@ -127,28 +129,10 @@ export interface BrewvaToolMetadata {
   requiredCapabilities?: readonly BrewvaToolRequiredCapability[];
 }
 
-export interface BrewvaToolInternalRuntime {
-  recordEvent?(input: {
-    sessionId: string;
-    type: string;
-    turn?: number;
-    payload?: object;
-    timestamp?: number;
-    skipTapeCheckpoint?: boolean;
-  }): unknown;
-  onClearState?(listener: (sessionId: string) => void): void;
-  resolveCredentialBindings?(sessionId: string, toolName: string): Record<string, string>;
-  appendGuardedSupplementalBlocks?(
-    sessionId: string,
-    blocks: readonly { familyId: string; content: string }[],
-    scopeId?: string,
-  ): Array<{
-    familyId: string;
-    accepted: boolean;
-    truncated?: boolean;
-    finalTokens?: number;
-    droppedReason?: "hard_limit" | "budget_exhausted";
-  }>;
+export type BrewvaToolRuntimeToolsExtension = Partial<Readonly<BrewvaToolRuntimeExtensionMethods>>;
+
+export interface BrewvaToolRuntimeExtensions {
+  readonly tools?: BrewvaToolRuntimeToolsExtension | RuntimeToolRuntimeExtensions["tools"];
 }
 
 export interface BrewvaToolMetadataCarrier {
@@ -627,8 +611,13 @@ export interface BrewvaToolDelegationQuery {
   listPendingOutcomes?(sessionId: string, query?: { limit?: number }): DelegationRunRecord[];
 }
 
-export type BrewvaToolRuntime = RuntimeToolRuntimePort & {
-  internal?: BrewvaToolInternalRuntime;
+type BrewvaToolRuntimeBase = Pick<
+  RuntimeToolRuntimePort,
+  "cwd" | "workspaceRoot" | "agentId" | "config" | "authority" | "inspect"
+>;
+
+export type BrewvaToolRuntime = BrewvaToolRuntimeBase & {
+  extensions?: BrewvaToolRuntimeExtensions;
   orchestration?: BrewvaToolOrchestration;
   delegation?: BrewvaToolDelegationQuery;
   semanticReranker?: BrewvaSemanticReranker;
@@ -672,10 +661,10 @@ type CapabilityScopedRuntimeGroup<
     : TGroupMap[TGroupName];
 };
 
-type CapabilityScopedInternalRuntime<TCapabilities extends string> = {
-  [TMethodName in keyof BrewvaToolInternalRuntime]: CapabilityScopedMethod<
-    BrewvaToolInternalRuntime[TMethodName],
-    `internal.${Extract<TMethodName, string>}`,
+type CapabilityScopedToolRuntimeExtensions<TCapabilities extends string> = {
+  [TMethodName in keyof BrewvaToolRuntimeToolsExtension]: CapabilityScopedMethod<
+    BrewvaToolRuntimeToolsExtension[TMethodName],
+    `extensions.tools.${Extract<TMethodName, string>}`,
     TCapabilities
   >;
 };
@@ -685,7 +674,7 @@ export type CapabilityScopedBrewvaToolRuntime<
   TCapabilities extends string,
 > = TRuntime extends undefined
   ? undefined
-  : Omit<TRuntime, "authority" | "inspect" | "internal"> & {
+  : Omit<TRuntime, "authority" | "inspect" | "extensions"> & {
       authority: CapabilityScopedRuntimeGroup<
         RuntimeToolRuntimePort["authority"],
         "authority",
@@ -696,12 +685,12 @@ export type CapabilityScopedBrewvaToolRuntime<
         "inspect",
         TCapabilities
       >;
-    } & (TRuntime extends { internal: BrewvaToolInternalRuntime }
-        ? { internal: CapabilityScopedInternalRuntime<TCapabilities> }
-        : { internal?: CapabilityScopedInternalRuntime<TCapabilities> });
+      extensions?: {
+        tools?: CapabilityScopedToolRuntimeExtensions<TCapabilities>;
+      };
+    };
 
-export type BrewvaBundledToolRuntime = RuntimeToolRuntimePort & {
-  internal: BrewvaToolInternalRuntime;
+export type BrewvaBundledToolRuntime = BrewvaToolRuntime & {
   orchestration?: BrewvaToolOrchestration;
   delegation?: BrewvaToolDelegationQuery;
   semanticReranker?: BrewvaSemanticReranker;

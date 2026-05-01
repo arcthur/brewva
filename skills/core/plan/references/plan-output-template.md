@@ -53,7 +53,7 @@ planning artifacts.
   ],
   "implementation_targets": [
     {
-      "target": "packages/brewva-runtime/src/services/skill-lifecycle.ts",
+      "target": "packages/brewva-runtime/src/domain/skills/skill-lifecycle.ts",
       "kind": "runtime-service",
       "owner_boundary": "runtime semantic contracts",
       "reason": "Own completion validation, repair budgeting, and canonical output enforcement."

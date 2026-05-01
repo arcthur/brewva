@@ -30,7 +30,7 @@ describe("deliberation memory tool", () => {
       },
       constraints: ["no backward compatibility"],
       targets: {
-        files: ["packages/brewva-runtime/src/runtime.ts"],
+        files: ["packages/brewva-runtime/src/runtime/runtime.ts"],
       },
     });
     runtime.authority.task.setSpec("memory-session-2", {

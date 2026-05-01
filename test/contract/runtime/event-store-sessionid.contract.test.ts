@@ -1,13 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import {
-  BrewvaRuntime,
-  DEFAULT_BREWVA_CONFIG,
-  asBrewvaEventType,
-  asBrewvaSessionId,
-} from "@brewva/brewva-runtime";
-import { BrewvaEventStore, recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
+import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG, asBrewvaSessionId } from "@brewva/brewva-runtime";
+import { createBrewvaEventStore } from "@brewva/brewva-runtime/event-log";
+import { asBrewvaEventType } from "@brewva/brewva-runtime/events";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 function listJsonlFiles(dir: string): string[] {
@@ -17,7 +13,7 @@ function listJsonlFiles(dir: string): string[] {
 describe("BrewvaEventStore session id file mapping", () => {
   test("encodes session ids into distinct files and lists true session ids", () => {
     const workspace = createTestWorkspace("event-store-encoded");
-    const store = new BrewvaEventStore(DEFAULT_BREWVA_CONFIG.infrastructure.events, workspace);
+    const store = createBrewvaEventStore(DEFAULT_BREWVA_CONFIG.infrastructure.events, workspace);
     const sessionA = asBrewvaSessionId("heartbeat:rule-1");
     const sessionB = asBrewvaSessionId("heartbeat_rule-1");
 
@@ -38,7 +34,7 @@ describe("BrewvaEventStore session id file mapping", () => {
 
   test("ignores non-encoded session jsonl files", () => {
     const workspace = createTestWorkspace("event-store-ignore-legacy");
-    const store = new BrewvaEventStore(DEFAULT_BREWVA_CONFIG.infrastructure.events, workspace);
+    const store = createBrewvaEventStore(DEFAULT_BREWVA_CONFIG.infrastructure.events, workspace);
     const sessionA = "heartbeat:rule-1";
 
     const eventsRoot = join(workspace, DEFAULT_BREWVA_CONFIG.infrastructure.events.dir);
@@ -55,7 +51,7 @@ describe("BrewvaEventStore session id file mapping", () => {
 
   test("recreates the events directory when it disappears after initialization", () => {
     const workspace = createTestWorkspace("event-store-recreate-events-dir");
-    const store = new BrewvaEventStore(DEFAULT_BREWVA_CONFIG.infrastructure.events, workspace);
+    const store = createBrewvaEventStore(DEFAULT_BREWVA_CONFIG.infrastructure.events, workspace);
     const sessionId = asBrewvaSessionId("heartbeat:rule-1");
     const eventsRoot = join(workspace, DEFAULT_BREWVA_CONFIG.infrastructure.events.dir);
 
@@ -79,14 +75,14 @@ describe("BrewvaEventStore session id file mapping", () => {
     });
     const sessionId = asBrewvaSessionId("heartbeat:rule-1");
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "startup",
       timestamp: 100,
     });
 
     const logPath = runtime.inspect.events.getLogPath(sessionId);
-    const store = new BrewvaEventStore(DEFAULT_BREWVA_CONFIG.infrastructure.events, workspace);
+    const store = createBrewvaEventStore(DEFAULT_BREWVA_CONFIG.infrastructure.events, workspace);
     expect(logPath).toBe(store.getLogPath(sessionId));
     expect(logPath.endsWith(".jsonl")).toBe(true);
     expect(Object.hasOwn(runtime.inspect.events, "append")).toBe(false);

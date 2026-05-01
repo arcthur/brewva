@@ -1,11 +1,8 @@
 import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { basename, dirname, extname, resolve } from "node:path";
-import {
-  TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE,
-  parseTscDiagnostics,
-  type TscDiagnostic,
-} from "@brewva/brewva-runtime";
+import { TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
+import { parseTscDiagnostics, type TscDiagnostic } from "@brewva/brewva-runtime/evidence";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate";
 import { Type } from "@sinclair/typebox";
 import { differenceInMilliseconds } from "date-fns";
@@ -13,7 +10,7 @@ import {
   buildReadPathDiscoveryObservationPayload,
   collectObservedPathsFromLocationLines,
 } from "./read-path-discovery.js";
-import { recordToolRuntimeEvent } from "./runtime-internal.js";
+import { recordToolRuntimeEvent } from "./runtime-extensions.js";
 import { escapeRegexLiteral } from "./shared/query.js";
 import { walkWorkspaceFiles } from "./shared/workspace-walk.js";
 import { resolveScopedPath, resolveToolTargetScope } from "./target-scope.js";

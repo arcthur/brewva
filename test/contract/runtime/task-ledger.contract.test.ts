@@ -15,7 +15,7 @@ describe("Task ledger", () => {
       schema: "brewva.task.v1",
       goal: "Fix failing tests in runtime",
       targets: {
-        files: ["packages/brewva-runtime/src/runtime.ts"],
+        files: ["packages/brewva-runtime/src/runtime/runtime.ts"],
       },
       constraints: ["Do not change public CLI flags"],
     };
@@ -25,7 +25,7 @@ describe("Task ledger", () => {
     const state = runtime.inspect.task.getState(sessionId);
     expect(state.spec?.schema).toBe("brewva.task.v1");
     expect(state.spec?.goal).toBe("Fix failing tests in runtime");
-    expect(state.spec?.targets?.files?.[0]).toBe("packages/brewva-runtime/src/runtime.ts");
+    expect(state.spec?.targets?.files?.[0]).toBe("packages/brewva-runtime/src/runtime/runtime.ts");
     expect(state.spec?.constraints?.[0]).toBe("Do not change public CLI flags");
   });
 
@@ -85,7 +85,7 @@ describe("Task ledger", () => {
       }),
     ).toEqual({
       ok: false,
-      error:
+      reason:
         "TaskSpec verification.level has been removed. Verification profile is skill-owned; use verification.commands only when you need explicit command checks.",
     });
 
@@ -98,7 +98,7 @@ describe("Task ledger", () => {
       }),
     ).toEqual({
       ok: false,
-      error:
+      reason:
         "TaskSpec acceptance.owner has been removed. Acceptance is always operator-owned when enabled.",
     });
   });
@@ -208,7 +208,7 @@ describe("Task ledger", () => {
       }),
     ).toEqual({
       ok: false,
-      error: "acceptance_not_enabled",
+      reason: "acceptance_not_enabled",
     });
     expect(runtime.inspect.task.getState(sessionId).acceptance).toBeUndefined();
   });

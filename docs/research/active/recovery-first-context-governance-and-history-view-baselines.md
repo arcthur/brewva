@@ -543,23 +543,23 @@ pipeline keeps its existing kernel entry point.
 - Active prompt-shaping RFC:
   `docs/research/active/prefix-stable-context-management-and-progressive-compaction.md`
 - Recovery working set implementation:
-  `packages/brewva-runtime/src/recovery/read-model.ts`
+  `packages/brewva-runtime/src/domain/recovery/read-model.ts`
 - Session lifecycle hydration:
-  `packages/brewva-runtime/src/services/session-lifecycle.ts`
+  `packages/brewva-runtime/src/domain/sessions/session-lifecycle.ts`
 - Hydration-time tool lifecycle diagnosis:
-  `packages/brewva-runtime/src/services/session-hydration-fold-tool-lifecycle.ts`
+  `packages/brewva-runtime/src/domain/sessions/hydration/fold-tool-lifecycle.ts`
 - Compaction bookkeeping and sanitization:
-  `packages/brewva-runtime/src/services/context-compaction.ts`
+  `packages/brewva-runtime/src/domain/context/context-compaction.ts`
   `packages/brewva-gateway/src/runtime-plugins/context-shared.ts`
 - Hosted compaction event handling and branch checkpoints:
   `packages/brewva-gateway/src/runtime-plugins/event-stream.ts`
-  `packages/brewva-runtime/src/tape/reasoning-events.ts`
+  `packages/brewva-runtime/src/domain/reasoning/events.ts`
 - Context admission and scope dedupe:
-  `packages/brewva-runtime/src/services/context.ts`
-  `packages/brewva-runtime/src/context/injection-orchestrator.ts`
+  `packages/brewva-runtime/src/domain/context/context.ts`
+  `packages/brewva-runtime/src/domain/context/injection-orchestrator.ts`
 - Arena budget classes:
-  `packages/brewva-runtime/src/context/sources.ts`
-  `packages/brewva-runtime/src/context/arena.ts`
+  `packages/brewva-runtime/src/domain/context/sources.ts`
+  `packages/brewva-runtime/src/domain/context/arena.ts`
 
 ## Validation Signals
 

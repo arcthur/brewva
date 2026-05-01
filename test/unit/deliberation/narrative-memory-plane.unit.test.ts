@@ -144,7 +144,7 @@ describe("narrative memory plane", () => {
                 actor: "operator",
                 sessionId: "s-store",
                 agentId: "default",
-                targetRoots: ["packages/brewva-runtime/src/runtime.ts"],
+                targetRoots: ["packages/brewva-runtime/src/runtime/runtime.ts"],
               },
               evidence: [
                 {

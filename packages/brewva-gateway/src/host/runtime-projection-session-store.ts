@@ -1,17 +1,20 @@
 import { randomUUID } from "node:crypto";
 import {
-  MESSAGE_END_EVENT_TYPE,
-  MODEL_PRESET_SELECT_EVENT_TYPE,
-  MODEL_SELECT_EVENT_TYPE,
-  REASONING_REVERT_EVENT_TYPE,
   SESSION_REWIND_DIVERGENCE_SCHEMA,
-  SESSION_REWIND_COMPLETED_EVENT_TYPE,
-  type BrewvaEventRecord,
   type BrewvaRuntime,
   type SessionLifecycleSnapshot,
   type SessionWireFrame,
 } from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
+import { type BrewvaEventRecord } from "@brewva/brewva-runtime/events";
+import {
+  MESSAGE_END_EVENT_TYPE,
+  MODEL_PRESET_SELECT_EVENT_TYPE,
+  MODEL_SELECT_EVENT_TYPE,
+  REASONING_REVERT_EVENT_TYPE,
+  readReasoningRevertEventPayload,
+  readSessionRewindCompletedEventPayload,
+  SESSION_REWIND_COMPLETED_EVENT_TYPE,
+} from "@brewva/brewva-runtime/events";
 import {
   DEFAULT_CONTEXT_STATE,
   buildManagedSessionContext,
@@ -25,10 +28,6 @@ import {
   type BrewvaSessionMessageEntry,
   type BrewvaThinkingLevelChangeEntry,
 } from "@brewva/brewva-substrate";
-import {
-  readSessionRewindCompletedPayload,
-  readSessionRewindDivergenceNote,
-} from "../session/rewind-event-payloads.js";
 import {
   SESSION_BRANCH_SUMMARY_RECORDED_EVENT_TYPE,
   THINKING_LEVEL_SELECTED_EVENT_TYPE,
@@ -171,46 +170,6 @@ function readCanonicalCompactionPayload(payload: unknown): {
   };
 }
 
-function readReasoningRevertPayload(payload: unknown): {
-  revertId: string;
-  toCheckpointId: string;
-  trigger: string;
-  continuityText: string;
-  linkedRollbackReceiptIds: string[];
-  targetLeafEntryId: string | null;
-} | null {
-  if (!isRecord(payload)) {
-    return null;
-  }
-  const revertId = readOptionalString(payload.revertId);
-  const toCheckpointId = readOptionalString(payload.toCheckpointId);
-  const trigger = readOptionalString(payload.trigger);
-  const continuityPacket = isRecord(payload.continuityPacket) ? payload.continuityPacket : null;
-  const continuityText =
-    continuityPacket && typeof continuityPacket.text === "string"
-      ? continuityPacket.text.trim()
-      : "";
-  const linkedRollbackReceiptIds = Array.isArray(payload.linkedRollbackReceiptIds)
-    ? payload.linkedRollbackReceiptIds.flatMap((value) =>
-        typeof value === "string" && value.trim().length > 0 ? [value.trim()] : [],
-      )
-    : [];
-  if (!revertId || !toCheckpointId || !trigger || continuityText.length === 0) {
-    return null;
-  }
-  return {
-    revertId,
-    toCheckpointId,
-    trigger,
-    continuityText,
-    linkedRollbackReceiptIds,
-    targetLeafEntryId:
-      payload.targetLeafEntryId === null
-        ? null
-        : (readOptionalString(payload.targetLeafEntryId) ?? null),
-  };
-}
-
 function readBranchSummaryPayload(payload: unknown): {
   summary: string;
   targetLeafEntryId: string | null;
@@ -248,7 +207,7 @@ function hasCanonicalTranscriptEvents(events: readonly BrewvaEventRecord[]): boo
         isRecord(event.payload) &&
         readOptionalString(event.payload.thinkingLevel)) ||
       (event.type === REASONING_REVERT_EVENT_TYPE &&
-        readReasoningRevertPayload(event.payload) !== null) ||
+        readReasoningRevertEventPayload(event) !== null) ||
       (event.type === SESSION_BRANCH_SUMMARY_RECORDED_EVENT_TYPE &&
         readBranchSummaryPayload(event.payload) !== null) ||
       (event.type === SESSION_COMPACT_EVENT_TYPE &&
@@ -399,7 +358,7 @@ export class HostedRuntimeTapeSessionStore {
   }
 
   appendMessage(message: StoredSessionMessage): string {
-    const event = recordRuntimeEvent(this.runtime, {
+    const event = this.runtime.extensions.hosted.events.record({
       sessionId: this.sessionId,
       type: MESSAGE_END_EVENT_TYPE,
       payload: buildTranscriptMessagePayload(message),
@@ -412,7 +371,7 @@ export class HostedRuntimeTapeSessionStore {
   }
 
   appendThinkingLevelChange(thinkingLevel: string): string {
-    const event = recordRuntimeEvent(this.runtime, {
+    const event = this.runtime.extensions.hosted.events.record({
       sessionId: this.sessionId,
       type: THINKING_LEVEL_SELECTED_EVENT_TYPE,
       payload: {
@@ -427,7 +386,7 @@ export class HostedRuntimeTapeSessionStore {
   }
 
   appendModelChange(provider: string, modelId: string): string {
-    const event = recordRuntimeEvent(this.runtime, {
+    const event = this.runtime.extensions.hosted.events.record({
       sessionId: this.sessionId,
       type: MODEL_SELECT_EVENT_TYPE,
       payload: {
@@ -451,7 +410,7 @@ export class HostedRuntimeTapeSessionStore {
     subagentModels?: Record<string, string>;
     synthetic?: boolean;
   }): string {
-    const event = recordRuntimeEvent(this.runtime, {
+    const event = this.runtime.extensions.hosted.events.record({
       sessionId: this.sessionId,
       type: MODEL_PRESET_SELECT_EVENT_TYPE,
       payload: {
@@ -504,7 +463,7 @@ export class HostedRuntimeTapeSessionStore {
       return revertId;
     }
 
-    const event = recordRuntimeEvent(this.runtime, {
+    const event = this.runtime.extensions.hosted.events.record({
       sessionId: this.sessionId,
       type: SESSION_BRANCH_SUMMARY_RECORDED_EVENT_TYPE,
       payload: {
@@ -528,7 +487,7 @@ export class HostedRuntimeTapeSessionStore {
     details?: unknown,
     fromHook?: boolean,
   ): string {
-    const event = recordRuntimeEvent(this.runtime, {
+    const event = this.runtime.extensions.hosted.events.record({
       sessionId: this.sessionId,
       type: SESSION_COMPACT_EVENT_TYPE,
       payload: {
@@ -562,7 +521,7 @@ export class HostedRuntimeTapeSessionStore {
       throw new Error(`Entry ${parentId} not found`);
     }
     this.#leafId = parentId;
-    const event = recordRuntimeEvent(this.runtime, {
+    const event = this.runtime.extensions.hosted.events.record({
       sessionId: this.sessionId,
       type: SESSION_BRANCH_SUMMARY_RECORDED_EVENT_TYPE,
       payload: {
@@ -601,10 +560,10 @@ export class HostedRuntimeTapeSessionStore {
     for (const event of events) {
       const rewind =
         event.type === SESSION_REWIND_COMPLETED_EVENT_TYPE
-          ? readSessionRewindCompletedPayload(event.payload)
+          ? readSessionRewindCompletedEventPayload(event)
           : null;
-      if (rewind) {
-        this.#rewindSummaryModeByRevertEventId.set(rewind.revertEventId, rewind.summary);
+      if (rewind?.ok === true && rewind.reasoningRevertEventId) {
+        this.#rewindSummaryModeByRevertEventId.set(rewind.reasoningRevertEventId, rewind.summary);
       }
     }
     for (const event of events) {
@@ -618,9 +577,9 @@ export class HostedRuntimeTapeSessionStore {
     }
     this.#seenEventIds.add(event.id);
     if (event.type === SESSION_REWIND_COMPLETED_EVENT_TYPE) {
-      const rewind = readSessionRewindCompletedPayload(event.payload);
-      if (rewind) {
-        this.#rewindSummaryModeByRevertEventId.set(rewind.revertEventId, rewind.summary);
+      const rewind = readSessionRewindCompletedEventPayload(event);
+      if (rewind?.ok === true && rewind.reasoningRevertEventId) {
+        this.#rewindSummaryModeByRevertEventId.set(rewind.reasoningRevertEventId, rewind.summary);
         if (rewind.summary === "none" && options.fromHydration !== true) {
           this.#hydrateFromRuntime();
           return;
@@ -628,9 +587,9 @@ export class HostedRuntimeTapeSessionStore {
       }
     }
     if (event.type === REASONING_REVERT_EVENT_TYPE) {
-      const revert = readReasoningRevertPayload(event.payload);
+      const revert = readReasoningRevertEventPayload(event);
       if (revert && this.#rewindSummaryModeByRevertEventId.get(event.id) === "none") {
-        this.#leafId = revert.targetLeafEntryId;
+        this.#leafId = revert.targetLeafEntryId ?? null;
         return;
       }
     }
@@ -711,19 +670,19 @@ export class HostedRuntimeTapeSessionStore {
     }
 
     if (event.type === REASONING_REVERT_EVENT_TYPE) {
-      const revert = readReasoningRevertPayload(payload);
+      const revert = readReasoningRevertEventPayload(event);
       if (!revert) {
         return undefined;
       }
       return {
         type: "branch_summary",
         id: event.id,
-        parentId: revert.targetLeafEntryId,
+        parentId: revert.targetLeafEntryId ?? null,
         timestamp,
         fromId: revert.targetLeafEntryId ?? "root",
-        summary: revert.continuityText,
+        summary: revert.continuityPacket.text,
         details: {
-          schema: "brewva.reasoning.continuity.v1",
+          schema: revert.continuityPacket.schema,
           revertId: revert.revertId,
           toCheckpointId: revert.toCheckpointId,
           trigger: revert.trigger,
@@ -734,10 +693,11 @@ export class HostedRuntimeTapeSessionStore {
     }
 
     if (event.type === SESSION_REWIND_COMPLETED_EVENT_TYPE) {
-      const divergenceNote = readSessionRewindDivergenceNote(payload);
-      if (!divergenceNote) {
+      const rewind = readSessionRewindCompletedEventPayload(event);
+      if (!rewind || !rewind.ok || !rewind.divergenceNote) {
         return undefined;
       }
+      const divergenceNote = rewind.divergenceNote;
       return {
         type: "branch_summary",
         id: event.id,

@@ -3,7 +3,7 @@ import {
   registerContextTransform,
 } from "@brewva/brewva-gateway/runtime-plugins";
 import { CONTEXT_SOURCES } from "@brewva/brewva-runtime";
-import type { ContextInjectionEntry } from "@brewva/brewva-runtime/internal";
+import { type ContextInjectionEntry } from "@brewva/brewva-runtime/context";
 import {
   createMockRuntimePluginApi,
   invokeHandler,

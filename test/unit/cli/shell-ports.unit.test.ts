@@ -3,8 +3,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
-import { OPERATOR_QUESTION_ANSWERED_EVENT_TYPE } from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
+import { OPERATOR_QUESTION_ANSWERED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
 import {
   buildBrewvaPromptText,
   type BrewvaPromptContentPart,
@@ -21,6 +20,7 @@ import {
   flattenQuestionRequest,
   resolveOpenSessionQuestionRequest,
 } from "../../../packages/brewva-gateway/src/operator-questions.js";
+import { recordHostedSkillCompleted } from "../../helpers/events.js";
 
 describe("cli shell session port", () => {
   test("routes non-streaming interactive prompts through the hosted thread loop", async () => {
@@ -64,7 +64,7 @@ describe("cli shell session port", () => {
         const prompt = buildBrewvaPromptText(parts);
         sentMessages.push(prompt);
         if (sentMessages.length === 1) {
-          recordRuntimeEvent(runtime, {
+          runtime.extensions.hosted.events.record({
             sessionId: "shell-port-session",
             type: "session_compact",
             payload: {
@@ -132,32 +132,30 @@ describe("cli shell session port", () => {
       cwd: mkdtempSync(join(tmpdir(), "brewva-shell-port-question-request-")),
     });
     const sessionId = "shell-port-question-session";
-    const skillCompleted = recordRuntimeEvent(runtime, {
+    const skillCompleted = recordHostedSkillCompleted({
+      runtime,
       sessionId,
-      type: "skill_completed",
-      payload: {
-        skillName: "plan",
-        outputs: {
-          question_requests: [
-            {
-              title: "Deployment",
-              questions: [
-                {
-                  header: "Deploy",
-                  question: "Proceed with deployment?",
-                  options: [{ label: "Yes" }, { label: "No" }],
-                  custom: false,
-                },
-                {
-                  header: "Smoke",
-                  question: "Wait for dist smoke?",
-                  options: [{ label: "Yes" }, { label: "No" }],
-                  custom: false,
-                },
-              ],
-            },
-          ],
-        },
+      skillName: "plan",
+      outputs: {
+        question_requests: [
+          {
+            title: "Deployment",
+            questions: [
+              {
+                header: "Deploy",
+                question: "Proceed with deployment?",
+                options: [{ label: "Yes" }, { label: "No" }],
+                custom: false,
+              },
+              {
+                header: "Smoke",
+                question: "Wait for dist smoke?",
+                options: [{ label: "Yes" }, { label: "No" }],
+                custom: false,
+              },
+            ],
+          },
+        ],
       },
     });
     if (!skillCompleted) {
@@ -195,7 +193,7 @@ describe("cli shell session port", () => {
         if (!firstQuestion) {
           return;
         }
-        recordRuntimeEvent(runtime, {
+        runtime.extensions.hosted.events.record({
           sessionId,
           type: OPERATOR_QUESTION_ANSWERED_EVENT_TYPE,
           payload: buildOperatorQuestionAnsweredPayload({

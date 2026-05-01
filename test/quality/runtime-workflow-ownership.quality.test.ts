@@ -29,18 +29,22 @@ function listSourceFiles(relativeDir: string): string[] {
 }
 
 describe("runtime workflow derivation ownership", () => {
-  test("root runtime exports concrete workflow owner modules without a derivation shim", () => {
+  test("runtime public surface exports concrete workflow owner modules without a derivation shim", () => {
     const indexSource = readRepoFile("packages/brewva-runtime/src/index.ts");
+    const publicIndexSource = readRepoFile("packages/brewva-runtime/src/public/index.ts");
 
     expect(
-      existsSync(resolve(repoRoot, "packages/brewva-runtime/src/workflow/derivation.ts")),
+      existsSync(resolve(repoRoot, "packages/brewva-runtime/src/domain/workflow/derivation.ts")),
     ).toBe(false);
-    expect(indexSource).not.toContain("./workflow/derivation.js");
-    expect(indexSource).toContain("./workflow/types.js");
-    expect(indexSource).toContain("./workflow/artifact-derivation.js");
-    expect(indexSource).toContain("./workflow/status-derivation.js");
-    expect(indexSource).toContain("./workflow/workspace-revision.js");
-    expect(indexSource).not.toContain('export * from "./workflow/artifact-derivation.js"');
+    expect(indexSource.trim()).toBe('export * from "./public/index.js";');
+    expect(publicIndexSource).not.toContain("./workflow/derivation.js");
+    expect(publicIndexSource).toContain("../domain/workflow/types.js");
+    expect(publicIndexSource).toContain("../domain/workflow/artifact-derivation.js");
+    expect(publicIndexSource).toContain("../domain/workflow/status-derivation.js");
+    expect(publicIndexSource).toContain("../domain/workflow/workspace-revision.js");
+    expect(publicIndexSource).not.toContain(
+      'export * from "../../packages/brewva-runtime/src/domain/workflow/artifact-derivation.js"',
+    );
   });
 
   test("runtime source imports concrete workflow owner modules directly", () => {

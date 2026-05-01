@@ -1,6 +1,5 @@
 import { BrewvaRuntime, type ToolOutputView } from "@brewva/brewva-runtime";
 import type { TurnEnvelope, TurnPart } from "@brewva/brewva-runtime/channels";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import type { SubscribablePromptSession } from "../session/contracts.js";
 import { runHostedTurnEnvelope } from "../session/turn-envelope.js";
 import { toErrorMessage } from "../utils/errors.js";
@@ -262,7 +261,7 @@ export function createChannelAgentDispatch(input: {
     if (!prompt) {
       return;
     }
-    recordRuntimeEvent(state.runtime, {
+    state.runtime.extensions.hosted.events.record({
       sessionId: canonicalTurn.sessionId,
       type: "channel_turn_dispatch_start",
       payload: {
@@ -283,7 +282,7 @@ export function createChannelAgentDispatch(input: {
     });
     await input.registry.touchAgent(state.agentId, Date.now(), true);
 
-    recordRuntimeEvent(state.runtime, {
+    state.runtime.extensions.hosted.events.record({
       sessionId: canonicalTurn.sessionId,
       type: "channel_turn_dispatch_end",
       payload: {
@@ -305,7 +304,7 @@ export function createChannelAgentDispatch(input: {
       nextSequence: () => input.sessionCoordinator.nextOutboundSequence(state),
     });
 
-    recordRuntimeEvent(state.runtime, {
+    state.runtime.extensions.hosted.events.record({
       sessionId: canonicalTurn.sessionId,
       type: "channel_turn_outbound_complete",
       payload: {

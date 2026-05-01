@@ -167,7 +167,10 @@ export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinitio
           status,
         });
         if (!result.ok) {
-          return failTextResult(`Task item rejected (${result.error ?? "unknown_error"}).`, result);
+          return failTextResult(
+            `Task item rejected (${result.reason ?? "unknown_error"}).`,
+            result,
+          );
         }
         return textResult(`Task item added (${result.itemId}).`, result);
       },
@@ -202,7 +205,7 @@ export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinitio
         });
         if (!result.ok) {
           return failTextResult(
-            `Task item update rejected (${result.error ?? "unknown_error"}).`,
+            `Task item update rejected (${result.reason ?? "unknown_error"}).`,
             result,
           );
         }
@@ -235,7 +238,7 @@ export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinitio
           truthFactId: params.truthFactId,
         });
         if (!result.ok) {
-          return failTextResult(`Blocker rejected (${result.error ?? "unknown_error"}).`, result);
+          return failTextResult(`Blocker rejected (${result.reason ?? "unknown_error"}).`, result);
         }
         return textResult(`Blocker recorded (${result.blockerId}).`, result);
       },
@@ -262,7 +265,7 @@ export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinitio
         );
         if (!result.ok) {
           return failTextResult(
-            `Blocker resolve rejected (${result.error ?? "unknown_error"}).`,
+            `Blocker resolve rejected (${result.reason ?? "unknown_error"}).`,
             result,
           );
         }
@@ -306,7 +309,7 @@ export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinitio
         });
         if (!result.ok) {
           return failTextResult(
-            `Acceptance update rejected (${result.error ?? "unknown_error"}).`,
+            `Acceptance update rejected (${result.reason ?? "unknown_error"}).`,
             result,
           );
         }

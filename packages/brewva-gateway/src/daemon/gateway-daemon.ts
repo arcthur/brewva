@@ -20,11 +20,11 @@ import {
   type ManagedToolMode,
 } from "@brewva/brewva-runtime";
 import {
-  RecoveryWalStore,
-  SchedulerService,
-  createSchedulerIngressPort,
-  recordRuntimeEvent,
-} from "@brewva/brewva-runtime/internal";
+  createRecoveryWalStore,
+  createSchedulerService,
+  type RecoveryWalStore,
+  type SchedulerService,
+} from "@brewva/brewva-runtime/recovery";
 import { WebSocketServer, type RawData, type WebSocket } from "ws";
 import { loadOrCreateGatewayToken, rotateGatewayToken } from "../auth.js";
 import { assertLoopbackHost, normalizeGatewayHost } from "../network.js";
@@ -585,7 +585,7 @@ export class GatewayDaemon {
       );
     this.recoveryWalStore = options.sessionBackend
       ? undefined
-      : new RecoveryWalStore({
+      : createRecoveryWalStore({
           workspaceRoot,
           config: runtimeConfig.infrastructure.recoveryWal,
           scope: "gateway",
@@ -611,6 +611,12 @@ export class GatewayDaemon {
         maxPendingSessionOpens: options.maxPendingSessionOpens,
         stateStore: this.stateStore,
         recoveryWalStore: this.recoveryWalStore,
+        recoveryWalContext: this.recoveryWalStore
+          ? {
+              workspaceRoot,
+              config: runtimeConfig.infrastructure.recoveryWal,
+            }
+          : undefined,
         recoveryWalCompactIntervalMs: Math.max(
           30_000,
           Math.floor(runtimeConfig.infrastructure.recoveryWal.compactAfterMs / 2),
@@ -641,14 +647,14 @@ export class GatewayDaemon {
       : null;
     if (this.schedulerRuntime && !this.schedulerUnavailableReason) {
       const schedulerRuntime = this.schedulerRuntime;
-      const schedulerIngress = createSchedulerIngressPort(schedulerRuntime);
-      this.scheduler = new SchedulerService({
+      const schedulerIngress = schedulerRuntime.extensions.recovery.scheduler;
+      this.scheduler = createSchedulerService({
         runtime: {
           workspaceRoot: schedulerRuntime.workspaceRoot,
           scheduleConfig: schedulerRuntime.config.schedule,
           listSessionIds: () => schedulerRuntime.inspect.events.listSessionIds(),
           listEvents: (sessionId, query) => schedulerRuntime.inspect.events.list(sessionId, query),
-          recordEvent: (input) => recordRuntimeEvent(schedulerRuntime, input),
+          recordEvent: (input) => schedulerRuntime.extensions.hosted.events.record(input),
           subscribeEvents: (listener) => schedulerRuntime.inspect.events.subscribe(listener),
           getTruthState: (sessionId) => schedulerRuntime.inspect.truth.getState(sessionId),
           getTaskState: (sessionId) => schedulerRuntime.inspect.task.getState(sessionId),
@@ -871,7 +877,9 @@ export class GatewayDaemon {
           reason: "Disabled by schedule.selfImprove.enabled=false.",
         });
         if (!cancelled.ok) {
-          throw new Error(`Failed to disable autonomous self-improve schedule: ${cancelled.error}`);
+          throw new Error(
+            `Failed to disable autonomous self-improve schedule: ${cancelled.reason}`,
+          );
         }
       }
       return;
@@ -891,7 +899,7 @@ export class GatewayDaemon {
         maxRuns: policy.maxRuns,
       });
       if (!created.ok) {
-        throw new Error(`Failed to create autonomous self-improve schedule: ${created.error}`);
+        throw new Error(`Failed to create autonomous self-improve schedule: ${created.reason}`);
       }
       return;
     }
@@ -914,7 +922,7 @@ export class GatewayDaemon {
       { allowInactiveReactivation: true },
     );
     if (!updated.ok) {
-      throw new Error(`Failed to reconcile autonomous self-improve schedule: ${updated.error}`);
+      throw new Error(`Failed to reconcile autonomous self-improve schedule: ${updated.reason}`);
     }
   }
 

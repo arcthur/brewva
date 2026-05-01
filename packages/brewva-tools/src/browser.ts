@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate";
 import { Type } from "@sinclair/typebox";
-import { recordToolRuntimeEvent } from "./runtime-internal.js";
+import { recordToolRuntimeEvent } from "./runtime-extensions.js";
 import type { BrewvaBundledToolOptions } from "./types.js";
 import { buildStringEnumSchema } from "./utils/input-alias.js";
 import { failTextResult, textResult } from "./utils/result.js";
@@ -167,8 +167,13 @@ function enforceRuntimeToolAccess(input: {
     sessionId: input.sessionId,
     type: "tool_call_blocked",
     payload: {
+      schema: "brewva.tool_call_blocked.v1",
       toolName: input.toolName,
       reason: decision.reason ?? "Tool call blocked by runtime policy.",
+      decision: null,
+      proposalId: null,
+      requestId: null,
+      manifestBasis: null,
     },
   });
 

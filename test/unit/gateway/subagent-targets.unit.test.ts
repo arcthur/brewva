@@ -38,7 +38,7 @@ describe("delegation prompt and catalog composition", () => {
         contextRefs: [
           {
             kind: "workspace_span",
-            locator: "packages/brewva-runtime/src/runtime.ts#L1",
+            locator: "packages/brewva-runtime/src/runtime/runtime.ts#L1",
             summary: "Primary runtime surface",
           },
           {

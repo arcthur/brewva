@@ -77,8 +77,8 @@ describe("review ensemble protocol", () => {
   test("classifies changed files into canonical fallback classes", () => {
     expect(
       classifyReviewChangedFiles([
-        "packages/brewva-runtime/src/services/event-pipeline.ts",
-        "packages/brewva-runtime/src/contracts/review.ts",
+        "packages/brewva-runtime/src/domain/sessions/event-pipeline.ts",
+        "packages/brewva-runtime/src/domain/skills/review.ts",
       ]),
     ).toEqual(expect.arrayContaining(["runtime_coordination", "persisted_format"]));
 

@@ -1,5 +1,14 @@
 import {
   BrewvaRuntime,
+  type ManagedToolMode,
+  type ScheduleContinuityMode,
+  type ScheduleIntentProjectionRecord,
+  type TaskSpec,
+  type TruthFact,
+} from "@brewva/brewva-runtime";
+import {
+  readSkillActivatedEventPayload,
+  readSkillCompletionFailureEventPayload,
   SESSION_SHUTDOWN_EVENT_TYPE,
   SKILL_ACTIVATED_EVENT_TYPE,
   SKILL_COMPLETED_EVENT_TYPE,
@@ -9,14 +18,7 @@ import {
   SCHEDULE_CHILD_SESSION_FINISHED_EVENT_TYPE,
   SCHEDULE_CHILD_SESSION_STARTED_EVENT_TYPE,
   SCHEDULE_WAKEUP_EVENT_TYPE,
-  type BrewvaEventRecord,
-  type ManagedToolMode,
-  type ScheduleContinuityMode,
-  type ScheduleIntentProjectionRecord,
-  type TaskSpec,
-  type TruthFact,
-} from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
+} from "@brewva/brewva-runtime/events";
 import type {
   SchedulePromptAnchor,
   SchedulePromptTrigger,
@@ -45,25 +47,6 @@ export function buildScheduleWorkerSessionId(input: {
   return `schedule:${input.intentId}:${input.runIndex}`;
 }
 
-function readOptionalString(value: unknown): string | undefined {
-  if (typeof value !== "string") {
-    return undefined;
-  }
-  const normalized = value.trim();
-  return normalized.length > 0 ? normalized : undefined;
-}
-
-function readEventPayloadRecord(event: BrewvaEventRecord): Record<string, unknown> | null {
-  return event.payload && typeof event.payload === "object" && !Array.isArray(event.payload)
-    ? (event.payload as Record<string, unknown>)
-    : null;
-}
-
-function readEventPayloadSkillName(event: BrewvaEventRecord): string | undefined {
-  const payload = readEventPayloadRecord(event);
-  return payload ? readOptionalString(payload.skillName) : undefined;
-}
-
 function deriveParentActiveSkillName(
   runtime: BrewvaRuntime,
   sessionId: string,
@@ -75,13 +58,12 @@ function deriveParentActiveSkillName(
       continue;
     }
     if (event.type === SKILL_ACTIVATED_EVENT_TYPE) {
-      activeSkillName = readEventPayloadSkillName(event);
+      activeSkillName = readSkillActivatedEventPayload(event)?.skillName;
       continue;
     }
     if (event.type === SKILL_COMPLETION_REJECTED_EVENT_TYPE) {
-      const skillName = readEventPayloadSkillName(event);
-      const payload = readEventPayloadRecord(event);
-      activeSkillName = payload?.phase === "repair_required" ? skillName : undefined;
+      const failure = readSkillCompletionFailureEventPayload(event);
+      activeSkillName = failure?.phase === "repair_required" ? failure.skillName : undefined;
       continue;
     }
     if (
@@ -107,7 +89,7 @@ export function collectScheduleContinuationSnapshot(
     };
   }
 
-  const parentAnchor = runtime.inspect.events.getTapeStatus(input.parentSessionId).lastAnchor;
+  const parentAnchor = runtime.inspect.tape.getTapeStatus(input.parentSessionId).lastAnchor;
   const parentTask = runtime.inspect.task.getState(input.parentSessionId);
   const parentTruth = runtime.inspect.truth.getState(input.parentSessionId);
   return {
@@ -199,7 +181,7 @@ export async function executeScheduleIntentRun(input: {
     snapshot,
   });
 
-  recordRuntimeEvent(input.runtime, {
+  input.runtime.extensions.hosted.events.record({
     sessionId: agentSessionId,
     type: SCHEDULE_WAKEUP_EVENT_TYPE,
     payload: {
@@ -216,7 +198,7 @@ export async function executeScheduleIntentRun(input: {
       parentAnchorId: snapshot.parentAnchor?.id ?? null,
     },
   });
-  recordRuntimeEvent(input.runtime, {
+  input.runtime.extensions.hosted.events.record({
     sessionId: input.intent.parentSessionId,
     type: SCHEDULE_CHILD_SESSION_STARTED_EVENT_TYPE,
     payload: {
@@ -233,7 +215,7 @@ export async function executeScheduleIntentRun(input: {
       trigger,
     });
     const evaluationSessionId = result.agentSessionId?.trim() || agentSessionId;
-    recordRuntimeEvent(input.runtime, {
+    input.runtime.extensions.hosted.events.record({
       sessionId: input.intent.parentSessionId,
       type: SCHEDULE_CHILD_SESSION_FINISHED_EVENT_TYPE,
       payload: {
@@ -247,7 +229,7 @@ export async function executeScheduleIntentRun(input: {
       workerSessionId,
     };
   } catch (error) {
-    recordRuntimeEvent(input.runtime, {
+    input.runtime.extensions.hosted.events.record({
       sessionId: input.intent.parentSessionId,
       type: SCHEDULE_CHILD_SESSION_FAILED_EVENT_TYPE,
       payload: {

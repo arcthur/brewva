@@ -2,17 +2,13 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import {
   BrewvaRuntime,
-  SCHEDULE_EVENT_TYPE,
   asBrewvaIntentId,
   buildScheduleIntentCreatedEvent,
   parseScheduleIntentEvent,
 } from "@brewva/brewva-runtime";
 import { buildTurnEnvelope } from "@brewva/brewva-runtime/channels";
-import {
-  SchedulerService,
-  createSchedulerIngressPort,
-  recordRuntimeEvent,
-} from "@brewva/brewva-runtime/internal";
+import { SCHEDULE_EVENT_TYPE } from "@brewva/brewva-runtime/events";
+import { createSchedulerService } from "@brewva/brewva-runtime/recovery";
 import { requireDefined } from "../../helpers/assertions.js";
 import {
   computeExpectedRecurringJitteredNextRunAt,
@@ -28,7 +24,7 @@ describe("scheduler service recovery contract", () => {
     const sessionId = "scheduler-recover-session";
     const now = Date.now();
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: SCHEDULE_EVENT_TYPE,
       payload: buildScheduleIntentCreatedEvent({
@@ -44,7 +40,7 @@ describe("scheduler service recovery contract", () => {
     });
 
     const fired: string[] = [];
-    const scheduler = new SchedulerService({
+    const scheduler = createSchedulerService({
       runtime: schedulerRuntimePort(runtime),
       executeIntent: async (intent) => {
         fired.push(intent.intentId);
@@ -88,7 +84,7 @@ describe("scheduler service recovery contract", () => {
     const sessionId = "scheduler-recover-overflow-session";
     const dueRunAt = nowMs - 10_000;
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: SCHEDULE_EVENT_TYPE,
       payload: buildScheduleIntentCreatedEvent({
@@ -102,7 +98,7 @@ describe("scheduler service recovery contract", () => {
       }) as unknown as Record<string, unknown>,
       skipTapeCheckpoint: true,
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: SCHEDULE_EVENT_TYPE,
       payload: buildScheduleIntentCreatedEvent({
@@ -118,7 +114,7 @@ describe("scheduler service recovery contract", () => {
     });
 
     const fired: string[] = [];
-    const scheduler = new SchedulerService({
+    const scheduler = createSchedulerService({
       runtime: schedulerRuntimePort(runtime),
       now: () => nowMs,
       executeIntent: async (intent) => {
@@ -163,7 +159,7 @@ describe("scheduler service recovery contract", () => {
     const nowMs = Date.UTC(2026, 0, 1, 1, 0, 0, 0);
     const dueRunAt = nowMs - 10_000;
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId: "session-fair-a",
       type: SCHEDULE_EVENT_TYPE,
       payload: buildScheduleIntentCreatedEvent({
@@ -177,7 +173,7 @@ describe("scheduler service recovery contract", () => {
       }) as unknown as Record<string, unknown>,
       skipTapeCheckpoint: true,
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId: "session-fair-a",
       type: SCHEDULE_EVENT_TYPE,
       payload: buildScheduleIntentCreatedEvent({
@@ -191,7 +187,7 @@ describe("scheduler service recovery contract", () => {
       }) as unknown as Record<string, unknown>,
       skipTapeCheckpoint: true,
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId: "session-fair-b",
       type: SCHEDULE_EVENT_TYPE,
       payload: buildScheduleIntentCreatedEvent({
@@ -207,7 +203,7 @@ describe("scheduler service recovery contract", () => {
     });
 
     const fired: string[] = [];
-    const scheduler = new SchedulerService({
+    const scheduler = createSchedulerService({
       runtime: schedulerRuntimePort(runtime),
       now: () => nowMs,
       executeIntent: async (intent) => {
@@ -275,7 +271,7 @@ describe("scheduler service recovery contract", () => {
     let nowMs = Date.now();
     const sessionId = "scheduler-circuit-session";
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: SCHEDULE_EVENT_TYPE,
       payload: buildScheduleIntentCreatedEvent({
@@ -290,7 +286,7 @@ describe("scheduler service recovery contract", () => {
       skipTapeCheckpoint: true,
     });
 
-    const scheduler = new SchedulerService({
+    const scheduler = createSchedulerService({
       runtime: schedulerRuntimePort(runtime),
       now: () => nowMs,
       executeIntent: async () => {
@@ -328,7 +324,7 @@ describe("scheduler service recovery contract", () => {
 
     const nowMs = Date.now();
     const sessionId = "scheduler-error-retry-session";
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: SCHEDULE_EVENT_TYPE,
       payload: buildScheduleIntentCreatedEvent({
@@ -343,7 +339,7 @@ describe("scheduler service recovery contract", () => {
       skipTapeCheckpoint: true,
     });
 
-    const scheduler = new SchedulerService({
+    const scheduler = createSchedulerService({
       runtime: schedulerRuntimePort(runtime),
       now: () => nowMs,
       executeIntent: async () => {
@@ -387,7 +383,7 @@ describe("scheduler service recovery contract", () => {
     const sessionId = "scheduler-stale-one-shot-session";
     const overdueRunAt = nowMs - 3 * 60 * 60 * 1000;
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: SCHEDULE_EVENT_TYPE,
       payload: buildScheduleIntentCreatedEvent({
@@ -403,7 +399,7 @@ describe("scheduler service recovery contract", () => {
     });
 
     const fired: string[] = [];
-    const scheduler = new SchedulerService({
+    const scheduler = createSchedulerService({
       runtime: schedulerRuntimePort(runtime),
       now: () => nowMs,
       executeIntent: async (intent) => {
@@ -445,7 +441,7 @@ describe("scheduler service recovery contract", () => {
 
     const nowMs = Date.UTC(2026, 0, 1, 4, 0, 0, 0);
     const sessionId = "scheduler-recovery-defer-order-session";
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: SCHEDULE_EVENT_TYPE,
       payload: buildScheduleIntentCreatedEvent({
@@ -459,7 +455,7 @@ describe("scheduler service recovery contract", () => {
       }) as unknown as Record<string, unknown>,
       skipTapeCheckpoint: true,
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: SCHEDULE_EVENT_TYPE,
       payload: buildScheduleIntentCreatedEvent({
@@ -473,7 +469,7 @@ describe("scheduler service recovery contract", () => {
       }) as unknown as Record<string, unknown>,
       skipTapeCheckpoint: true,
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: SCHEDULE_EVENT_TYPE,
       payload: buildScheduleIntentCreatedEvent({
@@ -487,7 +483,7 @@ describe("scheduler service recovery contract", () => {
       }) as unknown as Record<string, unknown>,
       skipTapeCheckpoint: true,
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: SCHEDULE_EVENT_TYPE,
       payload: buildScheduleIntentCreatedEvent({
@@ -502,7 +498,7 @@ describe("scheduler service recovery contract", () => {
       skipTapeCheckpoint: true,
     });
 
-    const schedulerIngress = createSchedulerIngressPort(runtime);
+    const schedulerIngress = runtime.extensions.recovery.scheduler;
     const walRecord = schedulerIngress.appendPending(
       buildTurnEnvelope({
         kind: "user",
@@ -525,7 +521,7 @@ describe("scheduler service recovery contract", () => {
     schedulerIngress.markInflight(walRecord.walId);
 
     const fired: string[] = [];
-    const scheduler = new SchedulerService({
+    const scheduler = createSchedulerService({
       runtime: {
         ...schedulerRuntimePort(runtime),
         recoveryWal: {
@@ -600,7 +596,7 @@ describe("scheduler service recovery contract", () => {
 
     let nowMs = Date.UTC(2026, 0, 1, 0, 1, 30, 0);
     const executed: number[] = [];
-    const scheduler = new SchedulerService({
+    const scheduler = createSchedulerService({
       runtime: schedulerRuntimePort(runtime),
       now: () => nowMs,
       executeIntent: async () => {
@@ -667,14 +663,14 @@ describe("scheduler service recovery contract", () => {
     });
 
     const nowMs = Date.UTC(2026, 0, 1, 0, 30, 0, 0);
-    const daemonScheduler = new SchedulerService({
+    const daemonScheduler = createSchedulerService({
       runtime: schedulerRuntimePort(runtime),
       now: () => nowMs,
       executeIntent: async () => {},
     });
     await daemonScheduler.recover();
 
-    const externalScheduler = new SchedulerService({
+    const externalScheduler = createSchedulerService({
       runtime: schedulerRuntimePort(runtime),
       now: () => nowMs,
       enableExecution: false,

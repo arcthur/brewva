@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { ContextInjectionCollector } from "@brewva/brewva-runtime/internal";
+import { createContextInjectionCollector } from "@brewva/brewva-runtime/context";
 
 function makeRegistration(
   source: string,
@@ -29,7 +29,7 @@ describe("Context injection collector", () => {
   const estimateTokens = (text: string): number => Math.max(0, Math.ceil(text.length / 3.5));
 
   test("does not let oversized provided estimates drop later entries", () => {
-    const collector = new ContextInjectionCollector();
+    const collector = createContextInjectionCollector();
     const sessionId = "collector-oversized-estimate";
 
     collector.register(
@@ -49,7 +49,7 @@ describe("Context injection collector", () => {
   });
 
   test("does not consume once-per-session entry before commit", () => {
-    const collector = new ContextInjectionCollector();
+    const collector = createContextInjectionCollector();
     const sessionId = "collector-once-before-commit";
 
     collector.register(
@@ -72,7 +72,7 @@ describe("Context injection collector", () => {
   });
 
   test("blocks once-per-session entry after commit", () => {
-    const collector = new ContextInjectionCollector();
+    const collector = createContextInjectionCollector();
     const sessionId = "collector-once-after-commit";
 
     collector.register(
@@ -91,7 +91,7 @@ describe("Context injection collector", () => {
   });
 
   test("uses conservative token estimate for dense text", () => {
-    const collector = new ContextInjectionCollector();
+    const collector = createContextInjectionCollector();
     const sessionId = "collector-conservative-estimate";
     const dense = "x".repeat(15);
 
@@ -103,7 +103,7 @@ describe("Context injection collector", () => {
   });
 
   test("oversized entries are truncated under deterministic single-path policy", () => {
-    const collector = new ContextInjectionCollector();
+    const collector = createContextInjectionCollector();
     const sessionId = "collector-deterministic-truncate";
     const structured = JSON.stringify({
       skills: ["debugging", "implementation", "review"],
@@ -120,7 +120,7 @@ describe("Context injection collector", () => {
   });
 
   test("collector stops after the first truncated oversized entry", () => {
-    const collector = new ContextInjectionCollector();
+    const collector = createContextInjectionCollector();
     const sessionId = "collector-deterministic-tail-stop";
 
     collector.register(sessionId, makeRegistration("source-large", "large", "x".repeat(200)));
@@ -134,7 +134,7 @@ describe("Context injection collector", () => {
   });
 
   test("accounts for entry separators when planning token budget", () => {
-    const collector = new ContextInjectionCollector();
+    const collector = createContextInjectionCollector();
     const sessionId = "collector-separator-budget";
     const block = "x".repeat(35);
 
@@ -147,7 +147,7 @@ describe("Context injection collector", () => {
   });
 
   test("plans entries in deterministic append order", () => {
-    const collector = new ContextInjectionCollector();
+    const collector = createContextInjectionCollector();
     const sessionId = "ctx-char-priority";
 
     collector.register(
@@ -166,7 +166,7 @@ describe("Context injection collector", () => {
   });
 
   test("commit removes consumed entries from next plan", () => {
-    const collector = new ContextInjectionCollector();
+    const collector = createContextInjectionCollector();
     const sessionId = "ctx-char-commit";
 
     collector.register(
@@ -182,7 +182,7 @@ describe("Context injection collector", () => {
   });
 
   test("sourceTokenLimits truncates individual source entries deterministically", () => {
-    const collector = new ContextInjectionCollector({
+    const collector = createContextInjectionCollector({
       sourceTokenLimits: {
         "brewva.projection-working": 5,
       },

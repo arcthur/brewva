@@ -1,12 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { chmodSync, mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import {
-  BrewvaRuntime,
-  DEFAULT_BREWVA_CONFIG,
-  PATCH_RECORDED_EVENT_TYPE,
-  type BrewvaConfig,
-} from "@brewva/brewva-runtime";
+import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG, type BrewvaConfig } from "@brewva/brewva-runtime";
+import { PATCH_RECORDED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
 import { createReadSpansTool, createTocTools } from "@brewva/brewva-tools";
 import { requireDefined } from "../../helpers/assertions.js";
 import { createBundledToolRuntime } from "../../helpers/runtime.js";
@@ -391,7 +387,7 @@ describe("TOC tools", () => {
     const bundledRuntime = createBundledToolRuntime(runtime);
     const sessionId = "toc-advisor-session";
     const now = Date.now();
-    bundledRuntime.internal?.recordEvent?.({
+    bundledRuntime.extensions?.tools?.recordEvent?.({
       sessionId,
       type: PATCH_RECORDED_EVENT_TYPE,
       timestamp: now,
@@ -499,7 +495,7 @@ describe("TOC tools", () => {
     const runtime = createRuntime(workspace);
     const bundledRuntime = createBundledToolRuntime(runtime);
     const sessionId = "toc-suggestion-combo-session";
-    bundledRuntime.internal?.recordEvent?.({
+    bundledRuntime.extensions?.tools?.recordEvent?.({
       sessionId,
       type: PATCH_RECORDED_EVENT_TYPE,
       timestamp: Date.now(),

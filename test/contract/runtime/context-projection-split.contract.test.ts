@@ -3,6 +3,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG, type BrewvaConfig } from "@brewva/brewva-runtime";
+import { getRuntimeInternals } from "../../helpers/runtime-internals.js";
 
 type RuntimeWithInternals = {
   projectionEngine: {
@@ -19,7 +20,7 @@ function createConfig(): BrewvaConfig {
 }
 
 function patchProjection(runtime: BrewvaRuntime): void {
-  const runtimeWithInternals = runtime as unknown as RuntimeWithInternals;
+  const runtimeWithInternals = getRuntimeInternals(runtime) as RuntimeWithInternals;
   runtimeWithInternals.projectionEngine.refreshIfNeeded = () => undefined;
   runtimeWithInternals.projectionEngine.getWorkingProjection = () => ({
     content: "[WorkingProjection]\nsummary: deterministic working projection",

@@ -160,7 +160,7 @@ Operator expectations:
 - Background controller: `packages/brewva-gateway/src/subagents/background-controller.ts`
 - Background protocol: `packages/brewva-gateway/src/subagents/background-protocol.ts`
 - Workspace isolation: `packages/brewva-gateway/src/subagents/workspace.ts`
-- Runtime parallel state: `packages/brewva-runtime/src/services/parallel.ts`
+- Runtime parallel state: `packages/brewva-runtime/src/domain/parallel/parallel.ts`
 - Delegation store: `packages/brewva-gateway/src/subagents/delegation-store.ts`
 - Run / fan-out tools: `packages/brewva-tools/src/subagent-run.ts`
 - Status / cancel tools: `packages/brewva-tools/src/subagent-control.ts`

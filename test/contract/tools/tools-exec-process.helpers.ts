@@ -121,22 +121,24 @@ export function createRuntimeForExecTests(input?: {
   const runtime: BrewvaBundledToolRuntime = {
     ...createToolRuntimePort(runtimeFixture),
     boxPlane: input?.boxPlane ?? createInMemoryBoxPlane(),
-    internal: {
-      recordEvent: (event) => {
-        events.push({
-          sessionId: event.sessionId,
-          type: event.type,
-          turn: event.turn,
-          payload: event.payload as Record<string, unknown> | undefined,
-          timestamp: event.timestamp,
-          skipTapeCheckpoint: event.skipTapeCheckpoint,
-        });
-        return undefined;
+    extensions: {
+      tools: {
+        recordEvent: (event) => {
+          events.push({
+            sessionId: event.sessionId,
+            type: event.type,
+            turn: event.turn,
+            payload: event.payload as Record<string, unknown> | undefined,
+            timestamp: event.timestamp,
+            skipTapeCheckpoint: event.skipTapeCheckpoint,
+          });
+          return undefined;
+        },
+        onClearState: (listener) => {
+          clearStateListeners.push(listener);
+        },
+        resolveCredentialBindings: () => ({ ...input?.boundEnv }),
       },
-      onClearState: (listener) => {
-        clearStateListeners.push(listener);
-      },
-      resolveCredentialBindings: () => ({ ...input?.boundEnv }),
     },
   };
 

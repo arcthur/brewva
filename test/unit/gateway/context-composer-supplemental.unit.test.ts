@@ -22,12 +22,13 @@ describe("context composer supplemental", () => {
     const blocks = resolveSupplementalContextBlocks({
       runtime: {
         inspect: {
-          events: {
+          tape: {
             getTapeStatus: () => ({
               tapePressure: "high",
               entriesSinceAnchor: 9,
             }),
           },
+          events: {},
         },
         delegation: {
           listRuns: (_sessionId, query) => {
@@ -110,12 +111,13 @@ describe("context composer supplemental", () => {
     const blocks = resolveSupplementalContextBlocks({
       runtime: {
         inspect: {
-          events: {
+          tape: {
             getTapeStatus: () => ({
               tapePressure: "medium",
               entriesSinceAnchor: 3,
             }),
           },
+          events: {},
         },
         delegation: {
           listRuns: (_sessionId, query) => {

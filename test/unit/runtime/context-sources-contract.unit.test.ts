@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { CONTEXT_SOURCES } from "../../../packages/brewva-runtime/src/context/sources.js";
+import { CONTEXT_SOURCES } from "../../../packages/brewva-runtime/src/domain/context/sources.js";
 
 describe("context sources contract", () => {
   test("defines unique source ids", () => {

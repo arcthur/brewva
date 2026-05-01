@@ -9,7 +9,7 @@ import {
   CURRENT_DELEGATION_CONTRACT_VERSION,
   asBrewvaSessionId,
 } from "@brewva/brewva-runtime";
-import type { ContextInjectionEntry } from "@brewva/brewva-runtime/internal";
+import { type ContextInjectionEntry } from "@brewva/brewva-runtime/context";
 
 function resolveBudgetClass(source: string): "core" | "working" | "recall" {
   switch (source) {
@@ -80,7 +80,7 @@ function createComposerRuntime(
 ): ContextComposerInput["runtime"] {
   return {
     inspect: {
-      events: {
+      tape: {
         getTapeStatus: () => ({
           tapePressure,
           totalEntries: 32,
@@ -88,6 +88,8 @@ function createComposerRuntime(
           entriesSinceCheckpoint: 7,
           lastAnchor: tapePressure === "low" ? null : { id: "a-1", name: "handoff" },
         }),
+      },
+      events: {
         query: () => [],
       },
     },

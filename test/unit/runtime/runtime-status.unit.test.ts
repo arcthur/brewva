@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { buildRuntimeStatusBlock } from "../../../packages/brewva-runtime/src/context/runtime-status.js";
+import { buildRuntimeStatusBlock } from "../../../packages/brewva-runtime/src/domain/context/runtime-status.js";
 
 describe("runtime status surface formatting", () => {
   test("renders canonical verification levels without agent-facing aliases", () => {

@@ -7,14 +7,16 @@ import {
 } from "@brewva/brewva-gateway";
 import {
   BrewvaRuntime,
-  SCHEDULE_CHILD_SESSION_FAILED_EVENT_TYPE,
-  SCHEDULE_CHILD_SESSION_FINISHED_EVENT_TYPE,
-  SCHEDULE_CHILD_SESSION_STARTED_EVENT_TYPE,
-  SCHEDULE_WAKEUP_EVENT_TYPE,
   asBrewvaIntentId,
   asBrewvaSessionId,
   type ScheduleIntentProjectionRecord,
 } from "@brewva/brewva-runtime";
+import {
+  SCHEDULE_CHILD_SESSION_FAILED_EVENT_TYPE,
+  SCHEDULE_CHILD_SESSION_FINISHED_EVENT_TYPE,
+  SCHEDULE_CHILD_SESSION_STARTED_EVENT_TYPE,
+  SCHEDULE_WAKEUP_EVENT_TYPE,
+} from "@brewva/brewva-runtime/events";
 import { cleanupTestWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
 
 function createScheduleIntent(
@@ -53,7 +55,7 @@ describe("gateway contract: schedule runner", () => {
       severity: "warn",
       summary: "Release notes are still missing reviewer approval.",
     });
-    runtime.authority.events.recordTapeHandoff(parentSessionId, {
+    runtime.authority.tape.recordTapeHandoff(parentSessionId, {
       name: "release-checkpoint",
       summary: "The release prep is partially complete.",
       nextSteps: "Resolve the last reviewer comment.",
@@ -232,7 +234,7 @@ describe("gateway contract: schedule runner", () => {
       severity: "warn",
       summary: "Release notes are still missing reviewer approval.",
     });
-    runtime.authority.events.recordTapeHandoff(parentSessionId, {
+    runtime.authority.tape.recordTapeHandoff(parentSessionId, {
       name: "release-checkpoint",
       summary: "The release prep is partially complete.",
       nextSteps: "Resolve the last reviewer comment.",

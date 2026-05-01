@@ -1,10 +1,11 @@
-import type { BrewvaConfig, VerificationLevel } from "../contracts/index.js";
+import type { VerificationLevel } from "../core/shared.js";
 import {
   type AnyRecord,
   isRecord,
   normalizeStringArray,
   normalizeStringRecord,
 } from "./normalization-shared.js";
+import type { BrewvaConfig } from "./types.js";
 
 const VALID_VERIFICATION_LEVELS = new Set<VerificationLevel>(["quick", "standard", "strict"]);
 

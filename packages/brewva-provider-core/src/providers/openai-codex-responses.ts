@@ -1008,7 +1008,7 @@ async function* trackCodexWebSocketResponse(
   for await (const event of events) {
     const outputItem = readCodexOutputItem(event);
     if (outputItem) {
-      tracker.outputItems.push(cloneJson(outputItem));
+      tracker.outputItems.push(cloneProtocolPayload(outputItem));
     }
     const responseId = readCodexResponseId(event);
     if (responseId) {
@@ -1046,8 +1046,8 @@ function readCodexResponseId(event: Record<string, unknown>): string | undefined
   return typeof id === "string" && id.length > 0 ? id : undefined;
 }
 
-function cloneJson<T>(value: T): T {
-  return JSON.parse(JSON.stringify(value)) as T;
+function cloneProtocolPayload<T>(value: T): T {
+  return structuredClone(value);
 }
 
 async function processWebSocketStream(
@@ -1090,10 +1090,10 @@ async function processWebSocketStream(
     if (options?.sessionId && responseId) {
       rememberCodexContinuationState(options.sessionId, {
         model: model.id,
-        previousRequest: cloneJson(body),
+        previousRequest: cloneProtocolPayload(body),
         lastResponse: {
           responseId,
-          outputItems: cloneJson(tracker.outputItems),
+          outputItems: cloneProtocolPayload(tracker.outputItems),
         },
       });
     }

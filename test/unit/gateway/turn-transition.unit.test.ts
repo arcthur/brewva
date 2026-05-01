@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import {
   HostedTransitionGateError,
   TURN_TRANSITION_TEST_ONLY,
@@ -7,6 +6,7 @@ import {
   projectHostedTransitionSnapshot,
   recordSessionTurnTransition,
 } from "../../../packages/brewva-gateway/src/session/turn-transition.js";
+import { buildToolCallBlockedPayload } from "../../helpers/events.js";
 import { createRuntimeFixture } from "../../helpers/runtime.js";
 
 describe("hosted turn transition coordinator", () => {
@@ -15,7 +15,7 @@ describe("hosted turn transition coordinator", () => {
     const sessionId = "turn-transition-mapping";
     getHostedTurnTransitionCoordinator(runtime);
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       turn: 4,
       type: "context_compaction_gate_blocked_tool",
@@ -23,7 +23,7 @@ describe("hosted turn transition coordinator", () => {
         toolName: "exec",
       },
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       turn: 4,
       type: "effect_commitment_approval_requested",
@@ -57,7 +57,7 @@ describe("hosted turn transition coordinator", () => {
     const sessionId = "turn-transition-dedup";
     getHostedTurnTransitionCoordinator(runtime);
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       turn: 2,
       type: "context_compaction_gate_blocked_tool",
@@ -65,7 +65,7 @@ describe("hosted turn transition coordinator", () => {
         toolName: "exec",
       },
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       turn: 2,
       type: "context_compaction_gate_blocked_tool",
@@ -73,7 +73,7 @@ describe("hosted turn transition coordinator", () => {
         toolName: "grep",
       },
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       turn: 2,
       type: "context_compaction_gate_cleared",
@@ -81,7 +81,7 @@ describe("hosted turn transition coordinator", () => {
         reason: "session_compact_performed",
       },
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       turn: 2,
       type: "context_compaction_gate_cleared",
@@ -90,7 +90,7 @@ describe("hosted turn transition coordinator", () => {
       },
     });
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       turn: 3,
       type: "effect_commitment_approval_requested",
@@ -98,7 +98,7 @@ describe("hosted turn transition coordinator", () => {
         requestId: "approval-1",
       },
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       turn: 3,
       type: "effect_commitment_approval_decided",
@@ -107,7 +107,7 @@ describe("hosted turn transition coordinator", () => {
         decision: "accept",
       },
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       turn: 3,
       type: "effect_commitment_approval_consumed",
@@ -227,12 +227,10 @@ describe("hosted turn transition coordinator", () => {
     const checkpoint = coordinator.captureOperatorVisibleCheckpoint(sessionId);
     expect(coordinator.hasOperatorVisibleFactSince(sessionId, checkpoint)).toBe(false);
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "tool_call_blocked",
-      payload: {
-        toolName: "exec",
-      },
+      payload: buildToolCallBlockedPayload(),
     });
 
     expect(coordinator.hasOperatorVisibleFactSince(sessionId, checkpoint)).toBe(true);
@@ -243,14 +241,12 @@ describe("hosted turn transition coordinator", () => {
     const runtime = createRuntimeFixture();
     const sessionId = "turn-transition-projection";
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "tool_call_blocked",
-      payload: {
-        toolName: "exec",
-      },
+      payload: buildToolCallBlockedPayload(),
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "session_turn_transition",
       payload: {
@@ -312,7 +308,7 @@ describe("hosted turn transition coordinator", () => {
     const runtime = createRuntimeFixture();
     const sessionId = "turn-transition-active-turn";
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       turn: 7,
       type: "turn_input_recorded",
@@ -337,7 +333,7 @@ describe("hosted turn transition coordinator", () => {
       error: "resume failed",
     });
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       turn: 7,
       type: "turn_render_committed",
@@ -439,7 +435,7 @@ describe("hosted turn transition coordinator", () => {
     const runtime = createRuntimeFixture();
     const sessionId = "turn-transition-after-close";
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "session_shutdown",
       payload: {
@@ -543,7 +539,7 @@ describe("hosted turn transition coordinator", () => {
     const runtime = createRuntimeFixture();
     const sessionId = "turn-transition-shutdown-query";
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "session_shutdown",
       payload: {
@@ -612,47 +608,70 @@ describe("hosted turn transition coordinator", () => {
     expect(state.pendingFamily).toBeNull();
   });
 
-  test("maps pending parent-turn delegation outcomes into delegation transitions", () => {
-    const runtime = createRuntimeFixture();
-    const sessionId = "turn-transition-pending-delegation";
-    const coordinator = getHostedTurnTransitionCoordinator(runtime);
-
-    recordRuntimeEvent(runtime, {
-      sessionId,
-      turn: 9,
-      type: "subagent_completed",
-      payload: {
-        runId: "run-pending-1",
-        delegate: "review",
+  test("maps pending parent-turn terminal delegation outcomes into persisted delegation transitions", () => {
+    const cases = [
+      {
+        eventType: "subagent_completed",
         status: "completed",
-        summary: "Waiting for the parent turn to consume the delegation outcome.",
-        deliveryMode: "text_only",
-        deliveryHandoffState: "pending_parent_turn",
-        deliveryReadyAt: 9,
-        deliveryUpdatedAt: 9,
       },
-    });
+      {
+        eventType: "subagent_failed",
+        status: "failed",
+      },
+      {
+        eventType: "subagent_cancelled",
+        status: "cancelled",
+      },
+    ] as const;
 
-    expect(coordinator.getSnapshot(sessionId).pendingFamily).toBe("delegation");
+    for (const testCase of cases) {
+      const runtime = createRuntimeFixture();
+      const sessionId = `turn-transition-pending-delegation-${testCase.status}`;
+      const coordinator = getHostedTurnTransitionCoordinator(runtime);
 
-    expect(() => {
-      recordSessionTurnTransition(runtime, {
+      runtime.extensions.hosted.events.record({
         sessionId,
-        turn: 10,
+        turn: 9,
+        type: testCase.eventType,
+        payload: {
+          runId: `run-pending-${testCase.status}`,
+          delegate: "review",
+          status: testCase.status,
+          summary: "Waiting for the parent turn to consume the delegation outcome.",
+          deliveryMode: "text_only",
+          deliveryHandoffState: "pending_parent_turn",
+          deliveryReadyAt: 9,
+          deliveryUpdatedAt: 9,
+        },
+      });
+
+      expect(coordinator.getSnapshot(sessionId).pendingFamily).toBe("delegation");
+
+      expect(() => {
+        recordSessionTurnTransition(runtime, {
+          sessionId,
+          turn: 10,
+          reason: "subagent_delivery_pending",
+          status: "completed",
+          family: "delegation",
+        });
+      }).not.toThrow();
+
+      const transitions = runtime.inspect.events.queryStructured(sessionId, {
+        type: "session_turn_transition",
+      });
+      expect(transitions).toHaveLength(2);
+      expect(transitions[0]?.payload).toMatchObject({
+        reason: "subagent_delivery_pending",
+        status: "entered",
+        family: "delegation",
+        sourceEventType: testCase.eventType,
+      });
+      expect(transitions[1]?.payload).toMatchObject({
         reason: "subagent_delivery_pending",
         status: "completed",
         family: "delegation",
       });
-    }).not.toThrow();
-
-    const transitions = runtime.inspect.events.queryStructured(sessionId, {
-      type: "session_turn_transition",
-    });
-    expect(transitions).toHaveLength(1);
-    expect(transitions[0]?.payload).toMatchObject({
-      reason: "subagent_delivery_pending",
-      status: "completed",
-      family: "delegation",
-    });
+    }
   });
 });

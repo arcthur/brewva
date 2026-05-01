@@ -1,11 +1,11 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { isAbsolute, resolve, sep } from "node:path";
-import type { BrewvaEventRecord } from "@brewva/brewva-runtime";
+import type { BrewvaEventRecord } from "@brewva/brewva-runtime/events";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate";
 import { Type } from "@sinclair/typebox";
 import Fuse from "fuse.js";
 import { LRUCache } from "lru-cache";
-import { recordToolRuntimeEvent, resolveToolRuntimeEventPort } from "./runtime-internal.js";
+import { recordToolRuntimeEvent, resolveToolRuntimeEventPort } from "./runtime-extensions.js";
 import { tokenizeSearchTerms } from "./shared/query.js";
 import type { BrewvaBundledToolOptions } from "./types.js";
 import { inconclusiveTextResult, textResult } from "./utils/result.js";

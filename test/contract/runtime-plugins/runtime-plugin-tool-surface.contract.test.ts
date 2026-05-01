@@ -16,8 +16,7 @@ import {
   buildSkillRoutingCatalogEntry,
   buildSkillSelectionProfile,
   hasSelectionProfileSignals,
-  recordRuntimeEvent,
-} from "@brewva/brewva-runtime/internal";
+} from "@brewva/brewva-runtime";
 import type { BrewvaToolDefinition } from "@brewva/brewva-substrate";
 import { Type } from "@sinclair/typebox";
 import { createMockRuntimePluginApi, invokeHandlerAsync } from "../../helpers/runtime-plugin.js";
@@ -178,7 +177,7 @@ function createToolSurfaceRuntime(options: ToolSurfaceRuntimeOptions = {}): Tool
       skills: runtime.inspect.skills,
       task: runtime.inspect.task,
     },
-    recordEvent: options.recordEvent ?? ((input) => recordRuntimeEvent(runtime, input)),
+    recordEvent: options.recordEvent ?? ((input) => runtime.extensions.hosted.events.record(input)),
   };
 }
 

@@ -1,5 +1,5 @@
 import { resolve, sep } from "node:path";
-import { resolveToolRuntimeTaskPort } from "./runtime-internal.js";
+import { resolveToolRuntimeTaskPort } from "./runtime-extensions.js";
 import type { BrewvaToolRuntime } from "./types.js";
 import { getToolSessionId } from "./utils/parallel-read.js";
 

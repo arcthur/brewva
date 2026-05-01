@@ -8,12 +8,11 @@ import type {
   PatchSet,
 } from "@brewva/brewva-runtime";
 import {
-  SUBAGENT_RUNNING_EVENT_TYPE,
   asBrewvaSessionId,
   isDelegationRunTerminalStatus,
   type WorkerResult,
 } from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
+import { SUBAGENT_RUNNING_EVENT_TYPE } from "@brewva/brewva-runtime/events";
 import type {
   AdvisorConsultKind,
   BrewvaToolOrchestration,
@@ -588,7 +587,7 @@ export function createHostedSubagentAdapter(
         summary: error,
         error,
       };
-      recordRuntimeEvent(options.runtime, {
+      options.runtime.extensions.hosted.events.record({
         sessionId: input.parentSessionId,
         type: "subagent_failed",
         payload: buildDelegationLifecyclePayload(failedRecord),
@@ -656,7 +655,7 @@ export function createHostedSubagentAdapter(
       }),
     };
 
-    recordRuntimeEvent(options.runtime, {
+    options.runtime.extensions.hosted.events.record({
       sessionId: input.parentSessionId,
       type: "subagent_spawned",
       payload: buildDelegationLifecyclePayload(initialRecord),
@@ -762,7 +761,7 @@ export function createHostedSubagentAdapter(
           modelRoute: executionPlan.modelRoute,
         };
         liveRun.record = cloneDelegationRunRecord(runningRecord);
-        recordRuntimeEvent(options.runtime, {
+        options.runtime.extensions.hosted.events.record({
           sessionId: input.parentSessionId,
           type: SUBAGENT_RUNNING_EVENT_TYPE,
           payload: buildDelegationLifecyclePayload(runningRecord),
@@ -797,7 +796,7 @@ export function createHostedSubagentAdapter(
           skillName: childOwnsSkill ? delegatedSkill : undefined,
         });
         if (structuredOutcome.parseError) {
-          recordRuntimeEvent(options.runtime, {
+          options.runtime.extensions.hosted.events.record({
             sessionId: input.parentSessionId,
             type: "subagent_outcome_parse_failed",
             payload: {
@@ -819,7 +818,7 @@ export function createHostedSubagentAdapter(
               )
             : undefined;
         if (childOwnsSkill && delegatedSkill && skillValidation && !skillValidation.ok) {
-          recordRuntimeEvent(options.runtime, {
+          options.runtime.extensions.hosted.events.record({
             sessionId: input.parentSessionId,
             type: "subagent_skill_output_validation_failed",
             payload: {
@@ -965,7 +964,7 @@ export function createHostedSubagentAdapter(
           costUsd: childCostSummary.totalCostUsd,
         };
         liveRun.record = completedRecord;
-        recordRuntimeEvent(options.runtime, {
+        options.runtime.extensions.hosted.events.record({
           sessionId: input.parentSessionId,
           type: "subagent_completed",
           payload: {
@@ -1084,7 +1083,7 @@ export function createHostedSubagentAdapter(
           costUsd: terminalCostSummary?.totalCostUsd,
         };
         liveRun.record = updatedRecord;
-        recordRuntimeEvent(options.runtime, {
+        options.runtime.extensions.hosted.events.record({
           sessionId: input.parentSessionId,
           type: terminalStatus === "cancelled" ? "subagent_cancelled" : "subagent_failed",
           payload: {
@@ -1156,7 +1155,7 @@ export function createHostedSubagentAdapter(
       delivery: buildDeliveryRecordFromRequest(input.request.delivery, startedAt),
     };
 
-    recordRuntimeEvent(options.runtime, {
+    options.runtime.extensions.hosted.events.record({
       sessionId: input.fromSessionId,
       type: "subagent_spawned",
       payload: buildDelegationLifecyclePayload(initialRecord),
@@ -1174,7 +1173,7 @@ export function createHostedSubagentAdapter(
         summary: `parallel_slot_rejected:${parallel.reason ?? "unknown"}`,
         error: `parallel_slot_rejected:${parallel.reason ?? "unknown"}`,
       };
-      recordRuntimeEvent(options.runtime, {
+      options.runtime.extensions.hosted.events.record({
         sessionId: input.fromSessionId,
         type: "subagent_failed",
         payload: buildDelegationLifecyclePayload(failedRecord),
@@ -1216,7 +1215,7 @@ export function createHostedSubagentAdapter(
         updatedAt: Date.now(),
         workerSessionId: childSessionId,
       };
-      recordRuntimeEvent(options.runtime, {
+      options.runtime.extensions.hosted.events.record({
         sessionId: input.fromSessionId,
         type: SUBAGENT_RUNNING_EVENT_TYPE,
         payload: buildDelegationLifecyclePayload(runningRecord),
@@ -1262,7 +1261,7 @@ export function createHostedSubagentAdapter(
         totalTokens: childCostSummary.totalTokens,
         costUsd: childCostSummary.totalCostUsd,
       };
-      recordRuntimeEvent(options.runtime, {
+      options.runtime.extensions.hosted.events.record({
         sessionId: input.fromSessionId,
         type: "subagent_completed",
         payload: buildDelegationLifecyclePayload(completedRecord),
@@ -1285,7 +1284,7 @@ export function createHostedSubagentAdapter(
         summary: message,
         error: message,
       };
-      recordRuntimeEvent(options.runtime, {
+      options.runtime.extensions.hosted.events.record({
         sessionId: input.fromSessionId,
         type: "subagent_failed",
         payload: buildDelegationLifecyclePayload(failedRecord),

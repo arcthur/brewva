@@ -1,14 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import { cpSync, existsSync, readFileSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
-import { CONTEXT_SOURCES, BrewvaRuntime, SKILL_COMPLETED_EVENT_TYPE } from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
+import { CONTEXT_SOURCES, BrewvaRuntime } from "@brewva/brewva-runtime";
 import {
   SkillPromotionBroker,
   createSkillPromotionContextProvider,
   getOrCreateSkillPromotionBroker,
   resolveSkillPromotionStatePath,
 } from "@brewva/brewva-skill-broker";
+import { recordHostedSkillCompleted } from "../../helpers/events.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 function normalizePath(value: string): string {
@@ -28,21 +28,19 @@ function recordPromotionSourceEvent(input: {
   timestamp: number;
   plan: string;
 }): void {
-  recordRuntimeEvent(input.runtime, {
+  recordHostedSkillCompleted({
+    runtime: input.runtime,
     sessionId: input.sessionId,
-    type: SKILL_COMPLETED_EVENT_TYPE,
     timestamp: input.timestamp,
-    payload: {
-      skillName: "self-improve",
-      outputs: {
-        improvement_hypothesis:
-          "The self-improve skill should route repeated delivery failures into explicit promotion drafts.",
-        improvement_plan: input.plan,
-        learning_backlog: [
-          "Collect repeated failure clusters before updating the skill catalog.",
-          "Materialize promotion packets instead of patching live skills directly.",
-        ],
-      },
+    skillName: "self-improve",
+    outputs: {
+      improvement_hypothesis:
+        "The self-improve skill should route repeated delivery failures into explicit promotion drafts.",
+      improvement_plan: input.plan,
+      learning_backlog: [
+        "Collect repeated failure clusters before updating the skill catalog.",
+        "Materialize promotion packets instead of patching live skills directly.",
+      ],
     },
   });
 }

@@ -1,0 +1,31 @@
+export const TOOL_CALL_EVENT_TYPE = "tool_call" as const;
+export const TOOL_EXECUTION_START_EVENT_TYPE = "tool_execution_start" as const;
+export const TOOL_EXECUTION_END_EVENT_TYPE = "tool_execution_end" as const;
+export const TOOL_RESULT_RECORDED_EVENT_TYPE = "tool_result_recorded" as const;
+export const TOOL_OUTPUT_DISTILLED_EVENT_TYPE = "tool_output_distilled" as const;
+export const TOOL_CALL_BLOCKED_EVENT_TYPE = "tool_call_blocked" as const;
+export const TOOL_OUTPUT_OBSERVED_EVENT_TYPE = "tool_output_observed" as const;
+export const TOOL_OUTPUT_ARTIFACT_PERSISTED_EVENT_TYPE = "tool_output_artifact_persisted" as const;
+export const TOOL_OUTPUT_ARTIFACT_PERSIST_FAILED_EVENT_TYPE =
+  "tool_output_artifact_persist_failed" as const;
+export const TOOL_CALL_MARKED_EVENT_TYPE = "tool_call_marked" as const;
+export const TOOL_ATTEMPT_BINDING_MISSING_EVENT_TYPE = "tool_attempt_binding_missing" as const;
+export const TOOL_CONTRACT_WARNING_EVENT_TYPE = "tool_contract_warning" as const;
+export const TOOL_READ_PATH_GATE_ARMED_EVENT_TYPE = "tool_read_path_gate_armed" as const;
+export const TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE =
+  "tool_read_path_discovery_observed" as const;
+export const TOOL_OUTPUT_SEARCH_EVENT_TYPE = "tool_output_search" as const;
+export const TOOL_PARALLEL_READ_EVENT_TYPE = "tool_parallel_read" as const;
+export const TOOL_SURFACE_RESOLVED_EVENT_TYPE = "tool_surface_resolved" as const;
+export const BOX_BOOTSTRAP_STARTED_EVENT_TYPE = "box.bootstrap.started" as const;
+export const BOX_BOOTSTRAP_PROGRESS_EVENT_TYPE = "box.bootstrap.progress" as const;
+export const BOX_BOOTSTRAP_COMPLETED_EVENT_TYPE = "box.bootstrap.completed" as const;
+export const BOX_BOOTSTRAP_FAILED_EVENT_TYPE = "box.bootstrap.failed" as const;
+export const BOX_ACQUIRED_EVENT_TYPE = "box.acquired" as const;
+export const BOX_EXEC_STARTED_EVENT_TYPE = "box.exec.started" as const;
+export const BOX_EXEC_COMPLETED_EVENT_TYPE = "box.exec.completed" as const;
+export const BOX_EXEC_FAILED_EVENT_TYPE = "box.exec.failed" as const;
+export const BOX_SNAPSHOT_CREATED_EVENT_TYPE = "box.snapshot.created" as const;
+export const BOX_FORK_CREATED_EVENT_TYPE = "box.fork.created" as const;
+export const BOX_RELEASED_EVENT_TYPE = "box.released" as const;
+export const BOX_MAINTENANCE_COMPLETED_EVENT_TYPE = "box.maintenance.completed" as const;

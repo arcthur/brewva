@@ -1,11 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import {
-  asBrewvaEventType,
   asBrewvaSessionId,
   deriveWorkflowArtifacts,
   deriveWorkflowStatus,
-  type BrewvaEventRecord,
 } from "@brewva/brewva-runtime";
+import { asBrewvaEventType, type BrewvaEventRecord } from "@brewva/brewva-runtime/events";
 import { buildCanonicalReviewReport } from "../../helpers/semantic-artifacts.js";
 
 function event(input: {
@@ -15,12 +14,30 @@ function event(input: {
   timestamp: number;
   payload?: Record<string, unknown>;
 }): BrewvaEventRecord {
+  const payload =
+    input.type === "skill_completed" && input.payload
+      ? {
+          ...input.payload,
+          ...(Object.prototype.hasOwnProperty.call(input.payload, "completedAt")
+            ? {}
+            : { completedAt: input.timestamp }),
+          ...(input.payload.outputs &&
+          typeof input.payload.outputs === "object" &&
+          !Array.isArray(input.payload.outputs)
+            ? {
+                outputKeys: Object.keys(
+                  input.payload.outputs as Record<string, unknown>,
+                ).toSorted(),
+              }
+            : {}),
+        }
+      : input.payload;
   return {
     id: input.id,
     sessionId: asBrewvaSessionId(input.sessionId ?? "workflow-derivation-session"),
     type: asBrewvaEventType(input.type),
     timestamp: input.timestamp,
-    payload: input.payload as BrewvaEventRecord["payload"],
+    payload: payload as BrewvaEventRecord["payload"],
   };
 }
 
@@ -109,7 +126,7 @@ describe("workflow derivation", () => {
             outputKeys: ["change_set", "files_changed"],
             outputs: {
               change_set: "Implemented the workflow posture projection.",
-              files_changed: ["packages/brewva-runtime/src/workflow/status-derivation.ts"],
+              files_changed: ["packages/brewva-runtime/src/domain/workflow/status-derivation.ts"],
             },
           },
         }),
@@ -594,7 +611,7 @@ describe("workflow derivation", () => {
               ],
               implementation_targets: [
                 {
-                  target: "packages/brewva-runtime/src/skills/registry.ts",
+                  target: "packages/brewva-runtime/src/domain/skills/registry.ts",
                   kind: "source",
                   owner_boundary: "runtime.skills",
                   reason: "Catalog projection lives here.",
@@ -695,7 +712,7 @@ describe("workflow derivation", () => {
               ],
               implementation_targets: [
                 {
-                  target: "packages/brewva-runtime/src/workflow/status-derivation.ts",
+                  target: "packages/brewva-runtime/src/domain/workflow/status-derivation.ts",
                   kind: "module",
                   owner_boundary: "runtime.workflow",
                   reason: "Required evidence closure is derived here.",
@@ -1117,7 +1134,7 @@ describe("workflow derivation", () => {
             outputKeys: ["change_set", "files_changed"],
             outputs: {
               change_set: "Updated the runtime boundary for completion enforcement.",
-              files_changed: "packages/brewva-runtime/src/services/skill-lifecycle.ts",
+              files_changed: "packages/brewva-runtime/src/domain/skills/skill-lifecycle.ts",
             },
           },
         }),

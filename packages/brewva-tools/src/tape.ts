@@ -54,7 +54,7 @@ function resolveContextAction(
 }
 
 function formatTapeInfoBlock(input: {
-  tape: ReturnType<BrewvaToolOptions["runtime"]["inspect"]["events"]["getTapeStatus"]>;
+  tape: ReturnType<BrewvaToolOptions["runtime"]["inspect"]["tape"]["getTapeStatus"]>;
   pressure: ContextPressureStatus;
   reasoning: ActiveReasoningBranchState;
 }): string {
@@ -156,20 +156,20 @@ export function createTapeTools(options: BrewvaToolOptions): ToolDefinition[] {
       }),
       async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
         const sessionId = getSessionId(ctx);
-        const handoff = tapeHandoffTool.runtime.authority.events.recordTapeHandoff(sessionId, {
+        const handoff = tapeHandoffTool.runtime.authority.tape.recordTapeHandoff(sessionId, {
           name: params.name,
           summary: params.summary,
           nextSteps: params.next_steps,
         });
         if (!handoff.ok) {
           return failTextResult(
-            `Tape handoff rejected (${handoff.error ?? "unknown_error"}).`,
+            `Tape handoff rejected (${handoff.reason ?? "unknown_error"}).`,
             handoff,
           );
         }
 
         const status =
-          handoff.tapeStatus ?? tapeHandoffTool.runtime.inspect.events.getTapeStatus(sessionId);
+          handoff.tapeStatus ?? tapeHandoffTool.runtime.inspect.tape.getTapeStatus(sessionId);
         const text = [
           "Tape handoff recorded.",
           `name: ${params.name}`,
@@ -189,7 +189,7 @@ export function createTapeTools(options: BrewvaToolOptions): ToolDefinition[] {
       },
     },
     {
-      requiredCapabilities: ["authority.events.recordTapeHandoff", "inspect.events.getTapeStatus"],
+      requiredCapabilities: ["authority.tape.recordTapeHandoff", "inspect.tape.getTapeStatus"],
     },
   );
 
@@ -200,7 +200,7 @@ export function createTapeTools(options: BrewvaToolOptions): ToolDefinition[] {
     parameters: Type.Object({}),
     async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
       const sessionId = getSessionId(ctx);
-      const tape = tapeInfoTool.runtime.inspect.events.getTapeStatus(sessionId);
+      const tape = tapeInfoTool.runtime.inspect.tape.getTapeStatus(sessionId);
       const usage =
         resolveToolContextUsage(ctx) ?? tapeInfoTool.runtime.inspect.context.getUsage(sessionId);
       const pressure = tapeInfoTool.runtime.inspect.context.getPressureStatus(sessionId, usage);
@@ -246,7 +246,7 @@ export function createTapeTools(options: BrewvaToolOptions): ToolDefinition[] {
       }
 
       const scope = toSafeScope(params.scope);
-      const result = tapeSearchTool.runtime.inspect.events.searchTape(sessionId, {
+      const result = tapeSearchTool.runtime.inspect.tape.searchTape(sessionId, {
         query,
         scope,
         limit: params.limit,

@@ -1,53 +1,32 @@
 import {
-  CONTEXT_COMPACTION_GATE_BLOCKED_TOOL_EVENT_TYPE,
   type BrewvaHostedRuntimePort,
+  type SessionWireTransitionFamily as HostedTransitionFamily,
+  type SessionWireTransitionStatus as HostedTransitionStatus,
+} from "@brewva/brewva-runtime";
+import {
+  type SessionTurnTransitionPayload,
+  type SessionTurnTransitionReason as TurnTransitionReason,
+  type BrewvaStructuredEvent,
+} from "@brewva/brewva-runtime/events";
+import {
+  CONTEXT_COMPACTION_GATE_BLOCKED_TOOL_EVENT_TYPE,
   EFFECT_COMMITMENT_APPROVAL_DECIDED_EVENT_TYPE,
   EFFECT_COMMITMENT_APPROVAL_REQUESTED_EVENT_TYPE,
   ROLLBACK_EVENT_TYPE,
+  readDelegationLifecycleEventPayload,
+  readSessionTurnTransitionEventPayload,
+  readTurnRenderCommittedEventPayload,
   SESSION_SHUTDOWN_EVENT_TYPE,
   SESSION_TURN_TRANSITION_EVENT_TYPE,
+  SUBAGENT_CANCELLED_EVENT_TYPE,
   SUBAGENT_COMPLETED_EVENT_TYPE,
+  SUBAGENT_FAILED_EVENT_TYPE,
   TURN_INPUT_RECORDED_EVENT_TYPE,
   TURN_RENDER_COMMITTED_EVENT_TYPE,
-  type BrewvaStructuredEvent,
-} from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
+} from "@brewva/brewva-runtime/events";
 
-export type TurnTransitionReason =
-  | "compaction_gate_blocked"
-  | "compaction_retry"
-  | "effect_commitment_pending"
-  | "output_budget_escalation"
-  | "provider_fallback_retry"
-  | "max_output_recovery"
-  | "reasoning_revert_resume"
-  | "subagent_delivery_pending"
-  | "wal_recovery_resume"
-  | "user_submit_interrupt"
-  | "signal_interrupt"
-  | "timeout_interrupt";
-
-export type HostedTransitionStatus = "entered" | "completed" | "failed" | "skipped";
-export type HostedTransitionFamily =
-  | "context"
-  | "output_budget"
-  | "approval"
-  | "delegation"
-  | "interrupt"
-  | "recovery";
-
-export interface SessionTurnTransitionPayload {
-  reason: TurnTransitionReason;
-  status: HostedTransitionStatus;
-  sequence: number;
-  family: HostedTransitionFamily;
-  attempt: number | null;
-  sourceEventId: string | null;
-  sourceEventType: string | null;
-  error: string | null;
-  breakerOpen: boolean;
-  model: string | null;
-}
+type ObservedHostedTransitionEvent = Pick<BrewvaStructuredEvent, "type" | "payload" | "turn"> &
+  Partial<Pick<BrewvaStructuredEvent, "id">>;
 
 interface HostedSessionTransitionState {
   sequence: number;
@@ -158,6 +137,12 @@ const REASON_LEVEL_COMPLETION_REASONS = new Set<TurnTransitionReason>([
   "subagent_delivery_pending",
 ]);
 
+const pendingParentTurnDelegationEventTypes = new Set<string>([
+  SUBAGENT_COMPLETED_EVENT_TYPE,
+  SUBAGENT_FAILED_EVENT_TYPE,
+  SUBAGENT_CANCELLED_EVENT_TYPE,
+]);
+
 function parseAttemptIdSequence(value: unknown): number | null {
   if (typeof value !== "string") {
     return null;
@@ -209,18 +194,6 @@ function createEmptyState(): HostedSessionTransitionState {
   };
 }
 
-function normalizeString(value: unknown): string | null {
-  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
-}
-
-function normalizeNumber(value: unknown): number | null {
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
-}
-
-function normalizeBoolean(value: unknown): boolean {
-  return value === true;
-}
-
 function resolveTransitionFamily(
   input: Pick<RecordSessionTurnTransitionInput, "reason" | "family">,
 ): HostedTransitionFamily {
@@ -228,15 +201,11 @@ function resolveTransitionFamily(
 }
 
 function hasPendingParentTurnDelegationHandoff(event: BrewvaStructuredEvent): boolean {
-  if (event.type !== SUBAGENT_COMPLETED_EVENT_TYPE) {
-    return false;
-  }
-  if (!event.payload || typeof event.payload !== "object" || Array.isArray(event.payload)) {
+  if (!pendingParentTurnDelegationEventTypes.has(event.type)) {
     return false;
   }
   return (
-    (event.payload as { deliveryHandoffState?: unknown }).deliveryHandoffState ===
-    "pending_parent_turn"
+    readDelegationLifecycleEventPayload(event)?.delivery?.handoffState === "pending_parent_turn"
   );
 }
 
@@ -299,38 +268,6 @@ function hasSessionShutdownReceipt(runtime: BrewvaHostedRuntimePort, sessionId: 
   );
 }
 
-function isTurnTransitionReason(value: unknown): value is TurnTransitionReason {
-  return (
-    value === "compaction_gate_blocked" ||
-    value === "compaction_retry" ||
-    value === "effect_commitment_pending" ||
-    value === "output_budget_escalation" ||
-    value === "provider_fallback_retry" ||
-    value === "max_output_recovery" ||
-    value === "reasoning_revert_resume" ||
-    value === "subagent_delivery_pending" ||
-    value === "wal_recovery_resume" ||
-    value === "user_submit_interrupt" ||
-    value === "signal_interrupt" ||
-    value === "timeout_interrupt"
-  );
-}
-
-function isHostedTransitionStatus(value: unknown): value is HostedTransitionStatus {
-  return value === "entered" || value === "completed" || value === "failed" || value === "skipped";
-}
-
-function isHostedTransitionFamily(value: unknown): value is HostedTransitionFamily {
-  return (
-    value === "context" ||
-    value === "output_budget" ||
-    value === "approval" ||
-    value === "delegation" ||
-    value === "interrupt" ||
-    value === "recovery"
-  );
-}
-
 function isBreakerManagedReason(value: TurnTransitionReason): value is BreakerManagedReason {
   return (
     value === "compaction_retry" ||
@@ -339,46 +276,9 @@ function isBreakerManagedReason(value: TurnTransitionReason): value is BreakerMa
   );
 }
 
-function readTransitionPayload(
-  event: Pick<BrewvaStructuredEvent, "payload">,
-): SessionTurnTransitionPayload | null {
-  const payload = event.payload;
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
-    return null;
-  }
-
-  const reason = (payload as { reason?: unknown }).reason;
-  const status = (payload as { status?: unknown }).status;
-  const sequence = normalizeNumber((payload as { sequence?: unknown }).sequence);
-  const family = (payload as { family?: unknown }).family;
-  if (
-    !isTurnTransitionReason(reason) ||
-    !isHostedTransitionStatus(status) ||
-    sequence === null ||
-    !isHostedTransitionFamily(family)
-  ) {
-    return null;
-  }
-
-  const attempt = normalizeNumber((payload as { attempt?: unknown }).attempt);
-  const error = normalizeString((payload as { error?: unknown }).error);
-  return {
-    reason,
-    status,
-    sequence,
-    family,
-    attempt,
-    sourceEventId: normalizeString((payload as { sourceEventId?: unknown }).sourceEventId),
-    sourceEventType: normalizeString((payload as { sourceEventType?: unknown }).sourceEventType),
-    error,
-    breakerOpen: normalizeBoolean((payload as { breakerOpen?: unknown }).breakerOpen),
-    model: normalizeString((payload as { model?: unknown }).model),
-  };
-}
-
 function foldObservedHostedTransitionEvent(
   state: HostedSessionTransitionState,
-  event: Pick<BrewvaStructuredEvent, "type" | "payload" | "turn">,
+  event: ObservedHostedTransitionEvent,
 ): HostedSessionTransitionState {
   if (event.type === TURN_INPUT_RECORDED_EVENT_TYPE) {
     state.activeTurnNumber = typeof event.turn === "number" ? event.turn : state.activeTurnNumber;
@@ -387,11 +287,9 @@ function foldObservedHostedTransitionEvent(
   }
   if (event.type === TURN_RENDER_COMMITTED_EVENT_TYPE) {
     state.activeTurnNumber = null;
-    const payload =
-      event.payload && typeof event.payload === "object" && !Array.isArray(event.payload)
-        ? (event.payload as { attemptId?: unknown })
-        : undefined;
-    state.activeAttemptSequence = parseAttemptIdSequence(payload?.attemptId);
+    state.activeAttemptSequence = parseAttemptIdSequence(
+      readTurnRenderCommittedEventPayload(event)?.attemptId,
+    );
     return state;
   }
   if (operatorVisibleEventTypes.has(event.type)) {
@@ -407,7 +305,7 @@ function foldObservedHostedTransitionEvent(
       sequence: state.sequence,
       family: "delegation",
       attempt: null,
-      sourceEventId: null,
+      sourceEventId: event.id ?? null,
       sourceEventType: event.type,
       error: null,
       breakerOpen: false,
@@ -417,7 +315,7 @@ function foldObservedHostedTransitionEvent(
   if (event.type !== SESSION_TURN_TRANSITION_EVENT_TYPE) {
     return state;
   }
-  const payload = readTransitionPayload(event);
+  const payload = readSessionTurnTransitionEventPayload(event);
   if (!payload) {
     return state;
   }
@@ -623,15 +521,11 @@ class HostedTurnTransitionCoordinator {
       return;
     }
 
-    foldObservedHostedTransitionEvent(state, event);
-    if (event.type === SESSION_TURN_TRANSITION_EVENT_TYPE) {
-      return;
-    }
-
-    if (hasPendingParentTurnDelegationHandoff(event)) {
-      if (hasActiveReason(state, "subagent_delivery_pending")) {
-        return;
-      }
+    const shouldRecordDelegationPendingTransition =
+      event.type !== SESSION_TURN_TRANSITION_EVENT_TYPE &&
+      hasPendingParentTurnDelegationHandoff(event) &&
+      !hasActiveReason(state, "subagent_delivery_pending");
+    if (shouldRecordDelegationPendingTransition) {
       this.record({
         sessionId: event.sessionId,
         turn: event.turn,
@@ -641,6 +535,14 @@ class HostedTurnTransitionCoordinator {
         sourceEventId: event.id,
         sourceEventType: event.type,
       });
+    }
+
+    foldObservedHostedTransitionEvent(state, event);
+    if (event.type === SESSION_TURN_TRANSITION_EVENT_TYPE) {
+      return;
+    }
+
+    if (shouldRecordDelegationPendingTransition) {
       return;
     }
 
@@ -736,7 +638,7 @@ class HostedTurnTransitionCoordinator {
     const state = this.getState(input.sessionId);
     const family = assertRecordableHostedTransition(this.runtime, state, input);
     const sequence = state.sequence + 1;
-    const recordedEvent = recordRuntimeEvent(this.runtime, {
+    const recordedEvent = this.runtime.extensions.hosted.events.record({
       sessionId: input.sessionId,
       turn: resolveActiveHostedTurn(state, input.turn),
       type: SESSION_TURN_TRANSITION_EVENT_TYPE,
@@ -806,6 +708,6 @@ export const TURN_TRANSITION_TEST_ONLY = {
   foldObservedHostedTransitionEvent,
   foldTransition,
   projectHostedTransitionSnapshot,
-  readTransitionPayload,
+  readTransitionPayload: readSessionTurnTransitionEventPayload,
   resolveTransitionFamily,
 };

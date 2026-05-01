@@ -2,7 +2,7 @@
 
 Orchestration is driven by runtime state management plus runtime-plugin lifecycle handlers.
 
-- Runtime governance facade and service wiring: `packages/brewva-runtime/src/runtime.ts`
+- Runtime governance facade and service wiring: `packages/brewva-runtime/src/runtime/runtime.ts`
 - Runtime plugin registration: `@brewva/brewva-gateway/runtime-plugins` (`packages/brewva-gateway/src/runtime-plugins/index.ts`)
 
 This guide focuses on the hosted turn pipeline, delegated worker routing, and
@@ -65,13 +65,13 @@ Platform-growth rule:
 
 ## Runtime Subsystems
 
-- Skills: `packages/brewva-runtime/src/skills/registry.ts`
-- Verification: `packages/brewva-runtime/src/verification/gate.ts`
-- Ledger: `packages/brewva-runtime/src/ledger/evidence-ledger.ts`
-- Context budget: `packages/brewva-runtime/src/context/budget.ts`
+- Skills: `packages/brewva-runtime/src/domain/skills/registry.ts`
+- Verification: `packages/brewva-runtime/src/domain/verification/gate.ts`
+- Ledger: `packages/brewva-runtime/src/domain/ledger/evidence-ledger.ts`
+- Context budget: `packages/brewva-runtime/src/domain/context/budget.ts`
 - Event store: `packages/brewva-runtime/src/events/store.ts`
-- Tape replay engine: `packages/brewva-runtime/src/tape/replay-engine.ts`
-- Cost tracker: `packages/brewva-runtime/src/cost/tracker.ts`
+- Tape replay engine: `packages/brewva-runtime/src/domain/tape/replay-engine.ts`
+- Cost tracker: `packages/brewva-runtime/src/domain/cost/tracker.ts`
 
 ## Custom Delegated Specialists
 

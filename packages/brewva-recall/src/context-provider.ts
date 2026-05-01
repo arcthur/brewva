@@ -1,11 +1,10 @@
 import {
   CONTEXT_SOURCES,
-  RECALL_RESULTS_SURFACED_EVENT_TYPE,
   type BrewvaHostedRuntimePort,
   type ContextSourceProvider,
   defineContextSourceProvider,
 } from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
+import { RECALL_RESULTS_SURFACED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
 import { getOrCreateRecallBroker, isRecallSessionIndexUnavailable } from "./broker.js";
 import type { RecallScope, RecallSearchEntry, RecallSearchIntent } from "./types.js";
 
@@ -128,7 +127,7 @@ export function createRecallContextProvider(input: {
         return;
       }
       const stableIds = search.results.map((entry) => entry.stableId);
-      recordRuntimeEvent(input.runtime, {
+      input.runtime.extensions.hosted.events.record({
         sessionId: providerInput.sessionId,
         type: RECALL_RESULTS_SURFACED_EVENT_TYPE,
         skipTapeCheckpoint: true,

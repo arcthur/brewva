@@ -4,8 +4,8 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { HostedDelegationStore } from "@brewva/brewva-gateway";
 import { BrewvaRuntime, CURRENT_DELEGATION_CONTRACT_VERSION } from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import { createWorkflowStatusTool } from "@brewva/brewva-tools";
+import { recordHostedSkillCompleted } from "../../helpers/events.js";
 import { buildCanonicalReviewReport } from "../../helpers/semantic-artifacts.js";
 import { extractTextContent, mergeContext } from "./tools-flow.helpers.js";
 
@@ -147,21 +147,18 @@ describe("workflow_status contract", () => {
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionId = "workflow-status-stale";
 
-    recordRuntimeEvent(runtime, {
+    recordHostedSkillCompleted({
+      runtime,
       sessionId,
-      type: "skill_completed",
       timestamp: 100,
-      payload: {
-        skillName: "review",
-        outputKeys: ["review_report", "review_findings", "merge_decision"],
-        outputs: {
-          review_report: buildCanonicalReviewReport("Review ready."),
-          review_findings: [],
-          merge_decision: "ready",
-        },
-      } as Record<string, unknown>,
+      skillName: "review",
+      outputs: {
+        review_report: buildCanonicalReviewReport("Review ready."),
+        review_findings: [],
+        merge_decision: "ready",
+      },
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "verification_outcome_recorded",
       timestamp: 110,
@@ -173,7 +170,7 @@ describe("workflow_status contract", () => {
         evidenceFreshness: "fresh",
       } as Record<string, unknown>,
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "verification_write_marked",
       timestamp: 120,
@@ -232,21 +229,18 @@ describe("workflow_status contract", () => {
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionId = "workflow-status-pending";
 
-    recordRuntimeEvent(runtime, {
+    recordHostedSkillCompleted({
+      runtime,
       sessionId,
-      type: "skill_completed",
       timestamp: 100,
-      payload: {
-        skillName: "review",
-        outputKeys: ["review_report", "review_findings", "merge_decision"],
-        outputs: {
-          review_report: buildCanonicalReviewReport("Ready to merge."),
-          review_findings: [],
-          merge_decision: "ready",
-        },
-      } as Record<string, unknown>,
+      skillName: "review",
+      outputs: {
+        review_report: buildCanonicalReviewReport("Ready to merge."),
+        review_findings: [],
+        merge_decision: "ready",
+      },
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "verification_outcome_recorded",
       timestamp: 110,
@@ -294,47 +288,41 @@ describe("workflow_status contract", () => {
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionId = "workflow-status-missing";
 
-    recordRuntimeEvent(runtime, {
+    recordHostedSkillCompleted({
+      runtime,
       sessionId,
-      type: "skill_completed",
       timestamp: 100,
-      payload: {
-        skillName: "review",
-        outputKeys: ["review_report", "review_findings", "merge_decision"],
-        outputs: {
-          review_report: buildCanonicalReviewReport("Ready to merge."),
-          review_findings: [],
-          merge_decision: "ready",
-        },
-      } as Record<string, unknown>,
+      skillName: "review",
+      outputs: {
+        review_report: buildCanonicalReviewReport("Ready to merge."),
+        review_findings: [],
+        merge_decision: "ready",
+      },
     });
-    recordRuntimeEvent(runtime, {
+    recordHostedSkillCompleted({
+      runtime,
       sessionId,
-      type: "skill_completed",
       timestamp: 110,
-      payload: {
-        skillName: "qa",
-        outputKeys: ["qa_report", "qa_findings", "qa_verdict", "qa_checks"],
-        outputs: {
-          qa_report: "QA passed.",
-          qa_findings: [],
-          qa_verdict: "pass",
-          qa_checks: [
-            {
-              name: "operator-smoke",
-              status: "pass",
-              summary: "Operator smoke check passed under executable QA.",
-              command: "bun test",
-              exit_code: 0,
-              observed_output: "operator smoke passed",
-              probe_type: "adversarial",
-              evidence_refs: ["snapshots/operator-flow.json"],
-            },
-          ],
-        },
-      } as Record<string, unknown>,
+      skillName: "qa",
+      outputs: {
+        qa_report: "QA passed.",
+        qa_findings: [],
+        qa_verdict: "pass",
+        qa_checks: [
+          {
+            name: "operator-smoke",
+            status: "pass",
+            summary: "Operator smoke check passed under executable QA.",
+            command: "bun test",
+            exit_code: 0,
+            observed_output: "operator smoke passed",
+            probe_type: "adversarial",
+            evidence_refs: ["snapshots/operator-flow.json"],
+          },
+        ],
+      },
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "verification_outcome_recorded",
       timestamp: 120,
@@ -396,7 +384,7 @@ describe("workflow_status contract", () => {
     const sessionId = "workflow-status-handoff";
     const delegationStore = new HostedDelegationStore(runtime);
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "subagent_completed",
       payload: {
@@ -499,7 +487,7 @@ describe("workflow_status contract", () => {
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionId = "workflow-status-stall";
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "task_stall_adjudicated",
       timestamp: 200,
@@ -561,75 +549,63 @@ describe("workflow_status contract", () => {
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionId = "workflow-status-expanded";
 
-    recordRuntimeEvent(runtime, {
+    recordHostedSkillCompleted({
+      runtime,
       sessionId,
-      type: "skill_completed",
       timestamp: 100,
-      payload: {
-        skillName: "discovery",
-        outputKeys: ["problem_frame", "user_pains", "scope_recommendation"],
-        outputs: {
-          problem_frame: "Operators need clearer workflow visibility.",
-          user_pains: ["Missing stages are easy to overlook."],
-          scope_recommendation: "Start with advisory workflow state.",
-        },
-      } as Record<string, unknown>,
+      skillName: "discovery",
+      outputs: {
+        problem_frame: "Operators need clearer workflow visibility.",
+        user_pains: ["Missing stages are easy to overlook."],
+        scope_recommendation: "Start with advisory workflow state.",
+      },
     });
-    recordRuntimeEvent(runtime, {
+    recordHostedSkillCompleted({
+      runtime,
       sessionId,
-      type: "skill_completed",
       timestamp: 110,
-      payload: {
-        skillName: "strategy",
-        outputKeys: ["strategy_review", "scope_decision", "strategic_risks"],
-        outputs: {
-          strategy_review: "Hold scope around advisory workflow state first.",
-          scope_decision: "Do not build a planner.",
-          strategic_risks: ["Duplicated status surfaces"],
-        },
-      } as Record<string, unknown>,
+      skillName: "strategy",
+      outputs: {
+        strategy_review: "Hold scope around advisory workflow state first.",
+        scope_decision: "Do not build a planner.",
+        strategic_risks: ["Duplicated status surfaces"],
+      },
     });
-    recordRuntimeEvent(runtime, {
+    recordHostedSkillCompleted({
+      runtime,
       sessionId,
-      type: "skill_completed",
       timestamp: 120,
-      payload: {
-        skillName: "review",
-        outputKeys: ["review_report", "review_findings", "merge_decision"],
-        outputs: {
-          review_report: buildCanonicalReviewReport("Review ready."),
-          review_findings: [],
-          merge_decision: "ready",
-        },
-      } as Record<string, unknown>,
+      skillName: "review",
+      outputs: {
+        review_report: buildCanonicalReviewReport("Review ready."),
+        review_findings: [],
+        merge_decision: "ready",
+      },
     });
-    recordRuntimeEvent(runtime, {
+    recordHostedSkillCompleted({
+      runtime,
       sessionId,
-      type: "skill_completed",
       timestamp: 130,
-      payload: {
-        skillName: "qa",
-        outputKeys: ["qa_report", "qa_findings", "qa_verdict", "qa_checks"],
-        outputs: {
-          qa_report: "Smoke-tested the operator path.",
-          qa_findings: [],
-          qa_verdict: "pass",
-          qa_checks: [
-            {
-              name: "operator-smoke",
-              status: "pass",
-              summary: "Operator smoke check passed under executable QA.",
-              command: "bun test",
-              exit_code: 0,
-              observed_output: "operator smoke passed",
-              probe_type: "adversarial",
-              evidence_refs: ["snapshots/operator-flow.json"],
-            },
-          ],
-        },
-      } as Record<string, unknown>,
+      skillName: "qa",
+      outputs: {
+        qa_report: "Smoke-tested the operator path.",
+        qa_findings: [],
+        qa_verdict: "pass",
+        qa_checks: [
+          {
+            name: "operator-smoke",
+            status: "pass",
+            summary: "Operator smoke check passed under executable QA.",
+            command: "bun test",
+            exit_code: 0,
+            observed_output: "operator smoke passed",
+            probe_type: "adversarial",
+            evidence_refs: ["snapshots/operator-flow.json"],
+          },
+        ],
+      },
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "verification_outcome_recorded",
       timestamp: 140,
@@ -640,33 +616,27 @@ describe("workflow_status contract", () => {
         evidenceFreshness: "fresh",
       } as Record<string, unknown>,
     });
-    recordRuntimeEvent(runtime, {
+    recordHostedSkillCompleted({
+      runtime,
       sessionId,
-      type: "skill_completed",
       timestamp: 150,
-      payload: {
-        skillName: "ship",
-        outputKeys: ["ship_report", "release_checklist", "ship_decision"],
-        outputs: {
-          ship_report: "Ready for PR handoff.",
-          release_checklist: ["CI green"],
-          ship_decision: "ready",
-        },
-      } as Record<string, unknown>,
+      skillName: "ship",
+      outputs: {
+        ship_report: "Ready for PR handoff.",
+        release_checklist: ["CI green"],
+        ship_decision: "ready",
+      },
     });
-    recordRuntimeEvent(runtime, {
+    recordHostedSkillCompleted({
+      runtime,
       sessionId,
-      type: "skill_completed",
       timestamp: 160,
-      payload: {
-        skillName: "retro",
-        outputKeys: ["retro_summary", "retro_findings", "followup_recommendation"],
-        outputs: {
-          retro_summary: "The chain stayed inspectable.",
-          retro_findings: ["QA should consume risk_register next."],
-          followup_recommendation: "Tighten QA inputs.",
-        },
-      } as Record<string, unknown>,
+      skillName: "retro",
+      outputs: {
+        retro_summary: "The chain stayed inspectable.",
+        retro_findings: ["QA should consume risk_register next."],
+        followup_recommendation: "Tighten QA inputs.",
+      },
     });
 
     const tool = createWorkflowStatusTool({ runtime });
@@ -697,21 +667,18 @@ describe("workflow_status contract", () => {
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionId = "workflow-status-limit";
 
-    recordRuntimeEvent(runtime, {
+    recordHostedSkillCompleted({
+      runtime,
       sessionId,
-      type: "skill_completed",
       timestamp: 100,
-      payload: {
-        skillName: "review",
-        outputKeys: ["review_report", "review_findings", "merge_decision"],
-        outputs: {
-          review_report: buildCanonicalReviewReport("Ready to merge."),
-          review_findings: [],
-          merge_decision: "ready",
-        },
-      } as Record<string, unknown>,
+      skillName: "review",
+      outputs: {
+        review_report: buildCanonicalReviewReport("Ready to merge."),
+        review_findings: [],
+        merge_decision: "ready",
+      },
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "verification_outcome_recorded",
       timestamp: 110,

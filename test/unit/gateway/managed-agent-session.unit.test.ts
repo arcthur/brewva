@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { BrewvaRuntime, defineContextSourceProvider } from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import {
   type ContextState,
   type CreateBrewvaHostPluginRunnerOptions,
@@ -558,7 +557,7 @@ describe("managed agent session compaction", () => {
     });
     observedPhases.length = 0;
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       turn: 1,
       type: "turn_input_recorded",
@@ -570,7 +569,7 @@ describe("managed agent session compaction", () => {
     });
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       turn: 1,
       type: "effect_commitment_approval_requested",
@@ -583,7 +582,7 @@ describe("managed agent session compaction", () => {
     });
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       turn: 1,
       type: "effect_commitment_approval_decided",
@@ -594,7 +593,7 @@ describe("managed agent session compaction", () => {
     });
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       turn: 1,
       type: "session_turn_transition",
@@ -613,7 +612,7 @@ describe("managed agent session compaction", () => {
     });
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       turn: 1,
       type: "session_turn_transition",
@@ -1081,7 +1080,7 @@ describe("managed agent session compaction", () => {
     sessionStore.appendThinkingLevelChange("high");
 
     const sessionId = sessionStore.getSessionId();
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       turn: 1,
       type: "turn_input_recorded",
@@ -1091,7 +1090,7 @@ describe("managed agent session compaction", () => {
         promptText: "resume while waiting for approval",
       },
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       turn: 1,
       type: "effect_commitment_approval_requested",
@@ -1192,7 +1191,7 @@ describe("managed agent session compaction", () => {
     sessionStore.appendThinkingLevelChange("high");
 
     const sessionId = sessionStore.getSessionId();
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       turn: 1,
       type: "turn_input_recorded",
@@ -1202,7 +1201,7 @@ describe("managed agent session compaction", () => {
         promptText: "resume while waiting for approval",
       },
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       turn: 1,
       type: "effect_commitment_approval_requested",
@@ -1272,7 +1271,7 @@ describe("managed agent session compaction", () => {
     sessionStore.appendThinkingLevelChange("high");
 
     const sessionId = sessionStore.getSessionId();
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       turn: 2,
       type: "turn_input_recorded",
@@ -1282,7 +1281,7 @@ describe("managed agent session compaction", () => {
         promptText: "resume while tool execution is still active",
       },
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       turn: 2,
       type: "tool_execution_start",
@@ -1367,7 +1366,7 @@ describe("managed agent session compaction", () => {
     sessionStore.appendThinkingLevelChange("high");
 
     const sessionId = sessionStore.getSessionId();
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       turn: 1,
       type: "turn_input_recorded",
@@ -1377,7 +1376,7 @@ describe("managed agent session compaction", () => {
         promptText: "resume after worker crash",
       },
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       turn: 1,
       type: "session_turn_transition",
@@ -1468,7 +1467,7 @@ describe("managed agent session compaction", () => {
     sessionStore.appendThinkingLevelChange("high");
 
     const sessionId = sessionStore.getSessionId();
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       turn: 1,
       type: "turn_input_recorded",
@@ -1478,7 +1477,7 @@ describe("managed agent session compaction", () => {
         promptText: "resume after worker crash",
       },
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       turn: 1,
       type: "session_turn_transition",

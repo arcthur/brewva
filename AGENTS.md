@@ -48,8 +48,8 @@
 
 ## Where To Look
 
-- Runtime API and contracts: `packages/brewva-runtime/src/runtime.ts`, `packages/brewva-runtime/src/contracts/index.ts`.
-- Runtime skills: `packages/brewva-runtime/src/skills/contract.ts`, `packages/brewva-runtime/src/skills/registry.ts`.
+- Runtime API and public entry surface: `packages/brewva-runtime/src/runtime/runtime.ts`, `packages/brewva-runtime/src/public/index.ts`.
+- Runtime skills: `packages/brewva-runtime/src/domain/skills/contract.ts`, `packages/brewva-runtime/src/domain/skills/registry.ts`.
 - Session query plane: `packages/brewva-session-index/src/index.ts`, consumed by `packages/brewva-recall/src/broker.ts` and `packages/brewva-cli/src/insights.ts`.
 - Gateway skill routing and plugins: `packages/brewva-gateway/src/runtime-plugins/skill-first.ts`, `packages/brewva-gateway/src/runtime-plugins/local-hook-port.ts`.
 - Managed tool capabilities: `packages/brewva-tools/src/managed-tool-metadata-registry.ts`, `packages/brewva-tools/src/utils/runtime-bound-tool.ts`.

@@ -72,7 +72,7 @@ function okGatewayCliValue<T>(value: T): GatewayCliValueResult<T> {
 }
 
 function gatewayCliValueError(error: string): GatewayCliValueResult<never> {
-  return { ok: false, error };
+  return { ok: false, reason: error };
 }
 
 function hasGatewayCliValue<T>(
@@ -83,7 +83,7 @@ function hasGatewayCliValue<T>(
 
 function printGatewayCliValueError<T>(result: GatewayCliValueResult<T>): void {
   if (!result.ok) {
-    console.error(result.error);
+    console.error(result.reason);
   }
 }
 

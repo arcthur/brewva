@@ -1,11 +1,11 @@
 import { existsSync } from "node:fs";
-import type { BrewvaConfig, ToolActionClass, ToolAdmissionBehavior } from "../contracts/index.js";
 import {
   TOOL_ACTION_CLASSES,
   TOOL_ADMISSION_BEHAVIORS,
   compareToolAdmission,
   getToolActionClassAdmissionBounds,
-} from "../governance/action-policy.js";
+} from "../domain/governance/action-policy.js";
+import type { ToolActionClass, ToolAdmissionBehavior } from "../domain/governance/types.js";
 import {
   isRecord,
   normalizeBoolean,
@@ -18,6 +18,7 @@ import {
   normalizeStringArray,
 } from "./normalization-shared.js";
 import { resolvePathInput } from "./paths.js";
+import type { BrewvaConfig } from "./types.js";
 
 const VALID_SECURITY_MODES = new Set(["permissive", "standard", "strict"]);
 const VALID_SECURITY_ENFORCEMENT_MODES = new Set(["off", "warn", "enforce", "inherit"]);

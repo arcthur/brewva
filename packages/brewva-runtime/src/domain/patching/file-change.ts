@@ -1,0 +1,377 @@
+import {
+  PATCH_RECORDED_EVENT_TYPE,
+  REDO_EVENT_TYPE,
+  ROLLBACK_EVENT_TYPE,
+  VERIFICATION_STATE_RESET_EVENT_TYPE,
+  VERIFICATION_WRITE_MARKED_EVENT_TYPE,
+} from "../../events/registry.js";
+import type { RuntimeKernelContext } from "../../runtime/runtime-kernel.js";
+import { SessionCostTracker } from "../cost/api.js";
+import type { ReversibleMutationService } from "../governance/api.js";
+import type { LedgerService } from "../ledger/api.js";
+import { RuntimeSessionStateStore } from "../sessions/api.js";
+import type { SkillLifecycleService } from "../skills/api.js";
+import type { SkillDocument } from "../skills/api.js";
+import { isMutationTool } from "../verification/api.js";
+import { buildVerificationWriteMarkedPayload } from "../verification/api.js";
+import { FileChangeTracker } from "./file-change-tracker.js";
+import type { PatchApplyResult, PatchSet, RedoResult, RollbackResult } from "./types.js";
+
+export interface TrackToolCallInput {
+  sessionId: string;
+  toolCallId: string;
+  toolName: string;
+  args?: Record<string, unknown>;
+}
+
+export interface TrackToolCallEndInput {
+  sessionId: string;
+  toolCallId: string;
+  toolName: string;
+  channelSuccess: boolean;
+}
+
+export interface ApplyPatchSetInput {
+  sessionId: string;
+  toolName: string;
+  patchSet: PatchSet;
+  toolCallId?: string;
+}
+
+export interface FileChangeServiceOptions {
+  sessionState: RuntimeKernelContext["sessionState"];
+  fileChanges: RuntimeKernelContext["fileChanges"];
+  costTracker: RuntimeKernelContext["costTracker"];
+  getCurrentTurn: RuntimeKernelContext["getCurrentTurn"];
+  recordEvent: RuntimeKernelContext["recordEvent"];
+  ledgerService: Pick<LedgerService, "recordInfrastructureRow">;
+  skillLifecycleService: Pick<SkillLifecycleService, "getActiveSkill">;
+  reversibleMutationService: Pick<
+    ReversibleMutationService,
+    "markWorkspacePatchSetRolledBack" | "markWorkspacePatchSetRedone"
+  >;
+}
+
+export class FileChangeService {
+  private readonly sessionState: RuntimeSessionStateStore;
+  private readonly fileChanges: FileChangeTracker;
+  private readonly costTracker: SessionCostTracker;
+  private readonly recordInfrastructureRow: (input: {
+    sessionId: string;
+    tool: string;
+    argsSummary: string;
+    outputSummary: string;
+    fullOutput?: string;
+    verdict?: "pass" | "fail" | "inconclusive";
+    metadata?: Record<string, unknown>;
+    turn?: number;
+    skill?: string | null;
+  }) => string;
+  private readonly getActiveSkill: (sessionId: string) => SkillDocument | undefined;
+  private readonly getCurrentTurn: (sessionId: string) => number;
+  private readonly recordEvent: (input: {
+    sessionId: string;
+    type: string;
+    turn?: number;
+    payload?: object;
+    timestamp?: number;
+    skipTapeCheckpoint?: boolean;
+  }) => unknown;
+  private readonly markWorkspacePatchSetRolledBack: (
+    sessionId: string,
+    patchSetId: string,
+  ) => string | undefined;
+  private readonly markWorkspacePatchSetRedone: (
+    sessionId: string,
+    patchSetId: string,
+  ) => string | undefined;
+
+  constructor(options: FileChangeServiceOptions) {
+    this.sessionState = options.sessionState;
+    this.fileChanges = options.fileChanges;
+    this.costTracker = options.costTracker;
+    this.recordInfrastructureRow = (input) => options.ledgerService.recordInfrastructureRow(input);
+    this.getActiveSkill = (sessionId) => options.skillLifecycleService.getActiveSkill(sessionId);
+    this.getCurrentTurn = (sessionId) => options.getCurrentTurn(sessionId);
+    this.recordEvent = (input) => options.recordEvent(input);
+    this.markWorkspacePatchSetRolledBack = (sessionId, patchSetId) =>
+      options.reversibleMutationService.markWorkspacePatchSetRolledBack(sessionId, patchSetId);
+    this.markWorkspacePatchSetRedone = (sessionId, patchSetId) =>
+      options.reversibleMutationService.markWorkspacePatchSetRedone(sessionId, patchSetId);
+  }
+
+  markToolCall(sessionId: string, toolName: string): void {
+    const state = this.sessionState.getCell(sessionId);
+    const current = state.toolCalls;
+    const next = current + 1;
+    state.toolCalls = next;
+    this.costTracker.recordToolCall(sessionId, {
+      toolName,
+      turn: this.getCurrentTurn(sessionId),
+    });
+    if (isMutationTool(toolName)) {
+      this.recordEvent({
+        sessionId,
+        type: VERIFICATION_WRITE_MARKED_EVENT_TYPE,
+        turn: this.getCurrentTurn(sessionId),
+        payload: buildVerificationWriteMarkedPayload({
+          toolName,
+        }),
+      });
+    }
+    this.recordEvent({
+      sessionId,
+      type: "tool_call_marked",
+      turn: state.turn,
+      payload: {
+        toolName,
+        toolCalls: next,
+      },
+    });
+  }
+
+  trackToolCallStart(input: TrackToolCallInput): void {
+    const capture = this.fileChanges.captureBeforeToolCall({
+      sessionId: input.sessionId,
+      toolCallId: input.toolCallId,
+      toolName: input.toolName,
+      args: input.args,
+    });
+    if (capture.trackedFiles.length === 0) {
+      return;
+    }
+    this.recordEvent({
+      sessionId: input.sessionId,
+      type: "file_snapshot_captured",
+      turn: this.getCurrentTurn(input.sessionId),
+      payload: {
+        toolCallId: input.toolCallId,
+        toolName: input.toolName,
+        files: capture.trackedFiles,
+      },
+    });
+  }
+
+  trackToolCallEnd(input: TrackToolCallEndInput): PatchSet | undefined {
+    const patchSet = this.fileChanges.completeToolCall({
+      sessionId: input.sessionId,
+      toolCallId: input.toolCallId,
+      channelSuccess: input.channelSuccess,
+    });
+    if (!patchSet) return undefined;
+    this.recordEvent({
+      sessionId: input.sessionId,
+      type: PATCH_RECORDED_EVENT_TYPE,
+      turn: this.getCurrentTurn(input.sessionId),
+      payload: {
+        toolCallId: input.toolCallId,
+        toolName: input.toolName,
+        patchSetId: patchSet.id,
+        changes: patchSet.changes.map((change) => ({
+          path: change.path,
+          action: change.action,
+        })),
+      },
+    });
+    return patchSet;
+  }
+
+  applyPatchSet(input: ApplyPatchSetInput): PatchApplyResult {
+    const applied = this.fileChanges.applyPatchSet(input.sessionId, {
+      patchSet: input.patchSet,
+      toolName: input.toolName,
+    });
+    this.recordEvent({
+      sessionId: input.sessionId,
+      type: PATCH_RECORDED_EVENT_TYPE,
+      turn: this.getCurrentTurn(input.sessionId),
+      payload: {
+        toolCallId: input.toolCallId ?? null,
+        toolName: input.toolName,
+        patchSetId: applied.patchSetId ?? null,
+        changes: input.patchSet.changes.map((change) => ({
+          path: change.path,
+          action: change.action,
+        })),
+        applyStatus: applied.ok ? "applied" : "failed",
+        failedPaths: applied.failedPaths,
+        reason: applied.ok ? null : applied.reason,
+      },
+    });
+    if (applied.ok) {
+      this.recordInfrastructureRow({
+        sessionId: input.sessionId,
+        turn: this.getCurrentTurn(input.sessionId),
+        skill: this.getActiveSkill(input.sessionId)?.name ?? null,
+        tool: input.toolName,
+        argsSummary: `patchSet=${input.patchSet.id}`,
+        outputSummary: `applied=${applied.appliedPaths.length} failed=0`,
+        fullOutput: JSON.stringify(applied),
+        verdict: "pass",
+        metadata: {
+          source: "worker_merge_apply",
+          patchSetId: applied.patchSetId ?? null,
+          appliedPaths: applied.appliedPaths,
+        },
+      });
+      return applied;
+    }
+
+    this.recordInfrastructureRow({
+      sessionId: input.sessionId,
+      turn: this.getCurrentTurn(input.sessionId),
+      skill: this.getActiveSkill(input.sessionId)?.name ?? null,
+      tool: input.toolName,
+      argsSummary: `patchSet=${input.patchSet.id}`,
+      outputSummary: `apply_failed=${applied.failedPaths.length}`,
+      fullOutput: JSON.stringify(applied),
+      verdict: "fail",
+      metadata: {
+        source: "worker_merge_apply",
+        patchSetId: applied.patchSetId ?? null,
+        failedPaths: applied.failedPaths,
+        reason: applied.ok ? null : applied.reason,
+      },
+    });
+    return applied;
+  }
+
+  rollbackLastPatchSet(sessionId: string): RollbackResult {
+    return this.rollbackPatchSet(sessionId);
+  }
+
+  redoLastPatchSet(sessionId: string): RedoResult {
+    return this.redoPatchSet(sessionId);
+  }
+
+  rollbackPatchSet(sessionId: string, patchSetId?: string): RollbackResult {
+    const rollback =
+      typeof patchSetId === "string" && patchSetId.trim().length > 0
+        ? this.fileChanges.rollbackPatchSet(sessionId, patchSetId)
+        : this.fileChanges.rollbackLast(sessionId);
+    const turn = this.getCurrentTurn(sessionId);
+    const mutationReceiptId =
+      rollback.ok && rollback.patchSetId
+        ? this.markWorkspacePatchSetRolledBack(sessionId, rollback.patchSetId)
+        : undefined;
+    this.recordEvent({
+      sessionId,
+      type: ROLLBACK_EVENT_TYPE,
+      turn,
+      payload: {
+        ok: rollback.ok,
+        patchSetId: rollback.patchSetId ?? null,
+        mutationReceiptId: mutationReceiptId ?? null,
+        restoredPaths: rollback.restoredPaths,
+        failedPaths: rollback.failedPaths,
+        reason: rollback.ok ? null : rollback.reason,
+      },
+    });
+
+    if (!rollback.ok) {
+      return rollback;
+    }
+
+    const result: RollbackResult = {
+      ...rollback,
+      ...(mutationReceiptId ? { mutationReceiptId } : {}),
+    };
+
+    this.recordEvent({
+      sessionId,
+      type: VERIFICATION_STATE_RESET_EVENT_TYPE,
+      turn,
+      payload: {
+        reason: "rollback",
+      },
+    });
+    this.recordInfrastructureRow({
+      sessionId,
+      turn,
+      skill: this.getActiveSkill(sessionId)?.name ?? null,
+      tool: "brewva_rollback",
+      argsSummary: `patchSet=${rollback.patchSetId ?? "unknown"}`,
+      outputSummary: `restored=${rollback.restoredPaths.length} failed=${rollback.failedPaths.length}`,
+      fullOutput: JSON.stringify(result),
+      verdict: rollback.failedPaths.length === 0 ? "pass" : "fail",
+      metadata: {
+        source: "rollback_tool",
+        patchSetId: rollback.patchSetId ?? null,
+        mutationReceiptId: mutationReceiptId ?? null,
+        restoredPaths: rollback.restoredPaths,
+        failedPaths: rollback.failedPaths,
+      },
+    });
+    return result;
+  }
+
+  redoPatchSet(sessionId: string, patchSetId?: string): RedoResult {
+    const redo =
+      typeof patchSetId === "string" && patchSetId.trim().length > 0
+        ? this.fileChanges.redoPatchSet(sessionId, patchSetId)
+        : this.fileChanges.redoLast(sessionId);
+    const turn = this.getCurrentTurn(sessionId);
+    const mutationReceiptId =
+      redo.ok && redo.patchSetId
+        ? this.markWorkspacePatchSetRedone(sessionId, redo.patchSetId)
+        : undefined;
+    const result: RedoResult =
+      redo.ok && mutationReceiptId
+        ? {
+            ...redo,
+            mutationReceiptId,
+          }
+        : redo;
+    this.recordEvent({
+      sessionId,
+      type: REDO_EVENT_TYPE,
+      turn,
+      payload: {
+        ok: result.ok,
+        patchSetId: result.patchSetId ?? null,
+        mutationReceiptId: result.mutationReceiptId ?? null,
+        restoredPaths: result.restoredPaths,
+        failedPaths: result.failedPaths,
+        reason: result.ok ? null : result.reason,
+      },
+    });
+
+    if (!result.ok) {
+      return result;
+    }
+
+    this.recordEvent({
+      sessionId,
+      type: VERIFICATION_STATE_RESET_EVENT_TYPE,
+      turn,
+      payload: {
+        reason: "redo",
+      },
+    });
+    this.recordInfrastructureRow({
+      sessionId,
+      turn,
+      skill: this.getActiveSkill(sessionId)?.name ?? null,
+      tool: "brewva_redo",
+      argsSummary: `patchSet=${result.patchSetId ?? "unknown"}`,
+      outputSummary: `restored=${result.restoredPaths.length} failed=${result.failedPaths.length}`,
+      fullOutput: JSON.stringify(result),
+      verdict: result.failedPaths.length === 0 ? "pass" : "fail",
+      metadata: {
+        source: "redo_tool",
+        patchSetId: result.patchSetId ?? null,
+        mutationReceiptId: mutationReceiptId ?? null,
+        restoredPaths: result.restoredPaths,
+        failedPaths: result.failedPaths,
+      },
+    });
+    return result;
+  }
+
+  resolveUndoSessionId(preferredSessionId?: string): string | undefined {
+    if (preferredSessionId && this.fileChanges.hasHistory(preferredSessionId)) {
+      return preferredSessionId;
+    }
+    return this.fileChanges.latestSessionWithHistory();
+  }
+}

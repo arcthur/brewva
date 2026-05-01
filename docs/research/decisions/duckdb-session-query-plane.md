@@ -14,7 +14,7 @@
 - Code anchors:
   - `packages/brewva-session-index/src/index.ts`
   - `packages/brewva-recall/src/broker.ts`
-  - `packages/brewva-runtime/src/runtime.ts`
+  - `packages/brewva-runtime/src/runtime/runtime.ts`
   - `packages/brewva-cli/src/insights.ts`
   - `script/build-binaries.ts`
   - `script/verify-dist.ts`

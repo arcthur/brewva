@@ -15,7 +15,7 @@
   - `docs/reference/gateway-control-plane-protocol.md`
   - `docs/journeys/internal/context-and-compaction.md`
 - Code anchors:
-  - `packages/brewva-runtime/src/lifecycle/turn-lifecycle-spine.ts`
+  - `packages/brewva-runtime/src/domain/lifecycle/turn-lifecycle-spine.ts`
   - `packages/brewva-gateway/src/session/turn-envelope.ts`
   - `packages/brewva-gateway/src/session/turn-transition.ts`
   - `test/unit/runtime/turn-lifecycle-spine.unit.test.ts`

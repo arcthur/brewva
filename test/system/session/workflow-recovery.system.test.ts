@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG, type BrewvaConfig } from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
+import { recordHostedSkillCompleted } from "../../helpers/events.js";
 import { cleanupTestWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
 
 function createConfig(): BrewvaConfig {
@@ -25,63 +25,54 @@ describe("system: workflow recovery", () => {
         schema: "brewva.task.v1",
         goal: "Recover workflow state after projection loss",
       });
-      recordRuntimeEvent(runtime, {
+      recordHostedSkillCompleted({
+        runtime,
         sessionId,
-        type: "skill_completed",
         timestamp: 100,
-        payload: {
-          skillName: "plan",
-          outputKeys: [
-            "design_spec",
-            "execution_plan",
-            "execution_mode_hint",
-            "risk_register",
-            "implementation_targets",
+        skillName: "plan",
+        outputs: {
+          design_spec: "Recover workflow artifacts from tape.",
+          execution_plan: [
+            {
+              step: "Replay durable events",
+              intent: "Recover workflow posture strictly from durable session history.",
+              owner: "runtime.workflow",
+              exit_criteria: "Replay rebuilds canonical workflow artifacts after recovery.",
+              verification_intent:
+                "Workflow recovery tests compare replayed posture against the pre-crash state.",
+            },
+            {
+              step: "Rebuild advisory context",
+              intent: "Restore working projection without hidden workflow controllers.",
+              owner: "runtime.context",
+              exit_criteria:
+                "Recovered session exposes workflow context through advisory surfaces.",
+              verification_intent:
+                "Recovered sessions keep workflow context available through the working projection.",
+            },
           ],
-          outputs: {
-            design_spec: "Recover workflow artifacts from tape.",
-            execution_plan: [
-              {
-                step: "Replay durable events",
-                intent: "Recover workflow posture strictly from durable session history.",
-                owner: "runtime.workflow",
-                exit_criteria: "Replay rebuilds canonical workflow artifacts after recovery.",
-                verification_intent:
-                  "Workflow recovery tests compare replayed posture against the pre-crash state.",
-              },
-              {
-                step: "Rebuild advisory context",
-                intent: "Restore working projection without hidden workflow controllers.",
-                owner: "runtime.context",
-                exit_criteria:
-                  "Recovered session exposes workflow context through advisory surfaces.",
-                verification_intent:
-                  "Recovered sessions keep workflow context available through the working projection.",
-              },
-            ],
-            execution_mode_hint: "coordinated_rollout",
-            risk_register: [
-              {
-                risk: "Recovery may replay events but fail to reconstruct planning evidence.",
-                category: "wal_replay",
-                severity: "high",
-                mitigation: "Persist canonical planning artifacts and recover them from tape.",
-                required_evidence: ["workflow_recovery_system_test"],
-                owner_lane: "review-concurrency",
-              },
-            ],
-            implementation_targets: [
-              {
-                target: "packages/brewva-runtime/src/workflow/artifact-derivation.ts",
-                kind: "module",
-                owner_boundary: "runtime.workflow",
-                reason: "Recovery workflow artifacts are derived here.",
-              },
-            ],
-          },
+          execution_mode_hint: "coordinated_rollout",
+          risk_register: [
+            {
+              risk: "Recovery may replay events but fail to reconstruct planning evidence.",
+              category: "wal_replay",
+              severity: "high",
+              mitigation: "Persist canonical planning artifacts and recover them from tape.",
+              required_evidence: ["workflow_recovery_system_test"],
+              owner_lane: "review-concurrency",
+            },
+          ],
+          implementation_targets: [
+            {
+              target: "packages/brewva-runtime/src/domain/workflow/artifact-derivation.ts",
+              kind: "module",
+              owner_boundary: "runtime.workflow",
+              reason: "Recovery workflow artifacts are derived here.",
+            },
+          ],
         },
       });
-      recordRuntimeEvent(runtime, {
+      runtime.extensions.hosted.events.record({
         sessionId,
         type: "verification_write_marked",
         timestamp: 110,
@@ -89,39 +80,36 @@ describe("system: workflow recovery", () => {
           toolName: "edit",
         },
       });
-      recordRuntimeEvent(runtime, {
+      recordHostedSkillCompleted({
+        runtime,
         sessionId,
-        type: "skill_completed",
         timestamp: 120,
-        payload: {
-          skillName: "review",
-          outputKeys: ["review_report", "review_findings", "merge_decision"],
-          outputs: {
-            review_report: {
-              summary:
-                "Recovered workflow chain is ready after lane disclosure and precedent consult were rebuilt from tape.",
-              activated_lanes: ["review-correctness", "review-boundaries", "review-operability"],
-              activation_basis: [
-                "Projection recovery changes workflow-facing artifacts.",
-                "Verification evidence is fresh after replay.",
-              ],
-              missing_evidence: [],
-              residual_blind_spots: [
-                "No security lane was needed because replay recovery stays local to the repository.",
-              ],
-              precedent_query_summary:
-                "query_intent=precedent_lookup | query=workflow recovery projection rebuild | source_types=auto | search_mode=solution_only",
-              precedent_consult_status: {
-                status: "consulted",
-                precedent_refs: ["docs/solutions/workflow/review-disclosure-shape.md"],
-              },
+        skillName: "review",
+        outputs: {
+          review_report: {
+            summary:
+              "Recovered workflow chain is ready after lane disclosure and precedent consult were rebuilt from tape.",
+            activated_lanes: ["review-correctness", "review-boundaries", "review-operability"],
+            activation_basis: [
+              "Projection recovery changes workflow-facing artifacts.",
+              "Verification evidence is fresh after replay.",
+            ],
+            missing_evidence: [],
+            residual_blind_spots: [
+              "No security lane was needed because replay recovery stays local to the repository.",
+            ],
+            precedent_query_summary:
+              "query_intent=precedent_lookup | query=workflow recovery projection rebuild | source_types=auto | search_mode=solution_only",
+            precedent_consult_status: {
+              status: "consulted",
+              precedent_refs: ["docs/solutions/workflow/review-disclosure-shape.md"],
             },
-            review_findings: [],
-            merge_decision: "ready",
           },
+          review_findings: [],
+          merge_decision: "ready",
         },
       });
-      recordRuntimeEvent(runtime, {
+      runtime.extensions.hosted.events.record({
         sessionId,
         type: "verification_outcome_recorded",
         timestamp: 130,

@@ -205,13 +205,14 @@ but runtime-plugin wiring narrows that root contract immediately:
 - hosted lifecycle adapters consume `BrewvaHostedRuntimePort`
 - embedded operator commands consume `BrewvaOperatorRuntimePort`
 - the repo-owned managed tool bundle receives `BrewvaToolRuntimePort` plus
-  explicit injected internal hooks, producing the `BrewvaBundledToolRuntime`
+  explicit controlled extension hooks, producing the `BrewvaBundledToolRuntime`
   used by `buildBrewvaTools()`
 
 Raw event append does not re-enter the public runtime surface through those
-ports. When hosted wiring genuinely needs raw tape append, it uses the
-repository-owned internal subpath instead of widening the hosted or tool
-contracts.
+ports. Hosted wiring and bundled tools that need repository-owned event or
+maintenance hooks receive branded controlled extension ports through
+`runtime.extensions`; they do not import a catch-all internal runtime barrel or
+spread service instances into plugin code.
 
 ## Hosted Pipeline
 

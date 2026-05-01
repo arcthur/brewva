@@ -10,7 +10,7 @@ import {
   coercePlanningArtifactSet,
   deriveSkillPlanningEvidenceStateFromEvents,
   resolveSkillVerificationEvidenceContext,
-} from "@brewva/brewva-runtime/internal";
+} from "@brewva/brewva-runtime";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate";
 import { Type } from "@sinclair/typebox";
 import {
@@ -167,6 +167,15 @@ function isReviewContractSkill(skill: SkillDocument | undefined): skill is Skill
   }
   const outputs = skill.contract.intent?.outputs ?? [];
   return REVIEW_OUTPUT_KEYS.every((key) => outputs.includes(key));
+}
+
+function readReviewMergeDecision(
+  value: unknown,
+): "ready" | "needs_changes" | "blocked" | undefined {
+  const normalized = readString(value)?.toLowerCase();
+  return normalized === "ready" || normalized === "needs_changes" || normalized === "blocked"
+    ? normalized
+    : undefined;
 }
 
 function resolveLatestSkillActivationTimestamp(
@@ -690,12 +699,20 @@ export function createSkillCompleteTool(options: BrewvaToolOptions): ToolDefinit
           });
         }
 
+        const verificationCommandsDeferred = options.verification?.executeCommands === false;
         const verification = await runtime.authority.verification.verify(sessionId, undefined, {
           executeCommands: options.verification?.executeCommands,
           timeoutMs: options.verification?.timeoutMs,
         });
+        const deferredReviewDecision = isReviewContractSkill(activeSkill)
+          ? readReviewMergeDecision(outputs.merge_decision)
+          : undefined;
+        const allowDeferredVerificationCompletion =
+          verificationCommandsDeferred &&
+          verification.failedChecks.length === 0 &&
+          (deferredReviewDecision === "blocked" || deferredReviewDecision === "needs_changes");
 
-        if (!verification.passed) {
+        if (!verification.passed && !allowDeferredVerificationCompletion) {
           return inconclusiveTextResult(
             `Verification gate blocked. Skill not completed: ${verification.missingEvidence.join(", ")}`,
             {
@@ -739,7 +756,9 @@ export function createSkillCompleteTool(options: BrewvaToolOptions): ToolDefinit
         }
         const message = verification.readOnly
           ? "Skill completed (read-only, no verification needed)."
-          : "Skill completed and verification gate passed.";
+          : !verification.passed && allowDeferredVerificationCompletion
+            ? "Skill completed (review recorded with verification commands deferred)."
+            : "Skill completed and verification gate passed.";
         return textResult(message, {
           ok: true,
           ...(learningResearchSynthesis ? { learningResearchSynthesis } : {}),

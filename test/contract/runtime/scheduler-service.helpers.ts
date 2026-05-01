@@ -9,7 +9,7 @@ import {
   parseCronExpression,
   type BrewvaConfig,
 } from "@brewva/brewva-runtime";
-import { recordRuntimeEvent, type SchedulerRuntimePort } from "@brewva/brewva-runtime/internal";
+import { type SchedulerRuntimePort } from "@brewva/brewva-runtime/recovery";
 
 export function createWorkspace(name: string): string {
   const workspace = mkdtempSync(join(tmpdir(), `brewva-scheduler-${name}-`));
@@ -43,7 +43,7 @@ export function schedulerRuntimePort(runtime: BrewvaRuntime): SchedulerRuntimePo
     scheduleConfig: runtime.config.schedule,
     listSessionIds: () => runtime.inspect.events.listSessionIds(),
     listEvents: (targetSessionId, query) => runtime.inspect.events.list(targetSessionId, query),
-    recordEvent: (input) => recordRuntimeEvent(runtime, input),
+    recordEvent: (input) => runtime.extensions.hosted.events.record(input),
     subscribeEvents: (listener) => runtime.inspect.events.subscribe(listener),
     getTruthState: (targetSessionId) => runtime.inspect.truth.getState(targetSessionId),
     getTaskState: (targetSessionId) => runtime.inspect.task.getState(targetSessionId),

@@ -2,8 +2,8 @@ import {
   getOrCreateNarrativeMemoryPlane,
   validateNarrativeMemoryCandidate,
 } from "@brewva/brewva-deliberation";
-import { NARRATIVE_MEMORY_RECORDED_EVENT_TYPE, type BrewvaRuntime } from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
+import type { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { NARRATIVE_MEMORY_RECORDED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
 import type { BrewvaSemanticReranker } from "@brewva/brewva-tools";
 import type { TurnLifecyclePort } from "./turn-lifecycle-port.js";
 
@@ -324,7 +324,7 @@ export function createNarrativeMemoryLifecycle(
           })),
         ],
       });
-      recordRuntimeEvent(runtime, {
+      runtime.extensions.hosted.events.record({
         sessionId,
         type: NARRATIVE_MEMORY_RECORDED_EVENT_TYPE,
         payload: {

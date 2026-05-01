@@ -1,12 +1,11 @@
 import {
   type DelegationRunQuery,
   type DelegationRunRecord,
-  type BrewvaEventRecord,
-  type BrewvaEventQuery,
   type BrewvaInspectionPort,
   type ContextCompactionGateStatus,
   type ContextInjectionCategory,
 } from "@brewva/brewva-runtime";
+import { type BrewvaEventRecord, type BrewvaEventQuery } from "@brewva/brewva-runtime/events";
 import type { BuildCapabilityViewResult } from "./capability-view.js";
 import type { ContextBlockProvenance } from "./context-composer.js";
 import { estimateTokens } from "./tool-output-distiller.js";
@@ -18,14 +17,16 @@ type ContextComposerEventQueryResult = Array<
 >;
 
 type ContextComposerTapeStatus = Pick<
-  ReturnType<BrewvaInspectionPort["events"]["getTapeStatus"]>,
+  ReturnType<BrewvaInspectionPort["tape"]["getTapeStatus"]>,
   "tapePressure" | "entriesSinceAnchor"
 >;
 
 export type ContextComposerSupplementalRuntime = {
   inspect: {
-    events: {
+    tape: {
       getTapeStatus(sessionId: string): ContextComposerTapeStatus;
+    };
+    events: {
       query?: (
         sessionId: string,
         query: ContextComposerEventQuery,
@@ -236,7 +237,7 @@ function buildOperationalDiagnosticsBlock(input: {
     lines.splice(1, 0, `requested_by: ${input.requested.map((name) => `$${name}`).join(", ")}`);
   }
   if (input.includeTapeTelemetry) {
-    const tapeStatus = input.runtime.inspect.events.getTapeStatus(input.sessionId);
+    const tapeStatus = input.runtime.inspect.tape.getTapeStatus(input.sessionId);
     lines.push(`tape_pressure: ${tapeStatus.tapePressure}`);
     lines.push(`tape_entries_since_anchor: ${tapeStatus.entriesSinceAnchor}`);
   }

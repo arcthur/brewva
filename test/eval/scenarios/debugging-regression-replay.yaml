@@ -6,9 +6,9 @@ context:
     Typecheck passes, but cascade events stop reconciling after session replay.
     The user sees stale state in the UI after resuming a saved session.
   workspace_state: |
-    packages/brewva-runtime/src/services/replay.ts exists.
-    packages/brewva-runtime/src/services/cascade-reconciler.ts exists.
-    Recent commit touched replay.ts finalize() method.
+    packages/brewva-runtime/src/domain/tape/replay-engine.ts exists.
+    packages/brewva-runtime/src/projection/engine.ts exists.
+    Recent commit touched replay-engine.ts finalize() method.
   available_artifacts:
     runtime_trace: "Turn 12: replay completes. Turn 13: cascade intent scheduled. Turn 14: reconciler skips event (epoch mismatch)."
     verification_evidence: "bun test passes. bun run check passes."

@@ -163,7 +163,7 @@ describe("Task status alignment", () => {
 
     expect(result).toEqual({
       ok: false,
-      error: "verifier_blocker_requires_truth_fact",
+      reason: "verifier_blocker_requires_truth_fact",
     });
   });
 

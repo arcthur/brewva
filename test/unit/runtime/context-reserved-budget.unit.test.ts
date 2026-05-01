@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   HISTORY_VIEW_BASELINE_RESERVED_BUDGET_RATIO,
   resolveReservedBudgetFromRatio,
-} from "../../../packages/brewva-runtime/src/context/reserved-budget.js";
+} from "../../../packages/brewva-runtime/src/domain/context/reserved-budget.js";
 
 describe("context reserved budget helpers", () => {
   test("exports the canonical history-view baseline reserved budget ratio", () => {

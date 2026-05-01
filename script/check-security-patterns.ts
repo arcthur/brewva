@@ -5,7 +5,7 @@ const ROOT = join(import.meta.dir, "..");
 const DEFAULT_SCAN_PATHS = [
   "packages/brewva-runtime/src/security/boundary-policy.ts",
   "packages/brewva-runtime/src/security/command-policy.ts",
-  "packages/brewva-runtime/src/services/tool-gate.ts",
+  "packages/brewva-runtime/src/domain/tools/tool-gate.ts",
   "packages/brewva-tools/src/exec.ts",
 ] as const;
 

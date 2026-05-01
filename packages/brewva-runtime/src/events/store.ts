@@ -10,23 +10,17 @@ import {
   writeFileSync,
 } from "node:fs";
 import { resolve } from "node:path";
-import type {
-  BrewvaConfig,
-  BrewvaEventQuery,
-  BrewvaEventRecord,
-  IntegrityIssue,
-} from "../contracts/index.js";
-import { asBrewvaEventType, asBrewvaSessionId } from "../contracts/index.js";
+import type { BrewvaConfig } from "../config/types.js";
+import { asBrewvaSessionId } from "../core/index.js";
+import type { IntegrityIssue } from "../domain/sessions/integrity.js";
+import { TAPE_ANCHOR_EVENT_TYPE, TAPE_CHECKPOINT_EVENT_TYPE } from "../domain/tape/events.js";
+import { type TapeAnchorPayload, type TapeCheckpointPayload } from "../domain/tape/payloads.js";
 import { redactUnknown } from "../security/redact.js";
-import {
-  TAPE_ANCHOR_EVENT_TYPE,
-  TAPE_CHECKPOINT_EVENT_TYPE,
-  type TapeAnchorPayload,
-  type TapeCheckpointPayload,
-} from "../tape/events.js";
 import { ensureDir, ensureDirForFile } from "../utils/fs.js";
 import type { JsonValue } from "../utils/json.js";
 import { normalizeJsonRecord } from "../utils/json.js";
+import type { BrewvaEventQuery, BrewvaEventRecord } from "./types.js";
+import { asBrewvaEventType } from "./types.js";
 
 type EventAppendInput<TPayload extends object = Record<string, JsonValue>> = {
   sessionId: string;

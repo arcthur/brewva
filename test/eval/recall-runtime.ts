@@ -4,7 +4,6 @@ import { dirname, join } from "node:path";
 import { performance } from "node:perf_hooks";
 import { getOrCreateRecallBroker } from "@brewva/brewva-recall";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import { tokenizeSearchText } from "@brewva/brewva-search";
 import { parse } from "yaml";
 import type { EvalTelemetry, RecallEvalDataset, RecallEvalMetrics } from "./types.js";
@@ -143,7 +142,7 @@ export async function executeRecallRuntimeScenario(input: {
 
     for (const event of session.events ?? []) {
       const payload = resolveAliasRefs(cloneValue(event.payload ?? {}), eventAliasMap, session.id);
-      const recorded = recordRuntimeEvent(runtime, {
+      const recorded = runtime.extensions.hosted.events.record({
         sessionId: session.id,
         type: event.type,
         turn: event.turn,
@@ -165,7 +164,7 @@ export async function executeRecallRuntimeScenario(input: {
   const currentSessionId = dataset.query.session_id;
 
   const baselineStartedAt = performance.now();
-  const baselineSearch = runtime.inspect.events.searchTape(currentSessionId, {
+  const baselineSearch = runtime.inspect.tape.searchTape(currentSessionId, {
     query: dataset.query.text,
     scope: "all_phases",
     limit,

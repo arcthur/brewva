@@ -7,7 +7,7 @@ import {
   SELECTION_PROFILE_SOURCE_FIELDS,
   type SkillFieldPath,
   type SkillHandoffProfile,
-} from "@brewva/brewva-runtime/internal";
+} from "@brewva/brewva-runtime";
 import { createContract } from "./skill-contract.helpers.js";
 
 function createSkillDocument(): SkillDocument {

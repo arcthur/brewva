@@ -1,22 +1,21 @@
 import { existsSync, statSync } from "node:fs";
 import { posix as pathPosix, resolve } from "node:path";
+import { type BrewvaOperatorRuntimePort, type EvidenceLedgerRow } from "@brewva/brewva-runtime";
+import { type BrewvaEventRecord } from "@brewva/brewva-runtime/events";
 import {
   BOX_BOOTSTRAP_FAILED_EVENT_TYPE,
   BOX_EXEC_FAILED_EVENT_TYPE,
   EXEC_FAILED_EVENT_TYPE,
   CONTEXT_COMPACTION_GATE_BLOCKED_TOOL_EVENT_TYPE,
+  readToolResultRecordedEventPayload,
   FILE_SNAPSHOT_CAPTURED_EVENT_TYPE,
   SKILL_BUDGET_WARNING_EVENT_TYPE,
   SKILL_PARALLEL_WARNING_EVENT_TYPE,
   TOOL_CALL_BLOCKED_EVENT_TYPE,
   TOOL_CONTRACT_WARNING_EVENT_TYPE,
-  TOOL_RESULT_RECORDED_EVENT_TYPE,
   VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
   VERIFICATION_WRITE_MARKED_EVENT_TYPE,
-  type BrewvaEventRecord,
-  type BrewvaOperatorRuntimePort,
-  type EvidenceLedgerRow,
-} from "@brewva/brewva-runtime";
+} from "@brewva/brewva-runtime/events";
 import {
   collectPathCandidates,
   collectPersistedPatchPaths,
@@ -24,7 +23,7 @@ import {
   resolveWorkspacePath,
   toWorkspaceRelativePath,
   type PersistedPatchSet,
-} from "@brewva/brewva-runtime/internal";
+} from "@brewva/brewva-runtime/patch-history";
 import { formatISO } from "date-fns";
 
 const IGNORED_WORKSPACE_PREFIXES = [".orchestrator/", ".brewva/", "node_modules/"] as const;
@@ -444,27 +443,34 @@ function buildToolContractFinding(events: BrewvaEventRecord[]): InspectFinding |
 }
 
 function buildShellCompositionFinding(events: BrewvaEventRecord[]): InspectFinding | null {
-  const matches = events.filter((event) => {
-    if (event.type !== TOOL_RESULT_RECORDED_EVENT_TYPE) return false;
-    return (
-      event.payload?.failureClass === "shell_syntax" ||
-      event.payload?.failureClass === "script_composition"
+  const matches = events
+    .map((event) => {
+      const payload = readToolResultRecordedEventPayload(event);
+      return payload ? { event, payload } : null;
+    })
+    .filter(
+      (
+        entry,
+      ): entry is {
+        event: BrewvaEventRecord;
+        payload: NonNullable<ReturnType<typeof readToolResultRecordedEventPayload>>;
+      } =>
+        entry !== null &&
+        (entry.payload.failureClass === "shell_syntax" ||
+          entry.payload.failureClass === "script_composition"),
     );
-  });
   if (matches.length === 0) {
     return null;
   }
 
   const shellSyntax = matches.filter(
-    (event) => event.payload?.failureClass === "shell_syntax",
+    (entry) => entry.payload.failureClass === "shell_syntax",
   ).length;
   const scriptComposition = matches.filter(
-    (event) => event.payload?.failureClass === "script_composition",
+    (entry) => entry.payload.failureClass === "script_composition",
   ).length;
   const tools = uniqueStrings(
-    matches
-      .map((event) => (typeof event.payload?.toolName === "string" ? event.payload.toolName : ""))
-      .filter((value) => value.length > 0),
+    matches.map((entry) => entry.payload.toolName).filter((value) => value.length > 0),
   );
 
   return {
@@ -473,10 +479,8 @@ function buildShellCompositionFinding(events: BrewvaEventRecord[]): InspectFindi
     confidence: "high",
     summary: `Command construction problems detected: shell_syntax=${shellSyntax}, script_composition=${scriptComposition}. Tools involved: ${tools.length > 0 ? tools.join(", ") : "unknown"}.`,
     evidenceRefs: topEvidenceRefs({
-      eventIds: matches.map((event) => event.id),
-      ledgerIds: matches
-        .map((event) => (typeof event.payload?.ledgerId === "string" ? event.payload.ledgerId : ""))
-        .filter((value) => value.length > 0),
+      eventIds: matches.map(({ event }) => event.id),
+      ledgerIds: matches.map(({ payload }) => payload.ledgerId).filter((value) => value.length > 0),
     }),
   };
 }

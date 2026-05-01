@@ -1,13 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import {
   BrewvaRuntime,
-  SCHEDULE_EVENT_TYPE,
   asBrewvaIntentId,
   buildScheduleIntentCreatedEvent,
   getNextCronRunAt,
   parseCronExpression,
 } from "@brewva/brewva-runtime";
-import { SchedulerService, recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
+import { SCHEDULE_EVENT_TYPE } from "@brewva/brewva-runtime/events";
+import { createSchedulerService } from "@brewva/brewva-runtime/recovery";
 import {
   createSchedulerConfig,
   computeExpectedRecurringJitteredNextRunAt,
@@ -26,7 +26,7 @@ describe("scheduler service limit contract", () => {
       }),
     });
 
-    const scheduler = new SchedulerService({ runtime: schedulerRuntimePort(runtime) });
+    const scheduler = createSchedulerService({ runtime: schedulerRuntimePort(runtime) });
     await scheduler.recover();
 
     const now = Date.now() + 120_000;
@@ -46,7 +46,7 @@ describe("scheduler service limit contract", () => {
     });
     expect(rejectedSession.ok).toBe(false);
     if (!rejectedSession.ok) {
-      expect(rejectedSession.error).toBe("max_active_intents_per_session_exceeded");
+      expect(rejectedSession.reason).toBe("max_active_intents_per_session_exceeded");
     }
 
     const createdB = scheduler.createIntent({
@@ -65,7 +65,7 @@ describe("scheduler service limit contract", () => {
     });
     expect(rejectedGlobal.ok).toBe(false);
     if (!rejectedGlobal.ok) {
-      expect(rejectedGlobal.error).toBe("max_active_intents_global_exceeded");
+      expect(rejectedGlobal.reason).toBe("max_active_intents_global_exceeded");
     }
 
     scheduler.stop();
@@ -81,7 +81,7 @@ describe("scheduler service limit contract", () => {
     });
 
     const nowMs = Date.UTC(2026, 0, 1, 0, 1, 30, 0);
-    const scheduler = new SchedulerService({
+    const scheduler = createSchedulerService({
       runtime: schedulerRuntimePort(runtime),
       now: () => nowMs,
       enableExecution: false,
@@ -128,7 +128,7 @@ describe("scheduler service limit contract", () => {
     });
 
     const nowMs = Date.UTC(2026, 0, 1, 0, 30, 0, 0);
-    const scheduler = new SchedulerService({
+    const scheduler = createSchedulerService({
       runtime: schedulerRuntimePort(runtime),
       now: () => nowMs,
       enableExecution: false,
@@ -171,7 +171,7 @@ describe("scheduler service limit contract", () => {
     });
 
     const nowMs = Date.UTC(2026, 0, 1, 0, 1, 30, 0);
-    const scheduler = new SchedulerService({
+    const scheduler = createSchedulerService({
       runtime: schedulerRuntimePort(runtime),
       now: () => nowMs,
       enableExecution: false,
@@ -235,7 +235,7 @@ describe("scheduler service limit contract", () => {
   test("rejects invalid cron expressions on create", async () => {
     const workspace = createWorkspace("cron-invalid");
     const runtime = new BrewvaRuntime({ cwd: workspace });
-    const scheduler = new SchedulerService({
+    const scheduler = createSchedulerService({
       runtime: schedulerRuntimePort(runtime),
       enableExecution: false,
     });
@@ -251,14 +251,14 @@ describe("scheduler service limit contract", () => {
 
     expect(created.ok).toBe(false);
     if (!created.ok) {
-      expect(created.error).toBe("invalid_cron");
+      expect(created.reason).toBe("invalid_cron");
     }
   });
 
   test("rejects invalid timeZone values on create", async () => {
     const workspace = createWorkspace("cron-invalid-timezone");
     const runtime = new BrewvaRuntime({ cwd: workspace });
-    const scheduler = new SchedulerService({
+    const scheduler = createSchedulerService({
       runtime: schedulerRuntimePort(runtime),
       enableExecution: false,
     });
@@ -275,14 +275,14 @@ describe("scheduler service limit contract", () => {
 
     expect(created.ok).toBe(false);
     if (!created.ok) {
-      expect(created.error).toBe("invalid_time_zone");
+      expect(created.reason).toBe("invalid_time_zone");
     }
   });
 
   test("rejects timeZone when cron is not provided", async () => {
     const workspace = createWorkspace("timezone-requires-cron");
     const runtime = new BrewvaRuntime({ cwd: workspace });
-    const scheduler = new SchedulerService({
+    const scheduler = createSchedulerService({
       runtime: schedulerRuntimePort(runtime),
       enableExecution: false,
     });
@@ -299,14 +299,14 @@ describe("scheduler service limit contract", () => {
 
     expect(created.ok).toBe(false);
     if (!created.ok) {
-      expect(created.error).toBe("timeZone_requires_cron");
+      expect(created.reason).toBe("timeZone_requires_cron");
     }
   });
 
   test("defaults maxRuns to 10000 for cron intents", async () => {
     const workspace = createWorkspace("cron-default-max-runs");
     const runtime = new BrewvaRuntime({ cwd: workspace });
-    const scheduler = new SchedulerService({
+    const scheduler = createSchedulerService({
       runtime: schedulerRuntimePort(runtime),
       enableExecution: false,
     });
@@ -338,7 +338,7 @@ describe("scheduler service limit contract", () => {
     const sessionId = "session-revive";
     const dueRunAt = nowMs - 1_000;
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: SCHEDULE_EVENT_TYPE,
       payload: buildScheduleIntentCreatedEvent({
@@ -354,7 +354,7 @@ describe("scheduler service limit contract", () => {
     });
 
     const fired: string[] = [];
-    const scheduler = new SchedulerService({
+    const scheduler = createSchedulerService({
       runtime: schedulerRuntimePort(runtime),
       now: () => nowMs,
       executeIntent: async (intent) => {
@@ -390,7 +390,7 @@ describe("scheduler service limit contract", () => {
   test("does not reactivate a cancelled intent through the public update path", async () => {
     const workspace = createWorkspace("cancelled-reactivation-guard");
     const runtime = new BrewvaRuntime({ cwd: workspace });
-    const scheduler = new SchedulerService({
+    const scheduler = createSchedulerService({
       runtime: schedulerRuntimePort(runtime),
       enableExecution: false,
     });
@@ -424,7 +424,7 @@ describe("scheduler service limit contract", () => {
 
     expect(updated.ok).toBe(false);
     if (!updated.ok) {
-      expect(updated.error).toBe("intent_not_active");
+      expect(updated.reason).toBe("intent_not_active");
     }
   });
 });

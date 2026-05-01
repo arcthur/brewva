@@ -1,13 +1,13 @@
 import {
-  TASK_STALL_ADJUDICATED_EVENT_TYPE,
   coerceTaskStallAdjudicatedPayload,
   deriveWorkflowStatus,
-  type BrewvaEventRecord,
   type SkillReadinessEntry,
   type WorkflowArtifact,
   type WorkflowFinishView,
   type WorkflowLaneStatus,
 } from "@brewva/brewva-runtime";
+import { type BrewvaEventRecord } from "@brewva/brewva-runtime/events";
+import { TASK_STALL_ADJUDICATED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate";
 import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "./types.js";

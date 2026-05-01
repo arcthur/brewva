@@ -1,5 +1,5 @@
-import type { BrewvaConfig } from "../contracts/index.js";
-import { asBrewvaIntentId, asBrewvaSessionId } from "../contracts/index.js";
+import { asBrewvaIntentId, asBrewvaSessionId } from "../core/index.js";
+import type { BrewvaConfig } from "./types.js";
 
 export const DEFAULT_BREWVA_CONFIG: BrewvaConfig = {
   ui: {

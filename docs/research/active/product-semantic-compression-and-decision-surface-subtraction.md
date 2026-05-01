@@ -478,10 +478,10 @@ Runtime and gateway anchors:
 - `packages/brewva-recall/src/broker.ts`
 - `packages/brewva-recall/src/context-provider.ts`
 - `packages/brewva-gateway/src/runtime-plugins/skill-first.ts`
-- `packages/brewva-runtime/src/skills/readiness.ts`
-- `packages/brewva-runtime/src/context/arena.ts`
-- `packages/brewva-runtime/src/context/provider.ts`
-- `packages/brewva-runtime/src/services/context.ts`
+- `packages/brewva-runtime/src/domain/skills/readiness-derivation.ts`
+- `packages/brewva-runtime/src/domain/context/arena.ts`
+- `packages/brewva-runtime/src/domain/context/provider.ts`
+- `packages/brewva-runtime/src/domain/context/context.ts`
 - `packages/brewva-tools/src/skill-load.ts`
 - `packages/brewva-tools/src/recall.ts`
 

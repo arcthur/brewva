@@ -1,11 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { SessionBackendCapacityError, SessionBackendStateError } from "@brewva/brewva-gateway";
-import {
-  BrewvaRuntime,
-  SCHEDULE_EVENT_TYPE,
-  buildScheduleIntentCreatedEvent,
-} from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
+import { BrewvaRuntime, buildScheduleIntentCreatedEvent } from "@brewva/brewva-runtime";
+import { SCHEDULE_EVENT_TYPE } from "@brewva/brewva-runtime/events";
 import {
   ReloadPayload,
   SessionsClosePayload,
@@ -652,7 +648,7 @@ describe("gateway daemon control-plane methods", () => {
     try {
       const runtime = new BrewvaRuntime({ cwd: harness.root });
       const nowMs = Date.now();
-      recordRuntimeEvent(runtime, {
+      runtime.extensions.hosted.events.record({
         sessionId: "parent-session",
         type: SCHEDULE_EVENT_TYPE,
         payload: buildScheduleIntentCreatedEvent({

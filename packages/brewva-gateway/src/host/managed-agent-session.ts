@@ -23,8 +23,7 @@ import {
   STEER_APPLIED_EVENT_TYPE,
   STEER_DROPPED_EVENT_TYPE,
   STEER_QUEUED_EVENT_TYPE,
-} from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
+} from "@brewva/brewva-runtime/events";
 import {
   DEFAULT_CONTEXT_STATE,
   advanceSessionPhaseResult,
@@ -2872,7 +2871,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     if (!this.#runtime) {
       return;
     }
-    recordRuntimeEvent(this.#runtime, {
+    this.#runtime.extensions.hosted.events.record({
       sessionId: this.sessionManager.getSessionId(),
       type,
       payload,

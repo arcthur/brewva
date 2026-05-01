@@ -8,7 +8,6 @@ import {
   asBrewvaToolName,
   type SessionWireFrame,
 } from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import {
   buildBrewvaPromptText,
   type BrewvaPromptContentPart,
@@ -83,7 +82,7 @@ function recordTurnInput(
   sessionId: string,
   turnId: string,
 ): void {
-  recordRuntimeEvent(eventBridge.runtime, {
+  eventBridge.runtime.extensions.hosted.events.record({
     sessionId,
     turn: 1,
     type: "turn_input_recorded",
@@ -262,7 +261,7 @@ describe("gateway collect output", () => {
             result: "requested",
             isError: false,
           } as BrewvaPromptSessionEvent);
-          recordRuntimeEvent(eventBridge.runtime, {
+          eventBridge.runtime.extensions.hosted.events.record({
             sessionId: "agent-session-1",
             type: "session_compact",
             payload: {
@@ -387,7 +386,7 @@ describe("gateway collect output", () => {
             result: "requested",
             isError: false,
           } as BrewvaPromptSessionEvent);
-          recordRuntimeEvent(eventBridge.runtime, {
+          eventBridge.runtime.extensions.hosted.events.record({
             sessionId,
             type: "session_compact",
             payload: {
@@ -397,7 +396,7 @@ describe("gateway collect output", () => {
           return;
         }
 
-        recordRuntimeEvent(eventBridge.runtime, {
+        eventBridge.runtime.extensions.hosted.events.record({
           sessionId,
           type: "session_turn_transition",
           payload: {
@@ -603,7 +602,7 @@ describe("gateway collect output", () => {
           toolName: "read",
           args: { path: "a.txt" },
         } as BrewvaPromptSessionEvent);
-        recordRuntimeEvent(eventBridge.runtime, {
+        eventBridge.runtime.extensions.hosted.events.record({
           sessionId: "agent-session-stale-tool",
           type: "session_turn_transition",
           payload: {

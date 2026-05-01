@@ -1,6 +1,5 @@
 import type { BrewvaRuntime } from "@brewva/brewva-runtime";
 import { buildTurnEnvelope, type TurnEnvelope } from "@brewva/brewva-runtime/channels";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import { toErrorMessage } from "../utils/errors.js";
 
 export interface ChannelToolTurnOutput {
@@ -113,7 +112,7 @@ export function createChannelReplyWriter(input: {
       try {
         await input.sendTurn(outbound);
       } catch (error) {
-        recordRuntimeEvent(input.runtime, {
+        input.runtime.extensions.hosted.events.record({
           sessionId: turn.sessionId,
           type: "channel_turn_outbound_error",
           payload: {
@@ -151,7 +150,7 @@ export function createChannelReplyWriter(input: {
           await input.sendTurn(toolTurn);
           outboundTurnsSent += 1;
         } catch (error) {
-          recordRuntimeEvent(output.runtime, {
+          output.runtime.extensions.hosted.events.record({
             sessionId: output.inbound.sessionId,
             type: "channel_turn_outbound_error",
             payload: {
@@ -185,7 +184,7 @@ export function createChannelReplyWriter(input: {
         await input.sendTurn(assistantTurn);
         outboundTurnsSent += 1;
       } catch (error) {
-        recordRuntimeEvent(output.runtime, {
+        output.runtime.extensions.hosted.events.record({
           sessionId: output.inbound.sessionId,
           type: "channel_turn_outbound_error",
           payload: {

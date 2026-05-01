@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import { readSessionBundleArtifact, replayImportedSessionEntries } from "@brewva/brewva-substrate";
 import { HostedRuntimeTapeSessionStore } from "../../../packages/brewva-gateway/src/host/runtime-projection-session-store.js";
 import type { StoredSessionMessage } from "../../../packages/brewva-gateway/src/session/runtime-session-transcript.js";
@@ -119,7 +118,7 @@ describe("hosted runtime tape session store", () => {
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionId = "agent-session:legacy";
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "hosted_session_projection_model_change",
       payload: {
@@ -127,14 +126,14 @@ describe("hosted runtime tape session store", () => {
         modelId: "gpt-5.4",
       },
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "hosted_session_projection_thinking_level_change",
       payload: {
         thinkingLevel: "high",
       },
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "hosted_session_projection_message",
       payload: {
@@ -145,7 +144,7 @@ describe("hosted runtime tape session store", () => {
         },
       },
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "hosted_session_projection_custom_message",
       payload: {

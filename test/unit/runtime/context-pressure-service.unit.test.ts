@@ -3,12 +3,10 @@ import { cpSync } from "node:fs";
 import { resolve } from "node:path";
 import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
-import { ContextBudgetManager } from "../../../packages/brewva-runtime/src/context/budget.js";
-import type {
-  BrewvaEventRecord,
-  ContextBudgetUsage,
-} from "../../../packages/brewva-runtime/src/contracts/index.js";
-import { ContextPressureService } from "../../../packages/brewva-runtime/src/services/context-pressure.js";
+import { ContextBudgetManager } from "../../../packages/brewva-runtime/src/domain/context/budget.js";
+import { ContextPressureService } from "../../../packages/brewva-runtime/src/domain/context/context-pressure.js";
+import type { ContextBudgetUsage } from "../../../packages/brewva-runtime/src/domain/context/types.js";
+import type { BrewvaEventRecord } from "../../../packages/brewva-runtime/src/events/types.js";
 import { setStaticContextPressureThresholds } from "../../fixtures/config.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 

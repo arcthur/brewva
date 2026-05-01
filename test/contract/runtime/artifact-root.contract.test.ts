@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 describe("runtime artifact root resolution", () => {
@@ -15,7 +14,7 @@ describe("runtime artifact root resolution", () => {
     const runtime = new BrewvaRuntime({ cwd: nestedCwd });
     const sessionId = "artifact-root-1";
 
-    recordRuntimeEvent(runtime, { sessionId, type: "session_start" });
+    runtime.extensions.hosted.events.record({ sessionId, type: "session_start" });
     runtime.authority.tools.recordResult({
       sessionId,
       toolName: "read",

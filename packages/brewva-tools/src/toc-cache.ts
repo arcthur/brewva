@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { LRUCache } from "lru-cache";
-import { registerToolRuntimeClearStateListener } from "./runtime-internal.js";
+import { registerToolRuntimeClearStateListener } from "./runtime-extensions.js";
 import type { BrewvaToolRuntime } from "./types.js";
 import { getOrCreateLruValue } from "./utils/lru.js";
 

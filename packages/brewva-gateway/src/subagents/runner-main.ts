@@ -3,13 +3,12 @@ import { relative } from "node:path";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
 import {
   CURRENT_DELEGATION_CONTRACT_VERSION,
-  SUBAGENT_RUNNING_EVENT_TYPE,
   asBrewvaSessionId,
   evaluateDelegationAdoption,
   type DelegationRunRecord,
   type SkillRoutingScope,
 } from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
+import { SUBAGENT_RUNNING_EVENT_TYPE } from "@brewva/brewva-runtime/events";
 import type {
   AdvisorConsultKind,
   SubagentOutcome,
@@ -198,7 +197,7 @@ async function main(): Promise<void> {
       error: `missing_delegate_target:${spec.delegate}`,
       summary: `missing_delegate_target:${spec.delegate}`,
     };
-    recordRuntimeEvent(parentRuntime, {
+    parentRuntime.extensions.hosted.events.record({
       sessionId: spec.parentSessionId,
       type: "subagent_failed",
       payload: buildDelegationLifecyclePayload(failed),
@@ -230,7 +229,7 @@ async function main(): Promise<void> {
       error: "missing_delegation_packet",
       summary: "missing_delegation_packet",
     };
-    recordRuntimeEvent(parentRuntime, {
+    parentRuntime.extensions.hosted.events.record({
       sessionId: spec.parentSessionId,
       type: "subagent_failed",
       payload: buildDelegationLifecyclePayload(failed),
@@ -317,7 +316,7 @@ async function main(): Promise<void> {
       boundary: executionPlan.boundary,
       modelRoute: executionPlan.modelRoute,
     };
-    recordRuntimeEvent(parentRuntime, {
+    parentRuntime.extensions.hosted.events.record({
       sessionId: spec.parentSessionId,
       type: SUBAGENT_RUNNING_EVENT_TYPE,
       payload: buildDelegationLifecyclePayload(runningRecord),
@@ -375,7 +374,7 @@ async function main(): Promise<void> {
       skillName: childOwnsSkill ? delegatedSkill : undefined,
     });
     if (structuredOutcome.parseError) {
-      recordRuntimeEvent(parentRuntime, {
+      parentRuntime.extensions.hosted.events.record({
         sessionId: spec.parentSessionId,
         type: "subagent_outcome_parse_failed",
         payload: {
@@ -397,7 +396,7 @@ async function main(): Promise<void> {
           )
         : undefined;
     if (childOwnsSkill && delegatedSkill && skillValidation && !skillValidation.ok) {
-      recordRuntimeEvent(parentRuntime, {
+      parentRuntime.extensions.hosted.events.record({
         sessionId: spec.parentSessionId,
         type: "subagent_skill_output_validation_failed",
         payload: {
@@ -539,7 +538,7 @@ async function main(): Promise<void> {
       costUsd: childCostSummary.totalCostUsd,
       delivery,
     };
-    recordRuntimeEvent(parentRuntime, {
+    parentRuntime.extensions.hosted.events.record({
       sessionId: spec.parentSessionId,
       type: "subagent_completed",
       payload: buildDelegationLifecyclePayload(completedRecord),
@@ -632,7 +631,7 @@ async function main(): Promise<void> {
       artifactRefs,
       delivery,
     };
-    recordRuntimeEvent(parentRuntime, {
+    parentRuntime.extensions.hosted.events.record({
       sessionId: spec.parentSessionId,
       type: terminalStatus === "cancelled" ? "subagent_cancelled" : "subagent_failed",
       payload: {

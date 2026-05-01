@@ -299,7 +299,7 @@ export class AgentRegistry {
   ): Promise<RuntimeResult<{ agentId: string }, SetFocusError>> {
     const agentId = normalizeRequestedAgentId(requestedAgentId);
     if (!this.isActive(agentId)) {
-      return { ok: false, error: "agent_not_found" };
+      return { ok: false, reason: "agent_not_found" };
     }
     this.focusByScope.set(scopeKey, agentId);
     await this.persist();
@@ -312,10 +312,10 @@ export class AgentRegistry {
     const createdAt = input.createdAt ?? Date.now();
     const agentId = normalizeRequestedAgentId(input.requestedAgentId);
     if (!agentId) {
-      return { ok: false, error: "invalid_agent_id" };
+      return { ok: false, reason: "invalid_agent_id" };
     }
     if (RESERVED_AGENT_IDS.has(agentId)) {
-      return { ok: false, error: "reserved_agent_id" };
+      return { ok: false, reason: "reserved_agent_id" };
     }
 
     let createError: CreateAgentError | undefined;
@@ -346,7 +346,7 @@ export class AgentRegistry {
     });
 
     if (createError) {
-      return { ok: false, error: createError };
+      return { ok: false, reason: createError };
     }
     return { ok: true, agent: { ...(this.agents.get(agentId) as ChannelAgentRecord) } };
   }
@@ -357,7 +357,7 @@ export class AgentRegistry {
   ): Promise<RuntimeResult<{}, SoftDeleteAgentError>> {
     const agentId = normalizeRequestedAgentId(requestedAgentId);
     if (agentId === DEFAULT_AGENT_ID) {
-      return { ok: false, error: "cannot_delete_default" };
+      return { ok: false, reason: "cannot_delete_default" };
     }
     let deleteError: SoftDeleteAgentError | undefined;
     await this.withWriteLock(async () => {
@@ -380,7 +380,7 @@ export class AgentRegistry {
       await this.persistUnlocked();
     });
     if (deleteError) {
-      return { ok: false, error: deleteError };
+      return { ok: false, reason: deleteError };
     }
     return { ok: true };
   }

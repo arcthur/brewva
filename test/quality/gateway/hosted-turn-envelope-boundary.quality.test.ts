@@ -83,7 +83,7 @@ describe("hosted turn envelope boundary", () => {
     ];
     const files = [
       ...listProductionFiles(),
-      "packages/brewva-runtime/src/events/event-types.ts",
+      "packages/brewva-runtime/src/events/registry.ts",
     ].toSorted();
 
     const offenders = files.filter((file) => {

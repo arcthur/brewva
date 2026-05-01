@@ -15,15 +15,12 @@ import {
   type Stats,
 } from "node:fs";
 import { dirname, join, resolve, sep } from "node:path";
+import { buildSessionRewindProjection, listSessionRewindTargets } from "@brewva/brewva-runtime";
 import {
   type BrewvaEventQuery,
   type BrewvaEventRecord,
   type BrewvaStructuredEvent,
-} from "@brewva/brewva-runtime";
-import {
-  buildSessionRewindProjection,
-  listSessionRewindTargets,
-} from "@brewva/brewva-runtime/internal";
+} from "@brewva/brewva-runtime/events";
 import { tokenizeSearchText } from "@brewva/brewva-search";
 
 export const SESSION_INDEX_SCHEMA_VERSION = 2;

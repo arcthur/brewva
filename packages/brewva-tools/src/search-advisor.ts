@@ -4,13 +4,13 @@ import {
   PATCH_RECORDED_EVENT_TYPE,
   TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE,
   TOOL_READ_PATH_GATE_ARMED_EVENT_TYPE,
-} from "@brewva/brewva-runtime";
+} from "@brewva/brewva-runtime/events";
 import { normalizeSearchText } from "@brewva/brewva-search";
 import { LRUCache } from "lru-cache";
 import {
   registerToolRuntimeClearStateListener,
   resolveToolRuntimeEventPort,
-} from "./runtime-internal.js";
+} from "./runtime-extensions.js";
 import type { BrewvaToolRuntime } from "./types.js";
 
 const MAX_SIGNAL_FILES = 256;

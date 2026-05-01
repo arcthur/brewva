@@ -1,22 +1,25 @@
 import {
-  TASK_STALL_ADJUDICATED_EVENT_TYPE,
-  TASK_STALL_ADJUDICATION_ERROR_EVENT_TYPE,
-  TASK_STUCK_DETECTED_EVENT_TYPE,
-  TOOL_CALL_BLOCKED_EVENT_TYPE,
-  TOOL_RESULT_RECORDED_EVENT_TYPE,
-  VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
   buildTaskStallAdjudicatedPayload,
-  coerceTaskStallAdjudicatedPayload,
-  coerceTaskStuckDetectedPayload,
   toTaskWatchdogEventPayload,
-  type BrewvaEventRecord,
   type BrewvaRuntime,
   type TapePressureLevel,
   type TaskStallAdjudicatedPayload,
   type TaskStallAdjudicationDecision,
   type TaskStuckDetectedPayload,
 } from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
+import { type BrewvaEventRecord } from "@brewva/brewva-runtime/events";
+import {
+  readTaskStallAdjudicatedEventPayload,
+  readTaskStuckDetectedEventPayload,
+  readToolResultRecordedEventPayload,
+  readVerificationOutcomeRecordedEventPayload,
+  TASK_STALL_ADJUDICATED_EVENT_TYPE,
+  TASK_STALL_ADJUDICATION_ERROR_EVENT_TYPE,
+  TASK_STUCK_DETECTED_EVENT_TYPE,
+  TOOL_CALL_BLOCKED_EVENT_TYPE,
+  TOOL_RESULT_RECORDED_EVENT_TYPE,
+  VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
+} from "@brewva/brewva-runtime/events";
 
 const TASK_STALL_INSPECTION_SCHEMA = "brewva.task-stall-inspection.v1" as const;
 const RECENT_FAILURE_LIMIT = 6;
@@ -91,13 +94,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function readStringArray(value: unknown): string[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-  return value.filter((entry): entry is string => typeof entry === "string" && entry.length > 0);
-}
-
 function lastEvent(events: BrewvaEventRecord[]): BrewvaEventRecord | undefined {
   return events[events.length - 1];
 }
@@ -112,22 +108,20 @@ function readVerificationSummary(
       last: 1,
     }),
   );
-  const payload = isRecord(lastOutcomeEvent?.payload) ? lastOutcomeEvent.payload : undefined;
-  const lastOutcome: TaskStallVerificationSummary["lastOutcome"] =
-    payload?.outcome === "pass" || payload?.outcome === "fail" || payload?.outcome === "skipped"
-      ? payload.outcome
-      : null;
-  const evidenceFreshness =
-    typeof payload?.evidenceFreshness === "string" ? payload.evidenceFreshness : null;
+  const payload = lastOutcomeEvent
+    ? readVerificationOutcomeRecordedEventPayload(lastOutcomeEvent)
+    : null;
+  const lastOutcome: TaskStallVerificationSummary["lastOutcome"] = payload?.outcome ?? null;
+  const evidenceFreshness = payload?.evidenceFreshness ?? null;
   return {
     passed: lastOutcome === "pass",
     skipped: lastOutcome === null || lastOutcome === "skipped",
-    level: typeof payload?.level === "string" ? payload.level : "unknown",
-    missingChecks: readStringArray(payload?.missingChecks),
-    missingEvidence: readStringArray(payload?.missingEvidence),
+    level: payload?.level ?? "unknown",
+    missingChecks: payload?.missingChecks ?? [],
+    missingEvidence: payload?.missingEvidence ?? [],
     lastOutcome,
     lastOutcomeAt: lastOutcomeEvent?.timestamp ?? null,
-    failedChecks: readStringArray(payload?.failedChecks),
+    failedChecks: payload?.failedChecks ?? [],
     evidenceFreshness,
   };
 }
@@ -142,22 +136,15 @@ function readRecentToolFailures(
       last: RECENT_FAILURE_LIMIT,
     })
     .flatMap((event) => {
-      const payload = isRecord(event.payload) ? event.payload : undefined;
-      const toolName = typeof payload?.toolName === "string" ? payload.toolName : null;
-      const verdict =
-        payload?.verdict === "pass" ||
-        payload?.verdict === "fail" ||
-        payload?.verdict === "inconclusive"
-          ? payload.verdict
-          : null;
-      if (!toolName || !verdict || (verdict !== "fail" && verdict !== "inconclusive")) {
+      const payload = readToolResultRecordedEventPayload(event);
+      if (!payload || (payload.verdict !== "fail" && payload.verdict !== "inconclusive")) {
         return [];
       }
       return [
         {
-          toolName,
-          verdict,
-          failureClass: typeof payload?.failureClass === "string" ? payload.failureClass : null,
+          toolName: payload.toolName,
+          verdict: payload.verdict,
+          failureClass: payload.failureClass,
           timestamp: event.timestamp,
         },
       ];
@@ -212,7 +199,7 @@ export function buildTaskStallInspectionPacket(input: {
 }): TaskStallInspectionPacket {
   const taskState = input.runtime.inspect.task.getState(input.sessionId);
   const verification = readVerificationSummary(input.runtime, input.sessionId);
-  const tape = input.runtime.inspect.events.getTapeStatus(input.sessionId);
+  const tape = input.runtime.inspect.tape.getTapeStatus(input.sessionId);
   const pendingWorkerResults = input.runtime.inspect.session.listWorkerResults(
     input.sessionId,
   ).length;
@@ -317,7 +304,7 @@ function hasAdjudicationForDetection(
       type: TASK_STALL_ADJUDICATED_EVENT_TYPE,
       last: 6,
     })
-    .some((event) => coerceTaskStallAdjudicatedPayload(event.payload)?.detectedAt === detectedAt);
+    .some((event) => readTaskStallAdjudicatedEventPayload(event)?.detectedAt === detectedAt);
 }
 
 function hasAdjudicationErrorForDetection(
@@ -345,7 +332,7 @@ export function maybeAdjudicateLatestTaskStall(
       last: 1,
     }),
   );
-  const detected = coerceTaskStuckDetectedPayload(latestDetected?.payload);
+  const detected = latestDetected ? readTaskStuckDetectedEventPayload(latestDetected) : null;
   if (!latestDetected || !detected) {
     return null;
   }
@@ -383,7 +370,7 @@ export function maybeAdjudicateLatestTaskStall(
       verificationPassed: packet.verification.passed,
       verificationSkipped: packet.verification.skipped,
     });
-    recordRuntimeEvent(input.runtime, {
+    input.runtime.extensions.hosted.events.record({
       sessionId: input.sessionId,
       type: TASK_STALL_ADJUDICATED_EVENT_TYPE,
       turn: latestDetected.turn,
@@ -392,7 +379,7 @@ export function maybeAdjudicateLatestTaskStall(
     });
     return payload;
   } catch (error) {
-    recordRuntimeEvent(input.runtime, {
+    input.runtime.extensions.hosted.events.record({
       sessionId: input.sessionId,
       type: TASK_STALL_ADJUDICATION_ERROR_EVENT_TYPE,
       turn: latestDetected.turn,

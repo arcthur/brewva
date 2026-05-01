@@ -7,7 +7,7 @@ import {
   buildTruthFactUpsertedEvent,
   type BrewvaConfig,
 } from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
+import { getRuntimeInternals } from "../../helpers/runtime-internals.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 function createConfig(): BrewvaConfig {
@@ -55,7 +55,7 @@ describe("session state cleanup", () => {
     const workspace = createTestWorkspace("session-clean");
     const runtime = new BrewvaRuntime({ cwd: workspace, config: createConfig() });
     const sessionId = "cleanup-state-1";
-    const internals = runtime as unknown as RuntimeInternals;
+    const internals = getRuntimeInternals(runtime) as RuntimeInternals;
 
     runtime.maintain.context.onTurnStart(sessionId, 1);
     runtime.authority.tools.markCall(sessionId, "edit");
@@ -122,7 +122,7 @@ describe("session state cleanup", () => {
     const workspace = createTestWorkspace("replay-view");
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionId = "replay-view-1";
-    const internals = runtime as unknown as RuntimeInternals;
+    const internals = getRuntimeInternals(runtime) as RuntimeInternals;
 
     runtime.authority.task.setSpec(sessionId, {
       schema: "brewva.task.v1",
@@ -145,7 +145,7 @@ describe("session state cleanup", () => {
     const workspace = createTestWorkspace("replay-filter");
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionId = "replay-filter-1";
-    const internals = runtime as unknown as RuntimeInternals;
+    const internals = getRuntimeInternals(runtime) as RuntimeInternals;
 
     runtime.authority.task.setSpec(sessionId, {
       schema: "brewva.task.v1",
@@ -155,7 +155,7 @@ describe("session state cleanup", () => {
 
     expect(internals.turnReplay.hasSession(sessionId)).toBe(true);
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "tool_call",
       payload: {
@@ -165,7 +165,7 @@ describe("session state cleanup", () => {
     });
     expect(internals.turnReplay.hasSession(sessionId)).toBe(true);
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "truth_event",
       payload: buildTruthFactUpsertedEvent({
@@ -204,7 +204,7 @@ describe("session state cleanup", () => {
     });
 
     const readerRuntime = new BrewvaRuntime({ cwd: workspace });
-    const internals = readerRuntime as unknown as RuntimeInternals;
+    const internals = getRuntimeInternals(readerRuntime) as RuntimeInternals;
     internals.costTracker.applyCostUpdateEvent = () => {
       throw new Error("hydration exploded");
     };
@@ -228,7 +228,7 @@ describe("session state cleanup", () => {
     const sessionId = "hydration-corrupt-tape-1";
 
     const writerRuntime = new BrewvaRuntime({ cwd: workspace });
-    recordRuntimeEvent(writerRuntime, {
+    writerRuntime.extensions.hosted.events.record({
       sessionId,
       type: "session_start",
       payload: { cwd: workspace },
@@ -258,7 +258,7 @@ describe("session state cleanup", () => {
     const sessionId = "hydration-corrupt-after-ready-1";
 
     const runtime = new BrewvaRuntime({ cwd: workspace });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "session_start",
       payload: { cwd: workspace },

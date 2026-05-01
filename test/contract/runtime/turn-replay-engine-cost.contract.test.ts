@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { asBrewvaSessionId, type BrewvaEventRecord } from "@brewva/brewva-runtime";
-import { TurnReplayEngine } from "@brewva/brewva-runtime/internal";
+import { asBrewvaSessionId } from "@brewva/brewva-runtime";
+import { type BrewvaEventRecord } from "@brewva/brewva-runtime/events";
+import { createTurnReplayEngine } from "@brewva/brewva-runtime/replay";
 import { anchorEvent, toolResultFailureEvent } from "./turn-replay-engine.helpers.js";
 
 describe("TurnReplayEngine cost and evidence folding", () => {
@@ -62,7 +63,7 @@ describe("TurnReplayEngine cost and evidence folding", () => {
         timestamp: 6,
       }),
     ];
-    const engine = new TurnReplayEngine({
+    const engine = createTurnReplayEngine({
       listEvents: () => events,
       getTurn: () => 1,
     });
@@ -88,7 +89,7 @@ describe("TurnReplayEngine cost and evidence folding", () => {
         failureClass: "shell_syntax",
       }),
     ];
-    const engine = new TurnReplayEngine({
+    const engine = createTurnReplayEngine({
       listEvents: () => events,
       getTurn: () => 7,
     });
@@ -100,6 +101,57 @@ describe("TurnReplayEngine cost and evidence folding", () => {
     const view = engine.replay(sessionId);
     expect(view.evidenceState.failureClassCounts.shell_syntax).toBe(1);
     expect(view.evidenceState.failureClassCounts.execution).toBe(0);
+  });
+
+  test("recent tool failures are returned as defensive JSON-safe clones", () => {
+    const sessionId = asBrewvaSessionId("replay-engine-defensive-tool-failures");
+    const events: BrewvaEventRecord[] = [
+      {
+        id: "evt-tool-failure-defensive-1",
+        sessionId,
+        type: "tool_result_recorded",
+        timestamp: 1,
+        turn: 2,
+        payload: {
+          toolName: "exec",
+          verdict: "fail",
+          channelSuccess: false,
+          ledgerId: "ledger:defensive-1",
+          failureContext: {
+            args: {
+              command: "bun test",
+              nested: {
+                files: ["a.ts"],
+              },
+            },
+            outputText: "Error: failed",
+            turn: 2,
+            failureClass: "execution",
+          },
+        } as BrewvaEventRecord["payload"],
+      },
+    ];
+    const engine = createTurnReplayEngine({
+      listEvents: () => events,
+      getTurn: () => 2,
+    });
+
+    const failuresA = engine.getRecentToolFailures(sessionId);
+    const nestedA = failuresA[0]?.args["nested"];
+    if (nestedA && typeof nestedA === "object" && !Array.isArray(nestedA)) {
+      const files = nestedA["files"];
+      if (Array.isArray(files)) {
+        files.push("b.ts");
+      }
+    }
+
+    const failuresB = engine.getRecentToolFailures(sessionId);
+    expect(failuresB[0]?.args).toEqual({
+      command: "bun test",
+      nested: {
+        files: ["a.ts"],
+      },
+    });
   });
 
   test("counts policy-denied tool results separately from execution failures", () => {
@@ -114,7 +166,7 @@ describe("TurnReplayEngine cost and evidence folding", () => {
         failureClass: "policy_denied",
       }),
     ];
-    const engine = new TurnReplayEngine({
+    const engine = createTurnReplayEngine({
       listEvents: () => events,
       getTurn: () => 3,
     });
@@ -140,6 +192,7 @@ describe("TurnReplayEngine cost and evidence folding", () => {
           toolName: "grep",
           verdict: "fail",
           channelSuccess: false,
+          ledgerId: "ledger:evt-tool-failure-derived-1",
           failureContext: {
             args: {
               query: "needle",
@@ -152,7 +205,7 @@ describe("TurnReplayEngine cost and evidence folding", () => {
         } as BrewvaEventRecord["payload"],
       },
     ];
-    const engine = new TurnReplayEngine({
+    const engine = createTurnReplayEngine({
       listEvents: () => events,
       getTurn: () => 4,
     });
@@ -235,7 +288,7 @@ describe("TurnReplayEngine cost and evidence folding", () => {
         } as BrewvaEventRecord["payload"],
       },
     ];
-    const engine = new TurnReplayEngine({
+    const engine = createTurnReplayEngine({
       listEvents: () => events,
       getTurn: () => 3,
     });
@@ -301,7 +354,7 @@ describe("TurnReplayEngine cost and evidence folding", () => {
         } as BrewvaEventRecord["payload"],
       },
     ];
-    const engine = new TurnReplayEngine({
+    const engine = createTurnReplayEngine({
       listEvents: () => events,
       getTurn: () => 4,
     });

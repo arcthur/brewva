@@ -7,21 +7,22 @@ import {
 } from "@brewva/brewva-gateway";
 import {
   BrewvaRuntime,
-  SCHEDULE_EVENT_TYPE,
-  SCHEDULE_CHILD_SESSION_FAILED_EVENT_TYPE,
-  SCHEDULE_CHILD_SESSION_FINISHED_EVENT_TYPE,
-  SCHEDULE_CHILD_SESSION_STARTED_EVENT_TYPE,
-  SCHEDULE_RECOVERY_DEFERRED_EVENT_TYPE,
   createTrustedLocalGovernancePort,
   parseScheduleIntentEvent,
   type ManagedToolMode,
 } from "@brewva/brewva-runtime";
 import {
-  RecoveryWalStore,
-  SchedulerService,
-  createSchedulerIngressPort,
-  recordRuntimeEvent,
-} from "@brewva/brewva-runtime/internal";
+  SCHEDULE_EVENT_TYPE,
+  SCHEDULE_CHILD_SESSION_FAILED_EVENT_TYPE,
+  SCHEDULE_CHILD_SESSION_FINISHED_EVENT_TYPE,
+  SCHEDULE_CHILD_SESSION_STARTED_EVENT_TYPE,
+  SCHEDULE_RECOVERY_DEFERRED_EVENT_TYPE,
+} from "@brewva/brewva-runtime/events";
+import {
+  createRecoveryWalStore,
+  createSchedulerService,
+  type SchedulerService,
+} from "@brewva/brewva-runtime/recovery";
 import { differenceInSeconds, formatISO } from "date-fns";
 
 export interface RunDaemonOptions {
@@ -105,7 +106,7 @@ export async function runDaemon(parsed: RunDaemonOptions): Promise<void> {
     return;
   }
 
-  const recoveryWalStore = new RecoveryWalStore({
+  const recoveryWalStore = createRecoveryWalStore({
     workspaceRoot: runtime.workspaceRoot,
     config: runtime.config.infrastructure.recoveryWal,
     scope: "scheduler",
@@ -118,6 +119,10 @@ export async function runDaemon(parsed: RunDaemonOptions): Promise<void> {
     defaultModel: parsed.model,
     defaultManagedToolMode: parsed.managedToolMode,
     recoveryWalStore,
+    recoveryWalContext: {
+      workspaceRoot: runtime.workspaceRoot,
+      config: runtime.config.infrastructure.recoveryWal,
+    },
     recoveryWalCompactIntervalMs: Math.max(
       30_000,
       Math.floor(runtime.config.infrastructure.recoveryWal.compactAfterMs / 2),
@@ -197,14 +202,14 @@ export async function runDaemon(parsed: RunDaemonOptions): Promise<void> {
   try {
     await supervisor.start();
     supervisorStarted = true;
-    const schedulerIngress = createSchedulerIngressPort(runtime);
-    scheduler = new SchedulerService({
+    const schedulerIngress = runtime.extensions.recovery.scheduler;
+    scheduler = createSchedulerService({
       runtime: {
         workspaceRoot: runtime.workspaceRoot,
         scheduleConfig: runtime.config.schedule,
         listSessionIds: () => runtime.inspect.events.listSessionIds(),
         listEvents: (sessionId, query) => runtime.inspect.events.list(sessionId, query),
-        recordEvent: (input) => recordRuntimeEvent(runtime, input),
+        recordEvent: (input) => runtime.extensions.hosted.events.record(input),
         subscribeEvents: (listener) => runtime.inspect.events.subscribe(listener),
         getTruthState: (sessionId) => runtime.inspect.truth.getState(sessionId),
         getTaskState: (sessionId) => runtime.inspect.task.getState(sessionId),

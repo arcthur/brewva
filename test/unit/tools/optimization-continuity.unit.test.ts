@@ -3,11 +3,10 @@ import { createOptimizationContinuityContextProvider } from "@brewva/brewva-deli
 import {
   CONTEXT_SOURCES,
   BrewvaRuntime,
-  SKILL_COMPLETED_EVENT_TYPE,
   buildScheduleIntentFiredEvent,
 } from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import { createOptimizationContinuityTool } from "@brewva/brewva-tools";
+import { recordHostedSkillCompleted } from "../../helpers/events.js";
 import { patchDateNow } from "../../helpers/global-state.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
@@ -24,7 +23,7 @@ function recordGoalLoopState(runtime: BrewvaRuntime): { loopKey: string; parentS
   const loopKey = "scheduler-verification-2026-03-23";
   const loopSource = `goal-loop:${loopKey}`;
 
-  recordRuntimeEvent(runtime, {
+  runtime.extensions.hosted.events.record({
     sessionId: parentSessionId,
     type: "schedule_intent",
     timestamp: 1_710_100_000_010,
@@ -43,7 +42,7 @@ function recordGoalLoopState(runtime: BrewvaRuntime): { loopKey: string; parentS
       }),
     },
   });
-  recordRuntimeEvent(runtime, {
+  runtime.extensions.hosted.events.record({
     sessionId: parentSessionId,
     type: "schedule_intent",
     timestamp: 1_710_100_000_020,
@@ -68,61 +67,59 @@ function recordGoalLoopState(runtime: BrewvaRuntime): { loopKey: string; parentS
     [childSessionId, `${loopKey}/run-2`, 2],
     [freshSessionId, `${loopKey}/run-fresh`, 9],
   ] as const) {
-    recordRuntimeEvent(runtime, {
+    recordHostedSkillCompleted({
+      runtime,
       sessionId,
-      type: SKILL_COMPLETED_EVENT_TYPE,
       timestamp: 1_710_100_000_100 + value,
-      payload: {
-        skillName: "goal-loop",
-        outputs: {
-          loop_contract: {
-            goal: "Reduce verification failures with bounded retries.",
-            scope: ["packages/brewva-runtime/src/services/event-pipeline.ts"],
-            cadence: {
-              mode: "scheduler",
-            },
-            continuity_mode: "inherit",
-            loop_key: loopKey,
-            baseline: {
-              value: 3,
-              source: loopSource,
-            },
-            metric: {
-              key: "failed_checks",
-              direction: "decrease",
-            },
-            guard: {
-              key: "bun-test",
-            },
-            escalation_policy: {
-              owner: "runtime-forensics",
-              trigger: "repeated regressions",
-            },
-            convergence_condition: {
-              kind: "max_runs",
-              limit: 4,
-            },
-            max_runs: 4,
+      skillName: "goal-loop",
+      outputs: {
+        loop_contract: {
+          goal: "Reduce verification failures with bounded retries.",
+          scope: ["packages/brewva-runtime/src/domain/sessions/event-pipeline.ts"],
+          cadence: {
+            mode: "scheduler",
           },
-          iteration_report: {
-            run_key: runKey,
-            iteration_key: `${runKey}/iter-1`,
-            outcome: value <= 3 ? "progress" : "no_improvement",
-            summary: "Recorded another bounded verification run.",
+          continuity_mode: "inherit",
+          loop_key: loopKey,
+          baseline: {
+            value: 3,
+            source: loopSource,
           },
-          convergence_report: {
-            run_key: runKey,
-            status: "continue",
-            reason_code: value <= 3 ? "progress" : "detached_branch",
-            metric_trajectory_summary: "The inherited lineage still has room to improve.",
+          metric: {
+            key: "failed_checks",
+            direction: "decrease",
           },
-          continuation_plan: {
-            loop_key: loopKey,
-            next_owner: "implementation",
-            next_run_trigger: "schedule",
-            next_run_timing: "later today",
-            next_run_objective: "Reduce remaining failed checks.",
+          guard: {
+            key: "bun-test",
           },
+          escalation_policy: {
+            owner: "runtime-forensics",
+            trigger: "repeated regressions",
+          },
+          convergence_condition: {
+            kind: "max_runs",
+            limit: 4,
+          },
+          max_runs: 4,
+        },
+        iteration_report: {
+          run_key: runKey,
+          iteration_key: `${runKey}/iter-1`,
+          outcome: value <= 3 ? "progress" : "no_improvement",
+          summary: "Recorded another bounded verification run.",
+        },
+        convergence_report: {
+          run_key: runKey,
+          status: "continue",
+          reason_code: value <= 3 ? "progress" : "detached_branch",
+          metric_trajectory_summary: "The inherited lineage still has room to improve.",
+        },
+        continuation_plan: {
+          loop_key: loopKey,
+          next_owner: "implementation",
+          next_run_trigger: "schedule",
+          next_run_timing: "later today",
+          next_run_objective: "Reduce remaining failed checks.",
         },
       },
     });

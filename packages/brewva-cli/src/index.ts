@@ -126,7 +126,7 @@ async function runInsightsCli(argv: string[]): Promise<number> {
 }
 
 function cliValueError(error: string): CliValueResult<never> {
-  return { ok: false, error };
+  return { ok: false, reason: error };
 }
 
 function resolveSessionRewindSession(
@@ -508,7 +508,7 @@ function parseCliArgs(argv: string[]): CliParseResult {
   }
   const managedToolMode = resolveManagedToolModeFlag(parsed.values["managed-tools"]);
   if (!managedToolMode.ok) {
-    console.error(managedToolMode.error);
+    console.error(managedToolMode.reason);
     return { kind: "error" };
   }
 
@@ -518,7 +518,7 @@ function parseCliArgs(argv: string[]): CliParseResult {
     parsed.values["telegram-poll-timeout"],
   );
   if (!pollTimeout.ok) {
-    console.error(pollTimeout.error);
+    console.error(pollTimeout.reason);
     return { kind: "error" };
   }
   const pollLimit = parseOptionalIntegerFlag(
@@ -526,7 +526,7 @@ function parseCliArgs(argv: string[]): CliParseResult {
     parsed.values["telegram-poll-limit"],
   );
   if (!pollLimit.ok) {
-    console.error(pollLimit.error);
+    console.error(pollLimit.reason);
     return { kind: "error" };
   }
   const pollRetryMs = parseOptionalIntegerFlag(
@@ -534,7 +534,7 @@ function parseCliArgs(argv: string[]): CliParseResult {
     parsed.values["telegram-poll-retry-ms"],
   );
   if (!pollRetryMs.ok) {
-    console.error(pollRetryMs.error);
+    console.error(pollRetryMs.reason);
     return { kind: "error" };
   }
   const args: CliArgs = {
@@ -637,7 +637,7 @@ function loadTaskSpec(parsed: CliArgs): CliValueResult<TaskSpec | undefined> {
 
   const result = parseTaskSpec(value);
   if (!result.ok) {
-    return cliValueError(`Error: invalid TaskSpec: ${result.error}`);
+    return cliValueError(`Error: invalid TaskSpec: ${result.reason}`);
   }
   return okCliValue(result.spec);
 }
@@ -929,7 +929,7 @@ async function run(): Promise<void> {
   const pipedInput = await readPipedStdin();
   const taskResolved = loadTaskSpec(parsed);
   if (!taskResolved.ok) {
-    console.error(taskResolved.error);
+    console.error(taskResolved.reason);
     process.exitCode = 1;
     return;
   }

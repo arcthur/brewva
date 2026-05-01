@@ -1,12 +1,11 @@
+import { type BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
+import { type BrewvaStructuredEvent } from "@brewva/brewva-runtime/events";
 import {
   REVERSIBLE_MUTATION_ROLLED_BACK_EVENT_TYPE,
   ROLLBACK_EVENT_TYPE,
   SESSION_REWIND_COMPLETED_EVENT_TYPE,
   TURN_GOVERNANCE_DECISION_EVENT_TYPE,
-  type BrewvaHostedRuntimePort,
-  type BrewvaStructuredEvent,
-} from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
+} from "@brewva/brewva-runtime/events";
 import type {
   BrewvaHostContext,
   BrewvaHostToolCallResult,
@@ -182,7 +181,7 @@ function recordGovernanceDecision(input: {
   hookName: string;
   result: LocalHookResult;
 }): void {
-  recordRuntimeEvent(input.runtime, {
+  input.runtime.extensions.hosted.events.record({
     sessionId: input.sessionId,
     type: TURN_GOVERNANCE_DECISION_EVENT_TYPE,
     payload: {

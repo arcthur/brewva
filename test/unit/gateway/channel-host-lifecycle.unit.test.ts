@@ -1,13 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import { ChannelTurnBridge, type ChannelAdapter } from "@brewva/brewva-runtime/channels";
-import type { RecoveryWalStore } from "@brewva/brewva-runtime/internal";
+import { type RecoveryWalStore } from "@brewva/brewva-runtime/recovery";
 import { runChannelHostLifecycle } from "../../../packages/brewva-gateway/src/channels/channel-host-lifecycle.js";
 import { createRuntimeFixture } from "../../helpers/runtime.js";
 
 function createRecoveryWalStoreStub(callOrder: string[]): RecoveryWalStore {
   return {
-    isEnabled: false,
-    scope: "test:channel-recovery-wal",
+    getScope: () => "test:channel-recovery-wal",
+    isWalEnabled: () => false,
     compact() {
       callOrder.push("recoveryWal.compact");
     },

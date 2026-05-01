@@ -9,7 +9,7 @@ import {
   PATCH_HISTORY_FILE,
   collectPersistedPatchPaths,
   listPersistedPatchSets,
-} from "@brewva/brewva-runtime/internal";
+} from "@brewva/brewva-runtime/patch-history";
 import { resolveDetachedSubagentContextManifestPath } from "./background-protocol.js";
 
 const IGNORED_ROOT_SEGMENTS = new Set([".git", "node_modules", ".orchestrator"]);

@@ -5,7 +5,7 @@ import {
   type BrewvaHostedRuntimePort,
   type SkillDocument,
 } from "@brewva/brewva-runtime";
-import { renderSemanticArtifactExample } from "@brewva/brewva-runtime/internal";
+import { renderSemanticArtifactExample } from "@brewva/brewva-runtime/semantic-artifacts";
 import type {
   BrewvaHostAgentEndEvent,
   BrewvaHostBeforeAgentStartEvent,

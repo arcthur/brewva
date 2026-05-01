@@ -3,6 +3,13 @@ import { writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import {
+  DEFAULT_BREWVA_CONFIG,
+  getToolActionPolicy,
+  loadBrewvaConfig,
+  type ToolActionPolicy,
+} from "@brewva/brewva-runtime";
+import {
+  BREWVA_REGISTERED_EVENT_TYPES,
   BOX_ACQUIRED_EVENT_TYPE,
   BOX_BOOTSTRAP_COMPLETED_EVENT_TYPE,
   BOX_BOOTSTRAP_FAILED_EVENT_TYPE,
@@ -15,15 +22,10 @@ import {
   BOX_MAINTENANCE_COMPLETED_EVENT_TYPE,
   BOX_RELEASED_EVENT_TYPE,
   BOX_SNAPSHOT_CREATED_EVENT_TYPE,
-  BREWVA_REGISTERED_EVENT_TYPES,
-  DEFAULT_BREWVA_CONFIG,
   EXEC_FAILED_EVENT_TYPE,
   EXEC_STARTED_EVENT_TYPE,
-  getToolActionPolicy,
   isBrewvaRegisteredEventType,
-  loadBrewvaConfig,
-  type ToolActionPolicy,
-} from "@brewva/brewva-runtime";
+} from "@brewva/brewva-runtime/events";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 describe("box runtime contract", () => {

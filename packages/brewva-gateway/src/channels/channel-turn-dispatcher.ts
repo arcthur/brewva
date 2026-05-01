@@ -1,6 +1,6 @@
 import { BrewvaRuntime, type BrewvaWalId } from "@brewva/brewva-runtime";
 import { type TurnEnvelope, type TurnPart } from "@brewva/brewva-runtime/channels";
-import { type RecoveryWalStore, recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
+import { type RecoveryWalStore } from "@brewva/brewva-runtime/recovery";
 import { LRUCache } from "lru-cache";
 import { toErrorMessage } from "../utils/errors.js";
 import type {
@@ -158,7 +158,7 @@ export function createChannelTurnDispatcher(input: {
           );
         } catch (error) {
           preparedCommand?.release?.();
-          recordRuntimeEvent(input.runtime, {
+          input.runtime.extensions.hosted.events.record({
             sessionId: turn.sessionId,
             type: "channel_command_rejected",
             payload: {
@@ -242,7 +242,7 @@ export function createChannelTurnDispatcher(input: {
         try {
           preparedCommand = await input.prepareCommand(commandMatch, turn, scopeKey);
         } catch (error) {
-          recordRuntimeEvent(input.runtime, {
+          input.runtime.extensions.hosted.events.record({
             sessionId: turn.sessionId,
             type: "channel_command_rejected",
             payload: {

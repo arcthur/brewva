@@ -1,4 +1,5 @@
-import { BrewvaRuntime, MODEL_PRESET_SELECT_EVENT_TYPE } from "@brewva/brewva-runtime";
+import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { MODEL_PRESET_SELECT_EVENT_TYPE } from "@brewva/brewva-runtime/events";
 import {
   createHostedResourceLoader,
   type InternalHostPlugin,

@@ -1,6 +1,6 @@
 import { isIP } from "node:net";
 import { relative, resolve } from "node:path";
-import type { BrewvaConfig } from "../contracts/index.js";
+import type { BrewvaConfig } from "../config/types.js";
 import { normalizeToolName } from "../utils/tool-name.js";
 import {
   analyzeShellCommand,

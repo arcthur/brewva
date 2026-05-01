@@ -1,11 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import {
-  TAPE_CHECKPOINT_EVENT_TYPE,
-  asBrewvaSessionId,
-  buildTapeCheckpointPayload,
-  type BrewvaEventRecord,
-} from "@brewva/brewva-runtime";
-import { TurnReplayEngine } from "@brewva/brewva-runtime/internal";
+import { asBrewvaSessionId, buildTapeCheckpointPayload } from "@brewva/brewva-runtime";
+import { type BrewvaEventRecord } from "@brewva/brewva-runtime/events";
+import { TAPE_CHECKPOINT_EVENT_TYPE } from "@brewva/brewva-runtime/events";
+import { createTurnReplayEngine } from "@brewva/brewva-runtime/replay";
 import { checkpointEvent, taskEvent } from "./turn-replay-engine.helpers.js";
 
 describe("TurnReplayEngine checkpoint replay", () => {
@@ -41,7 +38,7 @@ describe("TurnReplayEngine checkpoint replay", () => {
         } as BrewvaEventRecord["payload"],
       },
     ];
-    const engine = new TurnReplayEngine({
+    const engine = createTurnReplayEngine({
       listEvents: () => events,
       getTurn: () => 1,
     });
@@ -210,7 +207,7 @@ describe("TurnReplayEngine checkpoint replay", () => {
         } as BrewvaEventRecord["payload"],
       },
     ];
-    const engine = new TurnReplayEngine({
+    const engine = createTurnReplayEngine({
       listEvents: () => events,
       getTurn: () => 1,
     });
@@ -252,7 +249,7 @@ describe("TurnReplayEngine checkpoint replay", () => {
         } as BrewvaEventRecord["payload"],
       },
     ];
-    const engine = new TurnReplayEngine({
+    const engine = createTurnReplayEngine({
       listEvents: () => events,
       getTurn: () => 1,
     });
@@ -320,7 +317,7 @@ describe("TurnReplayEngine checkpoint replay", () => {
       }),
     ];
 
-    const engine = new TurnReplayEngine({
+    const engine = createTurnReplayEngine({
       listEvents: () => events,
       getTurn: () => 1,
     });

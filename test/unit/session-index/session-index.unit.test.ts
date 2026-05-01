@@ -1,15 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import {
-  BrewvaRuntime,
-  DEFAULT_BREWVA_CONFIG,
-  type BrewvaEventRecord,
-} from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
+import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
+import { type BrewvaEventRecord } from "@brewva/brewva-runtime/events";
 import { tokenizeSearchText } from "@brewva/brewva-search";
 import { SESSION_INDEX_SCHEMA_VERSION, createSessionIndex } from "@brewva/brewva-session-index";
 import { DuckDBInstance } from "@duckdb/node-api";
+import {
+  buildToolResultRecordedPayload,
+  buildVerificationOutcomeRecordedPayload,
+} from "../../helpers/events.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 async function readRows<T extends Record<string, unknown>>(
@@ -61,15 +61,11 @@ function recordTaskSession(
       files: [input.targetFile],
     },
   });
-  return recordRuntimeEvent(runtime, {
+  return runtime.extensions.hosted.events.record({
     sessionId: input.sessionId,
     type: "verification_outcome_recorded",
     timestamp: input.timestamp,
-    payload: {
-      schema: "brewva.verification.outcome.v1",
-      passed: true,
-      summary: input.evidenceText,
-    },
+    payload: buildVerificationOutcomeRecordedPayload({ evidence: input.evidenceText }),
   }) as BrewvaEventRecord;
 }
 
@@ -183,15 +179,11 @@ describe("session index", () => {
     );
     expect(firstState[0]?.indexed_event_count).toBe(3);
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId: "indexed-catch-up",
       type: "tool_result_recorded",
       timestamp: 1_700_000_002_000,
-      payload: {
-        toolName: "exec",
-        outputText: "second indexed receipt",
-        verdict: "success",
-      },
+      payload: buildToolResultRecordedPayload({ outputText: "second indexed receipt" }),
     });
     const nextIndex = await createSessionIndex({
       workspaceRoot: workspace,
@@ -243,11 +235,7 @@ describe("session index", () => {
       sessionId: "indexed-incomplete-jsonl-row",
       type: "verification_outcome_recorded",
       timestamp: 1_700_000_002_000,
-      payload: {
-        schema: "brewva.verification.outcome.v1",
-        passed: true,
-        summary: "complete partial receipt",
-      },
+      payload: buildVerificationOutcomeRecordedPayload({ evidence: "complete partial receipt" }),
     };
     const serialized = `${JSON.stringify(partialEvent)}\n`;
     const splitAt = Math.floor(serialized.length / 2);
@@ -386,18 +374,16 @@ describe("session index", () => {
 
     let lateEvent: BrewvaEventRecord | undefined;
     for (let index = 0; index < 25; index += 1) {
-      const event = recordRuntimeEvent(runtime, {
+      const event = runtime.extensions.hosted.events.record({
         sessionId: "indexed-long-session",
         type: "tool_result_recorded",
         timestamp: 1_700_000_001_000 + index,
-        payload: {
-          toolName: "exec",
+        payload: buildToolResultRecordedPayload({
           outputText:
             index === 24
               ? "rareanchor durable indexed receipt"
               : `generic maintenance output ${index}`,
-          verdict: "success",
-        },
+        }),
       }) as BrewvaEventRecord;
       if (index === 24) {
         lateEvent = event;

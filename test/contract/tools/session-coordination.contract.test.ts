@@ -3,7 +3,6 @@ import { mkdirSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import {
   buildBrewvaTools,
   createReasoningCheckpointTool,
@@ -96,17 +95,19 @@ describe("session coordination tool contracts", () => {
             getCompactionInstructions: () => "compact-now",
           },
         },
-        internal: {
-          recordEvent: (event: {
-            sessionId: string;
-            type: string;
-            payload?: Record<string, unknown>;
-          }) => {
-            events.push({
-              sessionId: event.sessionId,
-              type: event.type,
-              payload: event.payload,
-            });
+        extensions: {
+          tools: {
+            recordEvent: (event: {
+              sessionId: string;
+              type: string;
+              payload?: Record<string, unknown>;
+            }) => {
+              events.push({
+                sessionId: event.sessionId,
+                type: event.type,
+                payload: event.payload,
+              });
+            },
           },
         },
       } as any,
@@ -249,7 +250,7 @@ describe("session coordination tool contracts", () => {
     expect(handoffText).toContain("Tape handoff recorded");
     expect(runtime.inspect.events.query(sessionId, { type: "anchor" }).length).toBe(1);
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "tool_output_search",
       payload: {
@@ -262,7 +263,7 @@ describe("session coordination tool contracts", () => {
         matchLayers: { q1: "exact" },
       } as Record<string, unknown>,
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "tool_output_search",
       payload: {
@@ -301,12 +302,12 @@ describe("session coordination tool contracts", () => {
     const sessionId = "s12-search";
     runtime.maintain.context.onTurnStart(sessionId, 1);
 
-    runtime.authority.events.recordTapeHandoff(sessionId, {
+    runtime.authority.tape.recordTapeHandoff(sessionId, {
       name: "investigation",
       summary: "Collected flaky test evidence.",
       nextSteps: "Implement fix.",
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "task_event",
       payload: {
@@ -344,7 +345,7 @@ describe("session coordination tool contracts", () => {
       schema: "brewva.task.v1",
       goal: "Fix flaky worker bootstrap in the gateway runtime",
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId: priorSessionId,
       type: "task_event",
       payload: {
@@ -417,7 +418,7 @@ describe("session coordination tool contracts", () => {
       schema: "brewva.task.v1",
       goal: "修复网关数据库连接失败导致启动重试",
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId: priorSessionId,
       type: "task_event",
       payload: {
@@ -464,7 +465,7 @@ describe("session coordination tool contracts", () => {
       schema: "brewva.task.v1",
       goal: "Fix flaky gateway bootstrap recall",
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId: priorSessionId,
       type: "task_event",
       payload: {
@@ -509,7 +510,7 @@ describe("session coordination tool contracts", () => {
       .find((value): value is string => typeof value === "string" && value.startsWith("tape:"));
     expect(stableId).toBeDefined();
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId: currentSessionId,
       type: "recall_curation_recorded",
       payload: {
@@ -576,7 +577,7 @@ describe("session coordination tool contracts", () => {
         files: ["packages/gateway"],
       },
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId: gatewaySessionId,
       type: "task_event",
       payload: {
@@ -594,7 +595,7 @@ describe("session coordination tool contracts", () => {
         files: ["packages/cli"],
       },
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId: cliSessionId,
       type: "task_event",
       payload: {

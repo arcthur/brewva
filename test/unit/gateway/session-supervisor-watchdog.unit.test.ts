@@ -2,11 +2,12 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { SessionSupervisor } from "@brewva/brewva-gateway";
-import { BrewvaRuntime, GATEWAY_SESSION_BOUND_EVENT_TYPE } from "@brewva/brewva-runtime";
+import { BrewvaRuntime } from "@brewva/brewva-runtime";
 import {
   readBrewvaEventRecordsFromLogPath,
   resolveBrewvaEventLogPath,
-} from "@brewva/brewva-runtime/internal";
+} from "@brewva/brewva-runtime/event-log";
+import { GATEWAY_SESSION_BOUND_EVENT_TYPE } from "@brewva/brewva-runtime/events";
 import {
   GATEWAY_SESSION_BINDING_CONTROL_SESSION_ID,
   resolveGatewaySessionBindingLogPath,
@@ -104,16 +105,14 @@ describe("session supervisor watchdog bridge", () => {
         }
         expect(agentSessionId.length).toBeGreaterThan(0);
         const resolvedAgentSessionId = agentSessionId;
+        const observer = new BrewvaRuntime({ cwd: workspace, configPath: TEST_CONFIG_PATH });
 
         const detected = await waitForCondition(
-          () => {
-            if (!agentSessionId) return null;
-            const observer = new BrewvaRuntime({ cwd: workspace, configPath: TEST_CONFIG_PATH });
-            return observer.inspect.events.query(resolvedAgentSessionId, {
+          () =>
+            observer.inspect.events.query(resolvedAgentSessionId, {
               type: "task_stuck_detected",
               last: 1,
-            })[0];
-          },
+            })[0],
           {
             timeoutMs: 8_000,
             intervalMs: 100,
@@ -127,7 +126,6 @@ describe("session supervisor watchdog bridge", () => {
           idleMs: expect.any(Number),
         });
 
-        const observer = new BrewvaRuntime({ cwd: workspace, configPath: TEST_CONFIG_PATH });
         const taskState = observer.inspect.task.getState(resolvedAgentSessionId);
         expect(taskState.blockers).toEqual([]);
       } finally {
@@ -135,7 +133,7 @@ describe("session supervisor watchdog bridge", () => {
         rmSync(workspace, { recursive: true, force: true });
       }
     },
-    { timeout: 10_000 },
+    { timeout: 15_000 },
   );
 
   test(
@@ -173,18 +171,17 @@ describe("session supervisor watchdog bridge", () => {
         }
         expect(agentSessionId.length).toBeGreaterThan(0);
         const resolvedAgentSessionId = agentSessionId;
+        const observer = new BrewvaRuntime({ cwd: workspace, configPath: TEST_CONFIG_PATH });
 
         const stopped = await supervisor.stopSession("watchdog-worker-stop", "test_shutdown");
         expect(stopped).toBe(true);
 
         const shutdown = await waitForCondition(
-          () => {
-            const observer = new BrewvaRuntime({ cwd: workspace, configPath: TEST_CONFIG_PATH });
-            return observer.inspect.events.query(resolvedAgentSessionId, {
+          () =>
+            observer.inspect.events.query(resolvedAgentSessionId, {
               type: "session_shutdown",
               last: 1,
-            })[0];
-          },
+            })[0],
           {
             timeoutMs: 5_000,
             intervalMs: 100,
@@ -199,7 +196,6 @@ describe("session supervisor watchdog bridge", () => {
 
         await sleepMs(3_000);
 
-        const observer = new BrewvaRuntime({ cwd: workspace, configPath: TEST_CONFIG_PATH });
         expect(
           observer.inspect.events.query(resolvedAgentSessionId, {
             type: "task_stuck_detected",

@@ -1,17 +1,20 @@
 import { describe, expect, test } from "bun:test";
-import { asBrewvaSessionId, type BrewvaEventRecord } from "@brewva/brewva-runtime";
+import { asBrewvaSessionId } from "@brewva/brewva-runtime";
 import {
   MAX_REASONING_CONTINUITY_BYTES,
-  REASONING_CHECKPOINT_EVENT_TYPE,
-  REASONING_REVERT_EVENT_TYPE,
   buildReasoningCheckpointPayload,
   buildReasoningRevertPayload,
 } from "@brewva/brewva-runtime";
+import { type BrewvaEventRecord } from "@brewva/brewva-runtime/events";
+import {
+  REASONING_CHECKPOINT_EVENT_TYPE,
+  REASONING_REVERT_EVENT_TYPE,
+} from "@brewva/brewva-runtime/events";
 import {
   normalizeReasoningContinuityPacket,
   coerceReasoningContinuityPacket,
-} from "../../../packages/brewva-runtime/src/tape/reasoning-events.js";
-import { ReasoningReplayEngine } from "../../../packages/brewva-runtime/src/tape/reasoning-replay.js";
+} from "../../../packages/brewva-runtime/src/domain/reasoning/payloads.js";
+import { ReasoningReplayEngine } from "../../../packages/brewva-runtime/src/domain/tape/reasoning-replay.js";
 
 function checkpointEvent(input: {
   sessionId: string;

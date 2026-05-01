@@ -4,7 +4,7 @@ import {
   BREWVA_REGISTERED_EVENT_TYPES,
   getBrewvaEventDurabilityClass,
   isBrewvaRegisteredEventType,
-} from "@brewva/brewva-runtime";
+} from "@brewva/brewva-runtime/events";
 
 describe("runtime event registry", () => {
   test("registers session_turn_transition and drops legacy hosted lifecycle event names", () => {

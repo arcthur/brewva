@@ -1,6 +1,6 @@
 # Reference: Runtime Contract
 
-Primary implementation anchor: `packages/brewva-runtime/src/runtime.ts`.
+Primary implementation anchor: `packages/brewva-runtime/src/runtime/runtime.ts`.
 
 Related boundary references:
 
@@ -69,7 +69,6 @@ Runtime surface member count: 154.
 - `authority.cost.recordAssistantUsage`
 - `authority.events.recordGuardResult`
 - `authority.events.recordMetricObservation`
-- `authority.events.recordTapeHandoff`
 - `authority.proposals.decideEffectCommitment`
 - `authority.proposals.submit`
 - `authority.reasoning.recordCheckpoint`
@@ -85,6 +84,7 @@ Runtime surface member count: 154.
 - `authority.skills.activate`
 - `authority.skills.complete`
 - `authority.skills.recordCompletionFailure`
+- `authority.tape.recordTapeHandoff`
 - `authority.task.addItem`
 - `authority.task.recordAcceptance`
 - `authority.task.recordBlocker`
@@ -132,8 +132,6 @@ Runtime surface member count: 154.
 - `inspect.context.sanitizeInput`
 - `inspect.cost.getSummary`
 - `inspect.events.getLogPath`
-- `inspect.events.getTapePressureThresholds`
-- `inspect.events.getTapeStatus`
 - `inspect.events.list`
 - `inspect.events.listGuardResults`
 - `inspect.events.listMetricObservations`
@@ -141,7 +139,6 @@ Runtime surface member count: 154.
 - `inspect.events.listSessionIds`
 - `inspect.events.query`
 - `inspect.events.queryStructured`
-- `inspect.events.searchTape`
 - `inspect.events.subscribe`
 - `inspect.events.toStructured`
 - `inspect.ledger.getDigest`
@@ -185,6 +182,9 @@ Runtime surface member count: 154.
 - `inspect.skills.list`
 - `inspect.skills.listForRouting`
 - `inspect.skills.validateOutputs`
+- `inspect.tape.getTapePressureThresholds`
+- `inspect.tape.getTapeStatus`
+- `inspect.tape.searchTape`
 - `inspect.task.getState`
 - `inspect.task.getTargetDescriptor`
 - `inspect.tools.checkAccess`
@@ -228,22 +228,22 @@ The generated list is intentionally complete, but readers should choose by
 semantic group rather than method name. These groups carry the boundaries that
 were previously scattered across method-level reference prose:
 
-| Group                                                                   | Boundary                                                                                                                   |
-| ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `authority.proposals` / `inspect.proposals`                             | Effect commitment admission, pending approval, and resume identity; see `docs/reference/proposal-boundary.md`.             |
-| `authority.tools` / `inspect.tools` / `maintain.tools`                  | Managed-tool start/result/receipt policy, rollback identity, action-policy registration, and resource leases.              |
-| `authority.session` / `inspect.session` / `maintain.session`            | Runtime-owned session state, rewind/redo, worker results, hydration, integrity, and bounded clear-state maintenance.       |
-| `inspect.sessionWire`                                                   | Read-only session protocol projection for frontends and hosted products; not durable event authority.                      |
-| `authority.reasoning` / `inspect.reasoning`                             | Checkpoint and revert authority for model-visible reasoning continuity, separate from session rewind.                      |
-| `authority.cost` / `inspect.cost`                                       | Usage observations and cost summaries; cost state informs products but does not authorize effects.                         |
-| `inspect.lifecycle`                                                     | Snapshot of runtime lifecycle posture; use for diagnostics, not admission.                                                 |
-| `inspect.recovery` / `maintain.recovery`                                | WAL/recovery posture, pending recovery work, compact, and recover operations; recovery repairs bounded runtime state only. |
-| `authority.schedule` / `inspect.schedule`                               | Durable schedule-intent mutation and projection reads; gateway scheduling stays above runtime receipts.                    |
-| `authority.skills` / `inspect.skills` / `maintain.skills`               | Skill activation/completion, normalized output inspection, routing catalog reads, and catalog refresh.                     |
-| `authority.task` / `inspect.task` / `authority.truth` / `inspect.truth` | Task and truth facts that become replay-visible runtime state.                                                             |
-| `authority.events` / `inspect.events` / `inspect.ledger`                | Event, guard, metric, tape, replay, and ledger inspection around the event tape and evidence rows.                         |
-| `inspect.context` / `maintain.context`                                  | Context pressure, compaction, provider cache, visible-read state, and prompt-stability observations.                       |
-| `authority.verification`                                                | Verification evidence recording; failures remain verification debt unless promoted by a higher authority surface.          |
+| Group                                                                                        | Boundary                                                                                                                   |
+| -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `authority.proposals` / `inspect.proposals`                                                  | Effect commitment admission, pending approval, and resume identity; see `docs/reference/proposal-boundary.md`.             |
+| `authority.tools` / `inspect.tools` / `maintain.tools`                                       | Managed-tool start/result/receipt policy, rollback identity, action-policy registration, and resource leases.              |
+| `authority.session` / `inspect.session` / `maintain.session`                                 | Runtime-owned session state, rewind/redo, worker results, hydration, integrity, and bounded clear-state maintenance.       |
+| `inspect.sessionWire`                                                                        | Read-only session protocol projection for frontends and hosted products; not durable event authority.                      |
+| `authority.reasoning` / `inspect.reasoning`                                                  | Checkpoint and revert authority for model-visible reasoning continuity, separate from session rewind.                      |
+| `authority.cost` / `inspect.cost`                                                            | Usage observations and cost summaries; cost state informs products but does not authorize effects.                         |
+| `inspect.lifecycle`                                                                          | Snapshot of runtime lifecycle posture; use for diagnostics, not admission.                                                 |
+| `inspect.recovery` / `maintain.recovery`                                                     | WAL/recovery posture, pending recovery work, compact, and recover operations; recovery repairs bounded runtime state only. |
+| `authority.schedule` / `inspect.schedule`                                                    | Durable schedule-intent mutation and projection reads; gateway scheduling stays above runtime receipts.                    |
+| `authority.skills` / `inspect.skills` / `maintain.skills`                                    | Skill activation/completion, normalized output inspection, routing catalog reads, and catalog refresh.                     |
+| `authority.task` / `inspect.task` / `authority.truth` / `inspect.truth`                      | Task and truth facts that become replay-visible runtime state.                                                             |
+| `authority.events` / `inspect.events` / `authority.tape` / `inspect.tape` / `inspect.ledger` | Event, guard, metric, replay, tape handoff/search, and ledger inspection around the event tape and evidence rows.          |
+| `inspect.context` / `maintain.context`                                                       | Context pressure, compaction, provider cache, visible-read state, and prompt-stability observations.                       |
+| `authority.verification`                                                                     | Verification evidence recording; failures remain verification debt unless promoted by a higher authority surface.          |
 
 ### `authority`
 
@@ -274,6 +274,34 @@ record host-maintenance observations.
 Maintenance methods are not a general backdoor. They are explicit operational
 ports with narrower callers and clearer ownership than the old mixed runtime
 surface.
+
+## Domain And Extension Boundaries
+
+Runtime implementation code is organized by domain ownership rather than by
+technical layer. Domain slices live under
+`packages/brewva-runtime/src/domain/<name>/` and expose explicit seams:
+
+- `api.ts` for cross-domain value and service access
+- `types.ts` for domain-owned type contracts
+- `registrar.ts` for service construction and registration
+- `runtime-surface.ts` for semantic port contribution
+
+Cross-domain runtime source imports must use `api.ts` or `types.ts`. Concrete
+implementation files stay inside the owning domain unless they are exposed by a
+dedicated runtime subpath.
+
+Controlled extension ports are branded, sealed objects with explicit
+capability tokens. They expose only allowlisted methods; they do not spread
+service instances, leak private state, or preserve old implementation paths.
+The runtime currently provides controlled ports for hosted event recording,
+recovery scheduler WAL operations, and repo-owned bundled tool hooks through
+`runtime.extensions`.
+
+Dedicated runtime subpaths such as `@brewva/brewva-runtime/context`,
+`@brewva/brewva-runtime/recovery`, and `@brewva/brewva-runtime/event-log`
+return the same controlled-port shape for repo-owned infrastructure use. They
+are not wildcard implementation barrels and do not replace the semantic root
+contract.
 
 ## Verification Semantics
 

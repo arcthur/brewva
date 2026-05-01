@@ -1,6 +1,11 @@
 import { resolve } from "node:path";
 import { uniqueStrings } from "@brewva/brewva-deliberation";
-import type { BrewvaEventQuery, BrewvaEventRecord } from "@brewva/brewva-runtime";
+import {
+  readSkillCompletedEventPayload,
+  readToolResultRecordedEventPayload,
+  type BrewvaEventQuery,
+  type BrewvaEventRecord,
+} from "@brewva/brewva-runtime/events";
 import { isRecallSearchableTapeEvent } from "./evidence-events.js";
 import type { RecallSessionDigest } from "./types.js";
 
@@ -77,11 +82,16 @@ function extractEventSummary(event: BrewvaEventRecord): string | undefined {
   }
 
   if (event.type === "tool_result_recorded") {
+    const payload = readToolResultRecordedEventPayload(event);
+    const outputDistillation = isRecord(payload?.outputDistillation)
+      ? payload.outputDistillation
+      : undefined;
     return compactText(
       [
-        readString(event.payload.toolName),
-        readString(event.payload.outputText),
-        readString(event.payload.verdict),
+        payload?.toolName,
+        readString(outputDistillation?.summaryText) ??
+          readString(payload?.failureContext?.outputText),
+        payload?.verdict,
       ]
         .filter((entry): entry is string => !!entry)
         .join(" "),
@@ -89,11 +99,12 @@ function extractEventSummary(event: BrewvaEventRecord): string | undefined {
   }
 
   if (event.type === "skill_completed") {
-    const outputs = isRecord(event.payload.outputs) ? event.payload.outputs : undefined;
+    const payload = readSkillCompletedEventPayload(event);
+    const outputs = payload?.outputs;
     const outputLeaves: string[] = [];
     collectStringLeaves(outputs, outputLeaves);
     return compactText(
-      [readString(event.payload.skillName), ...outputLeaves.slice(0, 4)]
+      [payload?.skillName, ...outputLeaves.slice(0, 4)]
         .filter((entry): entry is string => !!entry)
         .join(" "),
     );

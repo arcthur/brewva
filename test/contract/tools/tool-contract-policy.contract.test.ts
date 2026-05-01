@@ -895,7 +895,7 @@ describe("resource lease negotiation", () => {
 
     expect(lease.ok).toBe(false);
     if (!lease.ok) {
-      expect(lease.error).toContain("active skill");
+      expect(lease.reason).toContain("active skill");
     }
     expect(runtime.inspect.tools.listResourceLeases(sessionId)).toHaveLength(0);
   });
@@ -1041,7 +1041,7 @@ describe("resource lease negotiation", () => {
 
     expect(lease.ok).toBe(false);
     if (!lease.ok) {
-      expect(lease.error).toContain("hard_ceiling");
+      expect(lease.reason).toContain("hard_ceiling");
     }
   });
 });

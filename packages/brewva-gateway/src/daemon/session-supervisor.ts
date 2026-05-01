@@ -5,6 +5,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   asBrewvaWalId,
+  type BrewvaConfig,
   type BrewvaWalId,
   type ContextPressureView,
   type ManagedToolMode,
@@ -12,11 +13,8 @@ import {
   type SessionLifecycleSnapshot,
   type SessionWireFrame,
 } from "@brewva/brewva-runtime";
-import {
-  RecoveryWalRecovery,
-  RecoveryWalStore,
-  querySessionWireFramesFromEventLog,
-} from "@brewva/brewva-runtime/internal";
+import { querySessionWireFramesFromEventLog } from "@brewva/brewva-runtime/event-log";
+import { createRecoveryWalRecovery, type RecoveryWalStore } from "@brewva/brewva-runtime/recovery";
 import type { BrewvaSteerOutcome } from "@brewva/brewva-substrate";
 import type { WorkerToParentMessage } from "../session/worker-protocol.js";
 import {
@@ -114,6 +112,10 @@ export interface SessionSupervisorOptions {
   maxPendingSessionOpens?: number;
   stateStore?: GatewayStateStore;
   recoveryWalStore?: RecoveryWalStore;
+  recoveryWalContext?: {
+    workspaceRoot: string;
+    config: BrewvaConfig["infrastructure"]["recoveryWal"];
+  };
   recoveryWalCompactIntervalMs?: number;
   onWorkerEvent?: (event: Extract<WorkerToParentMessage, { kind: "event" }>) => void;
 }
@@ -482,7 +484,7 @@ export class SessionSupervisor implements SessionBackend {
     const replayWalId = normalizeOptionalString(options.walReplayId);
     const waitForCompletion = options.waitForCompletion === true;
     let walId = replayWalId ? asBrewvaWalId(replayWalId) : undefined;
-    if (!walId && this.recoveryWalStore?.isEnabled) {
+    if (!walId && this.recoveryWalStore?.isWalEnabled()) {
       const walRecord = this.recoveryWalStore.appendPending(
         buildSessionTurnEnvelope({
           sessionId,
@@ -929,13 +931,17 @@ export class SessionSupervisor implements SessionBackend {
   }
 
   private async recoverRecoveryWalState(): Promise<void> {
-    if (!this.recoveryWalStore?.isEnabled) {
+    if (!this.recoveryWalStore?.isWalEnabled()) {
       return;
     }
-    const recovery = new RecoveryWalRecovery({
-      workspaceRoot: this.recoveryWalStore.workspaceRoot,
-      config: this.recoveryWalStore.config,
-      scopeFilter: (scope) => scope === this.recoveryWalStore?.scope,
+    if (!this.options.recoveryWalContext) {
+      throw new Error("recovery_wal_context_missing");
+    }
+    const recoveryWalScope = this.recoveryWalStore.getScope();
+    const recovery = createRecoveryWalRecovery({
+      workspaceRoot: this.options.recoveryWalContext.workspaceRoot,
+      config: this.options.recoveryWalContext.config,
+      scopeFilter: (scope) => scope === recoveryWalScope,
       handlers: {
         gateway: async ({ record }) => {
           await this.replayRecoveredTurn(record);
@@ -952,7 +958,7 @@ export class SessionSupervisor implements SessionBackend {
     const summary = await recovery.recover();
     if (summary.scanned > 0 || summary.retried > 0 || summary.failed > 0 || summary.expired > 0) {
       this.options.logger.info("Recovery WAL recovery completed", {
-        scope: this.recoveryWalStore.scope,
+        scope: recoveryWalScope,
         scanned: summary.scanned,
         retried: summary.retried,
         failed: summary.failed,
@@ -988,7 +994,7 @@ export class SessionSupervisor implements SessionBackend {
   }
 
   private startRecoveryWalCompaction(): void {
-    if (!this.recoveryWalStore?.isEnabled || this.recoveryWalCompactTimer) {
+    if (!this.recoveryWalStore?.isWalEnabled() || this.recoveryWalCompactTimer) {
       return;
     }
     this.recoveryWalCompactTimer = setInterval(() => {
@@ -996,7 +1002,7 @@ export class SessionSupervisor implements SessionBackend {
         const result = this.recoveryWalStore?.compact();
         if (result && result.dropped > 0) {
           this.options.logger.debug("Recovery WAL compacted", {
-            scope: this.recoveryWalStore?.scope,
+            scope: this.recoveryWalStore?.getScope(),
             scanned: result.scanned,
             retained: result.retained,
             dropped: result.dropped,

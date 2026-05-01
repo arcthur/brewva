@@ -9,7 +9,7 @@ Input: "Review the routing refactor for regressions."
       "condition": "Internal routing types exported from public entrypoint",
       "impact": "Widens public API surface, creating semver commitment",
       "evidence": "Diff adds export in contracts/index.ts",
-      "next_action": "Move to @brewva/brewva-runtime/internal"
+      "next_action": "Move behind a domain api/types seam or a dedicated controlled subpath"
     }
   ],
   "review_report": {

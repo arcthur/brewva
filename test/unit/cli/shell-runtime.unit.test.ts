@@ -8,9 +8,9 @@ import {
   asBrewvaSessionId,
   asBrewvaToolCallId,
   asBrewvaToolName,
-  type BrewvaReplaySession,
   type SessionWireFrame,
 } from "@brewva/brewva-runtime";
+import { type BrewvaReplaySession } from "@brewva/brewva-runtime/events";
 import {
   buildBrewvaPromptText,
   type BrewvaPromptContentPart,

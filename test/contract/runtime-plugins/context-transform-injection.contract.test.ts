@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { HostedDelegationStore } from "@brewva/brewva-gateway";
 import { CURRENT_DELEGATION_CONTRACT_VERSION, type SkillDocument } from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import {
   CONTEXT_SOURCES,
   createMockRuntimePluginApi,
@@ -257,7 +256,7 @@ describe("context transform injection contract", () => {
     });
     const delegationStore = new HostedDelegationStore(runtime);
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "subagent_completed",
       payload: {

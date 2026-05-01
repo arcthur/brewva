@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { DEFAULT_BREWVA_CONFIG, BrewvaRuntime } from "@brewva/brewva-runtime";
-import { discoverSkillRegistryRoots } from "@brewva/brewva-runtime/internal";
+import { discoverSkillRegistryRoots } from "@brewva/brewva-runtime";
 import { requireDefined } from "../../helpers/assertions.js";
 
 function writeSkill(

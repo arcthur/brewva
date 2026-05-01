@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import {
-  TurnLifecycleSpine,
   compareTurnLifecycleGates,
   getTurnLifecycleFoldPlacements,
   getTurnLifecycleRecoveryPlacement,
   getTurnLifecycleRecoveryPlacements,
-} from "@brewva/brewva-runtime/internal";
+  TurnLifecycleSpine,
+} from "@brewva/brewva-runtime";
 
 describe("turn lifecycle spine", () => {
   test("advances monotonically through the internal turn gates", () => {

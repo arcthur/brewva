@@ -170,9 +170,9 @@ export function createFollowUpTool(options: BrewvaToolOptions): ToolDefinition {
               maxRuns: 1,
             });
             if (!created.ok) {
-              return failTextResult(`Follow-up rejected (${created.error}).`, {
+              return failTextResult(`Follow-up rejected (${created.reason}).`, {
                 ok: false,
-                error: created.error,
+                error: created.reason,
               });
             }
 
@@ -222,9 +222,9 @@ export function createFollowUpTool(options: BrewvaToolOptions): ToolDefinition {
             maxRuns: params.runs ?? 12,
           });
           if (!created.ok) {
-            return failTextResult(`Follow-up rejected (${created.error}).`, {
+            return failTextResult(`Follow-up rejected (${created.reason}).`, {
               ok: false,
-              error: created.error,
+              error: created.reason,
             });
           }
 
@@ -259,9 +259,9 @@ export function createFollowUpTool(options: BrewvaToolOptions): ToolDefinition {
             reason: normalizeOptionalString(params.reason),
           });
           if (!cancelled.ok) {
-            return failTextResult(`Follow-up cancel rejected (${cancelled.error}).`, {
+            return failTextResult(`Follow-up cancel rejected (${cancelled.reason}).`, {
               ok: false,
-              error: cancelled.error ?? "unknown_error",
+              error: cancelled.reason ?? "unknown_error",
             });
           }
           return textResult(`Follow-up cancelled (${intentId}).`, {

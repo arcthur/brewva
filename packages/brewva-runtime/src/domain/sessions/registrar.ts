@@ -1,0 +1,181 @@
+import { inferEventCategory } from "../../runtime/runtime-helpers.js";
+import type {
+  RuntimeContextServices,
+  RuntimeGovernanceServices,
+  RuntimeLazyServiceFactories,
+  RuntimeServiceRegistrarOptions,
+  RuntimeSessionServices,
+  RuntimeWorkServices,
+} from "../../runtime/service-registrar-types.js";
+import type { RuntimeLazyServiceRegistrarOptions } from "../../runtime/service-registrar-types.js";
+import type { FileChangeService } from "../patching/api.js";
+import type { ReasoningService } from "../reasoning/api.js";
+import { registerRecoveryDomain } from "../recovery/api.js";
+import { registerTapeDomain } from "../tape/api.js";
+import { TruthProjectorService } from "../truth/api.js";
+import { VerificationGate } from "../verification/api.js";
+import { VerificationProjectorService } from "../verification/api.js";
+import { SESSIONS_EVENT_DESCRIPTORS } from "./event-descriptors.js";
+import { EventPipelineService } from "./event-pipeline.js";
+import { sessionSurfaceContribution, sessionWireSurfaceContribution } from "./runtime-surface.js";
+import { SessionLifecycleService } from "./session-lifecycle.js";
+import { SessionRewindService } from "./session-rewind.js";
+import { SessionWireService } from "./session-wire.js";
+
+interface RuntimeProjectionSubscriberRegistrarOptions {
+  cwd: string;
+  kernel: RuntimeServiceRegistrarOptions["kernel"];
+  verificationGate: VerificationGate;
+  eventPipeline: EventPipelineService;
+  taskService: RuntimeWorkServices["taskService"];
+  truthService: RuntimeWorkServices["truthService"];
+}
+
+function registerProjectionSubscribers(options: RuntimeProjectionSubscriberRegistrarOptions): void {
+  const truthProjector = new TruthProjectorService({
+    cwd: options.cwd,
+    getTaskState: (sessionId) => options.kernel.getTaskState(sessionId),
+    getTruthState: (sessionId) => options.kernel.getTruthState(sessionId),
+    eventPipeline: options.eventPipeline,
+    taskService: options.taskService,
+    truthService: options.truthService,
+  });
+  const verificationProjector = new VerificationProjectorService({
+    getTaskState: (sessionId) => options.kernel.getTaskState(sessionId),
+    getTruthState: (sessionId) => options.kernel.getTruthState(sessionId),
+    verificationStateStore: options.verificationGate.stateStore,
+    eventPipeline: options.eventPipeline,
+    taskService: options.taskService,
+    truthService: options.truthService,
+  });
+
+  void truthProjector;
+  void verificationProjector;
+}
+
+export interface RuntimeSessionsDomainRegistration {
+  services: RuntimeSessionServices;
+  surfaceContribution: typeof sessionSurfaceContribution;
+  wireSurfaceContribution: typeof sessionWireSurfaceContribution;
+  eventDescriptors: typeof SESSIONS_EVENT_DESCRIPTORS;
+}
+
+export interface RuntimeSessionsLazyDomainRegistration {
+  lazyFactories: Pick<
+    RuntimeLazyServiceFactories,
+    "createSessionRewindService" | "createSessionWireService"
+  >;
+}
+
+export function registerSessionsDomain(
+  options: RuntimeServiceRegistrarOptions,
+  workServices: RuntimeWorkServices,
+  contextServices: RuntimeContextServices,
+  governanceServices: RuntimeGovernanceServices,
+): RuntimeSessionsDomainRegistration {
+  const tapeDomain = registerTapeDomain(options);
+
+  const eventPipeline = new EventPipelineService({
+    events: options.coreDependencies.eventStore,
+    level: options.config.infrastructure.events.level,
+    inferEventCategory,
+    observeReplayEvent: (event) => {
+      options.coreDependencies.turnReplay.observeEvent(event);
+      options.coreDependencies.reasoningReplay.observeEvent(event);
+    },
+    ingestProjectionEvent: (event) => options.coreDependencies.projectionEngine.ingestEvent(event),
+    maybeRecordTapeCheckpoint: (event) =>
+      tapeDomain.services.getTapeService().maybeRecordTapeCheckpoint(event),
+  });
+
+  registerProjectionSubscribers({
+    cwd: options.cwd,
+    kernel: options.kernel,
+    verificationGate: options.coreDependencies.verificationGate,
+    eventPipeline,
+    taskService: workServices.taskService,
+    truthService: workServices.truthService,
+  });
+
+  const recoveryDomain = registerRecoveryDomain(
+    {
+      recoveryWalStore: options.coreDependencies.recoveryWalStore,
+    },
+    {
+      eventPipeline,
+    },
+  );
+
+  const sessionLifecycleService = new SessionLifecycleService({
+    sessionState: options.sessionState,
+    contextBudget: options.coreDependencies.contextBudget,
+    contextInjection: options.coreDependencies.contextInjection,
+    fileChanges: options.coreDependencies.fileChanges,
+    verificationGate: options.coreDependencies.verificationGate,
+    parallel: options.coreDependencies.parallel,
+    parallelResults: options.coreDependencies.parallelResults,
+    costTracker: options.coreDependencies.costTracker,
+    projectionEngine: options.coreDependencies.projectionEngine,
+    turnReplay: options.coreDependencies.turnReplay,
+    eventStore: options.coreDependencies.eventStore,
+    recoveryWalStore: options.coreDependencies.recoveryWalStore,
+    reversibleMutationService: governanceServices.reversibleMutationService,
+    recordEvent: (input) => options.kernel.recordEvent(input),
+    contextService: contextServices.contextService,
+  });
+
+  sessionLifecycleService.onClearState((sessionId) => {
+    recoveryDomain.services.toolLifecycleRecoveryWalService.clearSession(sessionId);
+    governanceServices.reversibleMutationService.clear(sessionId);
+    governanceServices.clearEffectCommitmentDeskState(sessionId);
+    options.coreDependencies.reasoningReplay.clear(sessionId);
+  });
+
+  return {
+    services: {
+      eventPipeline,
+      toolLifecycleRecoveryWalService: recoveryDomain.services.toolLifecycleRecoveryWalService,
+      sessionLifecycleService,
+      getTapeService: () => tapeDomain.services.getTapeService(),
+    },
+    surfaceContribution: sessionSurfaceContribution,
+    wireSurfaceContribution: sessionWireSurfaceContribution,
+    eventDescriptors: SESSIONS_EVENT_DESCRIPTORS,
+  };
+}
+
+export function registerSessionsLazyDomain(
+  options: RuntimeLazyServiceRegistrarOptions,
+  support: {
+    getReasoningService(): ReasoningService;
+    getFileChangeService(): FileChangeService;
+  },
+): RuntimeSessionsLazyDomainRegistration {
+  let sessionRewindService: SessionRewindService | undefined;
+  let sessionWireService: SessionWireService | undefined;
+  return {
+    lazyFactories: {
+      createSessionRewindService: () => {
+        sessionRewindService ??= new SessionRewindService({
+          eventStore: options.coreDependencies.eventStore,
+          reasoningService: support.getReasoningService(),
+          fileChangeService: support.getFileChangeService(),
+          getCurrentTurn: (sessionId) => options.kernel.getCurrentTurn(sessionId),
+          recordEvent: (input) => options.kernel.recordEvent(input),
+          getSessionLifecycleSnapshot: (sessionId) =>
+            options.getSessionLifecycleSnapshot(sessionId),
+          resolveToolAuthority: (toolName, args) => options.resolveToolAuthority(toolName, args),
+        });
+        return sessionRewindService;
+      },
+      createSessionWireService: () => {
+        sessionWireService ??= new SessionWireService({
+          queryStructuredEvents: (sessionId) =>
+            options.eventPipeline.queryStructuredEvents(sessionId),
+          subscribeEvents: (listener) => options.eventPipeline.subscribeEvents(listener),
+        });
+        return sessionWireService;
+      },
+    },
+  };
+}

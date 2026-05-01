@@ -1,12 +1,12 @@
 import { dirname, isAbsolute, relative, resolve } from "node:path";
 import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import {
+  readToolResultRecordedEventPayload,
   TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE,
   TOOL_READ_PATH_GATE_ARMED_EVENT_TYPE,
   TOOL_CONTRACT_WARNING_EVENT_TYPE,
   TOOL_RESULT_RECORDED_EVENT_TYPE,
-} from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
+} from "@brewva/brewva-runtime/events";
 import type { ComposedContextBlock } from "./context-composer.js";
 import type { TurnLifecyclePort } from "./turn-lifecycle-port.js";
 
@@ -115,19 +115,19 @@ function analyzeRecentMissingPathFailures(
   let consecutiveMissingPathFailures = 0;
 
   for (let index = events.length - 1; index >= 0; index -= 1) {
-    const payload = events[index]?.payload;
-    if (!isRecord(payload)) {
-      continue;
-    }
-    if (normalizeOptionalString(payload.toolName) !== "read") {
+    const payload = readToolResultRecordedEventPayload({
+      type: TOOL_RESULT_RECORDED_EVENT_TYPE,
+      payload: events[index]?.payload,
+    });
+    if (!payload || payload.toolName !== "read") {
       continue;
     }
 
-    const failureContext = isRecord(payload.failureContext) ? payload.failureContext : null;
+    const failureContext = payload.failureContext;
     if (
       payload.verdict === "fail" &&
-      isMissingPathFailure(failureContext?.outputText) &&
-      failureContext
+      failureContext &&
+      isMissingPathFailure(failureContext.outputText)
     ) {
       consecutiveMissingPathFailures += 1;
       const failedPath = extractPathFromArgs(failureContext.args);
@@ -293,7 +293,7 @@ export function createReadPathRecoveryLifecycle(
         return undefined;
       }
 
-      recordRuntimeEvent(runtime, {
+      runtime.extensions.hosted.events.record({
         sessionId,
         type: TOOL_READ_PATH_GATE_ARMED_EVENT_TYPE,
         payload: {
@@ -382,7 +382,7 @@ export function recordReadPathGuardWarning(
     state: ReadPathRecoveryState;
   },
 ): void {
-  recordRuntimeEvent(runtime, {
+  runtime.extensions.hosted.events.record({
     sessionId: input.sessionId,
     type: TOOL_CONTRACT_WARNING_EVENT_TYPE,
     payload: buildReadPathGuardWarningPayload({

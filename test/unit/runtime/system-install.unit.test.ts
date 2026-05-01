@@ -6,7 +6,7 @@ import {
   ensureBundledSystemSkills,
   resolveBundledSystemSkillsMarkerPath,
   resolveBundledSystemSkillsRoot,
-} from "../../../packages/brewva-runtime/src/skills/system-install.js";
+} from "../../../packages/brewva-runtime/src/domain/skills/system-install.js";
 
 function writeBundledSkill(sourceRoot: string, relativePath: string, content: string): void {
   const absolutePath = join(sourceRoot, relativePath);

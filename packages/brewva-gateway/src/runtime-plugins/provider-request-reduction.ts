@@ -1,5 +1,6 @@
 import { type BrewvaHostedRuntimePort, type ContextBudgetUsage } from "@brewva/brewva-runtime";
 import type { InternalHostPluginApi } from "@brewva/brewva-substrate";
+import { getHostedTurnTransitionCoordinator } from "../session/turn-transition.js";
 import { recordTransientReductionEvidence } from "./context-evidence.js";
 import { estimateTokens } from "./tool-output-distiller.js";
 
@@ -436,6 +437,17 @@ function resolveReductionPostureBlockReason(
   runtime: BrewvaHostedRuntimePort,
   sessionId: string,
 ): string | null {
+  const transitionSnapshot = getHostedTurnTransitionCoordinator(runtime).getSnapshot(sessionId);
+  if (transitionSnapshot.pendingFamily === "approval") {
+    return "approval wait is active";
+  }
+  if (
+    transitionSnapshot.pendingFamily !== null ||
+    transitionSnapshot.latest?.status === "entered"
+  ) {
+    return "recovery posture is active";
+  }
+
   const lifecycle = runtime.inspect.lifecycle.getSnapshot(sessionId);
   if (lifecycle.summary.kind === "degraded" || lifecycle.summary.kind === "recovering") {
     return "recovery posture is active";

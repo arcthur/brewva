@@ -2,11 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  BrewvaRuntime,
-  createTrustedLocalGovernancePort,
-  type BrewvaEventRecord,
-} from "@brewva/brewva-runtime";
+import { BrewvaRuntime, createTrustedLocalGovernancePort } from "@brewva/brewva-runtime";
+import { type BrewvaEventRecord } from "@brewva/brewva-runtime/events";
 import { createOpsRuntimeConfig } from "../../helpers/runtime.js";
 
 function createWorkspace(prefix: string): string {

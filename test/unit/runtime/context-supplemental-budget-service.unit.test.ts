@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
-import { ContextBudgetManager } from "../../../packages/brewva-runtime/src/context/budget.js";
+import { ContextBudgetManager } from "../../../packages/brewva-runtime/src/domain/context/budget.js";
 import {
   commitSupplementalContextInjection,
   planSupplementalContextInjection,
   type ContextSupplementalBudgetDeps,
-} from "../../../packages/brewva-runtime/src/services/context-supplemental-budget.js";
-import { RuntimeSessionStateStore } from "../../../packages/brewva-runtime/src/services/session-state.js";
+} from "../../../packages/brewva-runtime/src/domain/context/context-supplemental-budget.js";
+import { RuntimeSessionStateStore } from "../../../packages/brewva-runtime/src/domain/sessions/session-state.js";
 import { setStaticContextInjectionBudget } from "../../fixtures/config.js";
 
 describe("context-supplemental-budget module", () => {

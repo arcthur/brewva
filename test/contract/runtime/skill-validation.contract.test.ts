@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
+import { recordHostedSkillCompleted } from "../../helpers/events.js";
 import { createRuntimeConfig } from "../../helpers/runtime.js";
 import { buildCanonicalReviewReport } from "../../helpers/semantic-artifacts.js";
 import { cleanupWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
@@ -186,7 +186,7 @@ describe("skill validation runtime contract", () => {
       ],
       implementation_targets: [
         {
-          target: "packages/brewva-runtime/src/services/skill-lifecycle.ts",
+          target: "packages/brewva-runtime/src/domain/skills/skill-lifecycle.ts",
           kind: "module",
           owner_boundary: "runtime.authority.skills",
           reason: "The lifecycle completion boundary remains authoritative here.",
@@ -195,7 +195,7 @@ describe("skill validation runtime contract", () => {
     });
     expect(planningCompletion).toEqual({ ok: true, missing: [], invalid: [] });
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "verification_outcome_recorded",
       timestamp: 100,
@@ -239,7 +239,7 @@ describe("skill validation runtime contract", () => {
     const preview = runtime.inspect.skills.validateOutputs(sessionId, outputs);
     expect(preview).toEqual({ ok: true, missing: [], invalid: [] });
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "verification_write_marked",
       timestamp: 200,
@@ -413,51 +413,37 @@ describe("skill validation runtime contract", () => {
     const runtime = createRuntime();
     const sessionId = "ship-validation-upstream-gates-1";
 
-    recordRuntimeEvent(runtime, {
+    recordHostedSkillCompleted({
+      runtime,
       sessionId,
-      type: "skill_completed",
       timestamp: 100,
-      payload: {
-        skillName: "review-upstream",
-        outputKeys: ["review_report", "review_findings", "merge_decision"],
-        outputs: {
-          review_report: buildCanonicalReviewReport("Review completed and merge posture is ready."),
-          review_findings: [],
-          merge_decision: "ready",
-        },
+      skillName: "review-upstream",
+      outputs: {
+        review_report: buildCanonicalReviewReport("Review completed and merge posture is ready."),
+        review_findings: [],
+        merge_decision: "ready",
       },
     });
 
-    recordRuntimeEvent(runtime, {
+    recordHostedSkillCompleted({
+      runtime,
       sessionId,
-      type: "skill_completed",
       timestamp: 110,
-      payload: {
-        skillName: "qa-upstream",
-        outputKeys: [
-          "qa_report",
-          "qa_verdict",
-          "qa_checks",
-          "qa_missing_evidence",
-          "qa_confidence_gaps",
+      skillName: "qa-upstream",
+      outputs: {
+        qa_report: "QA covered the primary path but release evidence remains incomplete.",
+        qa_verdict: "inconclusive",
+        qa_checks: [
+          {
+            name: "Release smoke gate",
+            status: "inconclusive",
+            summary: "Smoke validation could not confirm the latest CI state.",
+            tool: "manual",
+            observed_output: "Latest CI run was missing for the current branch.",
+          },
         ],
-        outputs: {
-          qa_report: "QA covered the primary path but release evidence remains incomplete.",
-          qa_verdict: "inconclusive",
-          qa_checks: [
-            {
-              name: "Release smoke gate",
-              status: "inconclusive",
-              summary: "Smoke validation could not confirm the latest CI state.",
-              tool: "manual",
-              observed_output: "Latest CI run was missing for the current branch.",
-            },
-          ],
-          qa_missing_evidence: ["latest_ci_run"],
-          qa_confidence_gaps: [
-            "release gate verification is not current on the latest branch state",
-          ],
-        },
+        qa_missing_evidence: ["latest_ci_run"],
+        qa_confidence_gaps: ["release gate verification is not current on the latest branch state"],
       },
     });
 

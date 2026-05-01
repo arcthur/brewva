@@ -36,31 +36,31 @@ function resolveSchemaPath(): string | undefined {
 
 export function loadBrewvaConfigSchema():
   | { ok: true; schema: SchemaObject; schemaPath: string }
-  | { ok: false; error: Error } {
+  | { ok: false; cause: Error } {
   if (cachedSchema) {
     return { ok: true, schema: cachedSchema.schema, schemaPath: cachedSchema.schemaPath };
   }
   if (cachedError) {
-    return { ok: false, error: cachedError };
+    return { ok: false, cause: cachedError };
   }
 
   const schemaPath = resolveSchemaPath();
   if (!schemaPath) {
     cachedError = new Error("Config schema file not found.");
-    return { ok: false, error: cachedError };
+    return { ok: false, cause: cachedError };
   }
 
   try {
     const parsed = JSON.parse(readFileSync(schemaPath, "utf8")) as unknown;
     if (!isRecord(parsed)) {
       cachedError = new Error(`Config schema is not a JSON object: ${schemaPath}`);
-      return { ok: false, error: cachedError };
+      return { ok: false, cause: cachedError };
     }
     cachedSchema = { schema: parsed, schemaPath };
     return { ok: true, schema: parsed, schemaPath };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     cachedError = new Error(`Failed to load config schema (${schemaPath}): ${message}`);
-    return { ok: false, error: cachedError };
+    return { ok: false, cause: cachedError };
   }
 }

@@ -1,4 +1,3 @@
-import type { BrewvaConfig } from "../contracts/index.js";
 import {
   isRecord,
   normalizeBoolean,
@@ -8,6 +7,7 @@ import {
   normalizePositiveInteger,
   normalizeUnitInterval,
 } from "./normalization-shared.js";
+import type { BrewvaConfig } from "./types.js";
 
 const VALID_COST_ACTIONS = new Set(["warn", "block_tools"]);
 const VALID_EVENT_LEVELS = new Set(["audit", "ops", "debug"]);

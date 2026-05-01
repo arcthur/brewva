@@ -1,11 +1,7 @@
 import { createHash } from "node:crypto";
-import {
-  MESSAGE_END_EVENT_TYPE,
-  MODEL_SELECT_EVENT_TYPE,
-  type BrewvaEventRecord,
-  type BrewvaRuntime,
-} from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
+import { type BrewvaRuntime } from "@brewva/brewva-runtime";
+import { type BrewvaEventRecord } from "@brewva/brewva-runtime/events";
+import { MESSAGE_END_EVENT_TYPE, MODEL_SELECT_EVENT_TYPE } from "@brewva/brewva-runtime/events";
 import {
   SESSION_BRANCH_SUMMARY_RECORDED_EVENT_TYPE,
   THINKING_LEVEL_SELECTED_EVENT_TYPE,
@@ -87,7 +83,7 @@ function migrateLegacyProjectionEvent(
         return false;
       }
       return (
-        recordRuntimeEvent(runtime, {
+        runtime.extensions.hosted.events.record({
           sessionId,
           type: MESSAGE_END_EVENT_TYPE,
           payload: buildTranscriptMessagePayload(message),
@@ -101,7 +97,7 @@ function migrateLegacyProjectionEvent(
         return false;
       }
       return (
-        recordRuntimeEvent(runtime, {
+        runtime.extensions.hosted.events.record({
           sessionId,
           type: MESSAGE_END_EVENT_TYPE,
           payload: buildTranscriptMessagePayload({
@@ -121,7 +117,7 @@ function migrateLegacyProjectionEvent(
         return false;
       }
       return (
-        recordRuntimeEvent(runtime, {
+        runtime.extensions.hosted.events.record({
           sessionId,
           type: THINKING_LEVEL_SELECTED_EVENT_TYPE,
           payload: { thinkingLevel },
@@ -135,7 +131,7 @@ function migrateLegacyProjectionEvent(
         return false;
       }
       return (
-        recordRuntimeEvent(runtime, {
+        runtime.extensions.hosted.events.record({
           sessionId,
           type: MODEL_SELECT_EVENT_TYPE,
           payload: {
@@ -152,7 +148,7 @@ function migrateLegacyProjectionEvent(
         return false;
       }
       return (
-        recordRuntimeEvent(runtime, {
+        runtime.extensions.hosted.events.record({
           sessionId,
           type: SESSION_BRANCH_SUMMARY_RECORDED_EVENT_TYPE,
           payload: {

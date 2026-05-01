@@ -8,7 +8,6 @@ import {
   recordPromptStabilityEvidence,
   recordTransientReductionEvidence,
 } from "@brewva/brewva-gateway/runtime-plugins";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import { createRuntimeFixture } from "../../helpers/runtime.js";
 
 describe("context evidence", () => {
@@ -77,7 +76,7 @@ describe("context evidence", () => {
       totalTokens: 55,
       costUsd: 0.001,
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "message_end",
       turn: 2,
@@ -95,7 +94,7 @@ describe("context evidence", () => {
         },
       },
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "session_compact",
       turn: 3,

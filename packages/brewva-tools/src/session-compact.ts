@@ -1,6 +1,6 @@
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate";
 import { Type } from "@sinclair/typebox";
-import { recordToolRuntimeEvent, resolveToolRuntimeContextPort } from "./runtime-internal.js";
+import { recordToolRuntimeEvent, resolveToolRuntimeContextPort } from "./runtime-extensions.js";
 import type { BrewvaBundledToolOptions } from "./types.js";
 import { failTextResult, textResult } from "./utils/result.js";
 import { createRuntimeBoundBrewvaToolFactory } from "./utils/runtime-bound-tool.js";

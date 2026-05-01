@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { getRuntimeInternals } from "../helpers/runtime-internals.js";
 import { createTestWorkspace } from "../helpers/workspace.js";
 
 type RuntimeLazyFactories = {
@@ -51,7 +52,7 @@ function trackLazyFactoryCalls(
 describe("runtime constructor assembly guard", () => {
   test("does not instantiate cold-path services during construction or hot-path inspection", () => {
     const runtime = new BrewvaRuntime({ cwd: createTestWorkspace("runtime-assembly-hot-path") });
-    const internals = runtime as unknown as RuntimeInternals;
+    const internals = getRuntimeInternals(runtime) as RuntimeInternals;
     const counts = trackLazyFactoryCalls(internals);
 
     expect(internals.verificationService).toBeUndefined();
@@ -81,7 +82,7 @@ describe("runtime constructor assembly guard", () => {
 
   test("instantiates cold-path services lazily when their surfaces are first used", async () => {
     const runtime = new BrewvaRuntime({ cwd: createTestWorkspace("runtime-assembly-cold-path") });
-    const internals = runtime as unknown as RuntimeInternals;
+    const internals = getRuntimeInternals(runtime) as RuntimeInternals;
     const counts = trackLazyFactoryCalls(internals);
 
     runtime.inspect.tools.checkAccess("assembly-s2", "grep");

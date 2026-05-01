@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type { BrewvaEventRecord } from "@brewva/brewva-runtime";
-import { TurnReplayEngine } from "@brewva/brewva-runtime/internal";
+import type { BrewvaEventRecord } from "@brewva/brewva-runtime/events";
+import { createTurnReplayEngine } from "@brewva/brewva-runtime/replay";
 import { checkpointEvent, taskEvent, truthEvent } from "./turn-replay-engine.helpers.js";
 
 describe("TurnReplayEngine core replay", () => {
@@ -21,7 +21,7 @@ describe("TurnReplayEngine core replay", () => {
         factId: "fact-1",
       }),
     ];
-    const engine = new TurnReplayEngine({
+    const engine = createTurnReplayEngine({
       listEvents: () => events,
       getTurn: () => turn,
     });
@@ -51,7 +51,7 @@ describe("TurnReplayEngine core replay", () => {
         text: "item-1",
       }),
     ];
-    const engine = new TurnReplayEngine({
+    const engine = createTurnReplayEngine({
       listEvents: () => events,
       getTurn: () => 1,
     });
@@ -87,7 +87,7 @@ describe("TurnReplayEngine core replay", () => {
         text: "item-1",
       }),
     ];
-    const engine = new TurnReplayEngine({
+    const engine = createTurnReplayEngine({
       listEvents: () => events,
       getTurn: () => turn,
     });
@@ -118,7 +118,7 @@ describe("TurnReplayEngine core replay", () => {
         factId: "fact-1",
       }),
     ];
-    const engine = new TurnReplayEngine({
+    const engine = createTurnReplayEngine({
       listEvents: () => events,
       getTurn: () => 1,
     });
@@ -185,7 +185,7 @@ describe("TurnReplayEngine core replay", () => {
       }),
     ];
 
-    const engine = new TurnReplayEngine({
+    const engine = createTurnReplayEngine({
       listEvents: () => events,
       getTurn: () => 1,
     });
@@ -209,7 +209,7 @@ describe("TurnReplayEngine core replay", () => {
         text: "item-1",
       }),
     ];
-    const engine = new TurnReplayEngine({
+    const engine = createTurnReplayEngine({
       listEvents: () => events,
       getTurn: () => 1,
     });

@@ -3,7 +3,6 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import { createOutputSearchTool } from "@brewva/brewva-tools";
 import { createBundledToolRuntime } from "../../helpers/runtime.js";
 import { extractTextContent, mergeContext } from "./tools-flow.helpers.js";
@@ -24,7 +23,7 @@ describe("output_search contract", () => {
     ].join("\n");
     writeFileSync(join(workspace, artifactRef), artifactText, "utf8");
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "tool_output_artifact_persisted",
       payload: {
@@ -69,7 +68,7 @@ describe("output_search contract", () => {
     ].join("\n");
     writeFileSync(join(workspace, artifactRef), artifactText, "utf8");
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "tool_output_artifact_persisted",
       payload: {
@@ -114,7 +113,7 @@ describe("output_search contract", () => {
     ].join("\n");
     writeFileSync(join(workspace, artifactRef), artifactText, "utf8");
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "tool_output_artifact_persisted",
       payload: {
@@ -157,7 +156,7 @@ describe("output_search contract", () => {
     ].join("\n");
     writeFileSync(join(workspace, artifactRef), artifactText, "utf8");
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "tool_output_artifact_persisted",
       payload: {
@@ -200,7 +199,7 @@ describe("output_search contract", () => {
     ].join("\n");
     writeFileSync(join(workspace, artifactRef), artifactText, "utf8");
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "tool_output_artifact_persisted",
       payload: {
@@ -247,7 +246,7 @@ describe("output_search contract", () => {
 
     for (const artifact of artifacts) {
       writeFileSync(join(workspace, artifact.ref), artifact.text, "utf8");
-      recordRuntimeEvent(runtime, {
+      runtime.extensions.hosted.events.record({
         sessionId,
         type: "tool_output_artifact_persisted",
         payload: {
@@ -315,7 +314,7 @@ describe("output_search contract", () => {
 
     let artifactText = "cache marker alpha";
     writeFileSync(join(workspace, artifactRef), artifactText, "utf8");
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "tool_output_artifact_persisted",
       payload: {
@@ -349,7 +348,7 @@ describe("output_search contract", () => {
 
     artifactText = "cache marker beta with updated payload";
     writeFileSync(join(workspace, artifactRef), artifactText, "utf8");
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "tool_output_artifact_persisted",
       payload: {

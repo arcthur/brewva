@@ -3,7 +3,7 @@ import {
   createTrustedLocalGovernancePort,
   type ManagedToolMode,
 } from "@brewva/brewva-runtime";
-import { RecoveryWalStore, recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
+import { createRecoveryWalStore } from "@brewva/brewva-runtime/recovery";
 import { createHostedSession, type HostedSessionResult } from "../host/create-hosted-session.js";
 import { resolveBrewvaUpdateExecutionScope } from "../update-workflow.js";
 import { toErrorMessage } from "../utils/errors.js";
@@ -112,7 +112,7 @@ export async function runChannelMode(options: RunChannelModeOptions): Promise<vo
     availableSkillNames: runtime.inspect.skills.list().map((skill) => skill.name),
   });
   if (channel === "telegram" && telegramSkillPolicyState.missingSkillNames.length > 0) {
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId: "channel:system",
       type: "channel_skill_policy_degraded",
       payload: {
@@ -149,12 +149,12 @@ export async function runChannelMode(options: RunChannelModeOptions): Promise<vo
   });
   const commandRouter = new CommandRouter();
 
-  const recoveryWalStore = new RecoveryWalStore({
+  const recoveryWalStore = createRecoveryWalStore({
     workspaceRoot: runtime.workspaceRoot,
     config: runtime.config.infrastructure.recoveryWal,
     scope: `channel-${channel}`,
     recordEvent: (input) => {
-      recordRuntimeEvent(runtime, {
+      runtime.extensions.hosted.events.record({
         sessionId: input.sessionId,
         type: input.type,
         payload: input.payload,
@@ -162,6 +162,7 @@ export async function runChannelMode(options: RunChannelModeOptions): Promise<vo
       });
     },
   });
+  const recoveryWalScope = recoveryWalStore.getScope();
   const recoveryWalCompactIntervalMs = Math.max(
     30_000,
     Math.floor(runtime.config.infrastructure.recoveryWal.compactAfterMs / 2),
@@ -205,14 +206,14 @@ export async function runChannelMode(options: RunChannelModeOptions): Promise<vo
     },
     scopeStrategy,
     idleRuntimeTtlMs: orchestrationConfig.limits.idleRuntimeTtlMs,
-    recoveryWalScope: recoveryWalStore.scope,
+    recoveryWalScope,
     cleanupGracefulTimeoutMs: CHANNEL_SESSION_CLEANUP_GRACEFUL_TIMEOUT_MS,
   });
   const sessionQueries = createChannelSessionQueries({
     runtime,
     registry,
     runtimeManager,
-    recoveryWalScope: recoveryWalStore.scope,
+    recoveryWalScope,
     listLiveSessions: () => sessionCoordinator.listLiveSessions(),
     openLiveSession: (scopeKey, agentId) => sessionCoordinator.openLiveSession(scopeKey, agentId),
     loadInspectionRuntime: (agentId) => sessionCoordinator.loadInspectionRuntime(agentId),

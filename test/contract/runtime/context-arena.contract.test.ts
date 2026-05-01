@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { ContextArena } from "@brewva/brewva-runtime/internal";
+import { createContextArena } from "@brewva/brewva-runtime/context";
 
 function budgetClassForSource(source: string): "core" | "working" | "recall" {
   switch (source) {
@@ -37,7 +37,7 @@ describe("ContextArena", () => {
   const sessionId = "context-arena-session";
 
   test("append keeps historical entries (append-only)", () => {
-    const arena = new ContextArena();
+    const arena = createContextArena();
     arena.append(sessionId, makeEntry("brewva.runtime-status", "runtime-status", "status v1"));
     arena.append(sessionId, makeEntry("brewva.runtime-status", "runtime-status", "status v2"));
 
@@ -47,7 +47,7 @@ describe("ContextArena", () => {
   });
 
   test("plan uses latest value per key (last-write-wins)", () => {
-    const arena = new ContextArena();
+    const arena = createContextArena();
     arena.append(sessionId, makeEntry("brewva.runtime-status", "runtime-status", "old status"));
     arena.append(sessionId, makeEntry("brewva.runtime-status", "runtime-status", "new status"));
 
@@ -57,7 +57,7 @@ describe("ContextArena", () => {
   });
 
   test("re-registering existing key keeps deterministic key order while updating content", () => {
-    const arena = new ContextArena();
+    const arena = createContextArena();
     arena.append(sessionId, makeEntry("source-a", "same", "a-old"));
     arena.append(sessionId, makeEntry("source-b", "b", "b"));
     arena.append(sessionId, makeEntry("source-a", "same", "a-new"));
@@ -70,7 +70,7 @@ describe("ContextArena", () => {
   });
 
   test("markPresented keeps stored entries and suppresses next plan", () => {
-    const arena = new ContextArena();
+    const arena = createContextArena();
     arena.append(sessionId, makeEntry("brewva.runtime-status", "runtime-status", "fact"));
 
     const first = arena.plan(sessionId, 10_000);
@@ -84,7 +84,7 @@ describe("ContextArena", () => {
   });
 
   test("oncePerSession prevents re-append after presentation", () => {
-    const arena = new ContextArena();
+    const arena = createContextArena();
     arena.append(
       sessionId,
       makeEntry("brewva.identity", "identity-1", "identity", { oncePerSession: true }),
@@ -101,7 +101,7 @@ describe("ContextArena", () => {
   });
 
   test("plan preserves deterministic append order", () => {
-    const arena = new ContextArena();
+    const arena = createContextArena();
     arena.append(sessionId, {
       ...makeEntry("brewva.projection-working", "projection-working", "projection"),
       selectionPriority: 50,
@@ -125,7 +125,7 @@ describe("ContextArena", () => {
   });
 
   test("clearSession clears the whole session arena", () => {
-    const arena = new ContextArena();
+    const arena = createContextArena();
     arena.append(sessionId, makeEntry("brewva.runtime-status", "runtime-status", "fact"));
 
     arena.clearSession(sessionId);
@@ -136,7 +136,7 @@ describe("ContextArena", () => {
   });
 
   test("enforces hard SLO boundary when session arena is full", () => {
-    const arena = new ContextArena({
+    const arena = createContextArena({
       maxEntriesPerSession: 1,
     });
     arena.append(sessionId, makeEntry("brewva.runtime-status", "runtime-status", "status"));
@@ -149,7 +149,7 @@ describe("ContextArena", () => {
   });
 
   test("allows refreshing an existing key when arena is at capacity", () => {
-    const arena = new ContextArena({
+    const arena = createContextArena({
       maxEntriesPerSession: 2,
     });
     const fullSessionId = "context-arena-refresh-at-capacity";
@@ -171,7 +171,7 @@ describe("ContextArena", () => {
 
   test("snapshot exposes append-only arena counters", () => {
     const snapshotSessionId = "context-arena-snapshot";
-    const arena = new ContextArena({
+    const arena = createContextArena({
       maxEntriesPerSession: 64,
     });
     arena.append(
@@ -192,7 +192,7 @@ describe("ContextArena", () => {
   });
 
   test("retains core entries before recall entries under budget pressure", () => {
-    const arena = new ContextArena();
+    const arena = createContextArena();
     const budgetSessionId = "context-arena-budget-classes";
 
     arena.append(
@@ -214,7 +214,7 @@ describe("ContextArena", () => {
   });
 
   test("preserves later core floors even when recall entries were appended first", () => {
-    const arena = new ContextArena();
+    const arena = createContextArena();
     const budgetSessionId = "context-arena-late-core-floor";
 
     arena.append(

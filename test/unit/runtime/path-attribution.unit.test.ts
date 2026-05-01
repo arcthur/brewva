@@ -7,7 +7,7 @@ import {
   listPersistedPatchSets,
   resolveWorkspacePath,
   toWorkspaceRelativePath,
-} from "@brewva/brewva-runtime/internal";
+} from "@brewva/brewva-runtime/patch-history";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 describe("shared path attribution helpers", () => {

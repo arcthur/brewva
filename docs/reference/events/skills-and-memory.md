@@ -45,7 +45,7 @@ task/truth state or verification reports.
 
 ## Implementation Anchors
 
-- `packages/brewva-runtime/src/services/skill-lifecycle.ts`
-- `packages/brewva-runtime/src/skills/registry.ts`
-- `packages/brewva-runtime/src/iteration/facts.ts`
+- `packages/brewva-runtime/src/domain/skills/skill-lifecycle.ts`
+- `packages/brewva-runtime/src/domain/skills/registry.ts`
+- `packages/brewva-runtime/src/domain/iteration/facts.ts`
 - `packages/brewva-recall/src/broker.ts`

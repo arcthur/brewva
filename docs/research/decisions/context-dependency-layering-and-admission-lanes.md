@@ -12,13 +12,13 @@
   - `docs/reference/runtime-plugins.md`
   - `docs/journeys/internal/context-and-compaction.md`
 - Code anchors:
-  - `packages/brewva-runtime/src/context/provider.ts`
-  - `packages/brewva-runtime/src/context/builtins.ts`
-  - `packages/brewva-runtime/src/context/dependency-views.ts`
-  - `packages/brewva-runtime/src/context/arena.ts`
-  - `packages/brewva-runtime/src/context/injection.ts`
-  - `packages/brewva-runtime/src/runtime.ts`
-  - `packages/brewva-runtime/src/services/context.ts`
+  - `packages/brewva-runtime/src/domain/context/provider.ts`
+  - `packages/brewva-runtime/src/domain/context/builtins.ts`
+  - `packages/brewva-runtime/src/domain/context/dependency-views.ts`
+  - `packages/brewva-runtime/src/domain/context/arena.ts`
+  - `packages/brewva-runtime/src/domain/context/injection.ts`
+  - `packages/brewva-runtime/src/runtime/runtime.ts`
+  - `packages/brewva-runtime/src/domain/context/context.ts`
   - `packages/brewva-gateway/src/runtime-plugins/hosted-context-injection-pipeline.ts`
 
 ## Decision Summary

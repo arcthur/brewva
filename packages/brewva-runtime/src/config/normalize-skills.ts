@@ -1,10 +1,11 @@
-import type { BrewvaConfig, SkillRoutingScope } from "../contracts/index.js";
+import type { SkillRoutingScope } from "../domain/skills/types.js";
 import {
   type AnyRecord,
   isRecord,
   normalizeBoolean,
   normalizeStringArray,
 } from "./normalization-shared.js";
+import type { BrewvaConfig } from "./types.js";
 
 const VALID_SKILL_ROUTING_SCOPES = new Set(["core", "domain", "operator", "meta"]);
 

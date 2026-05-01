@@ -10,7 +10,18 @@ import {
   BrewvaRuntime,
   createOperatorRuntimePort,
   loadBrewvaInspectConfigResolution,
+  createTrustedLocalGovernancePort,
+  foldTaskLedgerEvents,
+  foldTruthLedgerEvents,
+  type BrewvaForensicConfigWarning,
+  type BrewvaOperatorRuntimePort,
+} from "@brewva/brewva-runtime";
+import { type BrewvaEventRecord } from "@brewva/brewva-runtime/events";
+import {
   MODEL_PRESET_SELECT_EVENT_TYPE,
+  readSkillActivatedEventPayload,
+  readSkillCompletedEventPayload,
+  readVerificationOutcomeRecordedEventPayload,
   TASK_EVENT_TYPE,
   SUBAGENT_RUNNING_EVENT_TYPE,
   SUBAGENT_SPAWNED_EVENT_TYPE,
@@ -18,14 +29,9 @@ import {
   TAPE_CHECKPOINT_EVENT_TYPE,
   TRUTH_EVENT_TYPE,
   VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
-  createTrustedLocalGovernancePort,
-  foldTaskLedgerEvents,
-  foldTruthLedgerEvents,
-  type BrewvaForensicConfigWarning,
-  type BrewvaEventRecord,
-  type BrewvaOperatorRuntimePort,
-} from "@brewva/brewva-runtime";
-import { PATCH_HISTORY_FILE, RecoveryWalStore } from "@brewva/brewva-runtime/internal";
+} from "@brewva/brewva-runtime/events";
+import { PATCH_HISTORY_FILE } from "@brewva/brewva-runtime/patch-history";
+import { createRecoveryWalStore } from "@brewva/brewva-runtime/recovery";
 import { formatISO } from "date-fns";
 import {
   buildInspectAnalysis,
@@ -351,14 +357,15 @@ function buildSkillInspection(events: BrewvaEventRecord[]): InspectReport["skill
   const completedSkills = new Set<string>();
 
   for (const event of events) {
-    const payload = event.payload;
-    if (event.type === "skill_activated" && typeof payload?.skillName === "string") {
-      activeSkill = payload.skillName;
+    const activated = readSkillActivatedEventPayload(event);
+    if (activated?.skillName) {
+      activeSkill = activated.skillName;
       continue;
     }
-    if (event.type === "skill_completed" && typeof payload?.skillName === "string") {
-      completedSkills.add(payload.skillName);
-      if (activeSkill === payload.skillName) {
+    const completed = readSkillCompletedEventPayload(event);
+    if (completed?.skillName) {
+      completedSkills.add(completed.skillName);
+      if (activeSkill === completed.skillName) {
         activeSkill = null;
       }
     }
@@ -374,12 +381,14 @@ function buildVerificationInspection(
   runtime: BrewvaOperatorRuntimePort,
   sessionId: string,
 ): InspectVerification {
-  const latest = readLatestEventPayload<Record<string, unknown>>(
-    runtime,
-    sessionId,
-    VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
-  );
-  if (!latest) {
+  const latestEvent = runtime.inspect.events
+    .list(sessionId, {
+      type: VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
+      last: 1,
+    })
+    .at(-1);
+  const latest = latestEvent ? readVerificationOutcomeRecordedEventPayload(latestEvent) : null;
+  if (!latestEvent || !latest) {
     return {
       timestamp: null,
       outcome: null,
@@ -391,27 +400,14 @@ function buildVerificationInspection(
     };
   }
 
-  const failedChecks = Array.isArray(latest.payload.failedChecks)
-    ? latest.payload.failedChecks.filter((value): value is string => typeof value === "string")
-    : [];
-  const missingChecks = Array.isArray(latest.payload.missingChecks)
-    ? latest.payload.missingChecks.filter((value): value is string => typeof value === "string")
-    : [];
-  const missingEvidence = Array.isArray(latest.payload.missingEvidence)
-    ? latest.payload.missingEvidence.filter((value): value is string => typeof value === "string")
-    : [];
-
   return {
-    timestamp: toIso(latest.timestamp),
-    outcome: typeof latest.payload.outcome === "string" ? latest.payload.outcome : null,
-    level: typeof latest.payload.level === "string" ? latest.payload.level : null,
-    failedChecks,
-    missingChecks,
-    missingEvidence,
-    reason:
-      typeof latest.payload.reason === "string" && latest.payload.reason.trim().length > 0
-        ? latest.payload.reason
-        : null,
+    timestamp: toIso(latestEvent.timestamp),
+    outcome: latest.outcome,
+    level: latest.level,
+    failedChecks: latest.failedChecks,
+    missingChecks: latest.missingChecks,
+    missingEvidence: latest.missingEvidence,
+    reason: latest.reason,
   };
 }
 
@@ -432,7 +428,7 @@ function listSessionPendingRecoveryWal(
     typeof recoveryWalDir === "string" &&
     recoveryWalDir.trim().length > 0 &&
     recoveryWalDir !== runtime.config.infrastructure.recoveryWal.dir
-      ? new RecoveryWalStore({
+      ? createRecoveryWalStore({
           workspaceRoot: runtime.workspaceRoot,
           config: {
             ...runtime.config.infrastructure.recoveryWal,
@@ -545,7 +541,7 @@ function buildInspectReport(
   const truthEvents = runtime.inspect.events.query(sessionId, { type: TRUTH_EVENT_TYPE });
   const taskState = foldTaskLedgerEvents(taskEvents);
   const truthState = foldTruthLedgerEvents(truthEvents);
-  const tapeStatus = runtime.inspect.events.getTapeStatus(sessionId);
+  const tapeStatus = runtime.inspect.tape.getTapeStatus(sessionId);
   const hydration = runtime.inspect.session.getHydration(sessionId);
   const integrity = runtime.inspect.session.getIntegrity(sessionId);
   const rewindState = runtime.inspect.session.getRewindState(sessionId);
@@ -606,7 +602,7 @@ function buildInspectReport(
   const recoveryWalPendingRows =
     typeof effectiveRecoveryWalDir === "string" &&
     effectiveRecoveryWalDir !== runtime.config.infrastructure.recoveryWal.dir
-      ? new RecoveryWalStore({
+      ? createRecoveryWalStore({
           workspaceRoot: runtime.workspaceRoot,
           config: {
             ...runtime.config.infrastructure.recoveryWal,

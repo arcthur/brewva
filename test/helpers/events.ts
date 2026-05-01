@@ -1,5 +1,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+import type { BrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaEventRecord } from "@brewva/brewva-runtime/events";
 
 export type RuntimeEventLike = {
   type?: string;
@@ -211,4 +213,149 @@ export function firstIndexOf(events: Array<{ type?: string }>, eventType: string
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+export function recordHostedSkillCompleted(input: {
+  runtime: BrewvaRuntime;
+  sessionId: string;
+  skillName: string;
+  outputs: Record<string, unknown>;
+  timestamp?: number;
+  turn?: number;
+  completedAt?: number;
+  semanticBindings?: Record<string, string>;
+}): BrewvaEventRecord | undefined {
+  const completedAt = input.completedAt ?? input.timestamp ?? Date.now();
+  return input.runtime.extensions.hosted.events.record({
+    sessionId: input.sessionId,
+    type: "skill_completed",
+    ...(input.timestamp !== undefined ? { timestamp: input.timestamp } : {}),
+    ...(input.turn !== undefined ? { turn: input.turn } : {}),
+    payload: {
+      skillName: input.skillName,
+      outputKeys: Object.keys(input.outputs).toSorted(),
+      outputs: input.outputs,
+      completedAt,
+      ...(input.semanticBindings ? { semanticBindings: input.semanticBindings } : {}),
+    },
+  });
+}
+
+export function buildVerificationOutcomeRecordedPayload(input?: {
+  evidence?: string;
+  outcome?: "pass" | "fail" | "skipped";
+  level?: "quick" | "standard" | "strict";
+}): Record<string, unknown> {
+  const outcome = input?.outcome ?? "pass";
+  const evidence = input?.evidence ?? "verification passed";
+  return {
+    schema: "brewva.verification.outcome.v1",
+    level: input?.level ?? "standard",
+    outcome,
+    lessonKey: "test_fixture",
+    pattern: "test fixture verification",
+    rootCause: outcome === "pass" ? "test fixture passed" : evidence,
+    recommendation: null,
+    taskGoal: null,
+    strategy: "test fixture strategy",
+    failedChecks: outcome === "fail" ? ["fixture"] : [],
+    missingChecks: [],
+    missingEvidence: [],
+    skipped: outcome === "skipped",
+    reason: outcome === "skipped" ? evidence : null,
+    evidence,
+    evidenceIds: [],
+    checkResults: [
+      {
+        name: "fixture",
+        status: outcome === "pass" ? "pass" : outcome === "fail" ? "fail" : "skip",
+        evidence,
+      },
+    ],
+    provenanceVersion: "test-fixture",
+    activeSkill: null,
+    referenceWriteAt: null,
+    evidenceFreshness: "fresh",
+    commandsExecuted: [],
+    commandsFresh: [],
+    commandsStale: [],
+    commandsMissing: [],
+    checkProvenance: [],
+  };
+}
+
+export function buildToolResultRecordedPayload(input?: {
+  toolName?: string;
+  outputText?: string;
+  verdict?: "pass" | "fail" | "inconclusive";
+  channelSuccess?: boolean;
+  ledgerId?: string;
+  turn?: number;
+}): Record<string, unknown> {
+  const verdict = input?.verdict ?? "pass";
+  const channelSuccess = input?.channelSuccess ?? verdict === "pass";
+  const outputText = input?.outputText ?? "tool output";
+  return {
+    toolName: input?.toolName ?? "exec",
+    toolCallId: null,
+    verdict,
+    channelSuccess,
+    ledgerId: input?.ledgerId ?? "fixture-ledger",
+    effectCommitmentRequestId: null,
+    outputObservation: null,
+    outputArtifact: null,
+    outputDistillation: {
+      summaryText: outputText,
+    },
+    truthProjection: null,
+    verificationProjection: null,
+    failureClass: channelSuccess ? null : "execution",
+    failureContext: {
+      args: {},
+      outputText,
+      failureClass: channelSuccess ? null : "execution",
+      turn: input?.turn ?? 1,
+    },
+  };
+}
+
+export function buildToolCallBlockedPayload(input?: {
+  toolName?: string;
+  reason?: string;
+  decision?: string | null;
+  proposalId?: string | null;
+  requestId?: string | null;
+}): Record<string, unknown> {
+  return {
+    schema: "brewva.tool_call_blocked.v1",
+    toolName: input?.toolName ?? "exec",
+    reason: input?.reason ?? "test_blocked",
+    decision: input?.decision ?? null,
+    proposalId: input?.proposalId ?? null,
+    requestId: input?.requestId ?? null,
+    manifestBasis: null,
+  };
+}
+
+export function buildReasoningRevertRecordedPayload(input?: {
+  createdAt?: number;
+  continuityText?: string;
+}): Record<string, unknown> {
+  return {
+    schema: "brewva.reasoning.revert.v1",
+    revertId: "revert-1",
+    revertSequence: 1,
+    toCheckpointId: "checkpoint-1",
+    fromBranchId: "branch-0",
+    newBranchId: "branch-1",
+    newBranchSequence: 1,
+    trigger: "operator_request",
+    continuityPacket: {
+      schema: "brewva.reasoning.continuity.v1",
+      text: input?.continuityText ?? "resume from diagnostic state",
+    },
+    linkedRollbackReceiptIds: [],
+    targetLeafEntryId: "leaf-1",
+    createdAt: input?.createdAt ?? 0,
+  };
 }

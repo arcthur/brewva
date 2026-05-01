@@ -7,10 +7,10 @@ scope: source-map
 
 ## Runtime
 
-- Runtime API and contracts: `packages/brewva-runtime/src/runtime.ts`, `packages/brewva-runtime/src/contracts/index.ts`
-- Runtime config and semantics: `packages/brewva-runtime/src/config/defaults.ts`, `packages/brewva-runtime/src/config/normalize.ts`, `packages/brewva-runtime/src/security/mode.ts`, `packages/brewva-runtime/src/services/event-pipeline.ts`
-- Runtime context and durability: `packages/brewva-runtime/src/context/arena.ts`, `packages/brewva-runtime/src/context/injection-orchestrator.ts`, `packages/brewva-runtime/src/services/context*.ts`, `packages/brewva-runtime/src/channels/recovery-wal*.ts`, `packages/brewva-runtime/src/governance/port.ts`
-- Runtime authorization, rollback, and diagnostics: `packages/brewva-runtime/src/services/tool-gate.ts`, `packages/brewva-runtime/src/services/effect-commitment-desk.ts`, `packages/brewva-runtime/src/services/reversible-mutation.ts`, `packages/brewva-runtime/src/services/mutation-rollback.ts`, `packages/brewva-runtime/src/services/task-watchdog.ts`
+- Runtime API and contracts: `packages/brewva-runtime/src/runtime/runtime.ts`, `packages/brewva-runtime/src/public/index.ts`
+- Runtime config and semantics: `packages/brewva-runtime/src/config/defaults.ts`, `packages/brewva-runtime/src/config/normalize.ts`, `packages/brewva-runtime/src/security/mode.ts`, `packages/brewva-runtime/src/domain/sessions/event-pipeline.ts`
+- Runtime context and durability: `packages/brewva-runtime/src/domain/context/arena.ts`, `packages/brewva-runtime/src/domain/context/injection-orchestrator.ts`, `packages/brewva-runtime/src/domain/context/context-compaction.ts`, `packages/brewva-runtime/src/domain/context/context-pressure.ts`, `packages/brewva-runtime/src/domain/context/context-supplemental-budget.ts`, `packages/brewva-runtime/src/channels/recovery-wal*.ts`, `packages/brewva-runtime/src/governance/port.ts`
+- Runtime authorization, rollback, and diagnostics: `packages/brewva-runtime/src/domain/tools/tool-gate.ts`, `packages/brewva-runtime/src/domain/proposals/effect-commitment-desk.ts`, `packages/brewva-runtime/src/domain/governance/reversible-mutation.ts`, `packages/brewva-runtime/src/domain/governance/mutation-rollback.ts`, `packages/brewva-runtime/src/domain/task/task-watchdog.ts`
 
 ## Recall and Session Query Plane
 

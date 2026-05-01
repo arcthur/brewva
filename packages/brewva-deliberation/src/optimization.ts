@@ -1,18 +1,20 @@
 import {
   CONTEXT_SOURCES,
-  ITERATION_GUARD_RECORDED_EVENT_TYPE,
-  ITERATION_METRIC_OBSERVED_EVENT_TYPE,
-  SCHEDULE_EVENT_TYPE,
-  SKILL_COMPLETED_EVENT_TYPE,
   coerceGuardResultPayload,
   coerceMetricObservationPayload,
   defineContextSourceProvider,
   parseScheduleIntentEvent,
-  type BrewvaEventRecord,
   type BrewvaInspectionPort,
   type ContextSourceProvider,
   type ScheduleIntentEventPayload,
 } from "@brewva/brewva-runtime";
+import { type BrewvaEventRecord } from "@brewva/brewva-runtime/events";
+import {
+  ITERATION_GUARD_RECORDED_EVENT_TYPE,
+  ITERATION_METRIC_OBSERVED_EVENT_TYPE,
+  SCHEDULE_EVENT_TYPE,
+  SKILL_COMPLETED_EVENT_TYPE,
+} from "@brewva/brewva-runtime/events";
 import { tokenizeSearchText } from "@brewva/brewva-search";
 import { FileOptimizationContinuityStore } from "./optimization-store.js";
 import {
@@ -39,7 +41,7 @@ import {
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_MAX_RETRIEVAL = 2;
 const GOAL_LOOP_PREFIX = "goal-loop:";
-const OPTIMIZATION_RELEVANT_EVENT_TYPES = new Set([
+const OPTIMIZATION_RELEVANT_EVENT_TYPES = new Set<string>([
   SKILL_COMPLETED_EVENT_TYPE,
   ITERATION_METRIC_OBSERVED_EVENT_TYPE,
   ITERATION_GUARD_RECORDED_EVENT_TYPE,

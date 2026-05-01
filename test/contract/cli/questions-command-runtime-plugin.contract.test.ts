@@ -3,14 +3,11 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createQuestionsCommandRuntimePlugin } from "@brewva/brewva-cli";
 import type { InternalRuntimePluginApi } from "@brewva/brewva-gateway/runtime-plugins";
-import {
-  BrewvaRuntime,
-  DEFAULT_BREWVA_CONFIG,
-  OPERATOR_QUESTION_ANSWERED_EVENT_TYPE,
-} from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
+import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
+import { OPERATOR_QUESTION_ANSWERED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
 import { buildBrewvaPromptText, type BrewvaPromptContentPart } from "@brewva/brewva-substrate";
 import { requireDefined, requireNonEmptyString } from "../../helpers/assertions.js";
+import { recordHostedSkillCompleted } from "../../helpers/events.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 type RegisteredCommand = {
@@ -71,14 +68,12 @@ describe("questions interactive command runtime plugin", () => {
     });
     const sessionId = "questions-command-session-1";
     const questionEvent = requireDefined(
-      recordRuntimeEvent(runtime, {
+      recordHostedSkillCompleted({
+        runtime,
         sessionId,
-        type: "skill_completed",
-        payload: {
-          skillName: "plan",
-          outputs: {
-            open_questions: ["Which deployment target should the gateway use?"],
-          },
+        skillName: "plan",
+        outputs: {
+          open_questions: ["Which deployment target should the gateway use?"],
         },
       }),
       "Expected question event to be recorded.",
@@ -129,14 +124,12 @@ describe("questions interactive command runtime plugin", () => {
     });
     const sessionId = "questions-answer-session-1";
     const questionEvent = requireDefined(
-      recordRuntimeEvent(runtime, {
+      recordHostedSkillCompleted({
+        runtime,
         sessionId,
-        type: "skill_completed",
-        payload: {
-          skillName: "plan",
-          outputs: {
-            open_questions: ["Which deployment target should the gateway use?"],
-          },
+        skillName: "plan",
+        outputs: {
+          open_questions: ["Which deployment target should the gateway use?"],
         },
       }),
       "Expected answerable question event to be recorded.",

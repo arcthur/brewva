@@ -5,7 +5,7 @@ import { join } from "node:path";
 import {
   PATCH_RECORDED_EVENT_TYPE,
   TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE,
-} from "@brewva/brewva-runtime";
+} from "@brewva/brewva-runtime/events";
 import { normalizeSearchText } from "@brewva/brewva-search";
 import { buildReadPathDiscoveryObservationPayload } from "../../../packages/brewva-tools/src/read-path-discovery.js";
 import {
@@ -60,7 +60,7 @@ describe("SearchAdvisor", () => {
       evidenceKind: "direct_file_access",
       observedPaths: ["unrelated/elsewhere.ts"],
     });
-    bundledRuntime.internal?.recordEvent?.({
+    bundledRuntime.extensions?.tools?.recordEvent?.({
       sessionId,
       type: TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE,
       timestamp: baseNow + 20,
@@ -117,7 +117,7 @@ describe("SearchAdvisor", () => {
       evidenceKind: "search_match",
       observedPaths: ["src/defaults.ts"],
     });
-    bundledRuntime.internal?.recordEvent?.({
+    bundledRuntime.extensions?.tools?.recordEvent?.({
       sessionId,
       type: TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE,
       timestamp: baseNow + 20,
@@ -161,7 +161,7 @@ describe("SearchAdvisor", () => {
         evidenceKind: "direct_file_access",
         observedPaths: ["src/defaults.ts"],
       });
-      bundledRuntime.internal?.recordEvent?.({
+      bundledRuntime.extensions?.tools?.recordEvent?.({
         sessionId,
         type: TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE,
         timestamp: issuedAt + 40,
@@ -218,7 +218,7 @@ describe("SearchAdvisor", () => {
         evidenceKind: "direct_file_access",
         observedPaths: ["src/defaults.ts"],
       });
-      bundledRuntime.internal?.recordEvent?.({
+      bundledRuntime.extensions?.tools?.recordEvent?.({
         sessionId,
         type: TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE,
         timestamp: issuedAt + 40,
@@ -260,7 +260,7 @@ describe("SearchAdvisor", () => {
     const sessionId = "advisor-clear-session";
     const now = Date.now() + 10_000;
 
-    bundledRuntime.internal?.recordEvent?.({
+    bundledRuntime.extensions?.tools?.recordEvent?.({
       sessionId,
       type: PATCH_RECORDED_EVENT_TYPE,
       timestamp: now,

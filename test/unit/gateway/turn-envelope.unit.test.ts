@@ -4,8 +4,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   BrewvaRuntime,
-  EFFECT_AUTHORITY_DECIDED_EVENT_TYPE,
-  TOOL_RESULT_RECORDED_EVENT_TYPE,
   asBrewvaToolCallId,
   asBrewvaToolName,
   type SessionWireFrame,
@@ -13,10 +11,13 @@ import {
 } from "@brewva/brewva-runtime";
 import {
   TurnLifecycleSpine,
-  recordRuntimeEvent,
   type TurnLifecycleAdvanceInput,
   type TurnLifecycleSnapshot,
-} from "@brewva/brewva-runtime/internal";
+} from "@brewva/brewva-runtime";
+import {
+  EFFECT_AUTHORITY_DECIDED_EVENT_TYPE,
+  TOOL_RESULT_RECORDED_EVENT_TYPE,
+} from "@brewva/brewva-runtime/events";
 import type { BrewvaPromptContentPart } from "@brewva/brewva-substrate";
 import {
   runHostedTurnEnvelope,
@@ -151,7 +152,7 @@ describe("hosted turn envelope", () => {
       turnId: "turn-effect-spine-1",
       turnLifecycleSpine,
       runLoop: async () => {
-        recordRuntimeEvent(runtime, {
+        runtime.extensions.hosted.events.record({
           sessionId,
           turn: 0,
           type: EFFECT_AUTHORITY_DECIDED_EVENT_TYPE,
@@ -193,7 +194,7 @@ describe("hosted turn envelope", () => {
             },
           },
         });
-        recordRuntimeEvent(runtime, {
+        runtime.extensions.hosted.events.record({
           sessionId,
           turn: 0,
           type: TOOL_RESULT_RECORDED_EVENT_TYPE,
@@ -281,13 +282,21 @@ describe("hosted turn envelope", () => {
       turnId: "turn-cross-recovery-1",
       turnLifecycleSpine,
       runLoop: async () => {
-        recordRuntimeEvent(runtime, {
+        runtime.extensions.hosted.events.record({
           sessionId,
           turn: 42,
           type: "session_turn_transition",
           payload: {
             reason: "wal_recovery_resume",
             status: "entered",
+            sequence: 1,
+            family: "recovery",
+            attempt: null,
+            sourceEventId: null,
+            sourceEventType: null,
+            error: null,
+            breakerOpen: false,
+            model: null,
           },
         });
         return createLoopResult({ assistantText: "recovered" });

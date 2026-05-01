@@ -1,10 +1,10 @@
 import { createHash } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
-import type { BrewvaEventRecord } from "@brewva/brewva-runtime";
+import type { BrewvaEventRecord } from "@brewva/brewva-runtime/events";
 import type { BrewvaToolContext as ExtensionContext } from "@brewva/brewva-substrate";
 import { Type } from "@sinclair/typebox";
-import { resolveToolRuntimeEventPort } from "../runtime-internal.js";
+import { resolveToolRuntimeEventPort } from "../runtime-extensions.js";
 import type { BrewvaToolRuntime } from "../types.js";
 import { buildStringEnumSchema } from "../utils/input-alias.js";
 

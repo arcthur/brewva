@@ -1,0 +1,398 @@
+import type { BrewvaConfig } from "../../config/types.js";
+import type { VerificationLevel } from "../../core/shared.js";
+import {
+  GOVERNANCE_VERIFY_SPEC_ERROR_EVENT_TYPE,
+  GOVERNANCE_VERIFY_SPEC_FAILED_EVENT_TYPE,
+  GOVERNANCE_VERIFY_SPEC_PASSED_EVENT_TYPE,
+  VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
+} from "../../events/registry.js";
+import type { RuntimeKernelContext } from "../../runtime/runtime-kernel.js";
+import { runShellCommand } from "../../utils/exec.js";
+import type { GovernancePort } from "../governance/api.js";
+import type { LedgerService } from "../ledger/api.js";
+import type { SkillLifecycleService } from "../skills/api.js";
+import type { SkillDocument } from "../skills/api.js";
+import type { TaskState } from "../task/api.js";
+import type { VerificationGate } from "./gate.js";
+import type { VerificationOutcomeRecordedEventPayload, VerificationReport } from "./types.js";
+import { VERIFICATION_OUTCOME_SCHEMA } from "./types.js";
+
+function compactText(value: string, maxChars = 800): string {
+  const compact = value.replace(/\s+/g, " ").trim();
+  if (compact.length <= maxChars) return compact;
+  return `${compact.slice(0, Math.max(1, maxChars - 3))}...`;
+}
+
+function sanitizeKeyToken(value: string): string {
+  const compact = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return compact || "unknown";
+}
+
+function buildVerificationLessonKey(input: {
+  level: VerificationLevel;
+  activeSkillName?: string;
+  checkNames: string[];
+}): string {
+  const normalizedChecks = [...new Set(input.checkNames.map((name) => sanitizeKeyToken(name)))]
+    .filter(Boolean)
+    .toSorted();
+  const checks = normalizedChecks.length > 0 ? normalizedChecks.join("+") : "none";
+  const skill = input.activeSkillName ? sanitizeKeyToken(input.activeSkillName) : "none";
+  return `verification:${sanitizeKeyToken(input.level)}:${skill}:${checks}`;
+}
+
+export interface VerificationServiceOptions {
+  cwd: RuntimeKernelContext["cwd"];
+  config: RuntimeKernelContext["config"];
+  verificationGate: RuntimeKernelContext["verificationGate"];
+  getTaskState: RuntimeKernelContext["getTaskState"];
+  recordEvent: RuntimeKernelContext["recordEvent"];
+  governancePort?: GovernancePort;
+  skillLifecycleService: Pick<SkillLifecycleService, "getActiveSkill">;
+  ledgerService: Pick<LedgerService, "recordToolResult">;
+}
+
+export interface VerifyCompletionOptions {
+  executeCommands?: boolean;
+  timeoutMs?: number;
+}
+
+export class VerificationService {
+  private readonly cwd: string;
+  private readonly config: BrewvaConfig;
+  private readonly verification: VerificationGate;
+  private readonly governancePort?: GovernancePort;
+  private readonly getTaskState: (sessionId: string) => TaskState;
+  private readonly getActiveSkill: (sessionId: string) => SkillDocument | undefined;
+  private readonly recordEvent: (input: {
+    sessionId: string;
+    type: string;
+    turn?: number;
+    payload?: object;
+    timestamp?: number;
+    skipTapeCheckpoint?: boolean;
+  }) => unknown;
+  private readonly recordToolResult: (input: {
+    sessionId: string;
+    toolName: string;
+    args: Record<string, unknown>;
+    outputText: string;
+    channelSuccess: boolean;
+    verdict?: "pass" | "fail" | "inconclusive";
+    metadata?: Record<string, unknown>;
+  }) => string;
+
+  constructor(options: VerificationServiceOptions) {
+    this.cwd = options.cwd;
+    this.config = options.config;
+    this.verification = options.verificationGate;
+    this.governancePort = options.governancePort;
+    this.getTaskState = (sessionId) => options.getTaskState(sessionId);
+    this.getActiveSkill = (sessionId) => options.skillLifecycleService.getActiveSkill(sessionId);
+    this.recordEvent = (input) => options.recordEvent(input);
+    this.recordToolResult = (input) => options.ledgerService.recordToolResult(input);
+  }
+
+  private resolveEffectiveLevel(
+    sessionId: string,
+    requestedLevel?: VerificationLevel,
+  ): VerificationLevel {
+    if (requestedLevel) {
+      return requestedLevel;
+    }
+    const activeSkill = this.getActiveSkill(sessionId);
+    const skillLevel = activeSkill?.contract.intent?.completionDefinition?.verificationLevel;
+    if (skillLevel) {
+      return skillLevel;
+    }
+    return this.verification.resolvePreferredLevel(
+      sessionId,
+      this.config.verification.defaultLevel,
+    );
+  }
+
+  async verifyCompletion(
+    sessionId: string,
+    level?: VerificationLevel,
+    options: VerifyCompletionOptions = {},
+  ): Promise<VerificationReport> {
+    const effectiveLevel = this.resolveEffectiveLevel(sessionId, level);
+    const executeCommands = options.executeCommands !== false;
+
+    if (executeCommands) {
+      await this.runVerificationCommands(sessionId, effectiveLevel, {
+        timeoutMs: options.timeoutMs ?? 10 * 60 * 1000,
+      });
+    }
+
+    const report = this.verification.evaluate(sessionId, effectiveLevel, {
+      requireCommands: executeCommands,
+    });
+    this.recordVerificationOutcome(sessionId, effectiveLevel, report);
+    await this.applyGovernanceVerification(sessionId, effectiveLevel, report);
+    return report;
+  }
+
+  private recordVerificationOutcome(
+    sessionId: string,
+    level: VerificationLevel,
+    report: VerificationReport,
+  ): void {
+    const verificationState = this.verification.stateStore.get(sessionId);
+    const taskState = this.getTaskState(sessionId);
+    const taskGoal = taskState.spec?.goal?.trim() ?? "";
+    const activeSkillName = this.getActiveSkill(sessionId)?.name;
+    const outcome: "pass" | "fail" | "skipped" = report.skipped
+      ? "skipped"
+      : report.passed
+        ? "pass"
+        : "fail";
+    const checkNames = report.checks.map((check) => check.name);
+    const lessonKey = buildVerificationLessonKey({
+      level,
+      activeSkillName: activeSkillName ?? undefined,
+      checkNames,
+    });
+    const pattern = `verification:${sanitizeKeyToken(level)}:${activeSkillName ? sanitizeKeyToken(activeSkillName) : "none"}`;
+    const failedChecks = [...report.failedChecks];
+    const missingChecks = [...report.missingChecks];
+    const referenceWriteAt = verificationState.lastWriteAt ?? 0;
+    const checkProvenance = report.checks.map((check) => {
+      const run = verificationState.checkRuns[check.name];
+      const hasRun = Boolean(run);
+      const freshSinceWrite = run ? run.timestamp >= referenceWriteAt : false;
+      return {
+        check: check.name,
+        status: check.status,
+        command: run?.command ?? null,
+        hasRun,
+        freshSinceWrite,
+        runTimestamp: run?.timestamp ?? null,
+        ledgerId: run?.ledgerId ?? null,
+      };
+    });
+    const commandsExecuted = checkProvenance
+      .filter((entry) => entry.hasRun)
+      .map((entry) => entry.check);
+    const commandsFresh = checkProvenance
+      .filter((entry) => entry.hasRun && entry.freshSinceWrite)
+      .map((entry) => entry.check);
+    const commandsStale = checkProvenance
+      .filter((entry) => entry.hasRun && !entry.freshSinceWrite)
+      .map((entry) => entry.check);
+    const commandsMissing = missingChecks.filter(
+      (checkName) => !commandsExecuted.includes(checkName),
+    );
+    const evidenceFreshness =
+      commandsExecuted.length === 0
+        ? "none"
+        : commandsFresh.length === commandsExecuted.length
+          ? "fresh"
+          : commandsFresh.length === 0
+            ? "stale"
+            : "mixed";
+
+    const statusSummary = report.checks
+      .map((check) => `${check.name}:${check.status}`)
+      .slice(0, 12)
+      .join(", ");
+    const strategyParts = [`verification_level=${level}`];
+    if (activeSkillName) strategyParts.push(`skill=${activeSkillName}`);
+    if (statusSummary) strategyParts.push(`checks=${statusSummary}`);
+    const strategy = compactText(strategyParts.join("; "), 600);
+
+    const evidenceParts: string[] = [];
+    const evidenceIds: string[] = [];
+    for (const checkName of failedChecks) {
+      const run = verificationState.checkRuns[checkName];
+      if (!run) continue;
+      if (run.timestamp < referenceWriteAt) continue;
+      if (run.ledgerId) evidenceIds.push(run.ledgerId);
+      const detail = run.outputSummary
+        ? `${checkName}: ${compactText(run.outputSummary, 360)}`
+        : `${checkName}: exitCode=${run.exitCode ?? "unknown"}`;
+      evidenceParts.push(detail);
+    }
+    if (evidenceParts.length === 0) {
+      for (const check of report.checks) {
+        if (check.status !== "fail") continue;
+        if (!check.evidence) continue;
+        evidenceParts.push(`${check.name}: ${compactText(check.evidence, 360)}`);
+      }
+    }
+
+    const evidence = compactText(
+      evidenceParts.length > 0
+        ? evidenceParts.join(" | ")
+        : report.missingEvidence.length > 0
+          ? report.missingEvidence.join(" | ")
+          : "no_failed_check_output_captured",
+      1200,
+    );
+    const rootCause =
+      outcome === "fail"
+        ? failedChecks.length > 0 && report.missingEvidence.length > 0
+          ? `failed checks: ${failedChecks.join(", ")}; missing evidence: ${report.missingEvidence.join(", ")}`
+          : failedChecks.length > 0
+            ? `failed checks: ${failedChecks.join(", ")}`
+            : report.missingEvidence.length > 0
+              ? `missing evidence: ${report.missingEvidence.join(", ")}`
+              : "verification failed without explicit check attribution"
+        : outcome === "skipped"
+          ? "read-only session, verification skipped"
+          : "verification checks passed";
+    const recommendation =
+      outcome === "fail"
+        ? failedChecks.length > 0 && report.missingEvidence.length > 0
+          ? `stabilize checks (${failedChecks.join(", ")}), restore missing evidence (${report.missingEvidence.join(", ")}), and rerun ${level} verification`
+          : failedChecks.length > 0
+            ? `stabilize checks (${failedChecks.join(", ")}) and rerun ${level} verification`
+            : report.missingEvidence.length > 0
+              ? `restore missing evidence (${report.missingEvidence.join(", ")}) and rerun ${level} verification`
+              : `re-run ${level} verification with focused diagnostics`
+        : outcome === "skipped"
+          ? null
+          : `reuse verification profile ${level} for similar tasks`;
+
+    this.verification.stateStore.recordOutcome(sessionId, {
+      level,
+      passed: report.passed,
+      recordedAt: Date.now(),
+      referenceWriteAt: referenceWriteAt > 0 ? referenceWriteAt : undefined,
+    });
+
+    const payload: VerificationOutcomeRecordedEventPayload = {
+      schema: VERIFICATION_OUTCOME_SCHEMA,
+      level,
+      outcome,
+      lessonKey,
+      pattern,
+      rootCause,
+      recommendation,
+      taskGoal: taskGoal || null,
+      strategy,
+      failedChecks,
+      missingChecks,
+      missingEvidence: report.missingEvidence,
+      skipped: report.skipped,
+      reason: report.reason ?? null,
+      evidence,
+      evidenceIds: [...new Set(evidenceIds)],
+      checkResults: report.checks.map((check) => ({
+        name: check.name,
+        status: check.status,
+        evidence: check.evidence ?? null,
+      })),
+      provenanceVersion: "v2",
+      activeSkill: activeSkillName ?? null,
+      referenceWriteAt: referenceWriteAt > 0 ? referenceWriteAt : null,
+      evidenceFreshness,
+      commandsExecuted,
+      commandsFresh,
+      commandsStale,
+      commandsMissing,
+      checkProvenance,
+    };
+
+    this.recordEvent({
+      sessionId,
+      type: VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
+      payload,
+    });
+  }
+
+  private async applyGovernanceVerification(
+    sessionId: string,
+    level: VerificationLevel,
+    report: VerificationReport,
+  ): Promise<void> {
+    const governancePort = this.governancePort;
+    if (!governancePort?.verifySpec) return;
+
+    try {
+      const result = await Promise.resolve(governancePort.verifySpec({ sessionId, level, report }));
+      if (result.ok) {
+        this.recordEvent({
+          sessionId,
+          type: GOVERNANCE_VERIFY_SPEC_PASSED_EVENT_TYPE,
+          payload: {
+            level,
+          },
+        });
+        return;
+      }
+
+      const reason = result.reason.trim() || "unknown";
+      this.recordEvent({
+        sessionId,
+        type: GOVERNANCE_VERIFY_SPEC_FAILED_EVENT_TYPE,
+        payload: {
+          level,
+          reason,
+        },
+      });
+    } catch (error) {
+      this.recordEvent({
+        sessionId,
+        type: GOVERNANCE_VERIFY_SPEC_ERROR_EVENT_TYPE,
+        payload: {
+          level,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
+    }
+  }
+
+  private async runVerificationCommands(
+    sessionId: string,
+    level: VerificationLevel,
+    options: { timeoutMs: number },
+  ): Promise<void> {
+    const state = this.verification.stateStore.get(sessionId);
+    if (!state.lastWriteAt) return;
+
+    const plan = this.verification.resolvePlan(sessionId, level);
+    for (const check of plan.checks) {
+      const command = check.command;
+      if (!command) continue;
+      if (check.name === "diff-review") continue;
+      const verificationCwd = check.cwd ?? plan.targetRoots[0] ?? this.cwd;
+
+      const existing = state.checkRuns[check.name];
+      const isFresh = existing && existing.ok && existing.timestamp >= state.lastWriteAt;
+      if (isFresh) continue;
+
+      const result = await runShellCommand(command, {
+        cwd: verificationCwd,
+        timeoutMs: options.timeoutMs,
+        maxOutputChars: 200_000,
+      });
+
+      const ok = result.exitCode === 0 && !result.timedOut;
+      const outputText = `${result.stdout}\n${result.stderr}`.trim();
+      const outputSummary =
+        outputText.length > 0 ? outputText.slice(0, 2000) : ok ? "(no output)" : "(no output)";
+
+      this.recordToolResult({
+        sessionId,
+        toolName: "brewva_verify",
+        args: { check: check.name, command, cwd: verificationCwd },
+        outputText: outputSummary,
+        channelSuccess: ok,
+        verdict: ok ? "pass" : "fail",
+        metadata: {
+          source: "verification_gate",
+          check: check.name,
+          command,
+          exitCode: result.exitCode,
+          durationMs: result.durationMs,
+          timedOut: result.timedOut,
+        },
+      });
+    }
+  }
+}

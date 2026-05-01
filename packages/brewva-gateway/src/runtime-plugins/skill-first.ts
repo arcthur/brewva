@@ -7,7 +7,7 @@ import {
   buildSkillHandoffProfile,
   type SkillHandoffProfile,
   type SkillRoutingCatalogEntry,
-} from "@brewva/brewva-runtime/internal";
+} from "@brewva/brewva-runtime";
 
 type SkillDiagnosisCatalogEntry = SkillRoutingCatalogEntry;
 

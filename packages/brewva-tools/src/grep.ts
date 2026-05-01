@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { statSync } from "node:fs";
 import { dirname, isAbsolute, relative, resolve } from "node:path";
-import { TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE } from "@brewva/brewva-runtime";
+import { TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate";
 import { Type } from "@sinclair/typebox";
 import {
@@ -11,7 +11,7 @@ import {
 import {
   recordToolRuntimeEvent,
   registerToolRuntimeClearStateListener,
-} from "./runtime-internal.js";
+} from "./runtime-extensions.js";
 import {
   attachSearchIntentPreviewCandidates,
   buildDelimiterInsensitivePattern,

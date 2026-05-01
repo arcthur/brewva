@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
 import type { TurnEnvelope } from "@brewva/brewva-runtime/channels";
-import { RecoveryWalRecovery, RecoveryWalStore } from "@brewva/brewva-runtime/internal";
+import { createRecoveryWalRecovery, createRecoveryWalStore } from "@brewva/brewva-runtime/recovery";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 function envelopeFor(input: { turnId: string; sessionId: string; channel: string }): TurnEnvelope {
@@ -20,7 +20,7 @@ function envelopeFor(input: { turnId: string; sessionId: string; channel: string
 describe("Recovery WAL recovery", () => {
   test("retries gateway/channel handlers and allows handler-owned completion transitions", async () => {
     const workspace = createTestWorkspace("recovery-wal-recovery-retry");
-    const store = new RecoveryWalStore({
+    const store = createRecoveryWalStore({
       workspaceRoot: workspace,
       config: DEFAULT_BREWVA_CONFIG.infrastructure.recoveryWal,
       scope: "gateway",
@@ -35,7 +35,7 @@ describe("Recovery WAL recovery", () => {
     );
 
     const retried: string[] = [];
-    const recovery = new RecoveryWalRecovery({
+    const recovery = createRecoveryWalRecovery({
       workspaceRoot: workspace,
       config: DEFAULT_BREWVA_CONFIG.infrastructure.recoveryWal,
       handlers: {
@@ -64,7 +64,7 @@ describe("Recovery WAL recovery", () => {
       defaultTtlMs: 50,
       maxRetries: 1,
     };
-    const store = new RecoveryWalStore({
+    const store = createRecoveryWalStore({
       workspaceRoot: workspace,
       config,
       scope: "channel-telegram",
@@ -92,7 +92,7 @@ describe("Recovery WAL recovery", () => {
     store.markInflight(exhausted.walId);
 
     nowMs += 200;
-    const recovery = new RecoveryWalRecovery({
+    const recovery = createRecoveryWalRecovery({
       workspaceRoot: workspace,
       config,
       now: () => nowMs,
@@ -119,7 +119,7 @@ describe("Recovery WAL recovery", () => {
       defaultTtlMs: 50,
       toolTurnTtlMs: 5_000,
     };
-    const store = new RecoveryWalStore({
+    const store = createRecoveryWalStore({
       workspaceRoot: workspace,
       config,
       scope: "runtime",
@@ -136,7 +136,7 @@ describe("Recovery WAL recovery", () => {
     );
 
     nowMs += 200;
-    const beforeExpiry = await new RecoveryWalRecovery({
+    const beforeExpiry = await createRecoveryWalRecovery({
       workspaceRoot: workspace,
       config,
       now: () => nowMs,
@@ -145,13 +145,13 @@ describe("Recovery WAL recovery", () => {
     expect(store.listCurrent().find((row) => row.walId === toolRow.walId)?.status).toBe("pending");
 
     nowMs += 5_100;
-    const afterExpiry = await new RecoveryWalRecovery({
+    const afterExpiry = await createRecoveryWalRecovery({
       workspaceRoot: workspace,
       config,
       now: () => nowMs,
     }).recover();
     expect(afterExpiry.expired).toBe(1);
-    const reloaded = new RecoveryWalStore({
+    const reloaded = createRecoveryWalStore({
       workspaceRoot: workspace,
       config,
       scope: "runtime",
@@ -164,7 +164,7 @@ describe("Recovery WAL recovery", () => {
 
   test("repeated recover is idempotent once a handler-owned retry has already completed", async () => {
     const workspace = createTestWorkspace("recovery-wal-recovery-idempotent");
-    const store = new RecoveryWalStore({
+    const store = createRecoveryWalStore({
       workspaceRoot: workspace,
       config: DEFAULT_BREWVA_CONFIG.infrastructure.recoveryWal,
       scope: "gateway",
@@ -179,7 +179,7 @@ describe("Recovery WAL recovery", () => {
     );
 
     const retried: string[] = [];
-    const recovery = new RecoveryWalRecovery({
+    const recovery = createRecoveryWalRecovery({
       workspaceRoot: workspace,
       config: DEFAULT_BREWVA_CONFIG.infrastructure.recoveryWal,
       handlers: {
@@ -205,7 +205,7 @@ describe("Recovery WAL recovery", () => {
 
   test("handler exceptions mark rows failed once and later recover calls do not retry them again", async () => {
     const workspace = createTestWorkspace("recovery-wal-recovery-handler-error");
-    const store = new RecoveryWalStore({
+    const store = createRecoveryWalStore({
       workspaceRoot: workspace,
       config: DEFAULT_BREWVA_CONFIG.infrastructure.recoveryWal,
       scope: "gateway",
@@ -220,7 +220,7 @@ describe("Recovery WAL recovery", () => {
     );
 
     let attempts = 0;
-    const recovery = new RecoveryWalRecovery({
+    const recovery = createRecoveryWalRecovery({
       workspaceRoot: workspace,
       config: DEFAULT_BREWVA_CONFIG.infrastructure.recoveryWal,
       handlers: {

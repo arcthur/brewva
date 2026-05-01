@@ -159,10 +159,10 @@ flowchart TD
 - Hosted runtime plugins: `packages/brewva-gateway/src/runtime-plugins/index.ts`
 - Completion tool: `packages/brewva-tools/src/skill-complete.ts`
 - Workflow artifact derivation:
-  `packages/brewva-runtime/src/workflow/artifact-derivation.ts`
+  `packages/brewva-runtime/src/domain/workflow/artifact-derivation.ts`
 - Workflow status derivation:
-  `packages/brewva-runtime/src/workflow/status-derivation.ts`
-- Verification gate: `packages/brewva-runtime/src/verification/gate.ts`
+  `packages/brewva-runtime/src/domain/workflow/status-derivation.ts`
+- Verification gate: `packages/brewva-runtime/src/domain/verification/gate.ts`
 
 ## Related Docs
 

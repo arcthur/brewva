@@ -37,8 +37,8 @@ This note does not reopen:
 
 ## Source Anchors
 
-- Rollback tracking state: `packages/brewva-runtime/src/state/file-change-tracker.ts`
-- Runtime rollback wiring: `packages/brewva-runtime/src/runtime.ts`
+- Rollback tracking state: `packages/brewva-runtime/src/domain/patching/file-change-tracker.ts`
+- Runtime rollback wiring: `packages/brewva-runtime/src/runtime/runtime.ts`
 - Rollback tool contract: `packages/brewva-tools/src/rollback-last-patch.ts`
 
 ## Validation Signals

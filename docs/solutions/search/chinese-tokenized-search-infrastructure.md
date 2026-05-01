@@ -88,7 +88,7 @@ surfaces together.
 ## References
 
 - `packages/brewva-search/src/index.ts`
-- `packages/brewva-runtime/src/services/tape.ts`
+- `packages/brewva-runtime/src/domain/tape/service.ts`
 - `packages/brewva-recall/src/knowledge-search-core.ts`
 - `packages/brewva-tools/src/shared/query.ts`
 - `script/build-binaries.ts`

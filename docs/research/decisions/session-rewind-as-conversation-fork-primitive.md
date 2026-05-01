@@ -14,12 +14,12 @@
   - `docs/journeys/operator/inspect-replay-and-recovery.md`
   - `docs/guide/cli.md`
 - Code anchors:
-  - `packages/brewva-runtime/src/services/session-rewind.ts`
-  - `packages/brewva-runtime/src/projection/session-rewind.ts`
-  - `packages/brewva-runtime/src/runtime-method-groups.ts`
-  - `packages/brewva-runtime/src/governance/action-policy.ts`
-  - `packages/brewva-runtime/src/events/event-types.ts`
-  - `packages/brewva-runtime/src/contracts/session.ts`
+  - `packages/brewva-runtime/src/domain/sessions/session-rewind.ts`
+  - `packages/brewva-runtime/src/domain/projection/session-rewind.ts`
+  - `packages/brewva-runtime/src/runtime/runtime-surfaces.ts`
+  - `packages/brewva-runtime/src/domain/governance/action-policy.ts`
+  - `packages/brewva-runtime/src/events/registry.ts`
+  - `packages/brewva-runtime/src/domain/sessions/types.ts`
   - `packages/brewva-session-index/src/index.ts`
   - `packages/brewva-cli/src/shell/flows/session-workflow.ts`
 

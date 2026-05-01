@@ -1,4 +1,3 @@
-import type { BrewvaConfig } from "../contracts/index.js";
 import {
   isRecord,
   normalizeNonEmptyString,
@@ -13,6 +12,7 @@ import { normalizeSecurityConfig } from "./normalize-security.js";
 import { normalizeSkillsConfig } from "./normalize-skills.js";
 import { normalizeUiConfig } from "./normalize-ui.js";
 import { normalizeVerificationConfig } from "./normalize-verification.js";
+import type { BrewvaConfig } from "./types.js";
 
 export function normalizeBrewvaConfig(config: unknown, defaults: BrewvaConfig): BrewvaConfig {
   const input = isRecord(config) ? config : {};

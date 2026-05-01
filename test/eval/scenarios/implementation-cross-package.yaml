@@ -10,13 +10,13 @@ context:
     execution_plan:
       - step: 1
         intent: "Define SkillTimingEvent type in runtime contracts"
-        owner: "packages/brewva-runtime/src/contracts/"
+        owner: "packages/brewva-runtime/src/events/"
       - step: 2
         intent: "Add emission in tools skill-complete handler"
         owner: "packages/brewva-tools/src/skill-complete.ts"
     execution_mode_hint: coordinated_rollout
     implementation_targets:
-      ["packages/brewva-runtime/src/contracts/", "packages/brewva-tools/src/skill-complete.ts"]
+      ["packages/brewva-runtime/src/events/", "packages/brewva-tools/src/skill-complete.ts"]
 rubric_path: ../rubrics/implementation-cross-package.yaml
 fixture_path: ../fixtures/implementation-cross-package.yaml
 output_contracts:

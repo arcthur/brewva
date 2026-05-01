@@ -13,10 +13,10 @@ import {
 import {
   RECALL_CURATION_RECORDED_EVENT_TYPE,
   RECALL_RESULTS_SURFACED_EVENT_TYPE,
-} from "@brewva/brewva-runtime";
+} from "@brewva/brewva-runtime/events";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate";
 import { Type } from "@sinclair/typebox";
-import { recordToolRuntimeEvent } from "./runtime-internal.js";
+import { recordToolRuntimeEvent } from "./runtime-extensions.js";
 import { resolveToolTargetScope } from "./target-scope.js";
 import type { BrewvaToolOptions } from "./types.js";
 import { buildStringEnumSchema } from "./utils/input-alias.js";

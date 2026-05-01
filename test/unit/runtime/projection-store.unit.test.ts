@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { chmodSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ProjectionStore } from "../../../packages/brewva-runtime/src/projection/store.js";
-import type { ProjectionUnitCandidate } from "../../../packages/brewva-runtime/src/projection/types.js";
+import { ProjectionStore } from "../../../packages/brewva-runtime/src/domain/projection/store.js";
+import type { ProjectionUnitCandidate } from "../../../packages/brewva-runtime/src/domain/projection/types.js";
 
 function candidate(input: {
   sessionId?: string;

@@ -27,7 +27,7 @@ describe("optimization continuity store", () => {
               goalRef: "goal-loop:coverage",
               rootSessionId: "session-1",
               summary: "summary",
-              scope: ["packages/brewva-runtime/src/runtime.ts"],
+              scope: ["packages/brewva-runtime/src/runtime/runtime.ts"],
               continuityMode: "detached",
               status: "active",
               runCount: 1,

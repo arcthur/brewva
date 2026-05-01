@@ -13,10 +13,10 @@
   - `docs/reference/configuration.md`
 - Code anchors:
   - `packages/brewva-runtime/src/config/paths.ts`
-  - `packages/brewva-runtime/src/contracts/skill.ts`
-  - `packages/brewva-runtime/src/runtime.ts`
-  - `packages/brewva-runtime/src/skills/registry.ts`
-  - `packages/brewva-runtime/src/skills/system-install.ts`
+  - `packages/brewva-runtime/src/domain/skills/types.ts`
+  - `packages/brewva-runtime/src/runtime/runtime.ts`
+  - `packages/brewva-runtime/src/domain/skills/registry.ts`
+  - `packages/brewva-runtime/src/domain/skills/system-install.ts`
   - `distribution/brewva/postinstall.mjs`
   - `script/build-binaries.ts`
   - `script/verify-dist.ts`

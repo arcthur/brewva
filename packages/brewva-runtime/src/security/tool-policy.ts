@@ -1,11 +1,8 @@
-import type {
-  SkillContract,
-  ToolAccessResult,
-  ToolEffectClass,
-  ToolGovernanceDescriptor,
-} from "../contracts/index.js";
-import { getToolGovernanceDescriptor } from "../governance/tool-governance.js";
-import { listSkillAllowedEffects, listSkillDeniedEffects } from "../skills/facets.js";
+import type { ToolAccessResult } from "../domain/context/types.js";
+import { getToolGovernanceDescriptor } from "../domain/governance/tool-governance.js";
+import type { ToolEffectClass, ToolGovernanceDescriptor } from "../domain/governance/types.js";
+import { listSkillAllowedEffects, listSkillDeniedEffects } from "../domain/skills/facets.js";
+import type { SkillContract } from "../domain/skills/types.js";
 import { normalizeToolName } from "../utils/tool-name.js";
 
 export interface ToolPolicyOptions {

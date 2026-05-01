@@ -1,0 +1,128 @@
+import type { BrewvaEventRecord } from "../../../events/types.js";
+import type { ResourceLeaseRecord } from "../../context/api.js";
+import type {
+  ActiveSkillRuntimeState,
+  SkillCompletionFailureRecord,
+  SkillOutputRecord,
+} from "../../skills/api.js";
+import type { VerificationCheckRun, VerificationSessionState } from "../../verification/api.js";
+import type { IntegrityIssue } from "../integrity.js";
+import type { RuntimeSessionStateCell } from "../session-state.js";
+import type { OpenToolCallRecord, SessionUncleanShutdownDiagnostic } from "../types.js";
+
+export interface SessionHydrationFoldCallbacks {
+  replayCostStateEvent(
+    sessionId: string,
+    event: BrewvaEventRecord,
+    payload: Record<string, unknown> | null,
+    options: {
+      checkpointTurnTransient: boolean;
+    },
+  ): void;
+  restoreVerificationState(sessionId: string, snapshot: VerificationSessionState | undefined): void;
+}
+
+export interface SessionHydrationFoldContext {
+  sessionId: string;
+  index: number;
+  replayCostTail: boolean;
+  replayCheckpointTurnTransient: boolean;
+  callbacks: SessionHydrationFoldCallbacks;
+  issues: IntegrityIssue[];
+}
+
+export interface SessionHydrationApplyContext {
+  sessionId: string;
+  callbacks: SessionHydrationFoldCallbacks;
+}
+
+export interface SessionHydrationFold<State> {
+  domain: string;
+  initial(cell: RuntimeSessionStateCell): State;
+  fold(state: State, event: BrewvaEventRecord, context: SessionHydrationFoldContext): void;
+  apply(state: State, cell: RuntimeSessionStateCell, context: SessionHydrationApplyContext): void;
+}
+
+export function applySessionHydrationFold<State>(
+  fold: SessionHydrationFold<State>,
+  state: State,
+  event: BrewvaEventRecord,
+  context: SessionHydrationFoldContext,
+): void {
+  try {
+    fold.fold(state, event, context);
+  } catch (error) {
+    context.issues.push({
+      domain: "event_tape",
+      severity: "degraded",
+      sessionId: context.sessionId,
+      eventId: event.id,
+      eventType: event.type,
+      index: context.index,
+      reason: `${fold.domain}: ${error instanceof Error ? error.message : String(error)}`,
+    });
+  }
+}
+
+export interface SkillHydrationState {
+  turn: number;
+  activeSkill?: string;
+  activeSkillState?: ActiveSkillRuntimeState;
+  latestSkillFailure?: SkillCompletionFailureRecord;
+  toolCalls: number;
+  toolContractWarnings: Set<string>;
+  governanceMetadataWarnings: Set<string>;
+  skillBudgetWarnings: Set<string>;
+  skillParallelWarnings: Set<string>;
+  skillOutputs: Map<string, SkillOutputRecord>;
+}
+
+export interface ToolLifecycleHydrationState {
+  openToolCalls: Map<string, OpenToolCallRecord>;
+  latestUncleanShutdownDiagnostic?: SessionUncleanShutdownDiagnostic;
+  lastSessionShutdownAt?: number;
+  latestEventAt?: number;
+}
+
+export interface ResourceLeaseHydrationState {
+  resourceLeases: Map<string, ResourceLeaseRecord>;
+}
+
+export interface VerificationHydrationState {
+  lastWriteAt?: number;
+  checkRuns: Record<string, VerificationCheckRun>;
+  lastOutcomeAt?: number;
+  lastOutcomeLevel?: VerificationSessionState["lastOutcomeLevel"];
+  lastOutcomePassed?: boolean;
+  lastOutcomeReferenceWriteAt?: number;
+}
+
+export interface LedgerHydrationState {
+  lastLedgerCompactionTurn?: number;
+}
+
+export function readObjectRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  return value as Record<string, unknown>;
+}
+
+export function readEventPayload(event: BrewvaEventRecord): Record<string, unknown> | null {
+  return readObjectRecord(event.payload);
+}
+
+export function readSkillName(payload: Record<string, unknown> | null): string | null {
+  const skillName =
+    payload && typeof payload.skillName === "string"
+      ? payload.skillName.trim()
+      : payload && typeof payload.skill === "string"
+        ? payload.skill.trim()
+        : "";
+  return skillName ? skillName : null;
+}
+
+export function readNonNegativeNumber(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  return Math.max(0, value);
+}

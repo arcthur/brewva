@@ -2,17 +2,15 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
   BrewvaRuntime,
   REVIEW_REPORT_OUTPUT_CONTRACT,
+  buildSkillSelectionProfile,
   getSkillOutputContracts,
   getSkillSemanticBindings,
+  hasSelectionProfileSignals,
   listSkillOutputs,
   parseSkillDocument,
   resolveSkillEffectLevel,
 } from "@brewva/brewva-runtime";
-import {
-  buildSkillSelectionProfile,
-  getSemanticArtifactOutputContract,
-  hasSelectionProfileSignals,
-} from "@brewva/brewva-runtime/internal";
+import { getSemanticArtifactOutputContract } from "@brewva/brewva-runtime/semantic-artifacts";
 import { createRuntimeConfig } from "../../helpers/runtime.js";
 import { cleanupWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
 import { repoRoot } from "./skill-contract.helpers.js";

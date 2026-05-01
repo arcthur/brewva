@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import { buildReadPathDiscoveryObservationPayload } from "@brewva/brewva-tools";
 import {
   TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE,
@@ -22,16 +21,19 @@ describe("read path recovery lifecycle", () => {
       const sessionId = "read-path-gate-arm";
 
       for (const path of ["src/missing-a.ts", "src/missing-b.ts"]) {
-        recordRuntimeEvent(runtime, {
+        runtime.extensions.hosted.events.record({
           sessionId,
           type: "tool_result_recorded",
           payload: {
             toolName: "read",
             verdict: "fail",
+            channelSuccess: false,
+            ledgerId: `ledger:${path}`,
             failureContext: {
               args: { path },
               outputText: `ENOENT: no such file or directory, open '${path}'`,
               failureClass: "execution",
+              turn: 0,
             },
           },
         });
@@ -73,16 +75,19 @@ describe("read path recovery lifecycle", () => {
       const sessionId = "read-path-no-arm";
 
       for (const path of ["src/missing-a.ts", "src/missing-b.ts"]) {
-        recordRuntimeEvent(runtime, {
+        runtime.extensions.hosted.events.record({
           sessionId,
           type: "tool_result_recorded",
           payload: {
             toolName: "read",
             verdict: "fail",
+            channelSuccess: false,
+            ledgerId: `ledger:${path}`,
             failureContext: {
               args: { path },
               outputText: `ENOENT: no such file or directory, open '${path}'`,
               failureClass: "execution",
+              turn: 0,
             },
           },
         });
@@ -106,7 +111,7 @@ describe("read path recovery lifecycle", () => {
       const runtime = new BrewvaRuntime({ cwd: workspace, config: createOpsRuntimeConfig() });
       const sessionId = "read-path-evidence";
 
-      recordRuntimeEvent(runtime, {
+      runtime.extensions.hosted.events.record({
         sessionId,
         type: TOOL_READ_PATH_GATE_ARMED_EVENT_TYPE,
         payload: {
@@ -122,7 +127,7 @@ describe("read path recovery lifecycle", () => {
         observedPaths: ["src/index.ts"],
       });
       expect(discoveryPayload).not.toBeNull();
-      recordRuntimeEvent(runtime, {
+      runtime.extensions.hosted.events.record({
         sessionId,
         type: TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE,
         payload: discoveryPayload ?? undefined,
@@ -156,22 +161,25 @@ describe("read path recovery lifecycle", () => {
       const sessionId = "read-path-arm-receipt-source";
 
       for (const path of ["src/missing-a.ts", "src/missing-b.ts"]) {
-        recordRuntimeEvent(runtime, {
+        runtime.extensions.hosted.events.record({
           sessionId,
           type: "tool_result_recorded",
           payload: {
             toolName: "read",
             verdict: "fail",
+            channelSuccess: false,
+            ledgerId: `ledger:${path}`,
             failureContext: {
               args: { path },
               outputText: `ENOENT: no such file or directory, open '${path}'`,
               failureClass: "execution",
+              turn: 0,
             },
           },
         });
       }
 
-      recordRuntimeEvent(runtime, {
+      runtime.extensions.hosted.events.record({
         sessionId,
         type: TOOL_READ_PATH_GATE_ARMED_EVENT_TYPE,
         payload: {

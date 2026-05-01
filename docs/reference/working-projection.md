@@ -82,9 +82,9 @@ flowchart TD
 
 ## Code Pointers
 
-- Projection engine: `packages/brewva-runtime/src/projection/engine.ts`
-- Projection extractor: `packages/brewva-runtime/src/projection/extractor.ts`
-- Runtime API: `packages/brewva-runtime/src/runtime.ts`
+- Projection engine: `packages/brewva-runtime/src/domain/projection/engine.ts`
+- Projection extractor: `packages/brewva-runtime/src/domain/projection/extractor.ts`
+- Runtime API: `packages/brewva-runtime/src/runtime/runtime.ts`
 - Hosted context composition: `packages/brewva-gateway/src/runtime-plugins/context-composer.ts`
 
 ## Related Docs

@@ -9,7 +9,7 @@ function okCliValue<T>(value: T): CliValueResult<T> {
 }
 
 function cliValueError(error: string): CliValueResult<never> {
-  return { ok: false, error };
+  return { ok: false, reason: error };
 }
 
 const ONBOARD_PARSE_OPTIONS = {
@@ -165,7 +165,7 @@ export async function runOnboardCli(argv: string[]): Promise<number> {
     pushOnboardBooleanFlag(gatewayArgs, "no-start", parsed.values["no-start"]);
     const managedToolMode = resolveManagedToolModeFlag(parsed.values["managed-tools"]);
     if (!managedToolMode.ok) {
-      console.error(managedToolMode.error);
+      console.error(managedToolMode.reason);
       return 1;
     }
     pushOnboardStringFlag(gatewayArgs, "managed-tools", managedToolMode.value);

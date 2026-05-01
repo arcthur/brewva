@@ -1,10 +1,25 @@
 import { describe, expect, test } from "bun:test";
-import { asBrewvaEventType, asBrewvaSessionId } from "@brewva/brewva-runtime";
-import type {
-  BrewvaEventRecord,
-  IntegrityIssue,
-  VerificationSessionState,
-} from "../../../packages/brewva-runtime/src/contracts/index.js";
+import { asBrewvaSessionId } from "@brewva/brewva-runtime";
+import { asBrewvaEventType } from "@brewva/brewva-runtime/events";
+import { createCostHydrationFold } from "../../../packages/brewva-runtime/src/domain/sessions/hydration/fold-cost.js";
+import { createLedgerHydrationFold } from "../../../packages/brewva-runtime/src/domain/sessions/hydration/fold-ledger.js";
+import { createResourceLeaseHydrationFold } from "../../../packages/brewva-runtime/src/domain/sessions/hydration/fold-resource-lease.js";
+import { createSkillHydrationFold } from "../../../packages/brewva-runtime/src/domain/sessions/hydration/fold-skill.js";
+import { createVerificationHydrationFold } from "../../../packages/brewva-runtime/src/domain/sessions/hydration/fold-verification.js";
+import {
+  applySessionHydrationFold,
+  type SessionHydrationApplyContext,
+  type SessionHydrationFold,
+  type SessionHydrationFoldCallbacks,
+  type SessionHydrationFoldContext,
+} from "../../../packages/brewva-runtime/src/domain/sessions/hydration/fold.js";
+import type { IntegrityIssue } from "../../../packages/brewva-runtime/src/domain/sessions/integrity.js";
+import { RuntimeSessionStateCell } from "../../../packages/brewva-runtime/src/domain/sessions/session-state.js";
+import {
+  buildVerificationToolResultProjectionPayload,
+  buildVerificationWriteMarkedPayload,
+} from "../../../packages/brewva-runtime/src/domain/verification/projector-payloads.js";
+import type { VerificationSessionState } from "../../../packages/brewva-runtime/src/domain/verification/types.js";
 import {
   RESOURCE_LEASE_CANCELLED_EVENT_TYPE,
   RESOURCE_LEASE_GRANTED_EVENT_TYPE,
@@ -12,25 +27,9 @@ import {
   VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
   VERIFICATION_STATE_RESET_EVENT_TYPE,
   VERIFICATION_WRITE_MARKED_EVENT_TYPE,
-} from "../../../packages/brewva-runtime/src/events/event-types.js";
-import { createCostHydrationFold } from "../../../packages/brewva-runtime/src/services/session-hydration-fold-cost.js";
-import { createLedgerHydrationFold } from "../../../packages/brewva-runtime/src/services/session-hydration-fold-ledger.js";
-import { createResourceLeaseHydrationFold } from "../../../packages/brewva-runtime/src/services/session-hydration-fold-resource-lease.js";
-import { createSkillHydrationFold } from "../../../packages/brewva-runtime/src/services/session-hydration-fold-skill.js";
-import { createVerificationHydrationFold } from "../../../packages/brewva-runtime/src/services/session-hydration-fold-verification.js";
-import {
-  applySessionHydrationFold,
-  type SessionHydrationApplyContext,
-  type SessionHydrationFold,
-  type SessionHydrationFoldCallbacks,
-  type SessionHydrationFoldContext,
-} from "../../../packages/brewva-runtime/src/services/session-hydration-fold.js";
-import { RuntimeSessionStateCell } from "../../../packages/brewva-runtime/src/services/session-state.js";
+} from "../../../packages/brewva-runtime/src/events/registry.js";
+import type { BrewvaEventRecord } from "../../../packages/brewva-runtime/src/events/types.js";
 import type { JsonValue } from "../../../packages/brewva-runtime/src/utils/json.js";
-import {
-  buildVerificationToolResultProjectionPayload,
-  buildVerificationWriteMarkedPayload,
-} from "../../../packages/brewva-runtime/src/verification/projector-payloads.js";
 
 function createEvent(input: {
   id: string;
@@ -161,6 +160,10 @@ describe("session hydration folds", () => {
         timestamp: 210,
         turn: 2,
         payload: {
+          toolName: "brewva_verify",
+          verdict: "pass",
+          channelSuccess: true,
+          ledgerId: "ledger-verify-empty",
           verificationProjection: undefined,
         },
       }),
@@ -170,6 +173,10 @@ describe("session hydration folds", () => {
         timestamp: 220,
         turn: 2,
         payload: {
+          toolName: "brewva_verify",
+          verdict: "pass",
+          channelSuccess: true,
+          ledgerId: "ledger-verify",
           verificationProjection: buildVerificationToolResultProjectionPayload({
             now: 220,
             toolName: "brewva_verify",

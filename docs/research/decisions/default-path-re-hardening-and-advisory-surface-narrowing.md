@@ -19,9 +19,9 @@
   - `packages/brewva-gateway/src/subagents/background-protocol.ts`
   - `packages/brewva-gateway/src/subagents/orchestrator.ts`
   - `packages/brewva-gateway/src/subagents/runner-main.ts`
-  - `packages/brewva-runtime/src/context/builtins.ts`
-  - `packages/brewva-runtime/src/iteration/facts.ts`
-  - `packages/brewva-runtime/src/services/event-pipeline.ts`
+  - `packages/brewva-runtime/src/domain/context/builtins.ts`
+  - `packages/brewva-runtime/src/domain/iteration/facts.ts`
+  - `packages/brewva-runtime/src/domain/sessions/event-pipeline.ts`
 
 ## Decision Summary
 

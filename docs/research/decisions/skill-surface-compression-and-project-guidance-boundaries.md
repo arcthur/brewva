@@ -13,7 +13,7 @@
   - `docs/architecture/system-architecture.md`
 - Code anchors:
   - `script/**`
-  - `packages/brewva-runtime/src/skills/registry.ts`
+  - `packages/brewva-runtime/src/domain/skills/registry.ts`
   - `test/contract/runtime/skills-discovery.contract.test.ts`
   - `test/contract/runtime/skill-creator-quick-validate.contract.test.ts`
 

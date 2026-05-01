@@ -180,7 +180,18 @@ const FILE_CLASS_RULES: ReadonlyArray<{
   },
   {
     fileClass: "persisted_format",
-    patterns: [/contract/, /schema/, /wire/, /protocol/, /persist/, /event-type/, /\.json$/],
+    patterns: [
+      /contract/,
+      /schema/,
+      /wire/,
+      /protocol/,
+      /persist/,
+      /event-type/,
+      /\.json$/,
+      /packages\/brewva-runtime\/src\/domain\/.+\/(types|wire|ledger|events|event-descriptors)\.ts$/,
+      /packages\/brewva-runtime\/src\/domain\/sessions\/event-pipeline\.ts$/,
+      /packages\/brewva-runtime\/src\/domain\/skills\/(planning|review)\.ts$/,
+    ],
   },
   {
     fileClass: "package_boundary",

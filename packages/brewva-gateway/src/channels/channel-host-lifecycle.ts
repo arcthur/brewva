@@ -1,9 +1,5 @@
 import type { BrewvaRuntime } from "@brewva/brewva-runtime";
-import {
-  RecoveryWalRecovery,
-  type RecoveryWalStore,
-  recordRuntimeEvent,
-} from "@brewva/brewva-runtime/internal";
+import { createRecoveryWalRecovery, type RecoveryWalStore } from "@brewva/brewva-runtime/recovery";
 import { waitForAllSettledWithTimeout } from "../utils/async.js";
 import { toErrorMessage } from "../utils/errors.js";
 import { createSerializedAsyncTaskRunner } from "../utils/serialized-async-task-runner.js";
@@ -28,14 +24,15 @@ export async function runChannelHostLifecycle(input: {
   shutdownSignal?: AbortSignal;
   setShuttingDown(value: boolean): void;
 }): Promise<void> {
+  const recoveryWalScope = input.recoveryWalStore.getScope();
   const recoveryWalMaintenance = createSerializedAsyncTaskRunner(async () => {
     try {
       input.recoveryWalStore.compact();
       await input.sessionCoordinator.evictIdleAgentRuntimesByTtl(Date.now());
       const evicted = input.runtimeManager.evictIdleRuntimes(Date.now());
       if (evicted.length > 0) {
-        recordRuntimeEvent(input.runtime, {
-          sessionId: input.recoveryWalStore.scope,
+        input.runtime.extensions.hosted.events.record({
+          sessionId: recoveryWalScope,
           type: "channel_runtime_evicted",
           payload: {
             agentIds: evicted,
@@ -67,12 +64,12 @@ export async function runChannelHostLifecycle(input: {
     input.runtimeManager.disposeAll();
   };
 
-  const recovery = new RecoveryWalRecovery({
+  const recovery = createRecoveryWalRecovery({
     workspaceRoot: input.runtime.workspaceRoot,
     config: input.runtime.config.infrastructure.recoveryWal,
-    scopeFilter: (scope) => scope === input.recoveryWalStore.scope,
+    scopeFilter: (scope) => scope === recoveryWalScope,
     recordEvent: (event) => {
-      recordRuntimeEvent(input.runtime, {
+      input.runtime.extensions.hosted.events.record({
         sessionId: event.sessionId,
         type: event.type,
         payload: event.payload,
@@ -88,7 +85,7 @@ export async function runChannelHostLifecycle(input: {
   await recovery.recover();
   input.recoveryWalStore.compact();
 
-  if (input.recoveryWalStore.isEnabled) {
+  if (input.recoveryWalStore.isWalEnabled()) {
     recoveryWalCompactTimer = setInterval(() => {
       void recoveryWalMaintenance.run();
     }, input.recoveryWalCompactIntervalMs);

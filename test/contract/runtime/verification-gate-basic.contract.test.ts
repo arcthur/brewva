@@ -26,7 +26,7 @@ function createCleanRuntime(): BrewvaRuntime {
   });
 }
 
-describe("S-004/S-005 verification gate", () => {
+describe("verification gate", () => {
   test("blocks without authoritative check runs after write and passes after verification executes", async () => {
     const runtime = createCleanRuntime();
     const sessionId = "s4";
@@ -121,5 +121,35 @@ describe("S-004/S-005 verification gate", () => {
 
     const passed = runtime.authority.verification.evaluate(sessionId, "quick");
     expect(passed.passed).toBe(true);
+  });
+
+  test("standard level executes configured commands and records ledger evidence", async () => {
+    const runtime = new BrewvaRuntime({
+      cwd: workspace,
+      config: createRuntimeConfig((config) => {
+        config.verification.defaultLevel = "standard";
+        config.verification.checks.quick = ["type-check"];
+        config.verification.checks.standard = ["type-check", "tests"];
+        config.verification.checks.strict = ["type-check", "tests", "diff-review"];
+        config.verification.commands["type-check"] = "true";
+        config.verification.commands.tests = "false";
+        config.verification.commands["diff-review"] = "true";
+      }),
+    });
+    const sessionId = "verify-standard-command-execution";
+    runtime.authority.tools.markCall(sessionId, "edit");
+
+    const report = await runtime.authority.verification.verify(sessionId, "standard", {
+      executeCommands: true,
+      timeoutMs: 5_000,
+    });
+    expect(report.passed).toBe(false);
+    expect(report.failedChecks).toEqual(["tests"]);
+    expect(report.missingChecks).toEqual([]);
+    expect(report.missingEvidence).toEqual([]);
+
+    const ledgerText = runtime.inspect.ledger.query(sessionId, { tool: "brewva_verify" });
+    expect(ledgerText).toContain("type-check");
+    expect(ledgerText).toContain("tests");
   });
 });

@@ -17,9 +17,22 @@ describe("runtime channels entrypoint", () => {
     expect("RecoveryWalRecovery" in channels).toBe(false);
   });
 
-  test("keeps raw Recovery WAL machinery on the internal subpath", async () => {
-    const internal = await import("@brewva/brewva-runtime/internal");
-    expect(typeof internal.RecoveryWalStore).toBe("function");
-    expect(typeof internal.RecoveryWalRecovery).toBe("function");
+  test("exposes Recovery WAL machinery from the dedicated recovery subpath", async () => {
+    const recovery = await import("@brewva/brewva-runtime/recovery");
+    expect(typeof recovery.createRecoveryWalStore).toBe("function");
+    expect(typeof recovery.createRecoveryWalRecovery).toBe("function");
+    expect("RecoveryWalStore" in recovery).toBe(false);
+    expect("RecoveryWalRecovery" in recovery).toBe(false);
+  });
+
+  test("removes the catch-all internal subpath", async () => {
+    const internalEntrypoint = "@brewva/brewva-runtime/internal" as string;
+    let rejected = false;
+    try {
+      await import(internalEntrypoint);
+    } catch {
+      rejected = true;
+    }
+    expect(rejected).toBe(true);
   });
 });

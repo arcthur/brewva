@@ -26,7 +26,7 @@ function createCleanRuntime(): BrewvaRuntime {
 function buildImpactMap(summary: string) {
   return {
     summary,
-    affected_paths: ["packages/brewva-runtime/src/runtime.ts"],
+    affected_paths: ["packages/brewva-runtime/src/runtime/runtime.ts"],
     boundaries: ["runtime.authority.skills"],
     high_risk_touchpoints: ["runtime output registry handoff"],
     change_categories: ["public_api"],
@@ -305,7 +305,7 @@ describe("skill output registry", () => {
       ],
       implementation_targets: [
         {
-          target: "packages/brewva-runtime/src/services/skill-lifecycle.ts",
+          target: "packages/brewva-runtime/src/domain/skills/skill-lifecycle.ts",
           kind: "module",
           owner_boundary: "runtime.authority.skills",
           reason: "The completion event is emitted here.",

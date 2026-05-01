@@ -46,8 +46,8 @@ target roots. Browser outputs remain workspace-root scoped.
 
 ## Implementation Anchors
 
-- `packages/brewva-runtime/src/services/tool-gate.ts`
-- `packages/brewva-runtime/src/services/tool-invocation-spine.ts`
-- `packages/brewva-runtime/src/services/verification.ts`
-- `packages/brewva-runtime/src/services/reversible-mutation.ts`
-- `packages/brewva-runtime/src/context/tool-output-distilled.ts`
+- `packages/brewva-runtime/src/domain/tools/tool-gate.ts`
+- `packages/brewva-runtime/src/domain/tools/tool-invocation-spine.ts`
+- `packages/brewva-runtime/src/domain/verification/verification.ts`
+- `packages/brewva-runtime/src/domain/governance/reversible-mutation.ts`
+- `packages/brewva-runtime/src/domain/context/tool-output-distilled.ts`

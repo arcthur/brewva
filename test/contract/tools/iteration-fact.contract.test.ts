@@ -3,7 +3,6 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BrewvaRuntime, buildScheduleIntentFiredEvent } from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import { createIterationFactTool } from "@brewva/brewva-tools";
 import { requireNonEmptyString } from "../../helpers/assertions.js";
 import { extractTextContent, mergeContext } from "./tools-flow.helpers.js";
@@ -129,7 +128,7 @@ describe("iteration_fact contract", () => {
     const loopSource = "goal-loop:coverage-raise-2026-03-22";
     const tool = createIterationFactTool({ runtime });
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId: parentSessionId,
       type: "schedule_intent",
       timestamp: 10,
@@ -148,7 +147,7 @@ describe("iteration_fact contract", () => {
         }),
       },
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId: parentSessionId,
       type: "schedule_intent",
       timestamp: 11,

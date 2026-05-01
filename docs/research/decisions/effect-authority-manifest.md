@@ -15,11 +15,11 @@
   - `docs/reference/tools.md`
   - `docs/reference/events/README.md`
 - Code anchors:
-  - `packages/brewva-runtime/src/authority/effect-authority-manifest.ts`
-  - `packages/brewva-runtime/src/services/tool-gate.ts`
-  - `packages/brewva-runtime/src/services/tool-access-policy.ts`
-  - `packages/brewva-runtime/src/services/proposal-admission.ts`
-  - `packages/brewva-runtime/src/services/proposal-admission-effect-commitment.ts`
+  - `packages/brewva-runtime/src/domain/governance/effect-authority-manifest.ts`
+  - `packages/brewva-runtime/src/domain/tools/tool-gate.ts`
+  - `packages/brewva-runtime/src/domain/tools/tool-access-policy.ts`
+  - `packages/brewva-runtime/src/domain/proposals/proposal-admission.ts`
+  - `packages/brewva-runtime/src/domain/proposals/proposal-admission-effect-commitment.ts`
   - `packages/brewva-runtime/src/security/command-policy.ts`
   - `packages/brewva-runtime/src/security/virtual-readonly-policy.ts`
   - `packages/brewva-tools/src/runtime-capability-scope.ts`

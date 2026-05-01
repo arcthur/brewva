@@ -1,5 +1,6 @@
 import type { ToolOutputView } from "@brewva/brewva-runtime";
-import type { HostedTransitionSnapshot, TurnTransitionReason } from "./turn-transition.js";
+import type { SessionTurnTransitionReason as TurnTransitionReason } from "@brewva/brewva-runtime/events";
+import type { HostedTransitionSnapshot } from "./turn-transition.js";
 
 export type ThreadLoopProfileName =
   | "interactive"

@@ -1,8 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { cpSync } from "node:fs";
 import { resolve } from "node:path";
-import { CONTEXT_SOURCES, BrewvaRuntime, SKILL_COMPLETED_EVENT_TYPE } from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
+import { CONTEXT_SOURCES, BrewvaRuntime } from "@brewva/brewva-runtime";
 import {
   createSkillPromotionContextProvider,
   getOrCreateSkillPromotionBroker,
@@ -12,6 +11,7 @@ import {
   createSkillPromotionPromoteTool,
   createSkillPromotionReviewTool,
 } from "@brewva/brewva-tools";
+import { recordHostedSkillCompleted } from "../../helpers/events.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 function createWorkspaceWithSkills(name: string): string {
@@ -32,22 +32,20 @@ function recordPromotionSourceEvent(
   sessionId: string,
   timestamp: number,
 ): void {
-  recordRuntimeEvent(runtime, {
+  recordHostedSkillCompleted({
+    runtime,
     sessionId,
-    type: SKILL_COMPLETED_EVENT_TYPE,
     timestamp,
-    payload: {
-      skillName: "self-improve",
-      outputs: {
-        improvement_hypothesis:
-          "The self-improve skill should route repeated delivery failures into explicit promotion drafts.",
-        improvement_plan:
-          "Patch self-improve so repeated failures produce reviewable promotion drafts.",
-        learning_backlog: [
-          "Collect repeated failure clusters before updating the skill catalog.",
-          "Materialize promotion packets instead of patching live skills directly.",
-        ],
-      },
+    skillName: "self-improve",
+    outputs: {
+      improvement_hypothesis:
+        "The self-improve skill should route repeated delivery failures into explicit promotion drafts.",
+      improvement_plan:
+        "Patch self-improve so repeated failures produce reviewable promotion drafts.",
+      learning_backlog: [
+        "Collect repeated failure clusters before updating the skill catalog.",
+        "Materialize promotion packets instead of patching live skills directly.",
+      ],
     },
   });
 }

@@ -1,5 +1,4 @@
 import {
-  OPERATOR_QUESTION_ANSWERED_EVENT_TYPE,
   buildOperatorQuestionAnswerPrompt,
   buildOperatorQuestionRequestAnswerPrompt,
   buildOperatorQuestionAnsweredPayload,
@@ -16,7 +15,7 @@ import {
   buildReasoningRevertSummaryDetails,
   type SessionRewindDivergenceNote,
 } from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
+import { OPERATOR_QUESTION_ANSWERED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
 import type { BrewvaModelPresetState, BrewvaPromptThinkingLevel } from "@brewva/brewva-substrate";
 import type {
   CliShellSessionBundle,
@@ -378,7 +377,7 @@ export function createOperatorSurfacePort(input: {
         answerText: validatedAnswer.answerText,
       });
       await deliverOperatorPrompt({ bundle, sessionId, prompt });
-      recordRuntimeEvent(bundle.runtime, {
+      bundle.runtime.extensions.hosted.events.record({
         sessionId,
         type: OPERATOR_QUESTION_ANSWERED_EVENT_TYPE,
         payload: buildOperatorQuestionAnsweredPayload({
@@ -410,7 +409,7 @@ export function createOperatorSurfacePort(input: {
         if (!answerText) {
           continue;
         }
-        recordRuntimeEvent(bundle.runtime, {
+        bundle.runtime.extensions.hosted.events.record({
           sessionId,
           type: OPERATOR_QUESTION_ANSWERED_EVENT_TYPE,
           payload: buildOperatorQuestionAnsweredPayload({

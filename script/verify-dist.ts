@@ -284,9 +284,18 @@ function main(): void {
       }
     }
     const { BrewvaRuntime, createToolRuntimePort } = await import("@brewva/brewva-runtime");
-    const { createToolRuntimeInternalPort, recordRuntimeEvent } = await import("@brewva/brewva-runtime/internal");
+    const semanticArtifactsModule = await import("@brewva/brewva-runtime/semantic-artifacts");
     const { createOutputSearchTool } = await import("@brewva/brewva-tools");
     const runtime = new BrewvaRuntime({ cwd: isolatedWorkspace });
+    if ("getSemanticArtifactOutputContract" in (await import("@brewva/brewva-runtime"))) {
+      throw new Error("runtime root dist entry unexpectedly re-exported semantic artifact catalog helpers");
+    }
+    if (typeof semanticArtifactsModule.getSemanticArtifactOutputContract !== "function") {
+      throw new Error("semantic-artifacts subpath missing getSemanticArtifactOutputContract export");
+    }
+    if (typeof semanticArtifactsModule.renderSemanticArtifactExample !== "function") {
+      throw new Error("semantic-artifacts subpath missing renderSemanticArtifactExample export");
+    }
     if (!existsSync(join(isolatedHome, "skills", ".system"))) {
       throw new Error("runtime construction smoke failed: system skill root was not installed");
     }
@@ -299,7 +308,7 @@ function main(): void {
     const artifactText = "服务启动中\n数据库连接被拒绝，连接失败需要重试\n";
     mkdirSync(dirname(artifactPath), { recursive: true });
     writeFileSync(artifactPath, artifactText, "utf8");
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.tools.recordEvent({
       sessionId,
       type: "tool_output_artifact_persisted",
       payload: {
@@ -309,10 +318,7 @@ function main(): void {
       },
     });
     const outputSearchTool = createOutputSearchTool({
-      runtime: {
-        ...createToolRuntimePort(runtime),
-        internal: createToolRuntimeInternalPort(runtime),
-      },
+      runtime: createToolRuntimePort(runtime),
     });
     const outputSearchResult = await outputSearchTool.execute(
       "dist-output-search-cjk",

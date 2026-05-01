@@ -4,7 +4,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import process from "node:process";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import type {
   BrewvaManagedPromptSession,
   BrewvaPromptContentPart,
@@ -113,7 +112,7 @@ describe("cli runtime print mode", () => {
         const prompt = buildBrewvaPromptText(parts);
         sentMessages.push(prompt);
         if (sentMessages.length === 1) {
-          recordRuntimeEvent(runtime, {
+          runtime.extensions.hosted.events.record({
             sessionId: "cli-print-session",
             type: "session_compact",
             payload: {

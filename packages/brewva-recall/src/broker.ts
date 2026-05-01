@@ -7,12 +7,12 @@ import {
   type NarrativeMemoryRecord,
   type OptimizationLineageArtifact,
 } from "@brewva/brewva-deliberation";
+import { type BrewvaInspectionPort } from "@brewva/brewva-runtime";
+import { type BrewvaEventRecord } from "@brewva/brewva-runtime/events";
 import {
   RECALL_CURATION_RECORDED_EVENT_TYPE,
   RECALL_UTILITY_OBSERVED_EVENT_TYPE,
-  type BrewvaEventRecord,
-  type BrewvaInspectionPort,
-} from "@brewva/brewva-runtime";
+} from "@brewva/brewva-runtime/events";
 import { tokenizeSearchText } from "@brewva/brewva-search";
 import {
   SESSION_INDEX_UNAVAILABLE,
@@ -86,16 +86,6 @@ export interface RecallBrokerRuntime {
     readonly events: RecallBrokerEventsPort;
     readonly task: Pick<BrewvaInspectionPort["task"], "getTargetDescriptor">;
     readonly skills: Pick<BrewvaInspectionPort["skills"], "list">;
-  };
-  readonly internal?: {
-    recordEvent?: (input: {
-      sessionId: string;
-      type: string;
-      turn?: number;
-      payload?: object;
-      timestamp?: number;
-      skipTapeCheckpoint?: boolean;
-    }) => unknown;
   };
 }
 

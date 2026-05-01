@@ -17,27 +17,27 @@ describe("tape status and search", () => {
     });
     runtime.authority.task.addItem(sessionId, { text: "before anchor" });
 
-    const before = runtime.inspect.events.getTapeStatus(sessionId);
+    const before = runtime.inspect.tape.getTapeStatus(sessionId);
     expect(before.totalEntries).toBeGreaterThan(0);
     expect(before.entriesSinceAnchor).toBe(before.totalEntries);
 
-    const handoff = runtime.authority.events.recordTapeHandoff(sessionId, {
+    const handoff = runtime.authority.tape.recordTapeHandoff(sessionId, {
       name: "investigation-done",
       summary: "captured findings",
       nextSteps: "implement changes",
     });
     expect(handoff.ok).toBe(true);
     if (!handoff.ok) {
-      throw new Error(handoff.error);
+      throw new Error(handoff.reason);
     }
     requireNonEmptyString(handoff.eventId, "missing tape handoff event id");
 
-    const after = runtime.inspect.events.getTapeStatus(sessionId);
+    const after = runtime.inspect.tape.getTapeStatus(sessionId);
     expect(after.lastAnchor?.name).toBe("investigation-done");
     expect(after.entriesSinceAnchor).toBe(0);
 
     runtime.authority.task.addItem(sessionId, { text: "after anchor" });
-    const afterMore = runtime.inspect.events.getTapeStatus(sessionId);
+    const afterMore = runtime.inspect.tape.getTapeStatus(sessionId);
     expect(afterMore.entriesSinceAnchor).toBeGreaterThan(0);
   });
 
@@ -46,33 +46,33 @@ describe("tape status and search", () => {
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionId = "tape-search-1";
 
-    runtime.authority.events.recordTapeHandoff(sessionId, {
+    runtime.authority.tape.recordTapeHandoff(sessionId, {
       name: "phase-a",
       summary: "alpha baseline",
       nextSteps: "continue",
     });
     runtime.authority.task.addItem(sessionId, { text: "alpha task" });
 
-    runtime.authority.events.recordTapeHandoff(sessionId, {
+    runtime.authority.tape.recordTapeHandoff(sessionId, {
       name: "phase-b",
       summary: "beta baseline",
       nextSteps: "continue",
     });
     runtime.authority.task.addItem(sessionId, { text: "beta task" });
 
-    const allPhases = runtime.inspect.events.searchTape(sessionId, {
+    const allPhases = runtime.inspect.tape.searchTape(sessionId, {
       query: "alpha",
       scope: "all_phases",
     });
     expect(allPhases.matches.length).toBeGreaterThan(0);
 
-    const currentPhase = runtime.inspect.events.searchTape(sessionId, {
+    const currentPhase = runtime.inspect.tape.searchTape(sessionId, {
       query: "alpha",
       scope: "current_phase",
     });
     expect(currentPhase.matches).toHaveLength(0);
 
-    const anchorOnly = runtime.inspect.events.searchTape(sessionId, {
+    const anchorOnly = runtime.inspect.tape.searchTape(sessionId, {
       query: "phase-b",
       scope: "anchors_only",
     });
@@ -85,28 +85,28 @@ describe("tape status and search", () => {
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionId = "tape-search-cjk";
 
-    runtime.authority.events.recordTapeHandoff(sessionId, {
+    runtime.authority.tape.recordTapeHandoff(sessionId, {
       name: "phase-a",
       summary: "数据库连接失败调查",
       nextSteps: "继续定位启动路径",
     });
     runtime.authority.task.addItem(sessionId, { text: "修复数据库连接被拒绝导致启动失败" });
 
-    runtime.authority.events.recordTapeHandoff(sessionId, {
+    runtime.authority.tape.recordTapeHandoff(sessionId, {
       name: "phase-b",
       summary: "缓存刷新完成",
       nextSteps: "继续验证",
     });
     runtime.authority.task.addItem(sessionId, { text: "缓存刷新成功" });
 
-    const allPhases = runtime.inspect.events.searchTape(sessionId, {
+    const allPhases = runtime.inspect.tape.searchTape(sessionId, {
       query: "数据库启动失败",
       scope: "all_phases",
     });
     expect(allPhases.matches.length).toBeGreaterThan(0);
     expect(allPhases.matches[0]?.excerpt).toContain("数据库");
 
-    const currentPhase = runtime.inspect.events.searchTape(sessionId, {
+    const currentPhase = runtime.inspect.tape.searchTape(sessionId, {
       query: "数据库启动失败",
       scope: "current_phase",
     });

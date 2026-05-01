@@ -207,7 +207,7 @@ function buildJsonShapeExample(input: {
           },
         ],
         ownershipHints: [
-          "packages/brewva-runtime/src/workflow/status-derivation.ts owns semantic posture derivation.",
+          "packages/brewva-runtime/src/domain/workflow/status-derivation.ts owns semantic posture derivation.",
         ],
         recommendedReads: [
           "packages/brewva-gateway/src/subagents/shared.ts",

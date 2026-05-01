@@ -1,5 +1,4 @@
 import {
-  OPERATOR_QUESTION_ANSWERED_EVENT_TYPE,
   buildOperatorQuestionAnswerPrompt,
   buildOperatorQuestionAnsweredPayload,
   classifyQuestionRequest,
@@ -14,7 +13,7 @@ import {
   type InternalRuntimePluginApi,
 } from "@brewva/brewva-gateway/runtime-plugins";
 import type { BrewvaRuntime } from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
+import { OPERATOR_QUESTION_ANSWERED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
 import { clampText } from "./inspect-analysis.js";
 
 const MAX_NOTIFICATION_LINES = 28;
@@ -183,7 +182,7 @@ export function createQuestionsCommandRuntimePlugin(runtime: BrewvaRuntime): Int
               deliverAs: "followUp",
             });
           }
-          recordRuntimeEvent(runtime, {
+          runtime.extensions.hosted.events.record({
             sessionId,
             type: OPERATOR_QUESTION_ANSWERED_EVENT_TYPE,
             payload: buildOperatorQuestionAnsweredPayload({

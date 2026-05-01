@@ -48,7 +48,7 @@ export function applySchedulePromptTrigger(
 
   let anchorApplied = false;
   if (trigger.parentAnchor) {
-    runtime.authority.events.recordTapeHandoff(sessionId, {
+    runtime.authority.tape.recordTapeHandoff(sessionId, {
       name: `schedule:inherit:${trigger.parentAnchor.name ?? "parent"}`,
       summary: trigger.parentAnchor.summary,
       nextSteps: trigger.parentAnchor.nextSteps,

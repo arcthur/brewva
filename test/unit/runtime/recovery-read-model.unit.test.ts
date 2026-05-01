@@ -1,12 +1,20 @@
 import { describe, expect, test } from "bun:test";
 import { asBrewvaSessionId, type TaskState } from "@brewva/brewva-runtime";
-import { runRecoveryContextPipeline } from "../../../packages/brewva-runtime/src/context/read-models.js";
+import {
+  type BrewvaEventRecord,
+  type SessionTurnTransitionPayload,
+  type ToolCallBlockedEventPayload,
+  type ToolLifecycleEventPayload,
+} from "@brewva/brewva-runtime/events";
+import { runRecoveryContextPipeline } from "../../../packages/brewva-runtime/src/domain/context/read-models.js";
 import {
   deriveDuplicateSideEffectSuppressionCount,
   deriveRecoveryCanonicalization,
-} from "../../../packages/brewva-runtime/src/recovery/read-model.js";
-import type { RuntimeKernelContext } from "../../../packages/brewva-runtime/src/runtime-kernel.js";
-import { RuntimeSessionStateStore } from "../../../packages/brewva-runtime/src/services/session-state.js";
+} from "../../../packages/brewva-runtime/src/domain/recovery/read-model.js";
+import { RuntimeSessionStateStore } from "../../../packages/brewva-runtime/src/domain/sessions/session-state.js";
+import type { RuntimeKernelContext } from "../../../packages/brewva-runtime/src/runtime/runtime-kernel.js";
+
+type EventPayload = NonNullable<BrewvaEventRecord["payload"]>;
 
 function emptyTaskState(goal?: string): TaskState {
   return {
@@ -22,6 +30,52 @@ function emptyTaskState(goal?: string): TaskState {
     blockers: [],
     updatedAt: null,
   };
+}
+
+function buildTransitionPayload(
+  input: Pick<SessionTurnTransitionPayload, "reason" | "status"> &
+    Partial<Omit<SessionTurnTransitionPayload, "reason" | "status">>,
+): SessionTurnTransitionPayload {
+  return {
+    reason: input.reason,
+    status: input.status,
+    sequence: input.sequence ?? 1,
+    family: input.family ?? "recovery",
+    attempt: input.attempt ?? null,
+    sourceEventId: input.sourceEventId ?? null,
+    sourceEventType: input.sourceEventType ?? null,
+    error: input.error ?? null,
+    breakerOpen: input.breakerOpen ?? false,
+    model: input.model ?? null,
+  };
+}
+
+function buildBlockedPayload(reason: string, toolName: string): ToolCallBlockedEventPayload {
+  return {
+    schema: "brewva.tool_call_blocked.v1",
+    toolName,
+    reason,
+    decision: null,
+    proposalId: null,
+    requestId: null,
+    manifestBasis: null,
+  };
+}
+
+function buildToolLifecyclePayload(
+  toolCallId: string,
+  toolName: string,
+  input: Partial<Omit<ToolLifecycleEventPayload, "toolCallId" | "toolName">> = {},
+): ToolLifecycleEventPayload {
+  return {
+    toolCallId,
+    toolName,
+    ...input,
+  };
+}
+
+function toEventPayload(payload: object): EventPayload {
+  return payload as unknown as EventPayload;
 }
 
 function createPipelineKernel(input: {
@@ -134,11 +188,12 @@ describe("recovery read model", () => {
         type: "session_turn_transition",
         timestamp: 6,
         turn: 2,
-        payload: {
-          reason: "wal_recovery_resume",
-          status: "entered",
-          family: "recovery",
-        },
+        payload: toEventPayload(
+          buildTransitionPayload({
+            reason: "wal_recovery_resume",
+            status: "entered",
+          }),
+        ),
       },
     ]);
 
@@ -160,10 +215,9 @@ describe("recovery read model", () => {
           type: "tool_call_blocked",
           timestamp: 10,
           turn: 2,
-          payload: {
-            toolName: "exec",
-            reason: "effect_commitment_request_in_flight:req-1",
-          },
+          payload: toEventPayload(
+            buildBlockedPayload("effect_commitment_request_in_flight:req-1", "exec"),
+          ),
         },
         {
           id: "ev-blocked-2",
@@ -171,10 +225,9 @@ describe("recovery read model", () => {
           type: "tool_call_blocked",
           timestamp: 11,
           turn: 2,
-          payload: {
-            toolName: "exec",
-            reason: "effect_commitment_operator_approval_consumed:req-1",
-          },
+          payload: toEventPayload(
+            buildBlockedPayload("effect_commitment_operator_approval_consumed:req-1", "exec"),
+          ),
         },
         {
           id: "ev-blocked-3",
@@ -182,10 +235,12 @@ describe("recovery read model", () => {
           type: "tool_call_blocked",
           timestamp: 12,
           turn: 2,
-          payload: {
-            toolName: "read",
-            reason: "Tool 'read' called with identical arguments 3 times consecutively.",
-          },
+          payload: toEventPayload(
+            buildBlockedPayload(
+              "Tool 'read' called with identical arguments 3 times consecutively.",
+              "read",
+            ),
+          ),
         },
       ]),
     ).toBe(2);
@@ -201,10 +256,7 @@ describe("recovery read model", () => {
           type: "tool_execution_start",
           timestamp: 10,
           turn: 2,
-          payload: {
-            toolCallId: "tc-read",
-            toolName: "read",
-          },
+          payload: toEventPayload(buildToolLifecyclePayload("tc-read", "read")),
         },
         {
           id: "ev-transition-1",
@@ -212,13 +264,14 @@ describe("recovery read model", () => {
           type: "session_turn_transition",
           timestamp: 11,
           turn: 2,
-          payload: {
-            reason: "wal_recovery_resume",
-            status: "entered",
-            family: "recovery",
-            sourceEventId: "ev-tool-start-1",
-            sourceEventType: "tool_execution_start",
-          },
+          payload: toEventPayload(
+            buildTransitionPayload({
+              reason: "wal_recovery_resume",
+              status: "entered",
+              sourceEventId: "ev-tool-start-1",
+              sourceEventType: "tool_execution_start",
+            }),
+          ),
         },
         {
           id: "ev-blocked-1",
@@ -226,10 +279,9 @@ describe("recovery read model", () => {
           type: "tool_call_blocked",
           timestamp: 12,
           turn: 2,
-          payload: {
-            toolName: "exec",
-            reason: "effect_commitment_request_in_flight:req-1",
-          },
+          payload: toEventPayload(
+            buildBlockedPayload("effect_commitment_request_in_flight:req-1", "exec"),
+          ),
         },
       ],
       taskState: emptyTaskState("Resume without replaying open tool effects"),
@@ -282,7 +334,7 @@ describe("recovery read model", () => {
           turn: 1,
           payload: {
             turnId: "turn-1",
-            trigger: "user_submit",
+            trigger: "user",
             promptText: "Keep pipeline event reads single-pass.",
           },
         },
@@ -314,7 +366,7 @@ describe("recovery read model", () => {
           turn: 1,
           payload: {
             turnId: "turn-1",
-            trigger: "user_submit",
+            trigger: "user",
             promptText: "x".repeat(2_000),
           },
         },

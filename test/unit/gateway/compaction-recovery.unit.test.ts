@@ -3,7 +3,6 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import {
   buildBrewvaPromptText,
   type BrewvaPromptContentPart,
@@ -17,6 +16,7 @@ import {
   installSessionCompactionRecovery,
 } from "../../../packages/brewva-gateway/src/session/compaction-recovery.js";
 import type { ThreadLoopRecoveryPolicyName } from "../../../packages/brewva-gateway/src/session/thread-loop-types.js";
+import { buildToolCallBlockedPayload } from "../../helpers/events.js";
 
 function textPrompt(text: string): BrewvaPromptContentPart[] {
   return [{ type: "text", text }];
@@ -136,7 +136,7 @@ describe("compaction recovery controller", () => {
         const content = promptText(parts);
         promptedMessages.push(content);
         if (promptedMessages.length === 1) {
-          recordRuntimeEvent(eventBridge.runtime, {
+          eventBridge.runtime.extensions.hosted.events.record({
             sessionId: "agent-session-1",
             type: "session_compact",
             turn: 7,
@@ -182,7 +182,7 @@ describe("compaction recovery controller", () => {
         const content = promptText(parts);
         promptedMessages.push(content);
         if (promptedMessages.length === 1) {
-          recordRuntimeEvent(eventBridge.runtime, {
+          eventBridge.runtime.extensions.hosted.events.record({
             sessionId: "agent-session-2",
             type: "session_compact",
             turn: 3,
@@ -226,7 +226,7 @@ describe("compaction recovery controller", () => {
         const content = promptText(parts);
         promptedMessages.push(content);
         if (promptedMessages.length === 1) {
-          recordRuntimeEvent(eventBridge.runtime, {
+          eventBridge.runtime.extensions.hosted.events.record({
             sessionId: "agent-session-deterministic-recovery",
             type: "session_compact",
             turn: 5,
@@ -472,7 +472,7 @@ describe("compaction recovery controller", () => {
     expect(session.prompt).toBe(prompt);
 
     wrapped.dispose?.();
-    recordRuntimeEvent(eventBridge.runtime, {
+    eventBridge.runtime.extensions.hosted.events.record({
       sessionId: "agent-session-4",
       type: "session_compact",
       turn: 1,
@@ -513,7 +513,7 @@ describe("compaction recovery controller", () => {
     });
 
     for (let attempt = 0; attempt < 3; attempt += 1) {
-      recordRuntimeEvent(eventBridge.runtime, {
+      eventBridge.runtime.extensions.hosted.events.record({
         sessionId: "agent-session-breaker",
         type: "session_compact",
         turn: attempt + 1,
@@ -522,7 +522,7 @@ describe("compaction recovery controller", () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     }
 
-    recordRuntimeEvent(eventBridge.runtime, {
+    eventBridge.runtime.extensions.hosted.events.record({
       sessionId: "agent-session-breaker",
       type: "session_compact",
       turn: 4,
@@ -541,12 +541,10 @@ describe("compaction recovery controller", () => {
         getSessionId: () => "agent-session-withheld",
       },
       async prompt(_parts: readonly BrewvaPromptContentPart[]): Promise<void> {
-        recordRuntimeEvent(eventBridge.runtime, {
+        eventBridge.runtime.extensions.hosted.events.record({
           sessionId: "agent-session-withheld",
           type: "tool_call_blocked",
-          payload: {
-            toolName: "exec",
-          },
+          payload: buildToolCallBlockedPayload(),
         });
         throw new Error("max output tokens exceeded");
       },

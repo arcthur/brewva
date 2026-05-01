@@ -12,7 +12,7 @@
   - `docs/reference/tools.md`
   - `docs/architecture/cognitive-product-architecture.md`
 - Code anchors:
-  - `packages/brewva-runtime/src/skills/profiles.ts`
+  - `packages/brewva-runtime/src/domain/skills/profiles.ts`
   - `packages/brewva-gateway/src/runtime-plugins/skill-first.ts`
   - `packages/brewva-tools/src/skill-load.ts`
   - `test/contract/runtime/skill-lifecycle-profiles.contract.test.ts`

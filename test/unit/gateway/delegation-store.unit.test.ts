@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { HostedDelegationStore } from "@brewva/brewva-gateway";
 import { BrewvaRuntime, CURRENT_DELEGATION_CONTRACT_VERSION } from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import { cleanupWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
 
 let workspace = "";
@@ -26,7 +25,7 @@ function recordCompletedRun(input: {
   consultKind?: "review" | "design";
   delegate?: string;
 }): void {
-  recordRuntimeEvent(input.runtime, {
+  input.runtime.extensions.hosted.events.record({
     sessionId: input.sessionId,
     type: "subagent_completed",
     timestamp: input.updatedAt,
@@ -96,7 +95,7 @@ describe("HostedDelegationStore", () => {
     const store = new HostedDelegationStore(runtime);
     const sessionId = "delegation-store-running";
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "subagent_spawned",
       timestamp: 100,
@@ -107,7 +106,7 @@ describe("HostedDelegationStore", () => {
         status: "pending",
       },
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "subagent_running",
       timestamp: 110,
@@ -132,7 +131,7 @@ describe("HostedDelegationStore", () => {
     const store = new HostedDelegationStore(runtime);
     const sessionId = "delegation-store-no-legacy-verification";
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "subagent_completed",
       timestamp: 100,
@@ -158,7 +157,7 @@ describe("HostedDelegationStore", () => {
     const store = new HostedDelegationStore(runtime);
     const sessionId = "delegation-store-missing-contract-version";
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "subagent_spawned",
       timestamp: 100,
@@ -179,7 +178,7 @@ describe("HostedDelegationStore", () => {
     const store = new HostedDelegationStore(runtime);
     const sessionId = "delegation-store-missing-adoption";
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "subagent_spawned",
       timestamp: 100,
@@ -204,7 +203,7 @@ describe("HostedDelegationStore", () => {
     const store = new HostedDelegationStore(runtime);
     const sessionId = "delegation-store-malformed-adoption";
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "subagent_spawned",
       timestamp: 100,

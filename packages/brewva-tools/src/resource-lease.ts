@@ -77,7 +77,7 @@ export function createResourceLeaseTool(options: BrewvaToolOptions): ToolDefinit
             ttlTurns: params.ttlTurns,
           });
           if (!result.ok) {
-            return failTextResult(`Error: ${result.error}`, { ok: false });
+            return failTextResult(`Error: ${result.reason}`, { ok: false });
           }
           return textResult(["# Resource Lease Granted", formatLease(result.lease)].join("\n"), {
             ok: true,
@@ -113,7 +113,7 @@ export function createResourceLeaseTool(options: BrewvaToolOptions): ToolDefinit
           params.reason,
         );
         if (!result.ok) {
-          return failTextResult(`Error: ${result.error}`, { ok: false });
+          return failTextResult(`Error: ${result.reason}`, { ok: false });
         }
         return textResult(["# Resource Lease Cancelled", formatLease(result.lease)].join("\n"), {
           ok: true,

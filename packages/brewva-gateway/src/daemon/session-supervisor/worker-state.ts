@@ -1,6 +1,6 @@
 import type { ChildProcess } from "node:child_process";
 import type { BrewvaWalId, ManagedToolMode } from "@brewva/brewva-runtime";
-import type { RecoveryWalStore } from "@brewva/brewva-runtime/internal";
+import type { RecoveryWalStore } from "@brewva/brewva-runtime/recovery";
 import type {
   ParentToWorkerMessage,
   WorkerResultErrorCode,

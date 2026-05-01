@@ -87,6 +87,17 @@ should be projection-visible. Performance-only state may remain local.
 The root runtime object is not a mixed implementation bag. Hosted sessions,
 tools, and operators receive narrowed ports.
 
+Runtime implementation ownership is sliced under
+`packages/brewva-runtime/src/domain/<name>/`. Each domain owns its public seam,
+type seam, registrar, event declarations, and runtime surface contribution
+through explicit `api.ts`, `types.ts`, `registrar.ts`, and
+`runtime-surface.ts` files. Cross-domain source imports go through those seams
+instead of reaching into another domain's implementation files.
+
+Repo-owned implementation-adjacent callers use branded controlled extension
+ports or explicit runtime subpaths. The removed `internal` barrel, method-group
+layer, and legacy assembler files are not compatibility surfaces.
+
 ## Transaction Boundary
 
 The current stable authority-bearing transaction boundary is `single tool

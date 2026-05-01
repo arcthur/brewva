@@ -2,11 +2,11 @@
 
 Boundary contract sources:
 
-- Runtime contracts: `packages/brewva-runtime/src/contracts/index.ts`
-- Runtime facade: `packages/brewva-runtime/src/runtime.ts`
-- Proposal admission: `packages/brewva-runtime/src/services/proposal-admission.ts`
-- Effect-commitment admission: `packages/brewva-runtime/src/services/proposal-admission-effect-commitment.ts`
-- Operator desk: `packages/brewva-runtime/src/services/effect-commitment-desk.ts`
+- Runtime contracts: `packages/brewva-runtime/src/domain/proposals/types.ts`
+- Runtime facade: `packages/brewva-runtime/src/runtime/runtime.ts`
+- Proposal admission: `packages/brewva-runtime/src/domain/proposals/proposal-admission.ts`
+- Effect-commitment admission: `packages/brewva-runtime/src/domain/proposals/proposal-admission-effect-commitment.ts`
+- Operator desk: `packages/brewva-runtime/src/domain/proposals/effect-commitment-desk.ts`
 
 The public proposal boundary is now intentionally small.
 

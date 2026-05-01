@@ -16,13 +16,13 @@ Output:
   "commit_plan": [
     {
       "order": 1,
-      "scope": "packages/brewva-runtime/src/context/",
+      "scope": "packages/brewva-runtime/src/domain/context/",
       "message": "refactor(context): extract injection port from arena",
       "files": 3
     },
     {
       "order": 2,
-      "scope": "packages/brewva-runtime/src/services/",
+      "scope": "packages/brewva-runtime/src/domain/context/",
       "message": "refactor(services): wire new context port into pipeline",
       "files": 2
     },

@@ -2,18 +2,18 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { BrewvaRuntime } from "@brewva/brewva-runtime";
 import {
-  BrewvaRuntime,
   ITERATION_METRIC_OBSERVED_EVENT_TYPE,
   VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
-} from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
+} from "@brewva/brewva-runtime/events";
 import {
   createCostViewTool,
   createObsQueryTool,
   createObsSloAssertTool,
   createObsSnapshotTool,
 } from "@brewva/brewva-tools";
+import { buildVerificationOutcomeRecordedPayload } from "../../helpers/events.js";
 import { createBundledToolRuntime, createRuntimeConfig } from "../../helpers/runtime.js";
 import { cleanupWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
 import { extractTextContent, fakeContext } from "./tools-flow.helpers.js";
@@ -71,7 +71,7 @@ describe("observability tool contracts", () => {
     const runtime = new BrewvaRuntime({ cwd: obsQueryWorkspace });
     const sessionId = "s10-obs-query";
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "latency_sample",
       payload: {
@@ -79,7 +79,7 @@ describe("observability tool contracts", () => {
         latencyMs: 810,
       },
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "latency_sample",
       payload: {
@@ -120,7 +120,7 @@ describe("observability tool contracts", () => {
     const runtime = new BrewvaRuntime({ cwd: obsSnapshotWorkspace });
     const sessionId = "s10-obs-snapshot";
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "startup_sample",
       payload: {
@@ -128,13 +128,13 @@ describe("observability tool contracts", () => {
         startupMs: 920,
       },
     });
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
-      payload: {
-        level: "standard",
-        outcome: "passed",
-      },
+      payload: buildVerificationOutcomeRecordedPayload({
+        evidence: "observability fixture verification failed",
+        outcome: "fail",
+      }),
     });
     runtime.maintain.context.observePromptStability(sessionId, {
       stablePrefixHash: "prefix-1",

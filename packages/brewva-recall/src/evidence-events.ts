@@ -1,3 +1,4 @@
+import { type BrewvaEventRecord } from "@brewva/brewva-runtime/events";
 import {
   DECISION_RECEIPT_RECORDED_EVENT_TYPE,
   EFFECT_COMMITMENT_APPROVAL_CONSUMED_EVENT_TYPE,
@@ -20,8 +21,7 @@ import {
   TURN_INPUT_RECORDED_EVENT_TYPE,
   TURN_RENDER_COMMITTED_EVENT_TYPE,
   VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
-  type BrewvaEventRecord,
-} from "@brewva/brewva-runtime";
+} from "@brewva/brewva-runtime/events";
 
 export const RECALL_SEARCHABLE_TAPE_EVENT_TYPES = [
   TASK_EVENT_TYPE,

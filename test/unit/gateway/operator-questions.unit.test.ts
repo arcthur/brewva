@@ -3,7 +3,6 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
-import { recordRuntimeEvent } from "@brewva/brewva-runtime/internal";
 import {
   classifyOpenQuestion,
   classifyQuestionRequest,
@@ -115,7 +114,7 @@ describe("operator question collection", () => {
       evidenceRefs: [],
     });
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "subagent_completed",
       payload: {
@@ -172,7 +171,7 @@ describe("operator question collection", () => {
       evidenceRefs: [],
     });
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "subagent_completed",
       payload: {
@@ -228,7 +227,7 @@ describe("operator question collection", () => {
       evidenceRefs: [],
     });
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "subagent_completed",
       payload: {
@@ -291,7 +290,7 @@ describe("operator question collection", () => {
       evidenceRefs: [],
     });
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "subagent_completed",
       payload: {
@@ -358,7 +357,7 @@ describe("operator question collection", () => {
       evidenceRefs: [],
     });
 
-    recordRuntimeEvent(runtime, {
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "subagent_completed",
       payload: {

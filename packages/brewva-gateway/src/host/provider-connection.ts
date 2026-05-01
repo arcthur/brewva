@@ -7,8 +7,8 @@ import {
 } from "node:http";
 import { setTimeout as sleep } from "node:timers/promises";
 import type { BrewvaRuntime } from "@brewva/brewva-runtime";
-import { createCredentialVaultServiceFromSecurityConfig } from "@brewva/brewva-runtime/internal";
-import type { CredentialVaultService } from "@brewva/brewva-runtime/internal";
+import { createCredentialVaultServiceFromSecurityConfig } from "@brewva/brewva-runtime/credentials";
+import type { CredentialVaultService } from "@brewva/brewva-runtime/credentials";
 import type {
   BrewvaModelCatalog,
   BrewvaRegisteredModel,

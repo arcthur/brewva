@@ -84,10 +84,12 @@ describe("parallel-read utils", () => {
   test("recordParallelReadTelemetry emits only when runtime and session id are available", () => {
     const calls: Array<Record<string, unknown>> = [];
     const runtime = {
-      internal: {
-        recordEvent(input: Record<string, unknown>) {
-          calls.push(input);
-          return undefined;
+      extensions: {
+        tools: {
+          recordEvent(input: Record<string, unknown>) {
+            calls.push(input);
+            return undefined;
+          },
         },
       },
     } as unknown as BrewvaToolRuntime;

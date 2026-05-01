@@ -3,7 +3,7 @@ import {
   buildEffectAuthorityManifestBasis,
   decideEffectAuthorityManifest,
   type EffectAuthorityManifestFacts,
-} from "@brewva/brewva-runtime/internal";
+} from "@brewva/brewva-runtime";
 
 function baseFacts(
   overrides: Partial<EffectAuthorityManifestFacts> = {},

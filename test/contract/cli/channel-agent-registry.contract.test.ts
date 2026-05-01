@@ -30,7 +30,7 @@ describe("channel agent registry", () => {
     const result = await registry.createAgent({ requestedAgentId: "system" });
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("expected failure");
-    expect(result.error).toBe("reserved_agent_id");
+    expect(result.reason).toBe("reserved_agent_id");
   });
 
   test("serializes concurrent create operations", async () => {

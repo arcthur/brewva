@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
-import { ContextBudgetManager } from "@brewva/brewva-runtime/internal";
+import { createContextBudgetManager } from "@brewva/brewva-runtime/context";
 
 describe("Context budget manager", () => {
   test("uses conservative token estimate for injection decisions", () => {
-    const manager = new ContextBudgetManager({
+    const manager = createContextBudgetManager({
       ...DEFAULT_BREWVA_CONFIG.infrastructure.contextBudget,
     });
 
@@ -24,7 +24,7 @@ describe("Context budget manager", () => {
     budgetConfig.injection.baseTokens = 32;
     budgetConfig.injection.windowFraction = 0;
     budgetConfig.injection.maxTokens = 32;
-    const manager = new ContextBudgetManager(budgetConfig);
+    const manager = createContextBudgetManager(budgetConfig);
 
     const decision = manager.planInjection("budget-conservative-2", "x".repeat(200));
     expect(decision.accepted).toBe(true);
@@ -34,7 +34,7 @@ describe("Context budget manager", () => {
 
   test("applies wall-clock cooldown between compactions", () => {
     let nowMs = 1_000;
-    const manager = new ContextBudgetManager(
+    const manager = createContextBudgetManager(
       {
         ...DEFAULT_BREWVA_CONFIG.infrastructure.contextBudget,
       },
@@ -79,7 +79,7 @@ describe("Context budget manager", () => {
     const budgetConfig = structuredClone(DEFAULT_BREWVA_CONFIG.infrastructure.contextBudget);
     budgetConfig.thresholds.hardLimitFloorPercent = 0.98;
     budgetConfig.thresholds.hardLimitCeilingPercent = 0.98;
-    const manager = new ContextBudgetManager(budgetConfig, {
+    const manager = createContextBudgetManager(budgetConfig, {
       now: () => nowMs,
     });
     const sessionId = "budget-cooldown-bypass";
@@ -109,7 +109,7 @@ describe("Context budget manager", () => {
   });
 
   test("normalizes percentage-point context usage into ratio", () => {
-    const manager = new ContextBudgetManager({
+    const manager = createContextBudgetManager({
       ...DEFAULT_BREWVA_CONFIG.infrastructure.contextBudget,
     });
     const sessionId = "budget-percent-points";
@@ -159,7 +159,7 @@ describe("Context budget manager", () => {
 
   test("scales thresholds and injection budget with larger context windows", () => {
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
-    const manager = new ContextBudgetManager(config.infrastructure.contextBudget);
+    const manager = createContextBudgetManager(config.infrastructure.contextBudget);
     const sessionId = "adaptive-budget-1";
 
     const largeWindowUsage = {
@@ -182,7 +182,7 @@ describe("Context budget manager", () => {
   });
 
   test("falls back to tokens/contextWindow when percent telemetry is missing", () => {
-    const manager = new ContextBudgetManager({
+    const manager = createContextBudgetManager({
       ...DEFAULT_BREWVA_CONFIG.infrastructure.contextBudget,
     });
     const sessionId = "adaptive-budget-null-percent";
@@ -205,7 +205,7 @@ describe("Context budget manager", () => {
   });
 
   test("caps injection to stay below the projected hard limit", () => {
-    const manager = new ContextBudgetManager({
+    const manager = createContextBudgetManager({
       ...DEFAULT_BREWVA_CONFIG.infrastructure.contextBudget,
     });
     const sessionId = "adaptive-budget-projected-hard-limit";
@@ -220,7 +220,7 @@ describe("Context budget manager", () => {
   });
 
   test("clamps injection to the remaining hard-limit headroom even when nominal adaptive budget is larger", () => {
-    const manager = new ContextBudgetManager({
+    const manager = createContextBudgetManager({
       ...DEFAULT_BREWVA_CONFIG.infrastructure.contextBudget,
     });
     const sessionId = "adaptive-budget-remaining-headroom";

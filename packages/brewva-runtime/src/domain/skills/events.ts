@@ -1,0 +1,12 @@
+export const SKILL_BUDGET_WARNING_EVENT_TYPE = "skill_budget_warning" as const;
+export const SKILL_REFRESH_RECORDED_EVENT_TYPE = "skill_refresh_recorded" as const;
+export const SKILL_DIAGNOSIS_DERIVED_EVENT_TYPE = "skill_diagnosis_derived" as const;
+export const SKILL_PARALLEL_WARNING_EVENT_TYPE = "skill_parallel_warning" as const;
+export const SKILL_PROMOTION_DRAFT_DERIVED_EVENT_TYPE = "skill_promotion_draft_derived" as const;
+export const SKILL_PROMOTION_REVIEWED_EVENT_TYPE = "skill_promotion_reviewed" as const;
+export const SKILL_PROMOTION_PROMOTED_EVENT_TYPE = "skill_promotion_promoted" as const;
+export const SKILL_PROMOTION_MATERIALIZED_EVENT_TYPE = "skill_promotion_materialized" as const;
+export const SKILL_ACTIVATED_EVENT_TYPE = "skill_activated" as const;
+export const SKILL_COMPLETED_EVENT_TYPE = "skill_completed" as const;
+export const SKILL_COMPLETION_REJECTED_EVENT_TYPE = "skill_completion_rejected" as const;
+export const SKILL_CONTRACT_FAILED_EVENT_TYPE = "skill_contract_failed" as const;

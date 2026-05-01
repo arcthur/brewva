@@ -44,7 +44,7 @@ describe("docs/reference runtime coverage", () => {
   it("generates public runtime methods in the runtime surface segment", () => {
     const repoRoot = resolve(import.meta.dirname, "../../..");
     const runtimeSource = readFileSync(
-      resolve(repoRoot, "packages/brewva-runtime/src/runtime.ts"),
+      resolve(repoRoot, "packages/brewva-runtime/src/runtime/runtime.ts"),
       "utf-8",
     );
     const markdown = readFileSync(resolve(repoRoot, "docs/reference/runtime.md"), "utf-8");

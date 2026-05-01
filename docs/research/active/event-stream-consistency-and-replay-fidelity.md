@@ -37,7 +37,7 @@ This note does not reopen:
 
 ## Source Anchors
 
-- Runtime core wiring: `packages/brewva-runtime/src/runtime.ts`
+- Runtime core wiring: `packages/brewva-runtime/src/runtime/runtime.ts`
 - Event stream hook: `packages/brewva-gateway/src/runtime-plugins/event-stream.ts`
 - Event store and query path: `packages/brewva-runtime/src/events/store.ts`
 

@@ -30,7 +30,7 @@ const { Type } = requireFromBrewvaTools("@sinclair/typebox") as {
 describe("managed Brewva tool definition metadata", () => {
   test("default Brewva tool bundle attaches surface and action class metadata", () => {
     const runtime = {
-      internal: {},
+      extensions: { tools: {} },
     } as Parameters<typeof buildBrewvaTools>[0]["runtime"];
     const tools = buildBrewvaTools({ runtime });
 
@@ -99,7 +99,7 @@ describe("managed Brewva tool definition metadata", () => {
 
   test("repo-owned managed tool registry stays aligned with bundled and A2A tool definitions", () => {
     const runtime = {
-      internal: {},
+      extensions: { tools: {} },
     } as Parameters<typeof buildBrewvaTools>[0]["runtime"];
     const bundledTools = buildBrewvaTools({ runtime });
     const a2aTools = createA2ATools({
@@ -122,7 +122,7 @@ describe("managed Brewva tool definition metadata", () => {
 
   test("skill promotion apply remains a reserved contract name, not a live tool", () => {
     const runtime = {
-      internal: {},
+      extensions: { tools: {} },
     } as Parameters<typeof buildBrewvaTools>[0]["runtime"];
     const tools = buildBrewvaTools({ runtime });
     const toolNames = tools.map((tool) => tool.name);
@@ -240,7 +240,7 @@ describe("managed Brewva tool definition metadata", () => {
 
   test("privileged managed tools declare required capabilities in metadata", () => {
     const runtime = {
-      internal: {},
+      extensions: { tools: {} },
     } as Parameters<typeof buildBrewvaTools>[0]["runtime"];
     const tools = buildBrewvaTools({ runtime });
 

@@ -1,6 +1,6 @@
-import type { BrewvaConfig } from "../contracts/index.js";
 import type { AnyRecord } from "./normalization-shared.js";
 import { normalizeBoolean, normalizePositiveInteger } from "./normalization-shared.js";
+import type { BrewvaConfig } from "./types.js";
 
 export function normalizeParallelConfig(
   parallelInput: AnyRecord,

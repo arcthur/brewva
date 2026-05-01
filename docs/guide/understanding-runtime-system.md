@@ -9,7 +9,7 @@ method-level contract and caller-specific ports, use:
 
 ## Runtime Shape
 
-`BrewvaRuntime` (`packages/brewva-runtime/src/runtime.ts`) is the stable runtime
+`BrewvaRuntime` (`packages/brewva-runtime/src/runtime/runtime.ts`) is the stable runtime
 instance contract.
 
 Its public root shape is semantic, not implementation-organized:
@@ -45,13 +45,25 @@ or scheduling may contribute methods to more than one surface.
 
 Some machinery is still real, but it is not the public runtime contract:
 
-- raw event append
-- raw turn-WAL mutation
+- raw event append outside typed descriptor validation
+- raw turn-WAL mutation outside recovery scheduler ports
 - service classes, stores, trackers, and replay engines
 
 Repo-owned code may still use those capabilities through
-`@brewva/brewva-runtime/internal`, but they are not the default integration
-surface for products or external consumers.
+dedicated runtime subpaths such as `@brewva/brewva-runtime/recovery`,
+`@brewva/brewva-runtime/event-log`, and controlled runtime extension ports, but
+they are not the default integration surface for products or external
+consumers.
+
+Those subpaths and extension ports are controlled ports: branded, sealed
+objects with explicit capability tokens and allowlisted methods. They do not
+preserve the removed `@brewva/brewva-runtime/internal` barrel, and they do not
+expose arbitrary service instance state.
+
+Inside `packages/brewva-runtime`, implementation ownership follows
+`domain/<name>/` slices. Domains own their `api.ts`, `types.ts`, registrar,
+events, and runtime surface contribution; cross-domain implementation imports
+go through the API or type seam.
 
 ## Replay And Durability
 
@@ -92,8 +104,9 @@ runtime contract.
 
 ## Shared Contract Surface
 
-Core contracts are defined in `packages/brewva-runtime/src/contracts/index.ts`,
-including:
+Shared contracts are defined explicitly in
+`packages/brewva-runtime/src/public/index.ts` and the domain-owned `types.ts`
+modules under `packages/brewva-runtime/src/domain/`, including:
 
 - task, truth, schedule, and evidence contracts
 - event, replay, receipt, and WAL contracts

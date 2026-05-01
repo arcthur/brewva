@@ -50,8 +50,8 @@ evidence. They do not replace task/truth state or verification reports.
 
 ## Implementation Anchors
 
-- `packages/brewva-runtime/src/events/event-types.ts`
-- `packages/brewva-runtime/src/services/event-pipeline.ts`
-- `packages/brewva-runtime/src/services/proposal-admission.ts`
-- `packages/brewva-runtime/src/services/context.ts`
-- `packages/brewva-runtime/src/services/task-watchdog.ts`
+- `packages/brewva-runtime/src/events/registry.ts`
+- `packages/brewva-runtime/src/domain/sessions/event-pipeline.ts`
+- `packages/brewva-runtime/src/domain/proposals/proposal-admission.ts`
+- `packages/brewva-runtime/src/domain/context/context.ts`
+- `packages/brewva-runtime/src/domain/task/task-watchdog.ts`

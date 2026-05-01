@@ -120,11 +120,11 @@ flowchart TD
 ## Code Pointers
 
 - Proposal boundary: `docs/reference/proposal-boundary.md`
-- Tool gate: `packages/brewva-runtime/src/services/tool-gate.ts`
-- Invocation spine: `packages/brewva-runtime/src/services/tool-invocation-spine.ts`
-- Effect-commitment desk: `packages/brewva-runtime/src/services/effect-commitment-desk.ts`
-- `PatchSet` rollback: `packages/brewva-runtime/src/services/file-change.ts`
-- Receipt-aware rollback: `packages/brewva-runtime/src/services/mutation-rollback.ts`
+- Tool gate: `packages/brewva-runtime/src/domain/tools/tool-gate.ts`
+- Invocation spine: `packages/brewva-runtime/src/domain/tools/tool-invocation-spine.ts`
+- Effect-commitment desk: `packages/brewva-runtime/src/domain/proposals/effect-commitment-desk.ts`
+- `PatchSet` rollback: `packages/brewva-runtime/src/domain/patching/file-change.ts`
+- Receipt-aware rollback: `packages/brewva-runtime/src/domain/governance/mutation-rollback.ts`
 - Rollback tool: `packages/brewva-tools/src/rollback-last-patch.ts`
 
 ## Related Docs
