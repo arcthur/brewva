@@ -1,0 +1,7 @@
+{
+  "propertyId": "substrate.session-phase.invalid-transition-shape",
+  "bugClass": "Invalid transitions must not mutate or partially advance phase state.",
+  "seed": 1592598566,
+  "path": "0",
+  "examples": [[{ "kind": "idle" }, { "type": "finish_tool_execution" }]]
+}

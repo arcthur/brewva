@@ -42,6 +42,7 @@
 ## Verification
 
 - Default quality stack: `bun run check` and `bun test`.
+- Property tests run inside `test:unit` and `test:contract` by filename; use `bun run test:property` for a focused property-only run and `bun run test:property:fuzz` for expanded runs.
 - Docs stack: `bun run test:docs`; add `bun run format:docs:check` when Markdown formatting changed.
 - Dist safety gate: `bun run test:dist`.
 - Binary packaging verification: `bun run build:binaries` and `./distribution/brewva-linux-x64/bin/brewva --help | head -n 1`.
