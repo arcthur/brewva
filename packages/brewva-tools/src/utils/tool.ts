@@ -1,9 +1,16 @@
 import { getExactToolActionPolicy, normalizeToolName } from "@brewva/brewva-runtime";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate";
+import {
+  ToolCatalog,
+  createToolCatalog,
+  resolveToolExecutionTraits,
+  type ToolCatalogEntry,
+} from "@brewva/brewva-tool-protocol";
 import type { TSchema } from "@sinclair/typebox";
 import { getExactBrewvaToolRequiredCapabilities } from "../required-capabilities.js";
 import { getBrewvaToolSurface } from "../surface.js";
 import type {
+  BrewvaToolDescriptor,
   BrewvaManagedToolDefinition,
   BrewvaToolMetadataCarrier,
   BrewvaToolExecutionTraitResolverInput,
@@ -100,6 +107,17 @@ function resolveCanonicalBrewvaToolMetadata(
   };
 }
 
+function cloneSerializableExecutionTraits(
+  definition: BrewvaToolExecutionTraitsDefinition | undefined,
+): BrewvaToolExecutionTraits | undefined {
+  if (!definition || typeof definition === "function") {
+    return undefined;
+  }
+  return {
+    ...definition,
+  };
+}
+
 function defineExecutionTraitsProperty(
   target: object,
   definition: BrewvaToolExecutionTraitsDefinition | undefined,
@@ -119,6 +137,7 @@ function defineExecutionTraitsProperty(
 function copyToolMetadataProperties(source: object, target: object): void {
   for (const propertyName of [
     "brewva",
+    "brewvaDescriptor",
     "brewvaExecutionTraits",
     "brewvaAgentParameters",
   ] as const) {
@@ -157,6 +176,26 @@ export function defineBrewvaTool<TParams extends TSchema, TDetails = unknown>(
     parameters: tool.parameters,
     execute,
   } as BrewvaManagedToolDefinition;
+  Object.defineProperty(managed, "brewvaDescriptor", {
+    enumerable: false,
+    configurable: false,
+    get() {
+      const nextMetadata =
+        resolveCanonicalBrewvaToolMetadata(normalizedName, metadata) ?? canonicalMetadata;
+      return {
+        name: tool.name,
+        label: tool.label,
+        description: tool.description,
+        parameters: tool.parameters,
+        promptSnippet: tool.promptSnippet,
+        promptGuidelines: tool.promptGuidelines,
+        surface: nextMetadata.surface,
+        actionClass: nextMetadata.actionClass,
+        executionTraits: cloneSerializableExecutionTraits(metadata.executionTraits),
+        requiredCapabilities: cloneRequiredCapabilities(nextMetadata.requiredCapabilities),
+      } satisfies BrewvaToolDescriptor<TParams>;
+    },
+  });
   Object.defineProperty(managed, "brewva", {
     enumerable: true,
     configurable: false,
@@ -193,10 +232,20 @@ export function getBrewvaToolMetadata(
   tool: BrewvaToolMetadataCarrier | undefined,
 ): BrewvaToolMetadata | undefined {
   const managedTool = tool as BrewvaManagedToolDefinition | undefined;
+  const descriptor = managedTool?.brewvaDescriptor;
   const metadata = managedTool?.brewva;
   const attachedExecutionTraits = cloneExecutionTraitsDefinition(
     managedTool?.brewvaExecutionTraits,
   );
+  if (descriptor?.surface && descriptor.actionClass) {
+    return {
+      surface: descriptor.surface,
+      actionClass: descriptor.actionClass,
+      executionTraits:
+        attachedExecutionTraits ?? cloneSerializableExecutionTraits(descriptor.executionTraits),
+      requiredCapabilities: cloneRequiredCapabilities(descriptor.requiredCapabilities),
+    };
+  }
   if (metadata) {
     return {
       surface: metadata.surface,
@@ -251,19 +300,13 @@ function resolveExecutionTraitsFromDefinition(
   definition: BrewvaToolExecutionTraitsDefinition | undefined,
   input: BrewvaToolExecutionTraitResolverInput,
 ): BrewvaToolExecutionTraits {
-  if (!definition) {
-    return { ...DEFAULT_BREWVA_TOOL_EXECUTION_TRAITS };
-  }
-  if (typeof definition === "function") {
-    const resolved = definition(input);
-    return {
-      ...DEFAULT_BREWVA_TOOL_EXECUTION_TRAITS,
-      ...resolved,
-    };
-  }
+  const resolved = resolveToolExecutionTraits(
+    definition,
+    input,
+  ) as Partial<BrewvaToolExecutionTraits>;
   return {
     ...DEFAULT_BREWVA_TOOL_EXECUTION_TRAITS,
-    ...definition,
+    ...resolved,
   };
 }
 
@@ -290,5 +333,57 @@ export function getBrewvaAgentParameters(
   tool: BrewvaToolMetadataCarrier | undefined,
 ): TSchema | undefined {
   const parameters = (tool as BrewvaManagedToolDefinition | undefined)?.brewvaAgentParameters;
-  return parameters ?? tool?.parameters;
+  return (
+    parameters ??
+    (tool as BrewvaManagedToolDefinition | undefined)?.brewvaDescriptor?.parameters ??
+    tool?.parameters
+  );
+}
+
+export function getBrewvaToolDescriptor(
+  tool: BrewvaToolMetadataCarrier | undefined,
+): BrewvaToolDescriptor | undefined {
+  const managedTool = tool as BrewvaManagedToolDefinition | undefined;
+  if (managedTool?.brewvaDescriptor) {
+    return managedTool.brewvaDescriptor;
+  }
+  if (!tool?.name || !tool.parameters) {
+    return undefined;
+  }
+  const metadata = getBrewvaToolMetadata(tool);
+  return {
+    name: tool.name,
+    label:
+      "label" in tool && typeof (tool as { label?: unknown }).label === "string"
+        ? (tool as { label: string }).label
+        : tool.name,
+    description:
+      "description" in tool && typeof (tool as { description?: unknown }).description === "string"
+        ? (tool as { description: string }).description
+        : "",
+    parameters: tool.parameters,
+    surface: metadata?.surface,
+    actionClass: metadata?.actionClass,
+    executionTraits: cloneSerializableExecutionTraits(metadata?.executionTraits),
+    requiredCapabilities: metadata?.requiredCapabilities,
+  };
+}
+
+export function createBrewvaToolCatalog(
+  tools: Iterable<BrewvaManagedToolDefinition>,
+  origin: ToolCatalogEntry["origin"] = "managed",
+): ToolCatalog {
+  const entries: ToolCatalogEntry[] = [];
+  for (const tool of tools) {
+    const descriptor = getBrewvaToolDescriptor(tool);
+    if (!descriptor) {
+      continue;
+    }
+    entries.push({
+      descriptor,
+      origin,
+      definition: tool,
+    });
+  }
+  return createToolCatalog(entries);
 }

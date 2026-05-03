@@ -12,6 +12,7 @@ import {
   resolveGoogleCachedContentEndpoint,
   resolveGoogleGeminiCliCacheRender,
 } from "@brewva/brewva-provider-core";
+import { estimateStructuredTokenCount } from "@brewva/brewva-token-estimation";
 import { stableHash, stableStringify } from "./hash.js";
 
 const MAX_PENDING_DELETE_ATTEMPTS = 5;
@@ -680,7 +681,10 @@ function buildPrefixHash(payload: GoogleCachedContentPayload): string {
 }
 
 function estimateCachedContentTokens(payload: GoogleCachedContentPayload): number {
-  return Math.ceil(stableStringify(buildStablePrefixMaterial(payload)).length / 4);
+  return estimateStructuredTokenCount(stableStringify(buildStablePrefixMaterial(payload)), {
+    api: "google-gemini-cli",
+    modelId: payload.model,
+  });
 }
 
 function buildStablePrefixMaterial(payload: GoogleCachedContentPayload): Record<string, unknown> {

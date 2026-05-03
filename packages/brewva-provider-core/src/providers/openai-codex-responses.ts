@@ -21,16 +21,19 @@ if (typeof process !== "undefined" && (process.versions?.node || process.version
 
 import { resolveOpenAIResponsesCacheRender } from "../cache-policy.js";
 import { supportsXhigh } from "../models.js";
+import { readSseFrames } from "../streaming/sse-frame-reader.js";
+import { runProviderStream } from "../streaming/stream-runner.js";
+import type { IncrementalToolCallFolder } from "../streaming/tool-call-folder.js";
 import type {
   Api,
   AssistantMessage,
+  AssistantMessageEventStream,
   Context,
   Model,
   SimpleStreamOptions,
   StreamFunction,
   StreamOptions,
 } from "../types.js";
-import { AssistantMessageEventStream } from "../utils/event-stream.js";
 import {
   convertResponsesMessages,
   convertResponsesTools,
@@ -147,28 +150,9 @@ export const streamOpenAICodexResponses: StreamFunction<
   context: Context,
   options?: OpenAICodexResponsesOptions,
 ): AssistantMessageEventStream => {
-  const stream = new AssistantMessageEventStream();
-
-  (async () => {
-    const output: AssistantMessage = {
-      role: "assistant",
-      content: [],
-      api: "openai-codex-responses" as Api,
-      provider: model.provider,
-      model: model.id,
-      usage: {
-        input: 0,
-        output: 0,
-        cacheRead: 0,
-        cacheWrite: 0,
-        totalTokens: 0,
-        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-      },
-      stopReason: "stop",
-      timestamp: Date.now(),
-    };
-
-    try {
+  return runProviderStream(
+    model,
+    async ({ stream, output, ensureStarted, composer }) => {
       const apiKey = options?.apiKey || "";
       if (!apiKey) {
         throw new Error(`No API key for provider: ${model.provider}`);
@@ -212,6 +196,7 @@ export const streamOpenAICodexResponses: StreamFunction<
             output,
             stream,
             model,
+            composer.toolCalls,
             () => {
               websocketStarted = true;
             },
@@ -221,12 +206,6 @@ export const streamOpenAICodexResponses: StreamFunction<
           if (options?.signal?.aborted) {
             throw new Error("Request was aborted");
           }
-          stream.push({
-            type: "done",
-            reason: output.stopReason as "stop" | "length" | "toolUse",
-            message: output,
-          });
-          stream.end();
           return;
         } catch (error) {
           if (transport === "websocket" || websocketStarted) {
@@ -295,28 +274,13 @@ export const streamOpenAICodexResponses: StreamFunction<
         throw new Error("No response body");
       }
 
-      stream.push({ type: "start", partial: output });
-      await processStream(response, output, stream, model);
-
-      if (options?.signal?.aborted) {
-        throw new Error("Request was aborted");
-      }
-
-      stream.push({
-        type: "done",
-        reason: output.stopReason as "stop" | "length" | "toolUse",
-        message: output,
-      });
-      stream.end();
-    } catch (error) {
-      output.stopReason = options?.signal?.aborted ? "aborted" : "error";
-      output.errorMessage = error instanceof Error ? error.message : String(error);
-      stream.push({ type: "error", reason: output.stopReason, error: output });
-      stream.end();
-    }
-  })();
-
-  return stream;
+      ensureStarted();
+      await processStream(response, output, stream, model, composer.toolCalls);
+    },
+    {
+      signal: options?.signal,
+    },
+  );
 };
 
 export const streamSimpleOpenAICodexResponses: StreamFunction<
@@ -516,8 +480,15 @@ async function processStream(
   output: AssistantMessage,
   stream: AssistantMessageEventStream,
   model: Model<"openai-codex-responses">,
+  toolCalls: IncrementalToolCallFolder,
 ): Promise<void> {
-  await processResponsesStream(mapCodexEvents(parseSSE(response)), output, stream, model);
+  await processResponsesStream(
+    mapCodexEvents(parseSSE(response)),
+    output,
+    stream,
+    model,
+    toolCalls,
+  );
 }
 
 async function* mapCodexEvents(
@@ -572,45 +543,17 @@ function normalizeCodexStatus(status: unknown): CodexResponseStatus | undefined 
 // ============================================================================
 
 async function* parseSSE(response: Response): AsyncGenerator<Record<string, unknown>> {
-  if (!response.body) return;
-
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-
-      let idx = buffer.indexOf("\n\n");
-      while (idx !== -1) {
-        const chunk = buffer.slice(0, idx);
-        buffer = buffer.slice(idx + 2);
-
-        const dataLines = chunk
-          .split("\n")
-          .filter((l) => l.startsWith("data:"))
-          .map((l) => l.slice(5).trim());
-        if (dataLines.length > 0) {
-          const data = dataLines.join("\n").trim();
-          if (data && data !== "[DONE]") {
-            try {
-              yield JSON.parse(data);
-            } catch {}
-          }
-        }
-        idx = buffer.indexOf("\n\n");
-      }
+  for await (const frame of readSseFrames(response)) {
+    const data = frame.data.trim();
+    if (!data || data === "[DONE]") {
+      continue;
     }
-  } finally {
     try {
-      await reader.cancel();
-    } catch {}
-    try {
-      reader.releaseLock();
-    } catch {}
+      yield JSON.parse(data);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`Invalid Codex SSE JSON: ${message}`);
+    }
   }
 }
 
@@ -1057,6 +1000,7 @@ async function processWebSocketStream(
   output: AssistantMessage,
   stream: AssistantMessageEventStream,
   model: Model<"openai-codex-responses">,
+  toolCalls: IncrementalToolCallFolder,
   onStart: () => void,
   options?: OpenAICodexResponsesOptions,
 ): Promise<void> {
@@ -1085,6 +1029,7 @@ async function processWebSocketStream(
       output,
       stream,
       model,
+      toolCalls,
     );
     const responseId = tracker.responseId ?? output.responseId;
     if (options?.sessionId && responseId) {
@@ -1110,6 +1055,7 @@ async function processWebSocketStream(
 
 export const OPENAI_CODEX_RESPONSES_TEST_ONLY = {
   buildCodexContinuationRequest,
+  parseSSE,
 } as const;
 
 // ============================================================================

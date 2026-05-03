@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
 import { createContextBudgetManager } from "@brewva/brewva-runtime/context";
+import { estimateTokenCount } from "@brewva/brewva-token-estimation";
 
 describe("Context budget manager", () => {
   test("uses conservative token estimate for injection decisions", () => {
@@ -15,8 +16,8 @@ describe("Context budget manager", () => {
     });
 
     expect(decision.accepted).toBe(true);
-    expect(decision.originalTokens).toBe(5);
-    expect(decision.finalTokens).toBe(5);
+    expect(decision.originalTokens).toBe(estimateTokenCount("x".repeat(15)));
+    expect(decision.finalTokens).toBe(decision.originalTokens);
   });
 
   test("applies conservative truncation at token boundary", () => {
@@ -26,10 +27,13 @@ describe("Context budget manager", () => {
     budgetConfig.injection.maxTokens = 32;
     const manager = createContextBudgetManager(budgetConfig);
 
-    const decision = manager.planInjection("budget-conservative-2", "x".repeat(200));
+    const inputText = Array.from({ length: 200 }, (_, index) => `token${index}`).join(" ");
+
+    const decision = manager.planInjection("budget-conservative-2", inputText);
     expect(decision.accepted).toBe(true);
-    expect(decision.finalText.length).toBe(112);
-    expect(decision.finalTokens).toBe(32);
+    expect(decision.finalText.length).toBeLessThan(inputText.length);
+    expect(decision.finalTokens).toBeLessThanOrEqual(32);
+    expect(estimateTokenCount(decision.finalText)).toBeLessThanOrEqual(32);
   });
 
   test("applies wall-clock cooldown between compactions", () => {

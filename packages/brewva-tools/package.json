@@ -21,6 +21,7 @@
     "@brewva/brewva-search": "workspace:*",
     "@brewva/brewva-skill-broker": "workspace:*",
     "@brewva/brewva-substrate": "workspace:*",
+    "@brewva/brewva-tool-protocol": "workspace:*",
     "@sinclair/typebox": "^0.34.49",
     "date-fns": "^4.1.0",
     "fuse.js": "^7.3.0",

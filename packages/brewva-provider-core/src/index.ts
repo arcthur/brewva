@@ -40,6 +40,7 @@ export { complete, completeSimple, stream, streamSimple } from "./stream.js";
 export type {
   Api,
   AssistantMessage,
+  AssistantMessageEvent,
   AssistantMessageEventStream,
   Context,
   FileContent,

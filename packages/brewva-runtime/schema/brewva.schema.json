@@ -255,6 +255,27 @@
             }
           }
         },
+        "integrations": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "mcp": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "servers": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/definitions/BrewvaMcpServerConfig"
+                  }
+                }
+              }
+            }
+          }
+        },
         "ledger": {
           "type": "object",
           "additionalProperties": false,
@@ -745,6 +766,139 @@
     "BrewvaIntentId": {
       "$ref": "#/definitions/BrewvaIdentifier%3C%22BrewvaIntentId%22%3E"
     },
+    "BrewvaMcpServerConfig": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/BrewvaMcpStdioServerConfig"
+        },
+        {
+          "$ref": "#/definitions/BrewvaMcpStreamableHttpServerConfig"
+        }
+      ]
+    },
+    "BrewvaMcpStdioServerConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "args": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "command": {
+          "type": "string"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "env": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "id": {
+          "type": "string"
+        },
+        "includeToolNames": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "timeoutMs": {
+          "type": "number"
+        },
+        "toolPolicies": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/BrewvaMcpToolPolicyConfig"
+          }
+        },
+        "transport": {
+          "type": "string",
+          "const": "stdio"
+        }
+      },
+      "required": [
+        "args",
+        "command",
+        "enabled",
+        "env",
+        "id",
+        "includeToolNames",
+        "timeoutMs",
+        "toolPolicies",
+        "transport"
+      ]
+    },
+    "BrewvaMcpStreamableHttpServerConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "headers": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "id": {
+          "type": "string"
+        },
+        "includeToolNames": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "timeoutMs": {
+          "type": "number"
+        },
+        "toolPolicies": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/BrewvaMcpToolPolicyConfig"
+          }
+        },
+        "transport": {
+          "type": "string",
+          "const": "streamable_http"
+        },
+        "url": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "enabled",
+        "headers",
+        "id",
+        "includeToolNames",
+        "timeoutMs",
+        "toolPolicies",
+        "transport",
+        "url"
+      ]
+    },
+    "BrewvaMcpToolPolicyConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "actionClass": {
+          "$ref": "#/definitions/ToolActionClass"
+        },
+        "surface": {
+          "$ref": "#/definitions/BrewvaMcpToolSurfaceOverride"
+        }
+      }
+    },
+    "BrewvaMcpToolSurfaceOverride": {
+      "type": "string",
+      "enum": ["base", "skill", "control_plane", "operator"]
+    },
     "BrewvaSessionId": {
       "$ref": "#/definitions/BrewvaIdentifier%3C%22BrewvaSessionId%22%3E"
     },
@@ -1104,6 +1258,23 @@
           "$ref": "#/definitions/ToolAdmissionBehavior"
         }
       }
+    },
+    "ToolActionClass": {
+      "type": "string",
+      "enum": [
+        "workspace_read",
+        "runtime_observe",
+        "workspace_patch",
+        "memory_write",
+        "control_state_mutation",
+        "budget_mutation",
+        "local_exec_readonly",
+        "local_exec_effectful",
+        "external_side_effect",
+        "schedule_mutation",
+        "delegation",
+        "credential_access"
+      ]
     },
     "ToolAdmissionBehavior": {
       "type": "string",

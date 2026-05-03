@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createContextInjectionCollector } from "@brewva/brewva-runtime/context";
+import { estimateTokenCount } from "@brewva/brewva-token-estimation";
 
 function makeRegistration(
   source: string,
@@ -26,7 +27,7 @@ function makeRegistration(
 }
 
 describe("Context injection collector", () => {
-  const estimateTokens = (text: string): number => Math.max(0, Math.ceil(text.length / 3.5));
+  const estimateTokens = (text: string): number => estimateTokenCount(text);
 
   test("does not let oversized provided estimates drop later entries", () => {
     const collector = createContextInjectionCollector();
@@ -99,7 +100,7 @@ describe("Context injection collector", () => {
 
     const consumed = collector.consume(sessionId, 128);
     expect(consumed.entries).toHaveLength(1);
-    expect(consumed.entries[0]?.estimatedTokens).toBe(5);
+    expect(consumed.entries[0]?.estimatedTokens).toBe(estimateTokens(dense));
   });
 
   test("oversized entries are truncated under deterministic single-path policy", () => {

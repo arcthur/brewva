@@ -15,10 +15,12 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.90.0",
+    "@brewva/brewva-token-estimation": "workspace:*",
     "@google/genai": "^1.50.1",
     "@sinclair/typebox": "^0.34.49",
     "ajv": "^8.18.0",
     "ajv-formats": "^3.0.1",
+    "eventsource-parser": "^3.0.8",
     "openai": "6.34.0",
     "partial-json": "^0.1.7",
     "proxy-agent": "^8.0.1"

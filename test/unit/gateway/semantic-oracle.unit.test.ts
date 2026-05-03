@@ -206,10 +206,10 @@ describe("hosted semantic reranker", () => {
       runtime,
       model: {
         ...createSemanticModel(),
-        provider: "google",
-        id: "gemini-cli",
-        name: "Gemini CLI",
-        api: "google-gemini-cli",
+        provider: "custom",
+        id: "custom-unsupported",
+        name: "Custom Unsupported",
+        api: "custom-unsupported-api",
         baseUrl: "https://example.invalid",
       },
       modelCatalog: {

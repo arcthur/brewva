@@ -1,11 +1,10 @@
 import type { ContextInjectionCategory } from "@brewva/brewva-runtime";
+import { truncateTextToTokenBudget } from "@brewva/brewva-token-estimation";
 import { estimateTokens } from "./tool-output-distiller.js";
 
 const GOVERNANCE_TOKEN_CAP_RATIO = 0.15;
 const MIN_GOVERNANCE_TOKEN_CAP = 96;
 const MIN_CAPABILITY_VIEW_TOKENS = 48;
-const CHARS_PER_TOKEN = 3.5;
-
 export interface GovernanceContextBlock {
   id: string;
   category: ContextInjectionCategory;
@@ -37,14 +36,7 @@ const DIAGNOSTIC_CAPABILITY_NAMES = new Set<string>([
 ]);
 
 function truncateContentToTokenBudget(content: string, maxTokens: number): string {
-  const maxChars = Math.max(1, Math.floor(Math.max(1, maxTokens) * CHARS_PER_TOKEN));
-  if (content.length <= maxChars) {
-    return content;
-  }
-  if (maxChars <= 3) {
-    return content.slice(0, maxChars);
-  }
-  return `${content.slice(0, maxChars - 3)}...`;
+  return truncateTextToTokenBudget(content, Math.max(1, maxTokens));
 }
 
 function rebuildBlock(

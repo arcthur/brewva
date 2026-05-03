@@ -76,6 +76,7 @@ Workflow walkthroughs:
 ## Reference
 
 - Configuration: `docs/reference/configuration.md`
+- MCP integration: `docs/reference/mcp-integration.md`
 - Tools: `docs/reference/tools.md`
   - Navigation tools: `docs/reference/tools/navigation.md`
   - Execution tools: `docs/reference/tools/execution.md`
@@ -84,6 +85,7 @@ Workflow walkthroughs:
   - Workflow and scheduling tools: `docs/reference/tools/workflow-and-scheduling.md`
 - Skills: `docs/reference/skills.md`
 - Runtime contract and ports: `docs/reference/runtime.md`
+- Provider streaming: `docs/reference/provider-streaming.md`
 - Context composer: `docs/reference/context-composer.md`
 - Token cache: `docs/reference/token-cache.md`
 - Proactivity (removed, explicit heartbeat remains): `docs/reference/proactivity-engine.md`

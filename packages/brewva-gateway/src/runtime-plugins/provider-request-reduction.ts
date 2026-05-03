@@ -1,8 +1,14 @@
 import { type BrewvaHostedRuntimePort, type ContextBudgetUsage } from "@brewva/brewva-runtime";
 import type { InternalHostPluginApi } from "@brewva/brewva-substrate";
+import {
+  estimateStructuredTokenCount,
+  normalizePercent,
+  resolveContextUsageRatio,
+  resolveContextUsageTokens,
+  type TokenEstimatorHints,
+} from "@brewva/brewva-token-estimation";
 import { getHostedTurnTransitionCoordinator } from "../session/turn-transition.js";
 import { recordTransientReductionEvidence } from "./context-evidence.js";
-import { estimateTokens } from "./tool-output-distiller.js";
 
 const CLEARED_TOOL_RESULT_PLACEHOLDER = "[cleared_for_request]";
 const RECENT_TOOL_RESULT_RETAIN_COUNT = 4;
@@ -97,43 +103,11 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 }
 
 function resolveUsageRatio(usage: ContextBudgetUsage | undefined): number | null {
-  if (!usage) {
-    return null;
-  }
-  if (typeof usage.percent === "number" && Number.isFinite(usage.percent)) {
-    const normalized = usage.percent > 1 ? usage.percent / 100 : usage.percent;
-    return Math.max(0, Math.min(1, normalized));
-  }
-  if (
-    typeof usage.tokens === "number" &&
-    Number.isFinite(usage.tokens) &&
-    usage.tokens >= 0 &&
-    typeof usage.contextWindow === "number" &&
-    Number.isFinite(usage.contextWindow) &&
-    usage.contextWindow > 0
-  ) {
-    return Math.max(0, Math.min(1, usage.tokens / usage.contextWindow));
-  }
-  return null;
+  return resolveContextUsageRatio(usage);
 }
 
 function resolveUsageTokens(usage: ContextBudgetUsage | undefined): number | null {
-  if (!usage) {
-    return null;
-  }
-  if (typeof usage.tokens === "number" && Number.isFinite(usage.tokens) && usage.tokens >= 0) {
-    return Math.ceil(usage.tokens);
-  }
-  const ratio = resolveUsageRatio(usage);
-  if (
-    ratio === null ||
-    typeof usage.contextWindow !== "number" ||
-    !Number.isFinite(usage.contextWindow) ||
-    usage.contextWindow <= 0
-  ) {
-    return null;
-  }
-  return Math.ceil(ratio * usage.contextWindow);
+  return resolveContextUsageTokens(usage);
 }
 
 function resolveUsageContextWindow(usage: ContextBudgetUsage | undefined): number | null {
@@ -172,13 +146,49 @@ function shouldCountPayloadString(value: string, context: PayloadStringContext):
   return true;
 }
 
-function estimatePayloadTextTokens(value: unknown, context: PayloadStringContext = {}): number {
+function derivePayloadTokenEstimatorHints(
+  payload: unknown,
+  metadata?: {
+    provider?: string;
+    api?: string;
+    modelId?: string;
+  },
+): TokenEstimatorHints {
+  const record = asRecord(payload);
+  const modelId =
+    metadata?.modelId ??
+    (record && typeof record.model === "string"
+      ? record.model
+      : record && typeof record.modelId === "string"
+        ? record.modelId
+        : null);
+  const api =
+    metadata?.api ??
+    (record && typeof record.api === "string"
+      ? record.api
+      : record && typeof record.providerApi === "string"
+        ? record.providerApi
+        : null);
+  return {
+    api,
+    provider: metadata?.provider,
+    modelId,
+  };
+}
+
+function estimatePayloadTextTokens(
+  value: unknown,
+  context: PayloadStringContext = {},
+  hints: TokenEstimatorHints = {},
+): number {
   if (typeof value === "string") {
-    return shouldCountPayloadString(value, context) ? estimateTokens(value) : 0;
+    return shouldCountPayloadString(value, context)
+      ? estimateStructuredTokenCount(value, hints)
+      : 0;
   }
   if (Array.isArray(value)) {
     return value.reduce(
-      (sum, entry) => sum + estimatePayloadTextTokens(entry, { parent: context.parent }),
+      (sum, entry) => sum + estimatePayloadTextTokens(entry, { parent: context.parent }, hints),
       0,
     );
   }
@@ -193,7 +203,7 @@ function estimatePayloadTextTokens(value: unknown, context: PayloadStringContext
 
   let total = 0;
   for (const [key, entry] of Object.entries(record)) {
-    total += estimatePayloadTextTokens(entry, { parent: record, key });
+    total += estimatePayloadTextTokens(entry, { parent: record, key }, hints);
   }
   return total;
 }
@@ -201,13 +211,22 @@ function estimatePayloadTextTokens(value: unknown, context: PayloadStringContext
 function buildEstimatedPayloadUsage(
   payload: unknown,
   runtimeUsage: ContextBudgetUsage | undefined,
+  metadata?: {
+    provider?: string;
+    api?: string;
+    modelId?: string;
+  },
 ): ContextBudgetUsage | undefined {
   const contextWindow = resolveUsageContextWindow(runtimeUsage);
   if (!contextWindow) {
     return undefined;
   }
 
-  const estimatedTokens = estimatePayloadTextTokens(payload);
+  const estimatedTokens = estimatePayloadTextTokens(
+    payload,
+    {},
+    derivePayloadTokenEstimatorHints(payload, metadata),
+  );
   if (estimatedTokens <= 0) {
     return undefined;
   }
@@ -216,7 +235,7 @@ function buildEstimatedPayloadUsage(
   return {
     tokens: estimatedTokens,
     contextWindow,
-    percent: usageRatio,
+    percent: normalizePercent(usageRatio),
   };
 }
 
@@ -230,11 +249,16 @@ function hasUsableRuntimeUsage(runtimeUsage: ContextBudgetUsage | undefined): bo
 function buildEffectiveReductionUsage(
   payload: unknown,
   runtimeUsage: ContextBudgetUsage | undefined,
+  metadata?: {
+    provider?: string;
+    api?: string;
+    modelId?: string;
+  },
 ): ContextBudgetUsage | undefined {
   if (hasUsableRuntimeUsage(runtimeUsage)) {
     return runtimeUsage;
   }
-  return buildEstimatedPayloadUsage(payload, runtimeUsage);
+  return buildEstimatedPayloadUsage(payload, runtimeUsage, metadata);
 }
 
 function buildStringCandidate(
@@ -469,6 +493,11 @@ export function resolveTransientOutboundReductionEligibility(
   runtime: BrewvaHostedRuntimePort,
   sessionId: string,
   payload?: unknown,
+  metadata?: {
+    provider?: string;
+    api?: string;
+    modelId?: string;
+  },
 ): ReductionEligibility {
   if (!runtime.config.infrastructure.contextBudget.enabled) {
     return {
@@ -487,7 +516,11 @@ export function resolveTransientOutboundReductionEligibility(
     };
   }
 
-  const usage = buildEffectiveReductionUsage(payload, runtime.inspect.context.getUsage(sessionId));
+  const usage = buildEffectiveReductionUsage(
+    payload,
+    runtime.inspect.context.getUsage(sessionId),
+    metadata,
+  );
   if (!usage) {
     return {
       allowed: false,
@@ -532,7 +565,14 @@ export function resolveTransientOutboundReductionEligibility(
   };
 }
 
-export function applyTransientOutboundReductionToPayload(payload: unknown): ReductionResult {
+export function applyTransientOutboundReductionToPayload(
+  payload: unknown,
+  metadata?: {
+    provider?: string;
+    api?: string;
+    modelId?: string;
+  },
+): ReductionResult {
   const record = asRecord(payload);
   if (!record) {
     return {
@@ -547,6 +587,7 @@ export function applyTransientOutboundReductionToPayload(payload: unknown): Redu
   }
 
   const cloned = structuredClone(record);
+  const hints = derivePayloadTokenEstimatorHints(cloned, metadata);
   const candidates = collectReductionCandidates(cloned);
   if (candidates.length <= RECENT_TOOL_RESULT_RETAIN_COUNT) {
     return {
@@ -579,7 +620,8 @@ export function applyTransientOutboundReductionToPayload(payload: unknown): Redu
     clearedChars,
     estimatedTokenSavings: Math.max(
       0,
-      estimateTokens("x".repeat(clearedChars)) - estimateTokens("x".repeat(placeholderChars)),
+      estimateStructuredTokenCount("x".repeat(clearedChars), hints) -
+        estimateStructuredTokenCount("x".repeat(placeholderChars), hints),
     ),
   };
 }
@@ -622,6 +664,11 @@ export function registerProviderRequestReduction(
       runtime,
       sessionId,
       event.payload,
+      {
+        provider: event.provider,
+        api: event.api,
+        modelId: event.modelId,
+      },
     );
     if (!eligibility.allowed) {
       const observed = runtime.maintain.context.observeTransientReduction(sessionId, {
@@ -641,7 +688,11 @@ export function registerProviderRequestReduction(
       return undefined;
     }
 
-    const result = applyTransientOutboundReductionToPayload(event.payload);
+    const result = applyTransientOutboundReductionToPayload(event.payload, {
+      provider: event.provider,
+      api: event.api,
+      modelId: event.modelId,
+    });
     const cachePreservationReason = resolveWarmProviderCachePreservationReason(
       runtime,
       sessionId,

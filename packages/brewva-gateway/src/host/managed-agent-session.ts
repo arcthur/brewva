@@ -72,6 +72,7 @@ import {
   BrewvaToolResult,
   type BrewvaToolUiPort,
 } from "@brewva/brewva-substrate";
+import { estimateStructuredTokenCount } from "@brewva/brewva-token-estimation";
 import { resolveBrewvaModelSelection } from "@brewva/brewva-tools";
 import {
   GoogleCachedContentManager,
@@ -791,11 +792,12 @@ function buildDeterministicCompactionSummary(messages: unknown[]): string {
 }
 
 function estimateCompactionTokens(messages: unknown[]): number {
-  const chars = messages
-    .map((message) => summarizeCompactionMessage(message) ?? "")
-    .join("\n")
-    .trim().length;
-  return chars > 0 ? Math.max(1, Math.ceil(chars / 4)) : 0;
+  return estimateStructuredTokenCount(
+    messages
+      .map((message) => summarizeCompactionMessage(message) ?? "")
+      .join("\n")
+      .trim(),
+  );
 }
 
 function sameSessionMessages(left: unknown, right: unknown): boolean {
@@ -1365,7 +1367,13 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
           return payload;
         }
         let nextPayload = await runner.emitBeforeProviderRequest(
-          { type: "before_provider_request", payload },
+          {
+            type: "before_provider_request",
+            payload,
+            provider: model.provider,
+            api: model.api,
+            modelId: model.id,
+          },
           session.createHostContext(),
         );
         if (options.runtime) {

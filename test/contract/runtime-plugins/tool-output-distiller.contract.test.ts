@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { distillToolOutput } from "@brewva/brewva-gateway/runtime-plugins";
+import { distillToolOutput, estimateTokens } from "@brewva/brewva-gateway/runtime-plugins";
 
 describe("tool output distiller", () => {
   test("applies exec heuristic and compresses noisy output", () => {
@@ -170,7 +170,7 @@ describe("tool output distiller", () => {
       outputText: output,
     });
 
-    expect(distillation.rawTokens).toBe(47);
+    expect(distillation.rawTokens).toBe(estimateTokens(output));
     expect(distillation.distillationApplied).toBe(false);
     expect(distillation.strategy).toBe("none");
   });

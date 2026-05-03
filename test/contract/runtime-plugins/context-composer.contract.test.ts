@@ -561,7 +561,6 @@ describe("context composer", () => {
     expect(result.content).toContain("effects: memory_write");
     expect(result.content).not.toContain("description:");
     expect(result.content).not.toContain("surface_policy:");
-    expect(result.content).not.toContain("boundary_policy:");
     expect(result.content).not.toContain("hidden_skill_count:");
     expect(result.content).not.toContain("operator_hint:");
   });

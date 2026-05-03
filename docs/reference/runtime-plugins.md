@@ -80,6 +80,8 @@ Current factory option surface:
 - `runtime?`
 - `internalRuntimePlugins?` on `createHostedSession(...)` / `createBrewvaSession(...)` for composing repo-owned internal runtime plugins alongside the canonical hosted pipeline
 - `localHooks?` for safe local hooks at `pre_admission`, `pre_effect`, `post_receipt`, `post_rollback`, and `post_terminal`
+- `customTools?` for caller-provided hosted tools that should join the normal hosted tool surface
+- `mcpToolSources?` for bridging MCP catalogs into hosted `customTools`
 - `registerTools?` (default `true`)
 - `orchestration?`
 - `delegationStore?`
@@ -281,6 +283,9 @@ Stable responsibilities:
   interpretation
 - provider-core renders Anthropic, OpenAI, Codex, and implicit-prefix strategies
   at the provider edge
+- provider-core normalizes provider-local streaming wire shapes into one
+  `AssistantMessageEventStream`; the detailed contract lives in
+  `docs/reference/provider-streaming.md`
 - gateway fingerprints final provider payloads and records provider-cache
   observations through runtime context inspection
 - provider-request reduction marks expected cache breaks and can preserve a

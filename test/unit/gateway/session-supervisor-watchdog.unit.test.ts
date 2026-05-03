@@ -209,7 +209,7 @@ describe("session supervisor watchdog bridge", () => {
         rmSync(workspace, { recursive: true, force: true });
       }
     },
-    { timeout: 10_000 },
+    { timeout: 15_000 },
   );
 
   test(

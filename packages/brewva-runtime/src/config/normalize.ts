@@ -5,6 +5,7 @@ import {
 } from "./normalization-shared.js";
 import { normalizeChannelsConfig } from "./normalize-channels.js";
 import { normalizeInfrastructureConfig } from "./normalize-infrastructure.js";
+import { normalizeIntegrationsConfig } from "./normalize-integrations.js";
 import { normalizeParallelConfig } from "./normalize-parallel.js";
 import { normalizeProjectionConfig } from "./normalize-projection.js";
 import { normalizeScheduleConfig } from "./normalize-schedule.js";
@@ -26,6 +27,7 @@ export function normalizeBrewvaConfig(config: unknown, defaults: BrewvaConfig): 
   const scheduleInput = isRecord(input.schedule) ? input.schedule : {};
   const parallelInput = isRecord(input.parallel) ? input.parallel : {};
   const channelsInput = isRecord(input.channels) ? input.channels : {};
+  const integrationsInput = isRecord(input.integrations) ? input.integrations : {};
   const infrastructureInput = isRecord(input.infrastructure) ? input.infrastructure : {};
 
   return {
@@ -50,6 +52,7 @@ export function normalizeBrewvaConfig(config: unknown, defaults: BrewvaConfig): 
     schedule: normalizeScheduleConfig(scheduleInput, defaults.schedule),
     parallel: normalizeParallelConfig(parallelInput, defaults.parallel),
     channels: normalizeChannelsConfig(channelsInput, defaults.channels),
+    integrations: normalizeIntegrationsConfig(integrationsInput, defaults.integrations),
     infrastructure: normalizeInfrastructureConfig(infrastructureInput, defaults.infrastructure),
   };
 }

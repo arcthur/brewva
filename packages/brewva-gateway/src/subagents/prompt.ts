@@ -5,15 +5,10 @@ import {
   type SkillDocument,
   type SkillOutputContract,
 } from "@brewva/brewva-runtime";
+import { estimateTokenCount } from "@brewva/brewva-token-estimation";
 import type { DelegationPacket, SubagentContextRef } from "@brewva/brewva-tools";
 import { buildStructuredOutcomeContract, getCanonicalSubagentPrompt } from "./protocol.js";
 import type { HostedDelegationTarget } from "./targets.js";
-
-const APPROX_CHARS_PER_TOKEN = 4;
-
-function estimateTokens(text: string): number {
-  return Math.max(1, Math.ceil(text.length / APPROX_CHARS_PER_TOKEN));
-}
 
 function renderContextRefs(
   refs: readonly SubagentContextRef[] | undefined,
@@ -35,7 +30,7 @@ function renderContextRefs(
       `- [${ref.kind}] ${ref.locator}`,
       annotations.length > 0 ? ` :: ${annotations.join(" | ")}` : "",
     ].join("");
-    const tokens = estimateTokens(line);
+    const tokens = Math.max(1, estimateTokenCount(line));
     if (maxInjectionTokens && lines.length > 0 && consumedTokens + tokens > maxInjectionTokens) {
       lines.push("- [truncated] Additional context references omitted to stay within budget.");
       break;

@@ -1,4 +1,5 @@
-export const CHARS_PER_TOKEN = 3.5;
+import { estimateTokenCount, truncateTextToTokenBudget } from "@brewva/brewva-token-estimation";
+
 const DEFAULT_MAX_SUMMARY_TOKENS = 220;
 const MAX_LINE_CHARS = 240;
 const MIN_DISTILLATION_RAW_TOKENS = 48;
@@ -34,7 +35,7 @@ export interface ToolOutputDistillation {
 }
 
 export function estimateTokens(text: string): number {
-  return Math.max(0, Math.ceil(text.length / CHARS_PER_TOKEN));
+  return estimateTokenCount(text);
 }
 
 function clampLine(line: string): string {
@@ -55,18 +56,12 @@ function clampSummary(
   text: string,
   maxSummaryTokens: number,
 ): { text: string; truncated: boolean } {
-  const maxChars = Math.max(1, Math.floor(Math.max(1, maxSummaryTokens) * CHARS_PER_TOKEN));
-  if (text.length <= maxChars) {
+  const clamped = truncateTextToTokenBudget(text, Math.max(1, maxSummaryTokens));
+  if (clamped === text) {
     return { text, truncated: false };
   }
-  if (maxChars <= 3) {
-    return {
-      text: text.slice(0, maxChars),
-      truncated: true,
-    };
-  }
   return {
-    text: `${text.slice(0, maxChars - 3)}...`,
+    text: clamped,
     truncated: true,
   };
 }

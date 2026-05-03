@@ -2,9 +2,10 @@ import OpenAI from "openai";
 import type { ResponseCreateParamsStreaming } from "openai/resources/responses/responses.js";
 import { resolveOpenAIResponsesCacheRender } from "../cache-policy.js";
 import { supportsXhigh } from "../models.js";
+import { runProviderStream } from "../streaming/stream-runner.js";
 import type {
   Api,
-  AssistantMessage,
+  AssistantMessageEventStream,
   Context,
   Model,
   SimpleStreamOptions,
@@ -12,7 +13,6 @@ import type {
   StreamOptions,
   Usage,
 } from "../types.js";
-import { AssistantMessageEventStream } from "../utils/event-stream.js";
 import { buildCopilotDynamicHeaders, hasCopilotVisionInput } from "./github-copilot-headers.js";
 import {
   convertResponsesMessages,
@@ -39,29 +39,9 @@ export const streamOpenAIResponses: StreamFunction<"openai-responses", OpenAIRes
   context: Context,
   options?: OpenAIResponsesOptions,
 ): AssistantMessageEventStream => {
-  const stream = new AssistantMessageEventStream();
-
-  // Start async processing
-  (async () => {
-    const output: AssistantMessage = {
-      role: "assistant",
-      content: [],
-      api: model.api as Api,
-      provider: model.provider,
-      model: model.id,
-      usage: {
-        input: 0,
-        output: 0,
-        cacheRead: 0,
-        cacheWrite: 0,
-        totalTokens: 0,
-        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-      },
-      stopReason: "stop",
-      timestamp: Date.now(),
-    };
-
-    try {
+  return runProviderStream(
+    model,
+    async ({ stream, output, ensureStarted, composer }) => {
       // Create OpenAI client
       const apiKey = options?.apiKey || "";
       const client = createClient(model, context, apiKey, options?.headers);
@@ -78,33 +58,21 @@ export const streamOpenAIResponses: StreamFunction<"openai-responses", OpenAIRes
         params,
         options?.signal ? { signal: options.signal } : undefined,
       );
-      stream.push({ type: "start", partial: output });
+      ensureStarted();
 
-      await processResponsesStream(openaiStream, output, stream, model, {
+      await processResponsesStream(openaiStream, output, stream, model, composer.toolCalls, {
         serviceTier: options?.serviceTier,
         applyServiceTierPricing,
       });
 
-      if (options?.signal?.aborted) {
-        throw new Error("Request was aborted");
-      }
-
       if (output.stopReason === "aborted" || output.stopReason === "error") {
         throw new Error("An unknown error occurred");
       }
-
-      stream.push({ type: "done", reason: output.stopReason, message: output });
-      stream.end();
-    } catch (error) {
-      for (const block of output.content) delete (block as { index?: number }).index;
-      output.stopReason = options?.signal?.aborted ? "aborted" : "error";
-      output.errorMessage = error instanceof Error ? error.message : JSON.stringify(error);
-      stream.push({ type: "error", reason: output.stopReason, error: output });
-      stream.end();
-    }
-  })();
-
-  return stream;
+    },
+    {
+      signal: options?.signal,
+    },
+  );
 };
 
 export const streamSimpleOpenAIResponses: StreamFunction<

@@ -157,6 +157,12 @@ export const DEFAULT_BREWVA_CONFIG: BrewvaConfig = {
       },
     },
   },
+  integrations: {
+    mcp: {
+      enabled: false,
+      servers: [],
+    },
+  },
   infrastructure: {
     events: {
       enabled: true,

@@ -195,20 +195,17 @@ describe("ContextArena", () => {
     const arena = createContextArena();
     const budgetSessionId = "context-arena-budget-classes";
 
-    arena.append(
-      budgetSessionId,
-      makeEntry("brewva.runtime-status", "runtime-status", "core status block remains visible"),
-    );
+    arena.append(budgetSessionId, makeEntry("brewva.runtime-status", "runtime-status", "status"));
     arena.append(
       budgetSessionId,
       makeEntry(
         "vendor.reference",
         "reference",
-        "recall recall recall recall recall recall recall",
+        Array.from({ length: 50 }, (_, index) => `reference${index}`).join(" "),
       ),
     );
 
-    const planned = arena.plan(budgetSessionId, 8);
+    const planned = arena.plan(budgetSessionId, 2);
     expect(planned.entries.map((entry) => entry.source)).toContain("brewva.runtime-status");
     expect(planned.entries.map((entry) => entry.source)).not.toContain("vendor.reference");
   });

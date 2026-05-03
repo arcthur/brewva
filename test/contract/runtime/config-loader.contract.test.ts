@@ -209,6 +209,132 @@ describe("Brewva config loader normalization", () => {
     expect(loaded.skills.routing.scopes).toEqual(["domain", "operator"]);
   });
 
+  test("normalizes MCP integration config", () => {
+    const workspace = createTestWorkspace("mcp-integration-config");
+    writeFileSync(
+      join(workspace, ".brewva/brewva.json"),
+      JSON.stringify(
+        {
+          integrations: {
+            mcp: {
+              enabled: true,
+              servers: [
+                {
+                  id: "repo",
+                  enabled: true,
+                  transport: "stdio",
+                  command: "bunx",
+                  args: ["@modelcontextprotocol/server-filesystem", "."],
+                  env: {
+                    MCP_LOG_LEVEL: "info",
+                  },
+                  timeoutMs: 5000,
+                  includeToolNames: ["search"],
+                  toolPolicies: {
+                    search: {
+                      actionClass: "workspace_read",
+                      surface: "base",
+                    },
+                  },
+                },
+              ],
+            },
+          },
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const loaded = loadBrewvaConfig({ cwd: workspace, configPath: ".brewva/brewva.json" });
+    expect(loaded.integrations.mcp).toEqual({
+      enabled: true,
+      servers: [
+        {
+          id: "repo",
+          enabled: true,
+          transport: "stdio",
+          command: "bunx",
+          args: ["@modelcontextprotocol/server-filesystem", "."],
+          env: {
+            MCP_LOG_LEVEL: "info",
+          },
+          timeoutMs: 5000,
+          includeToolNames: ["search"],
+          toolPolicies: {
+            search: {
+              actionClass: "workspace_read",
+              surface: "base",
+            },
+          },
+        },
+      ],
+    });
+  });
+
+  test("fails fast on invalid MCP config", () => {
+    const workspace = createTestWorkspace("mcp-invalid-config");
+    writeFileSync(
+      join(workspace, ".brewva/brewva.json"),
+      JSON.stringify(
+        {
+          integrations: {
+            mcp: {
+              enabled: true,
+              servers: [
+                {
+                  id: "repo",
+                  command: "bunx",
+                },
+              ],
+            },
+          },
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    expect(() => loadBrewvaConfig({ cwd: workspace, configPath: ".brewva/brewva.json" })).toThrow(
+      /transport/,
+    );
+  });
+
+  test("fails fast on duplicate MCP server ids in direct runtime config", () => {
+    const workspace = createTestWorkspace("mcp-duplicate-server-ids");
+    const config = structuredClone(DEFAULT_BREWVA_CONFIG);
+    config.integrations.mcp.enabled = true;
+    config.integrations.mcp.servers = [
+      {
+        id: "repo",
+        enabled: true,
+        transport: "stdio",
+        command: "bunx",
+        args: [],
+        env: {},
+        timeoutMs: 30_000,
+        includeToolNames: [],
+        toolPolicies: {},
+      },
+      {
+        id: "repo",
+        enabled: true,
+        transport: "streamable_http",
+        url: "http://localhost:3333/mcp",
+        headers: {},
+        timeoutMs: 30_000,
+        includeToolNames: [],
+        toolPolicies: {},
+      },
+    ];
+
+    expect(() => new BrewvaRuntime({ cwd: workspace, config })).toThrow(
+      /duplicate server id "repo"/,
+    );
+  });
+
   test("tracks explicit routing intent separately from normalized routing defaults", () => {
     const workspace = createTestWorkspace("routing-intent-metadata");
     writeFileSync(

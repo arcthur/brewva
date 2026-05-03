@@ -100,6 +100,7 @@
   },
   "dependencies": {
     "@brewva/brewva-search": "workspace:*",
+    "@brewva/brewva-token-estimation": "workspace:*",
     "ajv": "^8.18.0",
     "date-fns": "^4.1.0",
     "jsonc-parser": "^3.3.1",

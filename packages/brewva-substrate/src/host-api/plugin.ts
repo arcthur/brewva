@@ -151,6 +151,9 @@ export interface BrewvaHostContextEvent {
 export interface BrewvaHostBeforeProviderRequestEvent {
   type: "before_provider_request";
   payload: unknown;
+  provider?: string;
+  api?: string;
+  modelId?: string;
 }
 
 export interface BrewvaHostBeforeAgentStartEvent {

@@ -3,7 +3,16 @@ import {
   convertResponsesMessages,
   processResponsesStream,
 } from "../../../packages/brewva-provider-core/src/providers/openai-responses-shared.js";
+import { IncrementalToolCallFolder } from "../../../packages/brewva-provider-core/src/streaming/tool-call-folder.js";
+import type { AssistantMessage } from "../../../packages/brewva-provider-core/src/types.js";
 import { AssistantMessageEventStream } from "../../../packages/brewva-provider-core/src/utils/event-stream.js";
+
+function createTestToolCalls(
+  output: unknown,
+  stream: AssistantMessageEventStream,
+): IncrementalToolCallFolder {
+  return new IncrementalToolCallFolder(output as AssistantMessage, stream, () => {});
+}
 
 const TEST_MODEL = {
   provider: "openai",
@@ -165,6 +174,7 @@ describe("openai responses stream processing", () => {
       output as never,
       stream,
       TEST_MODEL as never,
+      createTestToolCalls(output, stream),
     );
 
     expect(
@@ -174,6 +184,201 @@ describe("openai responses stream processing", () => {
       {
         type: "thinking",
         thinking: "Step one",
+      },
+    ]);
+  });
+
+  test("does not leak partialJson working state into final tool call output", async () => {
+    const output = {
+      role: "assistant",
+      content: [],
+      api: "openai-responses",
+      provider: "openai",
+      model: "gpt-5.4-mini",
+      usage: {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 0,
+        cost: {
+          input: 0,
+          output: 0,
+          cacheRead: 0,
+          cacheWrite: 0,
+          total: 0,
+        },
+      },
+      stopReason: "toolUse",
+      timestamp: 1,
+    };
+    const stream = new AssistantMessageEventStream();
+
+    await processResponsesStream(
+      [
+        {
+          type: "response.output_item.added",
+          item: {
+            id: "fc_1",
+            call_id: "call_1",
+            type: "function_call",
+            name: "search",
+            arguments: "",
+          },
+        },
+        {
+          type: "response.function_call_arguments.delta",
+          item_id: "fc_1",
+          delta: '{"query":"needle"',
+        },
+        {
+          type: "response.function_call_arguments.done",
+          item_id: "fc_1",
+          arguments: '{"query":"needle","limit":2}',
+        },
+        {
+          type: "response.output_item.done",
+          item: {
+            id: "fc_1",
+            call_id: "call_1",
+            type: "function_call",
+            name: "search",
+            arguments: '{"query":"needle","limit":2}',
+          },
+        },
+      ] as never,
+      output as never,
+      stream,
+      TEST_MODEL as never,
+      createTestToolCalls(output, stream),
+    );
+
+    expect(output.content as unknown[]).toEqual([
+      {
+        type: "toolCall",
+        id: "call_1|fc_1",
+        name: "search",
+        arguments: {
+          query: "needle",
+          limit: 2,
+        },
+      },
+    ]);
+    expect(JSON.stringify(output.content)).not.toContain("partialJson");
+  });
+
+  test("routes interleaved function_call argument deltas by item_id", async () => {
+    const output = {
+      role: "assistant",
+      content: [],
+      api: "openai-responses",
+      provider: "openai",
+      model: "gpt-5.4-mini",
+      usage: {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 0,
+        cost: {
+          input: 0,
+          output: 0,
+          cacheRead: 0,
+          cacheWrite: 0,
+          total: 0,
+        },
+      },
+      stopReason: "toolUse",
+      timestamp: 1,
+    };
+    const stream = new AssistantMessageEventStream();
+
+    await processResponsesStream(
+      [
+        {
+          type: "response.output_item.added",
+          item: {
+            id: "fc_1",
+            call_id: "call_1",
+            type: "function_call",
+            name: "search",
+            arguments: "",
+          },
+        },
+        {
+          type: "response.output_item.added",
+          item: {
+            id: "fc_2",
+            call_id: "call_2",
+            type: "function_call",
+            name: "read",
+            arguments: "",
+          },
+        },
+        {
+          type: "response.function_call_arguments.delta",
+          item_id: "fc_1",
+          delta: '{"query":"alpha"',
+        },
+        {
+          type: "response.function_call_arguments.delta",
+          item_id: "fc_2",
+          delta: '{"path":"README',
+        },
+        {
+          type: "response.function_call_arguments.done",
+          item_id: "fc_1",
+          arguments: '{"query":"alpha","limit":2}',
+        },
+        {
+          type: "response.function_call_arguments.done",
+          item_id: "fc_2",
+          arguments: '{"path":"README.md"}',
+        },
+        {
+          type: "response.output_item.done",
+          item: {
+            id: "fc_2",
+            call_id: "call_2",
+            type: "function_call",
+            name: "read",
+            arguments: '{"path":"README.md"}',
+          },
+        },
+        {
+          type: "response.output_item.done",
+          item: {
+            id: "fc_1",
+            call_id: "call_1",
+            type: "function_call",
+            name: "search",
+            arguments: '{"query":"alpha","limit":2}',
+          },
+        },
+      ] as never,
+      output as never,
+      stream,
+      TEST_MODEL as never,
+      createTestToolCalls(output, stream),
+    );
+
+    expect(output.content as unknown[]).toEqual([
+      {
+        type: "toolCall",
+        id: "call_1|fc_1",
+        name: "search",
+        arguments: {
+          query: "alpha",
+          limit: 2,
+        },
+      },
+      {
+        type: "toolCall",
+        id: "call_2|fc_2",
+        name: "read",
+        arguments: {
+          path: "README.md",
+        },
       },
     ]);
   });

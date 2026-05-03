@@ -1,6 +1,6 @@
 import type { BrewvaIntentId, BrewvaSessionId } from "../core/identifiers-bridge.js";
 import type { SecurityEnforcementPreference, VerificationLevel } from "../core/shared.js";
-import type { ToolActionAdmissionOverrides } from "../domain/governance/types.js";
+import type { ToolActionAdmissionOverrides, ToolActionClass } from "../domain/governance/types.js";
 import type { SkillContractOverride, SkillRoutingScope } from "../domain/skills/types.js";
 
 export interface BrewvaSecurityBoundaryNetworkRule {
@@ -59,6 +59,43 @@ export interface BrewvaScheduleSelfImproveConfig {
     expectedBehavior?: string;
     constraints?: readonly string[];
   };
+}
+
+export type BrewvaMcpToolSurfaceOverride = "base" | "skill" | "control_plane" | "operator";
+
+export interface BrewvaMcpToolPolicyConfig {
+  actionClass?: ToolActionClass;
+  surface?: BrewvaMcpToolSurfaceOverride;
+}
+
+interface BrewvaMcpServerConfigBase {
+  id: string;
+  enabled: boolean;
+  timeoutMs: number;
+  includeToolNames: string[];
+  toolPolicies: Record<string, BrewvaMcpToolPolicyConfig>;
+}
+
+export interface BrewvaMcpStdioServerConfig extends BrewvaMcpServerConfigBase {
+  transport: "stdio";
+  command: string;
+  args: string[];
+  env: Record<string, string>;
+}
+
+export interface BrewvaMcpStreamableHttpServerConfig extends BrewvaMcpServerConfigBase {
+  transport: "streamable_http";
+  url: string;
+  headers: Record<string, string>;
+}
+
+export type BrewvaMcpServerConfig =
+  | BrewvaMcpStdioServerConfig
+  | BrewvaMcpStreamableHttpServerConfig;
+
+export interface BrewvaMcpIntegrationConfig {
+  enabled: boolean;
+  servers: BrewvaMcpServerConfig[];
 }
 
 export interface BrewvaConfig {
@@ -159,6 +196,9 @@ export interface BrewvaConfig {
         idleRuntimeTtlMs: number;
       };
     };
+  };
+  integrations: {
+    mcp: BrewvaMcpIntegrationConfig;
   };
   infrastructure: {
     events: {
@@ -271,6 +311,11 @@ export interface BrewvaConfigFile {
     > & {
       owners?: Partial<BrewvaConfig["channels"]["orchestration"]["owners"]>;
       limits?: Partial<BrewvaConfig["channels"]["orchestration"]["limits"]>;
+    };
+  };
+  integrations?: Partial<Omit<BrewvaConfig["integrations"], "mcp">> & {
+    mcp?: Partial<Omit<BrewvaMcpIntegrationConfig, "servers">> & {
+      servers?: BrewvaMcpServerConfig[];
     };
   };
   infrastructure?: Partial<

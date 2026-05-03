@@ -84,8 +84,10 @@ export {
 } from "./required-capabilities.js";
 export {
   attachBrewvaToolExecutionTraits,
+  createBrewvaToolCatalog,
   defineBrewvaTool,
   getBrewvaAgentParameters,
+  getBrewvaToolDescriptor,
   getBrewvaToolMetadata,
   resolveBrewvaToolExecutionTraits,
   validateBrewvaToolRequiredCapabilities,
@@ -241,6 +243,7 @@ export type {
   BrewvaToolDelegationQuery,
   BrewvaBundledToolOptions,
   BrewvaBundledToolRuntime,
+  BrewvaToolDescriptor,
   BrewvaToolExecutionTraitResolverInput,
   BrewvaToolExecutionTraits,
   BrewvaToolExecutionTraitsResolver,

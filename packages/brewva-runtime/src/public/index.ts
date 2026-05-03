@@ -184,6 +184,12 @@ export type {
 export type {
   BrewvaConfig,
   BrewvaConfigFile,
+  BrewvaMcpIntegrationConfig,
+  BrewvaMcpServerConfig,
+  BrewvaMcpStdioServerConfig,
+  BrewvaMcpStreamableHttpServerConfig,
+  BrewvaMcpToolPolicyConfig,
+  BrewvaMcpToolSurfaceOverride,
   BrewvaScheduleSelfImproveConfig,
   BrewvaSecurityBoundaryNetworkRule,
   BrewvaSecurityBoundaryPolicy,

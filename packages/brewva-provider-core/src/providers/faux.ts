@@ -1,3 +1,4 @@
+import { estimateTokenCount } from "@brewva/brewva-token-estimation";
 import { registerApiProvider, unregisterApiProviders } from "../api-registry.js";
 import { buildProviderCacheBucketKey, normalizeProviderCachePolicy } from "../cache-policy.js";
 import type {
@@ -146,7 +147,7 @@ export interface FauxProviderRegistration {
 }
 
 function estimateTokens(text: string): number {
-  return Math.ceil(text.length / 4);
+  return estimateTokenCount(text);
 }
 
 function randomId(prefix: string): string {

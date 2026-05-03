@@ -22,6 +22,11 @@ import type {
   BrewvaQuestionPrompt,
   BrewvaToolDefinition as ToolDefinition,
 } from "@brewva/brewva-substrate";
+import type {
+  ToolDescriptor as CanonicalToolDescriptor,
+  ToolExecutionTraitResolverInput as CanonicalToolExecutionTraitResolverInput,
+  ToolExecutionTraits as CanonicalToolExecutionTraits,
+} from "@brewva/brewva-tool-protocol";
 import type { TSchema } from "@sinclair/typebox";
 import type { BrewvaSemanticReranker } from "./semantic-reranker.js";
 
@@ -101,14 +106,17 @@ export type BrewvaToolRequiredCapability =
   | "extensions.tools.appendGuardedSupplementalBlocks"
   | "extensions.tools.resolveCredentialBindings";
 
-export interface BrewvaToolExecutionTraits {
+export interface BrewvaToolExecutionTraits extends CanonicalToolExecutionTraits {
   concurrencySafe: boolean;
   interruptBehavior: BrewvaToolInterruptBehavior;
   streamingEligible: boolean;
   contextModifying: boolean;
 }
 
-export interface BrewvaToolExecutionTraitResolverInput {
+export interface BrewvaToolExecutionTraitResolverInput extends Omit<
+  CanonicalToolExecutionTraitResolverInput,
+  "cwd"
+> {
   toolName: string;
   args: unknown;
   cwd?: string | null;
@@ -121,6 +129,16 @@ export type BrewvaToolExecutionTraitsResolver = (
 export type BrewvaToolExecutionTraitsDefinition =
   | BrewvaToolExecutionTraits
   | BrewvaToolExecutionTraitsResolver;
+
+export type BrewvaToolDescriptor<TParameters extends TSchema = TSchema> = Omit<
+  CanonicalToolDescriptor<TParameters>,
+  "surface" | "actionClass" | "executionTraits" | "requiredCapabilities"
+> & {
+  surface?: BrewvaToolSurface;
+  actionClass?: ToolActionClass;
+  executionTraits?: BrewvaToolExecutionTraits;
+  requiredCapabilities?: readonly BrewvaToolRequiredCapability[];
+};
 
 export interface BrewvaToolMetadata {
   surface: BrewvaToolSurface;
@@ -141,12 +159,14 @@ export interface BrewvaToolMetadataCarrier {
   brewva?: BrewvaToolMetadata;
   brewvaExecutionTraits?: BrewvaToolExecutionTraitsDefinition;
   brewvaAgentParameters?: TSchema;
+  brewvaDescriptor?: BrewvaToolDescriptor;
 }
 
 export type BrewvaManagedToolDefinition = ToolDefinition & {
   brewva?: BrewvaToolMetadata;
   brewvaExecutionTraits?: BrewvaToolExecutionTraitsDefinition;
   brewvaAgentParameters?: TSchema;
+  brewvaDescriptor?: BrewvaToolDescriptor;
 };
 
 export type AdvisorConsultKind = RuntimeDelegationConsultKind;

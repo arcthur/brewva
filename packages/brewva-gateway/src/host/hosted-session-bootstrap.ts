@@ -67,6 +67,13 @@ import {
   type HostedSessionSettingsView,
 } from "./hosted-session-driver.js";
 import type { HostedSessionLogger } from "./logger.js";
+import {
+  createHostedMcpToolBundle,
+  createHostedMcpToolSourcesFromConfig,
+  type HostedMcpOperationalEvent,
+  type HostedMcpToolBundle,
+  type HostedSessionMcpToolSource,
+} from "./mcp-tools.js";
 import { findModelPreset } from "./model-presets.js";
 import type { ProviderConnectionPort } from "./provider-connection.js";
 import { DEFAULT_HOSTED_ROUTING_SCOPES } from "./routing-defaults.js";
@@ -89,6 +96,8 @@ export interface CreateHostedSessionOptions extends RuntimeCreateBrewvaSessionOp
   internalRuntimePlugins?: InternalRuntimePlugin[];
   localHooks?: readonly LocalHookPort[];
   orchestration?: BrewvaToolOrchestration;
+  customTools?: readonly HostedSessionCustomTool[];
+  mcpToolSources?: readonly HostedSessionMcpToolSource[];
   managedToolNames?: readonly string[];
   builtinToolNames?: readonly HostedDelegationBuiltinToolName[];
   contextProfile?: "minimal" | "standard" | "full";
@@ -889,6 +898,99 @@ function recordHostedBootstrap(input: {
   });
 }
 
+function createHostedMcpEventRecorder(runtime: BrewvaRuntime): {
+  setSessionId(sessionId: string): void;
+  record(event: HostedMcpOperationalEvent): void;
+} {
+  let sessionId: string | undefined;
+  const pending: HostedMcpOperationalEvent[] = [];
+  const recordNow = (event: HostedMcpOperationalEvent, activeSessionId: string) => {
+    runtime.extensions.hosted.events.record({
+      sessionId: activeSessionId,
+      type: event.type,
+      payload: event.payload,
+    });
+  };
+  return {
+    setSessionId(nextSessionId) {
+      sessionId = nextSessionId;
+      for (const event of pending.splice(0)) {
+        recordNow(event, nextSessionId);
+      }
+    },
+    record(event) {
+      if (!sessionId) {
+        pending.push(event);
+        return;
+      }
+      recordNow(event, sessionId);
+    },
+  };
+}
+
+const MCP_BUNDLE_DISPOSE_TIMEOUT_MS = 5_000;
+
+function installHostedMcpBundleDisposal(
+  session: HostedSession,
+  runtime: BrewvaRuntime,
+  sessionId: string,
+  bundle: HostedMcpToolBundle | undefined,
+): HostedSession {
+  if (!bundle) {
+    return session;
+  }
+  const originalDispose = session.dispose.bind(session);
+  let disposed = false;
+  session.dispose = () => {
+    if (disposed) {
+      return;
+    }
+    disposed = true;
+
+    const disposePromise = bundle.dispose();
+    let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+    let timedOut = false;
+
+    const recordDisposeFailure = (payload: Record<string, unknown>) => {
+      runtime.extensions.hosted.events.record({
+        sessionId,
+        type: "mcp_server_disconnected",
+        payload: {
+          disposeFailed: true,
+          ...payload,
+        },
+      });
+    };
+
+    timeoutHandle = setTimeout(() => {
+      timedOut = true;
+      recordDisposeFailure({
+        disposeTimedOut: true,
+        timeoutMs: MCP_BUNDLE_DISPOSE_TIMEOUT_MS,
+      });
+    }, MCP_BUNDLE_DISPOSE_TIMEOUT_MS);
+
+    // Single subscriber on disposePromise so a rejection is reported exactly once,
+    // including rejections that arrive after the bounded timeout already fired.
+    void disposePromise
+      .catch((error: unknown) => {
+        recordDisposeFailure({
+          error: error instanceof Error ? error.message : String(error),
+          ...(timedOut ? { afterTimeout: true } : {}),
+        });
+      })
+      .finally(() => {
+        if (timeoutHandle) {
+          clearTimeout(timeoutHandle);
+          timeoutHandle = undefined;
+        }
+      });
+
+    originalDispose();
+  };
+  return session;
+}
+
 export async function createHostedSession(
   options: CreateHostedSessionOptions = {},
 ): Promise<HostedSessionResult> {
@@ -922,6 +1024,14 @@ export async function createHostedSession(
     runtime,
   });
   const toolExecutionCoordinator = createHostedToolExecutionCoordinator();
+  const mcpEventRecorder = createHostedMcpEventRecorder(runtime);
+  const configuredMcpToolSources = createHostedMcpToolSourcesFromConfig(
+    runtime.config.integrations.mcp,
+    {
+      recordEvent: (event) => mcpEventRecorder.record(event),
+    },
+  );
+  const mcpToolSources = [...configuredMcpToolSources, ...(options.mcpToolSources ?? [])];
   const directManagedTools = wrapToolDefinitionsWithHostedExecutionTraits(
     createDirectManagedTools({
       options,
@@ -933,16 +1043,34 @@ export async function createHostedSession(
     }),
     toolExecutionCoordinator,
   );
-  const customTools = createHostedCustomTools({
-    cwd: environment.cwd,
-    runtime,
-    settingsManager: settings.view,
-    builtinToolNames: options.builtinToolNames,
-    directManagedTools,
-    toolExecutionCoordinator,
+  const builtinCustomTools =
+    createHostedCustomTools({
+      cwd: environment.cwd,
+      runtime,
+      settingsManager: settings.view,
+      builtinToolNames: options.builtinToolNames,
+      directManagedTools,
+      toolExecutionCoordinator,
+    }) ?? [];
+  const providedCustomTools =
+    wrapToolDefinitionsWithHostedExecutionTraits(
+      [...(options.customTools ?? [])],
+      toolExecutionCoordinator,
+    ) ?? [];
+  const mcpToolBundle = await createHostedMcpToolBundle(mcpToolSources, {
+    recordEvent: (event) => mcpEventRecorder.record(event),
   });
+  const mcpCustomTools =
+    wrapToolDefinitionsWithHostedExecutionTraits(
+      mcpToolBundle?.tools ?? [],
+      toolExecutionCoordinator,
+    ) ?? [];
+  const customTools = [...builtinCustomTools, ...providedCustomTools, ...mcpCustomTools];
   const hostedToolDefinitionsByName = new Map<string, HostedSessionCustomTool>();
-  for (const tool of customTools ?? []) {
+  for (const tool of customTools) {
+    if (hostedToolDefinitionsByName.has(tool.name)) {
+      throw new Error(`Duplicate hosted tool name: ${tool.name}`);
+    }
     hostedToolDefinitionsByName.set(tool.name, tool);
   }
   const runtimePlugins = createRuntimePlugins({
@@ -974,10 +1102,12 @@ export async function createHostedSession(
       environment.sessionDriver.modelCatalog,
     ) ?? activeSemanticModel;
 
-  const session = installSessionCompactionRecovery(sessionRuntime.session, {
+  let session = installSessionCompactionRecovery(sessionRuntime.session, {
     runtime,
   });
   const sessionId = session.sessionManager.getSessionId();
+  mcpEventRecorder.setSessionId(sessionId);
+  session = installHostedMcpBundleDisposal(session, runtime, sessionId, mcpToolBundle);
   recordHostedBootstrap({
     runtime,
     sessionId,

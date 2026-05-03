@@ -14,6 +14,7 @@ import type {
 import { defineInternalHostPlugin } from "@brewva/brewva-substrate";
 import {
   buildBrewvaTools,
+  createBrewvaToolCatalog,
   getBrewvaToolSurface,
   type BrewvaSemanticReranker,
   type BrewvaToolOrchestration,
@@ -119,9 +120,15 @@ function registerHostedPipeline(
   userPorts: readonly TurnLifecyclePort[],
   localHooks: readonly LocalHookPort[],
 ): void {
-  const toolDefinitionsByName = new Map<string, BrewvaToolDefinition>(extraToolDefinitionsByName);
-  for (const tool of tools) {
-    toolDefinitionsByName.set(tool.name, tool);
+  const toolCatalog = createBrewvaToolCatalog(
+    [...extraToolDefinitionsByName.values(), ...tools],
+    "managed",
+  );
+  const toolDefinitionsByName = new Map<string, BrewvaToolDefinition>();
+  for (const entry of toolCatalog.list()) {
+    if (entry.definition) {
+      toolDefinitionsByName.set(entry.descriptor.name, entry.definition as BrewvaToolDefinition);
+    }
   }
   const turnClock = createRuntimeTurnClockStore();
   const hostedRuntime = createHostedRuntimePort(runtime);
@@ -369,7 +376,6 @@ export { registerProviderRequestReduction } from "./provider-request-reduction.j
 export { createRuntimeChannelTurnBridge } from "./channel-turn-bridge.js";
 export { createRuntimeTelegramChannelBridge } from "./telegram-channel-bridge.js";
 export {
-  CHARS_PER_TOKEN,
   distillToolOutput,
   estimateTokens,
   type ToolOutputDistillation,

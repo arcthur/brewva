@@ -28,7 +28,8 @@ describe("gateway contract: hosted provider surface", () => {
     expect(rerankerSource).not.toContain("pi-provider-driver");
     expect(rerankerSource).toContain("providerDriver");
     expect(driverSource).toContain("createHostedProviderDriver");
-    expect(driverSource).toContain("createFetchProviderCompletionDriver");
+    expect(driverSource).toContain("completeSimple");
+    expect(driverSource).toContain("UnsupportedBrewvaProviderApiError");
     expect(driverSource).not.toContain("@mariozechner/pi-ai");
   });
 });

@@ -14,6 +14,7 @@ import type {
   ResponseStreamEvent,
 } from "openai/resources/responses/responses.js";
 import { calculateCost } from "../models.js";
+import type { IncrementalToolCallFolder } from "../streaming/tool-call-folder.js";
 import type {
   Api,
   AssistantMessage,
@@ -31,7 +32,6 @@ import type {
 } from "../types.js";
 import type { AssistantMessageEventStream } from "../utils/event-stream.js";
 import { shortHash } from "../utils/hash.js";
-import { parseStreamingJson } from "../utils/json-parse.js";
 import { sanitizeSurrogates } from "../utils/sanitize-unicode.js";
 import {
   buildOpenAIInputFilePart,
@@ -367,12 +367,12 @@ export async function processResponsesStream<TApi extends Api>(
   output: AssistantMessage,
   stream: AssistantMessageEventStream,
   model: Model<TApi>,
+  toolCalls: IncrementalToolCallFolder,
   options?: OpenAIResponsesStreamOptions,
 ): Promise<void> {
   let currentItem: ResponseReasoningItem | ResponseOutputMessage | ResponseFunctionToolCall | null =
     null;
-  let currentBlock: ThinkingContent | TextContent | (ToolCall & { partialJson: string }) | null =
-    null;
+  let currentBlock: ThinkingContent | TextContent | null = null;
   const blocks = output.content;
   const blockIndex = () => blocks.length - 1;
 
@@ -392,16 +392,15 @@ export async function processResponsesStream<TApi extends Api>(
         output.content.push(currentBlock);
         stream.push({ type: "text_start", contentIndex: blockIndex(), partial: output });
       } else if (item.type === "function_call") {
-        currentItem = item;
-        currentBlock = {
-          type: "toolCall",
-          id: `${item.call_id}|${item.id}`,
-          name: item.name,
-          arguments: {},
-          partialJson: item.arguments || "",
-        };
-        output.content.push(currentBlock);
-        stream.push({ type: "toolcall_start", contentIndex: blockIndex(), partial: output });
+        const toolItemId = item.id ?? item.call_id;
+        toolCalls.begin(
+          toolItemId,
+          {
+            id: `${item.call_id}|${item.id}`,
+            name: item.name,
+          },
+          item.arguments || "",
+        );
       }
     } else if (event.type === "response.reasoning_summary_part.added") {
       if (currentItem && currentItem.type === "reasoning") {
@@ -478,34 +477,9 @@ export async function processResponsesStream<TApi extends Api>(
         }
       }
     } else if (event.type === "response.function_call_arguments.delta") {
-      if (currentItem?.type === "function_call" && currentBlock?.type === "toolCall") {
-        currentBlock.partialJson += event.delta;
-        currentBlock.arguments = parseStreamingJson(currentBlock.partialJson);
-        stream.push({
-          type: "toolcall_delta",
-          contentIndex: blockIndex(),
-          delta: event.delta,
-          partial: output,
-        });
-      }
+      toolCalls.appendArgumentsDelta(event.item_id, event.delta);
     } else if (event.type === "response.function_call_arguments.done") {
-      if (currentItem?.type === "function_call" && currentBlock?.type === "toolCall") {
-        const previousPartialJson = currentBlock.partialJson;
-        currentBlock.partialJson = event.arguments;
-        currentBlock.arguments = parseStreamingJson(currentBlock.partialJson);
-
-        if (event.arguments.startsWith(previousPartialJson)) {
-          const delta = event.arguments.slice(previousPartialJson.length);
-          if (delta.length > 0) {
-            stream.push({
-              type: "toolcall_delta",
-              contentIndex: blockIndex(),
-              delta,
-              partial: output,
-            });
-          }
-        }
-      }
+      toolCalls.replaceArguments(event.item_id, event.arguments);
     } else if (event.type === "response.output_item.done") {
       const item = event.item;
 
@@ -532,23 +506,11 @@ export async function processResponsesStream<TApi extends Api>(
         });
         currentBlock = null;
       } else if (item.type === "function_call") {
-        const args =
-          currentBlock?.type === "toolCall" && currentBlock.partialJson
-            ? parseStreamingJson(currentBlock.partialJson)
-            : parseStreamingJson(item.arguments || "{}");
-        const toolCall: ToolCall = {
-          type: "toolCall",
+        const toolItemId = item.id ?? item.call_id;
+        toolCalls.replaceArguments(toolItemId, item.arguments || "{}");
+        toolCalls.finalize(toolItemId, {
           id: `${item.call_id}|${item.id}`,
           name: item.name,
-          arguments: args,
-        };
-
-        currentBlock = null;
-        stream.push({
-          type: "toolcall_end",
-          contentIndex: blockIndex(),
-          toolCall,
-          partial: output,
         });
       }
     } else if (event.type === "response.completed") {
