@@ -43,6 +43,7 @@ import {
   resolveDialogSurfaceDimensions,
   resolveDialogTopInset,
   resolveDialogWidth,
+  resolveOverlaySurfaceSelectionRows,
 } from "./overlay-style.js";
 import { SPLIT_BORDER_CHARS, type SessionPalette } from "./palette.js";
 import { TextLineBlock } from "./transcript.js";
@@ -278,6 +279,14 @@ function InspectOverlay(input: {
   height: number;
 }) {
   const surface = createMemo(() => resolveDialogSurfaceDimensions(input.width, input.height));
+  const sidebarRows = createMemo(() =>
+    resolveOverlaySurfaceSelectionRows(
+      input.width,
+      input.height,
+      input.payload.sections.length,
+      "large",
+    ),
+  );
   const section = createMemo(() => input.payload.sections[input.payload.selectedIndex]);
   const lines = createMemo(() => section()?.lines ?? []);
   const lineWindow = createMemo(() =>
@@ -301,7 +310,7 @@ function InspectOverlay(input: {
             items={input.payload.sections.map((item) => item.title)}
             selectedIndex={input.payload.selectedIndex}
             theme={input.theme}
-            maxVisible={10}
+            maxVisible={sidebarRows()}
           />
         </box>
         <box flexGrow={1} flexDirection="column">
@@ -481,6 +490,9 @@ function InboxOverlay(input: {
   width: number;
   height: number;
 }) {
+  const sidebarRows = createMemo(() =>
+    resolveOverlaySurfaceSelectionRows(input.width, input.height, input.payload.items.length),
+  );
   const item = createMemo(() => input.payload.items[input.payload.selectedIndex]);
   const questionCount = createMemo(
     () => input.payload.items.filter((entry) => entry.kind === "question").length,
@@ -523,7 +535,7 @@ function InboxOverlay(input: {
               )}
               selectedIndex={input.payload.selectedIndex}
               theme={input.theme}
-              maxVisible={10}
+              maxVisible={sidebarRows()}
             />
           </Show>
         </box>
@@ -550,6 +562,9 @@ function SessionsOverlay(input: {
   height: number;
 }) {
   const session = createMemo(() => input.payload.sessions[input.payload.selectedIndex]);
+  const sidebarRows = createMemo(() =>
+    resolveOverlaySurfaceSelectionRows(input.width, input.height, input.payload.sessions.length),
+  );
   return (
     <OverlaySurface
       title="Sessions"
@@ -569,7 +584,7 @@ function SessionsOverlay(input: {
             })}
             selectedIndex={input.payload.selectedIndex}
             theme={input.theme}
-            maxVisible={10}
+            maxVisible={sidebarRows()}
           />
         </box>
         <box flexGrow={1} flexDirection="column">
@@ -601,6 +616,9 @@ function QueueOverlay(input: {
   height: number;
 }) {
   const queueListLabelWidth = 34 - visibleWidth("queued · ") - 1;
+  const sidebarRows = createMemo(() =>
+    resolveOverlaySurfaceSelectionRows(input.width, input.height, input.payload.items.length),
+  );
   const item = createMemo(() => input.payload.items[input.payload.selectedIndex]);
   const detailLines = createMemo(() => {
     const entry = item();
@@ -622,7 +640,7 @@ function QueueOverlay(input: {
             )}
             selectedIndex={input.payload.selectedIndex}
             theme={input.theme}
-            maxVisible={10}
+            maxVisible={sidebarRows()}
           />
         </box>
         <box flexGrow={1} flexDirection="column">
@@ -641,6 +659,13 @@ function TasksOverlay(input: {
   width: number;
   height: number;
 }) {
+  const sidebarRows = createMemo(() =>
+    resolveOverlaySurfaceSelectionRows(
+      input.width,
+      input.height,
+      input.payload.snapshot.taskRuns.length,
+    ),
+  );
   const run = createMemo(() => input.payload.snapshot.taskRuns[input.payload.selectedIndex]);
   const previewLines = createMemo(() => {
     const entry = run();
@@ -660,7 +685,7 @@ function TasksOverlay(input: {
             items={input.payload.snapshot.taskRuns.map((item) => buildTaskRunListLabel(item))}
             selectedIndex={input.payload.selectedIndex}
             theme={input.theme}
-            maxVisible={10}
+            maxVisible={sidebarRows()}
           />
         </box>
         <box flexGrow={1} flexDirection="column">
@@ -1142,6 +1167,14 @@ function SelectOverlay(input: {
   width: number;
   height: number;
 }) {
+  const listRows = createMemo(() =>
+    resolveOverlaySurfaceSelectionRows(
+      input.width,
+      input.height,
+      input.payload.options.length,
+      "medium",
+    ),
+  );
   return (
     <OverlaySurface
       title="Select"
@@ -1155,7 +1188,7 @@ function SelectOverlay(input: {
         items={input.payload.options}
         selectedIndex={input.payload.selectedIndex}
         theme={input.theme}
-        maxVisible={12}
+        maxVisible={listRows()}
       />
     </OverlaySurface>
   );

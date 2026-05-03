@@ -57,6 +57,21 @@ describe("cli transcript model", () => {
     });
   });
 
+  test("scopes seed transcript message ids by surface key so reconcile cannot reuse stale sessions", () => {
+    const wire: unknown[] = [
+      {
+        role: "user",
+        content: [{ type: "text", text: "Hello" }],
+      },
+    ];
+    const sessionA = buildSeedTranscriptMessages(wire, "session-a");
+    const sessionB = buildSeedTranscriptMessages(wire, "session-b");
+    expect(sessionA).toHaveLength(1);
+    expect(sessionB).toHaveLength(1);
+    expect(sessionA[0]?.id.startsWith("seed:session-a:0")).toBe(true);
+    expect(sessionB[0]?.id.startsWith("seed:session-b:0")).toBe(true);
+  });
+
   test("builds assistant transcript messages with reasoning, markdown text, and grouped tool parts", () => {
     const messages = buildSeedTranscriptMessages([
       {

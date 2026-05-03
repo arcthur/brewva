@@ -2389,6 +2389,91 @@ describe("shell runtime", () => {
     runtime.dispose();
   });
 
+  test("interactive question overlays move option focus with arrow keys and ctrl-n/ctrl-p", async () => {
+    const { bundle, getAttachedUi } = createFakeBundle();
+
+    const runtime = new CliShellRuntime(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+    });
+    const ui = getAttachedUi();
+    expect(ui).toBeDefined();
+
+    const submission = ui!.custom<readonly (readonly string[])[] | undefined>(
+      "question",
+      {
+        toolCallId: "tool-call-nav",
+        title: "Agent needs input",
+        questions: [
+          {
+            header: "Deploy",
+            question: "Proceed with deployment?",
+            options: [{ label: "Yes" }, { label: "No" }],
+            custom: false,
+          },
+        ],
+      },
+      {},
+    );
+
+    const payload = runtime.getViewState().overlay.active?.payload;
+    expect(payload?.kind).toBe("question");
+
+    await runtime.handleInput({
+      key: "down",
+      ctrl: false,
+      meta: false,
+      shift: false,
+    });
+    const activeAfterDown = runtime.getViewState().overlay.active?.payload;
+    expect(activeAfterDown?.kind).toBe("question");
+    expect(
+      activeAfterDown?.kind === "question"
+        ? activeAfterDown.draftsByRequestId?.["tool:tool-call-nav"]?.selectedOptionIndex
+        : null,
+    ).toBe(1);
+
+    await runtime.handleInput({
+      key: "up",
+      ctrl: false,
+      meta: false,
+      shift: false,
+    });
+    const activeAfterUp = runtime.getViewState().overlay.active?.payload;
+    expect(activeAfterUp?.kind).toBe("question");
+    expect(
+      activeAfterUp?.kind === "question"
+        ? activeAfterUp.draftsByRequestId?.["tool:tool-call-nav"]?.selectedOptionIndex
+        : null,
+    ).toBe(0);
+
+    await runtime.handleInput({
+      key: "n",
+      ctrl: true,
+      meta: false,
+      shift: false,
+    });
+    const activeAfterCtrlN = runtime.getViewState().overlay.active?.payload;
+    expect(
+      activeAfterCtrlN?.kind === "question"
+        ? activeAfterCtrlN.draftsByRequestId?.["tool:tool-call-nav"]?.selectedOptionIndex
+        : null,
+    ).toBe(1);
+
+    const consumedEnter = await runtime.handleInput({
+      key: "enter",
+      ctrl: false,
+      meta: false,
+      shift: false,
+    });
+
+    expect(consumedEnter).toBe(true);
+    expect(runtime.getViewState().overlay.active).toBeUndefined();
+    expect(await submission).toEqual([["No"]]);
+    runtime.dispose();
+  });
+
   test("interactive question custom requests resolve dismissed on abort", async () => {
     const { bundle, getAttachedUi } = createFakeBundle();
     const runtime = new CliShellRuntime(bundle, {
@@ -4093,6 +4178,30 @@ describe("shell runtime", () => {
     });
 
     expect(consumedOpen).toBe(true);
+    expect(runtime.getViewState().overlay.active?.payload).toMatchObject({
+      kind: "inbox",
+      selectedIndex: 0,
+    });
+
+    const consumedDown = await runtime.handleInput({
+      key: "down",
+      ctrl: false,
+      meta: false,
+      shift: false,
+    });
+    expect(consumedDown).toBe(true);
+    expect(runtime.getViewState().overlay.active?.payload).toMatchObject({
+      kind: "inbox",
+      selectedIndex: 1,
+    });
+
+    const consumedUp = await runtime.handleInput({
+      key: "up",
+      ctrl: false,
+      meta: false,
+      shift: false,
+    });
+    expect(consumedUp).toBe(true);
     expect(runtime.getViewState().overlay.active?.payload).toMatchObject({
       kind: "inbox",
       selectedIndex: 0,

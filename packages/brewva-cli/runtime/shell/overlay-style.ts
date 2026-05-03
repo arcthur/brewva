@@ -34,6 +34,17 @@ export function resolveDialogSelectRows(height: number, itemCount: number): numb
   return Math.max(1, Math.min(itemCount || 1, availableRows));
 }
 
+/** Rows for compact left-column {@link OverlaySurface} selection lists (sessions, inbox, etc.). */
+export function resolveOverlaySurfaceSelectionRows(
+  width: number,
+  height: number,
+  itemCount: number,
+  dialogSize: DialogSize = "large",
+): number {
+  const { contentHeight } = resolveDialogSurfaceDimensions(width, height, dialogSize);
+  return Math.max(1, Math.min(itemCount || 1, Math.max(4, contentHeight - 1)));
+}
+
 export function resolveDialogSurfaceDimensions(
   width: number,
   height: number,

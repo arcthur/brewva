@@ -61,7 +61,15 @@ export function BrewvaOpenTuiShell(input: {
     showThinking: () => state.view.showThinking,
   };
   const showScrollbar = createMemo(() => dimensions().width >= 96);
-  const bundleRefreshKey = createMemo(() => `${state.transcript.messages.length}`);
+  // Belt-and-braces vs seed-scoped message ids alone: ids fix Solid reconcile collisions;
+  // sessionId still differentiates empty transcripts across sessions; endpoints disambiguate same-length swaps.
+  const bundleRefreshKey = createMemo(() => {
+    const messages = state.transcript.messages;
+    const sessionId = input.runtime.getSessionIdentity().sessionId;
+    const firstId = messages[0]?.id ?? "";
+    const lastId = messages.length > 0 ? (messages[messages.length - 1]?.id ?? "") : "";
+    return `${sessionId}:${messages.length}:${firstId}:${lastId}`;
+  });
   const toolDefinitions = createMemo(() => {
     bundleRefreshKey();
     return input.runtime.getToolDefinitions();
@@ -409,6 +417,7 @@ export function BrewvaOpenTuiShell(input: {
         >
           <scrollbox
             ref={(node: OpenTuiScrollBoxHandle) => setScrollbox(node)}
+            focused={!state.overlay.active}
             viewportOptions={{
               paddingRight: showScrollbar() ? 1 : 0,
             }}

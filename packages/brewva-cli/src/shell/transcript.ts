@@ -386,7 +386,17 @@ export function buildTranscriptMessageFromMessage(
   }
 }
 
-export function buildSeedTranscriptMessages(messages: unknown[]): CliShellTranscriptMessage[] {
+function sanitizeTranscriptSeedScope(surfaceKey: string): string {
+  const trimmed = surfaceKey.trim();
+  const scope = trimmed.replace(/[^A-Za-z0-9._-]/g, "_").slice(0, 128);
+  return scope.length > 0 ? scope : "default";
+}
+
+export function buildSeedTranscriptMessages(
+  messages: unknown[],
+  surfaceKey: string = "default",
+): CliShellTranscriptMessage[] {
+  const scope = sanitizeTranscriptSeedScope(surfaceKey);
   let transcript: CliShellTranscriptMessage[] = [];
 
   messages.forEach((message, index) => {
@@ -398,13 +408,13 @@ export function buildSeedTranscriptMessages(messages: unknown[]): CliShellTransc
         result: toolResult,
         status: toolResult.isError ? "error" : "completed",
         renderMode: "stable",
-        fallbackMessageId: `seed:tool:${index}`,
+        fallbackMessageId: `seed:${scope}:tool:${index}`,
       });
       return;
     }
 
     const transcriptMessage = buildTranscriptMessageFromMessage(message, {
-      id: `seed:${index}`,
+      id: `seed:${scope}:${index}`,
       renderMode: "stable",
     });
     if (transcriptMessage) {

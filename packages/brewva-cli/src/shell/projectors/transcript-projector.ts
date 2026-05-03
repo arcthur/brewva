@@ -132,16 +132,30 @@ export class ShellTranscriptProjector {
     this.#rewindTranscriptMarkersBySessionId.set(sessionId, message);
   }
 
-  buildMessagesFromSession(): CliShellTranscriptMessage[] {
-    const messages = buildSeedTranscriptMessages(this.context.getTranscriptSeed());
+  private buildMessagesFromSession(): CliShellTranscriptMessage[] {
+    const messages = buildSeedTranscriptMessages(
+      this.context.getTranscriptSeed(),
+      this.context.getSessionId(),
+    );
     const rewindMarker = this.#rewindTranscriptMarkersBySessionId.get(this.context.getSessionId());
     return rewindMarker ? [...messages, rewindMarker] : messages;
   }
 
-  refreshFromSession(): void {
+  /**
+   * Build seed transcript messages and rebuild derived projector caches (tool trust) in one pass.
+   * Shared by the initial state composition (runtime.initializeState) and live re-seeding
+   * (refreshFromSession) so cache hydration cannot drift from message hydration. Returns the
+   * messages so callers can route them through the appropriate sink (action pipeline or
+   * direct replaceMessages).
+   */
+  composeSeedTranscript(): CliShellTranscriptMessage[] {
     const messages = this.buildMessagesFromSession();
     this.rebuildToolTrustCache(messages);
-    this.replaceMessages(messages);
+    return messages;
+  }
+
+  refreshFromSession(): void {
+    this.replaceMessages(this.composeSeedTranscript());
   }
 
   appendMessage(message: CliShellTranscriptMessage | null): void {

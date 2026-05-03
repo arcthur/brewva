@@ -32,6 +32,13 @@ import {
   readDiffSourceRecordFromDetails,
 } from "./tool-render.js";
 
+/** Rows reserved outside the question-option scroll viewport (title, hints, footer). */
+const QUESTION_OPTION_SCROLL_RESERVED_TERMINAL_ROWS = 24;
+/** Cap visible option rows so the overlay stays balanced on tall terminals. */
+const QUESTION_OPTION_SCROLL_MAX_VISIBLE_ROWS = 13;
+/** Floor visible rows so ↑/↓ navigation stays usable on short terminals. */
+const QUESTION_OPTION_SCROLL_MIN_VISIBLE_ROWS = 4;
+
 export function PromptActionChip(input: {
   label: string;
   active?: boolean;
@@ -52,11 +59,108 @@ export function PromptActionChip(input: {
   );
 }
 
+function leadingScrollRowsForQuestionOptions(
+  options: readonly { description?: string }[],
+  selectedIndex: number,
+): number {
+  const n = Math.max(0, Math.min(selectedIndex, options.length));
+  let row = 0;
+  for (let i = 0; i < n; i++) {
+    row += options[i]?.description ? 2 : 1;
+  }
+  return row;
+}
+
+function focusedOptionChunkRows(
+  options: readonly { description?: string }[],
+  selectedIndex: number,
+  hasCustomRow: boolean,
+  editingCustom: boolean,
+): number {
+  if (selectedIndex < options.length) {
+    return options[selectedIndex]?.description ? 2 : 1;
+  }
+  if (!hasCustomRow) {
+    return 1;
+  }
+  return editingCustom ? 3 : 2;
+}
+
+function questionChoiceMarker(multiple: boolean | undefined, selected: boolean): string {
+  if (multiple) {
+    return selected ? "[x]" : "[ ]";
+  }
+  return selected ? "(*)" : "( )";
+}
+
+function customAnswerPicked(
+  multiple: boolean | undefined,
+  answers: readonly string[] | undefined,
+  customAnswer: string,
+): boolean {
+  if (multiple) {
+    return (answers ?? []).includes(customAnswer);
+  }
+  return (answers?.[0] ?? "") === customAnswer;
+}
+
+/** Single option row: primary line is one terminal row (scroll sync assumes fixed row height per option). */
+function QuestionOptionRow(input: {
+  theme: SessionPalette;
+  numberLabel: string;
+  choiceLabel: string;
+  marker: string;
+  focused: boolean;
+  selected: boolean;
+  description?: string;
+}) {
+  return (
+    <box flexDirection="column" gap={0}>
+      <box flexDirection="row" flexShrink={0}>
+        <box
+          flexShrink={0}
+          paddingRight={1}
+          backgroundColor={input.focused ? input.theme.backgroundElement : undefined}
+        >
+          <text fg={input.focused ? input.theme.secondary : input.theme.textMuted}>
+            {input.numberLabel}
+          </text>
+        </box>
+        <box
+          flexShrink={1}
+          flexGrow={1}
+          backgroundColor={input.focused ? input.theme.backgroundElement : undefined}
+        >
+          <text
+            fg={
+              input.focused
+                ? input.theme.secondary
+                : input.selected
+                  ? input.theme.success
+                  : input.theme.text
+            }
+            wrapMode="none"
+          >
+            {`${input.marker} ${input.choiceLabel}`}
+          </text>
+        </box>
+      </box>
+      <Show when={input.description}>
+        <box paddingLeft={3}>
+          <text fg={input.theme.textMuted}>{input.description}</text>
+        </box>
+      </Show>
+    </box>
+  );
+}
+
 function InlinePromptCard(input: {
   title: string;
   theme: SessionPalette;
   accentColor: string;
   expanded?: boolean;
+  /** No fixed outer height; grows with body (use bounded scroll regions inside body). */
+  compact?: boolean;
   header?: JSX.Element;
   body: JSX.Element;
   actions: ReadonlyArray<{
@@ -75,6 +179,7 @@ function InlinePromptCard(input: {
       borderColor={input.accentColor}
       customBorderChars={SPLIT_BORDER_CHARS}
       flexDirection="column"
+      flexShrink={input.compact && !input.expanded ? 0 : undefined}
       zIndex={input.expanded ? DIALOG_Z_INDEX - 1 : undefined}
       {...(input.expanded
         ? {
@@ -84,11 +189,13 @@ function InlinePromptCard(input: {
             left: 0,
             right: 0,
           }
-        : {
-            position: "relative",
-            minHeight: 20,
-            maxHeight: 26,
-          })}
+        : input.compact
+          ? { position: "relative" }
+          : {
+              position: "relative",
+              minHeight: 20,
+              maxHeight: 26,
+            })}
     >
       <box
         gap={1}
@@ -474,12 +581,64 @@ export function InlineQuestionPrompt(input: {
     const current = question();
     return current ? current.options.length + (current.custom !== false ? 1 : 0) : 0;
   });
-  const customIndex = createMemo(() => {
-    const current = question();
-    return current ? current.options.length : -1;
-  });
   const total = createMemo(() => requests().length);
   const requestKindCounts = createMemo(() => countQuestionRequestKinds(requests()));
+  let questionOptionsScrollbox: OpenTuiScrollBoxHandle | undefined;
+  const dimensions = useTerminalDimensions();
+  const questionOptionsViewportRows = createMemo(() =>
+    Math.max(
+      QUESTION_OPTION_SCROLL_MIN_VISIBLE_ROWS,
+      Math.min(
+        QUESTION_OPTION_SCROLL_MAX_VISIBLE_ROWS,
+        dimensions().height - QUESTION_OPTION_SCROLL_RESERVED_TERMINAL_ROWS,
+      ),
+    ),
+  );
+  createEffect(() => {
+    const node = questionOptionsScrollbox;
+    if (!node || node.isDestroyed || confirmTab()) {
+      return;
+    }
+    const q = question();
+    const state = draft();
+    if (!q || state === undefined) {
+      return;
+    }
+    const options = q.options;
+    const selected = state.selectedOptionIndex;
+    const hasCustomRow = q.custom !== false;
+    const top = leadingScrollRowsForQuestionOptions(options, selected);
+    const chunk = focusedOptionChunkRows(options, selected, hasCustomRow, state.editingCustom);
+    const viewportHeight = Math.max(1, node.viewport.height);
+    const bottom = top + chunk - 1;
+    const scrollBottom = node.scrollTop + viewportHeight;
+    if (top < node.scrollTop) {
+      node.scrollBy(top - node.scrollTop);
+      return;
+    }
+    if (bottom >= scrollBottom) {
+      node.scrollBy(bottom + 1 - scrollBottom);
+    }
+  });
+  const questionCustomRow = createMemo(() => {
+    const q = question();
+    const state = draft();
+    if (!q || q.custom === false || state === undefined) {
+      return undefined;
+    }
+    const tabIx = state.activeTabIndex;
+    const answersRow = state.answers[tabIx];
+    const customAns = state.customAnswers[tabIx] ?? "";
+    const multi = q.multiple;
+    const picked = customAnswerPicked(multi, answersRow, customAns);
+    return {
+      numberLabel: `${q.options.length + 1}.`,
+      marker: questionChoiceMarker(multi, picked),
+      picked,
+      previewText: state.editingCustom ? `> ${customAns}_` : customAns || "Type your own answer",
+      focused: state.selectedOptionIndex === q.options.length,
+    };
+  });
   return (
     <Show
       when={request()}
@@ -508,6 +667,7 @@ export function InlineQuestionPrompt(input: {
           title={resolveQuestionOverlayTitle(input.payload)}
           theme={input.theme}
           accentColor={input.theme.warning}
+          compact={Boolean(question())}
           header={
             <box flexDirection="column" gap={1}>
               <Show when={total() > 1}>
@@ -578,79 +738,62 @@ export function InlineQuestionPrompt(input: {
                       ? "Select one or more answers, then move to Review."
                       : "Select one answer to continue."}
                   </text>
-                  <For each={question()?.options ?? []}>
-                    {(option, index) => {
-                      const selected = (
-                        draft()?.answers[draft()?.activeTabIndex ?? 0] ?? []
-                      ).includes(option.label);
-                      const focused = draft()?.selectedOptionIndex === index();
-                      const marker = question()?.multiple
-                        ? selected
-                          ? "[x]"
-                          : "[ ]"
-                        : selected
-                          ? "(*)"
-                          : "( )";
-                      return (
+                  <scrollbox
+                    ref={(node: OpenTuiScrollBoxHandle) => {
+                      questionOptionsScrollbox = node;
+                    }}
+                    height={questionOptionsViewportRows()}
+                    backgroundColor={input.theme.backgroundPanel}
+                    scrollAcceleration={DEFAULT_SCROLL_ACCELERATION}
+                    verticalScrollbarOptions={{
+                      trackOptions: {
+                        backgroundColor: input.theme.backgroundElement,
+                        foregroundColor: input.theme.borderActive,
+                      },
+                    }}
+                  >
+                    <For each={question()?.options ?? []}>
+                      {(option, index) => {
+                        const selected = (
+                          draft()?.answers[draft()?.activeTabIndex ?? 0] ?? []
+                        ).includes(option.label);
+                        const focused = draft()?.selectedOptionIndex === index();
+                        const marker = questionChoiceMarker(question()?.multiple, selected);
+                        return (
+                          <QuestionOptionRow
+                            theme={input.theme}
+                            numberLabel={`${index() + 1}.`}
+                            choiceLabel={option.label}
+                            marker={marker}
+                            focused={focused}
+                            selected={selected}
+                            description={option.description}
+                          />
+                        );
+                      }}
+                    </For>
+                    <Show when={questionCustomRow()}>
+                      {(row) => (
                         <box flexDirection="column" gap={0}>
-                          <box backgroundColor={focused ? input.theme.warning : undefined}>
+                          <QuestionOptionRow
+                            theme={input.theme}
+                            numberLabel={row().numberLabel}
+                            choiceLabel="Custom"
+                            marker={row().marker}
+                            focused={row().focused}
+                            selected={row().picked}
+                          />
+                          <box paddingLeft={3}>
                             <text
-                              fg={
-                                focused
-                                  ? input.theme.selectionText
-                                  : selected
-                                    ? input.theme.text
-                                    : input.theme.textMuted
-                              }
+                              fg={row().focused ? input.theme.secondary : input.theme.textMuted}
                             >
-                              {`${index() + 1}. ${marker} ${option.label}`}
+                              {row().previewText}
                             </text>
                           </box>
-                          <Show when={option.description}>
-                            <text fg={input.theme.textMuted}>{option.description}</text>
-                          </Show>
                         </box>
-                      );
-                    }}
-                  </For>
-                  <Show when={question()?.custom !== false}>
-                    <box flexDirection="column" gap={0}>
-                      <box
-                        backgroundColor={
-                          draft()?.selectedOptionIndex === customIndex()
-                            ? input.theme.warning
-                            : undefined
-                        }
-                      >
-                        <text
-                          fg={
-                            draft()?.selectedOptionIndex === customIndex()
-                              ? input.theme.selectionText
-                              : input.theme.textMuted
-                          }
-                        >
-                          {`${(question()?.options.length ?? 0) + 1}. ${
-                            question()?.multiple
-                              ? (draft()?.answers[draft()?.activeTabIndex ?? 0] ?? []).includes(
-                                  draft()?.customAnswers[draft()?.activeTabIndex ?? 0] ?? "",
-                                )
-                                ? "[x]"
-                                : "[ ]"
-                              : (draft()?.answers[draft()?.activeTabIndex ?? 0]?.[0] ?? "") ===
-                                  (draft()?.customAnswers[draft()?.activeTabIndex ?? 0] ?? "")
-                                ? "(*)"
-                                : "( )"
-                          } Custom`}
-                        </text>
-                      </box>
-                      <text fg={input.theme.textMuted}>
-                        {draft()?.editingCustom
-                          ? `> ${draft()?.customAnswers[draft()?.activeTabIndex ?? 0] ?? ""}_`
-                          : draft()?.customAnswers[draft()?.activeTabIndex ?? 0] ||
-                            "Type your own answer"}
-                      </text>
-                    </box>
-                  </Show>
+                      )}
+                    </Show>
+                  </scrollbox>
                 </box>
               </Show>
             </box>
@@ -691,7 +834,7 @@ export function InlineQuestionPrompt(input: {
           hints={[
             total() > 1 ? "pgup/pgdn request" : "",
             questionTabCount(currentRequest()) > 1 ? "tab switch" : "",
-            !confirmTab() ? "↑↓ choose" : "",
+            !confirmTab() ? "↑↓ · ^n/^p choose" : "",
             !confirmTab() && optionCount() > 0 ? "1-9 pick" : "",
             !confirmTab() ? "enter select" : "enter submit",
             "esc dismiss",

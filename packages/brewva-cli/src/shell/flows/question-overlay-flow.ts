@@ -13,6 +13,21 @@ import type { CliQuestionDraftState, CliShellInput, CliShellOverlayPayload } fro
 
 type QuestionOverlayPayload = Extract<CliShellOverlayPayload, { kind: "question" }>;
 
+/** Maps ^n/^p to down/up for question lists (shift does not block; matches shell-input-router). */
+function remapEmacsNav(input: CliShellInput): CliShellInput {
+  if (!input.ctrl || input.meta) {
+    return input;
+  }
+  const k = normalizeShellInputKey(input.key);
+  if (k === "n") {
+    return { ...input, ctrl: false, key: "down" };
+  }
+  if (k === "p") {
+    return { ...input, ctrl: false, key: "up" };
+  }
+  return input;
+}
+
 export interface ShellQuestionOverlayFlowContext {
   notify(message: string, level: "info" | "warning" | "error"): void;
   replaceActiveOverlay(payload: CliShellOverlayPayload): void;
@@ -28,7 +43,9 @@ export interface ShellQuestionOverlayFlowContext {
 export class ShellQuestionOverlayFlow {
   constructor(private readonly context: ShellQuestionOverlayFlowContext) {}
 
-  async handleInput(active: QuestionOverlayPayload, input: CliShellInput): Promise<boolean> {
+  async handleInput(active: QuestionOverlayPayload, rawInput: CliShellInput): Promise<boolean> {
+    const input = remapEmacsNav(rawInput);
+
     if (input.ctrl || input.meta) {
       return false;
     }

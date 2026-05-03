@@ -149,6 +149,9 @@ function selectableItemCount(payload: CliShellOverlayPayload): number | undefine
   if (payload.kind === "notifications") {
     return payload.notifications.length;
   }
+  if (payload.kind === "inbox") {
+    return payload.items.length;
+  }
   if (payload.kind === "inspect") {
     return payload.sections.length;
   }

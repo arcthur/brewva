@@ -740,6 +740,7 @@ export class CliShellRuntime {
     const shellViewPreferences = normalizeShellViewPreferences(
       this.#sessionPort.getShellViewPreferences(),
     );
+    const hydratedMessages = this.#transcriptProjector.composeSeedTranscript();
     const actions: ShellAction[] = [
       {
         type: "diff.setPreferences",
@@ -755,7 +756,7 @@ export class CliShellRuntime {
       ...this.buildSessionStatusActions(),
       {
         type: "transcript.setMessages",
-        messages: this.#transcriptProjector.buildMessagesFromSession(),
+        messages: hydratedMessages,
       },
       {
         type: "queue.set",

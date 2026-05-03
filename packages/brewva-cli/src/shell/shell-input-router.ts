@@ -39,6 +39,18 @@ function isPickerOverlay(kind: CliShellOverlayPayload["kind"] | undefined): bool
   return kind === "commandPalette" || kind === "modelPicker" || kind === "providerPicker";
 }
 
+/** Question overlay: route everything except ctrl+meta combos; allow ^n/^p (shift allowed, flow remaps). */
+function questionOverlayAcceptsShellInput(shellInput: CliShellInput): boolean {
+  if (shellInput.meta) {
+    return false;
+  }
+  if (!shellInput.ctrl) {
+    return true;
+  }
+  const k = normalizeShellInputKey(shellInput.key);
+  return k === "n" || k === "p";
+}
+
 export function routeShellInput(input: {
   input: CliShellInput;
   state: ShellInputRouterState;
@@ -51,7 +63,7 @@ export function routeShellInput(input: {
       intent: { type: "dialog.input", input: input.input },
     };
   }
-  if (overlayKind === "question" && !input.input.ctrl && !input.input.meta) {
+  if (overlayKind === "question" && questionOverlayAcceptsShellInput(input.input)) {
     return {
       handled: true,
       intent: { type: "question.input", input: input.input },
