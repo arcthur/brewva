@@ -48,7 +48,7 @@ import { createQuestionsCommandRuntimePlugin } from "./questions-command-runtime
 import { createBrewvaSession } from "./session.js";
 import { createUpdateCommandRuntimePlugin } from "./update-command-runtime-plugin.js";
 
-const NODE_VERSION_RANGE = "^20.19.0 || >=22.12.0";
+const NODE_VERSION_RANGE = "^20.19.0 || >=22.13.0";
 const BREWVA_SHELL_SMOKE_ENV = "BREWVA_SHELL_SMOKE";
 const BREWVA_OPENTUI_UNSUPPORTED_MESSAGE =
   "Interactive shell is not available on this Brewva build target yet. Use --print/--mode json or a promoted glibc/macOS build.";

@@ -5,7 +5,7 @@ import { createRequire } from "node:module";
 import { getBinaryPath, getPlatformPackage } from "./platform.js";
 
 const require = createRequire(import.meta.url);
-const NODE_VERSION_RANGE = "^20.19.0 || >=22.12.0";
+const NODE_VERSION_RANGE = "^20.19.0 || >=22.13.0";
 
 function parseSemver(versionText) {
   if (typeof versionText !== "string" || versionText.length === 0) return null;

@@ -198,7 +198,10 @@ describe("tool parallel read lsp integration", () => {
       {
         filePath: join(workspace, "src/a.ts"),
         scope: "workspace",
-        query: "export",
+        // AST-based search resolves only real identifiers; we pick "valueA"
+        // because the regex era tested "export" (a JS keyword), which is not
+        // an identifier under AST semantics.
+        query: "valueA",
         limit: 1,
       },
       undefined,
@@ -207,7 +210,7 @@ describe("tool parallel read lsp integration", () => {
     );
     expect(
       extractTextContent(result as { content: Array<{ type: string; text?: string }> }),
-    ).toContain("export");
+    ).toContain("valueA");
 
     const telemetry = requireRecord(
       runtime.inspect.events
@@ -288,15 +291,15 @@ describe("tool parallel read lsp integration", () => {
     expectTelemetryCountersConsistent(definitionTelemetry);
   });
 
-  test("lsp_prepare_rename emits both reference and definition scan telemetry", async () => {
+  test("ast_prepare_rename produces single-file occurrence summary without parallel telemetry", async () => {
     const workspace = workspaceWithSampleFiles("brewva-tools-prepare-rename-");
     const runtime = createRuntime(workspace);
     const sessionId = "parallel-read-prepare-rename";
     const tools = createLspTools({ runtime: createBundledToolRuntime(runtime) });
-    const lspPrepareRename = requireTool(tools, "lsp_prepare_rename");
+    const astPrepareRename = requireTool(tools, "ast_prepare_rename");
 
-    const result = await lspPrepareRename.execute(
-      "tc-lsp-prepare-rename",
+    const result = await astPrepareRename.execute(
+      "tc-ast-prepare-rename",
       {
         filePath: join(workspace, "src/b.ts"),
         line: 2,
@@ -306,16 +309,14 @@ describe("tool parallel read lsp integration", () => {
       undefined,
       fakeContext(sessionId, workspace),
     );
-    expect(
-      extractTextContent(result as { content: Array<{ type: string; text?: string }> }),
-    ).toContain("Rename available");
-
-    const payloads = getParallelReadPayloads(runtime, sessionId).filter(
-      (payload) => payload.toolName === "lsp_prepare_rename",
-    );
-    const operations = payloads.map((payload) => String(payload.operation));
-    expect(operations).toContain("find_references");
-    expect(operations).toContain("find_definition");
+    const text = extractTextContent(result as { content: Array<{ type: string; text?: string }> });
+    // The cursor is on `valueA` in `export const valueB = valueA + 1;` -- AST
+    // resolution returns occurrences as formatted location lines, not the
+    // legacy "Rename available" string from the regex-era prototype.
+    expect(text).toContain("valueA");
+    // ast_prepare_rename is strictly single-file; no parallel-read telemetry
+    // is emitted for it.
+    expect(getParallelReadPayloads(runtime, sessionId)).toHaveLength(0);
   });
 
   test("lsp_symbols in document scope does not emit parallel telemetry", async () => {

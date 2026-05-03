@@ -161,15 +161,11 @@ export const MANAGED_BREWVA_TOOL_METADATA_BY_NAME = {
     "inspect.task.getTargetDescriptor",
     "extensions.tools.recordEvent",
   ]),
-  lsp_prepare_rename: metadata("skill", "workspace_read", [
-    "authority.tools.acquireParallelSlotAsync",
-    "authority.tools.releaseParallelSlot",
+  ast_prepare_rename: metadata("skill", "workspace_read", [
     "inspect.task.getTargetDescriptor",
     "extensions.tools.recordEvent",
   ]),
-  lsp_rename: metadata("skill", "workspace_patch", [
-    "authority.tools.acquireParallelSlotAsync",
-    "authority.tools.releaseParallelSlot",
+  ast_rename_in_file: metadata("skill", "workspace_patch", [
     "inspect.task.getTargetDescriptor",
     "extensions.tools.recordEvent",
   ]),

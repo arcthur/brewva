@@ -20,6 +20,6 @@
     "@brewva/brewva-search": "workspace:*"
   },
   "engines": {
-    "node": "^20.19.0 || >=22.12.0"
+    "node": "^20.19.0 || >=22.13.0"
   }
 }

@@ -5,7 +5,7 @@ const WRITE_TOOLS = new Set([
   "multi_edit",
   "notebookedit",
   "notebook_edit",
-  "lsp_rename",
+  "ast_rename_in_file",
   "ast_grep_replace",
 ]);
 

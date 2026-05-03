@@ -4,7 +4,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { extname, resolve } from "node:path";
 
-const NODE_VERSION_RANGE = "^20.19.0 || >=22.12.0";
+const NODE_VERSION_RANGE = "^20.19.0 || >=22.13.0";
 
 function runOrThrow(
   command: string,

@@ -19,12 +19,13 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version-file: .node-version
+          package-manager-cache: false
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -75,12 +76,13 @@ jobs:
             smoke: ./distribution/brewva-darwin-arm64/bin/brewva --help | head -n 1
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version-file: .node-version
+          package-manager-cache: false
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -93,8 +95,12 @@ jobs:
 
       - name: Build ${{ matrix.label }} Binary
         shell: bash
-        run: BREWVA_BINARY_TARGETS=${{ matrix.target }} BREWVA_SHELL_SMOKE=1 bun run build:binaries
+        run: BREWVA_BINARY_TARGETS=${{ matrix.target }} bun run build:binaries
 
       - name: ${{ matrix.label }} Binary Smoke Test
         shell: bash
-        run: ${{ matrix.smoke }}
+        # Default GHA bash uses pipefail; `program --help | head -n 1` makes `head` close the
+        # pipe early and `brewva` exits 141 (SIGPIPE), failing the step.
+        run: |
+          set +o pipefail
+          ${{ matrix.smoke }}

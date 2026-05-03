@@ -108,8 +108,18 @@ const BOXLITE_NATIVE_PACKAGE_BY_TARGET: Partial<Record<PlatformTarget["target"],
   "bun-linux-arm64": "@boxlite-ai/boxlite-linux-arm64-gnu",
 };
 
+const OXC_PARSER_VERSION = "0.128.0";
+const OXC_PARSER_NATIVE_PACKAGE_BY_TARGET: Partial<Record<PlatformTarget["target"], string>> = {
+  "bun-darwin-arm64": "@oxc-parser/binding-darwin-arm64",
+  "bun-darwin-x64": "@oxc-parser/binding-darwin-x64",
+  "bun-linux-x64": "@oxc-parser/binding-linux-x64-gnu",
+  "bun-linux-arm64": "@oxc-parser/binding-linux-arm64-gnu",
+  "bun-windows-x64": "@oxc-parser/binding-win32-x64-msvc",
+};
+
 const DUCKDB_RUNTIME_PACKAGES = ["@duckdb/node-api", "@duckdb/node-bindings"] as const;
 const BOXLITE_RUNTIME_PACKAGES = ["@boxlite-ai/boxlite"] as const;
+const OXC_PARSER_RUNTIME_PACKAGES = ["oxc-parser", "@oxc-project/types"] as const;
 
 function copyDirectory(source: string, target: string): void {
   if (!existsSync(source)) return;
@@ -274,6 +284,19 @@ async function copyBoxLiteRuntimeAssets(outDir: string, platform: PlatformTarget
   }
 }
 
+async function copyOxcParserRuntimeAssets(outDir: string, platform: PlatformTarget): Promise<void> {
+  const nativePackage = OXC_PARSER_NATIVE_PACKAGE_BY_TARGET[platform.target];
+  if (!nativePackage) {
+    throw new Error(`oxc-parser native binding is unavailable for ${platform.target}`);
+  }
+
+  const targetNodeModules = join(outDir, "node_modules");
+  for (const packageName of [...OXC_PARSER_RUNTIME_PACKAGES, nativePackage]) {
+    const source = await ensurePackagedDependency(packageName, OXC_PARSER_VERSION);
+    copyDirectory(source, packagePath(targetNodeModules, packageName));
+  }
+}
+
 function resolveCurrentHostTarget(): PlatformTarget["target"] | null {
   if (process.platform === "darwin" && process.arch === "arm64") return "bun-darwin-arm64";
   if (process.platform === "darwin" && process.arch === "x64") return "bun-darwin-x64";
@@ -363,6 +386,7 @@ async function copyRuntimeAssets(outDir: string, platform: PlatformTarget): Prom
   copyDirectory(join(process.cwd(), "skills"), join(outDir, "skills"));
   await copyDuckDBRuntimeAssets(outDir, platform);
   await copyBoxLiteRuntimeAssets(outDir, platform);
+  await copyOxcParserRuntimeAssets(outDir, platform);
   writeFileSync(join(outDir, ".gitkeep"), "");
 }
 

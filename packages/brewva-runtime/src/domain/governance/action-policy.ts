@@ -451,8 +451,8 @@ export const TOOL_ACTION_POLICY_BY_NAME: Record<string, ToolActionPolicy> = {
   }),
   lsp_find_references: workspaceRead(),
   lsp_goto_definition: workspaceRead(),
-  lsp_prepare_rename: workspaceRead(),
-  lsp_rename: workspacePatch(),
+  ast_prepare_rename: workspaceRead(),
+  ast_rename_in_file: workspacePatch(),
   lsp_symbols: workspaceRead(),
   output_search: buildPolicy({
     actionClass: "workspace_read",

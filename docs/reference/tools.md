@@ -28,6 +28,8 @@ Tool count: 65.
 
 - `ast_grep_replace`
 - `ast_grep_search`
+- `ast_prepare_rename`
+- `ast_rename_in_file`
 - `browser_click`
 - `browser_close`
 - `browser_diff_snapshot`
@@ -54,8 +56,6 @@ Tool count: 65.
 - `lsp_diagnostics`
 - `lsp_find_references`
 - `lsp_goto_definition`
-- `lsp_prepare_rename`
-- `lsp_rename`
 - `lsp_symbols`
 - `obs_snapshot`
 - `precedent_sweep`

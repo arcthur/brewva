@@ -5,7 +5,7 @@ import { isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getBinaryPath, getPlatformPackage } from "./bin/platform.js";
 
-const NODE_VERSION_RANGE = "^20.19.0 || >=22.12.0";
+const NODE_VERSION_RANGE = "^20.19.0 || >=22.13.0";
 
 function parseSemver(versionText) {
   if (typeof versionText !== "string" || versionText.length === 0) return null;

@@ -25,7 +25,7 @@
 - Keep runtime execution receipt-based, replay-first, and recoverable through existing WAL/event/proposal boundaries.
 - Keep DuckDB session index state rebuildable and non-authoritative; event tape remains replay authority.
 - Keep search tokenization centralized in `@brewva/brewva-search`; do not add package-local tokenizers or silent Chinese-tokenizer fallbacks.
-- Use Bun for build and test. Baseline: Bun `1.3.12`, Node `^20.19.0 || >=22.12.0`, ESM, strict TypeScript.
+- Use Bun for build and test. Baseline: Bun `1.3.12`, Node `^20.19.0 || >=22.13.0`, ESM, strict TypeScript.
 - Detailed invariant context is in `skills/project/shared/critical-rules.md`, `skills/project/shared/package-boundaries.md`, and `skills/project/shared/anti-patterns.md`.
 
 ## Workflow Trigger Index
