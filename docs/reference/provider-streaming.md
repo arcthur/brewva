@@ -52,6 +52,20 @@ Provider-core now uses two internal streaming seams:
 It keeps incremental argument state private and only writes normalized `ToolCall`
 blocks into the public `AssistantMessage.content` array.
 
+When a provider stream has access to `context.tools`, the folder also derives
+an internal TypeBox-based streaming parse registry from those tool parameter
+schemas. `toolcall_start`, `toolcall_delta`, and `toolcall_end` may include an
+optional `parseStatus` signal:
+
+- `incomplete`: the current JSON cannot yet be recovered as an object.
+- `pending`: recovered fields are compatible with the schema, but the stream
+  may still be missing more fields.
+- `likely_invalid`: a present value violates the schema in a way that is not
+  plausibly just a streaming prefix.
+
+The signal is advisory. Final tool-call correctness remains the terminal AJV
+validation of the TypeBox schema.
+
 ## Provider Shapes
 
 | Provider shape                     | Wire identity                            | Text / thinking seam           | Tool-call seam                                              |
@@ -71,6 +85,8 @@ own parsing logic and only converge at the normalized event seam.
   by the provider-local key in that adapter.
 - Final `toolcall_end` must point at the same `contentIndex` created by
   `toolcall_start`.
+- Streaming `parseStatus` must not replace terminal AJV validation, and must
+  avoid false `likely_invalid` signals for incomplete JSON prefixes.
 - Providers may keep provider-specific signatures such as reasoning signatures
   or thought signatures, but those values stay attached to normalized blocks
   instead of creating parallel event families.

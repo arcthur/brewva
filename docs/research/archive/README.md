@@ -40,6 +40,7 @@ runtime, product, and session contracts.
 - [`rfc-runtime-decomposition-and-deliberation-thickening.md`](./rfc-runtime-decomposition-and-deliberation-thickening.md)
 - [`rfc-session-wire-v2-attempt-scoped-live-tool-frames.md`](./rfc-session-wire-v2-attempt-scoped-live-tool-frames.md)
 - [`rfc-stateful-box-plane-and-boxlite-execution-runtime.md`](./rfc-stateful-box-plane-and-boxlite-execution-runtime.md)
+- [`rfc-valibot-streaming-parse-and-typebox-boundary.md`](./rfc-valibot-streaming-parse-and-typebox-boundary.md)
 
 ## Reading Rule
 

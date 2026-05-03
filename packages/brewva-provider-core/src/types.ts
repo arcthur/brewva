@@ -379,6 +379,18 @@ export interface Context {
  * - `error` carrying the final AssistantMessage with stopReason "error" or "aborted"
  *   and errorMessage.
  */
+/**
+ * Streaming parse status for incremental tool-call argument validation.
+ *
+ * - "incomplete": partial-json could not recover a complete value.
+ * - "pending": well-formed object, but constraints are unsatisfied because
+ *   the stream has not finished (e.g. missing required fields).
+ * - "likely_invalid": a present value definitively violates a constraint
+ *   (e.g. wrong type, enum mismatch). Terminal AJV validation is
+ *   authoritative; this status is advisory.
+ */
+export type StreamingParseStatus = "incomplete" | "pending" | "likely_invalid";
+
 export type AssistantMessageEvent =
   | { type: "start"; partial: AssistantMessage }
   | { type: "text_start"; contentIndex: number; partial: AssistantMessage }
@@ -387,9 +399,26 @@ export type AssistantMessageEvent =
   | { type: "thinking_start"; contentIndex: number; partial: AssistantMessage }
   | { type: "thinking_delta"; contentIndex: number; delta: string; partial: AssistantMessage }
   | { type: "thinking_end"; contentIndex: number; content: string; partial: AssistantMessage }
-  | { type: "toolcall_start"; contentIndex: number; partial: AssistantMessage }
-  | { type: "toolcall_delta"; contentIndex: number; delta: string; partial: AssistantMessage }
-  | { type: "toolcall_end"; contentIndex: number; toolCall: ToolCall; partial: AssistantMessage }
+  | {
+      type: "toolcall_start";
+      contentIndex: number;
+      partial: AssistantMessage;
+      parseStatus?: StreamingParseStatus;
+    }
+  | {
+      type: "toolcall_delta";
+      contentIndex: number;
+      delta: string;
+      partial: AssistantMessage;
+      parseStatus?: StreamingParseStatus;
+    }
+  | {
+      type: "toolcall_end";
+      contentIndex: number;
+      toolCall: ToolCall;
+      partial: AssistantMessage;
+      parseStatus?: StreamingParseStatus;
+    }
   | {
       type: "done";
       reason: Extract<StopReason, "stop" | "length" | "toolUse">;

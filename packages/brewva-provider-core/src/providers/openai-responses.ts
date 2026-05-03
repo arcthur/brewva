@@ -71,6 +71,7 @@ export const streamOpenAIResponses: StreamFunction<"openai-responses", OpenAIRes
     },
     {
       signal: options?.signal,
+      tools: context.tools,
     },
   );
 };

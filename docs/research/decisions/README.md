@@ -73,6 +73,7 @@ Every accepted decision inherits these rules:
 - [schedule-intent-hardening-and-control-plane-ergonomics](./schedule-intent-hardening-and-control-plane-ergonomics.md)
 - [session-rewind-as-conversation-fork-primitive](./session-rewind-as-conversation-fork-primitive.md)
 - [token-cache-fidelity-and-provider-prefix-stability](./token-cache-fidelity-and-provider-prefix-stability.md)
+- [typebox-derived-provider-streaming-parse-boundary](./typebox-derived-provider-streaming-parse-boundary.md)
 - [turn-lifecycle-spine](./turn-lifecycle-spine.md)
 
 ## Maintenance Rule

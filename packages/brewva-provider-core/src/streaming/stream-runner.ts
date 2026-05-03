@@ -1,7 +1,9 @@
-import type { Api, AssistantMessage, Model } from "../types.js";
+import type { Api, AssistantMessage, Model, Tool } from "../types.js";
 import { AssistantMessageEventStream } from "../utils/event-stream.js";
 import { createAssistantMessage, resetAssistantMessage } from "./assistant-message.js";
 import { ProviderStreamingComposer } from "./stream-composer.js";
+import type { StreamingParseRegistry } from "./streaming-parse-types.js";
+import { createStreamingParseRegistry, EMPTY_PARSE_REGISTRY } from "./typebox-partialize.js";
 
 export interface ProviderStreamSession<TApi extends Api> {
   stream: AssistantMessageEventStream;
@@ -14,6 +16,8 @@ export interface ProviderStreamSession<TApi extends Api> {
 interface RunProviderStreamOptions {
   signal?: AbortSignal;
   startMode?: "eager" | "lazy";
+  /** Tool definitions for streaming parse schema derivation. */
+  tools?: Tool[];
 }
 
 export function runProviderStream<TApi extends Api>(
@@ -31,11 +35,17 @@ export function runProviderStream<TApi extends Api>(
     started = true;
     stream.push({ type: "start", partial: output });
   };
-  let composer = new ProviderStreamingComposer(output, stream, ensureStarted);
+
+  const parseRegistry: StreamingParseRegistry =
+    options.tools && options.tools.length > 0
+      ? createStreamingParseRegistry(options.tools)
+      : EMPTY_PARSE_REGISTRY;
+
+  let composer = new ProviderStreamingComposer(output, stream, ensureStarted, parseRegistry);
   const resetOutput = () => {
     resetAssistantMessage(output);
     started = false;
-    composer = new ProviderStreamingComposer(output, stream, ensureStarted);
+    composer = new ProviderStreamingComposer(output, stream, ensureStarted, parseRegistry);
   };
   const session: ProviderStreamSession<TApi> = {
     stream,

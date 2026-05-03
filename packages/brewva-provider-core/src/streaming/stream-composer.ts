@@ -1,5 +1,6 @@
 import type { AssistantMessage, AssistantMessageEventStream } from "../types.js";
 import { AssistantBlockAccumulator } from "./block-accumulator.js";
+import type { StreamingParseRegistry } from "./streaming-parse-types.js";
 import { IncrementalToolCallFolder } from "./tool-call-folder.js";
 
 export class ProviderStreamingComposer {
@@ -10,9 +11,10 @@ export class ProviderStreamingComposer {
     output: AssistantMessage,
     stream: AssistantMessageEventStream,
     ensureStarted: () => void,
+    parseRegistry?: StreamingParseRegistry,
   ) {
     this.blocks = new AssistantBlockAccumulator(output, stream, ensureStarted);
-    this.toolCalls = new IncrementalToolCallFolder(output, stream, ensureStarted);
+    this.toolCalls = new IncrementalToolCallFolder(output, stream, ensureStarted, parseRegistry);
   }
 
   finishAll(): void {

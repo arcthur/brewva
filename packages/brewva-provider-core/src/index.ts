@@ -73,6 +73,7 @@ export type {
   ResolvedTextFileContent,
   SimpleStreamOptions,
   StopReason,
+  StreamingParseStatus,
   StreamFunction,
   StreamOptions,
   TextContent,

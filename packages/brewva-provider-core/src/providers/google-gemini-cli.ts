@@ -615,6 +615,7 @@ export const streamGoogleGeminiCli: StreamFunction<"google-gemini-cli", GoogleGe
     {
       signal: options?.signal,
       startMode: "lazy",
+      tools: context.tools,
     },
   );
 };

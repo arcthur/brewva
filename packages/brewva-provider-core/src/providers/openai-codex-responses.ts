@@ -279,6 +279,7 @@ export const streamOpenAICodexResponses: StreamFunction<
     },
     {
       signal: options?.signal,
+      tools: context.tools,
     },
   );
 };

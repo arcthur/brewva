@@ -15,6 +15,10 @@ scope: anti-patterns
 - Treating `.brewva/session-index/session-index.duckdb` as source-of-truth memory or replay authority.
 - Adding user-facing SQL surfaces over the session index before a typed API exists for the product need.
 - Adding package-local search tokenizers or optional Chinese-tokenizer fallbacks outside `@brewva/brewva-search`.
+- Authoring a second schema source for provider tool arguments instead of
+  deriving advisory streaming parse from the canonical TypeBox schema.
+- Exporting provider-core streaming parse projection helpers such as
+  `partialize` or registry construction as root public APIs.
 - Re-exposing removed low-level tuning knobs as public config.
 - Editing generated distribution artifacts by hand.
 - Skipping `test:dist` for export, CLI, or distribution changes.

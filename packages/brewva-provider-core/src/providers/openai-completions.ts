@@ -125,6 +125,7 @@ export const streamOpenAICompletions: StreamFunction<
     {
       signal: options?.signal,
       startMode: "lazy",
+      tools: context.tools,
     },
   );
 };

@@ -27,3 +27,9 @@ scope: package-boundaries
 - search tokenization stays centralized in `@brewva/brewva-search`, including
   session-index token materialization
 - project overlays may tighten or extend project context, but should not invent new semantic territory
+- provider streaming parse is an advisory projection of TypeBox tool schemas;
+  TypeBox remains the canonical schema source and terminal AJV validation
+  remains authoritative
+- TypeBox-Value streaming helpers stay internal to
+  `@brewva/brewva-provider-core`; other packages consume only normalized
+  provider events such as optional `parseStatus`
