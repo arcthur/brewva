@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 
-import { truncateToWidth, visibleWidth } from "@brewva/brewva-tui";
+import { padToWidth, truncateToWidth, visibleWidth } from "@brewva/brewva-tui";
 import { TextAttributes } from "@opentui/core";
 import { For, Match, Show, Switch, createMemo, type JSX } from "solid-js";
 import {
@@ -46,6 +46,7 @@ import {
   resolveOverlaySurfaceSelectionRows,
 } from "./overlay-style.js";
 import { SPLIT_BORDER_CHARS, type SessionPalette } from "./palette.js";
+import { useShellRenderContext } from "./render-context.js";
 import { TextLineBlock } from "./transcript.js";
 import { visibleLineWindow, windowSelection } from "./utils.js";
 
@@ -71,6 +72,7 @@ function DialogFrame(input: {
   verticalAlign?: "topInset" | "center";
   children: JSX.Element;
 }) {
+  const ctx = useShellRenderContext();
   const verticalAlign = input.verticalAlign ?? "topInset";
   return (
     <box
@@ -85,11 +87,17 @@ function DialogFrame(input: {
       alignItems="center"
       justifyContent={verticalAlign === "center" ? "center" : undefined}
       paddingTop={verticalAlign === "center" ? 0 : resolveDialogTopInset(input.height)}
+      onMouseUp={() => {
+        void ctx.runtime.handleInput({ key: "escape", ctrl: false, meta: false, shift: false });
+      }}
     >
       <box
         width={resolveDialogWidth(input.width, input.size)}
         backgroundColor={input.theme.backgroundPanel}
         paddingTop={1}
+        onMouseUp={(e) => {
+          e.stopPropagation();
+        }}
       >
         {input.children}
       </box>
@@ -146,6 +154,11 @@ function OverlaySurface(input: {
   theme: SessionPalette;
   size?: DialogSize;
   footer?: string;
+  /**
+   * When true, dialog body ({input.children}) is not wrapped in horizontal padding so split
+   * sidebars match command-style pickers (full-width selection bars from dialog left).
+   */
+  splitContent?: boolean;
   children: JSX.Element;
 }) {
   const dimensions = createMemo(() =>
@@ -182,8 +195,12 @@ function OverlaySurface(input: {
           width="100%"
           height={dimensions().contentHeight}
           flexDirection="column"
-          paddingLeft={DIALOG_HORIZONTAL_PADDING}
-          paddingRight={DIALOG_HORIZONTAL_PADDING}
+          {...(input.splitContent
+            ? {}
+            : {
+                paddingLeft: DIALOG_HORIZONTAL_PADDING,
+                paddingRight: DIALOG_HORIZONTAL_PADDING,
+              })}
           paddingTop={1}
           flexShrink={0}
         >
@@ -213,7 +230,11 @@ function SelectionList(input: {
   selectedIndex: number;
   theme: SessionPalette;
   maxVisible?: number;
+  /** Flush labels to the sidebar edge (e.g. Inspect section titles). */
+  flushLeading?: boolean;
 }) {
+  const leadingPad = () => (input.flushLeading ? 0 : DIALOG_HORIZONTAL_PADDING);
+  const trailingPad = () => (input.flushLeading ? 1 : DIALOG_HORIZONTAL_PADDING);
   const selectionWindow = createMemo(() =>
     windowSelection(input.items, input.selectedIndex, input.maxVisible ?? 8),
   );
@@ -228,8 +249,8 @@ function SelectionList(input: {
               width="100%"
               flexDirection="row"
               backgroundColor={selected() ? input.theme.primary : undefined}
-              paddingLeft={3}
-              paddingRight={3}
+              paddingLeft={leadingPad()}
+              paddingRight={trailingPad()}
               flexShrink={0}
             >
               <text
@@ -303,6 +324,7 @@ function InspectOverlay(input: {
       height={input.height}
       theme={input.theme}
       footer="Enter open details · PgUp/PgDn scroll · Esc close/back"
+      splitContent
     >
       <box flexDirection="row" gap={1} flexGrow={1}>
         <box width={28} flexShrink={0}>
@@ -313,7 +335,7 @@ function InspectOverlay(input: {
             maxVisible={sidebarRows()}
           />
         </box>
-        <box flexGrow={1} flexDirection="column">
+        <box flexGrow={1} flexDirection="column" paddingRight={DIALOG_HORIZONTAL_PADDING}>
           <Show when={section()}>
             {(entry) => <text fg={input.theme.textMuted}>{entry().title}</text>}
           </Show>
@@ -520,6 +542,7 @@ function InboxOverlay(input: {
       height={input.height}
       theme={input.theme}
       footer="Enter inspect · d dismiss notification · x clear notifications · Esc close"
+      splitContent
     >
       <box flexDirection="row" gap={1} flexGrow={1}>
         <box width={34} flexShrink={0}>
@@ -539,7 +562,7 @@ function InboxOverlay(input: {
             />
           </Show>
         </box>
-        <box flexGrow={1} flexDirection="column">
+        <box flexGrow={1} flexDirection="column" paddingRight={DIALOG_HORIZONTAL_PADDING}>
           <TextLineBlock
             lines={[
               `Pending questions: ${questionCount()}`,
@@ -555,6 +578,90 @@ function InboxOverlay(input: {
   );
 }
 
+const SESSIONS_SIDEBAR_MARKER_WIDTH = 2;
+/** Fixed-width marker column shared by all PickerList rows so the label always starts
+ * at the same column regardless of whether `marker` is set or how wide the marker
+ * grapheme is. Sized to fit `●` (vw=1) and `✓` (vw=2) and a one-cell gap to the label. */
+const PICKER_MARKER_WIDTH = 2;
+
+/** Current session ● in its own column so selection inversion does not recolor it. */
+function SessionsSidebarList(input: {
+  payload: CliSessionsOverlayPayload;
+  theme: SessionPalette;
+  sidebarWidth: number;
+  maxVisible: number;
+}) {
+  const selectionWindow = createMemo(() =>
+    windowSelection(input.payload.sessions, input.payload.selectedIndex, input.maxVisible),
+  );
+  const labelMaxWidth = createMemo(() =>
+    Math.max(4, input.sidebarWidth - DIALOG_HORIZONTAL_PADDING * 2 - 1),
+  );
+  return (
+    <box width="100%" flexDirection="column" backgroundColor={input.theme.backgroundPanel}>
+      <For each={selectionWindow().items}>
+        {(item, index) => {
+          const absoluteIndex = createMemo(() => selectionWindow().startIndex + index());
+          const selected = createMemo(() => absoluteIndex() === input.payload.selectedIndex);
+          const isCurrent = createMemo(() => item.sessionId === input.payload.currentSessionId);
+          const markerFg = createMemo(() =>
+            selected()
+              ? input.theme.selectionText
+              : isCurrent()
+                ? input.theme.primary
+                : input.theme.textMuted,
+          );
+          const label = createMemo(() => {
+            const draft = input.payload.draftStateBySessionId[String(item.sessionId)];
+            const body = draft
+              ? `${item.sessionId} · draft ${draft.characters} chars`
+              : `${item.sessionId} · ${item.eventCount} events`;
+            return truncateDialogText(body, labelMaxWidth());
+          });
+          return (
+            <box
+              width="100%"
+              flexDirection="row"
+              alignItems="center"
+              backgroundColor={selected() ? input.theme.primary : undefined}
+              paddingLeft={DIALOG_HORIZONTAL_PADDING - SESSIONS_SIDEBAR_MARKER_WIDTH}
+              paddingRight={DIALOG_HORIZONTAL_PADDING}
+              flexShrink={0}
+              gap={0}
+            >
+              {/*
+                Fixed-width marker column. Marker text is padded to exactly
+                SESSIONS_SIDEBAR_MARKER_WIDTH visible cells so opentui's
+                visibleWidth (●=1, space=1) cannot shift the label column
+                across rows. Box width also reserves the column at the
+                flex-layout level as a belt-and-suspenders.
+              */}
+              <box width={SESSIONS_SIDEBAR_MARKER_WIDTH} flexShrink={0}>
+                <text
+                  fg={markerFg()}
+                  wrapMode="none"
+                  attributes={isCurrent() ? TextAttributes.BOLD : undefined}
+                >
+                  {isCurrent() ? "● " : "  "}
+                </text>
+              </box>
+              <text
+                flexGrow={1}
+                fg={selected() ? input.theme.selectionText : input.theme.text}
+                attributes={selected() ? TextAttributes.BOLD : undefined}
+                overflow="hidden"
+                wrapMode="none"
+              >
+                {label()}
+              </text>
+            </box>
+          );
+        }}
+      </For>
+    </box>
+  );
+}
+
 function SessionsOverlay(input: {
   payload: CliSessionsOverlayPayload;
   theme: SessionPalette;
@@ -565,6 +672,7 @@ function SessionsOverlay(input: {
   const sidebarRows = createMemo(() =>
     resolveOverlaySurfaceSelectionRows(input.width, input.height, input.payload.sessions.length),
   );
+  const sidebarWidth = 34;
   return (
     <OverlaySurface
       title="Sessions"
@@ -572,22 +680,18 @@ function SessionsOverlay(input: {
       height={input.height}
       theme={input.theme}
       footer="Enter switch · n new session · Esc close"
+      splitContent
     >
       <box flexDirection="row" gap={1} flexGrow={1}>
-        <box width={34} flexShrink={0}>
-          <SelectionList
-            items={input.payload.sessions.map((item) => {
-              const draft = input.payload.draftStateBySessionId[item.sessionId];
-              return draft
-                ? `${item.sessionId} · draft ${draft.characters} chars`
-                : `${item.sessionId} · ${item.eventCount} events`;
-            })}
-            selectedIndex={input.payload.selectedIndex}
+        <box width={sidebarWidth} flexShrink={0}>
+          <SessionsSidebarList
+            payload={input.payload}
             theme={input.theme}
+            sidebarWidth={sidebarWidth}
             maxVisible={sidebarRows()}
           />
         </box>
-        <box flexGrow={1} flexDirection="column">
+        <box flexGrow={1} flexDirection="column" paddingRight={DIALOG_HORIZONTAL_PADDING}>
           <Show when={session()}>
             {(entry) => (
               <TextLineBlock
@@ -631,6 +735,7 @@ function QueueOverlay(input: {
       height={input.height}
       theme={input.theme}
       footer="Enter details · d delete · Esc close"
+      splitContent
     >
       <box flexDirection="row" gap={1} flexGrow={1}>
         <box width={34} flexShrink={0}>
@@ -643,7 +748,7 @@ function QueueOverlay(input: {
             maxVisible={sidebarRows()}
           />
         </box>
-        <box flexGrow={1} flexDirection="column">
+        <box flexGrow={1} flexDirection="column" paddingRight={DIALOG_HORIZONTAL_PADDING}>
           <Show when={item()} fallback={<text fg={input.theme.textMuted}>No queued prompts.</text>}>
             <TextLineBlock lines={detailLines()} color={input.theme.text} />
           </Show>
@@ -678,6 +783,7 @@ function TasksOverlay(input: {
       height={input.height}
       theme={input.theme}
       footer="Enter inspect output · c cancel task · Esc close"
+      splitContent
     >
       <box flexDirection="row" gap={1} flexGrow={1}>
         <box width={34} flexShrink={0}>
@@ -688,7 +794,7 @@ function TasksOverlay(input: {
             maxVisible={sidebarRows()}
           />
         </box>
-        <box flexGrow={1} flexDirection="column">
+        <box flexGrow={1} flexDirection="column" paddingRight={DIALOG_HORIZONTAL_PADDING}>
           <Show when={run()}>
             {(entry) => (
               <TextLineBlock
@@ -831,14 +937,21 @@ function PickerList(input: {
           const label = createMemo(() => {
             const detailWidth = detail() ? visibleWidth(detail()!) + 1 : 0;
             const footerWidth = footer() ? visibleWidth(footer()!) + 1 : 0;
-            const rowChromeWidth = 6;
+            // paddingLeft is DIALOG_HORIZONTAL_PADDING - PICKER_MARKER_WIDTH so label text
+            // starts at column DIALOG_HORIZONTAL_PADDING (same as the dialog title).
+            // Total row chrome: leftPad + markerCol + rightPad = 2 * DIALOG_HORIZONTAL_PADDING.
+            const rowChromeWidth = DIALOG_HORIZONTAL_PADDING * 2;
             const availableWidth = contentWidth() - detailWidth - footerWidth - rowChromeWidth;
             return truncateDialogText(item.label, Math.max(1, Math.min(61, availableWidth)));
           });
           return (
             <>
               <Show when={showSection()}>
-                <box paddingTop={absoluteIndex() === 0 ? 0 : 1} paddingLeft={3} flexShrink={0}>
+                <box
+                  paddingTop={absoluteIndex() === 0 ? 0 : 1}
+                  paddingLeft={DIALOG_HORIZONTAL_PADDING}
+                  flexShrink={0}
+                >
                   <text fg={input.theme.accent} attributes={TextAttributes.BOLD}>
                     {item.section}
                   </text>
@@ -848,12 +961,18 @@ function PickerList(input: {
                 width="100%"
                 flexDirection="row"
                 backgroundColor={selected() ? input.theme.primary : undefined}
-                paddingLeft={item.marker ? 1 : 3}
-                paddingRight={3}
+                paddingLeft={DIALOG_HORIZONTAL_PADDING - PICKER_MARKER_WIDTH}
+                paddingRight={DIALOG_HORIZONTAL_PADDING}
                 flexShrink={0}
-                gap={1}
+                gap={0}
               >
-                <Show when={item.marker}>
+                {/*
+                  Fixed-width marker column shared by all rows so the label always
+                  starts at the same column regardless of marker presence or marker
+                  visible width (● = 1, ✓ = 2 in opentui's east-asian-width table).
+                  Marker text is padded to exactly PICKER_MARKER_WIDTH visible cells.
+                */}
+                <box width={PICKER_MARKER_WIDTH} flexShrink={0}>
                   <text
                     fg={
                       selected()
@@ -862,12 +981,11 @@ function PickerList(input: {
                           ? input.theme.textMuted
                           : input.theme.primary
                     }
-                    flexShrink={0}
                     wrapMode="none"
                   >
-                    {item.marker}
+                    {padToWidth(item.marker ?? "", PICKER_MARKER_WIDTH)}
                   </text>
-                </Show>
+                </box>
                 <text
                   flexGrow={1}
                   fg={

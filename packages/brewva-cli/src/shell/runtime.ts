@@ -417,6 +417,9 @@ export class CliShellRuntime {
       this.#providerAuthFlow,
     );
     modelDialogBridge.bind(this.#modelSelectionFlow);
+    // ShellSessionWorkflow is constructed before ShellOverlayLifecycleFlow; use a ref so submit can
+    // notify sessions stable-order intent once the overlay flow exists.
+    const overlayFlowRef: { current?: ShellOverlayLifecycleFlow } = {};
     this.#sessionWorkflow = new ShellSessionWorkflow({
       cwd: options.cwd,
       getState: () => this.#state,
@@ -437,6 +440,8 @@ export class CliShellRuntime {
       mountSession: (nextBundle) => this.mountSession(nextBundle),
       initializeState: () => this.initializeState(),
       refreshOperatorSnapshot: () => this.refreshOperatorSnapshotEffect(),
+      notifyInteractiveUserPromptCommitted: () =>
+        overlayFlowRef.current!.notifySessionsUserPromptReorderIntent(),
     });
     this.#overlayFlow = new ShellOverlayLifecycleFlow({
       getState: () => this.#state,
@@ -457,6 +462,7 @@ export class CliShellRuntime {
       providerAuth: this.#providerAuthFlow,
       questionOverlay: this.#questionOverlayFlow,
     });
+    overlayFlowRef.current = this.#overlayFlow;
     this.#viewPreferencesFlow = new ShellViewPreferencesFlow({
       getSessionPort: () => this.#sessionPort,
       getState: () => this.#state,

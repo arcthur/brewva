@@ -577,8 +577,15 @@ export class EventPipelineService {
       });
     }
 
+    rows.sort((left, right) => {
+      if (right.lastEventAt !== left.lastEventAt) {
+        return right.lastEventAt - left.lastEventAt;
+      }
+      return String(left.sessionId).localeCompare(String(right.sessionId));
+    });
+
     if (typeof limit === "number" && Number.isFinite(limit) && limit > 0) {
-      return rows.slice(0, limit);
+      return rows.slice(0, Math.floor(limit));
     }
     return rows;
   }

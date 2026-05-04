@@ -3758,7 +3758,8 @@ describe("opentui solid shell runtime", () => {
       frame = testSetup.captureCharFrame();
       expect(runtime.getViewState().overlay.active?.payload?.kind).toBe("queue");
       expect(frame).toContain("Queued prompts");
-      expect(frame).toContain("queued · Second queued promp");
+      // Sidebar truncates queued labels to the selection column width (split overlay layout).
+      expect(frame).toContain("queued · Second queued pro");
 
       await openTuiSolidAct(async () => {
         await runtime.handleInput({

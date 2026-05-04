@@ -45,4 +45,38 @@ describe("structured event replay", () => {
     const sessions = runtime.inspect.events.listReplaySessions();
     expect(sessions.map((entry) => entry.sessionId)).toContain(sessionId);
   });
+
+  test("listReplaySessions orders rows by last event timestamp, not jsonl directory order", async () => {
+    const workspace = createWorkspace("replay-order");
+    writeConfig(workspace, createConfig({}));
+
+    const runtime = new BrewvaRuntime({ cwd: workspace, configPath: RUNTIME_CONTRACT_CONFIG_PATH });
+    const olderSession = asBrewvaSessionId("session-older");
+    const newerSession = asBrewvaSessionId("session-newer");
+
+    runtime.extensions.hosted.events.record({
+      sessionId: newerSession,
+      type: "session_start",
+      payload: { cwd: workspace },
+      timestamp: 3000,
+    });
+
+    runtime.extensions.hosted.events.record({
+      sessionId: olderSession,
+      type: "session_start",
+      payload: { cwd: workspace },
+      timestamp: 1000,
+    });
+    runtime.extensions.hosted.events.record({
+      sessionId: olderSession,
+      type: "channel_session_bound",
+      payload: { channel: "cli", conversationId: "x" },
+      timestamp: 2000,
+    });
+
+    expect(runtime.inspect.events.listReplaySessions()).toEqual([
+      expect.objectContaining({ sessionId: newerSession, lastEventAt: 3000 }),
+      expect.objectContaining({ sessionId: olderSession, lastEventAt: 2000 }),
+    ]);
+  });
 });

@@ -9,6 +9,7 @@ export const DIALOG_WIDTH_BY_SIZE: Record<DialogSize, number> = {
 };
 
 export const DIALOG_Z_INDEX = 3000;
+/** Semi-transparent dark backdrop behind the dialog panel — dims the underlying content so focus is drawn to the overlay. Uses the same alpha value as opencode's overlay mask. */
 export const DIALOG_BACKDROP = RGBA.fromInts(0, 0, 0, 150);
 export const DIALOG_HORIZONTAL_PADDING = 4;
 export const DIALOG_FOOTER_RIGHT_PADDING = 2;

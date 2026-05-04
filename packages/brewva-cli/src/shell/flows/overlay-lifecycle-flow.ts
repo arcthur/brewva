@@ -12,6 +12,9 @@ import {
   buildNotificationDetailLines,
   buildNotificationsOverlayPayload,
   buildSessionsOverlayPayload,
+  mergeSessionsOverlayRows,
+  orderSessionsByStableIds,
+  reconcileSessionsOverlayStableIds,
 } from "../overlay-view.js";
 import { questionRequestsFromSnapshot } from "../question-utils.js";
 import type { ShellAction, ShellCommitOptions, ShellIntent } from "../shell-actions.js";
@@ -171,7 +174,24 @@ function selectableItemCount(payload: CliShellOverlayPayload): number | undefine
 }
 
 export class ShellOverlayLifecycleFlow {
+  /**
+   * Locks session-switcher row order across snapshot refreshes AND across overlay open/close
+   * cycles for the lifetime of the runtime. Stale ids are pruned in `reconcileSessionsOverlayStableIds`.
+   * Persistence is required to honor "don't change order unless I sent a message in current session":
+   * resetting on close caused the next open to re-seed from `snapshot.sessions` (lastEventAt desc),
+   * which surfaced the just-switched session at index 0.
+   */
+  #sessionsOverlayStableOrderIds?: string[];
+  readonly #sessionsOverlayLastEventCounts = new Map<string, number>();
+  #sessionsUserPromptReorderGeneration = 0;
+  #sessionsLastAppliedUserPromptReorderGeneration = 0;
+
   constructor(private readonly context: ShellOverlayLifecycleFlowContext) {}
+
+  /** After an interactive composer submit; sessions list may reorder current row to top once eventCount catches up. */
+  notifySessionsUserPromptReorderIntent(): void {
+    this.#sessionsUserPromptReorderGeneration += 1;
+  }
 
   openOverlay(payload: CliShellOverlayPayload, priority: OverlayPriority = "normal"): void {
     this.openOverlayWithOptions(payload, { priority });
@@ -856,11 +876,40 @@ export class ShellOverlayLifecycleFlow {
       index?: number;
     } = {},
   ): CliShellOverlayPayload {
+    const currentSessionId = this.context.getSessionPort().getSessionId();
+    const mergedSessions = mergeSessionsOverlayRows(snapshot, currentSessionId);
+
+    const stableAlready = this.#sessionsOverlayStableOrderIds !== undefined;
+    if (!stableAlready) {
+      for (const session of mergedSessions) {
+        this.#sessionsOverlayLastEventCounts.set(String(session.sessionId), session.eventCount);
+      }
+    }
+
+    const nextStable = reconcileSessionsOverlayStableIds({
+      mergedSessions,
+      currentSessionId,
+      stableOrderIds: this.#sessionsOverlayStableOrderIds,
+      lastEventCounts: this.#sessionsOverlayLastEventCounts,
+      userPromptReorderGeneration: this.#sessionsUserPromptReorderGeneration,
+      lastAppliedUserPromptReorderGeneration: this.#sessionsLastAppliedUserPromptReorderGeneration,
+    });
+    this.#sessionsOverlayStableOrderIds = nextStable.stableOrderIds;
+    this.#sessionsLastAppliedUserPromptReorderGeneration =
+      nextStable.lastAppliedUserPromptReorderGeneration;
+
+    const orderedReplay = orderSessionsByStableIds(mergedSessions, nextStable.stableOrderIds);
+
+    for (const session of mergedSessions) {
+      this.#sessionsOverlayLastEventCounts.set(String(session.sessionId), session.eventCount);
+    }
+
     return buildSessionsOverlayPayload({
       snapshot,
-      currentSessionId: this.context.getSessionPort().getSessionId(),
+      currentSessionId,
       draftsBySessionId: this.context.getDraftsBySessionId(),
       currentComposerText: this.context.getState().composer.text,
+      replaySessionsForOverlay: orderedReplay,
       selection,
     });
   }

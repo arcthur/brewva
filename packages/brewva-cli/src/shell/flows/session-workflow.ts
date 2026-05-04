@@ -75,6 +75,7 @@ export interface ShellSessionWorkflowContext {
   mountSession(bundle: CliShellSessionBundle): void;
   initializeState(): void;
   refreshOperatorSnapshot(): Promise<void>;
+  notifyInteractiveUserPromptCommitted: () => void;
 }
 
 export class ShellSessionWorkflow {
@@ -250,6 +251,7 @@ export class ShellSessionWorkflow {
         },
       },
     ]);
+    this.context.notifyInteractiveUserPromptCommitted();
   }
 
   async undoLastTurn(): Promise<void> {
