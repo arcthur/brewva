@@ -3,16 +3,18 @@ import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
-  complete,
   createGoogleCachedContent,
   deleteGoogleCachedContent,
-  getModel,
-  type AssistantMessage,
-  type Context,
-  type Model,
-  type ProviderPayloadMetadata,
-  type ProviderStreamOptions,
-} from "@brewva/brewva-provider-core";
+} from "@brewva/brewva-provider-core/cache";
+import { getModel } from "@brewva/brewva-provider-core/catalog";
+import type {
+  AssistantMessage,
+  Context,
+  Model,
+  ProviderPayloadMetadata,
+  StreamOptions,
+} from "@brewva/brewva-provider-core/contracts";
+import { complete } from "@brewva/brewva-provider-core/stream";
 import { resolveBrewvaAgentDir } from "@brewva/brewva-runtime";
 import { hasProviderRateLimitText } from "../../helpers/cli.js";
 import { runLive } from "../../helpers/live.js";
@@ -229,7 +231,12 @@ async function runCodexTurn(input: {
   transport: "sse" | "websocket";
   previousResponseId?: string;
 }): Promise<AssistantMessage> {
-  const options: ProviderStreamOptions = {
+  const options: StreamOptions & {
+    previousResponseId?: string;
+    textVerbosity?: "low" | "medium" | "high";
+    reasoningEffort?: "minimal" | "low" | "medium" | "high";
+    reasoningSummary?: "auto" | "detailed" | "concise" | null;
+  } = {
     apiKey: input.apiKey,
     sessionId: input.sessionId,
     transport: input.transport,

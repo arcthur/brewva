@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { OPENAI_COMPLETIONS_TEST_ONLY } from "../../../packages/brewva-provider-core/src/providers/openai-completions.js";
-import { IncrementalToolCallFolder } from "../../../packages/brewva-provider-core/src/streaming/tool-call-folder.js";
-import type { AssistantMessage } from "../../../packages/brewva-provider-core/src/types.js";
+import type { AssistantMessage } from "@brewva/brewva-provider-core/contracts";
+import { processOpenAICompletionsStream } from "../../../packages/brewva-provider-core/src/providers/openai-completions/stream-events.js";
+import { IncrementalToolCallFolder } from "../../../packages/brewva-provider-core/src/stream/tool-call-folder.js";
 import { AssistantMessageEventStream } from "../../../packages/brewva-provider-core/src/utils/event-stream.js";
 
 function createTestToolCalls(
@@ -45,7 +45,7 @@ describe("openai completions stream processor", () => {
     const output = createOutput();
     const stream = new AssistantMessageEventStream();
 
-    await OPENAI_COMPLETIONS_TEST_ONLY.processOpenAICompletionsStream(
+    await processOpenAICompletionsStream(
       (async function* () {
         yield {
           id: "resp_1",
@@ -193,7 +193,7 @@ describe("openai completions stream processor", () => {
     const output = createOutput();
     const stream = new AssistantMessageEventStream();
 
-    await OPENAI_COMPLETIONS_TEST_ONLY.processOpenAICompletionsStream(
+    await processOpenAICompletionsStream(
       (async function* () {
         yield {
           id: "resp_2",
@@ -240,7 +240,7 @@ describe("openai completions stream processor", () => {
     const output = createOutput();
     const stream = new AssistantMessageEventStream();
 
-    await OPENAI_COMPLETIONS_TEST_ONLY.processOpenAICompletionsStream(
+    await processOpenAICompletionsStream(
       (async function* () {
         yield {
           id: "resp_3",

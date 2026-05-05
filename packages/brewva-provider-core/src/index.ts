@@ -1,11 +1,24 @@
+export { complete, completeSimple, stream, streamSimple } from "./stream/index.js";
 export {
+  clearApiProviderSessions,
   clearApiProviders,
   getApiProvider,
   getApiProviders,
+  getExternalApiProvider,
+  getTypedApiProvider,
   registerApiProvider,
+  registerExternalApiProvider,
+  registerTypedApiProvider,
   unregisterApiProviders,
-} from "./api-registry.js";
-export type { ApiProvider, ApiStreamFunction, ApiStreamSimpleFunction } from "./api-registry.js";
+} from "./registry/index.js";
+export type {
+  AnyRegisteredApiProvider,
+  ApiProvider,
+  ApiStreamFunction,
+  ApiStreamSimpleFunction,
+  ExternalApiProvider,
+  TypedApiProvider,
+} from "./registry/index.js";
 
 export {
   calculateCost,
@@ -15,38 +28,48 @@ export {
   modelsAreEqual,
   supportsXhigh,
   supportsXhighModelId,
-} from "./catalog.js";
+} from "./catalog/index.js";
 
-export { getEnvApiKey } from "./auth.js";
+export { getEnvApiKey } from "./auth/index.js";
 export {
   DEFAULT_PROVIDER_CACHE_POLICY,
-  buildRenderBucketKey,
   buildProviderCacheBucketKey,
+  buildRenderBucketKey,
+  createGoogleCachedContent,
+  deleteGoogleCachedContent,
+  GoogleCachedContentError,
   normalizeProviderCachePolicy,
+  parseGoogleGeminiCliCredential,
   resolveAnthropicCacheRender,
+  resolveGoogleCachedContentEndpoint,
   resolveGoogleGeminiCliCacheRender,
   resolveOpenAICompletionsCacheRender,
   resolveOpenAIResponsesCacheRender,
   resolveProviderCacheCapability,
-} from "./cache-policy.js";
-export {
-  createGoogleCachedContent,
-  deleteGoogleCachedContent,
-  parseGoogleGeminiCliCredential,
-  resolveGoogleCachedContentEndpoint,
-} from "./google-cached-content.js";
-export { complete, completeSimple, stream, streamSimple } from "./stream.js";
+} from "./cache/index.js";
+
+export type {
+  GoogleCachedContentConfigInput,
+  GoogleCachedContentEndpointConfig,
+  GoogleCachedContentResource,
+} from "./cache/index.js";
 
 export type {
   Api,
   AssistantMessage,
   AssistantMessageEvent,
+  AssistantMessageEventOf,
   AssistantMessageEventStream,
   Context,
   FileContent,
   ImageContent,
+  KnownApi,
+  KnownProvider,
   Message,
   Model,
+  OpenAICompletionsCompat,
+  OpenAIResponsesCompat,
+  OpenRouterRouting,
   Provider,
   ProviderCacheCapability,
   ProviderCacheCounterSupport,
@@ -62,10 +85,10 @@ export type {
   ProviderCacheWriteMode,
   ProviderPayloadMetadata,
   ProviderRequestFingerprint,
-  ProviderStreamOptions,
   ProviderSessionContinuationCapability,
   ProviderSessionContinuationFamily,
   ProviderSessionContinuationMode,
+  ProviderSessionResources,
   ResolvedBinaryFileContent,
   ResolvedDirectoryFileContent,
   ResolvedFileContent,
@@ -73,23 +96,17 @@ export type {
   ResolvedTextFileContent,
   SimpleStreamOptions,
   StopReason,
-  StreamingParseStatus,
   StreamFunction,
+  StreamingParseStatus,
   StreamOptions,
   TextContent,
-  ThinkingLevel,
-  ThinkingContent,
   ThinkingBudgets,
+  ThinkingContent,
+  ThinkingLevel,
   Tool,
   ToolCall,
   ToolResultMessage,
   Transport,
   Usage,
   UserMessage,
-} from "./types.js";
-export type {
-  GoogleCachedContentConfigInput,
-  GoogleCachedContentEndpointConfig,
-  GoogleCachedContentError,
-  GoogleCachedContentResource,
-} from "./google-cached-content.js";
+} from "./contracts/index.js";

@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
+import type { AssistantMessage, Tool } from "@brewva/brewva-provider-core/contracts";
 import { Type } from "@sinclair/typebox";
-import { ANTHROPIC_MESSAGES_TEST_ONLY } from "../../../packages/brewva-provider-core/src/providers/anthropic.js";
-import { IncrementalToolCallFolder } from "../../../packages/brewva-provider-core/src/streaming/tool-call-folder.js";
-import type { AssistantMessage, Tool } from "../../../packages/brewva-provider-core/src/types.js";
+import { processAnthropicStream } from "../../../packages/brewva-provider-core/src/providers/anthropic/stream-events.js";
+import { IncrementalToolCallFolder } from "../../../packages/brewva-provider-core/src/stream/tool-call-folder.js";
 import { AssistantMessageEventStream } from "../../../packages/brewva-provider-core/src/utils/event-stream.js";
 
 function createTestToolCalls(
@@ -53,7 +53,7 @@ describe("anthropic stream processor", () => {
       },
     ];
 
-    await ANTHROPIC_MESSAGES_TEST_ONLY.processAnthropicStream(
+    await processAnthropicStream(
       (async function* () {
         yield {
           type: "message_start",
@@ -195,7 +195,7 @@ describe("anthropic stream processor", () => {
     const output = createOutput();
     const stream = new AssistantMessageEventStream();
 
-    await ANTHROPIC_MESSAGES_TEST_ONLY.processAnthropicStream(
+    await processAnthropicStream(
       (async function* () {
         yield {
           type: "content_block_start",

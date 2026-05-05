@@ -1,16 +1,43 @@
 import { describe, expect, test } from "bun:test";
-import { getEnvApiKey, getModel, type Context } from "@brewva/brewva-provider-core";
+import { getEnvApiKey } from "@brewva/brewva-provider-core/auth";
+import { getModel } from "@brewva/brewva-provider-core/catalog";
+import type { Context, Model } from "@brewva/brewva-provider-core/contracts";
 import { Type } from "@sinclair/typebox";
+import { buildOpenAICompletionsDefaultHeaders } from "../../../packages/brewva-provider-core/src/providers/openai-completions/adapter.js";
 import {
   buildOpenAICompletionsParams,
   convertMessages,
   normalizeOpenAICompletionsUsage,
   resolveOpenAICompletionsCompat,
   streamOpenAICompletions,
-} from "../../../packages/brewva-provider-core/src/providers/openai-completions.js";
+} from "../../../packages/brewva-provider-core/src/providers/openai-completions/index.js";
 import { patchProcessEnv } from "../../helpers/global-state.js";
 
 const DEEPSEEK_MODEL = getModel("deepseek", "deepseek-v4-flash");
+const OPENAI_COMPLETIONS_MODEL: Model<"openai-completions"> = {
+  api: "openai-completions",
+  id: "gpt-4o",
+  name: "GPT-4o",
+  provider: "openai",
+  baseUrl: "https://api.openai.com/v1",
+  reasoning: true,
+  input: ["text"],
+  contextWindow: 128_000,
+  maxTokens: 16_384,
+  cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+};
+const OPENROUTER_ANTHROPIC_MODEL: Model<"openai-completions"> = {
+  api: "openai-completions",
+  id: "anthropic/claude-sonnet-4.5",
+  name: "Claude Sonnet 4.5",
+  provider: "openrouter",
+  baseUrl: "https://openrouter.ai/api/v1",
+  reasoning: true,
+  input: ["text"],
+  contextWindow: 200_000,
+  maxTokens: 64_000,
+  cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+};
 
 function userText(text: string): Context["messages"][number] {
   return {
@@ -91,6 +118,179 @@ describe("OpenAI completions DeepSeek compatibility", () => {
     expect(params.reasoning_effort).toBeUndefined();
     expect((params.messages as Array<{ role: string }>)[0]?.role).toBe("system");
     expect(JSON.stringify(params.tools)).not.toContain('"strict"');
+  });
+
+  test("adds direct OpenAI prompt cache fields to completions payloads", () => {
+    const params = buildOpenAICompletionsParams(
+      OPENAI_COMPLETIONS_MODEL,
+      {
+        systemPrompt: "You are concise.",
+        messages: [userText("Say hi.")],
+      },
+      {
+        sessionId: "session-openai-completions",
+        cachePolicy: {
+          retention: "long",
+          writeMode: "readWrite",
+          scope: "session",
+          reason: "config",
+        },
+      },
+    ) as unknown as Record<string, unknown>;
+
+    expect(params.prompt_cache_key).toBe("session-openai-completions");
+    expect(params.prompt_cache_retention).toBe("24h");
+  });
+
+  test("omits OpenAI prompt cache retention when compat disables long retention", () => {
+    const params = buildOpenAICompletionsParams(
+      {
+        ...OPENAI_COMPLETIONS_MODEL,
+        compat: { supportsLongCacheRetention: false },
+      },
+      {
+        systemPrompt: "You are concise.",
+        messages: [userText("Say hi.")],
+      },
+      {
+        sessionId: "session-openai-short-compat",
+        cachePolicy: {
+          retention: "long",
+          writeMode: "readWrite",
+          scope: "session",
+          reason: "config",
+        },
+      },
+    ) as unknown as Record<string, unknown>;
+
+    expect(params.prompt_cache_key).toBe("session-openai-short-compat");
+    expect(params.prompt_cache_retention).toBeUndefined();
+  });
+
+  test("adds completions session affinity headers only when compat enables them", () => {
+    const defaultCompatHeaders = buildOpenAICompletionsDefaultHeaders(
+      OPENAI_COMPLETIONS_MODEL,
+      { messages: [] },
+      { status: "rendered", promptCacheKey: "session-completions" } as never,
+      undefined,
+      resolveOpenAICompletionsCompat(OPENAI_COMPLETIONS_MODEL),
+      "session-completions",
+    );
+    const affinityHeaders = buildOpenAICompletionsDefaultHeaders(
+      {
+        ...OPENAI_COMPLETIONS_MODEL,
+        compat: { sendSessionAffinityHeaders: true },
+      },
+      { messages: [] },
+      { status: "rendered", promptCacheKey: "session-completions" } as never,
+      {
+        "x-session-affinity": "explicit-affinity",
+      },
+      resolveOpenAICompletionsCompat({
+        ...OPENAI_COMPLETIONS_MODEL,
+        compat: { sendSessionAffinityHeaders: true },
+      }),
+      "session-completions",
+    );
+
+    expect(defaultCompatHeaders.session_id).toBeUndefined();
+    expect(defaultCompatHeaders["x-client-request-id"]).toBeUndefined();
+    expect(defaultCompatHeaders["x-session-affinity"]).toBeUndefined();
+    expect(affinityHeaders.session_id).toBe("session-completions");
+    expect(affinityHeaders["x-client-request-id"]).toBe("session-completions");
+    expect(affinityHeaders["x-session-affinity"]).toBe("explicit-affinity");
+  });
+
+  test("adds OpenRouter Anthropic cache markers to stable prompt boundaries", () => {
+    const params = buildOpenAICompletionsParams(
+      OPENROUTER_ANTHROPIC_MODEL,
+      {
+        systemPrompt: "You are concise.",
+        messages: [
+          userText("Earlier prompt."),
+          {
+            role: "assistant",
+            content: [{ type: "text", text: "Earlier answer." }],
+            api: "openai-completions",
+            provider: "openrouter",
+            model: "anthropic/claude-sonnet-4.5",
+            usage: {
+              input: 0,
+              output: 0,
+              cacheRead: 0,
+              cacheWrite: 0,
+              totalTokens: 0,
+              cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+            },
+            stopReason: "stop",
+            timestamp: Date.now(),
+          },
+          userText("Current prompt."),
+        ],
+        tools: [
+          {
+            name: "lookup",
+            description: "Look up a value.",
+            parameters: Type.Object({ id: Type.String() }),
+          },
+        ],
+      },
+      {
+        sessionId: "session-openrouter-anthropic",
+        cachePolicy: {
+          retention: "long",
+          writeMode: "readWrite",
+          scope: "session",
+          reason: "config",
+        },
+      },
+    ) as unknown as Record<string, unknown>;
+
+    const messages = params.messages as Array<{ role: string; content?: unknown }>;
+    const instruction = messages.find(
+      (message) => message.role === "system" || message.role === "developer",
+    );
+    const currentUser = messages.findLast((message) => message.role === "user");
+    const tools = params.tools as Array<{ cache_control?: unknown }>;
+    const currentUserContent = currentUser?.content;
+    const currentUserParts = Array.isArray(currentUserContent)
+      ? (currentUserContent as Array<{
+          type?: string;
+          text?: string;
+          cache_control?: unknown;
+        }>)
+      : [];
+
+    expect(instruction?.content).toEqual([
+      {
+        type: "text",
+        text: "You are concise.",
+        cache_control: { type: "ephemeral", ttl: "1h" },
+      },
+    ]);
+    expect(tools.at(-1)?.cache_control).toEqual({ type: "ephemeral", ttl: "1h" });
+    expect(currentUserParts.at(-1)?.cache_control).toEqual({ type: "ephemeral", ttl: "1h" });
+  });
+
+  test("does not add OpenRouter Anthropic cache markers when cache policy is disabled", () => {
+    const params = buildOpenAICompletionsParams(
+      OPENROUTER_ANTHROPIC_MODEL,
+      {
+        systemPrompt: "You are concise.",
+        messages: [userText("Say hi.")],
+      },
+      {
+        sessionId: "session-cache-disabled",
+        cachePolicy: {
+          retention: "none",
+          writeMode: "readWrite",
+          scope: "session",
+          reason: "config",
+        },
+      },
+    ) as unknown as Record<string, unknown>;
+
+    expect(JSON.stringify(params)).not.toContain("cache_control");
   });
 
   test("builds thinking DeepSeek payloads with provider-native reasoning effort", () => {

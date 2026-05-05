@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { clearApiProviders, getApiProviders, type ApiProvider } from "@brewva/brewva-provider-core";
-import { registerBuiltInApiProviders } from "../../../packages/brewva-provider-core/src/providers/register-builtins.js";
+import { clearApiProviders, getApiProviders } from "@brewva/brewva-provider-core/registry";
+import { registerBuiltInApiProviders } from "../../../packages/brewva-provider-core/src/registry/builtins.js";
 
 describe("provider core runtime initialization", () => {
   test("registerBuiltInApiProviders restores the canonical built-in API registry", () => {
@@ -10,7 +10,7 @@ describe("provider core runtime initialization", () => {
     registerBuiltInApiProviders();
 
     const apis = getApiProviders()
-      .map((provider: ApiProvider) => provider.api)
+      .map((provider) => provider.api)
       .toSorted();
 
     expect(apis).toEqual([

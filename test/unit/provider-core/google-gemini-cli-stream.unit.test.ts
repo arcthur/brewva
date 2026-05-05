@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { streamGoogleGeminiCli } from "../../../packages/brewva-provider-core/src/providers/google-gemini-cli.js";
+import { streamGoogleGeminiCli } from "../../../packages/brewva-provider-core/src/providers/google-gemini-cli/index.js";
 
 const originalFetch = globalThis.fetch;
 
@@ -36,7 +36,7 @@ describe("google gemini cli stream", () => {
     globalThis.fetch = (async () =>
       createResponseFromChunks([
         'data: {"response":{"responseId":"resp_google_1",\n',
-        'data: "candidates":[{"content":{"parts":[{"text":"Hello"}]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":10,"candidatesTokenCount":2,"totalTokenCount":12}}}',
+        'data: "candidates":[{"content":{"parts":[{"text":"Hello"}]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":10,"cachedContentTokenCount":4,"candidatesTokenCount":2,"totalTokenCount":12}}}',
       ])) as unknown as typeof fetch;
 
     const stream = streamGoogleGeminiCli(
@@ -76,6 +76,8 @@ describe("google gemini cli stream", () => {
     expect(done?.type).toBe("done");
     if (done?.type === "done") {
       expect(done.message.responseId).toBe("resp_google_1");
+      expect(done.message.usage.input).toBe(6);
+      expect(done.message.usage.cacheRead).toBe(4);
       expect(done.message.usage.totalTokens).toBe(12);
       expect(done.message.content[0]).toMatchObject({
         type: "text",

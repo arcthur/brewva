@@ -1,17 +1,17 @@
-import type {
-  GoogleCachedContentEndpointConfig,
-  GoogleCachedContentError,
-  ProviderCachePolicy,
-  ProviderCacheRenderResult,
-} from "@brewva/brewva-provider-core";
 import {
+  GoogleCachedContentError,
   buildRenderBucketKey,
   createGoogleCachedContent,
   deleteGoogleCachedContent,
   parseGoogleGeminiCliCredential,
   resolveGoogleCachedContentEndpoint,
   resolveGoogleGeminiCliCacheRender,
-} from "@brewva/brewva-provider-core";
+} from "@brewva/brewva-provider-core/cache";
+import type { GoogleCachedContentEndpointConfig } from "@brewva/brewva-provider-core/cache";
+import type {
+  ProviderCachePolicy,
+  ProviderCacheRenderResult,
+} from "@brewva/brewva-provider-core/contracts";
 import { estimateStructuredTokenCount } from "@brewva/brewva-token-estimation";
 import { stableHash, stableStringify } from "./hash.js";
 
@@ -722,11 +722,12 @@ function normalizeWorkspaceKey(workspaceRoot: string): string {
 }
 
 function normalizeErrorReason(error: unknown): string {
-  if (error instanceof Error) {
-    const typedError = error as GoogleCachedContentError & { code?: string };
-    if (typedError.code && typedError.code.trim().length > 0) {
-      return `google_cached_content_${typedError.code}`;
+  if (error instanceof GoogleCachedContentError) {
+    if (error.code.trim().length > 0) {
+      return `google_cached_content_${error.code}`;
     }
+  }
+  if (error instanceof Error) {
     if (error.message.trim().length > 0) {
       return normalizeReason(error.message);
     }
@@ -751,10 +752,10 @@ function normalizeReason(reason: string): string {
 }
 
 function shouldMemoizeCapabilityFailure(error: unknown): boolean {
-  if (!(error instanceof Error)) {
+  if (!(error instanceof GoogleCachedContentError)) {
     return false;
   }
-  const code = (error as GoogleCachedContentError & { code?: string }).code;
+  const code = error.code;
   return (
     code === "vertex_unauthorized" ||
     code === "vertex_forbidden" ||

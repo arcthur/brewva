@@ -3,7 +3,7 @@
   "compilerOptions": {
     "rootDir": "src",
     "outDir": "dist",
-    "noUncheckedIndexedAccess": false
+    "noUncheckedIndexedAccess": true
   },
   "include": ["src/**/*.ts"]
 }

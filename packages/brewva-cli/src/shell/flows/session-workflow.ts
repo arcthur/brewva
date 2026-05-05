@@ -259,7 +259,7 @@ export class ShellSessionWorkflow {
       await this.context.getSessionPort().abort();
       await this.context.getSessionPort().waitForIdle();
     }
-    const result = this.context.getSessionPort().rewindSession();
+    const result = await this.context.getSessionPort().rewindSession();
     if (!result.ok) {
       this.context.getUi().notify(`Undo unavailable (${result.reason}).`, "warning");
       return;
@@ -334,7 +334,7 @@ export class ShellSessionWorkflow {
       return;
     }
 
-    const result = this.context.getSessionPort().rewindSession({
+    const result = await this.context.getSessionPort().rewindSession({
       checkpointId: target.checkpointId,
       mode: parsedCommand?.mode ?? "both",
       summary: parsedCommand?.summary ?? "none",
@@ -376,7 +376,7 @@ export class ShellSessionWorkflow {
       this.context.getUi().notify("Cannot redo while agent is running.", "warning");
       return;
     }
-    const result = this.context.getSessionPort().redoSession();
+    const result = await this.context.getSessionPort().redoSession();
     if (!result.ok) {
       this.context.getUi().notify(`Redo unavailable (${result.reason}).`, "warning");
       return;

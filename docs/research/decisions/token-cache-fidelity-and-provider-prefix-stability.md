@@ -13,8 +13,10 @@
   - `docs/reference/configuration.md`
   - `docs/architecture/system-architecture.md`
 - Code anchors:
-  - `packages/brewva-provider-core/src/cache-policy.ts`
-  - `packages/brewva-provider-core/src/providers/payload-metadata.ts`
+  - `packages/brewva-provider-core/src/cache/policy.ts`
+  - `packages/brewva-provider-core/src/cache/capability.ts`
+  - `packages/brewva-provider-core/src/cache/render/`
+  - `packages/brewva-provider-core/src/providers/_shared/payload-metadata.ts`
   - `packages/brewva-agent-engine/src/agent-engine-types.ts`
   - `packages/brewva-agent-engine/src/provider-stream.ts`
   - `packages/brewva-gateway/src/cache/`

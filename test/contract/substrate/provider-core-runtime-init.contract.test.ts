@@ -1,26 +1,29 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import {
-  clearApiProviders,
-  getApiProviders,
-  getModel,
-  type ApiProvider,
-  streamSimple,
-} from "@brewva/brewva-provider-core";
+import { getModel } from "@brewva/brewva-provider-core/catalog";
+import { clearApiProviders, getApiProviders } from "@brewva/brewva-provider-core/registry";
+import { streamSimple } from "@brewva/brewva-provider-core/stream";
 
 describe("provider core runtime initialization contract", () => {
   test("keeps built-in provider registration explicit instead of module-load eager", () => {
     const repoRoot = resolve(import.meta.dirname, "../../..");
     const indexPath = resolve(repoRoot, "packages", "brewva-provider-core", "src", "index.ts");
-    const streamPath = resolve(repoRoot, "packages", "brewva-provider-core", "src", "stream.ts");
+    const streamPath = resolve(
+      repoRoot,
+      "packages",
+      "brewva-provider-core",
+      "src",
+      "stream",
+      "index.ts",
+    );
 
     const indexSource = readFileSync(indexPath, "utf8");
     const streamSource = readFileSync(streamPath, "utf8");
 
-    expect(indexSource).not.toContain("providers/register-builtins");
-    expect(streamSource).not.toContain('import "./providers/register-builtins.js"');
-    expect(streamSource).toContain('from "./providers/register-builtins.js"');
+    expect(indexSource).not.toContain("registry/builtins");
+    expect(streamSource).not.toContain('import "../registry/builtins.js"');
+    expect(streamSource).toContain('from "../registry/builtins.js"');
     expect(streamSource).toContain("registerBuiltInApiProviders()");
   });
 
@@ -37,7 +40,7 @@ describe("provider core runtime initialization contract", () => {
     streamSimple(model, { messages: [] });
 
     const apis = getApiProviders()
-      .map((provider: ApiProvider) => provider.api)
+      .map((provider) => provider.api)
       .toSorted();
 
     expect(apis).toContain("openai-responses");

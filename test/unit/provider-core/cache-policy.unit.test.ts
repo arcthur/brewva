@@ -7,7 +7,7 @@ import {
   resolveOpenAICompletionsCacheRender,
   resolveProviderCacheCapability,
   resolveOpenAIResponsesCacheRender,
-} from "../../../packages/brewva-provider-core/src/cache-policy.js";
+} from "../../../packages/brewva-provider-core/src/cache/index.js";
 
 describe("provider cache policy", () => {
   test("normalizes missing policy to the session-scoped short default", () => {
@@ -17,6 +17,30 @@ describe("provider cache policy", () => {
       scope: "session",
       reason: "default",
     });
+  });
+
+  test("normalization returns isolated policy objects", () => {
+    const first = normalizeProviderCachePolicy(undefined);
+    first.retention = "none";
+    first.writeMode = "readOnly";
+
+    expect(normalizeProviderCachePolicy(undefined)).toEqual({
+      retention: "short",
+      writeMode: "readWrite",
+      scope: "session",
+      reason: "default",
+    });
+
+    const configured = {
+      retention: "long" as const,
+      writeMode: "readWrite" as const,
+      scope: "session" as const,
+      reason: "config" as const,
+    };
+    const normalized = normalizeProviderCachePolicy(configured);
+    normalized.retention = "none";
+
+    expect(configured.retention).toBe("long");
   });
 
   test("builds stable cache buckets from provider, model, session, and policy", () => {
@@ -441,6 +465,157 @@ describe("provider cache policy", () => {
         },
       }).reason,
     ).toBe("kimi_code_cache_contract_not_verified");
+  });
+
+  test("renders direct OpenAI completions prompt cache keys with long retention", () => {
+    expect(
+      resolveOpenAICompletionsCacheRender({
+        provider: "openai",
+        modelId: "gpt-4o",
+        baseUrl: "https://api.openai.com/v1",
+        sessionId: "session-openai-completions",
+        policy: {
+          retention: "long",
+          writeMode: "readWrite",
+          scope: "session",
+          reason: "config",
+        },
+      }),
+    ).toEqual({
+      status: "rendered",
+      reason: "rendered_openai_completions_prompt_cache",
+      renderedRetention: "long",
+      bucketKey:
+        "openai-completions|session=session-openai-completions|retention=long|writeMode=readWrite",
+      capability: expect.objectContaining({
+        strategies: ["promptCacheKey", "implicitPrefix"],
+        cacheCounters: "readOnly",
+        longRetention: "24h",
+      }),
+      promptCacheKey: "session-openai-completions",
+      promptCacheRetention: "24h",
+    });
+  });
+
+  test("degrades direct OpenAI completions prompt cache retention when compat disables long retention", () => {
+    expect(
+      resolveOpenAICompletionsCacheRender({
+        provider: "openai",
+        modelId: "gpt-4o",
+        baseUrl: "https://api.openai.com/v1",
+        sessionId: "session-openai-short-compat",
+        supportsLongCacheRetention: false,
+        policy: {
+          retention: "long",
+          writeMode: "readWrite",
+          scope: "session",
+          reason: "config",
+        },
+      }),
+    ).toEqual({
+      status: "degraded",
+      reason: "long_retention_not_supported_for_provider_model",
+      renderedRetention: "short",
+      bucketKey:
+        "openai-completions|session=session-openai-short-compat|retention=short|writeMode=readWrite",
+      capability: expect.objectContaining({
+        strategies: ["promptCacheKey", "implicitPrefix"],
+        cacheCounters: "readOnly",
+        longRetention: "none",
+      }),
+      promptCacheKey: "session-openai-short-compat",
+      promptCacheRetention: undefined,
+    });
+  });
+
+  test("renders OpenAI-compatible completions prompt cache keys only when compat advertises support", () => {
+    expect(
+      resolveOpenAICompletionsCacheRender({
+        provider: "openrouter",
+        modelId: "openai/gpt-4o-compatible",
+        baseUrl: "https://openrouter.ai/api/v1",
+        sessionId: "session-compatible-prompt-cache",
+        supportsPromptCacheKey: true,
+        supportsLongCacheRetention: false,
+        policy: {
+          retention: "long",
+          writeMode: "readWrite",
+          scope: "session",
+          reason: "config",
+        },
+      }),
+    ).toEqual({
+      status: "degraded",
+      reason: "long_retention_not_supported_for_provider_model",
+      renderedRetention: "short",
+      bucketKey:
+        "openai-completions|session=session-compatible-prompt-cache|retention=short|writeMode=readWrite",
+      capability: expect.objectContaining({
+        strategies: ["promptCacheKey", "implicitPrefix"],
+        cacheCounters: "readOnly",
+        longRetention: "none",
+        reason: "openai_completions_prompt_cache_key_compat",
+      }),
+      promptCacheKey: "session-compatible-prompt-cache",
+      promptCacheRetention: undefined,
+    });
+
+    expect(
+      resolveOpenAICompletionsCacheRender({
+        provider: "openrouter",
+        modelId: "openai/gpt-4o-compatible",
+        baseUrl: "https://openrouter.ai/api/v1",
+        sessionId: "session-compatible-implicit",
+        supportsLongCacheRetention: false,
+        policy: {
+          retention: "long",
+          writeMode: "readWrite",
+          scope: "session",
+          reason: "config",
+        },
+      }),
+    ).toEqual({
+      status: "degraded",
+      reason: "long_retention_not_supported_for_provider_model",
+      renderedRetention: "short",
+      bucketKey:
+        "openai-completions|session=session-compatible-implicit|retention=short|writeMode=readWrite",
+      capability: expect.objectContaining({
+        strategies: ["implicitPrefix"],
+        longRetention: "none",
+      }),
+    });
+  });
+
+  test("renders OpenRouter Anthropic completions as explicit cache markers", () => {
+    expect(
+      resolveOpenAICompletionsCacheRender({
+        provider: "openrouter",
+        modelId: "anthropic/claude-sonnet-4.5",
+        baseUrl: "https://openrouter.ai/api/v1",
+        sessionId: "session-openrouter-anthropic",
+        cacheControlFormat: "anthropic",
+        supportsLongCacheRetention: true,
+        policy: {
+          retention: "long",
+          writeMode: "readWrite",
+          scope: "session",
+          reason: "config",
+        },
+      }),
+    ).toEqual({
+      status: "rendered",
+      reason: "rendered_openai_completions_anthropic_cache_control",
+      renderedRetention: "long",
+      bucketKey:
+        "openai-completions|session=session-openrouter-anthropic|retention=long|writeMode=readWrite",
+      capability: expect.objectContaining({
+        strategies: ["implicitPrefix"],
+      }),
+      cacheControl: { type: "ephemeral", ttl: "1h" },
+      promptCacheKey: undefined,
+      promptCacheRetention: undefined,
+    });
   });
 
   test("renders DeepSeek OpenAI-compatible cache as provider-side implicit prefix cache", () => {

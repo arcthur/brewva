@@ -15,7 +15,12 @@ import {
   TURN_RENDER_COMMITTED_EVENT_TYPE,
   VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
 } from "@brewva/brewva-runtime/events";
-import type { InternalHostPluginApi, BrewvaToolDefinition } from "@brewva/brewva-substrate";
+import type {
+  InternalHostPluginApi,
+  BrewvaPromptAssistantMessageEvent,
+  BrewvaPromptSessionEvent,
+  BrewvaToolDefinition,
+} from "@brewva/brewva-substrate";
 import { resolveBrewvaToolExecutionTraits } from "@brewva/brewva-tools";
 import { buildTranscriptMessagePayload } from "../session/runtime-session-transcript.js";
 import { ToolAttemptBindingRegistry } from "../session/tool-attempt-binding.js";
@@ -32,6 +37,17 @@ type MessageHealth = {
   drunk: boolean;
   flags: string[];
 };
+
+type BrewvaPromptDeltaEvent = Extract<
+  BrewvaPromptAssistantMessageEvent,
+  { type: "text_delta" | "thinking_delta" }
+>;
+
+function isPromptDeltaEvent(
+  event: Extract<BrewvaPromptSessionEvent, { type: "message_update" }>["assistantMessageEvent"],
+): event is BrewvaPromptDeltaEvent {
+  return !!event && (event.type === "text_delta" || event.type === "thinking_delta");
+}
 
 function resolveLeafEntryId(ctx: {
   sessionManager?: { getLeafId?: () => unknown };
@@ -581,12 +597,10 @@ export function registerEventStream(
     const currentText = extractMessageText(event.message);
     const previousText = lastAssistantTextBySession.get(sessionId) ?? "";
 
-    const deltaFromEvent =
-      (event.assistantMessageEvent.type === "text_delta" ||
-        event.assistantMessageEvent.type === "thinking_delta") &&
-      typeof (event.assistantMessageEvent as { delta?: unknown }).delta === "string"
-        ? ((event.assistantMessageEvent as { delta: string }).delta ?? "")
-        : "";
+    const assistantMessageEvent = event.assistantMessageEvent;
+    const deltaFromEvent = isPromptDeltaEvent(assistantMessageEvent)
+      ? assistantMessageEvent.delta
+      : "";
 
     const delta = deltaFromEvent || extractDeltaFromText(currentText, previousText);
     lastAssistantTextBySession.set(sessionId, currentText);

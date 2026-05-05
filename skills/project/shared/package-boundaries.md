@@ -10,6 +10,7 @@ scope: package-boundaries
 | Package                        | Responsibility                                                                          | Must Not Own                                  |
 | ------------------------------ | --------------------------------------------------------------------------------------- | --------------------------------------------- |
 | `@brewva/brewva-runtime`       | governance kernel, contracts, gates, verification state, context boundaries             | CLI wiring or transport-specific behavior     |
+| `@brewva/brewva-provider-core` | provider contracts, catalog lookup, typed registry, streaming, cache rendering, drivers | replay authority or credential ownership      |
 | `@brewva/brewva-recall`        | recall ranking, curation semantics, trust labels, and result rendering                  | event tape authority or database ownership    |
 | `@brewva/brewva-session-index` | rebuildable DuckDB query plane over session event tapes                                 | replay authority, tokenization policy, SQL UI |
 | `@brewva/brewva-deliberation`  | narrative memory, optimization continuity, and non-authoritative deliberation substrate | kernel commitments or transport ownership     |
@@ -33,3 +34,10 @@ scope: package-boundaries
 - TypeBox-Value streaming helpers stay internal to
   `@brewva/brewva-provider-core`; other packages consume only normalized
   provider events such as optional `parseStatus`
+- provider-core implementation stays domain-sliced under `contracts/`,
+  `catalog/`, `registry/`, `stream/`, `parse/`, `cache/`, and
+  vertical `providers/<api>/` folders; the root is a compatibility surface, not
+  an implementation home
+- provider session resources are a controlled lifecycle port; hosted callers
+  that replace session context or change provider/model must await
+  `clearSession(sessionId)` before continuing

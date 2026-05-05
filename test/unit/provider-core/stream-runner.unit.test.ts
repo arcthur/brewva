@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type { AssistantMessageEvent, Model } from "@brewva/brewva-provider-core";
-import { runProviderStream } from "../../../packages/brewva-provider-core/src/streaming/stream-runner.js";
+import type { AssistantMessageEvent, Model } from "@brewva/brewva-provider-core/contracts";
+import { runProviderStream } from "../../../packages/brewva-provider-core/src/stream/run-provider-stream.js";
 
 const model: Model<"openai-responses"> = {
   id: "gpt-4o",

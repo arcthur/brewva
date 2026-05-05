@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { OPENAI_CODEX_RESPONSES_TEST_ONLY } from "../../../packages/brewva-provider-core/src/providers/openai-codex-responses.js";
+import { parseSSE } from "../../../packages/brewva-provider-core/src/providers/openai-codex-responses/sse.js";
 
 function createResponseFromChunks(chunks: string[]): Response {
   const encoder = new TextEncoder();
@@ -27,7 +27,7 @@ describe("openai codex SSE parser", () => {
     ]);
 
     const events = [];
-    for await (const event of OPENAI_CODEX_RESPONSES_TEST_ONLY.parseSSE(response)) {
+    for await (const event of parseSSE(response)) {
       events.push(event);
     }
 
@@ -43,7 +43,7 @@ describe("openai codex SSE parser", () => {
     const response = createResponseFromChunks(["data: {not-json}\n\n"]);
     let error: unknown;
     try {
-      for await (const _ of OPENAI_CODEX_RESPONSES_TEST_ONLY.parseSSE(response)) {
+      for await (const _ of parseSSE(response)) {
       }
     } catch (nextError) {
       error = nextError;

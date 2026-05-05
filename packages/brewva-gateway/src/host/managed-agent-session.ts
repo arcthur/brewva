@@ -1,16 +1,17 @@
 import { randomUUID } from "node:crypto";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, extname, join, resolve } from "node:path";
-import type {
-  Api,
-  ProviderCachePolicy,
-  ProviderRequestFingerprint,
-  ProviderPayloadMetadata,
-} from "@brewva/brewva-provider-core";
 import {
   buildProviderCacheBucketKey,
   resolveProviderCacheCapability,
-} from "@brewva/brewva-provider-core";
+} from "@brewva/brewva-provider-core/cache";
+import type {
+  Api,
+  ProviderPayloadMetadata,
+  ProviderCachePolicy,
+  ProviderRequestFingerprint,
+} from "@brewva/brewva-provider-core/contracts";
+import { clearApiProviderSessions } from "@brewva/brewva-provider-core/registry";
 import type {
   BrewvaRuntime,
   ExpectedProviderCacheBreak,
@@ -1177,6 +1178,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     | ((message: Extract<BrewvaAgentEngineMessage, { role: "assistant" }>) => void)
     | undefined;
   readonly #onDispose: (() => void) | undefined;
+  #providerCacheSessionClear: Promise<void> | null = null;
 
   constructor(input: {
     cwd: string;
@@ -1307,7 +1309,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
         googleCachedContentManager.resetCapability(options.cwd, lastGoogleModelBaseUrl);
         lastGoogleModelBaseUrl = undefined;
         releaseGoogleCachedContent();
-        session?.clearProviderCacheSessionState();
+        session?.clearProviderCacheSessionStateBestEffort();
       }
     });
 
@@ -1568,7 +1570,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     this.refreshTools();
     const restoredMessages = this.sessionManager.buildSessionContext().messages;
     if (restoredMessages.length > 0) {
-      this.replaceMessages(restoredMessages);
+      await this.replaceMessages(restoredMessages);
     }
     const lifecycleSnapshot = this.sessionManager.readLifecycle?.();
     const lifecycleProjection = lifecycleSnapshot
@@ -1675,7 +1677,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
         previousModel.provider !== selection.model.provider ||
         previousModel.id !== selection.model.id;
       if (modelChanged) {
-        this.clearProviderCacheSessionState();
+        await this.clearProviderCacheSessionState();
         this.sessionManager.appendModelChange(selection.model.provider, selection.model.id);
         await this.#runner.emit(
           MODEL_SELECT_EVENT_TYPE,
@@ -1755,6 +1757,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     parts: readonly BrewvaPromptContentPart[],
     options?: BrewvaPromptOptions,
   ): Promise<void> {
+    await this.waitForProviderCacheSessionClear();
     await this.applyQueuedModelPreset();
     const expandPromptTemplates = options?.expandPromptTemplates ?? true;
     let currentParts = cloneBrewvaPromptContentParts(parts);
@@ -1905,7 +1908,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
       previousModel.provider !== resolved.provider ||
       previousModel.id !== resolved.id
     ) {
-      this.clearProviderCacheSessionState();
+      await this.clearProviderCacheSessionState();
       this.sessionManager.appendModelChange(resolved.provider, resolved.id);
       await this.#runner.emit(
         MODEL_SELECT_EVENT_TYPE,
@@ -1957,10 +1960,11 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     }
   }
 
-  replaceMessages(messages: unknown): void {
+  async replaceMessages(messages: unknown): Promise<void> {
     if (!Array.isArray(messages)) {
       throw new Error("replaceMessages expects an array of messages.");
     }
+    await this.clearProviderCacheSessionState();
     this.#agent.replaceMessages([...messages] as BrewvaAgentEngineMessage[]);
   }
 
@@ -2037,9 +2041,37 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     return this.resolveToolSchemaSnapshot(activeDefinitions, invalidationReason);
   }
 
-  private clearProviderCacheSessionState(): void {
+  private trackProviderCacheSessionClear(clear: Promise<void>): Promise<void> {
+    this.#providerCacheSessionClear = clear;
+    void clear
+      .finally(() => {
+        if (this.#providerCacheSessionClear === clear) {
+          this.#providerCacheSessionClear = null;
+        }
+      })
+      .catch(() => undefined);
+    return clear;
+  }
+
+  private async waitForProviderCacheSessionClear(): Promise<void> {
+    await this.#providerCacheSessionClear;
+  }
+
+  private clearProviderCacheSessionState(): Promise<void> {
     this.#toolSchemaSnapshotStore.clear("session_clear");
     this.#providerCacheStickyLatches.clear();
+    return this.trackProviderCacheSessionClear(
+      clearApiProviderSessions(this.sessionManager.getSessionId()),
+    );
+  }
+
+  private clearProviderCacheSessionStateBestEffort(): void {
+    void this.clearProviderCacheSessionState().catch((error) => {
+      this.#logger?.warn("provider cache session clear failed", {
+        sessionId: this.sessionManager.getSessionId(),
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
   }
 
   private observeProviderCacheStickyLatches(
@@ -2048,8 +2080,8 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     return this.#providerCacheStickyLatches.observe(input);
   }
 
-  private markSessionCompactedForCacheState(): void {
-    this.clearProviderCacheSessionState();
+  private async markSessionCompactedForCacheState(): Promise<void> {
+    await this.clearProviderCacheSessionState();
   }
 
   private refreshTools(): void {
@@ -2509,7 +2541,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
       );
       this.emitToListeners(beforeCompactEvent);
 
-      this.replaceMessages(preview.context.messages);
+      await this.replaceMessages(preview.context.messages);
 
       const compactEvent = {
         type: "session_compact" as const,
@@ -2528,7 +2560,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
       try {
         await this.#runner.emit("session_compact", compactEvent, this.createHostContext());
         this.emitToListeners(compactEvent);
-        this.markSessionCompactedForCacheState();
+        await this.markSessionCompactedForCacheState();
         request.onComplete?.(compactEvent);
       } catch (error) {
         for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -2544,14 +2576,14 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
               persistedLeaf.tokensBefore === preview.tokensBefore) ||
             sameSessionMessages(persistedContext.messages, preview.context.messages)
           ) {
-            this.replaceMessages(persistedContext.messages);
+            await this.replaceMessages(persistedContext.messages);
             this.emitToListeners(compactEvent);
-            this.markSessionCompactedForCacheState();
+            await this.markSessionCompactedForCacheState();
             request.onComplete?.(compactEvent);
             return;
           }
         }
-        this.replaceMessages(sessionContext.messages);
+        await this.replaceMessages(sessionContext.messages);
         throw error;
       }
     } catch (error) {
@@ -2563,9 +2595,9 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
         const settledLeaf = settledBranch[settledBranch.length - 1];
         const settledContext = this.sessionManager.buildSessionContext();
         if (settledLeaf?.type === "compaction") {
-          this.replaceMessages(settledContext.messages);
+          await this.replaceMessages(settledContext.messages);
           this.emitToListeners(pendingCompactEvent);
-          this.markSessionCompactedForCacheState();
+          await this.markSessionCompactedForCacheState();
           request.onComplete?.(pendingCompactEvent);
           return;
         }

@@ -11,6 +11,10 @@ import {
 } from "@brewva/brewva-gateway/runtime-plugins";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
 import { requireDefined, requireNumber, requireRecord } from "../../helpers/assertions.js";
+import {
+  createPromptMessageUpdateEvent,
+  createTextDeltaAssistantEvent,
+} from "../../helpers/prompt-session-events.js";
 import { createMockRuntimePluginApi, invokeHandlers } from "../../helpers/runtime-plugin.js";
 import { createOpsRuntimeConfig } from "../../helpers/runtime.js";
 
@@ -208,28 +212,37 @@ maxcalls`,
     invokeHandlers(
       handlers,
       "message_update",
-      {
+      createPromptMessageUpdateEvent({
         message: { role: "assistant", content: [{ type: "text", text: "a" }] },
-        assistantMessageEvent: { type: "text_delta", delta: "a" },
-      },
+        assistantMessageEvent: createTextDeltaAssistantEvent({
+          delta: "a",
+          partial: { role: "assistant", content: [{ type: "text", text: "a" }] },
+        }),
+      }),
       ctx,
     );
     invokeHandlers(
       handlers,
       "message_update",
-      {
+      createPromptMessageUpdateEvent({
         message: { role: "assistant", content: [{ type: "text", text: "ab" }] },
-        assistantMessageEvent: { type: "text_delta", delta: "b" },
-      },
+        assistantMessageEvent: createTextDeltaAssistantEvent({
+          delta: "b",
+          partial: { role: "assistant", content: [{ type: "text", text: "ab" }] },
+        }),
+      }),
       ctx,
     );
     invokeHandlers(
       handlers,
       "message_update",
-      {
+      createPromptMessageUpdateEvent({
         message: { role: "assistant", content: [{ type: "text", text: "abc" }] },
-        assistantMessageEvent: { type: "text_delta", delta: "c" },
-      },
+        assistantMessageEvent: createTextDeltaAssistantEvent({
+          delta: "c",
+          partial: { role: "assistant", content: [{ type: "text", text: "abc" }] },
+        }),
+      }),
       ctx,
     );
     invokeHandlers(
@@ -276,37 +289,34 @@ maxcalls`,
     invokeHandlers(
       handlers,
       "message_update",
-      {
-        assistantMessageEvent: {
-          type: "text_delta",
+      createPromptMessageUpdateEvent({
+        assistantMessageEvent: createTextDeltaAssistantEvent({
           delta: "a",
           partial: { role: "assistant", content: [{ type: "text", text: "a" }] },
-        },
-      },
+        }),
+      }),
       ctx,
     );
     invokeHandlers(
       handlers,
       "message_update",
-      {
-        assistantMessageEvent: {
-          type: "text_delta",
+      createPromptMessageUpdateEvent({
+        assistantMessageEvent: createTextDeltaAssistantEvent({
           delta: "b",
           partial: { role: "assistant", content: [{ type: "text", text: "ab" }] },
-        },
-      },
+        }),
+      }),
       ctx,
     );
     invokeHandlers(
       handlers,
       "message_update",
-      {
-        assistantMessageEvent: {
-          type: "text_delta",
+      createPromptMessageUpdateEvent({
+        assistantMessageEvent: createTextDeltaAssistantEvent({
           delta: "c",
           partial: { role: "assistant", content: [{ type: "text", text: "abc" }] },
-        },
-      },
+        }),
+      }),
       ctx,
     );
     invokeHandlers(

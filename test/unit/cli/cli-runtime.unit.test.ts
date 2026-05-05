@@ -15,6 +15,11 @@ import {
   runCliPrintSession,
 } from "../../../packages/brewva-cli/src/cli-runtime.js";
 import type { ProviderConnectionPort } from "../../../packages/brewva-gateway/src/host/provider-connection.js";
+import {
+  createPromptMessageEndEvent,
+  createPromptMessageUpdateEvent,
+  createTextDeltaAssistantEvent,
+} from "../../helpers/prompt-session-events.js";
 
 describe("cli runtime print mode", () => {
   const stdoutWrites: string[] = [];
@@ -121,20 +126,23 @@ describe("cli runtime print mode", () => {
           });
           return;
         }
-        listener?.({
-          type: "message_update",
-          assistantMessageEvent: {
-            type: "text_delta",
-            delta: "resumed print answer",
-          },
-        } as BrewvaPromptSessionEvent);
-        listener?.({
-          type: "message_end",
-          message: {
+        listener?.(
+          createPromptMessageUpdateEvent({
+            assistantMessageEvent: createTextDeltaAssistantEvent({
+              delta: "resumed print answer",
+              partial: {
+                role: "assistant",
+                content: [{ type: "text", text: "resumed print answer" }],
+              },
+            }),
+          }),
+        );
+        listener?.(
+          createPromptMessageEndEvent({
             role: "assistant",
             content: [{ type: "text", text: "resumed print answer" }],
-          },
-        } as BrewvaPromptSessionEvent);
+          }),
+        );
       },
       async waitForIdle() {},
     } as Pick<

@@ -34,7 +34,9 @@ function buildDivergenceSummaryDetails(note: SessionRewindDivergenceNote): Recor
   };
 }
 
-function replaceSessionMessagesFromCurrentContext(bundle: CliShellSessionBundle): void {
+async function replaceSessionMessagesFromCurrentContext(
+  bundle: CliShellSessionBundle,
+): Promise<void> {
   const context = bundle.session.sessionManager.buildSessionContext?.();
   if (!context || !Array.isArray(context.messages)) {
     throw new Error("Session rewind requires sessionManager.buildSessionContext().");
@@ -42,7 +44,7 @@ function replaceSessionMessagesFromCurrentContext(bundle: CliShellSessionBundle)
   if (typeof bundle.session.replaceMessages !== "function") {
     throw new Error("Session rewind requires session.replaceMessages().");
   }
-  bundle.session.replaceMessages(context.messages);
+  await bundle.session.replaceMessages(context.messages);
 }
 
 function appendRewindDivergenceSummary(
@@ -221,7 +223,7 @@ export function createSessionViewPort(bundle: CliShellSessionBundle): SessionVie
         },
       );
     },
-    rewindSession(input) {
+    async rewindSession(input) {
       const sessionId = bundle.session.sessionManager.getSessionId();
       const returnLeafEntryId =
         input?.returnLeafEntryId ?? bundle.session.sessionManager.getLeafId?.() ?? null;
@@ -264,10 +266,10 @@ export function createSessionViewPort(bundle: CliShellSessionBundle): SessionVie
       if (result.divergenceNote) {
         appendRewindDivergenceSummary(bundle, result.divergenceNote, returnLeafEntryId);
       }
-      replaceSessionMessagesFromCurrentContext(bundle);
+      await replaceSessionMessagesFromCurrentContext(bundle);
       return result;
     },
-    redoSession(input) {
+    async redoSession(input) {
       const sessionId = bundle.session.sessionManager.getSessionId();
       if (typeof bundle.session.replaceMessages !== "function") {
         throw new Error("Session redo requires session.replaceMessages().");
@@ -290,7 +292,7 @@ export function createSessionViewPort(bundle: CliShellSessionBundle): SessionVie
           sessionManager.resetLeaf();
         }
       }
-      replaceSessionMessagesFromCurrentContext(bundle);
+      await replaceSessionMessagesFromCurrentContext(bundle);
       return result;
     },
     getRewindState() {

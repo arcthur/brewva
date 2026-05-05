@@ -1,16 +1,16 @@
 import { describe, expect, test } from "bun:test";
+import type { Model, Tool } from "@brewva/brewva-provider-core/contracts";
 import { Type } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
-import { createAssistantMessage } from "../../../packages/brewva-provider-core/src/streaming/assistant-message.js";
-import { IncrementalToolCallFolder } from "../../../packages/brewva-provider-core/src/streaming/tool-call-folder.js";
+import { parseStreamingJson } from "../../../packages/brewva-provider-core/src/parse/json-parse.js";
 import {
   createStreamingParseRegistry,
   EMPTY_PARSE_REGISTRY,
   partialize,
-} from "../../../packages/brewva-provider-core/src/streaming/typebox-partialize.js";
-import type { Model, Tool } from "../../../packages/brewva-provider-core/src/types.js";
+} from "../../../packages/brewva-provider-core/src/parse/typebox-partialize.js";
+import { createAssistantMessage } from "../../../packages/brewva-provider-core/src/stream/assistant-message.js";
+import { IncrementalToolCallFolder } from "../../../packages/brewva-provider-core/src/stream/tool-call-folder.js";
 import { AssistantMessageEventStream } from "../../../packages/brewva-provider-core/src/utils/event-stream.js";
-import { parseStreamingJson } from "../../../packages/brewva-provider-core/src/utils/json-parse.js";
 
 async function collectEvents(stream: AssistantMessageEventStream) {
   stream.end();

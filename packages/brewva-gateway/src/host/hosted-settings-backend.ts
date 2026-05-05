@@ -1,12 +1,12 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import {
-  DEFAULT_PROVIDER_CACHE_POLICY,
-  type ProviderCachePolicy,
-  type ProviderCachePolicyReason,
-  type ProviderCacheRetention,
-  type ProviderCacheWriteMode,
-} from "@brewva/brewva-provider-core";
+import { DEFAULT_PROVIDER_CACHE_POLICY } from "@brewva/brewva-provider-core/cache";
+import type {
+  ProviderCachePolicy,
+  ProviderCachePolicyReason,
+  ProviderCacheRetention,
+  ProviderCacheWriteMode,
+} from "@brewva/brewva-provider-core/contracts";
 import type {
   BrewvaDiffPreferences,
   BrewvaShellViewPreferences,

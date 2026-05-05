@@ -1,6 +1,7 @@
 import AjvModule from "ajv";
 import addFormatsModule from "ajv-formats";
-import type { Tool, ToolCall } from "../types.js";
+import type { Tool, ToolCall } from "../contracts/index.js";
+import { resolveDefaultExport } from "./module-interop.js";
 
 declare const validatedProviderToolArgumentsBrand: unique symbol;
 
@@ -66,14 +67,11 @@ function canUseRuntimeCodegen(): boolean {
 let ajv: AjvLike | null = null;
 if (canUseRuntimeCodegen()) {
   try {
-    const Ajv = AjvModule as unknown as { default?: AjvConstructor } | AjvConstructor;
-    const AjvCtor = (typeof Ajv === "function" ? Ajv : Ajv.default) as AjvConstructor;
-    const addFormats = addFormatsModule as unknown as
-      | { default?: AddFormatsFunction }
-      | AddFormatsFunction;
-    const addFormatsFn = (
-      typeof addFormats === "function" ? addFormats : addFormats.default
-    ) as AddFormatsFunction;
+    const AjvCtor = resolveDefaultExport<AjvConstructor>(AjvModule);
+    const addFormatsFn = resolveDefaultExport<AddFormatsFunction>(addFormatsModule);
+    if (!AjvCtor || !addFormatsFn) {
+      throw new Error("AJV runtime interop failed");
+    }
     ajv = new AjvCtor({
       allErrors: true,
       strict: false,

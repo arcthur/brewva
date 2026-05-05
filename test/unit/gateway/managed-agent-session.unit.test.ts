@@ -1,8 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import {
+  registerExternalApiProvider,
+  unregisterApiProviders,
+} from "@brewva/brewva-provider-core/registry";
 import { BrewvaRuntime, defineContextSourceProvider } from "@brewva/brewva-runtime";
 import {
+  type BrewvaPromptSessionEvent,
   type ContextState,
   type CreateBrewvaHostPluginRunnerOptions,
   createHostedResourceLoader,
@@ -29,10 +34,31 @@ import { createHostedTurnPipeline } from "../../../packages/brewva-gateway/src/r
 import {
   fauxAssistantMessage,
   registerFauxProvider,
-} from "../../../packages/brewva-provider-core/src/providers/faux.js";
+} from "../../../packages/brewva-provider-core/src/providers/faux/index.js";
+import { createAssistantMessageEventStream } from "../../../packages/brewva-provider-core/src/utils/event-stream.js";
+import { createToolcallDeltaAssistantEvent } from "../../helpers/prompt-session-events.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 type TestRuntimePlugin = NonNullable<CreateBrewvaHostPluginRunnerOptions["plugins"]>[number];
+
+function createDeferred<T = void>(): {
+  promise: Promise<T>;
+  resolve(value?: T | PromiseLike<T>): void;
+  reject(error: unknown): void;
+} {
+  let resolve!: (value?: T | PromiseLike<T>) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = (value) => resolvePromise(value as T | PromiseLike<T>);
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
+async function flushMicrotasks(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
+}
 
 function testRuntimePlugin(
   name: string,
@@ -466,6 +492,55 @@ describe("managed agent session compaction", () => {
     session.dispose();
   });
 
+  test("preserves advisory parseStatus on subscribed message_update events", async () => {
+    const { session } = await createManagedSessionFixture("managed-agent-session-parse-status");
+    const observedStatuses: string[] = [];
+    const unsubscribe = session.subscribe((event) => {
+      if (event.type !== "message_update") {
+        return;
+      }
+      const assistantMessageEvent = (
+        event as Extract<BrewvaPromptSessionEvent, { type: "message_update" }>
+      ).assistantMessageEvent;
+      if (assistantMessageEvent?.type === "toolcall_delta" && assistantMessageEvent.parseStatus) {
+        observedStatuses.push(assistantMessageEvent.parseStatus);
+      }
+    });
+
+    const handleAgentEvent = (
+      session as unknown as {
+        handleAgentEvent(event: unknown): Promise<void>;
+      }
+    ).handleAgentEvent.bind(session);
+    const assistantMessage = {
+      role: "assistant" as const,
+      content: [{ type: "toolCall" as const, id: "tool_1", name: "search", arguments: {} }],
+      api: TEST_MODEL.api,
+      provider: TEST_MODEL.provider,
+      model: TEST_MODEL.id,
+      usage: createUsage(),
+      stopReason: "toolUse" as const,
+      timestamp: Date.now(),
+    };
+
+    try {
+      await handleAgentEvent({
+        type: "message_update",
+        message: assistantMessage,
+        assistantMessageEvent: createToolcallDeltaAssistantEvent({
+          delta: '{"query"',
+          partial: assistantMessage,
+          parseStatus: "pending",
+        }),
+      });
+    } finally {
+      unsubscribe();
+      session.dispose();
+    }
+
+    expect(observedStatuses).toEqual(["pending"]);
+  });
+
   test("attaches a UI port after session creation so tool context no longer falls back to NOOP_UI", async () => {
     const { session } = await createManagedSessionFixture("managed-agent-session-ui-attach");
     const createToolContext = (
@@ -760,6 +835,138 @@ describe("managed agent session compaction", () => {
       }
     } finally {
       fauxProvider.unregister();
+    }
+  });
+
+  test("awaits async provider session clear before model switch resolves", async () => {
+    const workspace = createTestWorkspace("managed-agent-session-model-switch-awaits-clear");
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionStore = new HostedRuntimeTapeSessionStore(
+      runtime,
+      workspace,
+      "managed-agent-session-model-switch-awaits-clear-session",
+    );
+    const nextModel: BrewvaRegisteredModel = {
+      ...TEST_MODEL,
+      provider: "openai-next",
+      id: "gpt-next",
+      name: "GPT Next",
+    };
+    const modelCatalog = createInMemoryModelCatalog();
+    registerModelCatalogProvider(modelCatalog, TEST_MODEL);
+    registerModelCatalogProvider(modelCatalog, nextModel);
+    sessionStore.appendModelChange(TEST_MODEL.provider, TEST_MODEL.id);
+    sessionStore.appendThinkingLevelChange("high");
+
+    const sourceId = "managed-agent-session-model-switch-awaits-clear-provider";
+    const clear = createDeferred();
+    const clearedSessions: string[] = [];
+    registerExternalApiProvider(
+      {
+        api: "managed-agent-session-model-switch-awaits-clear",
+        stream() {
+          return createAssistantMessageEventStream();
+        },
+        streamSimple() {
+          return createAssistantMessageEventStream();
+        },
+        sessionResources: {
+          clearSession(sessionId) {
+            clearedSessions.push(sessionId);
+            return clear.promise;
+          },
+        },
+      },
+      sourceId,
+    );
+
+    const session = await createBrewvaManagedAgentSession({
+      cwd: workspace,
+      agentDir: join(workspace, ".brewva-agent"),
+      sessionStore,
+      settings: createSettingsStub(),
+      runtime,
+      modelCatalog,
+      resourceLoader: await createResourceLoader(workspace),
+      customTools: [],
+      runtimePlugins: [createHostedTurnPipeline({ runtime, registerTools: false })],
+      initialModel: TEST_MODEL,
+      initialThinkingLevel: "high",
+    });
+
+    try {
+      if (typeof session.setModel !== "function") {
+        throw new Error("managed agent session should expose setModel");
+      }
+      let resolved = false;
+      const switchModel = Promise.resolve(session.setModel(nextModel)).then(() => {
+        resolved = true;
+      });
+
+      await flushMicrotasks();
+
+      expect(clearedSessions).toEqual([sessionStore.getSessionId()]);
+      expect(resolved).toBe(false);
+
+      clear.resolve();
+      await switchModel;
+
+      expect(resolved).toBe(true);
+    } finally {
+      clear.resolve();
+      session.dispose();
+      unregisterApiProviders(sourceId);
+    }
+  });
+
+  test("awaits async provider session clear before replacing messages", async () => {
+    const { sessionStore, session } = await createManagedSessionFixture(
+      "managed-agent-session-replace-awaits-clear",
+    );
+    const sourceId = "managed-agent-session-replace-awaits-clear-provider";
+    const clear = createDeferred();
+    const clearedSessions: string[] = [];
+    registerExternalApiProvider(
+      {
+        api: "managed-agent-session-replace-awaits-clear",
+        stream() {
+          return createAssistantMessageEventStream();
+        },
+        streamSimple() {
+          return createAssistantMessageEventStream();
+        },
+        sessionResources: {
+          clearSession(sessionId) {
+            clearedSessions.push(sessionId);
+            return clear.promise;
+          },
+        },
+      },
+      sourceId,
+    );
+
+    try {
+      if (typeof session.replaceMessages !== "function") {
+        throw new Error("managed agent session should expose replaceMessages");
+      }
+      let resolved = false;
+      const replaceMessages = Promise.resolve(session.replaceMessages([])).then(() => {
+        resolved = true;
+      });
+
+      await flushMicrotasks();
+
+      expect(clearedSessions).toEqual([sessionStore.getSessionId()]);
+      expect(resolved).toBe(false);
+
+      clear.resolve();
+      await replaceMessages;
+
+      expect(resolved).toBe(true);
+    } finally {
+      clear.resolve();
+      session.dispose();
+      unregisterApiProviders(sourceId);
     }
   });
 

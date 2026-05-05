@@ -4,7 +4,7 @@ import {
   buildGoogleFileDataPart,
   buildOpenAIInputFilePart,
   materializeResolvedUserMessageContentPart,
-} from "../../../packages/brewva-provider-core/src/providers/prompt-content.js";
+} from "../../../packages/brewva-provider-core/src/providers/_shared/prompt-content.js";
 
 const TEXT_ONLY_MODEL = {
   provider: "openai",

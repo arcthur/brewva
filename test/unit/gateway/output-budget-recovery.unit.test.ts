@@ -9,6 +9,11 @@ import { registerProviderRequestRecovery } from "../../../packages/brewva-gatewa
 import { COMPACTION_RECOVERY_TEST_ONLY } from "../../../packages/brewva-gateway/src/session/compaction-recovery.js";
 import { runHostedThreadLoop } from "../../../packages/brewva-gateway/src/session/hosted-thread-loop.js";
 import { getThreadLoopProfile } from "../../../packages/brewva-gateway/src/session/thread-loop-profiles.js";
+import {
+  createPromptMessageEndEvent,
+  createPromptMessageUpdateEvent,
+  createTextDeltaAssistantEvent,
+} from "../../helpers/prompt-session-events.js";
 import { createMockRuntimePluginApi, invokeHandler } from "../../helpers/runtime-plugin.js";
 import { createRuntimeFixture } from "../../helpers/runtime.js";
 
@@ -44,17 +49,21 @@ describe("output budget recovery chain", () => {
         promptedMessages.push(content);
 
         if (promptedMessages.length === 1) {
-          listener?.({
-            type: "message_update",
-            message: {
-              role: "assistant",
-              content: [{ type: "text", text: "draft answer that will be superseded" }],
-            },
-            assistantMessageEvent: {
-              type: "text_delta",
-              delta: "draft answer that will be superseded",
-            },
-          } as BrewvaPromptSessionEvent);
+          listener?.(
+            createPromptMessageUpdateEvent({
+              message: {
+                role: "assistant",
+                content: [{ type: "text", text: "draft answer that will be superseded" }],
+              },
+              assistantMessageEvent: createTextDeltaAssistantEvent({
+                delta: "draft answer that will be superseded",
+                partial: {
+                  role: "assistant",
+                  content: [{ type: "text", text: "draft answer that will be superseded" }],
+                },
+              }),
+            }),
+          );
           throw new Error("max output tokens exceeded");
         }
 
@@ -76,17 +85,21 @@ describe("output budget recovery chain", () => {
               },
             ),
           );
-          listener?.({
-            type: "message_update",
-            message: {
-              role: "assistant",
-              content: [{ type: "text", text: "second draft still too long" }],
-            },
-            assistantMessageEvent: {
-              type: "text_delta",
-              delta: "second draft still too long",
-            },
-          } as BrewvaPromptSessionEvent);
+          listener?.(
+            createPromptMessageUpdateEvent({
+              message: {
+                role: "assistant",
+                content: [{ type: "text", text: "second draft still too long" }],
+              },
+              assistantMessageEvent: createTextDeltaAssistantEvent({
+                delta: "second draft still too long",
+                partial: {
+                  role: "assistant",
+                  content: [{ type: "text", text: "second draft still too long" }],
+                },
+              }),
+            }),
+          );
           throw new Error("max output tokens exceeded");
         }
 
@@ -94,13 +107,12 @@ describe("output budget recovery chain", () => {
           throw new Error(`unexpected_prompt:${content}`);
         }
 
-        listener?.({
-          type: "message_end",
-          message: {
+        listener?.(
+          createPromptMessageEndEvent({
             role: "assistant",
             content: [{ type: "text", text: "final concise answer" }],
-          },
-        } as BrewvaPromptSessionEvent);
+          }),
+        );
       },
       agent: {
         async waitForIdle(): Promise<void> {

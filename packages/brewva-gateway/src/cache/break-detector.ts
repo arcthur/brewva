@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { ProviderRequestFingerprint } from "@brewva/brewva-provider-core";
+import type { ProviderRequestFingerprint } from "@brewva/brewva-provider-core/contracts";
 import type {
   ExpectedProviderCacheBreak,
   ProviderCacheBreakObservation,

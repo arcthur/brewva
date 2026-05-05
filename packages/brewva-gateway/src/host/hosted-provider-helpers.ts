@@ -2,9 +2,11 @@ import {
   getModels,
   getProviders,
   supportsXhighModelId,
-  type Api as ProviderCoreApi,
-  type Model as ProviderCoreModel,
-} from "@brewva/brewva-provider-core";
+} from "@brewva/brewva-provider-core/catalog";
+import type {
+  Api as ProviderCoreApi,
+  Model as ProviderCoreModel,
+} from "@brewva/brewva-provider-core/contracts";
 import type { BrewvaRegisteredModel } from "@brewva/brewva-substrate";
 
 type ProviderCoreKnownProvider = ReturnType<typeof getProviders>[number];

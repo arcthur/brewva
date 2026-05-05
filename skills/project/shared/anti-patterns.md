@@ -19,6 +19,11 @@ scope: anti-patterns
   deriving advisory streaming parse from the canonical TypeBox schema.
 - Exporting provider-core streaming parse projection helpers such as
   `partialize` or registry construction as root public APIs.
+- Reintroducing mixed provider-core root implementation files or flat
+  provider-driver siblings when the accepted shape is domain slices plus
+  `providers/<api>/`.
+- Fire-and-forget provider session cleanup on session replacement, rewind,
+  compaction, or model/provider change.
 - Re-exposing removed low-level tuning knobs as public config.
 - Editing generated distribution artifacts by hand.
 - Skipping `test:dist` for export, CLI, or distribution changes.

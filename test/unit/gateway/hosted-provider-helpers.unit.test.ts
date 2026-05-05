@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { getModels, getProviders } from "@brewva/brewva-provider-core";
+import { getModels, getProviders } from "@brewva/brewva-provider-core/catalog";
 import {
   getHostedBuiltInModels,
   getHostedBuiltInProviders,

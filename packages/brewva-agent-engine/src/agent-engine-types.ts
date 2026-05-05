@@ -1,8 +1,9 @@
 import type {
+  AssistantMessageEventOf,
   ProviderCachePolicy,
   ProviderCacheRenderResult,
   ProviderPayloadMetadata,
-} from "@brewva/brewva-provider-core";
+} from "@brewva/brewva-provider-core/contracts";
 import type {
   BrewvaRegisteredModel,
   BrewvaResolvedRequestAuth,
@@ -217,57 +218,11 @@ export interface BrewvaAgentEngineAfterToolCallContext {
   context: BrewvaAgentEngineContext;
 }
 
-export type BrewvaAgentEngineAssistantMessageEvent =
-  | { type: "start"; partial: BrewvaAgentEngineAssistantMessage }
-  | { type: "text_start"; contentIndex: number; partial: BrewvaAgentEngineAssistantMessage }
-  | {
-      type: "text_delta";
-      contentIndex: number;
-      delta: string;
-      partial: BrewvaAgentEngineAssistantMessage;
-    }
-  | {
-      type: "text_end";
-      contentIndex: number;
-      content: string;
-      partial: BrewvaAgentEngineAssistantMessage;
-    }
-  | { type: "thinking_start"; contentIndex: number; partial: BrewvaAgentEngineAssistantMessage }
-  | {
-      type: "thinking_delta";
-      contentIndex: number;
-      delta: string;
-      partial: BrewvaAgentEngineAssistantMessage;
-    }
-  | {
-      type: "thinking_end";
-      contentIndex: number;
-      content: string;
-      partial: BrewvaAgentEngineAssistantMessage;
-    }
-  | { type: "toolcall_start"; contentIndex: number; partial: BrewvaAgentEngineAssistantMessage }
-  | {
-      type: "toolcall_delta";
-      contentIndex: number;
-      delta: string;
-      partial: BrewvaAgentEngineAssistantMessage;
-    }
-  | {
-      type: "toolcall_end";
-      contentIndex: number;
-      toolCall: BrewvaAgentEngineToolCall;
-      partial: BrewvaAgentEngineAssistantMessage;
-    }
-  | {
-      type: "done";
-      reason: Extract<BrewvaAgentEngineStopReason, "stop" | "length" | "toolUse">;
-      message: BrewvaAgentEngineAssistantMessage;
-    }
-  | {
-      type: "error";
-      reason: Extract<BrewvaAgentEngineStopReason, "aborted" | "error">;
-      error: BrewvaAgentEngineAssistantMessage;
-    };
+export type BrewvaAgentEngineAssistantMessageEvent = AssistantMessageEventOf<
+  BrewvaAgentEngineAssistantMessage,
+  BrewvaAgentEngineToolCall,
+  BrewvaAgentEngineStopReason
+>;
 
 export type BrewvaAgentEngineEvent =
   | { type: "agent_start" }

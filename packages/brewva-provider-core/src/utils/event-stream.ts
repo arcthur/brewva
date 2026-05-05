@@ -1,9 +1,9 @@
-import type { AssistantMessage, AssistantMessageEvent } from "../types.js";
+import type { AssistantMessage, AssistantMessageEvent } from "../contracts/index.js";
 
 // Generic event stream class for async iteration
 export class EventStream<T, R = T> implements AsyncIterable<T> {
   private queue: T[] = [];
-  private waiting: ((value: IteratorResult<T>) => void)[] = [];
+  private waiting: ((value: IteratorResult<T, undefined>) => void)[] = [];
   private done = false;
   private finalResultPromise: Promise<R>;
   private resolveFinalResult!: (result: R) => void;
@@ -42,7 +42,7 @@ export class EventStream<T, R = T> implements AsyncIterable<T> {
     // Notify all waiting consumers that we're done
     while (this.waiting.length > 0) {
       const waiter = this.waiting.shift()!;
-      waiter({ value: undefined as any, done: true });
+      waiter({ value: undefined, done: true });
     }
   }
 
@@ -53,7 +53,7 @@ export class EventStream<T, R = T> implements AsyncIterable<T> {
       } else if (this.done) {
         return;
       } else {
-        const result = await new Promise<IteratorResult<T>>((resolve) =>
+        const result = await new Promise<IteratorResult<T, undefined>>((resolve) =>
           this.waiting.push(resolve),
         );
         if (result.done) return;

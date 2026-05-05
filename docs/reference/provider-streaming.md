@@ -78,6 +78,31 @@ validation of the TypeBox schema.
 The wire protocols are intentionally not unified. Provider adapters keep their
 own parsing logic and only converge at the normalized event seam.
 
+## Provider-Core Ownership
+
+Provider-core owns provider mechanisms through domain slices rather than mixed
+root implementation files:
+
+- `contracts/`: API, model, message, tool, event, stream, cache, and lifecycle
+  port contracts.
+- `catalog/`: generated model data and pure lookup/cost helpers.
+- `registry/`: typed provider registration, built-in lazy loading, and session
+  resource dispatch.
+- `stream/`: normalized event composition and provider stream lifecycle.
+- `parse/`: advisory JSON/schema parse helpers used by streaming tool-call
+  folding.
+- `providers/<api>/`: vertical driver slices for request construction, message
+  conversion, tools, stream-event parsing, usage, compat, and wire shims.
+
+`AssistantMessageEvent` is the canonical event contract. Agent-engine and
+hosted consumers derive or import that contract instead of copying provider
+event unions.
+
+Provider drivers that hold session-keyed local state expose
+`ProviderSessionResources.clearSession(sessionId)`. Hosted callers that replace
+session context or change provider/model must await that port before dispatching
+the next provider turn.
+
 ## Invariants
 
 - Private folding state must not leak into `AssistantMessage.content`.

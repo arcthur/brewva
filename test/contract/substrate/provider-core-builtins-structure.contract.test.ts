@@ -1,35 +1,27 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 describe("provider core built-in registration structure contract", () => {
-  test("keeps registration entrypoint thin and delegates manifest and loaders", () => {
+  test("keeps built-in registry and lazy loader in one canonical module", () => {
     const repoRoot = resolve(import.meta.dirname, "../../..");
-    const registerBuiltinsPath = resolve(
+    const builtinsPath = resolve(
       repoRoot,
       "packages",
       "brewva-provider-core",
       "src",
-      "providers",
-      "register-builtins.ts",
+      "registry",
+      "builtins.ts",
     );
-    const manifestPath = resolve(
+    const builtinsRuntimePath = resolve(
       repoRoot,
       "packages",
       "brewva-provider-core",
       "src",
-      "providers",
-      "built-in-api-provider-manifest.ts",
+      "registry",
+      "builtins-runtime.ts",
     );
-    const loadersPath = resolve(
-      repoRoot,
-      "packages",
-      "brewva-provider-core",
-      "src",
-      "providers",
-      "built-in-provider-loaders.ts",
-    );
-    const runtimePath = resolve(
+    const providerLoaderRuntimePath = resolve(
       repoRoot,
       "packages",
       "brewva-provider-core",
@@ -37,26 +29,21 @@ describe("provider core built-in registration structure contract", () => {
       "providers",
       "provider-loader-runtime.ts",
     );
-    const registerBuiltinsSource = readFileSync(registerBuiltinsPath, "utf8");
-    const manifestSource = readFileSync(manifestPath, "utf8");
-    const loadersSource = readFileSync(loadersPath, "utf8");
-    const runtimeSource = readFileSync(runtimePath, "utf8");
+    const builtinsSource = readFileSync(builtinsPath, "utf8");
 
-    expect(registerBuiltinsSource).toContain('from "./built-in-api-provider-manifest.js"');
-    expect(registerBuiltinsSource).not.toContain('import("./anthropic.js")');
-    expect(registerBuiltinsSource).not.toContain("createLazyStream(");
-
-    expect(manifestSource).toContain('from "./built-in-provider-loaders.js"');
-    expect(manifestSource).toContain("getStandardBuiltInApiProviderRegistrations");
-    expect(manifestSource).not.toContain("loadAnthropicProviderModule");
-
-    expect(loadersSource).toContain('from "./provider-loader-runtime.js"');
-    expect(loadersSource).toContain("createNamedProviderModuleLoader");
-    expect(loadersSource).toContain("STANDARD_BUILT_IN_PROVIDER_REGISTRATION_DESCRIPTORS");
-    expect(loadersSource).not.toContain("export const loadAnthropicProviderModule");
-
-    expect(runtimeSource).toContain("createLazyStream");
-    expect(runtimeSource).toContain("createCachedModuleLoader");
-    expect(runtimeSource).toContain("createNamedProviderModuleLoader");
+    expect(existsSync(builtinsRuntimePath)).toBe(false);
+    expect(existsSync(providerLoaderRuntimePath)).toBe(false);
+    expect(builtinsSource).toContain("BUILT_IN_API_PROVIDER_APIS");
+    expect(builtinsSource).toContain("STANDARD_BUILT_IN_PROVIDER_REGISTRATION_FACTORIES");
+    expect(builtinsSource).toContain("registerBuiltInApiProviders");
+    expect(builtinsSource).toContain("createCachedModuleLoader");
+    expect(builtinsSource).toContain("createProviderModuleLoader");
+    expect(builtinsSource).toContain("createLazyStream");
+    expect(builtinsSource).toContain("loadModule().then");
+    expect(builtinsSource).toContain("for (const registration");
+    expect(builtinsSource).not.toContain("built-in-api-provider-manifest");
+    expect(builtinsSource).not.toContain("builtins-runtime");
+    expect(builtinsSource).not.toContain("registrations[0]");
+    expect(builtinsSource).not.toContain("registrations[1]");
   });
 });

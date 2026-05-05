@@ -39,7 +39,7 @@ interface ReasoningRevertRecoverySessionLike {
     };
   };
   waitForIdle?(): Promise<void>;
-  replaceMessages?(messages: unknown): void;
+  replaceMessages?(messages: unknown): void | Promise<void>;
 }
 
 interface RequiredReasoningRevertRecoverySessionManager {
@@ -76,7 +76,7 @@ function normalizeSessionId(session: ReasoningRevertRecoverySessionLike): string
   return requireReasoningRecoverySessionManager(session).getSessionId().trim();
 }
 
-function applyHostedReasoningBranchReset(
+async function applyHostedReasoningBranchReset(
   session: ReasoningRevertRecoverySessionLike,
   input: {
     targetLeafEntryId: string | null;
@@ -84,7 +84,7 @@ function applyHostedReasoningBranchReset(
     summaryDetails: Record<string, unknown>;
     summaryMode: "carry" | "none";
   },
-): void {
+): Promise<void> {
   const sessionManager = requireReasoningRecoverySessionManager(session);
   if (input.summaryMode === "carry") {
     sessionManager.branchWithSummary(
@@ -110,7 +110,7 @@ function applyHostedReasoningBranchReset(
   if (typeof session.replaceMessages !== "function") {
     throw new Error("hosted reasoning revert requires session.replaceMessages()");
   }
-  session.replaceMessages(sessionContext.messages);
+  await session.replaceMessages(sessionContext.messages);
 }
 
 function resolveHostedRewindSummaryMode(
@@ -218,7 +218,7 @@ export async function applySessionReasoningRevertResume(
   try {
     await waitForSessionIdle(session);
     const summaryMode = resolveHostedRewindSummaryMode(input.runtime, sessionId, revert);
-    applyHostedReasoningBranchReset(session, {
+    await applyHostedReasoningBranchReset(session, {
       targetLeafEntryId: revert.targetLeafEntryId,
       summaryText: revert.continuityPacket.text,
       summaryDetails: buildReasoningRevertSummaryDetails(revert),

@@ -11,7 +11,8 @@ describe("substrate contract: Brewva-owned provider and asset branding", () => {
       "brewva-provider-core",
       "src",
       "providers",
-      "google-gemini-cli.ts",
+      "google-gemini-cli",
+      "adapter.ts",
     );
     const openaiCodexResponsesPath = resolve(
       repoRoot,
@@ -19,7 +20,8 @@ describe("substrate contract: Brewva-owned provider and asset branding", () => {
       "brewva-provider-core",
       "src",
       "providers",
-      "openai-codex-responses.ts",
+      "openai-codex-responses",
+      "adapter.ts",
     );
     const openaiCompletionsPath = resolve(
       repoRoot,
@@ -27,7 +29,8 @@ describe("substrate contract: Brewva-owned provider and asset branding", () => {
       "brewva-provider-core",
       "src",
       "providers",
-      "openai-completions.ts",
+      "openai-completions",
+      "compat.ts",
     );
 
     const googleGeminiCliSource = readFileSync(googleGeminiCliPath, "utf8");

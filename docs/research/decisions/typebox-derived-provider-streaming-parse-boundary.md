@@ -10,12 +10,12 @@
   - `skills/project/shared/package-boundaries.md`
   - `skills/project/shared/anti-patterns.md`
 - Code anchors:
-  - `packages/brewva-provider-core/src/utils/json-parse.ts`
-  - `packages/brewva-provider-core/src/streaming/typebox-partialize.ts`
-  - `packages/brewva-provider-core/src/streaming/streaming-parse-types.ts`
-  - `packages/brewva-provider-core/src/streaming/tool-call-folder.ts`
-  - `packages/brewva-provider-core/src/streaming/stream-runner.ts`
-  - `packages/brewva-provider-core/src/types.ts`
+  - `packages/brewva-provider-core/src/parse/json-parse.ts`
+  - `packages/brewva-provider-core/src/parse/typebox-partialize.ts`
+  - `packages/brewva-provider-core/src/parse/types.ts`
+  - `packages/brewva-provider-core/src/stream/tool-call-folder.ts`
+  - `packages/brewva-provider-core/src/stream/run-provider-stream.ts`
+  - `packages/brewva-provider-core/src/contracts/index.ts`
 
 ## Decision Summary
 

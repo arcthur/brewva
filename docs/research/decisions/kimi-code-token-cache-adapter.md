@@ -8,14 +8,16 @@
 - Stable docs:
   - `docs/reference/token-cache.md`
 - Code anchors:
-  - `packages/brewva-provider-core/src/cache-policy.ts`
-  - `packages/brewva-provider-core/src/providers/anthropic.ts`
-  - `packages/brewva-provider-core/src/providers/openai-completions.ts`
+  - `packages/brewva-provider-core/src/cache/capability.ts`
+  - `packages/brewva-provider-core/src/cache/render/anthropic.ts`
+  - `packages/brewva-provider-core/src/cache/render/openai-completions.ts`
+  - `packages/brewva-provider-core/src/providers/anthropic/index.ts`
+  - `packages/brewva-provider-core/src/providers/openai-completions/index.ts`
   - `packages/brewva-gateway/src/host/provider-connection.ts`
   - `test/unit/provider-core/cache-policy.unit.test.ts`
   - `test/live/provider/token-cache.live.test.ts`
-  - `packages/brewva-provider-core/src/models.generated.ts`
-  - `packages/brewva-provider-core/src/providers/payload-metadata.ts`
+  - `packages/brewva-provider-core/src/catalog/models.generated.ts`
+  - `packages/brewva-provider-core/src/providers/_shared/payload-metadata.ts`
 
 ## Decision Summary
 

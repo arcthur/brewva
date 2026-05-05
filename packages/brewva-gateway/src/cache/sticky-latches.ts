@@ -2,7 +2,7 @@ import type {
   ProviderCachePolicy,
   ProviderCacheRenderResult,
   Transport,
-} from "@brewva/brewva-provider-core";
+} from "@brewva/brewva-provider-core/contracts";
 
 export interface ProviderCacheStickyLatchState {
   providerCacheRetained: boolean;

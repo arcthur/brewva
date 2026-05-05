@@ -1,11 +1,11 @@
+import { buildProviderCacheBucketKey } from "@brewva/brewva-provider-core/cache";
 import type {
   ProviderCacheCapability,
   ProviderCachePolicy,
   ProviderCacheRenderResult,
   ProviderRequestFingerprint,
   ThinkingBudgets,
-} from "@brewva/brewva-provider-core";
-import { buildProviderCacheBucketKey } from "@brewva/brewva-provider-core";
+} from "@brewva/brewva-provider-core/contracts";
 import { stableHash, stableStringify } from "./hash.js";
 import type { ProviderCacheStickyLatchState } from "./sticky-latches.js";
 import type { ToolSchemaSnapshot } from "./tool-schema-snapshot.js";

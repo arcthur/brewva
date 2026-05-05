@@ -1,3 +1,4 @@
+import type { AssistantMessageEventOf } from "@brewva/brewva-provider-core/contracts";
 import type { ContextState } from "../contracts/context-state.js";
 import type { BrewvaToolDefinition } from "../contracts/tool.js";
 import type { ToolExecutionPhase } from "../execution/tool-phase.js";
@@ -172,7 +173,7 @@ export interface BrewvaPromptDispatchSession {
     name: string,
   ): Promise<BrewvaModelPresetSelectionResult> | BrewvaModelPresetSelectionResult;
   setThinkingLevel?(level: BrewvaPromptThinkingLevel): void;
-  replaceMessages?(messages: unknown): void;
+  replaceMessages?(messages: unknown): void | Promise<void>;
   getAvailableThinkingLevels?(): BrewvaPromptThinkingLevel[];
   isStreaming?: boolean;
   isCompacting?: boolean;
@@ -180,80 +181,19 @@ export interface BrewvaPromptDispatchSession {
   dispose?(): void;
 }
 
-export interface BrewvaPromptMessageDeltaEvent {
-  type: "start";
-  partial: unknown;
+export interface BrewvaPromptToolCall {
+  type: "toolCall";
+  id: string;
+  name: string;
+  arguments: Record<string, unknown>;
+  thoughtSignature?: string;
 }
 
-export type BrewvaPromptAssistantMessageEvent =
-  | BrewvaPromptMessageDeltaEvent
-  | {
-      type: "text_start";
-      contentIndex: number;
-      partial: unknown;
-    }
-  | {
-      type: "text_delta";
-      contentIndex: number;
-      delta: string;
-      partial: unknown;
-    }
-  | {
-      type: "text_end";
-      contentIndex: number;
-      content: string;
-      partial: unknown;
-    }
-  | {
-      type: "thinking_start";
-      contentIndex: number;
-      partial: unknown;
-    }
-  | {
-      type: "thinking_delta";
-      contentIndex: number;
-      delta: string;
-      partial: unknown;
-    }
-  | {
-      type: "thinking_end";
-      contentIndex: number;
-      content: string;
-      partial: unknown;
-    }
-  | {
-      type: "toolcall_start";
-      contentIndex: number;
-      partial: unknown;
-    }
-  | {
-      type: "toolcall_delta";
-      contentIndex: number;
-      delta: string;
-      partial: unknown;
-    }
-  | {
-      type: "toolcall_end";
-      contentIndex: number;
-      toolCall: {
-        type: "toolCall";
-        id: string;
-        name: string;
-        arguments: Record<string, unknown>;
-        thoughtSignature?: string;
-      };
-      partial: unknown;
-    }
-  | {
-      type: "done";
-      reason: "stop" | "length" | "toolUse";
-      message: unknown;
-    }
-  | {
-      type: "error";
-      reason: "aborted" | "error";
-      error: unknown;
-    };
+export type BrewvaPromptAssistantMessageEvent = AssistantMessageEventOf<
+  unknown,
+  BrewvaPromptToolCall,
+  "stop" | "length" | "toolUse" | "error" | "aborted"
+>;
 
 export type BrewvaPromptSessionEvent =
   | {

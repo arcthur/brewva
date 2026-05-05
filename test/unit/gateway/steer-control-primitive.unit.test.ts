@@ -25,7 +25,7 @@ import { createChannelUpdateLockManager } from "../../../packages/brewva-gateway
 import { createBrewvaManagedAgentSession } from "../../../packages/brewva-gateway/src/host/managed-agent-session.js";
 import { HostedRuntimeTapeSessionStore } from "../../../packages/brewva-gateway/src/host/runtime-projection-session-store.js";
 import { createHostedTurnPipeline } from "../../../packages/brewva-gateway/src/runtime-plugins/index.js";
-import { registerFauxProvider } from "../../../packages/brewva-provider-core/src/providers/faux.js";
+import { registerFauxProvider } from "../../../packages/brewva-provider-core/src/providers/faux/index.js";
 import {
   createConnectionState,
   createDaemonHarness,

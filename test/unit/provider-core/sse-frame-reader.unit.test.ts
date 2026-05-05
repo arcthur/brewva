@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { readSseFrames } from "../../../packages/brewva-provider-core/src/streaming/sse-frame-reader.js";
+import { readSseFrames } from "../../../packages/brewva-provider-core/src/stream/sse-frame-reader.js";
 
 function createResponseFromChunks(chunks: string[]): Response {
   const encoder = new TextEncoder();

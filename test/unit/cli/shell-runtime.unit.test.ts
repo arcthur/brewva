@@ -15,6 +15,7 @@ import {
   buildBrewvaPromptText,
   type BrewvaPromptContentPart,
   type BrewvaQueuedPromptView,
+  type BrewvaPromptToolCall,
   type BrewvaPromptSessionEvent,
   type BrewvaShellViewPreferences,
   type BrewvaModelPresetState,
@@ -32,6 +33,11 @@ import type {
   ProviderConnection,
 } from "../../../packages/brewva-cli/src/shell/types.js";
 import { patchDateNow } from "../../helpers/global-state.js";
+import {
+  createPromptMessageUpdateEvent,
+  createTextDeltaAssistantEvent,
+  createToolcallEndAssistantEvent,
+} from "../../helpers/prompt-session-events.js";
 
 function modelKey(model: Pick<BrewvaSessionModelDescriptor, "provider" | "id">): string {
   return `${model.provider}/${model.id}`;
@@ -3794,19 +3800,14 @@ describe("shell runtime", () => {
     };
 
     fixture.emitSessionEvent({
-      type: "message_update",
-      message: partialAssistantMessage,
-      assistantMessageEvent: {
-        type: "toolcall_end",
-        contentIndex: 2,
-        toolCall: partialAssistantMessage.content[2] as {
-          type: "toolCall";
-          id: string;
-          name: string;
-          arguments: Record<string, unknown>;
-        },
-        partial: partialAssistantMessage,
-      },
+      ...createPromptMessageUpdateEvent({
+        message: partialAssistantMessage,
+        assistantMessageEvent: createToolcallEndAssistantEvent({
+          contentIndex: 2,
+          toolCall: partialAssistantMessage.content[2] as BrewvaPromptToolCall,
+          partial: partialAssistantMessage,
+        }),
+      }),
     });
     fixture.emitSessionEvent({
       type: "tool_execution_update",
@@ -3878,18 +3879,23 @@ describe("shell runtime", () => {
 
     await runtime.start();
 
-    fixture.emitSessionEvent({
-      type: "message_update",
-      message: {
-        role: "assistant",
-        stopReason: "stop",
-        content: [{ type: "text", text: "Draft answer while skill is incomplete." }],
-      },
-      assistantMessageEvent: {
-        type: "content_delta",
-        delta: "Draft answer while skill is incomplete.",
-      },
-    } as unknown as BrewvaPromptSessionEvent);
+    fixture.emitSessionEvent(
+      createPromptMessageUpdateEvent({
+        message: {
+          role: "assistant",
+          stopReason: "stop",
+          content: [{ type: "text", text: "Draft answer while skill is incomplete." }],
+        },
+        assistantMessageEvent: createTextDeltaAssistantEvent({
+          delta: "Draft answer while skill is incomplete.",
+          partial: {
+            role: "assistant",
+            stopReason: "stop",
+            content: [{ type: "text", text: "Draft answer while skill is incomplete." }],
+          },
+        }),
+      }),
+    );
 
     expect(runtime.getViewState().transcript.messages).toHaveLength(1);
     expect(runtime.getViewState().transcript.messages[0]).toMatchObject({
@@ -3944,20 +3950,15 @@ describe("shell runtime", () => {
       stopReason: "toolUse",
     };
 
-    fixture.emitSessionEvent({
-      type: "message_update",
-      assistantMessageEvent: {
-        type: "toolcall_end",
-        contentIndex: 2,
-        toolCall: partialAssistantMessage.content[2] as {
-          type: "toolCall";
-          id: string;
-          name: string;
-          arguments: Record<string, unknown>;
-        },
-        partial: partialAssistantMessage,
-      },
-    });
+    fixture.emitSessionEvent(
+      createPromptMessageUpdateEvent({
+        assistantMessageEvent: createToolcallEndAssistantEvent({
+          contentIndex: 2,
+          toolCall: partialAssistantMessage.content[2] as BrewvaPromptToolCall,
+          partial: partialAssistantMessage,
+        }),
+      }),
+    );
 
     expect(runtime.getViewState().transcript.messages).toHaveLength(1);
     expect(runtime.getViewState().transcript.messages[0]).toMatchObject({

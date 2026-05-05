@@ -1,8 +1,8 @@
-import { streamSimple } from "@brewva/brewva-provider-core";
 import type {
   AssistantMessage as ProviderAssistantMessage,
   AssistantMessageEventStream as ProviderAssistantMessageEventStream,
-} from "@brewva/brewva-provider-core";
+} from "@brewva/brewva-provider-core/contracts";
+import { streamSimple } from "@brewva/brewva-provider-core/stream";
 import type {
   BrewvaAgentEngineStreamContext,
   BrewvaAgentEngineStreamFunction,

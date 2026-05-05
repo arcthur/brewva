@@ -2,14 +2,16 @@
 
 Implementation anchors:
 
-- `packages/brewva-provider-core/src/cache-policy.ts`
-- `packages/brewva-provider-core/src/google-cached-content.ts`
-- `packages/brewva-provider-core/src/providers/payload-metadata.ts`
-- `packages/brewva-provider-core/src/providers/anthropic.ts`
-- `packages/brewva-provider-core/src/providers/google-gemini-cli.ts`
-- `packages/brewva-provider-core/src/providers/openai-completions.ts`
-- `packages/brewva-provider-core/src/providers/openai-responses.ts`
-- `packages/brewva-provider-core/src/providers/openai-codex-responses.ts`
+- `packages/brewva-provider-core/src/cache/policy.ts`
+- `packages/brewva-provider-core/src/cache/capability.ts`
+- `packages/brewva-provider-core/src/cache/render/`
+- `packages/brewva-provider-core/src/providers/google-gemini-cli/cached-content.ts`
+- `packages/brewva-provider-core/src/providers/_shared/payload-metadata.ts`
+- `packages/brewva-provider-core/src/providers/anthropic/index.ts`
+- `packages/brewva-provider-core/src/providers/google-gemini-cli/index.ts`
+- `packages/brewva-provider-core/src/providers/openai-completions/index.ts`
+- `packages/brewva-provider-core/src/providers/openai-responses/index.ts`
+- `packages/brewva-provider-core/src/providers/openai-codex-responses/index.ts`
 - `packages/brewva-gateway/src/cache/`
 - `packages/brewva-gateway/src/host/managed-agent-session.ts`
 - `packages/brewva-gateway/src/host/hosted-session-bootstrap.ts`
@@ -67,6 +69,18 @@ must pass the object-shaped `cachePolicy` through the hosted path:
 Provider-core is the only layer that renders provider-specific cache fields.
 Gateway and runtime receive provider-neutral render metadata and normalized
 usage counters.
+
+## Session Lifecycle
+
+Provider cache and continuation state is disposable efficiency state. A provider
+driver that carries session-keyed local state exposes
+`ProviderSessionResources.clearSession(sessionId)` through the provider
+registry.
+
+Hosted sessions must clear and await provider session resources when session
+context is replaced, rewound, compacted, or when the active provider/model
+changes. Synchronous runtime cleanup listeners may start best-effort cleanup,
+but the next provider turn must not outrun a pending provider session clear.
 
 ## Provider Strategies
 

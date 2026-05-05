@@ -1,9 +1,19 @@
-import { completeSimple, type Api, type Model } from "@brewva/brewva-provider-core";
+import type { Api, Model } from "@brewva/brewva-provider-core/contracts";
+import { completeSimple } from "@brewva/brewva-provider-core/stream";
 import {
   type BrewvaProviderCompletionDriver,
   type BrewvaProviderCompletionResponse,
   UnsupportedBrewvaProviderApiError,
 } from "@brewva/brewva-substrate";
+
+function isProviderUnavailableError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    (error.message.startsWith("No API provider registered for api:") ||
+      error.message.startsWith("No external API provider registered for api:") ||
+      error.message.startsWith("No typed API provider registered for api:"))
+  );
+}
 
 class HostedProviderCoreCompletionDriver implements BrewvaProviderCompletionDriver {
   async complete(input: Parameters<BrewvaProviderCompletionDriver["complete"]>[0]) {
@@ -35,10 +45,7 @@ class HostedProviderCoreCompletionDriver implements BrewvaProviderCompletionDriv
         content: message.content,
       } satisfies BrewvaProviderCompletionResponse;
     } catch (error) {
-      if (
-        error instanceof Error &&
-        error.message.startsWith("No API provider registered for api:")
-      ) {
+      if (isProviderUnavailableError(error)) {
         throw new UnsupportedBrewvaProviderApiError(input.model.api);
       }
       throw error;

@@ -24,6 +24,7 @@ import {
   TOOL_EXECUTION_START_EVENT_TYPE,
 } from "@brewva/brewva-runtime/events";
 import type {
+  BrewvaPromptAssistantMessageEvent,
   BrewvaPromptContentPart,
   BrewvaPromptOptions,
   BrewvaPromptSessionEvent,
@@ -210,6 +211,18 @@ function asToolExecutionUpdateEvent(event: BrewvaPromptSessionEvent): {
   };
 }
 
+type BrewvaPromptMessageUpdateEvent = Extract<BrewvaPromptSessionEvent, { type: "message_update" }>;
+type BrewvaPromptDeltaEvent = Extract<
+  BrewvaPromptAssistantMessageEvent,
+  { type: "text_delta" | "thinking_delta" }
+>;
+
+function isPromptDeltaEvent(
+  event: BrewvaPromptMessageUpdateEvent["assistantMessageEvent"],
+): event is BrewvaPromptDeltaEvent {
+  return event?.type === "text_delta" || event?.type === "thinking_delta";
+}
+
 function asAssistantDelta(event: BrewvaPromptSessionEvent): {
   lane: AssistantDeltaFrameLane;
   delta: string;
@@ -217,17 +230,11 @@ function asAssistantDelta(event: BrewvaPromptSessionEvent): {
   if (event.type !== "message_update") {
     return null;
   }
-  const update = event as {
-    assistantMessageEvent?: unknown;
-  };
-  if (!update.assistantMessageEvent || typeof update.assistantMessageEvent !== "object") {
+  const assistantMessageEvent = (event as BrewvaPromptMessageUpdateEvent).assistantMessageEvent;
+  if (!isPromptDeltaEvent(assistantMessageEvent)) {
     return null;
   }
-  const assistantMessageEvent = update.assistantMessageEvent as {
-    type?: unknown;
-    delta?: unknown;
-  };
-  if (typeof assistantMessageEvent.delta !== "string" || assistantMessageEvent.delta.length === 0) {
+  if (assistantMessageEvent.delta.length === 0) {
     return null;
   }
   if (assistantMessageEvent.type === "text_delta") {
@@ -236,13 +243,10 @@ function asAssistantDelta(event: BrewvaPromptSessionEvent): {
       delta: assistantMessageEvent.delta,
     };
   }
-  if (assistantMessageEvent.type === "thinking_delta") {
-    return {
-      lane: "thinking",
-      delta: assistantMessageEvent.delta,
-    };
-  }
-  return null;
+  return {
+    lane: "thinking",
+    delta: assistantMessageEvent.delta,
+  };
 }
 
 function emitFrame(

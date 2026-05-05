@@ -240,7 +240,8 @@ describe("gateway contract: hosted session surface", () => {
     expect(providerStreamSource).not.toContain("@mariozechner/pi-agent-core");
     expect(providerStreamSource).not.toContain("@mariozechner/pi-ai");
     expect(providerStreamSource).not.toContain("@mariozechner/pi-coding-agent");
-    expect(providerStreamSource).toContain("@brewva/brewva-provider-core");
+    expect(providerStreamSource).toContain("@brewva/brewva-provider-core/stream");
+    expect(providerStreamSource).toContain("@brewva/brewva-provider-core/contracts");
     expect(providerStreamSource).not.toContain("as unknown as ProviderModel");
     expect(providerStreamSource).not.toContain("as unknown as ProviderContext");
     expect(providerStreamSource).not.toContain("as unknown as ProviderAssistantMessageEventStream");

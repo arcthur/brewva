@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { ANTHROPIC_MESSAGES_TEST_ONLY } from "../../../packages/brewva-provider-core/src/providers/anthropic.js";
+import { buildAnthropicParams } from "../../../packages/brewva-provider-core/src/providers/anthropic/request.js";
 
 const TEST_MODEL = {
   provider: "anthropic",
@@ -29,7 +29,7 @@ const KIMI_CODE_MODEL = {
 
 describe("anthropic cache breakpoints", () => {
   test("allocates cache_control across system, tools, message prefix, and current turn", () => {
-    const params = ANTHROPIC_MESSAGES_TEST_ONLY.buildParams(
+    const params = buildAnthropicParams(
       TEST_MODEL as never,
       {
         systemPrompt: "Stable system prompt",
@@ -104,7 +104,7 @@ describe("anthropic cache breakpoints", () => {
   });
 
   test("does not apply Anthropic cache_control to Kimi Code", () => {
-    const params = ANTHROPIC_MESSAGES_TEST_ONLY.buildParams(
+    const params = buildAnthropicParams(
       KIMI_CODE_MODEL as never,
       {
         systemPrompt: "Stable system prompt",

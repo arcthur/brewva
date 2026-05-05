@@ -27,6 +27,7 @@ Every accepted decision inherits these rules:
 - [effect-authority-manifest](./effect-authority-manifest.md)
 - [iteration-facts-and-model-native-optimization-protocols](./iteration-facts-and-model-native-optimization-protocols.md)
 - [kernel-first-subtraction-and-control-plane-deferral](./kernel-first-subtraction-and-control-plane-deferral.md)
+- [provider-core-domain-slicing-and-driver-port-boundaries](./provider-core-domain-slicing-and-driver-port-boundaries.md)
 - [repository-fitness-plane-and-runtime-boundary](./repository-fitness-plane-and-runtime-boundary.md)
 - [runtime-domain-slicing-and-controlled-extension-ports](./runtime-domain-slicing-and-controlled-extension-ports.md)
 - [skill-first-plugin-and-promotion-governance](./skill-first-plugin-and-promotion-governance.md)

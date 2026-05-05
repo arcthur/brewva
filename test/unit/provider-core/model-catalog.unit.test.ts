@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { getModel, getModels } from "@brewva/brewva-provider-core";
+import { getModel, getModels } from "@brewva/brewva-provider-core/catalog";
 
 describe("provider core model catalog", () => {
   test("exposes only the curated Google Gemini CLI catalog", () => {

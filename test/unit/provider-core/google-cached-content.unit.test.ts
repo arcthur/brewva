@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import {
   createGoogleCachedContent,
   deleteGoogleCachedContent,
-} from "../../../packages/brewva-provider-core/src/google-cached-content.js";
+} from "../../../packages/brewva-provider-core/src/providers/google-gemini-cli/cached-content.js";
 
 const INTRINSIC_FETCH = globalThis.fetch;
 const CREDENTIAL = '{"token":"tok","projectId":"project-1"}';

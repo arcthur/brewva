@@ -126,6 +126,9 @@ compatibility story.
 - `@brewva/brewva-runtime`: kernel contracts, event tape, projection,
   verification, governance, cost, rollback, and WAL durability.
 - `@brewva/brewva-substrate`: session and provider-loop substrate.
+- `@brewva/brewva-provider-core`: provider contracts, model catalog lookup,
+  provider registration, stream normalization, cache rendering, and driver
+  adapters. It is mechanism, not replay or credential authority.
 - `@brewva/brewva-tools`: managed tool bundle and capability-scoped runtime
   facades.
 - `@brewva/brewva-gateway`: hosted sessions, daemon, runtime plugins,

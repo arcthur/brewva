@@ -11,17 +11,53 @@
       "bun": "./src/index.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
+    },
+    "./auth": {
+      "types": "./dist/auth/index.d.ts",
+      "bun": "./src/auth/index.ts",
+      "import": "./dist/auth/index.js",
+      "default": "./dist/auth/index.js"
+    },
+    "./cache": {
+      "types": "./dist/cache/index.d.ts",
+      "bun": "./src/cache/index.ts",
+      "import": "./dist/cache/index.js",
+      "default": "./dist/cache/index.js"
+    },
+    "./catalog": {
+      "types": "./dist/catalog/index.d.ts",
+      "bun": "./src/catalog/index.ts",
+      "import": "./dist/catalog/index.js",
+      "default": "./dist/catalog/index.js"
+    },
+    "./contracts": {
+      "types": "./dist/contracts/index.d.ts",
+      "bun": "./src/contracts/index.ts",
+      "import": "./dist/contracts/index.js",
+      "default": "./dist/contracts/index.js"
+    },
+    "./registry": {
+      "types": "./dist/registry/index.d.ts",
+      "bun": "./src/registry/index.ts",
+      "import": "./dist/registry/index.js",
+      "default": "./dist/registry/index.js"
+    },
+    "./stream": {
+      "types": "./dist/stream/index.d.ts",
+      "bun": "./src/stream/index.ts",
+      "import": "./dist/stream/index.js",
+      "default": "./dist/stream/index.js"
     }
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.90.0",
+    "@anthropic-ai/sdk": "^0.93.0",
     "@brewva/brewva-token-estimation": "workspace:*",
-    "@google/genai": "^1.50.1",
+    "@google/genai": "^1.52.0",
     "@sinclair/typebox": "^0.34.49",
     "ajv": "^8.18.0",
     "ajv-formats": "^3.0.1",
     "eventsource-parser": "^3.0.8",
-    "openai": "6.34.0",
+    "openai": "6.36.0",
     "partial-json": "^0.1.7",
     "proxy-agent": "^8.0.1"
   },
