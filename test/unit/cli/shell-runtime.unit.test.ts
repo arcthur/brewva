@@ -32,6 +32,8 @@ import type {
   ProviderOAuthAuthorization,
   ProviderConnection,
 } from "../../../packages/brewva-cli/src/shell/types.js";
+import { HostedRuntimeTapeSessionStore } from "../../../packages/brewva-gateway/src/host/runtime-projection-session-store.js";
+import type { StoredSessionMessage } from "../../../packages/brewva-gateway/src/session/runtime-session-transcript.js";
 import { patchDateNow } from "../../helpers/global-state.js";
 import {
   createPromptMessageUpdateEvent,
@@ -167,6 +169,9 @@ function createFakeBundle(
     sessionManager: {
       getSessionId() {
         return sessionId;
+      },
+      resolveLineageLeafEntryId() {
+        return null;
       },
       buildSessionContext() {
         return { messages: [] };
@@ -539,6 +544,7 @@ describe("shell runtime", () => {
     expect(slashValues).toContain("model");
     expect(slashValues).toContain("inbox");
     expect(slashValues).toContain("inspect");
+    expect(slashValues).toContain("lineage");
     expect(slashValues).not.toContain("connect");
     expect(slashValues).not.toContain("think");
     expect(slashValues).not.toContain("thinking");
@@ -547,6 +553,121 @@ describe("shell runtime", () => {
     expect(slashValues).not.toContain("diffstyle");
     expect(slashValues).not.toContain("credentials");
     expect(slashValues).not.toContain("auth");
+
+    runtime.dispose();
+  });
+
+  test("lineage slash command opens the lineage overlay", async () => {
+    const { bundle } = createFakeBundle({ sessionId: "lineage-overlay-session" });
+    bundle.runtime.authority.session.createLineageNode("lineage-overlay-session", {
+      lineageNodeId: "lineage:main",
+      kind: "main",
+      forkPoint: { kind: "session_root" },
+      title: "Main task",
+    });
+    const runtime = new CliShellRuntime(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+    });
+
+    runtime.ui.setEditorText("/lineage");
+    await runtime.handleInput({ key: "enter", ctrl: false, meta: false, shift: false });
+
+    expect(runtime.getViewState().overlay.active?.payload).toMatchObject({
+      kind: "lineage",
+      selectedIndex: 0,
+    });
+    runtime.dispose();
+  });
+
+  test("lineage overlay checkout updates the hosted branch and visible transcript", async () => {
+    const { bundle } = createFakeBundle({ sessionId: "lineage-checkout-session" });
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-shell-lineage-checkout-"));
+    const store = new HostedRuntimeTapeSessionStore(
+      bundle.runtime,
+      workspace,
+      "lineage-checkout-session",
+    );
+    const mainEntryId = store.appendMessage({
+      role: "user",
+      content: [{ type: "text", text: "main checkpoint" }],
+      timestamp: Date.now(),
+    } as StoredSessionMessage);
+    const mainAnswerEntryId = store.appendMessage({
+      role: "assistant",
+      content: [{ type: "text", text: "main answer" }],
+      api: "openai-responses",
+      provider: "openai",
+      model: "gpt-5.4-mini",
+      usage: {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 0,
+        cost: {
+          input: 0,
+          output: 0,
+          cacheRead: 0,
+          cacheWrite: 0,
+          total: 0,
+        },
+      },
+      stopReason: "stop",
+      timestamp: Date.now() + 1,
+    } as StoredSessionMessage);
+    store.branch(mainEntryId);
+    store.appendMessage({
+      role: "user",
+      content: [{ type: "text", text: "experiment branch" }],
+      timestamp: Date.now() + 2,
+    } as StoredSessionMessage);
+
+    const session = bundle.session as unknown as {
+      sessionManager: HostedRuntimeTapeSessionStore;
+      replaceMessages(messages: unknown[]): Promise<void>;
+    };
+    const replacedMessages: unknown[][] = [];
+    session.sessionManager = store;
+    session.replaceMessages = async (messages) => {
+      replacedMessages.push(messages);
+    };
+
+    const runtime = new CliShellRuntime(bundle, {
+      cwd: workspace,
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+    });
+
+    runtime.ui.setEditorText("/lineage");
+    await runtime.handleInput({ key: "enter", ctrl: false, meta: false, shift: false });
+    expect(runtime.getViewState().overlay.active?.payload).toMatchObject({
+      kind: "lineage",
+      selectedIndex: 1,
+    });
+    expect(
+      (
+        runtime.getViewState().overlay.active?.payload as
+          | { kind: "lineage"; nodes: Array<{ lineageNodeId: string; leafEntryId: string | null }> }
+          | undefined
+      )?.nodes.find((node) => node.lineageNodeId === "lineage:main")?.leafEntryId,
+    ).toBe(mainAnswerEntryId);
+
+    await runtime.handleInput({ key: "up", ctrl: false, meta: false, shift: false });
+    await runtime.handleInput({ key: "enter", ctrl: false, meta: false, shift: false });
+
+    expect(store.getLineageNodeId()).toBe("lineage:main");
+    expect(runtime.getViewState().overlay.active?.payload).toMatchObject({
+      kind: "lineage",
+      selectedIndex: 0,
+    });
+    expect(
+      bundle.runtime.inspect.session.getLineageTree("lineage-checkout-session").selectedByChannel
+        .cli,
+    ).toBe("lineage:main");
+    expect(JSON.stringify(replacedMessages.at(-1))).toContain("main checkpoint");
+    expect(JSON.stringify(replacedMessages.at(-1))).not.toContain("experiment branch");
 
     runtime.dispose();
   });

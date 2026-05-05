@@ -574,6 +574,7 @@ type ManagedAgentSessionStoreCore = Pick<
 >;
 
 export interface ManagedAgentSessionStore extends ManagedAgentSessionStoreCore {
+  hasSessionEntryType?(type: string): boolean;
   subscribeSessionWire?(listener: (frame: SessionWireFrame) => void): () => void;
   querySessionWire?(): SessionWireFrame[];
   dispose?(): void;

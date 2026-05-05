@@ -45,9 +45,185 @@ import {
   VERIFICATION_WRITE_MARKED_EVENT_TYPE,
   WORKER_RESULTS_APPLIED_EVENT_TYPE,
   readWorkerResultsAppliedEventPayload,
+  CAPABILITY_STATE_RECORDED_EVENT_TYPE,
+  CONTEXT_ENTRY_RECORDED_EVENT_TYPE,
+  SESSION_LINEAGE_NODE_CREATED_EVENT_TYPE,
+  SESSION_LINEAGE_OUTCOME_RECORDED_EVENT_TYPE,
+  readCapabilityStateRecordedEventPayload,
+  readContextEntryRecordedEventPayload,
+  readSessionLineageNodeCreatedEventPayload,
+  readSessionLineageOutcomeRecordedEventPayload,
 } from "@brewva/brewva-runtime/events";
 
 describe("runtime event descriptors", () => {
+  test("reads lineage node payloads with discriminated fork points", () => {
+    expect(
+      readSessionLineageNodeCreatedEventPayload({
+        type: SESSION_LINEAGE_NODE_CREATED_EVENT_TYPE,
+        payload: {
+          schema: SESSION_LINEAGE_NODE_CREATED_EVENT_TYPE,
+          lineageNodeId: "ln-main",
+          parentLineageNodeId: null,
+          kind: "main",
+          title: "Main task",
+          forkPoint: {
+            kind: "session_root",
+            parentSessionId: "parent-session",
+          },
+          createdBy: "hosted-runtime",
+        },
+      }),
+    ).toEqual({
+      schema: SESSION_LINEAGE_NODE_CREATED_EVENT_TYPE,
+      lineageNodeId: "ln-main",
+      parentLineageNodeId: null,
+      kind: "main",
+      title: "Main task",
+      forkPoint: {
+        kind: "session_root",
+        parentSessionId: "parent-session",
+      },
+      createdBy: "hosted-runtime",
+    });
+  });
+
+  test("rejects malformed lineage fork points", () => {
+    expect(
+      readSessionLineageNodeCreatedEventPayload({
+        type: SESSION_LINEAGE_NODE_CREATED_EVENT_TYPE,
+        payload: {
+          schema: SESSION_LINEAGE_NODE_CREATED_EVENT_TYPE,
+          lineageNodeId: "ln-recovery",
+          parentLineageNodeId: "ln-main",
+          kind: "recovery",
+          forkPoint: {
+            kind: "turn",
+            turnId: "turn-3",
+            reasoningCheckpointId: "checkpoint-1",
+          },
+        },
+      }),
+    ).toBeNull();
+
+    expect(
+      readSessionLineageNodeCreatedEventPayload({
+        type: SESSION_LINEAGE_NODE_CREATED_EVENT_TYPE,
+        payload: {
+          schema: SESSION_LINEAGE_NODE_CREATED_EVENT_TYPE,
+          lineageNodeId: "ln-recovery",
+          parentLineageNodeId: "ln-main",
+          kind: "recovery",
+          forkPoint: {
+            turnId: "turn-3",
+          },
+        },
+      }),
+    ).toBeNull();
+  });
+
+  test("reads context entries and capability state as separate context/state channels", () => {
+    expect(
+      readContextEntryRecordedEventPayload({
+        type: CONTEXT_ENTRY_RECORDED_EVENT_TYPE,
+        payload: {
+          schema: CONTEXT_ENTRY_RECORDED_EVENT_TYPE,
+          entryId: "ctx-2",
+          lineageNodeId: "ln-main",
+          parentEntryId: "ctx-1",
+          sourceEventId: "evt-message-2",
+          sourceEventType: "message_end",
+          entryKind: "message",
+          admission: "context_required",
+          presentTo: "both",
+        },
+      }),
+    ).toEqual({
+      schema: CONTEXT_ENTRY_RECORDED_EVENT_TYPE,
+      entryId: "ctx-2",
+      lineageNodeId: "ln-main",
+      parentEntryId: "ctx-1",
+      sourceEventId: "evt-message-2",
+      sourceEventType: "message_end",
+      entryKind: "message",
+      admission: "context_required",
+      presentTo: "both",
+    });
+
+    expect(
+      readCapabilityStateRecordedEventPayload({
+        type: CAPABILITY_STATE_RECORDED_EVENT_TYPE,
+        payload: {
+          schema: CAPABILITY_STATE_RECORDED_EVENT_TYPE,
+          stateId: "state-1",
+          ownerCapability: "brewva.skill.review",
+          customType: "review-cache",
+          data: {
+            latestFindingCount: 2,
+          },
+          artifactRef: "artifact://review/state.json",
+          lineageNodeId: "ln-review",
+        },
+      }),
+    ).toEqual({
+      schema: CAPABILITY_STATE_RECORDED_EVENT_TYPE,
+      stateId: "state-1",
+      ownerCapability: "brewva.skill.review",
+      customType: "review-cache",
+      data: {
+        latestFindingCount: 2,
+      },
+      artifactRef: "artifact://review/state.json",
+      lineageNodeId: "ln-review",
+    });
+  });
+
+  test("rejects context-required lineage outcomes before adoption", () => {
+    expect(
+      readSessionLineageOutcomeRecordedEventPayload({
+        type: SESSION_LINEAGE_OUTCOME_RECORDED_EVENT_TYPE,
+        payload: {
+          schema: SESSION_LINEAGE_OUTCOME_RECORDED_EVENT_TYPE,
+          outcomeId: "outcome-1",
+          lineageNodeId: "ln-worker",
+          summary: "Direct context-required outcome should not be a valid outcome event.",
+          admission: "context_required",
+        },
+      }),
+    ).toBeNull();
+
+    expect(
+      readSessionLineageOutcomeRecordedEventPayload({
+        type: SESSION_LINEAGE_OUTCOME_RECORDED_EVENT_TYPE,
+        payload: {
+          schema: SESSION_LINEAGE_OUTCOME_RECORDED_EVENT_TYPE,
+          outcomeId: "outcome-1",
+          lineageNodeId: "ln-worker",
+          summary: "State-only outcome remains valid.",
+          admission: "state_only",
+        },
+      })?.admission,
+    ).toBe("state_only");
+  });
+
+  test("rejects invalid context admission values", () => {
+    expect(
+      readContextEntryRecordedEventPayload({
+        type: CONTEXT_ENTRY_RECORDED_EVENT_TYPE,
+        payload: {
+          schema: CONTEXT_ENTRY_RECORDED_EVENT_TYPE,
+          entryId: "ctx-2",
+          lineageNodeId: "ln-main",
+          parentEntryId: "ctx-1",
+          sourceEventId: "evt-message-2",
+          sourceEventType: "message_end",
+          entryKind: "message",
+          admission: "context_optional",
+          presentTo: "llm",
+        },
+      }),
+    ).toBeNull();
+  });
+
   test("reads canonical session turn transition payloads", () => {
     expect(
       readSessionTurnTransitionEventPayload({

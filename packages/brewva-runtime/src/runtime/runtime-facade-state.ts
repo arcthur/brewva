@@ -55,7 +55,10 @@ import {
 } from "./runtime-composition.js";
 import { resolveRuntimeConfigState } from "./runtime-config-state.js";
 import { createRuntimeExtensions } from "./runtime-extension-factory.js";
-import type { BrewvaRuntimeExtensions } from "./runtime-extensions.js";
+import {
+  listExtensionPortCapabilities,
+  type BrewvaRuntimeExtensions,
+} from "./runtime-extensions.js";
 import { RuntimeIterationFactController } from "./runtime-iteration-facts.js";
 import type { RuntimeKernelContext } from "./runtime-kernel.js";
 import { createRuntimeSemanticSurfaces } from "./runtime-surfaces.js";
@@ -102,6 +105,7 @@ class RuntimeFacadeStateController implements BrewvaHostedRuntimePort {
   declare private readonly ledgerService: RuntimeServiceDependencyMap["ledgerService"];
   declare private readonly taskWatchdogService: RuntimeServiceDependencyMap["taskWatchdogService"];
   declare private readonly sessionLifecycleService: RuntimeServiceDependencyMap["sessionLifecycleService"];
+  declare private readonly sessionLineageService: RuntimeServiceDependencyMap["sessionLineageService"];
   declare private readonly skillLifecycleService: RuntimeServiceDependencyMap["skillLifecycleService"];
   declare private readonly taskService: RuntimeServiceDependencyMap["taskService"];
   declare private readonly truthService: RuntimeServiceDependencyMap["truthService"];
@@ -211,6 +215,7 @@ class RuntimeFacadeStateController implements BrewvaHostedRuntimePort {
     this.costService = serviceDependencies.costService;
     this.contextService = serviceDependencies.contextService;
     this.taskWatchdogService = serviceDependencies.taskWatchdogService;
+    this.sessionLineageService = serviceDependencies.sessionLineageService;
     this.eventPipeline = serviceDependencies.eventPipeline;
     this.toolLifecycleRecoveryWalService = serviceDependencies.toolLifecycleRecoveryWalService;
     this.sessionLifecycleService = serviceDependencies.sessionLifecycleService;
@@ -239,6 +244,7 @@ class RuntimeFacadeStateController implements BrewvaHostedRuntimePort {
       contextInjection: this.contextInjection,
       getContextService: () => this.contextService,
       getSessionLifecycleService: () => this.sessionLifecycleService,
+      getSessionLineageService: () => this.sessionLineageService,
       getTaskWatchdogService: () => this.taskWatchdogService,
       getTaskService: () => this.taskService,
       getTruthService: () => this.truthService,
@@ -305,6 +311,9 @@ class RuntimeFacadeStateController implements BrewvaHostedRuntimePort {
       recoveryWalStore: this.recoveryWalStore,
       maintain: this.maintain,
     });
+    this.sessionLineageService.registerRuntimeCapabilityStateOwners(
+      listExtensionPortCapabilities(this.extensions),
+    );
   }
 
   private getCredentialVaultService(): ReturnType<

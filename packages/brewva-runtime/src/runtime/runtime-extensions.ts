@@ -222,3 +222,38 @@ export function createToolRuntimeExtensionPort(
     methods: input,
   });
 }
+
+function isObjectRecord(value: unknown): value is Record<PropertyKey, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function isExtensionPort(
+  value: unknown,
+): value is ExtensionPort<string, RuntimeExtensionAuthority, object> {
+  return (
+    isObjectRecord(value) && runtimeExtensionPortBrand in value && Array.isArray(value.capabilities)
+  );
+}
+
+export function listExtensionPortCapabilities(value: unknown): string[] {
+  const capabilities = new Set<string>();
+  const seen = new WeakSet<object>();
+  const visit = (candidate: unknown): void => {
+    if (!isObjectRecord(candidate) || seen.has(candidate)) {
+      return;
+    }
+    seen.add(candidate);
+    if (isExtensionPort(candidate)) {
+      for (const capability of candidate.capabilities) {
+        capabilities.add(String(capability));
+      }
+      return;
+    }
+    for (const nested of Object.values(candidate)) {
+      visit(nested);
+    }
+  };
+
+  visit(value);
+  return [...capabilities].toSorted();
+}

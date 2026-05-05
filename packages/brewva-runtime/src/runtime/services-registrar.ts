@@ -41,6 +41,7 @@ export function registerRuntimeServiceDependencies(
     eventPipeline: sessionServices.eventPipeline,
     toolLifecycleRecoveryWalService: sessionServices.toolLifecycleRecoveryWalService,
     sessionLifecycleService: sessionServices.sessionLifecycleService,
+    sessionLineageService: sessionServices.sessionLineageService,
     reversibleMutationService: governanceServices.reversibleMutationService,
     getTapeService: () => sessionServices.getTapeService(),
     getEffectCommitmentDeskService: () => governanceServices.getEffectCommitmentDeskService(),

@@ -43,6 +43,11 @@ import {
   cloneDelegationRunRecord,
 } from "./delegation-store.js";
 import { prepareSubagentEntry } from "./entry.js";
+import {
+  adoptDelegationLineageOutcome,
+  ensureDelegationLineageNode,
+  recordDelegationLineageOutcome,
+} from "./lineage.js";
 import type { DelegationModelRoutingContext } from "./model-routing.js";
 import { getCanonicalForkPrompt } from "./protocol.js";
 import {
@@ -592,6 +597,11 @@ export function createHostedSubagentAdapter(
         type: "subagent_failed",
         payload: buildDelegationLifecyclePayload(failedRecord),
       });
+      recordDelegationLineageOutcome({
+        runtime: options.runtime,
+        sessionId: input.parentSessionId,
+        record: failedRecord,
+      });
       return {
         record: failedRecord,
         outcomePromise: Promise.resolve(
@@ -659,6 +669,11 @@ export function createHostedSubagentAdapter(
       sessionId: input.parentSessionId,
       type: "subagent_spawned",
       payload: buildDelegationLifecyclePayload(initialRecord),
+    });
+    ensureDelegationLineageNode({
+      runtime: options.runtime,
+      sessionId: input.parentSessionId,
+      record: initialRecord,
     });
 
     const liveRun: LiveHostedDelegationRun = {
@@ -973,6 +988,19 @@ export function createHostedSubagentAdapter(
             patchChangeCount: patches?.changes.length ?? 0,
           },
         });
+        recordDelegationLineageOutcome({
+          runtime: options.runtime,
+          sessionId: input.parentSessionId,
+          record: completedRecord,
+        });
+        if (deliveryResult?.supplementalAppended) {
+          adoptDelegationLineageOutcome({
+            runtime: options.runtime,
+            sessionId: input.parentSessionId,
+            record: completedRecord,
+            admission: "context_eligible",
+          });
+        }
         return outcome;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -1093,6 +1121,19 @@ export function createHostedSubagentAdapter(
             patchChangeCount: workerResult?.patches?.changes.length ?? 0,
           },
         });
+        recordDelegationLineageOutcome({
+          runtime: options.runtime,
+          sessionId: input.parentSessionId,
+          record: updatedRecord,
+        });
+        if (deliveryResult?.supplementalAppended) {
+          adoptDelegationLineageOutcome({
+            runtime: options.runtime,
+            sessionId: input.parentSessionId,
+            record: updatedRecord,
+            admission: "context_eligible",
+          });
+        }
         return outcome;
       } finally {
         finished = true;
@@ -1160,6 +1201,11 @@ export function createHostedSubagentAdapter(
       type: "subagent_spawned",
       payload: buildDelegationLifecyclePayload(initialRecord),
     });
+    ensureDelegationLineageNode({
+      runtime: options.runtime,
+      sessionId: input.fromSessionId,
+      record: initialRecord,
+    });
 
     const parallel = options.runtime.authority.tools.acquireParallelSlot(
       input.fromSessionId,
@@ -1177,6 +1223,11 @@ export function createHostedSubagentAdapter(
         sessionId: input.fromSessionId,
         type: "subagent_failed",
         payload: buildDelegationLifecyclePayload(failedRecord),
+      });
+      recordDelegationLineageOutcome({
+        runtime: options.runtime,
+        sessionId: input.fromSessionId,
+        record: failedRecord,
       });
       return {
         ok: false,
@@ -1266,6 +1317,11 @@ export function createHostedSubagentAdapter(
         type: "subagent_completed",
         payload: buildDelegationLifecyclePayload(completedRecord),
       });
+      recordDelegationLineageOutcome({
+        runtime: options.runtime,
+        sessionId: input.fromSessionId,
+        record: completedRecord,
+      });
       return {
         ok: true,
         run: cloneDelegationRunRecord(completedRecord),
@@ -1288,6 +1344,11 @@ export function createHostedSubagentAdapter(
         sessionId: input.fromSessionId,
         type: "subagent_failed",
         payload: buildDelegationLifecyclePayload(failedRecord),
+      });
+      recordDelegationLineageOutcome({
+        runtime: options.runtime,
+        sessionId: input.fromSessionId,
+        record: failedRecord,
       });
       return {
         ok: false,

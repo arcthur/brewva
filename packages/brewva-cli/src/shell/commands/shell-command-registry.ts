@@ -69,6 +69,14 @@ const builtInShellCommands: readonly ShellCommand[] = [
     keybinding: { key: "i", ctrl: true, meta: false, shift: false },
   },
   {
+    id: "session.lineage",
+    title: "Lineage tree",
+    description: "Browse and checkout session lineage branches.",
+    category: "Session",
+    slash: { name: "lineage" },
+    suggested: true,
+  },
+  {
     id: "session.queue",
     title: "Queued prompts",
     description: "Inspect and delete queued prompts for the current session.",

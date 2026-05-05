@@ -175,6 +175,19 @@ interface InspectReport {
       rewoundAt: string | null;
     }>;
   };
+  lineage: {
+    supported: boolean;
+    rootNodeId: string | null;
+    currentNodeId: string | null;
+    currentKind: string | null;
+    nodeCount: number;
+    edgeCount: number;
+    summaryCount: number;
+    outcomeCount: number;
+    adoptedOutcomeCount: number;
+    selectedByChannel: Record<string, string>;
+    unsupportedReason: string | null;
+  };
   bootstrap: {
     managedToolMode: "runtime_plugin" | "direct" | null;
     workspaceRoot: string | null;
@@ -375,6 +388,48 @@ function buildSkillInspection(events: BrewvaEventRecord[]): InspectReport["skill
     activeSkill,
     completedSkills: [...completedSkills].toSorted((left, right) => left.localeCompare(right)),
   };
+}
+
+function buildLineageInspection(
+  runtime: BrewvaOperatorRuntimePort,
+  sessionId: string,
+): InspectReport["lineage"] {
+  try {
+    const tree = runtime.inspect.session.getLineageTree(sessionId);
+    const currentNodeId =
+      tree.selectedByChannel["cli"] ?? tree.selectedByChannel["tui"] ?? tree.rootNodeId;
+    const currentNode = tree.nodes.find((node) => node.lineageNodeId === currentNodeId) ?? null;
+    return {
+      supported: true,
+      rootNodeId: tree.rootNodeId,
+      currentNodeId,
+      currentKind: currentNode?.kind ?? null,
+      nodeCount: tree.nodes.length,
+      edgeCount: tree.edges.length,
+      summaryCount: tree.nodes.reduce((count, node) => count + node.summaries.length, 0),
+      outcomeCount: tree.nodes.reduce((count, node) => count + node.outcomes.length, 0),
+      adoptedOutcomeCount: tree.nodes.reduce(
+        (count, node) => count + node.adoptedOutcomes.length,
+        0,
+      ),
+      selectedByChannel: tree.selectedByChannel,
+      unsupportedReason: null,
+    };
+  } catch (error) {
+    return {
+      supported: false,
+      rootNodeId: null,
+      currentNodeId: null,
+      currentKind: null,
+      nodeCount: 0,
+      edgeCount: 0,
+      summaryCount: 0,
+      outcomeCount: 0,
+      adoptedOutcomeCount: 0,
+      selectedByChannel: {},
+      unsupportedReason: error instanceof Error ? error.message : String(error),
+    };
+  }
 }
 
 function buildVerificationInspection(
@@ -718,6 +773,7 @@ function buildInspectReport(
           : [],
       ),
     },
+    lineage: buildLineageInspection(runtime, sessionId),
     bootstrap: {
       managedToolMode:
         bootstrap?.managedToolMode === "runtime_plugin" || bootstrap?.managedToolMode === "direct"
@@ -863,6 +919,12 @@ function formatInspectText(report: InspectReport): string {
     `Model preset: active=${report.modelPreset.activeName} main=${report.modelPreset.mainModel ?? "none"} subagents=${renderList(Object.keys(report.modelPreset.subagentModels))} source=${report.modelPreset.source ?? "synthetic"} selectedAt=${report.modelPreset.selectedAt ?? "n/a"}`,
     `Rewind: checkpoints=${report.rewind.checkpointCount} targets=${report.rewind.targetCount} active=${report.rewind.activeTargetCount} abandoned=${report.rewind.abandonedTargetCount}`,
     `Rewind: available=${report.rewind.rewindAvailable ? "yes" : "no"} redo=${report.rewind.redoAvailable ? "yes" : "no"} redoDepth=${report.rewind.redoDepth} latestCheckpoint=${report.rewind.latestCheckpointId ?? "n/a"} status=${report.rewind.latestCheckpointStatus ?? "n/a"}`,
+    report.lineage.supported
+      ? `Lineage: root=${report.lineage.rootNodeId ?? "n/a"} current=${report.lineage.currentNodeId ?? "n/a"} nodes=${report.lineage.nodeCount} edges=${report.lineage.edgeCount}`
+      : `Lineage: unsupported reason=${report.lineage.unsupportedReason ?? "n/a"}`,
+    report.lineage.supported
+      ? `Lineage: selected=${renderSelectedLineageChannels(report.lineage.selectedByChannel)} summaries=${report.lineage.summaryCount} outcomes=${report.lineage.outcomeCount} adopted=${report.lineage.adoptedOutcomeCount}`
+      : "Lineage: selected=none summaries=0 outcomes=0 adopted=0",
     `Bootstrap: routingEnabled=${renderNullableBoolean(report.bootstrap.routingEnabled)} scopes=${renderList(report.bootstrap.routingScopes)}`,
     `Task: phase=${report.task.phase ?? "n/a"} health=${report.task.health ?? "n/a"} items=${report.task.items} blockers=${report.task.blockers} updatedAt=${report.task.updatedAt ?? "n/a"}`,
     `Task: goal=${report.task.goal ?? "n/a"}`,
@@ -973,6 +1035,15 @@ function renderNullableBoolean(value: boolean | null): string {
 
 function renderList(values: string[]): string {
   return values.length > 0 ? values.join(",") : "none";
+}
+
+function renderSelectedLineageChannels(selectedByChannel: Record<string, string>): string {
+  const entries = Object.entries(selectedByChannel).toSorted(([left], [right]) =>
+    left.localeCompare(right),
+  );
+  return entries.length > 0
+    ? entries.map(([channelId, lineageNodeId]) => `${channelId}:${lineageNodeId}`).join(",")
+    : "none";
 }
 
 function renderHostedLatest(latest: HostedTransitionSnapshot["latest"]): string {

@@ -12,6 +12,7 @@ export const CONTEXT_SOURCES = {
   skillPromotionDrafts: "brewva.skill-promotion-drafts",
   skillRouting: "brewva.skill-routing",
   historyViewBaseline: "brewva.history-view-baseline",
+  sessionLineage: "brewva.session-lineage",
   runtimeStatus: "brewva.runtime-status",
   taskState: "brewva.task-state",
   recoveryWorkingSet: "brewva.recovery-working-set",

@@ -5,6 +5,7 @@ import { buildSessionInspectReport, resolveInspectDirectory } from "../../inspec
 import { buildCommandPalettePayload, buildHelpHubPayload } from "../commands/command-palette.js";
 import type { ShellCommandProvider } from "../commands/command-provider.js";
 import {
+  buildLineageOverlayPayload,
   buildQueueOverlayPayload,
   buildQueuePromptDetailLines,
   buildInboxOverlayPayload,
@@ -83,6 +84,10 @@ interface QuestionOverlayDelegate {
   ): Promise<boolean>;
 }
 
+interface TranscriptProjectorDelegate {
+  refreshFromSession(): void;
+}
+
 export interface ShellOverlayLifecycleFlowContext {
   getState(): CliShellViewState;
   getViewportRows(): number;
@@ -99,6 +104,8 @@ export interface ShellOverlayLifecycleFlowContext {
     }
   >;
   getCommandProvider(): ShellCommandProvider;
+  transcriptProjector: TranscriptProjectorDelegate;
+  buildSessionStatusActions(): ShellAction[];
   commit(actions: readonly ShellAction[], options?: ShellOverlayCommitOptions): void;
   handleShellIntent(intent: ShellIntent): Promise<boolean>;
   submitComposer(): Promise<void>;
@@ -145,6 +152,9 @@ function selectableItemCount(payload: CliShellOverlayPayload): number | undefine
   }
   if (payload.kind === "sessions") {
     return payload.sessions.length;
+  }
+  if (payload.kind === "lineage") {
+    return payload.nodes.length;
   }
   if (payload.kind === "queue") {
     return payload.items.length;
@@ -497,6 +507,9 @@ export class ShellOverlayLifecycleFlow {
       case "commandPalette":
         await this.handleCommandPalettePrimary(active);
         return;
+      case "lineage":
+        await this.handleLineagePrimary(active);
+        return;
       case "inbox":
         await this.handleInboxPrimary(active);
         return;
@@ -582,6 +595,10 @@ export class ShellOverlayLifecycleFlow {
 
   openSessionsOverlay(): void {
     this.openOverlay(this.buildSessionsOverlayPayload());
+  }
+
+  openLineageOverlay(): void {
+    this.openOverlay(this.buildLineageOverlayPayload());
   }
 
   openQueueOverlay(): void {
@@ -726,6 +743,15 @@ export class ShellOverlayLifecycleFlow {
           index: active.selectedIndex,
         }),
       );
+      return;
+    }
+    if (active.kind === "lineage") {
+      this.replaceActiveOverlay(
+        this.buildLineageOverlayPayload({
+          lineageNodeId: active.nodes[active.selectedIndex]?.lineageNodeId,
+          index: active.selectedIndex,
+        }),
+      );
     }
   }
 
@@ -850,6 +876,40 @@ export class ShellOverlayLifecycleFlow {
     });
   }
 
+  private async handleLineagePrimary(
+    active: Extract<CliShellOverlayPayload, { kind: "lineage" }>,
+  ): Promise<void> {
+    const node = active.nodes[active.selectedIndex];
+    if (!node) {
+      return;
+    }
+    await this.context.getSessionPort().checkoutLineageNode({
+      lineageNodeId: node.lineageNodeId,
+      leafEntryId: node.leafEntryId,
+      channelId: "cli",
+      reason: "tui_overlay_checkout",
+    });
+    this.context.transcriptProjector.refreshFromSession();
+    this.context.commit(this.context.buildSessionStatusActions(), { debounceStatus: false });
+    this.replaceActiveOverlay(
+      this.buildLineageOverlayPayload({
+        lineageNodeId: node.lineageNodeId,
+        index: active.selectedIndex,
+      }),
+    );
+    this.context.commit([
+      {
+        type: "notification.add",
+        notification: {
+          id: `lineage-info:${randomUUID()}`,
+          level: "info",
+          message: `Checked out lineage branch ${node.lineageNodeId}.`,
+          createdAt: Date.now(),
+        },
+      },
+    ]);
+  }
+
   private buildNotificationsOverlayPayload(
     selection: {
       id?: string;
@@ -910,6 +970,29 @@ export class ShellOverlayLifecycleFlow {
       draftsBySessionId: this.context.getDraftsBySessionId(),
       currentComposerText: this.context.getState().composer.text,
       replaySessionsForOverlay: orderedReplay,
+      selection,
+    });
+  }
+
+  private buildLineageOverlayPayload(
+    selection: {
+      lineageNodeId?: string;
+      index?: number;
+    } = {},
+  ): CliShellOverlayPayload {
+    const sessionPort = this.context.getSessionPort();
+    const tree = sessionPort.getLineageTree();
+    const status = sessionPort.getLineageStatus();
+    const leafEntryIdsByLineageNodeId = new Map(
+      tree.nodes.map(
+        (node) =>
+          [node.lineageNodeId, sessionPort.resolveLineageLeafEntryId(node.lineageNodeId)] as const,
+      ),
+    );
+    return buildLineageOverlayPayload({
+      tree,
+      currentLineageNodeId: status.lineageNodeId,
+      leafEntryIdsByLineageNodeId,
       selection,
     });
   }

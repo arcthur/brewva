@@ -451,6 +451,8 @@ export class CliShellRuntime {
       getOperatorSnapshot: () => this.#operatorSnapshot,
       getDraftsBySessionId: () => this.#sessionWorkflow.getDraftsBySessionId(),
       getCommandProvider: () => this.#commandProvider,
+      transcriptProjector: this.#transcriptProjector,
+      buildSessionStatusActions: () => this.buildSessionStatusActions(),
       commit: (actions, commitOptions) => this.commit(actions, commitOptions),
       handleShellIntent: (intent) => this.handleShellIntent(intent),
       submitComposer: () => this.#sessionWorkflow.submitComposer(),
@@ -518,11 +520,14 @@ export class CliShellRuntime {
 
   getSessionIdentity(): {
     sessionId: string;
+    lineageLabel: string | null;
     modelLabel: string;
     thinkingLevel: string;
   } {
+    const lineageStatus = this.#sessionPort.getLineageStatus();
     return {
       sessionId: this.#sessionPort.getSessionId(),
+      lineageLabel: this.formatLineageStatusLabel(lineageStatus),
       modelLabel: this.#sessionPort.getModelLabel(),
       thinkingLevel: this.#sessionPort.getThinkingLevel(),
     };
@@ -800,6 +805,7 @@ export class CliShellRuntime {
 
   private buildSessionStatusActions(): CliShellAction[] {
     const modelLabel = this.#sessionPort.getModelLabel();
+    const lineageLabel = this.formatLineageStatusLabel(this.#sessionPort.getLineageStatus());
     const presetState = this.#sessionPort.getModelPresetState();
     const presetLabel = presetState.pendingName
       ? `${presetState.activeName} -> ${presetState.pendingName}`
@@ -822,10 +828,25 @@ export class CliShellRuntime {
       },
       {
         type: "status.set",
+        key: "lineage",
+        text: lineageLabel ?? undefined,
+      },
+      {
+        type: "status.set",
         key: "rewind",
         text: this.buildRewindStatusText(),
       },
     ];
+  }
+
+  private formatLineageStatusLabel(
+    status: ReturnType<SessionViewPort["getLineageStatus"]>,
+  ): string | null {
+    if (status.unsupportedReason || !status.lineageNodeId) {
+      return null;
+    }
+    const label = status.title ?? status.kind ?? status.lineageNodeId;
+    return status.childCount > 0 ? `${label} +${status.childCount}` : label;
   }
 
   private buildRewindStatusText(): string | undefined {
@@ -1068,6 +1089,9 @@ export class CliShellRuntime {
         return;
       case "overlay.openSessions":
         this.#overlayFlow.openSessionsOverlay();
+        return;
+      case "overlay.openLineage":
+        this.#overlayFlow.openLineageOverlay();
         return;
       case "overlay.openQueue":
         this.#overlayFlow.openQueueOverlay();

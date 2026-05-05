@@ -17,10 +17,25 @@ import { VerificationGate } from "../verification/api.js";
 import { VerificationProjectorService } from "../verification/api.js";
 import { SESSIONS_EVENT_DESCRIPTORS } from "./event-descriptors.js";
 import { EventPipelineService } from "./event-pipeline.js";
+import { SessionLineageService } from "./lineage.js";
 import { sessionSurfaceContribution, sessionWireSurfaceContribution } from "./runtime-surface.js";
 import { SessionLifecycleService } from "./session-lifecycle.js";
 import { SessionRewindService } from "./session-rewind.js";
 import { SessionWireService } from "./session-wire.js";
+
+function isDeclaredCapabilityStateOwner(
+  ownerCapability: string,
+  options: RuntimeServiceRegistrarOptions,
+): boolean {
+  const skillOwnerPrefix = "brewva.skill.";
+  if (!ownerCapability.startsWith(skillOwnerPrefix)) {
+    return false;
+  }
+  return (
+    options.coreDependencies.skillRegistry.get(ownerCapability.slice(skillOwnerPrefix.length)) !==
+    undefined
+  );
+}
 
 interface RuntimeProjectionSubscriberRegistrarOptions {
   cwd: string;
@@ -106,6 +121,13 @@ export function registerSessionsDomain(
     },
   );
 
+  const sessionLineageService = new SessionLineageService({
+    eventStore: options.coreDependencies.eventStore,
+    recordEvent: (input) => options.kernel.recordEvent(input),
+    isCapabilityStateOwnerDeclared: (ownerCapability) =>
+      isDeclaredCapabilityStateOwner(ownerCapability, options),
+  });
+
   const sessionLifecycleService = new SessionLifecycleService({
     sessionState: options.sessionState,
     contextBudget: options.coreDependencies.contextBudget,
@@ -136,6 +158,7 @@ export function registerSessionsDomain(
       eventPipeline,
       toolLifecycleRecoveryWalService: recoveryDomain.services.toolLifecycleRecoveryWalService,
       sessionLifecycleService,
+      sessionLineageService,
       getTapeService: () => tapeDomain.services.getTapeService(),
     },
     surfaceContribution: sessionSurfaceContribution,

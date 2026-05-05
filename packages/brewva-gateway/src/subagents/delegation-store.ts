@@ -26,6 +26,7 @@ import {
   readWorkerResultsAppliedEventPayload,
 } from "@brewva/brewva-runtime/events";
 import { recordSessionTurnTransition } from "../session/turn-transition.js";
+import { adoptDelegationLineageOutcome } from "./lineage.js";
 
 type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
 
@@ -417,6 +418,30 @@ function applyDelegationEvent(
   }
 }
 
+function adoptAppliedWorkerResultOutcomes(input: {
+  runtime: BrewvaRuntime;
+  sessionId: string;
+  runs: Map<string, DelegationRunRecord>;
+  event: DelegationEvent;
+}): void {
+  if (input.event.type !== WORKER_RESULTS_APPLIED_EVENT_TYPE) {
+    return;
+  }
+  const payload = readWorkerResultsAppliedEventPayload(input.event);
+  for (const workerId of payload?.workerIds ?? []) {
+    const record = input.runs.get(workerId);
+    if (!record) {
+      continue;
+    }
+    adoptDelegationLineageOutcome({
+      runtime: input.runtime,
+      sessionId: input.sessionId,
+      record,
+      admission: "context_required",
+    });
+  }
+}
+
 function filterDelegationRuns(
   runs: Iterable<DelegationRunRecord>,
   query: DelegationRunQuery = {},
@@ -472,6 +497,12 @@ export class HostedDelegationStore {
           return;
         }
         applyDelegationEvent(runs, event);
+        adoptAppliedWorkerResultOutcomes({
+          runtime: this.runtime,
+          sessionId: event.sessionId,
+          runs,
+          event,
+        });
       });
     }
   }

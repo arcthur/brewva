@@ -148,6 +148,144 @@ describe("session index", () => {
     expect(tokens).toEqual(expect.arrayContaining(tokenizeSearchText("中文 网关 bootstrap")));
   });
 
+  test("materializes session lineage and context-entry projections from tape", async () => {
+    const { workspace, runtime } = createIndexedRuntime("session-index-lineage");
+    const sessionId = "indexed-lineage";
+
+    runtime.authority.session.createLineageNode(sessionId, {
+      lineageNodeId: "ln-main",
+      kind: "main",
+      forkPoint: { kind: "session_root" },
+    });
+    const mainSource = runtime.extensions.hosted.events.record({
+      sessionId,
+      type: "message_end",
+      payload: {
+        role: "user",
+        content: "main message",
+      },
+    });
+    runtime.authority.session.recordContextEntry(sessionId, {
+      entryId: "ctx-main-1",
+      lineageNodeId: "ln-main",
+      parentEntryId: null,
+      sourceEventId: mainSource?.id ?? "missing-main-source",
+      sourceEventType: "message_end",
+      entryKind: "message",
+      admission: "context_required",
+      presentTo: "both",
+    });
+    runtime.authority.session.createLineageNode(sessionId, {
+      lineageNodeId: "ln-review",
+      parentLineageNodeId: "ln-main",
+      kind: "review",
+      forkPoint: {
+        kind: "context_entry",
+        lineageNodeId: "ln-main",
+        entryId: "ctx-main-1",
+      },
+    });
+    runtime.authority.session.recordLineageSummary(sessionId, {
+      summaryId: "summary-review",
+      lineageNodeId: "ln-review",
+      attachToEntryId: "ctx-main-1",
+      summary: "Review branch summary",
+      admission: "context_eligible",
+    });
+    runtime.authority.session.recordLineageOutcome(sessionId, {
+      outcomeId: "outcome-review",
+      lineageNodeId: "ln-review",
+      summary: "Review outcome is state-local until adoption.",
+    });
+    runtime.authority.session.adoptLineageOutcome(sessionId, {
+      adoptionId: "adopt-review",
+      outcomeId: "outcome-review",
+      fromLineageNodeId: "ln-review",
+      toLineageNodeId: "ln-main",
+      admission: "context_required",
+      summary: "Adopt review outcome",
+    });
+    const reviewSource = runtime.extensions.hosted.events.record({
+      sessionId,
+      type: "message_end",
+      payload: {
+        role: "user",
+        content: "review message",
+      },
+    });
+    runtime.authority.session.recordContextEntry(sessionId, {
+      entryId: "ctx-review-1",
+      lineageNodeId: "ln-review",
+      parentEntryId: "ctx-main-1",
+      sourceEventId: reviewSource?.id ?? "missing-review-source",
+      sourceEventType: "message_end",
+      entryKind: "message",
+      admission: "context_required",
+      presentTo: "llm",
+    });
+
+    const index = await createSessionIndex({
+      workspaceRoot: workspace,
+      events: runtime.inspect.events,
+      task: runtime.inspect.task,
+    });
+    try {
+      await index.catchUp();
+    } finally {
+      await index.close();
+    }
+
+    const dbPath = join(workspace, ".brewva", "session-index", "session-index.duckdb");
+    const nodes = await readRows<{
+      lineage_node_id: string;
+      parent_lineage_node_id: string | null;
+      kind: string;
+    }>(
+      dbPath,
+      "select lineage_node_id, parent_lineage_node_id, kind from session_lineage_nodes order by lineage_node_id",
+    );
+    expect(nodes).toEqual([
+      { lineage_node_id: "ln-main", parent_lineage_node_id: null, kind: "main" },
+      { lineage_node_id: "ln-review", parent_lineage_node_id: "ln-main", kind: "review" },
+    ]);
+
+    const contextEntries = await readRows<{ entry_id: string; parent_entry_id: string | null }>(
+      dbPath,
+      "select entry_id, parent_entry_id from session_context_entries order by entry_id",
+    );
+    expect(contextEntries).toEqual([
+      { entry_id: "ctx-main-1", parent_entry_id: null },
+      { entry_id: "ctx-review-1", parent_entry_id: "ctx-main-1" },
+    ]);
+
+    const summaries = await readRows<{ summary_id: string; admission: string }>(
+      dbPath,
+      "select summary_id, admission from session_lineage_summaries",
+    );
+    expect(summaries).toEqual([{ summary_id: "summary-review", admission: "context_eligible" }]);
+
+    const outcomes = await readRows<{ outcome_id: string; admission: string }>(
+      dbPath,
+      "select outcome_id, admission from session_lineage_outcomes",
+    );
+    expect(outcomes).toEqual([{ outcome_id: "outcome-review", admission: "state_only" }]);
+
+    const adoptions = await readRows<{ adoption_id: string; admission: string }>(
+      dbPath,
+      "select adoption_id, admission from session_lineage_adopted_outcomes",
+    );
+    expect(adoptions).toEqual([{ adoption_id: "adopt-review", admission: "context_required" }]);
+
+    const active = await readRows<{ lineage_node_id: string; last_context_entry_id: string }>(
+      dbPath,
+      "select lineage_node_id, last_context_entry_id from session_active_lineage_nodes order by lineage_node_id",
+    );
+    expect(active).toEqual([
+      { lineage_node_id: "ln-main", last_context_entry_id: "ctx-main-1" },
+      { lineage_node_id: "ln-review", last_context_entry_id: "ctx-review-1" },
+    ]);
+  });
+
   test("cold catch-up uses byte offsets and does not duplicate indexed events", async () => {
     const { workspace, runtime } = createIndexedRuntime("session-index-catch-up");
     recordTaskSession(runtime, {

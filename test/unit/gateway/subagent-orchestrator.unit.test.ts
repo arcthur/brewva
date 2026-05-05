@@ -16,6 +16,125 @@ function createTempWorkspace(prefix: string): string {
 }
 
 describe("hosted subagent orchestrator", () => {
+  test("projects completed subagent runs into session lineage as state-only outcomes", async () => {
+    const workspaceRoot = createTempWorkspace("brewva-subagent-lineage-");
+    const runtime = new BrewvaRuntime({ cwd: workspaceRoot });
+    const parentSessionId = "parent-session-lineage";
+
+    runtime.authority.session.createLineageNode(parentSessionId, {
+      lineageNodeId: "lineage:main",
+      kind: "main",
+      forkPoint: { kind: "session_root" },
+    });
+    const source = runtime.extensions.hosted.events.record({
+      sessionId: parentSessionId,
+      type: "message_end",
+      payload: {
+        role: "user",
+        content: "Delegate a discovery check.",
+      },
+    });
+    runtime.authority.session.recordContextEntry(parentSessionId, {
+      entryId: "ctx-parent-1",
+      lineageNodeId: "lineage:main",
+      parentEntryId: null,
+      sourceEventId: source?.id ?? "missing-source",
+      sourceEventType: "message_end",
+      entryKind: "message",
+      admission: "context_required",
+      presentTo: "both",
+    });
+
+    const adapter = createHostedSubagentAdapter({
+      runtime,
+      async createChildSession() {
+        const childRuntime = new BrewvaRuntime({ cwd: workspaceRoot });
+        const childSessionId = "child-lineage";
+        const listeners = new Set<(event: BrewvaPromptSessionEvent) => void>();
+
+        return {
+          runtime: childRuntime,
+          session: {
+            dispose() {},
+            async prompt() {
+              for (const listener of listeners) {
+                listener({
+                  type: "message_end",
+                  message: {
+                    role: "assistant",
+                    content: [{ type: "text", text: "Discovery check completed." }],
+                  },
+                } as BrewvaPromptSessionEvent);
+              }
+            },
+            async waitForIdle() {},
+            sessionManager: {
+              getSessionId() {
+                return childSessionId;
+              },
+            },
+            subscribe(listener) {
+              listeners.add(listener);
+              return () => {
+                listeners.delete(listener);
+              };
+            },
+          },
+        };
+      },
+    });
+
+    const result = await adapter.run({
+      fromSessionId: parentSessionId,
+      request: {
+        skillName: "discovery",
+        mode: "single",
+        packet: {
+          objective: "Inspect the current branch.",
+          deliverable: "One discovery summary.",
+          consultBrief: {
+            decision: "What matters for this branch?",
+            successCriteria: "Return one concise finding.",
+          },
+        },
+      },
+    });
+
+    if (!result.ok) {
+      throw new Error(result.error);
+    }
+    const outcome = result.outcomes[0];
+    expect(outcome?.ok).toBe(true);
+    if (!outcome || !outcome.ok) {
+      throw new Error("expected a successful delegation outcome");
+    }
+
+    const tree = runtime.inspect.session.getLineageTree(parentSessionId);
+    const subagentNode = tree.nodes.find(
+      (node) =>
+        node.forkPoint.kind === "worker_run" && node.forkPoint.workerRunId === outcome.runId,
+    );
+    expect(subagentNode).toEqual(
+      expect.objectContaining({
+        parentLineageNodeId: "lineage:main",
+        kind: "subagent.consult",
+      }),
+    );
+    expect(subagentNode?.outcomes).toEqual([
+      expect.objectContaining({
+        admission: "state_only",
+        summary: "Discovery check completed.",
+      }),
+    ]);
+    expect(runtime.inspect.session.getLineageNode(parentSessionId, "lineage:main")).toEqual(
+      expect.objectContaining({
+        adoptedOutcomes: [],
+      }),
+    );
+
+    await rm(workspaceRoot, { recursive: true, force: true });
+  });
+
   test("records patch worker results from an isolated child workspace", async () => {
     const workspaceRoot = createTempWorkspace("brewva-subagent-parent-");
     mkdirSync(join(workspaceRoot, "src"), { recursive: true });

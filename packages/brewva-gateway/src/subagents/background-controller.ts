@@ -36,6 +36,7 @@ import {
   buildDelegationLifecyclePayload,
   cloneDelegationRunRecord,
 } from "./delegation-store.js";
+import { ensureDelegationLineageNode, recordDelegationLineageOutcome } from "./lineage.js";
 import type { DelegationModelRoutingContext } from "./model-routing.js";
 import {
   buildDelegationRunRecordSeed,
@@ -249,6 +250,11 @@ export function createDetachedSubagentBackgroundController(
         reason,
       },
     });
+    recordDelegationLineageOutcome({
+      runtime: options.runtime,
+      sessionId: record.parentSessionId,
+      record: updated,
+    });
     return updated;
   };
 
@@ -381,6 +387,11 @@ export function createDetachedSubagentBackgroundController(
             reason: "completion_predicate_satisfied",
           },
         });
+        recordDelegationLineageOutcome({
+          runtime: options.runtime,
+          sessionId: input.parentSessionId,
+          record: cancelledRecord,
+        });
         return cloneDelegationRunRecord(cancelledRecord);
       }
 
@@ -400,6 +411,11 @@ export function createDetachedSubagentBackgroundController(
         sessionId: input.parentSessionId,
         type: "subagent_spawned",
         payload: buildDelegationLifecyclePayload(initialRecord),
+      });
+      ensureDelegationLineageNode({
+        runtime: options.runtime,
+        sessionId: input.parentSessionId,
+        record: initialRecord,
       });
 
       const spec: DetachedSubagentRunSpec = {

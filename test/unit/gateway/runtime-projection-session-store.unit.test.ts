@@ -1,7 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import {
+  BrewvaRuntime,
+  CONTEXT_ENTRY_RECORDED_EVENT_TYPE,
+  SESSION_LINEAGE_NODE_CREATED_EVENT_TYPE,
+} from "@brewva/brewva-runtime";
 import { readSessionBundleArtifact, replayImportedSessionEntries } from "@brewva/brewva-substrate";
 import { HostedRuntimeTapeSessionStore } from "../../../packages/brewva-gateway/src/host/runtime-projection-session-store.js";
 import type { StoredSessionMessage } from "../../../packages/brewva-gateway/src/session/runtime-session-transcript.js";
@@ -33,7 +37,7 @@ describe("hosted runtime tape session store", () => {
     timestamp: number;
   };
 
-  test("replays canonical transcript entries from runtime events without private projection events", () => {
+  test("replays canonical transcript entries through lineage context-entry linkers", () => {
     const restoreDateNow = patchDateNow(() => 1_700_000_000_000);
 
     try {
@@ -86,8 +90,11 @@ describe("hosted runtime tape session store", () => {
           "thinking_level_select",
           "message_end",
           "branch_summary_recorded",
+          SESSION_LINEAGE_NODE_CREATED_EVENT_TYPE,
+          CONTEXT_ENTRY_RECORDED_EVENT_TYPE,
         ]),
       );
+      expect(eventTypes[0]).toBe(SESSION_LINEAGE_NODE_CREATED_EVENT_TYPE);
       expect(eventTypes.some((type) => type.startsWith("hosted_session_projection_"))).toBe(false);
       expect(context.activeModelPresetName).toBe("Claude Lead");
       expect(context.activeModelPreset).toEqual({
@@ -113,7 +120,203 @@ describe("hosted runtime tape session store", () => {
     }
   });
 
-  test("migrates legacy hosted projection events into canonical runtime transcript events", () => {
+  test("branches from the target entry lineage rather than the current branch", () => {
+    const workspace = createTestWorkspace("runtime-projection-session-store-target-lineage");
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionId = "agent-session:target-lineage";
+    const store = new HostedRuntimeTapeSessionStore(runtime, workspace, sessionId);
+
+    const firstMainEntryId = store.appendMessage({
+      role: "user",
+      content: [{ type: "text", text: "main checkpoint" }],
+      timestamp: Date.now(),
+    } as StoredSessionMessage);
+    const secondMainEntryId = store.appendMessage({
+      role: "assistant",
+      content: [{ type: "text", text: "main continues" }],
+      api: "openai-responses",
+      provider: "openai",
+      model: "gpt-5.4",
+      usage: createUsage(),
+      stopReason: "stop",
+      timestamp: Date.now() + 1,
+    } as StoredSessionMessage);
+
+    store.branch(firstMainEntryId);
+    store.appendMessage({
+      role: "user",
+      content: [{ type: "text", text: "experiment branch" }],
+      timestamp: Date.now() + 2,
+    } as StoredSessionMessage);
+    store.branch(secondMainEntryId);
+    const treeAfterFirstVisit = runtime.inspect.session.getLineageTree(sessionId);
+    store.branch(firstMainEntryId);
+    const treeAfterRepeatVisit = runtime.inspect.session.getLineageTree(sessionId);
+
+    const targetBranch = treeAfterFirstVisit.nodes.find(
+      (node) =>
+        node.forkPoint.kind === "context_entry" && node.forkPoint.entryId === secondMainEntryId,
+    );
+
+    expect(targetBranch).toEqual(
+      expect.objectContaining({
+        parentLineageNodeId: "lineage:main",
+        forkPoint: {
+          kind: "context_entry",
+          lineageNodeId: "lineage:main",
+          entryId: secondMainEntryId,
+        },
+      }),
+    );
+    expect(treeAfterRepeatVisit.nodes).toHaveLength(treeAfterFirstVisit.nodes.length);
+  });
+
+  test("checks out an existing lineage node without creating a branch", () => {
+    const workspace = createTestWorkspace("runtime-projection-session-store-checkout-lineage");
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionId = "agent-session:checkout-lineage";
+    const store = new HostedRuntimeTapeSessionStore(runtime, workspace, sessionId);
+    const checkoutStore = store as HostedRuntimeTapeSessionStore & {
+      checkoutLineageNode(lineageNodeId: string, leafEntryId?: string | null): void;
+    };
+
+    const mainEntryId = store.appendMessage({
+      role: "user",
+      content: [{ type: "text", text: "main checkpoint" }],
+      timestamp: Date.now(),
+    } as StoredSessionMessage);
+    store.appendMessage({
+      role: "assistant",
+      content: [{ type: "text", text: "main answer" }],
+      api: "openai-responses",
+      provider: "openai",
+      model: "gpt-5.4",
+      usage: createUsage(),
+      stopReason: "stop",
+      timestamp: Date.now() + 1,
+    } as StoredSessionMessage);
+
+    store.branch(mainEntryId);
+    store.appendMessage({
+      role: "user",
+      content: [{ type: "text", text: "experiment branch" }],
+      timestamp: Date.now() + 2,
+    } as StoredSessionMessage);
+
+    const treeBeforeCheckout = runtime.inspect.session.getLineageTree(sessionId);
+    const experimentNode = treeBeforeCheckout.nodes.find((node) => node.kind === "branch");
+    if (!experimentNode) {
+      throw new Error("expected experiment branch lineage node");
+    }
+
+    checkoutStore.checkoutLineageNode("lineage:main", mainEntryId);
+
+    expect(store.getLineageNodeId()).toBe("lineage:main");
+    expect(store.getLeafId()).toBe(mainEntryId);
+    expect(JSON.stringify(store.buildSessionContext().messages)).toContain("main checkpoint");
+    expect(JSON.stringify(store.buildSessionContext().messages)).not.toContain("experiment branch");
+    expect(runtime.inspect.session.getLineageTree(sessionId).nodes).toHaveLength(
+      treeBeforeCheckout.nodes.length,
+    );
+
+    checkoutStore.checkoutLineageNode(experimentNode.lineageNodeId);
+
+    expect(store.getLineageNodeId()).toBe(experimentNode.lineageNodeId);
+    expect(JSON.stringify(store.buildSessionContext().messages)).toContain("experiment branch");
+    expect(runtime.inspect.session.getLineageTree(sessionId).nodes).toHaveLength(
+      treeBeforeCheckout.nodes.length,
+    );
+  });
+
+  test("rejects checkout when the leaf belongs to a descendant lineage", () => {
+    const workspace = createTestWorkspace("runtime-projection-session-store-checkout-mismatch");
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionId = "agent-session:checkout-mismatch";
+    const store = new HostedRuntimeTapeSessionStore(runtime, workspace, sessionId);
+    const checkoutStore = store as HostedRuntimeTapeSessionStore & {
+      checkoutLineageNode(lineageNodeId: string, leafEntryId?: string | null): void;
+    };
+
+    const mainEntryId = store.appendMessage({
+      role: "user",
+      content: [{ type: "text", text: "main checkpoint" }],
+      timestamp: Date.now(),
+    } as StoredSessionMessage);
+    store.appendMessage({
+      role: "assistant",
+      content: [{ type: "text", text: "main answer" }],
+      api: "openai-responses",
+      provider: "openai",
+      model: "gpt-5.4",
+      usage: createUsage(),
+      stopReason: "stop",
+      timestamp: Date.now() + 1,
+    } as StoredSessionMessage);
+
+    store.branch(mainEntryId);
+    const experimentEntryId = store.appendMessage({
+      role: "user",
+      content: [{ type: "text", text: "experiment branch" }],
+      timestamp: Date.now() + 2,
+    } as StoredSessionMessage);
+    const previousLineageNodeId = store.getLineageNodeId();
+    const previousLeafId = store.getLeafId();
+
+    expect(previousLineageNodeId).not.toBe("lineage:main");
+    expect(() => checkoutStore.checkoutLineageNode("lineage:main", experimentEntryId)).toThrow(
+      `session_context_entry_lineage_mismatch:${experimentEntryId}:lineage:main`,
+    );
+    expect(store.getLineageNodeId()).toBe(previousLineageNodeId);
+    expect(store.getLeafId()).toBe(previousLeafId);
+  });
+
+  test("builds LLM context from admitted context entries while retaining UI branch state", () => {
+    const workspace = createTestWorkspace("runtime-projection-session-store-admission");
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionId = "agent-session:admission";
+    const store = new HostedRuntimeTapeSessionStore(runtime, workspace, sessionId);
+
+    const visibleUser = {
+      role: "user",
+      content: [{ type: "text", text: "visible prompt" }],
+      timestamp: Date.now(),
+    } as StoredSessionMessage;
+    const hiddenState = {
+      role: "user",
+      content: [{ type: "text", text: "state-only diagnostic" }],
+      excludeFromContext: true,
+      timestamp: Date.now() + 1,
+    } as StoredSessionMessage;
+    const assistant = {
+      role: "assistant",
+      content: [{ type: "text", text: "visible answer" }],
+      api: "openai-responses",
+      provider: "openai",
+      model: "gpt-5.4",
+      usage: createUsage(),
+      stopReason: "stop",
+      timestamp: Date.now() + 2,
+    } as StoredSessionMessage;
+
+    store.appendMessage(visibleUser);
+    store.appendMessage(hiddenState);
+    store.appendMessage(assistant);
+
+    expect(
+      store
+        .getBranch()
+        .some(
+          (entry) =>
+            entry.type === "message" &&
+            JSON.stringify((entry.message as { content?: unknown }).content).includes(
+              "state-only diagnostic",
+            ),
+        ),
+    ).toBe(true);
+    expect(store.buildSessionContext().messages).toMatchObject([visibleUser, assistant]);
+  });
+
+  test("rejects legacy hosted projection tapes without a lineage root", () => {
     const workspace = createTestWorkspace("runtime-projection-session-store-legacy");
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionId = "agent-session:legacy";
@@ -154,27 +357,9 @@ describe("hosted runtime tape session store", () => {
       },
     });
 
-    const restored = new HostedRuntimeTapeSessionStore(runtime, workspace, sessionId);
-    const eventTypes = runtime.inspect.events.list(sessionId).map((event) => event.type);
-    const context = restored.buildSessionContext();
-
-    expect(eventTypes).toEqual(
-      expect.arrayContaining(["model_select", "thinking_level_select", "message_end"]),
+    expect(() => new HostedRuntimeTapeSessionStore(runtime, workspace, sessionId)).toThrow(
+      "session_lineage_root_missing",
     );
-    expect(context.model).toEqual({ provider: "openai", modelId: "gpt-5.4" });
-    expect(context.thinkingLevel).toBe("high");
-    expect(context.messages).toMatchObject([
-      {
-        role: "user",
-        content: [{ type: "text", text: "legacy hello" }],
-      },
-      {
-        role: "custom",
-        customType: "note",
-        content: "legacy custom",
-        display: true,
-      },
-    ]);
   });
 
   test("projects clean conversation rewind without replaying the discarded branch summary", () => {
@@ -248,6 +433,57 @@ describe("hosted runtime tape session store", () => {
         message.summary.includes("Treat the abandoned branch"),
       ),
     ).toBe(false);
+    expect(runtime.inspect.session.getLineageTree(sessionId).nodes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "recovery",
+          parentLineageNodeId: "lineage:main",
+        }),
+      ]),
+    );
+  });
+
+  test("keeps undo-triggered conversation rewind inside the current lineage node", () => {
+    const workspace = createTestWorkspace("runtime-projection-session-store-undo-intra-node");
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionId = "agent-session:undo-intra-node";
+    const store = new HostedRuntimeTapeSessionStore(runtime, workspace, sessionId);
+
+    store.appendMessage({
+      role: "user",
+      content: [{ type: "text", text: "first prompt" }],
+      timestamp: Date.now(),
+    } as StoredSessionMessage);
+    runtime.authority.session.recordRewindCheckpoint(sessionId, {
+      leafEntryId: store.getLeafId(),
+      prompt: {
+        text: "first prompt",
+        parts: [],
+      },
+    });
+    store.appendMessage({
+      role: "assistant",
+      content: [{ type: "text", text: "first answer" }],
+      api: "openai-responses",
+      provider: "openai",
+      model: "gpt-5.4",
+      usage: createUsage(),
+      stopReason: "stop",
+      timestamp: Date.now() + 1,
+    } as StoredSessionMessage);
+
+    const rewind = runtime.authority.session.rewind(sessionId, {
+      mode: "conversation",
+      summary: "none",
+      returnLeafEntryId: store.getLeafId(),
+    });
+    if (!rewind.ok) {
+      throw new Error(`expected undo rewind to succeed, got ${rewind.reason}`);
+    }
+
+    const tree = runtime.inspect.session.getLineageTree(sessionId);
+    expect(tree.nodes.some((node) => node.kind === "recovery")).toBe(false);
+    expect(store.getLineageNodeId()).toBe("lineage:main");
   });
 
   test("replays imported legacy Pi entries through the hosted runtime tape store", () => {

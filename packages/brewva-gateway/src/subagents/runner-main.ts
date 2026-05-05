@@ -31,6 +31,7 @@ import {
 } from "./background-protocol.js";
 import { HostedDelegationStore, buildDelegationLifecyclePayload } from "./delegation-store.js";
 import { prepareSubagentEntry } from "./entry.js";
+import { ensureDelegationLineageNode, recordDelegationLineageOutcome } from "./lineage.js";
 import { createDelegationModelRoutingContextFromAgentDir } from "./model-routing.js";
 import {
   aggregateChildCost,
@@ -202,6 +203,11 @@ async function main(): Promise<void> {
       type: "subagent_failed",
       payload: buildDelegationLifecyclePayload(failed),
     });
+    recordDelegationLineageOutcome({
+      runtime: parentRuntime,
+      sessionId: spec.parentSessionId,
+      record: failed,
+    });
     removeDetachedSubagentLiveState(spec.workspaceRoot, spec.runId);
     process.exitCode = 1;
     return;
@@ -233,6 +239,11 @@ async function main(): Promise<void> {
       sessionId: spec.parentSessionId,
       type: "subagent_failed",
       payload: buildDelegationLifecyclePayload(failed),
+    });
+    recordDelegationLineageOutcome({
+      runtime: parentRuntime,
+      sessionId: spec.parentSessionId,
+      record: failed,
     });
     removeDetachedSubagentLiveState(spec.workspaceRoot, spec.runId);
     process.exitCode = 1;
@@ -320,6 +331,11 @@ async function main(): Promise<void> {
       sessionId: spec.parentSessionId,
       type: SUBAGENT_RUNNING_EVENT_TYPE,
       payload: buildDelegationLifecyclePayload(runningRecord),
+    });
+    ensureDelegationLineageNode({
+      runtime: parentRuntime,
+      sessionId: spec.parentSessionId,
+      record: runningRecord,
     });
     writeDetachedSubagentLiveState(spec.workspaceRoot, spec.runId, {
       schema: "brewva.subagent-run-live.v1",
@@ -543,6 +559,11 @@ async function main(): Promise<void> {
       type: "subagent_completed",
       payload: buildDelegationLifecyclePayload(completedRecord),
     });
+    recordDelegationLineageOutcome({
+      runtime: parentRuntime,
+      sessionId: spec.parentSessionId,
+      record: completedRecord,
+    });
     writeDetachedSubagentOutcome(spec.workspaceRoot, spec.runId, outcome);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -638,6 +659,11 @@ async function main(): Promise<void> {
         ...buildDelegationLifecyclePayload(failedRecord),
         reason: cancellationReason ?? null,
       },
+    });
+    recordDelegationLineageOutcome({
+      runtime: parentRuntime,
+      sessionId: spec.parentSessionId,
+      record: failedRecord,
     });
     writeDetachedSubagentOutcome(spec.workspaceRoot, spec.runId, outcome);
   } finally {

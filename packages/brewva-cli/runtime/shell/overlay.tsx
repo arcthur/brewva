@@ -19,6 +19,7 @@ import type {
   CliInboxOverlayPayload,
   CliInputOverlayPayload,
   CliInspectOverlayPayload,
+  CliLineageOverlayPayload,
   CliModelPickerOverlayPayload,
   CliNotificationsOverlayPayload,
   CliQueueOverlayPayload,
@@ -713,6 +714,74 @@ function SessionsOverlay(input: {
   );
 }
 
+function LineageOverlay(input: {
+  payload: CliLineageOverlayPayload;
+  theme: SessionPalette;
+  width: number;
+  height: number;
+}) {
+  const node = createMemo(() => input.payload.nodes[input.payload.selectedIndex]);
+  const sidebarRows = createMemo(() =>
+    resolveOverlaySurfaceSelectionRows(input.width, input.height, input.payload.nodes.length),
+  );
+  const labelMaxWidth = 28;
+  const labels = createMemo(() =>
+    input.payload.nodes.map((entry) => {
+      const title = entry.title ?? entry.kind;
+      const prefix = `${"  ".repeat(entry.depth)}${entry.current ? "* " : "  "}`;
+      return truncateDialogText(`${prefix}${title}`, labelMaxWidth);
+    }),
+  );
+  const detailLines = createMemo(() => {
+    const entry = node();
+    if (!entry) {
+      return ["No lineage nodes found."];
+    }
+    return [
+      `id: ${entry.lineageNodeId}`,
+      `kind: ${entry.kind}`,
+      `title: ${entry.title ?? "n/a"}`,
+      `parent: ${entry.parentLineageNodeId ?? "none"}`,
+      `forkPoint: ${entry.forkPoint}`,
+      `leaf: ${entry.leafEntryId ?? "root"}`,
+      `current: ${entry.current ? "yes" : "no"}`,
+      `children: ${entry.childCount}`,
+      `summaries: ${entry.summaryCount}`,
+      `outcomes: ${entry.outcomeCount}`,
+      `adopted outcomes: ${entry.adoptedOutcomeCount}`,
+    ];
+  });
+  return (
+    <OverlaySurface
+      title="Lineage"
+      width={input.width}
+      height={input.height}
+      theme={input.theme}
+      footer="Enter checkout · Esc close"
+      splitContent
+    >
+      <box flexDirection="row" gap={1} flexGrow={1}>
+        <box width={34} flexShrink={0}>
+          <Show
+            when={input.payload.nodes.length > 0}
+            fallback={<text fg={input.theme.textMuted}>No lineage nodes found.</text>}
+          >
+            <SelectionList
+              items={labels()}
+              selectedIndex={input.payload.selectedIndex}
+              theme={input.theme}
+              maxVisible={sidebarRows()}
+            />
+          </Show>
+        </box>
+        <box flexGrow={1} flexDirection="column" paddingRight={DIALOG_HORIZONTAL_PADDING}>
+          <TextLineBlock lines={detailLines()} color={input.theme.text} />
+        </box>
+      </box>
+    </OverlaySurface>
+  );
+}
+
 function QueueOverlay(input: {
   payload: CliQueueOverlayPayload;
   theme: SessionPalette;
@@ -1375,6 +1444,14 @@ export function ModalOverlay(input: {
       <Match when={input.overlay.payload?.kind === "sessions"}>
         <SessionsOverlay
           payload={input.overlay.payload as CliSessionsOverlayPayload}
+          theme={input.theme}
+          width={input.width}
+          height={input.height}
+        />
+      </Match>
+      <Match when={input.overlay.payload?.kind === "lineage"}>
+        <LineageOverlay
+          payload={input.overlay.payload as CliLineageOverlayPayload}
           theme={input.theme}
           width={input.width}
           height={input.height}

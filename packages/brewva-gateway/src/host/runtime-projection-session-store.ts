@@ -2,15 +2,21 @@ import { randomUUID } from "node:crypto";
 import {
   SESSION_REWIND_DIVERGENCE_SCHEMA,
   type BrewvaRuntime,
+  type ContextAdmission,
+  type ContextEntryRecord,
+  type ContextEntryPresentTo,
   type SessionLifecycleSnapshot,
   type SessionWireFrame,
+  isLlmVisibleContextEntry,
 } from "@brewva/brewva-runtime";
 import { type BrewvaEventRecord } from "@brewva/brewva-runtime/events";
 import {
+  CONTEXT_ENTRY_RECORDED_EVENT_TYPE,
   MESSAGE_END_EVENT_TYPE,
   MODEL_PRESET_SELECT_EVENT_TYPE,
   MODEL_SELECT_EVENT_TYPE,
   REASONING_REVERT_EVENT_TYPE,
+  readContextEntryRecordedEventPayload,
   readReasoningRevertEventPayload,
   readSessionRewindCompletedEventPayload,
   SESSION_REWIND_COMPLETED_EVENT_TYPE,
@@ -35,14 +41,10 @@ import {
   readTranscriptMessageFromPayload,
   type StoredSessionMessage,
 } from "../session/runtime-session-transcript.js";
-import {
-  hasLegacyHostedProjectionEvents,
-  migrateLegacyHostedProjectionEvents,
-} from "./legacy-hosted-session-projection.js";
-
 type CustomMessageContentPart = { type: string };
 
 const SESSION_COMPACT_EVENT_TYPE = "session_compact";
+const HOSTED_MAIN_LINEAGE_NODE_ID = "lineage:main";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -194,33 +196,14 @@ function readBranchSummaryPayload(payload: unknown): {
   };
 }
 
-function hasCanonicalTranscriptEvents(events: readonly BrewvaEventRecord[]): boolean {
-  return events.some(
-    (event) =>
-      (event.type === MESSAGE_END_EVENT_TYPE &&
-        readTranscriptMessageFromPayload(event.payload) !== null) ||
-      (event.type === MODEL_SELECT_EVENT_TYPE &&
-        isRecord(event.payload) &&
-        readOptionalString(event.payload.provider) &&
-        readOptionalString(event.payload.model)) ||
-      (event.type === THINKING_LEVEL_SELECTED_EVENT_TYPE &&
-        isRecord(event.payload) &&
-        readOptionalString(event.payload.thinkingLevel)) ||
-      (event.type === REASONING_REVERT_EVENT_TYPE &&
-        readReasoningRevertEventPayload(event) !== null) ||
-      (event.type === SESSION_BRANCH_SUMMARY_RECORDED_EVENT_TYPE &&
-        readBranchSummaryPayload(event.payload) !== null) ||
-      (event.type === SESSION_COMPACT_EVENT_TYPE &&
-        readCanonicalCompactionPayload(event.payload) !== null),
-  );
-}
-
 export class HostedRuntimeTapeSessionStore {
   readonly #entries: BrewvaSessionEntry[] = [];
   readonly #byId = new Map<string, BrewvaSessionEntry>();
+  readonly #eventsById = new Map<string, BrewvaEventRecord>();
   readonly #seenEventIds = new Set<string>();
   readonly #rewindSummaryModeByRevertEventId = new Map<string, "carry" | "none">();
   #leafId: string | null = null;
+  #lineageNodeId: string = HOSTED_MAIN_LINEAGE_NODE_ID;
   #unsubscribeEvents: (() => void) | null = null;
 
   constructor(
@@ -228,6 +211,7 @@ export class HostedRuntimeTapeSessionStore {
     private readonly cwd: string,
     private readonly sessionId: string = randomUUID(),
   ) {
+    this.#ensureLineageRoot();
     this.#hydrateFromRuntime();
     this.#unsubscribeEvents = this.runtime.inspect.events.subscribe((event) => {
       if (event.sessionId !== this.sessionId) {
@@ -243,6 +227,14 @@ export class HostedRuntimeTapeSessionStore {
 
   getLeafId(): string | null {
     return this.#leafId;
+  }
+
+  getLineageNodeId(): string {
+    return this.#lineageNodeId;
+  }
+
+  hasSessionEntryType(type: string): boolean {
+    return this.#entries.some((entry) => entry.type === type);
   }
 
   readContextState(): ContextState {
@@ -277,13 +269,65 @@ export class HostedRuntimeTapeSessionStore {
 
   resetLeaf(): void {
     this.#leafId = null;
+    this.#lineageNodeId = HOSTED_MAIN_LINEAGE_NODE_ID;
   }
 
   branch(entryId: string): void {
     if (!this.#byId.has(entryId)) {
       throw new Error(`Entry ${entryId} not found`);
     }
-    this.#leafId = entryId;
+    const targetEntryId = this.#nearestContextEntryId(entryId);
+    if (!targetEntryId) {
+      this.#leafId = null;
+      return;
+    }
+    if (targetEntryId === this.#leafId) {
+      return;
+    }
+    const targetContextEntry = this.#resolveContextEntry(targetEntryId);
+    if (!targetContextEntry) {
+      throw new Error(`Context entry ${targetEntryId} not found`);
+    }
+    const targetLineageNodeId = targetContextEntry.lineageNodeId;
+    const existingBranch = this.runtime.inspect.session
+      .listLineageChildren(this.sessionId, targetLineageNodeId)
+      .find(
+        (node) =>
+          node.kind === "branch" &&
+          node.forkPoint.kind === "context_entry" &&
+          node.forkPoint.lineageNodeId === targetLineageNodeId &&
+          node.forkPoint.entryId === targetEntryId,
+      );
+    const branchNodeId = existingBranch?.lineageNodeId ?? `lineage:${randomUUID()}`;
+    if (!existingBranch) {
+      this.runtime.authority.session.createLineageNode(this.sessionId, {
+        lineageNodeId: branchNodeId,
+        parentLineageNodeId: targetLineageNodeId,
+        kind: "branch",
+        forkPoint: {
+          kind: "context_entry",
+          lineageNodeId: targetLineageNodeId,
+          entryId: targetEntryId,
+        },
+        createdBy: "hosted-session-store",
+      });
+    }
+    this.#lineageNodeId = branchNodeId;
+    this.#leafId = targetEntryId;
+  }
+
+  checkoutLineageNode(lineageNodeId: string, leafEntryId?: string | null): void {
+    const node = this.runtime.inspect.session.getLineageNode(this.sessionId, lineageNodeId);
+    if (!node) {
+      throw new Error(`session_lineage_node_missing:${lineageNodeId}`);
+    }
+    const nextLeafId = this.#resolveCheckoutLeafEntryId(lineageNodeId, leafEntryId);
+    this.#lineageNodeId = lineageNodeId;
+    this.#leafId = nextLeafId;
+  }
+
+  resolveLineageLeafEntryId(lineageNodeId: string): string | null {
+    return this.#resolveCheckoutLeafEntryId(lineageNodeId, undefined);
   }
 
   dispose(): void {
@@ -300,18 +344,52 @@ export class HostedRuntimeTapeSessionStore {
   }
 
   getBranch(fromId?: string | null): BrewvaSessionEntry[] {
-    const path: BrewvaSessionEntry[] = [];
     const startId = fromId === undefined ? this.#leafId : fromId;
-    let current = startId ? this.#byId.get(startId) : undefined;
-    while (current) {
-      path.unshift(current);
-      current = current.parentId ? this.#byId.get(current.parentId) : undefined;
+    if (!startId) {
+      return [];
     }
-    return path;
+    return this.runtime.inspect.session
+      .getContextEntryPath(this.sessionId, {
+        entryId: startId,
+        includeStateOnly: true,
+      })
+      .map((entry) => this.#byId.get(entry.entryId))
+      .filter((entry): entry is BrewvaSessionEntry => entry !== undefined);
+  }
+
+  #getLlmBranch(fromId?: string | null): BrewvaSessionEntry[] {
+    const startId = fromId === undefined ? this.#leafId : fromId;
+    if (!startId) {
+      return [];
+    }
+
+    const contextEntries = this.runtime.inspect.session
+      .getContextEntryPath(this.sessionId, {
+        entryId: startId,
+      })
+      .filter(isLlmVisibleContextEntry);
+    const entries: BrewvaSessionEntry[] = [];
+    let parentEntryId: string | null = null;
+    for (const contextEntry of contextEntries) {
+      const entry = this.#contextEntryRecordToSessionEntry(contextEntry, parentEntryId);
+      if (!entry) {
+        continue;
+      }
+      entries.push(entry);
+      parentEntryId = entry.id;
+    }
+    return entries;
   }
 
   buildSessionContext(): BrewvaSessionContext {
-    return buildManagedSessionContext(this.#entries, this.#leafId, this.#byId);
+    const contextEntries = this.#getLlmBranch(this.#leafId);
+    const contextIndex = new Map(contextEntries.map((entry) => [entry.id, entry] as const));
+    const contextLeafId = contextEntries[contextEntries.length - 1]?.id ?? null;
+    const context = buildManagedSessionContext(contextEntries, contextLeafId, contextIndex);
+    return {
+      ...context,
+      ...this.#readControlState(),
+    };
   }
 
   previewCompaction(
@@ -327,24 +405,25 @@ export class HostedRuntimeTapeSessionStore {
     tokensBefore: number;
     summary: string;
   } {
-    const branchEntries = this.getBranch(sourceLeafEntryId);
+    const branchEntries = this.#getLlmBranch(sourceLeafEntryId);
     const firstKeptEntryId = selectFirstKeptEntryId(branchEntries);
     if (!firstKeptEntryId) {
       throw new Error("Hosted compaction requires at least one message entry to keep.");
     }
 
+    const previewParentId = branchEntries[branchEntries.length - 1]?.id ?? sourceLeafEntryId;
     const previewEntry: BrewvaCompactionEntry = {
       type: "compaction",
       id: compactId,
-      parentId: sourceLeafEntryId,
+      parentId: previewParentId,
       timestamp: new Date().toISOString(),
       summary,
       firstKeptEntryId,
       tokensBefore,
       fromHook: true,
     };
-    const previewEntries = [...this.#entries, previewEntry];
-    const previewIndex = new Map(this.#byId);
+    const previewEntries = [...branchEntries, previewEntry];
+    const previewIndex = new Map(branchEntries.map((entry) => [entry.id, entry] as const));
     previewIndex.set(previewEntry.id, previewEntry);
 
     return {
@@ -477,6 +556,13 @@ export class HostedRuntimeTapeSessionStore {
       throw new Error("failed to record branch summary");
     }
     this.#ingestRuntimeEvent(event);
+    this.runtime.authority.session.recordLineageSummary(this.sessionId, {
+      summaryId: event.id,
+      lineageNodeId: this.#lineageNodeId,
+      attachToEntryId: branchFromId,
+      summary,
+      admission: "context_eligible",
+    });
     return event.id;
   }
 
@@ -538,23 +624,23 @@ export class HostedRuntimeTapeSessionStore {
       throw new Error("failed to record branch summary");
     }
     this.#ingestRuntimeEvent(event);
+    this.runtime.authority.session.recordLineageSummary(this.sessionId, {
+      summaryId: event.id,
+      lineageNodeId: this.#lineageNodeId,
+      attachToEntryId: parentId,
+      summary,
+      admission: "context_eligible",
+    });
     return event.id;
   }
 
   #hydrateFromRuntime(): void {
     this.#entries.length = 0;
     this.#byId.clear();
+    this.#eventsById.clear();
     this.#seenEventIds.clear();
     this.#rewindSummaryModeByRevertEventId.clear();
     this.#leafId = null;
-
-    const initialEvents = sortEvents(this.runtime.inspect.events.list(this.sessionId));
-    if (
-      hasLegacyHostedProjectionEvents(initialEvents) &&
-      !hasCanonicalTranscriptEvents(initialEvents)
-    ) {
-      migrateLegacyHostedProjectionEvents(this.runtime, this.sessionId, initialEvents);
-    }
 
     const events = sortEvents(this.runtime.inspect.events.list(this.sessionId));
     for (const event of events) {
@@ -576,10 +662,19 @@ export class HostedRuntimeTapeSessionStore {
       return;
     }
     this.#seenEventIds.add(event.id);
+    this.#eventsById.set(event.id, event);
     if (event.type === SESSION_REWIND_COMPLETED_EVENT_TYPE) {
       const rewind = readSessionRewindCompletedEventPayload(event);
       if (rewind?.ok === true && rewind.reasoningRevertEventId) {
         this.#rewindSummaryModeByRevertEventId.set(rewind.reasoningRevertEventId, rewind.summary);
+        if (rewind.divergenceNote && options.fromHydration !== true) {
+          this.#maybeUpgradeRewindToRecoveryLineage(event);
+          this.#recordContextEntryForSourceEvent(event);
+          if (rewind.summary === "none") {
+            this.#hydrateFromRuntime();
+          }
+          return;
+        }
         if (rewind.summary === "none" && options.fromHydration !== true) {
           this.#hydrateFromRuntime();
           return;
@@ -593,18 +688,374 @@ export class HostedRuntimeTapeSessionStore {
         return;
       }
     }
+    if (this.#isContextSourceEvent(event)) {
+      if (options.fromHydration !== true) {
+        this.#recordContextEntryForSourceEvent(event);
+      }
+      return;
+    }
+    if (event.type === CONTEXT_ENTRY_RECORDED_EVENT_TYPE) {
+      const entry = this.#contextEntryToSessionEntry(event);
+      if (!entry) {
+        return;
+      }
+      this.#entries.push(entry);
+      this.#byId.set(entry.id, entry);
+      this.#leafId = entry.id;
+      this.#lineageNodeId =
+        readContextEntryRecordedEventPayload(event)?.lineageNodeId ?? this.#lineageNodeId;
+      return;
+    }
+
     const entry = this.#canonicalEventToEntry(event);
     if (!entry) {
       return;
     }
     this.#entries.push(entry);
     this.#byId.set(entry.id, entry);
-    this.#leafId = entry.id;
   }
 
-  #canonicalEventToEntry(event: BrewvaEventRecord): BrewvaSessionEntry | undefined {
+  #ensureLineageRoot(): void {
+    const events = this.runtime.inspect.events.list(this.sessionId);
+    try {
+      const tree = this.runtime.inspect.session.getLineageTree(this.sessionId);
+      this.#lineageNodeId = tree.rootNodeId;
+      return;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!message.includes("session_lineage_root_missing")) {
+        throw error;
+      }
+      if (events.length > 0) {
+        throw error;
+      }
+    }
+
+    this.runtime.authority.session.createLineageNode(this.sessionId, {
+      lineageNodeId: HOSTED_MAIN_LINEAGE_NODE_ID,
+      kind: "main",
+      forkPoint: { kind: "session_root" },
+      title: "Main task",
+      createdBy: "hosted-session-store",
+    });
+    this.#lineageNodeId = HOSTED_MAIN_LINEAGE_NODE_ID;
+  }
+
+  #recordContextEntryForSourceEvent(sourceEvent: BrewvaEventRecord): void {
+    if (this.#hasContextEntryForSourceEvent(sourceEvent.id)) {
+      return;
+    }
+    const input = this.#contextEntryInputForSourceEvent(sourceEvent);
+    if (!input) {
+      return;
+    }
+    const event = this.runtime.authority.session.recordContextEntry(this.sessionId, {
+      entryId: sourceEvent.id,
+      lineageNodeId: this.#lineageNodeId,
+      parentEntryId: input.parentEntryId,
+      sourceEventId: sourceEvent.id,
+      sourceEventType: sourceEvent.type,
+      entryKind: input.entryKind,
+      admission: input.admission,
+      presentTo: input.presentTo,
+    });
+    this.#ingestRuntimeEvent(event);
+  }
+
+  #maybeUpgradeRewindToRecoveryLineage(sourceEvent: BrewvaEventRecord): void {
+    const rewind = readSessionRewindCompletedEventPayload(sourceEvent);
+    if (!rewind?.ok || !rewind.divergenceNote) {
+      return;
+    }
+    // Undo remains intra-node. An explicit rewind with a durable fork entry is a
+    // product-visible recovery continuation and gets its own lineage node.
+    if (rewind.trigger !== "rewind") {
+      return;
+    }
+    const forkEntryId = rewind.divergenceNote.parentLeafEntryId ?? rewind.returnLeafEntryId;
+    if (!forkEntryId) {
+      return;
+    }
+    const forkEntry = this.#resolveContextEntry(forkEntryId);
+    if (!forkEntry) {
+      return;
+    }
+    const lineageNodeId = `lineage:recovery:${sourceEvent.id}`;
+    try {
+      this.runtime.authority.session.createLineageNode(this.sessionId, {
+        lineageNodeId,
+        parentLineageNodeId: forkEntry.lineageNodeId,
+        kind: "recovery",
+        forkPoint: {
+          kind: "context_entry",
+          lineageNodeId: forkEntry.lineageNodeId,
+          entryId: forkEntry.entryId,
+        },
+        createdBy: "session-rewind",
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!message.includes(`session_lineage_node_exists:${lineageNodeId}`)) {
+        throw error;
+      }
+    }
+    this.#lineageNodeId = lineageNodeId;
+    this.#leafId = forkEntry.entryId;
+  }
+
+  #hasContextEntryForSourceEvent(sourceEventId: string): boolean {
+    // Phase 2 keeps this idempotency check simple; Phase 3 should ask the
+    // lineage projection cache for sourceEventId membership instead of scanning.
+    return this.runtime.inspect.events.list(this.sessionId).some((event) => {
+      if (event.type !== CONTEXT_ENTRY_RECORDED_EVENT_TYPE) {
+        return false;
+      }
+      return readContextEntryRecordedEventPayload(event)?.sourceEventId === sourceEventId;
+    });
+  }
+
+  #isContextSourceEvent(event: BrewvaEventRecord): boolean {
+    if (
+      event.type === MESSAGE_END_EVENT_TYPE ||
+      event.type === SESSION_BRANCH_SUMMARY_RECORDED_EVENT_TYPE ||
+      event.type === SESSION_COMPACT_EVENT_TYPE
+    ) {
+      return true;
+    }
+    if (event.type !== SESSION_REWIND_COMPLETED_EVENT_TYPE) {
+      return false;
+    }
+    const rewind = readSessionRewindCompletedEventPayload(event);
+    return rewind?.ok === true && rewind.divergenceNote !== undefined;
+  }
+
+  #contextEntryInputForSourceEvent(sourceEvent: BrewvaEventRecord): {
+    entryKind: string;
+    admission: ContextAdmission;
+    presentTo: ContextEntryPresentTo;
+    parentEntryId: string | null;
+  } | null {
+    const payload = isRecord(sourceEvent.payload) ? sourceEvent.payload : {};
+    if (sourceEvent.type === MESSAGE_END_EVENT_TYPE) {
+      const message = readTranscriptMessageFromPayload(payload);
+      if (!message) {
+        return null;
+      }
+      return {
+        entryKind: "message",
+        admission: this.#resolveMessageAdmission(message),
+        presentTo: this.#resolveMessagePresentation(message),
+        parentEntryId: this.#leafId,
+      };
+    }
+    if (sourceEvent.type === SESSION_BRANCH_SUMMARY_RECORDED_EVENT_TYPE) {
+      const branchSummary = readBranchSummaryPayload(payload);
+      if (!branchSummary) {
+        return null;
+      }
+      return {
+        entryKind: "branch_summary",
+        admission: "context_eligible",
+        presentTo: "llm",
+        parentEntryId: branchSummary.targetLeafEntryId,
+      };
+    }
+    if (sourceEvent.type === SESSION_COMPACT_EVENT_TYPE) {
+      const compaction = readCanonicalCompactionPayload(payload);
+      if (!compaction) {
+        return null;
+      }
+      return {
+        entryKind: "compaction",
+        admission: "context_required",
+        presentTo: "llm",
+        parentEntryId: compaction.leafEntryId ?? this.#leafId,
+      };
+    }
+    if (sourceEvent.type === SESSION_REWIND_COMPLETED_EVENT_TYPE) {
+      const rewind = readSessionRewindCompletedEventPayload(sourceEvent);
+      if (!rewind?.ok || !rewind.divergenceNote) {
+        return null;
+      }
+      return {
+        entryKind: "branch_summary",
+        admission: "context_required",
+        presentTo: "llm",
+        parentEntryId: this.#leafId,
+      };
+    }
+    return null;
+  }
+
+  #contextEntryToSessionEntry(event: BrewvaEventRecord): BrewvaSessionEntry | undefined {
+    const contextEntry = readContextEntryRecordedEventPayload(event);
+    if (!contextEntry) {
+      return undefined;
+    }
+    return this.#contextEntryRecordToSessionEntry({
+      ...contextEntry,
+      eventId: event.id,
+      timestamp: event.timestamp,
+    });
+  }
+
+  #contextEntryRecordToSessionEntry(
+    contextEntry: ContextEntryRecord,
+    parentEntryId: string | null = contextEntry.parentEntryId,
+  ): BrewvaSessionEntry | undefined {
+    const sourceEvent =
+      this.#eventsById.get(contextEntry.sourceEventId) ??
+      this.runtime.inspect.events
+        .list(this.sessionId)
+        .find((candidate) => candidate.id === contextEntry.sourceEventId);
+    if (!sourceEvent) {
+      return undefined;
+    }
+    return this.#canonicalEventToEntry(sourceEvent, {
+      entryId: contextEntry.entryId,
+      parentEntryId,
+    });
+  }
+
+  #resolveMessageAdmission(message: StoredSessionMessage): ContextAdmission {
+    if ((message as { excludeFromContext?: unknown }).excludeFromContext === true) {
+      return "state_only";
+    }
+    if (message.role === "custom" && (message as { display?: unknown }).display === false) {
+      return "context_eligible";
+    }
+    return "context_required";
+  }
+
+  #resolveMessagePresentation(message: StoredSessionMessage): ContextEntryPresentTo {
+    if ((message as { excludeFromContext?: unknown }).excludeFromContext === true) {
+      return "ui";
+    }
+    if (message.role === "custom" && (message as { display?: unknown }).display === false) {
+      return "llm";
+    }
+    return "both";
+  }
+
+  #readControlState(): Omit<BrewvaSessionContext, "messages"> {
+    const control: Omit<BrewvaSessionContext, "messages"> = {
+      thinkingLevel: "off",
+      model: null,
+      activeModelPresetName: "Default",
+      activeModelPreset: {
+        name: "Default",
+        subagentModels: {},
+        synthetic: true,
+      },
+    };
+    for (const entry of this.#entries) {
+      if (entry.type === "thinking_level_change") {
+        control.thinkingLevel = entry.thinkingLevel as BrewvaSessionContext["thinkingLevel"];
+        continue;
+      }
+      if (entry.type === "model_change") {
+        control.model = { provider: entry.provider, modelId: entry.modelId };
+        continue;
+      }
+      if (entry.type === "model_preset_select") {
+        control.activeModelPresetName = entry.presetName;
+        control.activeModelPreset = {
+          name: entry.presetName,
+          mainModel: entry.mainModel,
+          subagentModels: entry.subagentModels ? { ...entry.subagentModels } : {},
+          synthetic: entry.synthetic,
+        };
+        continue;
+      }
+      if (
+        entry.type === "message" &&
+        entry.message.role === "assistant" &&
+        typeof (entry.message as { provider?: unknown }).provider === "string" &&
+        typeof (entry.message as { model?: unknown }).model === "string"
+      ) {
+        const message = entry.message as unknown as { provider: string; model: string };
+        control.model = { provider: message.provider, modelId: message.model };
+      }
+    }
+    return control;
+  }
+
+  #nearestContextEntryId(entryId: string): string | null {
+    let current = this.#byId.get(entryId);
+    while (current) {
+      if (
+        current.type === "message" ||
+        current.type === "custom_message" ||
+        current.type === "branch_summary" ||
+        current.type === "compaction"
+      ) {
+        return current.id;
+      }
+      current = current.parentId ? this.#byId.get(current.parentId) : undefined;
+    }
+    return null;
+  }
+
+  #resolveContextEntry(entryId: string): ContextEntryRecord | undefined {
+    return this.runtime.inspect.session
+      .getContextEntryPath(this.sessionId, {
+        entryId,
+        includeStateOnly: true,
+      })
+      .find((entry) => entry.entryId === entryId);
+  }
+
+  #resolveCheckoutLeafEntryId(
+    lineageNodeId: string,
+    leafEntryId: string | null | undefined,
+  ): string | null {
+    const node = this.runtime.inspect.session.getLineageNode(this.sessionId, lineageNodeId);
+    if (!node) {
+      throw new Error(`session_lineage_node_missing:${lineageNodeId}`);
+    }
+
+    if (leafEntryId === null) {
+      return null;
+    }
+    if (leafEntryId !== undefined) {
+      const path = this.runtime.inspect.session.getContextEntryPath(this.sessionId, {
+        entryId: leafEntryId,
+        includeStateOnly: true,
+      });
+      const leafRecord = path.at(-1);
+      if (!leafRecord || leafRecord.entryId !== leafEntryId) {
+        throw new Error(`session_context_entry_missing:${leafEntryId}`);
+      }
+      const isForkPointEntry =
+        node.forkPoint.kind === "context_entry" && node.forkPoint.entryId === leafEntryId;
+      if (!isForkPointEntry && leafRecord.lineageNodeId !== lineageNodeId) {
+        throw new Error(`session_context_entry_lineage_mismatch:${leafEntryId}:${lineageNodeId}`);
+      }
+      return leafEntryId;
+    }
+
+    const nodePath = this.runtime.inspect.session.getContextEntryPath(this.sessionId, {
+      lineageNodeId,
+      includeStateOnly: true,
+    });
+    const nodeLeaf = nodePath.at(-1)?.entryId;
+    if (nodeLeaf) {
+      return nodeLeaf;
+    }
+    if (node.forkPoint.kind === "context_entry") {
+      return node.forkPoint.entryId;
+    }
+    return null;
+  }
+
+  #canonicalEventToEntry(
+    event: BrewvaEventRecord,
+    context?: { entryId: string; parentEntryId: string | null },
+  ): BrewvaSessionEntry | undefined {
     const payload = isRecord(event.payload) ? event.payload : {};
     const timestamp = toEntryTimestamp(event.timestamp);
+    const entryId = context?.entryId ?? event.id;
+    const parentId = context?.parentEntryId ?? null;
 
     if (event.type === MESSAGE_END_EVENT_TYPE) {
       const message = readTranscriptMessageFromPayload(payload);
@@ -613,8 +1064,8 @@ export class HostedRuntimeTapeSessionStore {
       }
       return {
         type: "message",
-        id: event.id,
-        parentId: this.#leafId,
+        id: entryId,
+        parentId,
         timestamp,
         message,
       } satisfies BrewvaSessionMessageEntry;
@@ -629,7 +1080,7 @@ export class HostedRuntimeTapeSessionStore {
       return {
         type: "model_change",
         id: event.id,
-        parentId: this.#leafId,
+        parentId: null,
         timestamp,
         provider,
         modelId,
@@ -644,7 +1095,7 @@ export class HostedRuntimeTapeSessionStore {
       return {
         type: MODEL_PRESET_SELECT_EVENT_TYPE,
         id: event.id,
-        parentId: this.#leafId,
+        parentId: null,
         timestamp,
         presetName,
         previousPresetName: readOptionalString(payload.previousPresetName),
@@ -663,7 +1114,7 @@ export class HostedRuntimeTapeSessionStore {
       return {
         type: "thinking_level_change",
         id: event.id,
-        parentId: this.#leafId,
+        parentId: null,
         timestamp,
         thinkingLevel,
       } satisfies BrewvaThinkingLevelChangeEntry;
@@ -676,8 +1127,8 @@ export class HostedRuntimeTapeSessionStore {
       }
       return {
         type: "branch_summary",
-        id: event.id,
-        parentId: revert.targetLeafEntryId ?? null,
+        id: entryId,
+        parentId: context?.parentEntryId ?? revert.targetLeafEntryId ?? null,
         timestamp,
         fromId: revert.targetLeafEntryId ?? "root",
         summary: revert.continuityPacket.text,
@@ -700,10 +1151,10 @@ export class HostedRuntimeTapeSessionStore {
       const divergenceNote = rewind.divergenceNote;
       return {
         type: "branch_summary",
-        id: event.id,
-        parentId: this.#leafId,
+        id: entryId,
+        parentId,
         timestamp,
-        fromId: this.#leafId ?? "root",
+        fromId: parentId ?? "root",
         summary: divergenceNote.text,
         details: {
           schema: SESSION_REWIND_DIVERGENCE_SCHEMA,
@@ -721,8 +1172,8 @@ export class HostedRuntimeTapeSessionStore {
       }
       return {
         type: "branch_summary",
-        id: event.id,
-        parentId: branchSummary.targetLeafEntryId,
+        id: entryId,
+        parentId: context?.parentEntryId ?? branchSummary.targetLeafEntryId,
         timestamp,
         fromId: branchSummary.fromId ?? branchSummary.targetLeafEntryId ?? "root",
         summary: branchSummary.summary,
@@ -739,15 +1190,15 @@ export class HostedRuntimeTapeSessionStore {
       if (!compaction) {
         return undefined;
       }
-      const branchEntries = this.getBranch(compaction.leafEntryId ?? this.#leafId);
+      const branchEntries = this.#getLlmBranch(compaction.leafEntryId ?? this.#leafId);
       const firstKeptEntryId = selectFirstKeptEntryId(branchEntries);
       if (!firstKeptEntryId) {
         return undefined;
       }
       return {
         type: "compaction",
-        id: event.id,
-        parentId: compaction.leafEntryId ?? this.#leafId,
+        id: entryId,
+        parentId: context?.parentEntryId ?? compaction.leafEntryId ?? this.#leafId,
         timestamp,
         summary: compaction.sanitizedSummary,
         firstKeptEntryId: readOptionalString(payload.firstKeptEntryId) ?? firstKeptEntryId,

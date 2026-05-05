@@ -22,6 +22,11 @@ Patch-producing workers return artifacts for parent-controlled adoption.
 Delegated QA runs return typed outcome data, not worker patches. Consult runs
 stay advisory unless the parent records a new task/truth or adoption event.
 
+Delegated sessions create child lineage nodes. Child outcomes are recorded as
+state-only by default; parent-visible model context requires an explicit
+lineage outcome adoption event. Adoption may admit a summary or artifact
+reference, but it does not import the child branch's raw transcript.
+
 ## Transaction Boundary
 
 Delegation does not create cross-agent saga behavior or automatic

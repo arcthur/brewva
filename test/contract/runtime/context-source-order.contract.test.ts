@@ -223,6 +223,20 @@ function expectedBaseProviders() {
       preservationPolicy: "truncatable",
     },
     {
+      source: CONTEXT_SOURCES.sessionLineage,
+      plane: "working_state",
+      authorityTier: "runtime_read_model",
+      admissionLane: "primary_registry",
+      category: "narrative",
+      budgetClass: "working",
+      collectionOrder: 46,
+      selectionPriority: 46,
+      readsFrom: ["readModel.sessionLineage"],
+      continuityCritical: false,
+      profileSelectable: true,
+      preservationPolicy: "truncatable",
+    },
+    {
       source: CONTEXT_SOURCES.projectionWorking,
       plane: "working_state",
       authorityTier: "working_state",
@@ -248,6 +262,111 @@ describe("context source order integration", () => {
     });
 
     expect(summarizeProviders(runtime)).toEqual(expectedBaseProviders());
+  });
+
+  test("injects admitted lineage summaries and adopted outcomes without sibling transcript", async () => {
+    const runtime = new BrewvaRuntime({
+      cwd: createContextOrderWorkspace("session-lineage-provider"),
+      config: createConfig(),
+      agentId: "default",
+    });
+    const sessionId = "context-source-session-lineage";
+
+    runtime.authority.session.createLineageNode(sessionId, {
+      lineageNodeId: "ln-main",
+      kind: "main",
+      forkPoint: { kind: "session_root" },
+    });
+    const mainSource = runtime.extensions.hosted.events.record({
+      sessionId,
+      type: "message_end",
+      payload: {
+        role: "user",
+        content: "Main prompt.",
+      },
+    });
+    runtime.authority.session.recordContextEntry(sessionId, {
+      entryId: "ctx-main-1",
+      lineageNodeId: "ln-main",
+      parentEntryId: null,
+      sourceEventId: mainSource?.id ?? "missing-main-source",
+      sourceEventType: "message_end",
+      entryKind: "message",
+      admission: "context_required",
+      presentTo: "both",
+    });
+    runtime.authority.session.createLineageNode(sessionId, {
+      lineageNodeId: "ln-review",
+      parentLineageNodeId: "ln-main",
+      kind: "review",
+      forkPoint: {
+        kind: "context_entry",
+        lineageNodeId: "ln-main",
+        entryId: "ctx-main-1",
+      },
+    });
+    runtime.authority.session.recordLineageSummary(sessionId, {
+      summaryId: "summary-review",
+      lineageNodeId: "ln-review",
+      attachToEntryId: "ctx-main-1",
+      summary: "Review found no blocking issue.",
+      admission: "context_eligible",
+    });
+    runtime.authority.session.createLineageNode(sessionId, {
+      lineageNodeId: "ln-experiment",
+      parentLineageNodeId: "ln-main",
+      kind: "experiment",
+      forkPoint: {
+        kind: "context_entry",
+        lineageNodeId: "ln-main",
+        entryId: "ctx-main-1",
+      },
+    });
+    runtime.authority.session.recordLineageSummary(sessionId, {
+      summaryId: "summary-unattached-experiment",
+      lineageNodeId: "ln-experiment",
+      summary: "Unattached experiment summary must not leak.",
+      admission: "context_eligible",
+    });
+    runtime.authority.session.recordLineageOutcome(sessionId, {
+      outcomeId: "outcome-review",
+      lineageNodeId: "ln-review",
+      summary: "Raw sibling transcript must not leak.",
+    });
+    runtime.authority.session.adoptLineageOutcome(sessionId, {
+      adoptionId: "adopt-review",
+      outcomeId: "outcome-review",
+      fromLineageNodeId: "ln-review",
+      toLineageNodeId: "ln-main",
+      admission: "context_required",
+      summary: "Adopt the review recommendation.",
+    });
+
+    const injected = await runtime.maintain.context.buildInjection(
+      sessionId,
+      "verify lineage context provider",
+      { tokens: 180, contextWindow: 16_000, percent: 0.01 },
+      {
+        injectionScopeId: "ctx-main-1",
+        sourceSelection: new Set([CONTEXT_SOURCES.sessionLineage]),
+      },
+    );
+
+    expect(injected.accepted).toBe(true);
+    expect(injected.text).toContain("[SessionLineageAdoptedOutcomes]");
+    expect(injected.text).toContain("[SessionLineageSummaries]");
+    expect(injected.text).toContain("Review found no blocking issue.");
+    expect(injected.text).toContain("Adopt the review recommendation.");
+    expect(injected.text).not.toContain("Raw sibling transcript must not leak.");
+    expect(injected.text).not.toContain("Unattached experiment summary must not leak.");
+    expect(injected.entries.map((entry) => entry.id)).toEqual([
+      "session-lineage:adopted-outcomes",
+      "session-lineage:summaries",
+    ]);
+    expect(injected.entries.map((entry) => entry.source)).toEqual([
+      CONTEXT_SOURCES.sessionLineage,
+      CONTEXT_SOURCES.sessionLineage,
+    ]);
   });
 
   test("injects governance blocks in selection-priority order", async () => {

@@ -13,6 +13,7 @@ export interface RegisterContextInjectionInput {
   content: string;
   estimatedTokens?: number;
   oncePerSession?: boolean;
+  delete?: boolean;
 }
 
 export interface ContextInjectionEntry {

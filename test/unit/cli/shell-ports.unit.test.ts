@@ -15,14 +15,273 @@ import {
   createSessionViewPort,
 } from "../../../packages/brewva-cli/src/shell/adapters/ports.js";
 import type { CliShellSessionBundle } from "../../../packages/brewva-cli/src/shell/types.js";
+import { HostedRuntimeTapeSessionStore } from "../../../packages/brewva-gateway/src/host/runtime-projection-session-store.js";
 import {
   buildOperatorQuestionAnsweredPayload,
   flattenQuestionRequest,
   resolveOpenSessionQuestionRequest,
 } from "../../../packages/brewva-gateway/src/operator-questions.js";
+import type { StoredSessionMessage } from "../../../packages/brewva-gateway/src/session/runtime-session-transcript.js";
 import { recordHostedSkillCompleted } from "../../helpers/events.js";
 
 describe("cli shell session port", () => {
+  test("exposes the current session lineage status", () => {
+    const runtime = new BrewvaRuntime({
+      cwd: mkdtempSync(join(tmpdir(), "brewva-shell-port-lineage-")),
+    });
+    const sessionId = "shell-port-lineage-session";
+    runtime.authority.session.createLineageNode(sessionId, {
+      lineageNodeId: "lineage:main",
+      kind: "main",
+      forkPoint: { kind: "session_root" },
+      title: "Main task",
+    });
+    runtime.authority.session.createLineageNode(sessionId, {
+      lineageNodeId: "lineage:review",
+      parentLineageNodeId: "lineage:main",
+      kind: "review",
+      forkPoint: { kind: "turn", turnId: "turn-review" },
+      title: "Review branch",
+    });
+
+    const session = {
+      model: {
+        provider: "openai",
+        id: "gpt-5.4-mini",
+      },
+      thinkingLevel: "high",
+      isStreaming: false,
+      sessionManager: {
+        getSessionId() {
+          return sessionId;
+        },
+        getLineageNodeId() {
+          return "lineage:review";
+        },
+        buildSessionContext() {
+          return { messages: [] };
+        },
+      },
+      subscribe() {
+        return () => undefined;
+      },
+      async prompt() {},
+      async waitForIdle() {},
+      async abort() {},
+      dispose() {},
+      getQueuedPrompts() {
+        return [];
+      },
+      removeQueuedPrompt() {
+        return false;
+      },
+      getRegisteredTools() {
+        return [];
+      },
+    };
+
+    const port = createSessionViewPort({
+      session,
+      runtime,
+      toolDefinitions: new Map(),
+    } as unknown as CliShellSessionBundle);
+
+    expect(port.getLineageStatus()).toEqual({
+      lineageNodeId: "lineage:review",
+      kind: "review",
+      title: "Review branch",
+      childCount: 0,
+      nodeCount: 2,
+      unsupportedReason: null,
+    });
+  });
+
+  test("checks out lineage through the session port and records channel selection", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-shell-port-lineage-checkout-"));
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionId = "shell-port-lineage-checkout-session";
+    const store = new HostedRuntimeTapeSessionStore(runtime, workspace, sessionId);
+    const mainEntryId = store.appendMessage({
+      role: "user",
+      content: [{ type: "text", text: "main checkpoint" }],
+      timestamp: Date.now(),
+    } as StoredSessionMessage);
+    store.appendMessage({
+      role: "assistant",
+      content: [{ type: "text", text: "main answer" }],
+      api: "openai-responses",
+      provider: "openai",
+      model: "gpt-5.4-mini",
+      usage: {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 0,
+        cost: {
+          input: 0,
+          output: 0,
+          cacheRead: 0,
+          cacheWrite: 0,
+          total: 0,
+        },
+      },
+      stopReason: "stop",
+      timestamp: Date.now() + 1,
+    } as StoredSessionMessage);
+    store.branch(mainEntryId);
+    store.appendMessage({
+      role: "user",
+      content: [{ type: "text", text: "experiment branch" }],
+      timestamp: Date.now() + 2,
+    } as StoredSessionMessage);
+
+    const replacedMessages: unknown[][] = [];
+    const session = {
+      model: {
+        provider: "openai",
+        id: "gpt-5.4-mini",
+      },
+      thinkingLevel: "high",
+      isStreaming: false,
+      sessionManager: store,
+      async replaceMessages(messages: unknown[]) {
+        replacedMessages.push(messages);
+      },
+      subscribe() {
+        return () => undefined;
+      },
+      async prompt() {},
+      async waitForIdle() {},
+      async abort() {},
+      dispose() {},
+      getQueuedPrompts() {
+        return [];
+      },
+      removeQueuedPrompt() {
+        return false;
+      },
+      getRegisteredTools() {
+        return [];
+      },
+    };
+
+    const port = createSessionViewPort({
+      session,
+      runtime,
+      toolDefinitions: new Map(),
+    } as unknown as CliShellSessionBundle);
+
+    expect(port.getLineageTree().nodes.map((node) => node.lineageNodeId)).toContain("lineage:main");
+
+    await port.checkoutLineageNode({
+      lineageNodeId: "lineage:main",
+      leafEntryId: mainEntryId,
+      channelId: "cli",
+    });
+
+    expect(store.getLineageNodeId()).toBe("lineage:main");
+    expect(runtime.inspect.session.getLineageTree(sessionId).selectedByChannel.cli).toBe(
+      "lineage:main",
+    );
+    expect(JSON.stringify(replacedMessages.at(-1))).toContain("main checkpoint");
+    expect(JSON.stringify(replacedMessages.at(-1))).not.toContain("experiment branch");
+  });
+
+  test("records lineage selection only after transcript replacement succeeds", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-shell-port-lineage-checkout-failure-"));
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionId = "shell-port-lineage-checkout-failure-session";
+    const store = new HostedRuntimeTapeSessionStore(runtime, workspace, sessionId);
+    const mainEntryId = store.appendMessage({
+      role: "user",
+      content: [{ type: "text", text: "main checkpoint" }],
+      timestamp: Date.now(),
+    } as StoredSessionMessage);
+    store.appendMessage({
+      role: "assistant",
+      content: [{ type: "text", text: "main answer" }],
+      api: "openai-responses",
+      provider: "openai",
+      model: "gpt-5.4-mini",
+      usage: {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 0,
+        cost: {
+          input: 0,
+          output: 0,
+          cacheRead: 0,
+          cacheWrite: 0,
+          total: 0,
+        },
+      },
+      stopReason: "stop",
+      timestamp: Date.now() + 1,
+    } as StoredSessionMessage);
+    store.branch(mainEntryId);
+    store.appendMessage({
+      role: "user",
+      content: [{ type: "text", text: "experiment branch" }],
+      timestamp: Date.now() + 2,
+    } as StoredSessionMessage);
+    const previousLineageNodeId = store.getLineageNodeId();
+    const previousLeafEntryId = store.getLeafId();
+
+    const session = {
+      model: {
+        provider: "openai",
+        id: "gpt-5.4-mini",
+      },
+      thinkingLevel: "high",
+      isStreaming: false,
+      sessionManager: store,
+      async replaceMessages() {
+        throw new Error("replace failed");
+      },
+      subscribe() {
+        return () => undefined;
+      },
+      async prompt() {},
+      async waitForIdle() {},
+      async abort() {},
+      dispose() {},
+      getQueuedPrompts() {
+        return [];
+      },
+      removeQueuedPrompt() {
+        return false;
+      },
+      getRegisteredTools() {
+        return [];
+      },
+    };
+
+    const port = createSessionViewPort({
+      session,
+      runtime,
+      toolDefinitions: new Map(),
+    } as unknown as CliShellSessionBundle);
+
+    let caughtError: unknown;
+    try {
+      await port.checkoutLineageNode({
+        lineageNodeId: "lineage:main",
+        leafEntryId: mainEntryId,
+        channelId: "cli",
+      });
+    } catch (error) {
+      caughtError = error;
+    }
+
+    expect(caughtError).toEqual(expect.objectContaining({ message: "replace failed" }));
+    expect(runtime.inspect.session.getLineageTree(sessionId).selectedByChannel.cli).toBeUndefined();
+    expect(store.getLineageNodeId()).toBe(previousLineageNodeId);
+    expect(store.getLeafId()).toBe(previousLeafEntryId);
+  });
+
   test("routes non-streaming interactive prompts through the hosted thread loop", async () => {
     const runtime = new BrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-shell-port-")),

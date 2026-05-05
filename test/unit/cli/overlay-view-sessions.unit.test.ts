@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { asBrewvaSessionId } from "@brewva/brewva-runtime";
+import type { SessionLineageTree } from "@brewva/brewva-runtime";
 import {
+  buildLineageOverlayPayload,
+  buildOverlayView,
   buildSessionsOverlayPayload,
   mergeSessionsOverlayRows,
   orderSessionsByStableIds,
@@ -110,6 +113,106 @@ describe("buildSessionsOverlayPayload session ordering", () => {
       asBrewvaSessionId("session-a"),
     ]);
     expect(payload.selectedIndex).toBe(1);
+  });
+});
+
+describe("buildLineageOverlayPayload", () => {
+  test("renders lineage nodes in tree order and preserves selected node by id", () => {
+    const tree = {
+      sessionId: "lineage-overlay-session",
+      rootNodeId: "lineage:main",
+      nodes: [
+        {
+          lineageNodeId: "lineage:main",
+          parentLineageNodeId: null,
+          kind: "main",
+          forkPoint: { kind: "session_root" },
+          title: "Main task",
+          summaries: [],
+          outcomes: [],
+          adoptedOutcomes: [],
+        },
+        {
+          lineageNodeId: "lineage:review",
+          parentLineageNodeId: "lineage:main",
+          kind: "review",
+          forkPoint: { kind: "context_entry", lineageNodeId: "lineage:main", entryId: "entry-1" },
+          title: "Review branch",
+          summaries: [],
+          outcomes: [],
+          adoptedOutcomes: [],
+        },
+        {
+          lineageNodeId: "lineage:experiment",
+          parentLineageNodeId: "lineage:main",
+          kind: "experiment",
+          forkPoint: { kind: "context_entry", lineageNodeId: "lineage:main", entryId: "entry-2" },
+          title: "Experiment",
+          summaries: [],
+          outcomes: [],
+          adoptedOutcomes: [],
+        },
+        {
+          lineageNodeId: "lineage:recovery",
+          parentLineageNodeId: "lineage:experiment",
+          kind: "recovery",
+          forkPoint: {
+            kind: "context_entry",
+            lineageNodeId: "lineage:experiment",
+            entryId: "entry-3",
+          },
+          title: "Recovery",
+          summaries: [],
+          outcomes: [],
+          adoptedOutcomes: [],
+        },
+      ],
+      edges: [
+        { parentLineageNodeId: "lineage:main", childLineageNodeId: "lineage:review" },
+        { parentLineageNodeId: "lineage:main", childLineageNodeId: "lineage:experiment" },
+        {
+          parentLineageNodeId: "lineage:experiment",
+          childLineageNodeId: "lineage:recovery",
+        },
+      ],
+      selectedByChannel: {},
+    } as unknown as SessionLineageTree;
+
+    const payload = buildLineageOverlayPayload({
+      tree,
+      currentLineageNodeId: "lineage:experiment",
+      selection: { lineageNodeId: "lineage:recovery" },
+      leafEntryIdsByLineageNodeId: new Map([
+        ["lineage:main", "entry-2"],
+        ["lineage:review", "entry-review"],
+        ["lineage:experiment", "entry-3"],
+        ["lineage:recovery", "entry-4"],
+      ]),
+    } as Parameters<typeof buildLineageOverlayPayload>[0] & {
+      leafEntryIdsByLineageNodeId: ReadonlyMap<string, string | null>;
+    });
+
+    expect(
+      payload.nodes.map((node) => ({
+        id: node.lineageNodeId,
+        depth: node.depth,
+        current: node.current,
+        leafEntryId: node.leafEntryId,
+      })),
+    ).toEqual([
+      { id: "lineage:main", depth: 0, current: false, leafEntryId: "entry-2" },
+      { id: "lineage:review", depth: 1, current: false, leafEntryId: "entry-review" },
+      { id: "lineage:experiment", depth: 1, current: true, leafEntryId: "entry-3" },
+      { id: "lineage:recovery", depth: 2, current: false, leafEntryId: "entry-4" },
+    ]);
+    expect(payload.selectedIndex).toBe(3);
+    expect(buildOverlayView(payload).lines).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("lineage:recovery"),
+        expect.stringContaining("leaf=entry-4"),
+        expect.stringContaining("Experiment"),
+      ]),
+    );
   });
 });
 

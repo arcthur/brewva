@@ -73,9 +73,9 @@ async function resolveHostedInitialModel(
 }> {
   const existingSession = sessionManager.buildSessionContext();
   const hasExistingSession = existingSession.messages.length > 0;
-  const hasThinkingEntry = sessionManager
-    .getBranch()
-    .some((entry) => entry.type === "thinking_level_change");
+  const hasThinkingEntry =
+    sessionManager.hasSessionEntryType?.("thinking_level_change") ??
+    sessionManager.getBranch().some((entry) => entry.type === "thinking_level_change");
   const existingThinkingLevel =
     hasExistingSession && typeof existingSession.thinkingLevel === "string"
       ? existingSession.thinkingLevel
@@ -285,9 +285,9 @@ async function createHostedLocalSessionResult(input: {
   const settingsPresetState = input.services.settingsManager.getModelPresetState();
   const restoredContext = sessionManager.buildSessionContext();
   const restoredBranch = sessionManager.getBranch();
-  const hasPresetSelectionEntry = restoredBranch.some(
-    (entry) => entry.type === MODEL_PRESET_SELECT_EVENT_TYPE,
-  );
+  const hasPresetSelectionEntry =
+    sessionManager.hasSessionEntryType?.(MODEL_PRESET_SELECT_EVENT_TYPE) ??
+    restoredBranch.some((entry) => entry.type === MODEL_PRESET_SELECT_EVENT_TYPE);
   const modelPresetState = cloneModelPresetState(
     hasPresetSelectionEntry
       ? stateWithReplayActivePreset(settingsPresetState, restoredContext.activeModelPreset)

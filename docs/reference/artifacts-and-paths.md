@@ -95,7 +95,9 @@ helper material, not session-state durability surfaces in the taxonomy above.
   - `.brewva/session-index/snapshots/*.duckdb`
   - rebuildable state only
   - stores session digests, target-root rows, event rows, event token indexes,
-    and per-session candidate tokens for typed recall and insights queries
+    lineage nodes, lineage summaries, lineage outcomes, adopted outcomes,
+    context entries, active-lineage materialization, and per-session candidate
+    tokens for typed recall and insights queries
   - session candidate tokens include aggregated searchable event text, not only
     task and digest text, so long sessions remain discoverable beyond the digest
     summary window
@@ -115,6 +117,8 @@ helper material, not session-state durability surfaces in the taxonomy above.
     evidence rather than acting as source-of-truth memory
   - explicit curation feedback and passive utility observations remain durable
     tape-visible events; the DuckDB file is not source-of-truth memory
+  - abandoned lineage branches remain on tape; index materialization may narrow
+    active-lineage views, but it does not prune or rewrite event authority
 - Heartbeat policy remains separate control-plane material:
   - gateway heartbeat policy default path:
     `<global brewva root>/agent/gateway/HEARTBEAT.md`

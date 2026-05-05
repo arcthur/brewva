@@ -111,6 +111,7 @@ export type ShellEffect =
   | { type: "overlay.openHelpHub" }
   | { type: "overlay.openInbox" }
   | { type: "overlay.openSessions" }
+  | { type: "overlay.openLineage" }
   | { type: "overlay.openQueue" }
   | { type: "overlay.openInspect" }
   | { type: "overlay.openNotifications" }

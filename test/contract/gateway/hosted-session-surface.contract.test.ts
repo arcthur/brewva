@@ -208,7 +208,7 @@ describe("gateway contract: hosted session surface", () => {
     expect(localBackendSource).not.toContain("AuthStorage.create(");
     expect(localBackendSource).not.toContain("ModelRegistry.create(");
     expect(runtimeProjectionStoreSource).not.toContain("hosted_session_projection_");
-    expect(runtimeProjectionStoreSource).toContain("migrateLegacyHostedProjectionEvents");
+    expect(runtimeProjectionStoreSource).not.toContain("migrateLegacyHostedProjectionEvents");
 
     expect(managedSessionSource).toContain("createHostedAgentEngine");
     expect(managedSessionSource).toContain("previewCompaction");

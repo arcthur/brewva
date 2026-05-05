@@ -375,6 +375,9 @@ export function BrewvaOpenTuiShell(input: {
   const thinkingLevel = createMemo(
     () => state.status.entries.thinking ?? input.runtime.getSessionIdentity().thinkingLevel,
   );
+  const lineageLabel = createMemo(
+    () => state.status.entries.lineage ?? input.runtime.getSessionIdentity().lineageLabel ?? "",
+  );
   const inlineApproval = createMemo(() =>
     activeOverlay()?.payload?.kind === "approval"
       ? (activeOverlay()!.payload as CliApprovalOverlayPayload)
@@ -479,6 +482,7 @@ export function BrewvaOpenTuiShell(input: {
             width={dimensions().width}
             modelLabel={modelLabel()}
             thinkingLevel={thinkingLevel()}
+            lineageLabel={lineageLabel()}
             setAnchor={(node) => setPromptAnchor(node)}
             setTextarea={(node) => setTextarea(node)}
           />

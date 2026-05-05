@@ -75,6 +75,7 @@ export function PromptPanel(input: {
   width: number;
   modelLabel: string;
   thinkingLevel: string;
+  lineageLabel: string;
   setAnchor(node: BoxRenderable): void;
   setTextarea(node: OpenTuiTextareaHandle): void;
 }) {
@@ -297,6 +298,11 @@ export function PromptPanel(input: {
               <text fg={input.theme.textMuted} wrapMode="none">
                 think {input.thinkingLevel}
               </text>
+              <Show when={input.lineageLabel}>
+                <text fg={input.theme.textMuted} wrapMode="none">
+                  branch {input.lineageLabel}
+                </text>
+              </Show>
             </box>
             <Show when={selectedCompletionLabel()}>
               <text fg={input.theme.accentSoft} wrapMode="none">

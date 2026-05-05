@@ -67,13 +67,16 @@ wins.
   rewind checkpoints.
 - Durable evidence: evidence ledger rows, verification reports, and audit
   events.
-- Rebuildable state: working projection, session-wire frames, schedule
-  projections, and derived workflow artifacts.
+- Rebuildable state: working projection, session-wire frames, session lineage,
+  context-entry paths, schedule projections, and derived workflow artifacts.
 - Cache/local state: provider token cache, live UI state, process-local loop
   diagnostics, and performance-only helpers.
 
 Behavior-changing state should be replay-derived. Visibility-changing state
 should be projection-visible. Performance-only state may remain local.
+
+Session lineage and context-entry projections explain work-branch topology and
+model context admission, but they do not replace tape authority.
 
 ## Runtime Surface
 

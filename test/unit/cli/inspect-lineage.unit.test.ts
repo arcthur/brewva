@@ -1,0 +1,39 @@
+import { describe, expect, test } from "bun:test";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { BrewvaRuntime, createOperatorRuntimePort } from "@brewva/brewva-runtime";
+import { buildInspectReport, formatInspectText } from "../../../packages/brewva-cli/src/inspect.js";
+
+describe("cli inspect lineage reporting", () => {
+  test("prints lineage topology and selected channels", () => {
+    const runtime = new BrewvaRuntime({
+      cwd: mkdtempSync(join(tmpdir(), "brewva-cli-inspect-lineage-")),
+    });
+    const sessionId = "inspect-lineage-session";
+    runtime.authority.session.createLineageNode(sessionId, {
+      lineageNodeId: "lineage:main",
+      kind: "main",
+      forkPoint: { kind: "session_root" },
+      title: "Main task",
+    });
+    runtime.authority.session.createLineageNode(sessionId, {
+      lineageNodeId: "lineage:review",
+      parentLineageNodeId: "lineage:main",
+      kind: "review",
+      forkPoint: { kind: "turn", turnId: "turn-review" },
+      title: "Review branch",
+    });
+    runtime.authority.session.recordLineageSelection(sessionId, {
+      selectionId: "selection-cli",
+      channelId: "cli",
+      lineageNodeId: "lineage:review",
+    });
+
+    const report = buildInspectReport(createOperatorRuntimePort(runtime), sessionId);
+    const text = formatInspectText(report);
+
+    expect(text).toContain("Lineage: root=lineage:main current=lineage:review nodes=2 edges=1");
+    expect(text).toContain("Lineage: selected=cli:lineage:review");
+  });
+});

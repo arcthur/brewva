@@ -17,6 +17,7 @@ import type {
   SessionRewindResult,
   SessionRewindState,
   SessionRewindTargetView,
+  SessionLineageTree,
 } from "@brewva/brewva-runtime";
 import type { DelegationRunRecord } from "@brewva/brewva-runtime";
 import type { BrewvaReplaySession } from "@brewva/brewva-runtime/events";
@@ -117,6 +118,15 @@ export interface CliShellPromptStorePort {
 export interface SessionViewPort {
   session: BrewvaManagedPromptSession;
   getSessionId(): string;
+  getLineageStatus(): SessionLineageStatusView;
+  getLineageTree(): SessionLineageTree;
+  resolveLineageLeafEntryId(lineageNodeId: string): string | null;
+  checkoutLineageNode(input: {
+    lineageNodeId: string;
+    leafEntryId?: string | null;
+    channelId?: string;
+    reason?: string;
+  }): Promise<SessionLineageStatusView>;
   getModelLabel(): string;
   getThinkingLevel(): string;
   listModels(options?: {
@@ -148,6 +158,15 @@ export interface SessionViewPort {
   redoSession(input?: SessionRedoInput): Promise<SessionRedoResult>;
   getRewindState(): SessionRewindState;
   listRewindTargets(): SessionRewindTargetView[];
+}
+
+export interface SessionLineageStatusView {
+  lineageNodeId: string | null;
+  kind: string | null;
+  title: string | null;
+  childCount: number;
+  nodeCount: number;
+  unsupportedReason: string | null;
 }
 
 export interface OperatorSurfaceSnapshot {
@@ -218,6 +237,30 @@ export interface CliSessionsOverlayPayload {
       preview: string;
     }
   >;
+}
+
+export interface CliLineageOverlayNode {
+  lineageNodeId: string;
+  parentLineageNodeId: string | null;
+  leafEntryId: string | null;
+  kind: string;
+  title: string | null;
+  depth: number;
+  current: boolean;
+  childCount: number;
+  summaryCount: number;
+  outcomeCount: number;
+  adoptedOutcomeCount: number;
+  forkPoint: string;
+}
+
+export interface CliLineageOverlayPayload {
+  kind: "lineage";
+  selectedIndex: number;
+  sessionId: string;
+  rootNodeId: string;
+  currentLineageNodeId: string | null;
+  nodes: CliLineageOverlayNode[];
 }
 
 export interface CliOverlayNotification {
@@ -398,6 +441,7 @@ export type CliShellOverlayPayload =
   | CliTasksOverlayPayload
   | CliQueueOverlayPayload
   | CliSessionsOverlayPayload
+  | CliLineageOverlayPayload
   | CliInboxOverlayPayload
   | CliNotificationsOverlayPayload
   | CliPagerOverlayPayload

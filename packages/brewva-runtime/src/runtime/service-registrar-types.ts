@@ -20,6 +20,7 @@ import type { ScheduleIntentService } from "../domain/schedule/api.js";
 import type { EventPipelineService } from "../domain/sessions/api.js";
 import type { SessionLifecycleSnapshot } from "../domain/sessions/api.js";
 import type { SessionLifecycleService } from "../domain/sessions/api.js";
+import type { SessionLineageService } from "../domain/sessions/api.js";
 import type { SessionRewindService } from "../domain/sessions/api.js";
 import type { RuntimeSessionStateStore } from "../domain/sessions/api.js";
 import type { SessionWireService } from "../domain/sessions/api.js";
@@ -52,6 +53,7 @@ export interface RuntimeServiceDependencies {
   eventPipeline: EventPipelineService;
   toolLifecycleRecoveryWalService: ToolLifecycleRecoveryWalService;
   sessionLifecycleService: SessionLifecycleService;
+  sessionLineageService: SessionLineageService;
   reversibleMutationService: ReversibleMutationService;
   getTapeService(): TapeService;
   getEffectCommitmentDeskService(): EffectCommitmentDeskService;
@@ -132,5 +134,6 @@ export interface RuntimeSessionServices {
   eventPipeline: EventPipelineService;
   toolLifecycleRecoveryWalService: ToolLifecycleRecoveryWalService;
   sessionLifecycleService: SessionLifecycleService;
+  sessionLineageService: SessionLineageService;
   getTapeService(): TapeService;
 }

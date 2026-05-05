@@ -2,6 +2,17 @@ import { IDENTITY_PARSE_WARNING_EVENT_TYPE } from "../../events/registry.js";
 import { buildTaskStateBlock } from "../../runtime/runtime-helpers.js";
 import type { RuntimeKernelContext } from "../../runtime/runtime-kernel.js";
 import { buildRecoveryWorkingSetBlock } from "../recovery/api.js";
+import {
+  deriveSessionLineageState,
+  findSessionLineageRoot,
+  isLlmVisibleContextEntry,
+} from "../sessions/api.js";
+import type {
+  ContextEntryRecord,
+  SessionLineageOutcomeAdoptionRecord,
+  SessionLineageState,
+  SessionLineageSummaryRecord,
+} from "../sessions/api.js";
 import type { SkillRegistry } from "../skills/api.js";
 import type { SkillLifecycleService } from "../skills/api.js";
 import {
@@ -21,6 +32,7 @@ import {
 import {
   defineContextSourceProvider,
   type ContextSourceProvider,
+  type ContextSourceProviderInput,
   type ContextSourceProviderRegistry,
 } from "./provider.js";
 import { HISTORY_VIEW_BASELINE_RESERVED_BUDGET_RATIO } from "./reserved-budget.js";
@@ -57,6 +69,7 @@ export function createBuiltInContextSourceProviders(
     createRuntimeStatusProvider(deps),
     createTaskStateProvider(deps),
     createRecoveryWorkingSetProvider(deps),
+    createSessionLineageProvider(deps),
   ];
 
   if (deps.kernel.config.infrastructure.toolOutputDistillationInjection.enabled) {
@@ -330,6 +343,202 @@ function createRecoveryWorkingSetProvider(
         id: "recovery-working-set",
         content: block,
       });
+    },
+  });
+}
+
+interface ActiveLineageContext {
+  entryIds: Set<string>;
+  lineageNodeIds: Set<string>;
+}
+
+const SESSION_LINEAGE_BLOCK_KINDS = ["adopted-outcomes", "summaries"] as const;
+
+function resolveActiveLineageContext(
+  state: SessionLineageState,
+  injectionScopeId: string | undefined,
+): ActiveLineageContext | null {
+  if (!injectionScopeId) return null;
+
+  const target = state.contextEntries.get(injectionScopeId);
+  if (!target) return null;
+
+  const path = collectContextEntryPath(state, target);
+  if (!path) return null;
+
+  const entryIds = new Set<string>();
+  const lineageNodeIds = new Set<string>();
+  for (const entry of path) {
+    addLineageNodeAndAncestors(state, lineageNodeIds, entry.lineageNodeId);
+    if (isLlmVisibleContextEntry(entry)) {
+      entryIds.add(entry.entryId);
+    }
+  }
+
+  return {
+    entryIds,
+    lineageNodeIds,
+  };
+}
+
+function collectContextEntryPath(
+  state: SessionLineageState,
+  target: ContextEntryRecord,
+): ContextEntryRecord[] | null {
+  const path: ContextEntryRecord[] = [];
+  const seen = new Set<string>();
+  let current: ContextEntryRecord | undefined = target;
+  while (current) {
+    if (seen.has(current.entryId)) return null;
+    seen.add(current.entryId);
+    path.push(current);
+    if (!current.parentEntryId) break;
+    current = state.contextEntries.get(current.parentEntryId);
+    if (!current) return null;
+  }
+  return path.toReversed();
+}
+
+function addLineageNodeAndAncestors(
+  state: SessionLineageState,
+  output: Set<string>,
+  lineageNodeId: string,
+): void {
+  let current = state.nodes.get(lineageNodeId);
+  const seen = new Set<string>();
+  while (current) {
+    if (seen.has(current.lineageNodeId)) return;
+    seen.add(current.lineageNodeId);
+    output.add(current.lineageNodeId);
+    current = current.parentLineageNodeId
+      ? state.nodes.get(current.parentLineageNodeId)
+      : undefined;
+  }
+}
+
+function collectAdoptedOutcomeLines(
+  state: SessionLineageState,
+  active: ActiveLineageContext,
+  deps: BuiltInContextSourceProviderDeps,
+): string[] {
+  return [...active.lineageNodeIds]
+    .flatMap((lineageNodeId) => state.adoptedOutcomesByNode.get(lineageNodeId) ?? [])
+    .filter((adoption) => isActiveAdoption(adoption, active))
+    .toSorted(compareLineageRecords)
+    .map((adoption) => {
+      const summary = deps.kernel.sanitizeInput(adoption.summary ?? "").trim();
+      if (!summary) return null;
+      return `- adopted ${adoption.outcomeId} from ${adoption.fromLineageNodeId}: ${summary}`;
+    })
+    .filter((line): line is string => line !== null);
+}
+
+function isActiveAdoption(
+  adoption: SessionLineageOutcomeAdoptionRecord,
+  active: ActiveLineageContext,
+): boolean {
+  if (adoption.admission === "state_only") return false;
+  if (adoption.adoptedEntryId && !active.entryIds.has(adoption.adoptedEntryId)) return false;
+  return active.lineageNodeIds.has(adoption.toLineageNodeId);
+}
+
+function collectLineageSummaryLines(
+  state: SessionLineageState,
+  active: ActiveLineageContext,
+  deps: BuiltInContextSourceProviderDeps,
+): string[] {
+  return [...state.summariesByNode.values()]
+    .flat()
+    .filter((summary) => isActiveSummary(summary, active))
+    .toSorted(compareLineageRecords)
+    .map((summary) => {
+      const text = deps.kernel.sanitizeInput(summary.summary).trim();
+      if (!text) return null;
+      return `- summary ${summary.summaryId} on ${summary.lineageNodeId}: ${text}`;
+    })
+    .filter((line): line is string => line !== null);
+}
+
+function isActiveSummary(
+  summary: SessionLineageSummaryRecord,
+  active: ActiveLineageContext,
+): boolean {
+  if (summary.admission === "state_only") return false;
+  if (active.lineageNodeIds.has(summary.lineageNodeId)) return true;
+  return summary.attachToEntryId !== null && active.entryIds.has(summary.attachToEntryId);
+}
+
+function compareLineageRecords(
+  left: { timestamp: number; eventId: string },
+  right: { timestamp: number; eventId: string },
+): number {
+  if (left.timestamp !== right.timestamp) {
+    return left.timestamp - right.timestamp;
+  }
+  return left.eventId.localeCompare(right.eventId);
+}
+
+function registerSessionLineageBlock(
+  input: ContextSourceProviderInput,
+  kind: (typeof SESSION_LINEAGE_BLOCK_KINDS)[number],
+  title: string,
+  lines: readonly string[],
+): void {
+  const id = `session-lineage:${kind}`;
+  if (lines.length === 0) {
+    input.register({
+      id,
+      content: "",
+      delete: true,
+    });
+    return;
+  }
+  input.register({
+    id,
+    content: [`[${title}]`, ...lines].join("\n"),
+  });
+}
+
+function deleteSessionLineageBlocks(input: ContextSourceProviderInput): void {
+  for (const kind of SESSION_LINEAGE_BLOCK_KINDS) {
+    input.register({
+      id: `session-lineage:${kind}`,
+      content: "",
+      delete: true,
+    });
+  }
+}
+
+function createSessionLineageProvider(
+  deps: BuiltInContextSourceProviderDeps,
+): ContextSourceProvider {
+  return defineContextSourceProvider({
+    kind: "runtime_read_model",
+    source: CONTEXT_SOURCES.sessionLineage,
+    category: "narrative",
+    budgetClass: "working",
+    collectionOrder: 46,
+    selectionPriority: 46,
+    readsFrom: ["readModel.sessionLineage"],
+    collect: (input) => {
+      const state = deriveSessionLineageState(deps.kernel.eventStore.list(input.sessionId));
+      if (!findSessionLineageRoot(state)) return;
+
+      const active = resolveActiveLineageContext(state, input.injectionScopeId);
+      if (!active) {
+        deleteSessionLineageBlocks(input);
+        return;
+      }
+
+      const adoptedLines = collectAdoptedOutcomeLines(state, active, deps);
+      const summaryLines = collectLineageSummaryLines(state, active, deps);
+      registerSessionLineageBlock(
+        input,
+        "adopted-outcomes",
+        "SessionLineageAdoptedOutcomes",
+        adoptedLines,
+      );
+      registerSessionLineageBlock(input, "summaries", "SessionLineageSummaries", summaryLines);
     },
   });
 }

@@ -45,9 +45,31 @@ Session wire frames are derived live protocol frames. They are useful for
 frontend and hosted inspection, but the authoritative recovery record stays in
 event tape, WAL state, and runtime inspect surfaces.
 
+## Session Lineage And Context Admission
+
+Session lineage events record work-branch topology under the session domain.
+They cover lineage node creation, branch summaries, child outcomes, explicit
+outcome adoption, and channel-local selection.
+
+Context-entry events are linker records. They attach source events to a local
+context-entry tree with `lineageNodeId`, `parentEntryId`, `admission`, and
+`presentTo`; source message, compaction, summary, and tool-result events keep
+their own event shapes.
+
+Capability state events persist capability-owned state for reload and
+inspection. They are state-only, fail-closed against declared capability
+owners, and must use artifact references when inline data would exceed the
+runtime payload bound.
+
+Selection events are advisory channel state. They are replayed for inspection
+and operator continuity, but authoritative writes remain self-describing with
+their own lineage and context-entry identifiers.
+
 ## Implementation Anchors
 
 - `packages/brewva-runtime/src/domain/sessions/session-lifecycle.ts`
 - `packages/brewva-runtime/src/domain/sessions/session-rewind.ts`
+- `packages/brewva-runtime/src/domain/sessions/lineage.ts`
+- `packages/brewva-runtime/src/domain/sessions/lineage-event-descriptors.ts`
 - `packages/brewva-runtime/src/domain/recovery/wal-store.ts`
 - `packages/brewva-runtime/src/domain/sessions/session-wire.ts`

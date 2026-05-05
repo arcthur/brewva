@@ -9,6 +9,7 @@ import type { CredentialVaultService } from "../credentials/api.js";
 import type { ParallelService } from "../parallel/api.js";
 import type { TaskWatchdogService } from "../task/api.js";
 import type { IntegrityStatus } from "./integrity.js";
+import type { SessionLineageService } from "./lineage.js";
 import type { SessionLifecycleService } from "./session-lifecycle.js";
 import type { SessionRewindService } from "./session-rewind.js";
 import type { SessionWireService } from "./session-wire.js";
@@ -21,6 +22,7 @@ export interface SessionSurfaceDependencies {
   getTaskWatchdogService(): TaskWatchdogService;
   getParallelService(): ParallelService;
   getSessionRewindService(): SessionRewindService;
+  getSessionLineageService(): SessionLineageService;
   getCredentialVaultService(): CredentialVaultService;
 }
 
@@ -87,6 +89,44 @@ export function createSessionSurfaceMethods(deps: SessionSurfaceDependencies) {
       sessionId: string,
       input: Parameters<ContextService["markContextCompacted"]>[1],
     ): BrewvaEventRecord => deps.getContextService().markContextCompacted(sessionId, input),
+    createLineageNode: (
+      sessionId: string,
+      input: Parameters<SessionLineageService["createLineageNode"]>[1],
+    ) => deps.getSessionLineageService().createLineageNode(sessionId, input),
+    recordLineageSummary: (
+      sessionId: string,
+      input: Parameters<SessionLineageService["recordLineageSummary"]>[1],
+    ) => deps.getSessionLineageService().recordLineageSummary(sessionId, input),
+    recordLineageOutcome: (
+      sessionId: string,
+      input: Parameters<SessionLineageService["recordLineageOutcome"]>[1],
+    ) => deps.getSessionLineageService().recordLineageOutcome(sessionId, input),
+    recordLineageSelection: (
+      sessionId: string,
+      input: Parameters<SessionLineageService["recordLineageSelection"]>[1],
+    ) => deps.getSessionLineageService().recordLineageSelection(sessionId, input),
+    adoptLineageOutcome: (
+      sessionId: string,
+      input: Parameters<SessionLineageService["adoptLineageOutcome"]>[1],
+    ) => deps.getSessionLineageService().adoptLineageOutcome(sessionId, input),
+    recordContextEntry: (
+      sessionId: string,
+      input: Parameters<SessionLineageService["recordContextEntry"]>[1],
+    ) => deps.getSessionLineageService().recordContextEntry(sessionId, input),
+    recordCapabilityState: (
+      sessionId: string,
+      input: Parameters<SessionLineageService["recordCapabilityState"]>[1],
+    ) => deps.getSessionLineageService().recordCapabilityState(sessionId, input),
+    getLineageTree: (sessionId: string) =>
+      deps.getSessionLineageService().getLineageTree(sessionId),
+    getLineageNode: (sessionId: string, lineageNodeId: string) =>
+      deps.getSessionLineageService().getLineageNode(sessionId, lineageNodeId),
+    listLineageChildren: (sessionId: string, lineageNodeId: string) =>
+      deps.getSessionLineageService().listLineageChildren(sessionId, lineageNodeId),
+    getContextEntryPath: (
+      sessionId: string,
+      input?: Parameters<SessionLineageService["getContextEntryPath"]>[1],
+    ) => deps.getSessionLineageService().getContextEntryPath(sessionId, input),
     resolveCredentialBindings: (sessionId: string, toolName: string) => {
       deps.getSessionLifecycleService().ensureHydrated(sessionId);
       return deps
@@ -114,6 +154,13 @@ export const sessionSurfaceContribution = {
     "redo",
     "commitCompaction",
     "applyMergedWorkerResults",
+    "createLineageNode",
+    "recordLineageSummary",
+    "recordLineageOutcome",
+    "recordLineageSelection",
+    "adoptLineageOutcome",
+    "recordContextEntry",
+    "recordCapabilityState",
   ],
   inspect: [
     "listWorkerResults",
@@ -124,6 +171,10 @@ export const sessionSurfaceContribution = {
     "getIntegrity",
     "getRewindState",
     "listRewindTargets",
+    "getLineageTree",
+    "getLineageNode",
+    "listLineageChildren",
+    "getContextEntryPath",
   ],
   maintain: [
     "recordWorkerResult",

@@ -123,6 +123,11 @@ export function cloneOverlayPayload(payload: CliShellOverlayPayload): CliShellOv
         sessions: [...payload.sessions],
         draftStateBySessionId: { ...payload.draftStateBySessionId },
       };
+    case "lineage":
+      return {
+        ...payload,
+        nodes: [...payload.nodes],
+      };
     case "confirm":
       return {
         ...payload,

@@ -39,6 +39,10 @@ recovery, and bounded execution.
     decision owns allow/block/defer meaning for a tool call.
 11. Turn lifecycle monotonicity:
     hosted turn gates move forward only and never rewrite prior event tape.
+12. Session lineage and context admission:
+    branch topology, context-entry paths, and capability state are replay-derived;
+    state-only records do not become model context without explicit admitted
+    context entries, lineage summaries, or outcome adoption.
 
 ## Failure Semantics
 
@@ -62,6 +66,7 @@ recovery, and bounded execution.
 | Evidence ledger | durable evidence                    | row issues degrade audit, not tape replay |
 | Projection      | rebuildable state                   | rebuild from tape/workspace               |
 | Session wire    | derived live/read model             | rebuild or degrade UI details             |
+| Session lineage | rebuildable state                   | rebuild from tape                         |
 | Provider cache  | performance cache                   | disable or miss without changing truth    |
 
 ## Implementation Anchors

@@ -1,4 +1,5 @@
 import { asBrewvaSessionId } from "@brewva/brewva-runtime";
+import type { ForkPoint, SessionLineageTree } from "@brewva/brewva-runtime";
 import type { BrewvaReplaySession } from "@brewva/brewva-runtime/events";
 import type { BrewvaQueuedPromptView } from "@brewva/brewva-substrate";
 import { truncateToWidth, visibleWidth } from "@brewva/brewva-tui";
@@ -17,6 +18,7 @@ import type {
   CliQueueOverlayPayload,
   CliInboxOverlayPayload,
   CliInboxOverlayItem,
+  CliLineageOverlayPayload,
   CliOverlayNotification,
   CliOverlaySection,
   CliSessionsOverlayPayload,
@@ -67,6 +69,8 @@ export function resolveOverlayFocusOwner(
       return "taskBrowser";
     case "sessions":
       return "sessionSwitcher";
+    case "lineage":
+      return "dialog";
     case "notifications":
       return "notificationCenter";
     case "queue":
@@ -157,6 +161,19 @@ export function buildInspectSections(report: SessionInspectReport): CliOverlaySe
             ]
           : []),
       ],
+    },
+    {
+      id: "lineage",
+      title: "Lineage",
+      lines: base.lineage.supported
+        ? [
+            `Root: ${base.lineage.rootNodeId ?? "n/a"}`,
+            `Current: ${base.lineage.currentNodeId ?? "n/a"} kind=${base.lineage.currentKind ?? "n/a"}`,
+            `Topology: nodes=${base.lineage.nodeCount} edges=${base.lineage.edgeCount}`,
+            `Context records: summaries=${base.lineage.summaryCount} outcomes=${base.lineage.outcomeCount} adopted=${base.lineage.adoptedOutcomeCount}`,
+            `Selected channels: ${renderLineageSelectionValue(base.lineage.selectedByChannel)}`,
+          ]
+        : [`Unsupported: ${base.lineage.unsupportedReason ?? "n/a"}`],
     },
     {
       id: "task",
@@ -374,6 +391,27 @@ export function buildOverlayView(payload: CliShellOverlayPayload): {
       }
       return { title: "Sessions", lines };
     }
+    case "lineage": {
+      const lines = [
+        `Lineage: ${payload.nodes.length}`,
+        `Current: ${payload.currentLineageNodeId ?? "none"} root=${payload.rootNodeId}`,
+        "Use Up/Down to choose, Enter to checkout, Esc to close.",
+      ];
+      for (const [index, item] of payload.nodes.entries()) {
+        const marker = index === payload.selectedIndex ? ">" : " ";
+        const current = item.current ? " current" : "";
+        const title = item.title ?? item.kind;
+        const indent = "  ".repeat(item.depth);
+        const leaf = item.leafEntryId ?? "root";
+        lines.push(
+          `${marker} ${indent}${title} [${item.lineageNodeId}] kind=${item.kind} leaf=${leaf}${current}`,
+        );
+      }
+      if (payload.nodes.length === 0) {
+        lines.push("No lineage nodes found.");
+      }
+      return { title: "Lineage", lines };
+    }
     case "queue": {
       const lines = [
         `Queued prompts: ${payload.items.length}`,
@@ -538,6 +576,90 @@ export function buildQueuePromptDetailLines(item: BrewvaQueuedPromptView): strin
     "",
     ...item.text.split(/\r?\n/u),
   ];
+}
+
+export function buildLineageOverlayPayload(input: {
+  tree: SessionLineageTree;
+  currentLineageNodeId: string | null;
+  leafEntryIdsByLineageNodeId?: ReadonlyMap<string, string | null>;
+  selection?: {
+    lineageNodeId?: string;
+    index?: number;
+  };
+}): CliLineageOverlayPayload {
+  const nodesById = new Map(input.tree.nodes.map((node) => [node.lineageNodeId, node] as const));
+  const childrenByParent = new Map<string, string[]>();
+  for (const edge of input.tree.edges) {
+    const children = childrenByParent.get(edge.parentLineageNodeId);
+    if (children) {
+      children.push(edge.childLineageNodeId);
+    } else {
+      childrenByParent.set(edge.parentLineageNodeId, [edge.childLineageNodeId]);
+    }
+  }
+
+  const ordered: Array<{ lineageNodeId: string; depth: number }> = [];
+  const visited = new Set<string>();
+  const visit = (lineageNodeId: string, depth: number): void => {
+    if (visited.has(lineageNodeId) || !nodesById.has(lineageNodeId)) {
+      return;
+    }
+    visited.add(lineageNodeId);
+    ordered.push({ lineageNodeId, depth });
+    for (const childId of childrenByParent.get(lineageNodeId) ?? []) {
+      visit(childId, depth + 1);
+    }
+  };
+  visit(input.tree.rootNodeId, 0);
+  for (const node of input.tree.nodes) {
+    visit(node.lineageNodeId, 0);
+  }
+
+  const nodes = ordered.flatMap(({ lineageNodeId, depth }) => {
+    const node = nodesById.get(lineageNodeId);
+    if (!node) {
+      return [];
+    }
+    return [
+      {
+        lineageNodeId: node.lineageNodeId,
+        parentLineageNodeId: node.parentLineageNodeId,
+        leafEntryId: input.leafEntryIdsByLineageNodeId?.get(node.lineageNodeId) ?? null,
+        kind: node.kind,
+        title: node.title ?? null,
+        depth,
+        current: node.lineageNodeId === input.currentLineageNodeId,
+        childCount: childrenByParent.get(node.lineageNodeId)?.length ?? 0,
+        summaryCount: node.summaries.length,
+        outcomeCount: node.outcomes.length,
+        adoptedOutcomeCount: node.adoptedOutcomes.length,
+        forkPoint: formatForkPoint(node.forkPoint),
+      },
+    ];
+  });
+
+  const selectedById =
+    typeof input.selection?.lineageNodeId === "string"
+      ? nodes.findIndex((node) => node.lineageNodeId === input.selection?.lineageNodeId)
+      : -1;
+  const currentIndex =
+    input.currentLineageNodeId === null
+      ? -1
+      : nodes.findIndex((node) => node.lineageNodeId === input.currentLineageNodeId);
+
+  return {
+    kind: "lineage",
+    sessionId: input.tree.sessionId,
+    rootNodeId: input.tree.rootNodeId,
+    currentLineageNodeId: input.currentLineageNodeId,
+    nodes,
+    selectedIndex:
+      selectedById >= 0
+        ? selectedById
+        : currentIndex >= 0
+          ? currentIndex
+          : Math.max(0, Math.min(input.selection?.index ?? 0, Math.max(0, nodes.length - 1))),
+  };
 }
 
 export function renderQueuePromptSummary(text: string, maxWidth = 72): string {
@@ -752,6 +874,39 @@ export function summarizeDraftPreview(text: string): {
 
 function renderListValue(values: readonly string[]): string {
   return values.length > 0 ? values.join(", ") : "none";
+}
+
+function renderLineageSelectionValue(selectedByChannel: Record<string, string>): string {
+  const entries = Object.entries(selectedByChannel).toSorted(([left], [right]) =>
+    left.localeCompare(right),
+  );
+  return entries.length > 0
+    ? entries.map(([channelId, lineageNodeId]) => `${channelId}:${lineageNodeId}`).join(", ")
+    : "none";
+}
+
+function formatForkPoint(forkPoint: ForkPoint): string {
+  switch (forkPoint.kind) {
+    case "session_root":
+      return forkPoint.parentSessionId
+        ? `session_root:${forkPoint.parentSessionId}`
+        : "session_root";
+    case "reasoning_checkpoint":
+      return `reasoning_checkpoint:${forkPoint.reasoningCheckpointId}`;
+    case "turn":
+      return `turn:${forkPoint.turnId}`;
+    case "context_entry":
+      return `context_entry:${forkPoint.lineageNodeId}:${forkPoint.entryId}`;
+    case "tool_call":
+      return `tool_call:${forkPoint.toolCallId}`;
+    case "patch_set":
+      return `patch_set:${forkPoint.patchSetId}`;
+    case "worker_run":
+      return `worker_run:${forkPoint.workerRunId}`;
+    default:
+      forkPoint satisfies never;
+      return "unknown";
+  }
 }
 
 function renderNullableBoolean(value: boolean | null): string {

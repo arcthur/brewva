@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import {
   buildOperatorQuestionAnswerPrompt,
   buildOperatorQuestionRequestAnswerPrompt,
@@ -21,9 +22,84 @@ import type {
   CliShellSessionBundle,
   OperatorSurfacePort,
   SessionViewPort,
+  SessionLineageStatusView,
   ShellConfigPort,
 } from "../types.js";
 export { createCliShellPromptStore } from "../prompt-store.js";
+
+function readSessionManagerLineageNodeId(sessionManager: unknown): string | null {
+  const getLineageNodeId = (sessionManager as { getLineageNodeId?: unknown } | null | undefined)
+    ?.getLineageNodeId;
+  if (typeof getLineageNodeId !== "function") {
+    return null;
+  }
+  const value = getLineageNodeId.call(sessionManager);
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function readSessionManagerLeafEntryId(sessionManager: unknown): string | null {
+  const getLeafId = (sessionManager as { getLeafId?: unknown } | null | undefined)?.getLeafId;
+  if (typeof getLeafId !== "function") {
+    return null;
+  }
+  const value = getLeafId.call(sessionManager);
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function readSessionManagerCheckoutLineageNode(
+  sessionManager: unknown,
+): ((lineageNodeId: string, leafEntryId?: string | null) => void) | undefined {
+  const checkoutLineageNode = (
+    sessionManager as { checkoutLineageNode?: unknown } | null | undefined
+  )?.checkoutLineageNode;
+  return typeof checkoutLineageNode === "function"
+    ? checkoutLineageNode.bind(sessionManager)
+    : undefined;
+}
+
+function readSessionManagerResolveLineageLeafEntryId(
+  sessionManager: unknown,
+): ((lineageNodeId: string) => string | null) | undefined {
+  const resolveLineageLeafEntryId = (
+    sessionManager as { resolveLineageLeafEntryId?: unknown } | null | undefined
+  )?.resolveLineageLeafEntryId;
+  return typeof resolveLineageLeafEntryId === "function"
+    ? resolveLineageLeafEntryId.bind(sessionManager)
+    : undefined;
+}
+
+function readLineageStatus(bundle: CliShellSessionBundle): SessionLineageStatusView {
+  const sessionId = bundle.session.sessionManager.getSessionId();
+  try {
+    const tree = bundle.runtime.inspect.session.getLineageTree(sessionId);
+    const lineageNodeId =
+      readSessionManagerLineageNodeId(bundle.session.sessionManager) ??
+      tree.selectedByChannel["cli"] ??
+      tree.rootNodeId;
+    const node = tree.nodes.find((candidate) => candidate.lineageNodeId === lineageNodeId) ?? null;
+    const childCount = tree.edges.filter(
+      (edge) => edge.parentLineageNodeId === lineageNodeId,
+    ).length;
+    return {
+      lineageNodeId,
+      kind: node?.kind ?? null,
+      title: node?.title ?? null,
+      childCount,
+      nodeCount: tree.nodes.length,
+      unsupportedReason: null,
+    };
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    return {
+      lineageNodeId: null,
+      kind: null,
+      title: null,
+      childCount: 0,
+      nodeCount: 0,
+      unsupportedReason: reason,
+    };
+  }
+}
 
 function buildDivergenceSummaryDetails(note: SessionRewindDivergenceNote): Record<string, unknown> {
   return {
@@ -76,6 +152,57 @@ export function createSessionViewPort(bundle: CliShellSessionBundle): SessionVie
     session: bundle.session,
     getSessionId() {
       return bundle.session.sessionManager.getSessionId();
+    },
+    getLineageStatus() {
+      return readLineageStatus(bundle);
+    },
+    getLineageTree() {
+      return bundle.runtime.inspect.session.getLineageTree(
+        bundle.session.sessionManager.getSessionId(),
+      );
+    },
+    resolveLineageLeafEntryId(lineageNodeId) {
+      const resolveLineageLeafEntryId = readSessionManagerResolveLineageLeafEntryId(
+        bundle.session.sessionManager,
+      );
+      if (!resolveLineageLeafEntryId) {
+        throw new Error(
+          "Session lineage overlay requires sessionManager.resolveLineageLeafEntryId().",
+        );
+      }
+      return resolveLineageLeafEntryId(lineageNodeId);
+    },
+    async checkoutLineageNode(input) {
+      const sessionId = bundle.session.sessionManager.getSessionId();
+      const previousLineageNodeId = readSessionManagerLineageNodeId(bundle.session.sessionManager);
+      const previousLeafEntryId = readSessionManagerLeafEntryId(bundle.session.sessionManager);
+      const checkoutLineageNode = readSessionManagerCheckoutLineageNode(
+        bundle.session.sessionManager,
+      );
+      if (!checkoutLineageNode) {
+        throw new Error("Session lineage checkout requires sessionManager.checkoutLineageNode().");
+      }
+      checkoutLineageNode(input.lineageNodeId, input.leafEntryId);
+      try {
+        await replaceSessionMessagesFromCurrentContext(bundle);
+      } catch (error) {
+        if (previousLineageNodeId) {
+          try {
+            checkoutLineageNode(previousLineageNodeId, previousLeafEntryId);
+          } catch {
+            // Preserve the transcript replacement failure; rollback is best-effort controller state.
+          }
+        }
+        throw error;
+      }
+      bundle.runtime.authority.session.recordLineageSelection(sessionId, {
+        selectionId: `cli:${randomUUID()}`,
+        channelId: input.channelId ?? "cli",
+        lineageNodeId: input.lineageNodeId,
+        ...(previousLineageNodeId ? { previousLineageNodeId } : {}),
+        reason: input.reason ?? "cli_checkout",
+      });
+      return readLineageStatus(bundle);
     },
     getModelLabel() {
       return bundle.session.model?.provider && bundle.session.model?.id

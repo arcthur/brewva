@@ -72,7 +72,8 @@ Hosted context profiles narrow sources before composition:
 - `standard` compiles `sourceSelection` from provider descriptors where
   `profileSelectable=true` and `plane in {history_view, working_state}`; today
   this additionally includes `brewva.runtime-status`, `brewva.task-state`,
-  `brewva.tool-outputs-distilled`, and `brewva.projection-working`
+  `brewva.session-lineage`, `brewva.tool-outputs-distilled`, and
+  `brewva.projection-working`
 - `full` or omitted `contextProfile` installs no source selection, so the
   kernel provider registry decides from the full registered source set
 
@@ -106,6 +107,11 @@ set:
     - arrives from the admitted `brewva.projection-working` provider after
       runtime refresh; `ContextComposer` does not read
       `.orchestrator/projection/**` directly
+  - session lineage
+    - admitted summaries and adopted outcomes scoped to the active
+      context-entry path
+    - arrives from `brewva.session-lineage`; sibling raw transcript is never
+      folded into this block
   - hosted recall broker results
     - default hosted recall source is `brewva.recall-broker`
     - entries remain source-typed and may originate from tape evidence,

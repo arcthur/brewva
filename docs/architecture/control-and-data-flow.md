@@ -38,6 +38,17 @@ flowchart LR
   EV --> WIRE["session wire/read models"]
 ```
 
+## Session Lineage And Context
+
+```mermaid
+flowchart LR
+  EV["event tape"] --> LIN["session lineage projection"]
+  EV --> CE["context-entry path"]
+  LIN --> INS["inspect + CLI/TUI lineage tree"]
+  CE --> CTX["model context for selected leaf"]
+  LIN --> CTX["admitted summaries + adopted outcomes"]
+```
+
 ## Hosted Turn Gates
 
 ```mermaid

@@ -79,12 +79,18 @@ export class ContextArena {
     const id = input.id.trim();
     if (!sessionId || !source || !id) return { accepted: false };
 
+    const key = `${source}:${id}`;
+    const state = this.getOrCreateSession(sessionId);
+    if (input.delete === true) {
+      const removed = state.latestIndexByKey.delete(key);
+      state.onceKeys.delete(key);
+      return { accepted: removed };
+    }
+
     const content = input.content.trim();
     if (!content) return { accepted: false };
 
-    const key = `${source}:${id}`;
     const oncePerSession = input.oncePerSession === true;
-    const state = this.getOrCreateSession(sessionId);
     if (oncePerSession && state.onceKeys.has(key)) {
       return { accepted: false };
     }

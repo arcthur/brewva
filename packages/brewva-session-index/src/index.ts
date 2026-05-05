@@ -15,7 +15,17 @@ import {
   type Stats,
 } from "node:fs";
 import { dirname, join, resolve, sep } from "node:path";
-import { buildSessionRewindProjection, listSessionRewindTargets } from "@brewva/brewva-runtime";
+import {
+  buildSessionRewindProjection,
+  deriveSessionLineageState,
+  findSessionLineageRoot,
+  listSessionRewindTargets,
+  type ContextEntryRecord,
+  type SessionLineageNodeRecord,
+  type SessionLineageOutcomeAdoptionRecord,
+  type SessionLineageOutcomeRecord,
+  type SessionLineageSummaryRecord,
+} from "@brewva/brewva-runtime";
 import {
   type BrewvaEventQuery,
   type BrewvaEventRecord,
@@ -23,7 +33,7 @@ import {
 } from "@brewva/brewva-runtime/events";
 import { tokenizeSearchText } from "@brewva/brewva-search";
 
-export const SESSION_INDEX_SCHEMA_VERSION = 2;
+export const SESSION_INDEX_SCHEMA_VERSION = 3;
 export const SESSION_INDEX_UNAVAILABLE = "session_index_unavailable" as const;
 
 const DEFAULT_DB_RELATIVE_PATH = join(".brewva", "session-index", "session-index.duckdb");
@@ -937,6 +947,75 @@ class DuckDBSessionIndex implements SessionIndex {
         rewound_at double
       );
 
+      create table if not exists session_lineage_nodes (
+        session_id varchar not null,
+        lineage_node_id varchar not null,
+        parent_lineage_node_id varchar,
+        kind varchar not null,
+        fork_point_json varchar not null,
+        title varchar,
+        event_id varchar not null,
+        timestamp double not null
+      );
+
+      create table if not exists session_lineage_summaries (
+        session_id varchar not null,
+        summary_id varchar not null,
+        lineage_node_id varchar not null,
+        attach_to_entry_id varchar,
+        admission varchar not null,
+        summary varchar not null,
+        details_artifact_ref varchar,
+        event_id varchar not null,
+        timestamp double not null
+      );
+
+      create table if not exists session_lineage_outcomes (
+        session_id varchar not null,
+        outcome_id varchar not null,
+        lineage_node_id varchar not null,
+        admission varchar not null,
+        summary varchar not null,
+        outcome_ref varchar,
+        details_artifact_ref varchar,
+        event_id varchar not null,
+        timestamp double not null
+      );
+
+      create table if not exists session_lineage_adopted_outcomes (
+        session_id varchar not null,
+        adoption_id varchar not null,
+        outcome_id varchar not null,
+        from_lineage_node_id varchar not null,
+        to_lineage_node_id varchar not null,
+        admission varchar not null,
+        summary varchar,
+        adopted_entry_id varchar,
+        event_id varchar not null,
+        timestamp double not null
+      );
+
+      create table if not exists session_context_entries (
+        session_id varchar not null,
+        entry_id varchar not null,
+        lineage_node_id varchar not null,
+        parent_entry_id varchar,
+        source_event_id varchar not null,
+        source_event_type varchar not null,
+        entry_kind varchar not null,
+        admission varchar not null,
+        present_to varchar not null,
+        event_id varchar not null,
+        timestamp double not null
+      );
+
+      create table if not exists session_active_lineage_nodes (
+        session_id varchar not null,
+        lineage_node_id varchar not null,
+        last_context_entry_id varchar,
+        last_context_entry_at double
+      );
+
       create table if not exists events (
         event_id varchar primary key,
         session_id varchar not null,
@@ -984,6 +1063,16 @@ class DuckDBSessionIndex implements SessionIndex {
         on session_rewind_targets(session_id);
       create index if not exists session_rewind_targets_checkpoint_idx
         on session_rewind_targets(checkpoint_id);
+      create index if not exists session_lineage_nodes_session_idx
+        on session_lineage_nodes(session_id);
+      create index if not exists session_lineage_nodes_parent_idx
+        on session_lineage_nodes(parent_lineage_node_id);
+      create index if not exists session_context_entries_session_idx
+        on session_context_entries(session_id);
+      create index if not exists session_context_entries_lineage_idx
+        on session_context_entries(lineage_node_id);
+      create index if not exists session_active_lineage_nodes_session_idx
+        on session_active_lineage_nodes(session_id);
       create index if not exists event_tokens_token_idx
         on event_tokens(token);
       create index if not exists event_tokens_session_idx
@@ -1052,6 +1141,28 @@ class DuckDBSessionIndex implements SessionIndex {
     await this.connection.run("delete from session_rewind_targets where session_id = $sessionId", {
       sessionId,
     });
+    await this.connection.run("delete from session_lineage_nodes where session_id = $sessionId", {
+      sessionId,
+    });
+    await this.connection.run(
+      "delete from session_lineage_summaries where session_id = $sessionId",
+      { sessionId },
+    );
+    await this.connection.run(
+      "delete from session_lineage_outcomes where session_id = $sessionId",
+      { sessionId },
+    );
+    await this.connection.run(
+      "delete from session_lineage_adopted_outcomes where session_id = $sessionId",
+      { sessionId },
+    );
+    await this.connection.run("delete from session_context_entries where session_id = $sessionId", {
+      sessionId,
+    });
+    await this.connection.run(
+      "delete from session_active_lineage_nodes where session_id = $sessionId",
+      { sessionId },
+    );
     await this.connection.run("delete from events where session_id = $sessionId", { sessionId });
     await this.connection.run("delete from sessions where session_id = $sessionId", { sessionId });
     await this.connection.run("delete from index_state where session_id = $sessionId", {
@@ -1072,6 +1183,12 @@ class DuckDBSessionIndex implements SessionIndex {
       await this.connection.run("delete from session_target_roots");
       await this.connection.run("delete from session_box");
       await this.connection.run("delete from session_rewind_targets");
+      await this.connection.run("delete from session_lineage_nodes");
+      await this.connection.run("delete from session_lineage_summaries");
+      await this.connection.run("delete from session_lineage_outcomes");
+      await this.connection.run("delete from session_lineage_adopted_outcomes");
+      await this.connection.run("delete from session_context_entries");
+      await this.connection.run("delete from session_active_lineage_nodes");
       await this.connection.run("delete from events");
       await this.connection.run("delete from sessions");
       await this.connection.run("delete from index_state");
@@ -1276,6 +1393,7 @@ class DuckDBSessionIndex implements SessionIndex {
     await this.insertSessionTargetRoots(sessionId, targetRoots);
     await this.rebuildSessionBoxProjection(sessionId, records);
     await this.rebuildSessionRewindTargetProjection(sessionId, records);
+    await this.rebuildSessionLineageProjection(sessionId, records);
 
     await this.connection.run("delete from session_tokens where session_id = $sessionId", {
       sessionId,
@@ -1411,6 +1529,329 @@ class DuckDBSessionIndex implements SessionIndex {
             lineage_kind,
             rewound_by,
             rewound_at
+          ) values ${values.join(", ")}
+        `,
+        params,
+      );
+    }
+  }
+
+  private async rebuildSessionLineageProjection(
+    sessionId: string,
+    records: readonly BrewvaEventRecord[],
+  ): Promise<void> {
+    const state = deriveSessionLineageState(records);
+    await this.connection.run("delete from session_lineage_nodes where session_id = $sessionId", {
+      sessionId,
+    });
+    await this.connection.run(
+      "delete from session_lineage_summaries where session_id = $sessionId",
+      { sessionId },
+    );
+    await this.connection.run(
+      "delete from session_lineage_outcomes where session_id = $sessionId",
+      { sessionId },
+    );
+    await this.connection.run(
+      "delete from session_lineage_adopted_outcomes where session_id = $sessionId",
+      { sessionId },
+    );
+    await this.connection.run("delete from session_context_entries where session_id = $sessionId", {
+      sessionId,
+    });
+    await this.connection.run(
+      "delete from session_active_lineage_nodes where session_id = $sessionId",
+      { sessionId },
+    );
+    if (!findSessionLineageRoot(state)) {
+      return;
+    }
+
+    await this.insertSessionLineageNodes(sessionId, [...state.nodes.values()]);
+    await this.insertSessionLineageSummaries(sessionId, [...state.summariesByNode.values()].flat());
+    await this.insertSessionLineageOutcomes(sessionId, [...state.outcomesByNode.values()].flat());
+    await this.insertSessionLineageAdoptedOutcomes(
+      sessionId,
+      [...state.adoptedOutcomesByNode.values()].flat(),
+    );
+    const contextEntries = [...state.contextEntries.values()];
+    await this.insertSessionContextEntries(sessionId, contextEntries);
+    await this.insertSessionActiveLineageNodes(sessionId, contextEntries);
+  }
+
+  private async insertSessionLineageNodes(
+    sessionId: string,
+    rows: readonly SessionLineageNodeRecord[],
+  ): Promise<void> {
+    for (const chunk of chunkArray(rows, 100)) {
+      const params: SqlParams = {};
+      const values = chunk.map((row, index) => {
+        params[`sessionId${index}`] = sessionId;
+        params[`lineageNodeId${index}`] = row.lineageNodeId;
+        params[`parentLineageNodeId${index}`] = row.parentLineageNodeId;
+        params[`kind${index}`] = row.kind;
+        params[`forkPointJson${index}`] = JSON.stringify(row.forkPoint);
+        params[`title${index}`] = row.title ?? null;
+        params[`eventId${index}`] = row.eventId;
+        params[`timestamp${index}`] = String(row.timestamp);
+        return `(
+          $sessionId${index},
+          $lineageNodeId${index},
+          $parentLineageNodeId${index},
+          $kind${index},
+          $forkPointJson${index},
+          $title${index},
+          $eventId${index},
+          cast($timestamp${index} as double)
+        )`;
+      });
+      await this.connection.run(
+        `
+          insert into session_lineage_nodes (
+            session_id,
+            lineage_node_id,
+            parent_lineage_node_id,
+            kind,
+            fork_point_json,
+            title,
+            event_id,
+            timestamp
+          ) values ${values.join(", ")}
+        `,
+        params,
+      );
+    }
+  }
+
+  private async insertSessionLineageSummaries(
+    sessionId: string,
+    rows: readonly SessionLineageSummaryRecord[],
+  ): Promise<void> {
+    for (const chunk of chunkArray(rows, 100)) {
+      const params: SqlParams = {};
+      const values = chunk.map((row, index) => {
+        params[`sessionId${index}`] = sessionId;
+        params[`summaryId${index}`] = row.summaryId;
+        params[`lineageNodeId${index}`] = row.lineageNodeId;
+        params[`attachToEntryId${index}`] = row.attachToEntryId;
+        params[`admission${index}`] = row.admission;
+        params[`summary${index}`] = row.summary;
+        params[`detailsArtifactRef${index}`] = row.detailsArtifactRef ?? null;
+        params[`eventId${index}`] = row.eventId;
+        params[`timestamp${index}`] = String(row.timestamp);
+        return `(
+          $sessionId${index},
+          $summaryId${index},
+          $lineageNodeId${index},
+          $attachToEntryId${index},
+          $admission${index},
+          $summary${index},
+          $detailsArtifactRef${index},
+          $eventId${index},
+          cast($timestamp${index} as double)
+        )`;
+      });
+      await this.connection.run(
+        `
+          insert into session_lineage_summaries (
+            session_id,
+            summary_id,
+            lineage_node_id,
+            attach_to_entry_id,
+            admission,
+            summary,
+            details_artifact_ref,
+            event_id,
+            timestamp
+          ) values ${values.join(", ")}
+        `,
+        params,
+      );
+    }
+  }
+
+  private async insertSessionLineageOutcomes(
+    sessionId: string,
+    rows: readonly SessionLineageOutcomeRecord[],
+  ): Promise<void> {
+    for (const chunk of chunkArray(rows, 100)) {
+      const params: SqlParams = {};
+      const values = chunk.map((row, index) => {
+        params[`sessionId${index}`] = sessionId;
+        params[`outcomeId${index}`] = row.outcomeId;
+        params[`lineageNodeId${index}`] = row.lineageNodeId;
+        params[`admission${index}`] = row.admission;
+        params[`summary${index}`] = row.summary;
+        params[`outcomeRef${index}`] = row.outcomeRef ?? null;
+        params[`detailsArtifactRef${index}`] = row.detailsArtifactRef ?? null;
+        params[`eventId${index}`] = row.eventId;
+        params[`timestamp${index}`] = String(row.timestamp);
+        return `(
+          $sessionId${index},
+          $outcomeId${index},
+          $lineageNodeId${index},
+          $admission${index},
+          $summary${index},
+          $outcomeRef${index},
+          $detailsArtifactRef${index},
+          $eventId${index},
+          cast($timestamp${index} as double)
+        )`;
+      });
+      await this.connection.run(
+        `
+          insert into session_lineage_outcomes (
+            session_id,
+            outcome_id,
+            lineage_node_id,
+            admission,
+            summary,
+            outcome_ref,
+            details_artifact_ref,
+            event_id,
+            timestamp
+          ) values ${values.join(", ")}
+        `,
+        params,
+      );
+    }
+  }
+
+  private async insertSessionLineageAdoptedOutcomes(
+    sessionId: string,
+    rows: readonly SessionLineageOutcomeAdoptionRecord[],
+  ): Promise<void> {
+    for (const chunk of chunkArray(rows, 100)) {
+      const params: SqlParams = {};
+      const values = chunk.map((row, index) => {
+        params[`sessionId${index}`] = sessionId;
+        params[`adoptionId${index}`] = row.adoptionId;
+        params[`outcomeId${index}`] = row.outcomeId;
+        params[`fromLineageNodeId${index}`] = row.fromLineageNodeId;
+        params[`toLineageNodeId${index}`] = row.toLineageNodeId;
+        params[`admission${index}`] = row.admission;
+        params[`summary${index}`] = row.summary ?? null;
+        params[`adoptedEntryId${index}`] = row.adoptedEntryId ?? null;
+        params[`eventId${index}`] = row.eventId;
+        params[`timestamp${index}`] = String(row.timestamp);
+        return `(
+          $sessionId${index},
+          $adoptionId${index},
+          $outcomeId${index},
+          $fromLineageNodeId${index},
+          $toLineageNodeId${index},
+          $admission${index},
+          $summary${index},
+          $adoptedEntryId${index},
+          $eventId${index},
+          cast($timestamp${index} as double)
+        )`;
+      });
+      await this.connection.run(
+        `
+          insert into session_lineage_adopted_outcomes (
+            session_id,
+            adoption_id,
+            outcome_id,
+            from_lineage_node_id,
+            to_lineage_node_id,
+            admission,
+            summary,
+            adopted_entry_id,
+            event_id,
+            timestamp
+          ) values ${values.join(", ")}
+        `,
+        params,
+      );
+    }
+  }
+
+  private async insertSessionContextEntries(
+    sessionId: string,
+    rows: readonly ContextEntryRecord[],
+  ): Promise<void> {
+    for (const chunk of chunkArray(rows, 100)) {
+      const params: SqlParams = {};
+      const values = chunk.map((row, index) => {
+        params[`sessionId${index}`] = sessionId;
+        params[`entryId${index}`] = row.entryId;
+        params[`lineageNodeId${index}`] = row.lineageNodeId;
+        params[`parentEntryId${index}`] = row.parentEntryId;
+        params[`sourceEventId${index}`] = row.sourceEventId;
+        params[`sourceEventType${index}`] = row.sourceEventType;
+        params[`entryKind${index}`] = row.entryKind;
+        params[`admission${index}`] = row.admission;
+        params[`presentTo${index}`] = row.presentTo;
+        params[`eventId${index}`] = row.eventId;
+        params[`timestamp${index}`] = String(row.timestamp);
+        return `(
+          $sessionId${index},
+          $entryId${index},
+          $lineageNodeId${index},
+          $parentEntryId${index},
+          $sourceEventId${index},
+          $sourceEventType${index},
+          $entryKind${index},
+          $admission${index},
+          $presentTo${index},
+          $eventId${index},
+          cast($timestamp${index} as double)
+        )`;
+      });
+      await this.connection.run(
+        `
+          insert into session_context_entries (
+            session_id,
+            entry_id,
+            lineage_node_id,
+            parent_entry_id,
+            source_event_id,
+            source_event_type,
+            entry_kind,
+            admission,
+            present_to,
+            event_id,
+            timestamp
+          ) values ${values.join(", ")}
+        `,
+        params,
+      );
+    }
+  }
+
+  private async insertSessionActiveLineageNodes(
+    sessionId: string,
+    contextEntries: readonly ContextEntryRecord[],
+  ): Promise<void> {
+    const latestByNode = new Map<string, ContextEntryRecord>();
+    for (const entry of contextEntries) {
+      const existing = latestByNode.get(entry.lineageNodeId);
+      if (!existing || entry.timestamp >= existing.timestamp) {
+        latestByNode.set(entry.lineageNodeId, entry);
+      }
+    }
+    for (const chunk of chunkArray([...latestByNode.entries()], 100)) {
+      const params: SqlParams = {};
+      const values = chunk.map(([lineageNodeId, entry], index) => {
+        params[`sessionId${index}`] = sessionId;
+        params[`lineageNodeId${index}`] = lineageNodeId;
+        params[`lastContextEntryId${index}`] = entry.entryId;
+        params[`lastContextEntryAt${index}`] = String(entry.timestamp);
+        return `(
+          $sessionId${index},
+          $lineageNodeId${index},
+          $lastContextEntryId${index},
+          cast($lastContextEntryAt${index} as double)
+        )`;
+      });
+      await this.connection.run(
+        `
+          insert into session_active_lineage_nodes (
+            session_id,
+            lineage_node_id,
+            last_context_entry_id,
+            last_context_entry_at
           ) values ${values.join(", ")}
         `,
         params,
