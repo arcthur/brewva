@@ -1,6 +1,6 @@
 import AjvModule from "ajv";
 import addFormatsModule from "ajv-formats";
-import type { BrewvaAgentEngineTool, BrewvaAgentEngineToolCall } from "./agent-engine-types.js";
+import type { BrewvaTurnLoopTool, BrewvaTurnLoopToolCall } from "./types.js";
 
 declare const validatedToolArgumentsBrand: unique symbol;
 
@@ -74,9 +74,9 @@ if (canUseRuntimeCodegen()) {
 }
 
 export function prepareToolArguments(
-  tool: BrewvaAgentEngineTool,
-  toolCall: BrewvaAgentEngineToolCall,
-): BrewvaAgentEngineToolCall {
+  tool: BrewvaTurnLoopTool,
+  toolCall: BrewvaTurnLoopToolCall,
+): BrewvaTurnLoopToolCall {
   if (!tool.prepareArguments) {
     return toolCall;
   }
@@ -91,8 +91,8 @@ export function prepareToolArguments(
 }
 
 export function validateToolArguments(
-  tool: BrewvaAgentEngineTool,
-  toolCall: BrewvaAgentEngineToolCall,
+  tool: BrewvaTurnLoopTool,
+  toolCall: BrewvaTurnLoopToolCall,
 ): BrewvaToolArgumentValidationResult {
   if (!ajv || !canUseRuntimeCodegen()) {
     return {

@@ -1,6 +1,6 @@
 import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import { coerceContextBudgetUsage } from "@brewva/brewva-runtime";
-import type { InternalHostPluginApi } from "@brewva/brewva-substrate";
+import type { InternalHostPluginApi } from "@brewva/brewva-substrate/host-api";
 import { getHostedTurnTransitionCoordinator } from "../session/turn-transition.js";
 import type { HostedDelegationStore } from "../subagents/delegation-store.js";
 import {

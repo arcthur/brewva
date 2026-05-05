@@ -4,7 +4,7 @@ import {
   canTransitionSessionPhase,
   type SessionPhase,
   type SessionPhaseEvent,
-} from "@brewva/brewva-substrate";
+} from "@brewva/brewva-substrate/session";
 
 function expectPhaseTransition(phase: SessionPhase, event: SessionPhaseEvent): SessionPhase {
   const result = advanceSessionPhaseResult(phase, event);

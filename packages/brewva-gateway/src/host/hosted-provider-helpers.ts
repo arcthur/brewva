@@ -7,7 +7,7 @@ import type {
   Api as ProviderCoreApi,
   Model as ProviderCoreModel,
 } from "@brewva/brewva-provider-core/contracts";
-import type { BrewvaRegisteredModel } from "@brewva/brewva-substrate";
+import type { BrewvaRegisteredModel } from "@brewva/brewva-substrate/provider";
 
 type ProviderCoreKnownProvider = ReturnType<typeof getProviders>[number];
 

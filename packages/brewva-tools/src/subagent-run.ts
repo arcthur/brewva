@@ -1,4 +1,4 @@
-import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate";
+import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import { Type, type Static, type TSchema } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 import {

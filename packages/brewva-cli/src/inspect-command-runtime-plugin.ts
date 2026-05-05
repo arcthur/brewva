@@ -4,7 +4,7 @@ import {
   type InternalRuntimePluginApi,
 } from "@brewva/brewva-gateway/runtime-plugins";
 import type { BrewvaOperatorRuntimePort } from "@brewva/brewva-runtime";
-import type { BrewvaHostContext } from "@brewva/brewva-substrate";
+import type { BrewvaHostContext } from "@brewva/brewva-substrate/host-api";
 import { clampText, resolveInspectDirectory } from "./inspect-analysis.js";
 import { buildSessionInspectReport, formatInspectText } from "./inspect.js";
 

@@ -1,4 +1,4 @@
-import type { BrewvaManagedPromptSession } from "@brewva/brewva-substrate";
+import type { BrewvaManagedPromptSession } from "@brewva/brewva-substrate/session";
 import {
   runCliInteractiveSession as runCliInteractiveSessionBase,
   type CliInteractiveSessionOptions,

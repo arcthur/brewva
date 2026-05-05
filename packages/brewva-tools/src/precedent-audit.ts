@@ -6,7 +6,7 @@ import {
   type KnowledgeSourceType,
   type ScoredKnowledgeDoc,
 } from "@brewva/brewva-recall";
-import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate";
+import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import { Type } from "@sinclair/typebox";
 import {
   type DerivativeLink,

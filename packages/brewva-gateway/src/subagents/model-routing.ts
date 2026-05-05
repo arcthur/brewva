@@ -1,6 +1,7 @@
 import type { DelegationModelRouteRecord } from "@brewva/brewva-runtime";
 import { resolveBrewvaAgentDir } from "@brewva/brewva-runtime";
-import type { BrewvaModelCatalog, BrewvaModelPreset } from "@brewva/brewva-substrate";
+import type { BrewvaModelCatalog } from "@brewva/brewva-substrate/provider";
+import type { BrewvaModelPreset } from "@brewva/brewva-substrate/session";
 import type { DelegationPacket, SubagentExecutionShape } from "@brewva/brewva-tools";
 import { resolveBrewvaModelSelection } from "@brewva/brewva-tools";
 import { createHostedSessionDriver } from "../host/hosted-session-driver.js";

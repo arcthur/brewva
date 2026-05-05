@@ -1,7 +1,7 @@
 import type {
   BrewvaModelPreferences,
   BrewvaSessionModelDescriptor,
-} from "@brewva/brewva-substrate";
+} from "@brewva/brewva-substrate/session";
 import type { ProviderAuthMethod, ProviderConnection } from "../types.js";
 
 export const RECENT_MODEL_LIMIT = 10;

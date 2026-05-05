@@ -61,39 +61,29 @@ describe("gateway contract: hosted session surface", () => {
       "host",
       "runtime-projection-session-store.ts",
     );
-    const hostedAgentEnginePath = resolve(
+    const substratePackagePath = resolve(repoRoot, "packages", "brewva-substrate", "package.json");
+    const turnIndexPath = resolve(
       repoRoot,
       "packages",
-      "brewva-gateway",
+      "brewva-substrate",
       "src",
-      "host",
-      "hosted-agent-engine.ts",
-    );
-    const agentEnginePackagePath = resolve(
-      repoRoot,
-      "packages",
-      "brewva-agent-engine",
-      "package.json",
-    );
-    const agentEngineIndexPath = resolve(
-      repoRoot,
-      "packages",
-      "brewva-agent-engine",
-      "src",
+      "turn",
       "index.ts",
     );
-    const brewvaAgentEnginePath = resolve(
+    const turnControllerPath = resolve(
       repoRoot,
       "packages",
-      "brewva-agent-engine",
+      "brewva-substrate",
       "src",
-      "brewva-agent-engine.ts",
+      "turn",
+      "controller.ts",
     );
     const providerStreamPath = resolve(
       repoRoot,
       "packages",
-      "brewva-agent-engine",
+      "brewva-substrate",
       "src",
+      "turn",
       "provider-stream.ts",
     );
     const hostedAuthStorePath = resolve(
@@ -129,10 +119,9 @@ describe("gateway contract: hosted session surface", () => {
     const localBackendSource = readFileSync(hostedLocalBackendPath, "utf8");
     const managedSessionSource = readFileSync(managedSessionPath, "utf8");
     const runtimeProjectionStoreSource = readFileSync(runtimeProjectionStorePath, "utf8");
-    const hostedAgentEngineSource = readFileSync(hostedAgentEnginePath, "utf8");
-    const agentEnginePackageSource = readFileSync(agentEnginePackagePath, "utf8");
-    const agentEngineIndexSource = readFileSync(agentEngineIndexPath, "utf8");
-    const brewvaAgentEngineSource = readFileSync(brewvaAgentEnginePath, "utf8");
+    const substratePackageSource = readFileSync(substratePackagePath, "utf8");
+    const turnIndexSource = readFileSync(turnIndexPath, "utf8");
+    const turnControllerSource = readFileSync(turnControllerPath, "utf8");
     const providerStreamSource = readFileSync(providerStreamPath, "utf8");
     const hostedAuthStoreSource = readFileSync(hostedAuthStorePath, "utf8");
     const hostedModelRegistrySource = readFileSync(hostedModelRegistryPath, "utf8");
@@ -210,7 +199,10 @@ describe("gateway contract: hosted session surface", () => {
     expect(runtimeProjectionStoreSource).not.toContain("hosted_session_projection_");
     expect(runtimeProjectionStoreSource).not.toContain("migrateLegacyHostedProjectionEvents");
 
-    expect(managedSessionSource).toContain("createHostedAgentEngine");
+    expect(managedSessionSource).toContain("createBrewvaTurnLoopController");
+    expect(managedSessionSource).toContain("@brewva/brewva-substrate/turn");
+    expect(managedSessionSource).not.toContain("@brewva/brewva-agent-engine");
+    expect(managedSessionSource).not.toContain("createHostedAgentEngine");
     expect(managedSessionSource).toContain("previewCompaction");
     expect(managedSessionSource).not.toContain("appendCompaction(");
     expect(managedSessionSource).not.toContain("createHostedPiAgentEngine");
@@ -218,25 +210,37 @@ describe("gateway contract: hosted session surface", () => {
     expect(managedSessionSource).not.toContain("@mariozechner/pi-ai");
     expect(managedSessionSource).not.toContain("@mariozechner/pi-coding-agent");
 
-    expect(hostedAgentEngineSource).toContain('from "@brewva/brewva-agent-engine"');
-    expect(hostedAgentEngineSource).not.toContain("@mariozechner/pi-agent-core");
-    expect(hostedAgentEngineSource).not.toContain("@mariozechner/pi-ai");
-    expect(hostedAgentEngineSource).not.toContain("@mariozechner/pi-coding-agent");
-
-    expect(agentEngineIndexSource).toContain('from "./brewva-agent-engine.js"');
-    expect(agentEnginePackageSource).not.toContain('"@mariozechner/pi-agent-core"');
-    expect(agentEnginePackageSource).not.toContain('"@mariozechner/pi-ai"');
-    expect(agentEnginePackageSource).toContain('"@brewva/brewva-provider-core"');
-    expect(agentEnginePackageSource).toContain('"ajv"');
-    expect(agentEnginePackageSource).toContain('"ajv-formats"');
-    expect(agentEnginePackageSource).toContain('"@sinclair/typebox"');
+    expect(turnIndexSource).toContain("createBrewvaTurnLoopController");
+    expect(turnIndexSource).toContain("runBrewvaTurnLoop");
+    expect(turnIndexSource).toContain("BrewvaTurnLoopController");
+    expect(turnIndexSource).not.toContain("BrewvaAgentEngine");
+    expect(turnControllerSource).toContain("createBrewvaTurnProviderStreamFunction");
+    expect(turnControllerSource).not.toContain("@mariozechner/pi-agent-core");
+    expect(turnControllerSource).not.toContain("@mariozechner/pi-ai");
+    expect(turnControllerSource).not.toContain("@mariozechner/pi-coding-agent");
+    expect(turnControllerSource).not.toContain("BrewvaAgentEngine");
+    for (const subpath of [
+      '"./contracts"',
+      '"./session"',
+      '"./prompt"',
+      '"./resources"',
+      '"./tools"',
+      '"./host-api"',
+      '"./persistence"',
+      '"./provider"',
+      '"./turn"',
+    ]) {
+      expect(substratePackageSource).toContain(subpath);
+    }
+    expect(substratePackageSource).toContain('"./turn"');
+    expect(substratePackageSource).toContain('"@brewva/brewva-provider-core"');
+    expect(substratePackageSource).toContain('"ajv"');
+    expect(substratePackageSource).toContain('"ajv-formats"');
+    expect(substratePackageSource).toContain('"@sinclair/typebox"');
 
     expect(hostedAuthStoreSource).not.toContain("@mariozechner/pi-ai");
     expect(hostedModelRegistrySource).not.toContain("@mariozechner/pi-ai");
 
-    expect(brewvaAgentEngineSource).not.toContain("@mariozechner/pi-agent-core");
-    expect(brewvaAgentEngineSource).not.toContain("@mariozechner/pi-ai");
-    expect(brewvaAgentEngineSource).not.toContain("@mariozechner/pi-coding-agent");
     expect(providerStreamSource).not.toContain("@mariozechner/pi-agent-core");
     expect(providerStreamSource).not.toContain("@mariozechner/pi-ai");
     expect(providerStreamSource).not.toContain("@mariozechner/pi-coding-agent");

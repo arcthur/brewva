@@ -4,7 +4,7 @@ import {
   type BrewvaRuntime,
   type SessionWireFrame,
 } from "@brewva/brewva-runtime";
-import type { BrewvaPromptContentPart } from "@brewva/brewva-substrate";
+import type { BrewvaPromptContentPart } from "@brewva/brewva-substrate/prompt";
 import {
   SessionPromptCollectionError,
   type CollectSessionPromptOutputSession,

@@ -9,9 +9,9 @@ import type {
   InternalHostPlugin,
   InternalHostPluginApi,
   RuntimePluginCapability,
-  BrewvaToolDefinition,
-} from "@brewva/brewva-substrate";
-import { defineInternalHostPlugin } from "@brewva/brewva-substrate";
+} from "@brewva/brewva-substrate/host-api";
+import { defineInternalHostPlugin } from "@brewva/brewva-substrate/host-api";
+import type { BrewvaToolDefinition } from "@brewva/brewva-substrate/tools";
 import {
   buildBrewvaTools,
   createBrewvaToolCatalog,

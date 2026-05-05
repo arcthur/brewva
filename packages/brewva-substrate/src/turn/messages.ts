@@ -1,10 +1,4 @@
-import type {
-  BrewvaAgentEngineBranchSummaryMessage,
-  BrewvaAgentEngineCompactionSummaryMessage,
-  BrewvaAgentEngineCustomMessage,
-  BrewvaAgentEngineLlmMessage,
-  BrewvaAgentEngineMessage,
-} from "./agent-engine-types.js";
+import type { BrewvaTurnLoopLlmMessage, BrewvaTurnLoopMessage } from "./types.js";
 
 export const COMPACTION_SUMMARY_PREFIX = `The conversation history before this point was compacted into the following summary:
 
@@ -21,13 +15,9 @@ export const BRANCH_SUMMARY_PREFIX = `The following is a summary of a branch tha
 
 export const BRANCH_SUMMARY_SUFFIX = `</summary>`;
 
-export type CustomMessage<T = unknown> = BrewvaAgentEngineCustomMessage<T>;
-export type BranchSummaryMessage = BrewvaAgentEngineBranchSummaryMessage;
-export type CompactionSummaryMessage = BrewvaAgentEngineCompactionSummaryMessage;
-
-export function convertToLlm(messages: BrewvaAgentEngineMessage[]): BrewvaAgentEngineLlmMessage[] {
+export function convertToLlm(messages: BrewvaTurnLoopMessage[]): BrewvaTurnLoopLlmMessage[] {
   return messages
-    .map((message): BrewvaAgentEngineLlmMessage | undefined => {
+    .map((message): BrewvaTurnLoopLlmMessage | undefined => {
       if (message.excludeFromContext) {
         return undefined;
       }
@@ -75,5 +65,5 @@ export function convertToLlm(messages: BrewvaAgentEngineMessage[]): BrewvaAgentE
         }
       }
     })
-    .filter((message): message is BrewvaAgentEngineLlmMessage => message !== undefined);
+    .filter((message): message is BrewvaTurnLoopLlmMessage => message !== undefined);
 }

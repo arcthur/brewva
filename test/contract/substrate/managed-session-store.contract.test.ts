@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { BrewvaManagedSessionStore } from "@brewva/brewva-substrate";
+import { BrewvaManagedSessionStore } from "@brewva/brewva-substrate/session";
 
 describe("managed session store contract", () => {
   test("previews compaction without mutating the active leaf", () => {

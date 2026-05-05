@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import { basename, resolve as resolvePath } from "node:path";
 import { TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
 import { parseTscDiagnostics, type TscDiagnostic } from "@brewva/brewva-runtime/evidence";
-import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate";
+import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import { Type } from "@sinclair/typebox";
 import { differenceInMilliseconds } from "date-fns";
 import {

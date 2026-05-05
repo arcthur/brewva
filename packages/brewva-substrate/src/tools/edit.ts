@@ -14,10 +14,10 @@ import {
   restoreLineEndings,
   stripBom,
   type Edit,
-} from "./edit-diff.js";
-import { withFileMutationQueue } from "./file-mutation-queue.js";
-import { resolveToCwd } from "./path-utils.js";
-import { asRenderTheme, createStaticTextComponent } from "./render.js";
+} from "./_shared/edit-diff.js";
+import { withFileMutationQueue } from "./_shared/file-mutation-queue.js";
+import { resolveToCwd } from "./_shared/path-utils.js";
+import { asRenderTheme, createStaticTextComponent } from "./_shared/render.js";
 
 const replaceEditSchema = Type.Object(
   {

@@ -4,7 +4,7 @@ import {
   brewvaPromptContentPartsEqual,
   cloneBrewvaPromptContentParts,
   type BrewvaPromptContentPart,
-} from "../session/prompt-content.js";
+} from "../prompt/content.js";
 import type {
   BrewvaHostBeforeAgentStartEvent,
   BrewvaHostBeforeAgentStartResult,

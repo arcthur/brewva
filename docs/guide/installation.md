@@ -7,7 +7,7 @@ CLI/config contract, use the reference docs.
 
 - Bun `1.3.12`
 - Node `^20.19.0 || >=22.13.0` for CLI execution and tooling
-- Model/provider setup supported by the bundled agent engine
+- Model/provider setup supported by the bundled substrate turn loop
 
 Build and test with Bun, not npm or yarn.
 

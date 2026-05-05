@@ -1,5 +1,5 @@
 import type { BrewvaRuntime } from "@brewva/brewva-runtime";
-import type { InternalHostPluginApi } from "@brewva/brewva-substrate";
+import type { InternalHostPluginApi } from "@brewva/brewva-substrate/host-api";
 import {
   consumeNextPromptOutputBudgetEscalation,
   markProviderRequestRecoveryInstalled,

@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { isAbsolute, resolve, sep } from "node:path";
 import type { BrewvaEventRecord } from "@brewva/brewva-runtime/events";
-import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate";
+import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import { Type } from "@sinclair/typebox";
 import Fuse from "fuse.js";
 import { LRUCache } from "lru-cache";

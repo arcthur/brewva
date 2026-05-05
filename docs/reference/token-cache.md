@@ -62,7 +62,7 @@ must pass the object-shaped `cachePolicy` through the hosted path:
 
 1. hosted settings
 2. managed session creation
-3. agent-engine stream options
+3. substrate turn-loop stream options
 4. provider-core stream options
 5. provider renderer
 

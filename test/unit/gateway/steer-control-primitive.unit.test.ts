@@ -1,24 +1,24 @@
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
-import {
-  createHostedAgentEngine,
-  type BrewvaAgentEngineAssistantMessage,
-  type BrewvaAgentEngineAssistantMessageEvent,
-  type BrewvaAgentEngineEvent,
-  type BrewvaAgentEngineLlmMessage,
-  type BrewvaAgentEngineStreamFunction,
-  type BrewvaAgentEngineToolResultMessage,
-} from "@brewva/brewva-agent-engine";
 import { SessionBackendStateError } from "@brewva/brewva-gateway";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
 import type { TurnEnvelope } from "@brewva/brewva-runtime/channels";
 import {
-  createHostedResourceLoader,
   createInMemoryModelCatalog,
-  type BrewvaPromptSessionEvent,
   type BrewvaRegisteredModel,
-  type BrewvaToolDefinition,
-} from "@brewva/brewva-substrate";
+} from "@brewva/brewva-substrate/provider";
+import { createHostedResourceLoader } from "@brewva/brewva-substrate/resources";
+import type { BrewvaPromptSessionEvent } from "@brewva/brewva-substrate/session";
+import type { BrewvaToolDefinition } from "@brewva/brewva-substrate/tools";
+import {
+  createBrewvaTurnLoopController,
+  type BrewvaTurnLoopAssistantMessage,
+  type BrewvaTurnLoopAssistantMessageEvent,
+  type BrewvaTurnLoopEvent,
+  type BrewvaTurnLoopLlmMessage,
+  type BrewvaTurnLoopStreamFunction,
+  type BrewvaTurnLoopToolResultMessage,
+} from "@brewva/brewva-substrate/turn";
 import { Type } from "@sinclair/typebox";
 import { createChannelControlRouter } from "../../../packages/brewva-gateway/src/channels/channel-control-router.js";
 import { createChannelUpdateLockManager } from "../../../packages/brewva-gateway/src/channels/channel-update-lock.js";
@@ -71,9 +71,9 @@ function createUsage() {
 }
 
 function createAssistantMessage(
-  content: BrewvaAgentEngineAssistantMessage["content"],
-  stopReason: BrewvaAgentEngineAssistantMessage["stopReason"] = "stop",
-): BrewvaAgentEngineAssistantMessage {
+  content: BrewvaTurnLoopAssistantMessage["content"],
+  stopReason: BrewvaTurnLoopAssistantMessage["stopReason"] = "stop",
+): BrewvaTurnLoopAssistantMessage {
   return {
     role: "assistant",
     content,
@@ -87,10 +87,10 @@ function createAssistantMessage(
 }
 
 function createStream(
-  finalMessage: BrewvaAgentEngineAssistantMessage,
-  events: BrewvaAgentEngineAssistantMessageEvent[] = [],
-): AsyncIterable<BrewvaAgentEngineAssistantMessageEvent> & {
-  result(): Promise<BrewvaAgentEngineAssistantMessage>;
+  finalMessage: BrewvaTurnLoopAssistantMessage,
+  events: BrewvaTurnLoopAssistantMessageEvent[] = [],
+): AsyncIterable<BrewvaTurnLoopAssistantMessageEvent> & {
+  result(): Promise<BrewvaTurnLoopAssistantMessage>;
 } {
   const allEvents = [...events];
   if (finalMessage.stopReason === "error" || finalMessage.stopReason === "aborted") {
@@ -130,12 +130,12 @@ function createDeferred<T = void>() {
 }
 
 function createEngine(
-  streamFn: BrewvaAgentEngineStreamFunction,
+  streamFn: BrewvaTurnLoopStreamFunction,
   options?: {
-    afterToolCall?: Parameters<typeof createHostedAgentEngine>[0]["afterToolCall"];
+    afterToolCall?: Parameters<typeof createBrewvaTurnLoopController>[0]["afterToolCall"];
   },
 ) {
-  return createHostedAgentEngine({
+  return createBrewvaTurnLoopController({
     initialModel: TEST_MODEL,
     initialThinkingLevel: "off",
     sessionId: "steer-test-session",
@@ -161,10 +161,8 @@ function createUserPrompt(text: string) {
   };
 }
 
-function findToolResultMessages(
-  events: BrewvaAgentEngineEvent[],
-): BrewvaAgentEngineToolResultMessage[] {
-  const results: BrewvaAgentEngineToolResultMessage[] = [];
+function findToolResultMessages(events: BrewvaTurnLoopEvent[]): BrewvaTurnLoopToolResultMessage[] {
+  const results: BrewvaTurnLoopToolResultMessage[] = [];
   for (const event of events) {
     if (event.type === "message_end" && event.message.role === "toolResult") {
       results.push(event.message);
@@ -312,12 +310,12 @@ function isSteerSessionEvent(
 
 describe("in-flight steer control primitive", () => {
   test("appends a single steer to the last tool result in a multi-tool batch", async () => {
-    const events: BrewvaAgentEngineEvent[] = [];
+    const events: BrewvaTurnLoopEvent[] = [];
     const releaseSecondTool = createDeferred();
     const secondToolStarted = createDeferred();
-    const streamFn: BrewvaAgentEngineStreamFunction = async (_model, context) => {
+    const streamFn: BrewvaTurnLoopStreamFunction = async (_model, context) => {
       const lastMessage = context.messages[context.messages.length - 1] as
-        | BrewvaAgentEngineLlmMessage
+        | BrewvaTurnLoopLlmMessage
         | undefined;
       if (lastMessage?.role === "toolResult") {
         return createStream(createAssistantMessage([{ type: "text", text: "final" }]));
@@ -369,7 +367,7 @@ describe("in-flight steer control primitive", () => {
 
       const toolResults = findToolResultMessages(events);
       const steerApplied = events.find(
-        (event): event is Extract<BrewvaAgentEngineEvent, { type: "steer_applied" }> =>
+        (event): event is Extract<BrewvaTurnLoopEvent, { type: "steer_applied" }> =>
           event.type === "steer_applied",
       );
 
@@ -387,10 +385,10 @@ describe("in-flight steer control primitive", () => {
   });
 
   test("applies a steer queued after turn_end before the next model call", async () => {
-    const events: BrewvaAgentEngineEvent[] = [];
+    const events: BrewvaTurnLoopEvent[] = [];
     let streamCalls = 0;
     let secondCallSawGuidance = false;
-    const streamFn: BrewvaAgentEngineStreamFunction = async (_model, context) => {
+    const streamFn: BrewvaTurnLoopStreamFunction = async (_model, context) => {
       streamCalls += 1;
       if (streamCalls === 1) {
         return createStream(
@@ -401,7 +399,7 @@ describe("in-flight steer control primitive", () => {
         );
       }
       const lastMessage = context.messages[context.messages.length - 1] as
-        | BrewvaAgentEngineLlmMessage
+        | BrewvaTurnLoopLlmMessage
         | undefined;
       secondCallSawGuidance =
         lastMessage?.role === "toolResult" &&
@@ -434,7 +432,7 @@ describe("in-flight steer control primitive", () => {
       const toolResult = findToolResultMessages(events)[0];
       const dropped = events.find((event) => event.type === "steer_dropped");
       const applied = events.find(
-        (event): event is Extract<BrewvaAgentEngineEvent, { type: "steer_applied" }> =>
+        (event): event is Extract<BrewvaTurnLoopEvent, { type: "steer_applied" }> =>
           event.type === "steer_applied",
       );
 
@@ -448,12 +446,12 @@ describe("in-flight steer control primitive", () => {
   });
 
   test("joins multiple steers before drain into one appended guidance block", async () => {
-    const events: BrewvaAgentEngineEvent[] = [];
+    const events: BrewvaTurnLoopEvent[] = [];
     const releaseTool = createDeferred();
     const toolStarted = createDeferred();
-    const streamFn: BrewvaAgentEngineStreamFunction = async (_model, context) => {
+    const streamFn: BrewvaTurnLoopStreamFunction = async (_model, context) => {
       const lastMessage = context.messages[context.messages.length - 1] as
-        | BrewvaAgentEngineLlmMessage
+        | BrewvaTurnLoopLlmMessage
         | undefined;
       if (lastMessage?.role === "toolResult") {
         return createStream(createAssistantMessage([{ type: "text", text: "final" }]));
@@ -498,7 +496,7 @@ describe("in-flight steer control primitive", () => {
           (
             part,
           ): part is Extract<
-            BrewvaAgentEngineToolResultMessage["content"][number],
+            BrewvaTurnLoopToolResultMessage["content"][number],
             { type: "text" }
           > => part.type === "text" && part.text.includes("User guidance:"),
         ) ?? [];
@@ -527,8 +525,8 @@ describe("in-flight steer control primitive", () => {
   });
 
   test("drops a pending steer as aborted when the active run is interrupted", async () => {
-    const events: BrewvaAgentEngineEvent[] = [];
-    const streamFn: BrewvaAgentEngineStreamFunction = async (_model, _context, options) => {
+    const events: BrewvaTurnLoopEvent[] = [];
+    const streamFn: BrewvaTurnLoopStreamFunction = async (_model, _context, options) => {
       await new Promise<void>((resolve) => {
         if (options.signal?.aborted) {
           resolve();
@@ -551,7 +549,7 @@ describe("in-flight steer control primitive", () => {
       await running;
 
       const dropped = events.find(
-        (event): event is Extract<BrewvaAgentEngineEvent, { type: "steer_dropped" }> =>
+        (event): event is Extract<BrewvaTurnLoopEvent, { type: "steer_dropped" }> =>
           event.type === "steer_dropped",
       );
 
@@ -567,10 +565,10 @@ describe("in-flight steer control primitive", () => {
   });
 
   test("drops a pending steer with no_tool_boundary when a successful turn has no tool calls", async () => {
-    const events: BrewvaAgentEngineEvent[] = [];
+    const events: BrewvaTurnLoopEvent[] = [];
     const releaseStream = createDeferred();
     const streamStarted = createDeferred();
-    const streamFn: BrewvaAgentEngineStreamFunction = async () => {
+    const streamFn: BrewvaTurnLoopStreamFunction = async () => {
       streamStarted.resolve();
       await releaseStream.promise;
       return createStream(createAssistantMessage([{ type: "text", text: "no tools needed" }]));
@@ -589,7 +587,7 @@ describe("in-flight steer control primitive", () => {
       await running;
 
       const dropped = events.find(
-        (event): event is Extract<BrewvaAgentEngineEvent, { type: "steer_dropped" }> =>
+        (event): event is Extract<BrewvaTurnLoopEvent, { type: "steer_dropped" }> =>
           event.type === "steer_dropped",
       );
       const userMessages = events.filter(
@@ -609,7 +607,7 @@ describe("in-flight steer control primitive", () => {
   });
 
   test("drops a steer queued during the final turn_end when no next model call exists", async () => {
-    const events: BrewvaAgentEngineEvent[] = [];
+    const events: BrewvaTurnLoopEvent[] = [];
     const engine = createEngine(async () =>
       createStream(createAssistantMessage([{ type: "text", text: "done" }])),
     );
@@ -624,7 +622,7 @@ describe("in-flight steer control primitive", () => {
       await engine.prompt(createUserPrompt("answer directly"));
 
       const dropped = events.find(
-        (event): event is Extract<BrewvaAgentEngineEvent, { type: "steer_dropped" }> =>
+        (event): event is Extract<BrewvaTurnLoopEvent, { type: "steer_dropped" }> =>
           event.type === "steer_dropped",
       );
 
@@ -813,10 +811,10 @@ describe("in-flight steer control primitive", () => {
     try {
       const handleAgentEvent = (
         fixture.session as unknown as {
-          handleAgentEvent(event: BrewvaAgentEngineEvent): Promise<void>;
+          handleAgentEvent(event: BrewvaTurnLoopEvent): Promise<void>;
         }
       ).handleAgentEvent.bind(fixture.session);
-      const toolResultMessage: BrewvaAgentEngineToolResultMessage = {
+      const toolResultMessage: BrewvaTurnLoopToolResultMessage = {
         role: "toolResult",
         toolCallId: "hold-1",
         toolName: "hold",
@@ -867,12 +865,12 @@ describe("in-flight steer control primitive", () => {
   });
 
   test("applies afterToolCall transforms before appending the steer guidance", async () => {
-    const events: BrewvaAgentEngineEvent[] = [];
+    const events: BrewvaTurnLoopEvent[] = [];
     const releaseTool = createDeferred();
     const toolStarted = createDeferred();
-    const streamFn: BrewvaAgentEngineStreamFunction = async (_model, context) => {
+    const streamFn: BrewvaTurnLoopStreamFunction = async (_model, context) => {
       const lastMessage = context.messages[context.messages.length - 1] as
-        | BrewvaAgentEngineLlmMessage
+        | BrewvaTurnLoopLlmMessage
         | undefined;
       if (lastMessage?.role === "toolResult") {
         return createStream(createAssistantMessage([{ type: "text", text: "final" }]));
@@ -926,12 +924,12 @@ describe("in-flight steer control primitive", () => {
   });
 
   test("emits steer_applied with the committed tool result after message_end transforms", async () => {
-    const recordedEvents: BrewvaAgentEngineEvent[] = [];
+    const recordedEvents: BrewvaTurnLoopEvent[] = [];
     const releaseTool = createDeferred();
     const toolStarted = createDeferred();
-    const streamFn: BrewvaAgentEngineStreamFunction = async (_model, context) => {
+    const streamFn: BrewvaTurnLoopStreamFunction = async (_model, context) => {
       const lastMessage = context.messages[context.messages.length - 1] as
-        | BrewvaAgentEngineLlmMessage
+        | BrewvaTurnLoopLlmMessage
         | undefined;
       if (lastMessage?.role === "toolResult") {
         return createStream(createAssistantMessage([{ type: "text", text: "final" }]));
@@ -983,7 +981,7 @@ describe("in-flight steer control primitive", () => {
 
       const committedToolResult = findToolResultMessages(recordedEvents)[0];
       const steerApplied = recordedEvents.find(
-        (event): event is Extract<BrewvaAgentEngineEvent, { type: "steer_applied" }> =>
+        (event): event is Extract<BrewvaTurnLoopEvent, { type: "steer_applied" }> =>
           event.type === "steer_applied",
       );
 
@@ -997,12 +995,12 @@ describe("in-flight steer control primitive", () => {
   });
 
   test("drops steer when message_end replacement removes appended guidance", async () => {
-    const recordedEvents: BrewvaAgentEngineEvent[] = [];
+    const recordedEvents: BrewvaTurnLoopEvent[] = [];
     const releaseTool = createDeferred();
     const toolStarted = createDeferred();
-    const streamFn: BrewvaAgentEngineStreamFunction = async (_model, context) => {
+    const streamFn: BrewvaTurnLoopStreamFunction = async (_model, context) => {
       const lastMessage = context.messages[context.messages.length - 1] as
-        | BrewvaAgentEngineLlmMessage
+        | BrewvaTurnLoopLlmMessage
         | undefined;
       if (lastMessage?.role === "toolResult") {
         return createStream(createAssistantMessage([{ type: "text", text: "final" }]));
@@ -1054,7 +1052,7 @@ describe("in-flight steer control primitive", () => {
 
       const committedToolResult = findToolResultMessages(recordedEvents)[0];
       const steerDropped = recordedEvents.find(
-        (event): event is Extract<BrewvaAgentEngineEvent, { type: "steer_dropped" }> =>
+        (event): event is Extract<BrewvaTurnLoopEvent, { type: "steer_dropped" }> =>
           event.type === "steer_dropped",
       );
 
@@ -1085,7 +1083,7 @@ describe("in-flight steer control primitive", () => {
     try {
       const handleAgentEvent = (
         fixture.session as unknown as {
-          handleAgentEvent(event: BrewvaAgentEngineEvent): Promise<void>;
+          handleAgentEvent(event: BrewvaTurnLoopEvent): Promise<void>;
         }
       ).handleAgentEvent.bind(fixture.session);
 

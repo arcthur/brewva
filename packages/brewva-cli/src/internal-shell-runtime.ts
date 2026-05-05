@@ -1,4 +1,4 @@
-import type { BrewvaManagedPromptSession } from "@brewva/brewva-substrate";
+import type { BrewvaManagedPromptSession } from "@brewva/brewva-substrate/session";
 import type { CliInteractiveSessionOptions, CliInteractiveSmokeResult } from "./cli-runtime.js";
 
 const UNSUPPORTED_RUNTIME_MESSAGE =

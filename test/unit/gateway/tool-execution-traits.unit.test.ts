@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createRequire } from "node:module";
-import type { BrewvaToolContext, BrewvaToolDefinition } from "@brewva/brewva-substrate";
+import type { BrewvaToolContext, BrewvaToolDefinition } from "@brewva/brewva-substrate/tools";
 import { attachBrewvaToolExecutionTraits } from "@brewva/brewva-tools";
 import {
   createHostedToolExecutionCoordinator,

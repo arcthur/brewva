@@ -3,7 +3,7 @@ import {
   createInMemorySessionHost,
   type BrewvaPromptEnvelope,
   type BrewvaQueuedPrompt,
-} from "@brewva/brewva-substrate";
+} from "@brewva/brewva-substrate/session";
 
 function prompt(promptId: string, content: string): BrewvaPromptEnvelope {
   return {

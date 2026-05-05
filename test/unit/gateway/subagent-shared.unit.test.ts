@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
-import type { BrewvaModelCatalog } from "@brewva/brewva-substrate";
+import type { BrewvaModelCatalog } from "@brewva/brewva-substrate/provider";
 import { loadHostedDelegationCatalog } from "../../../packages/brewva-gateway/src/subagents/catalog.js";
 import {
   assertDelegationShapeNarrowing,

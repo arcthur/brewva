@@ -21,7 +21,9 @@ import type {
 } from "@brewva/brewva-runtime";
 import type { DelegationRunRecord } from "@brewva/brewva-runtime";
 import type { BrewvaReplaySession } from "@brewva/brewva-runtime/events";
-import type { BrewvaInteractiveQuestionRequest } from "@brewva/brewva-substrate";
+import type { BrewvaInteractiveQuestionRequest } from "@brewva/brewva-substrate/host-api";
+import type { BrewvaToolUiPort } from "@brewva/brewva-substrate/host-api";
+import type { BrewvaPromptContentPart } from "@brewva/brewva-substrate/prompt";
 import type {
   BrewvaManagedPromptSession,
   BrewvaDiffPreferences,
@@ -31,13 +33,11 @@ import type {
   BrewvaModelPresetState,
   BrewvaSteerOptions,
   BrewvaSteerOutcome,
-  BrewvaPromptContentPart,
   BrewvaPromptOptions,
   BrewvaQueuedPromptView,
   BrewvaPromptSessionEvent,
-  BrewvaToolDefinition,
-  BrewvaToolUiPort,
-} from "@brewva/brewva-substrate";
+} from "@brewva/brewva-substrate/session";
+import type { BrewvaToolDefinition } from "@brewva/brewva-substrate/tools";
 import type { BrewvaSessionResult } from "../session.js";
 import type { ShellCompletionUsageEntry } from "./completion-provider.js";
 

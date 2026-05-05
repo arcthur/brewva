@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { buildBrewvaSystemPrompt } from "@brewva/brewva-substrate";
+import { buildBrewvaSystemPrompt } from "@brewva/brewva-substrate/prompt";
 
 describe("Brewva system prompt", () => {
   function extractCommunicationSection(prompt: string): string {

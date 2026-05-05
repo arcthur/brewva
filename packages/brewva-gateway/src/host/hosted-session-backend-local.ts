@@ -1,12 +1,14 @@
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
 import { MODEL_PRESET_SELECT_EVENT_TYPE } from "@brewva/brewva-runtime/events";
-import {
-  createHostedResourceLoader,
-  type InternalHostPlugin,
-  type BrewvaMutableModelCatalog,
-  type BrewvaModelPreset,
-  type BrewvaModelPresetState,
-} from "@brewva/brewva-substrate";
+import { BREWVA_THINKING_LEVELS } from "@brewva/brewva-substrate/contracts";
+import type { InternalHostPlugin } from "@brewva/brewva-substrate/host-api";
+import type { BrewvaMutableModelCatalog } from "@brewva/brewva-substrate/provider";
+import { createHostedResourceLoader } from "@brewva/brewva-substrate/resources";
+import type {
+  BrewvaModelPreset,
+  BrewvaModelPresetState,
+  BrewvaPromptThinkingLevel,
+} from "@brewva/brewva-substrate/session";
 import { resolveBrewvaModelSelection } from "@brewva/brewva-tools";
 import { createHostedTurnPipeline } from "../runtime-plugins/index.js";
 import {
@@ -39,7 +41,7 @@ import {
 } from "./model-presets.js";
 import { HostedRuntimeTapeSessionStore } from "./runtime-projection-session-store.js";
 
-const DEFAULT_THINKING_LEVEL = "medium";
+const DEFAULT_THINKING_LEVEL: BrewvaPromptThinkingLevel = "medium";
 
 const DEFAULT_MODEL_PER_PROVIDER: Record<string, string> = {
   anthropic: "claude-opus-4-6",
@@ -219,20 +221,35 @@ function resolveHostedThinkingLevel(input: {
   existingThinkingLevel?: string;
   defaultThinkingLevel?: string;
   model?: HostedRegisteredModel;
-}): string {
+}): BrewvaPromptThinkingLevel {
+  const requestedThinkingLevel = normalizeHostedThinkingLevel(input.requestedThinkingLevel);
+  const defaultThinkingLevel =
+    normalizeHostedThinkingLevel(input.defaultThinkingLevel) ?? DEFAULT_THINKING_LEVEL;
+  const existingThinkingLevel = normalizeHostedThinkingLevel(input.existingThinkingLevel);
   let thinkingLevel =
-    input.requestedThinkingLevel ??
+    requestedThinkingLevel ??
     (input.hasExistingSession
       ? input.hasThinkingEntry
-        ? input.existingThinkingLevel
-        : (input.defaultThinkingLevel ?? DEFAULT_THINKING_LEVEL)
-      : (input.defaultThinkingLevel ?? DEFAULT_THINKING_LEVEL));
+        ? existingThinkingLevel
+        : defaultThinkingLevel
+      : defaultThinkingLevel);
 
   if (!input.model || !input.model.reasoning) {
     thinkingLevel = "off";
   }
 
   return thinkingLevel ?? DEFAULT_THINKING_LEVEL;
+}
+
+function normalizeHostedThinkingLevel(
+  thinkingLevel: string | undefined,
+): BrewvaPromptThinkingLevel | undefined {
+  if (!thinkingLevel) {
+    return undefined;
+  }
+  return BREWVA_THINKING_LEVELS.includes(thinkingLevel as BrewvaPromptThinkingLevel)
+    ? (thinkingLevel as BrewvaPromptThinkingLevel)
+    : undefined;
 }
 
 function createHostedLocalSettingsHandle(cwd: string, agentDir: string): HostedSessionSettings {

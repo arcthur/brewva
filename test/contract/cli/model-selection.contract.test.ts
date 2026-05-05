@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { createInMemoryModelCatalog } from "@brewva/brewva-substrate";
+import { createInMemoryModelCatalog } from "@brewva/brewva-substrate/provider";
 import { resolveBrewvaModelSelection } from "@brewva/brewva-tools";
 
 function createRegistry() {

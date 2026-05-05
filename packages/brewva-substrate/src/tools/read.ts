@@ -6,16 +6,16 @@ import {
   type BrewvaToolDefinition,
   type BrewvaToolResult,
 } from "../contracts/tool.js";
-import { detectSupportedImageMimeTypeFromFile } from "./mime.js";
-import { resolveReadPath } from "./path-utils.js";
-import { asRenderTheme, createStaticTextComponent } from "./render.js";
+import { detectSupportedImageMimeTypeFromFile } from "./_shared/mime.js";
+import { resolveReadPath } from "./_shared/path-utils.js";
+import { asRenderTheme, createStaticTextComponent } from "./_shared/render.js";
 import {
   DEFAULT_MAX_BYTES,
   DEFAULT_MAX_LINES,
   formatSize,
   truncateHead,
   type TruncationResult,
-} from "./truncate.js";
+} from "./_shared/truncate.js";
 
 const readSchema = Type.Object(
   {

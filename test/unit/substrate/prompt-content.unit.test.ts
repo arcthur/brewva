@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { brewvaPromptContentPartsEqual } from "@brewva/brewva-substrate";
+import { brewvaPromptContentPartsEqual } from "@brewva/brewva-substrate/prompt";
 
 describe("brewva prompt content equality", () => {
   test("matches equal structured prompt parts without relying on JSON serialization", () => {

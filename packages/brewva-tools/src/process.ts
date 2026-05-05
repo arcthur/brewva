@@ -1,4 +1,4 @@
-import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate";
+import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import { Type } from "@sinclair/typebox";
 import { addMilliseconds, differenceInMilliseconds, isBefore } from "date-fns";
 import { resolveConfiguredBoxPlane, resolveRuntimeBoxConfig } from "./box-plane-runtime.js";

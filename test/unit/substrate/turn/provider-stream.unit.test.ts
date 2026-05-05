@@ -5,8 +5,8 @@ import {
   registerApiProvider,
   unregisterApiProviders,
 } from "@brewva/brewva-provider-core/registry";
-import { createHostedProviderStreamFunction } from "../../../packages/brewva-agent-engine/src/provider-stream.js";
-import { createAssistantMessageEventStream } from "../../../packages/brewva-provider-core/src/utils/event-stream.js";
+import { createAssistantMessageEventStream } from "@brewva/brewva-provider-core/stream";
+import { createBrewvaTurnProviderStreamFunction } from "@brewva/brewva-substrate/turn";
 
 const SOURCE_ID = "provider-stream-unit-test";
 
@@ -30,7 +30,7 @@ function createMessage(api: string): AssistantMessage {
   };
 }
 
-describe("agent engine provider stream", () => {
+describe("substrate turn provider stream", () => {
   test("preserves advisory parse status from provider-core event contract", async () => {
     clearApiProviders();
     registerApiProvider(
@@ -74,7 +74,7 @@ describe("agent engine provider stream", () => {
       SOURCE_ID,
     );
 
-    const providerStream = createHostedProviderStreamFunction();
+    const providerStream = createBrewvaTurnProviderStreamFunction();
     const stream = await providerStream(
       {
         provider: "unit-provider",

@@ -1,6 +1,9 @@
 import { BrewvaRuntime, type ManagedToolMode } from "@brewva/brewva-runtime";
 import type { TurnEnvelope } from "@brewva/brewva-runtime/channels";
-import type { BrewvaPromptSessionEvent, BrewvaSteerOutcome } from "@brewva/brewva-substrate";
+import type {
+  BrewvaPromptSessionEvent,
+  BrewvaSteerOutcome,
+} from "@brewva/brewva-substrate/session";
 import { ConversationBindingStore } from "../conversations/binding-store.js";
 import { createHostedSession, type HostedSessionResult } from "../host/create-hosted-session.js";
 import { waitForAllSettledWithTimeout } from "../utils/async.js";

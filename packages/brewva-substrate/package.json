@@ -11,12 +11,68 @@
       "bun": "./src/index.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
+    },
+    "./contracts": {
+      "types": "./dist/contracts/index.d.ts",
+      "bun": "./src/contracts/index.ts",
+      "import": "./dist/contracts/index.js",
+      "default": "./dist/contracts/index.js"
+    },
+    "./session": {
+      "types": "./dist/session/index.d.ts",
+      "bun": "./src/session/index.ts",
+      "import": "./dist/session/index.js",
+      "default": "./dist/session/index.js"
+    },
+    "./prompt": {
+      "types": "./dist/prompt/index.d.ts",
+      "bun": "./src/prompt/index.ts",
+      "import": "./dist/prompt/index.js",
+      "default": "./dist/prompt/index.js"
+    },
+    "./resources": {
+      "types": "./dist/resources/index.d.ts",
+      "bun": "./src/resources/index.ts",
+      "import": "./dist/resources/index.js",
+      "default": "./dist/resources/index.js"
+    },
+    "./tools": {
+      "types": "./dist/tools/index.d.ts",
+      "bun": "./src/tools/index.ts",
+      "import": "./dist/tools/index.js",
+      "default": "./dist/tools/index.js"
+    },
+    "./host-api": {
+      "types": "./dist/host-api/index.d.ts",
+      "bun": "./src/host-api/index.ts",
+      "import": "./dist/host-api/index.js",
+      "default": "./dist/host-api/index.js"
+    },
+    "./persistence": {
+      "types": "./dist/persistence/index.d.ts",
+      "bun": "./src/persistence/index.ts",
+      "import": "./dist/persistence/index.js",
+      "default": "./dist/persistence/index.js"
+    },
+    "./provider": {
+      "types": "./dist/provider/index.d.ts",
+      "bun": "./src/provider/index.ts",
+      "import": "./dist/provider/index.js",
+      "default": "./dist/provider/index.js"
+    },
+    "./turn": {
+      "types": "./dist/turn/index.d.ts",
+      "bun": "./src/turn/index.ts",
+      "import": "./dist/turn/index.js",
+      "default": "./dist/turn/index.js"
     }
   },
   "dependencies": {
     "@brewva/brewva-provider-core": "workspace:*",
     "@brewva/brewva-tool-protocol": "workspace:*",
     "@sinclair/typebox": "^0.34.49",
+    "ajv": "^8.18.0",
+    "ajv-formats": "^3.0.1",
     "file-type": "^22.0.1",
     "yaml": "^2.8.3"
   },

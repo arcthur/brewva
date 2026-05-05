@@ -3,8 +3,8 @@ import {
   SESSION_TERMINATION_REASONS,
   type BrewvaPromptSessionEvent,
   type SessionPhase,
-  type ToolExecutionPhase,
-} from "@brewva/brewva-substrate";
+} from "@brewva/brewva-substrate/session";
+import type { ToolExecutionPhase } from "@brewva/brewva-substrate/tools";
 import {
   extractMessageError,
   readAssistantMessageEventPartial,

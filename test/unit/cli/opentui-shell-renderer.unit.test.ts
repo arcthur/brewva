@@ -10,14 +10,16 @@ import {
   type SessionWireFrame,
 } from "@brewva/brewva-runtime";
 import { type BrewvaReplaySession } from "@brewva/brewva-runtime/events";
+import type { BrewvaToolUiPort } from "@brewva/brewva-substrate/host-api";
 import type {
   BrewvaQueuedPromptView,
   BrewvaPromptSessionEvent,
-  BrewvaRenderableComponent,
   BrewvaSessionModelDescriptor,
+} from "@brewva/brewva-substrate/session";
+import type {
+  BrewvaRenderableComponent,
   BrewvaToolDefinition,
-  BrewvaToolUiPort,
-} from "@brewva/brewva-substrate";
+} from "@brewva/brewva-substrate/tools";
 import {
   createOpenTuiRoot,
   createOpenTuiSolidElement,

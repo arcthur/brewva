@@ -10,7 +10,10 @@ import {
   registerQualityGate,
 } from "@brewva/brewva-gateway/runtime-plugins";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
-import { createBrewvaHostPluginRunner, type BrewvaHostContext } from "@brewva/brewva-substrate";
+import {
+  createBrewvaHostPluginRunner,
+  type BrewvaHostContext,
+} from "@brewva/brewva-substrate/host-api";
 import { requireNonEmptyString } from "../../helpers/assertions.js";
 import { createMockRuntimePluginApi, invokeHandlers } from "../../helpers/runtime-plugin.js";
 import { createOpsRuntimeConfig } from "../../helpers/runtime.js";

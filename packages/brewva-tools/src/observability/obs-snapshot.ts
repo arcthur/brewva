@@ -1,6 +1,6 @@
 import { formatTaskVerificationLevelForSurface } from "@brewva/brewva-runtime";
 import { VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
-import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate";
+import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "../types.js";
 import { textResult } from "../utils/result.js";

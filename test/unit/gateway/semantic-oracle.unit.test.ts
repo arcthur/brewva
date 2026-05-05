@@ -5,7 +5,7 @@ import {
   SEMANTIC_EXTRACTION_INVOKED_EVENT_TYPE,
   SEMANTIC_RERANK_INVOKED_EVENT_TYPE,
 } from "@brewva/brewva-runtime/events";
-import type { BrewvaRegisteredModel } from "@brewva/brewva-substrate";
+import type { BrewvaRegisteredModel } from "@brewva/brewva-substrate/provider";
 import { createHostedSemanticReranker } from "../../../packages/brewva-gateway/src/host/semantic-reranker.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 

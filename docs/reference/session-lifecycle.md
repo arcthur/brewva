@@ -204,10 +204,11 @@ operator explanation, but they are not a rival lifecycle state machine.
      of the ordinary human fast path
    - `scheduled`, `heartbeat`, `wal_recovery`, `channel`, and `subagent`
      profiles opt into the control-plane features their entrypoint needs
-   - the low-level agent loop still owns model streaming, tool calls, queued
-     prompts, in-flight steer application, follow-up messages, request
-     authorization, context transformation,
-     compaction/reasoning recovery, and process-local loop diagnostics
+   - the substrate turn loop owns model streaming, tool calls, queued prompts,
+     in-flight steer application, follow-up messages, request authorization,
+     context transformation, and event reporting
+   - hosted compaction, reasoning recovery, envelope policy, profile selection,
+     and process-local loop diagnostics remain gateway-owned
 6. Expose derived session wire replay through the runtime-owned session-wire
    compiler surface and dispose session resources
 

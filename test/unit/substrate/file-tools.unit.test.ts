@@ -5,7 +5,7 @@ import {
   createBrewvaEditToolDefinition,
   createBrewvaReadToolDefinition,
   createBrewvaWriteToolDefinition,
-} from "@brewva/brewva-substrate";
+} from "@brewva/brewva-substrate/tools";
 import { cleanupTestWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
 
 function extractText(result: {

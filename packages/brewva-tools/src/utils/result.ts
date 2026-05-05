@@ -1,7 +1,7 @@
 import type {
   BrewvaToolResult as AgentToolResult,
   BrewvaToolResultDisplay,
-} from "@brewva/brewva-substrate";
+} from "@brewva/brewva-substrate/tools";
 
 export type ToolResultVerdict = "pass" | "fail" | "inconclusive";
 

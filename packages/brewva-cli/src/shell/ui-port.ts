@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import process from "node:process";
-import type { BrewvaUiDialogOptions } from "@brewva/brewva-substrate";
+import type { BrewvaUiDialogOptions } from "@brewva/brewva-substrate/host-api";
 import {
   DEFAULT_TUI_THEME,
   getTuiTheme,

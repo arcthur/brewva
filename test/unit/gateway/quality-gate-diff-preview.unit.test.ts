@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
-import { createBrewvaEditToolDefinition } from "@brewva/brewva-substrate";
+import { createBrewvaEditToolDefinition } from "@brewva/brewva-substrate/tools";
 import { createQualityGateLifecycle } from "../../../packages/brewva-gateway/src/runtime-plugins/quality-gate.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 

@@ -6,7 +6,10 @@ import {
   CONTEXT_ENTRY_RECORDED_EVENT_TYPE,
   SESSION_LINEAGE_NODE_CREATED_EVENT_TYPE,
 } from "@brewva/brewva-runtime";
-import { readSessionBundleArtifact, replayImportedSessionEntries } from "@brewva/brewva-substrate";
+import {
+  readSessionBundleArtifact,
+  replayImportedSessionEntries,
+} from "@brewva/brewva-substrate/persistence";
 import { HostedRuntimeTapeSessionStore } from "../../../packages/brewva-gateway/src/host/runtime-projection-session-store.js";
 import type { StoredSessionMessage } from "../../../packages/brewva-gateway/src/session/runtime-session-transcript.js";
 import { patchDateNow } from "../../helpers/global-state.js";

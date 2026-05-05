@@ -3,8 +3,8 @@ import type {
   InternalSessionHostPlugin,
   InternalSessionHostPluginContext,
 } from "../host-api/plugin.js";
+import type { BrewvaPromptContentPart } from "../prompt/content.js";
 import { advanceSessionPhaseResult, type SessionPhaseEvent } from "./phase-machine.js";
-import type { BrewvaPromptContentPart } from "./prompt-content.js";
 
 export interface BrewvaPromptEnvelope {
   promptId: string;
@@ -65,7 +65,7 @@ class InMemorySessionHost implements BrewvaSessionHost {
   }
 
   removeQueuedPrompt(promptId: string): boolean {
-    // Hosted gateway sessions remove queued prompts through BrewvaAgentEngine.
+    // Hosted gateway sessions remove queued prompts through the substrate turn loop.
     // This in-memory host path exists for direct substrate-backed session flows.
     return (
       this.removeFromQueue(this.primaryQueue, promptId) ||

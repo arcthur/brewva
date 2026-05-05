@@ -25,23 +25,33 @@ import {
   STEER_DROPPED_EVENT_TYPE,
   STEER_QUEUED_EVENT_TYPE,
 } from "@brewva/brewva-runtime/events";
+import { DEFAULT_CONTEXT_STATE, type ContextState } from "@brewva/brewva-substrate/contracts";
 import {
-  DEFAULT_CONTEXT_STATE,
-  advanceSessionPhaseResult,
-  buildBrewvaSystemPrompt,
-  buildBrewvaPromptText,
-  canTransitionSessionPhase,
-  cloneBrewvaPromptContentParts,
   createBrewvaHostPluginRunner,
-  expandBrewvaPromptTemplate,
   type CreateBrewvaHostPluginRunnerOptions,
-  promptPartsArePlainText,
-  type BrewvaHostedResourceLoader,
   type BrewvaHostCommandContext,
   type BrewvaHostCustomMessage,
   type BrewvaHostCustomMessageDelivery,
   type BrewvaHostMessageVisibilityPatch,
   type BrewvaHostPluginRunner,
+  type BrewvaToolUiPort,
+} from "@brewva/brewva-substrate/host-api";
+import {
+  buildBrewvaSystemPrompt,
+  buildBrewvaPromptText,
+  cloneBrewvaPromptContentParts,
+  expandBrewvaPromptTemplate,
+  promptPartsArePlainText,
+  type BrewvaPromptContentPart,
+} from "@brewva/brewva-substrate/prompt";
+import type {
+  BrewvaMutableModelCatalog,
+  BrewvaRegisteredModel,
+} from "@brewva/brewva-substrate/provider";
+import type { BrewvaHostedResourceLoader } from "@brewva/brewva-substrate/resources";
+import {
+  advanceSessionPhaseResult,
+  canTransitionSessionPhase,
   type BrewvaManagedPromptSession,
   type BrewvaManagedSessionStore,
   type BrewvaManagedSessionSettingsView,
@@ -51,28 +61,39 @@ import {
   type BrewvaModelPresetSelectionRequest,
   type BrewvaModelPresetSelectionResult,
   type BrewvaModelPresetState,
-  type BrewvaMutableModelCatalog,
-  type BrewvaCompactionRequest,
   type BrewvaSteerOptions,
   type BrewvaSteerOutcome,
-  type BrewvaPromptContentPart,
   type BrewvaPromptOptions,
   type BrewvaPromptQueueBehavior,
   type BrewvaQueuedPromptView,
   type BrewvaPromptSessionEvent,
   type BrewvaPromptThinkingLevel,
-  type BrewvaRegisteredModel,
   type SessionPhase,
   type SessionPhaseEvent,
-  type ContextState,
   type BrewvaSessionModelCatalogView,
   type BrewvaSessionModelDescriptor,
   type BrewvaSessionContext,
+} from "@brewva/brewva-substrate/session";
+import {
+  type BrewvaCompactionRequest,
   BrewvaToolContext,
   BrewvaToolDefinition,
   BrewvaToolResult,
-  type BrewvaToolUiPort,
-} from "@brewva/brewva-substrate";
+} from "@brewva/brewva-substrate/tools";
+import {
+  createBrewvaTurnLoopController,
+  type BrewvaTurnLoopAfterToolCallContext,
+  type BrewvaTurnLoopBeforeToolCallContext,
+  type BrewvaTurnLoopController,
+  type BrewvaTurnLoopEvent,
+  type BrewvaTurnLoopFileContent,
+  type BrewvaTurnLoopMessage,
+  type BrewvaTurnLoopThinkingBudgets,
+  type BrewvaTurnLoopThinkingLevel,
+  type BrewvaTurnLoopTool,
+  type BrewvaTurnLoopToolResultMessage,
+  type BrewvaTurnLoopTransport,
+} from "@brewva/brewva-substrate/turn";
 import { estimateStructuredTokenCount } from "@brewva/brewva-token-estimation";
 import { resolveBrewvaModelSelection } from "@brewva/brewva-tools";
 import {
@@ -93,22 +114,7 @@ import {
   type RuntimeFactSessionPhaseProjection,
 } from "../session/session-phase-runtime-facts.js";
 import { clearDefaultTurnLifecycleSpine } from "../session/turn-envelope.js";
-import {
-  createHostedAgentEngine,
-  supportsHostedExtendedThinking,
-  type BrewvaAgentEngine,
-  type BrewvaAgentEngineAfterToolCallContext,
-  type BrewvaAgentEngineBeforeToolCallContext,
-  type BrewvaAgentEngineCachePolicy,
-  type BrewvaAgentEngineEvent,
-  type BrewvaAgentEngineFileContent,
-  type BrewvaAgentEngineMessage,
-  type BrewvaAgentEngineThinkingBudgets,
-  type BrewvaAgentEngineThinkingLevel,
-  type BrewvaAgentEngineTool,
-  type BrewvaAgentEngineToolResultMessage,
-  type BrewvaAgentEngineTransport,
-} from "./hosted-agent-engine.js";
+import { supportsHostedExtendedThinkingModel as supportsHostedExtendedThinking } from "./hosted-provider-helpers.js";
 import type { HostedSessionLogger } from "./logger.js";
 import {
   cloneModelPresetState,
@@ -144,17 +150,37 @@ function resolvePresetModelSelection(
   }
   return {
     model: selection.model,
-    thinkingLevel: selection.thinkingLevel as BrewvaPromptThinkingLevel | undefined,
+    thinkingLevel: selection.thinkingLevel,
     modelText: selection.thinkingLevel
       ? `${selection.model.provider}/${selection.model.id}:${selection.thinkingLevel}`
       : `${selection.model.provider}/${selection.model.id}`,
   };
 }
 
+function toTurnLoopThinkingLevel(
+  level: BrewvaPromptThinkingLevel | undefined,
+): BrewvaTurnLoopThinkingLevel {
+  switch (level) {
+    case "minimal":
+      return "minimal";
+    case "low":
+      return "low";
+    case "medium":
+      return "medium";
+    case "high":
+      return "high";
+    case "xhigh":
+      return "xhigh";
+    case "off":
+    default:
+      return "off";
+  }
+}
+
 function applyMessageEndTransform(
-  original: BrewvaAgentEngineMessage,
+  original: BrewvaTurnLoopMessage,
   visibility: BrewvaHostMessageVisibilityPatch,
-): BrewvaAgentEngineMessage {
+): BrewvaTurnLoopMessage {
   return {
     ...original,
     ...(visibility.display !== undefined ? { display: visibility.display } : {}),
@@ -335,7 +361,7 @@ interface QueuedPromptEntry {
   message: QueuedUserMessage;
 }
 
-type QueuedUserMessage = Extract<BrewvaAgentEngineMessage, { role: "user" }>;
+type QueuedUserMessage = Extract<BrewvaTurnLoopMessage, { role: "user" }>;
 
 function buildProviderDynamicTailSummary(input: {
   payload: unknown;
@@ -431,7 +457,7 @@ function buildProviderCacheModelKey(model: ProviderCacheModelIdentity): string {
 
 function buildUnsupportedProviderCacheRender(input: {
   model: ProviderCacheModelIdentity;
-  transport: BrewvaAgentEngineTransport;
+  transport: BrewvaTurnLoopTransport;
   sessionId: string;
   cachePolicy: ProviderCachePolicy;
 }): ProviderCacheRenderState {
@@ -471,7 +497,7 @@ function buildUnsupportedProviderCacheRender(input: {
 function normalizeProviderCacheRender(input: {
   metadata?: ProviderPayloadMetadata;
   model: ProviderCacheModelIdentity;
-  transport: BrewvaAgentEngineTransport;
+  transport: BrewvaTurnLoopTransport;
   sessionId: string;
   cachePolicy: ProviderCachePolicy;
   previousRender?: ProviderCacheRenderState;
@@ -518,9 +544,9 @@ export interface BrewvaManagedAgentSessionSettingsPort {
   getQuietStartup(): boolean;
   getQueueMode(): "all" | "one-at-a-time" | undefined;
   getFollowUpMode(): "all" | "one-at-a-time" | undefined;
-  getTransport(): BrewvaAgentEngineTransport;
-  getCachePolicy(): BrewvaAgentEngineCachePolicy;
-  getThinkingBudgets(): BrewvaAgentEngineThinkingBudgets | undefined;
+  getTransport(): BrewvaTurnLoopTransport;
+  getCachePolicy(): ProviderCachePolicy;
+  getThinkingBudgets(): BrewvaTurnLoopThinkingBudgets | undefined;
   getRetrySettings(): { maxDelayMs: number } | undefined;
   getModelPresetState?(): BrewvaModelPresetState;
   setDefaultThinkingLevel(thinkingLevel: string): void;
@@ -644,13 +670,12 @@ function toAgentTool(
   tool: BrewvaToolDefinition,
   ctxFactory: () => BrewvaToolContext,
   schemaOverride?: ToolSchemaSnapshotTool,
-): BrewvaAgentEngineTool {
+): BrewvaTurnLoopTool {
   return {
     name: tool.name,
     label: tool.label,
     description: schemaOverride?.description ?? tool.description,
-    parameters: (schemaOverride?.parameters ??
-      tool.parameters) as BrewvaAgentEngineTool["parameters"],
+    parameters: (schemaOverride?.parameters ?? tool.parameters) as BrewvaTurnLoopTool["parameters"],
     prepareArguments: tool.prepareArguments,
     execute: (
       toolCallId: string,
@@ -911,7 +936,7 @@ function buildTextPromptParts(text: string): BrewvaPromptContentPart[] {
 
 function toAgentUserContent(
   parts: readonly BrewvaPromptContentPart[],
-): Extract<BrewvaAgentEngineMessage, { role: "user" }>["content"] {
+): Extract<BrewvaTurnLoopMessage, { role: "user" }>["content"] {
   return parts.map((part) => {
     if (part.type === "text") {
       return { type: "text", text: part.text };
@@ -968,7 +993,7 @@ function truncatePromptFileText(text: string): string {
 
 function resolvePromptFilePart(
   cwd: string,
-  part: BrewvaAgentEngineFileContent,
+  part: BrewvaTurnLoopFileContent,
 ):
   | {
       kind: "text";
@@ -1144,7 +1169,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
   readonly #catalog: BrewvaMutableModelCatalog;
   #modelPresetState: BrewvaModelPresetState;
   readonly #resourceLoader: BrewvaHostedResourceLoader;
-  readonly #agent: BrewvaAgentEngine;
+  readonly #agent: BrewvaTurnLoopController;
   readonly #runner: BrewvaHostPluginRunner;
   readonly #registeredTools: BrewvaToolDefinition[];
   readonly #toolDefinitions = new Map<string, BrewvaToolDefinition>();
@@ -1156,8 +1181,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
   #ui: BrewvaToolUiPort;
   readonly #queuedPrompts: QueuedPromptEntry[] = [];
   readonly #queuedPromptIdsByMessage = new WeakMap<QueuedUserMessage, string>();
-  readonly #pendingNextTurnMessages: Array<Extract<BrewvaAgentEngineMessage, { role: "custom" }>> =
-    [];
+  readonly #pendingNextTurnMessages: Array<Extract<BrewvaTurnLoopMessage, { role: "custom" }>> = [];
   readonly #commandUnsupported = async (): Promise<{ cancelled: boolean }> => ({ cancelled: true });
   #sessionPhase: SessionPhase = { kind: "idle" };
   #unsubscribeSessionWire: (() => void) | null = null;
@@ -1176,7 +1200,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
   };
   readonly #logger: HostedSessionLogger | null;
   readonly #onProviderAssistantMessage:
-    | ((message: Extract<BrewvaAgentEngineMessage, { role: "assistant" }>) => void)
+    | ((message: Extract<BrewvaTurnLoopMessage, { role: "assistant" }>) => void)
     | undefined;
   readonly #onDispose: (() => void) | undefined;
   #providerCacheSessionClear: Promise<void> | null = null;
@@ -1191,11 +1215,11 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     modelPresetState?: BrewvaModelPresetState;
     customTools: readonly BrewvaToolDefinition[];
     runner: BrewvaHostPluginRunner;
-    agent: BrewvaAgentEngine;
+    agent: BrewvaTurnLoopController;
     ui?: BrewvaToolUiPort;
     logger?: HostedSessionLogger;
     onProviderAssistantMessage?: (
-      message: Extract<BrewvaAgentEngineMessage, { role: "assistant" }>,
+      message: Extract<BrewvaTurnLoopMessage, { role: "assistant" }>,
     ) => void;
     onDispose?: () => void;
   }) {
@@ -1314,9 +1338,9 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
       }
     });
 
-    const agent = createHostedAgentEngine({
+    const agent = createBrewvaTurnLoopController({
       initialModel: options.initialModel,
-      initialThinkingLevel: options.initialThinkingLevel ?? "off",
+      initialThinkingLevel: toTurnLoopThinkingLevel(options.initialThinkingLevel),
       queueMode: options.settings.getQueueMode(),
       followUpMode: options.settings.getFollowUpMode(),
       transport: options.settings.getTransport(),
@@ -1325,7 +1349,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
       maxRetryDelayMs: options.settings.getRetrySettings()?.maxDelayMs,
       sessionId,
       resolveRequestAuth: async (model) => options.modelCatalog.getApiKeyAndHeaders(model),
-      beforeToolCall: async (input: BrewvaAgentEngineBeforeToolCallContext) => {
+      beforeToolCall: async (input: BrewvaTurnLoopBeforeToolCallContext) => {
         if (!session) {
           return undefined;
         }
@@ -1340,7 +1364,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
         );
         return result ? { block: result.block, reason: result.reason } : undefined;
       },
-      afterToolCall: async (input: BrewvaAgentEngineAfterToolCallContext) => {
+      afterToolCall: async (input: BrewvaTurnLoopAfterToolCallContext) => {
         if (!session) {
           return undefined;
         }
@@ -1488,7 +1512,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
         return runner.emitContext(
           { type: "context", messages },
           session.createHostContext(),
-        ) as Promise<BrewvaAgentEngineMessage[]>;
+        ) as Promise<BrewvaTurnLoopMessage[]>;
       },
       resolveFile: (part) => resolvePromptFilePart(options.cwd, part),
       shouldStopAfterToolResults: (toolResults) =>
@@ -1599,7 +1623,8 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
   }
 
   get model(): BrewvaSessionModelDescriptor | undefined {
-    return this.#catalog.find(this.#agent.state.model.provider, this.#agent.state.model.id);
+    const model = this.#agent.state.model;
+    return model ? this.#catalog.find(model.provider, model.id) : undefined;
   }
 
   get thinkingLevel(): BrewvaPromptThinkingLevel {
@@ -1815,7 +1840,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
       throw new Error(`No API key found for ${this.model.provider}/${this.model.id}.`);
     }
 
-    const messages: BrewvaAgentEngineMessage[] = [
+    const messages: BrewvaTurnLoopMessage[] = [
       {
         role: "user",
         content: toAgentUserContent(currentParts),
@@ -1940,7 +1965,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
       : (available[available.length - 1] ?? "off");
     const previousThinkingLevel = this.#agent.state.thinkingLevel as BrewvaPromptThinkingLevel;
     const changed = effective !== previousThinkingLevel;
-    this.#agent.setThinkingLevel(effective as BrewvaAgentEngineThinkingLevel);
+    this.#agent.setThinkingLevel(toTurnLoopThinkingLevel(effective));
     if (changed) {
       this.sessionManager.appendThinkingLevelChange(effective);
       if (options.persistDefault) {
@@ -1966,7 +1991,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
       throw new Error("replaceMessages expects an array of messages.");
     }
     await this.clearProviderCacheSessionState();
-    this.#agent.replaceMessages([...messages] as BrewvaAgentEngineMessage[]);
+    this.#agent.replaceMessages([...messages] as BrewvaTurnLoopMessage[]);
   }
 
   getAvailableThinkingLevels(): BrewvaPromptThinkingLevel[] {
@@ -2027,7 +2052,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
   private buildAgentToolsFromSnapshot(
     tools: readonly BrewvaToolDefinition[],
     snapshot: ToolSchemaSnapshot,
-  ): BrewvaAgentEngineTool[] {
+  ): BrewvaTurnLoopTool[] {
     const schemasByName = new Map(snapshot.tools.map((tool) => [tool.name, tool]));
     return tools.map((tool) =>
       toAgentTool(tool, () => this.createToolContext(), schemasByName.get(tool.name)),
@@ -2280,7 +2305,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     message: BrewvaHostCustomMessage,
     options?: { triggerTurn?: boolean; deliverAs?: BrewvaHostCustomMessageDelivery },
   ): Promise<void> {
-    const customMessage: Extract<BrewvaAgentEngineMessage, { role: "custom" }> = {
+    const customMessage: Extract<BrewvaTurnLoopMessage, { role: "custom" }> = {
       role: "custom",
       customType: message.customType,
       content: message.content,
@@ -2423,7 +2448,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     };
   }
 
-  private async handleAgentEvent(event: BrewvaAgentEngineEvent): Promise<BrewvaAgentEngineEvent> {
+  private async handleAgentEvent(event: BrewvaTurnLoopEvent): Promise<BrewvaTurnLoopEvent> {
     if (event.type === "message_start" && event.message.role === "user") {
       this.deleteQueuedMessage(event.message);
     }
@@ -2485,7 +2510,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     void this.executeDeferredCompaction();
   }
 
-  private consumeToolResultStop(_toolResults: BrewvaAgentEngineToolResultMessage[]): boolean {
+  private consumeToolResultStop(_toolResults: BrewvaTurnLoopToolResultMessage[]): boolean {
     if (!this.#stopAfterCurrentToolResults) {
       return false;
     }
@@ -2609,7 +2634,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     }
   }
 
-  private async emitPluginEvent(event: BrewvaAgentEngineEvent): Promise<BrewvaAgentEngineEvent> {
+  private async emitPluginEvent(event: BrewvaTurnLoopEvent): Promise<BrewvaTurnLoopEvent> {
     const ctx = this.createHostContext();
     switch (event.type) {
       case "agent_start":
@@ -2731,7 +2756,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     }
   }
 
-  private async advanceSessionPhaseFromAgentEvent(event: BrewvaAgentEngineEvent): Promise<void> {
+  private async advanceSessionPhaseFromAgentEvent(event: BrewvaTurnLoopEvent): Promise<void> {
     switch (event.type) {
       case "message_start":
         if (event.message.role !== "assistant" || this.getSessionPhase().kind !== "idle") {
@@ -2888,7 +2913,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
   }
 
   private resolveModelCallId(
-    message: Extract<BrewvaAgentEngineMessage, { role: "assistant" }>,
+    message: Extract<BrewvaTurnLoopMessage, { role: "assistant" }>,
   ): string {
     return typeof message.responseId === "string" && message.responseId.trim().length > 0
       ? message.responseId
@@ -2942,7 +2967,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     });
   }
 
-  private deleteQueuedMessage(message: Extract<BrewvaAgentEngineMessage, { role: "user" }>): void {
+  private deleteQueuedMessage(message: Extract<BrewvaTurnLoopMessage, { role: "user" }>): void {
     const promptId = this.#queuedPromptIdsByMessage.get(message);
     const index = this.#queuedPrompts.findIndex(
       (entry) => entry.message === message || entry.view.promptId === promptId,

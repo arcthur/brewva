@@ -9,11 +9,8 @@ import { setTimeout as sleep } from "node:timers/promises";
 import type { BrewvaRuntime } from "@brewva/brewva-runtime";
 import { createCredentialVaultServiceFromSecurityConfig } from "@brewva/brewva-runtime/credentials";
 import type { CredentialVaultService } from "@brewva/brewva-runtime/credentials";
-import type {
-  BrewvaModelCatalog,
-  BrewvaRegisteredModel,
-  BrewvaSessionModelCatalogView,
-} from "@brewva/brewva-substrate";
+import type { BrewvaModelCatalog, BrewvaRegisteredModel } from "@brewva/brewva-substrate/provider";
+import type { BrewvaSessionModelCatalogView } from "@brewva/brewva-substrate/session";
 import {
   GOOGLE_OAUTH_AUTH_URL,
   GOOGLE_OAUTH_PROVIDER,

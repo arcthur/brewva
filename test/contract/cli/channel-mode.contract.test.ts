@@ -8,7 +8,8 @@ import {
   resolveSupportedChannel,
 } from "@brewva/brewva-gateway";
 import type { TurnEnvelope } from "@brewva/brewva-runtime/channels";
-import type { BrewvaPromptContentPart, BrewvaPromptSessionEvent } from "@brewva/brewva-substrate";
+import type { BrewvaPromptContentPart } from "@brewva/brewva-substrate/prompt";
+import type { BrewvaPromptSessionEvent } from "@brewva/brewva-substrate/session";
 import { createRuntimeFixture } from "../../helpers/runtime.js";
 
 type SessionLike = {

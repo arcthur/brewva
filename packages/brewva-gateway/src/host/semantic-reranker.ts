@@ -8,8 +8,8 @@ import type {
   BrewvaModelCatalog,
   BrewvaProviderCompletionDriver,
   BrewvaRegisteredModel,
-} from "@brewva/brewva-substrate";
-import { isUnsupportedBrewvaProviderApiError } from "@brewva/brewva-substrate";
+} from "@brewva/brewva-substrate/provider";
+import { isUnsupportedBrewvaProviderApiError } from "@brewva/brewva-substrate/provider";
 import type {
   BrewvaSemanticReranker,
   SemanticRerankerNarrativeExtractionInput,

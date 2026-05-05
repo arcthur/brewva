@@ -1,7 +1,7 @@
 import { accessSync, constants, realpathSync, statSync } from "node:fs";
 import { basename, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import type { BrewvaPromptContentPart } from "@brewva/brewva-substrate";
+import type { BrewvaPromptContentPart } from "@brewva/brewva-substrate/prompt";
 import type {
   CliShellPromptPart,
   CliShellPromptSnapshot,

@@ -4,7 +4,7 @@ import {
   advanceToolExecutionPhase,
   isToolExecutionPhaseTerminal,
   type ToolExecutionPhase,
-} from "@brewva/brewva-substrate";
+} from "@brewva/brewva-substrate/tools";
 
 describe("substrate tool execution phase contract", () => {
   test("encodes the fixed C2 execution phase order", () => {

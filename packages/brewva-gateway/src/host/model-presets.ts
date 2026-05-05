@@ -1,4 +1,4 @@
-import type { BrewvaModelPreset, BrewvaModelPresetState } from "@brewva/brewva-substrate";
+import type { BrewvaModelPreset, BrewvaModelPresetState } from "@brewva/brewva-substrate/session";
 
 export const DEFAULT_MODEL_PRESET_NAME = "Default";
 

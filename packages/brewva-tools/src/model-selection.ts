@@ -1,8 +1,10 @@
-import type { BrewvaModelCatalog as ModelRegistry } from "@brewva/brewva-substrate";
+import {
+  BREWVA_THINKING_LEVELS,
+  type BrewvaModelCatalog as ModelRegistry,
+  type BrewvaThinkingLevel,
+} from "@brewva/brewva-substrate/provider";
 
-const VALID_THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh"] as const;
-
-export type BrewvaThinkingLevel = (typeof VALID_THINKING_LEVELS)[number];
+export type { BrewvaThinkingLevel };
 
 type RegisteredModel = ReturnType<ModelRegistry["getAll"]>[number];
 
@@ -12,7 +14,7 @@ interface ModelMatchResult {
 }
 
 function isValidThinkingLevel(value: string): value is BrewvaThinkingLevel {
-  return VALID_THINKING_LEVELS.includes(value as BrewvaThinkingLevel);
+  return BREWVA_THINKING_LEVELS.includes(value as BrewvaThinkingLevel);
 }
 
 function toModelKey(model: RegisteredModel): string {

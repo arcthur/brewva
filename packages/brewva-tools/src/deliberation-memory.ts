@@ -7,7 +7,7 @@ import {
   type DeliberationMemoryArtifact,
   type DeliberationMemoryState,
 } from "@brewva/brewva-deliberation";
-import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate";
+import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "./types.js";
 import { buildStringEnumSchema } from "./utils/input-alias.js";

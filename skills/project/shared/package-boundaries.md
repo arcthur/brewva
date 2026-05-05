@@ -7,17 +7,18 @@ scope: package-boundaries
 
 ## Workspace Topology
 
-| Package                        | Responsibility                                                                          | Must Not Own                                  |
-| ------------------------------ | --------------------------------------------------------------------------------------- | --------------------------------------------- |
-| `@brewva/brewva-runtime`       | governance kernel, contracts, gates, verification state, context boundaries             | CLI wiring or transport-specific behavior     |
-| `@brewva/brewva-provider-core` | provider contracts, catalog lookup, typed registry, streaming, cache rendering, drivers | replay authority or credential ownership      |
-| `@brewva/brewva-recall`        | recall ranking, curation semantics, trust labels, and result rendering                  | event tape authority or database ownership    |
-| `@brewva/brewva-session-index` | rebuildable DuckDB query plane over session event tapes                                 | replay authority, tokenization policy, SQL UI |
-| `@brewva/brewva-deliberation`  | narrative memory, optimization continuity, and non-authoritative deliberation substrate | kernel commitments or transport ownership     |
-| `@brewva/brewva-skill-broker`  | post-execution skill-promotion brokerage and persisted promotion review state           | turn-time skill routing or kernel authority   |
-| `@brewva/brewva-tools`         | concrete tool adapters and runtime-aware helpers                                        | orchestration policy                          |
-| `@brewva/brewva-cli`           | user entrypoints and frontend command surface                                           | channel/control-plane ownership               |
-| `@brewva/brewva-gateway`       | daemon control plane, session supervision, channel host, and runtime wiring             | kernel semantics                              |
+| Package                        | Responsibility                                                                                                  | Must Not Own                                  |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| `@brewva/brewva-runtime`       | governance kernel, contracts, gates, verification state, context boundaries                                     | CLI wiring or transport-specific behavior     |
+| `@brewva/brewva-provider-core` | provider contracts, catalog lookup, typed registry, streaming, cache rendering, drivers                         | replay authority or credential ownership      |
+| `@brewva/brewva-substrate`     | contract root plus explicit session, turn, prompt/resource, tools, host-api, persistence, and provider subpaths | replay authority, credentials, hosted policy  |
+| `@brewva/brewva-recall`        | recall ranking, curation semantics, trust labels, and result rendering                                          | event tape authority or database ownership    |
+| `@brewva/brewva-session-index` | rebuildable DuckDB query plane over session event tapes                                                         | replay authority, tokenization policy, SQL UI |
+| `@brewva/brewva-deliberation`  | narrative memory, optimization continuity, and non-authoritative deliberation substrate                         | kernel commitments or transport ownership     |
+| `@brewva/brewva-skill-broker`  | post-execution skill-promotion brokerage and persisted promotion review state                                   | turn-time skill routing or kernel authority   |
+| `@brewva/brewva-tools`         | concrete tool adapters and runtime-aware helpers                                                                | orchestration policy                          |
+| `@brewva/brewva-cli`           | user entrypoints and frontend command surface                                                                   | channel/control-plane ownership               |
+| `@brewva/brewva-gateway`       | daemon control plane, session supervision, channel host, and runtime wiring                                     | kernel semantics                              |
 
 ## Invariants
 
@@ -38,6 +39,16 @@ scope: package-boundaries
   `catalog/`, `registry/`, `stream/`, `parse/`, `cache/`, and
   vertical `providers/<api>/` folders; the root is a compatibility surface, not
   an implementation home
+- substrate root is cross-domain vocabulary only. `/contracts` is reserved for
+  vocabulary that has no single mechanism owner, such as context state, session
+  phase, and thinking levels. Domain-owned contracts such as tool definitions
+  and provider model catalogs are imported from `/tools` and `/provider`
+- substrate mechanisms are imported through explicit domain subpaths:
+  `@brewva/brewva-substrate/session`, `/prompt`, `/resources`, `/tools`,
+  `/host-api`, `/persistence`, `/provider`, and `/turn`
+- substrate public/domain API files use curated exports. They must not grow
+  wildcard barrels or revive old source-path shims for moved implementation
+  files
 - provider session resources are a controlled lifecycle port; hosted callers
   that replace session context or change provider/model must await
   `clearSession(sessionId)` before continuing

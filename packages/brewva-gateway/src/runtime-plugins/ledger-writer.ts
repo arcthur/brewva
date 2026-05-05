@@ -8,7 +8,7 @@ import {
   TOOL_OUTPUT_DISTILLED_EVENT_TYPE,
   TOOL_OUTPUT_OBSERVED_EVENT_TYPE,
 } from "@brewva/brewva-runtime/events";
-import type { InternalHostPluginApi } from "@brewva/brewva-substrate";
+import type { InternalHostPluginApi } from "@brewva/brewva-substrate/host-api";
 import { LRUCache } from "lru-cache";
 import { persistToolOutputArtifact } from "./tool-output-artifact-store.js";
 import { distillToolOutput, estimateTokens } from "./tool-output-distiller.js";

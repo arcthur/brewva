@@ -7,7 +7,7 @@ import {
   isSessionPhaseActive,
   isSessionPhaseTerminal,
   type SessionPhase,
-} from "@brewva/brewva-substrate";
+} from "@brewva/brewva-substrate/session";
 
 describe("substrate session phase contract", () => {
   test("exports the C2 session phase vocabulary including approval and recovery states", () => {

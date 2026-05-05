@@ -1,5 +1,5 @@
 import type { BrewvaRuntime, ToolOutputView } from "@brewva/brewva-runtime";
-import type { BrewvaPromptContentPart } from "@brewva/brewva-substrate";
+import type { BrewvaPromptContentPart } from "@brewva/brewva-substrate/prompt";
 import type { CollectSessionPromptOutputSession } from "../session/collect-output.js";
 import { runHostedTurnEnvelope } from "../session/turn-envelope.js";
 

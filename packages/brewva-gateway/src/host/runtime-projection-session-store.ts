@@ -21,19 +21,18 @@ import {
   readSessionRewindCompletedEventPayload,
   SESSION_REWIND_COMPLETED_EVENT_TYPE,
 } from "@brewva/brewva-runtime/events";
+import { DEFAULT_CONTEXT_STATE, type ContextState } from "@brewva/brewva-substrate/contracts";
 import {
-  DEFAULT_CONTEXT_STATE,
   buildManagedSessionContext,
   type BrewvaBranchSummaryEntry,
   type BrewvaCompactionEntry,
-  type ContextState,
   type BrewvaModelChangeEntry,
   type BrewvaModelPresetSelectEntry,
   type BrewvaSessionContext,
   type BrewvaSessionEntry,
   type BrewvaSessionMessageEntry,
   type BrewvaThinkingLevelChangeEntry,
-} from "@brewva/brewva-substrate";
+} from "@brewva/brewva-substrate/session";
 import {
   SESSION_BRANCH_SUMMARY_RECORDED_EVENT_TYPE,
   THINKING_LEVEL_SELECTED_EVENT_TYPE,

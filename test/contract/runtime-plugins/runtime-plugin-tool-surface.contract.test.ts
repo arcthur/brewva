@@ -17,7 +17,7 @@ import {
   buildSkillSelectionProfile,
   hasSelectionProfileSignals,
 } from "@brewva/brewva-runtime";
-import type { BrewvaToolDefinition } from "@brewva/brewva-substrate";
+import type { BrewvaToolDefinition } from "@brewva/brewva-substrate/tools";
 import { Type } from "@sinclair/typebox";
 import { createMockRuntimePluginApi, invokeHandlerAsync } from "../../helpers/runtime-plugin.js";
 import {

@@ -12,7 +12,7 @@ import type {
   BrewvaShellViewPreferences,
   BrewvaModelPreferences,
   BrewvaModelPresetState,
-} from "@brewva/brewva-substrate";
+} from "@brewva/brewva-substrate/session";
 import type { HostedSessionSettingsBackend } from "./hosted-session-backend-contract.js";
 import type {
   CreateHostedManagedSessionOptions,

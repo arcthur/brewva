@@ -5,23 +5,30 @@ import {
   registerExternalApiProvider,
   unregisterApiProviders,
 } from "@brewva/brewva-provider-core/registry";
+import { createAssistantMessageEventStream } from "@brewva/brewva-provider-core/stream";
 import { BrewvaRuntime, defineContextSourceProvider } from "@brewva/brewva-runtime";
+import type { ContextState } from "@brewva/brewva-substrate/contracts";
 import {
-  type BrewvaPromptSessionEvent,
-  type ContextState,
   type CreateBrewvaHostPluginRunnerOptions,
-  createHostedResourceLoader,
-  createInMemoryModelCatalog,
   defineInternalHostPlugin,
-  type BrewvaPromptContentPart,
-  type BrewvaHostedResourceLoader,
-  type BrewvaPromptThinkingLevel,
-  type BrewvaRegisteredModel,
-  type BrewvaSessionMessageEntry,
-  type BrewvaToolContext,
   type BrewvaToolUiPort,
   type RuntimePluginCapability,
-} from "@brewva/brewva-substrate";
+} from "@brewva/brewva-substrate/host-api";
+import type { BrewvaPromptContentPart } from "@brewva/brewva-substrate/prompt";
+import {
+  createInMemoryModelCatalog,
+  type BrewvaRegisteredModel,
+} from "@brewva/brewva-substrate/provider";
+import {
+  createHostedResourceLoader,
+  type BrewvaHostedResourceLoader,
+} from "@brewva/brewva-substrate/resources";
+import type {
+  BrewvaPromptSessionEvent,
+  BrewvaPromptThinkingLevel,
+  BrewvaSessionMessageEntry,
+} from "@brewva/brewva-substrate/session";
+import type { BrewvaToolContext } from "@brewva/brewva-substrate/tools";
 import { stableHash, stableStringify } from "../../../packages/brewva-gateway/src/cache/index.js";
 import type { HostedSessionLogger } from "../../../packages/brewva-gateway/src/host/logger.js";
 import {
@@ -35,7 +42,6 @@ import {
   fauxAssistantMessage,
   registerFauxProvider,
 } from "../../../packages/brewva-provider-core/src/providers/faux/index.js";
-import { createAssistantMessageEventStream } from "../../../packages/brewva-provider-core/src/utils/event-stream.js";
 import { createToolcallDeltaAssistantEvent } from "../../helpers/prompt-session-events.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 

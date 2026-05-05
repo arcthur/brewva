@@ -13,13 +13,12 @@ import {
   type ManagedToolMode,
 } from "@brewva/brewva-runtime";
 import { TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
+import type { BrewvaToolUiPort } from "@brewva/brewva-substrate/host-api";
+import type { BrewvaModelCatalog, BrewvaRegisteredModel } from "@brewva/brewva-substrate/provider";
 import type {
   BrewvaManagedPromptSession,
-  BrewvaModelCatalog,
   BrewvaModelPreset,
-  BrewvaRegisteredModel,
-  BrewvaToolUiPort,
-} from "@brewva/brewva-substrate";
+} from "@brewva/brewva-substrate/session";
 import {
   attachBrewvaToolExecutionTraits,
   buildReadPathDiscoveryObservationPayload,

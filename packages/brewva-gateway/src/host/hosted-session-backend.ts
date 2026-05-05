@@ -1,5 +1,5 @@
 import type { BrewvaRuntime } from "@brewva/brewva-runtime";
-import type { BrewvaMutableModelCatalog } from "@brewva/brewva-substrate";
+import type { BrewvaMutableModelCatalog } from "@brewva/brewva-substrate/provider";
 import type {
   HostedSessionBackendAdapter,
   HostedSessionBackendAuthStore,

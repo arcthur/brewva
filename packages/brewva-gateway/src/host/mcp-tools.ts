@@ -12,7 +12,7 @@ import type {
   DeepReadonly,
   ToolActionClass,
 } from "@brewva/brewva-runtime";
-import type { BrewvaToolContentPart } from "@brewva/brewva-substrate";
+import type { BrewvaToolContentPart } from "@brewva/brewva-substrate/tools";
 import type { ToolCatalog, ToolDescriptor } from "@brewva/brewva-tool-protocol";
 import {
   defineBrewvaTool,

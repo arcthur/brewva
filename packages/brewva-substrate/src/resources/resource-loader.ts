@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { InternalHostPlugin } from "../host-api/plugin.js";
-import { type BrewvaPromptTemplate, loadBrewvaPromptTemplates } from "./prompt-templates.js";
+import { type BrewvaPromptTemplate, loadBrewvaPromptTemplates } from "../prompt/templates.js";
 import { discoverHostedSkills } from "./skill-discovery.js";
 
 export interface BrewvaHostedSkill {

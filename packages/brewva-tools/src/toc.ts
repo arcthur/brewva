@@ -1,6 +1,6 @@
 import { existsSync, statSync } from "node:fs";
 import { TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
-import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate";
+import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import { Type } from "@sinclair/typebox";
 import { buildReadPathDiscoveryObservationPayload } from "./read-path-discovery.js";
 import {

@@ -9,7 +9,10 @@ import {
   readDelegationLifecycleEventPayload,
   readSkillCompletedEventPayload,
 } from "@brewva/brewva-runtime/events";
-import { validateQuestionAnswers, type BrewvaQuestionAnswerSpec } from "@brewva/brewva-substrate";
+import {
+  validateQuestionAnswers,
+  type BrewvaQuestionAnswerSpec,
+} from "@brewva/brewva-substrate/host-api";
 import type { SubagentOutcome } from "@brewva/brewva-tools";
 
 const OPERATOR_QUESTION_ANSWERED_SCHEMA = "brewva.operator-question-answered.v1";

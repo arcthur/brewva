@@ -18,10 +18,8 @@ import type {
   ToolActionClass,
   ToolExecutionBoundary,
 } from "@brewva/brewva-runtime";
-import type {
-  BrewvaQuestionPrompt,
-  BrewvaToolDefinition as ToolDefinition,
-} from "@brewva/brewva-substrate";
+import type { BrewvaQuestionPrompt } from "@brewva/brewva-substrate/host-api";
+import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import type {
   ToolDescriptor as CanonicalToolDescriptor,
   ToolExecutionTraitResolverInput as CanonicalToolExecutionTraitResolverInput,

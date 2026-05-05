@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { BrewvaPromptSessionEvent } from "@brewva/brewva-substrate";
+import type { BrewvaPromptSessionEvent } from "@brewva/brewva-substrate/session";
 import { ShellTranscriptProjector } from "../../../packages/brewva-cli/src/shell/projectors/transcript-projector.js";
 import type { CliShellAction } from "../../../packages/brewva-cli/src/shell/state/index.js";
 import type { CliShellTranscriptMessage } from "../../../packages/brewva-cli/src/shell/transcript.js";

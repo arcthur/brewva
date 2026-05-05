@@ -1,15 +1,17 @@
 import type { BrewvaRuntime } from "@brewva/brewva-runtime";
+import type { InternalHostPlugin } from "@brewva/brewva-substrate/host-api";
 import type {
-  InternalHostPlugin,
-  BrewvaHostedResourceLoader,
+  BrewvaMutableModelCatalog,
+  BrewvaRegisteredModel,
+} from "@brewva/brewva-substrate/provider";
+import type { BrewvaHostedResourceLoader } from "@brewva/brewva-substrate/resources";
+import type {
   BrewvaManagedPromptSession,
   BrewvaDiffPreferences,
   BrewvaShellViewPreferences,
   BrewvaModelPreferences,
-  BrewvaMutableModelCatalog,
-  BrewvaRegisteredModel,
   BrewvaModelPresetState,
-} from "@brewva/brewva-substrate";
+} from "@brewva/brewva-substrate/session";
 import type { HostedAuthCredential } from "./hosted-auth-store.js";
 import type {
   CreateHostedManagedSessionOptions,
@@ -99,7 +101,7 @@ export interface HostedSessionBackendAdapter {
     cwd: string;
     settings: HostedSessionSettings;
     runtime?: BrewvaRuntime;
-    runtimePlugins?: readonly import("@brewva/brewva-substrate").InternalHostPlugin[];
+    runtimePlugins?: readonly import("@brewva/brewva-substrate/host-api").InternalHostPlugin[];
     sessionId?: string;
   }): Promise<HostedSessionServicesBundle>;
   createSessionResult(input: {

@@ -5,7 +5,7 @@ import {
 } from "@brewva/brewva-runtime";
 import type { ContextInjectionEntry } from "@brewva/brewva-runtime/context";
 import { SKILL_DIAGNOSIS_DERIVED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
-import type { InternalHostPluginApi } from "@brewva/brewva-substrate";
+import type { InternalHostPluginApi } from "@brewva/brewva-substrate/host-api";
 import { stableHash, stableStringify } from "../cache/hash.js";
 import type { HostedDelegationStore } from "../subagents/delegation-store.js";
 import { type BuildCapabilityViewResult } from "./capability-view.js";

@@ -11,18 +11,20 @@ import {
   type SessionWireFrame,
 } from "@brewva/brewva-runtime";
 import { type BrewvaReplaySession } from "@brewva/brewva-runtime/events";
+import type { BrewvaToolUiPort } from "@brewva/brewva-substrate/host-api";
 import {
   buildBrewvaPromptText,
   type BrewvaPromptContentPart,
-  type BrewvaQueuedPromptView,
-  type BrewvaPromptToolCall,
-  type BrewvaPromptSessionEvent,
-  type BrewvaShellViewPreferences,
-  type BrewvaModelPresetState,
-  type BrewvaSessionModelDescriptor,
-  type BrewvaSteerOutcome,
-  type BrewvaToolUiPort,
-} from "@brewva/brewva-substrate";
+} from "@brewva/brewva-substrate/prompt";
+import type {
+  BrewvaQueuedPromptView,
+  BrewvaPromptToolCall,
+  BrewvaPromptSessionEvent,
+  BrewvaShellViewPreferences,
+  BrewvaModelPresetState,
+  BrewvaSessionModelDescriptor,
+  BrewvaSteerOutcome,
+} from "@brewva/brewva-substrate/session";
 import { DEFAULT_TUI_THEME } from "@brewva/brewva-tui";
 import { createCliShellPromptStore } from "../../../packages/brewva-cli/src/shell/prompt-store.js";
 import { CliShellRuntime } from "../../../packages/brewva-cli/src/shell/runtime.js";

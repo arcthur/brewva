@@ -4,7 +4,7 @@ import {
   SKILL_PROMOTION_TARGET_KINDS,
   type SkillPromotionDraft,
 } from "@brewva/brewva-skill-broker";
-import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate";
+import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "./types.js";
 import { buildStringEnumSchema } from "./utils/input-alias.js";

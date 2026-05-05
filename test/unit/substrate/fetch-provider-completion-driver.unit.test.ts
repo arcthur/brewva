@@ -4,7 +4,7 @@ import {
   type BrewvaProviderCompletionDriver,
   type BrewvaRegisteredModel,
   UnsupportedBrewvaProviderApiError,
-} from "@brewva/brewva-substrate";
+} from "@brewva/brewva-substrate/provider";
 
 function createModel(overrides: Partial<BrewvaRegisteredModel> = {}): BrewvaRegisteredModel {
   return {

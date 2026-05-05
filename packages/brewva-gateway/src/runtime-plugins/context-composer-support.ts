@@ -1,5 +1,5 @@
 import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
-import type { InternalHostPluginApi, BrewvaHostToolInfo } from "@brewva/brewva-substrate";
+import type { InternalHostPluginApi, BrewvaHostToolInfo } from "@brewva/brewva-substrate/host-api";
 import { buildCapabilityView, type BuildCapabilityViewResult } from "./capability-view.js";
 import { deriveSkillDiagnoses, type SkillDiagnosisSet } from "./skill-first.js";
 

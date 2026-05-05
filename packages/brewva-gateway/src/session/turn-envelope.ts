@@ -22,7 +22,7 @@ import {
   TURN_INPUT_RECORDED_EVENT_TYPE,
   TURN_RENDER_COMMITTED_EVENT_TYPE,
 } from "@brewva/brewva-runtime/events";
-import { buildBrewvaPromptText } from "@brewva/brewva-substrate";
+import { buildBrewvaPromptText } from "@brewva/brewva-substrate/prompt";
 import type { SchedulePromptTrigger } from "../daemon/session-backend.js";
 import type { CollectSessionPromptOutputSession, SessionPromptInput } from "./collect-output.js";
 import { runHostedThreadLoop, type RunHostedThreadLoopInput } from "./hosted-thread-loop.js";

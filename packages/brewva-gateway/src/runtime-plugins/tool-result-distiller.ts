@@ -1,5 +1,5 @@
 import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
-import type { InternalHostPluginApi } from "@brewva/brewva-substrate";
+import type { InternalHostPluginApi } from "@brewva/brewva-substrate/host-api";
 import { distillToolOutput } from "./tool-output-distiller.js";
 
 function extractTextOnlyContent(content: unknown): string | undefined {

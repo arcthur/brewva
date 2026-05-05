@@ -2,7 +2,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { resolve } from "node:path";
 import type { BoxExec, BoxPlane } from "@brewva/brewva-box";
-import { resolveShellConfig as getShellConfig } from "@brewva/brewva-substrate";
+import { resolveShellConfig as getShellConfig } from "@brewva/brewva-substrate/host-api";
 import { differenceInMilliseconds } from "date-fns";
 
 const MAX_AGGREGATED_OUTPUT_CHARS = 1_000_000;

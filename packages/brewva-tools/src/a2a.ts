@@ -1,4 +1,4 @@
-import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate";
+import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import { Type } from "@sinclair/typebox";
 import type { BrewvaToolRuntime } from "./types.js";
 import { failTextResult, textResult, withVerdict } from "./utils/result.js";

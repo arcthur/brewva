@@ -2,7 +2,7 @@ import type {
   BrewvaPromptAssistantMessageEvent,
   BrewvaPromptSessionEvent,
   BrewvaPromptToolCall,
-} from "@brewva/brewva-substrate";
+} from "@brewva/brewva-substrate/session";
 
 export function createPromptMessageUpdateEvent(input: {
   message?: unknown;

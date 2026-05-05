@@ -4,12 +4,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import process from "node:process";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaPromptContentPart } from "@brewva/brewva-substrate/prompt";
+import { buildBrewvaPromptText } from "@brewva/brewva-substrate/prompt";
 import type {
   BrewvaManagedPromptSession,
-  BrewvaPromptContentPart,
   BrewvaPromptSessionEvent,
-} from "@brewva/brewva-substrate";
-import { buildBrewvaPromptText } from "@brewva/brewva-substrate";
+} from "@brewva/brewva-substrate/session";
 import {
   runCliInteractiveSession,
   runCliPrintSession,

@@ -15,7 +15,7 @@ import {
 } from "@brewva/brewva-runtime";
 import { querySessionWireFramesFromEventLog } from "@brewva/brewva-runtime/event-log";
 import { createRecoveryWalRecovery, type RecoveryWalStore } from "@brewva/brewva-runtime/recovery";
-import type { BrewvaSteerOutcome } from "@brewva/brewva-substrate";
+import type { BrewvaSteerOutcome } from "@brewva/brewva-substrate/session";
 import type { WorkerToParentMessage } from "../session/worker-protocol.js";
 import {
   FileGatewayStateStore,

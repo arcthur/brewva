@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 describe("provider event contract authority", () => {
-  test("keeps provider-core as the single event contract authority across agent-engine and substrate", () => {
+  test("keeps provider-core as the single event contract authority across substrate turn and session surfaces", () => {
     const repoRoot = resolve(import.meta.dirname, "../../..");
     const providerEventPath = resolve(
       repoRoot,
@@ -21,12 +21,13 @@ describe("provider event contract authority", () => {
       "parse",
       "types.ts",
     );
-    const agentEngineTypesPath = resolve(
+    const turnTypesPath = resolve(
       repoRoot,
       "packages",
-      "brewva-agent-engine",
+      "brewva-substrate",
       "src",
-      "agent-engine-types.ts",
+      "turn",
+      "types.ts",
     );
     const promptSessionPath = resolve(
       repoRoot,
@@ -36,12 +37,21 @@ describe("provider event contract authority", () => {
       "session",
       "prompt-session.ts",
     );
+    const sessionApiPath = resolve(
+      repoRoot,
+      "packages",
+      "brewva-substrate",
+      "src",
+      "session",
+      "api.ts",
+    );
     const substrateIndexPath = resolve(repoRoot, "packages", "brewva-substrate", "src", "index.ts");
 
     const providerEventSource = readFileSync(providerEventPath, "utf8");
     const parseTypesSource = readFileSync(parseTypesPath, "utf8");
-    const agentEngineTypesSource = readFileSync(agentEngineTypesPath, "utf8");
+    const turnTypesSource = readFileSync(turnTypesPath, "utf8");
     const promptSessionSource = readFileSync(promptSessionPath, "utf8");
+    const sessionApiSource = readFileSync(sessionApiPath, "utf8");
     const substrateIndexSource = readFileSync(substrateIndexPath, "utf8");
 
     expect(providerEventSource).toContain("export type StreamingParseStatus");
@@ -51,10 +61,15 @@ describe("provider event contract authority", () => {
     expect(parseTypesSource).toContain('from "../contracts/event.js"');
     expect(parseTypesSource).not.toContain("export type StreamingParseStatus =");
 
-    expect(agentEngineTypesSource).toContain("AssistantMessageEventOf");
-    expect(agentEngineTypesSource).toContain(
-      "export type BrewvaAgentEngineAssistantMessageEvent = AssistantMessageEventOf<",
+    expect(turnTypesSource).toContain("AssistantMessageEventOf");
+    expect(turnTypesSource).toContain(
+      "export type BrewvaTurnLoopAssistantMessageEvent = AssistantMessageEventOf<",
     );
+    expect(turnTypesSource).toContain("ProviderCachePolicy");
+    expect(turnTypesSource).toContain("ProviderCacheRenderResult");
+    expect(turnTypesSource).toContain("ProviderPayloadMetadata");
+    expect(turnTypesSource).not.toContain("BrewvaTurnLoopCachePolicy");
+    expect(turnTypesSource).not.toContain("BrewvaAgentEngine");
 
     expect(promptSessionSource).toContain("AssistantMessageEventOf");
     expect(promptSessionSource).toContain(
@@ -63,7 +78,9 @@ describe("provider event contract authority", () => {
     expect(promptSessionSource).not.toContain('type: "toolcall_start"');
     expect(promptSessionSource).not.toContain('type: "toolcall_delta"');
     expect(promptSessionSource).not.toContain('type: "toolcall_end"');
-    expect(substrateIndexSource).toContain("type BrewvaPromptAssistantMessageEvent");
+    expect(sessionApiSource).toContain("type BrewvaPromptAssistantMessageEvent");
+    expect(substrateIndexSource).toContain('export * from "./public/index.js"');
+    expect(substrateIndexSource).not.toContain("BrewvaPromptAssistantMessageEvent");
     expect(substrateIndexSource).not.toContain("type BrewvaPromptMessageDeltaEvent");
   });
 });

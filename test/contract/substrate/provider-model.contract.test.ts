@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { createInMemoryModelCatalog, type BrewvaRegisteredModel } from "@brewva/brewva-substrate";
+import {
+  createInMemoryModelCatalog,
+  type BrewvaRegisteredModel,
+} from "@brewva/brewva-substrate/provider";
 
 describe("substrate provider model contract", () => {
   test("supports Pi-host-compatible model descriptors without importing Pi types", () => {

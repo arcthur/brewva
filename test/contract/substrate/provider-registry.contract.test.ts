@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { createInMemoryModelCatalog, type BrewvaRegisteredModel } from "@brewva/brewva-substrate";
+import {
+  createInMemoryModelCatalog,
+  type BrewvaRegisteredModel,
+} from "@brewva/brewva-substrate/provider";
 
 function model(overrides: Partial<BrewvaRegisteredModel> = {}): BrewvaRegisteredModel {
   return {

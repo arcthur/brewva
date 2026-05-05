@@ -4,7 +4,10 @@ import { join } from "node:path";
 import { createUpdateCommandRuntimePlugin } from "@brewva/brewva-cli";
 import type { InternalRuntimePluginApi } from "@brewva/brewva-gateway/runtime-plugins";
 import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
-import { buildBrewvaPromptText, type BrewvaPromptContentPart } from "@brewva/brewva-substrate";
+import {
+  buildBrewvaPromptText,
+  type BrewvaPromptContentPart,
+} from "@brewva/brewva-substrate/prompt";
 import { requireDefined } from "../../helpers/assertions.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 

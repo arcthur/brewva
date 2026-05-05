@@ -1,4 +1,4 @@
-import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate";
+import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import { buildDefaultBundledBrewvaTools } from "./default-bundle.js";
 import type {
   BrewvaBundledToolRuntime,

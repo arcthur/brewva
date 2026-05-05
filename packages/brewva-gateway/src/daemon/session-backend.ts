@@ -8,7 +8,7 @@ import type {
   ToolOutputView,
   TruthFact,
 } from "@brewva/brewva-runtime";
-import type { BrewvaSteerOutcome } from "@brewva/brewva-substrate";
+import type { BrewvaSteerOutcome } from "@brewva/brewva-substrate/session";
 
 export interface OpenSessionInput {
   sessionId: string;

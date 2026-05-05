@@ -7,6 +7,7 @@
   "references": [
     { "path": "../brewva-runtime" },
     { "path": "../brewva-session-index" },
+    { "path": "../brewva-substrate" },
     { "path": "../brewva-channels-telegram" },
     { "path": "../brewva-ingress" },
     { "path": "../brewva-tools" },

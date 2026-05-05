@@ -1,9 +1,9 @@
 import type { DecideEffectCommitmentInput } from "@brewva/brewva-runtime";
+import type { BrewvaPromptContentPart } from "@brewva/brewva-substrate/prompt";
 import type {
-  BrewvaPromptContentPart,
   BrewvaPromptOptions,
   BrewvaPromptSessionEvent,
-} from "@brewva/brewva-substrate";
+} from "@brewva/brewva-substrate/session";
 import type { OverlayPriority } from "@brewva/brewva-tui";
 import type { CliShellAction } from "./state/index.js";
 import type { CliShellInput } from "./types.js";

@@ -85,7 +85,7 @@ and garbage-collection behavior.
 
 Provider token-cache policy is a hosted-session setting rather than a
 top-level `BrewvaConfig` key. Hosted settings may pass normalized cache policy
-through gateway, agent-engine, and provider-core.
+through gateway, substrate turn loop, and provider-core.
 
 Supported hosted cache policy fields are retention, write mode, scope, and
 reason. Provider-specific cache details remain in

@@ -7,7 +7,7 @@ import {
   canTransitionSessionPhase,
   type SessionPhase,
   type SessionPhaseEvent,
-} from "@brewva/brewva-substrate";
+} from "@brewva/brewva-substrate/session";
 import fc from "fast-check";
 import invalidTransitionFixture from "../../fixtures/property-counterexamples/session-phase-machine.invalid-transition.json" with { type: "json" };
 import { propertyTest } from "../../helpers/property.js";

@@ -17,7 +17,10 @@ import {
   type SessionRewindDivergenceNote,
 } from "@brewva/brewva-runtime";
 import { OPERATOR_QUESTION_ANSWERED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
-import type { BrewvaModelPresetState, BrewvaPromptThinkingLevel } from "@brewva/brewva-substrate";
+import type {
+  BrewvaModelPresetState,
+  BrewvaPromptThinkingLevel,
+} from "@brewva/brewva-substrate/session";
 import type {
   CliShellSessionBundle,
   OperatorSurfacePort,

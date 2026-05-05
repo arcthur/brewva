@@ -17,7 +17,7 @@ import {
   NARRATIVE_MEMORY_RECORDED_EVENT_TYPE,
   NARRATIVE_MEMORY_REVIEWED_EVENT_TYPE,
 } from "@brewva/brewva-runtime/events";
-import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate";
+import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import { Type } from "@sinclair/typebox";
 import { recordToolRuntimeEvent } from "./runtime-extensions.js";
 import type { BrewvaBundledToolOptions } from "./types.js";

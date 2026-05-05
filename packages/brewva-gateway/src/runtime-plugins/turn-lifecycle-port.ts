@@ -13,7 +13,7 @@ import type {
   BrewvaHostToolResultEvent as ToolResultEvent,
   BrewvaHostToolResultResult,
   BrewvaHostTurnStartEvent as TurnStartEvent,
-} from "@brewva/brewva-substrate";
+} from "@brewva/brewva-substrate/host-api";
 
 type MaybePromise<T> = T | Promise<T>;
 

@@ -1,4 +1,4 @@
-import type { BrewvaQueuedPromptView } from "@brewva/brewva-substrate";
+import type { BrewvaQueuedPromptView } from "@brewva/brewva-substrate/session";
 import { DEFAULT_TUI_THEME, type TuiTheme } from "@brewva/brewva-tui";
 import { FocusManager, OverlayManager, type OverlayEntry } from "@brewva/brewva-tui";
 import type { ShellCompletionCandidate, ShellCompletionRange } from "../completion-provider.js";

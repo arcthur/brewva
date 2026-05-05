@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 
-import type { BrewvaToolDefinition } from "@brewva/brewva-substrate";
+import type { BrewvaToolDefinition } from "@brewva/brewva-substrate/tools";
 import { useRenderer } from "@opentui/solid";
 import type { JSX } from "solid-js";
 import { For, Index, Match, Show, Switch, createEffect, createMemo, createSignal } from "solid-js";

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { BrewvaModelCatalog } from "@brewva/brewva-substrate";
+import type { BrewvaModelCatalog } from "@brewva/brewva-substrate/provider";
 import { resolveDelegationModelRoute } from "../../../packages/brewva-gateway/src/subagents/model-routing.js";
 import type { HostedDelegationTarget } from "../../../packages/brewva-gateway/src/subagents/targets.js";
 

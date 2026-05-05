@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { createHostedResourceLoader } from "@brewva/brewva-substrate";
+import { createHostedResourceLoader } from "@brewva/brewva-substrate/resources";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 function writeFile(path: string, content: string): void {

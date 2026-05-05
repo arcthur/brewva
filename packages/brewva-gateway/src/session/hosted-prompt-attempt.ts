@@ -1,4 +1,5 @@
-import type { BrewvaPromptContentPart, BrewvaPromptOptions } from "@brewva/brewva-substrate";
+import type { BrewvaPromptContentPart } from "@brewva/brewva-substrate/prompt";
+import type { BrewvaPromptOptions } from "@brewva/brewva-substrate/session";
 
 export const HOSTED_PROMPT_ATTEMPT_DISPATCH: unique symbol = Symbol.for(
   "brewva.hostedPromptAttemptDispatch",

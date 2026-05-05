@@ -20,7 +20,7 @@ import {
   EXEC_FAILED_EVENT_TYPE,
   EXEC_STARTED_EVENT_TYPE,
 } from "@brewva/brewva-runtime/events";
-import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate";
+import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import { Type } from "@sinclair/typebox";
 import {
   buildCommandPolicyAuditPayload,

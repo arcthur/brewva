@@ -1,9 +1,10 @@
 import type { AssistantMessageEventOf } from "@brewva/brewva-provider-core/contracts";
 import type { ContextState } from "../contracts/context-state.js";
+import type { BrewvaThinkingLevel } from "../contracts/thinking.js";
 import type { BrewvaToolDefinition } from "../contracts/tool.js";
 import type { ToolExecutionPhase } from "../execution/tool-phase.js";
 import type { BrewvaToolUiPort } from "../host-api/ui.js";
-import type { BrewvaPromptContentPart } from "./prompt-content.js";
+import type { BrewvaPromptContentPart } from "../prompt/content.js";
 import type { BrewvaPromptEnvelope } from "./session-host.js";
 
 export type BrewvaPromptQueueBehavior = "queue" | "followUp";
@@ -13,14 +14,7 @@ export type BrewvaSteerOutcome =
   | { status: "queued"; chars: number }
   | { status: "no_active_run" }
   | { status: "rejected_empty" };
-export type BrewvaPromptThinkingLevel =
-  | "off"
-  | "minimal"
-  | "low"
-  | "medium"
-  | "high"
-  | "xhigh"
-  | (string & {});
+export type BrewvaPromptThinkingLevel = BrewvaThinkingLevel;
 
 export interface BrewvaPromptOptions {
   expandPromptTemplates?: boolean;

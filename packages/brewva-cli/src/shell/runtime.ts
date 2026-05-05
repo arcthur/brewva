@@ -1,11 +1,13 @@
 import { type SessionQuestionRequest } from "@brewva/brewva-gateway";
-import { normalizeQuestionPrompt } from "@brewva/brewva-substrate";
+import { normalizeQuestionPrompt } from "@brewva/brewva-substrate/host-api";
 import type {
   BrewvaInteractiveQuestionRequest,
+  BrewvaUiDialogOptions,
+} from "@brewva/brewva-substrate/host-api";
+import type {
   BrewvaPromptSessionEvent,
   BrewvaQueuedPromptView,
-  BrewvaUiDialogOptions,
-} from "@brewva/brewva-substrate";
+} from "@brewva/brewva-substrate/session";
 import {
   createKeybindingResolver,
   type KeybindingResolver,

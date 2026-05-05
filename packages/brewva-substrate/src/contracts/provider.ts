@@ -1,3 +1,5 @@
+import type { BrewvaReasoningThinkingLevel } from "./thinking.js";
+
 export type BrewvaKnownApi =
   | "openai-completions"
   | "openai-responses"
@@ -6,8 +8,6 @@ export type BrewvaKnownApi =
   | "google-gemini-cli";
 
 export type BrewvaApi = BrewvaKnownApi | (string & {});
-
-export type BrewvaThinkingLevel = "minimal" | "low" | "medium" | "high" | "xhigh";
 
 export interface BrewvaOpenRouterRouting {
   only?: string[];
@@ -18,7 +18,7 @@ export interface BrewvaOpenAICompletionsCompat {
   supportsStore?: boolean;
   supportsDeveloperRole?: boolean;
   supportsReasoningEffort?: boolean;
-  reasoningEffortMap?: Partial<Record<BrewvaThinkingLevel, string>>;
+  reasoningEffortMap?: Partial<Record<BrewvaReasoningThinkingLevel, string>>;
   supportsUsageInStreaming?: boolean;
   maxTokensField?: "max_completion_tokens" | "max_tokens";
   requiresToolResultName?: boolean;

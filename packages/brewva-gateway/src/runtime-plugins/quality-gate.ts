@@ -7,14 +7,16 @@ import {
   type BrewvaHostedRuntimePort,
 } from "@brewva/brewva-runtime";
 import {
-  buildBrewvaEditDiffPreview,
   BrewvaHostInputEventResult as InputEventResult,
   InternalHostPluginApi,
-  BrewvaPromptContentPart,
   BrewvaHostToolResultEvent as ToolResultEvent,
+} from "@brewva/brewva-substrate/host-api";
+import {
+  BrewvaPromptContentPart,
   brewvaPromptContentPartsEqual,
   mapBrewvaPromptTextParts,
-} from "@brewva/brewva-substrate";
+} from "@brewva/brewva-substrate/prompt";
+import { buildBrewvaEditDiffPreview } from "@brewva/brewva-substrate/tools";
 import {
   collectStringEnumContractMismatches,
   getBrewvaAgentParameters,

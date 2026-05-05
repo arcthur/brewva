@@ -5,7 +5,7 @@ import { BrewvaRuntime } from "@brewva/brewva-runtime";
 import {
   createBrewvaReadToolDefinition,
   type BrewvaReadToolOptions,
-} from "@brewva/brewva-substrate";
+} from "@brewva/brewva-substrate/tools";
 import { createCompactReadTool } from "../../../packages/brewva-gateway/src/host/hosted-session-bootstrap.js";
 import {
   TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE,

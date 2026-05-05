@@ -6,8 +6,11 @@ import { BrewvaRuntime } from "@brewva/brewva-runtime";
 import {
   buildBrewvaPromptText,
   type BrewvaPromptContentPart,
-  type BrewvaPromptOptions,
-} from "@brewva/brewva-substrate";
+} from "@brewva/brewva-substrate/prompt";
+import type {
+  BrewvaPromptOptions,
+  BrewvaPromptThinkingLevel,
+} from "@brewva/brewva-substrate/session";
 import {
   COMPACTION_RECOVERY_TEST_ONLY,
   applyPromptRecoveryPolicy,
@@ -296,7 +299,7 @@ describe("compaction recovery controller", () => {
       reasoning: true,
     };
     let activeModel = currentModel;
-    let activeThinkingLevel = "high";
+    let activeThinkingLevel: BrewvaPromptThinkingLevel = "high";
 
     const session = {
       get model() {
@@ -305,7 +308,7 @@ describe("compaction recovery controller", () => {
       get thinkingLevel() {
         return activeThinkingLevel;
       },
-      getAvailableThinkingLevels() {
+      getAvailableThinkingLevels(): BrewvaPromptThinkingLevel[] {
         return ["off", "low", "medium", "high"];
       },
       modelRegistry: {
@@ -333,7 +336,7 @@ describe("compaction recovery controller", () => {
         activeModel = model;
         modelChanges.push(model.id);
       },
-      setThinkingLevel(level: string) {
+      setThinkingLevel(level: BrewvaPromptThinkingLevel) {
         activeThinkingLevel = level;
         thinkingLevelChanges.push(level);
       },

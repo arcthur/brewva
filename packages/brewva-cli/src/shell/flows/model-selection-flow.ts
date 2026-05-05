@@ -1,7 +1,7 @@
 import type {
   BrewvaModelPreferences,
   BrewvaSessionModelDescriptor,
-} from "@brewva/brewva-substrate";
+} from "@brewva/brewva-substrate/session";
 import type { OverlayPriority } from "@brewva/brewva-tui";
 import type { ShellCommitOptions } from "../shell-actions.js";
 import { normalizeShellInputKey } from "../shell-keymap.js";

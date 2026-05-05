@@ -2,9 +2,9 @@ import { mkdir as fsMkdir, writeFile as fsWriteFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { Type, type Static } from "@sinclair/typebox";
 import { defineBrewvaTool, type BrewvaToolDefinition } from "../contracts/tool.js";
-import { withFileMutationQueue } from "./file-mutation-queue.js";
-import { resolveToCwd } from "./path-utils.js";
-import { asRenderTheme, createStaticTextComponent } from "./render.js";
+import { withFileMutationQueue } from "./_shared/file-mutation-queue.js";
+import { resolveToCwd } from "./_shared/path-utils.js";
+import { asRenderTheme, createStaticTextComponent } from "./_shared/render.js";
 
 const writeSchema = Type.Object(
   {

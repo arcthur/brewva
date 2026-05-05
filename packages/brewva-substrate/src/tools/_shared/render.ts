@@ -1,4 +1,4 @@
-import type { BrewvaRenderableComponent } from "../contracts/tool.js";
+import type { BrewvaRenderableComponent } from "../../contracts/tool.js";
 
 export interface BrewvaToolRenderTheme {
   bold(text: string): string;

@@ -4,8 +4,8 @@ import type { BrewvaRuntime, SessionPromptSnapshot } from "@brewva/brewva-runtim
 import type {
   BrewvaManagedPromptSession,
   BrewvaPromptSessionEvent,
-  BrewvaToolDefinition,
-} from "@brewva/brewva-substrate";
+} from "@brewva/brewva-substrate/session";
+import type { BrewvaToolDefinition } from "@brewva/brewva-substrate/tools";
 import {
   extractMessageError,
   extractVisibleTextFromMessage,

@@ -5,7 +5,10 @@ import { createQuestionsCommandRuntimePlugin } from "@brewva/brewva-cli";
 import type { InternalRuntimePluginApi } from "@brewva/brewva-gateway/runtime-plugins";
 import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
 import { OPERATOR_QUESTION_ANSWERED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
-import { buildBrewvaPromptText, type BrewvaPromptContentPart } from "@brewva/brewva-substrate";
+import {
+  buildBrewvaPromptText,
+  type BrewvaPromptContentPart,
+} from "@brewva/brewva-substrate/prompt";
 import { requireDefined, requireNonEmptyString } from "../../helpers/assertions.js";
 import { recordHostedSkillCompleted } from "../../helpers/events.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";

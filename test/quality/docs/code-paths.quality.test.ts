@@ -96,6 +96,10 @@ function isRepoPathCandidate(raw: string, repoRootFiles: Set<string>): boolean {
   return STABLE_REPO_PATH_TOP_LEVELS.has(topLevel);
 }
 
+function isAcceptedDecisionWithHistoricalPaths(sourceFile: string, markdown: string): boolean {
+  return sourceFile.includes("/docs/research/decisions/") && /- Status: accepted/u.test(markdown);
+}
+
 describe("docs code path refs", () => {
   it("treats root-level repo files as repo-owned path refs", () => {
     const repoRoot = resolve(import.meta.dirname, "../../..");
@@ -118,6 +122,7 @@ describe("docs code path refs", () => {
     for (const filePath of markdownFiles) {
       const markdown = readFileSync(filePath, "utf-8");
       const refs = extractInlineCodeRefs(markdown, filePath);
+      const allowsHistoricalPaths = isAcceptedDecisionWithHistoricalPaths(filePath, markdown);
 
       for (const ref of refs) {
         const value = ref.raw.trim();
@@ -125,6 +130,9 @@ describe("docs code path refs", () => {
 
         const resolvedPath = resolve(repoRoot, value);
         if (!existsSync(resolvedPath)) {
+          if (allowsHistoricalPaths) {
+            continue;
+          }
           errors.push(
             `${ref.sourceFile}:${ref.lineNumber} missing path \`${value}\` (resolved: ${resolvedPath})`,
           );

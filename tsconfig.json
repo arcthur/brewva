@@ -10,7 +10,6 @@
     { "path": "./packages/brewva-session-index" },
     { "path": "./packages/brewva-provider-core" },
     { "path": "./packages/brewva-substrate" },
-    { "path": "./packages/brewva-agent-engine" },
     { "path": "./packages/brewva-deliberation" },
     { "path": "./packages/brewva-recall" },
     { "path": "./packages/brewva-skill-broker" },

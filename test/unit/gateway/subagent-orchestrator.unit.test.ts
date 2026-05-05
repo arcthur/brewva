@@ -9,7 +9,7 @@ import {
   type HostedSubagentSessionOptions,
 } from "@brewva/brewva-gateway";
 import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
-import type { BrewvaPromptSessionEvent } from "@brewva/brewva-substrate";
+import type { BrewvaPromptSessionEvent } from "@brewva/brewva-substrate/session";
 
 function createTempWorkspace(prefix: string): string {
   return mkdtempSync(join(tmpdir(), prefix));

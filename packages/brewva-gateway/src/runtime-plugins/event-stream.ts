@@ -15,12 +15,12 @@ import {
   TURN_RENDER_COMMITTED_EVENT_TYPE,
   VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
 } from "@brewva/brewva-runtime/events";
+import type { InternalHostPluginApi } from "@brewva/brewva-substrate/host-api";
 import type {
-  InternalHostPluginApi,
   BrewvaPromptAssistantMessageEvent,
   BrewvaPromptSessionEvent,
-  BrewvaToolDefinition,
-} from "@brewva/brewva-substrate";
+} from "@brewva/brewva-substrate/session";
+import type { BrewvaToolDefinition } from "@brewva/brewva-substrate/tools";
 import { resolveBrewvaToolExecutionTraits } from "@brewva/brewva-tools";
 import { buildTranscriptMessagePayload } from "../session/runtime-session-transcript.js";
 import { ToolAttemptBindingRegistry } from "../session/tool-attempt-binding.js";

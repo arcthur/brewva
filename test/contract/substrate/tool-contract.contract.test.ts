@@ -3,7 +3,7 @@ import {
   defineBrewvaTool,
   type BrewvaToolContext,
   type BrewvaToolDefinition,
-} from "@brewva/brewva-substrate";
+} from "@brewva/brewva-substrate/tools";
 import { Type } from "@sinclair/typebox";
 
 describe("substrate tool contract", () => {

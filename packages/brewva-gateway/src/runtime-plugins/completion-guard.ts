@@ -16,7 +16,7 @@ import type {
   BrewvaHostSessionShutdownEvent,
   BrewvaHostToolResultEvent,
   BrewvaHostTurnEndEvent,
-} from "@brewva/brewva-substrate";
+} from "@brewva/brewva-substrate/host-api";
 import { buildSkillDiagnosisPolicyBlock, deriveSkillDiagnoses } from "./skill-first.js";
 
 const MAX_STEERS_PER_PROMPT = 2;

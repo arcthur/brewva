@@ -1,5 +1,5 @@
 import { normalizeReviewLaneName } from "@brewva/brewva-runtime";
-import type { BrewvaQuestionOption, BrewvaQuestionPrompt } from "@brewva/brewva-substrate";
+import type { BrewvaQuestionOption, BrewvaQuestionPrompt } from "@brewva/brewva-substrate/host-api";
 import type {
   AdvisorConsultConfidence,
   AdvisorConsultKind,

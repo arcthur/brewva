@@ -1,9 +1,12 @@
-import { normalizeQuestionPrompt, validateQuestionAnswers } from "@brewva/brewva-substrate";
+import {
+  normalizeQuestionPrompt,
+  validateQuestionAnswers,
+} from "@brewva/brewva-substrate/host-api";
 import type {
   BrewvaInteractiveQuestionRequest,
   BrewvaQuestionPrompt,
-  BrewvaToolDefinition as ToolDefinition,
-} from "@brewva/brewva-substrate";
+} from "@brewva/brewva-substrate/host-api";
+import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import { Type } from "@sinclair/typebox";
 import { failTextResult, textResult } from "./utils/result.js";
 import { createManagedBrewvaToolFactory } from "./utils/runtime-bound-tool.js";

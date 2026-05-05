@@ -7,9 +7,11 @@ import { OPERATOR_QUESTION_ANSWERED_EVENT_TYPE } from "@brewva/brewva-runtime/ev
 import {
   buildBrewvaPromptText,
   type BrewvaPromptContentPart,
-  type BrewvaQueuedPromptView,
-  type BrewvaPromptSessionEvent,
-} from "@brewva/brewva-substrate";
+} from "@brewva/brewva-substrate/prompt";
+import type {
+  BrewvaQueuedPromptView,
+  BrewvaPromptSessionEvent,
+} from "@brewva/brewva-substrate/session";
 import {
   createOperatorSurfacePort,
   createSessionViewPort,

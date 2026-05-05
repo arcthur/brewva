@@ -1,13 +1,14 @@
 import { describe, expect, test } from "bun:test";
+import type { BrewvaRegisteredModel } from "@brewva/brewva-substrate/provider";
+import type { ToolExecutionPhase } from "@brewva/brewva-substrate/tools";
 import {
-  createHostedAgentEngine,
-  type BrewvaAgentEngineAssistantMessage,
-  type BrewvaAgentEngineAssistantMessageEvent,
-  type BrewvaAgentEngineEvent,
-  type BrewvaAgentEngineLlmMessage,
-  type BrewvaAgentEngineStreamFunction,
-} from "@brewva/brewva-agent-engine";
-import type { BrewvaRegisteredModel, ToolExecutionPhase } from "@brewva/brewva-substrate";
+  createBrewvaTurnLoopController,
+  type BrewvaTurnLoopAssistantMessage,
+  type BrewvaTurnLoopAssistantMessageEvent,
+  type BrewvaTurnLoopEvent,
+  type BrewvaTurnLoopLlmMessage,
+  type BrewvaTurnLoopStreamFunction,
+} from "@brewva/brewva-substrate/turn";
 import { Type } from "@sinclair/typebox";
 
 const TEST_MODEL: BrewvaRegisteredModel = {
@@ -46,9 +47,9 @@ function createUsage() {
 }
 
 function createAssistantMessage(
-  content: BrewvaAgentEngineAssistantMessage["content"],
-  stopReason: BrewvaAgentEngineAssistantMessage["stopReason"] = "stop",
-): BrewvaAgentEngineAssistantMessage {
+  content: BrewvaTurnLoopAssistantMessage["content"],
+  stopReason: BrewvaTurnLoopAssistantMessage["stopReason"] = "stop",
+): BrewvaTurnLoopAssistantMessage {
   return {
     role: "assistant",
     content,
@@ -62,10 +63,10 @@ function createAssistantMessage(
 }
 
 function createStream(
-  finalMessage: BrewvaAgentEngineAssistantMessage,
-  events: BrewvaAgentEngineAssistantMessageEvent[] = [],
-): AsyncIterable<BrewvaAgentEngineAssistantMessageEvent> & {
-  result(): Promise<BrewvaAgentEngineAssistantMessage>;
+  finalMessage: BrewvaTurnLoopAssistantMessage,
+  events: BrewvaTurnLoopAssistantMessageEvent[] = [],
+): AsyncIterable<BrewvaTurnLoopAssistantMessageEvent> & {
+  result(): Promise<BrewvaTurnLoopAssistantMessage>;
 } {
   const allEvents = [...events];
   if (finalMessage.stopReason === "error" || finalMessage.stopReason === "aborted") {
@@ -94,15 +95,45 @@ function createStream(
   };
 }
 
-describe("hosted agent engine", () => {
+describe("turn loop controller", () => {
+  test("rejects prompts until a model is configured", async () => {
+    const engine = createBrewvaTurnLoopController({
+      initialThinkingLevel: "off",
+      sessionId: "session-missing-model",
+      queueMode: "one-at-a-time",
+      followUpMode: "one-at-a-time",
+      transport: "sse",
+      thinkingBudgets: undefined,
+      maxRetryDelayMs: 1000,
+      beforeToolCall: async () => undefined,
+      afterToolCall: async () => undefined,
+      onPayload: async (payload) => payload,
+      transformContext: async (messages) => messages,
+      resolveRequestAuth: async () => ({ ok: true, apiKey: "unused-key" }),
+    });
+
+    expect(engine.state.model).toBeUndefined();
+    try {
+      await engine.prompt({
+        role: "user",
+        content: [{ type: "text", text: "hello" }],
+        timestamp: Date.now(),
+      });
+      expect.unreachable("expected prompt without a model to fail");
+    } catch (error) {
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toContain("requires a model before prompt()");
+    }
+  });
+
   test("forwards cache policy to the stream function", async () => {
     const calls: Array<unknown> = [];
-    const streamFn: BrewvaAgentEngineStreamFunction = async (_model, _context, options) => {
+    const streamFn: BrewvaTurnLoopStreamFunction = async (_model, _context, options) => {
       calls.push(options.cachePolicy);
       return createStream(createAssistantMessage([{ type: "text", text: "done" }]));
     };
 
-    const engine = createHostedAgentEngine({
+    const engine = createBrewvaTurnLoopController({
       initialModel: TEST_MODEL,
       initialThinkingLevel: "minimal",
       sessionId: "session-cache-policy",
@@ -146,7 +177,7 @@ describe("hosted agent engine", () => {
 
   test("resolves request auth before invoking the stream function", async () => {
     const calls: Array<{ apiKey?: string; headers?: Record<string, string> }> = [];
-    const streamFn: BrewvaAgentEngineStreamFunction = async (_model, _context, options) => {
+    const streamFn: BrewvaTurnLoopStreamFunction = async (_model, _context, options) => {
       calls.push({
         apiKey: options.apiKey,
         headers: options.headers,
@@ -154,7 +185,7 @@ describe("hosted agent engine", () => {
       return createStream(createAssistantMessage([{ type: "text", text: "done" }]));
     };
 
-    const engine = createHostedAgentEngine({
+    const engine = createBrewvaTurnLoopController({
       initialModel: TEST_MODEL,
       initialThinkingLevel: "minimal",
       sessionId: "session-auth",
@@ -190,10 +221,10 @@ describe("hosted agent engine", () => {
   });
 
   test("executes tool calls with local loop semantics and follow-up assistant turn", async () => {
-    const events: BrewvaAgentEngineEvent[] = [];
-    const streamFn: BrewvaAgentEngineStreamFunction = async (_model, context, _options) => {
+    const events: BrewvaTurnLoopEvent[] = [];
+    const streamFn: BrewvaTurnLoopStreamFunction = async (_model, context, _options) => {
       const lastMessage = context.messages[context.messages.length - 1] as
-        | BrewvaAgentEngineLlmMessage
+        | BrewvaTurnLoopLlmMessage
         | undefined;
       if (lastMessage?.role === "toolResult") {
         return createStream(createAssistantMessage([{ type: "text", text: "final" }]));
@@ -228,7 +259,7 @@ describe("hosted agent engine", () => {
           type: "toolcall_end",
           contentIndex: 0,
           toolCall: toolCallMessage.content[0] as Extract<
-            BrewvaAgentEngineAssistantMessage["content"][number],
+            BrewvaTurnLoopAssistantMessage["content"][number],
             { type: "toolCall" }
           >,
           partial: toolCallMessage,
@@ -236,7 +267,7 @@ describe("hosted agent engine", () => {
       ]);
     };
 
-    const engine = createHostedAgentEngine({
+    const engine = createBrewvaTurnLoopController({
       initialModel: TEST_MODEL,
       initialThinkingLevel: "off",
       sessionId: "session-tool-loop",
@@ -298,7 +329,7 @@ describe("hosted agent engine", () => {
     ).toEqual(["tool_execution_start", "tool_execution_update", "tool_execution_end"]);
 
     const turnEnds = events.filter(
-      (event): event is Extract<BrewvaAgentEngineEvent, { type: "turn_end" }> =>
+      (event): event is Extract<BrewvaTurnLoopEvent, { type: "turn_end" }> =>
         event.type === "turn_end",
     );
     expect(turnEnds).toHaveLength(2);
@@ -310,9 +341,9 @@ describe("hosted agent engine", () => {
 
   test("emits explicit tool execution phase transitions across the hosted loop", async () => {
     const observedPhases: ToolExecutionPhase[] = [];
-    const streamFn: BrewvaAgentEngineStreamFunction = async (_model, context, _options) => {
+    const streamFn: BrewvaTurnLoopStreamFunction = async (_model, context, _options) => {
       const lastMessage = context.messages[context.messages.length - 1] as
-        | BrewvaAgentEngineLlmMessage
+        | BrewvaTurnLoopLlmMessage
         | undefined;
       if (lastMessage?.role === "toolResult") {
         return createStream(createAssistantMessage([{ type: "text", text: "final" }]));
@@ -332,7 +363,7 @@ describe("hosted agent engine", () => {
       return createStream(toolCallMessage);
     };
 
-    const engine = createHostedAgentEngine({
+    const engine = createBrewvaTurnLoopController({
       initialModel: TEST_MODEL,
       initialThinkingLevel: "off",
       sessionId: "session-tool-phase-loop",
@@ -391,11 +422,11 @@ describe("hosted agent engine", () => {
   });
 
   test("surfaces tool argument validation failures without entering authorize or execute", async () => {
-    const events: BrewvaAgentEngineEvent[] = [];
+    const events: BrewvaTurnLoopEvent[] = [];
     const observedPhases: ToolExecutionPhase[] = [];
-    const streamFn: BrewvaAgentEngineStreamFunction = async (_model, context) => {
+    const streamFn: BrewvaTurnLoopStreamFunction = async (_model, context) => {
       const lastMessage = context.messages[context.messages.length - 1] as
-        | BrewvaAgentEngineLlmMessage
+        | BrewvaTurnLoopLlmMessage
         | undefined;
       if (lastMessage?.role === "toolResult") {
         return createStream(createAssistantMessage([{ type: "text", text: "final" }]));
@@ -415,7 +446,7 @@ describe("hosted agent engine", () => {
       );
     };
 
-    const engine = createHostedAgentEngine({
+    const engine = createBrewvaTurnLoopController({
       initialModel: TEST_MODEL,
       initialThinkingLevel: "off",
       sessionId: "session-tool-validation",
@@ -464,7 +495,7 @@ describe("hosted agent engine", () => {
     expect(observedPhases).toEqual(["classify", "cleanup"]);
 
     const toolEnd = events.find(
-      (event): event is Extract<BrewvaAgentEngineEvent, { type: "tool_execution_end" }> =>
+      (event): event is Extract<BrewvaTurnLoopEvent, { type: "tool_execution_end" }> =>
         event.type === "tool_execution_end",
     );
     expect(toolEnd?.isError).toBe(true);
@@ -480,7 +511,7 @@ describe("hosted agent engine", () => {
     );
 
     const firstTurnEnd = events.find(
-      (event): event is Extract<BrewvaAgentEngineEvent, { type: "turn_end" }> =>
+      (event): event is Extract<BrewvaTurnLoopEvent, { type: "turn_end" }> =>
         event.type === "turn_end" && event.toolResults.length > 0,
     );
     expect(firstTurnEnd?.toolResults).toHaveLength(1);
@@ -488,12 +519,12 @@ describe("hosted agent engine", () => {
   });
 
   test("emits a durable failure message before agent_end when the stream function throws", async () => {
-    const events: BrewvaAgentEngineEvent[] = [];
-    const streamFn: BrewvaAgentEngineStreamFunction = async () => {
+    const events: BrewvaTurnLoopEvent[] = [];
+    const streamFn: BrewvaTurnLoopStreamFunction = async () => {
       throw new Error("provider exploded");
     };
 
-    const engine = createHostedAgentEngine({
+    const engine = createBrewvaTurnLoopController({
       initialModel: TEST_MODEL,
       initialThinkingLevel: "off",
       sessionId: "session-run-failure",
@@ -542,10 +573,23 @@ describe("hosted agent engine", () => {
         excludeFromContext: true,
       },
     });
+    const agentEndEvent = events[agentEndIndex];
+    expect(agentEndEvent).toMatchObject({
+      type: "agent_end",
+      messages: [
+        { role: "user" },
+        {
+          role: "assistant",
+          stopReason: "error",
+          errorMessage: "provider exploded",
+          excludeFromContext: true,
+        },
+      ],
+    });
   });
 
   test("excludes failed assistant turns from the next provider request context", async () => {
-    const streamContexts: BrewvaAgentEngineLlmMessage[][] = [];
+    const streamContexts: BrewvaTurnLoopLlmMessage[][] = [];
     let streamCalls = 0;
     const failedMessage = {
       ...createAssistantMessage(
@@ -554,7 +598,7 @@ describe("hosted agent engine", () => {
       ),
       errorMessage: "server_error",
     };
-    const streamFn: BrewvaAgentEngineStreamFunction = async (_model, context) => {
+    const streamFn: BrewvaTurnLoopStreamFunction = async (_model, context) => {
       streamCalls += 1;
       streamContexts.push([...context.messages]);
       if (streamCalls === 1) {
@@ -563,8 +607,8 @@ describe("hosted agent engine", () => {
       return createStream(createAssistantMessage([{ type: "text", text: "recovered" }]));
     };
 
-    const events: BrewvaAgentEngineEvent[] = [];
-    const engine = createHostedAgentEngine({
+    const events: BrewvaTurnLoopEvent[] = [];
+    const engine = createBrewvaTurnLoopController({
       initialModel: TEST_MODEL,
       initialThinkingLevel: "off",
       sessionId: "session-retry-after-failure",
@@ -625,12 +669,12 @@ describe("hosted agent engine", () => {
   });
 
   test("stops the current loop after boundary tool results when requested", async () => {
-    const events: BrewvaAgentEngineEvent[] = [];
+    const events: BrewvaTurnLoopEvent[] = [];
     let streamCalls = 0;
-    const streamFn: BrewvaAgentEngineStreamFunction = async (_model, context) => {
+    const streamFn: BrewvaTurnLoopStreamFunction = async (_model, context) => {
       streamCalls += 1;
       const lastMessage = context.messages[context.messages.length - 1] as
-        | BrewvaAgentEngineLlmMessage
+        | BrewvaTurnLoopLlmMessage
         | undefined;
       if (lastMessage?.role === "toolResult") {
         return createStream(createAssistantMessage([{ type: "text", text: "unexpected resume" }]));
@@ -658,7 +702,7 @@ describe("hosted agent engine", () => {
           type: "toolcall_end",
           contentIndex: 0,
           toolCall: toolCallMessage.content[0] as Extract<
-            BrewvaAgentEngineAssistantMessage["content"][number],
+            BrewvaTurnLoopAssistantMessage["content"][number],
             { type: "toolCall" }
           >,
           partial: toolCallMessage,
@@ -666,7 +710,7 @@ describe("hosted agent engine", () => {
       ]);
     };
 
-    const engine = createHostedAgentEngine({
+    const engine = createBrewvaTurnLoopController({
       initialModel: TEST_MODEL,
       initialThinkingLevel: "off",
       sessionId: "session-stop-after-compaction",
@@ -715,13 +759,13 @@ describe("hosted agent engine", () => {
     expect(streamCalls).toBe(1);
     expect(
       events.filter(
-        (event): event is Extract<BrewvaAgentEngineEvent, { type: "turn_end" }> =>
+        (event): event is Extract<BrewvaTurnLoopEvent, { type: "turn_end" }> =>
           event.type === "turn_end",
       ),
     ).toHaveLength(1);
     expect(
       events.filter(
-        (event): event is Extract<BrewvaAgentEngineEvent, { type: "agent_end" }> =>
+        (event): event is Extract<BrewvaTurnLoopEvent, { type: "agent_end" }> =>
           event.type === "agent_end",
       ),
     ).toHaveLength(1);
@@ -729,12 +773,12 @@ describe("hosted agent engine", () => {
 
   test("refreshes active tools between provider turns inside the same run", async () => {
     const toolsSeenByStream: string[][] = [];
-    let engine: ReturnType<typeof createHostedAgentEngine>;
+    let engine: ReturnType<typeof createBrewvaTurnLoopController>;
 
-    const streamFn: BrewvaAgentEngineStreamFunction = async (_model, context) => {
+    const streamFn: BrewvaTurnLoopStreamFunction = async (_model, context) => {
       toolsSeenByStream.push((context.tools ?? []).map((tool) => tool.name));
       const lastMessage = context.messages[context.messages.length - 1] as
-        | BrewvaAgentEngineLlmMessage
+        | BrewvaTurnLoopLlmMessage
         | undefined;
       if (lastMessage?.role === "toolResult") {
         return createStream(createAssistantMessage([{ type: "text", text: "final" }]));
@@ -781,7 +825,7 @@ describe("hosted agent engine", () => {
       },
     };
 
-    engine = createHostedAgentEngine({
+    engine = createBrewvaTurnLoopController({
       initialModel: TEST_MODEL,
       initialThinkingLevel: "off",
       sessionId: "session-refresh-tools",
@@ -810,10 +854,10 @@ describe("hosted agent engine", () => {
   });
 
   test("drains follow-up messages queued by turn_end handlers before agent_end", async () => {
-    const events: BrewvaAgentEngineEvent[] = [];
+    const events: BrewvaTurnLoopEvent[] = [];
     let streamCalls = 0;
 
-    const streamFn: BrewvaAgentEngineStreamFunction = async (_model, context) => {
+    const streamFn: BrewvaTurnLoopStreamFunction = async (_model, context) => {
       streamCalls += 1;
       const sawGuardFollowUp = context.messages.some(
         (message) =>
@@ -830,7 +874,7 @@ describe("hosted agent engine", () => {
       );
     };
 
-    const engine = createHostedAgentEngine({
+    const engine = createBrewvaTurnLoopController({
       initialModel: TEST_MODEL,
       initialThinkingLevel: "off",
       sessionId: "session-agent-end-follow-up",
@@ -874,17 +918,17 @@ describe("hosted agent engine", () => {
     expect(engine.hasQueuedMessages()).toBe(false);
     expect(
       events.filter(
-        (event): event is Extract<BrewvaAgentEngineEvent, { type: "agent_end" }> =>
+        (event): event is Extract<BrewvaTurnLoopEvent, { type: "agent_end" }> =>
           event.type === "agent_end",
       ),
     ).toHaveLength(1);
   });
 
   test("applies message_end transforms before storing messages for later provider turns", async () => {
-    const streamContexts: BrewvaAgentEngineLlmMessage[][] = [];
+    const streamContexts: BrewvaTurnLoopLlmMessage[][] = [];
     let streamCalls = 0;
 
-    const streamFn: BrewvaAgentEngineStreamFunction = async (_model, context) => {
+    const streamFn: BrewvaTurnLoopStreamFunction = async (_model, context) => {
       streamCalls += 1;
       streamContexts.push([...context.messages]);
       return createStream(
@@ -894,7 +938,7 @@ describe("hosted agent engine", () => {
       );
     };
 
-    const engine = createHostedAgentEngine({
+    const engine = createBrewvaTurnLoopController({
       initialModel: TEST_MODEL,
       initialThinkingLevel: "off",
       sessionId: "session-message-end-transform-context",

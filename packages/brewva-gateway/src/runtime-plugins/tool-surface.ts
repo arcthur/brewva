@@ -20,8 +20,8 @@ import type {
   InternalHostPluginApi as ExtensionAPI,
   BrewvaHostToolInfo as ToolInfo,
   BrewvaHostToolResultEvent as ToolResultEvent,
-  BrewvaToolDefinition as ToolDefinition,
-} from "@brewva/brewva-substrate";
+} from "@brewva/brewva-substrate/host-api";
+import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import {
   BASE_BREWVA_TOOL_NAMES,
   CONTROL_PLANE_BREWVA_TOOL_NAMES,

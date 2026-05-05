@@ -9,9 +9,9 @@ import {
 import type {
   BrewvaHostContext,
   BrewvaHostToolCallResult,
-  BrewvaToolContentPart,
   InternalHostPluginApi,
-} from "@brewva/brewva-substrate";
+} from "@brewva/brewva-substrate/host-api";
+import type { BrewvaToolContentPart } from "@brewva/brewva-substrate/tools";
 import type { TurnLifecyclePort } from "./turn-lifecycle-port.js";
 
 export type LocalHookPhase =

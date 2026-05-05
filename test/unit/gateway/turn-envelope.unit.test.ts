@@ -18,7 +18,7 @@ import {
   EFFECT_AUTHORITY_DECIDED_EVENT_TYPE,
   TOOL_RESULT_RECORDED_EVENT_TYPE,
 } from "@brewva/brewva-runtime/events";
-import type { BrewvaPromptContentPart } from "@brewva/brewva-substrate";
+import type { BrewvaPromptContentPart } from "@brewva/brewva-substrate/prompt";
 import {
   runHostedTurnEnvelope,
   type HostedTurnEnvelopeLoopResult,

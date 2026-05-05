@@ -1,6 +1,9 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { BrewvaProviderRegistration, BrewvaRegisteredModel } from "@brewva/brewva-substrate";
+import type {
+  BrewvaProviderRegistration,
+  BrewvaRegisteredModel,
+} from "@brewva/brewva-substrate/provider";
 import { HostedAuthStore } from "./hosted-auth-store.js";
 import { resolveHostedConfigValueOrThrow, resolveHostedHeaders } from "./hosted-config-value.js";
 import { getHostedBuiltInModels, getHostedBuiltInProviders } from "./hosted-provider-helpers.js";

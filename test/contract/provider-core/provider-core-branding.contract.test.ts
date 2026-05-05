@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-describe("substrate contract: Brewva-owned provider and asset branding", () => {
+describe("provider core contract: Brewva-owned provider and asset branding", () => {
   test("removes Pi-branded provider identity markers from Brewva-owned providers", () => {
     const repoRoot = resolve(import.meta.dirname, "../../..");
     const googleGeminiCliPath = resolve(

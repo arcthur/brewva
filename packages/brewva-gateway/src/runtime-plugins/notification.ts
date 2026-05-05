@@ -1,5 +1,5 @@
 import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
-import type { InternalHostPluginApi } from "@brewva/brewva-substrate";
+import type { InternalHostPluginApi } from "@brewva/brewva-substrate/host-api";
 
 function buildActionableNotification(
   runtime: BrewvaHostedRuntimePort,

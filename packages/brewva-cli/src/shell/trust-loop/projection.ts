@@ -9,11 +9,8 @@ import {
   type ToolRecoveryPolicy,
   type ToolRiskLevel,
 } from "@brewva/brewva-runtime";
-import {
-  TOOL_EXECUTION_PHASES,
-  type SessionPhase,
-  type ToolExecutionPhase,
-} from "@brewva/brewva-substrate";
+import type { SessionPhase } from "@brewva/brewva-substrate/session";
+import { TOOL_EXECUTION_PHASES, type ToolExecutionPhase } from "@brewva/brewva-substrate/tools";
 
 export type TrustLoopPhase = "inspect" | "authorize" | "commit" | "record" | "recover";
 export type TrustLoopTone = "neutral" | "info" | "warning" | "success" | "error";

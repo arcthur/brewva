@@ -1,4 +1,4 @@
-import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate";
+import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import { createAstGrepTools } from "./ast-grep.js";
 import { createBrowserTools } from "./browser.js";
 import { createCostViewTool } from "./cost-view.js";

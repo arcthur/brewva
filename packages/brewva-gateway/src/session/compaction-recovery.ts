@@ -2,11 +2,13 @@ import type { BrewvaRuntime } from "@brewva/brewva-runtime";
 import {
   buildBrewvaPromptText,
   type BrewvaPromptContentPart,
+} from "@brewva/brewva-substrate/prompt";
+import {
   BrewvaPromptOptions,
   BrewvaPromptThinkingLevel,
   BrewvaSessionModelCatalogView,
   BrewvaSessionModelDescriptor,
-} from "@brewva/brewva-substrate";
+} from "@brewva/brewva-substrate/session";
 import { selectBrewvaFallbackModel } from "@brewva/brewva-tools";
 import type { CompactionGenerationCoordinator } from "./compaction-generation-coordinator.js";
 import type { PromptDispatchSession } from "./contracts.js";

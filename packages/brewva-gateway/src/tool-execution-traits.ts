@@ -1,4 +1,4 @@
-import type { BrewvaToolDefinition } from "@brewva/brewva-substrate";
+import type { BrewvaToolDefinition } from "@brewva/brewva-substrate/tools";
 import { resolveBrewvaToolExecutionTraits } from "@brewva/brewva-tools";
 
 type WaitMode = "shared" | "exclusive";

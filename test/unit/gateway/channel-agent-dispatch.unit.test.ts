@@ -7,8 +7,8 @@ import type { TurnEnvelope } from "@brewva/brewva-runtime/channels";
 import {
   buildBrewvaPromptText,
   type BrewvaPromptContentPart,
-  type BrewvaPromptSessionEvent,
-} from "@brewva/brewva-substrate";
+} from "@brewva/brewva-substrate/prompt";
+import type { BrewvaPromptSessionEvent } from "@brewva/brewva-substrate/session";
 import {
   createChannelAgentDispatch,
   buildChannelDispatchPrompt,

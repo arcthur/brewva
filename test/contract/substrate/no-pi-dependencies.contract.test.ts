@@ -38,9 +38,9 @@ describe("substrate dependency boundary", () => {
   test("keeps substrate-owned host and tool surfaces free of direct Pi dependencies", () => {
     const repoRoot = resolve(import.meta.dirname, "../../..");
     const roots = [
-      resolve(repoRoot, "packages", "brewva-agent-engine"),
       resolve(repoRoot, "packages", "brewva-provider-core"),
       resolve(repoRoot, "packages", "brewva-substrate"),
+      resolve(repoRoot, "packages", "brewva-substrate", "src", "turn"),
       resolve(repoRoot, "packages", "brewva-tools"),
       resolve(repoRoot, "packages", "brewva-gateway", "src", "runtime-plugins"),
       resolve(repoRoot, "packages", "brewva-gateway", "src", "session", "contracts.ts"),

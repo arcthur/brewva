@@ -1,4 +1,7 @@
-import type { BrewvaDiffPreferences, BrewvaShellViewPreferences } from "@brewva/brewva-substrate";
+import type {
+  BrewvaDiffPreferences,
+  BrewvaShellViewPreferences,
+} from "@brewva/brewva-substrate/session";
 import type { ShellCommitOptions } from "../shell-actions.js";
 import type { CliShellAction, CliShellViewState } from "../state/index.js";
 import type { CliShellUiPort, SessionViewPort } from "../types.js";

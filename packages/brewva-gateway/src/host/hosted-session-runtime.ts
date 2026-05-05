@@ -4,8 +4,8 @@ import type {
   BrewvaProviderRegistration,
   BrewvaRegisteredModel,
   BrewvaResolvedRequestAuth,
-} from "@brewva/brewva-substrate";
-import { createInMemoryModelCatalog } from "@brewva/brewva-substrate";
+} from "@brewva/brewva-substrate/provider";
+import { createInMemoryModelCatalog } from "@brewva/brewva-substrate/provider";
 import {
   createHostedSessionModelServices,
   createHostedSessionResult,

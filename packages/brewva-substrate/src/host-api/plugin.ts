@@ -7,7 +7,7 @@ import type {
   BrewvaToolResult,
 } from "../contracts/tool.js";
 import type { ToolExecutionPhase } from "../execution/tool-phase.js";
-import type { BrewvaPromptContentPart } from "../session/prompt-content.js";
+import type { BrewvaPromptContentPart } from "../prompt/content.js";
 import type { BrewvaPromptAssistantMessageEvent } from "../session/prompt-session.js";
 import type { BrewvaToolUiPort } from "./ui.js";
 

@@ -23,12 +23,12 @@ import {
   TOOL_EXECUTION_END_EVENT_TYPE,
   TOOL_EXECUTION_START_EVENT_TYPE,
 } from "@brewva/brewva-runtime/events";
+import type { BrewvaPromptContentPart } from "@brewva/brewva-substrate/prompt";
 import type {
   BrewvaPromptAssistantMessageEvent,
-  BrewvaPromptContentPart,
   BrewvaPromptOptions,
   BrewvaPromptSessionEvent,
-} from "@brewva/brewva-substrate";
+} from "@brewva/brewva-substrate/session";
 import { dispatchPromptWithCompactionSettlement } from "./compaction-recovery.js";
 import type { SubscribablePromptSession } from "./contracts.js";
 import { ToolAttemptBindingRegistry, formatAttemptId } from "./tool-attempt-binding.js";

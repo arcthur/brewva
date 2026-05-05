@@ -1,4 +1,4 @@
-import type { BrewvaModelCatalog as ModelRegistry } from "@brewva/brewva-substrate";
+import type { BrewvaModelCatalog as ModelRegistry } from "@brewva/brewva-substrate/provider";
 
 type RegisteredModel = ReturnType<ModelRegistry["getAll"]>[number];
 

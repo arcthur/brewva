@@ -3,8 +3,8 @@ import type { SessionWireFrame } from "@brewva/brewva-runtime";
 import {
   buildBrewvaPromptText,
   type BrewvaPromptContentPart,
-  type BrewvaPromptSessionEvent,
-} from "@brewva/brewva-substrate";
+} from "@brewva/brewva-substrate/prompt";
+import type { BrewvaPromptSessionEvent } from "@brewva/brewva-substrate/session";
 import { registerProviderRequestRecovery } from "../../../packages/brewva-gateway/src/runtime-plugins/provider-request-recovery.js";
 import { COMPACTION_RECOVERY_TEST_ONLY } from "../../../packages/brewva-gateway/src/session/compaction-recovery.js";
 import { runHostedThreadLoop } from "../../../packages/brewva-gateway/src/session/hosted-thread-loop.js";

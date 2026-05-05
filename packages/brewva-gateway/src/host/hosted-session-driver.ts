@@ -1,20 +1,21 @@
 import type { BrewvaRuntime } from "@brewva/brewva-runtime";
+import type { InternalHostPlugin, BrewvaToolUiPort } from "@brewva/brewva-substrate/host-api";
 import type {
-  InternalHostPlugin,
-  BrewvaManagedPromptSession,
   BrewvaModelCatalog,
   BrewvaMutableModelCatalog,
+  BrewvaRegisteredModel,
+} from "@brewva/brewva-substrate/provider";
+import type { BrewvaManagedPromptSession } from "@brewva/brewva-substrate/session";
+import type {
   BrewvaReadToolDetails,
   BrewvaReadToolOptions,
-  BrewvaRegisteredModel,
   BrewvaToolDefinition,
-  BrewvaToolUiPort,
-} from "@brewva/brewva-substrate";
+} from "@brewva/brewva-substrate/tools";
 import {
   createBrewvaEditToolDefinition,
   createBrewvaReadToolDefinition,
   createBrewvaWriteToolDefinition,
-} from "@brewva/brewva-substrate";
+} from "@brewva/brewva-substrate/tools";
 import {
   createHostedSessionRuntimeDriver,
   createHostedSessionRuntimeSettings,

@@ -4,10 +4,10 @@ import {
   defineInternalHostPlugin,
   type BrewvaHostCommandContext,
   type BrewvaHostContext,
-  type BrewvaPromptContentPart,
   type InternalHostPlugin,
   type RuntimePluginCapability,
-} from "@brewva/brewva-substrate";
+} from "@brewva/brewva-substrate/host-api";
+import type { BrewvaPromptContentPart } from "@brewva/brewva-substrate/prompt";
 import { Type } from "@sinclair/typebox";
 
 function createHostContext(): BrewvaHostContext {

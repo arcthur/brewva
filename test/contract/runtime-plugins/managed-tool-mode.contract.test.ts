@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createHostedTurnPipeline } from "@brewva/brewva-gateway/runtime-plugins";
-import type { BrewvaToolDefinition } from "@brewva/brewva-substrate";
+import type { BrewvaToolDefinition } from "@brewva/brewva-substrate/tools";
 import { Type } from "@sinclair/typebox";
 import { requireDefined } from "../../helpers/assertions.js";
 import { createMockRuntimePluginApi, invokeHandlerAsync } from "../../helpers/runtime-plugin.js";

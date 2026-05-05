@@ -15,6 +15,8 @@ import {
   type ProviderOptionsByApi,
 } from "../registry/typed-options.js";
 
+export { createAssistantMessageEventStream } from "../utils/event-stream.js";
+
 function isTypedModel(model: Model<Api>): model is Model<ProviderApiWithTypedOptions> {
   return isProviderApiWithTypedOptions(model.api);
 }

@@ -1,5 +1,5 @@
 import type { ToolOutputDisplayView } from "@brewva/brewva-runtime";
-import type { ToolExecutionPhase } from "@brewva/brewva-substrate";
+import type { ToolExecutionPhase } from "@brewva/brewva-substrate/tools";
 import {
   extractMessageError,
   extractVisibleTextFromMessage,

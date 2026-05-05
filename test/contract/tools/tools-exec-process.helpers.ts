@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
 import { createInMemoryBoxPlane, type BoxPlane } from "@brewva/brewva-box";
 import { createToolRuntimePort } from "@brewva/brewva-runtime";
-import type { BrewvaToolContext } from "@brewva/brewva-substrate";
+import type { BrewvaToolContext } from "@brewva/brewva-substrate/tools";
 import type { BrewvaBundledToolRuntime } from "@brewva/brewva-tools";
 import { createRuntimeConfig, createRuntimeFixture } from "../../helpers/runtime.js";
 

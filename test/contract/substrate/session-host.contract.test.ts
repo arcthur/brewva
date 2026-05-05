@@ -1,10 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import {
-  createInMemorySessionHost,
-  type InternalSessionHostPlugin,
-  type InternalSessionHostPluginContext,
-  type SessionPhase,
-} from "@brewva/brewva-substrate";
+import type {
+  InternalSessionHostPlugin,
+  InternalSessionHostPluginContext,
+} from "@brewva/brewva-substrate/host-api";
+import { createInMemorySessionHost, type SessionPhase } from "@brewva/brewva-substrate/session";
 
 function createPluginContext(): InternalSessionHostPluginContext {
   return {

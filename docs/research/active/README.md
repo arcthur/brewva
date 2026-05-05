@@ -26,3 +26,7 @@ stable docs already carry the accepted contract, convert the note to
 - [`product-semantic-compression-and-decision-surface-subtraction.md`](./product-semantic-compression-and-decision-surface-subtraction.md)
 - [`cost-observability-and-budget-governance.md`](./cost-observability-and-budget-governance.md)
 - [`rollback-ergonomics-and-patch-lifecycle-safety.md`](./rollback-ergonomics-and-patch-lifecycle-safety.md)
+
+## Execution Substrate
+
+- [`provider-transport-ownership-and-substrate-driver-boundary.md`](./provider-transport-ownership-and-substrate-driver-boundary.md)

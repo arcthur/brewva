@@ -1,4 +1,4 @@
-import type { BrewvaSessionMessageEntry } from "@brewva/brewva-substrate";
+import type { BrewvaSessionMessageEntry } from "@brewva/brewva-substrate/session";
 
 export const THINKING_LEVEL_SELECTED_EVENT_TYPE = "thinking_level_select";
 export const SESSION_BRANCH_SUMMARY_RECORDED_EVENT_TYPE = "branch_summary_recorded";

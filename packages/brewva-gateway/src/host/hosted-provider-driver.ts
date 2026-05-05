@@ -4,7 +4,7 @@ import {
   type BrewvaProviderCompletionDriver,
   type BrewvaProviderCompletionResponse,
   UnsupportedBrewvaProviderApiError,
-} from "@brewva/brewva-substrate";
+} from "@brewva/brewva-substrate/provider";
 
 function isProviderUnavailableError(error: unknown): boolean {
   return (
