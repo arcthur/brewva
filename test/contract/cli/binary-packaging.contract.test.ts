@@ -50,6 +50,20 @@ describe("binary packaging contract", () => {
     expect(buildScriptSource).not.toContain("--force-local");
   });
 
+  test("invalidates packaged dependency staging by requested version", () => {
+    const repoRoot = resolve(import.meta.dirname, "../../..");
+    const buildScriptPath = resolve(repoRoot, "script", "build-binaries.ts");
+    const buildScriptSource = readFileSync(buildScriptPath, "utf8");
+
+    expect(buildScriptSource).toContain(
+      "readPackagedDependencyVersion(repoPackagePath) === version",
+    );
+    expect(buildScriptSource).toContain(
+      "stageRootForPackage(NATIVE_PACKAGE_STAGE_ROOT, packageName, version)",
+    );
+    expect(buildScriptSource).toContain("function readPackagedDependencyVersion(packageRoot");
+  });
+
   test("packages only BoxLite-supported binary targets and stages native bindings", () => {
     const repoRoot = resolve(import.meta.dirname, "../../..");
     const buildScriptPath = resolve(repoRoot, "script", "build-binaries.ts");

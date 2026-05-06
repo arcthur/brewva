@@ -7,6 +7,7 @@ import type {
   BoxExecutionObserveOptions,
   BoxHandle,
   BoxInventory,
+  BoxInventoryEntry,
   BoxPlane,
   BoxScope,
   BoxScopeKind,
@@ -97,19 +98,23 @@ export class BaseBoxPlane implements BoxPlane {
   protected async inspectLocked(): Promise<BoxInventory> {
     await this.ensureLoaded();
     return {
-      boxes: [...this.boxes.values()].map((box) => ({
-        id: box.id,
-        scope: box.scope,
-        fingerprint: box.fingerprint,
-        createReason: box.createReason,
-        createdAt: box.createdAt,
-        lastExecAt: box.lastExecAt,
-        snapshots: [...box.snapshots],
-        parentBoxId: box.parentBoxId,
-        parentSnapshotId: box.parentSnapshotId,
-        supersededByBoxId: box.supersededByBoxId,
-        restoredSnapshotId: box.restoredSnapshotId,
-      })),
+      boxes: [...this.boxes.values()].map((box) => this.toInventoryEntry(box)),
+    };
+  }
+
+  protected toInventoryEntry(box: StoredBox): BoxInventoryEntry {
+    return {
+      id: box.id,
+      scope: box.scope,
+      fingerprint: box.fingerprint,
+      createReason: box.createReason,
+      createdAt: box.createdAt,
+      lastExecAt: box.lastExecAt,
+      snapshots: [...box.snapshots],
+      parentBoxId: box.parentBoxId,
+      parentSnapshotId: box.parentSnapshotId,
+      supersededByBoxId: box.supersededByBoxId,
+      restoredSnapshotId: box.restoredSnapshotId,
     };
   }
 

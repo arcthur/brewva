@@ -81,6 +81,16 @@ execution evidence can become authoritative. Box execution config controls the
 default sandbox image, resource limits, guest workspace path, network posture,
 and garbage-collection behavior.
 
+`security.execution.box.network.mode="off"` disables outbound network access in
+the BoxLite-backed box. `mode="allowlist"` forwards `network.allow` to BoxLite as
+the native `allowNet` list, so only those hostnames are available from the box.
+Tool-level `ToolBoxPolicy.networkAllowlist` can narrow a specific execution
+route without changing the global box default.
+
+`security.boundaryPolicy.network` remains the host-side command admission
+boundary. The box network allowlist is the runtime sandbox boundary for commands
+that actually route through the BoxLite-backed box.
+
 ## Hosted Cache
 
 Provider token-cache policy is a hosted-session setting rather than a

@@ -82,7 +82,7 @@ describe("box runtime contract", () => {
     );
   });
 
-  test("normalizes box home paths and rejects unsupported native network allowlists", () => {
+  test("normalizes box home paths and preserves native network allowlists", () => {
     const workspace = createTestWorkspace("box-home-path");
     writeFileSync(
       join(workspace, ".brewva/brewva.json"),
@@ -112,9 +112,10 @@ describe("box runtime contract", () => {
       "utf8",
     );
 
-    expect(() =>
-      loadBrewvaConfig({ cwd: allowlistWorkspace, configPath: ".brewva/brewva.json" }),
-    ).toThrow(/network\.allow.*not supported/i);
+    expect(
+      loadBrewvaConfig({ cwd: allowlistWorkspace, configPath: ".brewva/brewva.json" }).security
+        .execution.box.network,
+    ).toEqual({ mode: "allowlist", allow: ["example.com"] });
   });
 
   test("exec governance uses ToolBoxPolicy and requires box execution", () => {

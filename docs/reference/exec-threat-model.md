@@ -67,6 +67,10 @@ There is no automatic host fallback. `security.execution.backend` is either
   relax a non-virtual route into read-only auto-allow.
 - Deployment boundary policy remains responsible for filesystem roots,
   command deny lists, and network allowlists.
+- Box execution network policy is enforced by BoxLite when `exec` routes through
+  the box backend. `security.execution.box.network.allow` and tool-level
+  `ToolBoxPolicy.networkAllowlist` become the native `allowNet` list for that
+  box.
 - `exec.*` and `box.*` events record `commandHash`, `commandRedacted`, and structured
   `commandPolicy`, never raw command/env values.
 - The `virtual_readonly` backend materializes explicit relative path arguments
@@ -84,6 +88,8 @@ There is no automatic host fallback. `security.execution.backend` is either
   the box when the BoxLite SDK does not expose durable execution lookup.
 - Stateful boxes must be scoped, snapshotted, and garbage-collected as durable
   execution state, not treated as disposable per-command state.
+- Box inventory may include native BoxLite state and metrics for operator
+  inspection. Those fields are operational observability, not replay authority.
 
 ## Scenario Verdicts
 

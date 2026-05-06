@@ -90,6 +90,40 @@ export interface SnapshotRef {
   createdAt: string;
 }
 
+export interface BoxNativeHealth {
+  state: string;
+  failures: number;
+  lastCheck?: string;
+}
+
+export interface BoxNativeState {
+  status: string;
+  running: boolean;
+  pid?: number;
+  health?: BoxNativeHealth;
+}
+
+export interface BoxMetrics {
+  commandsExecutedTotal: number;
+  execErrorsTotal: number;
+  bytesSentTotal: number;
+  bytesReceivedTotal: number;
+  totalCreateDurationMs?: number;
+  guestBootDurationMs?: number;
+  cpuPercent?: number;
+  memoryBytes?: number;
+  networkBytesSent?: number;
+  networkBytesReceived?: number;
+  networkTcpConnections?: number;
+  networkTcpErrors?: number;
+  stageFilesystemSetupMs?: number;
+  stageImagePrepareMs?: number;
+  stageGuestRootfsMs?: number;
+  stageBoxConfigMs?: number;
+  stageBoxSpawnMs?: number;
+  stageContainerInitMs?: number;
+}
+
 export type ReleaseReason = "detach" | "session_closed" | "task_completed" | "ephemeral_done";
 
 export interface BoxHandle {
@@ -116,6 +150,8 @@ export interface BoxInventoryEntry {
   parentSnapshotId?: string;
   supersededByBoxId?: string;
   restoredSnapshotId?: string;
+  nativeState?: BoxNativeState;
+  metrics?: BoxMetrics;
 }
 
 export interface BoxInventory {

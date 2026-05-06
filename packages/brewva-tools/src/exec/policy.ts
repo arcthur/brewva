@@ -65,16 +65,17 @@ export function applyToolBoxPolicy(
   const networkAllowlist = boxPolicy.networkAllowlist
     ?.map((entry) => entry.trim().toLowerCase())
     .filter(Boolean);
-  if (networkAllowlist && networkAllowlist.length > 0) {
-    throw new Error(
-      "ToolBoxPolicy.networkAllowlist is not supported by the current BoxLite adapter; box network must remain off",
-    );
-  }
+  const normalizedNetworkAllowlist = networkAllowlist
+    ? [...new Set(networkAllowlist)].toSorted()
+    : undefined;
   return {
     ...box,
     image: boxPolicy.imageOverride ?? box.image,
     scopeDefault: boxPolicy.scopeKind ?? box.scopeDefault,
-    network: networkAllowlist ? { mode: "off" } : box.network,
+    network:
+      normalizedNetworkAllowlist && normalizedNetworkAllowlist.length > 0
+        ? { mode: "allowlist", allow: normalizedNetworkAllowlist }
+        : box.network,
   };
 }
 

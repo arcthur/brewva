@@ -6,6 +6,7 @@ import type {
   BoxExecutionObservation,
   BoxExecutionObserveOptions,
   BoxHandle,
+  BoxInventory,
   MaintenanceReport,
   BoxPlaneOptions,
   BoxScope,
@@ -21,8 +22,10 @@ import type { StoredBox } from "../plane/stored-box.js";
 import { fingerprintBoxScope } from "../scope.js";
 import {
   asNativeBox,
+  cloneNativeBox,
   collectNativeExecResult,
   createNativeBox,
+  inspectNativeBox,
   killNativeExecution,
   readNativeId,
   type NativeBox,
@@ -210,16 +213,7 @@ export class BoxLiteBoxPlane extends BaseBoxPlane {
   protected override async forkStoredBox(box: StoredBox, name: string): Promise<BoxHandle> {
     const snapshot = await this.snapshotStoredBox(box, name);
     const native = await this.resolveNativeBox(box, { create: false });
-    if (typeof native.cloneBox !== "function") {
-      throw new BoxPlaneError(
-        "BoxLite box does not expose cloneBox()",
-        "box_capability_unsupported",
-        {
-          boxId: box.id,
-        },
-      );
-    }
-    const childNative = await native.cloneBox(name);
+    const childNative = await cloneNativeBox(native, name, { boxId: box.id });
     const childScope: BoxScope = {
       ...box.scope,
       kind: "ephemeral",
@@ -260,6 +254,19 @@ export class BoxLiteBoxPlane extends BaseBoxPlane {
       box.native = undefined;
     }
     await this.persist();
+  }
+
+  protected override async inspectLocked(): Promise<BoxInventory> {
+    await this.ensureLoaded();
+    const boxes = [];
+    for (const box of this.boxes.values()) {
+      const entry = this.toInventoryEntry(box);
+      if (box.native) {
+        Object.assign(entry, await inspectNativeBox(asNativeBox(box.native)));
+      }
+      boxes.push(entry);
+    }
+    return { boxes };
   }
 
   protected override async reattachLocked(

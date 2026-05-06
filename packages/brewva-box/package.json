@@ -21,7 +21,7 @@
     }
   },
   "dependencies": {
-    "@boxlite-ai/boxlite": "^0.8.2"
+    "@boxlite-ai/boxlite": "^0.9.3"
   },
   "engines": {
     "node": "^20.19.0 || >=22.13.0"

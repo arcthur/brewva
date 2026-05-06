@@ -137,12 +137,7 @@ function normalizeBoxNetwork(
       value.allow,
       fallback.mode === "allowlist" ? fallback.allow : [],
     );
-    if (allow.length > 0) {
-      throw new Error(
-        "security.execution.box.network.allow is not supported by the current BoxLite adapter; use security.execution.box.network.mode='off'",
-      );
-    }
-    return { mode: "off" };
+    return allow.length > 0 ? { mode: "allowlist", allow } : { mode: "off" };
   }
   return { mode: "off" };
 }

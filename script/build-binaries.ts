@@ -86,7 +86,7 @@ const BREWVA_OPENTUI_SUPPORTED_ENV = "BREWVA_OPENTUI_SUPPORTED";
 const BREWVA_OPENTUI_ENV_PREFIX = "BREWVA_OPENTUI_*";
 const OPEN_TUI_VERSION = "0.1.99";
 const DUCKDB_NODE_API_VERSION = "1.5.2-r.1";
-const BOXLITE_VERSION = "0.8.2";
+const BOXLITE_VERSION = "0.9.3";
 
 const OPEN_TUI_NATIVE_PACKAGE_BY_TARGET: Partial<Record<PlatformTarget["target"], string>> = {
   "bun-darwin-arm64": "@opentui/core-darwin-arm64",
@@ -145,8 +145,19 @@ function packagePath(root: string, packageName: string): string {
   return join(root, ...segments);
 }
 
-function stageRootForPackage(root: string, packageName: string): string {
-  return join(root, packageName.replaceAll("@", "").replaceAll("/", "__"));
+function stageRootForPackage(root: string, packageName: string, version: string): string {
+  return join(root, `${packageName.replaceAll("@", "").replaceAll("/", "__")}__${version}`);
+}
+
+function readPackagedDependencyVersion(packageRoot: string): string | undefined {
+  try {
+    const manifest = JSON.parse(readFileSync(join(packageRoot, "package.json"), "utf8")) as {
+      version?: unknown;
+    };
+    return typeof manifest.version === "string" ? manifest.version : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function isOpenTuiInteractiveSupported(platform: PlatformTarget): boolean {
@@ -223,11 +234,11 @@ async function ensureOpenTuiNativePackage(platform: PlatformTarget): Promise<voi
 async function ensurePackagedDependency(packageName: string, version: string): Promise<string> {
   const repoNodeModules = join(process.cwd(), "node_modules");
   const repoPackagePath = packagePath(repoNodeModules, packageName);
-  if (existsSync(repoPackagePath)) {
+  if (existsSync(repoPackagePath) && readPackagedDependencyVersion(repoPackagePath) === version) {
     return realpathSync(repoPackagePath);
   }
 
-  const stageRoot = stageRootForPackage(NATIVE_PACKAGE_STAGE_ROOT, packageName);
+  const stageRoot = stageRootForPackage(NATIVE_PACKAGE_STAGE_ROOT, packageName, version);
   const stagePackagePath = packagePath(join(stageRoot, "node_modules"), packageName);
   if (!existsSync(stagePackagePath)) {
     mkdirSync(stageRoot, { recursive: true });

@@ -1,5 +1,6 @@
 import type {
   BoxExecResult,
+  BoxInventoryEntry,
   BoxNetworkCapability,
   BoxPlaneOptions,
   BoxScope,
@@ -29,10 +30,14 @@ export interface NativeBox {
     cwd?: string,
   ) => Promise<unknown>;
   snapshot?: NativeSnapshotManager;
-  cloneBox?: (name: string) => Promise<unknown>;
+  cloneBox?: (options?: unknown, name?: string | null) => Promise<unknown>;
+  info?: () => unknown;
+  metrics?: () => Promise<unknown>;
   start?: () => Promise<void>;
   stop?: () => Promise<void>;
 }
+
+type NativeNetworkSpec = { mode: "disabled" } | { mode: "enabled"; allowNet?: string[] };
 
 export async function createNativeBox(
   runtime: BoxLiteRuntime,
@@ -65,7 +70,7 @@ export async function createNativeBox(
     diskSizeGb: options.diskGb,
     workingDir: options.workspaceGuestPath,
     volumes,
-    network: toNativeNetworkMode(scope.capabilities.network),
+    network: toNativeNetworkSpec(scope.capabilities.network),
     ports: scope.capabilities.ports.map(({ guest, host, protocol }) => ({
       guestPort: guest,
       hostPort: host,
@@ -130,9 +135,40 @@ export async function collectNativeExecResult(
 
 export async function killNativeExecution(value: unknown, signal: string): Promise<void> {
   const record = readRecord(value);
-  if (typeof record?.kill === "function") {
-    await record.kill(signal);
+  const signalNumber = toNativeSignalNumber(signal);
+  if (typeof record?.signal === "function" && signalNumber !== undefined) {
+    await (record.signal as (value: number) => Promise<void>).call(value, signalNumber);
+    return;
   }
+  if (typeof record?.kill === "function") {
+    await (record.kill as () => Promise<void>).call(value);
+  }
+}
+
+export async function cloneNativeBox(
+  native: NativeBox,
+  name: string,
+  details: Record<string, unknown> = {},
+): Promise<NativeBox> {
+  if (typeof native.cloneBox !== "function") {
+    throw new BoxPlaneError(
+      "BoxLite box does not expose cloneBox()",
+      "box_capability_unsupported",
+      details,
+    );
+  }
+  return asNativeBox(await native.cloneBox(null, name));
+}
+
+export async function inspectNativeBox(
+  native: NativeBox,
+): Promise<Pick<BoxInventoryEntry, "nativeState" | "metrics">> {
+  const nativeState = readNativeState(safelyReadNativeInfo(native));
+  const metrics = readNativeMetrics(await safelyReadNativeMetrics(native));
+  return {
+    ...(nativeState ? { nativeState } : {}),
+    ...(metrics ? { metrics } : {}),
+  };
 }
 
 export function asNativeBox(value: unknown): NativeBox {
@@ -152,6 +188,14 @@ export function asNativeBox(value: unknown): NativeBox {
       typeof record.cloneBox === "function"
         ? (record.cloneBox.bind(value) as NativeBox["cloneBox"])
         : undefined,
+    info:
+      typeof record.info === "function"
+        ? (record.info.bind(value) as NativeBox["info"])
+        : undefined,
+    metrics:
+      typeof record.metrics === "function"
+        ? (record.metrics.bind(value) as NativeBox["metrics"])
+        : undefined,
     start:
       typeof record.start === "function"
         ? (record.start.bind(value) as NativeBox["start"])
@@ -163,18 +207,112 @@ export function asNativeBox(value: unknown): NativeBox {
   };
 }
 
-function toNativeNetworkMode(network: BoxNetworkCapability): string {
+function toNativeNetworkSpec(network: BoxNetworkCapability): NativeNetworkSpec {
   if (network.mode === "off") {
-    return "isolated";
+    return { mode: "disabled" };
   }
-  if (network.allow.length === 0) {
-    return "isolated";
+  const allowNet = network.allow.map((host) => host.trim().toLowerCase()).filter(Boolean);
+  if (allowNet.length === 0) {
+    return { mode: "disabled" };
   }
-  throw new BoxPlaneError(
-    "BoxLite native adapter cannot enforce domain allowlists with the current Node SDK",
-    "box_capability_unsupported",
-    { capability: "network.allowlist" },
-  );
+  return { mode: "enabled", allowNet };
+}
+
+function safelyReadNativeInfo(native: NativeBox): unknown {
+  if (typeof native.info !== "function") return undefined;
+  try {
+    return native.info();
+  } catch {
+    return undefined;
+  }
+}
+
+async function safelyReadNativeMetrics(native: NativeBox): Promise<unknown> {
+  if (typeof native.metrics !== "function") return undefined;
+  try {
+    return await native.metrics();
+  } catch {
+    return undefined;
+  }
+}
+
+function readNativeState(value: unknown): BoxInventoryEntry["nativeState"] | undefined {
+  const record = readRecord(value);
+  const state = readRecord(record?.state);
+  if (!state || typeof state.status !== "string" || typeof state.running !== "boolean") {
+    return undefined;
+  }
+  const health = readRecord(record?.healthStatus);
+  return {
+    status: state.status,
+    running: state.running,
+    pid: typeof state.pid === "number" ? state.pid : undefined,
+    health:
+      health && typeof health.state === "string" && typeof health.failures === "number"
+        ? {
+            state: health.state,
+            failures: health.failures,
+            lastCheck: typeof health.lastCheck === "string" ? health.lastCheck : undefined,
+          }
+        : undefined,
+  };
+}
+
+function readNativeMetrics(value: unknown): BoxInventoryEntry["metrics"] | undefined {
+  const record = readRecord(value);
+  if (!record) return undefined;
+  const commandsExecutedTotal = readOptionalNumber(record.commandsExecutedTotal);
+  const execErrorsTotal = readOptionalNumber(record.execErrorsTotal);
+  const bytesSentTotal = readOptionalNumber(record.bytesSentTotal);
+  const bytesReceivedTotal = readOptionalNumber(record.bytesReceivedTotal);
+  if (
+    commandsExecutedTotal === undefined ||
+    execErrorsTotal === undefined ||
+    bytesSentTotal === undefined ||
+    bytesReceivedTotal === undefined
+  ) {
+    return undefined;
+  }
+  return {
+    commandsExecutedTotal,
+    execErrorsTotal,
+    bytesSentTotal,
+    bytesReceivedTotal,
+    totalCreateDurationMs: readOptionalNumber(record.totalCreateDurationMs),
+    guestBootDurationMs: readOptionalNumber(record.guestBootDurationMs),
+    cpuPercent: readOptionalNumber(record.cpuPercent),
+    memoryBytes: readOptionalNumber(record.memoryBytes),
+    networkBytesSent: readOptionalNumber(record.networkBytesSent),
+    networkBytesReceived: readOptionalNumber(record.networkBytesReceived),
+    networkTcpConnections: readOptionalNumber(record.networkTcpConnections),
+    networkTcpErrors: readOptionalNumber(record.networkTcpErrors),
+    stageFilesystemSetupMs: readOptionalNumber(record.stageFilesystemSetupMs),
+    stageImagePrepareMs: readOptionalNumber(record.stageImagePrepareMs),
+    stageGuestRootfsMs: readOptionalNumber(record.stageGuestRootfsMs),
+    stageBoxConfigMs: readOptionalNumber(record.stageBoxConfigMs),
+    stageBoxSpawnMs: readOptionalNumber(record.stageBoxSpawnMs),
+    stageContainerInitMs: readOptionalNumber(record.stageContainerInitMs),
+  };
+}
+
+function readOptionalNumber(value: unknown): number | undefined {
+  return typeof value === "number" ? value : undefined;
+}
+
+function toNativeSignalNumber(signal: string): number | undefined {
+  const normalized = signal.trim().toUpperCase();
+  if (/^\d+$/u.test(normalized)) {
+    return Number(normalized);
+  }
+  const withPrefix = normalized.startsWith("SIG") ? normalized : `SIG${normalized}`;
+  const signalNumbers: Record<string, number> = {
+    SIGHUP: 1,
+    SIGINT: 2,
+    SIGQUIT: 3,
+    SIGTERM: 15,
+    SIGKILL: 9,
+  };
+  return signalNumbers[withPrefix];
 }
 
 function isNativeExecution(value: unknown): value is {
