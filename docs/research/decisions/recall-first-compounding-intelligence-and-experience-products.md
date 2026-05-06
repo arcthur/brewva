@@ -15,9 +15,9 @@
   - `docs/reference/artifacts-and-paths.md`
   - `docs/solutions/README.md`
 - Code anchors:
-  - `packages/brewva-recall/src/broker.ts`
-  - `packages/brewva-recall/src/context-provider.ts`
-  - `packages/brewva-recall/src/session-digests.ts`
+  - `packages/brewva-recall/src/broker/broker.ts`
+  - `packages/brewva-recall/src/context/provider.ts`
+  - `packages/brewva-session-index/src/factory.ts`
   - `packages/brewva-tools/src/recall.ts`
   - `packages/brewva-gateway/src/host/hosted-session-bootstrap.ts`
   - `packages/brewva-gateway/src/runtime-plugins/deliberation-maintenance.ts`

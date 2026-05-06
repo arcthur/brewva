@@ -12,6 +12,30 @@
       "bun": "./src/index.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
+    },
+    "./broker": {
+      "types": "./dist/broker/index.d.ts",
+      "bun": "./src/broker/index.ts",
+      "import": "./dist/broker/index.js",
+      "default": "./dist/broker/index.js"
+    },
+    "./context": {
+      "types": "./dist/context/index.d.ts",
+      "bun": "./src/context/index.ts",
+      "import": "./dist/context/index.js",
+      "default": "./dist/context/index.js"
+    },
+    "./knowledge": {
+      "types": "./dist/knowledge/index.d.ts",
+      "bun": "./src/knowledge/index.ts",
+      "import": "./dist/knowledge/index.js",
+      "default": "./dist/knowledge/index.js"
+    },
+    "./evidence": {
+      "types": "./dist/evidence/index.d.ts",
+      "bun": "./src/evidence/index.ts",
+      "import": "./dist/evidence/index.js",
+      "default": "./dist/evidence/index.js"
     }
   },
   "dependencies": {

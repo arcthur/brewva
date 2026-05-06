@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
-import { createRecallContextProvider } from "@brewva/brewva-recall";
+import { createRecallContextProvider } from "@brewva/brewva-recall/context";
 import {
   BrewvaRuntime,
   CONTEXT_SOURCES,

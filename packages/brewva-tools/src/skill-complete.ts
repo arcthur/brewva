@@ -1,4 +1,4 @@
-import { KNOWLEDGE_SOURCE_TYPES } from "@brewva/brewva-recall";
+import { KNOWLEDGE_SOURCE_TYPES } from "@brewva/brewva-recall/knowledge";
 import {
   listSkillOutputs,
   PLANNING_EVIDENCE_KEYS,

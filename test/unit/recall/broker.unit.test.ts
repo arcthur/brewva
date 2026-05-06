@@ -3,12 +3,9 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { getOrCreateNarrativeMemoryPlane } from "@brewva/brewva-deliberation";
-import {
-  createRecallContextProvider,
-  getOrCreateRecallBroker,
-  RECALL_CURATION_HALFLIFE_DAYS,
-  type RecallBrokerRuntime,
-} from "@brewva/brewva-recall";
+import { RECALL_CURATION_HALFLIFE_DAYS } from "@brewva/brewva-recall";
+import { getOrCreateRecallBroker, type RecallBrokerRuntime } from "@brewva/brewva-recall/broker";
+import { createRecallContextProvider } from "@brewva/brewva-recall/context";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
 import { type BrewvaEventRecord } from "@brewva/brewva-runtime/events";
 import {

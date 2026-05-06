@@ -1,0 +1,21 @@
+export {
+  FRESHNESS_SIGNALS,
+  KNOWLEDGE_QUERY_INTENTS,
+  KNOWLEDGE_SOURCE_TYPES,
+  authorityRankForIntent,
+  buildKnowledgeQuerySummary,
+  executeKnowledgeSearch,
+  findKnowledgeDocByRelativePath,
+  freshnessRank,
+  hasKnowledgeSearchSignal,
+  normalizeKnowledgeSourceTypes,
+} from "./search.js";
+export type {
+  ExecutedKnowledgeSearch,
+  FreshnessSignal,
+  KnowledgeDocRecord,
+  KnowledgeQueryIntent,
+  KnowledgeSearchInput,
+  KnowledgeSourceType,
+  ScoredKnowledgeDoc,
+} from "./search.js";

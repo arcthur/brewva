@@ -475,8 +475,8 @@ Architecture and research anchors:
 
 Runtime and gateway anchors:
 
-- `packages/brewva-recall/src/broker.ts`
-- `packages/brewva-recall/src/context-provider.ts`
+- `packages/brewva-recall/src/broker/broker.ts`
+- `packages/brewva-recall/src/context/provider.ts`
 - `packages/brewva-gateway/src/runtime-plugins/skill-first.ts`
 - `packages/brewva-runtime/src/domain/skills/readiness-derivation.ts`
 - `packages/brewva-runtime/src/domain/context/arena.ts`

@@ -1,5 +1,4 @@
 import {
-  getOrCreateRecallBroker,
   RECALL_CURATION_HALFLIFE_DAYS,
   RECALL_CURATION_SIGNAL_VALUES,
   RECALL_SCOPE_VALUES,
@@ -8,8 +7,11 @@ import {
   type RecallScope,
   type RecallSearchIntent,
   type RecallSearchEntry,
-  isRecallSessionIndexUnavailable,
 } from "@brewva/brewva-recall";
+import {
+  getOrCreateRecallBroker,
+  isRecallSessionIndexUnavailable,
+} from "@brewva/brewva-recall/broker";
 import {
   RECALL_CURATION_RECORDED_EVENT_TYPE,
   RECALL_RESULTS_SURFACED_EVENT_TYPE,

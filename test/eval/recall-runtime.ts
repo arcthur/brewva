@@ -2,9 +2,9 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { performance } from "node:perf_hooks";
-import { getOrCreateRecallBroker } from "@brewva/brewva-recall";
+import { getOrCreateRecallBroker } from "@brewva/brewva-recall/broker";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
-import { tokenizeSearchText } from "@brewva/brewva-search";
+import { tokenizeSearchContent } from "@brewva/brewva-search";
 import { parse } from "yaml";
 import type { EvalTelemetry, RecallEvalDataset, RecallEvalMetrics } from "./types.js";
 
@@ -65,7 +65,7 @@ function resolveAliasRefs(
 }
 
 function estimateTextTokenCost(text: string): number {
-  return tokenizeSearchText(text).length;
+  return tokenizeSearchContent(text).length;
 }
 
 function estimateBrokerTokenCost(results: readonly Record<string, unknown>[]): number {

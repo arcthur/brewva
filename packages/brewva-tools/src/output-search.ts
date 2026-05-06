@@ -1,12 +1,12 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { isAbsolute, resolve, sep } from "node:path";
 import type { BrewvaEventRecord } from "@brewva/brewva-runtime/events";
+import { tokenizeSearchQuery } from "@brewva/brewva-search";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import { Type } from "@sinclair/typebox";
 import Fuse from "fuse.js";
 import { LRUCache } from "lru-cache";
 import { recordToolRuntimeEvent, resolveToolRuntimeEventPort } from "./runtime-extensions.js";
-import { tokenizeSearchTerms } from "./shared/query.js";
 import type { BrewvaBundledToolOptions } from "./types.js";
 import { inconclusiveTextResult, textResult } from "./utils/result.js";
 import { createManagedBrewvaToolFactory } from "./utils/runtime-bound-tool.js";
@@ -231,11 +231,11 @@ function extractArtifactCandidates(input: {
 }
 
 function tokenizeLineWords(line: string): string[] {
-  return tokenizeSearchTerms(line, { minLength: 3 });
+  return tokenizeSearchQuery(line, { minLength: 3 });
 }
 
 function createQueryProfile(query: string): QueryProfile | null {
-  const tokens = tokenizeSearchTerms(query);
+  const tokens = tokenizeSearchQuery(query, { minLength: 2 });
   if (tokens.length === 0) return null;
 
   const partialTokens = [

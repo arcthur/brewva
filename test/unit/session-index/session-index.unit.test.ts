@@ -3,8 +3,12 @@ import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
 import { type BrewvaEventRecord } from "@brewva/brewva-runtime/events";
-import { tokenizeSearchText } from "@brewva/brewva-search";
+import { tokenizeSearchContent } from "@brewva/brewva-search";
 import { SESSION_INDEX_SCHEMA_VERSION, createSessionIndex } from "@brewva/brewva-session-index";
+import {
+  buildSessionIndexEventSearchText,
+  isSessionIndexTextIndexedEvent,
+} from "@brewva/brewva-session-index/evidence";
 import { DuckDBInstance } from "@duckdb/node-api";
 import {
   buildToolResultRecordedPayload,
@@ -104,7 +108,7 @@ describe("session index", () => {
 
       const evidenceRows = await index.queryTapeEvidence({
         sessionIds: ["indexed-prior-gateway"],
-        queryTokens: tokenizeSearchText("网关 bootstrap"),
+        query: "网关 bootstrap",
         limit: 5,
       });
       expect(evidenceRows[0]).toMatchObject({
@@ -112,6 +116,8 @@ describe("session index", () => {
         sessionId: "indexed-prior-gateway",
         type: "verification_outcome_recorded",
       });
+      expect(evidenceRows[0]?.searchText).toBe(buildSessionIndexEventSearchText(evidence));
+      expect(isSessionIndexTextIndexedEvent(evidence)).toBe(true);
     } finally {
       await index.close();
     }
@@ -145,7 +151,7 @@ describe("session index", () => {
       "select distinct token from event_tokens where session_id = 'indexed-prior-gateway' order by token",
     );
     const tokens = tokenRows.map((row) => row.token);
-    expect(tokens).toEqual(expect.arrayContaining(tokenizeSearchText("中文 网关 bootstrap")));
+    expect(tokens).toEqual(expect.arrayContaining(tokenizeSearchContent("中文 网关 bootstrap")));
   });
 
   test("materializes session lineage and context-entry projections from tape", async () => {
@@ -404,7 +410,7 @@ describe("session index", () => {
       await complete.catchUp();
       const evidence = await complete.queryTapeEvidence({
         sessionIds: ["indexed-incomplete-jsonl-row"],
-        queryTokens: tokenizeSearchText("complete partial receipt"),
+        query: "complete partial receipt",
         limit: 5,
       });
       expect(evidence.map((entry) => entry.eventId)).toContain("incomplete-jsonl-row-event");
@@ -435,17 +441,17 @@ describe("session index", () => {
       task: runtime.inspect.task,
     });
     try {
-      const queryTokens = tokenizeSearchText("debounce receipt");
+      const query = "debounce receipt";
       const sessions = await index.querySessionDigests({
         currentSessionId: "indexed-debounce-current",
         scope: "workspace_wide",
         targetRoots: [workspace],
-        queryTokens,
+        query,
         limit: 5,
       });
       const evidenceRows = await index.queryTapeEvidence({
         sessionIds: ["indexed-debounce"],
-        queryTokens,
+        query,
         limit: 5,
       });
       const event = await index.getTapeEvent({
@@ -490,7 +496,7 @@ describe("session index", () => {
         currentSessionId: "indexed-empty-token-current",
         scope: "workspace_wide",
         targetRoots: [workspace],
-        queryTokens: [],
+        query: "   ",
         limit: 10_000,
       });
 
@@ -538,19 +544,19 @@ describe("session index", () => {
     });
     try {
       await index.catchUp();
-      const queryTokens = tokenizeSearchText("rareanchor durable indexed receipt");
+      const query = "rareanchor durable indexed receipt";
       const sessions = await index.querySessionDigests({
         currentSessionId: "indexed-long-session-current",
         scope: "workspace_wide",
         targetRoots: [workspace],
-        queryTokens,
+        query,
         limit: 5,
       });
       expect(sessions.map((entry) => entry.sessionId)).toContain("indexed-long-session");
 
       const evidence = await index.queryTapeEvidence({
         sessionIds: sessions.map((entry) => entry.sessionId),
-        queryTokens,
+        query,
         limit: 5,
       });
       expect(evidence.map((entry) => entry.eventId)).toContain(lateEvent.id);
@@ -592,7 +598,7 @@ describe("session index", () => {
         currentSessionId: "indexed-lease-current",
         scope: "workspace_wide",
         targetRoots: [workspace],
-        queryTokens: tokenizeSearchText("lease receipt"),
+        query: "lease receipt",
         limit: 5,
       });
       expect(sessions.map((entry) => entry.sessionId)).toContain("indexed-lease");
@@ -660,7 +666,7 @@ describe("session index", () => {
         currentSessionId: "indexed-stale-lock-current",
         scope: "workspace_wide",
         targetRoots: [workspace],
-        queryTokens: tokenizeSearchText("stale recovery receipt"),
+        query: "stale recovery receipt",
         limit: 5,
       });
       expect(sessions.map((entry) => entry.sessionId)).toContain("indexed-stale-lock");
@@ -765,7 +771,7 @@ describe("session index", () => {
         currentSessionId: "indexed-rebuild-current",
         scope: "workspace_wide",
         targetRoots: [workspace],
-        queryTokens: tokenizeSearchText("rebuild receipt"),
+        query: "rebuild receipt",
         limit: 5,
       });
       expect(sessions.map((entry) => entry.sessionId)).toContain("indexed-rebuild");

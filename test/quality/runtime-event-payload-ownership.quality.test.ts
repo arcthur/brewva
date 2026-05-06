@@ -36,7 +36,6 @@ describe("runtime event payload ownership", () => {
     const scheduleRunner = readRepoFile("packages/brewva-gateway/src/daemon/schedule-runner.ts");
     const operatorQuestions = readRepoFile("packages/brewva-gateway/src/operator-questions.ts");
     const inspectCli = readRepoFile("packages/brewva-cli/src/inspect.ts");
-    const recallDigests = readRepoFile("packages/brewva-recall/src/session-digests.ts");
     const planningNormalization = readRepoFile(
       "packages/brewva-runtime/src/domain/skills/planning-normalization.ts",
     );
@@ -64,9 +63,9 @@ describe("runtime event payload ownership", () => {
     expect(inspectCli).toContain("readSkillCompletedEventPayload");
     expect(inspectCli).not.toContain('typeof payload?.skillName === "string"');
 
-    expect(recallDigests).toContain("readSkillCompletedEventPayload");
-    expect(recallDigests).not.toContain("event.payload.outputs");
-    expect(recallDigests).not.toContain("event.payload.skillName");
+    expect(existsSync(resolve(repoRoot, "packages/brewva-recall/src/session-digests.ts"))).toBe(
+      false,
+    );
 
     expect(planningNormalization).toContain("readSkillCompletedEventPayload");
     expect(planningNormalization).not.toContain("isRecord(event.payload)");
@@ -178,7 +177,6 @@ describe("runtime event payload ownership", () => {
     );
     const replayEngine = readRepoFile("packages/brewva-runtime/src/domain/tape/replay-engine.ts");
     const inspectAnalysis = readRepoFile("packages/brewva-cli/src/inspect-analysis.ts");
-    const recallSessionDigests = readRepoFile("packages/brewva-recall/src/session-digests.ts");
 
     expect(effectCommitmentDesk).toContain("readToolResultRecordedEventPayload");
 
@@ -203,9 +201,9 @@ describe("runtime event payload ownership", () => {
     expect(inspectAnalysis).not.toContain("event.payload?.failureClass");
     expect(inspectAnalysis).not.toContain("event.payload?.ledgerId");
 
-    expect(recallSessionDigests).toContain("readToolResultRecordedEventPayload");
-    expect(recallSessionDigests).not.toContain("event.payload.outputText");
-    expect(recallSessionDigests).not.toContain("event.payload.toolName");
+    expect(existsSync(resolve(repoRoot, "packages/brewva-recall/src/session-digests.ts"))).toBe(
+      false,
+    );
   });
 
   test("tool output distillation consumers use the shared runtime reader instead of re-parsing distillation payloads", () => {

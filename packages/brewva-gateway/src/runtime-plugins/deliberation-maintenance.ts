@@ -2,7 +2,7 @@ import {
   getOrCreateDeliberationMemoryPlane,
   getOrCreateOptimizationContinuityPlane,
 } from "@brewva/brewva-deliberation";
-import { getOrCreateRecallBroker } from "@brewva/brewva-recall";
+import { getOrCreateRecallBroker } from "@brewva/brewva-recall/broker";
 import type { BrewvaRuntime } from "@brewva/brewva-runtime";
 import { getOrCreateSkillPromotionBroker } from "@brewva/brewva-skill-broker";
 import type { TurnLifecyclePort } from "./turn-lifecycle-port.js";

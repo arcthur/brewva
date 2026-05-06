@@ -13,7 +13,8 @@
   - `docs/reference/tools.md`
 - Code anchors:
   - `packages/brewva-session-index/src/index.ts`
-  - `packages/brewva-recall/src/broker.ts`
+  - `packages/brewva-session-index/src/factory.ts`
+  - `packages/brewva-recall/src/broker/broker.ts`
   - `packages/brewva-runtime/src/runtime/runtime.ts`
   - `packages/brewva-cli/src/insights.ts`
   - `script/build-binaries.ts`
@@ -26,6 +27,7 @@
 - `session_tokens` contains task and digest tokens plus aggregated `event_text` tokens, so recall stage 1 can select long sessions even when a matching event is outside the digest summary window.
 - `session_target_roots` is the root-overlap query surface; JSON root arrays are not used for scoped filtering.
 - One writer updates the primary DuckDB file under a heartbeat lease. Non-writer processes read the latest published snapshot when available.
+- Session-index schema version bumps do not require migration scripts: the index is rebuildable, the writer opens the existing DuckDB file, rewrites rows from the event tape, and publishes fresh read snapshots for the current schema.
 
 ## Superseded by
 

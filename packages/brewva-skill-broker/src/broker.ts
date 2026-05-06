@@ -24,7 +24,7 @@ import {
   SKILL_PROMOTION_PROMOTED_EVENT_TYPE,
   SKILL_PROMOTION_REVIEWED_EVENT_TYPE,
 } from "@brewva/brewva-runtime/events";
-import { tokenizeSearchText } from "@brewva/brewva-search";
+import { tokenizeSearchContent, tokenizeSearchQuery } from "@brewva/brewva-search";
 import { FileSkillPromotionStore } from "./file-store.js";
 import { isRecord, readString } from "./parse.js";
 import {
@@ -75,7 +75,7 @@ function compactText(value: string, maxChars = 280): string {
 }
 
 function slugify(text: string, fallback = "draft"): string {
-  const normalized = tokenizeSearchText(text).join("-");
+  const normalized = tokenizeSearchContent(text).join("-");
   return normalized.length > 0 ? normalized.slice(0, 64) : fallback;
 }
 
@@ -341,7 +341,7 @@ function extractPromotionCandidates(
       sourceSkillName,
       target.kind,
       target.pathHint.toLowerCase(),
-      tokenizeSearchText(title).slice(0, 6).join("-"),
+      tokenizeSearchContent(title).slice(0, 6).join("-"),
     ].join(":");
     candidates.push({
       signature,
@@ -364,7 +364,7 @@ function extractPromotionCandidates(
       tags: uniqueStrings([
         sourceSkillName,
         target.kind,
-        ...tokenizeSearchText(target.pathHint).slice(0, 3),
+        ...tokenizeSearchContent(target.pathHint).slice(0, 3),
       ]),
       firstCapturedAt: event.timestamp,
       lastValidatedAt: event.timestamp,
@@ -638,7 +638,7 @@ function shouldInjectDrafts(promptText: string, drafts: readonly SkillPromotionD
   if (drafts.some((draft) => draft.status === "approved")) {
     return true;
   }
-  const tokens = new Set(tokenizeSearchText(promptText));
+  const tokens = new Set(tokenizeSearchQuery(promptText));
   for (const token of tokens) {
     if (PROMOTION_TRIGGER_TOKENS.has(token)) {
       return true;

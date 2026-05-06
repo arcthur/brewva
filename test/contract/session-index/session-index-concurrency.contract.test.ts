@@ -4,7 +4,6 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
 import { type BrewvaEventRecord } from "@brewva/brewva-runtime/events";
-import { tokenizeSearchText } from "@brewva/brewva-search";
 import { createSessionIndex } from "@brewva/brewva-session-index";
 import { buildVerificationOutcomeRecordedPayload } from "../../helpers/events.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
@@ -210,7 +209,7 @@ describe("session index concurrency contract", () => {
           currentSessionId: "indexed-snapshot-current",
           scope: "workspace_wide",
           targetRoots: [workspace],
-          queryTokens: tokenizeSearchText("snapshot receipt"),
+          query: "snapshot receipt",
           limit: 5,
         });
         expect(sessions.map((entry) => entry.sessionId)).toContain("indexed-snapshot-reader");

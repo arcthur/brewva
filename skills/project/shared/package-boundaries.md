@@ -12,8 +12,9 @@ scope: package-boundaries
 | `@brewva/brewva-runtime`       | governance kernel, contracts, gates, verification state, context boundaries                                                                             | CLI wiring or transport-specific behavior     |
 | `@brewva/brewva-provider-core` | provider contracts, catalog lookup, typed registry, streaming, cache rendering, drivers                                                                 | replay authority or credential ownership      |
 | `@brewva/brewva-substrate`     | contract root plus explicit session, turn, prompt/resource, provenance, execution, compaction, tools, host-api, persistence, provider, and sdk subpaths | replay authority, credentials, hosted policy  |
-| `@brewva/brewva-recall`        | recall ranking, curation semantics, trust labels, and result rendering                                                                                  | event tape authority or database ownership    |
-| `@brewva/brewva-session-index` | rebuildable DuckDB query plane over session event tapes                                                                                                 | replay authority, tokenization policy, SQL UI |
+| `@brewva/brewva-search`        | shared normalization, mandatory CJK segmentation, and semantic query/content token policy                                                               | recall ranking or event evidence projection   |
+| `@brewva/brewva-recall`        | curated root plus explicit broker, context, knowledge, and evidence subpaths for ranking, curation semantics, trust labels, and result rendering        | event tape authority or database ownership    |
+| `@brewva/brewva-session-index` | curated root plus explicit evidence subpath for the rebuildable DuckDB query plane over session event tapes                                             | replay authority, tokenization policy, SQL UI |
 | `@brewva/brewva-deliberation`  | narrative memory, optimization continuity, and non-authoritative deliberation substrate                                                                 | kernel commitments or transport ownership     |
 | `@brewva/brewva-skill-broker`  | post-execution skill-promotion brokerage and persisted promotion review state                                                                           | turn-time skill routing or kernel authority   |
 | `@brewva/brewva-tools`         | concrete tool adapters and runtime-aware helpers                                                                                                        | orchestration policy                          |
@@ -27,7 +28,12 @@ scope: package-boundaries
 - DuckDB session indexes are rebuildable query state; event tape remains replay
   authority
 - search tokenization stays centralized in `@brewva/brewva-search`, including
-  session-index token materialization
+  query/content token-mode policy and session-index token materialization
+- recall broker/context/knowledge/evidence imports use explicit
+  `@brewva/brewva-recall/*` subpaths; the recall root is shared vocabulary only
+- session-index evidence imports use `@brewva/brewva-session-index/evidence`
+  only for indexed evidence contracts; recall consumes typed query rows for
+  production recall instead of rebuilding event search text
 - project overlays may tighten or extend project context, but should not invent new semantic territory
 - provider streaming parse is an advisory projection of TypeBox tool schemas;
   TypeBox remains the canonical schema source and terminal AJV validation

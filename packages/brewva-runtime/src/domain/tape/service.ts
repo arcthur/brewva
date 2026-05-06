@@ -1,4 +1,8 @@
-import { normalizeSearchText, tokenizeSearchText } from "@brewva/brewva-search";
+import {
+  normalizeSearchText,
+  tokenizeSearchContent,
+  tokenizeSearchQuery,
+} from "@brewva/brewva-search";
 import type { BrewvaConfig } from "../../config/types.js";
 import type { BrewvaEventQuery, BrewvaEventRecord } from "../../events/types.js";
 import type { RuntimeCallback } from "../../runtime/callback.js";
@@ -344,7 +348,7 @@ export class TapeService {
 
     let tokenScore = 0;
     if (input.queryTokens.length > 0) {
-      const haystackTokens = new Set(tokenizeSearchText(input.haystack));
+      const haystackTokens = new Set(tokenizeSearchContent(input.haystack));
       const matchedTokens = input.queryTokens.filter((token) => haystackTokens.has(token));
       tokenScore = matchedTokens.length / input.queryTokens.length;
     }
@@ -394,7 +398,7 @@ export class TapeService {
     }
 
     const normalizedQuery = normalizeSearchText(query);
-    const queryTokens = tokenizeSearchText(query, { includeCompoundSubtokens: false });
+    const queryTokens = tokenizeSearchQuery(query);
     const candidates: TapeSearchCandidate[] = [];
 
     for (let index = scopedEvents.length - 1; index >= 0; index -= 1) {

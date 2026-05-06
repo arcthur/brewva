@@ -1,9 +1,10 @@
 import { realpathSync, statSync } from "node:fs";
 import { basename, extname, relative } from "node:path";
+import { tokenizeSearchQuery } from "@brewva/brewva-search";
 import { LRUCache } from "lru-cache";
 import ts from "typescript";
 import { buildSearchAdvisorSnapshot, normalizeSearchAdvisorPath } from "./search-advisor.js";
-import { escapeRegexLiteral, tokenizeSearchTerms } from "./shared/query.js";
+import { escapeRegexLiteral } from "./shared/query.js";
 import { DEFAULT_SKIPPED_WORKSPACE_DIRS, walkWorkspaceFiles } from "./shared/workspace-walk.js";
 import { readSourceTextWithCache, resolveTocSessionKey } from "./toc-cache.js";
 import type { BrewvaToolRuntime } from "./types.js";
@@ -872,7 +873,7 @@ export function runTocSearchCore(input: {
 }): TocSearchCoreResult {
   const queryText = input.queryText.trim();
   const query = queryText.toLowerCase();
-  const tokens = tokenizeSearchTerms(query);
+  const tokens = tokenizeSearchQuery(query, { minLength: 2 });
   const emptySummary: TocSearchSummary = {
     indexedFiles: 0,
     candidateFiles: 0,

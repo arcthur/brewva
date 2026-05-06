@@ -2,7 +2,8 @@ import { describe, expect } from "bun:test";
 import fc from "fast-check";
 import {
   normalizeSearchText,
-  tokenizeSearchText,
+  tokenizeSearchContent,
+  tokenizeSearchQuery,
 } from "../../../packages/brewva-search/src/index.js";
 import { propertyTest } from "../../helpers/property.js";
 
@@ -27,20 +28,19 @@ const cjkSearchRunArbitrary = fc
   .map((characters) => characters.join(""));
 
 describe("search tokenization properties", () => {
-  propertyTest("ASCII search tokens respect caller minLength and remain duplicate-free", {
+  propertyTest("ASCII query tokens respect caller minLength and remain duplicate-free", {
     propertyId: "search.tokenization.normalized-unique",
     layer: "unit",
     arbitraries: [
       asciiSearchTokenArbitrary,
       fc.record({
         minLength: fc.integer({ min: 1, max: 8 }),
-        includeCompoundSubtokens: fc.boolean(),
         includeCjkNgrams: fc.boolean(),
       }),
     ],
     predicate: (raw, options) => {
       const normalized = normalizeSearchText(raw);
-      const tokens = tokenizeSearchText(raw, options);
+      const tokens = tokenizeSearchQuery(raw, options);
 
       expect(normalizeSearchText(normalized)).toBe(normalized);
       expect(new Set(tokens).size).toBe(tokens.length);
@@ -49,19 +49,18 @@ describe("search tokenization properties", () => {
     },
   });
 
-  propertyTest("CJK search tokens use the documented two-character floor", {
+  propertyTest("CJK query tokens use the documented two-character floor", {
     propertyId: "search.tokenization.cjk-two-character-floor",
     layer: "unit",
     arbitraries: [
       cjkSearchRunArbitrary,
       fc.record({
         minLength: fc.integer({ min: 1, max: 8 }),
-        includeCompoundSubtokens: fc.boolean(),
         includeCjkNgrams: fc.boolean(),
       }),
     ],
     predicate: (raw, options) => {
-      const tokens = tokenizeSearchText(raw, options);
+      const tokens = tokenizeSearchQuery(raw, options);
 
       expect(new Set(tokens).size).toBe(tokens.length);
       expect(tokens.every((token) => token.trim() === token)).toBe(true);
@@ -69,7 +68,7 @@ describe("search tokenization properties", () => {
     },
   });
 
-  propertyTest("mixed search normalization is idempotent and tokenization is duplicate-free", {
+  propertyTest("mixed content normalization is idempotent and tokenization is duplicate-free", {
     propertyId: "search.tokenization.mixed-normalized-unique",
     layer: "unit",
     arbitraries: [
@@ -78,13 +77,12 @@ describe("search tokenization properties", () => {
       }),
       fc.record({
         minLength: fc.integer({ min: 1, max: 8 }),
-        includeCompoundSubtokens: fc.boolean(),
         includeCjkNgrams: fc.boolean(),
       }),
     ],
     predicate: (raw, options) => {
       const normalized = normalizeSearchText(raw);
-      const tokens = tokenizeSearchText(raw, options);
+      const tokens = tokenizeSearchContent(raw, options);
 
       expect(normalizeSearchText(normalized)).toBe(normalized);
       expect(new Set(tokens).size).toBe(tokens.length);

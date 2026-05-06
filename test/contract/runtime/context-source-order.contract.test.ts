@@ -6,7 +6,7 @@ import {
   createNarrativeMemoryContextProvider,
   createOptimizationContinuityContextProvider,
 } from "@brewva/brewva-deliberation";
-import { createRecallContextProvider } from "@brewva/brewva-recall";
+import { createRecallContextProvider } from "@brewva/brewva-recall/context";
 import {
   BrewvaRuntime,
   CONTEXT_SOURCES,

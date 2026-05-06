@@ -100,8 +100,8 @@ describe("search tokenizer contract", () => {
       writeFileSync(
         entrypoint,
         [
-          'import { tokenizeSearchText } from "../../../src/index.ts";',
-          'console.log(tokenizeSearchText("brewva runtime").join("|"));',
+          'import { tokenizeSearchQuery } from "../../../src/index.ts";',
+          'console.log(tokenizeSearchQuery("brewva runtime").join("|"));',
         ].join("\n"),
         "utf8",
       );

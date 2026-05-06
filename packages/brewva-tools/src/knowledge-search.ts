@@ -4,7 +4,7 @@ import {
   KNOWLEDGE_QUERY_INTENTS,
   KNOWLEDGE_SOURCE_TYPES,
   normalizeKnowledgeSourceTypes,
-} from "@brewva/brewva-recall";
+} from "@brewva/brewva-recall/knowledge";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import { Type } from "@sinclair/typebox";
 import { resolveToolTargetScope } from "./target-scope.js";

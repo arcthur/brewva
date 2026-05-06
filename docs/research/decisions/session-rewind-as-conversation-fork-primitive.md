@@ -20,7 +20,7 @@
   - `packages/brewva-runtime/src/domain/governance/action-policy.ts`
   - `packages/brewva-runtime/src/events/registry.ts`
   - `packages/brewva-runtime/src/domain/sessions/types.ts`
-  - `packages/brewva-session-index/src/index.ts`
+  - `packages/brewva-session-index/src/factory.ts`
   - `packages/brewva-cli/src/shell/flows/session-workflow.ts`
 
 ## Decision Summary

@@ -1,0 +1,112 @@
+import { tokenizeSearchQuery } from "@brewva/brewva-search";
+import type {
+  QueryRecentSessionsInput,
+  QueryTapeEvidenceInput,
+  SessionIndexRecentSession,
+  SessionIndexTapeEvidence,
+} from "../api.js";
+import { uniqueStrings } from "../collections.js";
+import { mapEventRow, type EventRow } from "../projection/rows.js";
+import { buildInList, type SqlParams } from "../sql/params.js";
+import type { SessionIndexQueryPort } from "./port.js";
+
+interface RecentSessionRow {
+  session_id: string;
+  event_count: number;
+  last_event_at: number;
+}
+
+export async function queryTapeEvidenceRows(input: {
+  query: QueryTapeEvidenceInput;
+  port: SessionIndexQueryPort;
+}): Promise<SessionIndexTapeEvidence[]> {
+  const sessionIds = uniqueStrings(input.query.sessionIds);
+  const queryTokens = uniqueStrings(tokenizeSearchQuery(input.query.query));
+  if (sessionIds.length === 0 || queryTokens.length === 0) return [];
+
+  await input.port.ensureAvailable();
+
+  const params: SqlParams = {
+    limit: Math.max(1, Math.trunc(input.query.limit)),
+  };
+  const sessionFilter = buildInList("session", sessionIds, params);
+  const tokenFilter = buildInList("token", queryTokens, params);
+  const rows = await input.port.selectRows<EventRow & { token_matches: bigint | number }>(
+    `
+      select
+        events.event_id,
+        events.session_id,
+        events.timestamp,
+        events.turn,
+        events.type,
+        events.payload_json,
+        events.search_text,
+        events.log_path,
+        events.log_offset,
+        count(distinct event_tokens.token) as token_matches
+      from event_tokens
+      inner join events on events.event_id = event_tokens.event_id
+      where event_tokens.session_id in (${sessionFilter})
+        and event_tokens.token in (${tokenFilter})
+      group by
+        events.event_id,
+        events.session_id,
+        events.timestamp,
+        events.turn,
+        events.type,
+        events.payload_json,
+        events.search_text,
+        events.log_path,
+        events.log_offset
+      order by token_matches desc, events.timestamp desc
+      limit $limit
+    `,
+    params,
+  );
+  const denominator = queryTokens.length;
+  return rows.map((row) => mapEventRow(row, Number(row.token_matches ?? 0) / denominator));
+}
+
+export async function getTapeEventRow(input: {
+  sessionId: string;
+  eventId: string;
+  port: SessionIndexQueryPort;
+}): Promise<SessionIndexTapeEvidence | undefined> {
+  await input.port.ensureAvailable();
+
+  const row = await input.port.selectOne<EventRow>(
+    `
+      select event_id, session_id, timestamp, turn, type, payload_json, search_text, log_path, log_offset
+      from events
+      where session_id = $sessionId and event_id = $eventId
+      limit 1
+    `,
+    {
+      sessionId: input.sessionId,
+      eventId: input.eventId,
+    },
+  );
+  return row ? mapEventRow(row, 0) : undefined;
+}
+
+export async function listRecentSessionRows(input: {
+  query: QueryRecentSessionsInput;
+  port: SessionIndexQueryPort;
+}): Promise<SessionIndexRecentSession[]> {
+  await input.port.ensureAvailable();
+
+  const rows = await input.port.selectRows<RecentSessionRow>(
+    `
+      select session_id, event_count, last_event_at
+      from sessions
+      order by last_event_at desc
+      limit $limit
+    `,
+    { limit: Math.max(1, Math.trunc(input.query.limit)) },
+  );
+  return rows.map((row) => ({
+    sessionId: row.session_id,
+    eventCount: row.event_count,
+    lastEventAt: row.last_event_at,
+  }));
+}

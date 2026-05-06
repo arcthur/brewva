@@ -5,7 +5,7 @@ import {
   type KnowledgeSearchInput,
   type KnowledgeSourceType,
   type ScoredKnowledgeDoc,
-} from "@brewva/brewva-recall";
+} from "@brewva/brewva-recall/knowledge";
 import type { SkillDocument } from "@brewva/brewva-runtime";
 import { summarizeImpactMapSearchSignal } from "./impact-map.js";
 

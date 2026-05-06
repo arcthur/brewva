@@ -1,55 +1,22 @@
-import { type BrewvaEventRecord } from "@brewva/brewva-runtime/events";
 import {
   DECISION_RECEIPT_RECORDED_EVENT_TYPE,
   EFFECT_COMMITMENT_APPROVAL_CONSUMED_EVENT_TYPE,
   EFFECT_COMMITMENT_APPROVAL_DECIDED_EVENT_TYPE,
   EFFECT_COMMITMENT_APPROVAL_REQUESTED_EVENT_TYPE,
   PATCH_RECORDED_EVENT_TYPE,
-  REASONING_CHECKPOINT_EVENT_TYPE,
   REASONING_REVERT_EVENT_TYPE,
   RECOVERY_WAL_APPENDED_EVENT_TYPE,
   REVERSIBLE_MUTATION_PREPARED_EVENT_TYPE,
   REVERSIBLE_MUTATION_RECORDED_EVENT_TYPE,
   REVERSIBLE_MUTATION_ROLLED_BACK_EVENT_TYPE,
   ROLLBACK_EVENT_TYPE,
-  SCHEDULE_EVENT_TYPE,
-  SESSION_COMPACT_EVENT_TYPE,
   SKILL_COMPLETED_EVENT_TYPE,
-  TASK_EVENT_TYPE,
   TOOL_RESULT_RECORDED_EVENT_TYPE,
   TRUTH_EVENT_TYPE,
-  TURN_INPUT_RECORDED_EVENT_TYPE,
-  TURN_RENDER_COMMITTED_EVENT_TYPE,
   VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
+  type BrewvaEventRecord,
 } from "@brewva/brewva-runtime/events";
-
-export const RECALL_SEARCHABLE_TAPE_EVENT_TYPES = [
-  TASK_EVENT_TYPE,
-  TRUTH_EVENT_TYPE,
-  TOOL_RESULT_RECORDED_EVENT_TYPE,
-  SKILL_COMPLETED_EVENT_TYPE,
-  SESSION_COMPACT_EVENT_TYPE,
-  TURN_INPUT_RECORDED_EVENT_TYPE,
-  TURN_RENDER_COMMITTED_EVENT_TYPE,
-  REASONING_CHECKPOINT_EVENT_TYPE,
-  REASONING_REVERT_EVENT_TYPE,
-  SCHEDULE_EVENT_TYPE,
-  EFFECT_COMMITMENT_APPROVAL_REQUESTED_EVENT_TYPE,
-  EFFECT_COMMITMENT_APPROVAL_DECIDED_EVENT_TYPE,
-  EFFECT_COMMITMENT_APPROVAL_CONSUMED_EVENT_TYPE,
-  REVERSIBLE_MUTATION_PREPARED_EVENT_TYPE,
-  REVERSIBLE_MUTATION_RECORDED_EVENT_TYPE,
-  REVERSIBLE_MUTATION_ROLLED_BACK_EVENT_TYPE,
-  RECOVERY_WAL_APPENDED_EVENT_TYPE,
-  ROLLBACK_EVENT_TYPE,
-  PATCH_RECORDED_EVENT_TYPE,
-  DECISION_RECEIPT_RECORDED_EVENT_TYPE,
-  VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
-] as const;
-
-const RECALL_SEARCHABLE_TAPE_EVENT_TYPE_SET: ReadonlySet<string> = new Set(
-  RECALL_SEARCHABLE_TAPE_EVENT_TYPES,
-);
+import type { RecallEvidenceStrength, RecallTrustLabel } from "../types.js";
 
 export const RECALL_KERNEL_TRUTH_TAPE_EVENT_TYPES = [TRUTH_EVENT_TYPE] as const;
 
@@ -79,18 +46,41 @@ const RECALL_STRONG_TAPE_EVENT_TYPE_SET: ReadonlySet<string> = new Set(
   RECALL_STRONG_TAPE_EVENT_TYPES,
 );
 
-export function isRecallSearchableTapeEventType(type: string): boolean {
-  return RECALL_SEARCHABLE_TAPE_EVENT_TYPE_SET.has(type);
-}
-
-export function isRecallSearchableTapeEvent(event: Pick<BrewvaEventRecord, "type">): boolean {
-  return isRecallSearchableTapeEventType(event.type);
-}
-
 export function isKernelTruthRecallTapeEvent(event: Pick<BrewvaEventRecord, "type">): boolean {
   return RECALL_KERNEL_TRUTH_TAPE_EVENT_TYPE_SET.has(event.type);
 }
 
 export function isStrongRecallTapeEvent(event: Pick<BrewvaEventRecord, "type">): boolean {
   return RECALL_STRONG_TAPE_EVENT_TYPE_SET.has(event.type);
+}
+
+export function classifyRecallTapeEvent(
+  event: BrewvaEventRecord,
+  currentSessionId: string,
+): {
+  trustLabel: RecallTrustLabel;
+  evidenceStrength: RecallEvidenceStrength;
+} {
+  if (isKernelTruthRecallTapeEvent(event)) {
+    return {
+      trustLabel: "Kernel truth",
+      evidenceStrength: "strong",
+    };
+  }
+  if (isStrongRecallTapeEvent(event)) {
+    return {
+      trustLabel: "Verified evidence",
+      evidenceStrength: "strong",
+    };
+  }
+  if (event.sessionId === currentSessionId) {
+    return {
+      trustLabel: "Session-local memory",
+      evidenceStrength: "weak",
+    };
+  }
+  return {
+    trustLabel: "Advisory posture",
+    evidenceStrength: "weak",
+  };
 }

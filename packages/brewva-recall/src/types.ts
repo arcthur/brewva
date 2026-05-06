@@ -1,3 +1,5 @@
+import type { SessionIndexDigest } from "@brewva/brewva-session-index";
+
 export const RECALL_BROKER_STATE_SCHEMA = "brewva.recall.broker.v5" as const;
 export const RECALL_CURATION_HALFLIFE_DAYS = 45;
 
@@ -52,16 +54,7 @@ export type RecallSearchIntent = (typeof RECALL_SEARCH_INTENT_VALUES)[number];
 export type RecallCurationSignal = (typeof RECALL_CURATION_SIGNAL_VALUES)[number];
 export type RecallFreshness = (typeof RECALL_FRESHNESS_VALUES)[number];
 
-export interface RecallSessionDigest {
-  sessionId: string;
-  eventCount: number;
-  lastEventAt: number;
-  repositoryRoot: string;
-  primaryRoot: string;
-  targetRoots: string[];
-  taskGoal?: string;
-  digestText: string;
-}
+export type RecallSessionDigest = Omit<SessionIndexDigest, "tokenScore">;
 
 export interface RecallEvidenceIndexEntry {
   sessionId: string;

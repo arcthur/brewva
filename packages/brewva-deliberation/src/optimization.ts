@@ -15,7 +15,7 @@ import {
   SCHEDULE_EVENT_TYPE,
   SKILL_COMPLETED_EVENT_TYPE,
 } from "@brewva/brewva-runtime/events";
-import { tokenizeSearchText } from "@brewva/brewva-search";
+import { tokenizeSearchContent, tokenizeSearchQuery } from "@brewva/brewva-search";
 import { FileOptimizationContinuityStore } from "./optimization-store.js";
 import {
   clamp,
@@ -1108,9 +1108,9 @@ export function retrieveOptimizationContinuityArtifacts(input: {
   limit?: number;
 }): OptimizationContinuityRetrieval[] {
   const now = input.now ?? Date.now();
-  const queryTokens = new Set(tokenizeSearchText(input.promptText));
+  const queryTokens = new Set(tokenizeSearchQuery(input.promptText));
   const scored = input.state.lineages.map((artifact) => {
-    const haystack = tokenizeSearchText(
+    const haystack = tokenizeSearchContent(
       [
         artifact.loopKey,
         artifact.goalRef,
@@ -1148,7 +1148,7 @@ function shouldInjectOptimizationLineages(
   promptText: string,
   lineages: readonly OptimizationLineageArtifact[],
 ): boolean {
-  const tokens = new Set(tokenizeSearchText(promptText));
+  const tokens = new Set(tokenizeSearchQuery(promptText));
   for (const token of tokens) {
     if (OPTIMIZATION_TRIGGER_TOKENS.has(token)) {
       return true;

@@ -5,8 +5,8 @@ import {
   defineContextSourceProvider,
 } from "@brewva/brewva-runtime";
 import { RECALL_RESULTS_SURFACED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
-import { getOrCreateRecallBroker, isRecallSessionIndexUnavailable } from "./broker.js";
-import type { RecallScope, RecallSearchEntry, RecallSearchIntent } from "./types.js";
+import { getOrCreateRecallBroker, isRecallSessionIndexUnavailable } from "../broker/index.js";
+import type { RecallScope, RecallSearchEntry, RecallSearchIntent } from "../types.js";
 
 const DEFAULT_MAX_CONTEXT_RESULTS = 4;
 

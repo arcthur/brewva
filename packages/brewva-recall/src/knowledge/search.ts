@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, join, relative } from "node:path";
 import { parseMarkdownFrontmatter } from "@brewva/brewva-runtime/markdown";
-import { tokenizeSearchText } from "@brewva/brewva-search";
+import { tokenizeSearchContent, tokenizeSearchQuery } from "@brewva/brewva-search";
 import Fuse from "fuse.js";
 import type { FuseResultMatch } from "fuse.js";
 
@@ -305,7 +305,7 @@ function loadKnowledgeDocs(searchRoot: string, workspaceRoot: string): LoadedKno
       const problemKind = readTrimmedString(data.problem_kind);
       const updatedAt = readUpdatedAt(data);
       const freshness = resolveFreshnessSignal(updatedAt);
-      const searchTokens = tokenizeSearchText(
+      const searchTokens = tokenizeSearchContent(
         [
           title,
           module ?? "",
@@ -622,7 +622,7 @@ function searchDocs(
   }
 
   const fuse = createKnowledgeFuse(filteredDocs);
-  const queryTokens = tokenizeSearchText(input.query, { includeCompoundSubtokens: false });
+  const queryTokens = tokenizeSearchQuery(input.query);
   const rankedByPath = new Map<string, RankedKnowledgeDoc>();
   for (const rankedEntry of fuse.search(input.query).map((fuseEntry) => {
     const queryReasons = collectFuseMatchReasons(fuseEntry.matches);

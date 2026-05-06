@@ -5,7 +5,7 @@ import {
   type ExecutedKnowledgeSearch,
   type KnowledgeSourceType,
   type ScoredKnowledgeDoc,
-} from "@brewva/brewva-recall";
+} from "@brewva/brewva-recall/knowledge";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import { Type } from "@sinclair/typebox";
 import {

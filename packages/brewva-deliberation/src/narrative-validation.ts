@@ -1,5 +1,5 @@
 import { readAgentMemoryProfile } from "@brewva/brewva-runtime";
-import { containsCjk, tokenizeSearchText } from "@brewva/brewva-search";
+import { containsCjk, tokenizeSearchContent } from "@brewva/brewva-search";
 import type {
   NarrativeMemoryApplicabilityScope,
   NarrativeMemoryRecord,
@@ -107,7 +107,7 @@ function looksLikePrecedentDocument(text: string): boolean {
 }
 
 function tokenizePolicyText(text: string): string[] {
-  return tokenizeSearchText(text).filter(
+  return tokenizeSearchContent(text).filter(
     (token) => (containsCjk(token) || token.length >= 3) && !POLICY_STOP_WORDS.has(token),
   );
 }

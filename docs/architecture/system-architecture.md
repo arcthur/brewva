@@ -139,15 +139,25 @@ compatibility story.
 - `@brewva/brewva-provider-core`: provider contracts, model catalog lookup,
   provider registration, stream normalization, cache rendering, and driver
   adapters. It is mechanism, not replay or credential authority.
+- `@brewva/brewva-search`: shared search normalization, CJK segmentation, and
+  semantic query/content tokenization policy. It does not own event evidence,
+  DuckDB state, or recall ranking.
+- `@brewva/brewva-session-index`: rebuildable DuckDB read model over session
+  event tapes. It owns indexed evidence projection and typed query rows, while
+  event tape remains runtime replay authority.
+- `@brewva/brewva-recall`: source-typed recall products over session-index
+  evidence, narrative/deliberation memory, promotion drafts, and repository
+  precedent. Its root is shared vocabulary; broker/context/knowledge/evidence
+  implementations use explicit subpaths.
 - `@brewva/brewva-tools`: managed tool bundle and capability-scoped runtime
   facades.
 - `@brewva/brewva-gateway`: hosted sessions, daemon, runtime plugins,
   subagents, and local control-plane orchestration.
 - `@brewva/brewva-cli` and `@brewva/brewva-tui`: operator shell, one-shot CLI,
   renderer boundary, and terminal capability policy.
-- `@brewva/brewva-recall`, `@brewva/brewva-deliberation`,
-  `@brewva/brewva-skill-broker`, and `docs/solutions/**`: advisory memory,
-  precedent, and compounding knowledge surfaces.
+- `@brewva/brewva-deliberation`, `@brewva/brewva-skill-broker`, and
+  `docs/solutions/**`: advisory memory, precedent, skill promotion, and
+  compounding knowledge surfaces.
 - channel and ingress packages: external transport adapters.
 
 ## Reading Guide

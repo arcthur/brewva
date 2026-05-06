@@ -105,6 +105,12 @@ helper material, not session-state durability surfaces in the taxonomy above.
     latest published snapshot when the primary file is locked
   - the writer lease is guarded by PID plus heartbeat timestamp; stale locks are
     recoverable and the index can be rebuilt from event tape
+  - schema version bumps do not require durable migrations; the writer rewrites
+    rebuildable rows from event tape and republishes snapshots for the current
+    schema
+  - indexed tape evidence contracts live under
+    `@brewva/brewva-session-index/evidence`; recall consumes typed rows rather
+    than duplicating search-text extraction
   - broker search results carry presentation `trustLabel`,
     `evidenceStrength`, `semanticScore`, `rankingScore`, and `rankReasons`
     instead of a single source-tier ordering

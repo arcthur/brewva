@@ -34,9 +34,9 @@ whether substring, fuzzy, or local token overlap mattered.
 ## Guidance
 
 Use `@brewva/brewva-search` as the only repo-owned search tokenizer boundary.
-Consumers should call `tokenizeSearchText`, `normalizeSearchText`, or
-`containsCjk` rather than importing `jieba-wasm` directly or adding
-package-local tokenization rules.
+Consumers should call `tokenizeSearchQuery`, `tokenizeSearchContent`,
+`normalizeSearchText`, or `containsCjk` rather than importing `jieba-wasm`
+directly or adding package-local tokenization rules.
 
 Chinese tokenization is a mandatory runtime capability. Missing `jieba-wasm`
 or missing `jieba_rs_wasm_bg.wasm` is a build/runtime failure, not an
@@ -88,8 +88,9 @@ surfaces together.
 ## References
 
 - `packages/brewva-search/src/index.ts`
+- `packages/brewva-search/src/tokenization/tokenizer.ts`
 - `packages/brewva-runtime/src/domain/tape/service.ts`
-- `packages/brewva-recall/src/knowledge-search-core.ts`
+- `packages/brewva-recall/src/knowledge/search.ts`
 - `packages/brewva-tools/src/shared/query.ts`
 - `script/build-binaries.ts`
 - `script/verify-dist.ts`

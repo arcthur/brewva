@@ -194,6 +194,12 @@ function main(): void {
       "@brewva/brewva-runtime",
       "@brewva/brewva-search",
       "@brewva/brewva-session-index",
+      "@brewva/brewva-session-index/evidence",
+      "@brewva/brewva-recall",
+      "@brewva/brewva-recall/broker",
+      "@brewva/brewva-recall/context",
+      "@brewva/brewva-recall/knowledge",
+      "@brewva/brewva-recall/evidence",
       "@brewva/brewva-channels-telegram",
       "@brewva/brewva-ingress",
       "@brewva/brewva-tools",
@@ -276,12 +282,44 @@ function main(): void {
     const isolatedWorkspace = mkdtempSync(join(tmpdir(), "brewva-dist-workspace-"));
     mkdirSync(join(isolatedWorkspace, ".git"), { recursive: true });
     process.env.BREWVA_CODING_AGENT_DIR = join(isolatedHome, "agent");
-    const { tokenizeSearchText } = await import("@brewva/brewva-search");
-    const tokenizerTokens = tokenizeSearchText("数据库连接失败");
+    const { tokenizeSearchQuery } = await import("@brewva/brewva-search");
+    const tokenizerTokens = tokenizeSearchQuery("数据库连接失败");
     for (const requiredToken of ["数据库", "连接", "失败"]) {
       if (!tokenizerTokens.includes(requiredToken)) {
         throw new Error("dist tokenizer smoke failed: missing token " + requiredToken);
       }
+    }
+    const recallRootModule = await import("@brewva/brewva-recall");
+    const recallBrokerModule = await import("@brewva/brewva-recall/broker");
+    const recallContextModule = await import("@brewva/brewva-recall/context");
+    const recallKnowledgeModule = await import("@brewva/brewva-recall/knowledge");
+    const recallEvidenceModule = await import("@brewva/brewva-recall/evidence");
+    const sessionIndexEvidenceModule = await import("@brewva/brewva-session-index/evidence");
+    if (!Array.isArray(recallRootModule.RECALL_SCOPE_VALUES)) {
+      throw new Error("recall root dist entry missing shared vocabulary export");
+    }
+    if (
+      "getOrCreateRecallBroker" in recallRootModule ||
+      "createRecallContextProvider" in recallRootModule ||
+      "executeKnowledgeSearch" in recallRootModule ||
+      "classifyRecallTapeEvent" in recallRootModule
+    ) {
+      throw new Error("recall root dist entry unexpectedly re-exported implementation subpaths");
+    }
+    if (typeof recallBrokerModule.getOrCreateRecallBroker !== "function") {
+      throw new Error("recall broker subpath missing getOrCreateRecallBroker export");
+    }
+    if (typeof recallContextModule.createRecallContextProvider !== "function") {
+      throw new Error("recall context subpath missing createRecallContextProvider export");
+    }
+    if (typeof recallKnowledgeModule.executeKnowledgeSearch !== "function") {
+      throw new Error("recall knowledge subpath missing executeKnowledgeSearch export");
+    }
+    if (typeof recallEvidenceModule.classifyRecallTapeEvent !== "function") {
+      throw new Error("recall evidence subpath missing classifyRecallTapeEvent export");
+    }
+    if (typeof sessionIndexEvidenceModule.buildSessionIndexEventSearchText !== "function") {
+      throw new Error("session-index evidence subpath missing event search-text export");
     }
     const { BrewvaRuntime, createToolRuntimePort } = await import("@brewva/brewva-runtime");
     const semanticArtifactsModule = await import("@brewva/brewva-runtime/semantic-artifacts");

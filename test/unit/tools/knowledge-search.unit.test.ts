@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { findKnowledgeDocByRelativePath } from "@brewva/brewva-recall";
+import { findKnowledgeDocByRelativePath } from "@brewva/brewva-recall/knowledge";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
 import { createKnowledgeSearchTool } from "@brewva/brewva-tools";
 import { createTestWorkspace } from "../../helpers/workspace.js";

@@ -1,24 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { mkdirSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { tokenizeSearchTerms } from "../../../packages/brewva-tools/src/shared/query.js";
 import { walkWorkspaceFiles } from "../../../packages/brewva-tools/src/shared/workspace-walk.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 describe("tool shared helpers", () => {
-  test("tokenizeSearchTerms applies consistent normalization and minimum lengths", () => {
-    expect(tokenizeSearchTerms(" Brewva, brewva! TOC-search  ", { minLength: 3 })).toEqual([
-      "brewva",
-      "toc-search",
-    ]);
-  });
-
-  test("tokenizeSearchTerms delegates Chinese-aware terms to the shared search tokenizer", () => {
-    expect(tokenizeSearchTerms("中文 recall_search 分词", { minLength: 2 })).toEqual(
-      expect.arrayContaining(["中文", "recall_search", "分词"]),
-    );
-  });
-
   test("walkWorkspaceFiles dedupes symlink loops while preserving .config", () => {
     const workspace = createTestWorkspace("tool-walk");
     mkdirSync(join(workspace, "src"), { recursive: true });
