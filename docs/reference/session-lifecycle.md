@@ -182,6 +182,11 @@ operator explanation, but they are not a rival lifecycle state machine.
    - runtime config is loaded/normalized first
    - startup UI setting (`ui.quietStartup`) is applied from `runtime.config.ui` into session settings overrides
    - CLI and hosted routes share the same substrate-owned session bootstrap
+   - non-hosted direct consumers may use
+     `@brewva/brewva-substrate/sdk` to assemble an in-memory substrate session
+     from substrate services, a session host, a host plugin runner, and the
+     turn loop; that SDK route is a mechanism entrypoint and does not create a
+     hosted envelope, runtime, recovery policy, or terminal render receipt
 3. Register lifecycle handlers through the canonical hosted pipeline (`packages/brewva-gateway/src/runtime-plugins/index.ts`)
    - `managedToolMode=runtime_plugin`: register managed Brewva tools through the runtime plugin API
    - `managedToolMode=direct`: provide managed Brewva tools directly from the host
@@ -207,6 +212,8 @@ operator explanation, but they are not a rival lifecycle state machine.
    - the substrate turn loop owns model streaming, tool calls, queued prompts,
      in-flight steer application, follow-up messages, request authorization,
      context transformation, and event reporting
+   - `@brewva/brewva-substrate/compaction` owns pure compaction helpers for
+     summary projection, token estimation, and cut-point selection
    - hosted compaction, reasoning recovery, envelope policy, profile selection,
      and process-local loop diagnostics remain gateway-owned
 6. Expose derived session wire replay through the runtime-owned session-wire

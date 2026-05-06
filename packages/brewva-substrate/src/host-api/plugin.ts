@@ -8,6 +8,7 @@ import type {
 } from "../contracts/tool.js";
 import type { ToolExecutionPhase } from "../execution/tool-phase.js";
 import type { BrewvaPromptContentPart } from "../prompt/content.js";
+import type { BrewvaSourceInfo } from "../provenance/source-info.js";
 import type { BrewvaPromptAssistantMessageEvent } from "../session/prompt-session.js";
 import type { BrewvaToolUiPort } from "./ui.js";
 
@@ -96,7 +97,7 @@ export interface BrewvaHostToolInfo {
   name: string;
   description: string;
   parameters: unknown;
-  sourceInfo?: unknown;
+  sourceInfo?: BrewvaSourceInfo;
 }
 
 export interface BrewvaHostRegisteredCommand {

@@ -33,6 +33,7 @@ Every accepted decision inherits these rules:
 - [skill-first-plugin-and-promotion-governance](./skill-first-plugin-and-promotion-governance.md)
 - [stateful-box-plane-and-boxlite-execution-runtime](./stateful-box-plane-and-boxlite-execution-runtime.md)
 - [substrate-domain-slicing-and-root-surface-compression](./substrate-domain-slicing-and-root-surface-compression.md)
+- [substrate-sdk-diagnostics-and-compaction-mechanism-ports](./substrate-sdk-diagnostics-and-compaction-mechanism-ports.md)
 - [substrate-turn-loop-internalization](./substrate-turn-loop-internalization.md)
 - [workflow-artifacts-and-posture-control-plane](./workflow-artifacts-and-posture-control-plane.md)
 

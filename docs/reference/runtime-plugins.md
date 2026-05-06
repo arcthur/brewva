@@ -92,6 +92,21 @@ Current factory option surface:
 - `toolExecutionCoordinator?`
 - `hostedToolDefinitionsByName?`
 
+Direct substrate hosts can also pass `runtimePlugins` to
+`@brewva/brewva-substrate/sdk`. That path creates the same substrate
+host-plugin runner and wires turn-loop-aligned events and hooks:
+`agent_start`, `agent_end`, `turn_start`, `turn_end`, message events,
+tool-execution events, `context`, `before_provider_request`, `tool_call`, and
+`tool_result`. It remains an in-memory mechanism composition path: hosted
+prompt input handling, `before_agent_start` injection, local-hook gates,
+profiles, recovery, compaction policy, runtime receipts, and terminal render
+authority stay in gateway/runtime.
+
+Substrate also exposes pure compaction and provenance mechanism subpaths for
+direct hosts. Runtime plugins may consume those helper contracts, but they do
+not gain authority to emit runtime compaction receipts or alter hosted recovery
+policy from substrate.
+
 `post_receipt` hooks receive a snapshot of the normalized tool result content,
 details, and error posture. The snapshot is advisory input only; returning or
 mutating local hook data cannot rewrite the model-visible tool result.

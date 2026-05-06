@@ -100,12 +100,24 @@ Global review prompt.
         description: "Review globally",
         content: "\nGlobal review prompt.\n",
         filePath: join(agentDir, "prompts", "global-review.md"),
+        sourceInfo: {
+          path: join(agentDir, "prompts", "global-review.md"),
+          source: "local",
+          scope: "user",
+          baseDir: join(agentDir, "prompts"),
+        },
       },
       {
         name: "project-cleanup",
         description: "Project cleanup prompt.",
         content: "Project cleanup prompt.\n",
         filePath: join(workspace, ".brewva", "prompts", "project-cleanup.md"),
+        sourceInfo: {
+          path: join(workspace, ".brewva", "prompts", "project-cleanup.md"),
+          source: "local",
+          scope: "project",
+          baseDir: join(workspace, ".brewva", "prompts"),
+        },
       },
     ]);
   });

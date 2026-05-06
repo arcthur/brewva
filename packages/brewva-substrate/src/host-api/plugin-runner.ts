@@ -5,6 +5,7 @@ import {
   cloneBrewvaPromptContentParts,
   type BrewvaPromptContentPart,
 } from "../prompt/content.js";
+import type { BrewvaSourceInfo } from "../provenance/source-info.js";
 import type {
   BrewvaHostBeforeAgentStartEvent,
   BrewvaHostBeforeAgentStartResult,
@@ -85,7 +86,7 @@ export interface BrewvaHostPluginRunnerActionPort {
     name: string;
     description: string;
     parameters: unknown;
-    sourceInfo?: unknown;
+    sourceInfo?: BrewvaSourceInfo;
   }[];
   setActiveTools(toolNames: string[]): void;
   refreshTools(): void;

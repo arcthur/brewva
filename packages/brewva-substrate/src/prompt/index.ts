@@ -11,7 +11,9 @@ export {
   type BrewvaPromptImageContentPart,
   type BrewvaPromptTextContentPart,
   expandBrewvaPromptTemplate,
+  loadBrewvaPromptTemplates,
   type BrewvaPromptTemplate,
+  type LoadBrewvaPromptTemplatesOptions,
   buildBrewvaSystemPrompt,
   type BuildBrewvaSystemPromptOptions,
 } from "./api.js";

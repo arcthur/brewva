@@ -35,4 +35,9 @@ export {
   type BrewvaWriteOperations,
   type BrewvaWriteToolInput,
   type BrewvaWriteToolOptions,
+  wrapBrewvaTool,
+  type BrewvaToolInvocation,
+  type BrewvaToolInvocationError,
+  type BrewvaToolInvocationResult,
+  type BrewvaToolWrapper,
 } from "./api.js";

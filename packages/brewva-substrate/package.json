@@ -36,6 +36,24 @@
       "import": "./dist/resources/index.js",
       "default": "./dist/resources/index.js"
     },
+    "./provenance": {
+      "types": "./dist/provenance/index.d.ts",
+      "bun": "./src/provenance/index.ts",
+      "import": "./dist/provenance/index.js",
+      "default": "./dist/provenance/index.js"
+    },
+    "./execution": {
+      "types": "./dist/execution/index.d.ts",
+      "bun": "./src/execution/index.ts",
+      "import": "./dist/execution/index.js",
+      "default": "./dist/execution/index.js"
+    },
+    "./compaction": {
+      "types": "./dist/compaction/index.d.ts",
+      "bun": "./src/compaction/index.ts",
+      "import": "./dist/compaction/index.js",
+      "default": "./dist/compaction/index.js"
+    },
     "./tools": {
       "types": "./dist/tools/index.d.ts",
       "bun": "./src/tools/index.ts",
@@ -60,6 +78,12 @@
       "import": "./dist/provider/index.js",
       "default": "./dist/provider/index.js"
     },
+    "./sdk": {
+      "types": "./dist/sdk/index.d.ts",
+      "bun": "./src/sdk/index.ts",
+      "import": "./dist/sdk/index.js",
+      "default": "./dist/sdk/index.js"
+    },
     "./turn": {
       "types": "./dist/turn/index.d.ts",
       "bun": "./src/turn/index.ts",
@@ -69,6 +93,7 @@
   },
   "dependencies": {
     "@brewva/brewva-provider-core": "workspace:*",
+    "@brewva/brewva-token-estimation": "workspace:*",
     "@brewva/brewva-tool-protocol": "workspace:*",
     "@sinclair/typebox": "^0.34.49",
     "ajv": "^8.18.0",

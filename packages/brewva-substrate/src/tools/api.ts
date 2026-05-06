@@ -44,3 +44,10 @@ export {
   type BrewvaWriteToolInput,
   type BrewvaWriteToolOptions,
 } from "./write.js";
+export {
+  wrapBrewvaTool,
+  type BrewvaToolInvocation,
+  type BrewvaToolInvocationError,
+  type BrewvaToolInvocationResult,
+  type BrewvaToolWrapper,
+} from "./wrap.js";

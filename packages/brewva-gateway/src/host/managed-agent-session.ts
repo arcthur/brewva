@@ -25,6 +25,10 @@ import {
   STEER_DROPPED_EVENT_TYPE,
   STEER_QUEUED_EVENT_TYPE,
 } from "@brewva/brewva-runtime/events";
+import {
+  buildBrewvaDeterministicCompactionSummary,
+  estimateBrewvaCompactionTokens,
+} from "@brewva/brewva-substrate/compaction";
 import { DEFAULT_CONTEXT_STATE, type ContextState } from "@brewva/brewva-substrate/contracts";
 import {
   createBrewvaHostPluginRunner,
@@ -34,6 +38,7 @@ import {
   type BrewvaHostCustomMessageDelivery,
   type BrewvaHostMessageVisibilityPatch,
   type BrewvaHostPluginRunner,
+  type BrewvaHostToolInfo,
   type BrewvaToolUiPort,
 } from "@brewva/brewva-substrate/host-api";
 import {
@@ -94,7 +99,6 @@ import {
   type BrewvaTurnLoopToolResultMessage,
   type BrewvaTurnLoopTransport,
 } from "@brewva/brewva-substrate/turn";
-import { estimateStructuredTokenCount } from "@brewva/brewva-token-estimation";
 import { resolveBrewvaModelSelection } from "@brewva/brewva-tools";
 import {
   GoogleCachedContentManager,
@@ -706,8 +710,6 @@ interface PendingCompactionRequestState {
   onError?: BrewvaCompactionRequest["onError"];
 }
 
-const COMPACTION_SUMMARY_MAX_LINES = 8;
-const COMPACTION_SUMMARY_MAX_CHARS = 220;
 const REQUIRED_HOSTED_PERSISTENCE_EVENTS = ["message_end", "session_compact"] as const;
 const PROMPT_FILE_MAX_BYTES = 50 * 1024;
 const PROMPT_BINARY_INLINE_MAX_BYTES = 5 * 1024 * 1024;
@@ -725,107 +727,6 @@ const FILE_MIME_BY_EXTENSION: Record<string, string> = {
   ...IMAGE_MIME_BY_EXTENSION,
   ".pdf": "application/pdf",
 };
-
-function normalizeSummaryText(text: string): string {
-  return text.replace(/\s+/gu, " ").trim();
-}
-
-function summarizeUnknownMessageContent(content: unknown): string {
-  if (typeof content === "string") {
-    return normalizeSummaryText(content);
-  }
-  if (!Array.isArray(content)) {
-    return "";
-  }
-  const fragments: string[] = [];
-  for (const part of content) {
-    if (!part || typeof part !== "object") {
-      continue;
-    }
-    const record = part as { type?: unknown; text?: unknown; name?: unknown };
-    if (record.type === "text" && typeof record.text === "string") {
-      fragments.push(record.text);
-      continue;
-    }
-    if (record.type === "toolCall" && typeof record.name === "string") {
-      fragments.push(`[toolCall:${record.name}]`);
-    }
-  }
-  return normalizeSummaryText(fragments.join(" "));
-}
-
-function summarizeCompactionMessage(message: unknown): string | null {
-  if (!message || typeof message !== "object") {
-    return null;
-  }
-  const record = message as {
-    role?: unknown;
-    content?: unknown;
-    toolName?: unknown;
-    customType?: unknown;
-    summary?: unknown;
-    errorMessage?: unknown;
-  };
-  if (record.role === "branchSummary" && typeof record.summary === "string") {
-    return `branchSummary: ${normalizeSummaryText(record.summary)}`;
-  }
-  if (record.role === "compactionSummary" && typeof record.summary === "string") {
-    return `compactionSummary: ${normalizeSummaryText(record.summary)}`;
-  }
-  if (record.role === "toolResult") {
-    const toolName = typeof record.toolName === "string" ? record.toolName : "tool";
-    const body = summarizeUnknownMessageContent(record.content);
-    return body.length > 0 ? `toolResult(${toolName}): ${body}` : `toolResult(${toolName})`;
-  }
-  if (record.role === "custom") {
-    const customType = typeof record.customType === "string" ? record.customType : "custom";
-    const body = summarizeUnknownMessageContent(record.content);
-    return body.length > 0 ? `custom(${customType}): ${body}` : `custom(${customType})`;
-  }
-  if (typeof record.role === "string") {
-    const body = summarizeUnknownMessageContent(record.content);
-    if (body.length > 0) {
-      return `${record.role}: ${body}`;
-    }
-    if (typeof record.errorMessage === "string" && record.errorMessage.trim().length > 0) {
-      return `${record.role}: ${record.errorMessage.trim()}`;
-    }
-    return record.role;
-  }
-  return null;
-}
-
-function trimCompactionSummaryLine(line: string): string {
-  if (line.length <= COMPACTION_SUMMARY_MAX_CHARS) {
-    return line;
-  }
-  return `${line.slice(0, COMPACTION_SUMMARY_MAX_CHARS - 1).trimEnd()}…`;
-}
-
-function buildDeterministicCompactionSummary(messages: unknown[]): string {
-  const summarized = messages
-    .map((message) => summarizeCompactionMessage(message))
-    .filter((line): line is string => typeof line === "string" && line.length > 0);
-  const selected = summarized.slice(-COMPACTION_SUMMARY_MAX_LINES).map(trimCompactionSummaryLine);
-  const lines = ["[CompactSummary]"];
-  if (selected.length === 0) {
-    lines.push("- Preserve the current task state and latest verified evidence.");
-  } else {
-    for (const line of selected) {
-      lines.push(`- ${line}`);
-    }
-  }
-  return lines.join("\n");
-}
-
-function estimateCompactionTokens(messages: unknown[]): number {
-  return estimateStructuredTokenCount(
-    messages
-      .map((message) => summarizeCompactionMessage(message) ?? "")
-      .join("\n")
-      .trim(),
-  );
-}
 
 function sameSessionMessages(left: unknown, right: unknown): boolean {
   if (!Array.isArray(left) || !Array.isArray(right)) {
@@ -2213,17 +2114,18 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     return this.#agent.state.tools.map((tool) => tool.name);
   }
 
-  private getAllToolInfo(): Array<{
-    name: string;
-    description: string;
-    parameters: unknown;
-    sourceInfo?: unknown;
-  }> {
-    return [...this.#toolDefinitions.values()].map((tool) => ({
-      name: tool.name,
-      description: tool.description,
-      parameters: tool.parameters,
-    }));
+  private getAllToolInfo(): BrewvaHostToolInfo[] {
+    return [...this.#toolDefinitions.values()].map((tool) => {
+      const info: BrewvaHostToolInfo = {
+        name: tool.name,
+        description: tool.description,
+        parameters: tool.parameters,
+      };
+      if (tool.sourceInfo !== undefined) {
+        info.sourceInfo = tool.sourceInfo;
+      }
+      return info;
+    });
   }
 
   private setActiveTools(toolNames: string[]): void {
@@ -2543,8 +2445,8 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
       const branchEntries = this.sessionManager.getBranch();
       const sessionContext = this.sessionManager.buildSessionContext();
       const sourceLeafEntryId = this.sessionManager.getLeafId() ?? null;
-      const summary = buildDeterministicCompactionSummary(sessionContext.messages);
-      const tokensBefore = estimateCompactionTokens(sessionContext.messages);
+      const summary = buildBrewvaDeterministicCompactionSummary(sessionContext.messages);
+      const tokensBefore = estimateBrewvaCompactionTokens(sessionContext.messages);
       const compactId = randomUUID();
       const preview = this.sessionManager.previewCompaction(
         summary,

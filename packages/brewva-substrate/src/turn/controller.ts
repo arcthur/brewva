@@ -5,6 +5,11 @@ import type {
   ResolvedFileContent,
 } from "@brewva/brewva-provider-core/contracts";
 import type { BrewvaRegisteredModel } from "../contracts/provider.js";
+import {
+  type BrewvaEventBus,
+  type BrewvaEventBusController,
+  createBrewvaEventBus,
+} from "../execution/event-bus.js";
 import { runBrewvaTurnLoop, type BrewvaTurnLoopConfig } from "./loop.js";
 import { createBrewvaTurnProviderStreamFunction } from "./provider-stream.js";
 import type {
@@ -121,9 +126,8 @@ class PendingMessageQueue {
 }
 
 class BrewvaTurnLoopControllerImpl implements BrewvaTurnLoopController {
-  readonly #listeners = new Set<
-    (event: BrewvaTurnLoopEvent) => Promise<BrewvaTurnLoopEvent | void> | BrewvaTurnLoopEvent | void
-  >();
+  readonly #events: BrewvaEventBus<BrewvaTurnLoopEvent>;
+  readonly #eventController: BrewvaEventBusController<BrewvaTurnLoopEvent>;
   readonly #queuedPromptQueue: PendingMessageQueue;
   readonly #followUpQueue: PendingMessageQueue;
   readonly #streamFn: BrewvaTurnLoopStreamFunction;
@@ -141,10 +145,10 @@ class BrewvaTurnLoopControllerImpl implements BrewvaTurnLoopController {
   readonly #afterToolCall:
     | ((input: BrewvaTurnLoopAfterToolCallContext) => Promise<
         | {
-            content: Array<
+            content?: Array<
               { type: "text"; text: string } | { type: "image"; data: string; mimeType: string }
             >;
-            details: unknown;
+            details?: unknown;
             isError?: boolean;
           }
         | undefined
@@ -191,10 +195,10 @@ class BrewvaTurnLoopControllerImpl implements BrewvaTurnLoopController {
     afterToolCall:
       | ((input: BrewvaTurnLoopAfterToolCallContext) => Promise<
           | {
-              content: Array<
+              content?: Array<
                 { type: "text"; text: string } | { type: "image"; data: string; mimeType: string }
               >;
-              details: unknown;
+              details?: unknown;
               isError?: boolean;
             }
           | undefined
@@ -219,6 +223,12 @@ class BrewvaTurnLoopControllerImpl implements BrewvaTurnLoopController {
       | undefined;
     streamFn: BrewvaTurnLoopStreamFunction;
   }) {
+    const events = createBrewvaEventBus<BrewvaTurnLoopEvent>({
+      normalizeEvent: excludeTransientFailureFromEvent,
+      acceptReturnedEvent: ({ current, returned }) => returned.type === current.type,
+    });
+    this.#events = events.bus;
+    this.#eventController = events.controller;
     this.#state = {
       systemPrompt: "",
       model: input.initialModel,
@@ -270,10 +280,7 @@ class BrewvaTurnLoopControllerImpl implements BrewvaTurnLoopController {
       event: BrewvaTurnLoopEvent,
     ) => Promise<BrewvaTurnLoopEvent | void> | BrewvaTurnLoopEvent | void,
   ): () => void {
-    this.#listeners.add(listener);
-    return () => {
-      this.#listeners.delete(listener);
-    };
+    return this.#events.subscribe(listener);
   }
 
   async prompt(message: BrewvaTurnLoopMessage | BrewvaTurnLoopMessage[]): Promise<void> {
@@ -508,13 +515,7 @@ class BrewvaTurnLoopControllerImpl implements BrewvaTurnLoopController {
   }
 
   async #processEvents(event: BrewvaTurnLoopEvent): Promise<BrewvaTurnLoopEvent> {
-    let currentEvent = excludeTransientFailureFromEvent(event);
-    for (const listener of this.#listeners) {
-      const result = await listener(currentEvent);
-      if (result && result.type === currentEvent.type) {
-        currentEvent = excludeTransientFailureFromEvent(result);
-      }
-    }
+    const currentEvent = await this.#eventController.emit(event);
 
     switch (currentEvent.type) {
       case "message_end":
@@ -550,10 +551,10 @@ export function createBrewvaTurnLoopController(input: {
   ) => Promise<{ block?: boolean; reason?: string } | undefined>;
   afterToolCall: (input: BrewvaTurnLoopAfterToolCallContext) => Promise<
     | {
-        content: Array<
+        content?: Array<
           { type: "text"; text: string } | { type: "image"; data: string; mimeType: string }
         >;
-        details: unknown;
+        details?: unknown;
         isError?: boolean;
       }
     | undefined

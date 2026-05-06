@@ -47,10 +47,14 @@ describe("substrate domain slicing quality guard", () => {
       join(substrateSrc, "session", "api.ts"),
       join(substrateSrc, "prompt", "api.ts"),
       join(substrateSrc, "resources", "api.ts"),
+      join(substrateSrc, "provenance", "api.ts"),
+      join(substrateSrc, "execution", "api.ts"),
+      join(substrateSrc, "compaction", "api.ts"),
       join(substrateSrc, "tools", "api.ts"),
       join(substrateSrc, "host-api", "api.ts"),
       join(substrateSrc, "persistence", "api.ts"),
       join(substrateSrc, "provider", "api.ts"),
+      join(substrateSrc, "sdk", "api.ts"),
     ];
 
     for (const apiFile of apiFiles) {
@@ -86,6 +90,10 @@ describe("substrate domain slicing quality guard", () => {
 
     expect(packageJson.exports).not.toHaveProperty("./tools/_shared");
     expect(packageJson.exports).not.toHaveProperty("./resources/skill-discovery");
+    expect(packageJson.exports).not.toHaveProperty("./sdk/session-services");
+    expect(packageJson.exports).not.toHaveProperty("./compaction/mechanism");
+    expect(packageJson.exports).not.toHaveProperty("./provenance/source-info");
+    expect(packageJson.exports).not.toHaveProperty("./execution/event-bus");
   });
 
   test("keeps production packages on explicit substrate subpaths", () => {

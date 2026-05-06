@@ -1,6 +1,11 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, resolve, sep } from "node:path";
+import {
+  createBrewvaSyntheticSourceInfo,
+  type BrewvaSourceInfo,
+  type BrewvaSourceScope,
+} from "../provenance/source-info.js";
 import { parseMarkdownFrontmatter } from "./markdown-frontmatter.js";
 
 export interface BrewvaPromptTemplate {
@@ -8,7 +13,7 @@ export interface BrewvaPromptTemplate {
   description: string;
   content: string;
   filePath: string;
-  sourceInfo?: unknown;
+  sourceInfo?: BrewvaSourceInfo;
 }
 
 function normalizePath(input: string): string {
@@ -24,7 +29,10 @@ function resolvePromptPath(p: string, cwd: string): string {
   return isAbsolute(normalized) ? normalized : resolve(cwd, normalized);
 }
 
-function loadTemplateFromFile(filePath: string): BrewvaPromptTemplate | null {
+function loadTemplateFromFile(
+  filePath: string,
+  sourceInfo?: BrewvaSourceInfo,
+): BrewvaPromptTemplate | null {
   try {
     const raw = readFileSync(filePath, "utf8");
     const { data, body } = parseMarkdownFrontmatter(raw);
@@ -44,13 +52,21 @@ function loadTemplateFromFile(filePath: string): BrewvaPromptTemplate | null {
       description,
       content: body,
       filePath,
+      ...(sourceInfo !== undefined ? { sourceInfo } : {}),
     };
   } catch {
     return null;
   }
 }
 
-function loadTemplatesFromDir(dir: string): BrewvaPromptTemplate[] {
+function loadTemplatesFromDir(
+  dir: string,
+  input?: {
+    cwd: string;
+    agentDir: string;
+    configDirName: string;
+  },
+): BrewvaPromptTemplate[] {
   if (!existsSync(dir)) {
     return [];
   }
@@ -71,7 +87,17 @@ function loadTemplatesFromDir(dir: string): BrewvaPromptTemplate[] {
       if (!isFile || !entry.name.endsWith(".md")) {
         continue;
       }
-      const template = loadTemplateFromFile(fullPath);
+      const template = loadTemplateFromFile(
+        fullPath,
+        input
+          ? buildPromptTemplatePathSourceInfo(
+              fullPath,
+              input.cwd,
+              input.agentDir,
+              input.configDirName,
+            )
+          : undefined,
+      );
       if (template) {
         templates.push(template);
       }
@@ -105,8 +131,8 @@ export function loadBrewvaPromptTemplates(
   const projectPromptDir = join(cwd, configDirName, "prompts");
 
   if (includeDefaults) {
-    templates.push(...loadTemplatesFromDir(globalPromptDir));
-    templates.push(...loadTemplatesFromDir(projectPromptDir));
+    templates.push(...loadTemplatesFromDir(globalPromptDir, { cwd, agentDir, configDirName }));
+    templates.push(...loadTemplatesFromDir(projectPromptDir, { cwd, agentDir, configDirName }));
   }
 
   for (const rawPath of promptPaths) {
@@ -117,9 +143,12 @@ export function loadBrewvaPromptTemplates(
     try {
       const stats = statSync(resolvedPath);
       if (stats.isDirectory()) {
-        templates.push(...loadTemplatesFromDir(resolvedPath));
+        templates.push(...loadTemplatesFromDir(resolvedPath, { cwd, agentDir, configDirName }));
       } else if (stats.isFile() && resolvedPath.endsWith(".md")) {
-        const template = loadTemplateFromFile(resolvedPath);
+        const template = loadTemplateFromFile(
+          resolvedPath,
+          buildPromptTemplatePathSourceInfo(resolvedPath, cwd, agentDir, configDirName),
+        );
         if (template) {
           templates.push(template);
         }
@@ -223,28 +252,27 @@ export function buildPromptTemplatePathSourceInfo(
   cwd: string,
   agentDir: string,
   configDirName: string,
-): unknown {
+): BrewvaSourceInfo {
   const globalPromptDir = join(agentDir, "prompts");
   const projectPromptDir = join(cwd, configDirName, "prompts");
   if (isPathUnderRoot(resolvedPath, globalPromptDir)) {
-    return {
-      path: resolvedPath,
+    return createBrewvaSyntheticSourceInfo(resolvedPath, {
       source: "local",
       scope: "user",
       baseDir: globalPromptDir,
-    };
+    });
   }
   if (isPathUnderRoot(resolvedPath, projectPromptDir)) {
-    return {
-      path: resolvedPath,
+    return createBrewvaSyntheticSourceInfo(resolvedPath, {
       source: "local",
       scope: "project",
       baseDir: projectPromptDir,
-    };
+    });
   }
-  return {
-    path: resolvedPath,
+  const scope: BrewvaSourceScope = isPathUnderRoot(resolvedPath, agentDir) ? "user" : "project";
+  return createBrewvaSyntheticSourceInfo(resolvedPath, {
     source: "local",
+    scope,
     baseDir: statSync(resolvedPath).isDirectory() ? resolvedPath : dirname(resolvedPath),
-  };
+  });
 }

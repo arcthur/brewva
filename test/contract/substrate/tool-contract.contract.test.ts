@@ -3,6 +3,7 @@ import {
   defineBrewvaTool,
   type BrewvaToolContext,
   type BrewvaToolDefinition,
+  wrapBrewvaTool,
 } from "@brewva/brewva-substrate/tools";
 import { Type } from "@sinclair/typebox";
 
@@ -149,5 +150,9 @@ describe("substrate tool contract", () => {
       mimeType: "image/png",
     });
     expect("details" in result).toBe(true);
+  });
+
+  test("exports a metadata-preserving tool wrapper from the tools subpath", () => {
+    expect(typeof wrapBrewvaTool).toBe("function");
   });
 });

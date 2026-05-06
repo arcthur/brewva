@@ -1,5 +1,6 @@
 import type { Static, TSchema } from "@sinclair/typebox";
 import type { BrewvaToolUiPort } from "../host-api/ui.js";
+import type { BrewvaSourceInfo } from "../provenance/source-info.js";
 
 export interface BrewvaTextContentPart {
   type: "text";
@@ -97,6 +98,7 @@ export interface BrewvaToolDefinition<TParams extends TSchema = TSchema, TDetail
   label: string;
   description: string;
   parameters: TParams;
+  sourceInfo?: BrewvaSourceInfo;
   promptSnippet?: string;
   promptGuidelines?: string[];
   prepareArguments?: (args: unknown) => Static<TParams>;
