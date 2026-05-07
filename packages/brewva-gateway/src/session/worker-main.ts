@@ -1,3 +1,10 @@
+import {
+  BrewvaEffect,
+  BrewvaWorkerScope,
+  runEdgeOperation,
+  startScopedSchedule,
+  type ScopedScheduleHandle,
+} from "@brewva/brewva-effect";
 import { type ContextPressureView, type SessionWireFrame } from "@brewva/brewva-runtime";
 import type { HostedSessionLogger } from "../host/logger.js";
 import { createRuntimeTurnClockStore } from "../runtime-plugins/runtime-turn-clock.js";
@@ -20,8 +27,8 @@ let expectedParentPid = 0;
 let initialized = false;
 let sessionResult: GatewaySessionResult | null = null;
 let lastPingAt = Date.now();
-let watchdog: ReturnType<typeof setInterval> | null = null;
-let heartbeatTicker: ReturnType<typeof setInterval> | null = null;
+let watchdog: ScopedScheduleHandle | null = null;
+let heartbeatTicker: ScopedScheduleHandle | null = null;
 let taskProgressWatchdog: TaskProgressWatchdog | null = null;
 let shuttingDown = false;
 let activeTurnId: string | null = null;
@@ -217,14 +224,7 @@ async function shutdown(exitCode = 0, reason = "shutdown", shutdownError?: unkno
   if (shuttingDown) return;
   shuttingDown = true;
 
-  if (watchdog) {
-    clearInterval(watchdog);
-    watchdog = null;
-  }
-  if (heartbeatTicker) {
-    clearInterval(heartbeatTicker);
-    heartbeatTicker = null;
-  }
+  await stopBridgeWatchdog();
 
   if (sessionResult) {
     const runtime = sessionResult.runtime;
@@ -277,7 +277,7 @@ async function shutdown(exitCode = 0, reason = "shutdown", shutdownError?: unkno
         error: shutdownReason,
       });
     }
-    taskProgressWatchdog?.stop();
+    await taskProgressWatchdog?.stop();
     taskProgressWatchdog = null;
     try {
       await sessionResult.session.abort();
@@ -304,24 +304,38 @@ async function shutdown(exitCode = 0, reason = "shutdown", shutdownError?: unkno
 function startBridgeWatchdog(): void {
   if (watchdog) return;
 
-  watchdog = setInterval(() => {
-    const now = Date.now();
-    if (now - lastPingAt > BRIDGE_TIMEOUT_MS) {
-      void shutdown(1, "bridge_timeout");
-      return;
-    }
+  watchdog = startScopedSchedule({
+    intervalMs: 1000,
+    run: () =>
+      BrewvaEffect.sync(() => {
+        const now = Date.now();
+        if (now - lastPingAt > BRIDGE_TIMEOUT_MS) {
+          void shutdown(1, "bridge_timeout");
+          return;
+        }
 
-    if (expectedParentPid > 0 && process.ppid !== expectedParentPid) {
-      void shutdown(1, "parent_pid_mismatch");
-      return;
-    }
-  }, 1000);
-  watchdog.unref?.();
+        if (expectedParentPid > 0 && process.ppid !== expectedParentPid) {
+          void shutdown(1, "parent_pid_mismatch");
+        }
+      }),
+  });
 
-  heartbeatTicker = setInterval(() => {
-    send({ kind: "bridge.heartbeat", ts: Date.now() });
-  }, BRIDGE_HEARTBEAT_INTERVAL_MS);
-  heartbeatTicker.unref?.();
+  heartbeatTicker = startScopedSchedule({
+    intervalMs: BRIDGE_HEARTBEAT_INTERVAL_MS,
+    run: () =>
+      BrewvaEffect.sync(() => {
+        send({ kind: "bridge.heartbeat", ts: Date.now() });
+      }),
+  });
+}
+
+async function stopBridgeWatchdog(): Promise<void> {
+  const handles = [watchdog, heartbeatTicker].filter(
+    (handle): handle is ScopedScheduleHandle => handle !== null,
+  );
+  watchdog = null;
+  heartbeatTicker = null;
+  await Promise.all(handles.map((handle) => handle.close()));
 }
 
 async function handleInit(
@@ -746,20 +760,85 @@ async function handleMessage(raw: unknown): Promise<void> {
   }
 }
 
+function resolveWorkerMessageKind(raw: unknown): string {
+  if (!raw || typeof raw !== "object") {
+    return "invalid";
+  }
+  const kind = (raw as { kind?: unknown }).kind;
+  return typeof kind === "string" && kind.trim().length > 0 ? kind.trim() : "unknown";
+}
+
+function workerScopeFields(): { sessionId: string; pid: number } {
+  return {
+    sessionId: requestedSessionId || "uninitialized",
+    pid: process.pid,
+  };
+}
+
+export function handleWorkerMessageEffect(raw: unknown): BrewvaEffect.Effect<void, unknown> {
+  return BrewvaEffect.promise(() => handleMessage(raw));
+}
+
+function shutdownEffect(
+  exitCode: number,
+  reason: string,
+  shutdownError?: unknown,
+): BrewvaEffect.Effect<void, unknown> {
+  return BrewvaEffect.promise(() => shutdown(exitCode, reason, shutdownError));
+}
+
+function logWorkerEdgeFailure(operation: string, error: unknown): void {
+  log("error", "worker edge operation failed", {
+    requestedSessionId,
+    operation,
+    error: error instanceof Error ? error.message : String(error),
+  });
+}
+
+function runWorkerEdgeOperation(
+  operation: string,
+  effect: BrewvaEffect.Effect<void, unknown>,
+): Promise<void> {
+  const scope = workerScopeFields();
+  return runEdgeOperation(
+    `brewva.gateway.worker.${operation}`,
+    effect.pipe(BrewvaEffect.provide(BrewvaWorkerScope.layer(scope))),
+    {
+      fields: {
+        operation,
+        requestedSessionId: scope.sessionId,
+        activeTurnId,
+        pid: scope.pid,
+      },
+    },
+  );
+}
+
 process.on("message", (message) => {
-  void handleMessage(message);
+  const operation = `message.${resolveWorkerMessageKind(message)}`;
+  void runWorkerEdgeOperation(operation, handleWorkerMessageEffect(message)).catch((error) => {
+    logWorkerEdgeFailure(operation, error);
+  });
 });
 
 process.on("disconnect", () => {
-  void shutdown(0, "parent_disconnected");
+  void runWorkerEdgeOperation("disconnect", shutdownEffect(0, "parent_disconnected")).catch(
+    (error) => {
+      logWorkerEdgeFailure("disconnect", error);
+    },
+  );
 });
 
 process.on("SIGTERM", () => {
-  void shutdown(0, "sigterm");
+  void runWorkerEdgeOperation("signal.sigterm", shutdownEffect(0, "sigterm")).catch((error) => {
+    logWorkerEdgeFailure("signal.sigterm", error);
+  });
 });
 
 process.on("SIGINT", () => {
-  void shutdown(0, "sigint");
+  void runWorkerEdgeOperation("signal.sigint", shutdownEffect(0, "sigint")).catch((error) => {
+    logWorkerEdgeFailure("signal.sigint", error);
+  });
 });
 
 process.on("uncaughtException", (error) => {
@@ -767,7 +846,12 @@ process.on("uncaughtException", (error) => {
     requestedSessionId,
     error: error instanceof Error ? error.message : String(error),
   });
-  void shutdown(1, "uncaught_exception", error);
+  void runWorkerEdgeOperation(
+    "uncaught_exception",
+    shutdownEffect(1, "uncaught_exception", error),
+  ).catch((edgeError) => {
+    logWorkerEdgeFailure("uncaught_exception", edgeError);
+  });
 });
 
 process.on("unhandledRejection", (reason) => {
@@ -775,5 +859,10 @@ process.on("unhandledRejection", (reason) => {
     requestedSessionId,
     error: reason instanceof Error ? reason.message : String(reason),
   });
-  void shutdown(1, "unhandled_rejection", reason);
+  void runWorkerEdgeOperation(
+    "unhandled_rejection",
+    shutdownEffect(1, "unhandled_rejection", reason),
+  ).catch((error) => {
+    logWorkerEdgeFailure("unhandled_rejection", error);
+  });
 });

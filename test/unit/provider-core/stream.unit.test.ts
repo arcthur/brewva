@@ -5,8 +5,13 @@ import {
   registerExternalApiProvider,
   registerTypedApiProvider,
 } from "@brewva/brewva-provider-core/registry";
-import { stream } from "../../../packages/brewva-provider-core/src/stream/index.js";
-import { createAssistantMessageEventStream } from "../../../packages/brewva-provider-core/src/utils/event-stream.js";
+import { complete } from "../../../packages/brewva-provider-core/src/stream/index.js";
+import {
+  createProviderDoneStream,
+  createProviderEventStream,
+} from "../../helpers/effect-stream.js";
+
+const doneMessage = { role: "assistant", content: [] } as never;
 
 describe("provider core stream routing", () => {
   test("routes built-in typed APIs through the typed registry seam", async () => {
@@ -17,19 +22,16 @@ describe("provider core stream routing", () => {
       api: "openai-responses",
       stream(_model, _context, options) {
         seenOptions.push({ reasoningEffort: options?.reasoningEffort });
-        const events = createAssistantMessageEventStream();
-        queueMicrotask(() => events.end({ role: "assistant", content: [] } as never));
-        return events;
+        return createProviderDoneStream(doneMessage);
       },
       streamSimple() {
-        return createAssistantMessageEventStream();
+        return createProviderEventStream();
       },
     });
 
-    const events = stream({ api: "openai-responses" } as Model<"openai-responses">, {} as Context, {
+    await complete({ api: "openai-responses" } as Model<"openai-responses">, {} as Context, {
       reasoningEffort: "high",
     });
-    await events.result();
 
     expect(seenOptions).toEqual([{ reasoningEffort: "high" }]);
     clearApiProviders();
@@ -43,19 +45,16 @@ describe("provider core stream routing", () => {
       api: "external-stream-provider",
       stream(_model, _context, options) {
         seenOptions.push({ temperature: options?.temperature });
-        const events = createAssistantMessageEventStream();
-        queueMicrotask(() => events.end({ role: "assistant", content: [] } as never));
-        return events;
+        return createProviderDoneStream(doneMessage);
       },
       streamSimple() {
-        return createAssistantMessageEventStream();
+        return createProviderEventStream();
       },
     });
 
-    const events = stream({ api: "external-stream-provider" } as Model<Api>, {} as Context, {
+    await complete({ api: "external-stream-provider" } as Model<Api>, {} as Context, {
       temperature: 0.25,
     });
-    await events.result();
 
     expect(seenOptions).toEqual([{ temperature: 0.25 }]);
     clearApiProviders();

@@ -685,7 +685,7 @@ function toAgentTool(
       toolCallId: string,
       params: unknown,
       signal?: AbortSignal,
-      onUpdate?: (update: ToolResultForAgent) => void,
+      onUpdate?: (update: ToolResultForAgent) => Promise<void>,
     ) =>
       tool.execute(
         toolCallId,

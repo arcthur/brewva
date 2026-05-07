@@ -1,6 +1,12 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import {
+  BrewvaEffect,
+  startScopedSchedule,
+  type ScopedScheduleHandle,
+} from "@brewva/brewva-effect";
 import { parseJsonc } from "@brewva/brewva-runtime";
+import { toErrorMessage } from "../utils/errors.js";
 import type { StructuredLogger } from "./logger.js";
 
 export interface HeartbeatRule {
@@ -104,7 +110,7 @@ export interface HeartbeatSchedulerStatus {
 export class HeartbeatScheduler {
   private policy: HeartbeatPolicy;
   private readonly nextRunByRule = new Map<string, number>();
-  private timer: ReturnType<typeof setInterval> | null = null;
+  private timer: ScopedScheduleHandle | null = null;
 
   constructor(
     private readonly options: {
@@ -121,10 +127,15 @@ export class HeartbeatScheduler {
   start(): void {
     if (this.timer) return;
     const tickIntervalMs = Math.max(1000, this.options.tickIntervalMs ?? 15_000);
-    this.timer = setInterval(() => {
-      void this.tick();
-    }, tickIntervalMs);
-    this.timer.unref?.();
+    this.timer = startScopedSchedule({
+      intervalMs: tickIntervalMs,
+      run: () => BrewvaEffect.promise(() => this.tick()),
+      onError: (error) => {
+        this.options.logger.warn("heartbeat scheduler tick failed", {
+          error: toErrorMessage(error),
+        });
+      },
+    });
     this.options.logger.info("heartbeat scheduler started", {
       sourcePath: this.policy.sourcePath,
       rules: this.policy.rules.length,
@@ -132,10 +143,11 @@ export class HeartbeatScheduler {
     });
   }
 
-  stop(): void {
+  async stop(): Promise<void> {
     if (!this.timer) return;
-    clearInterval(this.timer);
+    const timer = this.timer;
     this.timer = null;
+    await timer.close();
   }
 
   reload(): HeartbeatPolicy {

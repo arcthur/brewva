@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { writeSync } from "node:fs";
 import { resolve } from "node:path";
 import process from "node:process";
+import { BrewvaEffect, startScopedTimeout, type ScopedTimeoutHandle } from "@brewva/brewva-effect";
 import {
   connectGatewayClient,
   queryGatewayStatus,
@@ -162,24 +163,29 @@ export async function tryGatewayPrint(input: TryGatewayPrintInput): Promise<Gate
   let completionSettled = false;
   let resolveCompletionRef: ((text: string) => void) | undefined;
   let rejectCompletionRef: ((error: unknown) => void) | undefined;
+  let completionTimeout: ScopedTimeoutHandle | undefined;
   const completion = new Promise<string>((resolveCompletion, rejectCompletion) => {
-    const timer = setTimeout(() => {
-      if (completionSettled) return;
-      completionSettled = true;
-      rejectCompletion(new Error("gateway turn timed out"));
-    }, requestTimeoutMs);
-    timer.unref?.();
+    completionTimeout = startScopedTimeout({
+      delayMs: requestTimeoutMs,
+      run: () =>
+        BrewvaEffect.sync(() => {
+          if (completionSettled) return;
+          completionSettled = true;
+          void completionTimeout?.close();
+          rejectCompletion(new Error("gateway turn timed out"));
+        }),
+    });
 
     resolveCompletionRef = (text: string): void => {
       if (completionSettled) return;
       completionSettled = true;
-      clearTimeout(timer);
+      void completionTimeout?.close();
       resolveCompletion(text);
     };
     rejectCompletionRef = (error: unknown): void => {
       if (completionSettled) return;
       completionSettled = true;
-      clearTimeout(timer);
+      void completionTimeout?.close();
       rejectCompletion(error instanceof Error ? error : new Error(toErrorMessage(error)));
     };
   });

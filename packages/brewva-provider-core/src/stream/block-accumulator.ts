@@ -1,6 +1,6 @@
 import type {
   AssistantMessage,
-  AssistantMessageEventStream,
+  ProviderEventSink,
   TextContent,
   ThinkingContent,
 } from "../contracts/index.js";
@@ -12,29 +12,29 @@ export class AssistantBlockAccumulator {
 
   constructor(
     private readonly output: AssistantMessage,
-    private readonly stream: AssistantMessageEventStream,
-    private readonly ensureStarted: () => void,
+    private readonly stream: ProviderEventSink,
+    private readonly ensureStarted: () => Promise<void>,
   ) {}
 
   get hasContent(): boolean {
     return this.output.content.length > 0;
   }
 
-  appendText(
+  async appendText(
     text: string,
     options: {
       thinking?: boolean;
       signature?: string;
     } = {},
-  ): void {
+  ): Promise<void> {
     const thinking = options.thinking === true;
     if (
       !this.#currentBlock ||
       (thinking && this.#currentBlock.type !== "thinking") ||
       (!thinking && this.#currentBlock.type !== "text")
     ) {
-      this.endCurrent();
-      this.ensureStarted();
+      await this.endCurrent();
+      await this.ensureStarted();
       if (thinking) {
         this.#currentBlock = {
           type: "thinking",
@@ -42,7 +42,7 @@ export class AssistantBlockAccumulator {
           thinkingSignature: undefined,
         };
         this.output.content.push(this.#currentBlock);
-        this.stream.push({
+        await this.stream.push({
           type: "thinking_start",
           contentIndex: this.blockIndex(),
           partial: this.output,
@@ -54,7 +54,7 @@ export class AssistantBlockAccumulator {
           textSignature: undefined,
         };
         this.output.content.push(this.#currentBlock);
-        this.stream.push({
+        await this.stream.push({
           type: "text_start",
           contentIndex: this.blockIndex(),
           partial: this.output,
@@ -67,7 +67,7 @@ export class AssistantBlockAccumulator {
       if (options.signature) {
         this.#currentBlock.thinkingSignature = options.signature;
       }
-      this.stream.push({
+      await this.stream.push({
         type: "thinking_delta",
         contentIndex: this.blockIndex(),
         delta: text,
@@ -80,7 +80,7 @@ export class AssistantBlockAccumulator {
     if (options.signature) {
       this.#currentBlock.textSignature = options.signature;
     }
-    this.stream.push({
+    await this.stream.push({
       type: "text_delta",
       contentIndex: this.blockIndex(),
       delta: text,
@@ -88,27 +88,27 @@ export class AssistantBlockAccumulator {
     });
   }
 
-  finish(): void {
-    this.endCurrent();
+  async finish(): Promise<void> {
+    await this.endCurrent();
   }
 
   private blockIndex(): number {
     return this.output.content.length - 1;
   }
 
-  private endCurrent(): void {
+  private async endCurrent(): Promise<void> {
     if (!this.#currentBlock) {
       return;
     }
     if (this.#currentBlock.type === "thinking") {
-      this.stream.push({
+      await this.stream.push({
         type: "thinking_end",
         contentIndex: this.blockIndex(),
         content: this.#currentBlock.thinking,
         partial: this.output,
       });
     } else {
-      this.stream.push({
+      await this.stream.push({
         type: "text_end",
         contentIndex: this.blockIndex(),
         content: this.#currentBlock.text,

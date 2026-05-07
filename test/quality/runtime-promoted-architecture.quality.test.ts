@@ -112,6 +112,9 @@ describe("runtime promoted architecture guard", () => {
     const runtimeCompositionSource = readRepoFile(
       "packages/brewva-runtime/src/runtime/runtime-composition.ts",
     );
+    const runtimeEffectLayerSource = readRepoFile(
+      "packages/brewva-runtime/src/runtime/effect-runtime-layer.ts",
+    );
     const servicesRegistrarSource = readRepoFile(
       "packages/brewva-runtime/src/runtime/services-registrar.ts",
     );
@@ -162,20 +165,27 @@ describe("runtime promoted architecture guard", () => {
     expect(runtimeSource).not.toMatch(/from "\.\.\/services\/(?!event-pipeline|session-state)/u);
     expect(runtimeSource.split("\n").length).toBeLessThan(120);
     expect(runtimeFacadeStateSource).toContain("./runtime-composition.js");
+    expect(runtimeFacadeStateSource).toContain("./effect-runtime-layer.js");
     expect(runtimeFacadeStateSource).toContain("./runtime-surfaces.js");
     expect(runtimeFacadeStateSource).toContain("./runtime-config-state.js");
     expect(runtimeFacadeStateSource).not.toContain("../config/loader.js");
     expect(runtimeFacadeStateSource).not.toContain("../core/freeze.js");
     expect(runtimeFacadeStateSource).not.toContain("../channels/recovery-wal-recovery.js");
-    expect(runtimeCompositionSource).toContain("./core-registrar.js");
-    expect(runtimeCompositionSource).toContain("./kernel-registrar.js");
-    expect(runtimeCompositionSource).toContain("./services-registrar.js");
-    expect(runtimeCompositionSource).toContain("registerRuntimeCoreDependencies(");
-    expect(runtimeCompositionSource).toContain("registerRuntimeKernelContext(");
-    expect(runtimeCompositionSource).toContain("registerRuntimeServiceDependencies(");
-    expect(runtimeCompositionSource).toContain("registerRuntimeLazyServiceFactories(");
+    expect(runtimeCompositionSource).not.toContain("./effect-runtime-layer.js");
+    expect(runtimeCompositionSource).not.toContain("registerRuntimeCoreDependencies(");
+    expect(runtimeCompositionSource).not.toContain("registerRuntimeKernelContext(");
+    expect(runtimeCompositionSource).not.toContain("registerRuntimeServiceDependencies(");
+    expect(runtimeCompositionSource).not.toContain("registerRuntimeLazyServiceFactories(");
     expect(runtimeCompositionSource).not.toMatch(/from "\.\.\/services\//u);
     expect(runtimeCompositionSource.split("\n").length).toBeLessThan(150);
+    expect(runtimeEffectLayerSource).toContain("./core-registrar.js");
+    expect(runtimeEffectLayerSource).toContain("./kernel-registrar.js");
+    expect(runtimeEffectLayerSource).toContain("./services-registrar.js");
+    expect(runtimeEffectLayerSource).toContain("registerRuntimeCoreDependencies(");
+    expect(runtimeEffectLayerSource).toContain("registerRuntimeKernelContext(");
+    expect(runtimeEffectLayerSource).toContain("registerRuntimeServiceDependencies(");
+    expect(runtimeEffectLayerSource).toContain("registerRuntimeLazyServiceFactories(");
+    expect(runtimeEffectLayerSource).not.toMatch(/from "\.\.\/services\//u);
     expect(servicesRegistrarSource).toContain("./governance-service-registrar.js");
     expect(servicesRegistrarSource).toContain("./work-service-registrar.js");
     expect(servicesRegistrarSource).toContain("./context-service-registrar.js");

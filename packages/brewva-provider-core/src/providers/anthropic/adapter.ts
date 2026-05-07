@@ -1,11 +1,5 @@
 import type Anthropic from "@anthropic-ai/sdk";
-import type {
-  AssistantMessageEventStream,
-  Context,
-  Model,
-  SimpleStreamOptions,
-  StreamFunction,
-} from "../../contracts/index.js";
+import type { Context, Model, SimpleStreamOptions, StreamFunction } from "../../contracts/index.js";
 import { runProviderStream } from "../../stream/run-provider-stream.js";
 import { asPartialObject } from "../../utils/unknown-object.js";
 import { buildProviderPayloadMetadata } from "../_shared/payload-metadata.js";
@@ -23,10 +17,10 @@ export const streamAnthropic: StreamFunction<"anthropic-messages", AnthropicOpti
   model: Model<"anthropic-messages">,
   context: Context,
   options?: AnthropicOptions,
-): AssistantMessageEventStream => {
+) => {
   return runProviderStream(
     model,
-    async ({ stream, output, ensureStarted, composer }) => {
+    async ({ stream, output, ensureStarted, composer, signal }) => {
       let client: Anthropic;
       let oauthToken: boolean;
       let requestHeaders: Record<string, string> | undefined;
@@ -63,16 +57,13 @@ export const streamAnthropic: StreamFunction<"anthropic-messages", AnthropicOpti
           ...asPartialObject<typeof params>(nextParams),
         };
       }
-      const anthropicStream = client.messages.stream(
-        { ...params, stream: true },
-        { signal: options?.signal },
-      );
-      ensureStarted();
+      const anthropicStream = client.messages.stream({ ...params, stream: true }, { signal });
+      await ensureStarted();
       await processAnthropicStream(anthropicStream, output, stream, model, composer.toolCalls, {
         isOAuth: oauthToken,
         tools: context.tools,
       });
-      if (options?.signal?.aborted) {
+      if (signal.aborted) {
         throw new Error("Request was aborted");
       }
       if (output.stopReason === "aborted" || output.stopReason === "error") {
@@ -81,6 +72,7 @@ export const streamAnthropic: StreamFunction<"anthropic-messages", AnthropicOpti
     },
     {
       signal: options?.signal,
+      sessionId: options?.sessionId,
       startMode: "lazy",
       tools: context.tools,
     },
@@ -91,7 +83,7 @@ export const streamSimpleAnthropic: StreamFunction<"anthropic-messages", SimpleS
   model: Model<"anthropic-messages">,
   context: Context,
   options?: SimpleStreamOptions,
-): AssistantMessageEventStream => {
+) => {
   const apiKey = options?.apiKey;
   if (!apiKey) {
     throw new Error(`No API key for provider: ${model.provider}`);

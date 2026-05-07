@@ -1,6 +1,8 @@
+import { BrewvaEffect, runEdgeOperation } from "@brewva/brewva-effect";
 import type { BrewvaManagedPromptSession } from "@brewva/brewva-substrate/session";
 import {
-  runCliInteractiveSession as runCliInteractiveSessionBase,
+  runCliInteractiveShellEffect,
+  runCliInteractiveSessionOperation as runCliInteractiveSessionBaseOperation,
   type CliInteractiveSessionOptions,
   type CliInteractiveSmokeResult,
 } from "../src/cli-runtime.js";
@@ -22,7 +24,7 @@ export async function runCliInteractiveSmoke(): Promise<CliInteractiveSmokeResul
   });
 }
 
-export async function runCliInteractiveSession(
+export async function runCliInteractiveSessionOperation(
   session: BrewvaManagedPromptSession,
   options: CliInteractiveSessionOptions,
 ): Promise<void> {
@@ -31,7 +33,34 @@ export async function runCliInteractiveSession(
     return;
   }
 
-  await runCliInteractiveSessionBase(session, options, async (bundle, shellOptions) => {
+  await runCliInteractiveSessionBaseOperation(session, options, async (bundle, shellOptions) => {
     await renderCliInteractiveOpenTuiShell(bundle, shellOptions);
   });
+}
+
+export function runCliInteractiveSessionEffect(
+  session: BrewvaManagedPromptSession,
+  options: CliInteractiveSessionOptions,
+): BrewvaEffect.Effect<void, unknown> {
+  if (process.env[BREWVA_SHELL_SMOKE_ENV] === "1") {
+    return BrewvaEffect.promise(() => runCliInteractiveSmoke());
+  }
+  return runCliInteractiveShellEffect(session, options, async (bundle, shellOptions) => {
+    await renderCliInteractiveOpenTuiShell(bundle, shellOptions);
+  });
+}
+
+export async function runCliInteractiveSession(
+  session: BrewvaManagedPromptSession,
+  options: CliInteractiveSessionOptions,
+): Promise<void> {
+  return await runEdgeOperation(
+    "brewva.cli.interactive",
+    runCliInteractiveSessionEffect(session, options),
+    {
+      fields: {
+        cwd: options.cwd,
+      },
+    },
+  );
 }

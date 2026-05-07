@@ -42,6 +42,12 @@ function extractText(result: { content: Array<{ type: string; text?: string }> }
     .join("\n");
 }
 
+function assertNotAborted(signal: AbortSignal | undefined): void {
+  if (signal?.aborted) {
+    throw new Error("Operation aborted");
+  }
+}
+
 export function createBrewvaWriteToolDefinition(
   cwd: string,
   options?: BrewvaWriteToolOptions,
@@ -61,37 +67,20 @@ export function createBrewvaWriteToolDefinition(
       const dir = dirname(absolutePath);
 
       return withFileMutationQueue(absolutePath, async () => {
-        if (signal?.aborted) {
-          throw new Error("Operation aborted");
-        }
-
-        let aborted = false;
-        const abortPromise = new Promise<never>((_, reject) => {
-          const onAbort = () => {
-            aborted = true;
-            reject(new Error("Operation aborted"));
-          };
-          signal?.addEventListener("abort", onAbort, { once: true });
-        });
-
-        const execution = (async () => {
-          await operations.mkdir(dir);
-          if (aborted) {
-            throw new Error("Operation aborted");
-          }
-          await operations.writeFile(absolutePath, content);
-          return {
-            content: [
-              {
-                type: "text" as const,
-                text: `Successfully wrote ${content.length} bytes to ${path}`,
-              },
-            ],
-            details: undefined,
-          };
-        })();
-
-        return signal ? Promise.race([execution, abortPromise]) : execution;
+        assertNotAborted(signal);
+        await operations.mkdir(dir);
+        assertNotAborted(signal);
+        await operations.writeFile(absolutePath, content);
+        assertNotAborted(signal);
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `Successfully wrote ${content.length} bytes to ${path}`,
+            },
+          ],
+          details: undefined,
+        };
       });
     },
     renderCall(args, theme) {

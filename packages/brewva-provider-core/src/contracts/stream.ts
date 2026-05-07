@@ -1,4 +1,12 @@
-import type { AssistantMessageEventStream } from "../utils/event-stream.js";
+import {
+  BrewvaConfig,
+  BrewvaConfigService,
+  BrewvaContext,
+  BrewvaEffect,
+  BrewvaLayer,
+  BrewvaSchema,
+  BrewvaStream,
+} from "@brewva/brewva-effect";
 import type { Api, ThinkingBudgets, ThinkingLevel, Transport } from "./api.js";
 import type {
   ProviderCacheCapability,
@@ -6,8 +14,63 @@ import type {
   ProviderCacheRenderResult,
 } from "./cache.js";
 import type { FileContent, ResolvedFileContent } from "./content.js";
+import type { AssistantMessageEvent } from "./event.js";
 import type { Model } from "./model.js";
 import type { Context } from "./tool.js";
+
+export interface ProviderRuntimeService {
+  readonly streamBufferSize: number;
+}
+
+export class ProviderRuntime extends BrewvaContext.Service<
+  ProviderRuntime,
+  ProviderRuntimeService
+>()("@brewva/brewva-provider-core/ProviderRuntime") {}
+
+export class ProviderRuntimeConfig extends BrewvaConfigService.Service<ProviderRuntimeConfig>()(
+  "@brewva/brewva-provider-core/ProviderRuntimeConfig",
+  {
+    streamBufferSize: BrewvaConfig.int("BREWVA_PROVIDER_STREAM_BUFFER_SIZE").pipe(
+      BrewvaConfig.withDefault(64),
+      BrewvaConfig.map((value) => Math.max(1, value)),
+    ),
+  },
+) {}
+
+export function providerRuntimeLayerFrom(
+  service: ProviderRuntimeService,
+): BrewvaLayer.Layer<ProviderRuntime> {
+  return BrewvaLayer.succeed(ProviderRuntime)(service);
+}
+
+export const providerRuntimeLayer = BrewvaLayer.effect(
+  ProviderRuntime,
+  BrewvaEffect.gen(function* () {
+    const config = yield* ProviderRuntimeConfig;
+    return ProviderRuntime.of({
+      streamBufferSize: config.streamBufferSize,
+    });
+  }),
+).pipe(BrewvaLayer.provide(ProviderRuntimeConfig.defaultLayer));
+
+export class ProviderStreamError extends BrewvaSchema.TaggedErrorClass<ProviderStreamError>()(
+  "ProviderStreamError",
+  {
+    message: BrewvaSchema.String,
+    cause: BrewvaSchema.optional(BrewvaSchema.Unknown),
+  },
+) {}
+
+export type ProviderAssistantMessageStream = BrewvaStream.Stream<
+  AssistantMessageEvent,
+  ProviderStreamError,
+  ProviderRuntime
+>;
+
+export interface ProviderEventSink {
+  push(event: AssistantMessageEvent): Promise<void>;
+  end(): Promise<void>;
+}
 
 export interface ProviderPayloadMetadata {
   cachePolicy?: ProviderCachePolicy;
@@ -49,4 +112,4 @@ export interface SimpleStreamOptions extends StreamOptions {
 export type StreamFunction<
   TApi extends Api = Api,
   TOptions extends StreamOptions = StreamOptions,
-> = (model: Model<TApi>, context: Context, options?: TOptions) => AssistantMessageEventStream;
+> = (model: Model<TApi>, context: Context, options?: TOptions) => ProviderAssistantMessageStream;

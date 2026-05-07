@@ -1,5 +1,6 @@
 import { parseArgs as parseNodeArgs } from "node:util";
-import { runGatewayCli } from "@brewva/brewva-gateway";
+import { BrewvaEffect, runEdgeOperation } from "@brewva/brewva-effect";
+import { runGatewayCliOperation } from "@brewva/brewva-gateway";
 import type { ManagedToolMode, RuntimeResult } from "@brewva/brewva-runtime";
 
 type CliValueResult<T> = RuntimeResult<{ value: T }>;
@@ -120,7 +121,7 @@ function resolveManagedToolModeFlag(raw: unknown): CliValueResult<ManagedToolMod
   return cliValueError("Error: invalid --managed-tools value. Use 'direct' or 'runtime_plugin'.");
 }
 
-export async function runOnboardCli(argv: string[]): Promise<number> {
+export async function runOnboardCliOperation(argv: string[]): Promise<number> {
   let parsed: ReturnType<typeof parseNodeArgs>;
   try {
     parsed = parseNodeArgs({
@@ -194,6 +195,18 @@ export async function runOnboardCli(argv: string[]): Promise<number> {
   pushOnboardStringFlag(gatewayArgs, "plist-file", parsed.values["plist-file"]);
   pushOnboardStringFlag(gatewayArgs, "unit-file", parsed.values["unit-file"]);
 
-  const gatewayResult = await runGatewayCli(gatewayArgs);
+  const gatewayResult = await runGatewayCliOperation(gatewayArgs);
   return gatewayResult.exitCode;
+}
+
+export function runOnboardCliEffect(argv: string[]): BrewvaEffect.Effect<number, unknown> {
+  return BrewvaEffect.promise(() => runOnboardCliOperation(argv));
+}
+
+export async function runOnboardCli(argv: string[]): Promise<number> {
+  return runEdgeOperation("brewva.cli.onboard", runOnboardCliEffect(argv), {
+    fields: {
+      command: argv[0] ?? "help",
+    },
+  });
 }

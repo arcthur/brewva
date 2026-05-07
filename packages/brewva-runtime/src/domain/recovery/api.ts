@@ -49,6 +49,7 @@ export { RecoveryWalRecovery } from "./wal-recovery.js";
 export type {
   RecoveryWalRecoverHandler,
   RecoveryWalRecoverHandlerInput,
+  RecoveryWalRecoveryError,
   RecoveryWalRecoveryOptions,
 } from "./wal-recovery.js";
-export { recoverRecoveryWal } from "./wal-maintenance.js";
+export { recoverRecoveryWal, recoverRecoveryWalEffect } from "./wal-maintenance.js";

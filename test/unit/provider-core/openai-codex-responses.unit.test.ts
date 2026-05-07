@@ -16,7 +16,7 @@ import {
 } from "../../../packages/brewva-provider-core/src/providers/openai-codex-responses/websocket.js";
 import { createAssistantMessage } from "../../../packages/brewva-provider-core/src/stream/assistant-message.js";
 import { IncrementalToolCallFolder } from "../../../packages/brewva-provider-core/src/stream/tool-call-folder.js";
-import { createAssistantMessageEventStream } from "../../../packages/brewva-provider-core/src/utils/event-stream.js";
+import { createRecordingProviderEventStream } from "../../helpers/effect-stream.js";
 
 class FakeCodexWebSocket {
   static sockets: FakeCodexWebSocket[] = [];
@@ -84,9 +84,9 @@ const CODEX_MODEL: Model<"openai-codex-responses"> = {
 };
 
 function createCodexStreamHarness() {
-  const stream = createAssistantMessageEventStream();
+  const stream = createRecordingProviderEventStream();
   const output = createAssistantMessage(CODEX_MODEL);
-  const toolCalls = new IncrementalToolCallFolder(output, stream, () => {});
+  const toolCalls = new IncrementalToolCallFolder(output, stream, async () => {});
   return { stream, output, toolCalls };
 }
 

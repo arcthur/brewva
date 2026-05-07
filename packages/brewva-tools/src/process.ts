@@ -1,3 +1,4 @@
+import { runPromiseAtBoundary } from "@brewva/brewva-effect";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import { Type } from "@sinclair/typebox";
 import { addMilliseconds, differenceInMilliseconds, isBefore } from "date-fns";
@@ -11,7 +12,6 @@ import {
   getFinishedSession,
   getRunningBoxSession,
   getRunningSession,
-  hasPendingOutput,
   listFinishedBoxBackgroundSessions,
   listFinishedBackgroundSessions,
   listRunningBoxBackgroundSessions,
@@ -19,6 +19,7 @@ import {
   readSessionLog,
   terminateRunningBoxSession,
   terminateRunningSession,
+  waitForManagedSessionActivityEffect,
   type ManagedBoxExecFinishedSession,
   type ManagedExecFinishedSession,
   type ManagedExecRunningSession,
@@ -132,17 +133,9 @@ async function waitForPollCondition(
   sessionId: string,
   timeoutMs: number,
 ): Promise<void> {
-  if (timeoutMs <= 0) return;
-  const deadline = addMilliseconds(Date.now(), timeoutMs).getTime();
-  while (isBefore(Date.now(), deadline)) {
-    const running = getRunningSession(ownerSessionId, sessionId);
-    const runningBox = getRunningBoxSession(ownerSessionId, sessionId);
-    if (!running && !runningBox) return;
-    if (running && (running.exited || hasPendingOutput(running))) return;
-    if (runningBox && (runningBox.exited || hasPendingOutput(runningBox))) return;
-    const sleepMs = Math.min(200, Math.max(1, differenceInMilliseconds(deadline, Date.now())));
-    await new Promise((resolveNow) => setTimeout(resolveNow, sleepMs));
-  }
+  await runPromiseAtBoundary(
+    waitForManagedSessionActivityEffect(ownerSessionId, sessionId, timeoutMs),
+  );
 }
 
 function defaultTailHint(totalLines: number, usingDefaultTail: boolean): string {

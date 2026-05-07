@@ -1,6 +1,6 @@
 import type {
   AssistantMessage,
-  AssistantMessageEventStream,
+  ProviderEventSink,
   StreamingParseStatus,
   ToolCall,
 } from "../contracts/index.js";
@@ -27,8 +27,8 @@ export class IncrementalToolCallFolder {
 
   constructor(
     private readonly output: AssistantMessage,
-    private readonly stream: AssistantMessageEventStream,
-    private readonly ensureStarted: () => void,
+    private readonly stream: ProviderEventSink,
+    private readonly ensureStarted: () => Promise<void>,
     private readonly parseRegistry?: StreamingParseRegistry,
   ) {}
 
@@ -53,7 +53,7 @@ export class IncrementalToolCallFolder {
     );
   }
 
-  begin(key: string, seed: ToolCallSeed, partialJson = ""): number {
+  async begin(key: string, seed: ToolCallSeed, partialJson = ""): Promise<number> {
     const state = this.#states.get(key);
     if (state) {
       state.block.id = seed.id || state.block.id;
@@ -64,7 +64,7 @@ export class IncrementalToolCallFolder {
       return state.contentIndex;
     }
 
-    this.ensureStarted();
+    await this.ensureStarted();
 
     const parseResult = this.#parseSeedArguments(seed, partialJson);
     const block: ToolCall = {
@@ -83,7 +83,7 @@ export class IncrementalToolCallFolder {
     };
     this.#states.set(key, nextState);
     this.#order.push(key);
-    this.stream.push({
+    await this.stream.push({
       type: "toolcall_start",
       contentIndex: nextState.contentIndex,
       partial: this.output,
@@ -92,11 +92,11 @@ export class IncrementalToolCallFolder {
     return nextState.contentIndex;
   }
 
-  appendArgumentsDelta(
+  async appendArgumentsDelta(
     key: string,
     delta: string,
     patch?: Partial<Pick<ToolCall, "id" | "name" | "thoughtSignature">>,
-  ): void {
+  ): Promise<void> {
     const state = this.#states.get(key);
     if (!state) {
       return;
@@ -120,7 +120,7 @@ export class IncrementalToolCallFolder {
       state.block.arguments = parseResult.output;
       state.lastParseStatus = parseResult.parseStatus;
     }
-    this.stream.push({
+    await this.stream.push({
       type: "toolcall_delta",
       contentIndex: state.contentIndex,
       delta,
@@ -129,11 +129,11 @@ export class IncrementalToolCallFolder {
     });
   }
 
-  replaceArguments(
+  async replaceArguments(
     key: string,
     fullJson: string,
     patch?: Partial<Pick<ToolCall, "id" | "name" | "thoughtSignature">>,
-  ): void {
+  ): Promise<void> {
     const state = this.#states.get(key);
     if (!state) {
       return;
@@ -156,7 +156,7 @@ export class IncrementalToolCallFolder {
       ? fullJson.slice(previousPartialJson.length)
       : "";
     if (delta.length > 0) {
-      this.stream.push({
+      await this.stream.push({
         type: "toolcall_delta",
         contentIndex: state.contentIndex,
         delta,
@@ -166,10 +166,10 @@ export class IncrementalToolCallFolder {
     }
   }
 
-  finalize(
+  async finalize(
     key: string,
     patch?: Partial<Pick<ToolCall, "id" | "name" | "thoughtSignature">>,
-  ): ToolCall | null {
+  ): Promise<ToolCall | null> {
     const state = this.#states.get(key);
     if (!state) {
       return null;
@@ -186,7 +186,7 @@ export class IncrementalToolCallFolder {
     const parseResult = this.#parseStateArguments(state);
     state.block.arguments = parseResult.output;
     this.output.content[state.contentIndex] = state.block;
-    this.stream.push({
+    await this.stream.push({
       type: "toolcall_end",
       contentIndex: state.contentIndex,
       toolCall: state.block,
@@ -197,16 +197,16 @@ export class IncrementalToolCallFolder {
     return state.block;
   }
 
-  finalizeAll(): void {
+  async finalizeAll(): Promise<void> {
     for (const key of this.#order) {
-      this.finalize(key);
+      await this.finalize(key);
     }
   }
 
-  pushAtomic(toolCall: ToolCall, key: string): void {
+  async pushAtomic(toolCall: ToolCall, key: string): Promise<void> {
     const argumentsJson = JSON.stringify(toolCall.arguments ?? {});
-    this.begin(key, toolCall, argumentsJson);
-    this.appendArgumentsDelta(key, argumentsJson, toolCall);
-    this.finalize(key, toolCall);
+    await this.begin(key, toolCall, argumentsJson);
+    await this.appendArgumentsDelta(key, argumentsJson, toolCall);
+    await this.finalize(key, toolCall);
   }
 }

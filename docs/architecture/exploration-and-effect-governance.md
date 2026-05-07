@@ -25,6 +25,20 @@ boundary policy, skill posture, context pressure, and approval state. Those
 inputs produce facts. The runtime authority decision owns allow, block, defer,
 receipt, and rollback meaning.
 
+## Runtime Effect Substrate
+
+The Effect runtime library is an execution substrate, not the authority
+manifest. It may run the model stream, tool execution, provider request,
+channel handler, IPC call, schedule, or cleanup finalizer that supports a
+commitment, but the commitment remains governed by Brewva authority.
+
+Use the distinction precisely:
+
+- `EffectAuthorityManifest` decides whether an effectful tool invocation may
+  commit.
+- `@brewva/brewva-effect` coordinates in-memory execution mechanics beneath
+  that decision.
+
 ## Non-Goals
 
 - no kernel-owned planner or hidden stage machine

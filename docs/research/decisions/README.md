@@ -24,6 +24,7 @@ Every accepted decision inherits these rules:
 - [context-dependency-layering-and-admission-lanes](./context-dependency-layering-and-admission-lanes.md)
 - [default-path-re-hardening-and-advisory-surface-narrowing](./default-path-re-hardening-and-advisory-surface-narrowing.md)
 - [durability-taxonomy-and-rebuildable-surface-narrowing](./durability-taxonomy-and-rebuildable-surface-narrowing.md)
+- [effect-native-runtime-foundation](./effect-native-runtime-foundation.md)
 - [effect-authority-manifest](./effect-authority-manifest.md)
 - [iteration-facts-and-model-native-optimization-protocols](./iteration-facts-and-model-native-optimization-protocols.md)
 - [kernel-first-subtraction-and-control-plane-deferral](./kernel-first-subtraction-and-control-plane-deferral.md)

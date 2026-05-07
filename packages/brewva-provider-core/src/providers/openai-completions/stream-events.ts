@@ -1,7 +1,7 @@
 import type { ChatCompletionChunk } from "openai/resources/chat/completions.js";
 import type {
   AssistantMessage,
-  AssistantMessageEventStream,
+  ProviderEventSink,
   Model,
   StopReason,
   TextContent,
@@ -54,18 +54,18 @@ function mapStopReason(reason: ChatCompletionChunk.Choice["finish_reason"] | str
 export async function processOpenAICompletionsStream(
   openaiStream: AsyncIterable<ChatCompletionChunk>,
   output: AssistantMessage,
-  stream: AssistantMessageEventStream,
+  stream: ProviderEventSink,
   model: Model<"openai-completions">,
   toolCalls: IncrementalToolCallFolder,
 ): Promise<void> {
   let currentBlock: OpenAICompletionCurrentBlock = null;
 
-  const finishCurrentBlock = () => {
+  const finishCurrentBlock = async () => {
     if (!currentBlock) {
       return;
     }
     if (currentBlock.type === "text") {
-      stream.push({
+      await stream.push({
         type: "text_end",
         contentIndex: currentBlock.outputIndex,
         content: currentBlock.block.text,
@@ -75,7 +75,7 @@ export async function processOpenAICompletionsStream(
       return;
     }
     if (currentBlock.type === "thinking") {
-      stream.push({
+      await stream.push({
         type: "thinking_end",
         contentIndex: currentBlock.outputIndex,
         content: currentBlock.block.thinking,
@@ -153,7 +153,7 @@ export async function processOpenAICompletionsStream(
       choice.delta.content.length > 0
     ) {
       if (!currentBlock || currentBlock.type !== "text") {
-        finishCurrentBlock();
+        await finishCurrentBlock();
         const block: TextContent = { type: "text", text: "" };
         output.content.push(block);
         currentBlock = {
@@ -161,7 +161,7 @@ export async function processOpenAICompletionsStream(
           block,
           outputIndex: output.content.length - 1,
         };
-        stream.push({
+        await stream.push({
           type: "text_start",
           contentIndex: currentBlock.outputIndex,
           partial: output,
@@ -169,7 +169,7 @@ export async function processOpenAICompletionsStream(
       }
       if (currentBlock.type === "text") {
         currentBlock.block.text += choice.delta.content;
-        stream.push({
+        await stream.push({
           type: "text_delta",
           contentIndex: currentBlock.outputIndex,
           delta: choice.delta.content,
@@ -181,7 +181,7 @@ export async function processOpenAICompletionsStream(
     const reasoningDelta = readReasoningDeltaField(choice.delta);
     if (reasoningDelta) {
       if (!currentBlock || currentBlock.type !== "thinking") {
-        finishCurrentBlock();
+        await finishCurrentBlock();
         const block: ThinkingContent = {
           type: "thinking",
           thinking: "",
@@ -193,7 +193,7 @@ export async function processOpenAICompletionsStream(
           block,
           outputIndex: output.content.length - 1,
         };
-        stream.push({
+        await stream.push({
           type: "thinking_start",
           contentIndex: currentBlock.outputIndex,
           partial: output,
@@ -201,7 +201,7 @@ export async function processOpenAICompletionsStream(
       }
       if (currentBlock.type === "thinking") {
         currentBlock.block.thinking += reasoningDelta.value;
-        stream.push({
+        await stream.push({
           type: "thinking_delta",
           contentIndex: currentBlock.outputIndex,
           delta: reasoningDelta.value,
@@ -213,15 +213,15 @@ export async function processOpenAICompletionsStream(
     if (choice.delta.tool_calls) {
       for (const toolCall of choice.delta.tool_calls) {
         if (currentBlock) {
-          finishCurrentBlock();
+          await finishCurrentBlock();
         }
         const toolCallKey = resolveToolCallKey(toolCall);
-        toolCalls.begin(toolCallKey, {
+        await toolCalls.begin(toolCallKey, {
           id: toolCall.id || "",
           name: toolCall.function?.name || "",
           arguments: {},
         });
-        toolCalls.appendArgumentsDelta(toolCallKey, toolCall.function?.arguments || "", {
+        await toolCalls.appendArgumentsDelta(toolCallKey, toolCall.function?.arguments || "", {
           ...(toolCall.id ? { id: toolCall.id } : {}),
           ...(toolCall.function?.name ? { name: toolCall.function.name } : {}),
         });
@@ -250,6 +250,6 @@ export async function processOpenAICompletionsStream(
     }
   }
 
-  finishCurrentBlock();
-  toolCalls.finalizeAll();
+  await finishCurrentBlock();
+  await toolCalls.finalizeAll();
 }

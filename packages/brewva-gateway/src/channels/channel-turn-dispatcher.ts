@@ -9,6 +9,10 @@ import type {
 } from "./channel-command-dispatch.js";
 import type { ChannelReplyWriter } from "./channel-reply-writer.js";
 import type { ChannelCommandMatch, CommandRouter } from "./command-router.js";
+import {
+  createChannelEffectSerialQueue,
+  type ChannelEffectSerialQueue,
+} from "./effect-serial-queue.js";
 
 const LAST_TURN_CACHE_MAX_ENTRIES_DEFAULT = 2_048;
 
@@ -79,7 +83,7 @@ export function createChannelTurnDispatcher(input: {
   isShuttingDown(): boolean;
   lastTurnCacheMaxEntries?: number;
 }): ChannelTurnDispatcher {
-  const scopeQueues = new Map<string, Promise<void>>();
+  const scopeQueues = new Map<string, ChannelEffectSerialQueue>();
   const lastTurnCacheMaxEntries = normalizeLastTurnCacheMaxEntries(input.lastTurnCacheMaxEntries);
   const lastTurnByScope = new LRUCache<string, TurnEnvelope>({
     max: lastTurnCacheMaxEntries,
@@ -270,25 +274,34 @@ export function createChannelTurnDispatcher(input: {
         }
       }
 
-      const previous = scopeQueues.get(scopeKey) ?? Promise.resolve();
-      const next = previous
-        .catch(() => undefined)
-        .then(async () => {
-          await processInboundTurn(turn, walId, scopeKey, preparedCommand);
+      let queue = scopeQueues.get(scopeKey);
+      if (!queue) {
+        queue = createChannelEffectSerialQueue({
+          name: `channel-turn:${scopeKey}`,
         });
-      const settled = next.then(
-        () => undefined,
-        () => undefined,
-      );
-      scopeQueues.set(scopeKey, settled);
-      void settled.finally(() => {
-        if (scopeQueues.get(scopeKey) === settled) {
-          scopeQueues.delete(scopeKey);
-        }
+        scopeQueues.set(scopeKey, queue);
+      }
+
+      const next = queue.enqueue(async () => {
+        await processInboundTurn(turn, walId, scopeKey, preparedCommand);
       });
+      const releaseQueue = () => {
+        void queue
+          .whenIdle()
+          .then(async () => {
+            if (scopeQueues.get(scopeKey) === queue && queue.isIdle()) {
+              scopeQueues.delete(scopeKey);
+              await queue.close();
+            }
+          })
+          .catch(() => undefined);
+      };
+      void next.then(releaseQueue, releaseQueue);
 
       if (enqueueOptions.awaitCompletion) {
         await next;
+      } else {
+        void next.catch(() => undefined);
       }
     },
 
@@ -303,7 +316,7 @@ export function createChannelTurnDispatcher(input: {
     },
 
     listQueueTails(): Promise<void>[] {
-      return [...scopeQueues.values()];
+      return [...scopeQueues.values()].map((queue) => queue.whenIdle());
     },
   };
 }

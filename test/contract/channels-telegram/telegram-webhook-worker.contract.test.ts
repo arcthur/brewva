@@ -130,11 +130,13 @@ describe("telegram webhook worker", () => {
     const update = createTelegramUpdate(7002);
     const body = JSON.stringify(update);
     const forwardCalls: Request[] = [];
+    let forwardedSignal: AbortSignal | null | undefined;
 
     const worker = createTelegramWebhookWorker({
       now: () => nowMs,
       nonceFactory: () => "nonce-accepted",
       fetchImpl: async (input, init) => {
+        forwardedSignal = init?.signal;
         const request = input instanceof Request ? input : new Request(String(input), init);
         forwardCalls.push(request);
         return new Response(JSON.stringify({ ok: true }), { status: 202 });
@@ -149,14 +151,11 @@ describe("telegram webhook worker", () => {
       BREWVA_TELEGRAM_EXPECTED_PATH: "/telegram/webhook",
     };
 
-    const response = await worker.fetch(
-      createWebhookRequest({
-        update,
-        telegramSecretToken: "telegram-secret",
-      }),
-      env,
-      NOOP_EXECUTION_CONTEXT,
-    );
+    const request = createWebhookRequest({
+      update,
+      telegramSecretToken: "telegram-secret",
+    });
+    const response = await worker.fetch(request, env, NOOP_EXECUTION_CONTEXT);
     const payload = await readJson(response);
 
     expect(response.status).toBe(200);
@@ -179,6 +178,7 @@ describe("telegram webhook worker", () => {
         body,
       }),
     );
+    expect(forwardedSignal).toBe(request.signal);
   });
 
   test("short-circuits duplicate update id at edge", async () => {

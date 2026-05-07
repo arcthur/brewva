@@ -15,9 +15,9 @@ import type {
   TextSignatureV1,
   ThinkingContent,
   Usage,
+  ProviderEventSink,
 } from "../../contracts/index.js";
 import type { IncrementalToolCallFolder } from "../../stream/tool-call-folder.js";
-import type { AssistantMessageEventStream } from "../../utils/event-stream.js";
 import type { OpenAIResponsesStreamOptions } from "./contract.js";
 
 type ResponseReasoningSummaryPart = NonNullable<ResponseReasoningItem["summary"]>[number];
@@ -76,7 +76,7 @@ function encodeTextSignatureV1(id: string, phase?: TextSignatureV1["phase"]): st
 export async function processResponsesStream<TApi extends Api>(
   openaiStream: AsyncIterable<ResponseStreamEvent>,
   output: AssistantMessage,
-  stream: AssistantMessageEventStream,
+  stream: ProviderEventSink,
   model: Model<TApi>,
   toolCalls: IncrementalToolCallFolder,
   options?: OpenAIResponsesStreamOptions,
@@ -96,15 +96,15 @@ export async function processResponsesStream<TApi extends Api>(
         currentItem = item;
         currentBlock = { type: "thinking", thinking: "" };
         output.content.push(currentBlock);
-        stream.push({ type: "thinking_start", contentIndex: blockIndex(), partial: output });
+        await stream.push({ type: "thinking_start", contentIndex: blockIndex(), partial: output });
       } else if (item.type === "message") {
         currentItem = item;
         currentBlock = { type: "text", text: "" };
         output.content.push(currentBlock);
-        stream.push({ type: "text_start", contentIndex: blockIndex(), partial: output });
+        await stream.push({ type: "text_start", contentIndex: blockIndex(), partial: output });
       } else if (item.type === "function_call") {
         const toolItemId = item.id ?? item.call_id;
-        toolCalls.begin(
+        await toolCalls.begin(
           toolItemId,
           {
             id: `${item.call_id}|${item.id}`,
@@ -123,7 +123,7 @@ export async function processResponsesStream<TApi extends Api>(
         if (part) {
           currentBlock.thinking += event.delta;
           part.text += event.delta;
-          stream.push({
+          await stream.push({
             type: "thinking_delta",
             contentIndex: blockIndex(),
             delta: event.delta,
@@ -137,7 +137,7 @@ export async function processResponsesStream<TApi extends Api>(
         if (part) {
           currentBlock.thinking += "\n\n";
           part.text += "\n\n";
-          stream.push({
+          await stream.push({
             type: "thinking_delta",
             contentIndex: blockIndex(),
             delta: "\n\n",
@@ -161,7 +161,7 @@ export async function processResponsesStream<TApi extends Api>(
         if (lastPart?.type === "output_text") {
           currentBlock.text += event.delta;
           lastPart.text += event.delta;
-          stream.push({
+          await stream.push({
             type: "text_delta",
             contentIndex: blockIndex(),
             delta: event.delta,
@@ -178,7 +178,7 @@ export async function processResponsesStream<TApi extends Api>(
         if (lastPart?.type === "refusal") {
           currentBlock.text += event.delta;
           lastPart.refusal += event.delta;
-          stream.push({
+          await stream.push({
             type: "text_delta",
             contentIndex: blockIndex(),
             delta: event.delta,
@@ -187,16 +187,16 @@ export async function processResponsesStream<TApi extends Api>(
         }
       }
     } else if (event.type === "response.function_call_arguments.delta") {
-      toolCalls.appendArgumentsDelta(event.item_id, event.delta);
+      await toolCalls.appendArgumentsDelta(event.item_id, event.delta);
     } else if (event.type === "response.function_call_arguments.done") {
-      toolCalls.replaceArguments(event.item_id, event.arguments);
+      await toolCalls.replaceArguments(event.item_id, event.arguments);
     } else if (event.type === "response.output_item.done") {
       const item = event.item;
 
       if (item.type === "reasoning" && currentBlock?.type === "thinking") {
         currentBlock.thinking = item.summary?.map((s) => s.text).join("\n\n") || "";
         currentBlock.thinkingSignature = JSON.stringify(item);
-        stream.push({
+        await stream.push({
           type: "thinking_end",
           contentIndex: blockIndex(),
           content: currentBlock.thinking,
@@ -208,7 +208,7 @@ export async function processResponsesStream<TApi extends Api>(
           .map((c) => (c.type === "output_text" ? c.text : c.refusal))
           .join("");
         currentBlock.textSignature = encodeTextSignatureV1(item.id, item.phase ?? undefined);
-        stream.push({
+        await stream.push({
           type: "text_end",
           contentIndex: blockIndex(),
           content: currentBlock.text,
@@ -217,8 +217,8 @@ export async function processResponsesStream<TApi extends Api>(
         currentBlock = null;
       } else if (item.type === "function_call") {
         const toolItemId = item.id ?? item.call_id;
-        toolCalls.replaceArguments(toolItemId, item.arguments || "{}");
-        toolCalls.finalize(toolItemId, {
+        await toolCalls.replaceArguments(toolItemId, item.arguments || "{}");
+        await toolCalls.finalize(toolItemId, {
           id: `${item.call_id}|${item.id}`,
           name: item.name,
         });

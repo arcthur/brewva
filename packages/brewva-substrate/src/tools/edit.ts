@@ -108,6 +108,12 @@ function extractText(result: { content: Array<{ type: string; text?: string }> }
     .join("\n");
 }
 
+function assertNotAborted(signal: AbortSignal | undefined): void {
+  if (signal?.aborted) {
+    throw new Error("Operation aborted");
+  }
+}
+
 export function buildBrewvaEditDiffPreview(
   input: unknown,
   rawContent: string,
@@ -150,69 +156,47 @@ export function createBrewvaEditToolDefinition(
       const absolutePath = resolveToCwd(path, cwd);
 
       return withFileMutationQueue(absolutePath, async () => {
-        if (signal?.aborted) {
-          throw new Error("Operation aborted");
+        assertNotAborted(signal);
+        try {
+          await operations.access(absolutePath);
+        } catch {
+          throw new Error(`File not found: ${path}`);
         }
 
-        let aborted = false;
-        const abortPromise = new Promise<never>((_, reject) => {
-          const onAbort = () => {
-            aborted = true;
-            reject(new Error("Operation aborted"));
-          };
-          signal?.addEventListener("abort", onAbort, { once: true });
-        });
+        assertNotAborted(signal);
+        const buffer = await operations.readFile(absolutePath);
+        assertNotAborted(signal);
 
-        const execution = (async () => {
-          try {
-            await operations.access(absolutePath);
-          } catch {
-            throw new Error(`File not found: ${path}`);
-          }
+        const rawContent = buffer.toString("utf8");
+        const { bom, text } = stripBom(rawContent);
+        const originalEnding = detectLineEnding(text);
+        const normalizedContent = normalizeToLF(text);
+        const { baseContent, newContent } = applyEditsToNormalizedContent(
+          normalizedContent,
+          edits,
+          path,
+        );
 
-          if (aborted) {
-            throw new Error("Operation aborted");
-          }
+        assertNotAborted(signal);
+        await operations.writeFile(
+          absolutePath,
+          bom + restoreLineEndings(newContent, originalEnding),
+        );
+        assertNotAborted(signal);
 
-          const buffer = await operations.readFile(absolutePath);
-          if (aborted) {
-            throw new Error("Operation aborted");
-          }
-
-          const rawContent = buffer.toString("utf8");
-          const { bom, text } = stripBom(rawContent);
-          const originalEnding = detectLineEnding(text);
-          const normalizedContent = normalizeToLF(text);
-          const { baseContent, newContent } = applyEditsToNormalizedContent(
-            normalizedContent,
-            edits,
-            path,
-          );
-
-          if (aborted) {
-            throw new Error("Operation aborted");
-          }
-
-          await operations.writeFile(
-            absolutePath,
-            bom + restoreLineEndings(newContent, originalEnding),
-          );
-          const diffResult = generateDiffString(baseContent, newContent);
-          return {
-            content: [
-              {
-                type: "text" as const,
-                text: `Successfully replaced ${edits.length} block(s) in ${path}.`,
-              },
-            ],
-            details: {
-              diff: diffResult.diff,
-              firstChangedLine: diffResult.firstChangedLine,
+        const diffResult = generateDiffString(baseContent, newContent);
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `Successfully replaced ${edits.length} block(s) in ${path}.`,
             },
-          };
-        })();
-
-        return signal ? Promise.race([execution, abortPromise]) : execution;
+          ],
+          details: {
+            diff: diffResult.diff,
+            firstChangedLine: diffResult.firstChangedLine,
+          },
+        };
       });
     },
     renderCall(args, theme) {

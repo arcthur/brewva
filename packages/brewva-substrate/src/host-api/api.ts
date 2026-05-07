@@ -6,7 +6,10 @@ export {
   type CreateBrewvaHostPluginRunnerOptions,
 } from "./plugin-runner.js";
 export {
+  defineEffectInternalHostPlugin,
   defineInternalHostPlugin,
+  type EffectInternalHostPlugin,
+  type EffectInternalHostPluginApi,
   type BrewvaHostAgentEndEvent,
   type BrewvaHostAgentStartEvent,
   type BrewvaHostBeforeAgentStartEvent,

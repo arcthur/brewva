@@ -11,6 +11,7 @@ import {
   resolveOpenAICompletionsCompat,
   streamOpenAICompletions,
 } from "../../../packages/brewva-provider-core/src/providers/openai-completions/index.js";
+import { collectProviderEvents } from "../../helpers/effect-stream.js";
 import { patchProcessEnv } from "../../helpers/global-state.js";
 
 const DEEPSEEK_MODEL = getModel("deepseek", "deepseek-v4-flash");
@@ -74,10 +75,14 @@ describe("OpenAI completions DeepSeek compatibility", () => {
         messages: [userText("Say hi.")],
       });
 
-      const result = await stream.result();
+      const events = await collectProviderEvents(stream);
+      const result = events.at(-1);
 
-      expect(result.stopReason).toBe("error");
-      expect(result.errorMessage).toBe("No API key for provider: deepseek");
+      expect(result?.type).toBe("error");
+      if (result?.type === "error") {
+        expect(result.error.stopReason).toBe("error");
+        expect(result.error.errorMessage).toBe("No API key for provider: deepseek");
+      }
     } finally {
       restoreEnv();
     }

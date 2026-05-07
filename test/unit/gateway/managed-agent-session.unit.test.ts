@@ -5,7 +5,6 @@ import {
   registerExternalApiProvider,
   unregisterApiProviders,
 } from "@brewva/brewva-provider-core/registry";
-import { createAssistantMessageEventStream } from "@brewva/brewva-provider-core/stream";
 import { BrewvaRuntime, defineContextSourceProvider } from "@brewva/brewva-runtime";
 import type { ContextState } from "@brewva/brewva-substrate/contracts";
 import {
@@ -42,6 +41,7 @@ import {
   fauxAssistantMessage,
   registerFauxProvider,
 } from "../../../packages/brewva-provider-core/src/providers/faux/index.js";
+import { createProviderEventStream } from "../../helpers/effect-stream.js";
 import { createToolcallDeltaAssistantEvent } from "../../helpers/prompt-session-events.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
@@ -871,10 +871,10 @@ describe("managed agent session compaction", () => {
       {
         api: "managed-agent-session-model-switch-awaits-clear",
         stream() {
-          return createAssistantMessageEventStream();
+          return createProviderEventStream();
         },
         streamSimple() {
-          return createAssistantMessageEventStream();
+          return createProviderEventStream();
         },
         sessionResources: {
           clearSession(sessionId) {
@@ -936,10 +936,10 @@ describe("managed agent session compaction", () => {
       {
         api: "managed-agent-session-replace-awaits-clear",
         stream() {
-          return createAssistantMessageEventStream();
+          return createProviderEventStream();
         },
         streamSimple() {
-          return createAssistantMessageEventStream();
+          return createProviderEventStream();
         },
         sessionResources: {
           clearSession(sessionId) {

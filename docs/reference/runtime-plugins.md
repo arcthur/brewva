@@ -64,6 +64,8 @@ semantics live in `docs/reference/runtime.md` and
 
 - `InternalRuntimePlugin`
 - `InternalRuntimePluginApi`
+- `defineEffectInternalHostPlugin`
+- `EffectInternalHostPluginApi`
 - `RuntimePluginCapability`
 - `LocalHookPort`
 - `createHostedTurnPipeline`
@@ -74,6 +76,14 @@ semantics live in `docs/reference/runtime.md` and
 passed into a repo-owned runtime plugin at host bootstrap. Internal plugins are
 manifest objects with explicit capabilities; local project rules use
 `LocalHookPort` instead of receiving the raw plugin API.
+
+`defineEffectInternalHostPlugin` is the Effect-native authoring helper for
+repo-owned substrate runtime plugins. It adds `onEffect(...)` for
+Effect-returning handlers and adapts those handlers into the same host-plugin
+runner used by Promise-friendly plugins. The helper does not expose
+`BrewvaRuntime`, Effect runtime layers, capability ports, or replay authority to
+plugin code; declared plugin capabilities still decide whether a handler may
+rewrite prompt parts, provider payloads, tool results, or message visibility.
 
 Current factory option surface:
 
@@ -299,8 +309,8 @@ Stable responsibilities:
 - provider-core renders Anthropic, OpenAI, Codex, and implicit-prefix strategies
   at the provider edge
 - provider-core normalizes provider-local streaming wire shapes into one
-  `AssistantMessageEventStream`; the detailed contract lives in
-  `docs/reference/provider-streaming.md`
+  Effect-native `ProviderAssistantMessageStream`; the detailed contract lives
+  in `docs/reference/provider-streaming.md`
 - gateway fingerprints final provider payloads and records provider-cache
   observations through runtime context inspection
 - provider-request reduction marks expected cache breaks and can preserve a

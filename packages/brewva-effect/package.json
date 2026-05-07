@@ -1,0 +1,55 @@
+{
+  "name": "@brewva/brewva-effect",
+  "version": "0.1.0",
+  "description": "Internal Effect runtime foundation for Brewva.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "bun": "./src/index.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./edge": {
+      "types": "./src/edge.ts",
+      "bun": "./src/edge.ts",
+      "import": "./dist/edge.js",
+      "default": "./dist/edge.js"
+    },
+    "./edge-runner": {
+      "types": "./src/edge-runner.ts",
+      "bun": "./src/edge-runner.ts",
+      "import": "./dist/edge-runner.js",
+      "default": "./dist/edge-runner.js"
+    },
+    "./platform-node": {
+      "types": "./src/platform-node.ts",
+      "bun": "./src/platform-node.ts",
+      "import": "./dist/platform-node.js",
+      "default": "./dist/platform-node.js"
+    },
+    "./runtime": {
+      "types": "./src/runtime-spine.ts",
+      "bun": "./src/runtime-spine.ts",
+      "import": "./dist/runtime-spine.js",
+      "default": "./dist/runtime-spine.js"
+    },
+    "./testing": {
+      "types": "./src/testing.ts",
+      "bun": "./src/testing.ts",
+      "import": "./dist/testing.js",
+      "default": "./dist/testing.js"
+    }
+  },
+  "dependencies": {
+    "@effect/opentelemetry": "4.0.0-beta.60",
+    "@effect/platform-node": "4.0.0-beta.60",
+    "effect": "4.0.0-beta.60"
+  },
+  "engines": {
+    "node": "^20.19.0 || >=22.13.0"
+  }
+}

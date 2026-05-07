@@ -1,3 +1,4 @@
+import { Effect, runPlatformEdgeOperation } from "@brewva/brewva-effect/edge";
 import { LRUCache } from "lru-cache";
 
 const TELEGRAM_SECRET_HEADER = "x-telegram-bot-api-secret-token";
@@ -77,6 +78,29 @@ export interface CreateTelegramWebhookWorkerOptions {
   nonceFactory?: () => string;
   replayStore?: TelegramWebhookReplayStore;
   rateLimiter?: TelegramWebhookRateLimiter;
+}
+
+export interface TelegramWebhookFetchEffectInput {
+  run: () => Promise<Response>;
+}
+
+export function handleTelegramWebhookFetchEffect(
+  input: TelegramWebhookFetchEffectInput,
+): Effect.Effect<Response> {
+  return Effect.tryPromise({
+    try: input.run,
+    catch: (error) => error,
+  }).pipe(
+    Effect.catch((error: unknown) =>
+      Effect.succeed(
+        jsonResponse(500, {
+          ok: false,
+          code: "internal_error",
+          message: error instanceof Error ? error.message : String(error),
+        }),
+      ),
+    ),
+  );
 }
 
 export interface TelegramWebhookFetchLike {
@@ -472,7 +496,7 @@ export function createTelegramWebhookWorker(
   // done synchronously so that a failed forward can roll back the edge dedupe
   // reservation and return a 502, causing Telegram to retry. Moving the forward
   // into waitUntil would make rollback impossible.
-  const handleFetch: TelegramWebhookWorkerFetchHandler = async (request, env) => {
+  const handleFetchOperation: TelegramWebhookWorkerFetchHandler = async (request, env) => {
     let config: WorkerConfig;
     try {
       config = resolveWorkerConfig(env);
@@ -615,6 +639,7 @@ export function createTelegramWebhookWorker(
         method: "POST",
         headers,
         body: rawBody,
+        signal: request.signal,
       });
     } catch {
       await replayStore.delete(dedupeKey);
@@ -644,7 +669,20 @@ export function createTelegramWebhookWorker(
   };
 
   return {
-    fetch: handleFetch,
+    fetch: async (request, env, ctx) =>
+      await runPlatformEdgeOperation(
+        "brewva.ingress.telegram.worker.fetch",
+        handleTelegramWebhookFetchEffect({
+          run: () => handleFetchOperation(request, env, ctx),
+        }),
+        {
+          fields: {
+            method: request.method,
+            path: new URL(request.url).pathname,
+          },
+          signal: request.signal,
+        },
+      ),
   };
 }
 

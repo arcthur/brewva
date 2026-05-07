@@ -30,14 +30,14 @@ import {
   type VariableDeclaration,
   type VariableDeclarator,
 } from "oxc-parser";
+import { detectLanguage, isParsableFile, type ParseLanguage } from "./language.js";
 
 export type { OxcError };
+export { detectLanguage, isParsableFile, type ParseLanguage };
 
 /* -------------------------------------------------------------------------- *
  * Public types                                                               *
  * -------------------------------------------------------------------------- */
-
-export type ParseLanguage = "ts" | "tsx" | "js" | "jsx" | "dts";
 
 export interface ParsedSource {
   readonly filename: string;
@@ -114,22 +114,6 @@ export interface RenameResult {
 const PARSE_CACHE = new LRUCache<string, ParsedSource>({
   max: 256,
 });
-
-export function detectLanguage(filename: string): ParseLanguage | null {
-  const lower = filename.toLowerCase();
-  if (lower.endsWith(".d.ts")) return "dts";
-  if (lower.endsWith(".tsx")) return "tsx";
-  if (lower.endsWith(".ts")) return "ts";
-  if (lower.endsWith(".jsx")) return "jsx";
-  if (lower.endsWith(".js") || lower.endsWith(".mjs") || lower.endsWith(".cjs")) {
-    return "js";
-  }
-  return null;
-}
-
-export function isParsableFile(filename: string): boolean {
-  return detectLanguage(filename) !== null;
-}
 
 function buildCacheKey(filename: string, sourceText: string): string {
   return `${filename}\u0000${sourceText.length}\u0000${cheapHash(sourceText)}`;

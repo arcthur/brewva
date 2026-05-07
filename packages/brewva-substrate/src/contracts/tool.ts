@@ -91,7 +91,7 @@ export interface BrewvaToolResultRenderOptions {
 
 export type BrewvaToolUpdateHandler<TDetails = unknown> = (
   update: BrewvaToolResult<TDetails>,
-) => void;
+) => Promise<void>;
 
 export interface BrewvaToolDefinition<TParams extends TSchema = TSchema, TDetails = unknown> {
   name: string;

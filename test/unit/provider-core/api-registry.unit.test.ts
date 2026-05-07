@@ -9,7 +9,7 @@ import {
   registerApiProvider,
   registerTypedApiProvider,
 } from "@brewva/brewva-provider-core/registry";
-import { createAssistantMessageEventStream } from "../../../packages/brewva-provider-core/src/utils/event-stream.js";
+import { createProviderEventStream } from "../../helpers/effect-stream.js";
 
 describe("provider api registry session resources", () => {
   test("clears session resources only for registered providers that declare them", async () => {
@@ -19,10 +19,10 @@ describe("provider api registry session resources", () => {
     registerApiProvider({
       api: "session-resource-test",
       stream() {
-        return createAssistantMessageEventStream();
+        return createProviderEventStream();
       },
       streamSimple() {
-        return createAssistantMessageEventStream();
+        return createProviderEventStream();
       },
       sessionResources: {
         clearSession(sessionId) {
@@ -33,10 +33,10 @@ describe("provider api registry session resources", () => {
     registerApiProvider({
       api: "session-resource-test-noop",
       stream() {
-        return createAssistantMessageEventStream();
+        return createProviderEventStream();
       },
       streamSimple() {
-        return createAssistantMessageEventStream();
+        return createProviderEventStream();
       },
     });
 
@@ -52,19 +52,19 @@ describe("provider api registry session resources", () => {
     registerTypedApiProvider({
       api: "openai-responses",
       stream() {
-        return createAssistantMessageEventStream();
+        return createProviderEventStream();
       },
       streamSimple() {
-        return createAssistantMessageEventStream();
+        return createProviderEventStream();
       },
     });
     registerExternalApiProvider({
       api: "external-provider-test",
       stream() {
-        return createAssistantMessageEventStream();
+        return createProviderEventStream();
       },
       streamSimple() {
-        return createAssistantMessageEventStream();
+        return createProviderEventStream();
       },
     });
 
@@ -82,10 +82,10 @@ describe("provider api registry session resources", () => {
     registerApiProvider({
       api: "openai-responses",
       stream() {
-        return createAssistantMessageEventStream();
+        return createProviderEventStream();
       },
       streamSimple() {
-        return createAssistantMessageEventStream();
+        return createProviderEventStream();
       },
     });
 

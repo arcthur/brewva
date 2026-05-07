@@ -1,4 +1,10 @@
 import {
+  BrewvaEffect,
+  fromAbortableBoundaryPromise,
+  runEdgeOperation,
+  type BrewvaBoundaryError,
+} from "@brewva/brewva-effect";
+import {
   BrewvaRuntime,
   createTrustedLocalGovernancePort,
   type ManagedToolMode,
@@ -90,7 +96,7 @@ export interface RunChannelModeDependencies {
 }
 const CHANNEL_SESSION_CLEANUP_GRACEFUL_TIMEOUT_MS = 2_000;
 
-export async function runChannelMode(options: RunChannelModeOptions): Promise<void> {
+export async function runChannelModeOperation(options: RunChannelModeOptions): Promise<void> {
   const channel = resolveSupportedChannel(options.channel);
   if (!channel) {
     console.error(
@@ -376,4 +382,19 @@ export async function runChannelMode(options: RunChannelModeOptions): Promise<vo
     console.error(`Error: ${toErrorMessage(error)}`);
     process.exitCode = 1;
   }
+}
+
+export function runChannelModeEffect(
+  options: RunChannelModeOptions,
+): BrewvaEffect.Effect<void, BrewvaBoundaryError> {
+  return fromAbortableBoundaryPromise(() => runChannelModeOperation(options));
+}
+
+export async function runChannelMode(options: RunChannelModeOptions): Promise<void> {
+  return runEdgeOperation("brewva.channel.mode", runChannelModeEffect(options), {
+    fields: {
+      channel: options.channel,
+      agentId: options.agentId,
+    },
+  });
 }

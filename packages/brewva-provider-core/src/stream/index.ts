@@ -1,12 +1,14 @@
+import { BrewvaEffect, BrewvaStream, runPromiseAtBoundary } from "@brewva/brewva-effect";
 import type {
   Api,
   AssistantMessage,
-  AssistantMessageEventStream,
   Context,
   Model,
+  ProviderAssistantMessageStream,
   SimpleStreamOptions,
   StreamOptions,
 } from "../contracts/index.js";
+import { ProviderStreamError, providerRuntimeLayer } from "../contracts/index.js";
 import { getExternalApiProvider, getTypedApiProvider } from "../registry/api-registry.js";
 import { registerBuiltInApiProviders } from "../registry/builtins.js";
 import {
@@ -14,8 +16,6 @@ import {
   type ProviderApiWithTypedOptions,
   type ProviderOptionsByApi,
 } from "../registry/typed-options.js";
-
-export { createAssistantMessageEventStream } from "../utils/event-stream.js";
 
 function isTypedModel(model: Model<Api>): model is Model<ProviderApiWithTypedOptions> {
   return isProviderApiWithTypedOptions(model.api);
@@ -49,7 +49,7 @@ function streamTyped<TApi extends ProviderApiWithTypedOptions>(
   model: Model<TApi>,
   context: Context,
   options?: ProviderOptionsByApi[TApi],
-): AssistantMessageEventStream {
+): ProviderAssistantMessageStream {
   return resolveTypedProvider(model.api).stream(model, context, options);
 }
 
@@ -57,7 +57,7 @@ function streamExternal<TApi extends Api>(
   model: Model<TApi>,
   context: Context,
   options?: StreamOptions,
-): AssistantMessageEventStream {
+): ProviderAssistantMessageStream {
   return resolveExternalProvider(model.api).stream(model, context, options);
 }
 
@@ -65,7 +65,7 @@ function streamSimpleTyped<TApi extends ProviderApiWithTypedOptions>(
   model: Model<TApi>,
   context: Context,
   options?: SimpleStreamOptions,
-): AssistantMessageEventStream {
+): ProviderAssistantMessageStream {
   return resolveTypedProvider(model.api).streamSimple(model, context, options);
 }
 
@@ -73,17 +73,17 @@ export function stream<TApi extends ProviderApiWithTypedOptions>(
   model: Model<TApi>,
   context: Context,
   options?: ProviderOptionsByApi[TApi],
-): AssistantMessageEventStream;
+): ProviderAssistantMessageStream;
 export function stream<TApi extends Api>(
   model: Model<TApi>,
   context: Context,
   options?: StreamOptions,
-): AssistantMessageEventStream;
+): ProviderAssistantMessageStream;
 export function stream<TApi extends Api>(
   model: Model<TApi>,
   context: Context,
   options?: StreamOptions,
-): AssistantMessageEventStream {
+): ProviderAssistantMessageStream {
   if (isTypedModel(model)) {
     return streamTyped(model, context, options);
   }
@@ -108,14 +108,14 @@ export async function complete<TApi extends Api>(
   const s = isTypedModel(model)
     ? streamTyped(model, context, options)
     : streamExternal(model, context, options);
-  return s.result();
+  return runProviderStreamToCompletion(s);
 }
 
 export function streamSimple<TApi extends Api>(
   model: Model<TApi>,
   context: Context,
   options?: SimpleStreamOptions,
-): AssistantMessageEventStream {
+): ProviderAssistantMessageStream {
   if (isTypedModel(model)) {
     return streamSimpleTyped(model, context, options);
   }
@@ -128,5 +128,41 @@ export async function completeSimple<TApi extends Api>(
   options?: SimpleStreamOptions,
 ): Promise<AssistantMessage> {
   const s = streamSimple(model, context, options);
-  return s.result();
+  return runProviderStreamToCompletion(s);
+}
+
+function runProviderStreamToCompletion(
+  providerStream: ProviderAssistantMessageStream,
+): Promise<AssistantMessage> {
+  return runPromiseAtBoundary(
+    providerStream.pipe(
+      BrewvaStream.runFoldEffect(
+        (): AssistantMessage | undefined => undefined,
+        (message, event) => {
+          if (event.type === "done") {
+            return BrewvaEffect.succeed(event.message);
+          }
+          if (event.type === "error") {
+            return BrewvaEffect.fail(
+              new ProviderStreamError({
+                message: event.error.errorMessage ?? "Provider stream failed",
+                cause: event.error,
+              }),
+            );
+          }
+          return BrewvaEffect.succeed(message);
+        },
+      ),
+      BrewvaEffect.flatMap((message) =>
+        message
+          ? BrewvaEffect.succeed(message)
+          : BrewvaEffect.fail(
+              new ProviderStreamError({
+                message: "Provider stream ended before producing a final message",
+              }),
+            ),
+      ),
+      BrewvaEffect.provide(providerRuntimeLayer),
+    ),
+  );
 }

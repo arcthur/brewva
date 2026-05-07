@@ -17,7 +17,12 @@ All provider adapters normalize into:
 
 - `AssistantMessage`
 - `AssistantMessageEvent`
-- `AssistantMessageEventStream`
+- `ProviderAssistantMessageStream`
+
+`ProviderAssistantMessageStream` is an Effect stream:
+`Stream.Stream<AssistantMessageEvent, ProviderStreamError, ProviderRuntime>`.
+The old Promise-first `AssistantMessageEventStream` compatibility class has
+been removed.
 
 The stable event families are:
 
@@ -34,7 +39,21 @@ The stable event families are:
 - `done` emission
 - `error` emission
 - abort propagation
+- async provider event sink backpressure
 - final `AssistantMessage` result delivery
+
+Provider-local event folding writes through `ProviderEventSink.push(...)`, which
+returns a promise. Adapters must await each push. The sink awaits the underlying
+Effect stream queue, so a slow consumer applies backpressure to the provider
+driver instead of silently dropping normalized events.
+
+Provider retries use the shared Effect retry policy where a provider owns a
+retryable request loop. Drivers still classify protocol-specific failures
+locally. For example, OpenAI Codex SSE distinguishes usage-limit failures from
+transient HTTP/fetch failures, while Google Gemini CLI preserves
+service-directed retry delays from response headers and error text. The shared
+policy owns the schedule and retry budget; provider adapters own
+retryability classification.
 
 ## Internal Seams
 

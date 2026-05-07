@@ -5,11 +5,17 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { parseArgs as parseNodeArgs } from "node:util";
 import {
+  BrewvaEffect,
+  runEdgeOperation,
+  startScopedTimeout,
+  type ScopedTimeoutHandle,
+} from "@brewva/brewva-effect";
+import {
   recordAbnormalSessionShutdown,
   recordSessionShutdownIfMissing,
   recordSessionTurnTransition,
-  runChannelMode,
-  runGatewayCli,
+  runChannelModeOperation,
+  runGatewayCliOperation,
 } from "@brewva/brewva-gateway";
 import { DEFAULT_HOSTED_ROUTING_SCOPES } from "@brewva/brewva-gateway/host";
 import {
@@ -42,7 +48,7 @@ import { createInspectCommandRuntimePlugin } from "./inspect-command-runtime-plu
 import { resolveTargetSession, runInspectCli } from "./inspect.js";
 import { resolveEffectiveCliMode } from "./interactive-mode.js";
 import { writeJsonLine } from "./json-lines.js";
-import { runOnboardCli } from "./onboard.js";
+import { runOnboardCliOperation } from "./onboard.js";
 import { handleQuestionsChannelCommand } from "./questions-channel-command.js";
 import { createQuestionsCommandRuntimePlugin } from "./questions-command-runtime-plugin.js";
 import { createBrewvaSession } from "./session.js";
@@ -734,7 +740,7 @@ function resolveCliSessionCompleteReason(runtime: BrewvaRuntime, sessionId: stri
   return "cli_session_complete";
 }
 
-async function run(): Promise<void> {
+async function runCliRootOperation(): Promise<void> {
   process.title = "brewva";
   if (process.env[BREWVA_SHELL_SMOKE_ENV] === "1") {
     const { runCliInteractiveSmoke } = await loadCliInteractiveRuntime();
@@ -751,7 +757,7 @@ async function run(): Promise<void> {
   }
   const subcommand = resolveRootSubcommand(rawArgs);
   if (subcommand?.name === "gateway") {
-    const gatewayResult = await runGatewayCli(subcommand.args);
+    const gatewayResult = await runGatewayCliOperation(subcommand.args);
     if (gatewayResult.handled) {
       process.exitCode = gatewayResult.exitCode;
       return;
@@ -762,7 +768,7 @@ async function run(): Promise<void> {
     return;
   }
   if (subcommand?.name === "onboard") {
-    process.exitCode = await runOnboardCli(subcommand.args);
+    process.exitCode = await runOnboardCliOperation(subcommand.args);
     return;
   }
   if (subcommand?.name === "inspect") {
@@ -815,7 +821,7 @@ async function run(): Promise<void> {
       process.exitCode = 1;
       return;
     }
-    await runChannelMode({
+    await runChannelModeOperation({
       cwd: parsed.cwd,
       configPath: parsed.configPath,
       model: parsed.model,
@@ -1134,28 +1140,29 @@ async function run(): Promise<void> {
       error: signal,
     });
 
-    const timeout = setTimeout(() => {
-      void session
-        .abort()
-        .then(() => {
-          finalizeSignalTransition("completed");
-        })
-        .catch((error) => {
-          finalizeSignalTransition(
-            "failed",
-            error instanceof Error ? error.message : String(error),
-          );
-        })
-        .finally(() => {
-          finalizeAndExit(130);
-        });
-    }, gracefulTimeoutMs);
+    const timeout: ScopedTimeoutHandle = startScopedTimeout({
+      delayMs: gracefulTimeoutMs,
+      run: () =>
+        BrewvaEffect.promise(async () => {
+          try {
+            await session.abort();
+            finalizeSignalTransition("completed");
+          } catch (error) {
+            finalizeSignalTransition(
+              "failed",
+              error instanceof Error ? error.message : String(error),
+            );
+          } finally {
+            finalizeAndExit(130);
+          }
+        }),
+    });
 
     void session
       .waitForIdle()
       .catch(() => undefined)
       .finally(() => {
-        clearTimeout(timeout);
+        void timeout.close();
         finalizeSignalTransition("completed");
         finalizeAndExit(130);
       });
@@ -1183,7 +1190,7 @@ async function run(): Promise<void> {
           orchestration = next.orchestration;
         },
       };
-      await interactiveRuntime.runCliInteractiveSession(session, interactiveOptions);
+      await interactiveRuntime.runCliInteractiveSessionOperation(session, interactiveOptions);
       printCostSummary(getSessionId(), runtime);
       return;
     }
@@ -1237,6 +1244,10 @@ async function run(): Promise<void> {
   }
 }
 
+export function runCliRootEffect(): BrewvaEffect.Effect<void, unknown> {
+  return BrewvaEffect.promise(() => runCliRootOperation());
+}
+
 const isBunMain = (import.meta as ImportMeta & { main?: boolean }).main;
 const isNodeMain = process.argv[1]
   ? resolve(process.argv[1]) === fileURLToPath(import.meta.url)
@@ -1244,7 +1255,11 @@ const isNodeMain = process.argv[1]
 
 if (isBunMain ?? isNodeMain) {
   assertSupportedRuntime();
-  void run().catch((error) => {
+  void runEdgeOperation("brewva.cli.root", runCliRootEffect(), {
+    fields: {
+      command: process.argv[2] ?? "default",
+    },
+  }).catch((error) => {
     printStartupError(error);
     process.exitCode = 1;
   });

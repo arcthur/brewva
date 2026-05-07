@@ -1,4 +1,3 @@
-export type { AssistantMessageEventStream } from "../utils/event-stream.js";
 export * from "./api.js";
 export * from "./cache.js";
 export * from "./content.js";

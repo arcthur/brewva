@@ -51,6 +51,18 @@ Removed or invalid fields fail fast during config load. Unknown fields may be
 stripped only in forensic inspect paths where the loader explicitly marks the
 result degraded.
 
+## Runtime Effect Config Services
+
+Runtime Effect layers expose typed services for the normalized readonly config
+and selected config slices such as security, infrastructure, and schedule
+settings. These services are implementation dependencies for Effect-native
+runtime code; they do not change the persisted config file contract.
+
+Persisted config remains owned by the loader, normalizer, type contract, and
+generated JSON schema listed above. New Effect-native runtime boundaries may
+use `@brewva/brewva-effect` config service helpers when they need a typed layer
+service or a test override layer.
+
 ## Skill Routing
 
 `skills.routing.enabled` controls whether skill-first routing is active.

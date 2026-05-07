@@ -16,6 +16,7 @@
   "dependencies": {
     "@brewva/brewva-box": "workspace:*",
     "@brewva/brewva-deliberation": "workspace:*",
+    "@brewva/brewva-effect": "workspace:*",
     "@brewva/brewva-recall": "workspace:*",
     "@brewva/brewva-runtime": "workspace:*",
     "@brewva/brewva-search": "workspace:*",

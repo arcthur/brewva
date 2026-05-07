@@ -3,13 +3,16 @@ import type { AssistantMessage, Tool } from "@brewva/brewva-provider-core/contra
 import { Type } from "@sinclair/typebox";
 import { processAnthropicStream } from "../../../packages/brewva-provider-core/src/providers/anthropic/stream-events.js";
 import { IncrementalToolCallFolder } from "../../../packages/brewva-provider-core/src/stream/tool-call-folder.js";
-import { AssistantMessageEventStream } from "../../../packages/brewva-provider-core/src/utils/event-stream.js";
+import {
+  createRecordingProviderEventStream,
+  type RecordingProviderEventStream,
+} from "../../helpers/effect-stream.js";
 
 function createTestToolCalls(
   output: AssistantMessage,
-  stream: AssistantMessageEventStream,
+  stream: RecordingProviderEventStream,
 ): IncrementalToolCallFolder {
-  return new IncrementalToolCallFolder(output, stream, () => {});
+  return new IncrementalToolCallFolder(output, stream, async () => {});
 }
 
 function createOutput(): AssistantMessage {
@@ -32,19 +35,15 @@ function createOutput(): AssistantMessage {
   };
 }
 
-async function collectQueuedEvents(stream: AssistantMessageEventStream) {
-  stream.end();
-  const events = [];
-  for await (const event of stream) {
-    events.push(event);
-  }
-  return events;
+async function collectQueuedEvents(stream: RecordingProviderEventStream) {
+  await stream.end();
+  return stream.events;
 }
 
 describe("anthropic stream processor", () => {
   test("folds thinking, OAuth tool names, partial JSON, and usage without leaking private fields", async () => {
     const output = createOutput();
-    const stream = new AssistantMessageEventStream();
+    const stream = createRecordingProviderEventStream();
     const tools: Tool[] = [
       {
         name: "grep",
@@ -193,7 +192,7 @@ describe("anthropic stream processor", () => {
 
   test("preserves redacted thinking blocks", async () => {
     const output = createOutput();
-    const stream = new AssistantMessageEventStream();
+    const stream = createRecordingProviderEventStream();
 
     await processAnthropicStream(
       (async function* () {

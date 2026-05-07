@@ -1,3 +1,4 @@
+import { BrewvaEffect, runEdgeOperation } from "@brewva/brewva-effect";
 import type { BrewvaManagedPromptSession } from "@brewva/brewva-substrate/session";
 import type { CliInteractiveSessionOptions, CliInteractiveSmokeResult } from "./cli-runtime.js";
 
@@ -18,9 +19,31 @@ export async function runCliInteractiveSmoke(): Promise<CliInteractiveSmokeResul
   throw createUnsupportedRuntimeError();
 }
 
-export async function runCliInteractiveSession(
+export async function runCliInteractiveSessionOperation(
   _session: BrewvaManagedPromptSession,
   _options: CliInteractiveSessionOptions,
 ): Promise<never> {
   throw createUnsupportedRuntimeError();
+}
+
+export function runCliInteractiveSessionEffect(
+  session: BrewvaManagedPromptSession,
+  options: CliInteractiveSessionOptions,
+): BrewvaEffect.Effect<never, unknown> {
+  return BrewvaEffect.promise(() => runCliInteractiveSessionOperation(session, options));
+}
+
+export async function runCliInteractiveSession(
+  session: BrewvaManagedPromptSession,
+  options: CliInteractiveSessionOptions,
+): Promise<never> {
+  return await runEdgeOperation(
+    "brewva.cli.interactive",
+    runCliInteractiveSessionEffect(session, options),
+    {
+      fields: {
+        cwd: options.cwd,
+      },
+    },
+  );
 }

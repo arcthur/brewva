@@ -2,6 +2,20 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { resolve } from "node:path";
 import type { BoxExec, BoxPlane } from "@brewva/brewva-box";
+import {
+  BrewvaBoundaryFailure,
+  BrewvaCause,
+  BrewvaDeferred,
+  BrewvaDuration,
+  BrewvaEffect,
+  BrewvaQueue,
+  BrewvaStream,
+  addScopedFinalizer,
+  runPromiseAtBoundary,
+  startScopedTimeout,
+  type ScopedTimeoutHandle,
+  type BrewvaScope,
+} from "@brewva/brewva-effect";
 import { resolveShellConfig as getShellConfig } from "@brewva/brewva-substrate/host-api";
 import { differenceInMilliseconds } from "date-fns";
 
@@ -15,6 +29,43 @@ export const DEFAULT_LOG_TAIL_LINES = 200;
 export const MAX_POLL_WAIT_MS = 120_000;
 
 export type ManagedExecResultStatus = "completed" | "failed";
+export type ManagedExecBackend = "host" | "box";
+export type ManagedExecOutputChannel = "stdout" | "stderr" | "system";
+
+export type ManagedExecOutputEvent =
+  | {
+      type: "output";
+      sessionId: string;
+      ownerSessionId: string;
+      backend: ManagedExecBackend;
+      channel: ManagedExecOutputChannel;
+      chunk: string;
+      aggregateChars: number;
+      truncated: boolean;
+      emittedAt: number;
+    }
+  | {
+      type: "exit";
+      sessionId: string;
+      ownerSessionId: string;
+      backend: ManagedExecBackend;
+      status: ManagedExecResultStatus;
+      exitCode: number | null;
+      exitSignal: NodeJS.Signals | null;
+      emittedAt: number;
+    };
+
+export class ManagedExecSessionNotFoundError extends Error {
+  readonly _tag = "ManagedExecSessionNotFoundError";
+
+  constructor(readonly sessionId: string) {
+    super(`managed exec session not found: ${sessionId}`);
+    this.name = "ManagedExecSessionNotFoundError";
+  }
+}
+
+export type ManagedExecStartError = BrewvaBoundaryFailure;
+export type ManagedExecRuntimeError = BrewvaBoundaryFailure | ManagedExecSessionNotFoundError;
 
 interface ManagedExecBase {
   id: string;
@@ -36,6 +87,9 @@ interface ManagedExecBase {
 }
 
 interface ManagedOutputSession {
+  id: string;
+  ownerSessionId: string;
+  kind: string;
   aggregated: string;
   tail: string;
   truncated: boolean;
@@ -47,7 +101,7 @@ export interface ManagedExecRunningSession extends ManagedExecBase {
   kind: "running";
   child: ChildProcessWithoutNullStreams;
   stdin: ChildProcessWithoutNullStreams["stdin"];
-  timeoutHandle?: ReturnType<typeof setTimeout>;
+  timeoutHandle?: ScopedTimeoutHandle;
 }
 
 export interface ManagedExecFinishedSession extends ManagedExecBase {
@@ -62,7 +116,7 @@ export interface ManagedBoxExecRunningSession extends ManagedExecBase {
   executionId: string;
   fingerprint?: string;
   execution: BoxExec;
-  timeoutHandle?: ReturnType<typeof setTimeout>;
+  timeoutHandle?: ScopedTimeoutHandle;
 }
 
 export interface ManagedBoxExecFinishedSession extends ManagedExecBase {
@@ -115,6 +169,10 @@ const runningSessions = new Map<string, ManagedExecRunningSession>();
 const finishedSessions = new Map<string, ManagedExecFinishedSession>();
 const runningBoxSessions = new Map<string, ManagedBoxExecRunningSession>();
 const finishedBoxSessions = new Map<string, ManagedBoxExecFinishedSession>();
+type ManagedOutputSubscriber = (
+  event: ManagedExecOutputEvent,
+) => void | boolean | Promise<void | boolean>;
+const outputSubscribers = new Map<string, Set<ManagedOutputSubscriber>>();
 
 function cleanupExpiredFinishedSessions(now = Date.now()): void {
   for (const [sessionId, session] of finishedSessions.entries()) {
@@ -138,10 +196,55 @@ function clampNonNegativeInt(value: number, fallback = 0): number {
   return Math.max(0, Math.trunc(value));
 }
 
-function appendOutput(session: ManagedOutputSession, chunk: Buffer | string): void {
-  if (session.removed) return;
+function resolveBackend(session: Pick<ManagedOutputSession, "kind">): ManagedExecBackend {
+  return session.kind.startsWith("box_") ? "box" : "host";
+}
+
+async function publishOutputEvent(event: ManagedExecOutputEvent): Promise<void> {
+  const subscribers = outputSubscribers.get(event.sessionId);
+  if (!subscribers || subscribers.size === 0) {
+    return;
+  }
+  await Promise.all(
+    [...subscribers].map(async (subscriber) => {
+      try {
+        const keep = await subscriber(event);
+        if (keep === false) {
+          subscribers.delete(subscriber);
+        }
+      } catch {
+        subscribers.delete(subscriber);
+      }
+    }),
+  );
+  if (subscribers.size === 0) {
+    outputSubscribers.delete(event.sessionId);
+  }
+}
+
+function subscribeManagedSessionOutput(
+  sessionId: string,
+  subscriber: ManagedOutputSubscriber,
+): () => void {
+  const subscribers = outputSubscribers.get(sessionId) ?? new Set();
+  subscribers.add(subscriber);
+  outputSubscribers.set(sessionId, subscribers);
+  return () => {
+    subscribers.delete(subscriber);
+    if (subscribers.size === 0) {
+      outputSubscribers.delete(sessionId);
+    }
+  };
+}
+
+function appendOutputToSession(
+  session: ManagedOutputSession,
+  chunk: Buffer | string,
+  channel: ManagedExecOutputChannel = "system",
+): ManagedExecOutputEvent | undefined {
+  if (session.removed) return undefined;
   const text = String(chunk);
-  if (!text) return;
+  if (!text) return undefined;
 
   session.aggregated += text;
   if (session.aggregated.length > MAX_AGGREGATED_OUTPUT_CHARS) {
@@ -155,10 +258,41 @@ function appendOutput(session: ManagedOutputSession, chunk: Buffer | string): vo
     session.drainCursor = session.aggregated.length;
   }
   session.tail = session.aggregated.slice(-TAIL_CHARS);
+  return {
+    type: "output",
+    sessionId: session.id,
+    ownerSessionId: session.ownerSessionId,
+    backend: resolveBackend(session),
+    channel,
+    chunk: text,
+    aggregateChars: session.aggregated.length,
+    truncated: session.truncated,
+    emittedAt: Date.now(),
+  };
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolveNow) => setTimeout(resolveNow, ms));
+function appendOutput(
+  session: ManagedOutputSession,
+  chunk: Buffer | string,
+  channel: ManagedExecOutputChannel = "system",
+): void {
+  const event = appendOutputToSession(session, chunk, channel);
+  if (!event) {
+    return;
+  }
+  void publishOutputEvent(event);
+}
+
+async function appendOutputWithBackpressure(
+  session: ManagedOutputSession,
+  chunk: Buffer | string,
+  channel: ManagedExecOutputChannel = "system",
+): Promise<void> {
+  const event = appendOutputToSession(session, chunk, channel);
+  if (!event) {
+    return;
+  }
+  await publishOutputEvent(event);
 }
 
 function sliceUtf8FromByteOffset(text: string, offset: number): string {
@@ -166,6 +300,15 @@ function sliceUtf8FromByteOffset(text: string, offset: number): string {
   const bytes = Buffer.from(text, "utf8");
   if (offset >= bytes.length) return "";
   return bytes.subarray(offset).toString("utf8");
+}
+
+function closeSessionTimeout(session: { timeoutHandle?: ScopedTimeoutHandle }): void {
+  const timeoutHandle = session.timeoutHandle;
+  if (!timeoutHandle) {
+    return;
+  }
+  session.timeoutHandle = undefined;
+  void timeoutHandle.close();
 }
 
 function finalizeBoxSession(
@@ -177,16 +320,13 @@ function finalizeBoxSession(
     error?: string;
   },
 ): ManagedBoxExecFinishedSession {
-  if (session.timeoutHandle) {
-    clearTimeout(session.timeoutHandle);
-    session.timeoutHandle = undefined;
-  }
+  closeSessionTimeout(session);
   runningBoxSessions.delete(session.id);
   if (params.output) {
-    appendOutput(session, params.output);
+    appendOutput(session, params.output, "system");
   }
   if (params.error) {
-    appendOutput(session, `\n\n${params.error}`);
+    appendOutput(session, `\n\n${params.error}`, "system");
   }
   if (params.timedOut) {
     session.timedOut = true;
@@ -223,14 +363,21 @@ function finalizeBoxSession(
     finishedBoxSessions.set(finished.id, finished);
     cleanupExpiredFinishedSessions();
   }
+  void publishOutputEvent({
+    type: "exit",
+    sessionId: finished.id,
+    ownerSessionId: finished.ownerSessionId,
+    backend: "box",
+    status: finished.status,
+    exitCode: finished.exitCode,
+    exitSignal: finished.exitSignal,
+    emittedAt: finished.endedAt,
+  });
   return finished;
 }
 
 function finalizeSession(session: ManagedExecRunningSession): ManagedExecFinishedSession {
-  if (session.timeoutHandle) {
-    clearTimeout(session.timeoutHandle);
-    session.timeoutHandle = undefined;
-  }
+  closeSessionTimeout(session);
   runningSessions.delete(session.id);
 
   const status: ManagedExecResultStatus =
@@ -263,6 +410,16 @@ function finalizeSession(session: ManagedExecRunningSession): ManagedExecFinishe
     finishedSessions.set(finished.id, finished);
     cleanupExpiredFinishedSessions();
   }
+  void publishOutputEvent({
+    type: "exit",
+    sessionId: finished.id,
+    ownerSessionId: finished.ownerSessionId,
+    backend: "host",
+    status: finished.status,
+    exitCode: finished.exitCode,
+    exitSignal: finished.exitSignal,
+    emittedAt: finished.endedAt,
+  });
   return finished;
 }
 
@@ -355,12 +512,20 @@ export function startManagedExec(input: ManagedExecStartInput): ManagedExecStart
 
   if (typeof input.timeoutSec === "number" && input.timeoutSec > 0) {
     const timeoutMs = Math.trunc(input.timeoutSec * 1000);
-    session.timeoutHandle = setTimeout(() => {
-      if (session.exited || session.removed) return;
-      session.timedOut = true;
-      appendOutput(session, `\n\nCommand timed out after ${input.timeoutSec} seconds.`);
-      terminateRunningSession(session, true);
-    }, timeoutMs);
+    session.timeoutHandle = startScopedTimeout({
+      delayMs: timeoutMs,
+      run: () =>
+        BrewvaEffect.sync(() => {
+          if (session.exited || session.removed) return;
+          session.timedOut = true;
+          appendOutput(
+            session,
+            `\n\nCommand timed out after ${input.timeoutSec} seconds.`,
+            "system",
+          );
+          terminateRunningSession(session, true);
+        }),
+    });
   }
 
   const completion = new Promise<ManagedExecFinishedSession>((resolveCompletion) => {
@@ -374,16 +539,26 @@ export function startManagedExec(input: ManagedExecStartInput): ManagedExecStart
       session.exitCode = params.exitCode;
       session.exitSignal = params.exitSignal;
       if (params.spawnError) {
-        appendOutput(session, `\n\n${params.spawnError}`);
+        appendOutput(session, `\n\n${params.spawnError}`, "system");
       }
       resolveCompletion(finalizeSession(session));
     };
 
     child.stdout.on("data", (chunk) => {
-      appendOutput(session, chunk);
+      child.stdout.pause();
+      void appendOutputWithBackpressure(session, chunk, "stdout").finally(() => {
+        if (!session.exited && !session.removed) {
+          child.stdout.resume();
+        }
+      });
     });
     child.stderr.on("data", (chunk) => {
-      appendOutput(session, chunk);
+      child.stderr.pause();
+      void appendOutputWithBackpressure(session, chunk, "stderr").finally(() => {
+        if (!session.exited && !session.removed) {
+          child.stderr.resume();
+        }
+      });
     });
     child.on("error", (error) => {
       settle({
@@ -403,6 +578,33 @@ export function startManagedExec(input: ManagedExecStartInput): ManagedExecStart
   return { session, completion };
 }
 
+export function startManagedExecEffect(
+  input: ManagedExecStartInput,
+): BrewvaEffect.Effect<ManagedExecStartResult, ManagedExecStartError> {
+  return BrewvaEffect.tryPromise({
+    try: () => Promise.resolve(startManagedExec(input)),
+    catch: (error) =>
+      error instanceof BrewvaBoundaryFailure
+        ? error
+        : new BrewvaBoundaryFailure({
+            message: "managedExec.start failed",
+            cause: error,
+          }),
+  });
+}
+
+export function scopedManagedExec(
+  input: ManagedExecStartInput,
+): BrewvaEffect.Effect<ManagedExecStartResult, ManagedExecStartError, BrewvaScope.Scope> {
+  return BrewvaEffect.acquireRelease(startManagedExecEffect(input), (started) =>
+    BrewvaEffect.sync(() => {
+      if (!started.session.backgrounded && !started.session.exited) {
+        terminateRunningSession(started.session, true);
+      }
+    }),
+  );
+}
+
 export function startManagedBoxExec(input: ManagedBoxExecStartInput): ManagedBoxExecStartResult {
   cleanupExpiredFinishedSessions();
 
@@ -411,6 +613,8 @@ export function startManagedBoxExec(input: ManagedBoxExecStartInput): ManagedBox
   let stderrOffset = 0;
   let outputAppendQueue: Promise<void> = Promise.resolve();
   let finalized: ManagedBoxExecFinishedSession | undefined;
+  let releaseCompleted = false;
+  let resolveCompletion: (session: ManagedBoxExecFinishedSession) => void = () => undefined;
   const session: ManagedBoxExecRunningSession = {
     id,
     kind: "box_running",
@@ -436,10 +640,78 @@ export function startManagedBoxExec(input: ManagedBoxExecStartInput): ManagedBox
   };
   runningBoxSessions.set(session.id, session);
 
+  const completion = new Promise<ManagedBoxExecFinishedSession>((resolveNow) => {
+    resolveCompletion = resolveNow;
+  });
+
+  const observeCurrentOffsetsBestEffort = async (): Promise<void> => {
+    try {
+      await input.plane.observeExecution(input.boxId, input.execution.id, {
+        stdoutOffset,
+        stderrOffset,
+        maxBytes: BOX_OBSERVE_MAX_BYTES,
+      });
+    } catch {
+      // Best-effort reconciliation only.
+    }
+  };
+
+  const finalizeOnce = (params: {
+    exitCode: number | null;
+    output?: string;
+    timedOut?: boolean;
+    error?: string;
+  }): ManagedBoxExecFinishedSession => {
+    if (finalized) return finalized;
+    session.exited = true;
+    finalized = finalizeBoxSession(session, params);
+    if (!input.releaseOnCompletion) {
+      releaseCompleted = true;
+      resolveCompletion(finalized);
+    }
+    return finalized;
+  };
+
+  const releaseAfterCompletion = async (finished: ManagedBoxExecFinishedSession): Promise<void> => {
+    if (releaseCompleted) {
+      return;
+    }
+    releaseCompleted = true;
+    if (input.releaseOnCompletion) {
+      try {
+        await input.releaseOnCompletion();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        appendOutput(finished, `\n\nBox release after execution failed: ${message}`, "system");
+      }
+    }
+    resolveCompletion(finished);
+  };
+
+  const settle = async (
+    params: {
+      exitCode: number | null;
+      output?: string;
+      timedOut?: boolean;
+      error?: string;
+    },
+    options?: { release?: boolean },
+  ): Promise<ManagedBoxExecFinishedSession> => {
+    const finished = finalizeOnce(params);
+    if (options?.release === true) {
+      await releaseAfterCompletion(finished);
+    }
+    return finished;
+  };
+
   const appendObservedOutput = async (): Promise<boolean> => {
     let keepPolling = true;
     const appendTask = outputAppendQueue.then(
       async () => {
+        if (finalized || session.exited || session.removed) {
+          keepPolling = false;
+          return;
+        }
         try {
           const observation = await input.plane.observeExecution(input.boxId, input.execution.id, {
             stdoutOffset,
@@ -450,11 +722,31 @@ export function startManagedBoxExec(input: ManagedBoxExecStartInput): ManagedBox
             keepPolling = true;
             return;
           }
-          if (observation.stdout.length > 0) appendOutput(session, observation.stdout);
-          if (observation.stderr.length > 0) appendOutput(session, observation.stderr);
           stdoutOffset = observation.stdoutOffset;
           stderrOffset = observation.stderrOffset;
-          keepPolling = observation.status === "running";
+          const hasBufferedOutput =
+            observation.stdoutTruncated === true || observation.stderrTruncated === true;
+          keepPolling = observation.status === "running" || hasBufferedOutput;
+          const outputEvents = [
+            observation.stdout.length > 0
+              ? appendOutputToSession(session, observation.stdout, "stdout")
+              : undefined,
+            observation.stderr.length > 0
+              ? appendOutputToSession(session, observation.stderr, "stderr")
+              : undefined,
+          ].filter((event): event is ManagedExecOutputEvent => event !== undefined);
+          const publishOutput = Promise.all(outputEvents.map((event) => publishOutputEvent(event)));
+          if (
+            !keepPolling &&
+            typeof observation.exitCode === "number" &&
+            observation.status !== "running"
+          ) {
+            await observeCurrentOffsetsBestEffort();
+            await settle({
+              exitCode: observation.exitCode,
+            });
+          }
+          await publishOutput;
         } catch {
           keepPolling = true;
         }
@@ -475,58 +767,86 @@ export function startManagedBoxExec(input: ManagedBoxExecStartInput): ManagedBox
     while (!session.exited && !session.removed) {
       const keepPolling = await appendObservedOutput();
       if (!keepPolling) break;
-      await sleep(BOX_OBSERVE_POLL_MS);
+      await runPromiseAtBoundary(BrewvaEffect.sleep(BrewvaDuration.millis(BOX_OBSERVE_POLL_MS)));
     }
   })();
 
   if (typeof input.timeoutSec === "number" && input.timeoutSec > 0) {
     const timeoutMs = Math.trunc(input.timeoutSec * 1000);
-    session.timeoutHandle = setTimeout(() => {
-      if (session.exited || session.removed) return;
-      session.timedOut = true;
-      appendOutput(session, `\n\nCommand timed out after ${input.timeoutSec} seconds.`);
-      void input.execution.kill("SIGKILL");
-    }, timeoutMs);
+    session.timeoutHandle = startScopedTimeout({
+      delayMs: timeoutMs,
+      run: () =>
+        BrewvaEffect.sync(() => {
+          if (session.exited || session.removed) return;
+          session.timedOut = true;
+          appendOutput(
+            session,
+            `\n\nCommand timed out after ${input.timeoutSec} seconds.`,
+            "system",
+          );
+          void input.execution.kill("SIGKILL");
+        }),
+    });
   }
 
-  const settle = async (params: {
-    exitCode: number | null;
-    output?: string;
-    timedOut?: boolean;
-    error?: string;
-  }): Promise<ManagedBoxExecFinishedSession> => {
-    if (finalized) return finalized;
-    session.exited = true;
-    finalized = finalizeBoxSession(session, params);
-    if (input.releaseOnCompletion) {
-      try {
-        await input.releaseOnCompletion();
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        appendOutput(finalized, `\n\nBox release after execution failed: ${message}`);
-      }
-    }
-    return finalized;
-  };
-
-  const completion = input.execution
+  input.execution
     .wait()
     .then(async (result) => {
+      if (finalized) {
+        await observeCurrentOffsetsBestEffort();
+        await releaseAfterCompletion(finalized);
+        return finalized;
+      }
       await appendObservedOutput();
+      if (finalized) {
+        await observeCurrentOffsetsBestEffort();
+        await releaseAfterCompletion(finalized);
+        return finalized;
+      }
       session.exitCode = result.exitCode;
       const remainingStdout = sliceUtf8FromByteOffset(result.stdout, stdoutOffset);
       const remainingStderr = sliceUtf8FromByteOffset(result.stderr, stderrOffset);
-      return await settle({
-        exitCode: result.exitCode,
-        output: [remainingStdout, remainingStderr].filter((part) => part.length > 0).join("\n"),
-      });
+      return await settle(
+        {
+          exitCode: result.exitCode,
+          output: [remainingStdout, remainingStderr].filter((part) => part.length > 0).join("\n"),
+        },
+        { release: true },
+      );
     })
     .catch(async (error: unknown) => {
       const message = error instanceof Error ? error.message : String(error);
-      return await settle({ exitCode: 1, error: message });
+      return await settle({ exitCode: 1, error: message }, { release: true });
     });
 
   return { session, completion };
+}
+
+export function startManagedBoxExecEffect(
+  input: ManagedBoxExecStartInput,
+): BrewvaEffect.Effect<ManagedBoxExecStartResult, ManagedExecStartError> {
+  return BrewvaEffect.tryPromise({
+    try: () => Promise.resolve(startManagedBoxExec(input)),
+    catch: (error) =>
+      error instanceof BrewvaBoundaryFailure
+        ? error
+        : new BrewvaBoundaryFailure({
+            message: "managedBoxExec.start failed",
+            cause: error,
+          }),
+  });
+}
+
+export function scopedManagedBoxExec(
+  input: ManagedBoxExecStartInput,
+): BrewvaEffect.Effect<ManagedBoxExecStartResult, ManagedExecStartError, BrewvaScope.Scope> {
+  return BrewvaEffect.acquireRelease(startManagedBoxExecEffect(input), (started) =>
+    BrewvaEffect.promise(async () => {
+      if (!started.session.backgrounded && !started.session.exited) {
+        await terminateRunningBoxSession(started.session, true);
+      }
+    }),
+  );
 }
 
 export function markSessionBackgrounded(ownerSessionId: string, sessionId: string): boolean {
@@ -618,6 +938,127 @@ export function getFinishedBoxSession(
   return session;
 }
 
+type ManagedSession =
+  | ManagedExecRunningSession
+  | ManagedExecFinishedSession
+  | ManagedBoxExecRunningSession
+  | ManagedBoxExecFinishedSession;
+
+function getManagedSession(ownerSessionId: string, sessionId: string): ManagedSession | undefined {
+  return (
+    getRunningSession(ownerSessionId, sessionId) ??
+    getRunningBoxSession(ownerSessionId, sessionId) ??
+    getFinishedSession(ownerSessionId, sessionId) ??
+    getFinishedBoxSession(ownerSessionId, sessionId)
+  );
+}
+
+function isManagedSessionRunning(session: ManagedSession | undefined): boolean {
+  return session?.kind === "running" || session?.kind === "box_running";
+}
+
+function isManagedSessionFinished(
+  session: ManagedSession,
+): session is ManagedExecFinishedSession | ManagedBoxExecFinishedSession {
+  return session.kind === "finished" || session.kind === "box_finished";
+}
+
+export function streamManagedSessionOutput(
+  ownerSessionId: string,
+  sessionId: string,
+): BrewvaStream.Stream<ManagedExecOutputEvent, ManagedExecSessionNotFoundError> {
+  return BrewvaStream.callback(
+    (queue) =>
+      BrewvaEffect.gen(function* () {
+        const session = getManagedSession(ownerSessionId, sessionId);
+        if (!session) {
+          BrewvaQueue.failCauseUnsafe(
+            queue,
+            BrewvaCause.fail(new ManagedExecSessionNotFoundError(sessionId)),
+          );
+          return;
+        }
+
+        const offerEvent = async (event: ManagedExecOutputEvent): Promise<boolean> => {
+          if (event.ownerSessionId !== ownerSessionId) {
+            return true;
+          }
+          const offered = await runPromiseAtBoundary(BrewvaQueue.offer(queue, event));
+          if (event.type === "exit") {
+            BrewvaQueue.endUnsafe(queue);
+          }
+          return offered;
+        };
+        const unsubscribe = subscribeManagedSessionOutput(sessionId, offerEvent);
+        yield* addScopedFinalizer(unsubscribe);
+
+        if (isManagedSessionFinished(session)) {
+          void offerEvent({
+            type: "exit",
+            sessionId: session.id,
+            ownerSessionId: session.ownerSessionId,
+            backend: resolveBackend(session),
+            status: session.status,
+            exitCode: session.exitCode,
+            exitSignal: session.exitSignal,
+            emittedAt: "endedAt" in session ? session.endedAt : Date.now(),
+          });
+        }
+      }),
+    { bufferSize: 64, strategy: "suspend" },
+  );
+}
+
+export function consumeManagedSessionOutputEffect<E = never, R = never>(
+  ownerSessionId: string,
+  sessionId: string,
+  sink: (event: ManagedExecOutputEvent) => BrewvaEffect.Effect<void, E, R> | void,
+): BrewvaEffect.Effect<void, ManagedExecSessionNotFoundError | E, R> {
+  return streamManagedSessionOutput(ownerSessionId, sessionId).pipe(
+    BrewvaStream.runForEach((event) => sink(event) ?? BrewvaEffect.void),
+  );
+}
+
+export function waitForManagedSessionActivityEffect(
+  ownerSessionId: string,
+  sessionId: string,
+  timeoutMs: number,
+): BrewvaEffect.Effect<void> {
+  if (timeoutMs <= 0) {
+    return BrewvaEffect.void;
+  }
+  return BrewvaEffect.scoped(
+    BrewvaEffect.gen(function* () {
+      const current = getManagedSession(ownerSessionId, sessionId);
+      if (!isManagedSessionRunning(current) || (current && hasPendingOutput(current))) {
+        return;
+      }
+
+      const activity = yield* BrewvaDeferred.make<void>();
+      const unsubscribe = subscribeManagedSessionOutput(sessionId, (event) => {
+        if (event.ownerSessionId !== ownerSessionId) {
+          return;
+        }
+        BrewvaDeferred.doneUnsafe(activity, BrewvaEffect.succeed(undefined));
+      });
+      yield* addScopedFinalizer(unsubscribe);
+
+      const afterSubscribe = getManagedSession(ownerSessionId, sessionId);
+      if (
+        !isManagedSessionRunning(afterSubscribe) ||
+        (afterSubscribe && hasPendingOutput(afterSubscribe))
+      ) {
+        return;
+      }
+
+      yield* BrewvaEffect.race(
+        BrewvaDeferred.await(activity),
+        BrewvaEffect.sleep(BrewvaDuration.millis(timeoutMs)),
+      );
+    }),
+  );
+}
+
 export function hasPendingOutput(
   session:
     | ManagedExecRunningSession
@@ -696,6 +1137,29 @@ export async function terminateRunningBoxSession(
   } catch {
     return false;
   }
+}
+
+export function terminateRunningSessionEffect(
+  session: ManagedExecRunningSession,
+  force = false,
+): BrewvaEffect.Effect<boolean> {
+  return BrewvaEffect.sync(() => terminateRunningSession(session, force));
+}
+
+export function terminateRunningBoxSessionEffect(
+  session: ManagedBoxExecRunningSession,
+  force = false,
+): BrewvaEffect.Effect<boolean, BrewvaBoundaryFailure> {
+  return BrewvaEffect.tryPromise({
+    try: () => terminateRunningBoxSession(session, force),
+    catch: (error) =>
+      error instanceof BrewvaBoundaryFailure
+        ? error
+        : new BrewvaBoundaryFailure({
+            message: "managedBoxExec.terminate failed",
+            cause: error,
+          }),
+  });
 }
 
 export function deleteManagedSession(ownerSessionId: string, sessionId: string): boolean {

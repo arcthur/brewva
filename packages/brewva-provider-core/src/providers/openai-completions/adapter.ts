@@ -5,7 +5,6 @@ import {
 } from "../../cache/render/openai-completions.js";
 import { supportsXhigh } from "../../catalog/index.js";
 import type {
-  AssistantMessageEventStream,
   Context,
   Model,
   ResolvedOpenAICompletionsCompat,
@@ -63,14 +62,10 @@ function createClient(
 export const streamOpenAICompletions: StreamFunction<
   "openai-completions",
   OpenAICompletionsOptions
-> = (
-  model: Model<"openai-completions">,
-  context: Context,
-  options?: OpenAICompletionsOptions,
-): AssistantMessageEventStream => {
+> = (model: Model<"openai-completions">, context: Context, options?: OpenAICompletionsOptions) => {
   return runProviderStream(
     model,
-    async ({ stream, output, ensureStarted, composer }) => {
+    async ({ stream, output, ensureStarted, composer, signal }) => {
       const apiKey = options?.apiKey || "";
       const compat = resolveOpenAICompletionsCompat(model);
       const cacheRender = resolveOpenAICompletionsCacheRender({
@@ -114,9 +109,9 @@ export const streamOpenAICompletions: StreamFunction<
         };
       }
       const openaiStream = await client.chat.completions.create(asStreamingParams(params), {
-        signal: options?.signal,
+        signal,
       });
-      ensureStarted();
+      await ensureStarted();
       try {
         await processOpenAICompletionsStream(
           openaiStream,
@@ -134,7 +129,7 @@ export const streamOpenAICompletions: StreamFunction<
         }
         throw error;
       }
-      if (options?.signal?.aborted) {
+      if (signal.aborted) {
         throw new Error("Request was aborted");
       }
       if (output.stopReason === "aborted") {
@@ -146,6 +141,7 @@ export const streamOpenAICompletions: StreamFunction<
     },
     {
       signal: options?.signal,
+      sessionId: options?.sessionId,
       startMode: "lazy",
       tools: context.tools,
     },
@@ -155,11 +151,7 @@ export const streamOpenAICompletions: StreamFunction<
 export const streamSimpleOpenAICompletions: StreamFunction<
   "openai-completions",
   SimpleStreamOptions
-> = (
-  model: Model<"openai-completions">,
-  context: Context,
-  options?: SimpleStreamOptions,
-): AssistantMessageEventStream => {
+> = (model: Model<"openai-completions">, context: Context, options?: SimpleStreamOptions) => {
   const apiKey = options?.apiKey;
   if (!apiKey) {
     throw new Error(`No API key for provider: ${model.provider}`);

@@ -1,4 +1,5 @@
 import type { ChildProcess } from "node:child_process";
+import type { BrewvaDeferred, BrewvaEffect, BrewvaScope } from "@brewva/brewva-effect";
 import type { BrewvaWalId, ManagedToolMode } from "@brewva/brewva-runtime";
 import type { RecoveryWalStore } from "@brewva/brewva-runtime/recovery";
 import type {
@@ -16,16 +17,11 @@ import type {
 } from "../session-backend.js";
 
 export interface PendingRequest {
-  resolve: (payload: Record<string, unknown> | undefined) => void;
-  reject: (error: Error) => void;
-  timer: ReturnType<typeof setTimeout>;
+  deferred: BrewvaDeferred.Deferred<Record<string, unknown> | undefined, Error>;
 }
 
 export interface PendingTurn {
-  resolve: (payload: SendPromptOutput) => void;
-  reject: (error: Error) => void;
-  timer: ReturnType<typeof setTimeout>;
-  walId?: BrewvaWalId;
+  deferred: BrewvaDeferred.Deferred<SendPromptOutput, Error>;
 }
 
 export interface QueuedTurn {
@@ -42,6 +38,7 @@ export interface QueuedTurn {
 
 export interface WorkerHandle {
   sessionId: string;
+  scope: BrewvaScope.Scope;
   child: ChildProcess;
   startedAt: number;
   lastActivityAt: number;
@@ -57,9 +54,7 @@ export interface WorkerHandle {
   activeTurnId: string | null;
   activeRecoveryWalIds: Map<string, BrewvaWalId>;
   readyRequestId?: string;
-  readyResolve?: (payload: WorkerReadyPayload) => void;
-  readyReject?: (error: Error) => void;
-  readyTimer?: ReturnType<typeof setTimeout>;
+  readyDeferred?: BrewvaDeferred.Deferred<WorkerReadyPayload, Error>;
   lastHeartbeatAt: number;
 }
 
@@ -86,16 +81,16 @@ export interface WorkerRpcControllerDeps {
 }
 
 export interface TurnQueueControllerDeps {
-  request(
+  requestEffect(
     handle: WorkerHandle,
     message: Exclude<ParentToWorkerMessage, { kind: "bridge.ping" | "init" }>,
     timeoutMs?: number,
-  ): Promise<Record<string, unknown> | undefined>;
-  registerPendingTurn(
+  ): BrewvaEffect.Effect<Record<string, unknown> | undefined, Error>;
+  registerPendingTurnEffect(
     handle: WorkerHandle,
     turnId: string,
     timeoutMs: number,
-  ): Promise<SendPromptOutput>;
+  ): BrewvaEffect.Effect<SendPromptOutput, Error>;
   rejectPendingTurn(handle: WorkerHandle, turnId: string, error: unknown): void;
   rekeyPendingTurn(handle: WorkerHandle, fromTurnId: string, toTurnId: string): void;
   trackRecoveryWalId(handle: WorkerHandle, turnId: string, walId: BrewvaWalId): void;

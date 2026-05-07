@@ -18,8 +18,10 @@ function createCapturingBoxPlane(calls: {
   execs: BoxExecSpec[];
   snapshots: string[];
   releases?: Array<{ kind: string; id: string; reason: string }>;
+  kills?: string[];
   result?: { stdout: string; stderr: string; exitCode: number };
   waitDelayMs?: number;
+  waitNever?: boolean;
 }): BoxPlane {
   const acquiredBoxes: Array<{ id: string; scope: BoxScope; fingerprint: string }> = [];
   return {
@@ -42,6 +44,9 @@ function createCapturingBoxPlane(calls: {
             boxId: "box-captured",
             detached: spec.detach === true,
             async wait() {
+              if (calls.waitNever) {
+                await new Promise(() => {});
+              }
               if (calls.waitDelayMs && calls.waitDelayMs > 0) {
                 await new Promise((resolveNow) => setTimeout(resolveNow, calls.waitDelayMs));
               }
@@ -53,7 +58,9 @@ function createCapturingBoxPlane(calls: {
                 exitCode: calls.result?.exitCode ?? 0,
               };
             },
-            async kill() {},
+            async kill(signal) {
+              calls.kills?.push(signal ?? "SIGTERM");
+            },
           };
         },
         async snapshot(name) {
@@ -415,6 +422,59 @@ describe("exec box routing", () => {
       {
         kind: "session",
         id: sessionId,
+        reason: "task_completed",
+      },
+    ]);
+  });
+
+  test("box foreground execution kills and releases through Effect scope on abort", async () => {
+    const calls = {
+      scopes: [] as BoxScope[],
+      execs: [] as BoxExecSpec[],
+      snapshots: [] as string[],
+      releases: [] as Array<{ kind: string; id: string; reason: string }>,
+      kills: [] as string[],
+      waitNever: true,
+    };
+    const { runtime } = createRuntimeForExecTests({
+      mode: "standard",
+      backend: "box",
+      boxDetach: false,
+      boxPlane: createCapturingBoxPlane(calls),
+    });
+    const execTool = createExecTool({ runtime });
+    const controller = new AbortController();
+
+    const pending = execTool.execute(
+      "tc-exec-box-abort-finalizer",
+      {
+        command: "sleep 100",
+      },
+      controller.signal,
+      undefined,
+      fakeContext("s13-exec-box-abort-finalizer"),
+    );
+
+    const deadline = Date.now() + 1000;
+    while (calls.execs.length === 0 && Date.now() < deadline) {
+      await new Promise((resolveNow) => setTimeout(resolveNow, 10));
+    }
+    expect(calls.execs).toHaveLength(1);
+
+    controller.abort();
+
+    let thrown: unknown;
+    try {
+      await pending;
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(Error);
+    expect(calls.kills).toContain("SIGKILL");
+    expect(calls.releases).toEqual([
+      {
+        kind: "session",
+        id: "s13-exec-box-abort-finalizer",
         reason: "task_completed",
       },
     ]);

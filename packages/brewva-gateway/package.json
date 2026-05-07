@@ -28,6 +28,7 @@
   "dependencies": {
     "@brewva/brewva-channels-telegram": "workspace:*",
     "@brewva/brewva-deliberation": "workspace:*",
+    "@brewva/brewva-effect": "workspace:*",
     "@brewva/brewva-ingress": "workspace:*",
     "@brewva/brewva-mcp-adapter": "workspace:*",
     "@brewva/brewva-provider-core": "workspace:*",

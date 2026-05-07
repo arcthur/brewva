@@ -1,4 +1,13 @@
 import {
+  BrewvaCancelled,
+  BrewvaDuration,
+  BrewvaEffect,
+  BrewvaTimeout,
+  fromAbortableBoundaryPromise,
+  runEdgeOperation,
+  type BrewvaBoundaryError,
+} from "@brewva/brewva-effect";
+import {
   createToolCatalog,
   type JsonSchema,
   type ToolCatalog,
@@ -50,6 +59,8 @@ export type McpAdapterEvent =
   | { type: "server_disconnected"; serverId?: string }
   | { type: "tool_list_refreshed"; serverId?: string; toolCount: number }
   | { type: "tool_call_failed"; serverId?: string; toolName: string; error: string };
+
+export type McpAdapterRuntimeError = BrewvaBoundaryError | BrewvaTimeout;
 
 type McpAdapterEventWithoutServerId =
   | { type: "server_connected" }
@@ -171,50 +182,73 @@ export class McpToolCatalogAdapter {
       : undefined;
   }
 
-  async #withOperationGuard<T>(
-    operation: Promise<T>,
+  #withMcpOperationGuardEffect<T>(
+    _operation: "connect" | "list_tools" | "call_tool" | "close",
+    run: (signal: AbortSignal) => Promise<T>,
     options: { signal?: AbortSignal; timeoutMs?: number } = {},
-  ): Promise<T> {
+  ): BrewvaEffect.Effect<T, McpAdapterRuntimeError> {
     if (options.signal?.aborted) {
-      throw new Error("MCP operation was aborted");
+      return BrewvaEffect.fail(
+        new BrewvaCancelled({
+          message: "MCP operation was aborted",
+        }),
+      );
     }
     const timeoutMs = this.#operationTimeoutMs(options.timeoutMs);
-    if (!timeoutMs && !options.signal) {
-      return await operation;
+    const guarded = fromAbortableBoundaryPromise(run, options.signal);
+    const abortable = options.signal
+      ? BrewvaEffect.raceFirst(
+          guarded,
+          fromAbortableBoundaryPromise<never>(
+            (signal) =>
+              new Promise<never>((_resolve, reject) => {
+                const rejectAborted = () =>
+                  reject(
+                    new BrewvaCancelled({
+                      message: "MCP operation was aborted",
+                    }),
+                  );
+                if (signal.aborted) {
+                  rejectAborted();
+                  return;
+                }
+                signal.addEventListener("abort", rejectAborted, { once: true });
+              }),
+            options.signal,
+          ),
+        )
+      : guarded;
+    if (!timeoutMs) {
+      return abortable;
     }
+    const timedOut = BrewvaEffect.sleep(BrewvaDuration.millis(timeoutMs)).pipe(
+      BrewvaEffect.andThen(
+        BrewvaEffect.fail(
+          new BrewvaTimeout({
+            message: `MCP operation timed out after ${timeoutMs}ms`,
+            timeoutMs,
+          }),
+        ),
+      ),
+    );
+    return BrewvaEffect.raceFirst(abortable, timedOut);
+  }
 
-    return await new Promise<T>((resolve, reject) => {
-      let settled = false;
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      const cleanup = () => {
-        if (timer) {
-          clearTimeout(timer);
-        }
-        options.signal?.removeEventListener("abort", onAbort);
-      };
-      const settle = (callback: () => void) => {
-        if (settled) {
-          return;
-        }
-        settled = true;
-        cleanup();
-        callback();
-      };
-      const onAbort = () => settle(() => reject(new Error("MCP operation was aborted")));
-      if (options.signal) {
-        options.signal.addEventListener("abort", onAbort, { once: true });
-      }
-      if (timeoutMs) {
-        timer = setTimeout(
-          () => settle(() => reject(new Error(`MCP operation timed out after ${timeoutMs}ms`))),
-          timeoutMs,
-        );
-      }
-      operation.then(
-        (value) => settle(() => resolve(value)),
-        (error: unknown) => settle(() => reject(error)),
-      );
-    });
+  async #withOperationGuard<T>(
+    operation: "connect" | "list_tools" | "call_tool" | "close",
+    run: (signal: AbortSignal) => Promise<T>,
+    options: { signal?: AbortSignal; timeoutMs?: number } = {},
+  ): Promise<T> {
+    return await runEdgeOperation(
+      `brewva.mcp.adapter.${operation}`,
+      this.#withMcpOperationGuardEffect(operation, run, options),
+      {
+        fields: {
+          operation,
+          serverId: this.#serverId,
+        },
+      },
+    );
   }
 
   async connect(): Promise<void> {
@@ -223,7 +257,7 @@ export class McpToolCatalogAdapter {
     }
     if (!this.#connectPromise) {
       this.#connectPromise = (async () => {
-        await this.#withOperationGuard(
+        await this.#withOperationGuard("connect", () =>
           this.#client.connect(createMcpTransport(this.#transportConfig)),
         );
         this.#connected = true;
@@ -243,7 +277,7 @@ export class McpToolCatalogAdapter {
     const seenNames = new Set<string>();
     let cursor: string | undefined;
     do {
-      const page = await this.#withOperationGuard(
+      const page = await this.#withOperationGuard("list_tools", () =>
         this.#client.listTools(cursor ? { cursor } : undefined),
       );
       for (const tool of page.tools) {
@@ -268,7 +302,11 @@ export class McpToolCatalogAdapter {
   async callTool(input: McpToolCall, options: McpToolCallOptions = {}): Promise<McpToolCallResult> {
     await this.connect();
     try {
-      return await this.#withOperationGuard(this.#client.callTool(input, options), options);
+      return await this.#withOperationGuard(
+        "call_tool",
+        (signal) => this.#client.callTool(input, { ...options, signal }),
+        options,
+      );
     } catch (error) {
       this.#emit({
         type: "tool_call_failed",
@@ -284,7 +322,7 @@ export class McpToolCatalogAdapter {
       return;
     }
     try {
-      await this.#withOperationGuard(this.#client.close());
+      await this.#withOperationGuard("close", () => this.#client.close());
     } finally {
       this.#connected = false;
       this.#emit({ type: "server_disconnected" });

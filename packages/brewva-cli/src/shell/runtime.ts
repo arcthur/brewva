@@ -1,3 +1,9 @@
+import {
+  BrewvaEffect,
+  startScopedSchedule,
+  startScopedTimeout,
+  type ScopedScheduleHandle,
+} from "@brewva/brewva-effect";
 import { type SessionQuestionRequest } from "@brewva/brewva-gateway";
 import { normalizeQuestionPrompt } from "@brewva/brewva-substrate/host-api";
 import type {
@@ -254,8 +260,8 @@ export class CliShellRuntime {
     sessions: [],
   };
   #unsubscribeSession: (() => void) | undefined;
-  #pollTimer: ReturnType<typeof setInterval> | undefined;
-  #statusTimer: ReturnType<typeof setTimeout> | undefined;
+  #pollTimer: ScopedScheduleHandle | undefined;
+  #statusTimer: { close(): Promise<void> } | undefined;
   #queuedStatusActions: CliShellAction[] = [];
   #resolveExit: (() => void) | undefined;
   readonly #exitPromise: Promise<void>;
@@ -592,11 +598,15 @@ export class CliShellRuntime {
     this.#started = true;
     this.initializeState();
     this.mountSession(this.#bundle);
-    this.#pollTimer = setInterval(() => {
-      void this.runShellEffects([
-        { type: "operator.refresh", sessionGeneration: this.#sessionGeneration },
-      ]);
-    }, this.options.operatorPollIntervalMs ?? 750);
+    this.#pollTimer = startScopedSchedule({
+      intervalMs: this.options.operatorPollIntervalMs ?? 750,
+      run: () =>
+        BrewvaEffect.promise(() =>
+          this.runShellEffects([
+            { type: "operator.refresh", sessionGeneration: this.#sessionGeneration },
+          ]),
+        ),
+    });
     await this.runShellEffects([
       { type: "operator.refresh", sessionGeneration: this.#sessionGeneration },
     ]);
@@ -623,12 +633,12 @@ export class CliShellRuntime {
     this.#disposed = true;
     this.#started = false;
     this.dismissPendingInteractiveQuestionRequests();
-    if (this.#pollTimer) {
-      clearInterval(this.#pollTimer);
-    }
-    if (this.#statusTimer) {
-      clearTimeout(this.#statusTimer);
-    }
+    const pollTimer = this.#pollTimer;
+    const statusTimer = this.#statusTimer;
+    this.#pollTimer = undefined;
+    this.#statusTimer = undefined;
+    void pollTimer?.close();
+    void statusTimer?.close();
     this.#unsubscribeSession?.();
     this.#listeners.clear();
     this.#resolveExit?.();
@@ -1307,11 +1317,15 @@ export class CliShellRuntime {
     if (this.#statusTimer) {
       return;
     }
-    this.#statusTimer = setTimeout(() => {
-      this.#statusTimer = undefined;
-      const queued = this.#queuedStatusActions.splice(0);
-      this.commit(queued, { debounceStatus: false });
-    }, delayMs);
+    this.#statusTimer = startScopedTimeout({
+      delayMs,
+      run: () =>
+        BrewvaEffect.sync(() => {
+          this.#statusTimer = undefined;
+          const queued = this.#queuedStatusActions.splice(0);
+          this.commit(queued, { debounceStatus: false });
+        }),
+    });
   }
 
   private syncSnapshotOverlay(snapshot: OperatorSurfaceSnapshot): void {

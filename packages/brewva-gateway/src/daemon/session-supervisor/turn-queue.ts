@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { runPromiseAtBoundary } from "@brewva/brewva-effect";
 import type { SendPromptOutput } from "../session-backend.js";
 import { extractBusyTurnId } from "./worker-rpc.js";
 import { type TurnQueueControllerDeps, type WorkerHandle } from "./worker-state.js";
@@ -32,7 +33,13 @@ export class SessionTurnQueueCoordinator {
     let completionPromise: Promise<SendPromptOutput> | undefined;
     try {
       completionPromise = queued.waitForCompletion
-        ? this.deps.registerPendingTurn(handle, queued.requestedTurnId, WORKER_RPC_TIMEOUT_MS)
+        ? runPromiseAtBoundary(
+            this.deps.registerPendingTurnEffect(
+              handle,
+              queued.requestedTurnId,
+              WORKER_RPC_TIMEOUT_MS,
+            ),
+          )
         : undefined;
     } catch (error) {
       handle.activeTurnId = null;
@@ -61,17 +68,19 @@ export class SessionTurnQueueCoordinator {
     let agentSessionId = handle.requestedAgentSessionId;
 
     try {
-      const ackPayload = await this.deps.request(handle, {
-        kind: "send",
-        requestId: randomUUID(),
-        payload: {
-          prompt: queued.prompt,
-          turnId: queued.requestedTurnId,
-          walReplayId: queued.walReplayId,
-          trigger: queued.trigger,
-          source: queued.source,
-        },
-      });
+      const ackPayload = await runPromiseAtBoundary(
+        this.deps.requestEffect(handle, {
+          kind: "send",
+          requestId: randomUUID(),
+          payload: {
+            prompt: queued.prompt,
+            turnId: queued.requestedTurnId,
+            walReplayId: queued.walReplayId,
+            trigger: queued.trigger,
+            source: queued.source,
+          },
+        }),
+      );
 
       if (
         ackPayload &&

@@ -72,7 +72,7 @@ describe("gateway session watchdog integration", () => {
         idleMs: 2_001,
       });
 
-      watchdog.stop();
+      await watchdog.stop();
     } finally {
       restoreNow();
       result.session.dispose();

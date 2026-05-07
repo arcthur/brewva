@@ -97,7 +97,7 @@ describe("task progress watchdog", () => {
     }
   });
 
-  test("start schedules a single poller, stop clears it, and threshold sanitization clamps overrides", () => {
+  test("start schedules a single poller, stop clears it, and threshold sanitization clamps overrides", async () => {
     let now = 1_725_000_000_000;
     let scheduledCallback: (() => void) | null = null;
     let scheduledDelayMs = 0;
@@ -172,8 +172,8 @@ describe("task progress watchdog", () => {
         decision: "continue",
       });
 
-      watchdog.stop();
-      watchdog.stop();
+      await watchdog.stop();
+      await watchdog.stop();
       expect(stopCalls).toBe(1);
     } finally {
       restoreNow();

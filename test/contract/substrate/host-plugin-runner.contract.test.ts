@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
+import { BrewvaDuration, BrewvaEffect } from "@brewva/brewva-effect";
 import {
   createBrewvaHostPluginRunner,
+  defineEffectInternalHostPlugin,
   defineInternalHostPlugin,
   type BrewvaHostCommandContext,
   type BrewvaHostContext,
@@ -10,7 +12,7 @@ import {
 import type { BrewvaPromptContentPart } from "@brewva/brewva-substrate/prompt";
 import { Type } from "@sinclair/typebox";
 
-function createHostContext(): BrewvaHostContext {
+function createHostContext(options: { signal?: AbortSignal } = {}): BrewvaHostContext {
   return {
     ui: {
       select: async () => undefined,
@@ -43,7 +45,7 @@ function createHostContext(): BrewvaHostContext {
     modelRegistry: undefined,
     model: undefined,
     isIdle: () => true,
-    signal: undefined,
+    signal: options.signal,
     abort: () => undefined,
     hasPendingMessages: () => false,
     shutdown: () => undefined,
@@ -90,6 +92,128 @@ function testPlugin(
 }
 
 describe("substrate host plugin runner", () => {
+  test("adapts Effect-native runtime plugin handlers without exposing runtime layers", async () => {
+    const runner = await createBrewvaHostPluginRunner({
+      plugins: [
+        defineEffectInternalHostPlugin({
+          name: "effect-input-plugin",
+          capabilities: ["input_parts.write"],
+          register(api) {
+            api.onEffect("input", (event) =>
+              BrewvaEffect.succeed({
+                action: "transform" as const,
+                parts: textPrompt(`effect:${event.text}`),
+              }),
+            );
+          },
+        }),
+      ],
+      actions: {
+        sendMessage: () => undefined,
+        sendUserMessage: () => undefined,
+        getActiveTools: () => [],
+        getAllTools: () => [],
+        setActiveTools: () => undefined,
+        refreshTools: () => undefined,
+      },
+    });
+
+    const result = await runner.emitInput(
+      {
+        type: "input",
+        text: "hello",
+        parts: textPrompt("hello"),
+        source: "interactive",
+      },
+      createHostContext(),
+    );
+
+    expect(result).toEqual({ action: "transform", parts: textPrompt("effect:hello") });
+  });
+
+  test("interrupts Effect-native runtime plugin handlers with the host signal", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const runner = await createBrewvaHostPluginRunner({
+      plugins: [
+        defineEffectInternalHostPlugin({
+          name: "effect-abort-plugin",
+          capabilities: ["input_parts.write"],
+          register(api) {
+            api.onEffect("input", () =>
+              BrewvaEffect.sleep(BrewvaDuration.millis(50)).pipe(
+                BrewvaEffect.andThen(
+                  BrewvaEffect.succeed({
+                    action: "transform" as const,
+                    parts: textPrompt("should-not-commit"),
+                  }),
+                ),
+              ),
+            );
+          },
+        }),
+      ],
+      actions: {
+        sendMessage: () => undefined,
+        sendUserMessage: () => undefined,
+        getActiveTools: () => [],
+        getAllTools: () => [],
+        setActiveTools: () => undefined,
+        refreshTools: () => undefined,
+      },
+    });
+
+    return expect(
+      runner.emitInput(
+        {
+          type: "input",
+          text: "hello",
+          parts: textPrompt("hello"),
+          source: "interactive",
+        },
+        createHostContext({ signal: controller.signal }),
+      ),
+    ).rejects.toThrow();
+  });
+
+  test("interrupts legacy runtime plugin callbacks with the host signal", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const runner = await createBrewvaHostPluginRunner({
+      plugins: [
+        testPlugin("legacy-abort-plugin", ["input_parts.write"], (api) => {
+          api.on("input", async () => {
+            await new Promise((resolve) => setTimeout(resolve, 50));
+            return {
+              action: "transform" as const,
+              parts: textPrompt("should-not-commit"),
+            };
+          });
+        }),
+      ],
+      actions: {
+        sendMessage: () => undefined,
+        sendUserMessage: () => undefined,
+        getActiveTools: () => [],
+        getAllTools: () => [],
+        setActiveTools: () => undefined,
+        refreshTools: () => undefined,
+      },
+    });
+
+    return expect(
+      runner.emitInput(
+        {
+          type: "input",
+          text: "hello",
+          parts: textPrompt("hello"),
+          source: "interactive",
+        },
+        createHostContext({ signal: controller.signal }),
+      ),
+    ).rejects.toThrow();
+  });
+
   test("initializes manifest plugins, tracks registrations, and forwards callbacks", async () => {
     const registeredTools: string[] = [];
     const registeredCommands: string[] = [];

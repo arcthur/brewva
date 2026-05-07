@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@brewva/brewva-channels-telegram": "workspace:*",
+    "@brewva/brewva-effect": "workspace:*",
     "lru-cache": "^11.3.5"
   },
   "engines": {

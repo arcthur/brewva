@@ -164,6 +164,18 @@ function isOpenTuiInteractiveSupported(platform: PlatformTarget): boolean {
   return platform.target !== "bun-linux-x64-musl" && platform.target !== "bun-linux-arm64-musl";
 }
 
+async function maybeAdHocSignDarwinBinary(
+  platform: PlatformTarget,
+  outfile: string,
+): Promise<void> {
+  if (!platform.target.startsWith("bun-darwin") || process.platform !== "darwin") {
+    return;
+  }
+  await $`codesign --remove-signature ${outfile}`.quiet().nothrow();
+  await $`codesign --force --deep --sign - --timestamp=none ${outfile}`.quiet();
+  console.log("  signed: ad-hoc");
+}
+
 function resolveRequestedPlatforms(): PlatformTarget[] {
   const raw = process.env[BREWVA_BINARY_TARGETS_ENV];
   if (!raw || raw.trim().length === 0) {
@@ -453,6 +465,7 @@ async function buildPlatform(platform: PlatformTarget): Promise<boolean> {
       return false;
     }
 
+    await maybeAdHocSignDarwinBinary(platform, outfile);
     await copyRuntimeAssets(outDir, platform);
     await maybeRunOpenTuiSmoke(platform, outfile);
 

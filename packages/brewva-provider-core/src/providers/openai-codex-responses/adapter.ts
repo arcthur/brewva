@@ -1,7 +1,12 @@
 import type * as NodeOs from "node:os";
+import {
+  BrewvaEffect,
+  fromAbortableBoundaryPromise,
+  retryWithBrewvaPolicy,
+  runPromiseAtBoundary,
+} from "@brewva/brewva-effect";
 import { supportsXhigh } from "../../catalog/index.js";
 import type {
-  AssistantMessageEventStream,
   Context,
   Model,
   SimpleStreamOptions,
@@ -36,6 +41,20 @@ const MAX_RETRIES = 3;
 const BASE_DELAY_MS = 1000;
 const OPENAI_BETA_RESPONSES_WEBSOCKETS = "responses_websockets=2026-02-06";
 
+class CodexRetryableRequestError extends Error {
+  constructor(readonly original: Error) {
+    super(original.message);
+    this.name = "CodexRetryableRequestError";
+  }
+}
+
+class CodexNonRetryableRequestError extends Error {
+  constructor(readonly original: Error) {
+    super(original.message);
+    this.name = "CodexNonRetryableRequestError";
+  }
+}
+
 export function resolveCodexTransport(
   options?: Pick<OpenAICodexResponsesOptions, "transport">,
 ): Transport {
@@ -64,18 +83,25 @@ function isRetryableError(status: number, errorText: string): boolean {
   );
 }
 
-function sleep(ms: number, signal?: AbortSignal): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (signal?.aborted) {
-      reject(new Error("Request was aborted"));
-      return;
-    }
-    const timeout = setTimeout(resolve, ms);
-    signal?.addEventListener("abort", () => {
-      clearTimeout(timeout);
-      reject(new Error("Request was aborted"));
-    });
-  });
+function toError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(String(error));
+}
+
+function isAbortError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    (error.name === "AbortError" || error.message === "Request was aborted")
+  );
+}
+
+function unwrapCodexRequestError(error: unknown): Error {
+  if (
+    error instanceof CodexRetryableRequestError ||
+    error instanceof CodexNonRetryableRequestError
+  ) {
+    return error.original;
+  }
+  return toError(error);
 }
 
 async function parseErrorResponse(
@@ -192,6 +218,76 @@ function buildWebSocketHeaders(
   return headers;
 }
 
+function fetchCodexSseResponseEffect(input: {
+  url: string;
+  headers: Headers;
+  bodyJson: string;
+  signal: AbortSignal;
+}): BrewvaEffect.Effect<Response, Error> {
+  const attempt = BrewvaEffect.gen(function* () {
+    if (input.signal.aborted) {
+      return yield* BrewvaEffect.fail(
+        new CodexNonRetryableRequestError(new Error("Request was aborted")),
+      );
+    }
+
+    const response = yield* fromAbortableBoundaryPromise(
+      (abortSignal) =>
+        fetch(input.url, {
+          method: "POST",
+          headers: input.headers,
+          body: input.bodyJson,
+          signal: abortSignal,
+        }),
+      input.signal,
+    ).pipe(BrewvaEffect.mapError(toError));
+
+    if (response.ok) {
+      return response;
+    }
+
+    const errorText = yield* fromAbortableBoundaryPromise(() => response.text(), input.signal).pipe(
+      BrewvaEffect.mapError(toError),
+    );
+    const info = yield* fromAbortableBoundaryPromise(
+      () =>
+        parseErrorResponse(
+          new Response(errorText, {
+            status: response.status,
+            statusText: response.statusText,
+          }),
+        ),
+      input.signal,
+    ).pipe(BrewvaEffect.mapError(toError));
+    const requestError = new Error(info.friendlyMessage || info.message);
+
+    if (isRetryableError(response.status, errorText)) {
+      return yield* BrewvaEffect.fail(new CodexRetryableRequestError(requestError));
+    }
+    return yield* BrewvaEffect.fail(new CodexNonRetryableRequestError(requestError));
+  }).pipe(
+    BrewvaEffect.catch((error) => {
+      if (
+        error instanceof CodexRetryableRequestError ||
+        error instanceof CodexNonRetryableRequestError
+      ) {
+        return BrewvaEffect.fail(error);
+      }
+      const normalized = toError(error);
+      if (isAbortError(normalized) || normalized.message.includes("usage limit")) {
+        return BrewvaEffect.fail(new CodexNonRetryableRequestError(normalized));
+      }
+      return BrewvaEffect.fail(new CodexRetryableRequestError(normalized));
+    }),
+  );
+
+  return retryWithBrewvaPolicy(attempt, {
+    maxRetries: MAX_RETRIES,
+    baseDelayMs: BASE_DELAY_MS,
+    while: (error) => error instanceof CodexRetryableRequestError,
+  }).pipe(BrewvaEffect.mapError(unwrapCodexRequestError));
+}
+
 export const streamOpenAICodexResponses: StreamFunction<
   "openai-codex-responses",
   OpenAICodexResponsesOptions
@@ -199,10 +295,10 @@ export const streamOpenAICodexResponses: StreamFunction<
   model: Model<"openai-codex-responses">,
   context: Context,
   options?: OpenAICodexResponsesOptions,
-): AssistantMessageEventStream => {
+) => {
   return runProviderStream(
     model,
-    async ({ stream, output, ensureStarted, composer }) => {
+    async ({ stream, output, ensureStarted, composer, signal }) => {
       const apiKey = options?.apiKey || "";
       if (!apiKey) {
         throw new Error(`No API key for provider: ${model.provider}`);
@@ -235,6 +331,7 @@ export const streamOpenAICodexResponses: StreamFunction<
       );
       const bodyJson = JSON.stringify(body);
       const transport = resolveCodexTransport(options);
+      const linkedOptions: OpenAICodexResponsesOptions = { ...options, signal };
 
       if (shouldAttemptCodexWebSocketTransport(transport, options?.sessionId)) {
         let websocketStarted = false;
@@ -250,10 +347,10 @@ export const streamOpenAICodexResponses: StreamFunction<
             () => {
               websocketStarted = true;
             },
-            options,
+            linkedOptions,
           );
 
-          if (options?.signal?.aborted) {
+          if (signal.aborted) {
             throw new Error("Request was aborted");
           }
           return;
@@ -265,68 +362,26 @@ export const streamOpenAICodexResponses: StreamFunction<
         }
       }
 
-      let response: Response | undefined;
-      let lastError: Error | undefined;
-
-      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-        if (options?.signal?.aborted) {
-          throw new Error("Request was aborted");
-        }
-
-        try {
-          response = await fetch(resolveCodexUrl(model.baseUrl), {
-            method: "POST",
-            headers: sseHeaders,
-            body: bodyJson,
-            signal: options?.signal,
-          });
-
-          if (response.ok) {
-            break;
-          }
-
-          const errorText = await response.text();
-          if (attempt < MAX_RETRIES && isRetryableError(response.status, errorText)) {
-            const delayMs = BASE_DELAY_MS * 2 ** attempt;
-            await sleep(delayMs, options?.signal);
-            continue;
-          }
-
-          const fakeResponse = new Response(errorText, {
-            status: response.status,
-            statusText: response.statusText,
-          });
-          const info = await parseErrorResponse(fakeResponse);
-          throw new Error(info.friendlyMessage || info.message);
-        } catch (error) {
-          if (error instanceof Error) {
-            if (error.name === "AbortError" || error.message === "Request was aborted") {
-              throw new Error("Request was aborted");
-            }
-          }
-          lastError = error instanceof Error ? error : new Error(String(error));
-          if (attempt < MAX_RETRIES && !lastError.message.includes("usage limit")) {
-            const delayMs = BASE_DELAY_MS * 2 ** attempt;
-            await sleep(delayMs, options?.signal);
-            continue;
-          }
-          throw lastError;
-        }
-      }
-
-      if (!response?.ok) {
-        throw lastError ?? new Error("Failed after retries");
-      }
+      const response = await runPromiseAtBoundary(
+        fetchCodexSseResponseEffect({
+          url: resolveCodexUrl(model.baseUrl),
+          headers: sseHeaders,
+          bodyJson,
+          signal,
+        }),
+        { signal },
+      );
 
       if (!response.body) {
         throw new Error("No response body");
       }
 
-      ensureStarted();
+      await ensureStarted();
       await processStream(response, output, stream, model, composer.toolCalls);
     },
     {
       signal: options?.signal,
+      sessionId: options?.sessionId,
       tools: context.tools,
     },
   );
@@ -335,11 +390,7 @@ export const streamOpenAICodexResponses: StreamFunction<
 export const streamSimpleOpenAICodexResponses: StreamFunction<
   "openai-codex-responses",
   SimpleStreamOptions
-> = (
-  model: Model<"openai-codex-responses">,
-  context: Context,
-  options?: SimpleStreamOptions,
-): AssistantMessageEventStream => {
+> = (model: Model<"openai-codex-responses">, context: Context, options?: SimpleStreamOptions) => {
   const apiKey = options?.apiKey;
   if (!apiKey) {
     throw new Error(`No API key for provider: ${model.provider}`);

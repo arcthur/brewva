@@ -38,6 +38,27 @@ interface BrewvaRuntime {
 Identity fields are read-only runtime facts. `config` is a deep-readonly
 snapshot after normalization.
 
+## Internal Effect Runtime Spine
+
+Runtime internals are composed through Effect layers behind the public facade.
+The internal subpath `@brewva/brewva-runtime/runtime-effect` exposes
+implementation-only helpers for running Effect programs against the runtime
+spine:
+
+- `getRuntimeEffectSpine(...)`
+- `runRuntimeEffect(...)`
+- `runRuntimeEffectSync(...)`
+
+Those helpers expose implementation services such as runtime identity,
+readonly resolved config, security config, infrastructure config, schedule
+config, core dependencies, kernel context, service dependencies, and lazy
+factory services. They do not expose `runtime.authority`, `runtime.inspect`,
+or `runtime.maintain`, and they do not grant tool authority.
+
+Capability-scoped runtime ports remain the only access path for hosted tools
+and plugins. Effect layers track implementation dependencies; capability ports
+track authority.
+
 ## Transaction Boundary
 
 The stable authority-bearing transaction boundary is

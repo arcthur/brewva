@@ -1,7 +1,7 @@
 import type {
   Api,
-  AssistantMessageEventStream,
   Context,
+  ProviderAssistantMessageStream,
   ProviderSessionResources,
   SimpleStreamOptions,
   StreamFunction,
@@ -17,13 +17,13 @@ export type ApiStreamFunction = (
   model: import("../contracts/index.js").Model<Api>,
   context: Context,
   options?: StreamOptions,
-) => AssistantMessageEventStream;
+) => ProviderAssistantMessageStream;
 
 export type ApiStreamSimpleFunction = (
   model: import("../contracts/index.js").Model<Api>,
   context: Context,
   options?: SimpleStreamOptions,
-) => AssistantMessageEventStream;
+) => ProviderAssistantMessageStream;
 
 export interface ApiProvider<
   TApi extends Api = Api,

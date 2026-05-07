@@ -1,23 +1,41 @@
+import {
+  BrewvaEffect,
+  fromAbortableBoundaryPromise,
+  withBrewvaObservability,
+} from "@brewva/brewva-effect";
 import type {
   ProviderCachePolicy,
   ProviderCacheRenderResult,
   ProviderPayloadMetadata,
+  ProviderStreamError,
+  ProviderRuntime,
   ResolvedFileContent,
 } from "@brewva/brewva-provider-core/contracts";
 import type { BrewvaRegisteredModel } from "../contracts/provider.js";
 import { streamAssistantResponse } from "./assistant-stream.js";
+import {
+  BrewvaToolInvocationScope,
+  BrewvaTurnScope,
+  createTurnEventDispatcher,
+  type BrewvaTurnRuntimeError,
+  type BrewvaTurnEventDispatcher,
+  type BrewvaTurnLoopEventSink,
+} from "./effect-runtime.js";
 import {
   applyPendingSteerToLastCommittedToolResult,
   appendSteerToToolResultMessage,
   dropPendingSteer,
   toolResultMessageContainsSteer,
 } from "./steer.js";
-import { emitToolCallMessageOutcome, executeToolCalls } from "./tool-runner.js";
+import {
+  emitToolCallMessageOutcome,
+  executeToolCalls,
+  type ToolCallOutcomeEnvelope,
+} from "./tool-runner.js";
 import type {
   BrewvaTurnLoopAfterToolCallContext,
   BrewvaTurnLoopBeforeToolCallContext,
   BrewvaTurnLoopContext,
-  BrewvaTurnLoopEvent,
   BrewvaTurnLoopMessage,
   BrewvaTurnLoopResolveRequestAuth,
   BrewvaTurnLoopStreamFunction,
@@ -30,9 +48,22 @@ import type {
   BrewvaTurnLoopStopAfterToolResults,
 } from "./types.js";
 
-export type BrewvaTurnLoopEventSink = (
-  event: BrewvaTurnLoopEvent,
-) => Promise<BrewvaTurnLoopEvent | void> | BrewvaTurnLoopEvent | void;
+type BrewvaTurnLoopRuntimeError = BrewvaTurnRuntimeError | ProviderStreamError;
+type PublicTurnRuntimeEffect<A> = BrewvaEffect.Effect<
+  A,
+  BrewvaTurnLoopRuntimeError,
+  ProviderRuntime
+>;
+type InternalTurnRuntimeEffect<A> = BrewvaEffect.Effect<
+  A,
+  BrewvaTurnLoopRuntimeError,
+  ProviderRuntime | BrewvaTurnScope
+>;
+type ToolScopedTurnRuntimeEffect<A> = BrewvaEffect.Effect<
+  A,
+  BrewvaTurnLoopRuntimeError,
+  ProviderRuntime | BrewvaTurnScope | BrewvaToolInvocationScope
+>;
 
 export interface BrewvaTurnLoopConfig {
   model: BrewvaRegisteredModel;
@@ -47,7 +78,7 @@ export interface BrewvaTurnLoopConfig {
     payload: unknown,
     model: BrewvaRegisteredModel,
     metadata?: ProviderPayloadMetadata,
-  ) => Promise<unknown>;
+  ) => unknown;
   transport: BrewvaTurnLoopTransport;
   thinkingBudgets?: BrewvaTurnLoopThinkingBudgets;
   maxRetryDelayMs?: number;
@@ -75,182 +106,273 @@ export interface BrewvaTurnLoopConfig {
     messages: BrewvaTurnLoopMessage[],
     signal?: AbortSignal,
   ) => Promise<BrewvaTurnLoopMessage[]>;
-  getQueuedMessages?: () => Promise<BrewvaTurnLoopMessage[]>;
-  getFollowUpMessages?: () => Promise<BrewvaTurnLoopMessage[]>;
-  consumePendingSteer?: () => Promise<string | undefined>;
+  getQueuedMessagesEffect?: () => BrewvaEffect.Effect<
+    BrewvaTurnLoopMessage[],
+    BrewvaTurnRuntimeError,
+    BrewvaTurnScope
+  >;
+  getFollowUpMessagesEffect?: () => BrewvaEffect.Effect<
+    BrewvaTurnLoopMessage[],
+    BrewvaTurnRuntimeError,
+    BrewvaTurnScope
+  >;
+  consumePendingSteerEffect?: () => BrewvaEffect.Effect<
+    string | undefined,
+    BrewvaTurnRuntimeError,
+    BrewvaTurnScope
+  >;
   getCurrentContext?: () => Pick<BrewvaTurnLoopContext, "systemPrompt" | "tools">;
   resolveRequestAuth?: BrewvaTurnLoopResolveRequestAuth;
   toolExecution?: "parallel" | "sequential";
   shouldStopAfterToolResults?: BrewvaTurnLoopStopAfterToolResults;
 }
 
-export async function runBrewvaTurnLoop(
+export function runBrewvaTurnLoop(
   prompts: BrewvaTurnLoopMessage[],
   context: BrewvaTurnLoopContext,
   config: BrewvaTurnLoopConfig,
   emit: BrewvaTurnLoopEventSink,
   signal?: AbortSignal,
-): Promise<BrewvaTurnLoopMessage[]> {
-  const newMessages: BrewvaTurnLoopMessage[] = [...prompts];
-  const currentContext: BrewvaTurnLoopContext = {
-    ...context,
-    messages: [...context.messages, ...prompts],
-    tools: [...context.tools],
+): PublicTurnRuntimeEffect<BrewvaTurnLoopMessage[]> {
+  const observability = {
+    sessionId: config.sessionId,
+    model: config.model.id,
+    provider: config.model.provider,
   };
 
-  await emit({ type: "agent_start" });
-  await emit({ type: "turn_start" });
-  for (const prompt of prompts) {
-    await emit({ type: "message_start", message: prompt });
-    await emit({ type: "message_end", message: prompt });
-  }
+  return BrewvaEffect.scoped(
+    BrewvaEffect.gen(function* () {
+      yield* BrewvaTurnScope;
+      const dispatcher = yield* createTurnEventDispatcher(emit);
+      const newMessages: BrewvaTurnLoopMessage[] = [...prompts];
+      const currentContext: BrewvaTurnLoopContext = {
+        ...context,
+        messages: [...context.messages, ...prompts],
+        tools: [...context.tools],
+      };
 
-  await runLoop(currentContext, newMessages, config, signal, emit);
-  return newMessages;
+      yield* dispatcher.emit({ type: "agent_start" });
+      yield* dispatcher.emit({ type: "turn_start" });
+      for (const prompt of prompts) {
+        yield* dispatcher.emit({ type: "message_start", message: prompt });
+        yield* dispatcher.emit({ type: "message_end", message: prompt });
+      }
+
+      yield* runLoop(currentContext, newMessages, config, signal, dispatcher);
+      return newMessages;
+    }),
+  ).pipe(
+    BrewvaEffect.provide(BrewvaTurnScope.layer({ sessionId: config.sessionId })),
+    withBrewvaObservability("brewva.turn.loop", observability),
+  );
 }
 
-async function runLoop(
+function runLoop(
   currentContext: BrewvaTurnLoopContext,
   newMessages: BrewvaTurnLoopMessage[],
   config: BrewvaTurnLoopConfig,
   signal: AbortSignal | undefined,
-  emit: BrewvaTurnLoopEventSink,
-): Promise<void> {
-  let firstTurn = true;
-  let pendingMessages = (await config.getQueuedMessages?.()) ?? [];
+  dispatcher: BrewvaTurnEventDispatcher,
+): InternalTurnRuntimeEffect<void> {
+  return BrewvaEffect.gen(function* () {
+    let firstTurn = true;
+    let pendingMessages = yield* getQueuedMessages(config, signal);
 
-  while (true) {
-    let hasMoreToolCalls = true;
+    while (true) {
+      let hasMoreToolCalls = true;
 
-    while (hasMoreToolCalls || pendingMessages.length > 0) {
-      if (!firstTurn) {
-        await emit({ type: "turn_start" });
-      } else {
-        firstTurn = false;
-      }
-
-      await applyPendingSteerToLastCommittedToolResult(currentContext, config, emit);
-
-      if (pendingMessages.length > 0) {
-        for (const message of pendingMessages) {
-          await emit({ type: "message_start", message });
-          const messageEnd = await emit({ type: "message_end", message });
-          const committedMessage =
-            messageEnd?.type === "message_end" ? messageEnd.message : message;
-          currentContext.messages.push(committedMessage);
-          newMessages.push(committedMessage);
+      while (hasMoreToolCalls || pendingMessages.length > 0) {
+        if (!firstTurn) {
+          yield* dispatcher.emit({ type: "turn_start" });
+        } else {
+          firstTurn = false;
         }
-        pendingMessages = [];
-      }
 
-      refreshCurrentContext(currentContext, config);
-      const message = await streamAssistantResponse(currentContext, config, signal, emit);
-      newMessages.push(message);
-
-      if (message.stopReason === "error" || message.stopReason === "aborted") {
-        const dropReason = message.stopReason === "aborted" ? "aborted" : "failed";
-        await dropPendingSteer(config, emit, dropReason);
-        await emit({ type: "turn_end", message, toolResults: [] });
-        // turn_end listeners may enqueue steer after the pre-terminal drain.
-        await dropPendingSteer(config, emit, dropReason);
-        await emit({ type: "agent_end", messages: newMessages });
-        return;
-      }
-
-      const toolCalls = message.content.filter(
-        (content): content is BrewvaTurnLoopToolCall => content.type === "toolCall",
-      );
-      hasMoreToolCalls = toolCalls.length > 0;
-
-      const toolResults: BrewvaTurnLoopToolResultMessage[] = [];
-      if (hasMoreToolCalls) {
-        const toolResultEnvelopes = await executeToolCalls(
+        yield* applyPendingSteerToLastCommittedToolResult(
           currentContext,
-          message,
-          toolCalls,
           config,
+          dispatcher,
           signal,
-          emit,
         );
-        const pendingSteer = await config.consumePendingSteer?.();
-        let appliedSteer:
-          | {
-              text: string;
-              toolCallId: string;
-              toolName: string;
-            }
-          | undefined;
-        if (pendingSteer) {
-          const target = toolResultEnvelopes[toolResultEnvelopes.length - 1];
-          if (target) {
-            appendSteerToToolResultMessage(target.message, pendingSteer);
-            appliedSteer = {
-              text: pendingSteer,
-              toolCallId: target.toolCall.id,
-              toolName: target.toolCall.name,
-            };
-          } else {
-            await emit({
-              type: "steer_dropped",
-              text: pendingSteer,
-              reason: "no_tool_boundary",
+
+        if (pendingMessages.length > 0) {
+          for (const message of pendingMessages) {
+            yield* dispatcher.emit({ type: "message_start", message });
+            const messageEnd = yield* dispatcher.emit({
+              type: "message_end",
+              message,
             });
+            const committedMessage =
+              messageEnd?.type === "message_end" ? messageEnd.message : message;
+            currentContext.messages.push(committedMessage);
+            newMessages.push(committedMessage);
           }
+          pendingMessages = [];
         }
-        for (const outcome of toolResultEnvelopes) {
-          const committedMessage = await emitToolCallMessageOutcome(outcome, emit);
-          toolResults.push(committedMessage);
-          if (appliedSteer && outcome.toolCall.id === appliedSteer.toolCallId) {
-            if (toolResultMessageContainsSteer(committedMessage, appliedSteer.text)) {
-              await emit({
-                type: "steer_applied",
-                text: appliedSteer.text,
-                toolCallId: appliedSteer.toolCallId,
-                toolName: appliedSteer.toolName,
-                message: committedMessage,
-              });
+
+        refreshCurrentContext(currentContext, config);
+        const message = yield* streamAssistantResponse(currentContext, config, signal, dispatcher);
+        newMessages.push(message);
+
+        if (message.stopReason === "error" || message.stopReason === "aborted") {
+          const dropReason = message.stopReason === "aborted" ? "aborted" : "failed";
+          yield* dropPendingSteer(config, dispatcher, dropReason, signal);
+          yield* dispatcher.emit({
+            type: "turn_end",
+            message,
+            toolResults: [],
+          });
+          // turn_end listeners may enqueue steer after the pre-terminal drain.
+          yield* dropPendingSteer(config, dispatcher, dropReason, signal);
+          yield* dispatcher.emit({ type: "agent_end", messages: newMessages });
+          return;
+        }
+
+        const toolCalls = message.content.filter(
+          (content): content is BrewvaTurnLoopToolCall => content.type === "toolCall",
+        );
+        hasMoreToolCalls = toolCalls.length > 0;
+
+        const toolResults: BrewvaTurnLoopToolResultMessage[] = [];
+        if (hasMoreToolCalls) {
+          const toolResultEnvelopes = yield* executeToolCalls(
+            currentContext,
+            message,
+            toolCalls,
+            config,
+            signal,
+            dispatcher,
+          );
+          const pendingSteer = yield* consumePendingSteer(config, signal);
+          let appliedSteer:
+            | {
+                text: string;
+                toolCallId: string;
+                toolName: string;
+              }
+            | undefined;
+          if (pendingSteer) {
+            const target = toolResultEnvelopes[toolResultEnvelopes.length - 1];
+            if (target) {
+              appendSteerToToolResultMessage(target.message, pendingSteer);
+              appliedSteer = {
+                text: pendingSteer,
+                toolCallId: target.toolCall.id,
+                toolName: target.toolCall.name,
+              };
             } else {
-              await emit({
+              yield* dispatcher.emit({
                 type: "steer_dropped",
-                text: appliedSteer.text,
-                reason: "overwritten",
+                text: pendingSteer,
+                reason: "no_tool_boundary",
               });
             }
-            appliedSteer = undefined;
           }
+          for (const outcome of toolResultEnvelopes) {
+            const committedMessage = yield* emitToolCallMessageOutcome(outcome, dispatcher);
+            toolResults.push(committedMessage);
+            if (appliedSteer && outcome.toolCall.id === appliedSteer.toolCallId) {
+              const steer = appliedSteer;
+              if (toolResultMessageContainsSteer(committedMessage, steer.text)) {
+                yield* withOutcomeToolInvocationScope(
+                  outcome,
+                  dispatcher.emit({
+                    type: "steer_applied",
+                    text: steer.text,
+                    toolCallId: steer.toolCallId,
+                    toolName: steer.toolName,
+                    message: committedMessage,
+                  }),
+                );
+              } else {
+                yield* withOutcomeToolInvocationScope(
+                  outcome,
+                  dispatcher.emit({
+                    type: "steer_dropped",
+                    text: steer.text,
+                    reason: "overwritten",
+                  }),
+                );
+              }
+              appliedSteer = undefined;
+            }
+          }
+          for (const result of toolResults) {
+            currentContext.messages.push(result);
+            newMessages.push(result);
+          }
+        } else {
+          yield* dropPendingSteer(config, dispatcher, "no_tool_boundary", signal);
         }
-        for (const result of toolResults) {
-          currentContext.messages.push(result);
-          newMessages.push(result);
+
+        yield* dispatcher.emit({ type: "turn_end", message, toolResults });
+        if (!hasMoreToolCalls) {
+          // turn_end listeners may enqueue steer when there will be no next provider turn.
+          yield* dropPendingSteer(config, dispatcher, "no_tool_boundary", signal);
         }
-      } else {
-        await dropPendingSteer(config, emit, "no_tool_boundary");
+        const shouldStopAfterToolResults =
+          toolResults.length > 0 &&
+          (yield* shouldStopAfterToolResultsEffect(config, toolResults, signal));
+        if (shouldStopAfterToolResults) {
+          yield* dropPendingSteer(config, dispatcher, "no_tool_boundary", signal);
+          yield* dispatcher.emit({ type: "agent_end", messages: newMessages });
+          return;
+        }
+        pendingMessages = yield* getQueuedMessages(config, signal);
       }
 
-      await emit({ type: "turn_end", message, toolResults });
-      if (!hasMoreToolCalls) {
-        // turn_end listeners may enqueue steer when there will be no next provider turn.
-        await dropPendingSteer(config, emit, "no_tool_boundary");
+      const followUpMessages = yield* getFollowUpMessages(config, signal);
+      if (followUpMessages.length > 0) {
+        pendingMessages = followUpMessages;
+        continue;
       }
-      const shouldStopAfterToolResults =
-        toolResults.length > 0 && (await config.shouldStopAfterToolResults?.(toolResults)) === true;
-      if (shouldStopAfterToolResults) {
-        await dropPendingSteer(config, emit, "no_tool_boundary");
-        await emit({ type: "agent_end", messages: newMessages });
-        return;
-      }
-      pendingMessages = (await config.getQueuedMessages?.()) ?? [];
+
+      yield* dispatcher.emit({ type: "agent_end", messages: newMessages });
+      return;
     }
+  });
+}
 
-    const followUpMessages = (await config.getFollowUpMessages?.()) ?? [];
-    if (followUpMessages.length > 0) {
-      pendingMessages = followUpMessages;
-      continue;
-    }
+function getQueuedMessages(
+  config: BrewvaTurnLoopConfig,
+  signal: AbortSignal | undefined,
+): BrewvaEffect.Effect<BrewvaTurnLoopMessage[], BrewvaTurnRuntimeError, BrewvaTurnScope> {
+  void signal;
+  return config.getQueuedMessagesEffect?.() ?? BrewvaEffect.succeed([]);
+}
 
-    await emit({ type: "agent_end", messages: newMessages });
-    return;
-  }
+function getFollowUpMessages(
+  config: BrewvaTurnLoopConfig,
+  signal: AbortSignal | undefined,
+): BrewvaEffect.Effect<BrewvaTurnLoopMessage[], BrewvaTurnRuntimeError, BrewvaTurnScope> {
+  void signal;
+  return config.getFollowUpMessagesEffect?.() ?? BrewvaEffect.succeed([]);
+}
+
+function consumePendingSteer(
+  config: BrewvaTurnLoopConfig,
+  signal: AbortSignal | undefined,
+): BrewvaEffect.Effect<string | undefined, BrewvaTurnRuntimeError, BrewvaTurnScope> {
+  void signal;
+  return config.consumePendingSteerEffect?.() ?? BrewvaEffect.succeed(undefined);
+}
+
+function shouldStopAfterToolResultsEffect(
+  config: BrewvaTurnLoopConfig,
+  toolResults: BrewvaTurnLoopToolResultMessage[],
+  signal: AbortSignal | undefined,
+): BrewvaEffect.Effect<boolean, BrewvaTurnRuntimeError> {
+  return fromAbortableBoundaryPromise(async (abortSignal) => {
+    const shouldStop = await config.shouldStopAfterToolResults?.(toolResults, abortSignal);
+    return shouldStop === true;
+  }, signal);
+}
+
+function withOutcomeToolInvocationScope<A>(
+  outcome: ToolCallOutcomeEnvelope,
+  effect: ToolScopedTurnRuntimeEffect<A>,
+): InternalTurnRuntimeEffect<A> {
+  return effect.pipe(BrewvaEffect.provide(BrewvaToolInvocationScope.layer(outcome.scope)));
 }
 
 function refreshCurrentContext(

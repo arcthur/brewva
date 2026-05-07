@@ -101,6 +101,28 @@ Repo-owned implementation-adjacent callers use branded controlled extension
 ports or explicit runtime subpaths. The removed `internal` barrel, method-group
 layer, and legacy assembler files are not compatibility surfaces.
 
+## Effect Runtime Spine
+
+Effect is the internal runtime mechanics substrate for long-running effectful
+execution. It owns dependency layers, scopes, fibers, streams, schedules,
+typed runtime errors, and structural observability in the runtime, substrate,
+gateway, tools, and provider execution paths.
+
+Effect does not create authority. A layer dependency means an implementation
+needs a service; it never means a tool or plugin may access a runtime
+capability. Capability-scoped runtime ports remain the only way hosted tools
+and plugins gain runtime access.
+
+Public edges stay Promise-friendly where appropriate. CLI commands, TUI
+launch, HTTP handlers, Telegram/channel ingress, MCP calls, plugin callbacks,
+and worker IPC run one Effect program per logical operation and translate
+external `AbortSignal` cancellation once at that boundary.
+
+The foundation package wires Effect spans and log annotations structurally. The
+default observability layer is inert until configured, and the Node runtime path
+can attach `@effect/opentelemetry` `NodeSdk` processors without importing Node
+platform adapters into Worker-oriented edge code.
+
 ## Transaction Boundary
 
 The current stable authority-bearing transaction boundary is `single tool
@@ -128,6 +150,13 @@ compatibility story.
 
 - `@brewva/brewva-runtime`: kernel contracts, event tape, projection,
   verification, governance, cost, rollback, and WAL durability.
+- `@brewva/brewva-effect`: internal Effect foundation package. It owns Effect
+  platform dependencies, boundary runners, scope/schedule helpers, typed
+  runtime errors, runtime spine helpers, config service helpers, and
+  observability adapters. Its root entrypoint is a thin re-export spine, with
+  explicit internal subpaths for platform adapters, runtime spine, edge runners,
+  and test utilities. Other packages import Effect primitives only through this
+  package.
 - `@brewva/brewva-substrate`: contract-only root vocabulary plus explicit
   mechanism subpaths for session lifecycle, prompt/resource loading,
   provenance, sequential execution primitives, pure compaction mechanics,

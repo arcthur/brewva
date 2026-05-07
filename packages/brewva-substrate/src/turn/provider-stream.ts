@@ -1,17 +1,19 @@
-import type { AssistantMessageEventStream as ProviderAssistantMessageEventStream } from "@brewva/brewva-provider-core/contracts";
+import type {
+  Api,
+  Context as ProviderStreamContext,
+  Model as ProviderStreamModel,
+  SimpleStreamOptions as ProviderStreamOptions,
+} from "@brewva/brewva-provider-core/contracts";
 import { streamSimple } from "@brewva/brewva-provider-core/stream";
 import type {
   BrewvaTurnLoopStreamContext,
   BrewvaTurnLoopStreamFunction,
   BrewvaTurnLoopStreamOptions,
-  BrewvaTurnLoopAssistantMessageEventStream,
 } from "./types.js";
 
-type ProviderStreamModel = Parameters<typeof streamSimple>[0];
-type ProviderStreamContext = Parameters<typeof streamSimple>[1];
-type ProviderStreamOptions = NonNullable<Parameters<typeof streamSimple>[2]>;
-
-function toProviderModel(model: Parameters<BrewvaTurnLoopStreamFunction>[0]): ProviderStreamModel {
+function toProviderModel(
+  model: Parameters<BrewvaTurnLoopStreamFunction>[0],
+): ProviderStreamModel<Api> {
   return {
     id: model.id,
     name: model.name,
@@ -65,19 +67,12 @@ function toProviderOptions(
   };
 }
 
-function toTurnLoopEventStream(
-  providerStream: ProviderAssistantMessageEventStream,
-): BrewvaTurnLoopAssistantMessageEventStream {
-  return providerStream;
-}
-
 export const createBrewvaTurnProviderStreamFunction = (): BrewvaTurnLoopStreamFunction => {
-  return async (model, context, options) => {
-    const providerStream = streamSimple(
+  return (model, context, options) => {
+    return streamSimple(
       toProviderModel(model),
       toProviderContext(context),
       toProviderOptions(options, model),
     );
-    return toTurnLoopEventStream(providerStream);
   };
 };

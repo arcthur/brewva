@@ -56,7 +56,7 @@ describe("runtime-bound managed Brewva tool factory", () => {
       "call-1",
       {},
       new AbortController().signal,
-      () => undefined,
+      async () => undefined,
       {} as never,
     );
 
@@ -115,7 +115,7 @@ describe("runtime-bound managed Brewva tool factory", () => {
       "call-1",
       {},
       new AbortController().signal,
-      () => undefined,
+      async () => undefined,
       {} as never,
     );
 

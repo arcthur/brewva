@@ -96,9 +96,16 @@
       "import": "./dist/runtime/runtime-extensions.js",
       "default": "./dist/runtime/runtime-extensions.js"
     },
+    "./runtime-effect": {
+      "types": "./dist/runtime-effect.d.ts",
+      "bun": "./src/runtime-effect.ts",
+      "import": "./dist/runtime-effect.js",
+      "default": "./dist/runtime-effect.js"
+    },
     "./schema/brewva.schema.json": "./schema/brewva.schema.json"
   },
   "dependencies": {
+    "@brewva/brewva-effect": "workspace:*",
     "@brewva/brewva-search": "workspace:*",
     "@brewva/brewva-token-estimation": "workspace:*",
     "ajv": "^8.18.0",

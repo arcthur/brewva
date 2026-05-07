@@ -1,13 +1,25 @@
 import {
+  type BrewvaBoundaryFailure,
+  BrewvaDuration,
+  BrewvaEffect,
+  BrewvaSessionScope,
+  addScopedFinalizer,
+  runPromiseAtBoundary,
+  withBrewvaObservability,
+} from "@brewva/brewva-effect";
+import {
   deleteManagedSession,
   markSessionBackgrounded,
-  startManagedExec,
+  scopedManagedExec,
   terminateRunningSession,
   type ManagedExecFinishedSession,
   type ManagedExecRunningSession,
 } from "../exec-process-registry.js";
 import { textResult, withVerdict } from "../utils/result.js";
 import { execDisplayResult, isSafeEnvKey } from "./shared.js";
+import { ExecCommandFailedError } from "./shared.js";
+
+type HostCommandResult = ReturnType<typeof textResult>;
 
 function formatExit(session: ManagedExecFinishedSession): string {
   if (session.exitSignal) return `signal ${session.exitSignal}`;
@@ -35,24 +47,17 @@ function runningResult(session: ManagedExecRunningSession) {
   });
 }
 
-async function waitForCompletionOrYield(
+function waitForCompletionOrYieldEffect(
   completion: Promise<ManagedExecFinishedSession>,
   yieldMs: number,
-): Promise<ManagedExecFinishedSession | undefined> {
-  if (yieldMs === 0) return undefined;
-  const timerTag = Symbol("yield");
-  let yieldTimer: ReturnType<typeof setTimeout> | undefined;
-  const winner = await Promise.race([
-    completion,
-    new Promise<symbol>((resolveNow) => {
-      yieldTimer = setTimeout(() => resolveNow(timerTag), yieldMs);
-    }),
-  ]);
-  if (winner !== timerTag && yieldTimer !== undefined) {
-    clearTimeout(yieldTimer);
+): BrewvaEffect.Effect<ManagedExecFinishedSession | undefined> {
+  if (yieldMs === 0) {
+    return BrewvaEffect.succeed(undefined);
   }
-  if (winner === timerTag) return undefined;
-  return winner as ManagedExecFinishedSession;
+  return BrewvaEffect.race(
+    BrewvaEffect.promise(() => completion),
+    BrewvaEffect.sleep(BrewvaDuration.millis(yieldMs)).pipe(BrewvaEffect.as(undefined)),
+  );
 }
 
 export function buildHostEnv(requestedEnv?: Record<string, string>): NodeJS.ProcessEnv {
@@ -70,7 +75,7 @@ export function buildHostEnv(requestedEnv?: Record<string, string>): NodeJS.Proc
   return env;
 }
 
-export async function executeHostCommand(input: {
+export interface ExecuteHostCommandInput {
   ownerSessionId: string;
   command: string;
   cwd: string;
@@ -79,75 +84,107 @@ export async function executeHostCommand(input: {
   background: boolean;
   yieldMs: number;
   signal?: AbortSignal;
-}) {
-  let started;
-  try {
-    started = startManagedExec({
-      ownerSessionId: input.ownerSessionId,
-      command: input.command,
-      cwd: input.cwd,
-      env: input.env,
-      timeoutSec: input.timeoutSec,
-    });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return textResult(
-      `Exec failed to start: ${message}`,
-      withVerdict(
-        {
-          status: "failed",
-          command: input.command,
-          cwd: input.cwd,
-          backend: "host",
-        },
-        "fail",
-      ),
-    );
-  }
+}
 
+export function executeHostCommandEffect(
+  input: ExecuteHostCommandInput,
+): BrewvaEffect.Effect<HostCommandResult, BrewvaBoundaryFailure | ExecCommandFailedError> {
+  const observability = {
+    sessionId: input.ownerSessionId,
+    backend: "host",
+  };
+  let startedForAbort: { session: ManagedExecRunningSession } | undefined;
   const onAbort = () => {
-    if (input.background || started.session.backgrounded) return;
+    const started = startedForAbort;
+    if (!started || input.background || started.session.backgrounded) return;
     terminateRunningSession(started.session, true);
   };
 
-  if (input.signal?.aborted) {
-    onAbort();
-  } else if (input.signal) {
-    input.signal.addEventListener("abort", onAbort, { once: true });
-  }
+  const program = BrewvaEffect.scoped(
+    BrewvaEffect.gen(function* () {
+      const startedResult = yield* scopedManagedExec({
+        ownerSessionId: input.ownerSessionId,
+        command: input.command,
+        cwd: input.cwd,
+        env: input.env,
+        timeoutSec: input.timeoutSec,
+      }).pipe(
+        BrewvaEffect.map((started) => ({ ok: true as const, started })),
+        BrewvaEffect.catch((error) => BrewvaEffect.succeed({ ok: false as const, error })),
+      );
+      if (!startedResult.ok) {
+        const message =
+          startedResult.error instanceof Error
+            ? startedResult.error.message
+            : String(startedResult.error);
+        return textResult(
+          `Exec failed to start: ${message}`,
+          withVerdict(
+            {
+              status: "failed",
+              command: input.command,
+              cwd: input.cwd,
+              backend: "host",
+            },
+            "fail",
+          ),
+        );
+      }
 
-  try {
-    if (input.background || input.yieldMs === 0) {
-      markSessionBackgrounded(input.ownerSessionId, started.session.id);
-      return runningResult(started.session);
-    }
+      const started = startedResult.started;
+      startedForAbort = started;
+      if (input.signal) {
+        input.signal.addEventListener("abort", onAbort, { once: true });
+        yield* addScopedFinalizer(() => input.signal?.removeEventListener("abort", onAbort));
+      }
+      if (input.signal?.aborted) {
+        onAbort();
+      }
 
-    const finished = await waitForCompletionOrYield(started.completion, input.yieldMs);
-    if (!finished) {
-      markSessionBackgrounded(input.ownerSessionId, started.session.id);
-      return runningResult(started.session);
-    }
+      if (input.background || input.yieldMs === 0) {
+        markSessionBackgrounded(input.ownerSessionId, started.session.id);
+        return runningResult(started.session);
+      }
 
-    if (!finished.backgrounded) {
-      deleteManagedSession(input.ownerSessionId, finished.id);
-    }
+      const finished = yield* waitForCompletionOrYieldEffect(started.completion, input.yieldMs);
+      if (!finished) {
+        markSessionBackgrounded(input.ownerSessionId, started.session.id);
+        return runningResult(started.session);
+      }
 
-    const output = finished.aggregated.trimEnd() || "(no output)";
-    if (finished.status === "completed") {
-      return execDisplayResult(output, {
-        status: "completed",
-        exitCode: finished.exitCode ?? 0,
-        durationMs: finished.endedAt - finished.startedAt,
-        cwd: finished.cwd,
-        command: finished.command,
-        backend: "host",
-      });
-    }
+      if (!finished.backgrounded) {
+        deleteManagedSession(input.ownerSessionId, finished.id);
+      }
 
-    throw new Error(`${output}\n\nProcess exited with ${formatExit(finished)}.`);
-  } finally {
-    if (input.signal) {
-      input.signal.removeEventListener("abort", onAbort);
-    }
-  }
+      const output = finished.aggregated.trimEnd() || "(no output)";
+      if (finished.status === "completed") {
+        return execDisplayResult(output, {
+          status: "completed",
+          exitCode: finished.exitCode ?? 0,
+          durationMs: finished.endedAt - finished.startedAt,
+          cwd: finished.cwd,
+          command: finished.command,
+          backend: "host",
+        });
+      }
+
+      return yield* BrewvaEffect.fail(
+        new ExecCommandFailedError(
+          `${output}\n\nProcess exited with ${formatExit(finished)}.`,
+          finished.exitCode ?? 1,
+        ),
+      );
+    }),
+  ).pipe(
+    BrewvaEffect.provide(BrewvaSessionScope.layer({ sessionId: input.ownerSessionId })),
+    withBrewvaObservability("brewva.tools.host.exec", observability),
+  );
+
+  return program;
+}
+
+export async function executeHostCommand(
+  input: ExecuteHostCommandInput,
+): Promise<HostCommandResult> {
+  return await runPromiseAtBoundary(executeHostCommandEffect(input));
 }

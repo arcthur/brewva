@@ -1,3 +1,13 @@
+import {
+  BrewvaEffect,
+  addScopedFinalizer,
+  fromAbortableBoundaryPromise,
+  runEdgeOperation,
+  startScopedSchedule,
+  type BrewvaBoundaryError,
+  type BrewvaScope,
+  type ScopedScheduleHandle,
+} from "@brewva/brewva-effect";
 import type { BrewvaRuntime } from "@brewva/brewva-runtime";
 import { createRecoveryWalRecovery, type RecoveryWalStore } from "@brewva/brewva-runtime/recovery";
 import { waitForAllSettledWithTimeout } from "../utils/async.js";
@@ -8,7 +18,7 @@ import type { ChannelModeLaunchBundle } from "./channel-bootstrap.js";
 import type { ChannelSessionCoordinator } from "./channel-session-coordinator.js";
 import type { ChannelTurnDispatcher } from "./channel-turn-dispatcher.js";
 
-export async function runChannelHostLifecycle(input: {
+export interface RunChannelHostLifecycleInput {
   runtime: BrewvaRuntime;
   channel: string;
   verbose: boolean;
@@ -23,7 +33,59 @@ export async function runChannelHostLifecycle(input: {
   runtimeManager: Pick<AgentRuntimeManager, "disposeAll" | "evictIdleRuntimes">;
   shutdownSignal?: AbortSignal;
   setShuttingDown(value: boolean): void;
-}): Promise<void> {
+}
+
+function waitForChannelShutdownSignal(
+  input: RunChannelHostLifecycleInput,
+): BrewvaEffect.Effect<NodeJS.Signals, BrewvaBoundaryError> {
+  return fromAbortableBoundaryPromise(
+    (signal) =>
+      new Promise<NodeJS.Signals>((resolve) => {
+        let settled = false;
+        let removeExternalAbortListener: (() => void) | null = null;
+
+        const cleanupListeners = () => {
+          process.off("SIGINT", onSigInt);
+          process.off("SIGTERM", onSigTerm);
+          signal.removeEventListener("abort", onAbort);
+          removeExternalAbortListener?.();
+          removeExternalAbortListener = null;
+        };
+
+        const shutdown = (nextSignal: NodeJS.Signals): void => {
+          if (settled) return;
+          settled = true;
+          input.setShuttingDown(true);
+          cleanupListeners();
+          resolve(nextSignal);
+        };
+
+        const onSigInt = (): void => shutdown("SIGINT");
+        const onSigTerm = (): void => shutdown("SIGTERM");
+        const onAbort = (): void => shutdown("SIGTERM");
+
+        process.on("SIGINT", onSigInt);
+        process.on("SIGTERM", onSigTerm);
+        signal.addEventListener("abort", onAbort, { once: true });
+
+        if (input.shutdownSignal) {
+          const onExternalAbort = () => shutdown("SIGTERM");
+          input.shutdownSignal.addEventListener("abort", onExternalAbort, { once: true });
+          removeExternalAbortListener = () => {
+            input.shutdownSignal?.removeEventListener("abort", onExternalAbort);
+          };
+          if (input.shutdownSignal.aborted) {
+            shutdown("SIGTERM");
+          }
+        }
+      }),
+    input.shutdownSignal,
+  );
+}
+
+export function runChannelHostLifecycleEffect(
+  input: RunChannelHostLifecycleInput,
+): BrewvaEffect.Effect<void, BrewvaBoundaryError, BrewvaScope.Scope> {
   const recoveryWalScope = input.recoveryWalStore.getScope();
   const recoveryWalMaintenance = createSerializedAsyncTaskRunner(async () => {
     try {
@@ -47,12 +109,15 @@ export async function runChannelHostLifecycle(input: {
       }
     }
   });
-  let recoveryWalCompactTimer: ReturnType<typeof setInterval> | null = null;
+  let recoveryWalCompactTimer: ScopedScheduleHandle | null = null;
+  let bridgeStarted = false;
+  let bundleStarted = false;
 
-  const stopRecoveryWalMaintenance = (): void => {
+  const stopRecoveryWalMaintenance = async (): Promise<void> => {
     if (!recoveryWalCompactTimer) return;
-    clearInterval(recoveryWalCompactTimer);
+    const timer = recoveryWalCompactTimer;
     recoveryWalCompactTimer = null;
+    await timer.close();
   };
 
   const disposeQueues = async (): Promise<void> => {
@@ -82,82 +147,58 @@ export async function runChannelHostLifecycle(input: {
       },
     },
   });
-  await recovery.recover();
-  input.recoveryWalStore.compact();
-
-  if (input.recoveryWalStore.isWalEnabled()) {
-    recoveryWalCompactTimer = setInterval(() => {
-      void recoveryWalMaintenance.run();
-    }, input.recoveryWalCompactIntervalMs);
-    recoveryWalCompactTimer.unref?.();
-  }
-
-  try {
-    await input.bundle.bridge.start();
-    await input.bundle.onStart?.();
-  } catch (error) {
-    stopRecoveryWalMaintenance();
-    await recoveryWalMaintenance.whenIdle();
-    await Promise.allSettled([input.bundle.onStop?.(), input.bundle.bridge.stop()]);
-    throw error;
-  }
-
-  if (input.verbose) {
-    console.error(`[channel] ${input.channel} bridge started`);
-  }
-
-  await new Promise<void>((resolve, reject) => {
-    let stopping = false;
-    let removeAbortListener: (() => void) | null = null;
-
-    const cleanupListeners = () => {
-      process.off("SIGINT", onSigInt);
-      process.off("SIGTERM", onSigTerm);
-      removeAbortListener?.();
-      removeAbortListener = null;
-    };
-
-    const shutdown = (signal: NodeJS.Signals): void => {
-      if (stopping) return;
-      stopping = true;
-      input.setShuttingDown(true);
-
-      void (async () => {
-        try {
-          if (input.verbose) {
-            console.error(`[channel] received ${signal}, stopping...`);
-          }
-          stopRecoveryWalMaintenance();
-          await recoveryWalMaintenance.whenIdle();
-          await input.bundle.onStop?.();
-          await input.bundle.bridge.stop();
-          await disposeQueues();
-          cleanupListeners();
-          if (input.verbose) {
-            console.error("[channel] shutdown completed");
-          }
-          resolve();
-        } catch (error) {
-          cleanupListeners();
-          reject(error);
-        }
-      })();
-    };
-
-    const onSigInt = (): void => shutdown("SIGINT");
-    const onSigTerm = (): void => shutdown("SIGTERM");
-    process.on("SIGINT", onSigInt);
-    process.on("SIGTERM", onSigTerm);
-
-    if (input.shutdownSignal) {
-      const onAbort = () => shutdown("SIGTERM");
-      input.shutdownSignal.addEventListener("abort", onAbort, { once: true });
-      removeAbortListener = () => {
-        input.shutdownSignal?.removeEventListener("abort", onAbort);
-      };
-      if (input.shutdownSignal.aborted) {
-        shutdown("SIGTERM");
+  return BrewvaEffect.gen(function* () {
+    yield* addScopedFinalizer(async () => {
+      await stopRecoveryWalMaintenance();
+      await recoveryWalMaintenance.whenIdle();
+      if (bundleStarted) {
+        await input.bundle.onStop?.();
+        bundleStarted = false;
       }
+      if (bridgeStarted) {
+        await input.bundle.bridge.stop();
+        bridgeStarted = false;
+      }
+      await disposeQueues();
+      if (input.verbose) {
+        console.error("[channel] shutdown completed");
+      }
+    });
+
+    yield* fromAbortableBoundaryPromise(() => recovery.recover(), input.shutdownSignal);
+    input.recoveryWalStore.compact();
+
+    if (input.recoveryWalStore.isWalEnabled()) {
+      recoveryWalCompactTimer = startScopedSchedule({
+        intervalMs: input.recoveryWalCompactIntervalMs,
+        run: () => BrewvaEffect.promise(() => recoveryWalMaintenance.run()),
+      });
     }
+
+    yield* fromAbortableBoundaryPromise(() => input.bundle.bridge.start(), input.shutdownSignal);
+    bridgeStarted = true;
+    yield* fromAbortableBoundaryPromise(
+      () => Promise.resolve(input.bundle.onStart?.()),
+      input.shutdownSignal,
+    );
+    bundleStarted = true;
+
+    if (input.verbose) {
+      console.error(`[channel] ${input.channel} bridge started`);
+    }
+
+    const signal = yield* waitForChannelShutdownSignal(input);
+    if (input.verbose) {
+      console.error(`[channel] received ${signal}, stopping...`);
+    }
+  });
+}
+
+export async function runChannelHostLifecycle(input: RunChannelHostLifecycleInput): Promise<void> {
+  return runEdgeOperation("brewva.channel.host.lifecycle", runChannelHostLifecycleEffect(input), {
+    fields: {
+      channel: input.channel,
+      workspaceRoot: input.runtime.workspaceRoot,
+    },
   });
 }

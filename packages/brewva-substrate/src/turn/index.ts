@@ -1,15 +1,26 @@
 export { createBrewvaTurnLoopController } from "./controller.js";
+export {
+  BrewvaToolInvocationScope,
+  BrewvaTurnScope,
+  createTurnEventDispatcher,
+  type BrewvaTurnEventCallbackOptions,
+  type BrewvaTurnEventDispatcher,
+  type BrewvaTurnLoopEventSink,
+  type BrewvaToolInvocationScopeShape,
+  type BrewvaTurnScopeShape,
+} from "./effect-runtime.js";
 export { runBrewvaTurnLoop, type BrewvaTurnLoopConfig } from "./loop.js";
 export { createBrewvaTurnProviderStreamFunction } from "./provider-stream.js";
 export type {
   BrewvaTurnLoopAfterToolCallContext,
   BrewvaTurnLoopAssistantMessage,
   BrewvaTurnLoopAssistantMessageEvent,
-  BrewvaTurnLoopAssistantMessageEventStream,
+  BrewvaTurnLoopAssistantMessageStream,
   BrewvaTurnLoopBeforeToolCallContext,
   BrewvaTurnLoopBranchSummaryMessage,
   BrewvaTurnLoopCompactionSummaryMessage,
   BrewvaTurnLoopContext,
+  BrewvaTurnEventScope,
   BrewvaTurnLoopController,
   BrewvaTurnLoopCustomMessage,
   BrewvaTurnLoopEvent,

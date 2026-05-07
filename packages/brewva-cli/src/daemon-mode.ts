@@ -1,5 +1,10 @@
 import { join } from "node:path";
 import {
+  BrewvaEffect,
+  startScopedSchedule,
+  type ScopedScheduleHandle,
+} from "@brewva/brewva-effect";
+import {
   SessionSupervisor,
   executeScheduleIntentRun,
   removePidRecord,
@@ -194,9 +199,14 @@ export async function runDaemon(parsed: RunDaemonOptions): Promise<void> {
     }
   });
   const summaryInterval = parsed.verbose
-    ? setInterval(() => emitSummaryWindow("tick"), 60_000)
+    ? startScopedSchedule({
+        intervalMs: 60_000,
+        run: () => BrewvaEffect.sync(() => emitSummaryWindow("tick")),
+      })
     : null;
-  summaryInterval?.unref?.();
+  const closeSummaryInterval = async (handle: ScopedScheduleHandle | null): Promise<void> => {
+    await handle?.close();
+  };
   let scheduler: SchedulerService | null = null;
   let supervisorStarted = false;
   try {
@@ -242,9 +252,7 @@ export async function runDaemon(parsed: RunDaemonOptions): Promise<void> {
         "brewva scheduler daemon: execution is disabled because no intent executor is configured.",
       );
       scheduler.stop();
-      if (summaryInterval) {
-        clearInterval(summaryInterval);
-      }
+      await closeSummaryInterval(summaryInterval);
       unsubscribeEvents();
       await supervisor.stop();
       removePidRecord(pidFilePath);
@@ -263,20 +271,29 @@ export async function runDaemon(parsed: RunDaemonOptions): Promise<void> {
         if (resolved) return;
         resolved = true;
         scheduler?.stop();
-        if (summaryInterval) {
-          clearInterval(summaryInterval);
-        }
-        void supervisor.stop().finally(() => {
-          emitSummaryWindow("shutdown");
-          unsubscribeEvents();
-          removePidRecord(pidFilePath);
-          if (parsed.verbose) {
-            console.error(`[daemon] received ${signal}, scheduler stopped.`);
+        void (async () => {
+          try {
+            await Promise.all([closeSummaryInterval(summaryInterval), supervisor.stop()]);
+          } catch (error) {
+            if (parsed.verbose) {
+              console.error(
+                `[daemon] shutdown cleanup failed: ${
+                  error instanceof Error ? error.message : String(error)
+                }`,
+              );
+            }
+          } finally {
+            emitSummaryWindow("shutdown");
+            unsubscribeEvents();
+            removePidRecord(pidFilePath);
+            if (parsed.verbose) {
+              console.error(`[daemon] received ${signal}, scheduler stopped.`);
+            }
+            process.off("SIGINT", onSigInt);
+            process.off("SIGTERM", onSigTerm);
+            complete();
           }
-          process.off("SIGINT", onSigInt);
-          process.off("SIGTERM", onSigTerm);
-          complete();
-        });
+        })();
       };
 
       const onSigInt = (): void => shutdown("SIGINT");
@@ -286,9 +303,7 @@ export async function runDaemon(parsed: RunDaemonOptions): Promise<void> {
     });
   } catch (error) {
     scheduler?.stop();
-    if (summaryInterval) {
-      clearInterval(summaryInterval);
-    }
+    await closeSummaryInterval(summaryInterval);
     unsubscribeEvents();
     if (supervisorStarted) {
       await supervisor.stop().catch(() => undefined);

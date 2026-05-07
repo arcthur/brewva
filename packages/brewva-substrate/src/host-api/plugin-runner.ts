@@ -1,3 +1,12 @@
+import {
+  BrewvaCancelled,
+  BrewvaEffect,
+  BrewvaSchema,
+  fromAbortableBoundaryPromise,
+  runPromiseAtBoundary,
+  withBrewvaObservability,
+  type BrewvaBoundaryError,
+} from "@brewva/brewva-effect";
 import type { BrewvaToolContentPart, BrewvaToolDefinition } from "../contracts/tool.js";
 import {
   buildBrewvaPromptText,
@@ -35,6 +44,18 @@ type PluginHandler<TKey extends keyof BrewvaHostPluginEventMap> = (
   event: BrewvaHostPluginEventMap[TKey],
   ctx: BrewvaHostContext,
 ) => unknown;
+
+export class BrewvaHostPluginHandlerError extends BrewvaSchema.TaggedErrorClass<BrewvaHostPluginHandlerError>()(
+  "BrewvaHostPluginHandlerError",
+  {
+    message: BrewvaSchema.String,
+    pluginName: BrewvaSchema.String,
+    event: BrewvaSchema.String,
+    cause: BrewvaSchema.optional(BrewvaSchema.Unknown),
+  },
+) {}
+
+export type BrewvaHostPluginRuntimeError = BrewvaCancelled | BrewvaHostPluginHandlerError;
 
 interface PluginHandlerRecord<TKey extends keyof BrewvaHostPluginEventMap> {
   readonly pluginName: string;
@@ -243,6 +264,46 @@ function createEmptyHandlerRegistry(): HandlerRegistry {
   };
 }
 
+function runHostPluginHandlerEffect<TKey extends keyof BrewvaHostPluginEventMap>(
+  record: PluginHandlerRecord<TKey>,
+  event: TKey,
+  payload: BrewvaHostPluginEventMap[TKey],
+  ctx: BrewvaHostContext,
+): BrewvaEffect.Effect<unknown, BrewvaHostPluginRuntimeError> {
+  return fromAbortableBoundaryPromise(
+    (signal) => Promise.resolve(record.handler(payload, { ...ctx, signal })),
+    ctx.signal,
+  ).pipe(
+    BrewvaEffect.mapError((error: BrewvaBoundaryError) =>
+      error instanceof BrewvaCancelled
+        ? error
+        : new BrewvaHostPluginHandlerError({
+            message: error.message,
+            pluginName: record.pluginName,
+            event,
+            cause: error,
+          }),
+    ),
+    withBrewvaObservability(`brewva.host.plugin.${event}`, {
+      pluginName: record.pluginName,
+      event,
+      sessionId: ctx.sessionManager.getSessionId(),
+    }),
+  );
+}
+
+async function runHostPluginHandler<TKey extends keyof BrewvaHostPluginEventMap>(
+  record: PluginHandlerRecord<TKey>,
+  event: TKey,
+  payload: BrewvaHostPluginEventMap[TKey],
+  ctx: BrewvaHostContext,
+): Promise<unknown> {
+  return await runPromiseAtBoundary(
+    runHostPluginHandlerEffect(record, event, payload, ctx),
+    ctx.signal ? { signal: ctx.signal } : undefined,
+  );
+}
+
 export async function createBrewvaHostPluginRunner(
   options: CreateBrewvaHostPluginRunnerOptions,
 ): Promise<BrewvaHostPluginRunner> {
@@ -363,16 +424,18 @@ export async function createBrewvaHostPluginRunner(
     },
     async emit(event, payload, ctx) {
       for (const record of handlers[event]) {
-        await record.handler(payload, ctx);
+        await runHostPluginHandler(record, event, payload, ctx);
       }
     },
     async emitContext(payload, ctx) {
       let currentMessages = structuredClone(payload.messages);
       for (const record of handlers.context) {
-        const result = (await record.handler({ ...payload, messages: currentMessages }, ctx)) as
-          | BrewvaHostContextEvent
-          | { messages?: unknown[] }
-          | undefined;
+        const result = (await runHostPluginHandler(
+          record,
+          "context",
+          { ...payload, messages: currentMessages },
+          ctx,
+        )) as BrewvaHostContextEvent | { messages?: unknown[] } | undefined;
         if (result && "messages" in result && Array.isArray(result.messages)) {
           assertHandlerCapability(
             options.actions,
@@ -389,7 +452,12 @@ export async function createBrewvaHostPluginRunner(
     async emitBeforeProviderRequest(payload, ctx) {
       let currentPayload = payload.payload;
       for (const record of handlers.before_provider_request) {
-        const result = await record.handler({ ...payload, payload: currentPayload }, ctx);
+        const result = await runHostPluginHandler(
+          record,
+          "before_provider_request",
+          { ...payload, payload: currentPayload },
+          ctx,
+        );
         if (result !== undefined) {
           assertHandlerCapability(
             options.actions,
@@ -409,7 +477,9 @@ export async function createBrewvaHostPluginRunner(
       let systemPromptChanged = false;
 
       for (const record of handlers.before_agent_start) {
-        const result = (await record.handler(
+        const result = (await runHostPluginHandler(
+          record,
+          "before_agent_start",
           { ...payload, systemPrompt: currentSystemPrompt },
           ctx,
         )) as BrewvaHostBeforeAgentStartResult | undefined;
@@ -452,7 +522,9 @@ export async function createBrewvaHostPluginRunner(
       let currentParts = cloneBrewvaPromptContentParts(payload.parts);
 
       for (const record of handlers.input) {
-        const result = (await record.handler(
+        const result = (await runHostPluginHandler(
+          record,
+          "input",
           {
             ...payload,
             parts: currentParts,
@@ -490,7 +562,9 @@ export async function createBrewvaHostPluginRunner(
     async emitToolCall(payload, ctx) {
       let lastResult: BrewvaHostToolCallResult | undefined;
       for (const record of handlers.tool_call) {
-        const result = (await record.handler(payload, ctx)) as BrewvaHostToolCallResult | undefined;
+        const result = (await runHostPluginHandler(record, "tool_call", payload, ctx)) as
+          | BrewvaHostToolCallResult
+          | undefined;
         if (!result) {
           continue;
         }
@@ -515,7 +589,9 @@ export async function createBrewvaHostPluginRunner(
       let changed = false;
 
       for (const record of handlers.tool_result) {
-        const result = (await record.handler(
+        const result = (await runHostPluginHandler(
+          record,
+          "tool_result",
           {
             ...payload,
             content: currentContent,
@@ -577,7 +653,9 @@ export async function createBrewvaHostPluginRunner(
       let changed = false;
 
       for (const record of handlers.message_end) {
-        const result = (await record.handler(
+        const result = (await runHostPluginHandler(
+          record,
+          "message_end",
           {
             ...payload,
             message: currentMessage,

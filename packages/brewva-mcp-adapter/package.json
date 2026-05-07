@@ -14,6 +14,7 @@
     }
   },
   "dependencies": {
+    "@brewva/brewva-effect": "workspace:*",
     "@brewva/brewva-tool-protocol": "workspace:*",
     "@modelcontextprotocol/sdk": "1.29.0"
   },

@@ -4,13 +4,16 @@ import { buildOpenAIResponsesDefaultHeaders } from "../../../packages/brewva-pro
 import { convertResponsesMessages } from "../../../packages/brewva-provider-core/src/providers/openai-responses/messages.js";
 import { processResponsesStream } from "../../../packages/brewva-provider-core/src/providers/openai-responses/stream-events.js";
 import { IncrementalToolCallFolder } from "../../../packages/brewva-provider-core/src/stream/tool-call-folder.js";
-import { AssistantMessageEventStream } from "../../../packages/brewva-provider-core/src/utils/event-stream.js";
+import {
+  createRecordingProviderEventStream,
+  type RecordingProviderEventStream,
+} from "../../helpers/effect-stream.js";
 
 function createTestToolCalls(
   output: unknown,
-  stream: AssistantMessageEventStream,
+  stream: RecordingProviderEventStream,
 ): IncrementalToolCallFolder {
-  return new IncrementalToolCallFolder(output as AssistantMessage, stream, () => {});
+  return new IncrementalToolCallFolder(output as AssistantMessage, stream, async () => {});
 }
 
 const TEST_MODEL = {
@@ -148,12 +151,12 @@ describe("openai responses stream processing", () => {
       stopReason: "stop",
       timestamp: 1,
     };
-    const stream = new AssistantMessageEventStream();
+    const stream = createRecordingProviderEventStream();
     const observed: Array<{ type: string; delta?: string }> = [];
     const push = stream.push.bind(stream);
-    stream.push = (event) => {
+    stream.push = async (event) => {
       observed.push(event);
-      push(event);
+      await push(event);
     };
 
     await processResponsesStream(
@@ -246,7 +249,7 @@ describe("openai responses stream processing", () => {
       stopReason: "toolUse",
       timestamp: 1,
     };
-    const stream = new AssistantMessageEventStream();
+    const stream = createRecordingProviderEventStream();
 
     await processResponsesStream(
       [
@@ -325,7 +328,7 @@ describe("openai responses stream processing", () => {
       stopReason: "toolUse",
       timestamp: 1,
     };
-    const stream = new AssistantMessageEventStream();
+    const stream = createRecordingProviderEventStream();
 
     await processResponsesStream(
       [

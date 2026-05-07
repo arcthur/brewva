@@ -214,6 +214,55 @@ describe("tool catalog", () => {
     expect((error as Error).message).toBe("Duplicate MCP tool name from server repo: dup");
   });
 
+  test("MCP adapter operation guard aborts tool calls when the Effect timeout wins", async () => {
+    let observedAbort = false;
+    const fakeClient: McpClientLike = {
+      async connect() {},
+      async close() {},
+      async listTools() {
+        return { tools: [] };
+      },
+      callTool(_input, options) {
+        return new Promise((resolve, reject) => {
+          options?.signal?.addEventListener(
+            "abort",
+            () => {
+              observedAbort = true;
+              reject(new Error("client observed abort"));
+            },
+            { once: true },
+          );
+          setTimeout(() => {
+            resolve({
+              isError: false,
+              content: [{ type: "text", text: "late" }],
+            });
+          }, 250);
+        });
+      },
+    };
+
+    const adapter = new McpToolCatalogAdapter({
+      transport: {
+        type: "stdio",
+        command: "unused",
+      },
+      timeoutMs: 10,
+      createClient: () => fakeClient,
+    });
+
+    let error: unknown;
+    try {
+      await adapter.callTool({ name: "slow" });
+    } catch (caught) {
+      error = caught;
+    }
+
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toBe("MCP operation timed out after 10ms");
+    expect(observedAbort).toBe(true);
+  });
+
   test("plain catalog can host external descriptors without managed definitions", () => {
     const catalog = createToolCatalog([
       {

@@ -29,6 +29,7 @@
     }
   },
   "dependencies": {
+    "@brewva/brewva-effect": "workspace:*",
     "@brewva/brewva-gateway": "workspace:*",
     "@brewva/brewva-runtime": "workspace:*",
     "@brewva/brewva-session-index": "workspace:*",

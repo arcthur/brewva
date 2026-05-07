@@ -6,7 +6,6 @@ import {
 } from "../../cache/render/openai-responses.js";
 import { supportsXhigh } from "../../catalog/index.js";
 import type {
-  AssistantMessageEventStream,
   Context,
   Model,
   OpenAIResponsesCompat,
@@ -29,10 +28,10 @@ export const streamOpenAIResponses: StreamFunction<"openai-responses", OpenAIRes
   model: Model<"openai-responses">,
   context: Context,
   options?: OpenAIResponsesOptions,
-): AssistantMessageEventStream => {
+) => {
   return runProviderStream(
     model,
-    async ({ stream, output, ensureStarted, composer }) => {
+    async ({ stream, output, ensureStarted, composer, signal }) => {
       const apiKey = options?.apiKey || "";
       const compat = resolveOpenAIResponsesCompat(model);
       const cacheRender = resolveOpenAIResponsesCacheRender({
@@ -54,11 +53,8 @@ export const streamOpenAIResponses: StreamFunction<"openai-responses", OpenAIRes
       if (nextParams !== undefined) {
         params = nextParams as ResponseCreateParamsStreaming;
       }
-      const openaiStream = await client.responses.create(
-        params,
-        options?.signal ? { signal: options.signal } : undefined,
-      );
-      ensureStarted();
+      const openaiStream = await client.responses.create(params, { signal });
+      await ensureStarted();
 
       await processResponsesStream(openaiStream, output, stream, model, composer.toolCalls, {
         serviceTier: options?.serviceTier,
@@ -71,6 +67,7 @@ export const streamOpenAIResponses: StreamFunction<"openai-responses", OpenAIRes
     },
     {
       signal: options?.signal,
+      sessionId: options?.sessionId,
       tools: context.tools,
     },
   );
@@ -79,11 +76,7 @@ export const streamOpenAIResponses: StreamFunction<"openai-responses", OpenAIRes
 export const streamSimpleOpenAIResponses: StreamFunction<
   "openai-responses",
   SimpleStreamOptions
-> = (
-  model: Model<"openai-responses">,
-  context: Context,
-  options?: SimpleStreamOptions,
-): AssistantMessageEventStream => {
+> = (model: Model<"openai-responses">, context: Context, options?: SimpleStreamOptions) => {
   const apiKey = options?.apiKey;
   if (!apiKey) {
     throw new Error(`No API key for provider: ${model.provider}`);

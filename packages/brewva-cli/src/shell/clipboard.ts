@@ -1,5 +1,6 @@
 import { Buffer } from "node:buffer";
 import { spawn } from "node:child_process";
+import { BrewvaEffect, startScopedTimeout, type ScopedTimeoutHandle } from "@brewva/brewva-effect";
 
 function writeOsc52ToStdout(text: string): boolean {
   const encoded = Buffer.from(text, "utf8").toString("base64");
@@ -15,22 +16,35 @@ function runClipboardCommand(command: string, args: string[], text: string): Pro
       env: process.env,
       stdio: ["pipe", "ignore", "pipe"],
     });
-    const timeout = setTimeout(() => {
-      child.kill("SIGTERM");
-      reject(new Error(`${command} clipboard command timed out.`));
-    }, 2_000);
-    timeout.unref();
+    let settled = false;
+    let timeout: ScopedTimeoutHandle | undefined;
+    const settle = (complete: () => void): void => {
+      if (settled) return;
+      settled = true;
+      void timeout?.close();
+      complete();
+    };
+    timeout = startScopedTimeout({
+      delayMs: 2_000,
+      run: () =>
+        BrewvaEffect.sync(() => {
+          settle(() => {
+            child.kill("SIGTERM");
+            reject(new Error(`${command} clipboard command timed out.`));
+          });
+        }),
+    });
     child.on("error", (error) => {
-      clearTimeout(timeout);
-      reject(error);
+      settle(() => reject(error));
     });
     child.on("close", (code) => {
-      clearTimeout(timeout);
       if (code === 0) {
-        resolve();
+        settle(resolve);
         return;
       }
-      reject(new Error(`${command} clipboard command exited with code ${code ?? -1}.`));
+      settle(() =>
+        reject(new Error(`${command} clipboard command exited with code ${code ?? -1}.`)),
+      );
     });
     child.stdin.end(text);
   });

@@ -1,12 +1,13 @@
+import { BrewvaEffect, BrewvaStream } from "@brewva/brewva-effect";
 import type {
   Api,
   AssistantMessage,
   AssistantMessageEvent,
   Context,
   Model,
+  ProviderAssistantMessageStream,
   ProviderSessionResources,
 } from "../contracts/index.js";
-import { AssistantMessageEventStream } from "../utils/event-stream.js";
 import {
   clearApiProviders,
   registerTypedApiProvider,
@@ -29,12 +30,12 @@ export interface LazyProviderModule<TApi extends ProviderApiWithTypedOptions> {
     model: Model<TApi>,
     context: Context,
     options?: ProviderOptionsByApi[TApi],
-  ) => AsyncIterable<AssistantMessageEvent>;
+  ) => ProviderAssistantMessageStream;
   streamSimple: (
     model: Model<TApi>,
     context: Context,
     options?: ProviderSimpleOptionsByApi[TApi],
-  ) => AsyncIterable<AssistantMessageEvent>;
+  ) => ProviderAssistantMessageStream;
   sessionResources?: ProviderSessionResources;
 }
 
@@ -46,18 +47,6 @@ export interface CachedModuleLoader<TModule> {
 interface BuiltInProviderRegistrationFactory<TApi extends BuiltInApiProviderApi> {
   api: TApi;
   create(): TypedApiProvider<TApi>;
-}
-
-function forwardStream(
-  target: AssistantMessageEventStream,
-  source: AsyncIterable<AssistantMessageEvent>,
-): void {
-  (async () => {
-    for await (const event of source) {
-      target.push(event);
-    }
-    target.end();
-  })();
 }
 
 function createLazyLoadErrorMessage<TApi extends Api>(
@@ -84,24 +73,34 @@ function createLazyLoadErrorMessage<TApi extends Api>(
   };
 }
 
+function createLazyLoadErrorStream<TApi extends Api>(
+  model: Model<TApi>,
+  error: unknown,
+): ProviderAssistantMessageStream {
+  const message = createLazyLoadErrorMessage(model, error);
+  const event: AssistantMessageEvent = {
+    type: "error",
+    reason: "error",
+    error: message,
+  };
+  return BrewvaStream.make(event);
+}
+
 function createLazyStream<TApi extends ProviderApiWithTypedOptions>(
   loadModule: () => Promise<LazyProviderModule<TApi>>,
 ): TypedApiProvider<TApi>["stream"] {
   return (model, context, options) => {
-    const outer = new AssistantMessageEventStream();
-
-    loadModule()
-      .then((module) => {
-        const inner = module.stream(model, context, options);
-        forwardStream(outer, inner);
-      })
-      .catch((error) => {
-        const message = createLazyLoadErrorMessage(model, error);
-        outer.push({ type: "error", reason: "error", error: message });
-        outer.end(message);
-      });
-
-    return outer;
+    return BrewvaStream.unwrap(
+      BrewvaEffect.tryPromise({
+        try: () => loadModule(),
+        catch: (error) => error,
+      }).pipe(
+        BrewvaEffect.map((module) => module.stream(model, context, options)),
+        BrewvaEffect.catch((error) =>
+          BrewvaEffect.succeed(createLazyLoadErrorStream(model, error)),
+        ),
+      ),
+    );
   };
 }
 
@@ -109,20 +108,17 @@ function createLazySimpleStream<TApi extends ProviderApiWithTypedOptions>(
   loadModule: () => Promise<LazyProviderModule<TApi>>,
 ): TypedApiProvider<TApi>["streamSimple"] {
   return (model, context, options) => {
-    const outer = new AssistantMessageEventStream();
-
-    loadModule()
-      .then((module) => {
-        const inner = module.streamSimple(model, context, options);
-        forwardStream(outer, inner);
-      })
-      .catch((error) => {
-        const message = createLazyLoadErrorMessage(model, error);
-        outer.push({ type: "error", reason: "error", error: message });
-        outer.end(message);
-      });
-
-    return outer;
+    return BrewvaStream.unwrap(
+      BrewvaEffect.tryPromise({
+        try: () => loadModule(),
+        catch: (error) => error,
+      }).pipe(
+        BrewvaEffect.map((module) => module.streamSimple(model, context, options)),
+        BrewvaEffect.catch((error) =>
+          BrewvaEffect.succeed(createLazyLoadErrorStream(model, error)),
+        ),
+      ),
+    );
   };
 }
 

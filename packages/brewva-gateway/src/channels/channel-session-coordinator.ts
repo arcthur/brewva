@@ -11,6 +11,10 @@ import { toErrorMessage } from "../utils/errors.js";
 import { recordSessionShutdownIfMissing } from "../utils/runtime.js";
 import { AgentRegistry } from "./agent-registry.js";
 import { AgentRuntimeManager } from "./agent-runtime-manager.js";
+import {
+  createChannelEffectSerialQueue,
+  type ChannelEffectSerialQueue,
+} from "./effect-serial-queue.js";
 import type { AgentSessionUsage } from "./eviction.js";
 import { selectIdleEvictableAgentsByTtl, selectLruEvictableAgent } from "./eviction.js";
 import {
@@ -75,7 +79,7 @@ interface ChannelSessionState {
   runtime: BrewvaRuntime;
   agentSessionId: string;
   result: HostedSessionResult;
-  queueTail: Promise<void>;
+  taskQueue: ChannelEffectSerialQueue;
   inFlightTasks: number;
   outboundSequence: number;
   lastUsedAt: number;
@@ -133,7 +137,7 @@ export function createChannelSessionCoordinator(input: {
   const sessions = new Map<string, ChannelSessionState>();
   const sessionByAgentSessionId = new Map<string, ChannelSessionState>();
   const sessionEpochByAgent = new Map<string, number>();
-  const cleanupTasksByAgent = new Map<string, Promise<void>>();
+  const cleanupQueuesByAgent = new Map<string, ChannelEffectSerialQueue>();
   const createSessionTasks = new Map<
     string,
     {
@@ -148,6 +152,32 @@ export function createChannelSessionCoordinator(input: {
   );
 
   const getSessionEpoch = (agentId: string): number => sessionEpochByAgent.get(agentId) ?? 0;
+
+  const getAgentCleanupQueue = (agentId: string): ChannelEffectSerialQueue => {
+    let queue = cleanupQueuesByAgent.get(agentId);
+    if (!queue) {
+      queue = createChannelEffectSerialQueue({
+        name: `channel-agent-cleanup:${agentId}`,
+      });
+      cleanupQueuesByAgent.set(agentId, queue);
+    }
+    return queue;
+  };
+
+  const releaseAgentCleanupQueueWhenIdle = (
+    agentId: string,
+    queue: ChannelEffectSerialQueue,
+  ): void => {
+    void queue
+      .whenIdle()
+      .then(async () => {
+        if (cleanupQueuesByAgent.get(agentId) === queue && queue.isIdle()) {
+          cleanupQueuesByAgent.delete(agentId);
+          await queue.close();
+        }
+      })
+      .catch(() => undefined);
+  };
 
   const resolveScopeKey = (turn: TurnEnvelope): string => {
     const conversationKey = buildRoutingScopeKey(turn, input.scopeStrategy);
@@ -226,22 +256,14 @@ export function createChannelSessionCoordinator(input: {
     task: () => Promise<T>,
   ): Promise<T> => {
     const state = requireSessionState(handle);
-    const previous = state.queueTail;
-    const next = previous
-      .catch(() => undefined)
-      .then(async () => {
-        state.inFlightTasks += 1;
-        try {
-          return await task();
-        } finally {
-          state.inFlightTasks = Math.max(0, state.inFlightTasks - 1);
-        }
-      });
-    state.queueTail = next.then(
-      () => undefined,
-      () => undefined,
-    );
-    return next;
+    return await state.taskQueue.enqueue(async () => {
+      state.inFlightTasks += 1;
+      try {
+        return await task();
+      } finally {
+        state.inFlightTasks = Math.max(0, state.inFlightTasks - 1);
+      }
+    });
   };
 
   const disposeHostedSession = async (inputState: {
@@ -279,45 +301,30 @@ export function createChannelSessionCoordinator(input: {
       agentSessionId: state.agentSessionId,
       result: state.result,
     });
+    await state.taskQueue.close();
     input.runtimeManager.releaseRuntime(state.agentId);
   };
 
   const cleanupAgentSessions = async (agentId: string): Promise<void> => {
-    while (true) {
-      const activeCleanup = cleanupTasksByAgent.get(agentId);
-      if (activeCleanup) {
-        await activeCleanup.catch(() => undefined);
-        continue;
-      }
+    const queue = getAgentCleanupQueue(agentId);
+    const cleanupTask = queue.enqueue(async () => {
+      invalidateAgentSessions(agentId);
+      const liveMatches = [...sessions.values()].filter((state) => state.agentId === agentId);
+      const pendingCreates = listPendingCreateTasksForAgent(agentId);
+      await waitForAllSettledWithTimeout(
+        [...liveMatches.map((state) => state.taskQueue.whenIdle()), ...pendingCreates],
+        cleanupGracefulTimeoutMs,
+      );
 
-      let cleanupTask: Promise<void> | undefined;
-      cleanupTask = (async (): Promise<void> => {
-        invalidateAgentSessions(agentId);
-        const liveMatches = [...sessions.values()].filter((state) => state.agentId === agentId);
-        const pendingCreates = listPendingCreateTasksForAgent(agentId);
-        await waitForAllSettledWithTimeout(
-          [...liveMatches.map((state) => state.queueTail), ...pendingCreates],
-          cleanupGracefulTimeoutMs,
-        );
-
-        const remainingMatches = [...sessions.values()].filter(
-          (state) => state.agentId === agentId,
-        );
-        await Promise.all(
-          remainingMatches.map(async (state) => {
-            await disposeSessionState(state);
-          }),
-        );
-      })().finally(() => {
-        if (cleanupTask && cleanupTasksByAgent.get(agentId) === cleanupTask) {
-          cleanupTasksByAgent.delete(agentId);
-        }
-      });
-
-      cleanupTasksByAgent.set(agentId, cleanupTask);
-      await cleanupTask;
-      return;
-    }
+      const remainingMatches = [...sessions.values()].filter((state) => state.agentId === agentId);
+      await Promise.all(
+        remainingMatches.map(async (state) => {
+          await disposeSessionState(state);
+        }),
+      );
+    });
+    releaseAgentCleanupQueueWhenIdle(agentId, queue);
+    await cleanupTask;
   };
 
   const buildSessionUsages = (): AgentSessionUsage[] =>
@@ -330,7 +337,7 @@ export function createChannelSessionCoordinator(input: {
   const evictAgentRuntime = async (agentId: string): Promise<boolean> => {
     const matches = [...sessions.values()].filter((state) => state.agentId === agentId);
     await waitForAllSettledWithTimeout(
-      matches.map((state) => state.queueTail),
+      matches.map((state) => state.taskQueue.whenIdle()),
       cleanupGracefulTimeoutMs,
     );
     if (
@@ -391,9 +398,9 @@ export function createChannelSessionCoordinator(input: {
     ): Promise<ChannelSessionHandle> {
       const key = buildAgentScopedConversationKey(agentId, scopeKey);
       while (true) {
-        const cleanupTask = cleanupTasksByAgent.get(agentId);
-        if (cleanupTask) {
-          await cleanupTask.catch(() => undefined);
+        const cleanupQueue = cleanupQueuesByAgent.get(agentId);
+        if (cleanupQueue && !cleanupQueue.isIdle()) {
+          await cleanupQueue.whenIdle().catch(() => undefined);
           continue;
         }
 
@@ -461,7 +468,9 @@ export function createChannelSessionCoordinator(input: {
               runtime: workerRuntime,
               agentSessionId,
               result,
-              queueTail: Promise.resolve(),
+              taskQueue: createChannelEffectSerialQueue({
+                name: `channel-session:${agentSessionId}`,
+              }),
               inFlightTasks: 0,
               outboundSequence: 0,
               lastUsedAt: Date.now(),
@@ -557,7 +566,8 @@ export function createChannelSessionCoordinator(input: {
 
     listQueueTails(): Promise<void>[] {
       return [
-        ...[...sessions.values()].map((state) => state.queueTail),
+        ...[...sessions.values()].map((state) => state.taskQueue.whenIdle()),
+        ...[...cleanupQueuesByAgent.values()].map((queue) => queue.whenIdle()),
         ...[...createSessionTasks.values()].map((entry) =>
           entry.promise.then(
             () => undefined,

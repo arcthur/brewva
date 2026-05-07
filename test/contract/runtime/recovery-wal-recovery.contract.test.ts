@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { runPromiseAtBoundary } from "@brewva/brewva-effect";
 import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
 import type { TurnEnvelope } from "@brewva/brewva-runtime/channels";
 import { createRecoveryWalRecovery, createRecoveryWalStore } from "@brewva/brewva-runtime/recovery";
@@ -47,7 +48,7 @@ describe("Recovery WAL recovery", () => {
       },
     });
 
-    const summary = await recovery.recover();
+    const summary = await runPromiseAtBoundary(recovery.recoverEffect());
     expect(summary.scanned).toBe(1);
     expect(summary.retried).toBe(1);
     expect(summary.failed).toBe(0);

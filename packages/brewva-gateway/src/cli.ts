@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import process from "node:process";
 import { parseArgs as parseNodeArgs } from "node:util";
+import { BrewvaEffect, runEdgeOperation } from "@brewva/brewva-effect";
 import {
   BrewvaConfigLoadError,
   resolveBrewvaAgentDir,
@@ -1954,7 +1955,7 @@ async function handleUninstall(argv: string[]): Promise<number> {
   }
 }
 
-export async function runGatewayCli(
+export async function runGatewayCliOperation(
   argv: string[],
   options: RunGatewayCliOptions = {},
 ): Promise<RunGatewayCliResult> {
@@ -2052,4 +2053,22 @@ export async function runGatewayCli(
     handled: true,
     exitCode: 1,
   };
+}
+
+export function runGatewayCliEffect(
+  argv: string[],
+  options: RunGatewayCliOptions = {},
+): BrewvaEffect.Effect<RunGatewayCliResult, unknown> {
+  return BrewvaEffect.promise(() => runGatewayCliOperation(argv, options));
+}
+
+export async function runGatewayCli(
+  argv: string[],
+  options: RunGatewayCliOptions = {},
+): Promise<RunGatewayCliResult> {
+  return runEdgeOperation("brewva.gateway.cli", runGatewayCliEffect(argv, options), {
+    fields: {
+      command: argv[0] ?? "help",
+    },
+  });
 }

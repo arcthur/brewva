@@ -1,12 +1,14 @@
 import { describe, expect, test } from "bun:test";
+import { BrewvaEffect, BrewvaStream, runPromiseAtBoundary } from "@brewva/brewva-effect";
 import type { AssistantMessage } from "@brewva/brewva-provider-core/contracts";
+import { providerRuntimeLayer } from "@brewva/brewva-provider-core/contracts";
 import {
   clearApiProviders,
   registerApiProvider,
   unregisterApiProviders,
 } from "@brewva/brewva-provider-core/registry";
-import { createAssistantMessageEventStream } from "@brewva/brewva-provider-core/stream";
 import { createBrewvaTurnProviderStreamFunction } from "@brewva/brewva-substrate/turn";
+import { createProviderEventStream } from "../../../helpers/effect-stream.js";
 
 const SOURCE_ID = "provider-stream-unit-test";
 
@@ -37,45 +39,41 @@ describe("substrate turn provider stream", () => {
       {
         api: "engine-provider-stream-test",
         stream() {
-          const stream = createAssistantMessageEventStream();
-          return stream;
+          return createProviderEventStream();
         },
         streamSimple(model) {
-          const stream = createAssistantMessageEventStream();
           const partial = createMessage(model.api);
-          queueMicrotask(() => {
-            stream.push({ type: "start", partial });
-            stream.push({
+          return createProviderEventStream([
+            { type: "start", partial },
+            {
               type: "toolcall_start",
               contentIndex: 0,
               partial,
               parseStatus: "incomplete",
-            });
-            stream.push({
+            },
+            {
               type: "toolcall_delta",
               contentIndex: 0,
               delta: '{"query"',
               partial,
               parseStatus: "pending",
-            });
-            stream.push({
+            },
+            {
               type: "toolcall_end",
               contentIndex: 0,
               toolCall: { type: "toolCall", id: "call_1", name: "search", arguments: {} },
               partial,
               parseStatus: "likely_invalid",
-            });
-            stream.push({ type: "done", reason: "toolUse", message: partial });
-            stream.end(partial);
-          });
-          return stream;
+            },
+            { type: "done", reason: "toolUse", message: partial },
+          ]);
         },
       },
       SOURCE_ID,
     );
 
     const providerStream = createBrewvaTurnProviderStreamFunction();
-    const stream = await providerStream(
+    const stream = providerStream(
       {
         provider: "unit-provider",
         id: "unit-model",
@@ -97,10 +95,9 @@ describe("substrate turn provider stream", () => {
       },
     );
 
-    const events = [];
-    for await (const event of stream) {
-      events.push(event);
-    }
+    const events = await runPromiseAtBoundary(
+      stream.pipe(BrewvaStream.runCollect, BrewvaEffect.provide(providerRuntimeLayer)),
+    );
 
     expect(events[1]).toMatchObject({ type: "toolcall_start", parseStatus: "incomplete" });
     expect(events[2]).toMatchObject({ type: "toolcall_delta", parseStatus: "pending" });

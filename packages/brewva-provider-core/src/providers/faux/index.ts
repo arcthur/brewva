@@ -2,7 +2,6 @@ import { estimateTokenCount } from "@brewva/brewva-token-estimation";
 import { buildProviderCacheBucketKey, normalizeProviderCachePolicy } from "../../cache/policy.js";
 import type {
   AssistantMessage,
-  AssistantMessageEventStream,
   Context,
   FileContent,
   ImageContent,
@@ -10,6 +9,7 @@ import type {
   Model,
   ProviderCacheCapability,
   ProviderCacheRenderResult,
+  ProviderEventSink,
   SimpleStreamOptions,
   StreamFunction,
   StreamOptions,
@@ -23,7 +23,7 @@ import {
   registerExternalApiProvider,
   unregisterApiProviders,
 } from "../../registry/api-registry.js";
-import { createAssistantMessageEventStream } from "../../utils/event-stream.js";
+import { runProviderStream } from "../../stream/run-provider-stream.js";
 import { buildProviderPayloadMetadata } from "../_shared/payload-metadata.js";
 
 const DEFAULT_API = "faux";
@@ -57,7 +57,12 @@ export interface FauxModelDefinition {
   name?: string;
   reasoning?: boolean;
   input?: ("text" | "image")[];
-  cost?: { input: number; output: number; cacheRead: number; cacheWrite: number };
+  cost?: {
+    input: number;
+    output: number;
+    cacheRead: number;
+    cacheWrite: number;
+  };
   contextWindow?: number;
   maxTokens?: number;
 }
@@ -381,53 +386,48 @@ function scheduleChunk(chunk: string, tokensPerSecond: number | undefined): Prom
 }
 
 async function streamWithDeltas(
-  stream: AssistantMessageEventStream,
+  stream: ProviderEventSink,
   message: AssistantMessage,
   minTokenSize: number,
   maxTokenSize: number,
   tokensPerSecond: number | undefined,
   signal: AbortSignal | undefined,
-): Promise<void> {
+): Promise<AssistantMessage> {
   const partial: AssistantMessage = { ...message, content: [] };
   if (signal?.aborted) {
-    const aborted = createAbortedMessage(partial);
-    stream.push({ type: "error", reason: "aborted", error: aborted });
-    stream.end(aborted);
-    return;
+    throw new Error(createAbortedMessage(partial).errorMessage);
   }
 
-  stream.push({ type: "start", partial: { ...partial } });
+  await stream.push({ type: "start", partial: { ...partial } });
 
   for (let index = 0; index < message.content.length; index++) {
     if (signal?.aborted) {
-      const aborted = createAbortedMessage(partial);
-      stream.push({ type: "error", reason: "aborted", error: aborted });
-      stream.end(aborted);
-      return;
+      throw new Error(createAbortedMessage(partial).errorMessage);
     }
 
     const block = message.content[index]!;
 
     if (block.type === "thinking") {
       partial.content = [...partial.content, { type: "thinking", thinking: "" }];
-      stream.push({ type: "thinking_start", contentIndex: index, partial: { ...partial } });
+      await stream.push({
+        type: "thinking_start",
+        contentIndex: index,
+        partial: { ...partial },
+      });
       for (const chunk of splitStringByTokenSize(block.thinking, minTokenSize, maxTokenSize)) {
         await scheduleChunk(chunk, tokensPerSecond);
         if (signal?.aborted) {
-          const aborted = createAbortedMessage(partial);
-          stream.push({ type: "error", reason: "aborted", error: aborted });
-          stream.end(aborted);
-          return;
+          throw new Error(createAbortedMessage(partial).errorMessage);
         }
         (partial.content[index] as ThinkingContent).thinking += chunk;
-        stream.push({
+        await stream.push({
           type: "thinking_delta",
           contentIndex: index,
           delta: chunk,
           partial: { ...partial },
         });
       }
-      stream.push({
+      await stream.push({
         type: "thinking_end",
         contentIndex: index,
         content: block.thinking,
@@ -438,24 +438,25 @@ async function streamWithDeltas(
 
     if (block.type === "text") {
       partial.content = [...partial.content, { type: "text", text: "" }];
-      stream.push({ type: "text_start", contentIndex: index, partial: { ...partial } });
+      await stream.push({
+        type: "text_start",
+        contentIndex: index,
+        partial: { ...partial },
+      });
       for (const chunk of splitStringByTokenSize(block.text, minTokenSize, maxTokenSize)) {
         await scheduleChunk(chunk, tokensPerSecond);
         if (signal?.aborted) {
-          const aborted = createAbortedMessage(partial);
-          stream.push({ type: "error", reason: "aborted", error: aborted });
-          stream.end(aborted);
-          return;
+          throw new Error(createAbortedMessage(partial).errorMessage);
         }
         (partial.content[index] as TextContent).text += chunk;
-        stream.push({
+        await stream.push({
           type: "text_delta",
           contentIndex: index,
           delta: chunk,
           partial: { ...partial },
         });
       }
-      stream.push({
+      await stream.push({
         type: "text_end",
         contentIndex: index,
         content: block.text,
@@ -468,7 +469,11 @@ async function streamWithDeltas(
       ...partial.content,
       { type: "toolCall", id: block.id, name: block.name, arguments: {} },
     ];
-    stream.push({ type: "toolcall_start", contentIndex: index, partial: { ...partial } });
+    await stream.push({
+      type: "toolcall_start",
+      contentIndex: index,
+      partial: { ...partial },
+    });
     for (const chunk of splitStringByTokenSize(
       JSON.stringify(block.arguments),
       minTokenSize,
@@ -476,12 +481,9 @@ async function streamWithDeltas(
     )) {
       await scheduleChunk(chunk, tokensPerSecond);
       if (signal?.aborted) {
-        const aborted = createAbortedMessage(partial);
-        stream.push({ type: "error", reason: "aborted", error: aborted });
-        stream.end(aborted);
-        return;
+        throw new Error(createAbortedMessage(partial).errorMessage);
       }
-      stream.push({
+      await stream.push({
         type: "toolcall_delta",
         contentIndex: index,
         delta: chunk,
@@ -489,7 +491,7 @@ async function streamWithDeltas(
       });
     }
     (partial.content[index] as ToolCall).arguments = block.arguments;
-    stream.push({
+    await stream.push({
       type: "toolcall_end",
       contentIndex: index,
       toolCall: block,
@@ -498,13 +500,10 @@ async function streamWithDeltas(
   }
 
   if (message.stopReason === "error" || message.stopReason === "aborted") {
-    stream.push({ type: "error", reason: message.stopReason, error: message });
-    stream.end(message);
-    return;
+    throw new Error(message.errorMessage || `Faux provider returned ${message.stopReason}`);
   }
 
-  stream.push({ type: "done", reason: message.stopReason, message });
-  stream.end(message);
+  return message;
 }
 
 export function registerFauxProvider(
@@ -547,18 +546,23 @@ export function registerFauxProvider(
     baseUrl: DEFAULT_BASE_URL,
     reasoning: definition.reasoning ?? false,
     input: definition.input ?? ["text", "image"],
-    cost: definition.cost ?? { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    cost: definition.cost ?? {
+      input: 0,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+    },
     contextWindow: definition.contextWindow ?? 128000,
     maxTokens: definition.maxTokens ?? 16384,
   })) as [Model<string>, ...Model<string>[]];
 
   const stream: StreamFunction<string, StreamOptions> = (requestModel, context, streamOptions) => {
-    const outer = createAssistantMessageEventStream();
     const step = pendingResponses.shift();
     state.callCount++;
 
-    queueMicrotask(async () => {
-      try {
+    return runProviderStream(
+      requestModel,
+      async ({ stream: sink, output, signal }) => {
         const cacheRender = resolveFauxCacheRender(requestModel, streamOptions);
         await streamOptions?.onCacheRender?.(cacheRender, requestModel);
         const payload = buildFauxPayload(context, requestModel);
@@ -576,9 +580,7 @@ export function registerFauxProvider(
             requestModel.id,
           );
           message = withUsageEstimate(message, context, streamOptions, promptCache);
-          outer.push({ type: "error", reason: "error", error: message });
-          outer.end(message);
-          return;
+          throw new Error(message.errorMessage);
         }
 
         const resolved =
@@ -587,22 +589,18 @@ export function registerFauxProvider(
             : step;
         let message = cloneMessage(resolved, api, provider, requestModel.id);
         message = withUsageEstimate(message, context, streamOptions, promptCache);
-        await streamWithDeltas(
-          outer,
+        const finalMessage = await streamWithDeltas(
+          sink,
           message,
           minTokenSize,
           maxTokenSize,
           tokensPerSecond,
-          streamOptions?.signal,
+          signal,
         );
-      } catch (error) {
-        const message = createErrorMessage(error, api, provider, requestModel.id);
-        outer.push({ type: "error", reason: "error", error: message });
-        outer.end(message);
-      }
-    });
-
-    return outer;
+        Object.assign(output, finalMessage);
+      },
+      { signal: streamOptions?.signal, sessionId: streamOptions?.sessionId },
+    );
   };
 
   const streamSimple: StreamFunction<string, SimpleStreamOptions> = (

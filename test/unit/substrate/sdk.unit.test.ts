@@ -16,6 +16,7 @@ import type {
   BrewvaTurnLoopStreamOptions,
 } from "@brewva/brewva-substrate/turn";
 import { Type } from "@sinclair/typebox";
+import { createTurnEventStream } from "../../helpers/effect-stream.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 const TEST_MODEL: BrewvaRegisteredModel = {
@@ -83,7 +84,7 @@ function createToolCallAssistantMessage(toolName: string): BrewvaTurnLoopAssista
 }
 
 function createTestStream(text: string): BrewvaTurnLoopStreamFunction {
-  return async () => {
+  return () => {
     const finalMessage = createAssistantMessage(text);
     const events: BrewvaTurnLoopAssistantMessageEvent[] = [
       { type: "start", partial: finalMessage },
@@ -95,16 +96,7 @@ function createTestStream(text: string): BrewvaTurnLoopStreamFunction {
       },
       { type: "done", reason: "stop", message: finalMessage },
     ];
-    return {
-      async *[Symbol.asyncIterator]() {
-        for (const event of events) {
-          yield event;
-        }
-      },
-      async result() {
-        return finalMessage;
-      },
-    };
+    return createTurnEventStream(events);
   };
 }
 
@@ -113,8 +105,10 @@ function createSequenceStream(
   onCall?: (options: BrewvaTurnLoopStreamOptions) => Promise<void> | void,
 ): BrewvaTurnLoopStreamFunction {
   let index = 0;
-  return async (_model, _context, options) => {
-    await onCall?.(options);
+  return (_model, _context, options) => {
+    // Stream factories are synchronous; tests that need async setup must do it
+    // before returning the Effect stream.
+    void onCall?.(options);
     const finalMessage =
       messages[Math.min(index, messages.length - 1)] ?? createAssistantMessage("");
     index += 1;
@@ -128,16 +122,7 @@ function createSequenceStream(
       { type: "start", partial: finalMessage },
       { type: "done", reason: doneReason, message: finalMessage },
     ];
-    return {
-      async *[Symbol.asyncIterator]() {
-        for (const event of events) {
-          yield event;
-        }
-      },
-      async result() {
-        return finalMessage;
-      },
-    };
+    return createTurnEventStream(events);
   };
 }
 

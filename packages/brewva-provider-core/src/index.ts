@@ -59,7 +59,6 @@ export type {
   AssistantMessage,
   AssistantMessageEvent,
   AssistantMessageEventOf,
-  AssistantMessageEventStream,
   Context,
   FileContent,
   ImageContent,

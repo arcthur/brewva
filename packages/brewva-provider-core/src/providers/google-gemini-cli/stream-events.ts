@@ -1,6 +1,6 @@
 import type {
   AssistantMessage,
-  AssistantMessageEventStream,
+  ProviderEventSink,
   Model,
   TextContent,
   ThinkingContent,
@@ -13,7 +13,7 @@ import { applyGoogleGeminiCliUsage } from "./usage.js";
 export async function processGoogleGeminiCliSseStream(
   chunks: AsyncIterable<CloudCodeAssistResponseChunk>,
   output: AssistantMessage,
-  stream: AssistantMessageEventStream,
+  stream: ProviderEventSink,
   model: Model<"google-gemini-cli">,
   toolCalls: IncrementalToolCallFolder,
 ): Promise<void> {
@@ -23,9 +23,9 @@ export async function processGoogleGeminiCliSseStream(
   let currentThinkingBlock: ThinkingContent | null = null;
   let currentThinkingBlockIndex = -1;
 
-  const endCurrentTextBlock = () => {
+  const endCurrentTextBlock = async () => {
     if (!currentTextBlock) return;
-    stream.push({
+    await stream.push({
       type: "text_end",
       contentIndex: currentTextBlockIndex,
       content: currentTextBlock.text,
@@ -35,9 +35,9 @@ export async function processGoogleGeminiCliSseStream(
     currentTextBlockIndex = -1;
   };
 
-  const endCurrentThinkingBlock = () => {
+  const endCurrentThinkingBlock = async () => {
     if (!currentThinkingBlock) return;
-    stream.push({
+    await stream.push({
       type: "thinking_end",
       contentIndex: currentThinkingBlockIndex,
       content: currentThinkingBlock.thinking,
@@ -63,7 +63,7 @@ export async function processGoogleGeminiCliSseStream(
       if (part.text) {
         hadContent = true;
         if (part.thought) {
-          endCurrentTextBlock();
+          await endCurrentTextBlock();
           if (!currentThinkingBlock) {
             currentThinkingBlock = {
               type: "thinking",
@@ -72,7 +72,7 @@ export async function processGoogleGeminiCliSseStream(
             };
             output.content.push(currentThinkingBlock);
             currentThinkingBlockIndex = output.content.length - 1;
-            stream.push({
+            await stream.push({
               type: "thinking_start",
               contentIndex: currentThinkingBlockIndex,
               partial: output,
@@ -84,26 +84,26 @@ export async function processGoogleGeminiCliSseStream(
             );
           }
           currentThinkingBlock.thinking += part.text;
-          stream.push({
+          await stream.push({
             type: "thinking_delta",
             contentIndex: currentThinkingBlockIndex,
             delta: part.text,
             partial: output,
           });
         } else {
-          endCurrentThinkingBlock();
+          await endCurrentThinkingBlock();
           if (!currentTextBlock) {
             currentTextBlock = { type: "text", text: "" };
             output.content.push(currentTextBlock);
             currentTextBlockIndex = output.content.length - 1;
-            stream.push({
+            await stream.push({
               type: "text_start",
               contentIndex: currentTextBlockIndex,
               partial: output,
             });
           }
           currentTextBlock.text += part.text;
-          stream.push({
+          await stream.push({
             type: "text_delta",
             contentIndex: currentTextBlockIndex,
             delta: part.text,
@@ -114,10 +114,10 @@ export async function processGoogleGeminiCliSseStream(
 
       if (part.functionCall) {
         hadContent = true;
-        endCurrentTextBlock();
-        endCurrentThinkingBlock();
+        await endCurrentTextBlock();
+        await endCurrentThinkingBlock();
         const key = part.functionCall.id || part.functionCall.name;
-        toolCalls.pushAtomic(
+        await toolCalls.pushAtomic(
           {
             type: "toolCall",
             id: part.functionCall.id || part.functionCall.name,
@@ -135,8 +135,8 @@ export async function processGoogleGeminiCliSseStream(
     }
   }
 
-  endCurrentTextBlock();
-  endCurrentThinkingBlock();
+  await endCurrentTextBlock();
+  await endCurrentThinkingBlock();
 
   if (!hadContent) {
     throw new Error("Empty SSE response");

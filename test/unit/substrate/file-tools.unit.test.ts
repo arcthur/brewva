@@ -20,6 +20,15 @@ function extractText(result: {
     .join("\n");
 }
 
+async function captureError(run: Promise<unknown>): Promise<unknown> {
+  try {
+    await run;
+    return undefined;
+  } catch (error) {
+    return error;
+  }
+}
+
 describe("substrate file tools", () => {
   test("read tool returns bounded content with a continuation footer", async () => {
     const workspace = createTestWorkspace("substrate-read-tool");
@@ -95,6 +104,76 @@ describe("substrate file tools", () => {
 
     expect(readFileSync(filePath, "utf8")).toBe("hello from substrate");
     expect(extractText(result)).toContain("Successfully wrote");
+
+    cleanupTestWorkspace(workspace);
+  });
+
+  test("write tool keeps aborted mutations inside the file queue until checkpoints complete", async () => {
+    const workspace = createTestWorkspace("substrate-write-abort-tool");
+    const controller = new AbortController();
+    let attemptedWrite = false;
+    const tool = createBrewvaWriteToolDefinition(workspace, {
+      operations: {
+        async mkdir() {
+          controller.abort();
+        },
+        async writeFile() {
+          attemptedWrite = true;
+        },
+      },
+    });
+
+    const error = await captureError(
+      tool.execute(
+        "tool-call-4",
+        {
+          path: "abort/output.txt",
+          content: "must not write",
+        },
+        controller.signal,
+        undefined,
+        undefined as never,
+      ),
+    );
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toBe("Operation aborted");
+    expect(attemptedWrite).toBe(false);
+
+    cleanupTestWorkspace(workspace);
+  });
+
+  test("edit tool does not release an aborted file mutation before the read checkpoint", async () => {
+    const workspace = createTestWorkspace("substrate-edit-abort-tool");
+    const controller = new AbortController();
+    let attemptedWrite = false;
+    const tool = createBrewvaEditToolDefinition(workspace, {
+      operations: {
+        async access() {},
+        async readFile() {
+          controller.abort();
+          return Buffer.from("const value = 1;\n", "utf8");
+        },
+        async writeFile() {
+          attemptedWrite = true;
+        },
+      },
+    });
+
+    const error = await captureError(
+      tool.execute(
+        "tool-call-5",
+        {
+          path: "src/example.ts",
+          edits: [{ oldText: "const value = 1;", newText: "const value = 2;" }],
+        },
+        controller.signal,
+        undefined,
+        undefined as never,
+      ),
+    );
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toBe("Operation aborted");
+    expect(attemptedWrite).toBe(false);
 
     cleanupTestWorkspace(workspace);
   });

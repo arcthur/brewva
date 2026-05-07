@@ -1,3 +1,8 @@
+import {
+  BrewvaEffect,
+  runPromiseAtBoundary,
+  type BrewvaBoundaryError,
+} from "@brewva/brewva-effect";
 import type { ContextState } from "../contracts/context-state.js";
 import type { SessionPhase } from "../contracts/session-phase.js";
 import type {
@@ -429,6 +434,45 @@ export interface InternalHostPlugin {
 
 export function defineInternalHostPlugin(plugin: InternalHostPlugin): InternalHostPlugin {
   return plugin;
+}
+
+export interface EffectInternalHostPluginApi extends InternalHostPluginApi {
+  onEffect<TKey extends keyof BrewvaHostPluginEventMap, E = BrewvaBoundaryError | Error>(
+    event: TKey,
+    handler: (
+      event: BrewvaHostPluginEventMap[TKey],
+      ctx: BrewvaHostContext,
+    ) => BrewvaEffect.Effect<BrewvaHostPluginHandlerResult<TKey>, E>,
+  ): void;
+}
+
+export interface EffectInternalHostPlugin {
+  readonly name: string;
+  readonly capabilities: readonly RuntimePluginCapability[];
+  register(api: EffectInternalHostPluginApi): void | Promise<void>;
+}
+
+export function defineEffectInternalHostPlugin(
+  plugin: EffectInternalHostPlugin,
+): InternalHostPlugin {
+  return defineInternalHostPlugin({
+    name: plugin.name,
+    capabilities: plugin.capabilities,
+    register(api) {
+      const effectApi: EffectInternalHostPluginApi = {
+        ...api,
+        onEffect(event, handler) {
+          api.on(event, (payload, ctx) =>
+            runPromiseAtBoundary(
+              handler(payload, ctx),
+              ctx.signal ? { signal: ctx.signal } : undefined,
+            ),
+          );
+        },
+      };
+      return plugin.register(effectApi);
+    },
+  });
 }
 
 export type { BrewvaToolUiPort };

@@ -40,6 +40,11 @@ import {
 } from "../events/descriptors.js";
 import type { BrewvaEventRecord } from "../events/types.js";
 import { sanitizeContextText } from "../security/sanitize.js";
+import {
+  collectRuntimeComposition,
+  createRuntimeEffectLayer,
+  createRuntimeEffectSpine,
+} from "./effect-runtime-layer.js";
 import type {
   BrewvaAuthorityPort,
   BrewvaHostedRuntimePort,
@@ -47,11 +52,10 @@ import type {
   BrewvaMaintenancePort,
   BrewvaRuntimeOptions,
 } from "./runtime-api.js";
-import {
-  composeRuntimeDependencies,
-  type RuntimeCoreDependencies,
-  type RuntimeLazyServiceFactories,
-  type RuntimeServiceDependencies,
+import type {
+  RuntimeCoreDependencies,
+  RuntimeLazyServiceFactories,
+  RuntimeServiceDependencies,
 } from "./runtime-composition.js";
 import { resolveRuntimeConfigState } from "./runtime-config-state.js";
 import { createRuntimeExtensions } from "./runtime-extension-factory.js";
@@ -98,6 +102,8 @@ class RuntimeFacadeStateController implements BrewvaHostedRuntimePort {
   private readonly sessionLifecycleSnapshotCache = new Map<string, SessionLifecycleSnapshot>();
   private readonly kernel: RuntimeKernelContext;
   private readonly lazyServiceFactories: RuntimeLazyServiceFactories;
+  private readonly effectRuntimeSpine: ReturnType<typeof createRuntimeEffectSpine>;
+  private readonly effectRuntimeLayer: ReturnType<typeof createRuntimeEffectLayer>;
   private readonly clearEffectCommitmentDeskState: (sessionId: string) => void;
   declare private readonly contextService: RuntimeServiceDependencyMap["contextService"];
   declare private readonly costService: RuntimeServiceDependencyMap["costService"];
@@ -163,36 +169,45 @@ class RuntimeFacadeStateController implements BrewvaHostedRuntimePort {
     this.runtimeConfig = configState.config;
     this.config = configState.readonlyConfig;
 
-    const composition = composeRuntimeDependencies({
-      cwd: this.cwd,
-      workspaceRoot: this.workspaceRoot,
-      agentId: this.agentId,
-      config: this.runtimeConfig,
-      governancePort: options.governancePort,
-      sessionState: this.sessionState,
-      resolveToolAuthority: (toolName, args) =>
-        resolveToolAuthority(
-          toolName,
-          this.actionPolicyRegistry,
-          args,
-          this.runtimeConfig.security.actionAdmissionOverrides,
-        ),
-      getCurrentTurn: (sessionId) => this.getCurrentTurn(sessionId),
-      getTaskState: (sessionId) => this.getTaskState(sessionId),
-      getTruthState: (sessionId) => this.getTruthState(sessionId),
-      recordEvent: (input) => this.recordEvent(input),
-      sanitizeInput: (text) => this.sanitizeInput(text),
-      getRecentToolOutputDistillations: (sessionId, maxEntries) =>
-        this.getRecentToolOutputDistillations(sessionId, maxEntries),
-      getLatestVerificationOutcome: (sessionId) => this.getLatestVerificationOutcome(sessionId),
-      isContextBudgetEnabled: () => this.isContextBudgetEnabled(),
-      resolveCheckpointCostSummary: (sessionId) => this.resolveCheckpointCostSummary(sessionId),
-      resolveCheckpointCostSkillLastTurnByName: (sessionId) =>
-        this.resolveCheckpointCostSkillLastTurnByName(sessionId),
-      evaluateCompletion: (sessionId, level) => this.evaluateCompletion(sessionId, level),
-      getSessionLifecycleSnapshot: (sessionId) => this.getSessionLifecycleSnapshot(sessionId),
+    this.effectRuntimeSpine = createRuntimeEffectSpine({
+      identity: {
+        cwd: this.cwd,
+        workspaceRoot: this.workspaceRoot,
+        agentId: this.agentId,
+      },
+      config: {
+        mutableConfig: this.runtimeConfig,
+        readonlyConfig: this.config,
+      },
+      hooks: {
+        governancePort: options.governancePort,
+        sessionState: this.sessionState,
+        resolveToolAuthority: (toolName, args) =>
+          resolveToolAuthority(
+            toolName,
+            this.actionPolicyRegistry,
+            args,
+            this.runtimeConfig.security.actionAdmissionOverrides,
+          ),
+        getCurrentTurn: (sessionId) => this.getCurrentTurn(sessionId),
+        getTaskState: (sessionId) => this.getTaskState(sessionId),
+        getTruthState: (sessionId) => this.getTruthState(sessionId),
+        recordEvent: (input) => this.recordEvent(input),
+        sanitizeInput: (text) => this.sanitizeInput(text),
+        getRecentToolOutputDistillations: (sessionId, maxEntries) =>
+          this.getRecentToolOutputDistillations(sessionId, maxEntries),
+        getLatestVerificationOutcome: (sessionId) => this.getLatestVerificationOutcome(sessionId),
+        isContextBudgetEnabled: () => this.isContextBudgetEnabled(),
+        resolveCheckpointCostSummary: (sessionId) => this.resolveCheckpointCostSummary(sessionId),
+        resolveCheckpointCostSkillLastTurnByName: (sessionId) =>
+          this.resolveCheckpointCostSkillLastTurnByName(sessionId),
+        evaluateCompletion: (sessionId, level) => this.evaluateCompletion(sessionId, level),
+        getSessionLifecycleSnapshot: (sessionId) => this.getSessionLifecycleSnapshot(sessionId),
+      },
     });
-    const { coreDependencies, kernel, serviceDependencies, lazyServiceFactories } = composition;
+    this.effectRuntimeLayer = this.effectRuntimeSpine.layer;
+    const { coreDependencies, kernel, serviceDependencies, lazyServiceFactories } =
+      this.effectRuntimeSpine.runSync(collectRuntimeComposition());
     this.skillRegistry = coreDependencies.skillRegistry;
     this.evidenceLedger = coreDependencies.evidenceLedger;
     this.verificationGate = coreDependencies.verificationGate;
@@ -314,6 +329,14 @@ class RuntimeFacadeStateController implements BrewvaHostedRuntimePort {
     this.sessionLineageService.registerRuntimeCapabilityStateOwners(
       listExtensionPortCapabilities(this.extensions),
     );
+  }
+
+  getEffectRuntimeLayer(): ReturnType<typeof createRuntimeEffectLayer> {
+    return this.effectRuntimeLayer;
+  }
+
+  getEffectRuntimeSpine(): ReturnType<typeof createRuntimeEffectSpine> {
+    return this.effectRuntimeSpine;
   }
 
   private getCredentialVaultService(): ReturnType<
@@ -675,4 +698,16 @@ export function createRuntimeFacadeState(options: BrewvaRuntimeOptions = {}): Ru
     writable: false,
   });
   return facadeState;
+}
+
+export function getRuntimeEffectLayer(
+  state: RuntimeFacadeState,
+): ReturnType<typeof createRuntimeEffectLayer> {
+  return state[BREWVA_RUNTIME_INTERNAL_STATE_SYMBOL].getEffectRuntimeLayer();
+}
+
+export function getRuntimeEffectSpine(
+  state: RuntimeFacadeState,
+): ReturnType<typeof createRuntimeEffectSpine> {
+  return state[BREWVA_RUNTIME_INTERNAL_STATE_SYMBOL].getEffectRuntimeSpine();
 }

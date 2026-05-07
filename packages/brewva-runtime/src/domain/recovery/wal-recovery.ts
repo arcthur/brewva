@@ -1,3 +1,10 @@
+import {
+  BrewvaCause,
+  BrewvaEffect,
+  BrewvaExit,
+  BrewvaSchema,
+  runPromiseAtBoundary,
+} from "@brewva/brewva-effect";
 import type { BrewvaConfig } from "../../config/types.js";
 import type {
   RecoveryWalRecord,
@@ -79,6 +86,33 @@ function toErrorMessage(error: unknown): string {
   return "unknown_recovery_error";
 }
 
+export class RecoveryWalRecoveryError extends BrewvaSchema.TaggedErrorClass<RecoveryWalRecoveryError>()(
+  "RecoveryWalRecoveryError",
+  {
+    message: BrewvaSchema.String,
+    operation: BrewvaSchema.String,
+    cause: BrewvaSchema.optional(BrewvaSchema.Unknown),
+  },
+) {}
+
+function toRecoveryWalRecoveryError(operation: string, cause: unknown): RecoveryWalRecoveryError {
+  return new RecoveryWalRecoveryError({
+    message: `Recovery WAL recovery failed during ${operation}`,
+    operation,
+    cause,
+  });
+}
+
+function recoverable<A>(
+  operation: string,
+  run: () => A | PromiseLike<A>,
+): BrewvaEffect.Effect<A, RecoveryWalRecoveryError> {
+  return BrewvaEffect.tryPromise({
+    try: () => Promise.resolve(run()),
+    catch: (error) => toRecoveryWalRecoveryError(operation, error),
+  });
+}
+
 export class RecoveryWalRecovery {
   private readonly now: () => number;
   private readonly handlers: Partial<Record<RecoveryWalSource, RecoveryWalRecoverHandler>>;
@@ -103,69 +137,90 @@ export class RecoveryWalRecovery {
   }
 
   async recover(): Promise<RecoveryWalRecoveryResult> {
-    const result = buildEmptySummary();
-    const recoveredAt = this.now();
-    result.recoveredAt = recoveredAt;
-    if (!this.options.config.enabled) {
-      return result;
-    }
+    return await runPromiseAtBoundary(this.recoverEffect());
+  }
 
-    const scopes = RecoveryWalStore.listScopeIds({
-      workspaceRoot: this.options.workspaceRoot,
-      dir: this.options.config.dir,
-    }).filter((scope) => this.scopeFilter(scope));
-
-    for (const scope of scopes) {
-      const store = new RecoveryWalStore({
-        workspaceRoot: this.options.workspaceRoot,
-        config: this.options.config,
-        scope,
-        now: this.now,
-        recordEvent: this.recordEvent,
-      });
-      const rows = store.listPending();
-      for (const row of rows) {
-        result.scanned += 1;
-        result.bySource[row.source].scanned += 1;
-
-        if (this.isExpired(row, recoveredAt)) {
-          store.markExpired(row.walId);
-          result.expired += 1;
-          result.bySource[row.source].expired += 1;
-          continue;
-        }
-
-        if (row.attempts >= this.maxRetries) {
-          store.markFailed(row.walId, "max_retries_exhausted");
-          result.failed += 1;
-          result.bySource[row.source].failed += 1;
-          continue;
-        }
-
-        const handler = this.handlers[row.source];
-        if (!handler) {
-          result.skipped += 1;
-          result.bySource[row.source].skipped += 1;
-          continue;
-        }
-
-        try {
-          await handler({ record: row, store });
-          result.retried += 1;
-          result.bySource[row.source].retried += 1;
-        } catch (error) {
-          store.markFailed(row.walId, `recovery_retry_failed:${toErrorMessage(error)}`);
-          result.failed += 1;
-          result.bySource[row.source].failed += 1;
-        }
+  recoverEffect(): BrewvaEffect.Effect<RecoveryWalRecoveryResult, RecoveryWalRecoveryError> {
+    return BrewvaEffect.gen({ self: this }, function* () {
+      const result = buildEmptySummary();
+      const recoveredAt = this.now();
+      result.recoveredAt = recoveredAt;
+      if (!this.options.config.enabled) {
+        return result;
       }
 
-      const compacted = store.compact();
-      result.compacted += compacted.dropped;
-    }
+      const scopes = yield* recoverable("list_scopes", () =>
+        RecoveryWalStore.listScopeIds({
+          workspaceRoot: this.options.workspaceRoot,
+          dir: this.options.config.dir,
+        }).filter((scope) => this.scopeFilter(scope)),
+      );
 
-    this.emitRecoveryCompleted(result);
-    return result;
+      for (const scope of scopes) {
+        const store = yield* recoverable(
+          "open_scope",
+          () =>
+            new RecoveryWalStore({
+              workspaceRoot: this.options.workspaceRoot,
+              config: this.options.config,
+              scope,
+              now: this.now,
+              recordEvent: this.recordEvent,
+            }),
+        );
+        const rows = yield* recoverable("list_pending", () => store.listPending());
+        for (const row of rows) {
+          result.scanned += 1;
+          result.bySource[row.source].scanned += 1;
+
+          if (this.isExpired(row, recoveredAt)) {
+            yield* recoverable("mark_expired", () => store.markExpired(row.walId));
+            result.expired += 1;
+            result.bySource[row.source].expired += 1;
+            continue;
+          }
+
+          if (row.attempts >= this.maxRetries) {
+            yield* recoverable("mark_max_retries_failed", () =>
+              store.markFailed(row.walId, "max_retries_exhausted"),
+            );
+            result.failed += 1;
+            result.bySource[row.source].failed += 1;
+            continue;
+          }
+
+          const handler = this.handlers[row.source];
+          if (!handler) {
+            result.skipped += 1;
+            result.bySource[row.source].skipped += 1;
+            continue;
+          }
+
+          const handlerExit = yield* BrewvaEffect.tryPromise({
+            try: () => Promise.resolve(handler({ record: row, store })),
+            catch: (error) => error,
+          }).pipe(BrewvaEffect.exit);
+          if (BrewvaExit.isSuccess(handlerExit)) {
+            result.retried += 1;
+            result.bySource[row.source].retried += 1;
+            continue;
+          }
+
+          const error = BrewvaCause.squash(handlerExit.cause);
+          yield* recoverable("mark_handler_failed", () =>
+            store.markFailed(row.walId, `recovery_retry_failed:${toErrorMessage(error)}`),
+          );
+          result.failed += 1;
+          result.bySource[row.source].failed += 1;
+        }
+
+        const compacted = yield* recoverable("compact_scope", () => store.compact());
+        result.compacted += compacted.dropped;
+      }
+
+      yield* recoverable("emit_recovery_completed", () => this.emitRecoveryCompleted(result));
+      return result;
+    });
   }
 
   private isExpired(record: RecoveryWalRecord, nowMs: number): boolean {

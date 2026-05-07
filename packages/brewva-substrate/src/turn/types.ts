@@ -1,8 +1,11 @@
+import { BrewvaStream } from "@brewva/brewva-effect";
 import type {
   AssistantMessageEventOf,
   ProviderCachePolicy,
   ProviderCacheRenderResult,
   ProviderPayloadMetadata,
+  ProviderRuntime,
+  ProviderStreamError,
   ResolvedFileContent,
 } from "@brewva/brewva-provider-core/contracts";
 import type { TSchema } from "@sinclair/typebox";
@@ -169,7 +172,7 @@ export interface BrewvaTurnLoopToolResult<TDetails = unknown> {
 
 export type BrewvaTurnLoopToolUpdateCallback<TDetails = unknown> = (
   partialResult: BrewvaTurnLoopToolResult<TDetails>,
-) => void;
+) => Promise<void>;
 
 export interface BrewvaTurnLoopTool {
   name: string;
@@ -265,6 +268,17 @@ export type BrewvaTurnLoopEvent =
       reason: BrewvaTurnLoopSteerDropReason;
     };
 
+export interface BrewvaTurnEventScope {
+  readonly turn: {
+    readonly sessionId?: string;
+    readonly turnId?: string;
+  };
+  readonly toolInvocation?: {
+    readonly toolCallId: string;
+    readonly toolName: string;
+  };
+}
+
 export interface BrewvaTurnLoopController {
   readonly state: {
     model: { provider: string; id: string } | undefined;
@@ -277,6 +291,8 @@ export interface BrewvaTurnLoopController {
   subscribe(
     listener: (
       event: BrewvaTurnLoopEvent,
+      scope: BrewvaTurnEventScope | undefined,
+      signal: AbortSignal | undefined,
     ) => Promise<BrewvaTurnLoopEvent | void> | BrewvaTurnLoopEvent | void,
   ): () => void;
   prompt(message: BrewvaTurnLoopMessage | BrewvaTurnLoopMessage[]): Promise<void>;
@@ -317,7 +333,7 @@ export interface BrewvaTurnLoopStreamOptions {
     payload: unknown,
     model: BrewvaRegisteredModel,
     metadata?: ProviderPayloadMetadata,
-  ) => Promise<unknown>;
+  ) => unknown;
   headers?: Record<string, string>;
   maxRetryDelayMs?: number;
   thinkingBudgets?: BrewvaTurnLoopThinkingBudgets;
@@ -329,18 +345,22 @@ export interface BrewvaTurnLoopStreamOptions {
 
 export type BrewvaTurnLoopStopAfterToolResults = (
   toolResults: BrewvaTurnLoopToolResultMessage[],
+  signal?: AbortSignal,
 ) => boolean | Promise<boolean>;
 
-export interface BrewvaTurnLoopAssistantMessageEventStream extends AsyncIterable<BrewvaTurnLoopAssistantMessageEvent> {
-  result(): Promise<BrewvaTurnLoopAssistantMessage>;
-}
+export type BrewvaTurnLoopAssistantMessageStream = BrewvaStream.Stream<
+  BrewvaTurnLoopAssistantMessageEvent,
+  ProviderStreamError,
+  ProviderRuntime
+>;
 
 export type BrewvaTurnLoopResolveRequestAuth = (
   model: BrewvaRegisteredModel,
+  signal?: AbortSignal,
 ) => Promise<BrewvaResolvedRequestAuth> | BrewvaResolvedRequestAuth;
 
 export type BrewvaTurnLoopStreamFunction = (
   model: BrewvaRegisteredModel,
   context: BrewvaTurnLoopStreamContext,
   options: BrewvaTurnLoopStreamOptions,
-) => BrewvaTurnLoopAssistantMessageEventStream | Promise<BrewvaTurnLoopAssistantMessageEventStream>;
+) => BrewvaTurnLoopAssistantMessageStream;

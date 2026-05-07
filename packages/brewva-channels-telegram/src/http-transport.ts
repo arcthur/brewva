@@ -1,3 +1,4 @@
+import { sleepAtBoundary } from "@brewva/brewva-effect";
 import type { TelegramChannelTransport, TelegramChannelTransportSendResult } from "./adapter.js";
 import type { TelegramOutboundRequest, TelegramUpdate } from "./types.js";
 
@@ -249,9 +250,7 @@ function buildNetworkError(method: string, cause: unknown): TelegramTransportErr
 }
 
 async function defaultSleep(delayMs: number): Promise<void> {
-  await new Promise<void>((resolve) => {
-    setTimeout(resolve, delayMs);
-  });
+  await sleepAtBoundary(delayMs);
 }
 
 export class TelegramHttpTransport implements TelegramChannelTransport {

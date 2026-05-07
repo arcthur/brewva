@@ -1,7 +1,7 @@
 import type { ResponseInput } from "openai/resources/responses/responses.js";
 import type {
   AssistantMessage,
-  AssistantMessageEventStream,
+  ProviderEventSink,
   Model,
   ProviderSessionResources,
 } from "../../contracts/index.js";
@@ -489,7 +489,7 @@ export async function processWebSocketStream(
   body: RequestBody,
   headers: Headers,
   output: AssistantMessage,
-  stream: AssistantMessageEventStream,
+  stream: ProviderEventSink,
   model: Model<"openai-codex-responses">,
   toolCalls: IncrementalToolCallFolder,
   onStart: () => void,
@@ -517,7 +517,7 @@ export async function processWebSocketStream(
   try {
     socket.send(JSON.stringify({ type: "response.create", ...outboundBody }));
     onStart();
-    stream.push({ type: "start", partial: output });
+    await stream.push({ type: "start", partial: output });
     await processResponsesStream(
       mapCodexEvents(trackCodexWebSocketResponse(parseWebSocket(socket, options?.signal), tracker)),
       output,

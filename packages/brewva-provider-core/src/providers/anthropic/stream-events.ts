@@ -1,6 +1,6 @@
 import type {
   AssistantMessage,
-  AssistantMessageEventStream,
+  ProviderEventSink,
   Model,
   StopReason,
   TextContent,
@@ -39,7 +39,7 @@ type AnthropicBlockState =
 export async function processAnthropicStream(
   anthropicStream: AsyncIterable<any>,
   output: AssistantMessage,
-  stream: AssistantMessageEventStream,
+  stream: ProviderEventSink,
   model: Model<"anthropic-messages">,
   toolCalls: IncrementalToolCallFolder,
   options: {
@@ -69,7 +69,7 @@ export async function processAnthropicStream(
         output.content.push(block);
         const outputIndex = output.content.length - 1;
         blocks.set(event.index, { type: "text", outputIndex, block });
-        stream.push({
+        await stream.push({
           type: "text_start",
           contentIndex: outputIndex,
           partial: output,
@@ -86,7 +86,7 @@ export async function processAnthropicStream(
         output.content.push(block);
         const outputIndex = output.content.length - 1;
         blocks.set(event.index, { type: "thinking", outputIndex, block });
-        stream.push({
+        await stream.push({
           type: "thinking_start",
           contentIndex: outputIndex,
           partial: output,
@@ -104,7 +104,7 @@ export async function processAnthropicStream(
         output.content.push(block);
         const outputIndex = output.content.length - 1;
         blocks.set(event.index, { type: "thinking", outputIndex, block });
-        stream.push({
+        await stream.push({
           type: "thinking_start",
           contentIndex: outputIndex,
           partial: output,
@@ -113,7 +113,7 @@ export async function processAnthropicStream(
       }
 
       if (event.content_block.type === "tool_use") {
-        const outputIndex = toolCalls.begin(
+        const outputIndex = await toolCalls.begin(
           `anthropic:${event.index}`,
           {
             id: event.content_block.id,
@@ -146,7 +146,7 @@ export async function processAnthropicStream(
 
       if (event.delta.type === "text_delta" && state.type === "text") {
         state.block.text += event.delta.text;
-        stream.push({
+        await stream.push({
           type: "text_delta",
           contentIndex: state.outputIndex,
           delta: event.delta.text,
@@ -157,7 +157,7 @@ export async function processAnthropicStream(
 
       if (event.delta.type === "thinking_delta" && state.type === "thinking") {
         state.block.thinking += event.delta.thinking;
-        stream.push({
+        await stream.push({
           type: "thinking_delta",
           contentIndex: state.outputIndex,
           delta: event.delta.thinking,
@@ -168,7 +168,7 @@ export async function processAnthropicStream(
 
       if (event.delta.type === "input_json_delta" && state.type === "toolCall") {
         state.partialJson += event.delta.partial_json;
-        toolCalls.appendArgumentsDelta(`anthropic:${event.index}`, event.delta.partial_json);
+        await toolCalls.appendArgumentsDelta(`anthropic:${event.index}`, event.delta.partial_json);
         continue;
       }
 
@@ -186,7 +186,7 @@ export async function processAnthropicStream(
       }
       blocks.delete(event.index);
       if (state.type === "text") {
-        stream.push({
+        await stream.push({
           type: "text_end",
           contentIndex: state.outputIndex,
           content: state.block.text,
@@ -195,7 +195,7 @@ export async function processAnthropicStream(
         continue;
       }
       if (state.type === "thinking") {
-        stream.push({
+        await stream.push({
           type: "thinking_end",
           contentIndex: state.outputIndex,
           content: state.block.thinking,
@@ -203,7 +203,7 @@ export async function processAnthropicStream(
         });
         continue;
       }
-      toolCalls.finalize(`anthropic:${event.index}`);
+      await toolCalls.finalize(`anthropic:${event.index}`);
       continue;
     }
 

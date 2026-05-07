@@ -1,3 +1,12 @@
+import {
+  BrewvaDeferred,
+  BrewvaDuration,
+  BrewvaEffect,
+  BrewvaScope,
+  BrewvaWorkerScope,
+  runPromiseAtBoundary,
+  withBrewvaObservability,
+} from "@brewva/brewva-effect";
 import type { BrewvaWalId } from "@brewva/brewva-runtime";
 import { validateSessionWireFramePayload } from "../../protocol/validate.js";
 import type {
@@ -13,6 +22,45 @@ import {
 } from "./worker-state.js";
 
 const WORKER_RPC_TIMEOUT_MS = 5 * 60_000;
+
+function normalizeWorkerRpcTimeoutMs(timeoutMs: number): number {
+  return Math.max(1_000, Math.trunc(timeoutMs));
+}
+
+function failDeferred<A>(deferred: BrewvaDeferred.Deferred<A, Error>, error: Error): void {
+  BrewvaDeferred.doneUnsafe(deferred, BrewvaEffect.fail(error));
+}
+
+function succeedDeferred<A>(deferred: BrewvaDeferred.Deferred<A, Error>, payload: A): void {
+  BrewvaDeferred.doneUnsafe(deferred, BrewvaEffect.succeed(payload));
+}
+
+function toError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(String(error));
+}
+
+function withWorkerRpcObservability<A, E, R>(
+  handle: WorkerHandle,
+  operation: string,
+  effect: BrewvaEffect.Effect<A, E, R>,
+): BrewvaEffect.Effect<A, E, R> {
+  const fields = {
+    sessionId: handle.sessionId,
+    workerPid: handle.child.pid,
+    operation,
+  };
+  return BrewvaScope.provide(handle.scope)(
+    effect.pipe(
+      BrewvaEffect.provide(
+        BrewvaWorkerScope.layer({
+          sessionId: handle.sessionId,
+          pid: handle.child.pid ?? undefined,
+        }),
+      ),
+      withBrewvaObservability(`brewva.gateway.worker.${operation}`, fields),
+    ),
+  );
+}
 
 export function toWorkerResultError(input: WorkerRpcErrorInput): Error {
   if (input.errorCode === "session_busy") {
@@ -66,24 +114,24 @@ export class SessionWorkerRpcController {
     message: Exclude<ParentToWorkerMessage, { kind: "bridge.ping" | "init" }>,
     timeoutMs = WORKER_RPC_TIMEOUT_MS,
   ): Promise<Record<string, unknown> | undefined> {
-    return new Promise((resolveRequest, rejectRequest) => {
-      const timer = setTimeout(
-        () => {
-          handle.pending.delete(message.requestId);
-          rejectRequest(new Error(`worker request timeout: ${message.kind}`));
-        },
-        Math.max(1_000, timeoutMs),
-      );
-      timer.unref?.();
+    return runPromiseAtBoundary(this.requestEffect(handle, message, timeoutMs)).catch((error) =>
+      Promise.reject(toError(error)),
+    );
+  }
 
-      handle.pending.set(message.requestId, {
-        resolve: resolveRequest,
-        reject: rejectRequest,
-        timer,
-      });
-
-      this.sendToWorker(handle, message);
-    });
+  requestEffect(
+    handle: WorkerHandle,
+    message: Exclude<ParentToWorkerMessage, { kind: "bridge.ping" | "init" }>,
+    timeoutMs = WORKER_RPC_TIMEOUT_MS,
+  ): BrewvaEffect.Effect<Record<string, unknown> | undefined, Error> {
+    return withWorkerRpcObservability(
+      handle,
+      "request",
+      BrewvaEffect.gen({ self: this }, function* () {
+        const deferred = yield* BrewvaEffect.sync(() => this.openPendingRequest(handle, message));
+        return yield* this.awaitPendingRequestEffect(handle, message, deferred, timeoutMs);
+      }),
+    );
   }
 
   registerPendingTurn(
@@ -91,41 +139,31 @@ export class SessionWorkerRpcController {
     turnId: string,
     timeoutMs: number,
   ): Promise<SendPromptOutput> {
-    const normalizedTurnId = turnId.trim();
-    if (!normalizedTurnId) {
-      throw new Error("turnId is required");
-    }
-    if (handle.pendingTurns.has(normalizedTurnId)) {
-      throw new SessionBackendStateError(
-        "duplicate_active_turn_id",
-        `duplicate active turn id: ${normalizedTurnId}`,
-      );
-    }
+    return runPromiseAtBoundary(this.registerPendingTurnEffect(handle, turnId, timeoutMs));
+  }
 
-    return new Promise((resolveTurn, rejectTurn) => {
-      const timer = setTimeout(
-        () => {
-          handle.pendingTurns.delete(normalizedTurnId);
-          rejectTurn(new Error(`worker turn timeout: ${normalizedTurnId}`));
-        },
-        Math.max(1_000, timeoutMs),
-      );
-      timer.unref?.();
-
-      handle.pendingTurns.set(normalizedTurnId, {
-        resolve: resolveTurn,
-        reject: rejectTurn,
-        timer,
-      });
-    });
+  registerPendingTurnEffect(
+    handle: WorkerHandle,
+    turnId: string,
+    timeoutMs: number,
+  ): BrewvaEffect.Effect<SendPromptOutput, Error> {
+    return withWorkerRpcObservability(
+      handle,
+      "turn",
+      BrewvaEffect.gen({ self: this }, function* () {
+        const normalizedTurnId = yield* BrewvaEffect.sync(() =>
+          this.validatePendingTurn(handle, turnId),
+        );
+        const deferred = yield* BrewvaEffect.sync(() =>
+          this.openPendingTurn(handle, normalizedTurnId),
+        );
+        return yield* this.awaitPendingTurnEffect(handle, normalizedTurnId, deferred, timeoutMs);
+      }),
+    );
   }
 
   trackRecoveryWalId(handle: WorkerHandle, turnId: string, walId: BrewvaWalId): void {
     handle.activeRecoveryWalIds.set(turnId, walId);
-    const pending = handle.pendingTurns.get(turnId);
-    if (pending) {
-      pending.walId = walId;
-    }
   }
 
   untrackRecoveryWalId(handle: WorkerHandle, turnId: string): BrewvaWalId | undefined {
@@ -175,9 +213,8 @@ export class SessionWorkerRpcController {
     if (!pending) {
       return;
     }
-    clearTimeout(pending.timer);
     handle.pendingTurns.delete(turnId);
-    pending.resolve(payload);
+    succeedDeferred(pending.deferred, payload);
     this.deps.touchActivity(handle);
   }
 
@@ -186,33 +223,25 @@ export class SessionWorkerRpcController {
     if (!pending) {
       return;
     }
-    clearTimeout(pending.timer);
     handle.pendingTurns.delete(turnId);
-    pending.reject(error instanceof Error ? error : new Error(String(error)));
+    failDeferred(pending.deferred, error instanceof Error ? error : new Error(String(error)));
     this.deps.touchActivity(handle);
   }
 
   failAllPending(handle: WorkerHandle, error: Error): void {
-    if (handle.readyTimer) {
-      clearTimeout(handle.readyTimer);
-      handle.readyTimer = undefined;
-    }
-    if (handle.readyReject) {
-      handle.readyReject(error);
-      handle.readyReject = undefined;
-      handle.readyResolve = undefined;
+    if (handle.readyDeferred) {
+      failDeferred(handle.readyDeferred, error);
+      handle.readyDeferred = undefined;
       handle.readyRequestId = undefined;
     }
 
     for (const pending of handle.pending.values()) {
-      clearTimeout(pending.timer);
-      pending.reject(error);
+      failDeferred(pending.deferred, error);
     }
     handle.pending.clear();
 
     for (const pendingTurn of handle.pendingTurns.values()) {
-      clearTimeout(pendingTurn.timer);
-      pendingTurn.reject(error);
+      failDeferred(pendingTurn.deferred, error);
     }
     handle.pendingTurns.clear();
 
@@ -257,16 +286,13 @@ export class SessionWorkerRpcController {
 
     if (message.kind === "ready") {
       if (handle.readyRequestId === message.requestId) {
-        if (handle.readyTimer) {
-          clearTimeout(handle.readyTimer);
-          handle.readyTimer = undefined;
-        }
-        const resolveReady = handle.readyResolve;
+        const readyDeferred = handle.readyDeferred;
         handle.readyRequestId = undefined;
-        handle.readyResolve = undefined;
-        handle.readyReject = undefined;
+        handle.readyDeferred = undefined;
         this.deps.touchActivity(handle);
-        resolveReady?.(message.payload);
+        if (readyDeferred) {
+          succeedDeferred(readyDeferred, message.payload);
+        }
       }
       return;
     }
@@ -310,15 +336,12 @@ export class SessionWorkerRpcController {
 
     if (message.kind === "result") {
       if (handle.readyRequestId === message.requestId && !message.ok) {
-        if (handle.readyTimer) {
-          clearTimeout(handle.readyTimer);
-          handle.readyTimer = undefined;
-        }
-        const rejectReady = handle.readyReject;
+        const readyDeferred = handle.readyDeferred;
         handle.readyRequestId = undefined;
-        handle.readyResolve = undefined;
-        handle.readyReject = undefined;
-        rejectReady?.(new Error(message.error));
+        handle.readyDeferred = undefined;
+        if (readyDeferred) {
+          failDeferred(readyDeferred, new Error(message.error));
+        }
         return;
       }
 
@@ -327,15 +350,95 @@ export class SessionWorkerRpcController {
         return;
       }
 
-      clearTimeout(pending.timer);
       handle.pending.delete(message.requestId);
       this.deps.touchActivity(handle);
       if (message.ok) {
-        pending.resolve(message.payload);
+        succeedDeferred(pending.deferred, message.payload);
       } else {
-        pending.reject(toWorkerResultError(message));
+        failDeferred(pending.deferred, toWorkerResultError(message));
       }
     }
+  }
+
+  private openPendingRequest(
+    handle: WorkerHandle,
+    message: Exclude<ParentToWorkerMessage, { kind: "bridge.ping" | "init" }>,
+  ): BrewvaDeferred.Deferred<Record<string, unknown> | undefined, Error> {
+    const deferred = BrewvaDeferred.makeUnsafe<Record<string, unknown> | undefined, Error>();
+    handle.pending.set(message.requestId, { deferred });
+    try {
+      this.sendToWorker(handle, message);
+    } catch (error) {
+      handle.pending.delete(message.requestId);
+      failDeferred(deferred, toError(error));
+      throw error;
+    }
+    return deferred;
+  }
+
+  private awaitPendingRequestEffect(
+    handle: WorkerHandle,
+    message: Exclude<ParentToWorkerMessage, { kind: "bridge.ping" | "init" }>,
+    deferred: BrewvaDeferred.Deferred<Record<string, unknown> | undefined, Error>,
+    timeoutMs: number,
+  ): BrewvaEffect.Effect<Record<string, unknown> | undefined, Error> {
+    return BrewvaEffect.race(
+      BrewvaDeferred.await(deferred),
+      BrewvaEffect.sleep(BrewvaDuration.millis(normalizeWorkerRpcTimeoutMs(timeoutMs))).pipe(
+        BrewvaEffect.andThen(
+          BrewvaEffect.fail(new Error(`worker request timeout: ${message.kind}`)),
+        ),
+      ),
+    ).pipe(
+      BrewvaEffect.ensuring(
+        BrewvaEffect.sync(() => {
+          handle.pending.delete(message.requestId);
+        }),
+      ),
+    );
+  }
+
+  private validatePendingTurn(handle: WorkerHandle, turnId: string): string {
+    const normalizedTurnId = turnId.trim();
+    if (!normalizedTurnId) {
+      throw new Error("turnId is required");
+    }
+    if (handle.pendingTurns.has(normalizedTurnId)) {
+      throw new SessionBackendStateError(
+        "duplicate_active_turn_id",
+        `duplicate active turn id: ${normalizedTurnId}`,
+      );
+    }
+    return normalizedTurnId;
+  }
+
+  private openPendingTurn(
+    handle: WorkerHandle,
+    turnId: string,
+  ): BrewvaDeferred.Deferred<SendPromptOutput, Error> {
+    const deferred = BrewvaDeferred.makeUnsafe<SendPromptOutput, Error>();
+    handle.pendingTurns.set(turnId, { deferred });
+    return deferred;
+  }
+
+  private awaitPendingTurnEffect(
+    handle: WorkerHandle,
+    turnId: string,
+    deferred: BrewvaDeferred.Deferred<SendPromptOutput, Error>,
+    timeoutMs: number,
+  ): BrewvaEffect.Effect<SendPromptOutput, Error> {
+    return BrewvaEffect.race(
+      BrewvaDeferred.await(deferred),
+      BrewvaEffect.sleep(BrewvaDuration.millis(normalizeWorkerRpcTimeoutMs(timeoutMs))).pipe(
+        BrewvaEffect.andThen(BrewvaEffect.fail(new Error(`worker turn timeout: ${turnId}`))),
+      ),
+    ).pipe(
+      BrewvaEffect.ensuring(
+        BrewvaEffect.sync(() => {
+          handle.pendingTurns.delete(turnId);
+        }),
+      ),
+    );
   }
 
   private sendToWorker(handle: WorkerHandle, message: ParentToWorkerMessage): void {

@@ -1,9 +1,5 @@
 import type { ResponseStreamEvent } from "openai/resources/responses/responses.js";
-import type {
-  AssistantMessage,
-  AssistantMessageEventStream,
-  Model,
-} from "../../contracts/index.js";
+import type { AssistantMessage, ProviderEventSink, Model } from "../../contracts/index.js";
 import { readSseFrames } from "../../stream/sse-frame-reader.js";
 import type { IncrementalToolCallFolder } from "../../stream/tool-call-folder.js";
 import { processResponsesStream } from "../openai-responses/stream-events.js";
@@ -28,7 +24,7 @@ const CODEX_RESPONSE_STATUSES = new Set<CodexResponseStatus>([
 export async function processStream(
   response: Response,
   output: AssistantMessage,
-  stream: AssistantMessageEventStream,
+  stream: ProviderEventSink,
   model: Model<"openai-codex-responses">,
   toolCalls: IncrementalToolCallFolder,
 ): Promise<void> {

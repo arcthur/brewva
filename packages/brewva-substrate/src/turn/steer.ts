@@ -1,4 +1,10 @@
-import type { BrewvaTurnLoopConfig, BrewvaTurnLoopEventSink } from "./loop.js";
+import { BrewvaEffect } from "@brewva/brewva-effect";
+import {
+  BrewvaTurnScope,
+  type BrewvaTurnEventDispatcher,
+  type BrewvaTurnRuntimeError,
+} from "./effect-runtime.js";
+import type { BrewvaTurnLoopConfig } from "./loop.js";
 import type {
   BrewvaTurnLoopContext,
   BrewvaTurnLoopMessage,
@@ -6,43 +12,57 @@ import type {
   BrewvaTurnLoopToolResultMessage,
 } from "./types.js";
 
-export async function dropPendingSteer(
+export function dropPendingSteer(
   config: BrewvaTurnLoopConfig,
-  emit: BrewvaTurnLoopEventSink,
+  dispatcher: BrewvaTurnEventDispatcher,
   reason: BrewvaTurnLoopSteerDropReason,
-): Promise<void> {
-  const pendingSteer = await config.consumePendingSteer?.();
-  if (!pendingSteer) {
-    return;
-  }
-  await emit({
-    type: "steer_dropped",
-    text: pendingSteer,
-    reason,
+  signal?: AbortSignal,
+): BrewvaEffect.Effect<void, BrewvaTurnRuntimeError, BrewvaTurnScope> {
+  return BrewvaEffect.gen(function* () {
+    const pendingSteer = yield* consumePendingSteer(config, signal);
+    if (!pendingSteer) {
+      return;
+    }
+    yield* dispatcher.emit({
+      type: "steer_dropped",
+      text: pendingSteer,
+      reason,
+    });
   });
 }
 
-export async function applyPendingSteerToLastCommittedToolResult(
+export function applyPendingSteerToLastCommittedToolResult(
   currentContext: BrewvaTurnLoopContext,
   config: BrewvaTurnLoopConfig,
-  emit: BrewvaTurnLoopEventSink,
-): Promise<void> {
-  const target = findLastToolResultMessage(currentContext.messages);
-  if (!target) {
-    return;
-  }
-  const pendingSteer = await config.consumePendingSteer?.();
-  if (!pendingSteer) {
-    return;
-  }
-  appendSteerToToolResultMessage(target, pendingSteer);
-  await emit({
-    type: "steer_applied",
-    text: pendingSteer,
-    toolCallId: target.toolCallId,
-    toolName: target.toolName,
-    message: target,
+  dispatcher: BrewvaTurnEventDispatcher,
+  signal?: AbortSignal,
+): BrewvaEffect.Effect<void, BrewvaTurnRuntimeError, BrewvaTurnScope> {
+  return BrewvaEffect.gen(function* () {
+    const target = findLastToolResultMessage(currentContext.messages);
+    if (!target) {
+      return;
+    }
+    const pendingSteer = yield* consumePendingSteer(config, signal);
+    if (!pendingSteer) {
+      return;
+    }
+    appendSteerToToolResultMessage(target, pendingSteer);
+    yield* dispatcher.emit({
+      type: "steer_applied",
+      text: pendingSteer,
+      toolCallId: target.toolCallId,
+      toolName: target.toolName,
+      message: target,
+    });
   });
+}
+
+function consumePendingSteer(
+  config: BrewvaTurnLoopConfig,
+  signal: AbortSignal | undefined,
+): BrewvaEffect.Effect<string | undefined, BrewvaTurnRuntimeError, BrewvaTurnScope> {
+  void signal;
+  return config.consumePendingSteerEffect?.() ?? BrewvaEffect.succeed(undefined);
 }
 
 function findLastToolResultMessage(

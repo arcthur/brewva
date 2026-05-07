@@ -1,15 +1,24 @@
 import { describe, expect, test } from "bun:test";
+import { BrewvaEffect, BrewvaStream, runPromiseAtBoundary } from "@brewva/brewva-effect";
+import { providerRuntimeLayer } from "@brewva/brewva-provider-core/contracts";
 import type { BrewvaRegisteredModel } from "@brewva/brewva-substrate/provider";
 import type { ToolExecutionPhase } from "@brewva/brewva-substrate/tools";
 import {
   createBrewvaTurnLoopController,
+  runBrewvaTurnLoop,
+  type BrewvaTurnEventScope,
   type BrewvaTurnLoopAssistantMessage,
+  type BrewvaTurnLoopAssistantMessageStream,
   type BrewvaTurnLoopAssistantMessageEvent,
+  type BrewvaTurnLoopConfig,
+  type BrewvaTurnLoopContext,
   type BrewvaTurnLoopEvent,
   type BrewvaTurnLoopLlmMessage,
   type BrewvaTurnLoopStreamFunction,
+  type BrewvaTurnLoopToolResult,
 } from "@brewva/brewva-substrate/turn";
 import { Type } from "@sinclair/typebox";
+import { createTurnEventStream } from "../../../helpers/effect-stream.js";
 
 const TEST_MODEL: BrewvaRegisteredModel = {
   provider: "openai",
@@ -65,9 +74,7 @@ function createAssistantMessage(
 function createStream(
   finalMessage: BrewvaTurnLoopAssistantMessage,
   events: BrewvaTurnLoopAssistantMessageEvent[] = [],
-): AsyncIterable<BrewvaTurnLoopAssistantMessageEvent> & {
-  result(): Promise<BrewvaTurnLoopAssistantMessage>;
-} {
+): BrewvaTurnLoopAssistantMessageStream {
   const allEvents = [...events];
   if (finalMessage.stopReason === "error" || finalMessage.stopReason === "aborted") {
     allEvents.push({
@@ -83,16 +90,7 @@ function createStream(
     });
   }
 
-  return {
-    async *[Symbol.asyncIterator]() {
-      for (const event of allEvents) {
-        yield event;
-      }
-    },
-    async result() {
-      return finalMessage;
-    },
-  };
+  return createTurnEventStream(allEvents);
 }
 
 describe("turn loop controller", () => {
@@ -128,7 +126,7 @@ describe("turn loop controller", () => {
 
   test("forwards cache policy to the stream function", async () => {
     const calls: Array<unknown> = [];
-    const streamFn: BrewvaTurnLoopStreamFunction = async (_model, _context, options) => {
+    const streamFn: BrewvaTurnLoopStreamFunction = (_model, _context, options) => {
       calls.push(options.cachePolicy);
       return createStream(createAssistantMessage([{ type: "text", text: "done" }]));
     };
@@ -177,7 +175,7 @@ describe("turn loop controller", () => {
 
   test("resolves request auth before invoking the stream function", async () => {
     const calls: Array<{ apiKey?: string; headers?: Record<string, string> }> = [];
-    const streamFn: BrewvaTurnLoopStreamFunction = async (_model, _context, options) => {
+    const streamFn: BrewvaTurnLoopStreamFunction = (_model, _context, options) => {
       calls.push({
         apiKey: options.apiKey,
         headers: options.headers,
@@ -222,7 +220,7 @@ describe("turn loop controller", () => {
 
   test("executes tool calls with local loop semantics and follow-up assistant turn", async () => {
     const events: BrewvaTurnLoopEvent[] = [];
-    const streamFn: BrewvaTurnLoopStreamFunction = async (_model, context, _options) => {
+    const streamFn: BrewvaTurnLoopStreamFunction = (_model, context, _options) => {
       const lastMessage = context.messages[context.messages.length - 1] as
         | BrewvaTurnLoopLlmMessage
         | undefined;
@@ -297,7 +295,7 @@ describe("turn loop controller", () => {
           text: Type.String(),
         }),
         async execute(_toolCallId, params, _signal, onUpdate) {
-          onUpdate?.({
+          await onUpdate?.({
             content: [{ type: "text", text: `partial:${(params as { text: string }).text}` }],
             details: { phase: "partial" },
           });
@@ -339,9 +337,100 @@ describe("turn loop controller", () => {
     expect(engine.hasQueuedMessages()).toBe(false);
   });
 
+  test("serializes asynchronous tool update emissions before tool execution end", async () => {
+    const observed: string[] = [];
+    const streamFn: BrewvaTurnLoopStreamFunction = (_model, context, _options) => {
+      const lastMessage = context.messages[context.messages.length - 1] as
+        | BrewvaTurnLoopLlmMessage
+        | undefined;
+      if (lastMessage?.role === "toolResult") {
+        return createStream(createAssistantMessage([{ type: "text", text: "final" }]));
+      }
+
+      return createStream(
+        createAssistantMessage(
+          [
+            {
+              type: "toolCall",
+              id: "tool-update-order-1",
+              name: "ordered_update",
+              arguments: {},
+            },
+          ],
+          "toolUse",
+        ),
+      );
+    };
+
+    const engine = createBrewvaTurnLoopController({
+      initialModel: TEST_MODEL,
+      initialThinkingLevel: "off",
+      sessionId: "session-tool-update-order",
+      queueMode: "one-at-a-time",
+      followUpMode: "one-at-a-time",
+      transport: "sse",
+      thinkingBudgets: undefined,
+      maxRetryDelayMs: 1000,
+      beforeToolCall: async () => undefined,
+      afterToolCall: async () => undefined,
+      onPayload: async (payload) => payload,
+      transformContext: async (messages) => messages,
+      resolveRequestAuth: async () => ({ ok: true, apiKey: "tool-key" }),
+      streamFn,
+    });
+
+    const unsubscribe = engine.subscribe(async (event) => {
+      if (event.type === "tool_execution_update") {
+        const partialResult = event.partialResult as BrewvaTurnLoopToolResult;
+        const firstContent = partialResult.content[0];
+        const text = firstContent?.type === "text" ? firstContent.text : "unknown";
+        if (text === "first") {
+          await new Promise((resolve) => setTimeout(resolve, 20));
+        }
+        observed.push(text);
+      }
+      if (event.type === "tool_execution_end") {
+        observed.push("end");
+      }
+    });
+
+    engine.setTools([
+      {
+        name: "ordered_update",
+        label: "Ordered Update",
+        description: "Emits ordered partial results",
+        parameters: Type.Object({}),
+        async execute(_toolCallId, _params, _signal, onUpdate) {
+          await onUpdate?.({
+            content: [{ type: "text", text: "first" }],
+            details: undefined,
+          });
+          await onUpdate?.({
+            content: [{ type: "text", text: "second" }],
+            details: undefined,
+          });
+          return {
+            content: [{ type: "text", text: "done" }],
+            details: undefined,
+          };
+        },
+      },
+    ]);
+
+    await engine.prompt({
+      role: "user",
+      content: [{ type: "text", text: "call tool" }],
+      timestamp: Date.now(),
+    });
+
+    unsubscribe();
+
+    expect(observed).toEqual(["first", "second", "end"]);
+  });
+
   test("emits explicit tool execution phase transitions across the hosted loop", async () => {
     const observedPhases: ToolExecutionPhase[] = [];
-    const streamFn: BrewvaTurnLoopStreamFunction = async (_model, context, _options) => {
+    const streamFn: BrewvaTurnLoopStreamFunction = (_model, context, _options) => {
       const lastMessage = context.messages[context.messages.length - 1] as
         | BrewvaTurnLoopLlmMessage
         | undefined;
@@ -421,10 +510,137 @@ describe("turn loop controller", () => {
     ]);
   });
 
+  test("attaches one tool invocation scope across the complete tool lifecycle", async () => {
+    const observed: Array<{
+      type: BrewvaTurnLoopEvent["type"];
+      phase?: ToolExecutionPhase;
+      scope?: BrewvaTurnEventScope;
+    }> = [];
+    const streamFn: BrewvaTurnLoopStreamFunction = (_model, context, _options) => {
+      const lastMessage = context.messages[context.messages.length - 1] as
+        | BrewvaTurnLoopLlmMessage
+        | undefined;
+      if (lastMessage?.role === "toolResult") {
+        return createStream(createAssistantMessage([{ type: "text", text: "final" }]));
+      }
+
+      return createStream(
+        createAssistantMessage(
+          [
+            {
+              type: "toolCall",
+              id: "scope-tool-1",
+              name: "scoped_tool",
+              arguments: {},
+            },
+          ],
+          "toolUse",
+        ),
+      );
+    };
+
+    const engine = createBrewvaTurnLoopController({
+      initialModel: TEST_MODEL,
+      initialThinkingLevel: "off",
+      sessionId: "session-tool-scope",
+      queueMode: "one-at-a-time",
+      followUpMode: "one-at-a-time",
+      transport: "sse",
+      thinkingBudgets: undefined,
+      maxRetryDelayMs: 1000,
+      beforeToolCall: async () => undefined,
+      afterToolCall: async () => undefined,
+      onPayload: async (payload) => payload,
+      transformContext: async (messages) => messages,
+      resolveRequestAuth: async () => ({ ok: true, apiKey: "tool-key" }),
+      streamFn,
+    });
+
+    const unsubscribe = engine.subscribe((event, scope) => {
+      if (
+        event.type === "tool_execution_start" ||
+        event.type === "tool_execution_phase_change" ||
+        event.type === "tool_execution_update" ||
+        event.type === "tool_execution_end" ||
+        (event.type === "message_start" && event.message.role === "toolResult") ||
+        (event.type === "message_end" && event.message.role === "toolResult") ||
+        event.type === "steer_applied"
+      ) {
+        observed.push({
+          type: event.type,
+          phase: event.type === "tool_execution_phase_change" ? event.phase : undefined,
+          scope,
+        });
+      }
+      if (event.type === "tool_execution_end") {
+        expect(engine.steer("operator steer")).toBe(true);
+      }
+    });
+
+    engine.setTools([
+      {
+        name: "scoped_tool",
+        label: "Scoped Tool",
+        description: "Emits partial output",
+        parameters: Type.Object({}),
+        async execute(_toolCallId, _params, _signal, onUpdate) {
+          await onUpdate?.({
+            content: [{ type: "text", text: "partial" }],
+            details: undefined,
+          });
+          return {
+            content: [{ type: "text", text: "done" }],
+            details: undefined,
+          };
+        },
+      },
+    ]);
+
+    await engine.prompt({
+      role: "user",
+      content: [{ type: "text", text: "call scoped tool" }],
+      timestamp: Date.now(),
+    });
+
+    unsubscribe();
+
+    expect(
+      observed.map((entry) =>
+        entry.type === "tool_execution_phase_change" ? `${entry.type}:${entry.phase}` : entry.type,
+      ),
+    ).toEqual([
+      "tool_execution_start",
+      "tool_execution_phase_change:classify",
+      "tool_execution_phase_change:authorize",
+      "tool_execution_phase_change:prepare",
+      "tool_execution_phase_change:execute",
+      "tool_execution_update",
+      "tool_execution_phase_change:record",
+      "tool_execution_end",
+      "message_start",
+      "message_end",
+      "tool_execution_phase_change:cleanup",
+      "steer_applied",
+    ]);
+    expect(
+      observed.map((entry) => ({
+        turnSessionId: entry.scope?.turn.sessionId,
+        toolCallId: entry.scope?.toolInvocation?.toolCallId,
+        toolName: entry.scope?.toolInvocation?.toolName,
+      })),
+    ).toEqual(
+      observed.map(() => ({
+        turnSessionId: "session-tool-scope",
+        toolCallId: "scope-tool-1",
+        toolName: "scoped_tool",
+      })),
+    );
+  });
+
   test("surfaces tool argument validation failures without entering authorize or execute", async () => {
     const events: BrewvaTurnLoopEvent[] = [];
     const observedPhases: ToolExecutionPhase[] = [];
-    const streamFn: BrewvaTurnLoopStreamFunction = async (_model, context) => {
+    const streamFn: BrewvaTurnLoopStreamFunction = (_model, context) => {
       const lastMessage = context.messages[context.messages.length - 1] as
         | BrewvaTurnLoopLlmMessage
         | undefined;
@@ -520,7 +736,7 @@ describe("turn loop controller", () => {
 
   test("emits a durable failure message before agent_end when the stream function throws", async () => {
     const events: BrewvaTurnLoopEvent[] = [];
-    const streamFn: BrewvaTurnLoopStreamFunction = async () => {
+    const streamFn: BrewvaTurnLoopStreamFunction = () => {
       throw new Error("provider exploded");
     };
 
@@ -588,6 +804,117 @@ describe("turn loop controller", () => {
     });
   });
 
+  test("abort interrupts the active Effect stream fiber", async () => {
+    const events: BrewvaTurnLoopEvent[] = [];
+    let streamStarted!: () => void;
+    const streamStartedPromise = new Promise<void>((resolve) => {
+      streamStarted = resolve;
+    });
+    let streamFinalized = false;
+    const streamFn: BrewvaTurnLoopStreamFunction = () => {
+      streamStarted();
+      return BrewvaStream.never.pipe(
+        BrewvaStream.ensuring(
+          BrewvaEffect.sync(() => {
+            streamFinalized = true;
+          }),
+        ),
+      ) as BrewvaTurnLoopAssistantMessageStream;
+    };
+
+    const engine = createBrewvaTurnLoopController({
+      initialModel: TEST_MODEL,
+      initialThinkingLevel: "off",
+      sessionId: "session-effect-interrupt",
+      queueMode: "one-at-a-time",
+      followUpMode: "one-at-a-time",
+      transport: "sse",
+      thinkingBudgets: undefined,
+      maxRetryDelayMs: 1000,
+      beforeToolCall: async () => undefined,
+      afterToolCall: async () => undefined,
+      onPayload: async (payload) => payload,
+      transformContext: async (messages) => messages,
+      resolveRequestAuth: async () => ({ ok: true, apiKey: "interrupt-key" }),
+      streamFn,
+    });
+
+    const unsubscribe = engine.subscribe((event) => {
+      events.push(event);
+    });
+
+    const promptPromise = engine.prompt({
+      role: "user",
+      content: [{ type: "text", text: "wait" }],
+      timestamp: Date.now(),
+    });
+    await streamStartedPromise;
+    engine.abort();
+    await promptPromise;
+    unsubscribe();
+
+    expect(streamFinalized).toBe(true);
+    expect(engine.state.isStreaming).toBe(false);
+    expect(
+      events.some(
+        (event) =>
+          event.type === "message_end" &&
+          event.message.role === "assistant" &&
+          event.message.stopReason === "aborted",
+      ),
+    ).toBe(true);
+  });
+
+  test("passes abort signals to Promise turn boundary callbacks", async () => {
+    const abortController = new AbortController();
+    const callbackSignals: AbortSignal[] = [];
+    let queueStarted!: () => void;
+    const queueStartedPromise = new Promise<void>((resolve) => {
+      queueStarted = resolve;
+    });
+
+    const prompt = {
+      role: "user" as const,
+      content: [{ type: "text" as const, text: "wait before stream" }],
+      timestamp: Date.now(),
+    };
+    const context: BrewvaTurnLoopContext = {
+      systemPrompt: "",
+      messages: [],
+      tools: [],
+    };
+    const config: BrewvaTurnLoopConfig = {
+      model: TEST_MODEL,
+      transport: "sse",
+      onPayload: (payload) => payload,
+      transformContext: (messages, signal) => {
+        if (signal) {
+          callbackSignals.push(signal);
+        }
+        queueStarted();
+        return new Promise((resolve) => {
+          signal?.addEventListener("abort", () => resolve(messages), { once: true });
+        });
+      },
+      resolveRequestAuth: async () => ({ ok: true, apiKey: "unused-key" }),
+      streamFn: () => createStream(createAssistantMessage([{ type: "text", text: "unexpected" }])),
+    };
+
+    const runPromise = runPromiseAtBoundary(
+      runBrewvaTurnLoop([prompt], context, config, () => undefined, abortController.signal).pipe(
+        BrewvaEffect.provide(providerRuntimeLayer),
+      ),
+      { signal: abortController.signal },
+    ).catch(() => undefined);
+
+    await queueStartedPromise;
+    abortController.abort();
+    await runPromise;
+
+    expect(callbackSignals).toHaveLength(1);
+    expect(callbackSignals[0]?.aborted).toBe(true);
+  });
+
   test("excludes failed assistant turns from the next provider request context", async () => {
     const streamContexts: BrewvaTurnLoopLlmMessage[][] = [];
     let streamCalls = 0;
@@ -598,7 +925,7 @@ describe("turn loop controller", () => {
       ),
       errorMessage: "server_error",
     };
-    const streamFn: BrewvaTurnLoopStreamFunction = async (_model, context) => {
+    const streamFn: BrewvaTurnLoopStreamFunction = (_model, context) => {
       streamCalls += 1;
       streamContexts.push([...context.messages]);
       if (streamCalls === 1) {
@@ -671,7 +998,7 @@ describe("turn loop controller", () => {
   test("stops the current loop after boundary tool results when requested", async () => {
     const events: BrewvaTurnLoopEvent[] = [];
     let streamCalls = 0;
-    const streamFn: BrewvaTurnLoopStreamFunction = async (_model, context) => {
+    const streamFn: BrewvaTurnLoopStreamFunction = (_model, context) => {
       streamCalls += 1;
       const lastMessage = context.messages[context.messages.length - 1] as
         | BrewvaTurnLoopLlmMessage
@@ -724,7 +1051,7 @@ describe("turn loop controller", () => {
       onPayload: async (payload) => payload,
       transformContext: async (messages) => messages,
       resolveRequestAuth: async () => ({ ok: true, apiKey: "tool-key" }),
-      shouldStopAfterToolResults: (toolResults) =>
+      shouldStopAfterToolResults: async (toolResults) =>
         toolResults.some((result) => result.toolName === "session_compact"),
       streamFn,
     });
@@ -775,7 +1102,7 @@ describe("turn loop controller", () => {
     const toolsSeenByStream: string[][] = [];
     let engine: ReturnType<typeof createBrewvaTurnLoopController>;
 
-    const streamFn: BrewvaTurnLoopStreamFunction = async (_model, context) => {
+    const streamFn: BrewvaTurnLoopStreamFunction = (_model, context) => {
       toolsSeenByStream.push((context.tools ?? []).map((tool) => tool.name));
       const lastMessage = context.messages[context.messages.length - 1] as
         | BrewvaTurnLoopLlmMessage
@@ -857,7 +1184,7 @@ describe("turn loop controller", () => {
     const events: BrewvaTurnLoopEvent[] = [];
     let streamCalls = 0;
 
-    const streamFn: BrewvaTurnLoopStreamFunction = async (_model, context) => {
+    const streamFn: BrewvaTurnLoopStreamFunction = (_model, context) => {
       streamCalls += 1;
       const sawGuardFollowUp = context.messages.some(
         (message) =>
@@ -928,7 +1255,7 @@ describe("turn loop controller", () => {
     const streamContexts: BrewvaTurnLoopLlmMessage[][] = [];
     let streamCalls = 0;
 
-    const streamFn: BrewvaTurnLoopStreamFunction = async (_model, context) => {
+    const streamFn: BrewvaTurnLoopStreamFunction = (_model, context) => {
       streamCalls += 1;
       streamContexts.push([...context.messages]);
       return createStream(

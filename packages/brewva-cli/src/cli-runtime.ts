@@ -1,4 +1,5 @@
 import process from "node:process";
+import { BrewvaEffect, runEdgeOperation } from "@brewva/brewva-effect";
 import { createProviderConnectionPort, runHostedPromptTurn } from "@brewva/brewva-gateway/host";
 import type { BrewvaRuntime, SessionPromptSnapshot } from "@brewva/brewva-runtime";
 import type {
@@ -195,7 +196,7 @@ async function runCliTurn(
   return emittedText;
 }
 
-export async function runCliInteractiveSession(
+export async function runCliInteractiveSessionOperation(
   session: BrewvaManagedPromptSession,
   options: CliInteractiveSessionOptions,
   launchInteractiveShell: CliInteractiveShellLauncher,
@@ -227,6 +228,32 @@ export async function runCliInteractiveSession(
           runtime: bundle.runtime,
           orchestration: bundle.orchestration,
         });
+      },
+    },
+  );
+}
+
+export function runCliInteractiveShellEffect(
+  session: BrewvaManagedPromptSession,
+  options: CliInteractiveSessionOptions,
+  launchInteractiveShell: CliInteractiveShellLauncher,
+): BrewvaEffect.Effect<void, unknown> {
+  return BrewvaEffect.promise(() =>
+    runCliInteractiveSessionOperation(session, options, launchInteractiveShell),
+  );
+}
+
+export async function runCliInteractiveSession(
+  session: BrewvaManagedPromptSession,
+  options: CliInteractiveSessionOptions,
+  launchInteractiveShell: CliInteractiveShellLauncher,
+): Promise<void> {
+  return await runEdgeOperation(
+    "brewva.cli.interactive",
+    runCliInteractiveShellEffect(session, options, launchInteractiveShell),
+    {
+      fields: {
+        cwd: options.cwd,
       },
     },
   );

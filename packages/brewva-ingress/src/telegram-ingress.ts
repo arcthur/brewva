@@ -10,6 +10,7 @@ import {
   buildTelegramInboundDedupeKey,
   type TelegramUpdate,
 } from "@brewva/brewva-channels-telegram";
+import { BrewvaEffect, fromBoundaryPromise, runEdgeOperation } from "@brewva/brewva-effect";
 
 const DEFAULT_INGRESS_PATH = "/ingest/telegram";
 const DEFAULT_MAX_BODY_BYTES = 1_048_576;
@@ -437,6 +438,14 @@ export interface CreateTelegramIngressServerOptions extends TelegramIngressProce
   onError?: (error: unknown) => Promise<void> | void;
 }
 
+export interface TelegramIngressHttpRequestInput {
+  request: IncomingMessage;
+  ingressPath: string;
+  maxBodyBytes: number;
+  processor: TelegramIngressProcessor;
+  onError?: (error: unknown) => Promise<void> | void;
+}
+
 function writeJson(
   response: ServerResponse,
   status: number,
@@ -484,48 +493,88 @@ function readRequestBody(request: IncomingMessage, maxBodyBytes: number): Promis
   });
 }
 
+export function handleTelegramIngressHttpRequestEffect(
+  input: TelegramIngressHttpRequestInput,
+): BrewvaEffect.Effect<TelegramIngressResult> {
+  const requestPath = new URL(input.request.url ?? "/", "http://127.0.0.1").pathname;
+  if (requestPath !== input.ingressPath) {
+    return BrewvaEffect.succeed({
+      status: 404,
+      body: {
+        ok: false,
+        code: "not_found",
+        message: "route not found",
+      },
+    } satisfies TelegramIngressResult);
+  }
+
+  return fromBoundaryPromise(() => readRequestBody(input.request, input.maxBodyBytes)).pipe(
+    BrewvaEffect.flatMap((rawBody) =>
+      fromBoundaryPromise(() =>
+        input.processor.handle({
+          method: input.request.method ?? "GET",
+          headers: toHeaderMap(input.request.headers),
+          body: rawBody,
+        }),
+      ),
+    ),
+    BrewvaEffect.catch((error) =>
+      BrewvaEffect.gen(function* () {
+        if (error instanceof PayloadTooLargeError) {
+          return {
+            status: 413,
+            body: {
+              ok: false,
+              code: "payload_too_large",
+              message: error.message,
+            },
+          } satisfies TelegramIngressResult;
+        }
+        yield* fromBoundaryPromise(() => Promise.resolve(input.onError?.(error))).pipe(
+          BrewvaEffect.catch(() => BrewvaEffect.void),
+        );
+        return {
+          status: 500,
+          body: {
+            ok: false,
+            code: "internal_error",
+            message: "ingress handler failed",
+          },
+        } satisfies TelegramIngressResult;
+      }),
+    ),
+  );
+}
+
+export async function handleTelegramIngressHttpRequest(
+  input: TelegramIngressHttpRequestInput,
+): Promise<TelegramIngressResult> {
+  const requestPath = new URL(input.request.url ?? "/", "http://127.0.0.1").pathname;
+  return await runEdgeOperation(
+    "brewva.ingress.telegram.http.request",
+    handleTelegramIngressHttpRequestEffect(input),
+    {
+      fields: {
+        method: input.request.method ?? "GET",
+        path: requestPath,
+      },
+    },
+  );
+}
+
 export function createTelegramIngressServer(options: CreateTelegramIngressServerOptions): Server {
   const ingressPath = (options.path ?? DEFAULT_INGRESS_PATH).trim() || DEFAULT_INGRESS_PATH;
   const maxBodyBytes = Math.max(1_024, Math.floor(options.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES));
   const processor = new TelegramIngressProcessor(options);
 
   return createServer(async (request, response) => {
-    const requestPath = new URL(request.url ?? "/", "http://127.0.0.1").pathname;
-    if (requestPath !== ingressPath) {
-      writeJson(response, 404, {
-        ok: false,
-        code: "not_found",
-        message: "route not found",
-      });
-      return;
-    }
-
-    let rawBody = "";
-    try {
-      rawBody = await readRequestBody(request, maxBodyBytes);
-      const result = await processor.handle({
-        method: request.method ?? "GET",
-        headers: toHeaderMap(request.headers),
-        body: rawBody,
-      });
-      writeJson(response, result.status, result.body);
-    } catch (error) {
-      if (error instanceof PayloadTooLargeError) {
-        // Body-too-large is an expected client error, not a server fault.
-        // Do not forward it to onError to avoid false-positive alerts.
-        writeJson(response, 413, {
-          ok: false,
-          code: "payload_too_large",
-          message: error.message,
-        });
-        return;
-      }
-      await options.onError?.(error);
-      writeJson(response, 500, {
-        ok: false,
-        code: "internal_error",
-        message: "ingress handler failed",
-      });
-    }
+    const result = await handleTelegramIngressHttpRequest({
+      request,
+      ingressPath,
+      maxBodyBytes,
+      processor,
+      onError: options.onError,
+    });
+    writeJson(response, result.status, result.body);
   });
 }

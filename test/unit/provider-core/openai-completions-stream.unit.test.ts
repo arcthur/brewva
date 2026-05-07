@@ -2,13 +2,16 @@ import { describe, expect, test } from "bun:test";
 import type { AssistantMessage } from "@brewva/brewva-provider-core/contracts";
 import { processOpenAICompletionsStream } from "../../../packages/brewva-provider-core/src/providers/openai-completions/stream-events.js";
 import { IncrementalToolCallFolder } from "../../../packages/brewva-provider-core/src/stream/tool-call-folder.js";
-import { AssistantMessageEventStream } from "../../../packages/brewva-provider-core/src/utils/event-stream.js";
+import {
+  createRecordingProviderEventStream,
+  type RecordingProviderEventStream,
+} from "../../helpers/effect-stream.js";
 
 function createTestToolCalls(
   output: AssistantMessage,
-  stream: AssistantMessageEventStream,
+  stream: RecordingProviderEventStream,
 ): IncrementalToolCallFolder {
-  return new IncrementalToolCallFolder(output, stream, () => {});
+  return new IncrementalToolCallFolder(output, stream, async () => {});
 }
 
 function createOutput(): AssistantMessage {
@@ -31,19 +34,15 @@ function createOutput(): AssistantMessage {
   };
 }
 
-async function collectQueuedEvents(stream: AssistantMessageEventStream) {
-  stream.end();
-  const events = [];
-  for await (const event of stream) {
-    events.push(event);
-  }
-  return events;
+async function collectQueuedEvents(stream: RecordingProviderEventStream) {
+  await stream.end();
+  return stream.events;
 }
 
 describe("openai completions stream processor", () => {
   test("folds text, reasoning, tool calls, reasoning details, and usage without leaking partial args", async () => {
     const output = createOutput();
-    const stream = new AssistantMessageEventStream();
+    const stream = createRecordingProviderEventStream();
 
     await processOpenAICompletionsStream(
       (async function* () {
@@ -191,7 +190,7 @@ describe("openai completions stream processor", () => {
 
   test("uses choice usage fallback and preserves provider error stop reason", async () => {
     const output = createOutput();
-    const stream = new AssistantMessageEventStream();
+    const stream = createRecordingProviderEventStream();
 
     await processOpenAICompletionsStream(
       (async function* () {
@@ -238,7 +237,7 @@ describe("openai completions stream processor", () => {
 
   test("routes interleaved tool call deltas by tool-call index instead of current block", async () => {
     const output = createOutput();
-    const stream = new AssistantMessageEventStream();
+    const stream = createRecordingProviderEventStream();
 
     await processOpenAICompletionsStream(
       (async function* () {

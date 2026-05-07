@@ -4,6 +4,17 @@ import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  BrewvaDeferred,
+  BrewvaDuration,
+  BrewvaEffect,
+  BrewvaExit,
+  BrewvaScope,
+  runPromiseAtBoundary,
+  runSyncAtBoundary,
+  startScopedSchedule,
+  type ScopedScheduleHandle,
+} from "@brewva/brewva-effect";
+import {
   asBrewvaWalId,
   type BrewvaConfig,
   type BrewvaWalId,
@@ -124,7 +135,6 @@ export interface SessionSupervisorTestPendingRequest {
   requestId: string;
   resolve?: (payload: Record<string, unknown> | undefined) => void;
   reject?: (error: Error) => void;
-  timer?: ReturnType<typeof setTimeout>;
 }
 
 export interface SessionSupervisorTestWorkerInput {
@@ -178,10 +188,10 @@ export class SessionSupervisor implements SessionBackend {
   private readonly openAdmission: SessionOpenAdmissionController;
   private readonly workerRpc: SessionWorkerRpcController;
   private readonly turnQueue: SessionTurnQueueCoordinator;
-  private pingTimer: ReturnType<typeof setInterval> | null = null;
-  private idleSweepTimer: ReturnType<typeof setInterval> | null = null;
-  private recoveryWalCompactTimer: ReturnType<typeof setInterval> | null = null;
-  private idleSweepInFlight = false;
+  private readonly supervisorScope: BrewvaScope.Closeable;
+  private pingLoop: ScopedScheduleHandle | null = null;
+  private idleSweepLoop: ScopedScheduleHandle | null = null;
+  private recoveryWalCompactLoop: ScopedScheduleHandle | null = null;
 
   readonly testHooks: SessionSupervisorTestHooks = {
     seedWorker: (input) => {
@@ -209,6 +219,7 @@ export class SessionSupervisor implements SessionBackend {
   };
 
   constructor(private readonly options: SessionSupervisorOptions) {
+    this.supervisorScope = runSyncAtBoundary(BrewvaScope.make());
     this.stateDir = resolve(options.stateDir);
     this.childrenRegistryPath = resolve(this.stateDir, "children.json");
     this.sessionBindingLogPath = resolveGatewaySessionBindingLogPath(this.stateDir);
@@ -254,9 +265,10 @@ export class SessionSupervisor implements SessionBackend {
       },
     });
     this.turnQueue = new SessionTurnQueueCoordinator({
-      request: (handle, message, timeoutMs) => this.workerRpc.request(handle, message, timeoutMs),
-      registerPendingTurn: (handle, turnId, timeoutMs) =>
-        this.workerRpc.registerPendingTurn(handle, turnId, timeoutMs),
+      requestEffect: (handle, message, timeoutMs) =>
+        this.workerRpc.requestEffect(handle, message, timeoutMs),
+      registerPendingTurnEffect: (handle, turnId, timeoutMs) =>
+        this.workerRpc.registerPendingTurnEffect(handle, turnId, timeoutMs),
       rejectPendingTurn: (handle, turnId, error) =>
         this.workerRpc.rejectPendingTurn(handle, turnId, error),
       rekeyPendingTurn: (handle, fromTurnId, toTurnId) =>
@@ -285,18 +297,13 @@ export class SessionSupervisor implements SessionBackend {
   }
 
   async stop(): Promise<void> {
-    if (this.pingTimer) {
-      clearInterval(this.pingTimer);
-      this.pingTimer = null;
-    }
-    if (this.idleSweepTimer) {
-      clearInterval(this.idleSweepTimer);
-      this.idleSweepTimer = null;
-    }
-    if (this.recoveryWalCompactTimer) {
-      clearInterval(this.recoveryWalCompactTimer);
-      this.recoveryWalCompactTimer = null;
-    }
+    const loops = [this.pingLoop, this.idleSweepLoop, this.recoveryWalCompactLoop].filter(
+      (loop): loop is ScopedScheduleHandle => loop !== null,
+    );
+    this.pingLoop = null;
+    this.idleSweepLoop = null;
+    this.recoveryWalCompactLoop = null;
+    await Promise.allSettled(loops.map((loop) => loop.close()));
 
     await Promise.allSettled(
       [...this.workers.keys()].map(async (sessionId) => {
@@ -305,6 +312,9 @@ export class SessionSupervisor implements SessionBackend {
     );
 
     this.persistRegistry();
+    await runPromiseAtBoundary(
+      BrewvaScope.close(this.supervisorScope, BrewvaExit.succeed(undefined)),
+    );
   }
 
   async sweepOrphanedChildren(): Promise<void> {
@@ -372,6 +382,7 @@ export class SessionSupervisor implements SessionBackend {
       const resolvedConfigPath = input.configPath ?? this.options.defaultConfigPath;
       const handle: WorkerHandle = {
         sessionId: input.sessionId,
+        scope: this.createWorkerScope(child),
         child,
         startedAt: Date.now(),
         lastActivityAt: Date.now(),
@@ -390,21 +401,9 @@ export class SessionSupervisor implements SessionBackend {
       this.workerRpc.attachWorkerListeners(handle);
 
       const requestId = randomUUID();
-      const ready = new Promise<WorkerReadyPayload>((resolveReady, rejectReady) => {
-        const timer = setTimeout(() => {
-          handle.readyRequestId = undefined;
-          handle.readyResolve = undefined;
-          handle.readyReject = undefined;
-          handle.readyTimer = undefined;
-          rejectReady(new Error("worker init timeout"));
-        }, WORKER_READY_TIMEOUT_MS);
-        timer.unref?.();
-
-        handle.readyRequestId = requestId;
-        handle.readyResolve = resolveReady;
-        handle.readyReject = rejectReady;
-        handle.readyTimer = timer;
-      });
+      const readyDeferred = runSyncAtBoundary(BrewvaDeferred.make<WorkerReadyPayload, Error>());
+      handle.readyRequestId = requestId;
+      handle.readyDeferred = readyDeferred;
 
       handle.child.send({
         kind: "init",
@@ -421,7 +420,23 @@ export class SessionSupervisor implements SessionBackend {
       });
 
       try {
-        const readyPayload = await ready;
+        const readyPayload = await runPromiseAtBoundary(
+          BrewvaEffect.race(
+            BrewvaDeferred.await(readyDeferred),
+            BrewvaEffect.sleep(BrewvaDuration.millis(WORKER_READY_TIMEOUT_MS)).pipe(
+              BrewvaEffect.andThen(BrewvaEffect.fail(new Error("worker init timeout"))),
+            ),
+          ).pipe(
+            BrewvaEffect.ensuring(
+              BrewvaEffect.sync(() => {
+                if (handle.readyDeferred === readyDeferred) {
+                  handle.readyRequestId = undefined;
+                  handle.readyDeferred = undefined;
+                }
+              }),
+            ),
+          ),
+        );
         handle.requestedAgentSessionId = readyPayload.agentSessionId;
         handle.agentEventLogPath = readyPayload.agentEventLogPath;
         appendGatewaySessionBindingReceipt(this.sessionBindingLogPath, {
@@ -583,6 +598,7 @@ export class SessionSupervisor implements SessionBackend {
     }
 
     await terminatePid(handle.child.pid ?? 0);
+    await this.closeWorkerScope(handle);
     this.workers.delete(sessionId);
     this.persistRegistry();
     this.openAdmission.notifyIfAvailable();
@@ -673,25 +689,27 @@ export class SessionSupervisor implements SessionBackend {
     const now = Date.now();
     const pending = new Map<string, PendingRequest>();
     for (const request of input.pendingRequests ?? []) {
+      const deferred = runSyncAtBoundary(
+        BrewvaDeferred.make<Record<string, unknown> | undefined, Error>(),
+      );
+      if (request.resolve || request.reject) {
+        void runPromiseAtBoundary(BrewvaDeferred.await(deferred)).then(
+          (payload) => request.resolve?.(payload),
+          (error: unknown) =>
+            request.reject?.(error instanceof Error ? error : new Error(String(error))),
+        );
+      }
       pending.set(request.requestId, {
-        resolve: request.resolve ?? (() => undefined),
-        reject: request.reject ?? (() => undefined),
-        timer: request.timer ?? setTimeout(() => undefined, 5 * 60_000),
+        deferred,
       });
-    }
-
-    for (const request of pending.values()) {
-      request.timer.unref?.();
     }
 
     const pendingCount = Math.max(0, input.pendingCount ?? 0);
     for (let index = pending.size; index < pendingCount; index += 1) {
-      const timer = setTimeout(() => undefined, 5 * 60_000);
-      timer.unref?.();
       pending.set(`pending-${index}`, {
-        resolve: () => undefined,
-        reject: () => undefined,
-        timer,
+        deferred: runSyncAtBoundary(
+          BrewvaDeferred.make<Record<string, unknown> | undefined, Error>(),
+        ),
       });
     }
 
@@ -703,6 +721,7 @@ export class SessionSupervisor implements SessionBackend {
 
     this.workers.set(input.sessionId, {
       sessionId: input.sessionId,
+      scope: this.createWorkerScope(),
       child,
       startedAt: input.startedAt ?? now,
       lastActivityAt: input.lastActivityAt ?? now,
@@ -773,6 +792,34 @@ export class SessionSupervisor implements SessionBackend {
     this.ensureTerminalReceiptForHandle(handle, exit);
     this.persistRegistry();
     this.openAdmission.notifyIfAvailable();
+    void this.closeWorkerScope(handle);
+  }
+
+  private createWorkerScope(child?: ChildProcess): BrewvaScope.Closeable {
+    const scope = runSyncAtBoundary(BrewvaScope.fork(this.supervisorScope));
+    if (child) {
+      runSyncAtBoundary(
+        BrewvaScope.addFinalizer(
+          scope,
+          BrewvaEffect.promise(async () => {
+            await terminatePid(child.pid ?? 0);
+          }),
+        ),
+      );
+    }
+    return scope;
+  }
+
+  private async closeWorkerScope(handle: WorkerHandle): Promise<void> {
+    try {
+      await runPromiseAtBoundary(BrewvaScope.close(handle.scope, BrewvaExit.succeed(undefined)));
+    } catch (error) {
+      this.options.logger.warn("failed to close worker scope", {
+        sessionId: handle.sessionId,
+        pid: handle.child.pid,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   private ensureTerminalReceiptForRegistryEntry(
@@ -849,52 +896,57 @@ export class SessionSupervisor implements SessionBackend {
   }
 
   private startBridgePing(): void {
-    if (this.pingTimer) {
+    if (this.pingLoop) {
       return;
     }
 
-    this.pingTimer = setInterval(() => {
-      const now = Date.now();
-      for (const handle of this.workers.values()) {
-        if (now - handle.lastHeartbeatAt > BRIDGE_HEARTBEAT_TIMEOUT_MS) {
-          this.options.logger.warn("worker heartbeat timeout", {
-            sessionId: handle.sessionId,
-            pid: handle.child.pid,
-          });
-          void this.stopSession(handle.sessionId, "heartbeat_timeout");
-          continue;
-        }
+    this.pingLoop = startScopedSchedule({
+      intervalMs: BRIDGE_PING_INTERVAL_MS,
+      run: () =>
+        BrewvaEffect.sync(() => {
+          const now = Date.now();
+          for (const handle of this.workers.values()) {
+            if (now - handle.lastHeartbeatAt > BRIDGE_HEARTBEAT_TIMEOUT_MS) {
+              this.options.logger.warn("worker heartbeat timeout", {
+                sessionId: handle.sessionId,
+                pid: handle.child.pid,
+              });
+              void this.stopSession(handle.sessionId, "heartbeat_timeout");
+              continue;
+            }
 
-        handle.child.send({
-          kind: "bridge.ping",
-          ts: now,
+            handle.child.send({
+              kind: "bridge.ping",
+              ts: now,
+            });
+          }
+        }),
+      onError: (error) => {
+        this.options.logger.warn("worker heartbeat loop failed", {
+          error: toErrorMessage(error),
         });
-      }
-    }, BRIDGE_PING_INTERVAL_MS);
-    this.pingTimer.unref?.();
+      },
+    });
   }
 
   private startIdleSweep(): void {
-    if (this.sessionIdleTtlMs <= 0 || this.idleSweepTimer) {
+    if (this.sessionIdleTtlMs <= 0 || this.idleSweepLoop) {
       return;
     }
 
-    this.idleSweepTimer = setInterval(() => {
-      if (this.idleSweepInFlight) {
-        return;
-      }
-      this.idleSweepInFlight = true;
-      void this.sweepIdleSessions()
-        .catch((error: unknown) => {
-          this.options.logger.warn("idle session sweep failed", {
-            error: error instanceof Error ? error.message : String(error),
-          });
-        })
-        .finally(() => {
-          this.idleSweepInFlight = false;
+    this.idleSweepLoop = startScopedSchedule({
+      intervalMs: this.sessionIdleSweepIntervalMs,
+      run: () =>
+        BrewvaEffect.tryPromise({
+          try: () => this.sweepIdleSessions(),
+          catch: (error) => error,
+        }),
+      onError: (error) => {
+        this.options.logger.warn("idle session sweep failed", {
+          error: toErrorMessage(error),
         });
-    }, this.sessionIdleSweepIntervalMs);
-    this.idleSweepTimer.unref?.();
+      },
+    });
     this.options.logger.info("session idle sweep started", {
       ttlMs: this.sessionIdleTtlMs,
       intervalMs: this.sessionIdleSweepIntervalMs,
@@ -994,27 +1046,29 @@ export class SessionSupervisor implements SessionBackend {
   }
 
   private startRecoveryWalCompaction(): void {
-    if (!this.recoveryWalStore?.isWalEnabled() || this.recoveryWalCompactTimer) {
+    if (!this.recoveryWalStore?.isWalEnabled() || this.recoveryWalCompactLoop) {
       return;
     }
-    this.recoveryWalCompactTimer = setInterval(() => {
-      try {
-        const result = this.recoveryWalStore?.compact();
-        if (result && result.dropped > 0) {
-          this.options.logger.debug("Recovery WAL compacted", {
-            scope: this.recoveryWalStore?.getScope(),
-            scanned: result.scanned,
-            retained: result.retained,
-            dropped: result.dropped,
-          });
-        }
-      } catch (error) {
+    this.recoveryWalCompactLoop = startScopedSchedule({
+      intervalMs: this.recoveryWalCompactIntervalMs,
+      run: () =>
+        BrewvaEffect.sync(() => {
+          const result = this.recoveryWalStore?.compact();
+          if (result && result.dropped > 0) {
+            this.options.logger.debug("Recovery WAL compacted", {
+              scope: this.recoveryWalStore?.getScope(),
+              scanned: result.scanned,
+              retained: result.retained,
+              dropped: result.dropped,
+            });
+          }
+        }),
+      onError: (error) => {
         this.options.logger.warn("Recovery WAL compaction failed", {
           error: toErrorMessage(error),
         });
-      }
-    }, this.recoveryWalCompactIntervalMs);
-    this.recoveryWalCompactTimer.unref?.();
+      },
+    });
   }
 
   private readRegistry(): ChildRegistryEntry[] {

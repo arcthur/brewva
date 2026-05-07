@@ -17,9 +17,10 @@ const RECOVERY_WAL_STORE_METHODS = [
   "getIngressHighWatermark",
   "compact",
 ] as const satisfies readonly (keyof InstanceType<typeof InternalRecoveryWalStore>)[];
-const RECOVERY_WAL_RECOVERY_METHODS = ["recover"] as const satisfies readonly (keyof InstanceType<
-  typeof InternalRecoveryWalRecovery
->)[];
+const RECOVERY_WAL_RECOVERY_METHODS = [
+  "recover",
+  "recoverEffect",
+] as const satisfies readonly (keyof InstanceType<typeof InternalRecoveryWalRecovery>)[];
 const SCHEDULER_SERVICE_METHODS = [
   "getProjectionPath",
   "snapshot",
@@ -59,6 +60,7 @@ export type {
 export type {
   RecoveryWalRecoverHandler,
   RecoveryWalRecoverHandlerInput,
+  RecoveryWalRecoveryError,
   RecoveryWalRecoveryOptions,
 } from "./domain/recovery/api.js";
 export type {

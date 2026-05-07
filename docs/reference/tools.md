@@ -108,6 +108,9 @@ Boundary rules:
   the tool instead of falling back to hidden authority
 - tool outputs become replay-visible through runtime receipts, event tape, and
   verification posture
+- internal process, host command, and box execution use Effect scopes,
+  finalizers, streams, and timeout/schedule helpers for lifecycle mechanics;
+  those mechanics do not replace capability checks or durable receipts
 
 ## Target Roots And Read Scope
 

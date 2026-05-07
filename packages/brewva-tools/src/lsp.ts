@@ -6,22 +6,8 @@ import { parseTscDiagnostics, type TscDiagnostic } from "@brewva/brewva-runtime/
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import { Type } from "@sinclair/typebox";
 import { differenceInMilliseconds } from "date-fns";
-import {
-  collectSymbols,
-  diffIntroducedFatalParseErrors,
-  extractLineSnippet,
-  findIdentifierAtPosition,
-  findOccurrences,
-  formatOccurrenceLine,
-  formatSymbolLine,
-  isParsableFile,
-  isValidIdentifierName,
-  parseSource,
-  renameInFile,
-  type IdentifierOccurrence,
-  type ParsedSource,
-  type SourceSymbol,
-} from "./parsing/index.js";
+import type { IdentifierOccurrence, ParsedSource, SourceSymbol } from "./parsing/index.js";
+import { isParsableFile } from "./parsing/language.js";
 import {
   buildReadPathDiscoveryObservationPayload,
   collectObservedPathsFromLocationLines,
@@ -49,6 +35,15 @@ const LSP_DIAGNOSTIC_SEVERITIES = ["error", "warning", "information", "hint", "a
 const LSP_SYMBOL_SCOPE_VALUES = ["document", "workspace"] as const;
 
 const require = createRequire(import.meta.url);
+
+type ParsingRuntime = typeof import("./parsing/index.js");
+
+let parsingRuntimePromise: Promise<ParsingRuntime> | undefined;
+
+function loadParsingRuntime(): Promise<ParsingRuntime> {
+  parsingRuntimePromise ??= import("./parsing/index.js");
+  return parsingRuntimePromise;
+}
 
 function resolveTscBinPath(): string {
   try {
@@ -122,15 +117,19 @@ function stableParsableWalkOrder(paths: readonly string[], hint?: string): strin
   return [chosen, ...sorted.filter((_p, i) => i !== idx)];
 }
 
-function safeParse(filePath: string, sourceText: string): ParsedSource | null {
+function safeParse(
+  parsing: ParsingRuntime,
+  filePath: string,
+  sourceText: string,
+): ParsedSource | null {
   try {
-    return parseSource(filePath, sourceText);
+    return parsing.parseSource(filePath, sourceText);
   } catch {
     return null;
   }
 }
 
-function readAndParse(filePath: string): ParsedSource | null {
+async function readAndParse(filePath: string): Promise<ParsedSource | null> {
   if (!isParsableFile(filePath)) return null;
   let sourceText: string;
   try {
@@ -138,7 +137,7 @@ function readAndParse(filePath: string): ParsedSource | null {
   } catch {
     return null;
   }
-  return safeParse(filePath, sourceText);
+  return safeParse(await loadParsingRuntime(), filePath, sourceText);
 }
 
 /* -------------------------------------------------------------------------- *
@@ -171,6 +170,7 @@ async function findDefinitionsInWorkspace(
     scan.sessionId,
     `${scan.toolName}:find_definition`,
     async () => {
+      const parsing = await loadParsingRuntime();
       const targetLimit = Math.max(1, Math.trunc(limit));
       const ordered = stableParsableWalkOrder(walkParsableFiles(rootDir), hintFile);
 
@@ -207,15 +207,15 @@ async function findDefinitionsInWorkspace(
 
         for (const item of loaded) {
           if (item.content === null) continue;
-          const parsed = safeParse(item.file, item.content);
+          const parsed = safeParse(parsing, item.file, item.content);
           if (!parsed) continue;
 
-          for (const sym of collectDefinitionSymbols(parsed, symbol)) {
+          for (const sym of collectDefinitionSymbols(parsing, parsed, symbol)) {
             matches.push({
               filePath: item.file,
               line: sym.line,
               column: sym.column,
-              snippet: extractLineSnippet(parsed.sourceText, sym.start),
+              snippet: parsing.extractLineSnippet(parsed.sourceText, sym.start),
               tag: sym.kind,
             });
             if (matches.length >= targetLimit) return true;
@@ -242,8 +242,12 @@ async function findDefinitionsInWorkspace(
   );
 }
 
-function collectDefinitionSymbols(parsed: ParsedSource, name: string): SourceSymbol[] {
-  return collectSymbols(parsed, { limit: 1000 }).filter((sym) => sym.name === name);
+function collectDefinitionSymbols(
+  parsing: ParsingRuntime,
+  parsed: ParsedSource,
+  name: string,
+): SourceSymbol[] {
+  return parsing.collectSymbols(parsed, { limit: 1000 }).filter((sym) => sym.name === name);
 }
 
 async function findReferencesInWorkspace(
@@ -258,6 +262,7 @@ async function findReferencesInWorkspace(
     scan.sessionId,
     `${scan.toolName}:find_references`,
     async () => {
+      const parsing = await loadParsingRuntime();
       const targetLimit = Math.max(1, Math.trunc(limit));
       const ordered = stableParsableWalkOrder(walkParsableFiles(rootDir), hintFile);
 
@@ -299,7 +304,7 @@ async function findReferencesInWorkspace(
 
         for (const item of loaded) {
           if (item.content === null) continue;
-          const parsed = safeParse(item.file, item.content);
+          const parsed = safeParse(parsing, item.file, item.content);
           if (!parsed) continue;
 
           // Cross-file scan: there is no per-file anchor we can trust (the
@@ -308,13 +313,13 @@ async function findReferencesInWorkspace(
           // identifier reference filtered against comments, strings,
           // member-access property names, and object/interface property keys.
           // The upgrade over regex is correctness, not symbol resolution.
-          const occurrences = findOccurrences(parsed, symbol, { mode: "ast-walk" });
+          const occurrences = parsing.findOccurrences(parsed, symbol, { mode: "ast-walk" });
           for (const occ of occurrences) {
             matches.push({
               filePath: item.file,
               line: occ.line,
               column: occ.column,
-              snippet: extractLineSnippet(parsed.sourceText, occ.start),
+              snippet: parsing.extractLineSnippet(parsed.sourceText, occ.start),
               tag: occ.kind,
             });
             if (matches.length >= targetLimit) {
@@ -512,11 +517,12 @@ export function createLspTools(options?: { runtime?: BrewvaBundledToolRuntime })
         observedPaths: [targetFilePath],
       });
 
-      const parsed = readAndParse(targetFilePath);
+      const parsing = await loadParsingRuntime();
+      const parsed = await readAndParse(targetFilePath);
       if (!parsed) {
         return failTextResult(`Error: failed to parse ${targetFilePath}`);
       }
-      const identifier = findIdentifierAtPosition(parsed, params.line, params.character);
+      const identifier = parsing.findIdentifierAtPosition(parsed, params.line, params.character);
       if (!identifier) {
         return inconclusiveTextResult("No identifier at cursor.");
       }
@@ -590,11 +596,12 @@ export function createLspTools(options?: { runtime?: BrewvaBundledToolRuntime })
         observedPaths: [targetFilePath],
       });
 
-      const parsed = readAndParse(targetFilePath);
+      const parsing = await loadParsingRuntime();
+      const parsed = await readAndParse(targetFilePath);
       if (!parsed) {
         return failTextResult(`Error: failed to parse ${targetFilePath}`);
       }
-      const identifier = findIdentifierAtPosition(parsed, params.line, params.character);
+      const identifier = parsing.findIdentifierAtPosition(parsed, params.line, params.character);
       if (!identifier) {
         return inconclusiveTextResult("No identifier at cursor.");
       }
@@ -701,13 +708,14 @@ export function createLspTools(options?: { runtime?: BrewvaBundledToolRuntime })
           observedPaths: [targetFilePath],
         });
 
-        const parsed = readAndParse(targetFilePath);
+        const parsing = await loadParsingRuntime();
+        const parsed = await readAndParse(targetFilePath);
         if (!parsed) {
           return failTextResult(`Error: failed to parse ${targetFilePath}`);
         }
-        const symbols = collectSymbols(parsed, { limit, query: params.query });
+        const symbols = parsing.collectSymbols(parsed, { limit, query: params.query });
         if (symbols.length === 0) return inconclusiveTextResult("No symbols found");
-        const lines = symbols.map((s) => formatSymbolLine(targetFilePath, s));
+        const lines = symbols.map((s) => parsing.formatSymbolLine(targetFilePath, s));
         return textResult(lines.join("\n"));
       }
 
@@ -833,24 +841,25 @@ export function createLspTools(options?: { runtime?: BrewvaBundledToolRuntime })
         );
       }
 
-      const parsed = readAndParse(targetFilePath);
+      const parsing = await loadParsingRuntime();
+      const parsed = await readAndParse(targetFilePath);
       if (!parsed) {
         return failTextResult(`Error: failed to parse ${targetFilePath}`);
       }
 
-      const identifier = findIdentifierAtPosition(parsed, params.line, params.character);
+      const identifier = parsing.findIdentifierAtPosition(parsed, params.line, params.character);
       if (!identifier) {
         return inconclusiveTextResult("Rename not available: cursor is not on an identifier.");
       }
 
-      const occurrences = findOccurrences(parsed, identifier.name, {
+      const occurrences = parsing.findOccurrences(parsed, identifier.name, {
         atOffset: identifier.start,
         // TS type-space symbols (interface/type/enum) are not visible to
         // eslint-scope; force AST-walk so we don't silently miss them.
         mode: identifier.inTypePosition ? "ast-walk" : "scope-anchored",
       });
       const lines = occurrences.map((occ) =>
-        formatOccurrenceLine(targetFilePath, occ, parsed.sourceText),
+        parsing.formatOccurrenceLine(targetFilePath, occ, parsed.sourceText),
       );
       const summary = summarizeOccurrences(identifier.name, occurrences);
       return textResult(lines.length > 0 ? lines.join("\n") : summary.text, {
@@ -885,13 +894,14 @@ export function createLspTools(options?: { runtime?: BrewvaBundledToolRuntime })
           "Error: ast_rename_in_file only supports .ts, .tsx, .js, .jsx, .mjs, .cjs, .d.ts files.",
         );
       }
-      if (!isValidIdentifierName(params.newName)) {
+      const parsing = await loadParsingRuntime();
+      if (!parsing.isValidIdentifierName(params.newName)) {
         return failTextResult("Error: newName must be a valid identifier.");
       }
 
       const sourceText = readFileSync(targetFilePath, "utf8");
-      const parsed = parseSource(targetFilePath, sourceText);
-      const identifier = findIdentifierAtPosition(parsed, params.line, params.character);
+      const parsed = parsing.parseSource(targetFilePath, sourceText);
+      const identifier = parsing.findIdentifierAtPosition(parsed, params.line, params.character);
       if (!identifier) {
         return failTextResult("Error: cursor is not on an identifier.");
       }
@@ -901,7 +911,7 @@ export function createLspTools(options?: { runtime?: BrewvaBundledToolRuntime })
         );
       }
 
-      const occurrences = findOccurrences(parsed, identifier.name, {
+      const occurrences = parsing.findOccurrences(parsed, identifier.name, {
         atOffset: identifier.start,
         // TS type-space symbols (interface/type/enum) are not visible to
         // eslint-scope; force AST-walk so we don't silently miss them.
@@ -911,9 +921,9 @@ export function createLspTools(options?: { runtime?: BrewvaBundledToolRuntime })
         return inconclusiveTextResult(`No scoped occurrences of '${identifier.name}' found.`);
       }
 
-      const result = renameInFile(parsed, occurrences, params.newName);
-      const reparsed = parseSource(targetFilePath, result.sourceText);
-      const newFatalErrors = diffIntroducedFatalParseErrors(parsed.errors, reparsed.errors);
+      const result = parsing.renameInFile(parsed, occurrences, params.newName);
+      const reparsed = parsing.parseSource(targetFilePath, result.sourceText);
+      const newFatalErrors = parsing.diffIntroducedFatalParseErrors(parsed.errors, reparsed.errors);
       if (newFatalErrors.length > 0) {
         const detail = newFatalErrors
           .slice(0, 5)

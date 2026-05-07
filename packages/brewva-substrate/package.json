@@ -92,6 +92,7 @@
     }
   },
   "dependencies": {
+    "@brewva/brewva-effect": "workspace:*",
     "@brewva/brewva-provider-core": "workspace:*",
     "@brewva/brewva-token-estimation": "workspace:*",
     "@brewva/brewva-tool-protocol": "workspace:*",

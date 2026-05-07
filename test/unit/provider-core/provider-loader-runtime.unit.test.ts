@@ -3,7 +3,7 @@ import {
   createBuiltInApiProviderRegistration,
   createCachedModuleLoader,
 } from "../../../packages/brewva-provider-core/src/registry/builtins.js";
-import { createAssistantMessageEventStream } from "../../../packages/brewva-provider-core/src/utils/event-stream.js";
+import { createProviderEventStream } from "../../helpers/effect-stream.js";
 
 describe("provider loader runtime", () => {
   test("lazy-loads a cold provider module before clearing session resources", async () => {
@@ -13,10 +13,10 @@ describe("provider loader runtime", () => {
       loadCount += 1;
       return {
         stream() {
-          return createAssistantMessageEventStream();
+          return createProviderEventStream();
         },
         streamSimple() {
-          return createAssistantMessageEventStream();
+          return createProviderEventStream();
         },
         sessionResources: {
           clearSession(sessionId: string) {

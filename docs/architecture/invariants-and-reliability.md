@@ -43,6 +43,10 @@ recovery, and bounded execution.
     branch topology, context-entry paths, and capability state are replay-derived;
     state-only records do not become model context without explicit admitted
     context entries, lineage summaries, or outcome adoption.
+13. Effect runtime substrate:
+    scopes, fibers, layers, schedules, and streams own in-memory execution
+    mechanics only; they never replace event tape, WAL, receipts, or
+    capability-scoped authority.
 
 ## Failure Semantics
 
@@ -56,6 +60,10 @@ recovery, and bounded execution.
   durable recovery truth.
 - Deleted durable source-of-truth events change replay correctness and must be
   treated as data loss.
+- Effect interruption and scope finalization are cleanup mechanics. Durable
+  cancellation, rollback, recovery, and failure evidence must still be recorded
+  through runtime events, receipts, WAL, or ledger rows when the boundary
+  requires it.
 
 ## State Roles
 
@@ -78,6 +86,11 @@ recovery, and bounded execution.
 - `packages/brewva-runtime/src/domain/governance/reversible-mutation.ts`
 - `packages/brewva-runtime/src/domain/governance/effect-authority-manifest.ts`
 - `packages/brewva-gateway/src/session/turn-envelope.ts`
+- `packages/brewva-effect/src/index.ts`
+- `packages/brewva-effect/src/runtime-spine.ts`
+- `packages/brewva-effect/src/schedules.ts`
+- `packages/brewva-substrate/src/turn/effect-runtime.ts`
+- `packages/brewva-provider-core/src/stream/run-provider-stream.ts`
 
 ## Related Docs
 

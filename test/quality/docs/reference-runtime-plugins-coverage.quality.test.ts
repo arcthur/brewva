@@ -5,6 +5,8 @@ import { resolve } from "node:path";
 const EXPECTED_SYMBOLS = [
   "InternalRuntimePlugin",
   "InternalRuntimePluginApi",
+  "defineEffectInternalHostPlugin",
+  "EffectInternalHostPluginApi",
   "RuntimePluginCapability",
   "LocalHookPort",
   "createHostedTurnPipeline",

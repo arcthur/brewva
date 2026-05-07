@@ -1,9 +1,11 @@
+import { BrewvaEffect, runPromiseAtBoundary } from "@brewva/brewva-effect";
 import type {
   ProviderCachePolicy,
   ProviderCacheRenderResult,
   ProviderPayloadMetadata,
   ResolvedFileContent,
 } from "@brewva/brewva-provider-core/contracts";
+import { providerRuntimeLayer } from "@brewva/brewva-provider-core/contracts";
 import type { BrewvaRegisteredModel } from "../contracts/provider.js";
 import {
   type BrewvaEventBus,
@@ -13,6 +15,7 @@ import {
 import { runBrewvaTurnLoop, type BrewvaTurnLoopConfig } from "./loop.js";
 import { createBrewvaTurnProviderStreamFunction } from "./provider-stream.js";
 import type {
+  BrewvaTurnEventScope,
   BrewvaTurnLoopController,
   BrewvaTurnLoopAfterToolCallContext,
   BrewvaTurnLoopBeforeToolCallContext,
@@ -126,8 +129,8 @@ class PendingMessageQueue {
 }
 
 class BrewvaTurnLoopControllerImpl implements BrewvaTurnLoopController {
-  readonly #events: BrewvaEventBus<BrewvaTurnLoopEvent>;
-  readonly #eventController: BrewvaEventBusController<BrewvaTurnLoopEvent>;
+  readonly #events: BrewvaEventBus<BrewvaTurnLoopEvent, BrewvaTurnEventScope>;
+  readonly #eventController: BrewvaEventBusController<BrewvaTurnLoopEvent, BrewvaTurnEventScope>;
   readonly #queuedPromptQueue: PendingMessageQueue;
   readonly #followUpQueue: PendingMessageQueue;
   readonly #streamFn: BrewvaTurnLoopStreamFunction;
@@ -158,7 +161,7 @@ class BrewvaTurnLoopControllerImpl implements BrewvaTurnLoopController {
     payload: unknown,
     model: BrewvaRegisteredModel,
     metadata?: ProviderPayloadMetadata,
-  ) => Promise<unknown>;
+  ) => unknown;
   readonly #onCacheRender:
     | ((render: ProviderCacheRenderResult, model: BrewvaRegisteredModel) => void | Promise<void>)
     | undefined;
@@ -208,7 +211,7 @@ class BrewvaTurnLoopControllerImpl implements BrewvaTurnLoopController {
       payload: unknown,
       model: BrewvaRegisteredModel,
       metadata?: ProviderPayloadMetadata,
-    ) => Promise<unknown>;
+    ) => unknown;
     onCacheRender:
       | ((render: ProviderCacheRenderResult, model: BrewvaRegisteredModel) => void | Promise<void>)
       | undefined;
@@ -223,7 +226,7 @@ class BrewvaTurnLoopControllerImpl implements BrewvaTurnLoopController {
       | undefined;
     streamFn: BrewvaTurnLoopStreamFunction;
   }) {
-    const events = createBrewvaEventBus<BrewvaTurnLoopEvent>({
+    const events = createBrewvaEventBus<BrewvaTurnLoopEvent, BrewvaTurnEventScope>({
       normalizeEvent: excludeTransientFailureFromEvent,
       acceptReturnedEvent: ({ current, returned }) => returned.type === current.type,
     });
@@ -278,6 +281,8 @@ class BrewvaTurnLoopControllerImpl implements BrewvaTurnLoopController {
   subscribe(
     listener: (
       event: BrewvaTurnLoopEvent,
+      scope: BrewvaTurnEventScope | undefined,
+      signal: AbortSignal | undefined,
     ) => Promise<BrewvaTurnLoopEvent | void> | BrewvaTurnLoopEvent | void,
   ): () => void {
     return this.#events.subscribe(listener);
@@ -362,12 +367,15 @@ class BrewvaTurnLoopControllerImpl implements BrewvaTurnLoopController {
   async #runPromptMessages(messages: BrewvaTurnLoopMessage[]): Promise<void> {
     this.#requireModel();
     await this.#runWithLifecycle(async (signal) => {
-      await runBrewvaTurnLoop(
-        messages,
-        this.#createContextSnapshot(),
-        this.#createLoopConfig(),
-        (event) => this.#processEvents(event),
-        signal,
+      await runPromiseAtBoundary(
+        runBrewvaTurnLoop(
+          messages,
+          this.#createContextSnapshot(),
+          this.#createLoopConfig(),
+          (event, scope) => this.#processEvents(event, scope),
+          signal,
+        ).pipe(BrewvaEffect.provide(providerRuntimeLayer)),
+        { signal },
       );
     });
   }
@@ -388,7 +396,7 @@ class BrewvaTurnLoopControllerImpl implements BrewvaTurnLoopController {
       sessionId: this.#sessionId,
       cachePolicy: this.#cachePolicy,
       onCacheRender: this.#onCacheRender,
-      onPayload: this.#onPayload as BrewvaTurnLoopConfig["onPayload"],
+      onPayload: this.#onPayload,
       transport: this.#transport,
       thinkingBudgets: this.#thinkingBudgets,
       maxRetryDelayMs: this.#maxRetryDelayMs,
@@ -396,9 +404,9 @@ class BrewvaTurnLoopControllerImpl implements BrewvaTurnLoopController {
       beforeToolCall: this.#beforeToolCall,
       afterToolCall: this.#afterToolCall as BrewvaTurnLoopConfig["afterToolCall"],
       transformContext: this.#transformContext,
-      getQueuedMessages: async () => this.#queuedPromptQueue.drain(),
-      getFollowUpMessages: async () => this.#followUpQueue.drain(),
-      consumePendingSteer: async () => this.#consumePendingSteer(),
+      getQueuedMessagesEffect: () => BrewvaEffect.sync(() => this.#queuedPromptQueue.drain()),
+      getFollowUpMessagesEffect: () => BrewvaEffect.sync(() => this.#followUpQueue.drain()),
+      consumePendingSteerEffect: () => BrewvaEffect.sync(() => this.#consumePendingSteer()),
       getCurrentContext: () => ({
         systemPrompt: this.#state.systemPrompt,
         tools: [...this.#state.tools],
@@ -514,8 +522,12 @@ class BrewvaTurnLoopControllerImpl implements BrewvaTurnLoopController {
     this.#activeRun = undefined;
   }
 
-  async #processEvents(event: BrewvaTurnLoopEvent): Promise<BrewvaTurnLoopEvent> {
-    const currentEvent = await this.#eventController.emit(event);
+  async #processEvents(
+    event: BrewvaTurnLoopEvent,
+    scope?: BrewvaTurnEventScope,
+    signal?: AbortSignal,
+  ): Promise<BrewvaTurnLoopEvent> {
+    const currentEvent = await this.#eventController.emit(event, scope, signal);
 
     switch (currentEvent.type) {
       case "message_end":
@@ -563,7 +575,7 @@ export function createBrewvaTurnLoopController(input: {
     payload: unknown,
     model: BrewvaRegisteredModel,
     metadata?: ProviderPayloadMetadata,
-  ) => Promise<unknown>;
+  ) => unknown;
   onCacheRender?: (
     render: ProviderCacheRenderResult,
     model: BrewvaRegisteredModel,

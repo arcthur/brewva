@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { Model, Tool } from "@brewva/brewva-provider-core/contracts";
+import type { AssistantMessageEvent, Model, Tool } from "@brewva/brewva-provider-core/contracts";
 import { Type } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 import { parseStreamingJson } from "../../../packages/brewva-provider-core/src/parse/json-parse.js";
@@ -10,15 +10,34 @@ import {
 } from "../../../packages/brewva-provider-core/src/parse/typebox-partialize.js";
 import { createAssistantMessage } from "../../../packages/brewva-provider-core/src/stream/assistant-message.js";
 import { IncrementalToolCallFolder } from "../../../packages/brewva-provider-core/src/stream/tool-call-folder.js";
-import { AssistantMessageEventStream } from "../../../packages/brewva-provider-core/src/utils/event-stream.js";
+import {
+  createRecordingProviderEventStream,
+  type RecordingProviderEventStream,
+} from "../../helpers/effect-stream.js";
 
-async function collectEvents(stream: AssistantMessageEventStream) {
-  stream.end();
-  const events: any[] = [];
-  for await (const event of stream) {
-    events.push(event);
-  }
-  return events;
+async function collectEvents(stream: RecordingProviderEventStream) {
+  await stream.end();
+  return stream.events;
+}
+
+type ToolCallEventType = "toolcall_start" | "toolcall_delta" | "toolcall_end";
+
+function findToolCallEvent<TType extends ToolCallEventType>(
+  events: readonly AssistantMessageEvent[],
+  type: TType,
+): Extract<AssistantMessageEvent, { type: TType }> | undefined {
+  return events.find(
+    (event): event is Extract<AssistantMessageEvent, { type: TType }> => event.type === type,
+  );
+}
+
+function filterToolCallEvents<TType extends ToolCallEventType>(
+  events: readonly AssistantMessageEvent[],
+  type: TType,
+): Array<Extract<AssistantMessageEvent, { type: TType }>> {
+  return events.filter(
+    (event): event is Extract<AssistantMessageEvent, { type: TType }> => event.type === type,
+  );
 }
 
 const TEST_MODEL: Model<"openai-responses"> = {
@@ -37,17 +56,17 @@ const TEST_MODEL: Model<"openai-responses"> = {
 describe("incremental tool call folder", () => {
   test("tracks interleaved incremental tool calls without leaking partialJson", async () => {
     const output = createAssistantMessage(TEST_MODEL);
-    const stream = new AssistantMessageEventStream();
-    const folder = new IncrementalToolCallFolder(output, stream, () => {});
+    const stream = createRecordingProviderEventStream();
+    const folder = new IncrementalToolCallFolder(output, stream, async () => {});
 
-    folder.begin("call:1", { id: "call_1", name: "search" });
-    folder.begin("call:2", { id: "call_2", name: "read" });
-    folder.appendArgumentsDelta("call:1", '{"query":"alpha"');
-    folder.appendArgumentsDelta("call:2", '{"path":"README');
-    folder.replaceArguments("call:1", '{"query":"alpha","limit":2}');
-    folder.replaceArguments("call:2", '{"path":"README.md"}');
-    folder.finalize("call:2");
-    folder.finalize("call:1");
+    await folder.begin("call:1", { id: "call_1", name: "search" });
+    await folder.begin("call:2", { id: "call_2", name: "read" });
+    await folder.appendArgumentsDelta("call:1", '{"query":"alpha"');
+    await folder.appendArgumentsDelta("call:2", '{"path":"README');
+    await folder.replaceArguments("call:1", '{"query":"alpha","limit":2}');
+    await folder.replaceArguments("call:2", '{"path":"README.md"}');
+    await folder.finalize("call:2");
+    await folder.finalize("call:1");
 
     const events = await collectEvents(stream);
     expect(events.map((event) => event.type)).toEqual([
@@ -84,10 +103,10 @@ describe("incremental tool call folder", () => {
 
   test("supports atomic tool calls with one shared seam", async () => {
     const output = createAssistantMessage(TEST_MODEL);
-    const stream = new AssistantMessageEventStream();
-    const folder = new IncrementalToolCallFolder(output, stream, () => {});
+    const stream = createRecordingProviderEventStream();
+    const folder = new IncrementalToolCallFolder(output, stream, async () => {});
 
-    folder.pushAtomic(
+    await folder.pushAtomic(
       {
         type: "toolCall",
         id: "call_3",
@@ -117,15 +136,15 @@ describe("incremental tool call folder", () => {
 
   test("emits parseStatus undefined when no registry is provided", async () => {
     const output = createAssistantMessage(TEST_MODEL);
-    const stream = new AssistantMessageEventStream();
-    const folder = new IncrementalToolCallFolder(output, stream, () => {});
+    const stream = createRecordingProviderEventStream();
+    const folder = new IncrementalToolCallFolder(output, stream, async () => {});
 
-    folder.begin("call:1", { id: "call_1", name: "search" }, '{"query":"alpha"}');
-    folder.finalize("call:1");
+    await folder.begin("call:1", { id: "call_1", name: "search" }, '{"query":"alpha"}');
+    await folder.finalize("call:1");
 
     const events = await collectEvents(stream);
-    const startEvent = events.find((e: any) => e.type === "toolcall_start");
-    const endEvent = events.find((e: any) => e.type === "toolcall_end");
+    const startEvent = findToolCallEvent(events, "toolcall_start");
+    const endEvent = findToolCallEvent(events, "toolcall_end");
     // Without registry, parseStatus should be undefined (not set)
     expect(startEvent?.parseStatus).toBeUndefined();
     expect(endEvent?.parseStatus).toBeUndefined();
@@ -144,14 +163,14 @@ describe("incremental tool call folder", () => {
     const registry = createStreamingParseRegistry([readTool]);
 
     const output = createAssistantMessage(TEST_MODEL);
-    const stream = new AssistantMessageEventStream();
-    const folder = new IncrementalToolCallFolder(output, stream, () => {}, registry);
+    const stream = createRecordingProviderEventStream();
+    const folder = new IncrementalToolCallFolder(output, stream, async () => {}, registry);
 
     // Start with empty arguments — should be "pending" (missing required path is OK during streaming)
-    folder.begin("call:1", { id: "call_1", name: "read" }, "{}");
+    await folder.begin("call:1", { id: "call_1", name: "read" }, "{}");
     const eventsAfterStart = await collectEvents(stream);
 
-    const startEvent = eventsAfterStart.find((e: any) => e.type === "toolcall_start");
+    const startEvent = findToolCallEvent(eventsAfterStart, "toolcall_start");
     expect(startEvent?.parseStatus).toBe("pending");
   });
 
@@ -164,15 +183,15 @@ describe("incremental tool call folder", () => {
     const registry = createStreamingParseRegistry([tool]);
 
     const output = createAssistantMessage(TEST_MODEL);
-    const stream = new AssistantMessageEventStream();
-    const folder = new IncrementalToolCallFolder(output, stream, () => {}, registry);
+    const stream = createRecordingProviderEventStream();
+    const folder = new IncrementalToolCallFolder(output, stream, async () => {}, registry);
 
-    folder.begin("call:1", { id: "call_1", name: "health", arguments: {} });
-    folder.finalize("call:1");
+    await folder.begin("call:1", { id: "call_1", name: "health", arguments: {} });
+    await folder.finalize("call:1");
 
     const events = await collectEvents(stream);
-    const startEvent = events.find((e: any) => e.type === "toolcall_start");
-    const endEvent = events.find((e: any) => e.type === "toolcall_end");
+    const startEvent = findToolCallEvent(events, "toolcall_start");
+    const endEvent = findToolCallEvent(events, "toolcall_end");
     expect(startEvent?.parseStatus).toBe("pending");
     expect(endEvent?.parseStatus).toBe("pending");
   });
@@ -188,13 +207,13 @@ describe("incremental tool call folder", () => {
     const registry = createStreamingParseRegistry([tool]);
 
     const output = createAssistantMessage(TEST_MODEL);
-    const stream = new AssistantMessageEventStream();
-    const folder = new IncrementalToolCallFolder(output, stream, () => {}, registry);
+    const stream = createRecordingProviderEventStream();
+    const folder = new IncrementalToolCallFolder(output, stream, async () => {}, registry);
 
-    folder.begin("call:1", { id: "call_1", name: "action" }, '{"mode":"delete"}');
+    await folder.begin("call:1", { id: "call_1", name: "action" }, '{"mode":"delete"}');
 
     const events = await collectEvents(stream);
-    const startEvent = events.find((e: any) => e.type === "toolcall_start");
+    const startEvent = findToolCallEvent(events, "toolcall_start");
     expect(startEvent?.parseStatus).toBe("likely_invalid");
   });
 
@@ -210,14 +229,14 @@ describe("incremental tool call folder", () => {
     const registry = createStreamingParseRegistry([tool]);
 
     const output = createAssistantMessage(TEST_MODEL);
-    const stream = new AssistantMessageEventStream();
-    const folder = new IncrementalToolCallFolder(output, stream, () => {}, registry);
+    const stream = createRecordingProviderEventStream();
+    const folder = new IncrementalToolCallFolder(output, stream, async () => {}, registry);
 
     // Partial: only path present, content missing. In streaming, this is "pending".
-    folder.begin("call:1", { id: "call_1", name: "write" }, '{"path":"/tmp/test.txt"}');
+    await folder.begin("call:1", { id: "call_1", name: "write" }, '{"path":"/tmp/test.txt"}');
     const events = await collectEvents(stream);
 
-    const startEvent = events.find((e: any) => e.type === "toolcall_start");
+    const startEvent = findToolCallEvent(events, "toolcall_start");
     expect(startEvent?.parseStatus).toBe("pending");
   });
 
@@ -230,14 +249,14 @@ describe("incremental tool call folder", () => {
     const registry = createStreamingParseRegistry([tool]);
 
     const output = createAssistantMessage(TEST_MODEL);
-    const stream = new AssistantMessageEventStream();
-    const folder = new IncrementalToolCallFolder(output, stream, () => {}, registry);
+    const stream = createRecordingProviderEventStream();
+    const folder = new IncrementalToolCallFolder(output, stream, async () => {}, registry);
 
     // "unknown_tool" is not in the registry — should fall back to permissive
-    folder.begin("call:1", { id: "call_1", name: "unknown_tool" }, '{"data":123}');
+    await folder.begin("call:1", { id: "call_1", name: "unknown_tool" }, '{"data":123}');
     const events = await collectEvents(stream);
 
-    const startEvent = events.find((e: any) => e.type === "toolcall_start");
+    const startEvent = findToolCallEvent(events, "toolcall_start");
     // Permissive parse: no schema, so parseStatus should be undefined
     expect(startEvent?.parseStatus).toBeUndefined();
   });
@@ -253,22 +272,22 @@ describe("incremental tool call folder", () => {
     const registry = createStreamingParseRegistry([tool]);
 
     const output = createAssistantMessage(TEST_MODEL);
-    const stream = new AssistantMessageEventStream();
-    const folder = new IncrementalToolCallFolder(output, stream, () => {}, registry);
+    const stream = createRecordingProviderEventStream();
+    const folder = new IncrementalToolCallFolder(output, stream, async () => {}, registry);
 
-    folder.begin("call:1", { id: "call_1", name: "read" });
-    folder.appendArgumentsDelta("call:1", '{"path":"/tmp');
-    folder.appendArgumentsDelta("call:1", '/test.txt"}');
-    folder.finalize("call:1");
+    await folder.begin("call:1", { id: "call_1", name: "read" });
+    await folder.appendArgumentsDelta("call:1", '{"path":"/tmp');
+    await folder.appendArgumentsDelta("call:1", '/test.txt"}');
+    await folder.finalize("call:1");
 
     const events = await collectEvents(stream);
-    const deltaEvents = events.filter((e: any) => e.type === "toolcall_delta");
+    const deltaEvents = filterToolCallEvents(events, "toolcall_delta");
     // Each delta should have a parseStatus since we have a registry and tool name
     for (const delta of deltaEvents) {
       expect(delta.parseStatus).toBeDefined();
     }
 
-    const endEvent = events.find((e: any) => e.type === "toolcall_end");
+    const endEvent = findToolCallEvent(events, "toolcall_end");
     expect(endEvent?.parseStatus).toBe("pending");
     expect((output.content[0] as any).arguments).toEqual({ path: "/tmp/test.txt" });
   });

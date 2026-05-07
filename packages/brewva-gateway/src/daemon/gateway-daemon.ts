@@ -4,6 +4,15 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { resolve } from "node:path";
 import process from "node:process";
 import {
+  BrewvaEffect,
+  BrewvaGatewayScope,
+  runPromiseAtBoundary,
+  startScopedSchedule,
+  withBrewvaObservability,
+  type BrewvaObservationFields,
+  type ScopedScheduleHandle,
+} from "@brewva/brewva-effect";
+import {
   BrewvaRuntime,
   SESSION_WIRE_SCHEMA,
   type BrewvaScheduleSelfImproveConfig,
@@ -495,7 +504,7 @@ export class GatewayDaemon {
   private currentPort: number;
   private currentHealthHttpPort?: number;
   private eventSeq = 0;
-  private tickTimer: ReturnType<typeof setInterval> | null = null;
+  private tickTimer: ScopedScheduleHandle | null = null;
   private stopping = false;
   private ownsPidRecord = false;
   private onSigInt: (() => void) | null = null;
@@ -984,6 +993,32 @@ export class GatewayDaemon {
     await this.stopDeferred.promise;
   }
 
+  private gatewayScopeFields(extra?: BrewvaObservationFields): BrewvaObservationFields {
+    return {
+      gatewayId: this.stateDir,
+      stateDir: this.stateDir,
+      ...extra,
+    };
+  }
+
+  private withGatewayObservability<A, E, R>(
+    operation: string,
+    effect: BrewvaEffect.Effect<A, E, R>,
+  ): BrewvaEffect.Effect<A, E, R> {
+    return effect.pipe(
+      BrewvaEffect.provide(
+        BrewvaGatewayScope.layer({
+          gatewayId: this.stateDir,
+          stateDir: this.stateDir,
+        }),
+      ),
+      withBrewvaObservability(
+        `brewva.gateway.${operation}`,
+        this.gatewayScopeFields({ operation }),
+      ),
+    );
+  }
+
   async stop(reason = "shutdown"): Promise<void> {
     if (this.stopping) {
       await this.stopDeferred.promise;
@@ -997,13 +1032,10 @@ export class GatewayDaemon {
       ts: Date.now(),
     });
 
-    if (this.tickTimer) {
-      clearInterval(this.tickTimer);
-      this.tickTimer = null;
-    }
+    await this.stopTickEmitter();
 
     this.scheduler?.stop();
-    this.heartbeatScheduler.stop();
+    await this.heartbeatScheduler.stop();
     try {
       await this.supervisor.stop();
     } catch {
@@ -1069,12 +1101,9 @@ export class GatewayDaemon {
   }
 
   private async cleanupFailedStart(): Promise<void> {
-    if (this.tickTimer) {
-      clearInterval(this.tickTimer);
-      this.tickTimer = null;
-    }
+    await this.stopTickEmitter();
 
-    this.heartbeatScheduler.stop();
+    await this.heartbeatScheduler.stop();
 
     if (this.wss) {
       const server = this.wss;
@@ -1110,16 +1139,34 @@ export class GatewayDaemon {
       return;
     }
 
-    this.tickTimer = setInterval(() => {
-      this.broadcastEvent("tick", {
-        ts: Date.now(),
-        workers: this.supervisor.listWorkers().length,
-        connections: [...this.connections.values()].filter((value) =>
-          isConnectionAuthenticated(value),
-        ).length,
-      });
-    }, this.tickIntervalMs);
-    this.tickTimer.unref?.();
+    this.tickTimer = startScopedSchedule({
+      intervalMs: this.tickIntervalMs,
+      run: () =>
+        this.withGatewayObservability(
+          "tick",
+          BrewvaEffect.sync(() => {
+            this.broadcastEvent("tick", {
+              ts: Date.now(),
+              workers: this.supervisor.listWorkers().length,
+              connections: [...this.connections.values()].filter((value) =>
+                isConnectionAuthenticated(value),
+              ).length,
+            });
+          }),
+        ),
+      onError: (error) => {
+        this.logger.warn("gateway tick failed", { error: toErrorMessage(error) });
+      },
+    });
+  }
+
+  private async stopTickEmitter(): Promise<void> {
+    if (!this.tickTimer) {
+      return;
+    }
+    const timer = this.tickTimer;
+    this.tickTimer = null;
+    await timer.close();
   }
 
   private async closeWebSocketServer(server: WebSocketServer, timeoutMs: number): Promise<void> {
@@ -2429,6 +2476,27 @@ export class GatewayDaemon {
 
 export async function runGatewayDaemon(options: GatewayDaemonOptions): Promise<void> {
   const daemon = new GatewayDaemon(options);
-  await daemon.start();
-  await daemon.waitForStop();
+  const stateDir = resolve(options.stateDir);
+  const scopeFields = {
+    gatewayId: stateDir,
+    stateDir,
+  };
+  await runPromiseAtBoundary(
+    BrewvaEffect.scoped(
+      BrewvaEffect.acquireRelease(
+        BrewvaEffect.promise(async () => {
+          await daemon.start();
+          return daemon;
+        }),
+        (startedDaemon) => BrewvaEffect.promise(() => startedDaemon.stop("effect_scope_closed")),
+      ).pipe(
+        BrewvaEffect.flatMap((startedDaemon) =>
+          BrewvaEffect.promise(() => startedDaemon.waitForStop()),
+        ),
+      ),
+    ).pipe(
+      BrewvaEffect.provide(BrewvaGatewayScope.layer(scopeFields)),
+      withBrewvaObservability("brewva.gateway.daemon", scopeFields),
+    ),
+  );
 }

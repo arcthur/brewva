@@ -211,7 +211,7 @@ describe("session supervisor safeguards", () => {
     }
   });
 
-  test("given worker returns session_busy, when result is dispatched, then typed SessionBackendStateError is propagated", () => {
+  test("given worker returns session_busy, when result is dispatched, then typed SessionBackendStateError is propagated", async () => {
     const root = mkdtempSync(join(tmpdir(), "brewva-session-supervisor-"));
     const stateDir = join(root, "state");
     const supervisor = new SessionSupervisor({
@@ -227,8 +227,6 @@ describe("session supervisor safeguards", () => {
     });
     try {
       const rejectCalls: Error[] = [];
-      const pendingTimer = setTimeout(() => {}, 1_000);
-      pendingTimer.unref?.();
 
       supervisor.testHooks.seedWorker({
         sessionId: "busy-session",
@@ -240,7 +238,6 @@ describe("session supervisor safeguards", () => {
             reject: (error: Error) => {
               rejectCalls.push(error);
             },
-            timer: pendingTimer,
           },
         ],
       });
@@ -252,6 +249,7 @@ describe("session supervisor safeguards", () => {
         error: "session is busy with active turn: turn-1",
         errorCode: "session_busy",
       });
+      await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(rejectCalls.length).toBe(1);
       expect(rejectCalls[0]).toBeInstanceOf(SessionBackendStateError);
@@ -260,7 +258,6 @@ describe("session supervisor safeguards", () => {
         .listWorkers()
         .find((worker) => worker.sessionId === "busy-session")?.pendingRequests;
       expect(pendingRequests).toBe(0);
-      clearTimeout(pendingTimer);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

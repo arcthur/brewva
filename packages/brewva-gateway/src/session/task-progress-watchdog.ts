@@ -1,3 +1,8 @@
+import {
+  BrewvaEffect,
+  startScopedSchedule,
+  type ScopedScheduleHandle,
+} from "@brewva/brewva-effect";
 import { type BrewvaRuntime } from "@brewva/brewva-runtime";
 import {
   maybeAdjudicateLatestTaskStall,
@@ -5,6 +10,9 @@ import {
 } from "./task-stall-adjudication.js";
 
 type IntervalHandle = ReturnType<typeof setInterval>;
+type WatchdogTimer =
+  | { kind: "managed"; handle: ScopedScheduleHandle }
+  | { kind: "injected"; handle: IntervalHandle };
 
 const DEFAULT_POLL_INTERVAL_MS = 60_000;
 const DEFAULT_THRESHOLD_MS = 5 * 60_000;
@@ -35,7 +43,7 @@ export class TaskProgressWatchdog {
   private readonly adjudicator?: TaskStallAdjudicator;
   private readonly setIntervalFn: TaskProgressWatchdogOptions["setIntervalFn"];
   private readonly clearIntervalFn: TaskProgressWatchdogOptions["clearIntervalFn"];
-  private timer: IntervalHandle | null = null;
+  private timer: WatchdogTimer | null = null;
 
   constructor(options: TaskProgressWatchdogOptions) {
     this.runtime = options.runtime;
@@ -44,24 +52,38 @@ export class TaskProgressWatchdog {
     this.pollIntervalMs = sanitizeDelayMs(options.pollIntervalMs, DEFAULT_POLL_INTERVAL_MS);
     this.thresholdMs = sanitizeDelayMs(options.thresholdMs, DEFAULT_THRESHOLD_MS);
     this.adjudicator = options.adjudicator;
-    this.setIntervalFn =
-      options.setIntervalFn ?? ((callback, delayMs) => setInterval(callback, delayMs));
-    this.clearIntervalFn = options.clearIntervalFn ?? ((handle) => clearInterval(handle));
+    this.setIntervalFn = options.setIntervalFn;
+    this.clearIntervalFn = options.clearIntervalFn;
   }
 
   start(): void {
     if (this.timer) return;
-    this.timer =
-      this.setIntervalFn?.(() => {
+    if (this.setIntervalFn) {
+      const handle = this.setIntervalFn(() => {
         this.poll();
-      }, this.pollIntervalMs) ?? null;
-    this.timer?.unref?.();
+      }, this.pollIntervalMs);
+      handle?.unref?.();
+      this.timer = { kind: "injected", handle };
+      return;
+    }
+    this.timer = {
+      kind: "managed",
+      handle: startScopedSchedule({
+        intervalMs: this.pollIntervalMs,
+        run: () => BrewvaEffect.sync(() => this.poll()),
+      }),
+    };
   }
 
-  stop(): void {
+  async stop(): Promise<void> {
     if (!this.timer) return;
-    this.clearIntervalFn?.(this.timer);
+    const timer = this.timer;
     this.timer = null;
+    if (timer.kind === "managed") {
+      await timer.handle.close();
+      return;
+    }
+    this.clearIntervalFn?.(timer.handle);
   }
 
   poll(): void {

@@ -69,6 +69,16 @@ The registry groups event types by how the runtime may interpret them:
 The broader artifact taxonomy still uses durable transient, rebuildable state,
 and cache. Runtime event type strings use the exported classes above.
 
+## Effect Runtime Boundary
+
+Effect fibers, scopes, spans, and log annotations are in-memory execution
+mechanics. They are not durable runtime events and are not replay truth.
+
+When an Effect-native path crosses a durable boundary, it must still write the
+same event, receipt, WAL record, ledger row, or projection update that the
+runtime contract requires. Scope finalizers may clean up resources, but they do
+not substitute for replay-visible cancellation, rollback, or recovery evidence.
+
 ## Registry Surface
 
 The exported constant registry lives in
