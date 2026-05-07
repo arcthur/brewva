@@ -1,5 +1,5 @@
 import { tokenizeSearchContent } from "@brewva/brewva-search";
-import { uniqueStrings } from "../collections.js";
+import { uniqueNonEmptyStrings } from "@brewva/brewva-std/collections";
 
 export interface IndexedEventTokenInsertRow {
   token: string;
@@ -25,7 +25,7 @@ export function buildEventSearchTokenRows(input: {
   if (!input.searchText.trim()) {
     return [];
   }
-  return uniqueStrings(tokenizeSearchContent(input.searchText)).map((token) => ({
+  return uniqueNonEmptyStrings(tokenizeSearchContent(input.searchText)).map((token) => ({
     token,
     eventId: input.eventId,
     sessionId: input.sessionId,
@@ -39,7 +39,7 @@ export function buildSessionFieldTokenRows(input: {
   sourceField: string;
   value: string;
 }): SessionTokenInsertRow[] {
-  return uniqueStrings(tokenizeSearchContent(input.value)).map((token) => ({
+  return uniqueNonEmptyStrings(tokenizeSearchContent(input.value)).map((token) => ({
     token,
     sessionId: input.sessionId,
     sourceField: input.sourceField,

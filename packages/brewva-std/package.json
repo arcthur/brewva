@@ -1,0 +1,66 @@
+{
+  "name": "@brewva/brewva-std",
+  "version": "0.1.0",
+  "description": "Brewva standard utility primitives.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    "./async": {
+      "types": "./dist/async.d.ts",
+      "bun": "./src/async.ts",
+      "import": "./dist/async.js",
+      "default": "./dist/async.js"
+    },
+    "./collections": {
+      "types": "./dist/collections.d.ts",
+      "bun": "./src/collections.ts",
+      "import": "./dist/collections.js",
+      "default": "./dist/collections.js"
+    },
+    "./hash": {
+      "types": "./dist/hash.d.ts",
+      "bun": "./src/hash.ts",
+      "import": "./dist/hash.js",
+      "default": "./dist/hash.js"
+    },
+    "./json": {
+      "types": "./dist/json.d.ts",
+      "bun": "./src/json.ts",
+      "import": "./dist/json.js",
+      "default": "./dist/json.js"
+    },
+    "./markdown": {
+      "types": "./dist/markdown.d.ts",
+      "bun": "./src/markdown.ts",
+      "import": "./dist/markdown.js",
+      "default": "./dist/markdown.js"
+    },
+    "./node/fs": {
+      "types": "./dist/node/fs.d.ts",
+      "bun": "./src/node/fs.ts",
+      "import": "./dist/node/fs.js",
+      "default": "./dist/node/fs.js"
+    },
+    "./text": {
+      "types": "./dist/text.d.ts",
+      "bun": "./src/text.ts",
+      "import": "./dist/text.js",
+      "default": "./dist/text.js"
+    },
+    "./unknown": {
+      "types": "./dist/unknown.d.ts",
+      "bun": "./src/unknown.ts",
+      "import": "./dist/unknown.js",
+      "default": "./dist/unknown.js"
+    }
+  },
+  "dependencies": {
+    "@noble/hashes": "2.2.0",
+    "p-limit": "7.3.0",
+    "remeda": "2.34.0",
+    "yaml": "^2.8.3"
+  },
+  "engines": {
+    "node": "^20.19.0 || >=22.13.0"
+  }
+}

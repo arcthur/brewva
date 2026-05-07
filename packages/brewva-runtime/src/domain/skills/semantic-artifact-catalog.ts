@@ -1,4 +1,4 @@
-import type { JsonValue } from "../../utils/json.js";
+import type { JsonValue } from "@brewva/brewva-std/json";
 import { DESIGN_EXECUTION_MODE_HINTS } from "./planning.js";
 import {
   PLANNING_OWNER_LANES,

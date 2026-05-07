@@ -1,11 +1,11 @@
 import { tokenizeSearchQuery } from "@brewva/brewva-search";
+import { uniqueNonEmptyStrings } from "@brewva/brewva-std/collections";
 import type {
   FilterSessionIdsByScopeInput,
   ListSessionDigestsInput,
   QuerySessionDigestsInput,
   SessionIndexDigest,
 } from "../api.js";
-import { uniqueStrings } from "../collections.js";
 import { mapSessionRow, type SessionRow } from "../projection/rows.js";
 import { normalizeRoots } from "../roots.js";
 import { buildInList, type SqlParams } from "../sql/params.js";
@@ -21,7 +21,7 @@ export async function querySessionDigestRows(input: {
   workspaceRoot: string;
   port: SessionIndexQueryPort;
 }): Promise<SessionIndexDigest[]> {
-  const queryTokens = uniqueStrings(tokenizeSearchQuery(input.query.query));
+  const queryTokens = uniqueNonEmptyStrings(tokenizeSearchQuery(input.query.query));
   if (queryTokens.length === 0) {
     return [];
   }
@@ -138,7 +138,7 @@ export async function filterScopedSessionIds(input: {
   workspaceRoot: string;
   port: SessionIndexQueryPort;
 }): Promise<string[]> {
-  const sessionIds = uniqueStrings(input.query.sessionIds);
+  const sessionIds = uniqueNonEmptyStrings(input.query.sessionIds);
   if (sessionIds.length === 0) return [];
 
   await input.port.ensureAvailable();

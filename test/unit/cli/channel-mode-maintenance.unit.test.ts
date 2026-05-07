@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { createSerializedAsyncTaskRunner } from "../../../packages/brewva-gateway/src/utils/serialized-async-task-runner.js";
+import { createNonOverlappingTaskRunner } from "@brewva/brewva-std/async";
 
 describe("channel mode maintenance runner", () => {
   test("skips overlapping ticks and allows the next tick after completion", async () => {
@@ -8,7 +8,7 @@ describe("channel mode maintenance runner", () => {
     let releaseFirstRun: () => void = () => {};
     let firstRunBlocked = false;
 
-    const runner = createSerializedAsyncTaskRunner(async () => {
+    const runner = createNonOverlappingTaskRunner(async () => {
       starts += 1;
       if (starts === 1) {
         await new Promise<void>((resolve) => {
@@ -38,7 +38,7 @@ describe("channel mode maintenance runner", () => {
 
   test("releases the latch after a failure", async () => {
     let attempts = 0;
-    const runner = createSerializedAsyncTaskRunner(async () => {
+    const runner = createNonOverlappingTaskRunner(async () => {
       attempts += 1;
       if (attempts === 1) {
         throw new Error("maintenance failed");

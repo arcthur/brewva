@@ -1,5 +1,5 @@
+import type { JsonValue } from "@brewva/brewva-std/json";
 import type { RuntimeResult } from "../../core/runtime-result.js";
-import type { JsonValue } from "../../utils/json.js";
 
 export type TruthFactStatus = "active" | "resolved";
 

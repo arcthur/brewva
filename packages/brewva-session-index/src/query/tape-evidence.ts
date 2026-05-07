@@ -1,11 +1,11 @@
 import { tokenizeSearchQuery } from "@brewva/brewva-search";
+import { uniqueNonEmptyStrings } from "@brewva/brewva-std/collections";
 import type {
   QueryRecentSessionsInput,
   QueryTapeEvidenceInput,
   SessionIndexRecentSession,
   SessionIndexTapeEvidence,
 } from "../api.js";
-import { uniqueStrings } from "../collections.js";
 import { mapEventRow, type EventRow } from "../projection/rows.js";
 import { buildInList, type SqlParams } from "../sql/params.js";
 import type { SessionIndexQueryPort } from "./port.js";
@@ -20,8 +20,8 @@ export async function queryTapeEvidenceRows(input: {
   query: QueryTapeEvidenceInput;
   port: SessionIndexQueryPort;
 }): Promise<SessionIndexTapeEvidence[]> {
-  const sessionIds = uniqueStrings(input.query.sessionIds);
-  const queryTokens = uniqueStrings(tokenizeSearchQuery(input.query.query));
+  const sessionIds = uniqueNonEmptyStrings(input.query.sessionIds);
+  const queryTokens = uniqueNonEmptyStrings(tokenizeSearchQuery(input.query.query));
   if (sessionIds.length === 0 || queryTokens.length === 0) return [];
 
   await input.port.ensureAvailable();

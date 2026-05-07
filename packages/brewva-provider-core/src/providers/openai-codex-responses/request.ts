@@ -1,3 +1,4 @@
+import { stableJsonStringify } from "@brewva/brewva-std/json";
 import type { ResponseInput } from "openai/resources/responses/responses.js";
 import { resolveOpenAIResponsesCacheRender } from "../../cache/render/openai-responses.js";
 import type { Context, Model } from "../../contracts/index.js";
@@ -84,8 +85,8 @@ export function buildCodexContinuationRequest(
   }
 
   if (
-    stableStringify(stripRequestInput(continuation.previousRequest)) !==
-    stableStringify(stripRequestInput(body))
+    stableJsonStringify(stripRequestInput(continuation.previousRequest)) !==
+    stableJsonStringify(stripRequestInput(body))
   ) {
     return body;
   }
@@ -124,29 +125,11 @@ function responseInputStartsWith(input: ResponseInput, prefix: ResponseInput): b
     if (left === undefined || right === undefined) {
       return false;
     }
-    if (stableStringify(left) !== stableStringify(right)) {
+    if (stableJsonStringify(left) !== stableJsonStringify(right)) {
       return false;
     }
   }
   return true;
-}
-
-function stableStringify(value: unknown): string {
-  return JSON.stringify(normalizeStable(value));
-}
-
-function normalizeStable(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map(normalizeStable);
-  }
-  if (!value || typeof value !== "object") {
-    return value;
-  }
-  const output: Record<string, unknown> = {};
-  for (const key of Object.keys(value).sort()) {
-    output[key] = normalizeStable((value as Record<string, unknown>)[key]);
-  }
-  return output;
 }
 
 function clampReasoningEffort(modelId: string, effort: string): string {

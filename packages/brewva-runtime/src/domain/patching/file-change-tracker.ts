@@ -1,12 +1,12 @@
 import { existsSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
 import { basename, resolve } from "node:path";
+import { sha256Hex } from "@brewva/brewva-std/hash";
+import { ensureDir, writeFileAtomic } from "@brewva/brewva-std/node/fs";
 import {
   collectPathCandidates,
   normalizeWorkspaceRelativePath,
   resolveWorkspacePath,
 } from "../../config/workspace-paths.js";
-import { ensureDir, writeFileAtomic } from "../../utils/fs.js";
-import { sha256 } from "../../utils/hash.js";
 import { isMutationTool } from "../verification/api.js";
 import {
   PATCH_HISTORY_FILE,
@@ -165,7 +165,7 @@ export class FileChangeTracker {
     for (const tracked of pending.trackedFiles) {
       const afterExists = existsSync(tracked.absolutePath);
       const afterContent = afterExists ? readFileSync(tracked.absolutePath) : undefined;
-      const afterHash = afterContent ? sha256(afterContent) : undefined;
+      const afterHash = afterContent ? sha256Hex(afterContent) : undefined;
       const action = this.resolveAction({
         beforeExists: tracked.beforeExists,
         afterExists,
@@ -254,7 +254,9 @@ export class FileChangeTracker {
       }
 
       const beforeExists = existsSync(resolvedPath.absolutePath);
-      const beforeHash = beforeExists ? sha256(readFileSync(resolvedPath.absolutePath)) : undefined;
+      const beforeHash = beforeExists
+        ? sha256Hex(readFileSync(resolvedPath.absolutePath))
+        : undefined;
       const expectedBeforeHash = change.beforeHash?.trim();
       if (change.action === "add" && beforeExists) {
         return {
@@ -306,7 +308,7 @@ export class FileChangeTracker {
           };
         }
         const artifactContent = readFileSync(artifactPath.absolutePath);
-        const artifactHash = sha256(artifactContent);
+        const artifactHash = sha256Hex(artifactContent);
         if (change.afterHash && artifactHash !== change.afterHash) {
           return {
             ok: false,
@@ -523,7 +525,7 @@ export class FileChangeTracker {
       if (!currentExists) {
         return false;
       }
-      return sha256(readFileSync(change.absolutePath)) !== change.beforeHash;
+      return sha256Hex(readFileSync(change.absolutePath)) !== change.beforeHash;
     });
     if (mismatch) {
       return {
@@ -815,7 +817,7 @@ export class FileChangeTracker {
     }
 
     const content = readFileSync(absolutePath);
-    const beforeHash = sha256(content);
+    const beforeHash = sha256Hex(content);
     const beforeSnapshotPath = this.writeFileSnapshot(sessionId, relativePath, content);
 
     return {
@@ -831,7 +833,7 @@ export class FileChangeTracker {
     const sessionDir = this.sessionDir(sessionId);
     ensureDir(sessionDir);
 
-    const snapshotId = sha256(`${relativePath}:${sha256(content)}`);
+    const snapshotId = sha256Hex(`${relativePath}:${sha256Hex(content)}`);
     const snapshotPath = resolve(sessionDir, `${snapshotId}.snap`);
     if (!existsSync(snapshotPath)) {
       writeFileAtomic(snapshotPath, content);

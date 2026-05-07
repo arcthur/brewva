@@ -162,6 +162,14 @@ describe("provider cache fingerprinting", () => {
     expect(fingerprint.recallInjectionHash).not.toBe("");
     expect(fingerprint.providerFallbackHash).not.toBe("");
     expect(fingerprint.requestHash).not.toContain("redacted by hash");
+    for (const [field, value] of Object.entries(fingerprint)) {
+      if (field.endsWith("Hash") && typeof value === "string") {
+        expect(value).toMatch(/^[a-f0-9]{64}$/u);
+      }
+    }
+    for (const value of Object.values(fingerprint.perToolHashes)) {
+      expect(value).toMatch(/^[a-f0-9]{64}$/u);
+    }
   });
 
   test("suppresses expected breaks while surfacing unexpected cache-read drops", () => {

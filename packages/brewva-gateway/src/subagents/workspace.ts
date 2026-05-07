@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { constants } from "node:fs";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { cp, copyFile, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
@@ -10,6 +10,7 @@ import {
   collectPersistedPatchPaths,
   listPersistedPatchSets,
 } from "@brewva/brewva-runtime/patch-history";
+import { sha256Hex, shortSha256Hex } from "@brewva/brewva-std/hash";
 import { resolveDetachedSubagentContextManifestPath } from "./background-protocol.js";
 
 const IGNORED_ROOT_SEGMENTS = new Set([".git", "node_modules", ".orchestrator"]);
@@ -46,11 +47,11 @@ function shouldIgnorePath(relativePath: string): boolean {
 }
 
 function hashBuffer(buffer: Buffer): string {
-  return createHash("sha256").update(buffer).digest("hex");
+  return sha256Hex(buffer);
 }
 
 function buildPatchArtifactFileName(relativePath: string): string {
-  const digest = createHash("sha256").update(relativePath).digest("hex").slice(0, 16);
+  const digest = shortSha256Hex(relativePath, 16);
   const name = basename(relativePath).replaceAll(/[^a-zA-Z0-9._-]+/g, "_");
   return `${digest}-${name || "artifact"}`;
 }

@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import { createDeferred } from "@brewva/brewva-std/async";
+import { safeParseJson } from "@brewva/brewva-std/json";
 import WebSocket, { type RawData } from "ws";
 import { normalizeGatewayHost, assertLoopbackHost } from "./network.js";
 import type {
@@ -11,9 +13,7 @@ import type {
 } from "./protocol/index.js";
 import { PROTOCOL_VERSION } from "./protocol/index.js";
 import { validateGatewayFrame } from "./protocol/validate.js";
-import { createDeferred } from "./utils/deferred.js";
 import { toErrorMessage } from "./utils/errors.js";
-import { safeParseJson } from "./utils/json.js";
 import { rawToText } from "./utils/ws.js";
 
 interface PendingResponse {

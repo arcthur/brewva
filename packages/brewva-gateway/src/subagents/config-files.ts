@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, resolve } from "node:path";
 import type { DelegationIsolationStrategy, ManagedToolMode } from "@brewva/brewva-runtime";
-import { parseMarkdownFrontmatter } from "@brewva/brewva-runtime/markdown";
+import { parseMarkdownFrontmatter } from "@brewva/brewva-std/markdown";
 import type {
   AdvisorConsultKind,
   SubagentContextBudget,

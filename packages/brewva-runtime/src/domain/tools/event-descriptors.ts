@@ -1,3 +1,4 @@
+import { toJsonValue } from "@brewva/brewva-std/json";
 import { asBrewvaToolCallId, asBrewvaToolName } from "../../core/identifiers.js";
 import { defineBrewvaUntypedEventDefinition } from "../../events/definition-core.js";
 import {
@@ -11,7 +12,6 @@ import {
   readBrewvaEventPayload,
   type BrewvaEventLike,
 } from "../../events/descriptor-core.js";
-import { toJsonValue } from "../../utils/json.js";
 import { normalizeToolName } from "../../utils/tool-name.js";
 import type {
   ToolCallBlockedEventPayload,

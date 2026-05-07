@@ -1,5 +1,5 @@
-import { createHash } from "node:crypto";
 import type { BrewvaHostedRuntimePort, ContextBudgetUsage } from "@brewva/brewva-runtime";
+import { sha256Hex } from "@brewva/brewva-std/hash";
 import {
   extractCompactionEntryId,
   extractCompactionSummary,
@@ -104,10 +104,6 @@ function extractSourceLeafEntryId(input: unknown): string | null {
   }
   const normalized = compactionEntry.sourceLeafEntryId.trim();
   return normalized.length > 0 ? normalized : null;
-}
-
-function sha256(input: string): string {
-  return createHash("sha256").update(input).digest("hex");
 }
 
 function getOrCreateGateState(
@@ -422,7 +418,7 @@ export function createHostedCompactionController(
       runtime.authority.session.commitCompaction(input.sessionId, {
         compactId,
         sanitizedSummary,
-        summaryDigest: sha256(sanitizedSummary),
+        summaryDigest: sha256Hex(sanitizedSummary),
         sourceTurn: state.turnIndex,
         leafEntryId:
           extractSourceLeafEntryId({

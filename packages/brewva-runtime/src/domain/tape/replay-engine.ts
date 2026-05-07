@@ -1,10 +1,10 @@
+import { cloneJsonValue } from "@brewva/brewva-std/json";
 import { readToolResultRecordedEventPayload } from "../../events/descriptors.js";
 import {
   PROJECTION_REFRESHED_EVENT_TYPE,
   TOOL_RESULT_RECORDED_EVENT_TYPE,
 } from "../../events/registry.js";
 import type { BrewvaEventRecord } from "../../events/types.js";
-import { cloneJsonValue } from "../../utils/json.js";
 import type { ToolFailureEntry } from "../context/api.js";
 import {
   applyBudgetAlertPayload,

@@ -9,10 +9,10 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
+import { parseMarkdownFrontmatter } from "@brewva/brewva-std/markdown";
 import { formatISO } from "date-fns";
 import { resolveGlobalBrewvaRootDir, resolveProjectBrewvaRootDir } from "../../config/paths.js";
 import type { BrewvaConfig } from "../../config/types.js";
-import { parseMarkdownFrontmatter } from "../../utils/markdown-frontmatter.js";
 import {
   createEmptySkillResources,
   mergeOverlayContract,

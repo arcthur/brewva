@@ -20,6 +20,7 @@ Every accepted decision inherits these rules:
 - [brewva-c2-full-internalization-and-kernel-substrate-boundaries](./brewva-c2-full-internalization-and-kernel-substrate-boundaries.md)
 - [boundary-first-subtraction-and-model-native-recovery](./boundary-first-subtraction-and-model-native-recovery.md)
 - [boundary-policy-credential-vault-and-loop-guard](./boundary-policy-credential-vault-and-loop-guard.md)
+- [brewva-standard-utility-boundary](./brewva-standard-utility-boundary.md)
 - [capability-compression-and-output-distillation](./capability-compression-and-output-distillation.md)
 - [context-dependency-layering-and-admission-lanes](./context-dependency-layering-and-admission-lanes.md)
 - [default-path-re-hardening-and-advisory-surface-narrowing](./default-path-re-hardening-and-advisory-surface-narrowing.md)

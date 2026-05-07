@@ -78,7 +78,6 @@ describe("runtime promoted architecture guard", () => {
     const coreSource = readRepoFile("packages/brewva-runtime/src/core.ts");
     const publicIndexSource = readRepoFile("packages/brewva-runtime/src/public/index.ts");
     const channelsSource = readRepoFile("packages/brewva-runtime/src/channels.ts");
-    const markdownSource = readRepoFile("packages/brewva-runtime/src/markdown.ts");
     const eventsSource = readRepoFile("packages/brewva-runtime/src/events.ts");
 
     expect(indexSource.trim()).toBe('export * from "./public/index.js";');
@@ -100,7 +99,7 @@ describe("runtime promoted architecture guard", () => {
     expect(publicIndexSource).toContain("../domain/skills/semantic-artifacts.js");
     expect(publicIndexSource).toContain("../domain/skills/repair-policy.js");
     expect(channelsSource).not.toMatch(/export \* from /u);
-    expect(markdownSource).not.toMatch(/export \* from /u);
+    expect(existsSync(resolve(repoRoot, "packages/brewva-runtime/src/markdown.ts"))).toBe(false);
     expect(eventsSource).not.toMatch(/export \* from /u);
     expect(existsSync(resolve(repoRoot, "packages/brewva-runtime/src/domain/index.ts"))).toBe(
       false,

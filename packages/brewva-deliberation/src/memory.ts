@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import type { TaskSpec, TruthState, WorkflowArtifact } from "@brewva/brewva-runtime";
 import {
   CONTEXT_SOURCES,
@@ -22,13 +21,14 @@ import {
 } from "@brewva/brewva-runtime/events";
 import { type BrewvaEventRecord } from "@brewva/brewva-runtime/events";
 import { tokenizeSearchContent, tokenizeSearchQuery } from "@brewva/brewva-search";
+import { uniqueNonEmptyStrings as uniqueStrings } from "@brewva/brewva-std/collections";
+import { shortSha256Hex } from "@brewva/brewva-std/hash";
 import { FileDeliberationMemoryStore } from "./file-store.js";
 import {
   clamp,
   collectPlaneSessionDigests,
   getOrCreatePlaneForRuntime,
   reconcileSessionDigestBackedPlaneState,
-  uniqueStrings,
 } from "./plane-substrate.js";
 import {
   DELIBERATION_MEMORY_STATE_SCHEMA,
@@ -219,7 +219,7 @@ function createArtifact(input: {
 }
 
 function hashRepositoryRoot(root: string): string {
-  return createHash("sha256").update(root).digest("hex").slice(0, 12);
+  return shortSha256Hex(root, 12);
 }
 
 function resolveScopeRetentionBias(

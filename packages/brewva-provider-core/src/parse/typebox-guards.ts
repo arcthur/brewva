@@ -1,3 +1,4 @@
+import { isRecord } from "@brewva/brewva-std/unknown";
 import {
   Kind,
   type TArray,
@@ -6,7 +7,6 @@ import {
   type TSchema,
   type TUnion,
 } from "@sinclair/typebox";
-import { isRecord } from "../utils/unknown-object.js";
 
 function hasTypeBoxKind(schema: TSchema, kind: string): boolean {
   return isRecord(schema) && schema[Kind] === kind;

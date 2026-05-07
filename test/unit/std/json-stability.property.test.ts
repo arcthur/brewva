@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test";
+import { stableJsonStringify } from "@brewva/brewva-std/json";
 import fc from "fast-check";
-import { stableStringify } from "../../../packages/brewva-box/src/internal/stable-json.js";
 import { propertyTest } from "../../helpers/property.js";
 
 function reverseObjectEntries(value: unknown): unknown {
@@ -30,7 +30,7 @@ describe("stable JSON properties", () => {
     layer: "unit",
     arbitraries: [jsonValueArbitrary],
     predicate: (value) => {
-      expect(stableStringify(value)).toBe(stableStringify(reverseObjectEntries(value)));
+      expect(stableJsonStringify(value)).toBe(stableJsonStringify(reverseObjectEntries(value)));
     },
   });
 });

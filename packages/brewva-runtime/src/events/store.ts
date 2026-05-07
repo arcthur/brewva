@@ -10,15 +10,15 @@ import {
   writeFileSync,
 } from "node:fs";
 import { resolve } from "node:path";
+import type { JsonValue } from "@brewva/brewva-std/json";
+import { normalizeJsonRecord } from "@brewva/brewva-std/json";
+import { ensureDir, ensureDirForFile } from "@brewva/brewva-std/node/fs";
 import type { BrewvaConfig } from "../config/types.js";
 import { asBrewvaSessionId } from "../core/index.js";
 import type { IntegrityIssue } from "../domain/sessions/integrity.js";
 import { TAPE_ANCHOR_EVENT_TYPE, TAPE_CHECKPOINT_EVENT_TYPE } from "../domain/tape/events.js";
 import { type TapeAnchorPayload, type TapeCheckpointPayload } from "../domain/tape/payloads.js";
 import { redactUnknown } from "../security/redact.js";
-import { ensureDir, ensureDirForFile } from "../utils/fs.js";
-import type { JsonValue } from "../utils/json.js";
-import { normalizeJsonRecord } from "../utils/json.js";
 import type { BrewvaEventQuery, BrewvaEventRecord } from "./types.js";
 import { asBrewvaEventType } from "./types.js";
 

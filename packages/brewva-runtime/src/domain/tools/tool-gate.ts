@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import { sha256Hex } from "@brewva/brewva-std/hash";
+import { stableJsonStringify } from "@brewva/brewva-std/json";
 import { asBrewvaToolCallId, asBrewvaToolName } from "../../core/identifiers.js";
 import {
   EFFECT_AUTHORITY_DECIDED_EVENT_TYPE,
@@ -23,8 +25,6 @@ import {
   summarizeVirtualReadonlyEligibility,
   type VirtualReadonlyPolicySummary,
 } from "../../security/virtual-readonly-policy.js";
-import { sha256 } from "../../utils/hash.js";
-import { stableJsonStringify } from "../../utils/json.js";
 import { normalizeToolName } from "../../utils/tool-name.js";
 import { resolveToolResultVerdict } from "../../utils/tool-result.js";
 import type { ContextBudgetUsage } from "../context/api.js";
@@ -324,7 +324,7 @@ export class ToolGateService {
     }
 
     const serializedArgs = stableJsonStringify(input.args ?? {});
-    const hash = sha256(`${normalizedToolName}:${serializedArgs}`);
+    const hash = sha256Hex(`${normalizedToolName}:${serializedArgs}`);
     const state = this.sessionState.getCell(input.sessionId);
     const previous = state.consecutiveToolCall;
 
@@ -412,7 +412,7 @@ export class ToolGateService {
             ? serialized
             : `${serialized.slice(0, 237)}...`;
       return {
-        digest: sha256(serialized),
+        digest: sha256Hex(serialized),
         summary,
       };
     } catch {

@@ -10,6 +10,7 @@
     { "path": "../brewva-ingress" },
     { "path": "../brewva-mcp-adapter" },
     { "path": "../brewva-runtime" },
+    { "path": "../brewva-std" },
     { "path": "../brewva-substrate" },
     { "path": "../brewva-tool-protocol" },
     { "path": "../brewva-tools" },

@@ -1,7 +1,7 @@
+import type { JsonValue } from "@brewva/brewva-std/json";
 import type { BrewvaConfig } from "../../config/types.js";
 import { TOOL_RESULT_RECORDED_EVENT_TYPE } from "../../events/registry.js";
 import type { RuntimeKernelContext } from "../../runtime/runtime-kernel.js";
-import type { JsonValue } from "../../utils/json.js";
 import { normalizeToolName } from "../../utils/tool-name.js";
 import {
   isToolResultFail,

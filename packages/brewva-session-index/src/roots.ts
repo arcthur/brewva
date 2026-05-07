@@ -1,12 +1,12 @@
 import { resolve } from "node:path";
-import { uniqueStrings } from "./collections.js";
+import { uniqueNonEmptyStrings } from "@brewva/brewva-std/collections";
 
 export function normalizeRoot(value: string | undefined, fallback: string): string {
   return resolve(value ?? fallback);
 }
 
 export function normalizeRoots(roots: readonly string[] | undefined, fallback: string): string[] {
-  const normalized = uniqueStrings(
+  const normalized = uniqueNonEmptyStrings(
     (roots ?? [])
       .map((root) => root.trim())
       .filter((root) => root.length > 0)

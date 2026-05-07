@@ -1,6 +1,6 @@
-import { createHash } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
+import { sha256Hex } from "@brewva/brewva-std/hash";
 
 const DEFAULT_ARTIFACT_DIR = ".orchestrator/tool-output-artifacts";
 
@@ -58,7 +58,7 @@ export function persistToolOutputArtifact(
 
     const rawBytes = Buffer.byteLength(input.outputText, "utf8");
     const rawChars = input.outputText.length;
-    const sha256 = createHash("sha256").update(input.outputText).digest("hex");
+    const sha256 = sha256Hex(input.outputText);
     const artifactRef = normalizeRelativePath(relative(input.workspaceRoot, absolutePath));
 
     return {

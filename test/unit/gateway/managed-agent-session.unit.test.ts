@@ -6,6 +6,7 @@ import {
   unregisterApiProviders,
 } from "@brewva/brewva-provider-core/registry";
 import { BrewvaRuntime, defineContextSourceProvider } from "@brewva/brewva-runtime";
+import { redactedStableJsonSha256Hex } from "@brewva/brewva-std/hash";
 import type { ContextState } from "@brewva/brewva-substrate/contracts";
 import {
   type CreateBrewvaHostPluginRunnerOptions,
@@ -28,7 +29,6 @@ import type {
   BrewvaSessionMessageEntry,
 } from "@brewva/brewva-substrate/session";
 import type { BrewvaToolContext } from "@brewva/brewva-substrate/tools";
-import { stableHash, stableStringify } from "../../../packages/brewva-gateway/src/cache/index.js";
 import type { HostedSessionLogger } from "../../../packages/brewva-gateway/src/host/logger.js";
 import {
   MANAGED_AGENT_SESSION_TEST_ONLY,
@@ -280,13 +280,11 @@ function registerModelCatalogProvider(
 
 describe("managed agent session compaction", () => {
   test("recall fingerprinting uses precise source matching and content-hash fallback", () => {
-    const fallbackContentHash = stableHash(
-      stableStringify({
-        source: "brewva.recall-broker",
-        count: 2,
-        estimatedTokens: 34,
-      }),
-    );
+    const fallbackContentHash = redactedStableJsonSha256Hex({
+      source: "brewva.recall-broker",
+      count: 2,
+      estimatedTokens: 34,
+    });
 
     const fingerprint = MANAGED_AGENT_SESSION_TEST_ONLY.resolveRecallInjectionFingerprint([
       {
@@ -323,16 +321,14 @@ describe("managed agent session compaction", () => {
         sourceCount: 1,
         sources: ["brewva.recall-broker"],
         estimatedTokens: 34,
-        contentHash: stableHash(
-          stableStringify([
-            {
-              source: "brewva.recall-broker",
-              count: 2,
-              estimatedTokens: 34,
-              contentHash: fallbackContentHash,
-            },
-          ]),
-        ),
+        contentHash: redactedStableJsonSha256Hex([
+          {
+            source: "brewva.recall-broker",
+            count: 2,
+            estimatedTokens: 34,
+            contentHash: fallbackContentHash,
+          },
+        ]),
       }),
     );
   });
@@ -822,7 +818,7 @@ describe("managed agent session compaction", () => {
         );
         expect(warmObservation?.breakObservation.status).toBe("warm");
         expect(warmObservation?.fingerprint.channelContextHash).toBe(
-          stableHash(stableStringify({ source: "channel:telegram" })),
+          redactedStableJsonSha256Hex({ source: "channel:telegram" }),
         );
 
         runtime.maintain.session.clearState(sessionStore.getSessionId());

@@ -1,9 +1,9 @@
+import type { JsonValue } from "@brewva/brewva-std/json";
 import {
   ITERATION_GUARD_RECORDED_EVENT_TYPE,
   ITERATION_METRIC_OBSERVED_EVENT_TYPE,
 } from "../../events/registry.js";
 import type { BrewvaEventQuery, BrewvaEventRecord } from "../../events/types.js";
-import type { JsonValue } from "../../utils/json.js";
 
 export const ITERATION_FACTS_SCHEMA = "brewva.iteration-facts.v1" as const;
 

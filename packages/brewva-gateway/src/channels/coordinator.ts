@@ -1,3 +1,4 @@
+import { mapConcurrent } from "@brewva/brewva-std/async";
 import type { A2ABroadcastResult, A2ASendResult } from "@brewva/brewva-tools";
 
 export interface CoordinatorDispatchInput {
@@ -135,9 +136,9 @@ export class ChannelCoordinator {
       };
     }
 
-    const results = await mapWithConcurrencyLimit(
+    const results = await mapConcurrent(
       uniqueAgentIds,
-      MAX_CONCURRENT_FANOUT_DISPATCHES,
+      { concurrency: Math.min(MAX_CONCURRENT_FANOUT_DISPATCHES, uniqueAgentIds.length) },
       async (agentId) => {
         if (!this.deps.isAgentActive(agentId)) {
           return {
@@ -320,6 +321,9 @@ export class ChannelCoordinator {
 
   async a2aBroadcast(input: CoordinatorA2ABroadcastInput): Promise<A2ABroadcastResult> {
     const targetIds = Array.from(new Set(input.toAgentIds));
+    if (targetIds.length === 0) {
+      return { ok: true, results: [] };
+    }
     if (targetIds.length > this.deps.limits.fanoutMaxAgents) {
       return {
         ok: false,
@@ -327,9 +331,9 @@ export class ChannelCoordinator {
         results: [],
       };
     }
-    const results = await mapWithConcurrencyLimit(
+    const results = await mapConcurrent(
       targetIds,
-      MAX_CONCURRENT_FANOUT_DISPATCHES,
+      { concurrency: Math.min(MAX_CONCURRENT_FANOUT_DISPATCHES, targetIds.length) },
       (toAgentId) =>
         this.a2aSend({
           ...input,
@@ -365,31 +369,4 @@ function isDiscussionStopSignal(text: string): boolean {
   if (!normalized) return true;
   const upper = normalized.toUpperCase();
   return upper.includes("[DONE]") || upper.includes("REPLY_SKIP");
-}
-
-async function mapWithConcurrencyLimit<TInput, TOutput>(
-  inputs: readonly TInput[],
-  maxConcurrent: number,
-  worker: (input: TInput) => Promise<TOutput>,
-): Promise<TOutput[]> {
-  if (inputs.length === 0) return [];
-
-  const results: TOutput[] = [];
-  results.length = inputs.length;
-  const concurrency = Math.max(1, Math.min(maxConcurrent, inputs.length));
-  let nextIndex = 0;
-
-  const runWorker = async (): Promise<void> => {
-    while (true) {
-      const currentIndex = nextIndex;
-      nextIndex += 1;
-      if (currentIndex >= inputs.length) {
-        return;
-      }
-      results[currentIndex] = await worker(inputs[currentIndex] as TInput);
-    }
-  };
-
-  await Promise.all(Array.from({ length: concurrency }, () => runWorker()));
-  return results;
 }

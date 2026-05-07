@@ -16,6 +16,7 @@
   "dependencies": {
     "@brewva/brewva-effect": "workspace:*",
     "@brewva/brewva-runtime": "workspace:*",
+    "@brewva/brewva-std": "workspace:*",
     "lru-cache": "^11.2.7"
   },
   "engines": {

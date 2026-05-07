@@ -1,3 +1,4 @@
+import type { JsonValue } from "@brewva/brewva-std/json";
 import { asBrewvaSessionId } from "../../core/index.js";
 import {
   readReasoningRevertEventPayload,
@@ -13,7 +14,6 @@ import {
   SESSION_REWIND_SUPERSEDED_EVENT_TYPE,
 } from "../../events/registry.js";
 import type { BrewvaEventRecord } from "../../events/types.js";
-import type { JsonValue } from "../../utils/json.js";
 import type { RedoResult } from "../patching/types.js";
 import {
   REASONING_CHECKPOINT_EVENT_TYPE,

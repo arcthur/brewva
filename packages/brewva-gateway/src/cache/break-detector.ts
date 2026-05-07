@@ -6,7 +6,7 @@ import type {
   ProviderCacheBreakObservation,
   ProviderCacheRenderState,
 } from "@brewva/brewva-runtime";
-import { stableHash, stableStringify } from "./hash.js";
+import { redactedStableJsonSha256Hex, redactedStableJsonStringify } from "@brewva/brewva-std/hash";
 import { SourceTracker } from "./source-tracker.js";
 
 export const DEFAULT_PROVIDER_CACHE_DETECTOR_THRESHOLDS = {
@@ -213,20 +213,18 @@ export class ProviderCacheBreakDetector {
     }
     try {
       mkdirSync(this.#diagnosticDumpDirectory, { recursive: true });
-      const shortId = stableHash(
-        stableStringify({
-          source: input.source,
-          observedAt: input.observedAt,
-          requestHash: input.fingerprint.requestHash,
-        }),
-      ).slice(0, 12);
+      const shortId = redactedStableJsonSha256Hex({
+        source: input.source,
+        observedAt: input.observedAt,
+        requestHash: input.fingerprint.requestHash,
+      }).slice(0, 12);
       const filePath = join(
         this.#diagnosticDumpDirectory,
         `cache-break-${input.observedAt}-${shortId}.json`,
       );
       writeFileSync(
         filePath,
-        `${stableStringify({
+        `${redactedStableJsonStringify({
           source: input.source,
           observedAt: input.observedAt,
           observation: input.observation,

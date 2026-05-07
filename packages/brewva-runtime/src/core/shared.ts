@@ -5,7 +5,7 @@ import type {
 
 export type VerificationLevel = "quick" | "standard" | "strict";
 
-export type { JsonValue } from "../utils/json.js";
+export type { JsonValue } from "@brewva/brewva-std/json";
 export type { DeepReadonly } from "./deep-readonly.js";
 export type { RuntimeFailure, RuntimeResult, RuntimeSuccess } from "./runtime-result.js";
 

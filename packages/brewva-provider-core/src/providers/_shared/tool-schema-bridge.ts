@@ -1,4 +1,4 @@
-import { isRecord } from "../../utils/unknown-object.js";
+import { isRecord } from "@brewva/brewva-std/unknown";
 
 export function asJsonSchemaObject(schema: unknown): Record<string, unknown> {
   return isRecord(schema) ? schema : {};

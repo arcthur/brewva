@@ -1,5 +1,5 @@
+import { normalizeJsonRecord } from "@brewva/brewva-std/json";
 import type { RuntimeKernelContext } from "../../runtime/runtime-kernel.js";
-import { normalizeJsonRecord } from "../../utils/json.js";
 import {
   TRUTH_EVENT_TYPE,
   buildTruthFactResolvedEvent,

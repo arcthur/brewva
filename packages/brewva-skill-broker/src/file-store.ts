@@ -1,7 +1,11 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { writeFileAtomic } from "@brewva/brewva-deliberation";
-import { isRecord, readNumber, readString, readStringArray } from "./parse.js";
+import {
+  normalizeStringList as readStringArray,
+  readNonEmptyString as readString,
+} from "@brewva/brewva-std/text";
+import { isRecord, readFiniteNumberValue as readNumber } from "@brewva/brewva-std/unknown";
 import {
   SKILL_PROMOTION_STATE_SCHEMA,
   SKILL_PROMOTION_STATUSES,

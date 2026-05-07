@@ -1,7 +1,7 @@
 import { relative, resolve } from "node:path";
+import { sha256Hex } from "@brewva/brewva-std/hash";
+import type { JsonValue } from "@brewva/brewva-std/json";
 import { redactSecrets } from "../../security/redact.js";
-import { sha256 } from "../../utils/hash.js";
-import type { JsonValue } from "../../utils/json.js";
 import { normalizeToolName } from "../../utils/tool-name.js";
 import {
   isToolResultFail,
@@ -200,7 +200,7 @@ function resolveCommandFailureClass(failure: EvidenceArtifact | undefined): Comm
 
 function truthFactIdForCommand(command: string): string {
   const normalized = redactSecrets(command).trim().toLowerCase();
-  const digest = sha256(normalized).slice(0, 16);
+  const digest = sha256Hex(normalized).slice(0, 16);
   return `truth:command:${digest}`;
 }
 
@@ -216,7 +216,7 @@ function displayFilePath(cwd: string, filePath: string): string {
 }
 
 function truthFactPrefixForDiagnosticFile(cwd: string, filePath: string): string {
-  const digest = sha256(normalizeTruthFilePath(cwd, filePath)).slice(0, 16);
+  const digest = sha256Hex(normalizeTruthFilePath(cwd, filePath)).slice(0, 16);
   return `truth:diagnostic:${digest}:`;
 }
 
@@ -255,7 +255,7 @@ function dedupeArtifacts(artifacts: EvidenceArtifact[]): EvidenceArtifact[] {
   for (const artifact of artifacts) {
     let key = "";
     try {
-      key = sha256(JSON.stringify(artifact)).slice(0, 16);
+      key = sha256Hex(JSON.stringify(artifact)).slice(0, 16);
     } catch {
       key = `fallback_${Math.random().toString(36).slice(2, 10)}`;
     }
@@ -472,7 +472,7 @@ function normalizeObservabilityAssertion(
 }
 
 function observabilityAssertionFactId(assertion: ObservabilityAssertionRecord): string {
-  const digest = sha256(JSON.stringify(assertion.spec)).slice(0, 16);
+  const digest = sha256Hex(JSON.stringify(assertion.spec)).slice(0, 16);
   return `truth:observability:${digest}`;
 }
 

@@ -52,6 +52,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.93.0",
     "@brewva/brewva-effect": "workspace:*",
+    "@brewva/brewva-std": "workspace:*",
     "@brewva/brewva-token-estimation": "workspace:*",
     "@google/genai": "^1.52.0",
     "@sinclair/typebox": "^0.34.49",

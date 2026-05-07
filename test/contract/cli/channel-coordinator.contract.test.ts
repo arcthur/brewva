@@ -32,22 +32,31 @@ describe("channel coordinator", () => {
       listAgents: () => [],
     });
 
-    const resultPromise = coordinator.fanOut({
-      agentIds,
-      task: "review this",
-    });
+    let resultSettled = false;
+    const resultPromise = coordinator
+      .fanOut({
+        agentIds,
+        task: "review this",
+      })
+      .finally(() => {
+        resultSettled = true;
+      });
 
-    await flushMicrotasks();
+    expect(await flushUntil(() => releaseQueue.length === 4)).toBe(true);
     expect(releaseQueue).toHaveLength(4);
     expect(maxInFlight).toBe(4);
 
-    while (releaseQueue.length > 0) {
+    let releasedCount = 0;
+    while (releasedCount < agentIds.length) {
+      expect(await flushUntil(() => releaseQueue.length > 0)).toBe(true);
       const batch = releaseQueue.splice(0);
+      releasedCount += batch.length;
       for (const release of batch) {
         release();
       }
       await flushMicrotasks();
     }
+    expect(await flushUntil(() => resultSettled)).toBe(true);
 
     const result = await resultPromise;
     expect(result.ok).toBe(true);
@@ -186,4 +195,11 @@ describe("channel coordinator", () => {
 async function flushMicrotasks(): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();
+}
+
+async function flushUntil(predicate: () => boolean, maxAttempts = 20): Promise<boolean> {
+  for (let attempt = 0; attempt < maxAttempts && !predicate(); attempt += 1) {
+    await flushMicrotasks();
+  }
+  return predicate();
 }

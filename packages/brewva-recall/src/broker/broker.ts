@@ -2,12 +2,12 @@ import {
   getOrCreateDeliberationMemoryPlane,
   getOrCreateNarrativeMemoryPlane,
   getOrCreateOptimizationContinuityPlane,
-  uniqueStrings,
 } from "@brewva/brewva-deliberation";
 import { tokenizeSearchQuery } from "@brewva/brewva-search";
 import { createSessionIndex, type SessionIndex } from "@brewva/brewva-session-index";
 import { isSessionIndexTextIndexedEvent } from "@brewva/brewva-session-index/evidence";
 import { getOrCreateSkillPromotionBroker } from "@brewva/brewva-skill-broker";
+import { uniqueNonEmptyStrings as uniqueStrings } from "@brewva/brewva-std/collections";
 import { classifyRecallTapeEvent } from "../evidence/index.js";
 import { executeKnowledgeSearch, findKnowledgeDocByRelativePath } from "../knowledge/index.js";
 import {

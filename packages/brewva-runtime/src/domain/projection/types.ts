@@ -1,4 +1,4 @@
-import type { JsonValue } from "../../utils/json.js";
+import type { JsonValue } from "@brewva/brewva-std/json";
 
 export type ProjectionUnitStatus = "active" | "resolved";
 

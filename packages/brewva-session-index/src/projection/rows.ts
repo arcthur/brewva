@@ -1,12 +1,12 @@
 import { buildSessionRewindProjection, listSessionRewindTargets } from "@brewva/brewva-runtime";
 import type { BrewvaEventRecord } from "@brewva/brewva-runtime/events";
+import { uniqueNonEmptyStrings } from "@brewva/brewva-std/collections";
 import type {
   SessionIndexBox,
   SessionIndexDigest,
   SessionIndexRewindTarget,
   SessionIndexTapeEvidence,
 } from "../api.js";
-import { uniqueStrings } from "../collections.js";
 import {
   normalizeInteger,
   normalizePayload,
@@ -165,7 +165,7 @@ export function extractSessionBoxProjection(
       if (boxId && boxId !== projection.boxId) continue;
       const snapshotRef = readString(payload.snapshotId) ?? readString(payload.snapshotRef);
       if (snapshotRef) {
-        projection.snapshotRefs = uniqueStrings([...projection.snapshotRefs, snapshotRef]);
+        projection.snapshotRefs = uniqueNonEmptyStrings([...projection.snapshotRefs, snapshotRef]);
       }
     }
   }

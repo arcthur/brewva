@@ -1,4 +1,4 @@
-import { stableHash, stableStringify } from "./hash.js";
+import { redactedStableJsonSha256Hex } from "@brewva/brewva-std/hash";
 
 export interface ToolSchemaSnapshotTool {
   name: string;
@@ -40,11 +40,11 @@ export function createToolSchemaSnapshot(
     .toSorted((left, right) => left.name.localeCompare(right.name));
   const perToolHashes: Record<string, string> = {};
   for (const tool of normalizedTools) {
-    perToolHashes[tool.name] = stableHash(stableStringify(tool));
+    perToolHashes[tool.name] = redactedStableJsonSha256Hex(tool);
   }
   return {
-    hash: stableHash(stableStringify(normalizedTools)),
-    overlayHash: stableHash(stableStringify(overlayTools)),
+    hash: redactedStableJsonSha256Hex(normalizedTools),
+    overlayHash: redactedStableJsonSha256Hex(overlayTools),
     perToolHashes,
     tools: normalizedTools,
     epoch: Math.max(0, Math.trunc(options.epoch ?? 0)),
@@ -80,7 +80,7 @@ export function createToolSchemaSnapshotStore(): ToolSchemaSnapshotStore {
         return lockedSnapshot;
       }
 
-      const overlayHash = stableHash(stableStringify(normalizedTools));
+      const overlayHash = redactedStableJsonSha256Hex(normalizedTools);
       const driftedToolNames = findDriftedToolNames(lockedSnapshot, normalizedTools);
       return {
         ...lockedSnapshot,
@@ -126,7 +126,7 @@ function findDriftedToolNames(
   const drifted: string[] = [];
   for (const tool of overlayTools) {
     const lockedHash = lockedSnapshot.perToolHashes[tool.name];
-    const overlayHash = stableHash(stableStringify(tool));
+    const overlayHash = redactedStableJsonSha256Hex(tool);
     if (lockedHash !== overlayHash) {
       drifted.push(tool.name);
     }

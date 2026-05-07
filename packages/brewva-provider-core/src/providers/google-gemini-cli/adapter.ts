@@ -4,10 +4,10 @@ import {
   retryWithBrewvaPolicy,
   runPromiseAtBoundary,
 } from "@brewva/brewva-effect";
+import { asPartialObject } from "@brewva/brewva-std/unknown";
 import type { Context, Model, SimpleStreamOptions, StreamFunction } from "../../contracts/index.js";
 import { runProviderStream } from "../../stream/run-provider-stream.js";
 import { readSseFrames } from "../../stream/sse-frame-reader.js";
-import { asPartialObject } from "../../utils/unknown-object.js";
 import { buildProviderPayloadMetadata } from "../_shared/payload-metadata.js";
 import {
   GOOGLE_CLOUD_CODE_ASSIST_CREDENTIAL_HINT,

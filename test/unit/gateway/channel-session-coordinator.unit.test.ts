@@ -5,11 +5,11 @@ import {
   DEFAULT_BREWVA_CONFIG,
 } from "@brewva/brewva-runtime";
 import type { TurnEnvelope } from "@brewva/brewva-runtime/channels";
+import { createDeferred } from "@brewva/brewva-std/async";
 import { AgentRegistry } from "../../../packages/brewva-gateway/src/channels/agent-registry.js";
 import { AgentRuntimeManager } from "../../../packages/brewva-gateway/src/channels/agent-runtime-manager.js";
 import { createChannelSessionCoordinator } from "../../../packages/brewva-gateway/src/channels/channel-session-coordinator.js";
 import type { HostedSessionResult } from "../../../packages/brewva-gateway/src/host/create-hosted-session.js";
-import { createDeferred } from "../../../packages/brewva-gateway/src/utils/deferred.js";
 import { cleanupTestWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
 
 function createUserTurn(scopeKey: string): TurnEnvelope {

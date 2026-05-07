@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test";
+import { redactedStableJsonSha256Hex, redactedStableJsonStringify } from "@brewva/brewva-std/hash";
 import fc from "fast-check";
-import { stableHash, stableStringify } from "../../../packages/brewva-gateway/src/cache/hash.js";
 import { propertyTest } from "../../helpers/property.js";
 
 const redactedKeyArbitrary = fc.constantFrom(
@@ -24,7 +24,7 @@ function reverseObjectEntries(value: unknown): unknown {
   );
 }
 
-describe("gateway cache hash properties", () => {
+describe("std redacted stable JSON hash properties", () => {
   propertyTest("redacted stable hash ignores secret values", {
     propertyId: "gateway.cache-hash.redacted-secret-values",
     layer: "unit",
@@ -33,8 +33,8 @@ describe("gateway cache hash properties", () => {
       const left = { stable: "same", token: leftSecret, nested: { [secretKey]: leftSecret } };
       const right = { stable: "same", token: rightSecret, nested: { [secretKey]: rightSecret } };
 
-      expect(stableStringify(left)).toBe(stableStringify(right));
-      expect(stableHash(left)).toBe(stableHash(right));
+      expect(redactedStableJsonStringify(left)).toBe(redactedStableJsonStringify(right));
+      expect(redactedStableJsonSha256Hex(left)).toBe(redactedStableJsonSha256Hex(right));
     },
   });
 
@@ -47,7 +47,9 @@ describe("gateway cache hash properties", () => {
       }),
     ],
     predicate: (value) => {
-      expect(stableHash(value)).toBe(stableHash(reverseObjectEntries(value)));
+      expect(redactedStableJsonSha256Hex(value)).toBe(
+        redactedStableJsonSha256Hex(reverseObjectEntries(value)),
+      );
     },
   });
 });

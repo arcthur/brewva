@@ -34,6 +34,8 @@ import {
   type RecoveryWalStore,
   type SchedulerService,
 } from "@brewva/brewva-runtime/recovery";
+import { createDeferred } from "@brewva/brewva-std/async";
+import { safeParseJson } from "@brewva/brewva-std/json";
 import { WebSocketServer, type RawData, type WebSocket } from "ws";
 import { loadOrCreateGatewayToken, rotateGatewayToken } from "../auth.js";
 import { assertLoopbackHost, normalizeGatewayHost } from "../network.js";
@@ -56,9 +58,7 @@ import {
   validateSessionWireFramePayload,
 } from "../protocol/validate.js";
 import { FileGatewayStateStore, type GatewayStateStore } from "../state-store.js";
-import { createDeferred } from "../utils/deferred.js";
 import { toErrorMessage } from "../utils/errors.js";
-import { safeParseJson } from "../utils/json.js";
 import { rawToText } from "../utils/ws.js";
 import { HeartbeatScheduler, type HeartbeatRule } from "./heartbeat-policy.js";
 import { StructuredLogger } from "./logger.js";

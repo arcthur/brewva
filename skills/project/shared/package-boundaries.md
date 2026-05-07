@@ -17,6 +17,7 @@ scope: package-boundaries
 | `@brewva/brewva-session-index` | curated root plus explicit evidence subpath for the rebuildable DuckDB query plane over session event tapes                                             | replay authority, tokenization policy, SQL UI |
 | `@brewva/brewva-deliberation`  | narrative memory, optimization continuity, and non-authoritative deliberation substrate                                                                 | kernel commitments or transport ownership     |
 | `@brewva/brewva-skill-broker`  | post-execution skill-promotion brokerage and persisted promotion review state                                                                           | turn-time skill routing or kernel authority   |
+| `@brewva/brewva-std`           | leaf standard primitives for async, collections, hashing, JSON, markdown, text, unknown readers, and Node-only filesystem helpers                       | product policy, runtime authority, or domains |
 | `@brewva/brewva-tools`         | concrete tool adapters and runtime-aware helpers                                                                                                        | orchestration policy                          |
 | `@brewva/brewva-cli`           | user entrypoints and frontend command surface                                                                                                           | channel/control-plane ownership               |
 | `@brewva/brewva-gateway`       | daemon control plane, session supervision, channel host, and runtime wiring                                                                             | kernel semantics                              |
@@ -72,3 +73,13 @@ scope: package-boundaries
 - provider session resources are a controlled lifecycle port; hosted callers
   that replace session context or change provider/model must await
   `clearSession(sessionId)` before continuing
+- `@brewva/brewva-std` is the only package that may directly depend on generic
+  utility substrate libraries such as Remeda, `p-limit`, and `@noble/hashes`;
+  product packages import Brewva-owned std subpaths instead
+- std has no root export. Callers use explicit subpaths such as
+  `@brewva/brewva-std/hash`, `/json`, `/collections`, `/async`, and `/node/fs`
+- portable std subpaths must not import Node builtins; Node-only utilities live
+  under explicit `/node/*` subpaths
+- generic stable hashing, short SHA-256 IDs, redacted digests, and cache
+  fingerprints use `@brewva/brewva-std/hash`; protocol-owned HMAC, PKCE,
+  credential-vault byte digests, and byte-stream fingerprints stay local

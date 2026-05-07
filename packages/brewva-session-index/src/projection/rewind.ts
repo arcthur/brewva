@@ -1,6 +1,6 @@
 import type { BrewvaEventRecord } from "@brewva/brewva-runtime/events";
+import { chunkArray } from "@brewva/brewva-std/collections";
 import type { SessionIndexRewindTarget } from "../api.js";
-import { chunkArray } from "../collections.js";
 import type { DuckDBConnection } from "../duckdb/instance.js";
 import type { SessionIndexQueryPort } from "../query/port.js";
 import type { SqlParams } from "../sql/params.js";

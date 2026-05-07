@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { asBrewvaSessionId } from "@brewva/brewva-runtime";
 import { asBrewvaEventType } from "@brewva/brewva-runtime/events";
+import type { JsonValue } from "@brewva/brewva-std/json";
 import { createCostHydrationFold } from "../../../packages/brewva-runtime/src/domain/sessions/hydration/fold-cost.js";
 import { createLedgerHydrationFold } from "../../../packages/brewva-runtime/src/domain/sessions/hydration/fold-ledger.js";
 import { createResourceLeaseHydrationFold } from "../../../packages/brewva-runtime/src/domain/sessions/hydration/fold-resource-lease.js";
@@ -29,7 +30,6 @@ import {
   VERIFICATION_WRITE_MARKED_EVENT_TYPE,
 } from "../../../packages/brewva-runtime/src/events/registry.js";
 import type { BrewvaEventRecord } from "../../../packages/brewva-runtime/src/events/types.js";
-import type { JsonValue } from "../../../packages/brewva-runtime/src/utils/json.js";
 
 function createEvent(input: {
   id: string;

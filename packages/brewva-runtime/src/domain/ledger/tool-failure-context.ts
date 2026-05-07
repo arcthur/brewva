@@ -1,4 +1,4 @@
-import type { JsonValue } from "../../utils/json.js";
+import type { JsonValue } from "@brewva/brewva-std/json";
 import type { ToolFailureClass } from "../context/api.js";
 
 export const TOOL_FAILURE_CONTEXT_METADATA_KEY = "brewvaToolFailureContext";

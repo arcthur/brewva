@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { cloneJsonValue, toJsonValue } from "../../../packages/brewva-runtime/src/utils/json.js";
+import { cloneJsonValue, toJsonValue } from "@brewva/brewva-std/json";
 
-describe("runtime json helpers", () => {
+describe("std json helpers", () => {
   test("cloneJsonValue returns a detached clone for canonical JSON values", () => {
     const canonical = toJsonValue({
       nested: {
@@ -26,6 +26,15 @@ describe("runtime json helpers", () => {
       nested: {
         list: ["alpha", { ok: true }],
       },
+    });
+  });
+
+  test("toJsonValue normalizes non-finite numbers to null", () => {
+    expect(toJsonValue({ ok: 1, nan: NaN, positive: Infinity, negative: -Infinity })).toEqual({
+      ok: 1,
+      nan: null,
+      positive: null,
+      negative: null,
     });
   });
 });

@@ -1,6 +1,6 @@
-import { createHash } from "node:crypto";
 import { relative, resolve } from "node:path";
 import type { BrewvaConfig } from "@brewva/brewva-runtime";
+import { sha256Hex } from "@brewva/brewva-std/hash";
 import { textResult } from "../utils/result.js";
 
 export const DEFAULT_YIELD_MS = 10_000;
@@ -163,5 +163,5 @@ export function execDisplayResult(text: string, details: Record<string, unknown>
 }
 
 export function hashText(value: string): string {
-  return createHash("sha256").update(value).digest("hex");
+  return sha256Hex(value);
 }

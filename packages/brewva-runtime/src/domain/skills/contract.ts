@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { basename, dirname } from "node:path";
-import { parseMarkdownFrontmatter } from "../../utils/markdown-frontmatter.js";
+import { parseMarkdownFrontmatter } from "@brewva/brewva-std/markdown";
 import { normalizeToolName } from "../../utils/tool-name.js";
 import type { ToolEffectClass } from "../governance/api.js";
 import { isSemanticArtifactSchemaId } from "./semantic-artifacts.js";

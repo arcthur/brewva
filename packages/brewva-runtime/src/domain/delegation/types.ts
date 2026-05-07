@@ -1,5 +1,5 @@
+import type { JsonValue } from "@brewva/brewva-std/json";
 import type { BrewvaSessionId } from "../../core/identifiers-bridge.js";
-import type { JsonValue } from "../../utils/json.js";
 import type { ToolExecutionBoundary } from "../governance/api.js";
 
 export type DelegationRunStatus =

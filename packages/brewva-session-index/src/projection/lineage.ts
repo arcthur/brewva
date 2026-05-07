@@ -8,7 +8,7 @@ import {
   type SessionLineageSummaryRecord,
 } from "@brewva/brewva-runtime";
 import type { BrewvaEventRecord } from "@brewva/brewva-runtime/events";
-import { chunkArray } from "../collections.js";
+import { chunkArray } from "@brewva/brewva-std/collections";
 import type { DuckDBConnection } from "../duckdb/instance.js";
 import type { SqlParams } from "../sql/params.js";
 

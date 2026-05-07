@@ -48,26 +48,26 @@ describe("event store persistence safety", () => {
     const payload = (events[0]?.payload ?? {}) as {
       ok?: boolean;
       missing?: unknown;
-      nan?: number;
-      inf?: number;
+      nan?: null;
+      inf?: null;
       nested?: {
-        value?: number;
-        arr?: Array<number | { x?: unknown; y?: number }>;
+        value?: null;
+        arr?: Array<number | null | { x?: unknown; y?: number }>;
       };
     };
     expect(payload.ok).toBe(true);
     expect("missing" in payload).toBe(false);
-    expect(payload.nan).toBe(0);
-    expect(payload.inf).toBe(0);
+    expect(payload.nan).toBeNull();
+    expect(payload.inf).toBeNull();
     const nested = requireRecord(payload.nested, "Expected normalized nested payload.") as {
-      value?: number;
+      value?: null;
       arr?: unknown;
     };
-    expect(nested.value).toBe(0);
+    expect(nested.value).toBeNull();
     const nestedItems = requireArray(nested.arr, "Expected normalized nested array.");
     expect(nestedItems[0]).toBe(1);
-    expect(nestedItems[1]).toBe(0);
-    expect(nestedItems[2]).toBe(0);
+    expect(nestedItems[1]).toBeNull();
+    expect(nestedItems[2]).toBeNull();
     const nestedObject = requireRecord(nestedItems[3], "Expected normalized nested object.");
     expect("x" in nestedObject).toBe(false);
     expect((nestedObject as { y?: number }).y).toBe(2);

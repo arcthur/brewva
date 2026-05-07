@@ -1,8 +1,4 @@
-import { createHash } from "node:crypto";
-
-function sha256Utf8(text: string): string {
-  return createHash("sha256").update(text, "utf8").digest("hex");
-}
+import { sha256Hex } from "@brewva/brewva-std/hash";
 
 export function buildPromptStabilityObservation(input: {
   systemPrompt: string;
@@ -16,8 +12,8 @@ export function buildPromptStabilityObservation(input: {
   turn: number;
 } {
   return {
-    stablePrefixHash: sha256Utf8(input.systemPrompt),
-    dynamicTailHash: sha256Utf8(input.composedContent),
+    stablePrefixHash: sha256Hex(input.systemPrompt),
+    dynamicTailHash: sha256Hex(input.composedContent),
     injectionScopeId: input.injectionScopeId,
     turn: input.turn,
   };

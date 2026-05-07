@@ -1,7 +1,7 @@
-import { createHash } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
 import type { BrewvaEventRecord } from "@brewva/brewva-runtime/events";
+import { sha256Hex } from "@brewva/brewva-std/hash";
 import type { BrewvaToolContext as ExtensionContext } from "@brewva/brewva-substrate/tools";
 import { Type } from "@sinclair/typebox";
 import { resolveToolRuntimeEventPort } from "../runtime-extensions.js";
@@ -346,7 +346,7 @@ export function persistObservabilityArtifact(input: {
 
     const rawBytes = Buffer.byteLength(input.rawText, "utf8");
     const rawChars = input.rawText.length;
-    const sha256 = createHash("sha256").update(input.rawText).digest("hex");
+    const sha256 = sha256Hex(input.rawText);
     const artifactRef = normalizeRelativePath(relative(input.workspaceRoot, absolutePath));
 
     return {

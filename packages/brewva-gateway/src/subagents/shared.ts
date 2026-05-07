@@ -20,6 +20,7 @@ import {
   listSkillPreferredTools,
   resolveSkillEffectLevel,
 } from "@brewva/brewva-runtime";
+import { uniqueNonEmptyStrings as uniqueStrings } from "@brewva/brewva-std/collections";
 import type {
   DelegationPacket,
   SubagentExecutionBoundary,
@@ -55,10 +56,6 @@ const BOUNDARY_RANK: Record<ToolExecutionBoundary, number> = {
 
 function isBuiltinSubagentToolName(value: string): value is HostedDelegationBuiltinToolName {
   return value === "read" || value === "edit" || value === "write";
-}
-
-function uniqueStrings(values: readonly string[]): string[] {
-  return [...new Set(values.filter((value) => value.trim().length > 0))];
 }
 
 function mostRestrictiveBoundary(

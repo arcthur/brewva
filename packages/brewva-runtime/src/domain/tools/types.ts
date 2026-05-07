@@ -1,5 +1,5 @@
+import type { JsonValue } from "@brewva/brewva-std/json";
 import type { BrewvaToolCallId, BrewvaToolName } from "../../core/identifiers.js";
-import type { JsonValue } from "../../utils/json.js";
 import type { EffectAuthorityManifestBasis } from "../governance/api.js";
 
 export type {

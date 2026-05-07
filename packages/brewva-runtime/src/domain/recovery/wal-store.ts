@@ -10,10 +10,10 @@ import {
   writeFileSync,
 } from "node:fs";
 import { resolve } from "node:path";
+import { ensureDir, ensureDirForFile, writeFileAtomic } from "@brewva/brewva-std/node/fs";
 import type { BrewvaConfig } from "../../config/types.js";
 import type { BrewvaWalId } from "../../core/index.js";
 import { asBrewvaSessionId, asBrewvaWalId } from "../../core/index.js";
-import { ensureDir, ensureDirForFile, writeFileAtomic } from "../../utils/fs.js";
 import { assertTurnEnvelope, type TurnEnvelope } from "../channels/api.js";
 import type {
   RecoveryWalIngressWatermarkRecord,

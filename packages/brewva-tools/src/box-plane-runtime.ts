@@ -1,10 +1,9 @@
-import { createHash } from "node:crypto";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { createBoxPlane, type BoxPlane, type BoxPlaneOptions } from "@brewva/brewva-box";
-import { stableStringify } from "@brewva/brewva-box/internal/stable-json";
 import { DEFAULT_BREWVA_CONFIG, type BrewvaConfig } from "@brewva/brewva-runtime";
 import { BOX_RELEASED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
+import { stableJsonSha256Hex } from "@brewva/brewva-std/hash";
 import type { BrewvaBundledToolRuntime } from "./types.js";
 
 export type RuntimeBoxConfig = BrewvaConfig["security"]["execution"]["box"];
@@ -131,7 +130,5 @@ async function releaseSessionBoxes(
 }
 
 function hashBoxConfig(box: RuntimeBoxConfig): string {
-  return createHash("sha256")
-    .update(stableStringify(cloneBoxConfig(box)))
-    .digest("hex");
+  return stableJsonSha256Hex(cloneBoxConfig(box));
 }

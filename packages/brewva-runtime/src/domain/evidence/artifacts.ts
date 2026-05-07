@@ -1,5 +1,5 @@
+import type { JsonValue } from "@brewva/brewva-std/json";
 import { isRecord, normalizeNonEmptyString } from "../../utils/coerce.js";
-import type { JsonValue } from "../../utils/json.js";
 import { parseTscDiagnostics } from "./tsc.js";
 
 export type EvidenceArtifact = Record<string, JsonValue> & { kind: string };

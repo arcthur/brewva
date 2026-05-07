@@ -10,9 +10,9 @@ import {
 } from "@brewva/brewva-effect";
 import type { BrewvaRuntime } from "@brewva/brewva-runtime";
 import { createRecoveryWalRecovery, type RecoveryWalStore } from "@brewva/brewva-runtime/recovery";
+import { createNonOverlappingTaskRunner } from "@brewva/brewva-std/async";
 import { waitForAllSettledWithTimeout } from "../utils/async.js";
 import { toErrorMessage } from "../utils/errors.js";
-import { createSerializedAsyncTaskRunner } from "../utils/serialized-async-task-runner.js";
 import type { AgentRuntimeManager } from "./agent-runtime-manager.js";
 import type { ChannelModeLaunchBundle } from "./channel-bootstrap.js";
 import type { ChannelSessionCoordinator } from "./channel-session-coordinator.js";
@@ -87,7 +87,7 @@ export function runChannelHostLifecycleEffect(
   input: RunChannelHostLifecycleInput,
 ): BrewvaEffect.Effect<void, BrewvaBoundaryError, BrewvaScope.Scope> {
   const recoveryWalScope = input.recoveryWalStore.getScope();
-  const recoveryWalMaintenance = createSerializedAsyncTaskRunner(async () => {
+  const recoveryWalMaintenance = createNonOverlappingTaskRunner(async () => {
     try {
       input.recoveryWalStore.compact();
       await input.sessionCoordinator.evictIdleAgentRuntimesByTtl(Date.now());

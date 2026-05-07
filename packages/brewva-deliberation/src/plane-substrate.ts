@@ -42,10 +42,6 @@ export function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
-export function uniqueStrings(values: readonly string[]): string[] {
-  return [...new Set(values.map((value) => value.trim()).filter((value) => value.length > 0))];
-}
-
 export function collectPlaneSessionDigests<TEvent extends EventLike>(
   events: EventStoreLike<TEvent>,
 ): PlaneSessionDigest[] {

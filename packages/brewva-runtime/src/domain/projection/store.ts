@@ -1,7 +1,7 @@
 import { appendFileSync, existsSync, readFileSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { ensureDir, writeFileAtomic } from "../../utils/fs.js";
-import { sha256 } from "../../utils/hash.js";
+import { sha256Hex } from "@brewva/brewva-std/hash";
+import { ensureDir, writeFileAtomic } from "@brewva/brewva-std/node/fs";
 import type {
   ProjectionExtractionResult,
   ProjectionStoreState,
@@ -21,7 +21,7 @@ function nowId(prefix: string): string {
 }
 
 function fingerprintForUnit(input: { projectionKey: string }): string {
-  return sha256(normalizeText(input.projectionKey));
+  return sha256Hex(normalizeText(input.projectionKey));
 }
 
 function nextUpdatedAt(currentUpdatedAt: number, proposedAt: number): number {

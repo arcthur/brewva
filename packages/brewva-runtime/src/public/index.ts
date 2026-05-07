@@ -555,8 +555,6 @@ export {
   resolveProjectBrewvaRootDir,
   resolveWorkspaceRootDir,
 } from "../config/paths.js";
-export { parseMarkdownFrontmatter } from "../markdown.js";
-export type { ParsedMarkdownFrontmatter } from "../markdown.js";
 export { evaluateDelegationAdoption } from "../domain/delegation/adoption.js";
 export type {
   DelegationAdoptionContractId,

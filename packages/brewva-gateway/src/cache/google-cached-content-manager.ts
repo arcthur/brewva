@@ -12,8 +12,12 @@ import type {
   ProviderCachePolicy,
   ProviderCacheRenderResult,
 } from "@brewva/brewva-provider-core/contracts";
+import {
+  redactedStableJsonSha256Hex,
+  redactedStableJsonStringify,
+  sha256Hex,
+} from "@brewva/brewva-std/hash";
 import { estimateStructuredTokenCount } from "@brewva/brewva-token-estimation";
-import { stableHash, stableStringify } from "./hash.js";
 
 const MAX_PENDING_DELETE_ATTEMPTS = 5;
 const PENDING_DELETE_BASE_DELAY_MS = 30 * 1000;
@@ -677,14 +681,17 @@ function withCachedContent(
 function buildPrefixHash(payload: GoogleCachedContentPayload): string {
   // CachedContent identity is the stable prefix only. Generation controls intentionally stay
   // out of this hash so temperature/topP changes do not fragment reusable prefix resources.
-  return stableHash(stableStringify(buildStablePrefixMaterial(payload)));
+  return redactedStableJsonSha256Hex(buildStablePrefixMaterial(payload));
 }
 
 function estimateCachedContentTokens(payload: GoogleCachedContentPayload): number {
-  return estimateStructuredTokenCount(stableStringify(buildStablePrefixMaterial(payload)), {
-    api: "google-gemini-cli",
-    modelId: payload.model,
-  });
+  return estimateStructuredTokenCount(
+    redactedStableJsonStringify(buildStablePrefixMaterial(payload)),
+    {
+      api: "google-gemini-cli",
+      modelId: payload.model,
+    },
+  );
 }
 
 function buildStablePrefixMaterial(payload: GoogleCachedContentPayload): Record<string, unknown> {
@@ -777,15 +784,13 @@ function fingerprintGoogleCredential(credential: string | undefined): string | u
   }
   try {
     const parsed = parseGoogleGeminiCliCredential(credential);
-    return stableHash(
-      stableStringify({
-        token: parsed.token,
-        projectId: parsed.projectId,
-      }),
-    );
+    return redactedStableJsonSha256Hex({
+      token: parsed.token,
+      projectId: parsed.projectId,
+    });
   } catch {
     const normalized = credential.trim();
-    return normalized.length > 0 ? stableHash(normalized) : undefined;
+    return normalized.length > 0 ? sha256Hex(normalized) : undefined;
   }
 }
 

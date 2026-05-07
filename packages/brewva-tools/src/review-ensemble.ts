@@ -4,6 +4,9 @@ import type {
   ReviewReportArtifact,
 } from "@brewva/brewva-runtime";
 import { REVIEW_LANE_NAMES, normalizeReviewLaneName } from "@brewva/brewva-runtime";
+import { uniqueNonEmptyStrings as uniqueStrings } from "@brewva/brewva-std/collections";
+import { normalizeStringList, readNonEmptyString as readString } from "@brewva/brewva-std/text";
+import { isRecord } from "@brewva/brewva-std/unknown";
 export { normalizeReviewLaneName } from "@brewva/brewva-runtime";
 import type { ReviewChangeCategory, ReviewChangedFileClass } from "./review-classification.js";
 import type {
@@ -210,25 +213,8 @@ const NEUTRAL_FILE_CLASSES = new Set<ReviewChangedFileClass>([
   "fixtures_only",
 ]);
 
-function uniqueStrings(values: readonly string[]): string[] {
-  return [...new Set(values.map((value) => value.trim()).filter((value) => value.length > 0))];
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function readString(value: unknown): string | undefined {
-  return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
-}
-
 function readStringArray(value: unknown): string[] | undefined {
-  if (!Array.isArray(value)) {
-    return undefined;
-  }
-  const items = value
-    .map((entry) => readString(entry))
-    .filter((entry): entry is string => Boolean(entry));
+  const items = normalizeStringList(value);
   return items.length > 0 ? items : undefined;
 }
 

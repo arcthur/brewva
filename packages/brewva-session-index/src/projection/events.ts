@@ -1,4 +1,4 @@
-import { uniqueStrings, chunkArray } from "../collections.js";
+import { chunkArray, uniqueNonEmptyStrings } from "@brewva/brewva-std/collections";
 import type { DuckDBConnection } from "../duckdb/instance.js";
 import {
   buildSessionIndexEventSearchText,
@@ -96,7 +96,7 @@ async function deleteEventTokens(
   connection: DuckDBConnection,
   eventIds: readonly string[],
 ): Promise<void> {
-  for (const chunk of chunkArray(uniqueStrings(eventIds), 500)) {
+  for (const chunk of chunkArray(uniqueNonEmptyStrings(eventIds), 500)) {
     const params: SqlParams = {};
     const eventFilter = buildInList("event", chunk, params);
     await connection.run(`delete from event_tokens where event_id in (${eventFilter})`, params);

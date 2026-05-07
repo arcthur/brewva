@@ -1,3 +1,4 @@
+import { shortSha256Hex } from "@brewva/brewva-std/hash";
 import type {
   ResponseFunctionCallOutputItemList,
   ResponseInput,
@@ -19,7 +20,6 @@ import type {
   TextSignatureV1,
   ToolCall,
 } from "../../contracts/index.js";
-import { shortHash } from "../../utils/hash.js";
 import { sanitizeSurrogates } from "../../utils/sanitize-unicode.js";
 import {
   buildOpenAIInputFilePart,
@@ -63,7 +63,7 @@ export function convertResponsesMessages<TApi extends Api>(
   };
 
   const buildForeignResponsesItemId = (itemId: string): string => {
-    const normalized = `fc_${shortHash(itemId)}`;
+    const normalized = `fc_${shortSha256Hex(itemId, 16)}`;
     return normalized.length > 64 ? normalized.slice(0, 64) : normalized;
   };
 
@@ -166,7 +166,7 @@ export function convertResponsesMessages<TApi extends Api>(
           if (!msgId) {
             msgId = `msg_${msgIndex}`;
           } else if (msgId.length > 64) {
-            msgId = `msg_${shortHash(msgId)}`;
+            msgId = `msg_${shortSha256Hex(msgId, 16)}`;
           }
           output.push({
             type: "message",

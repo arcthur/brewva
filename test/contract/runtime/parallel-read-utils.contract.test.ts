@@ -195,6 +195,20 @@ describe("parallel-read utils", () => {
     expect(loaded[2]).toEqual({ file: fileA, content: "export const a = 1;\n" });
   });
 
+  test("readTextBatch normalizes invalid local concurrency and keeps failures explicit", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "parallel-read-utils-"));
+    const file = join(workspace, "readable.ts");
+    const missing = join(workspace, "missing.ts");
+    writeFileSync(file, "export const readable = true;\n", "utf8");
+
+    const loaded = await readTextBatch([missing, file], { concurrency: 0 });
+
+    expect(loaded).toEqual([
+      { file: missing, content: null },
+      { file, content: "export const readable = true;\n" },
+    ]);
+  });
+
   test("withParallelReadSlot acquires and releases runtime slots when session context is available", async () => {
     const calls: string[] = [];
     const runtime = {

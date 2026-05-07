@@ -1,12 +1,12 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, resolve, sep } from "node:path";
+import { parseMarkdownFrontmatter } from "@brewva/brewva-std/markdown";
 import {
   createBrewvaSyntheticSourceInfo,
   type BrewvaSourceInfo,
   type BrewvaSourceScope,
 } from "../provenance/source-info.js";
-import { parseMarkdownFrontmatter } from "./markdown-frontmatter.js";
 
 export interface BrewvaPromptTemplate {
   name: string;

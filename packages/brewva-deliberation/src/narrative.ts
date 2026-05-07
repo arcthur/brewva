@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { BrewvaInspectionPort, ContextSourceProvider } from "@brewva/brewva-runtime";
 import { CONTEXT_SOURCES, defineContextSourceProvider } from "@brewva/brewva-runtime";
 import { tokenizeSearchContent, tokenizeSearchQuery } from "@brewva/brewva-search";
+import { uniqueNonEmptyStrings as uniqueStrings } from "@brewva/brewva-std/collections";
 import { FileNarrativeMemoryStore } from "./narrative-store.js";
 import {
   NARRATIVE_MEMORY_RECORD_CLASSES,
@@ -17,7 +18,7 @@ import {
   type NarrativeMemoryRetrieval,
   type NarrativeMemoryState,
 } from "./narrative-types.js";
-import { clamp, getOrCreatePlaneForRuntime, uniqueStrings } from "./plane-substrate.js";
+import { clamp, getOrCreatePlaneForRuntime } from "./plane-substrate.js";
 
 const DEFAULT_MAX_RETRIEVAL = 4;
 const DEFAULT_CONTEXT_RECORDS = 3;

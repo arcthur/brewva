@@ -1,23 +1,22 @@
 import { tokenizeSearchContent } from "@brewva/brewva-search";
+import {
+  compactWhitespace,
+  normalizeStringList,
+  readNonEmptyString,
+  truncateText,
+} from "@brewva/brewva-std/text";
 import type { RecallFreshness } from "../types.js";
 
 export function readString(value: unknown): string | undefined {
-  if (typeof value !== "string") return undefined;
-  const normalized = value.trim();
-  return normalized.length > 0 ? normalized : undefined;
+  return readNonEmptyString(value);
 }
 
 export function readStringArray(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  return value.map((entry) => readString(entry) ?? "").filter((entry) => entry.length > 0);
+  return normalizeStringList(value);
 }
 
 export function compactText(value: string, maxChars = 220): string {
-  const normalized = value.replace(/\s+/g, " ").trim();
-  if (normalized.length <= maxChars) {
-    return normalized;
-  }
-  return `${normalized.slice(0, Math.max(1, maxChars - 3))}...`;
+  return truncateText(compactWhitespace(value), maxChars, { marker: "..." });
 }
 
 export function freshnessFromTimestamp(timestamp: number | undefined): RecallFreshness {

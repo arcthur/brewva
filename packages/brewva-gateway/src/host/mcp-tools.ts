@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import {
   getDefaultMcpAdapterPool,
   type McpAdapterEvent,
@@ -12,6 +11,7 @@ import type {
   DeepReadonly,
   ToolActionClass,
 } from "@brewva/brewva-runtime";
+import { shortSha256Hex } from "@brewva/brewva-std/hash";
 import type { BrewvaToolContentPart } from "@brewva/brewva-substrate/tools";
 import type { ToolCatalog, ToolDescriptor } from "@brewva/brewva-tool-protocol";
 import {
@@ -86,7 +86,7 @@ export function buildHostedMcpToolName(serverId: string, toolName: string): stri
   if (base.length <= MAX_PROVIDER_TOOL_NAME_LENGTH) {
     return base;
   }
-  const digest = createHash("sha256").update(base).digest("hex").slice(0, 8);
+  const digest = shortSha256Hex(base, 8);
   const suffix = `__${digest}`;
   return `${base.slice(0, MAX_PROVIDER_TOOL_NAME_LENGTH - suffix.length)}${suffix}`;
 }

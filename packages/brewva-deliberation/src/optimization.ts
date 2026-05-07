@@ -16,13 +16,13 @@ import {
   SKILL_COMPLETED_EVENT_TYPE,
 } from "@brewva/brewva-runtime/events";
 import { tokenizeSearchContent, tokenizeSearchQuery } from "@brewva/brewva-search";
+import { uniqueNonEmptyStrings as uniqueStrings } from "@brewva/brewva-std/collections";
 import { FileOptimizationContinuityStore } from "./optimization-store.js";
 import {
   clamp,
   collectPlaneSessionDigests,
   getOrCreatePlaneForRuntime,
   reconcileSessionDigestBackedPlaneState,
-  uniqueStrings,
 } from "./plane-substrate.js";
 import {
   OPTIMIZATION_CONTINUITY_STATE_SCHEMA,

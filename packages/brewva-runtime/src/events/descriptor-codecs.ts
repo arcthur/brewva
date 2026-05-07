@@ -1,5 +1,5 @@
-import type { JsonValue } from "../utils/json.js";
-import { toJsonValue } from "../utils/json.js";
+import type { JsonValue } from "@brewva/brewva-std/json";
+import { toJsonValue } from "@brewva/brewva-std/json";
 
 export function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)

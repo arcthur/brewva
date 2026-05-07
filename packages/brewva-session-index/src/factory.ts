@@ -1,5 +1,6 @@
 import { copyFileSync, mkdirSync, renameSync, rmSync, statSync, type Stats } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import { uniqueNonEmptyStrings } from "@brewva/brewva-std/collections";
 import {
   SESSION_INDEX_SCHEMA_VERSION,
   type CreateSessionIndexInput,
@@ -18,7 +19,6 @@ import {
   type SessionIndexTapeEvidence,
   type SessionIndexTaskSource,
 } from "./api.js";
-import { uniqueStrings } from "./collections.js";
 import {
   acquireDuckDBInstance,
   type DuckDBConnection,
@@ -350,7 +350,7 @@ class DuckDBSessionIndex implements SessionIndex {
         snapshotDir: this.snapshotDir,
         schemaVersion: SESSION_INDEX_SCHEMA_VERSION,
       });
-      const sessionIds = uniqueStrings([
+      const sessionIds = uniqueNonEmptyStrings([
         ...this.events.listSessionIds(),
         ...(await listIndexedSessionIds(this.connection)),
       ]);

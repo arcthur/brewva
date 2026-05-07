@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { parseMarkdownFrontmatter } from "@brewva/brewva-runtime/markdown";
+import { parseMarkdownFrontmatter } from "@brewva/brewva-std/markdown";
 
 describe("parseMarkdownFrontmatter", () => {
   test("returns empty metadata when the document has no frontmatter", () => {

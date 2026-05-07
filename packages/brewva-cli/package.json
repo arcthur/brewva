@@ -33,6 +33,7 @@
     "@brewva/brewva-gateway": "workspace:*",
     "@brewva/brewva-runtime": "workspace:*",
     "@brewva/brewva-session-index": "workspace:*",
+    "@brewva/brewva-std": "workspace:*",
     "@brewva/brewva-substrate": "workspace:*",
     "@brewva/brewva-tui": "workspace:*",
     "@opentui/core": "0.1.100",

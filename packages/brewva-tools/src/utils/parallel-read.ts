@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
+import { mapConcurrent } from "@brewva/brewva-std/async";
 import { recordToolRuntimeEvent, resolveToolRuntimeAuthorityTools } from "../runtime-extensions.js";
 import type { BrewvaToolRuntime } from "../types.js";
 
@@ -47,6 +48,7 @@ export interface ReadBatchSummary {
 
 export interface ReadTextBatchOptions {
   timeoutMs?: number;
+  concurrency?: number;
 }
 
 export interface ParallelReadSlotOptions {
@@ -157,6 +159,14 @@ function normalizeTimeoutMs(value: number | undefined, fallbackMs: number): numb
   return Math.max(0, Math.trunc(value));
 }
 
+function normalizeReadConcurrency(value: number | undefined, fileCount: number): number {
+  const requested =
+    typeof value === "number" && Number.isFinite(value)
+      ? Math.trunc(value)
+      : DEFAULT_PARALLEL_READ_BATCH_SIZE;
+  return Math.max(1, Math.min(fileCount, clampBatchSize(requested)));
+}
+
 async function readTextFile(file: string, timeoutMs: number): Promise<string> {
   if (timeoutMs <= 0) {
     return readFile(file, "utf8");
@@ -211,13 +221,12 @@ export async function readTextBatch(
   options: ReadTextBatchOptions = {},
 ): Promise<ReadBatchItem[]> {
   const timeoutMs = normalizeTimeoutMs(options.timeoutMs, DEFAULT_READ_FILE_TIMEOUT_MS);
-  return Promise.all(
-    files.map(async (file) => {
-      try {
-        return { file, content: await readTextFile(file, timeoutMs) };
-      } catch {
-        return { file, content: null };
-      }
-    }),
-  );
+  const concurrency = normalizeReadConcurrency(options.concurrency, Math.max(1, files.length));
+  return mapConcurrent(files, { concurrency }, async (file) => {
+    try {
+      return { file, content: await readTextFile(file, timeoutMs) };
+    } catch {
+      return { file, content: null };
+    }
+  });
 }

@@ -1,9 +1,9 @@
-import { createHash } from "node:crypto";
 import { recordAssistantUsageFromMessage, type BrewvaRuntime } from "@brewva/brewva-runtime";
 import {
   SEMANTIC_EXTRACTION_INVOKED_EVENT_TYPE,
   SEMANTIC_RERANK_INVOKED_EVENT_TYPE,
 } from "@brewva/brewva-runtime/events";
+import { stableJsonSha256Hex } from "@brewva/brewva-std/hash";
 import type {
   BrewvaModelCatalog,
   BrewvaProviderCompletionDriver,
@@ -66,11 +66,7 @@ function resolveModelRef(model: BrewvaRegisteredModel | undefined): string | und
 }
 
 function buildCacheKey(label: string, payload: unknown): string {
-  return createHash("sha256")
-    .update(label)
-    .update("\n")
-    .update(JSON.stringify(payload))
-    .digest("hex");
+  return stableJsonSha256Hex({ label, payload });
 }
 
 function extractTextContent(content: unknown): string {

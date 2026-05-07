@@ -1,7 +1,6 @@
-import { createHash } from "node:crypto";
 import { resolve } from "node:path";
+import { stableJsonSha256Hex } from "@brewva/brewva-std/hash";
 import type { BoxCapabilitySet, BoxScope } from "./contract.js";
-import { stableStringify } from "./internal/stable-json.js";
 
 export function normalizeBoxCapabilitySet(input: BoxCapabilitySet): BoxCapabilitySet {
   return {
@@ -70,5 +69,5 @@ export function sameWorkspace(left: BoxScope, right: BoxScope): boolean {
 }
 
 function hashJson(value: unknown): string {
-  return createHash("sha256").update(stableStringify(value)).digest("hex");
+  return stableJsonSha256Hex(value);
 }

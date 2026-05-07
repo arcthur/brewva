@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
-import { parseMarkdownFrontmatter } from "../prompt/markdown-frontmatter.js";
+import { parseMarkdownFrontmatter } from "@brewva/brewva-std/markdown";
 import type { BrewvaHostedSkill, BrewvaHostedSkillLoadResult } from "./resource-loader.js";
 
 const BREWVA_CONFIG_DIR_RELATIVE = ".brewva";

@@ -83,6 +83,9 @@ export type ProviderCacheBreakClassification =
   | "providerEdit"
   | "cacheCold";
 
+/** Opaque SHA-256 hex digest. Consumers should compare for equality only. */
+export type ProviderCacheFingerprintDigest = string;
+
 export interface ProviderCacheFingerprintState {
   bucketKey: string;
   provider: string;
@@ -90,26 +93,26 @@ export interface ProviderCacheFingerprintState {
   model: string;
   transport?: string;
   sessionId?: string;
-  cachePolicyHash: string;
-  toolSchemaSnapshotHash: string;
-  toolSchemaOverlayHash: string;
-  perToolHashes: Record<string, string>;
-  stablePrefixHash: string;
-  dynamicTailHash: string;
-  requestHash: string;
-  activeSkillSetHash: string;
+  cachePolicyHash: ProviderCacheFingerprintDigest;
+  toolSchemaSnapshotHash: ProviderCacheFingerprintDigest;
+  toolSchemaOverlayHash: ProviderCacheFingerprintDigest;
+  perToolHashes: Record<string, ProviderCacheFingerprintDigest>;
+  stablePrefixHash: ProviderCacheFingerprintDigest;
+  dynamicTailHash: ProviderCacheFingerprintDigest;
+  requestHash: ProviderCacheFingerprintDigest;
+  activeSkillSetHash: ProviderCacheFingerprintDigest;
   skillRoutingEpoch: number;
-  channelContextHash: string;
-  renderedCacheHash: string;
-  cacheCapabilityHash: string;
-  stickyLatchHash: string;
-  reasoningHash: string;
-  thinkingBudgetHash: string;
-  cacheRelevantHeadersHash: string;
-  extraBodyHash: string;
-  visibleHistoryReductionHash: string;
-  recallInjectionHash: string;
-  providerFallbackHash: string;
+  channelContextHash: ProviderCacheFingerprintDigest;
+  renderedCacheHash: ProviderCacheFingerprintDigest;
+  cacheCapabilityHash: ProviderCacheFingerprintDigest;
+  stickyLatchHash: ProviderCacheFingerprintDigest;
+  reasoningHash: ProviderCacheFingerprintDigest;
+  thinkingBudgetHash: ProviderCacheFingerprintDigest;
+  cacheRelevantHeadersHash: ProviderCacheFingerprintDigest;
+  extraBodyHash: ProviderCacheFingerprintDigest;
+  visibleHistoryReductionHash: ProviderCacheFingerprintDigest;
+  recallInjectionHash: ProviderCacheFingerprintDigest;
+  providerFallbackHash: ProviderCacheFingerprintDigest;
 }
 
 export type ProviderCacheCapabilityStrategy =

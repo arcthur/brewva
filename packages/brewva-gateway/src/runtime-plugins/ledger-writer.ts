@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
 import { type BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
@@ -8,6 +7,7 @@ import {
   TOOL_OUTPUT_DISTILLED_EVENT_TYPE,
   TOOL_OUTPUT_OBSERVED_EVENT_TYPE,
 } from "@brewva/brewva-runtime/events";
+import { sha256Hex } from "@brewva/brewva-std/hash";
 import type { InternalHostPluginApi } from "@brewva/brewva-substrate/host-api";
 import { LRUCache } from "lru-cache";
 import { persistToolOutputArtifact } from "./tool-output-artifact-store.js";
@@ -111,7 +111,7 @@ function validateArtifactOverride(
     const rawText = readFileSync(absolutePath, "utf8");
     const rawBytes = Buffer.byteLength(rawText, "utf8");
     const rawChars = rawText.length;
-    const sha256 = createHash("sha256").update(rawText).digest("hex");
+    const sha256 = sha256Hex(rawText);
     if (
       rawBytes !== override.rawBytes ||
       rawChars !== override.rawChars ||

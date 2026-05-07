@@ -1,5 +1,5 @@
+import { isRecord, readRecord as readObject, readString } from "@brewva/brewva-std/unknown";
 import type { ResponseStreamEvent } from "openai/resources/responses/responses.js";
-import { isRecord, readObject, readString } from "../../utils/unknown-object.js";
 
 type WebSocketConstructor = new (
   url: string,

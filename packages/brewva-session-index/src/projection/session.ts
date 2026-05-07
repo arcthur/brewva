@@ -1,7 +1,7 @@
 import type { Stats } from "node:fs";
 import type { BrewvaEventRecord } from "@brewva/brewva-runtime/events";
+import { chunkArray, uniqueNonEmptyStrings } from "@brewva/brewva-std/collections";
 import { SESSION_INDEX_SCHEMA_VERSION, type SessionIndexTaskSource } from "../api.js";
-import { uniqueStrings, chunkArray } from "../collections.js";
 import type { DuckDBConnection } from "../duckdb/instance.js";
 import { selectRows } from "../duckdb/query.js";
 import { buildSessionFieldTokenRows, type SessionTokenInsertRow } from "../evidence/tokens.js";
@@ -52,7 +52,7 @@ export async function rebuildSessionProjection(input: {
     descriptorRoots.length > 0 ? descriptorRoots : fallbackRoots,
     primaryRoot,
   );
-  const digestSnippets = uniqueStrings(
+  const digestSnippets = uniqueNonEmptyStrings(
     rows.map((row) => compactText(row.search_text, 240)).filter((entry) => entry.length > 0),
   ).slice(0, MAX_DIGEST_SNIPPETS);
   const digestText = compactText([taskGoal, ...digestSnippets].filter(Boolean).join(" "), 2_400);

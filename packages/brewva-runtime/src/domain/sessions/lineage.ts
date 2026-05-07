@@ -1,6 +1,6 @@
+import type { JsonValue } from "@brewva/brewva-std/json";
 import type { BrewvaEventStore } from "../../events/store.js";
 import type { BrewvaEventRecord } from "../../events/types.js";
-import type { JsonValue } from "../../utils/json.js";
 import type { RuntimeRecordEvent } from "./event-pipeline.js";
 import {
   CAPABILITY_STATE_RECORDED_EVENT_TYPE,

@@ -1,4 +1,4 @@
-import { createDeferred, type Deferred } from "../../utils/deferred.js";
+import { createDeferred, type Deferred } from "@brewva/brewva-std/async";
 import { SessionBackendCapacityError } from "../session-backend.js";
 import type { LoggerLike } from "./worker-state.js";
 

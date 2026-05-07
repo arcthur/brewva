@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { shortSha256Hex } from "@brewva/brewva-std/hash";
 import { normalizeChannelId } from "./channel-id.js";
 
 const SESSION_ID_PREFIX = "channel:";
@@ -23,8 +23,7 @@ export function buildRawConversationKey(channel: string, conversationId: string)
 
 export function buildChannelSessionId(channel: string, conversationId: string): string {
   const rawKey = buildRawConversationKey(channel, conversationId);
-  const hash = createHash("sha256").update(rawKey).digest("hex");
-  return `${SESSION_ID_PREFIX}${hash.slice(0, SESSION_HASH_LENGTH)}`;
+  return `${SESSION_ID_PREFIX}${shortSha256Hex(rawKey, SESSION_HASH_LENGTH)}`;
 }
 
 export function buildChannelDedupeKey(

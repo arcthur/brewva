@@ -1,3 +1,4 @@
+import { sha256Hex } from "@brewva/brewva-std/hash";
 import {
   GOVERNANCE_COMPACTION_INTEGRITY_CHECKED_EVENT_TYPE,
   GOVERNANCE_COMPACTION_INTEGRITY_ERROR_EVENT_TYPE,
@@ -10,7 +11,6 @@ import {
   sanitizeCompactionSummary,
   validateCompactionSummary,
 } from "../../security/compaction-integrity.js";
-import { sha256 } from "../../utils/hash.js";
 import type { GovernancePort } from "../governance/api.js";
 import type { RuntimeSessionStateStore } from "../sessions/api.js";
 import type { SkillDocument } from "../skills/api.js";
@@ -100,7 +100,7 @@ export function commitSessionCompaction(
     payload: {
       compactId,
       sanitizedSummary: summary ?? "",
-      summaryDigest: sha256(summary ?? ""),
+      summaryDigest: sha256Hex(summary ?? ""),
       sourceTurn: input.sourceTurn,
       leafEntryId: input.leafEntryId,
       referenceContextDigest: input.referenceContextDigest,
@@ -124,7 +124,7 @@ export function commitSessionCompaction(
     fullOutput: JSON.stringify({
       compactId,
       sanitizedSummary: summary ?? "",
-      summaryDigest: sha256(summary ?? ""),
+      summaryDigest: sha256Hex(summary ?? ""),
       fromTokens: input.fromTokens,
       toTokens: input.toTokens,
     }),

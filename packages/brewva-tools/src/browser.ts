@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
-import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
+import { sha256Hex, shortSha256Hex } from "@brewva/brewva-std/hash";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import { Type } from "@sinclair/typebox";
 import { recordToolRuntimeEvent } from "./runtime-extensions.js";
@@ -91,7 +91,7 @@ function encodeSessionId(sessionId: string): string {
 }
 
 function hashSessionId(sessionId: string): string {
-  return createHash("sha256").update(sessionId).digest("hex").slice(0, 16);
+  return shortSha256Hex(sessionId, 16);
 }
 
 function resolveBrowserSessionName(sessionId: string): string {
@@ -376,7 +376,7 @@ function buildTextArtifact(kind: string, artifactRef: string, content: string): 
     kind,
     path: artifactRef,
     bytes: Buffer.byteLength(content, "utf8"),
-    sha256: createHash("sha256").update(content).digest("hex"),
+    sha256: sha256Hex(content),
   };
 }
 

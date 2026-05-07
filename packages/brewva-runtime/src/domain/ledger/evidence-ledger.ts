@@ -1,9 +1,9 @@
 import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { sha256Hex } from "@brewva/brewva-std/hash";
+import { ensureDirForFile, writeFileAtomic } from "@brewva/brewva-std/node/fs";
 import { asBrewvaSessionId } from "../../core/identifiers.js";
 import { redactSecrets, redactUnknown } from "../../security/redact.js";
-import { ensureDirForFile, writeFileAtomic } from "../../utils/fs.js";
-import { sha256 } from "../../utils/hash.js";
 import type { EvidenceLedgerRow, EvidenceQuery, EvidenceRecord } from "./types.js";
 
 interface AppendInput extends Omit<EvidenceRecord, "id" | "timestamp" | "outputHash"> {
@@ -90,7 +90,7 @@ export class EvidenceLedger {
     const timestamp = Date.now();
     const id = `ev_${timestamp}_${Math.random().toString(36).slice(2, 10)}`;
     const rawOutput = redactSecrets(input.fullOutput ?? input.outputSummary);
-    const outputHash = sha256(rawOutput);
+    const outputHash = sha256Hex(rawOutput);
 
     const argsSummary = redactSecrets(input.argsSummary);
     const outputSummary = redactSecrets(input.outputSummary);
@@ -175,7 +175,7 @@ export class EvidenceLedger {
       tool: "ledger_checkpoint",
       argsSummary: summarizeText(`reason=${options.reason ?? "scheduled"} keepLast=${keepLast}`),
       outputSummary: summarizeText(checkpointSummary),
-      outputHash: sha256(checkpointSummary),
+      outputHash: sha256Hex(checkpointSummary),
       verdict: "inconclusive",
       sessionId: asBrewvaSessionId(sessionId),
       metadata: {

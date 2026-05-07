@@ -1,10 +1,15 @@
+import {
+  isRecord,
+  readArray,
+  readRecord as readObject,
+  readString,
+} from "@brewva/brewva-std/unknown";
 import type OpenAI from "openai";
 import type {
   ChatCompletionAssistantMessageParam,
   ChatCompletionChunk,
   ChatCompletionToolMessageParam,
 } from "openai/resources/chat/completions.js";
-import { isRecord, readArray, readObject, readString } from "../../utils/unknown-object.js";
 
 export type OpenAICompletionsRequestCompat = Omit<
   OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming,

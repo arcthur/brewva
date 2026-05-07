@@ -24,6 +24,7 @@ import {
   toWorkspaceRelativePath,
   type PersistedPatchSet,
 } from "@brewva/brewva-runtime/patch-history";
+import { uniqueNonEmptyStrings as uniqueStrings } from "@brewva/brewva-std/collections";
 import { formatISO } from "date-fns";
 
 const IGNORED_WORKSPACE_PREFIXES = [".orchestrator/", ".brewva/", "node_modules/"] as const;
@@ -165,10 +166,6 @@ function pathExists(path: string): boolean {
   } catch {
     return false;
   }
-}
-
-function uniqueStrings(values: string[]): string[] {
-  return [...new Set(values.filter((value) => value.trim().length > 0))];
 }
 
 function isRelativePathInsideDir(path: string, directory: string): boolean {

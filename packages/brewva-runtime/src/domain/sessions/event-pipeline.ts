@@ -1,3 +1,4 @@
+import type { JsonValue } from "@brewva/brewva-std/json";
 import { formatISO } from "date-fns";
 import { asBrewvaSessionId } from "../../core/identifiers.js";
 import {
@@ -168,7 +169,6 @@ import type {
   BrewvaStructuredEvent,
 } from "../../events/types.js";
 import type { RuntimeCallback } from "../../runtime/callback.js";
-import type { JsonValue } from "../../utils/json.js";
 import { REASONING_CHECKPOINT_EVENT_TYPE, REASONING_REVERT_EVENT_TYPE } from "../reasoning/api.js";
 import { SCHEDULE_EVENT_TYPE } from "../schedule/api.js";
 import { TAPE_ANCHOR_EVENT_TYPE, TAPE_CHECKPOINT_EVENT_TYPE } from "../tape/api.js";

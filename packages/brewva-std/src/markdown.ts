@@ -25,7 +25,7 @@ function isEffectivelyEmptyFrontmatter(rawMatter: string): boolean {
   return (
     rawMatter
       .split("\n")
-      .filter((line) => !/^\s*#/.test(line))
+      .filter((line) => !/^\s*#/u.test(line))
       .join("\n")
       .trim().length === 0
   );
@@ -42,7 +42,7 @@ export function parseMarkdownFrontmatter(input: string): ParsedMarkdownFrontmatt
     };
   }
 
-  const match = /^---[ \t]*\n([\s\S]*?)\n---[ \t]*(?:\n([\s\S]*))?$/.exec(normalized);
+  const match = /^---[ \t]*\n([\s\S]*?)\n---[ \t]*(?:\n([\s\S]*))?$/u.exec(normalized);
   if (!match) {
     throw new Error("invalid frontmatter: missing closing delimiter");
   }

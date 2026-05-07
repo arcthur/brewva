@@ -1,4 +1,4 @@
-import { sha256 } from "../../utils/hash.js";
+import { sha256Hex } from "@brewva/brewva-std/hash";
 import { resolveContextUsageRatio } from "../../utils/token.js";
 import type { TruthState } from "../truth/api.js";
 import type {
@@ -94,7 +94,7 @@ export async function buildContextInjection(
   const decision = deps.planBudgetInjection(input.sessionId, merged.text, input.usage);
   const wasTruncated = decision.truncated || merged.truncated;
   if (decision.accepted) {
-    const fingerprint = sha256(decision.finalText);
+    const fingerprint = sha256Hex(decision.finalText);
     const scopeKey = deps.buildInjectionScopeKey(input.sessionId, input.injectionScopeId);
     const previous = deps.getLastInjectedFingerprint(scopeKey);
     if (previous === fingerprint) {

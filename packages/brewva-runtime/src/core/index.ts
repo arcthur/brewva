@@ -15,4 +15,4 @@ export {
   asBrewvaWalId,
 } from "./identifiers.js";
 export type { RuntimeFailure, RuntimeResult, RuntimeSuccess } from "./runtime-result.js";
-export type { JsonValue } from "../utils/json.js";
+export type { JsonValue } from "@brewva/brewva-std/json";

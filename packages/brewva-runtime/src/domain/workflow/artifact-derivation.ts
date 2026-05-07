@@ -1,3 +1,4 @@
+import type { JsonValue } from "@brewva/brewva-std/json";
 import {
   readDelegationLifecycleEventPayload,
   readSkillCompletedEventPayload,
@@ -15,7 +16,6 @@ import {
   WORKER_RESULTS_APPLY_FAILED_EVENT_TYPE,
 } from "../../events/registry.js";
 import type { BrewvaEventRecord } from "../../events/types.js";
-import type { JsonValue } from "../../utils/json.js";
 import { coerceGuardResultPayload, coerceMetricObservationPayload } from "../iteration/api.js";
 import type {
   SkillNormalizedBlockingState,

@@ -26,6 +26,11 @@ import {
   STEER_QUEUED_EVENT_TYPE,
 } from "@brewva/brewva-runtime/events";
 import {
+  redactedStableJsonSha256Hex,
+  redactedStableJsonStringify,
+  sha256Hex,
+} from "@brewva/brewva-std/hash";
+import {
   buildBrewvaDeterministicCompactionSummary,
   estimateBrewvaCompactionTokens,
 } from "@brewva/brewva-substrate/compaction";
@@ -106,8 +111,6 @@ import {
   ProviderCacheStickyLatches,
   createProviderRequestFingerprint,
   createToolSchemaSnapshotStore,
-  stableHash,
-  stableStringify,
   type ToolSchemaSnapshot,
   type ToolSchemaSnapshotTool,
 } from "../cache/index.js";
@@ -237,7 +240,7 @@ function buildSteerAuditPayload(
 ): Record<string, unknown> {
   return {
     chars: text.length,
-    hash: stableHash(text),
+    hash: sha256Hex(text),
     ...extra,
   };
 }
@@ -285,13 +288,11 @@ function resolveRecallSourceContentHash(input: {
   if (typeof input.contentHash === "string" && input.contentHash.trim().length > 0) {
     return input.contentHash;
   }
-  return stableHash(
-    stableStringify({
-      source: input.source,
-      count: input.count,
-      estimatedTokens: input.estimatedTokens,
-    }),
-  );
+  return redactedStableJsonSha256Hex({
+    source: input.source,
+    count: input.count,
+    estimatedTokens: input.estimatedTokens,
+  });
 }
 
 function resolveRecallInjectionFingerprint(
@@ -351,7 +352,7 @@ function resolveRecallInjectionFingerprint(
     sourceCount: recallSources.length,
     sources: recallSources.map((entry) => entry.source).toSorted(),
     estimatedTokens: recallSources.reduce((sum, entry) => sum + entry.estimatedTokens, 0),
-    contentHash: stableHash(stableStringify(recallSources)),
+    contentHash: redactedStableJsonSha256Hex(recallSources),
   };
 }
 
@@ -384,11 +385,11 @@ function buildProviderDynamicTailSummary(input: {
 
 function summarizeProviderPayloadTail(payload: unknown): unknown {
   if (!isRecord(payload)) {
-    const serialized = stableStringify(payload);
+    const serialized = redactedStableJsonStringify(payload);
     return {
       kind: typeof payload,
       bytes: serialized.length,
-      tailHash: stableHash(serialized.slice(-4096)),
+      tailHash: sha256Hex(serialized.slice(-4096)),
     };
   }
   const messages = Array.isArray(payload.messages)
@@ -405,17 +406,17 @@ function summarizeProviderPayloadTail(payload: unknown): unknown {
 }
 
 function summarizeProviderPayloadMessage(message: unknown): unknown {
-  const serialized = stableStringify(message);
+  const serialized = redactedStableJsonStringify(message);
   const role = isRecord(message) && typeof message.role === "string" ? message.role : null;
   const type = isRecord(message) && typeof message.type === "string" ? message.type : null;
   const content = isRecord(message) ? message.content : undefined;
-  const contentSerialized = stableStringify(content ?? null);
+  const contentSerialized = redactedStableJsonStringify(content ?? null);
   return {
     role,
     type,
     bytes: serialized.length,
     contentBytes: contentSerialized.length,
-    contentTailHash: stableHash(contentSerialized.slice(-4096)),
+    contentTailHash: sha256Hex(contentSerialized.slice(-4096)),
   };
 }
 

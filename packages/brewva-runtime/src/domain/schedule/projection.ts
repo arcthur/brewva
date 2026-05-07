@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { writeFileAtomic } from "@brewva/brewva-std/node/fs";
 import { asBrewvaIntentId, asBrewvaSessionId } from "../../core/identifiers.js";
-import { writeFileAtomic } from "../../utils/fs.js";
 import type { ScheduleIntentProjectionRecord, ScheduleProjectionSnapshot } from "./types.js";
 
 interface ProjectionMetaLine {

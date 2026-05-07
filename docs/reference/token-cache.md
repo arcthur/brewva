@@ -344,7 +344,9 @@ Fingerprint fields include:
 - provider fallback hash
 
 Fingerprints contain hashes and safe labels, not raw prompt content, credentials,
-or provider secrets.
+or provider secrets. The hash fields are opaque SHA-256 hex digests and must be
+compared for equality only; callers must not rely on the historical 16-hex FNV
+width.
 
 ## Break Detection
 

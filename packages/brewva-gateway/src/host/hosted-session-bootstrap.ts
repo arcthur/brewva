@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
@@ -13,6 +12,7 @@ import {
   type ManagedToolMode,
 } from "@brewva/brewva-runtime";
 import { TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
+import { sha256Hex, stableJsonSha256Hex } from "@brewva/brewva-std/hash";
 import type { BrewvaToolUiPort } from "@brewva/brewva-substrate/host-api";
 import type { BrewvaModelCatalog, BrewvaRegisteredModel } from "@brewva/brewva-substrate/provider";
 import type {
@@ -276,9 +276,7 @@ function readFileSignature(path: string) {
       size: stat.size,
       mtimeMs: stat.mtimeMs,
       contentHash:
-        stat.size <= READ_SIGNATURE_CONTENT_HASH_MAX_BYTES
-          ? createHash("sha256").update(readFileSync(path)).digest("hex")
-          : null,
+        stat.size <= READ_SIGNATURE_CONTENT_HASH_MAX_BYTES ? sha256Hex(readFileSync(path)) : null,
     };
   } catch {
     return undefined;
@@ -296,19 +294,15 @@ function buildReadSignatureHash(input: {
   key: ReturnType<typeof buildReadStateKey>;
   signature: ReturnType<typeof readFileSignature>;
 }): string {
-  return createHash("sha256")
-    .update(
-      JSON.stringify({
-        path: input.key.path,
-        offset: input.key.offset,
-        limit: input.key.limit,
-        encoding: input.key.encoding,
-        size: input.signature?.size ?? null,
-        mtimeMs: input.signature?.mtimeMs ?? null,
-        contentHash: input.signature?.contentHash ?? null,
-      }),
-    )
-    .digest("hex");
+  return stableJsonSha256Hex({
+    path: input.key.path,
+    offset: input.key.offset,
+    limit: input.key.limit,
+    encoding: input.key.encoding,
+    size: input.signature?.size ?? null,
+    mtimeMs: input.signature?.mtimeMs ?? null,
+    contentHash: input.signature?.contentHash ?? null,
+  });
 }
 
 export function createCompactReadTool(input: CompactReadToolInput): HostedSessionCustomTool {

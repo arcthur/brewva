@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, join, relative } from "node:path";
-import { parseMarkdownFrontmatter } from "@brewva/brewva-runtime/markdown";
 import { tokenizeSearchContent, tokenizeSearchQuery } from "@brewva/brewva-search";
+import { parseMarkdownFrontmatter } from "@brewva/brewva-std/markdown";
 import Fuse from "fuse.js";
 import type { FuseResultMatch } from "fuse.js";
 

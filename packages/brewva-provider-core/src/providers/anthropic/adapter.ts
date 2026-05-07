@@ -1,7 +1,7 @@
 import type Anthropic from "@anthropic-ai/sdk";
+import { asPartialObject } from "@brewva/brewva-std/unknown";
 import type { Context, Model, SimpleStreamOptions, StreamFunction } from "../../contracts/index.js";
 import { runProviderStream } from "../../stream/run-provider-stream.js";
-import { asPartialObject } from "../../utils/unknown-object.js";
 import { buildProviderPayloadMetadata } from "../_shared/payload-metadata.js";
 import { adjustMaxTokensForThinking, buildBaseOptions } from "../_shared/simple-options.js";
 import { mapThinkingLevelToEffort, supportsAdaptiveThinking } from "./compat.js";

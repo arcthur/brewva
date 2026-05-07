@@ -6,7 +6,7 @@ import type {
   ProviderRequestFingerprint,
   ThinkingBudgets,
 } from "@brewva/brewva-provider-core/contracts";
-import { stableHash, stableStringify } from "./hash.js";
+import { redactedStableJsonSha256Hex } from "@brewva/brewva-std/hash";
 import type { ProviderCacheStickyLatchState } from "./sticky-latches.js";
 import type { ToolSchemaSnapshot } from "./tool-schema-snapshot.js";
 
@@ -53,27 +53,27 @@ export function createProviderRequestFingerprint(
     model: input.model,
     transport: input.transport,
     sessionId: input.sessionId,
-    cachePolicyHash: stableHash(stableStringify(input.cachePolicy)),
+    cachePolicyHash: redactedStableJsonSha256Hex(input.cachePolicy),
     toolSchemaSnapshotHash: input.toolSchemaSnapshot.hash,
     toolSchemaOverlayHash: input.toolSchemaSnapshot.overlayHash,
     perToolHashes: { ...input.toolSchemaSnapshot.perToolHashes },
-    stablePrefixHash: stableHash(stableStringify(input.stablePrefixParts)),
-    dynamicTailHash: stableHash(stableStringify(input.dynamicTailParts)),
-    requestHash: stableHash(stableStringify(input.payload)),
-    activeSkillSetHash: stableHash(stableStringify(activeSkillSet)),
+    stablePrefixHash: redactedStableJsonSha256Hex(input.stablePrefixParts),
+    dynamicTailHash: redactedStableJsonSha256Hex(input.dynamicTailParts),
+    requestHash: redactedStableJsonSha256Hex(input.payload),
+    activeSkillSetHash: redactedStableJsonSha256Hex(activeSkillSet),
     skillRoutingEpoch: Math.max(0, Math.trunc(input.skillRoutingEpoch)),
-    channelContextHash: stableHash(stableStringify(input.channelContext)),
-    renderedCacheHash: stableHash(stableStringify(input.renderedCache ?? null)),
-    cacheCapabilityHash: stableHash(
-      stableStringify(input.cacheCapability ?? input.renderedCache?.capability ?? null),
+    channelContextHash: redactedStableJsonSha256Hex(input.channelContext),
+    renderedCacheHash: redactedStableJsonSha256Hex(input.renderedCache ?? null),
+    cacheCapabilityHash: redactedStableJsonSha256Hex(
+      input.cacheCapability ?? input.renderedCache?.capability ?? null,
     ),
-    stickyLatchHash: stableHash(stableStringify(input.stickyLatches ?? null)),
-    reasoningHash: stableHash(stableStringify(input.reasoning ?? null)),
-    thinkingBudgetHash: stableHash(stableStringify(input.thinkingBudgets ?? null)),
-    cacheRelevantHeadersHash: stableHash(stableStringify(input.cacheRelevantHeaders ?? null)),
-    extraBodyHash: stableHash(stableStringify(input.extraBody ?? null)),
-    visibleHistoryReductionHash: stableHash(stableStringify(input.visibleHistoryReduction ?? null)),
-    recallInjectionHash: stableHash(stableStringify(input.recallInjection ?? null)),
-    providerFallbackHash: stableHash(stableStringify(input.providerFallback ?? null)),
+    stickyLatchHash: redactedStableJsonSha256Hex(input.stickyLatches ?? null),
+    reasoningHash: redactedStableJsonSha256Hex(input.reasoning ?? null),
+    thinkingBudgetHash: redactedStableJsonSha256Hex(input.thinkingBudgets ?? null),
+    cacheRelevantHeadersHash: redactedStableJsonSha256Hex(input.cacheRelevantHeaders ?? null),
+    extraBodyHash: redactedStableJsonSha256Hex(input.extraBody ?? null),
+    visibleHistoryReductionHash: redactedStableJsonSha256Hex(input.visibleHistoryReduction ?? null),
+    recallInjectionHash: redactedStableJsonSha256Hex(input.recallInjection ?? null),
+    providerFallbackHash: redactedStableJsonSha256Hex(input.providerFallback ?? null),
   };
 }

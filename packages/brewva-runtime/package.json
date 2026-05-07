@@ -54,12 +54,6 @@
       "import": "./dist/events.js",
       "default": "./dist/events.js"
     },
-    "./markdown": {
-      "types": "./dist/markdown.d.ts",
-      "bun": "./src/markdown.ts",
-      "import": "./dist/markdown.js",
-      "default": "./dist/markdown.js"
-    },
     "./patch-history": {
       "types": "./dist/patch-history.d.ts",
       "bun": "./src/patch-history.ts",
@@ -107,6 +101,7 @@
   "dependencies": {
     "@brewva/brewva-effect": "workspace:*",
     "@brewva/brewva-search": "workspace:*",
+    "@brewva/brewva-std": "workspace:*",
     "@brewva/brewva-token-estimation": "workspace:*",
     "ajv": "^8.18.0",
     "date-fns": "^4.1.0",

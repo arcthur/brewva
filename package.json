@@ -77,6 +77,7 @@
     "@brewva/brewva-search": "workspace:*",
     "@brewva/brewva-session-index": "workspace:*",
     "@brewva/brewva-skill-broker": "workspace:*",
+    "@brewva/brewva-std": "workspace:*",
     "@brewva/brewva-substrate": "workspace:*",
     "@brewva/brewva-token-estimation": "workspace:*",
     "@brewva/brewva-tool-protocol": "workspace:*",

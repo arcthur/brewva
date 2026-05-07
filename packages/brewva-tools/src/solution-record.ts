@@ -1,5 +1,10 @@
 import { join } from "node:path";
-import { parseMarkdownFrontmatter } from "@brewva/brewva-runtime/markdown";
+import { uniqueValues as uniqueStrings } from "@brewva/brewva-std/collections";
+import { parseMarkdownFrontmatter } from "@brewva/brewva-std/markdown";
+import {
+  normalizeStringList as readStringArray,
+  readNonEmptyString as readTrimmedString,
+} from "@brewva/brewva-std/text";
 import { Type } from "@sinclair/typebox";
 import { buildStringEnumSchema } from "./utils/input-alias.js";
 import { readLiteral } from "./utils/literal.js";
@@ -92,35 +97,6 @@ export const SolutionRecordInputSchema = Type.Object({
     ),
   ),
 });
-
-function readTrimmedString(value: unknown): string | undefined {
-  if (typeof value !== "string") return undefined;
-  const normalized = value.trim();
-  return normalized.length > 0 ? normalized : undefined;
-}
-
-function readStringArray(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  const items: string[] = [];
-  for (const entry of value) {
-    const parsed = readTrimmedString(entry);
-    if (parsed) {
-      items.push(parsed);
-    }
-  }
-  return items;
-}
-
-function uniqueStrings(values: readonly string[]): string[] {
-  const seen = new Set<string>();
-  const result: string[] = [];
-  for (const value of values) {
-    if (seen.has(value)) continue;
-    seen.add(value);
-    result.push(value);
-  }
-  return result;
-}
 
 export function normalizeRelativePath(value: string): string {
   return value.replaceAll("\\", "/");

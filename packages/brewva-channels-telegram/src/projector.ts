@@ -1,10 +1,10 @@
-import { createHash } from "node:crypto";
 import {
   buildChannelDedupeKey,
   buildChannelSessionId,
   coerceTurnEnvelope,
 } from "@brewva/brewva-runtime/channels";
 import type { ApprovalPayload, TurnEnvelope, TurnPart } from "@brewva/brewva-runtime/channels";
+import { shortSha256Hex } from "@brewva/brewva-std/hash";
 import {
   decodeTelegramApprovalCallback,
   encodeTelegramApprovalCallback,
@@ -296,7 +296,7 @@ function shortenTokenWithHash(token: string, maxLength: number): string {
   }
 
   const digestLength = Math.min(8, Math.max(4, Math.floor((maxLength - 1) / 2)));
-  const digest = createHash("sha256").update(token).digest("hex").slice(0, digestLength);
+  const digest = shortSha256Hex(token, digestLength);
   const headLength = Math.max(1, maxLength - digestLength - 1);
   return `${token.slice(0, headLength)}-${digest}`;
 }
@@ -494,10 +494,7 @@ function buildUiRequestId(payload: Record<string, unknown>, actions: TelegramUiA
     state: payload.state ?? null,
     actions: actions.map((action) => action.actionId),
   });
-  const digest = createHash("sha256")
-    .update(seed)
-    .digest("hex")
-    .slice(0, TELEGRAM_UI_REQUEST_HASH_LENGTH);
+  const digest = shortSha256Hex(seed, TELEGRAM_UI_REQUEST_HASH_LENGTH);
   return `${screenToken}_${digest}`;
 }
 

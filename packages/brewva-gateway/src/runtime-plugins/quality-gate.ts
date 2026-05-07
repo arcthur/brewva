@@ -6,6 +6,7 @@ import {
   type EffectCommitmentDiffPreview,
   type BrewvaHostedRuntimePort,
 } from "@brewva/brewva-runtime";
+import { truncateText } from "@brewva/brewva-std/text";
 import {
   BrewvaHostInputEventResult as InputEventResult,
   InternalHostPluginApi,
@@ -56,13 +57,6 @@ type PendingToolState = {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function truncateText(value: string, maxChars: number): string {
-  if (value.length <= maxChars) {
-    return value;
-  }
-  return `${value.slice(0, Math.max(1, maxChars - 3))}...`;
 }
 
 function isPathInside(basePath: string, targetPath: string): boolean {
@@ -275,17 +269,17 @@ export function createQualityGateLifecycle(
     const lines = ["[InvocationRepair]", "retry with the canonical parameter contract:"];
     for (const mismatch of mismatches.slice(0, 4)) {
       const parts = [
-        `got="${truncateText(mismatch.received, 60)}"`,
+        `got="${truncateText(mismatch.received, 60, { marker: "..." })}"`,
         `accepted=${mismatch.contract.canonicalValues.join("|")}`,
         mismatch.contract.defaultValue ? `default=${mismatch.contract.defaultValue}` : undefined,
         mismatch.contract.recommendedValue
           ? `recommended=${mismatch.contract.recommendedValue}`
           : undefined,
         mismatch.contract.guidance
-          ? `guidance=${truncateText(mismatch.contract.guidance, 220)}`
+          ? `guidance=${truncateText(mismatch.contract.guidance, 220, { marker: "..." })}`
           : undefined,
         mismatch.contract.omitGuidance
-          ? `omit=${truncateText(mismatch.contract.omitGuidance, 180)}`
+          ? `omit=${truncateText(mismatch.contract.omitGuidance, 180, { marker: "..." })}`
           : undefined,
       ].filter((part): part is string => Boolean(part));
       lines.push(`${mismatch.pathText}: ${parts.join(" ; ")}`);

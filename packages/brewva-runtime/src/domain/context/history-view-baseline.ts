@@ -1,3 +1,4 @@
+import { sha256Hex } from "@brewva/brewva-std/hash";
 import {
   readTurnInputRecordedEventPayload,
   readTurnRenderCommittedEventPayload,
@@ -8,7 +9,6 @@ import {
   TURN_RENDER_COMMITTED_EVENT_TYPE,
 } from "../../events/registry.js";
 import type { BrewvaEventRecord } from "../../events/types.js";
-import { sha256 } from "../../utils/hash.js";
 import { estimateTokenCount } from "../../utils/token.js";
 import { coerceReasoningRevertPayload } from "../reasoning/api.js";
 import type { HistoryViewBaselineSnapshot, SessionCompactionCommitInput } from "./types.js";
@@ -85,7 +85,7 @@ export function buildHistoryViewBaselineSnapshot(
     return null;
   }
   const diagnostics: string[] = [];
-  const computedSummaryDigest = sha256(payload.sanitizedSummary);
+  const computedSummaryDigest = sha256Hex(payload.sanitizedSummary);
   if (computedSummaryDigest !== payload.summaryDigest) {
     diagnostics.push("summary_digest_mismatch");
   }
@@ -186,7 +186,7 @@ function buildExactHistorySnapshot(input: {
   return {
     compactId: `exact-history:${lastTurn.turn}`,
     sanitizedSummary: transcript,
-    summaryDigest: sha256(transcript),
+    summaryDigest: sha256Hex(transcript),
     sourceTurn: lastTurn.turn,
     leafEntryId: null,
     referenceContextDigest: null,

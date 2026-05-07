@@ -1,7 +1,7 @@
-import { createHash } from "node:crypto";
 import { type BrewvaRuntime } from "@brewva/brewva-runtime";
 import { type BrewvaEventRecord } from "@brewva/brewva-runtime/events";
 import { MESSAGE_END_EVENT_TYPE, MODEL_SELECT_EVENT_TYPE } from "@brewva/brewva-runtime/events";
+import { sha256Hex } from "@brewva/brewva-std/hash";
 import {
   SESSION_BRANCH_SUMMARY_RECORDED_EVENT_TYPE,
   THINKING_LEVEL_SELECTED_EVENT_TYPE,
@@ -63,10 +63,6 @@ function readProjectionCustomContent(
 
 function normalizeParentId(payload: Record<string, unknown>): string | null {
   return readOptionalString(payload.parentId) ?? null;
-}
-
-function sha256(input: string): string {
-  return createHash("sha256").update(input).digest("hex");
 }
 
 function migrateLegacyProjectionEvent(
@@ -168,7 +164,7 @@ function migrateLegacyProjectionEvent(
       runtime.authority.session.commitCompaction(sessionId, {
         compactId: event.id,
         sanitizedSummary: summary,
-        summaryDigest: sha256(summary),
+        summaryDigest: sha256Hex(summary),
         sourceTurn: 0,
         leafEntryId: normalizeParentId(payload),
         referenceContextDigest: null,

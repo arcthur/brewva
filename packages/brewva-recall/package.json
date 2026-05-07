@@ -44,6 +44,7 @@
     "@brewva/brewva-search": "workspace:*",
     "@brewva/brewva-session-index": "workspace:*",
     "@brewva/brewva-skill-broker": "workspace:*",
+    "@brewva/brewva-std": "workspace:*",
     "fuse.js": "^7.3.0"
   },
   "engines": {

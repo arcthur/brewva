@@ -5,8 +5,8 @@ import {
 } from "@brewva/brewva-runtime";
 import type { ContextInjectionEntry } from "@brewva/brewva-runtime/context";
 import { SKILL_DIAGNOSIS_DERIVED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
+import { redactedStableJsonSha256Hex } from "@brewva/brewva-std/hash";
 import type { InternalHostPluginApi } from "@brewva/brewva-substrate/host-api";
-import { stableHash, stableStringify } from "../cache/hash.js";
 import type { HostedDelegationStore } from "../subagents/delegation-store.js";
 import { type BuildCapabilityViewResult } from "./capability-view.js";
 import { prepareContextComposerSupport } from "./context-composer-support.js";
@@ -265,7 +265,7 @@ function buildContextSourceSummaries(entries: readonly ContextInjectionEntry[]) 
       estimatedTokens: entry.estimatedTokens,
       categories: [...entry.categories].toSorted(),
       budgetClasses: [...entry.budgetClasses].toSorted(),
-      contentHash: stableHash(stableStringify(entry.contentParts)),
+      contentHash: redactedStableJsonSha256Hex(entry.contentParts),
     }));
 }
 

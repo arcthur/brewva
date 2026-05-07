@@ -1,5 +1,5 @@
+import type { JsonValue } from "@brewva/brewva-std/json";
 import type { BrewvaIdentifier, BrewvaSessionId } from "../core/identifiers.js";
-import type { JsonValue } from "../utils/json.js";
 import type { BrewvaRegisteredEventType } from "./registry.js";
 
 export type { BrewvaRegisteredEventType };
