@@ -24,6 +24,30 @@ interface RuntimeCalls {
   observedContext: Array<{ sessionId: string; usage: unknown }>;
 }
 
+function makeContextStatus(
+  usageRatio: number,
+  hardLimitRatio = 0.98,
+  compactionThresholdRatio = 0.8,
+) {
+  const tokensTotal = 4096;
+  const tokensUsed = Math.round(tokensTotal * usageRatio);
+  const hardLimitTokens = Math.floor(tokensTotal * hardLimitRatio);
+  return {
+    tokensUsed,
+    tokensTotal,
+    tokensRemaining: Math.max(0, tokensTotal - tokensUsed),
+    tokensUntilForcedCompact: Math.max(0, hardLimitTokens - tokensUsed),
+    predictedTurnGrowthTokens: 1024,
+    tokensUntilPredictedOverflow: Math.max(0, hardLimitTokens - 1024 - tokensUsed),
+    predictedOverflow: tokensUsed + 1024 >= hardLimitTokens,
+    usageRatio,
+    hardLimitRatio,
+    compactionThresholdRatio,
+    compactionAdvised: usageRatio >= compactionThresholdRatio,
+    forcedCompaction: usageRatio >= hardLimitRatio,
+  };
+}
+
 function createRuntimeFixture(
   input: {
     startAllowed?: boolean;
@@ -75,39 +99,19 @@ function createRuntimeFixture(
     observeUsage(sessionId: string, usage: unknown) {
       calls.observedContext.push({ sessionId, usage });
     },
-    async buildInjection() {
-      return {
-        text: "",
-        entries: [],
-        accepted: false,
-        originalTokens: 0,
-        finalTokens: 0,
-        truncated: false,
-      };
-    },
   });
 
   Object.assign(runtime.inspect.context, {
     getUsage() {
       return { tokens: 320, contextWindow: 4096, percent: 0.078 };
     },
-    getPressureStatus(_sessionId: string, usage?: { percent?: number }) {
-      return {
-        level: "low",
-        usageRatio: typeof usage?.percent === "number" ? usage.percent : 0.078,
-        hardLimitRatio: 0.98,
-        compactionThresholdRatio: 0.8,
-      };
+    getStatus(_sessionId: string, usage?: { percent?: number }) {
+      return makeContextStatus(typeof usage?.percent === "number" ? usage.percent : 0.078);
     },
     getCompactionGateStatus() {
       return {
         required: true,
-        pressure: {
-          level: "critical",
-          usageRatio: 0.97,
-          hardLimitRatio: 0.98,
-          compactionThresholdRatio: 0.8,
-        },
+        status: makeContextStatus(0.99),
         recentCompaction: false,
         windowTurns: 2,
         lastCompactionTurn: null,
@@ -839,42 +843,16 @@ describe("hosted turn pipeline", () => {
         }
         return { tokens: 320, contextWindow: 4096, percent: 0.078 };
       },
-      getPressureStatus(_sessionId: string, usage?: { percent?: number }) {
+      getStatus(_sessionId: string, usage?: { percent?: number }) {
         const usageRatio = typeof usage?.percent === "number" ? usage.percent : 0;
-        if (usageRatio >= 0.98) {
-          return {
-            level: "critical",
-            usageRatio,
-            hardLimitRatio: 0.98,
-            compactionThresholdRatio: 0.8,
-          };
-        }
-        if (usageRatio >= 0.8) {
-          return {
-            level: "high",
-            usageRatio,
-            hardLimitRatio: 0.98,
-            compactionThresholdRatio: 0.8,
-          };
-        }
-        return {
-          level: "low",
-          usageRatio,
-          hardLimitRatio: 0.98,
-          compactionThresholdRatio: 0.8,
-        };
+        return makeContextStatus(usageRatio);
       },
       getCompactionGateStatus(_sessionId: string, usage?: { percent?: number }) {
-        const pressure = this.getPressureStatus(_sessionId, usage) as {
-          level: "low" | "high" | "critical";
-          usageRatio: number;
-          hardLimitRatio: number;
-          compactionThresholdRatio: number;
-        };
+        const status = makeContextStatus(typeof usage?.percent === "number" ? usage.percent : 0);
         return {
-          required: pressure.level === "critical",
-          reason: pressure.level === "critical" ? "hard_limit" : null,
-          pressure,
+          required: status.forcedCompaction,
+          reason: status.forcedCompaction ? "hard_limit" : null,
+          status,
           recentCompaction: false,
           windowTurns: 2,
           lastCompactionTurn: null,
@@ -882,10 +860,8 @@ describe("hosted turn pipeline", () => {
         };
       },
       getPendingCompactionReason(_sessionId: string, usage?: { percent?: number }) {
-        const pressure = this.getPressureStatus(_sessionId, usage) as {
-          level: "low" | "high" | "critical";
-        };
-        return pressure.level === "critical" ? "hard_limit" : null;
+        const status = makeContextStatus(typeof usage?.percent === "number" ? usage.percent : 0);
+        return status.forcedCompaction ? "hard_limit" : null;
       },
     });
     await createHostedTurnPipeline({
@@ -972,6 +948,10 @@ describe("hosted turn pipeline", () => {
       stablePrefixTargetMet: true,
       reductionEvidenceObserved: true,
       cacheAccountingObserved: true,
+      promptCacheHitTargetMet: true,
+      promptCacheStopLossPassed: true,
+      inputCostBaselineObserved: false,
+      inputCostStopLossPassed: true,
       ready: true,
       gaps: [],
     });

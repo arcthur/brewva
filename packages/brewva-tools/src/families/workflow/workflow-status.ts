@@ -1,7 +1,6 @@
 import {
   coerceTaskStallAdjudicatedPayload,
   deriveWorkflowStatus,
-  type SkillReadinessEntry,
   type WorkflowArtifact,
   type WorkflowFinishView,
   type WorkflowLaneStatus,
@@ -115,15 +114,6 @@ function renderArtifact(artifact: WorkflowArtifact): string {
   ].join(" | ");
 }
 
-function renderSkillReadinessLine(entry: SkillReadinessEntry): string {
-  const missingRequires =
-    entry.missingRequires.length > 0 ? entry.missingRequires.join(", ") : "none";
-  const declaredConsumes = entry.consumes.length > 0 ? entry.consumes.join(", ") : "none";
-  const satisfiedConsumes =
-    entry.satisfiedConsumes.length > 0 ? entry.satisfiedConsumes.join(", ") : "none";
-  return `- ${entry.name}: ${entry.readiness} score=${entry.score} missing_requires=${missingRequires} declared_consumes=${declaredConsumes} satisfied_consumes=${satisfiedConsumes}`;
-}
-
 function renderFinishView(finish: WorkflowFinishView): string[] {
   return [
     "[Finish]",
@@ -198,9 +188,6 @@ export function createWorkflowStatusTool(options: BrewvaToolOptions): ToolDefini
       const sessionId = getSessionId(ctx);
       const events = workflowStatusTool.runtime.inspect.events.query(sessionId);
       const taskState = workflowStatusTool.runtime.inspect.task.getState(sessionId);
-      const activeSkillState = workflowStatusTool.runtime.inspect.skills.getActiveState(sessionId);
-      const latestSkillFailure =
-        workflowStatusTool.runtime.inspect.skills.getLatestFailure(sessionId);
       const openToolCalls = workflowStatusTool.runtime.inspect.session.getOpenToolCalls(sessionId);
       const uncleanShutdownDiagnostic =
         workflowStatusTool.runtime.inspect.session.getUncleanShutdownDiagnostic(sessionId);
@@ -210,7 +197,6 @@ export function createWorkflowStatusTool(options: BrewvaToolOptions): ToolDefini
         workflowStatusTool.runtime,
         sessionId,
       );
-      const skillReadiness = workflowStatusTool.runtime.inspect.skills.getReadiness(sessionId);
       const stallAdjudication = readLatestStallAdjudication(events);
       const snapshot = deriveWorkflowStatus({
         sessionId,
@@ -226,7 +212,6 @@ export function createWorkflowStatusTool(options: BrewvaToolOptions): ToolDefini
         },
         pendingWorkerResults: pendingWorkerResults.length,
         pendingDelegationOutcomes: pendingDelegationOutcomes.length,
-        skillReadiness,
         workspaceRoot: workflowStatusTool.runtime.workspaceRoot,
       });
 
@@ -277,53 +262,8 @@ export function createWorkflowStatusTool(options: BrewvaToolOptions): ToolDefini
         `retro: ${posture.retro}`,
         `pending_worker_results: ${snapshot.pendingWorkerResults}`,
         `pending_delegation_outcomes: ${snapshot.pendingDelegationOutcomes}`,
-        `active_skill: ${
-          activeSkillState
-            ? `${activeSkillState.skillName} phase=${activeSkillState.phase}`
-            : "none"
-        }`,
         `open_tool_calls: ${openToolCalls.length}`,
       ];
-
-      lines.push("skill_readiness:");
-      if (snapshot.skillReadiness.length === 0) {
-        lines.push("- none");
-      } else {
-        const displayedReadiness = [
-          ...snapshot.skillReadiness.filter((entry) => entry.readiness === "ready").slice(0, 5),
-          ...snapshot.skillReadiness.filter((entry) => entry.readiness === "available").slice(0, 3),
-          ...snapshot.skillReadiness.filter((entry) => entry.readiness === "blocked").slice(0, 3),
-        ];
-        for (const entry of displayedReadiness) {
-          lines.push(renderSkillReadinessLine(entry));
-        }
-      }
-
-      if (activeSkillState?.phase === "repair_required" && activeSkillState.repairBudget) {
-        lines.push(
-          `repair_budget: remaining_attempts=${activeSkillState.repairBudget.remainingAttempts} remaining_tool_calls=${activeSkillState.repairBudget.remainingToolCalls} token_budget=${activeSkillState.repairBudget.tokenBudget} used_tokens=${activeSkillState.repairBudget.usedTokens ?? "unknown"}`,
-        );
-      } else {
-        lines.push("repair_budget: none");
-      }
-
-      if (latestSkillFailure) {
-        lines.push(
-          `latest_completion_rejection: ${formatTimestamp(latestSkillFailure.occurredAt)} phase=${latestSkillFailure.phase} missing=${
-            latestSkillFailure.missing.length > 0 ? latestSkillFailure.missing.join(", ") : "none"
-          } invalid=${
-            latestSkillFailure.invalid.length > 0
-              ? latestSkillFailure.invalid
-                  .map((issue) =>
-                    issue.schemaId ? `${issue.name}[${issue.schemaId}]` : issue.name,
-                  )
-                  .join(", ")
-              : "none"
-          }`,
-        );
-      } else {
-        lines.push("latest_completion_rejection: none");
-      }
 
       if (uncleanShutdownDiagnostic) {
         lines.push(
@@ -406,7 +346,6 @@ export function createWorkflowStatusTool(options: BrewvaToolOptions): ToolDefini
               summary: result.summary,
             })),
             pendingDelegationOutcomesCount: snapshot.pendingDelegationOutcomes,
-            skillReadiness: snapshot.skillReadiness,
             pendingDelegationOutcomes: pendingDelegationOutcomes.map((run) => ({
               runId: run.runId,
               delegate: run.delegate,
@@ -415,8 +354,6 @@ export function createWorkflowStatusTool(options: BrewvaToolOptions): ToolDefini
               summary: run.summary,
               handoffState: run.delivery?.handoffState ?? null,
             })),
-            activeSkillState,
-            latestSkillFailure,
             openToolCalls,
             uncleanShutdownDiagnostic,
             stallAdjudication,

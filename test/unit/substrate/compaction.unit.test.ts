@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
-  BREWVA_COMPACTION_SUMMARY_HEADER,
+  BREWVA_EMERGENCY_COMPACTION_SUMMARY_HEADER,
   buildBrewvaDeterministicCompactionSummary,
   createBrewvaCompactionSummaryMessage,
   findBrewvaCompactionCutPoint,
@@ -32,7 +32,7 @@ describe("substrate compaction mechanisms", () => {
 
   test("uses a stable default summary for empty inputs", () => {
     expect(buildBrewvaDeterministicCompactionSummary([])).toBe(
-      `${BREWVA_COMPACTION_SUMMARY_HEADER}\n- Preserve the current task state and latest verified evidence.`,
+      `${BREWVA_EMERGENCY_COMPACTION_SUMMARY_HEADER}\n- Preserve the current task state and latest verified evidence.`,
     );
   });
 

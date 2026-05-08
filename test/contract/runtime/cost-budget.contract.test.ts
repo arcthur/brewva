@@ -81,8 +81,7 @@ describe("cost budget", () => {
 
     const access = runtime.inspect.tools.checkAccess(sessionId, "read");
     expect(access.allowed).toBe(false);
-    expect(runtime.inspect.tools.checkAccess(sessionId, "skill_complete").allowed).toBe(true);
-    expect(runtime.inspect.tools.checkAccess(sessionId, "session_compact").allowed).toBe(true);
+    expect(runtime.inspect.tools.checkAccess(sessionId, "workbench_compact").allowed).toBe(true);
   });
 
   test("enforces session cost budget status consistently with tool access checks", async () => {
@@ -148,15 +147,12 @@ implementation`,
       totalTokens: 60,
       costUsd: 0.002,
     });
-    expect(runtime.authority.skills.activate(sessionId, "implementation").ok).toBe(true);
-
     const summary = runtime.inspect.cost.getSummary(sessionId);
     expect(summary.budget.blocked).toBe(true);
 
     const access = runtime.inspect.tools.checkAccess(sessionId, "read");
     expect(access.allowed).toBe(false);
-    expect(runtime.inspect.tools.checkAccess(sessionId, "skill_complete").allowed).toBe(true);
-    expect(runtime.inspect.tools.checkAccess(sessionId, "session_compact").allowed).toBe(true);
+    expect(runtime.inspect.tools.checkAccess(sessionId, "workbench_compact").allowed).toBe(true);
   });
 
   test("does not block tools when costTracking.enabled is false", () => {

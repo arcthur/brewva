@@ -1,15 +1,14 @@
 # Reference: Skills
 
-Skill parsing, merge, routing, and runtime lifecycle anchors:
+Skill parsing, merge, and inventory anchors:
 
 - `packages/brewva-runtime/src/domain/skills/contract.ts`
 - `packages/brewva-runtime/src/domain/skills/registry.ts`
-- `packages/brewva-runtime/src/domain/skills/skill-lifecycle.ts`
-- `packages/brewva-gateway/src/runtime-plugins/skill-first.ts`
 
-This page owns skill taxonomy, contract metadata, routing/profile semantics,
-and the generated skill inventory. Turn-level recommendation order and
-warm-transition heuristics live in `docs/reference/skill-routing.md`.
+This page owns skill taxonomy, contract metadata, and the generated skill
+inventory. Hosted turns treat skills as readable files and advisory context,
+not as a runtime attention gate. The reset boundary is described in
+`docs/reference/skill-routing.md`.
 
 ## Generated Inventory
 
@@ -102,9 +101,9 @@ it. The stable consumed families are:
 Authored markdown remains part of the skill contract for model behavior. It is
 not a substitute for structured metadata when runtime code requires a field.
 
-## Routing Semantics
+## File Semantics
 
-Directory layout derives category and default routing scope:
+Directory layout derives category and discoverability:
 
 - `skills/core/*` -> `core`
 - `skills/domain/*` -> `domain`
@@ -112,42 +111,31 @@ Directory layout derives category and default routing scope:
 - `skills/meta/*` -> `meta`
 - `skills/project/overlays/*` -> overlay for the matching skill
 
-`skills.routing.scopes` is the explicit allowlist for routing visibility, but
-scope alone is not sufficient. A loadable skill must also provide at least one
-selection signal to become routable.
-
-Cold-start routing reads only the compiled selection profile:
-
-- `name`
-- `selection.when_to_use`
-- `selection.paths`
-- authored `## Trigger` bullets
-
-Fields such as outputs, effects, resources, and execution hints do not raise a
-skill above the selection shortlist. Warm artifact state can gate handoff
-readiness, but it cannot add a new candidate.
+Hosted runtime code does not score or load skills before useful work. The model
+may read these files through ordinary file/search tools when relevant. Skill
+metadata can still support repository indexing, documentation, and migration
+checks, but it is not a per-turn control surface.
 
 ## Skills Versus Delegation
 
 Skills and delegated workers stay separate:
 
-- a skill is the semantic contract for work and completion outputs
+- a skill is a readable instruction document
 - an execution envelope defines runtime posture for delegated work
-- an agent spec composes a default skill with specialist instructions and tool
-  narrowing
+- an agent spec may reference skill files as default instructions
 
-Public delegated runs start from a `skillName` intent packet. The parent
-session owns active skill state, completion, and patch adoption. Child-owned
-consult runs remain advisory unless the parent records a new authoritative
-fact or adoption receipt.
+Public delegated runs may name a skill for human-readable intent, but the
+parent session owns effect receipts, verification, and patch adoption.
+Child-owned consult runs remain advisory unless the parent records a new
+authoritative fact or adoption receipt.
 
 ## Authoring Rules
 
 - Use structured metadata for boundaries the runtime consumes.
-- Keep `selection` focused on reusable routing signals, not one-off task
-  descriptions.
-- Keep operator/meta skills inspectable even when they are not routable by
-  default.
+- Keep `selection` useful for humans and repository tooling, not mandatory
+  runtime routing.
+- Keep operator/meta skills inspectable even when they are not part of the
+  default model context.
 - Put project-specific tightening in overlays or shared project guidance
   instead of widening the public skill catalog.
 

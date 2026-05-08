@@ -41,6 +41,7 @@ export interface BrewvaHostedRuntimePort extends BrewvaRuntimeIdentity {
 export interface BrewvaToolRuntimePort extends BrewvaRuntimeIdentity {
   readonly authority: BrewvaAuthorityPort;
   readonly inspect: BrewvaInspectionPort;
+  readonly maintain: Pick<BrewvaMaintenancePort, "workbench">;
   readonly extensions: BrewvaToolRuntimeExtensions;
 }
 

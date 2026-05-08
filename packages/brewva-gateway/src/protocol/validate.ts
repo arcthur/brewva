@@ -139,14 +139,23 @@ function isDurability(value: unknown): value is SessionWireFrame["durability"] {
   return value === "cache" || value === "durable";
 }
 
-function isContextPressure(value: unknown): boolean {
+function isContextStatus(value: unknown): boolean {
   if (!isRecord(value)) {
     return false;
   }
   return (
-    isFiniteNumber(value.tokens) &&
-    isFiniteNumber(value.limit) &&
-    (value.level === "normal" || value.level === "elevated" || value.level === "critical")
+    isFiniteNumber(value.tokensUsed) &&
+    isFiniteNumber(value.tokensTotal) &&
+    isFiniteNumber(value.tokensRemaining) &&
+    isFiniteNumber(value.tokensUntilForcedCompact) &&
+    isFiniteNumber(value.predictedTurnGrowthTokens) &&
+    isFiniteNumber(value.tokensUntilPredictedOverflow) &&
+    typeof value.predictedOverflow === "boolean" &&
+    isFiniteNumber(value.usageRatio) &&
+    isFiniteNumber(value.hardLimitRatio) &&
+    isFiniteNumber(value.compactionThresholdRatio) &&
+    typeof value.compactionAdvised === "boolean" &&
+    typeof value.forcedCompaction === "boolean"
   );
 }
 
@@ -299,8 +308,8 @@ export function validateSessionWireFramePayload(
       if (!isOptionalString(value.reason) || !isOptionalString(value.detail)) {
         return { ok: false, error: "session.status reason/detail must be strings when present" };
       }
-      if (value.contextPressure !== undefined && !isContextPressure(value.contextPressure)) {
-        return { ok: false, error: "session.status.contextPressure is invalid" };
+      if (value.contextStatus !== undefined && !isContextStatus(value.contextStatus)) {
+        return { ok: false, error: "session.status.contextStatus is invalid" };
       }
       {
         const semanticsError = requireLiveCacheSemantics(value, type);

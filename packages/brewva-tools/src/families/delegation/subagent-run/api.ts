@@ -82,9 +82,7 @@ export function createSubagentRunTool(options: BrewvaToolOptions): ToolDefinitio
         });
       },
     },
-    {
-      requiredCapabilities: ["extensions.tools.appendGuardedSupplementalBlocks"],
-    },
+    {},
   );
 }
 
@@ -150,9 +148,7 @@ export function createSubagentFanoutTool(options: BrewvaToolOptions): ToolDefini
         });
       },
     },
-    {
-      requiredCapabilities: ["extensions.tools.appendGuardedSupplementalBlocks"],
-    },
+    {},
   );
 }
 
@@ -221,8 +217,6 @@ export function createSubagentRunDiagnosticTool(options: BrewvaToolOptions): Too
         });
       },
     },
-    {
-      requiredCapabilities: ["extensions.tools.appendGuardedSupplementalBlocks"],
-    },
+    {},
   );
 }

@@ -58,10 +58,6 @@ function readCanonicalStringArray(
   return undefined;
 }
 
-function readObject(value: unknown): Record<string, unknown> | undefined {
-  return isRecord(value) ? { ...value } : undefined;
-}
-
 function readQuestionOption(value: unknown): BrewvaQuestionOption | undefined {
   if (!isRecord(value)) {
     return undefined;
@@ -290,48 +286,6 @@ function normalizeQaOutcomeData(data: QaSubagentOutcomeData): QaSubagentOutcomeD
     ...(missingEvidence?.length ? { missing_evidence: missingEvidence } : {}),
     ...(confidenceGaps?.length ? { confidence_gaps: confidenceGaps } : {}),
     ...(environmentLimits?.length ? { environment_limits: environmentLimits } : {}),
-  };
-}
-
-function toCanonicalQaSkillCheck(check: QaCheck): Record<string, unknown> {
-  return {
-    name: check.name,
-    status: check.status,
-    summary: check.summary ?? check.name,
-    ...(check.command ? { command: check.command, exit_code: check.exit_code } : {}),
-    ...(check.tool ? { tool: check.tool } : {}),
-    ...(check.cwd ? { cwd: check.cwd } : {}),
-    ...(check.expected ? { expected: check.expected } : {}),
-    observed_output: check.observed_output,
-    ...(check.probe_type ? { probe_type: check.probe_type } : {}),
-    ...(check.evidence_refs ? { evidence_refs: check.evidence_refs } : {}),
-  };
-}
-
-function buildQaSkillOutputs(
-  data: QaSubagentOutcomeData,
-  narrativeText: string,
-  existing: Record<string, unknown> | undefined,
-): Record<string, unknown> {
-  const report =
-    readString(existing?.qa_report) ??
-    readString(narrativeText) ??
-    summarizeStructuredOutcomeData(data) ??
-    `QA finished with verdict ${data.verdict}.`;
-  return {
-    ...existing,
-    qa_report: report,
-    qa_findings:
-      Array.isArray(existing?.qa_findings) && existing.qa_findings.length > 0
-        ? existing.qa_findings
-        : data.checks
-            .filter((check) => check.status !== "pass")
-            .map((check) => check.summary ?? check.name),
-    qa_verdict: data.verdict,
-    qa_checks: data.checks.map((check) => toCanonicalQaSkillCheck(check)),
-    qa_missing_evidence: data.missing_evidence ?? [],
-    qa_confidence_gaps: data.confidence_gaps ?? [],
-    qa_environment_limits: data.environment_limits ?? [],
   };
 }
 
@@ -625,7 +579,6 @@ export function extractStructuredOutcomeData(input: {
   data?: SubagentOutcomeData;
   narrativeText: string;
   parseError?: string;
-  skillOutputs?: Record<string, unknown>;
 } {
   const normalized = normalizeJsonBlock(input.assistantText);
   if (!normalized.rawJson) {
@@ -648,25 +601,17 @@ export function extractStructuredOutcomeData(input: {
     return {
       narrativeText: normalized.narrativeText,
       parseError: `unexpected_skill_name:${parsedSkillName}`,
-      skillOutputs: isRecord(parsed) ? readObject(parsed.skillOutputs) : undefined,
     };
   }
   const data = parseOutcomeData(input.resultMode, input.consultKind, parsed);
-  const rawSkillOutputs = isRecord(parsed) ? readObject(parsed.skillOutputs) : undefined;
   if (!data) {
     return {
       narrativeText: normalized.narrativeText,
       parseError: "invalid_structured_outcome_payload",
-      skillOutputs: rawSkillOutputs,
     };
   }
-  const skillOutputs =
-    input.skillName === "qa" && data.kind === "qa"
-      ? buildQaSkillOutputs(data, normalized.narrativeText, rawSkillOutputs)
-      : rawSkillOutputs;
   return {
     data,
     narrativeText: normalized.narrativeText,
-    skillOutputs,
   };
 }

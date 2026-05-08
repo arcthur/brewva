@@ -1,7 +1,6 @@
 import { resolve } from "node:path";
 import type { BrewvaConfig } from "../config/types.js";
 import { ContextBudgetManager } from "../domain/context/api.js";
-import { ContextInjectionCollector } from "../domain/context/api.js";
 import { SessionCostTracker } from "../domain/cost/api.js";
 import { EvidenceLedger } from "../domain/ledger/api.js";
 import { ParallelBudgetManager } from "../domain/parallel/api.js";
@@ -25,7 +24,6 @@ export interface RuntimeCoreDependencies {
   eventStore: BrewvaEventStore;
   recoveryWalStore: RecoveryWalStore;
   contextBudget: ContextBudgetManager;
-  contextInjection: ContextInjectionCollector;
   turnReplay: TurnReplayEngine;
   reasoningReplay: ReasoningReplayEngine;
   fileChanges: FileChangeTracker;
@@ -73,10 +71,6 @@ export function registerRuntimeCoreDependencies(
     },
   });
   const contextBudget = new ContextBudgetManager(options.config.infrastructure.contextBudget);
-  const contextInjection = new ContextInjectionCollector({
-    sourceTokenLimits: {},
-    maxEntriesPerSession: options.config.infrastructure.contextBudget.arena.maxEntriesPerSession,
-  });
   const turnReplay = new TurnReplayEngine({
     listEvents: (sessionId) => eventStore.list(sessionId),
     getTurn: (sessionId) => options.getCurrentTurn(sessionId),
@@ -106,7 +100,6 @@ export function registerRuntimeCoreDependencies(
     eventStore,
     recoveryWalStore,
     contextBudget,
-    contextInjection,
     turnReplay,
     reasoningReplay,
     fileChanges,

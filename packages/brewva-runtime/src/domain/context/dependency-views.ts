@@ -6,7 +6,6 @@ import {
 } from "./read-models.js";
 import { resolveReservedBudgetFromRatio } from "./reserved-budget.js";
 import type { ToolFailureEntry } from "./tool-failures.js";
-import type { ToolOutputDistillationEntry } from "./tool-output-distilled.js";
 import type { ContextBudgetUsage } from "./types.js";
 
 export interface RuntimeStatusView {
@@ -50,28 +49,6 @@ export function resolveProjectionWorkingView(
   return { content };
 }
 
-export function resolveToolOutputDistillationView(
-  kernel: RuntimeKernelContext,
-  sessionId: string,
-): ToolOutputDistillationEntry[] {
-  return kernel
-    .getRecentToolOutputDistillations(sessionId, 12)
-    .map((entry) => ({
-      toolName: entry.toolName,
-      strategy: entry.strategy,
-      summaryText: kernel.sanitizeInput(entry.summaryText),
-      rawTokens: entry.rawTokens,
-      summaryTokens: entry.summaryTokens,
-      compressionRatio: entry.compressionRatio,
-      artifactRef: entry.artifactRef ? kernel.sanitizeInput(entry.artifactRef) : null,
-      isError: entry.isError,
-      verdict: entry.verdict,
-      turn: entry.turn,
-      timestamp: entry.timestamp,
-    }))
-    .filter((entry) => entry.summaryText.trim().length > 0);
-}
-
 export function resolveHistoryViewBaselineView(
   kernel: RuntimeKernelContext,
   input: {
@@ -90,7 +67,7 @@ export function resolveHistoryViewBaselineView(
         ? null
         : resolveReservedBudgetFromRatio(
             input.reservedBudgetRatio,
-            kernel.contextBudget.getEffectiveInjectionTokenBudget(input.sessionId, input.usage),
+            kernel.contextBudget.getEffectiveDynamicTailTokenBudget(input.sessionId, input.usage),
           ),
   });
 }
@@ -113,7 +90,7 @@ export function resolveRecoveryWorkingSetView(
         ? null
         : resolveReservedBudgetFromRatio(
             input.reservedBudgetRatio,
-            kernel.contextBudget.getEffectiveInjectionTokenBudget(input.sessionId, input.usage),
+            kernel.contextBudget.getEffectiveDynamicTailTokenBudget(input.sessionId, input.usage),
           ),
   });
 }

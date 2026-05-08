@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 describe("gateway contract: hosted provider surface", () => {
-  test("anchors semantic reranker on a Brewva-owned provider driver contract", () => {
+  test("keeps provider-side semantic reranker deleted from hosted bootstrap", () => {
     const repoRoot = resolve(import.meta.dirname, "../../..");
     const semanticRerankerPath = resolve(
       repoRoot,
@@ -12,6 +12,14 @@ describe("gateway contract: hosted provider surface", () => {
       "src",
       "host",
       "semantic-reranker.ts",
+    );
+    const hostedBootstrapPath = resolve(
+      repoRoot,
+      "packages",
+      "brewva-gateway",
+      "src",
+      "host",
+      "hosted-session-bootstrap.ts",
     );
     const hostedProviderDriverPath = resolve(
       repoRoot,
@@ -22,11 +30,12 @@ describe("gateway contract: hosted provider surface", () => {
       "hosted-provider-driver.ts",
     );
 
-    const rerankerSource = readFileSync(semanticRerankerPath, "utf8");
+    const bootstrapSource = readFileSync(hostedBootstrapPath, "utf8");
     const driverSource = readFileSync(hostedProviderDriverPath, "utf8");
 
-    expect(rerankerSource).not.toContain("pi-provider-driver");
-    expect(rerankerSource).toContain("providerDriver");
+    expect(existsSync(semanticRerankerPath)).toBe(false);
+    expect(bootstrapSource).not.toContain("semanticReranker");
+    expect(bootstrapSource).not.toContain("createHostedSemanticReranker");
     expect(driverSource).toContain("createHostedProviderDriver");
     expect(driverSource).toContain("completeSimple");
     expect(driverSource).toContain("UnsupportedBrewvaProviderApiError");

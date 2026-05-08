@@ -23,9 +23,9 @@ describe("runtime entrypoint surface", () => {
     expect("readSkillCompletedEventPayload" in runtime).toBe(false);
     expect("asBrewvaEventType" in runtime).toBe(false);
 
-    expect("SKILL_COMPLETED_EVENT_TYPE" in events).toBe(true);
+    expect("SKILL_COMPLETED_EVENT_TYPE" in events).toBe(false);
     expect("BREWVA_REGISTERED_EVENT_TYPES" in events).toBe(true);
-    expect("readSkillCompletedEventPayload" in events).toBe(true);
+    expect("readSkillCompletedEventPayload" in events).toBe(false);
     expect("asBrewvaEventType" in events).toBe(true);
     expect("parseTscDiagnostics" in runtime).toBe(false);
     expect("parseTscDiagnostics" in evidence).toBe(true);
@@ -34,16 +34,18 @@ describe("runtime entrypoint surface", () => {
   });
 
   test("dedicated subpath extension ports expose only public methods", async () => {
+    const runtime = await import("@brewva/brewva-runtime");
     const context = await import("@brewva/brewva-runtime/context");
     const credentials = await import("@brewva/brewva-runtime/credentials");
     const parallel = await import("@brewva/brewva-runtime/parallel");
     const recovery = await import("@brewva/brewva-runtime/recovery");
 
-    const arena = context.createContextArena();
-    expect(Object.isSealed(arena)).toBe(true);
-    expect(Object.keys(arena)).not.toContain("sessions");
-    expect(Object.keys(arena)).not.toContain("getOrCreateSession");
-    expect(Object.keys(arena)).not.toContain("fitEntryToBudget");
+    expect("createContextArena" in context).toBe(false);
+    const contextBudget = context.createContextBudgetManager(
+      runtime.DEFAULT_BREWVA_CONFIG.infrastructure.contextBudget,
+    );
+    expect(Object.isSealed(contextBudget)).toBe(true);
+    expect(Object.keys(contextBudget)).not.toContain("sessionState");
 
     const vault = credentials.createCredentialVaultService({
       vaultPath: join(mkdtempSync(join(tmpdir(), "brewva-vault-")), "credentials.json"),

@@ -2,10 +2,8 @@ import { readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
 import { resolveBrewvaModelSelection } from "@brewva/brewva-gateway/model-routing";
-import { createRecallContextProvider } from "@brewva/brewva-recall/context";
 import {
   BrewvaRuntime,
-  CONTEXT_SOURCES,
   createToolRuntimePort,
   createTrustedLocalGovernancePort,
   resolveBrewvaAgentDir,
@@ -15,7 +13,7 @@ import {
 import { TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
 import { sha256Hex, stableJsonSha256Hex } from "@brewva/brewva-std/hash";
 import type { BrewvaToolUiPort } from "@brewva/brewva-substrate/host-api";
-import type { BrewvaModelCatalog, BrewvaRegisteredModel } from "@brewva/brewva-substrate/provider";
+import type { BrewvaModelCatalog } from "@brewva/brewva-substrate/provider";
 import type {
   BrewvaManagedPromptSession,
   BrewvaModelPreset,
@@ -23,7 +21,6 @@ import type {
 import { buildBrewvaTools } from "@brewva/brewva-tools";
 import type {
   BrewvaToolExecutionTraits,
-  BrewvaSemanticReranker,
   BrewvaToolOrchestration,
 } from "@brewva/brewva-tools/contracts";
 import { buildReadPathDiscoveryObservationPayload } from "@brewva/brewva-tools/navigation";
@@ -76,7 +73,6 @@ import {
 import { findModelPreset } from "./model-presets.js";
 import type { ProviderConnectionPort } from "./provider-connection.js";
 import { DEFAULT_HOSTED_ROUTING_SCOPES } from "./routing-defaults.js";
-import { createHostedSemanticReranker } from "./semantic-reranker.js";
 
 export type HostedSession = BrewvaManagedPromptSession;
 
@@ -613,37 +609,6 @@ function applyRuntimeUiSettings(
   });
 }
 
-function toRegisteredSemanticModel(
-  model: HostedSession["model"] | undefined,
-  modelCatalog: Pick<BrewvaModelCatalog, "find">,
-): BrewvaRegisteredModel | undefined {
-  if (!model) {
-    return undefined;
-  }
-  return (
-    modelCatalog.find(model.provider, model.id) ?? {
-      provider: model.provider,
-      id: model.id,
-      name: model.name ?? model.displayName ?? model.id,
-      api: model.api ?? "openai-responses",
-      baseUrl: model.baseUrl ?? "",
-      reasoning: model.reasoning,
-      input: model.input ?? ["text"],
-      cost: model.cost ?? {
-        input: 0,
-        output: 0,
-        cacheRead: 0,
-        cacheWrite: 0,
-      },
-      contextWindow: model.contextWindow,
-      maxTokens: model.maxTokens,
-      ...(model.headers ? { headers: model.headers } : {}),
-      ...(model.compat != null ? { compat: model.compat } : {}),
-      ...(model.displayName ? { displayName: model.displayName } : {}),
-    }
-  );
-}
-
 function resolveManagedToolMode(mode: ManagedToolMode | undefined): ManagedToolMode {
   return mode === "direct" ? "direct" : "runtime_plugin";
 }
@@ -682,20 +647,6 @@ function createKernelRuntime(options: CreateHostedSessionOptions, cwd: string): 
           : (options.routingDefaultScopes ?? [...DEFAULT_HOSTED_ROUTING_SCOPES]),
     })
   );
-}
-
-function installContextProviders(runtime: BrewvaRuntime): void {
-  if (
-    !runtime.inspect.context
-      .listProviders()
-      .some((provider) => provider.source === CONTEXT_SOURCES.recallBroker)
-  ) {
-    runtime.maintain.context.registerProvider(
-      createRecallContextProvider({
-        runtime,
-      }),
-    );
-  }
 }
 
 function assertRoutingScopeCompatibility(
@@ -806,7 +757,6 @@ function createRuntimePlugins(input: {
   runtime: BrewvaRuntime;
   orchestration: BrewvaToolOrchestration | undefined;
   delegationStore: HostedDelegationStore | undefined;
-  semanticReranker?: BrewvaSemanticReranker;
   toolExecutionCoordinator: HostedToolExecutionCoordinator;
   hostedToolDefinitionsByName?: ReadonlyMap<string, HostedSessionCustomTool>;
 }): InternalRuntimePlugin[] {
@@ -820,7 +770,6 @@ function createRuntimePlugins(input: {
       delegationStore: input.delegationStore,
       managedToolNames: input.options.managedToolNames,
       contextProfile: input.options.contextProfile,
-      semanticReranker: input.semanticReranker,
       toolExecutionCoordinator: input.toolExecutionCoordinator,
       hostedToolDefinitionsByName: input.hostedToolDefinitionsByName,
       localHooks: input.options.localHooks,
@@ -838,7 +787,6 @@ function createDirectManagedTools(input: {
   orchestration: BrewvaToolOrchestration | undefined;
   delegationStore: HostedDelegationStore | undefined;
   managedToolMode: ManagedToolMode;
-  semanticReranker?: BrewvaSemanticReranker;
 }) {
   if (input.managedToolMode !== "direct") {
     return undefined;
@@ -846,7 +794,6 @@ function createDirectManagedTools(input: {
   return buildBrewvaTools({
     runtime: {
       ...createToolRuntimePort(input.runtime),
-      ...(input.semanticReranker ? { semanticReranker: input.semanticReranker } : {}),
     },
     orchestration: input.orchestration,
     delegation: createDelegationQuery(input.delegationStore),
@@ -861,7 +808,6 @@ function recordHostedBootstrap(input: {
   configPath?: string;
   managedToolMode: ManagedToolMode;
 }): void {
-  const skillLoadReport = input.runtime.inspect.skills.getLoadReport();
   input.runtime.extensions.hosted.events.record({
     sessionId: input.sessionId,
     type: "session_bootstrap",
@@ -878,14 +824,6 @@ function recordHostedBootstrap(input: {
           projectionDir: input.runtime.config.projection.dir,
           ledgerPath: input.runtime.config.ledger.path,
         },
-      },
-      skillLoad: {
-        loadedSkills: skillLoadReport.loadedSkills,
-        routingEnabled: skillLoadReport.routingEnabled,
-        routingScopes: skillLoadReport.routingScopes,
-        routableSkills: skillLoadReport.routableSkills,
-        hiddenSkills: skillLoadReport.hiddenSkills,
-        overlaySkills: skillLoadReport.overlaySkills,
       },
     },
   });
@@ -989,7 +927,6 @@ export async function createHostedSession(
 ): Promise<HostedSessionResult> {
   const environment = resolveHostedEnvironment(options);
   const runtime = createKernelRuntime(options, environment.cwd);
-  installContextProviders(runtime);
   assertRoutingScopeCompatibility(runtime, options);
 
   const autoSubagentsEnabled = options.enableSubagents !== false;
@@ -1010,12 +947,6 @@ export async function createHostedSession(
   });
 
   const managedToolMode = resolveManagedToolMode(options.managedToolMode);
-  let activeSemanticModel = environment.requestedModelSelection.model;
-  const semanticReranker = createHostedSemanticReranker({
-    resolveModel: () => activeSemanticModel,
-    modelCatalog: environment.sessionDriver.modelCatalog,
-    runtime,
-  });
   const toolExecutionCoordinator = createHostedToolExecutionCoordinator();
   const mcpEventRecorder = createHostedMcpEventRecorder(runtime);
   const configuredMcpToolSources = createHostedMcpToolSourcesFromConfig(
@@ -1032,7 +963,6 @@ export async function createHostedSession(
       orchestration,
       delegationStore,
       managedToolMode,
-      semanticReranker,
     }),
     toolExecutionCoordinator,
   );
@@ -1071,7 +1001,6 @@ export async function createHostedSession(
     runtime,
     orchestration,
     delegationStore,
-    semanticReranker,
     toolExecutionCoordinator,
     hostedToolDefinitionsByName,
   });
@@ -1089,11 +1018,6 @@ export async function createHostedSession(
     logger: options.logger,
   });
   activeSession = sessionRuntime.session;
-  activeSemanticModel =
-    toRegisteredSemanticModel(
-      sessionRuntime.session.model,
-      environment.sessionDriver.modelCatalog,
-    ) ?? activeSemanticModel;
 
   let session = installSessionCompactionRecovery(sessionRuntime.session, {
     runtime,

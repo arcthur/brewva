@@ -24,7 +24,6 @@ export function registerVerificationDomain(
           getTaskState: (sessionId) => options.kernel.getTaskState(sessionId),
           recordEvent: (input) => options.kernel.recordEvent(input),
           governancePort: options.governancePort,
-          skillLifecycleService: options.skillLifecycleService,
           ledgerService: options.ledgerService,
         }),
     },

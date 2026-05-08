@@ -1,35 +1,31 @@
 # Skill And Memory Event Families
 
-This page covers skill lifecycle, budget, routing, recall, narrative memory,
-deliberation memory, semantic extraction, and iteration-fact events.
+This page covers the remaining skill catalog refresh events plus recall,
+workbench, semantic extraction, and iteration-fact events.
 
-## Skill Lifecycle
+## Skill Catalog
 
-Skill lifecycle events record activation, completion, rejected completion,
-contract failure, refresh, diagnosis derivation, and promotion review
-surfaces. The parent runtime owns active skill state and completion authority;
-delegated children may return skill-shaped outputs, but the parent decides
-whether those outputs become authoritative lifecycle state.
+Skills are catalog documents. Runtime events may record catalog refresh and
+inventory maintenance, but there is no activation, completion, repair, or
+active-skill lifecycle state.
 
 ## Skill Budget
 
-Budget warning and parallel warning events explain why a skill is approaching
-or crossing a declared resource boundary. They do not mutate the skill catalog
-or routing taxonomy by themselves.
+Per-skill token and tool-call budgets have been removed. Cost, parallelism,
+and tool admission are owned by session-level budget and effect governance.
 
-## Recall And Narrative Memory
+## Recall And Workbench Memory
 
-Recall and narrative memory events expose semantic memory as inspectable
-evidence:
+Recall and workbench events expose semantic memory as inspectable evidence:
 
 - recall curation records operator or runtime curation actions
 - recall utility observations describe usefulness signals
 - recall surfaced events connect query intent to returned evidence
-- narrative memory events track record, review, promotion, archive, and forget
-  transitions
+- workbench events track model-authored notes, reversible evictions, and
+  committed baselines
 
-Narrative memory is advisory unless a downstream runtime surface explicitly
-uses it as evidence.
+Workbench memory is advisory unless a downstream runtime surface explicitly
+uses it as evidence. It is not kernel truth.
 
 ## Deliberation And Semantic Extraction
 
@@ -45,7 +41,6 @@ task/truth state or verification reports.
 
 ## Implementation Anchors
 
-- `packages/brewva-runtime/src/domain/skills/skill-lifecycle.ts`
 - `packages/brewva-runtime/src/domain/skills/registry.ts`
 - `packages/brewva-runtime/src/domain/iteration/facts.ts`
 - `packages/brewva-recall/src/broker/broker.ts`

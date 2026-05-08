@@ -1,7 +1,8 @@
 # Tool Family: Memory And Recall
 
 Memory and recall tools inspect or curate durable evidence across current
-session tape, repository precedent, narrative memory, and prior solutions.
+session tape, repository precedent, model-authored workbench notes, and prior
+solutions.
 
 ## Boundary
 
@@ -28,11 +29,11 @@ runtime replay authority.
 ## Surfaces
 
 - recall search and recall curation
-- narrative and deliberation memory
+- model-authored workbench note, evict, and undo-evict operations
 - knowledge capture and knowledge search
 - precedent audit and sweep
 - solution-record parsing and rendering
-- iteration facts and optimization continuity
+- iteration facts
 
 ## Retrieval Scope
 

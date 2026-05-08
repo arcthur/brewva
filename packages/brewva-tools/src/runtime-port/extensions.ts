@@ -62,23 +62,6 @@ export function registerToolRuntimeClearStateListener(
   }
 }
 
-export function appendToolRuntimeGuardedSupplementalBlocks(
-  runtime: BrewvaToolRuntime,
-  sessionId: string,
-  blocks: readonly { familyId: string; content: string }[],
-  scopeId?: string,
-) {
-  const extensionResult = runtime.extensions?.tools?.appendGuardedSupplementalBlocks?.(
-    sessionId,
-    blocks,
-    scopeId,
-  );
-  if (extensionResult) {
-    return extensionResult;
-  }
-  return null;
-}
-
 export function resolveToolRuntimeEventPort(
   runtime: BrewvaToolRuntime | undefined,
 ): ToolRuntimeEventPort | undefined {
@@ -101,10 +84,4 @@ export function resolveToolRuntimeAuthorityTools(
   runtime: BrewvaToolRuntime | undefined,
 ): ToolRuntimeAuthorityToolsPort | undefined {
   return runtime?.authority?.tools;
-}
-
-export function canAppendToolRuntimeGuardedSupplementalBlocks(
-  runtime: BrewvaToolRuntime | undefined,
-): boolean {
-  return typeof runtime?.extensions?.tools?.appendGuardedSupplementalBlocks === "function";
 }

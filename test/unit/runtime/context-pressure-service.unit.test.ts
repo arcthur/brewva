@@ -4,10 +4,17 @@ import { resolve } from "node:path";
 import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
 import { ContextBudgetManager } from "../../../packages/brewva-runtime/src/domain/context/budget.js";
-import { ContextPressureService } from "../../../packages/brewva-runtime/src/domain/context/context-pressure.js";
+import {
+  evaluateContextCompactionGate,
+  requestContextCompaction,
+} from "../../../packages/brewva-runtime/src/domain/context/context-compaction-gate.js";
+import {
+  getContextCompactionGateStatus,
+  getContextUsageRatio,
+} from "../../../packages/brewva-runtime/src/domain/context/context-pressure.js";
 import type { ContextBudgetUsage } from "../../../packages/brewva-runtime/src/domain/context/types.js";
 import type { BrewvaEventRecord } from "../../../packages/brewva-runtime/src/events/types.js";
-import { setStaticContextPressureThresholds } from "../../fixtures/config.js";
+import { setStaticContextStatusThresholds } from "../../fixtures/config.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 function createUsage(percent: number): ContextBudgetUsage {
@@ -25,11 +32,155 @@ function createWorkspaceWithSkills(name: string): string {
   return workspace;
 }
 
-describe("ContextPressureService", () => {
-  test("blocks tools on critical pressure and emits expected payload", () => {
+function createPressureHarness(input: {
+  config: typeof DEFAULT_BREWVA_CONFIG;
+  contextBudget: ContextBudgetManager;
+  getCurrentTurn: (sessionId: string) => number;
+  recordEvent: (eventInput: {
+    sessionId: string;
+    type: string;
+    turn?: number;
+    payload?: object;
+  }) => BrewvaEventRecord | undefined;
+}) {
+  return {
+    observeContextUsage(sessionId: string, usage: ContextBudgetUsage | undefined): void {
+      input.contextBudget.observeUsage(sessionId, usage);
+      if (!usage) return;
+      input.recordEvent({
+        sessionId,
+        type: "context_usage",
+        payload: {
+          tokens: usage.tokens,
+          contextWindow: usage.contextWindow,
+          percent: getContextUsageRatio(usage),
+        },
+      });
+    },
+    getContextCompactionGateStatus(sessionId: string, usage?: ContextBudgetUsage) {
+      return getContextCompactionGateStatus({
+        config: input.config,
+        contextBudget: input.contextBudget,
+        sessionId,
+        usage,
+        getCurrentTurn: input.getCurrentTurn,
+      });
+    },
+    checkContextCompactionGate(sessionId: string, toolName: string, usage?: ContextBudgetUsage) {
+      return evaluateContextCompactionGate({
+        config: input.config,
+        contextBudget: input.contextBudget,
+        sessionId,
+        toolName,
+        usage,
+        getCurrentTurn: input.getCurrentTurn,
+        recordEvent: input.recordEvent,
+      });
+    },
+    explainContextCompactionGate(sessionId: string, toolName: string, usage?: ContextBudgetUsage) {
+      return evaluateContextCompactionGate({
+        config: input.config,
+        contextBudget: input.contextBudget,
+        sessionId,
+        toolName,
+        usage,
+        getCurrentTurn: input.getCurrentTurn,
+      });
+    },
+    requestCompaction(
+      sessionId: string,
+      reason: "usage_threshold" | "hard_limit",
+      usage?: ContextBudgetUsage,
+    ) {
+      requestContextCompaction({
+        contextBudget: input.contextBudget,
+        sessionId,
+        reason,
+        usage,
+        recordEvent: input.recordEvent,
+      });
+    },
+  };
+}
+
+describe("context status derivation", () => {
+  test("derives predictive overflow headroom from the hard compaction boundary", () => {
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
     config.infrastructure.contextBudget.enabled = true;
-    setStaticContextPressureThresholds(config, {
+    setStaticContextStatusThresholds(config, {
+      hardLimitPercent: 0.9,
+      compactionThresholdPercent: 0.8,
+    });
+
+    const budget = new ContextBudgetManager(config.infrastructure.contextBudget);
+    const service = createPressureHarness({
+      config,
+      contextBudget: budget,
+      getCurrentTurn: () => 1,
+      recordEvent: () => undefined as BrewvaEventRecord | undefined,
+    });
+
+    const gate = service.getContextCompactionGateStatus("predictive-session", {
+      tokens: 70_000,
+      contextWindow: 100_000,
+      percent: 0.7,
+    });
+
+    expect(gate.status).toEqual(
+      expect.objectContaining({
+        tokensUntilForcedCompact: 20_000,
+        predictedTurnGrowthTokens: 35_000,
+        tokensUntilPredictedOverflow: 0,
+        predictedOverflow: true,
+        compactionAdvised: false,
+        forcedCompaction: false,
+      }),
+    );
+  });
+
+  test("derives predictive overflow from context-budget tuning", () => {
+    const config = structuredClone(DEFAULT_BREWVA_CONFIG);
+    config.infrastructure.contextBudget.enabled = true;
+    setStaticContextStatusThresholds(config, {
+      hardLimitPercent: 0.9,
+      compactionThresholdPercent: 0.8,
+    });
+    config.infrastructure.contextBudget.predictiveTurnGrowth = {
+      floorContextWindow: 1_000,
+      largeContextWindow: 10_000,
+      standardTokens: 200,
+      largeTokens: 400,
+      scalingFactor: 0.1,
+    };
+
+    const budget = new ContextBudgetManager(config.infrastructure.contextBudget);
+    const service = createPressureHarness({
+      config,
+      contextBudget: budget,
+      getCurrentTurn: () => 1,
+      recordEvent: () => undefined as BrewvaEventRecord | undefined,
+    });
+
+    const status = service.getContextCompactionGateStatus("predictive-tuned", {
+      tokens: 8_650,
+      contextWindow: 10_000,
+      percent: 0.865,
+    }).status;
+
+    expect(status).toEqual(
+      expect.objectContaining({
+        predictedTurnGrowthTokens: 400,
+        tokensUntilPredictedOverflow: 0,
+        predictedOverflow: true,
+        forcedCompaction: false,
+      }),
+    );
+  });
+
+  test("blocks tools on forced compaction and emits expected payload", () => {
+    const config = structuredClone(DEFAULT_BREWVA_CONFIG);
+    config.infrastructure.contextBudget.enabled = true;
+    setStaticContextStatusThresholds(config, {
       hardLimitPercent: 0.8,
       compactionThresholdPercent: 0.7,
     });
@@ -44,7 +195,7 @@ describe("ContextPressureService", () => {
     const budget = new ContextBudgetManager(config.infrastructure.contextBudget);
     budget.beginTurn("pressure-session", 12);
 
-    const service = new ContextPressureService({
+    const service = createPressureHarness({
       config,
       contextBudget: budget,
       getCurrentTurn: () => 12,
@@ -90,7 +241,7 @@ describe("ContextPressureService", () => {
     const budget = new ContextBudgetManager(config.infrastructure.contextBudget);
     budget.beginTurn("pressure-session", 7);
 
-    const service = new ContextPressureService({
+    const service = createPressureHarness({
       config,
       contextBudget: budget,
       getCurrentTurn: () => 7,
@@ -133,7 +284,7 @@ describe("ContextPressureService", () => {
     const budget = new ContextBudgetManager(config.infrastructure.contextBudget);
     budget.beginTurn("pressure-session", 8);
 
-    const service = new ContextPressureService({
+    const service = createPressureHarness({
       config,
       contextBudget: budget,
       getCurrentTurn: () => 8,
@@ -171,7 +322,7 @@ describe("ContextPressureService", () => {
     }> = [];
 
     const budget = new ContextBudgetManager(config.infrastructure.contextBudget);
-    const service = new ContextPressureService({
+    const service = createPressureHarness({
       config,
       contextBudget: budget,
       getCurrentTurn: () => 1,
@@ -200,7 +351,7 @@ describe("ContextPressureService", () => {
   test("does not arm compaction gate from pending reason alone when pressure is below critical", () => {
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
     config.infrastructure.contextBudget.enabled = true;
-    setStaticContextPressureThresholds(config, {
+    setStaticContextStatusThresholds(config, {
       hardLimitPercent: 0.8,
       compactionThresholdPercent: 0.7,
     });
@@ -208,7 +359,7 @@ describe("ContextPressureService", () => {
     const budget = new ContextBudgetManager(config.infrastructure.contextBudget);
     budget.beginTurn("pressure-session", 9);
 
-    const service = new ContextPressureService({
+    const service = createPressureHarness({
       config,
       contextBudget: budget,
       getCurrentTurn: () => 9,
@@ -219,7 +370,8 @@ describe("ContextPressureService", () => {
 
     const mediumUsage = createUsage(0.75);
     const gate = service.getContextCompactionGateStatus("pressure-session", mediumUsage);
-    expect(gate.pressure.level).toBe("high");
+    expect(gate.status.compactionAdvised).toBe(true);
+    expect(gate.status.forcedCompaction).toBe(false);
     expect(gate.required).toBe(false);
     expect(gate.reason).toBeNull();
 
@@ -230,7 +382,7 @@ describe("ContextPressureService", () => {
   test("explaining the compaction gate does not emit blocked-tool telemetry", () => {
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
     config.infrastructure.contextBudget.enabled = true;
-    setStaticContextPressureThresholds(config, { hardLimitPercent: 0.8 });
+    setStaticContextStatusThresholds(config, { hardLimitPercent: 0.8 });
 
     const events: Array<{
       sessionId: string;
@@ -242,7 +394,7 @@ describe("ContextPressureService", () => {
     const budget = new ContextBudgetManager(config.infrastructure.contextBudget);
     budget.beginTurn("pressure-session", 12);
 
-    const service = new ContextPressureService({
+    const service = createPressureHarness({
       config,
       contextBudget: budget,
       getCurrentTurn: () => 12,
@@ -262,18 +414,17 @@ describe("ContextPressureService", () => {
     );
   });
 
-  test("allows control-plane tools during critical pressure when configured as always allowed", () => {
+  test("allows only workbench_compact during critical pressure", () => {
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
     config.infrastructure.contextBudget.enabled = true;
-    setStaticContextPressureThresholds(config, { hardLimitPercent: 0.8 });
+    setStaticContextStatusThresholds(config, { hardLimitPercent: 0.8 });
 
     const budget = new ContextBudgetManager(config.infrastructure.contextBudget);
     budget.beginTurn("pressure-session", 12);
 
-    const service = new ContextPressureService({
+    const service = createPressureHarness({
       config,
       contextBudget: budget,
-      alwaysAllowedTools: ["skill_complete", "skill_load", "session_compact"],
       getCurrentTurn: () => 12,
       recordEvent: () => undefined as BrewvaEventRecord | undefined,
     });
@@ -281,20 +432,21 @@ describe("ContextPressureService", () => {
     const usage = createUsage(0.9);
     const controlDecision = service.checkContextCompactionGate(
       "pressure-session",
-      "skill_complete",
+      "workbench_compact",
       usage,
     );
     expect(controlDecision.allowed).toBe(true);
 
     const dataPlaneDecision = service.checkContextCompactionGate("pressure-session", "exec", usage);
     expect(dataPlaneDecision.allowed).toBe(false);
+    expect(dataPlaneDecision.reason).toContain("Allowed during gate: workbench_compact.");
   });
 
-  test("runtime wiring allows select control-plane diagnostics during critical pressure while gating data-plane tools", () => {
+  test("runtime wiring only allows compact during critical pressure", () => {
     const workspace = createWorkspaceWithSkills("pressure-runtime-wiring");
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
     config.infrastructure.contextBudget.enabled = true;
-    setStaticContextPressureThresholds(config, {
+    setStaticContextStatusThresholds(config, {
       hardLimitPercent: 0.8,
       compactionThresholdPercent: 0.7,
     });
@@ -308,33 +460,13 @@ describe("ContextPressureService", () => {
     const usage = createUsage(0.9);
     runtime.maintain.context.observeUsage(sessionId, usage);
 
-    expect(runtime.inspect.context.checkCompactionGate(sessionId, "tape_info", usage).allowed).toBe(
-      true,
-    );
+    for (const toolName of ["tape_info", "tape_search", "recall_search", "cost_view", "exec"]) {
+      expect(runtime.inspect.context.checkCompactionGate(sessionId, toolName, usage).allowed).toBe(
+        false,
+      );
+    }
     expect(
-      runtime.inspect.context.checkCompactionGate(sessionId, "tape_search", usage).allowed,
-    ).toBe(true);
-    expect(
-      runtime.inspect.context.checkCompactionGate(sessionId, "recall_search", usage).allowed,
-    ).toBe(true);
-    expect(runtime.inspect.context.checkCompactionGate(sessionId, "cost_view", usage).allowed).toBe(
-      true,
-    );
-    expect(
-      runtime.inspect.context.checkCompactionGate(sessionId, "optimization_continuity", usage)
-        .allowed,
-    ).toBe(true);
-    expect(
-      runtime.inspect.context.checkCompactionGate(sessionId, "ledger_query", usage).allowed,
-    ).toBe(true);
-    expect(runtime.inspect.context.checkCompactionGate(sessionId, "exec", usage).allowed).toBe(
-      false,
-    );
-    expect(
-      runtime.inspect.context.checkCompactionGate(sessionId, "skill_complete", usage).allowed,
-    ).toBe(true);
-    expect(
-      runtime.inspect.context.checkCompactionGate(sessionId, "session_compact", usage).allowed,
+      runtime.inspect.context.checkCompactionGate(sessionId, "workbench_compact", usage).allowed,
     ).toBe(true);
   });
 });

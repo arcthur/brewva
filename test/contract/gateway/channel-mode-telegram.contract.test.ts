@@ -7,17 +7,17 @@ import {
   handleQuestionsChannelCommand,
 } from "@brewva/brewva-cli";
 import {
-  DEFAULT_TELEGRAM_SKILL_NAME,
+  DEFAULT_TELEGRAM_CHANNEL_NAME,
   runChannelMode,
   type ChannelModeLauncher,
   type RunChannelModeDependencies,
 } from "@brewva/brewva-gateway";
 import { createHostedSession } from "@brewva/brewva-gateway/host";
-import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
+import { DEFAULT_BREWVA_CONFIG, type BrewvaRuntime } from "@brewva/brewva-runtime";
 import { type ChannelTurnBridge, type TurnEnvelope } from "@brewva/brewva-runtime/channels";
 import { OPERATOR_QUESTION_ANSWERED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
 import { createRecoveryWalStore } from "@brewva/brewva-runtime/recovery";
-import { recordHostedSkillCompleted } from "../../helpers/events.js";
+import { recordHostedDelegationOutcome } from "../../helpers/events.js";
 import { waitUntil } from "../../helpers/process.js";
 import { cleanupTestWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
 
@@ -52,6 +52,43 @@ function writeChannelConfig(
     "utf8",
   );
   return configPath;
+}
+
+function recordDelegatedOpenQuestion(input: {
+  runtime: BrewvaRuntime;
+  sessionId: string;
+  runId: string;
+  question: string;
+}): string {
+  recordHostedDelegationOutcome({
+    runtime: input.runtime,
+    sessionId: input.sessionId,
+    runId: input.runId,
+    payload: {
+      delegate: "advisor",
+      kind: "consult",
+      consultKind: "review",
+    },
+    outcome: {
+      ok: true,
+      runId: input.runId,
+      delegate: "advisor",
+      label: "advisor",
+      kind: "consult",
+      consultKind: "review",
+      status: "ok",
+      summary: "Open question available.",
+      data: {
+        kind: "consult",
+        consultKind: "review",
+        conclusion: "The run needs operator input.",
+        followUpQuestions: [input.question],
+      },
+      metrics: { durationMs: 1 },
+      evidenceRefs: [],
+    },
+  });
+  return `delegation:${input.runId}:1`;
 }
 
 function createInboundTurn(input: { turnId: string; text: string }): TurnEnvelope {
@@ -290,7 +327,7 @@ describe("gateway contract: telegram channel dispatch", () => {
     }
   });
 
-  test("telegram inbound turns include the unified telegram skill policy", async () => {
+  test("telegram inbound turns include channel policy", async () => {
     const workspace = createTestWorkspace("channel-telegram-dispatch");
     const configPath = writeChannelConfig(workspace);
     const channelConfig = {
@@ -360,8 +397,8 @@ describe("gateway contract: telegram channel dispatch", () => {
     }
 
     const prompt = capturedPrompts[0] ?? "";
-    expect(prompt).toContain("[Brewva Channel Skill Policy]");
-    expect(prompt).toContain(`Primary channel skill: ${DEFAULT_TELEGRAM_SKILL_NAME}`);
+    expect(prompt).toContain("[Brewva Channel Policy]");
+    expect(prompt).toContain(`Transport: ${DEFAULT_TELEGRAM_CHANNEL_NAME}`);
     expect(prompt).toContain("[channel:telegram] conversation:12345");
     expect(prompt).toContain("hello from channel e2e");
     expect(outboundTurns[0]?.parts).toEqual([
@@ -592,13 +629,11 @@ describe("gateway contract: telegram channel dispatch", () => {
             5_000,
             "timed out waiting for agent session bootstrap",
           );
-          recordHostedSkillCompleted({
+          recordDelegatedOpenQuestion({
             runtime: hostedSession!.runtime,
             sessionId: hostedSession!.sessionId,
-            skillName: "plan",
-            outputs: {
-              open_questions: ["Should the update target the daemon or the print path?"],
-            },
+            runId: "telegram-status-question-1",
+            question: "Should the update target the daemon or the print path?",
           });
           await input.onInboundTurn(
             createInboundTurn({
@@ -714,15 +749,12 @@ describe("gateway contract: telegram channel dispatch", () => {
             5_000,
             "timed out waiting for agent session bootstrap",
           );
-          const questionEvent = recordHostedSkillCompleted({
+          hostedSession!.questionId = recordDelegatedOpenQuestion({
             runtime: hostedSession!.runtime,
             sessionId: hostedSession!.sessionId,
-            skillName: "plan",
-            outputs: {
-              open_questions: ["Should the update target the daemon or the print path?"],
-            },
+            runId: "telegram-answer-question-1",
+            question: "Should the update target the daemon or the print path?",
           });
-          hostedSession!.questionId = `skill:${questionEvent?.id}:1`;
           await input.onInboundTurn(
             createInboundTurn({
               turnId: "turn-answer-1",
@@ -846,15 +878,12 @@ describe("gateway contract: telegram channel dispatch", () => {
             5_000,
             "timed out waiting for default agent session bootstrap",
           );
-          const questionEvent = recordHostedSkillCompleted({
+          defaultSession!.questionId = recordDelegatedOpenQuestion({
             runtime: defaultSession!.runtime,
             sessionId: defaultSession!.sessionId,
-            skillName: "plan",
-            outputs: {
-              open_questions: ["Should the update target the daemon or the print path?"],
-            },
+            runId: "telegram-default-question-1",
+            question: "Should the update target the daemon or the print path?",
           });
-          defaultSession!.questionId = `skill:${questionEvent?.id}:1`;
 
           await input.onInboundTurn(
             createInboundTurn({
@@ -1025,15 +1054,12 @@ describe("gateway contract: telegram channel dispatch", () => {
             5_000,
             "timed out waiting for default session bootstrap",
           );
-          const questionEvent = recordHostedSkillCompleted({
+          defaultSession!.questionId = recordDelegatedOpenQuestion({
             runtime: defaultSession!.runtime,
             sessionId: defaultSession!.sessionId,
-            skillName: "plan",
-            outputs: {
-              open_questions: ["Should the update target the daemon or the print path?"],
-            },
+            runId: "telegram-answer-receipt-question-1",
+            question: "Should the update target the daemon or the print path?",
           });
-          defaultSession!.questionId = `skill:${questionEvent?.id}:1`;
 
           await input.onInboundTurn(
             createInboundTurn({

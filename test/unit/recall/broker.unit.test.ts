@@ -2,14 +2,12 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { getOrCreateNarrativeMemoryPlane } from "@brewva/brewva-deliberation";
 import { RECALL_CURATION_HALFLIFE_DAYS } from "@brewva/brewva-recall";
 import { getOrCreateRecallBroker, type RecallBrokerRuntime } from "@brewva/brewva-recall/broker";
-import { createRecallContextProvider } from "@brewva/brewva-recall/context";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
 import { type BrewvaEventRecord } from "@brewva/brewva-runtime/events";
 import {
-  CONTEXT_INJECTED_EVENT_TYPE,
+  CONTEXT_COMPOSED_EVENT_TYPE,
   PROJECTION_REFRESHED_EVENT_TYPE,
   RECALL_RESULTS_SURFACED_EVENT_TYPE,
 } from "@brewva/brewva-runtime/events";
@@ -19,65 +17,6 @@ import {
 } from "../../helpers/events.js";
 
 describe("recall broker", () => {
-  test("context injection does not create self-reinforcing curation signals", async () => {
-    const workspace = mkdtempSync(join(tmpdir(), "brewva-recall-broker-"));
-    mkdirSync(join(workspace, "packages", "gateway"), { recursive: true });
-    const runtime = new BrewvaRuntime({ cwd: workspace });
-    const priorSessionId = "recall-broker-prior";
-    const currentSessionId = "recall-broker-current";
-
-    runtime.maintain.context.onTurnStart(priorSessionId, 1);
-    runtime.authority.task.setSpec(priorSessionId, {
-      schema: "brewva.task.v1",
-      goal: "Fix gateway bootstrap flake",
-      targets: {
-        files: ["packages/gateway"],
-      },
-    });
-    runtime.extensions.hosted.events.record({
-      sessionId: priorSessionId,
-      type: "task_event",
-      payload: {
-        schema: "brewva.task.inspect.ledger.v1",
-        kind: "item_added",
-        item: {
-          id: "recall-prior-item",
-          text: "Fix gateway bootstrap flake",
-          status: "todo",
-        },
-      } as Record<string, unknown>,
-    });
-
-    runtime.maintain.context.onTurnStart(currentSessionId, 1);
-    runtime.authority.task.setSpec(currentSessionId, {
-      schema: "brewva.task.v1",
-      goal: "Investigate gateway bootstrap flake",
-      targets: {
-        files: ["packages/gateway"],
-      },
-    });
-
-    const provider = createRecallContextProvider({ runtime });
-    const injectedIds: string[] = [];
-    await provider.collect({
-      sessionId: currentSessionId,
-      promptText: "gateway bootstrap flake",
-      register: (entry) => {
-        injectedIds.push(entry.id);
-      },
-    });
-
-    expect(injectedIds.length).toBeGreaterThan(0);
-    expect(
-      runtime.inspect.events.query(currentSessionId, {
-        type: "recall_utility_observed",
-      }),
-    ).toHaveLength(0);
-
-    const broker = getOrCreateRecallBroker(runtime);
-    expect((await broker.sync()).curation).toHaveLength(0);
-  });
-
   test("excludes recall, context, and projection signals from searchable tape evidence", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-recall-broker-"));
     const runtime = new BrewvaRuntime({ cwd: workspace });
@@ -94,9 +33,9 @@ describe("recall broker", () => {
     });
     runtime.extensions.hosted.events.record({
       sessionId: priorSessionId,
-      type: CONTEXT_INJECTED_EVENT_TYPE,
+      type: CONTEXT_COMPOSED_EVENT_TYPE,
       payload: {
-        source: "brewva.recall-broker",
+        source: "brewva-workbench-context",
         text: "poisoned gateway context marker",
       } as Record<string, unknown>,
     });
@@ -173,31 +112,6 @@ describe("recall broker", () => {
       }),
     });
 
-    getOrCreateNarrativeMemoryPlane(runtime).addRecord({
-      class: "project_context_note",
-      title: "Gamma authority ranking advisory memory",
-      summary: "Gamma authority ranking advisory memory",
-      content: "Gamma authority ranking advisory memory should not outrank repository precedent.",
-      applicabilityScope: "repository",
-      confidenceScore: 1,
-      status: "active",
-      retrievalCount: 0,
-      provenance: {
-        source: "passive_extraction",
-        actor: "assistant",
-        sessionId: priorSessionId,
-        targetRoots: [join(workspace, "packages", "gateway")],
-      },
-      evidence: [
-        {
-          kind: "input_excerpt",
-          summary: "Gamma authority ranking advisory memory",
-          sessionId: priorSessionId,
-          timestamp: 1_000,
-        },
-      ],
-    });
-
     runtime.maintain.context.onTurnStart(currentSessionId, 1);
     runtime.authority.task.setSpec(currentSessionId, {
       schema: "brewva.task.v1",
@@ -221,14 +135,10 @@ describe("recall broker", () => {
     const weakTapeIndex = result.results.findIndex(
       (entry) => entry.sourceFamily === "tape_evidence" && entry.evidenceStrength === "weak",
     );
-    const advisoryIndex = result.results.findIndex(
-      (entry) => entry.sourceFamily === "narrative_memory",
-    );
 
     expect(strongRuntimeIndex).toBeGreaterThanOrEqual(0);
     expect(precedentIndex).toBeGreaterThan(strongRuntimeIndex);
     expect(weakTapeIndex).toBeGreaterThan(precedentIndex);
-    expect(advisoryIndex).toBeGreaterThan(precedentIndex);
     expect(result.results[precedentIndex]?.trustLabel).toBe("Repository precedent");
   });
 
@@ -416,63 +326,6 @@ describe("recall broker", () => {
     );
     expect(result.results[priorTapeIndex]?.rankReasons).toContain(
       "intent:current_session_evidence",
-    );
-  });
-
-  test("context provider passes inferred recall intent into rendered entries and events", async () => {
-    const workspace = mkdtempSync(join(tmpdir(), "brewva-recall-broker-"));
-    mkdirSync(join(workspace, "packages", "gateway"), { recursive: true });
-    const runtime = new BrewvaRuntime({ cwd: workspace });
-    const sessionId = "recall-broker-provider-intent-current";
-
-    runtime.maintain.context.onTurnStart(sessionId, 1);
-    runtime.authority.task.setSpec(sessionId, {
-      schema: "brewva.task.v1",
-      goal: "Inspect current session gateway trace marker",
-      targets: {
-        files: ["packages/gateway"],
-      },
-    });
-    runtime.extensions.hosted.events.record({
-      sessionId,
-      type: "task_event",
-      payload: {
-        schema: "brewva.task.ledger.v1",
-        kind: "item_added",
-        item: {
-          id: "recall-provider-intent-item",
-          text: "Current session gateway trace marker",
-          status: "done",
-        },
-      } as Record<string, unknown>,
-    });
-
-    const provider = createRecallContextProvider({ runtime });
-    const injectedContent: string[] = [];
-    await provider.collect({
-      sessionId,
-      promptText: "Find current session evidence for gateway trace marker",
-      register: (entry) => {
-        injectedContent.push(entry.content);
-      },
-    });
-
-    expect(injectedContent).toEqual(
-      expect.arrayContaining([expect.stringContaining("search_intent: current_session_evidence")]),
-    );
-    expect(
-      runtime.inspect.events.query(sessionId, {
-        type: RECALL_RESULTS_SURFACED_EVENT_TYPE,
-      }),
-    ).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          payload: expect.objectContaining({
-            source: "context_provider",
-            intent: "current_session_evidence",
-          }),
-        }),
-      ]),
     );
   });
 

@@ -103,17 +103,22 @@ const ACTIVE_CONFIG_FIELD_POLICY_RULES: readonly ActiveConfigFieldPolicyRule[] =
   {
     path: ["infrastructure", "contextBudget", "hardLimitPercent"],
     message:
-      "infrastructure.contextBudget.hardLimitPercent has been replaced. Use infrastructure.contextBudget.thresholds.* and injection.* instead.",
+      "infrastructure.contextBudget.hardLimitPercent has been replaced. Use infrastructure.contextBudget.thresholds.* and dynamicTail.* instead.",
   },
   {
     path: ["infrastructure", "contextBudget", "compactionThresholdPercent"],
     message:
-      "infrastructure.contextBudget.compactionThresholdPercent has been replaced. Use infrastructure.contextBudget.thresholds.* and injection.* instead.",
+      "infrastructure.contextBudget.compactionThresholdPercent has been replaced. Use infrastructure.contextBudget.thresholds.* and dynamicTail.* instead.",
   },
   {
     path: ["infrastructure", "contextBudget", "maxInjectionTokens"],
     message:
-      "infrastructure.contextBudget.maxInjectionTokens has been replaced. Use infrastructure.contextBudget.thresholds.* and injection.* instead.",
+      "infrastructure.contextBudget.maxInjectionTokens has been replaced. Use infrastructure.contextBudget.dynamicTail.* instead.",
+  },
+  {
+    path: ["infrastructure", "contextBudget", "arena"],
+    message:
+      "infrastructure.contextBudget.arena has been removed; arena admission has been replaced by model-authored workbench entries and request shaping.",
   },
 ] as const;
 

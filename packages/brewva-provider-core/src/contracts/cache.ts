@@ -82,8 +82,6 @@ export interface ProviderRequestFingerprint {
   stablePrefixHash: ProviderCacheFingerprintDigest;
   dynamicTailHash: ProviderCacheFingerprintDigest;
   requestHash: ProviderCacheFingerprintDigest;
-  activeSkillSetHash: ProviderCacheFingerprintDigest;
-  skillRoutingEpoch: number;
   channelContextHash: ProviderCacheFingerprintDigest;
   renderedCacheHash: ProviderCacheFingerprintDigest;
   cacheCapabilityHash: ProviderCacheFingerprintDigest;
@@ -93,6 +91,6 @@ export interface ProviderRequestFingerprint {
   cacheRelevantHeadersHash: ProviderCacheFingerprintDigest;
   extraBodyHash: ProviderCacheFingerprintDigest;
   visibleHistoryReductionHash: ProviderCacheFingerprintDigest;
-  recallInjectionHash: ProviderCacheFingerprintDigest;
+  workbenchContextHash: ProviderCacheFingerprintDigest;
   providerFallbackHash: ProviderCacheFingerprintDigest;
 }

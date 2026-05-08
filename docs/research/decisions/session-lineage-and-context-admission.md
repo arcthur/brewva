@@ -13,7 +13,7 @@
   - `docs/reference/events/README.md`
   - `docs/reference/events/session.md`
   - `docs/reference/session-lifecycle.md`
-  - `docs/reference/context-composer.md`
+  - `docs/reference/hosted-dynamic-context.md`
   - `docs/reference/artifacts-and-paths.md`
   - `docs/reference/tools/delegation.md`
 - Code anchors:

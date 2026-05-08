@@ -63,37 +63,10 @@ export function getDefaultAgentSpecNameForResultMode(resultMode: SubagentResultM
   return DEFAULT_AGENT_SPEC_BY_RESULT_MODE[resultMode];
 }
 
-function buildSkillOutputsExample(skillOutputNames: readonly string[]): Record<string, unknown> {
-  return Object.fromEntries(
-    skillOutputNames.map((name) => {
-      if (
-        name.endsWith("_findings") ||
-        name.endsWith("_artifacts") ||
-        name.endsWith("_plan") ||
-        name.endsWith("_checks") ||
-        name.endsWith("_targets") ||
-        name.endsWith("_evidence") ||
-        name.endsWith("_gaps") ||
-        name.endsWith("_limits")
-      ) {
-        return [name, []];
-      }
-      if (name === "qa_verdict") {
-        return [name, "inconclusive"];
-      }
-      if (name.endsWith("_decision") || name.endsWith("_verdict")) {
-        return [name, "pending"];
-      }
-      return [name, "<value>"];
-    }),
-  );
-}
-
 function buildJsonShapeExample(input: {
   resultMode: SubagentResultMode;
   consultKind?: AdvisorConsultKind;
   skillName?: string;
-  skillOutputNames?: readonly string[];
 }): string {
   if (input.resultMode === "consult") {
     const base = {
@@ -149,7 +122,7 @@ function buildJsonShapeExample(input: {
             {
               option: "Unify read-only public delegation under advisor.",
               summary:
-                "Keeps execution identity singular while leaving semantic workflow lanes in parent skills.",
+                "Keeps execution identity singular while leaving semantic workflow lanes in the parent workbench.",
               tradeoffs: ["Requires a broader contract and parser cutover."],
             },
           ],
@@ -252,7 +225,6 @@ function buildJsonShapeExample(input: {
 
   if (input.skillName) {
     base.skillName = input.skillName;
-    base.skillOutputs = buildSkillOutputsExample(input.skillOutputNames ?? []);
   }
 
   return JSON.stringify(base, null, 2);
@@ -262,14 +234,10 @@ export function buildStructuredOutcomeContract(input: {
   resultMode: SubagentResultMode;
   consultKind?: AdvisorConsultKind;
   skillName?: string;
-  skillOutputNames?: readonly string[];
 }): string[] {
   const skillLines =
     input.resultMode !== "consult" && input.skillName
-      ? [
-          "Include a top-level skillOutputs object that satisfies the delegated skill contract.",
-          `Set skillName to ${input.skillName}.`,
-        ]
+      ? [`Set skillName to ${input.skillName}.`]
       : [];
   const modeLines =
     input.resultMode === "consult"

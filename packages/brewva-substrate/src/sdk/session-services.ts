@@ -30,11 +30,6 @@ import {
 import type { BrewvaToolUiPort } from "../host-api/ui.js";
 import type { BrewvaPromptContentPart } from "../prompt/content.js";
 import { buildBrewvaSystemPrompt } from "../prompt/system-prompt.js";
-import type { BrewvaProviderCompletionDriver } from "../provider/completion.js";
-import {
-  createFetchProviderCompletionDriver,
-  type CreateFetchProviderCompletionDriverOptions,
-} from "../provider/fetch-provider-driver.js";
 import { createInMemoryModelCatalog } from "../provider/model-catalog.js";
 import {
   createHostedResourceLoader,
@@ -55,7 +50,6 @@ import {
   type BrewvaTurnLoopToolResult,
   type BrewvaTurnLoopTool,
   type BrewvaTurnLoopTransport,
-  createBrewvaTurnProviderStreamFunction,
 } from "../turn/index.js";
 
 export interface BrewvaSubstrateDiagnostic {
@@ -97,10 +91,7 @@ export interface BrewvaSessionServicesOptions {
   auth?: BrewvaProviderAuthStore;
   modelCatalog?: BrewvaMutableModelCatalog;
   resourceLoader?: BrewvaHostedResourceLoader;
-  providerDriver?: BrewvaProviderCompletionDriver;
   runtimePlugins?: readonly InternalHostPlugin[];
-  fetchImpl?: CreateFetchProviderCompletionDriverOptions["fetchImpl"];
-  maxOutputTokens?: number;
 }
 
 export interface BrewvaSessionServices {
@@ -108,7 +99,6 @@ export interface BrewvaSessionServices {
   agentDir: string;
   modelCatalog: BrewvaMutableModelCatalog;
   resourceLoader: BrewvaHostedResourceLoader;
-  providerDriver: BrewvaProviderCompletionDriver;
   runtimePlugins: readonly InternalHostPlugin[];
   diagnostics: readonly BrewvaSubstrateDiagnostic[];
 }
@@ -129,7 +119,7 @@ export interface BrewvaSessionFromServicesOptions {
   runtimePlugins?: readonly InternalHostPlugin[];
   sessionHost?: BrewvaSessionHost;
   sessionHostPlugins?: CreateInMemorySessionHostOptions["plugins"];
-  streamFn?: BrewvaTurnLoopStreamFunction;
+  streamFn: BrewvaTurnLoopStreamFunction;
   systemPrompt?: string;
   sessionId?: string;
   queueMode?: "all" | "one-at-a-time";
@@ -149,11 +139,10 @@ export interface BrewvaInMemoryAgentSession {
 
 export type BrewvaInMemoryAgentSessionOptions = Omit<
   BrewvaSessionServicesOptions & Omit<BrewvaSessionFromServicesOptions, "services">,
-  "modelCatalog" | "resourceLoader" | "providerDriver"
+  "modelCatalog" | "resourceLoader"
 > & {
   modelCatalog?: BrewvaMutableModelCatalog;
   resourceLoader?: BrewvaHostedResourceLoader;
-  providerDriver?: BrewvaProviderCompletionDriver;
 };
 
 type MutableSdkState = {
@@ -702,12 +691,6 @@ export async function createBrewvaSessionServices(
         auth: options.auth,
       }),
     resourceLoader,
-    providerDriver:
-      options.providerDriver ??
-      createFetchProviderCompletionDriver({
-        fetchImpl: options.fetchImpl,
-        maxOutputTokens: options.maxOutputTokens,
-      }),
     runtimePlugins: options.runtimePlugins ?? [],
     diagnostics,
   };
@@ -827,7 +810,7 @@ export async function createBrewvaSessionFromServices(
         await runner.emitContext({ type: "context", messages }, createCurrentHostContext()),
       );
     },
-    streamFn: options.streamFn ?? createBrewvaTurnProviderStreamFunction(),
+    streamFn: options.streamFn,
     resolveRequestAuth: (model) => services.modelCatalog.getApiKeyAndHeaders(model),
   });
   const turnLoop = trackTurnLoopModel(baseTurnLoop, (model) => {
@@ -1061,7 +1044,7 @@ export async function createBrewvaSessionFromServices(
 }
 
 export async function createBrewvaInMemoryAgentSession(
-  options: BrewvaInMemoryAgentSessionOptions = {},
+  options: BrewvaInMemoryAgentSessionOptions,
 ): Promise<BrewvaInMemoryAgentSession> {
   const services = await createBrewvaSessionServices(options);
   return createBrewvaSessionFromServices({

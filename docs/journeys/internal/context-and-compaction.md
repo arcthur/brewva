@@ -10,21 +10,22 @@
 ## Entry Points
 
 - hosted lifecycle `beforeAgentStart`
-- `runtime.maintain.context.buildInjection(...)`
-- `session_compact`
+- `runtime.inspect.workbench.list(...)`
+- model-facing `workbench_compact`
+- durable `session_compact` receipts
 - post-compaction turn resume
 
 ## Objective
 
-Describe how Brewva executes deterministic primary context admission, explicit
-post-primary hosted context additions, pressure evaluation, the compaction gate,
-hosted auto-compaction, and post-compaction turn recovery through one reviewable
-flow.
+Describe how Brewva executes model-authored workbench rendering, explicit
+diagnostic context additions, context-status derivation, the compaction gate,
+hosted auto-compaction, and post-compaction turn recovery through one
+reviewable flow.
 
 ## In Scope
 
-- deterministic injection path
-- context pressure and the compaction gate
+- model-operated workbench path
+- numeric context status and the compaction gate
 - hosted auto-compaction policy
 - compaction completion and interrupted-turn resume
 - reasoning-branch reset interaction with hosted context rebuild
@@ -39,10 +40,10 @@ flow.
 
 ```mermaid
 flowchart TD
-  A["Turn start"] --> B["Register providers and observe usage"]
-  B --> C["Build admitted injection once"]
-  C --> D["Evaluate pressure and compaction gate"]
-  D --> R{"High pressure below hard gate?"}
+  A["Turn start"] --> B["Observe usage and current workbench"]
+  B --> C["Render dynamic tail once"]
+  C --> D["Derive status and compaction gate"]
+  D --> R{"Compaction advised below hard gate?"}
   R -->|Yes| S["Transient outbound reduction on request copy only"]
   R -->|No| E{"Compaction requested?"}
   S --> E
@@ -51,48 +52,44 @@ flowchart TD
   G -->|No| H["Emit skipped or advisory state"]
   G -->|Yes, agent active| I["Defer auto-compaction and expose advisory"]
   G -->|Yes, idle| J["Run auto-compaction watchdog path"]
-  J --> K["session_compact"]
+  J --> K["workbench_compact or hosted auto-compaction"]
   K --> L["authority.session.commitCompaction + clear breaker and gate state"]
   L --> M["Resume interrupted turn from current evidence state"]
 ```
 
 ## Key Steps
 
-1. At turn start, the runtime initializes turn-local budget state and clears
-   leftover reservations from the previous turn.
-2. Primary context providers enter one deterministic registry-and-arena
-   admission path; the runtime builds one admitted injection plan for the turn.
-3. Hosted logic may then append family-tagged guarded supplemental blocks under
-   headroom governance, and the composer may synthesize provenance-tagged policy
-   blocks without back-modeling them as sources.
-4. `ContextPressureService` computes gate status from usage ratio, hard limit,
+1. At turn start, the runtime initializes turn-local budget state.
+2. The hosted workbench pipeline reads the model-authored workbench notebook and
+   renders the dynamic tail once for the turn.
+3. Hosted logic may append fixed dynamic-tail blocks without back-modeling them
+   as registered context sources.
+4. Runtime context functions derive gate status from usage ratio, hard limit,
    and the recent-compaction window.
-5. Under critical pressure without recent compaction, every tool except
-   `session_compact` and the minimal context-critical allowlist is blocked by
+5. Under forced-compaction status without recent compaction, every tool except
+   `workbench_compact` and the minimal context-critical allowlist is blocked by
    the gate.
 6. The hosted path then decides whether to:
    - emit advisory state only
    - defer auto-compaction because the agent is active
    - trigger auto-compaction while the session is idle
-7. If pressure is elevated but still below hard-gate posture, the hosted path
+7. If compaction is advised but still below hard-gate posture, the hosted path
    may clear older large tool-result bodies on the outbound provider request
    copy before the provider call is sent.
-8. After `session_compact` completes, the runtime commits the durable
-   compaction receipt, clears the gate, and resumes the interrupted turn when
-   required.
+8. After `workbench_compact` or hosted auto-compaction completes, the runtime
+   records the durable `session_compact` receipt, clears the gate, and resumes
+   the interrupted turn when required.
 9. If a durable `reasoning_revert` arrives, hosted recovery rebuilds the active
    branch from the target checkpoint and resumes from that surviving context
    instead of keeping superseded branch history visible to the model.
 
 ## Execution Semantics
 
-- primary source admission is deterministic and single-path; runtime plugins may
-  not bypass it or reintroduce pseudo-sources through side channels
-- hosted `contextProfile` narrows only primary provider collection by compiling
-  `sourceSelection` from primary-source descriptors
-- guarded supplemental families are explicit post-primary exception-lane blocks:
+- there is no provider registry or automatic prompt-injection admission path;
+  runtime plugins may not reintroduce pseudo-sources through side channels
+- guarded diagnostic families are explicit dynamic-tail blocks:
   - they stay headroom-governed
-  - they do not participate in provider selection or arena budget-class floors
+  - they do not participate in hidden provider selection or arena budget floors
 - composer policy blocks are provenance-tagged render artifacts rather than
   source-typed admission objects
 - the effective compaction threshold is derived from context window, threshold
@@ -101,8 +98,8 @@ flowchart TD
   system-prompt contract stays static and does not cache window-derived
   percentages
 - recent-compaction cooldown is governed by both `minTurnsBetween` and
-  `minSecondsBetween`; severe pressure may cross the fixed bypass line
-- while the compaction gate is armed, `session_compact` remains the required
+  `minSecondsBetween`; forced-compaction status may cross the fixed bypass line
+- while the compaction gate is armed, `workbench_compact` remains the required
   repair action and only the minimal context-critical allowlist remains usable;
   this is narrower than the broader control-plane tool set
 - hosted auto-compaction uses an idle-versus-active policy:
@@ -151,9 +148,8 @@ flowchart TD
 - crash recovery does not need a second reasoning-specific WAL: the gateway WAL
   replays the interrupted turn envelope, while tape decides whether pending
   branch reset must be re-applied before the next prompt runs
-- the resumed turn also gets a recovery-aware typed working set block so the
-  model can re-anchor on hosted recovery posture, task state, and pending
-  delegation handoff without relying on freeform memory carry-over
+- recovery posture remains inspectable as a derived read model; it is not
+  rendered as a hidden working-set block in the model prompt
 - projection remains a rebuildable helper; compaction and recovery correctness
   do not depend on projection-cache files being present
 
@@ -181,8 +177,8 @@ flowchart TD
   - `no_request -> non_interactive_mode -> agent_active_manual_compaction_unsafe -> auto_compaction_breaker_open -> auto_compaction_in_flight -> execute_auto_compaction`
 - ladder note:
   - this trigger ladder decides whether hosted auto-compaction runs at all
-  - deterministic-first ordering lives in the recovery/context strategy path,
-    not in the trigger ladder itself
+  - summary quality is owned by the hosted compaction summary path; deterministic
+    summary projection is an emergency fallback, not the primary order
 - prompt failure recovery:
   - `HostedThreadLoop` owns recovery decision ordering from a turn-local state
     projection instead of letting policy helpers recursively dispatch prompts
@@ -208,9 +204,8 @@ flowchart TD
   - this report is the promotion-evidence surface; it is not a replay input
     and it is not a new durable runtime event family
 - post-recovery context:
-  - hidden injection may include `[RecoveryWorkingSet]` when hosted transition
-    posture indicates compaction retry, provider fallback retry, max-output
-    recovery, output-budget escalation, or WAL resume
+  - recovery posture remains available through runtime inspection and event
+    tape; no `[RecoveryWorkingSet]` hidden prompt block is rendered
 - governance events:
   - `governance_compaction_integrity_checked`
   - `governance_compaction_integrity_failed`
@@ -219,7 +214,7 @@ flowchart TD
 ## Code Pointers
 
 - Runtime context service: `packages/brewva-runtime/src/domain/context/context.ts`
-- Pressure / gate logic: `packages/brewva-runtime/src/domain/context/context-pressure.ts`
+- Status / gate logic: `packages/brewva-runtime/src/domain/context/context-pressure.ts`
 - Context-critical allowlist: `packages/brewva-runtime/src/security/control-plane-tools.ts`
 - Context budget policy: `packages/brewva-runtime/src/domain/context/budget.ts`
 - Compaction integrity: `packages/brewva-runtime/src/domain/context/context-compaction.ts`
@@ -235,5 +230,5 @@ flowchart TD
 
 - Runtime plugins: `docs/reference/runtime-plugins.md`
 - Configuration: `docs/reference/configuration.md`
-- Context composer: `docs/reference/context-composer.md`
+- Hosted dynamic context: `docs/reference/hosted-dynamic-context.md`
 - Working projection: `docs/reference/working-projection.md`

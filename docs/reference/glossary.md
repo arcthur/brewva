@@ -9,7 +9,7 @@
 - Replay: reconstruction of session history from structured events
 - PatchSet: tracked file change set used for rollback and worker-result adoption
 - Invocation Spine: the shared runtime-owned tool invocation path for admission, usage tracking, ledger linkage, and rollback/approval wiring
-- Context Budget: policy for context injection and compaction
+- Context Budget: policy for dynamic-tail rendering, request reduction, and compaction
 - Context Compaction Gate: the policy check that blocks further tool execution when compaction must happen first
 - Cost Budget: threshold policy for session-level USD spend
 - Channel Gateway: external channel ingress/egress gateway used by `--channel` mode
@@ -18,10 +18,10 @@
 - Runtime Plugin: the canonical Brewva hosted session integration unit registered through `@brewva/brewva-gateway/runtime-plugins`; implemented on top of the upstream `ExtensionFactory` contract
 - Proposal: the public approval-bearing authorization envelope; current stable public shape is `EffectCommitmentProposal`
 - DecisionReceipt: the durable kernel decision record for a public `EffectCommitmentProposal`; captures the decision, policy basis, reasons, committed effects, evidence references, turn, and timestamp
-- Context Arena: the context injection workspace that manages source reservations and token budgets per turn
+- Workbench: model-authored working-memory notebook exposed through `workbench_note` and `workbench_evict`
 - Recovery WAL: write-ahead log for turn durability; enables crash recovery and replay of in-flight turns
 - Effect Boundary: the runtime execution class for a tool invocation: `safe` or `effectful`
-- Working State: non-authoritative session-local working surfaces such as projection, context arena, active tool surface, and derived workflow posture
+- Working State: non-authoritative session-local working surfaces such as the workbench, active tool surface, and derived workflow posture
 - Working Projection: a tape-derived working snapshot maintained across turns; rebuilt from source events rather than agent reasoning memory
 - Iteration Fact: a durable objective observation or guard result recorded as evidence for optimization and convergence flows
 - Supplemental Context: same-turn non-authoritative context appended through the hosted session path rather than persisted as a kernel proposal
@@ -33,5 +33,5 @@
 - CapabilityView: the model-facing capability disclosure surface built from exact governance metadata
 - PersonaProfile: the rendered identity/workstyle context block built from `.brewva/agents/<agent-id>/identity.md`
 - Kernel Ring: the authority-bearing architecture ring that owns policy, verification, replay, and commitment decisions
-- Deliberation Ring: the advisory architecture ring that folds evidence-backed artifacts such as deliberation memory, optimization continuity, and promotion drafts
+- Deliberation Ring: the advisory architecture ring that folds evidence-backed artifacts such as recall results, workbench notes, and promotion drafts
 - Experience Ring: the outer architecture ring for CLI, gateway, channels, and operator UX

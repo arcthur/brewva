@@ -28,12 +28,7 @@ import {
   listSkillPreferredTools,
   resolveSkillEffectLevel,
 } from "./facets.js";
-import {
-  buildSkillRoutingCatalogEntry,
-  buildSkillSelectionProfile,
-  hasSelectionProfileSignals,
-  type SkillRoutingCatalogEntry,
-} from "./profiles.js";
+import { buildSkillSelectionProfile, hasSelectionProfileSignals } from "./profiles.js";
 import { resolveBundledSystemSkillsRoot } from "./system-install.js";
 import type {
   LoadableSkillCategory,
@@ -517,12 +512,6 @@ export class SkillRegistry {
 
   list(): SkillDocument[] {
     return [...this.skills.values()].toSorted((left, right) => left.name.localeCompare(right.name));
-  }
-
-  listForRouting(): SkillRoutingCatalogEntry[] {
-    return this.list()
-      .filter((skill) => this.isRoutable(skill))
-      .map((skill) => buildSkillRoutingCatalogEntry(skill));
   }
 
   get(name: string): SkillDocument | undefined {

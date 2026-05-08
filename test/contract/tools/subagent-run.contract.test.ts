@@ -95,7 +95,6 @@ describe("subagent_run public surface", () => {
       packet: {
         objective: "trace the gateway entrypoints",
         consultBrief: buildBrief("Which gateway entrypoints matter first?"),
-        activeSkillName: "discovery",
         executionHints: undefined,
         contextBudget: undefined,
         effectCeiling: undefined,
@@ -190,34 +189,9 @@ describe("subagent_run public surface", () => {
     expect(extractText(result)).toContain("executionShape");
   });
 
-  test("supports supplemental delivery from public packets", async () => {
-    const appendCalls: Array<{
-      sessionId: string;
-      familyId: string;
-      text: string;
-      scopeId?: string;
-    }> = [];
+  test("reports supplemental return requests without hidden context reinjection", async () => {
     const tool = createSubagentRunTool({
       runtime: {
-        extensions: {
-          tools: {
-            appendGuardedSupplementalBlocks(
-              sessionId: string,
-              blocks: readonly { familyId: string; content: string }[],
-              scopeId?: string,
-            ) {
-              return blocks.map(({ familyId, content }) => {
-                appendCalls.push({ sessionId, familyId, text: content, scopeId });
-                return {
-                  familyId,
-                  accepted: true,
-                  finalTokens: 12,
-                  truncated: false,
-                };
-              });
-            },
-          },
-        },
         orchestration: {
           subagents: {
             run: async (input: { request: SubagentRunRequest }) => ({
@@ -257,13 +231,7 @@ describe("subagent_run public surface", () => {
       fakeContext("session-supplemental"),
     );
 
-    expect(appendCalls).toHaveLength(1);
-    expect(appendCalls[0]).toMatchObject({
-      sessionId: "session-supplemental",
-      familyId: "subagent-outcome",
-      scopeId: "delegation-leaf",
-    });
-    expect(extractText(result)).toContain("supplemental delivery accepted");
+    expect(extractText(result)).toContain("supplemental delivery skipped (unavailable)");
   });
 
   test("can start public delegated work in background mode", async () => {
@@ -391,15 +359,15 @@ describe("subagent_fanout public surface", () => {
         label: "gateway",
         objective: "inspect gateway entrypoints",
         consultBrief: buildBrief("Which findings should block merge?"),
-        activeSkillName: "review",
       }),
       expect.objectContaining({
         label: "runtime",
         objective: "inspect runtime entrypoints",
         consultBrief: buildBrief("Which findings should block merge?"),
-        activeSkillName: "review",
       }),
     ]);
+    expect(capturedRequest?.tasks?.[0]).not.toHaveProperty("activeSkillName");
+    expect(capturedRequest?.tasks?.[1]).not.toHaveProperty("activeSkillName");
     expect(extractText(result)).toContain("subagent_fanout completed for delegate=review");
   });
 

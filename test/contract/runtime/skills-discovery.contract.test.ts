@@ -135,46 +135,6 @@ describe("skill discovery and loading", () => {
     );
   });
 
-  test("exposes a narrow routing catalog instead of full skill documents", () => {
-    const workspace = mkdtempSync(join(tmpdir(), "brewva-skill-routing-catalog-"));
-    writeSkill(join(workspace, ".brewva/skills/core/foo/SKILL.md"), {
-      name: "foo",
-      executionHints: true,
-    });
-
-    const config = structuredClone(DEFAULT_BREWVA_CONFIG);
-    config.skills.routing.enabled = true;
-    config.skills.routing.scopes = ["core"];
-    const runtime = new BrewvaRuntime({ cwd: workspace, config });
-
-    const fullSkill = requireDefined(runtime.inspect.skills.get("foo"), "expected foo skill");
-    expect(fullSkill.description).toBe("foo skill");
-    expect(fullSkill.contract.executionHints?.preferredTools).toEqual(["read"]);
-
-    const routingEntry = requireDefined(
-      runtime.inspect.skills.listForRouting().find((entry) => entry.name === "foo"),
-      "expected foo routing entry",
-    );
-    expect(Object.keys(routingEntry).toSorted()).toEqual([
-      "category",
-      "consumes",
-      "name",
-      "requires",
-      "selection",
-    ]);
-    expect(routingEntry.selection.forScorer).toMatchObject({
-      name: "foo",
-      whenToUse: "Use when the task needs the routed test skill.",
-      triggerBullets: ["Use for tests."],
-    });
-
-    const serialized = JSON.stringify(routingEntry);
-    expect(serialized).not.toContain("foo skill");
-    expect(serialized).not.toContain(fullSkill.filePath);
-    expect(serialized).not.toContain("preferredTools");
-    expect(serialized).not.toContain("workspace_read");
-  });
-
   test("does not load ancestor .brewva skills when running from nested cwd", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-skill-ancestor-disabled-"));
     writeSkill(join(workspace, ".brewva/skills/core/commitcraft/SKILL.md"), {

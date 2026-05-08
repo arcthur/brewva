@@ -13,7 +13,6 @@ import {
   SCHEDULE_CHILD_SESSION_FINISHED_EVENT_TYPE,
   SCHEDULE_CHILD_SESSION_STARTED_EVENT_TYPE,
   SCHEDULE_WAKEUP_EVENT_TYPE,
-  SKILL_ACTIVATED_EVENT_TYPE,
 } from "@brewva/brewva-runtime/events";
 import { writeMinimalConfig } from "../../helpers/config.js";
 import { buildGatewayWorkerHarnessEnv, startGatewayDaemonHarness } from "../../helpers/gateway.js";
@@ -211,7 +210,6 @@ describe("system: scheduler daemon", () => {
         summary: "Release prep is partially complete.",
         nextSteps: "Resolve the final reviewer comment.",
       });
-      expect(setupRuntime.authority.skills.activate(parentSessionId, "self-improve").ok).toBe(true);
       const created = await setupRuntime.authority.schedule.createIntent(parentSessionId, {
         intentId: asBrewvaIntentId("intent-scheduler-daemon"),
         reason: "nightly release follow-up",
@@ -287,13 +285,6 @@ describe("system: scheduler daemon", () => {
 
         const childTask = persisted.inspect.task.getState(childSessionId);
         expect(childTask.spec?.goal).toBe(parentTaskGoal);
-        const childSkillEvents = persisted.inspect.events.query(childSessionId, {
-          type: SKILL_ACTIVATED_EVENT_TYPE,
-        });
-        expect(childSkillEvents.at(-1)?.payload).toMatchObject({
-          skillName: "self-improve",
-        });
-
         const childTruth = persisted.inspect.truth.getState(childSessionId);
         expect(childTruth.facts).toEqual(
           expect.arrayContaining([

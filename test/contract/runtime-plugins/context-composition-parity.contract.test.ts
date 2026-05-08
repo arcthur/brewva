@@ -3,7 +3,7 @@ import {
   createHostedTurnPipeline,
   registerContextTransform,
 } from "@brewva/brewva-gateway/runtime-plugins";
-import { setStaticContextPressureThresholds } from "../../fixtures/config.js";
+import { setStaticContextStatusThresholds } from "../../fixtures/config.js";
 import {
   createMockRuntimePluginApi,
   invokeHandler,
@@ -15,22 +15,12 @@ import { createRuntimeConfig, createRuntimeFixture } from "./fixtures/runtime.js
 describe("context composition parity", () => {
   test("keeps gate-clearing semantics aligned between direct context registration and hosted pipeline", async () => {
     const config = createRuntimeConfig((draft) => {
-      setStaticContextPressureThresholds(draft, { hardLimitPercent: 0.8 });
+      setStaticContextStatusThresholds(draft, { hardLimitPercent: 0.8 });
     });
 
     const makeRuntime = () =>
       createRuntimeFixture({
         config,
-        context: {
-          buildInjection: async () => ({
-            text: "",
-            entries: [],
-            accepted: false,
-            originalTokens: 0,
-            finalTokens: 0,
-            truncated: false,
-          }),
-        },
       });
 
     const sessionManager = { getSessionId: () => "parity-clear" };

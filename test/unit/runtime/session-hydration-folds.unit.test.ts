@@ -5,7 +5,6 @@ import type { JsonValue } from "@brewva/brewva-std/json";
 import { createCostHydrationFold } from "../../../packages/brewva-runtime/src/domain/sessions/hydration/fold-cost.js";
 import { createLedgerHydrationFold } from "../../../packages/brewva-runtime/src/domain/sessions/hydration/fold-ledger.js";
 import { createResourceLeaseHydrationFold } from "../../../packages/brewva-runtime/src/domain/sessions/hydration/fold-resource-lease.js";
-import { createSkillHydrationFold } from "../../../packages/brewva-runtime/src/domain/sessions/hydration/fold-skill.js";
 import { createVerificationHydrationFold } from "../../../packages/brewva-runtime/src/domain/sessions/hydration/fold-verification.js";
 import {
   applySessionHydrationFold,
@@ -110,41 +109,6 @@ function runFold<State>(
 }
 
 describe("session hydration folds", () => {
-  test("skill fold restores active skill, call count, and governance warning dedupe state", () => {
-    const result = runFold(createSkillHydrationFold(), [
-      createEvent({
-        id: "skill-1",
-        type: "skill_activated",
-        timestamp: 100,
-        turn: 1,
-        payload: { skillName: "plan" },
-      }),
-      createEvent({
-        id: "skill-2",
-        type: "tool_call_marked",
-        timestamp: 110,
-        turn: 1,
-        payload: { toolName: "custom_query_tool", toolCalls: 1 },
-      }),
-      createEvent({
-        id: "skill-3",
-        type: "governance_metadata_missing",
-        timestamp: 120,
-        turn: 1,
-        payload: {
-          skill: "plan",
-          toolName: "custom_query_tool",
-          resolution: "hint",
-        },
-      }),
-    ]);
-
-    expect(result.issues).toHaveLength(0);
-    expect(result.cell.activeSkill).toBe("plan");
-    expect(result.cell.toolCalls).toBe(1);
-    expect([...result.cell.governanceMetadataWarnings]).toEqual(["plan:custom_query_tool"]);
-  });
-
   test("verification fold restores write markers, authoritative outcomes, and check runs", () => {
     const result = runFold(createVerificationHydrationFold(), [
       createEvent({

@@ -170,7 +170,7 @@ export function createRuntimeFixture(options: RuntimeFixtureOptions = {}): Brewv
 
 export function createBundledToolRuntime(
   runtime: BrewvaRuntime,
-  extras?: Pick<BrewvaBundledToolRuntime, "delegation" | "orchestration" | "semanticReranker">,
+  extras?: Pick<BrewvaBundledToolRuntime, "delegation" | "orchestration">,
 ): BrewvaBundledToolRuntime {
   return {
     ...createToolRuntimePort(runtime),

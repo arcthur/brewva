@@ -139,7 +139,7 @@ describe("observability tool contracts", () => {
     runtime.maintain.context.observePromptStability(sessionId, {
       stablePrefixHash: "prefix-1",
       dynamicTailHash: "tail-1",
-      injectionScopeId: "leaf-1",
+      contextScopeId: "leaf-1",
       turn: 1,
       timestamp: 1_740_000_000_100,
     });
@@ -150,7 +150,8 @@ describe("observability tool contracts", () => {
       clearedToolResults: 2,
       clearedChars: 2048,
       estimatedTokenSavings: 580,
-      pressureLevel: "high",
+      compactionAdvised: true,
+      forcedCompaction: false,
       turn: 1,
       timestamp: 1_740_000_000_101,
     });
@@ -194,7 +195,8 @@ describe("observability tool contracts", () => {
     const snapshotText = extractTextContent(snapshotResult);
     expect(snapshotText).toContain("[ObsSnapshot]");
     expect(snapshotText).toContain("tape_pressure:");
-    expect(snapshotText).toContain("context_pressure:");
+    expect(snapshotText).toContain("context_compaction_advised:");
+    expect(snapshotText).toContain("context_forced_compaction:");
     expect(snapshotText).toContain("prompt_prefix_stable: true");
     expect(snapshotText).toContain("dynamic_tail_stable: true");
     expect(snapshotText).toContain(`prompt_scope_key: ${sessionId}::leaf-1`);

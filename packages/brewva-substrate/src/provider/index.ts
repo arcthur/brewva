@@ -17,7 +17,5 @@ export {
   type BrewvaProviderCompletionResponse,
   type BrewvaProviderCompletionUsage,
   UnsupportedBrewvaProviderApiError,
-  createFetchProviderCompletionDriver,
   isUnsupportedBrewvaProviderApiError,
-  type CreateFetchProviderCompletionDriverOptions,
 } from "./api.js";

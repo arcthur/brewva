@@ -9,7 +9,7 @@
   - `docs/architecture/exploration-and-effect-governance.md`
   - `docs/architecture/invariants-and-reliability.md`
   - `docs/reference/configuration.md`
-  - `docs/reference/context-composer.md`
+  - `docs/reference/hosted-dynamic-context.md`
   - `docs/reference/events/README.md`
   - `docs/reference/proposal-boundary.md`
   - `docs/reference/runtime.md`

@@ -51,7 +51,7 @@ Platform-growth rule:
    current implementation in
    `packages/brewva-gateway/src/host/hosted-session-bootstrap.ts`
 2. Gateway host installs `createHostedTurnPipeline` (`@brewva/brewva-gateway/runtime-plugins`)
-3. `before_agent_start` runs lifecycle plumbing (`context-transform`) and model-facing composition (`context-composer`)
+3. `before_agent_start` runs lifecycle plumbing (`context-transform`) and renders the hosted dynamic context tail
 4. `tool_call` passes quality/security/budget gates (`quality-gate`)
 5. `ledger-writer` records durable tool outcomes (normally from SDK `tool_result`; can fallback to `tool_execution_end` when `tool_result` is missing). Persisted governance event is `tool_result_recorded`.
 6. `tool-result-distiller` may replace large pure-text `tool_result` payloads with bounded same-turn summaries after raw evidence is recorded.
@@ -180,8 +180,8 @@ The overlay/operator RFC is now closed through thin command veneers rather than
 new kernel state:
 
 - interactive `/inbox` and headless `/questions` both inspect the operator
-  inbox derived from durable `skill_completed` outputs and delegated consult
-  outcome artifacts
+  inbox derived from durable task, verification, and delegated consult outcome
+  artifacts
 - `/answer` records `operator_question_answered` and routes the answer back into
   the active session as explicit operator input
 - `/agent-overlays` inspects and validates Markdown-authored delegated-worker

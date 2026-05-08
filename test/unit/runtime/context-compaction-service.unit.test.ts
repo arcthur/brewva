@@ -6,7 +6,6 @@ import {
   type ContextCompactionDeps,
 } from "../../../packages/brewva-runtime/src/domain/context/context-compaction.js";
 import { RuntimeSessionStateStore } from "../../../packages/brewva-runtime/src/domain/sessions/session-state.js";
-import type { SkillDocument } from "../../../packages/brewva-runtime/src/domain/skills/types.js";
 import type { BrewvaEventRecord } from "../../../packages/brewva-runtime/src/events/types.js";
 
 async function flushAsyncEvents(): Promise<void> {
@@ -34,12 +33,8 @@ function createRecordedEvent(
 }
 
 describe("context-compaction module", () => {
-  test("marks compaction, clears scope caches, emits event, and appends ledger evidence", () => {
+  test("marks compaction without clearing prompt-cache state, emits event, and appends ledger evidence", () => {
     const sessionState = new RuntimeSessionStateStore();
-    sessionState.setLastInjectedFingerprint("session-a::root", "fp-a");
-    sessionState.setLastInjectedFingerprint("session-b::root", "fp-b");
-    sessionState.setReservedInjectionTokens("session-a::root", 42);
-    sessionState.setReservedInjectionTokens("session-b::root", 7);
 
     const events: Array<{
       sessionId: string;
@@ -49,7 +44,6 @@ describe("context-compaction module", () => {
     }> = [];
     const ledgerRows: Array<Record<string, unknown>> = [];
     const pressureMarks: string[] = [];
-    const injectionMarks: string[] = [];
 
     const deps: ContextCompactionDeps = {
       sessionState,
@@ -60,14 +54,7 @@ describe("context-compaction module", () => {
       markPressureCompacted: (sessionId) => {
         pressureMarks.push(sessionId);
       },
-      markInjectionCompacted: (sessionId) => {
-        injectionMarks.push(sessionId);
-      },
       getCurrentTurn: () => 17,
-      getActiveSkill: () =>
-        ({
-          name: "implementation",
-        }) as SkillDocument,
       recordEvent: (input) => {
         events.push(input);
         return createRecordedEvent(events.length, input);
@@ -87,11 +74,6 @@ describe("context-compaction module", () => {
     });
 
     expect(pressureMarks).toEqual(["session-a"]);
-    expect(injectionMarks).toEqual(["session-a"]);
-    expect(sessionState.getLastInjectedFingerprint("session-a::root")).toBeUndefined();
-    expect(sessionState.getLastInjectedFingerprint("session-b::root")).toBe("fp-b");
-    expect(sessionState.getReservedInjectionTokens("session-a::root")).toBeUndefined();
-    expect(sessionState.getReservedInjectionTokens("session-b::root")).toBe(7);
     expect(events).toHaveLength(1);
     expect(events[0]).toEqual(
       expect.objectContaining({
@@ -105,6 +87,13 @@ describe("context-compaction module", () => {
           leafEntryId: "leaf-a",
           referenceContextDigest: "ref-digest",
           sanitizedSummary: "keep latest failures only",
+          cacheImpact: expect.objectContaining({
+            before: null,
+            after: null,
+            explicitEpochChanges: 1,
+            prefixBytesChanged: null,
+            degradedReason: null,
+          }),
         }),
       }),
     );
@@ -115,7 +104,7 @@ describe("context-compaction module", () => {
         sessionId: "session-a",
         turn: 17,
         tool: "brewva_session_compaction",
-        skill: "implementation",
+        skill: null,
       }),
     );
     expect(ledgerRows[0]?.metadata).toEqual(
@@ -142,9 +131,7 @@ describe("context-compaction module", () => {
       sessionState,
       recordInfrastructureRow: () => "ev_test",
       markPressureCompacted: () => undefined,
-      markInjectionCompacted: () => undefined,
       getCurrentTurn: () => 3,
-      getActiveSkill: () => undefined,
       recordEvent: (input) => {
         events.push(input);
         return createRecordedEvent(events.length, input);
@@ -171,6 +158,105 @@ describe("context-compaction module", () => {
     );
   });
 
+  test("records cache impact baseline from the last provider cache observation", () => {
+    const sessionState = new RuntimeSessionStateStore();
+    sessionState.setProviderCacheObservation("session-cache", {
+      turn: 8,
+      updatedAt: 123,
+      source: "bucket-a",
+      fingerprint: {
+        bucketKey: "bucket-a",
+        provider: "openai",
+        api: "openai-responses",
+        model: "gpt-5.4",
+        cachePolicyHash: "cache-policy",
+        toolSchemaSnapshotHash: "tools",
+        toolSchemaOverlayHash: "tool-overlay",
+        perToolHashes: {},
+        stablePrefixHash: "stable-prefix",
+        dynamicTailHash: "dynamic-tail",
+        requestHash: "request",
+        channelContextHash: "channel",
+        renderedCacheHash: "rendered",
+        cacheCapabilityHash: "capability",
+        stickyLatchHash: "sticky",
+        reasoningHash: "reasoning",
+        thinkingBudgetHash: "thinking",
+        cacheRelevantHeadersHash: "headers",
+        extraBodyHash: "body",
+        visibleHistoryReductionHash: "visible-history",
+        workbenchContextHash: "workbench",
+        providerFallbackHash: "provider-fallback",
+      },
+      render: {
+        status: "rendered",
+        reason: "ok",
+        renderedRetention: "short",
+        bucketKey: "bucket-a",
+      },
+      breakObservation: {
+        status: "warm",
+        classification: "prefixPreserving",
+        expected: false,
+        reason: null,
+        previousCacheReadTokens: 20,
+        cacheReadTokens: 15,
+        cacheWriteTokens: 5,
+        cacheMissTokens: 0,
+        thresholdTokens: 1_000,
+        relativeDropThreshold: 0.2,
+        changedFields: [],
+      },
+    });
+    const events: Array<{
+      sessionId: string;
+      type: string;
+      turn?: number;
+      payload?: object;
+    }> = [];
+
+    const deps: ContextCompactionDeps = {
+      sessionState,
+      recordInfrastructureRow: () => "ev_test",
+      markPressureCompacted: () => undefined,
+      getCurrentTurn: () => 8,
+      recordEvent: (input) => {
+        events.push(input);
+        return createRecordedEvent(events.length, input);
+      },
+    };
+
+    commitSessionCompaction(deps, "session-cache", {
+      compactId: "cmp-cache",
+      sanitizedSummary: "cache summary",
+      summaryDigest: "unused",
+      sourceTurn: 8,
+      leafEntryId: null,
+      referenceContextDigest: null,
+      fromTokens: 800,
+      toTokens: 240,
+      origin: "auto_compaction",
+    });
+
+    expect(events[0]?.payload).toEqual(
+      expect.objectContaining({
+        cacheImpact: expect.objectContaining({
+          before: expect.objectContaining({
+            cacheReadTokens: 15,
+            cacheWriteTokens: 5,
+            bucketKey: "bucket-a",
+            stablePrefixHash: "stable-prefix",
+            dynamicTailHash: "dynamic-tail",
+            visibleHistoryReductionHash: "visible-history",
+            workbenchContextHash: "workbench",
+          }),
+          after: null,
+          explicitEpochChanges: 1,
+        }),
+      }),
+    );
+  });
+
   test("emits governance_compaction_integrity_checked when governance port accepts summary", async () => {
     const sessionState = new RuntimeSessionStateStore();
     const events: Array<{
@@ -187,9 +273,7 @@ describe("context-compaction module", () => {
         checkCompactionIntegrity: () => ({ ok: true }),
       },
       markPressureCompacted: () => undefined,
-      markInjectionCompacted: () => undefined,
       getCurrentTurn: () => 3,
-      getActiveSkill: () => undefined,
       recordEvent: (input) => {
         events.push(input);
         return createRecordedEvent(events.length, input);
@@ -230,9 +314,7 @@ describe("context-compaction module", () => {
         checkCompactionIntegrity: () => ({ ok: false, reason: "missing-required-fact" }),
       },
       markPressureCompacted: () => undefined,
-      markInjectionCompacted: () => undefined,
       getCurrentTurn: () => 3,
-      getActiveSkill: () => undefined,
       recordEvent: (input) => {
         events.push(input);
         return createRecordedEvent(events.length, input);
@@ -276,9 +358,7 @@ describe("context-compaction module", () => {
         },
       },
       markPressureCompacted: () => undefined,
-      markInjectionCompacted: () => undefined,
       getCurrentTurn: () => 3,
-      getActiveSkill: () => undefined,
       recordEvent: (input) => {
         events.push(input);
         return createRecordedEvent(events.length, input);

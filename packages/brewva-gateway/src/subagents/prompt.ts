@@ -141,9 +141,6 @@ export function buildDelegationPrompt(input: {
   if (input.target.consultKind) {
     lines.push(`Consult kind: ${input.target.consultKind}`);
   }
-  if (input.packet.activeSkillName) {
-    lines.push(`Parent skill: ${input.packet.activeSkillName}`);
-  }
   if (input.target.skillName) {
     lines.push(`Delegated skill: ${input.target.skillName}`);
   }
@@ -193,8 +190,7 @@ export function buildDelegationPrompt(input: {
   }
   if (
     input.packet.executionHints?.preferredTools?.length ||
-    input.packet.executionHints?.fallbackTools?.length ||
-    input.packet.executionHints?.preferredSkills?.length
+    input.packet.executionHints?.fallbackTools?.length
   ) {
     lines.push("", "## Execution Hints");
     if (input.packet.executionHints.preferredTools?.length) {
@@ -202,9 +198,6 @@ export function buildDelegationPrompt(input: {
     }
     if (input.packet.executionHints.fallbackTools?.length) {
       lines.push(`Fallback tools: ${input.packet.executionHints.fallbackTools.join(", ")}`);
-    }
-    if (input.packet.executionHints.preferredSkills?.length) {
-      lines.push(`Preferred skills: ${input.packet.executionHints.preferredSkills.join(", ")}`);
     }
   }
 
@@ -233,10 +226,6 @@ export function buildDelegationPrompt(input: {
         input.target.resultMode === "consult"
           ? undefined
           : (input.skill?.name ?? input.target.skillName),
-      skillOutputNames:
-        input.target.resultMode === "consult" || !input.skill
-          ? undefined
-          : listSkillOutputs(input.skill.contract),
     }),
   );
 

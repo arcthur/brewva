@@ -111,22 +111,6 @@ describe("Evidence artifact extraction", () => {
     expect(failureClass).toBe("invocation_validation");
   });
 
-  test("classifies rejected skill completion contracts as invocation_validation", () => {
-    const failureClass = classifyToolFailure({
-      toolName: "skill_complete",
-      args: {
-        outputs: {},
-      },
-      outputText: "Skill completion rejected. Missing required outputs: precedent_refs",
-      details: {
-        message: "Skill completion rejected. Missing required outputs: precedent_refs",
-      },
-      isError: true,
-    });
-
-    expect(failureClass).toBe("invocation_validation");
-  });
-
   test("does not classify raw policy-denial text as policy_denied without trusted metadata", () => {
     const failureClass = classifyToolFailure({
       toolName: "read",
@@ -134,10 +118,10 @@ describe("Evidence artifact extraction", () => {
         path: "packages/brewva-runtime/src/runtime/runtime.ts",
       },
       outputText:
-        "Repair posture only allows: skill_complete, workflow_status, task_view_state, ledger_query, tape_info, reasoning_checkpoint, reasoning_revert, session_compact.",
+        "Repair posture only allows: workflow_status, task_view_state, ledger_query, tape_info, reasoning_checkpoint, reasoning_revert, workbench_compact.",
       details: {
         reason:
-          "Repair posture only allows: skill_complete, workflow_status, task_view_state, ledger_query, tape_info, reasoning_checkpoint, reasoning_revert, session_compact.",
+          "Repair posture only allows: workflow_status, task_view_state, ledger_query, tape_info, reasoning_checkpoint, reasoning_revert, workbench_compact.",
       },
       isError: true,
     });

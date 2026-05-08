@@ -170,7 +170,6 @@ describe("brewva std utility boundary", () => {
       "packages/brewva-box/src/internal/stable-json.ts",
       "packages/brewva-substrate/src/prompt/markdown-frontmatter.ts",
       "packages/brewva-session-index/src/collections.ts",
-      "packages/brewva-skill-broker/src/parse.ts",
     ]) {
       expect(existsSync(resolve(repoRoot, removedPath)), removedPath).toBe(false);
     }

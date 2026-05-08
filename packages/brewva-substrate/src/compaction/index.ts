@@ -1,6 +1,7 @@
 export {
   BREWVA_COMPACTION_DEFAULT_LINE,
   BREWVA_COMPACTION_SUMMARY_HEADER,
+  BREWVA_EMERGENCY_COMPACTION_SUMMARY_HEADER,
   buildBrewvaDeterministicCompactionSummary,
   createBrewvaCompactionSummaryMessage,
   estimateBrewvaCompactionTokens,

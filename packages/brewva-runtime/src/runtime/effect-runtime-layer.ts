@@ -150,7 +150,6 @@ export function createRuntimeEffectLayerInput(
       getTruthState: input.getTruthState,
       recordEvent: input.recordEvent,
       sanitizeInput: input.sanitizeInput,
-      getRecentToolOutputDistillations: input.getRecentToolOutputDistillations,
       getLatestVerificationOutcome: input.getLatestVerificationOutcome,
       isContextBudgetEnabled: input.isContextBudgetEnabled,
       resolveCheckpointCostSummary: input.resolveCheckpointCostSummary,
@@ -255,8 +254,6 @@ function createRuntimeKernelLayer(
           getTruthState: (sessionId) => hooks.getTruthState(sessionId),
           recordEvent: hooks.recordEvent,
           sanitizeInput: hooks.sanitizeInput,
-          getRecentToolOutputDistillations: (sessionId, maxEntries) =>
-            hooks.getRecentToolOutputDistillations(sessionId, maxEntries),
           getLatestVerificationOutcome: (sessionId) =>
             hooks.getLatestVerificationOutcome(sessionId),
           isContextBudgetEnabled: () => hooks.isContextBudgetEnabled(),
@@ -338,7 +335,6 @@ function createRuntimeLazyServiceFactoriesLayer(
           getProposalAdmissionService: () => serviceDependencies.getProposalAdmissionService(),
           getEffectCommitmentDeskService: () =>
             serviceDependencies.getEffectCommitmentDeskService(),
-          skillLifecycleService: serviceDependencies.skillLifecycleService,
           ledgerService: serviceDependencies.ledgerService,
           reversibleMutationService: serviceDependencies.reversibleMutationService,
           resolveToolAuthority: hooks.resolveToolAuthority,

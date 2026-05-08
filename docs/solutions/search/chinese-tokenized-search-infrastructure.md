@@ -9,7 +9,7 @@ boundaries:
   - tools.output_search
   - tools.knowledge_search
   - runtime.inspect.events
-  - deliberation.narrative_validation
+  - workbench.memory
 source_artifacts:
   - implementation_plan
   - verification_evidence
@@ -26,10 +26,10 @@ updated_at: 2026-04-19
 ## Context
 
 Brewva previously had search behavior split across session tape search, recall,
-output artifact search, knowledge search, and deliberation-owned helper
-tokenization. That made Chinese queries fragile because CJK text could be
-treated as one opaque string, while individual search surfaces each decided
-whether substring, fuzzy, or local token overlap mattered.
+output artifact search, knowledge search, and advisory helper tokenization.
+That made Chinese queries fragile because CJK text could be treated as one
+opaque string, while individual search surfaces each decided whether substring,
+fuzzy, or local token overlap mattered.
 
 ## Guidance
 
@@ -53,7 +53,7 @@ implicit `join(" ")` / `split(/\s+/)` contracts unless crossing a real
 serialization boundary. The current knowledge-search corpus stores
 `searchTokens` as `string[]` and lets Fuse index that field directly.
 
-Policy validation is part of the same tokenizer boundary. Narrative memory
+Policy validation is part of the same tokenizer boundary. Advisory memory and
 contradiction checks should use the shared tokenizer for CJK text and maintain
 explicit polarity cues for Chinese policy language, rather than stripping CJK
 characters through ASCII-only cleanup.
@@ -77,8 +77,8 @@ Apply this precedent whenever a feature touches:
 - `output_search`
 - `knowledge_search`
 - `tape_search`
-- deliberation, narrative, or optimization memory retrieval
-- narrative policy validation and contradiction checks
+- workbench or recall retrieval
+- advisory policy validation and contradiction checks
 - binary packaging of tokenizer assets
 
 Do not add optional Chinese search enhancements locally. Either use the shared

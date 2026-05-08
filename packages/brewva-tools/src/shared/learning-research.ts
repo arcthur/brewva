@@ -18,15 +18,6 @@ export const LEARNING_RESEARCH_OUTPUT_KEYS = [
 
 type LearningResearchOutputKey = (typeof LEARNING_RESEARCH_OUTPUT_KEYS)[number];
 
-export interface LearningResearchSkillDocument {
-  name: string;
-  contract: {
-    intent?: {
-      outputs?: readonly string[];
-    };
-  };
-}
-
 function hasOwn(record: Record<string, unknown>, key: string): boolean {
   return Object.prototype.hasOwnProperty.call(record, key);
 }
@@ -223,18 +214,7 @@ function buildNoMatchChecks(input: {
   return dedupeStrings(checks).slice(0, 4);
 }
 
-export function isLearningResearchContractSkill(
-  skill: LearningResearchSkillDocument | undefined,
-): boolean {
-  if (!skill) {
-    return false;
-  }
-  const outputs = skill.contract.intent?.outputs ?? [];
-  return LEARNING_RESEARCH_OUTPUT_KEYS.every((key) => outputs.includes(key));
-}
-
 export function buildLearningResearchOutputs(input: {
-  activeSkill: LearningResearchSkillDocument | undefined;
   rawOutputs: Record<string, unknown>;
   consumedOutputs: Record<string, unknown>;
   searchRoots: readonly string[];
@@ -264,17 +244,6 @@ export function buildLearningResearchOutputs(input: {
       message: string;
       details?: Record<string, unknown>;
     } {
-  if (!isLearningResearchContractSkill(input.activeSkill)) {
-    return {
-      ok: false,
-      message:
-        "Learning research synthesis rejected. The active skill does not declare the canonical learning-research outputs.",
-      details: {
-        activeSkill: input.activeSkill?.name ?? null,
-      },
-    };
-  }
-
   const conflictingOutputs = LEARNING_RESEARCH_OUTPUT_KEYS.filter((key) =>
     hasOwn(input.rawOutputs, key),
   );

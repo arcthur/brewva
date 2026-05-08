@@ -14,8 +14,6 @@
     { "path": "../brewva-substrate" },
     { "path": "../brewva-tool-protocol" },
     { "path": "../brewva-tools" },
-    { "path": "../brewva-deliberation" },
-    { "path": "../brewva-skill-broker" },
     { "path": "../brewva-recall" }
   ],
   "include": ["src/**/*.ts"]

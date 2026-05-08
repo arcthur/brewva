@@ -16,14 +16,13 @@ stable docs already carry the accepted contract, convert the note to
 ## Runtime Fidelity
 
 - [`event-stream-consistency-and-replay-fidelity.md`](./event-stream-consistency-and-replay-fidelity.md)
-- [`context-budget-behavior-in-long-running-sessions.md`](./context-budget-behavior-in-long-running-sessions.md)
 - [`recovery-robustness-under-interrupt-conditions.md`](./recovery-robustness-under-interrupt-conditions.md)
+- [`model-operated-working-memory-evaluation.md`](./model-operated-working-memory-evaluation.md)
 - [`prefix-stable-context-management-and-progressive-compaction.md`](./prefix-stable-context-management-and-progressive-compaction.md)
 - [`recovery-first-context-governance-and-history-view-baselines.md`](./recovery-first-context-governance-and-history-view-baselines.md)
 
 ## Operator And Control Surfaces
 
-- [`product-semantic-compression-and-decision-surface-subtraction.md`](./product-semantic-compression-and-decision-surface-subtraction.md)
 - [`cost-observability-and-budget-governance.md`](./cost-observability-and-budget-governance.md)
 - [`rollback-ergonomics-and-patch-lifecycle-safety.md`](./rollback-ergonomics-and-patch-lifecycle-safety.md)
 

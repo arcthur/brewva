@@ -28,7 +28,6 @@ function hasSinglePacketInput(params: SharedPacketInput): boolean {
     params.consultBrief !== undefined ||
     params.constraints !== undefined ||
     params.sharedNotes !== undefined ||
-    params.activeSkillName !== undefined ||
     params.executionHints !== undefined ||
     params.contextRefs !== undefined ||
     params.contextBudget !== undefined ||
@@ -45,14 +44,12 @@ function buildExecutionHints(
   }
   const preferredTools = value.preferredTools;
   const fallbackTools = value.fallbackTools;
-  const preferredSkills = value.preferredSkills;
-  if (!preferredTools && !fallbackTools && !preferredSkills) {
+  if (!preferredTools && !fallbackTools) {
     return undefined;
   }
   return {
     preferredTools,
     fallbackTools,
-    preferredSkills,
   };
 }
 
@@ -119,7 +116,6 @@ function buildPacket(packet: SharedPacketInput): DelegationPacket | undefined {
     consultBrief: buildConsultBrief(packet.consultBrief),
     constraints: packet.constraints,
     sharedNotes: packet.sharedNotes,
-    activeSkillName: packet.activeSkillName,
     executionHints: buildExecutionHints(packet.executionHints),
     contextRefs: packet.contextRefs,
     contextBudget,
@@ -141,7 +137,6 @@ function buildPublicPacket(input: {
     consultBrief: input.packet.brief,
     constraints: input.packet.constraints,
     sharedNotes: input.packet.sharedNotes,
-    activeSkillName: input.skillName,
     executionHints: input.packet.executionHints,
     contextRefs: input.packet.contextRefs,
     contextBudget: input.packet.contextBudget,
@@ -161,7 +156,6 @@ function buildPublicTask(input: {
     constraints: input.task.constraints,
     sharedNotes: input.task.sharedNotes,
     consultBrief: input.brief,
-    activeSkillName: input.skillName,
     executionHints: input.task.executionHints,
     contextRefs: input.task.contextRefs,
     contextBudget: input.task.contextBudget,

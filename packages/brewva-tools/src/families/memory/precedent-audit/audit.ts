@@ -96,7 +96,7 @@ export function auditPrecedentRecord(input: {
       code: "invalid_promotion_candidate_ref",
       severity: "error",
       summary:
-        "Promotion-candidate derivative links must stay under .brewva/skill-broker/ so the related warm-memory artifact remains inspectable.",
+        "Promotion-candidate derivative links must stay under .brewva/knowledge/ so the related warm-memory artifact remains inspectable.",
       refs: promotionCandidateLinks
         .map((entry) => entry.resolution.relativePath ?? entry.link.ref)
         .filter((entry): entry is string => Boolean(entry)),

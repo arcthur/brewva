@@ -211,38 +211,6 @@ describe("event pipeline level classification", () => {
     ).toBe("governance");
   });
 
-  test("keeps skill promotion lifecycle events visible at audit level", () => {
-    const runtime = new BrewvaRuntime({
-      cwd: mkdtempSync(join(tmpdir(), "brewva-events-audit-skill-promotion-")),
-      config: createAuditConfig(),
-    });
-    const sessionId = "audit-level-skill-promotion-session";
-
-    const promotionTypes = [
-      "skill_promotion_draft_derived",
-      "skill_promotion_reviewed",
-      "skill_promotion_promoted",
-      "skill_promotion_materialized",
-    ] as const;
-
-    for (const type of promotionTypes) {
-      runtime.extensions.hosted.events.record({
-        sessionId,
-        type,
-        payload: {
-          draftId: "spd:test",
-        },
-      });
-    }
-
-    for (const type of promotionTypes) {
-      expect(runtime.inspect.events.query(sessionId, { type })).toHaveLength(1);
-      const structured = runtime.inspect.events.queryStructured(sessionId, { type })[0];
-      expect(structured?.type).toBe(type);
-      expect(structured?.category).toBe("control");
-    }
-  });
-
   test("keeps hosted compaction warning events visible at audit level", () => {
     const runtime = new BrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-events-audit-compaction-")),
@@ -263,7 +231,7 @@ describe("event pipeline level classification", () => {
         type,
         payload: {
           reason: "unit-test",
-          requiredTool: "session_compact",
+          requiredTool: "workbench_compact",
         },
       });
     }
@@ -273,7 +241,7 @@ describe("event pipeline level classification", () => {
     }
   });
 
-  test("keeps read-path and skill diagnosis protocol receipts at audit level", () => {
+  test("keeps read-path protocol receipts at audit level", () => {
     const runtime = new BrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-events-audit-hosted-protocol-")),
       config: createAuditConfig(),
@@ -283,7 +251,6 @@ describe("event pipeline level classification", () => {
     for (const type of [
       "tool_read_path_gate_armed",
       "tool_read_path_discovery_observed",
-      "skill_diagnosis_derived",
     ] as const) {
       runtime.extensions.hosted.events.record({
         sessionId,
@@ -299,9 +266,6 @@ describe("event pipeline level classification", () => {
     ).toHaveLength(1);
     expect(
       runtime.inspect.events.query(sessionId, { type: "tool_read_path_discovery_observed" }),
-    ).toHaveLength(1);
-    expect(
-      runtime.inspect.events.query(sessionId, { type: "skill_diagnosis_derived" }),
     ).toHaveLength(1);
   });
 
@@ -347,21 +311,17 @@ describe("event pipeline level classification", () => {
     ).toBe("control");
   });
 
-  test("classifies narrative memory and semantic recall receipts as control events", () => {
+  test("classifies recall receipts as control events", () => {
     const runtime = new BrewvaRuntime({
-      cwd: mkdtempSync(join(tmpdir(), "brewva-events-audit-narrative-control-")),
+      cwd: mkdtempSync(join(tmpdir(), "brewva-events-audit-recall-control-")),
       config: createAuditConfig(),
     });
-    const sessionId = "audit-level-narrative-control-session";
+    const sessionId = "audit-level-recall-control-session";
 
     const receiptTypes = [
-      "narrative_memory_recorded",
-      "narrative_memory_reviewed",
-      "narrative_memory_promoted",
-      "narrative_memory_archived",
-      "narrative_memory_forgotten",
-      "semantic_extraction_invoked",
-      "semantic_rerank_invoked",
+      "recall_curation_recorded",
+      "recall_results_surfaced",
+      "recall_utility_observed",
     ] as const;
 
     for (const type of receiptTypes) {

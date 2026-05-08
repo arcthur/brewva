@@ -61,9 +61,10 @@ orchestration is enabled. They are not part of the default bundle.
 
 ## Skill And Delegation Model
 
-Skills define semantic work contracts. Delegated workers define execution
-envelopes. The parent session owns active skill state, completion, task truth,
-and patch adoption.
+Skills are readable semantic guidance documents. Delegated workers define
+execution envelopes. The parent session owns task truth, effect receipts,
+verification evidence, and patch adoption; it no longer owns an active skill
+slot or skill completion state.
 
 Skill taxonomy is split by role:
 

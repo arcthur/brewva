@@ -215,9 +215,6 @@ export class SessionIntegrityCoordinator {
     if (openTurns.length > 0) {
       reasons.push("open_turn_without_terminal_receipt");
     }
-    if (state.activeSkillState) {
-      reasons.push("active_skill_without_terminal_receipt");
-    }
     if (reasons.length === 0) {
       return;
     }
@@ -227,10 +224,6 @@ export class SessionIntegrityCoordinator {
       reasons,
       openToolCalls,
       ...(openTurns.length > 0 ? { openTurns } : {}),
-      ...(state.activeSkillState ? { activeSkill: structuredClone(state.activeSkillState) } : {}),
-      ...(state.latestSkillFailure
-        ? { latestFailure: structuredClone(state.latestSkillFailure) }
-        : {}),
       latestEventType: latestEvent.type,
       latestEventAt: latestEvent.timestamp,
     };
@@ -246,7 +239,6 @@ export class SessionIntegrityCoordinator {
           ? `tools=${openToolCalls.map((record) => record.toolName).join(",")}`
           : null,
         openTurns.length > 0 ? `turns=${openTurns.map((record) => record.turn).join(",")}` : null,
-        state.activeSkillState ? `skill=${state.activeSkillState.skillName}` : null,
       ]
         .filter((entry): entry is string => Boolean(entry))
         .join(";")}`,

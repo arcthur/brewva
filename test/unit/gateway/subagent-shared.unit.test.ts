@@ -225,7 +225,7 @@ describe("subagent shared execution resolution", () => {
     expect(resolved.target.consultKind).toBe("design");
   });
 
-  test("resolveDelegationTarget materializes a skill-first agent spec through the catalog", async () => {
+  test("resolveDelegationTarget materializes an agent spec through the catalog", async () => {
     const catalog = await loadHostedDelegationCatalog(process.cwd());
     const resolved = resolveDelegationTarget({
       catalog,

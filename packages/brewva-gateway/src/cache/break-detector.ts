@@ -260,8 +260,6 @@ function diffFingerprint(
     "stablePrefixHash",
     "dynamicTailHash",
     "requestHash",
-    "activeSkillSetHash",
-    "skillRoutingEpoch",
     "channelContextHash",
     "renderedCacheHash",
     "cacheCapabilityHash",
@@ -271,7 +269,7 @@ function diffFingerprint(
     "cacheRelevantHeadersHash",
     "extraBodyHash",
     "visibleHistoryReductionHash",
-    "recallInjectionHash",
+    "workbenchContextHash",
     "providerFallbackHash",
   ];
   for (const key of keys) {

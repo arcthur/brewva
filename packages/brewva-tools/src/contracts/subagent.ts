@@ -1,9 +1,4 @@
-import type {
-  ManagedToolMode,
-  PatchSet,
-  SkillOutputValidationResult,
-  ToolExecutionBoundary,
-} from "@brewva/brewva-runtime";
+import type { ManagedToolMode, PatchSet, ToolExecutionBoundary } from "@brewva/brewva-runtime";
 import type {
   AdvisorConsultKind,
   AdvisorSubagentOutcomeData,
@@ -108,8 +103,6 @@ export interface SubagentOutcomeBase {
   summary: string;
   assistantText?: string;
   data?: SubagentOutcomeData;
-  skillOutputs?: Record<string, unknown>;
-  skillValidation?: SkillOutputValidationResult;
   metrics: SubagentOutcomeMetricSummary;
   evidenceRefs: SubagentOutcomeEvidenceRef[];
   patches?: PatchSet;

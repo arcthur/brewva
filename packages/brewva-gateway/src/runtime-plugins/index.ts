@@ -13,10 +13,7 @@ import type {
 import { defineInternalHostPlugin } from "@brewva/brewva-substrate/host-api";
 import type { BrewvaToolDefinition } from "@brewva/brewva-substrate/tools";
 import { buildBrewvaTools } from "@brewva/brewva-tools";
-import type {
-  BrewvaSemanticReranker,
-  BrewvaToolOrchestration,
-} from "@brewva/brewva-tools/contracts";
+import type { BrewvaToolOrchestration } from "@brewva/brewva-tools/contracts";
 import { createBrewvaToolCatalog, getBrewvaToolSurface } from "@brewva/brewva-tools/registry";
 import { DEFAULT_HOSTED_ROUTING_SCOPES } from "../host/routing-defaults.js";
 import type { HostedDelegationStore } from "../subagents/delegation-store.js";
@@ -25,14 +22,11 @@ import {
   wrapToolDefinitionsWithHostedExecutionTraits,
   type HostedToolExecutionCoordinator,
 } from "../tool-execution-traits.js";
-import { createCompletionGuardLifecycle, registerCompletionGuard } from "./completion-guard.js";
 import { createContextTransformLifecycle } from "./context-transform.js";
-import { createDeliberationMaintenanceLifecycle } from "./deliberation-maintenance.js";
 import { registerEventStream } from "./event-stream.js";
 import { registerLedgerWriter } from "./ledger-writer.js";
 import { createLocalHookManager } from "./local-hook-port.js";
 import type { LocalHookPort } from "./local-hook-port.js";
-import { createNarrativeMemoryLifecycle } from "./narrative-memory-lifecycle.js";
 import { registerProviderRequestRecovery } from "./provider-request-recovery.js";
 import { registerProviderRequestReduction } from "./provider-request-reduction.js";
 import { createQualityGateLifecycle, registerQualityGate } from "./quality-gate.js";
@@ -58,7 +52,6 @@ export interface CreateHostedTurnPipelineOptions extends BrewvaRuntimeOptions {
   delegationStore?: HostedDelegationStore;
   managedToolNames?: readonly string[];
   contextProfile?: "minimal" | "standard" | "full";
-  semanticReranker?: BrewvaSemanticReranker;
   ports?: readonly TurnLifecyclePort[];
   localHooks?: readonly LocalHookPort[];
   toolExecutionCoordinator?: HostedToolExecutionCoordinator;
@@ -82,7 +75,7 @@ function buildManagedTools(
   runtime: BrewvaRuntime,
   options: Pick<
     CreateHostedTurnPipelineOptions,
-    "managedToolNames" | "orchestration" | "delegationStore" | "semanticReranker"
+    "managedToolNames" | "orchestration" | "delegationStore"
   >,
 ): ReturnType<typeof buildBrewvaTools> {
   const delegationStore = options.delegationStore;
@@ -99,7 +92,6 @@ function buildManagedTools(
   return buildBrewvaTools({
     runtime: {
       ...createToolRuntimePort(runtime),
-      ...(options.semanticReranker ? { semanticReranker: options.semanticReranker } : {}),
     },
     orchestration: options.orchestration,
     delegation,
@@ -115,7 +107,6 @@ function registerHostedPipeline(
   registerTools: boolean,
   delegationStore: HostedDelegationStore | undefined,
   contextProfile: "minimal" | "standard" | "full" | undefined,
-  semanticReranker: BrewvaSemanticReranker | undefined,
   userPorts: readonly TurnLifecyclePort[],
   localHooks: readonly LocalHookPort[],
 ): void {
@@ -133,7 +124,6 @@ function registerHostedPipeline(
   const hostedRuntime = createHostedRuntimePort(runtime);
   const toolSurfaceRuntime: ToolSurfaceRuntime = {
     config: hostedRuntime.config,
-    inspect: hostedRuntime.inspect,
     recordEvent: (input: { sessionId: string; type: string; payload?: object }) =>
       hostedRuntime.extensions.hosted.events.record(input),
   };
@@ -147,20 +137,16 @@ function registerHostedPipeline(
     turnClock,
     contextProfile,
   });
-  const deliberationMaintenance = createDeliberationMaintenanceLifecycle(runtime);
-  const narrativeMemory = createNarrativeMemoryLifecycle(runtime, semanticReranker);
   const qualityGate = createQualityGateLifecycle(hostedRuntime, {
     toolDefinitionsByName,
   });
   const toolSurface = createToolSurfaceLifecycle(runtimePluginApi, toolSurfaceRuntime, {
     dynamicToolDefinitions: registerTools ? toolDefinitionsByName : undefined,
   });
-  const completionGuard = createCompletionGuardLifecycle(runtimePluginApi, hostedRuntime);
   const readPathRecovery = createReadPathRecoveryLifecycle(hostedRuntime);
 
   runtimePluginApi.on("tool_call", qualityGate.toolCall);
   runtimePluginApi.on("context", contextTransform.context);
-  runtimePluginApi.on("message_end", completionGuard.messageEnd);
   registerProviderRequestReduction(runtimePluginApi, hostedRuntime);
   registerProviderRequestRecovery(runtimePluginApi, runtime);
   registerEventStream(runtimePluginApi, hostedRuntime, turnClock, {
@@ -169,10 +155,6 @@ function registerHostedPipeline(
   registerLedgerWriter(runtimePluginApi, hostedRuntime);
   registerToolResultDistiller(runtimePluginApi, hostedRuntime);
   registerTurnLifecyclePorts(runtimePluginApi, [
-    {
-      beforeAgentStart: deliberationMaintenance.beforeAgentStart,
-      agentEnd: deliberationMaintenance.agentEnd,
-    },
     localHookManager.lifecycle,
     {
       turnStart: contextTransform.turnStart,
@@ -191,14 +173,6 @@ function registerHostedPipeline(
     {
       toolResult: toolSurface.toolResult,
       sessionShutdown: toolSurface.sessionShutdown,
-    },
-    narrativeMemory,
-    {
-      beforeAgentStart: completionGuard.beforeAgentStart,
-      toolResult: completionGuard.toolResult,
-      turnEnd: completionGuard.turnEnd,
-      agentEnd: completionGuard.agentEnd,
-      sessionShutdown: completionGuard.sessionShutdown,
     },
     ...userPorts,
   ]);
@@ -259,7 +233,6 @@ export function createHostedTurnPipeline(
         registerTools,
         options.delegationStore,
         options.contextProfile,
-        options.semanticReranker,
         options.ports ?? [],
         options.localHooks ?? [],
       );
@@ -270,28 +243,28 @@ export function createHostedTurnPipeline(
 export { registerContextTransform } from "./context-transform.js";
 export { createRuntimeTurnClockStore, type RuntimeTurnClockStore } from "./runtime-turn-clock.js";
 export {
-  createHostedContextInjectionPipeline,
-  type HostedContextInjectionInput,
-  type HostedContextInjectionMessageDetails,
-  type HostedContextInjectionPipeline,
-  type HostedContextInjectionPipelineOptions,
-  type HostedContextInjectionResult,
-  type HostedInjectionSessionManager,
-  HOSTED_CONTEXT_INJECTION_MESSAGE_TYPE,
-} from "./hosted-context-injection-pipeline.js";
+  createHostedWorkbenchContextPipeline,
+  type HostedWorkbenchContextInput,
+  type HostedWorkbenchContextMessageDetails,
+  type HostedWorkbenchContextPipeline,
+  type HostedWorkbenchContextPipelineOptions,
+  type HostedWorkbenchContextResult,
+  type HostedContextSessionManager,
+  HOSTED_WORKBENCH_CONTEXT_MESSAGE_TYPE,
+} from "./hosted-workbench-context-pipeline.js";
 export {
   AUTO_COMPACTION_WATCHDOG_ERROR,
   createHostedContextTelemetry,
   type HostedContextTelemetry,
 } from "./hosted-context-telemetry.js";
 export {
-  composeContextBlocks,
-  type ComposedContextBlock,
-  type ContextBlockCategory,
-  type ContextComposerInput,
-  type ContextComposerMetrics,
-  type ContextComposerResult,
-} from "./context-composer.js";
+  buildContextComposedEventPayload,
+  makeHostedContextBlock,
+  renderHostedContextBlocks,
+  type ContextComposedEventPayload,
+  type HostedContextBlock,
+  type HostedContextRenderResult,
+} from "./hosted-context-blocks.js";
 export {
   buildCapabilityView,
   renderCapabilityView,
@@ -311,17 +284,6 @@ export {
   type RenderCapabilityViewInput,
   type BuildCapabilityViewResult,
 } from "./capability-view.js";
-export {
-  buildSkillDiagnosisPolicyBlock,
-  deriveSkillDiagnoses,
-  type SkillActivationPosture,
-  type SkillDiagnosisCandidate,
-  type SkillDiagnosisReadiness,
-  type SkillDiagnosisSet,
-  type SkillFirstRuntimeLike,
-  type RejectedSkillDiagnosisCandidate,
-  type ToolAvailabilityPosture,
-} from "./skill-first.js";
 export type {
   LocalHookNote,
   LocalHookPhase,
@@ -350,7 +312,6 @@ export type {
 export { registerEventStream } from "./event-stream.js";
 export { registerQualityGate } from "./quality-gate.js";
 export { registerLedgerWriter } from "./ledger-writer.js";
-export { registerCompletionGuard } from "./completion-guard.js";
 export { registerToolSurface, type ToolSurfaceRuntime } from "./tool-surface.js";
 export { registerToolResultDistiller } from "./tool-result-distiller.js";
 export { applyContextContract, buildContextContractBlock } from "./context-contract.js";
@@ -359,12 +320,14 @@ export {
   persistContextEvidenceReport,
   readContextEvidenceRecords,
   readContextEvidenceSamples,
+  recordProviderCacheObservationEvidence,
   recordPromptStabilityEvidence,
   recordTransientReductionEvidence,
   type ContextEvidenceAggregateReport,
   type ContextEvidenceArtifactRef,
   type ContextEvidencePromotionReadiness,
   type ContextEvidenceReport,
+  type ContextEvidenceReportOptions,
   type ContextEvidenceSample,
   type ContextEvidenceSessionReport,
   type PromptStabilityEvidenceSample,

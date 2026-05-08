@@ -70,12 +70,6 @@ describe("inspect interactive command runtime plugin", () => {
       type: "session_bootstrap",
       payload: {
         managedToolMode: "runtime_plugin",
-        skillLoad: {
-          routingEnabled: false,
-          routingScopes: ["core", "domain"],
-          routableSkills: [],
-          hiddenSkills: [],
-        },
       },
     });
     runtime.maintain.context.onTurnStart(sessionId, 1);

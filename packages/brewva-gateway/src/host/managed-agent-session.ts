@@ -17,6 +17,7 @@ import type {
   BrewvaRuntime,
   ExpectedProviderCacheBreak,
   ProviderCacheRenderState,
+  SessionCompactionGenerationMetadata,
   SessionLifecycleSnapshot,
   SessionWireFrame,
 } from "@brewva/brewva-runtime";
@@ -26,11 +27,7 @@ import {
   STEER_DROPPED_EVENT_TYPE,
   STEER_QUEUED_EVENT_TYPE,
 } from "@brewva/brewva-runtime/events";
-import {
-  redactedStableJsonSha256Hex,
-  redactedStableJsonStringify,
-  sha256Hex,
-} from "@brewva/brewva-std/hash";
+import { redactedStableJsonStringify, sha256Hex } from "@brewva/brewva-std/hash";
 import {
   buildBrewvaDeterministicCompactionSummary,
   estimateBrewvaCompactionTokens,
@@ -114,6 +111,7 @@ import {
   type ToolSchemaSnapshot,
   type ToolSchemaSnapshotTool,
 } from "../cache/index.js";
+import { recordProviderCacheObservationEvidence } from "../runtime-plugins/context-evidence.js";
 import { HOSTED_PROMPT_ATTEMPT_DISPATCH } from "../session/hosted-prompt-attempt.js";
 import {
   deriveSessionPhaseFromRuntimeFactFrame,
@@ -121,7 +119,17 @@ import {
   type RuntimeFactSessionPhaseProjection,
 } from "../session/session-phase-runtime-facts.js";
 import { clearDefaultTurnLifecycleSpine } from "../session/turn-envelope.js";
+import {
+  createHostedLlmCompactionSummaryGenerator,
+  DETERMINISTIC_EMERGENCY_COMPACTION_STRATEGY,
+  LLM_PRIMARY_COMPACTION_STRATEGY,
+  normalizeCompactionSummaryForStorage,
+  type BrewvaCompactionSummaryGenerationResult,
+  type BrewvaCompactionSummaryGenerator,
+  type BrewvaCompactionSummaryStrategy,
+} from "./compaction-summary-generator.js";
 import { supportsHostedExtendedThinkingModel as supportsHostedExtendedThinking } from "./hosted-provider-helpers.js";
+import { createHostedProviderStreamFunction } from "./hosted-provider-stream.js";
 import type { HostedSessionLogger } from "./logger.js";
 import {
   cloneModelPresetState,
@@ -202,28 +210,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function resolveActiveSkillSet(runtime: BrewvaRuntime, sessionId: string): string[] {
-  const active = runtime.inspect.skills.getActive(sessionId) as unknown;
-  if (typeof active === "string" && active.trim().length > 0) {
-    return [active.trim()];
-  }
-  if (isRecord(active)) {
-    const name = active.name;
-    if (typeof name === "string" && name.trim().length > 0) {
-      return [name.trim()];
-    }
-  }
-  return [];
-}
-
-function resolveSkillRoutingEpoch(runtime: BrewvaRuntime, sessionId: string): number {
-  const state = runtime.inspect.skills.getActiveState(sessionId) as unknown;
-  if (isRecord(state) && typeof state.epoch === "number" && Number.isFinite(state.epoch)) {
-    return Math.max(0, Math.trunc(state.epoch));
-  }
-  return 0;
-}
-
 function normalizePromptSource(
   source: BrewvaPromptOptions["source"] | undefined,
 ): string | undefined {
@@ -249,115 +235,53 @@ function resolveChannelContext(source: string | undefined): { source: string } |
   return source ? { source } : "";
 }
 
-const RECALL_CONTEXT_SOURCE_NAMES = new Set(["brewva.recall-broker"]);
-
-interface RecallInjectionFingerprintInput {
+interface WorkbenchContextFingerprintInput {
   present: boolean;
   scope: "dynamic_tail";
-  accepted: boolean;
-  sourceCount: number;
-  sources: string[];
-  estimatedTokens: number;
+  entryCount: number;
+  notes: number;
+  evictions: number;
   contentHash: string | null;
 }
 
-const EMPTY_RECALL_INJECTION_FINGERPRINT: RecallInjectionFingerprintInput = {
+const EMPTY_WORKBENCH_CONTEXT_FINGERPRINT: WorkbenchContextFingerprintInput = {
   present: false,
   scope: "dynamic_tail",
-  accepted: false,
-  sourceCount: 0,
-  sources: [],
-  estimatedTokens: 0,
+  entryCount: 0,
+  notes: 0,
+  evictions: 0,
   contentHash: null,
 };
 
-function isRecallContextSource(sourceName: string, budgetClasses: readonly unknown[]): boolean {
-  return (
-    RECALL_CONTEXT_SOURCE_NAMES.has(sourceName) ||
-    sourceName.startsWith("brewva.recall.") ||
-    budgetClasses.some((entry) => entry === "recall")
-  );
-}
-
-function resolveRecallSourceContentHash(input: {
-  source: string;
-  count: number;
-  estimatedTokens: number;
-  contentHash: unknown;
-}): string {
-  if (typeof input.contentHash === "string" && input.contentHash.trim().length > 0) {
-    return input.contentHash;
-  }
-  return redactedStableJsonSha256Hex({
-    source: input.source,
-    count: input.count,
-    estimatedTokens: input.estimatedTokens,
-  });
-}
-
-function resolveRecallInjectionFingerprint(
+function resolveWorkbenchContextFingerprint(
   messages: readonly BrewvaHostCustomMessage[] | undefined,
-): RecallInjectionFingerprintInput {
-  const recallSources: Array<{
-    source: string;
-    count: number;
-    estimatedTokens: number;
-    contentHash: string;
-  }> = [];
-  let accepted = false;
+): WorkbenchContextFingerprintInput {
+  let latest: WorkbenchContextFingerprintInput | undefined;
   for (const message of messages ?? []) {
-    if (message.customType !== "brewva-context-injection") {
+    if (message.customType !== "brewva-workbench-context") {
       continue;
     }
-    const contextSources = isRecord(message.details) ? message.details.contextSources : undefined;
-    if (!isRecord(contextSources)) {
+    const workbench = isRecord(message.details) ? message.details.workbench : undefined;
+    if (!isRecord(workbench)) {
       continue;
     }
-    accepted = accepted || contextSources.accepted === true;
-    const sources = Array.isArray(contextSources.sources) ? contextSources.sources : [];
-    for (const source of sources) {
-      if (!isRecord(source)) {
-        continue;
-      }
-      const sourceName = typeof source.source === "string" ? source.source : "";
-      const budgetClasses = Array.isArray(source.budgetClasses) ? source.budgetClasses : [];
-      if (!isRecallContextSource(sourceName, budgetClasses)) {
-        continue;
-      }
-      const count = typeof source.count === "number" ? Math.max(0, Math.trunc(source.count)) : 0;
-      const estimatedTokens =
-        typeof source.estimatedTokens === "number"
-          ? Math.max(0, Math.trunc(source.estimatedTokens))
-          : 0;
-      recallSources.push({
-        source: sourceName,
-        count,
-        estimatedTokens,
-        contentHash: resolveRecallSourceContentHash({
-          source: sourceName,
-          count,
-          estimatedTokens,
-          contentHash: source.contentHash,
-        }),
-      });
-    }
+    latest = {
+      present: true,
+      scope: "dynamic_tail",
+      entryCount: typeof workbench.entries === "number" ? Math.max(0, workbench.entries) : 0,
+      notes: typeof workbench.notes === "number" ? Math.max(0, workbench.notes) : 0,
+      evictions: typeof workbench.evictions === "number" ? Math.max(0, workbench.evictions) : 0,
+      contentHash:
+        typeof workbench.contentHash === "string" && workbench.contentHash.trim().length > 0
+          ? workbench.contentHash
+          : null,
+    };
   }
-  if (recallSources.length === 0) {
-    return { ...EMPTY_RECALL_INJECTION_FINGERPRINT };
-  }
-  return {
-    present: true,
-    scope: "dynamic_tail",
-    accepted,
-    sourceCount: recallSources.length,
-    sources: recallSources.map((entry) => entry.source).toSorted(),
-    estimatedTokens: recallSources.reduce((sum, entry) => sum + entry.estimatedTokens, 0),
-    contentHash: redactedStableJsonSha256Hex(recallSources),
-  };
+  return latest ?? { ...EMPTY_WORKBENCH_CONTEXT_FINGERPRINT };
 }
 
 export const MANAGED_AGENT_SESSION_TEST_ONLY = {
-  resolveRecallInjectionFingerprint,
+  resolveWorkbenchContextFingerprint,
   isCachedContentUnsupportedStreamError,
 } as const;
 
@@ -371,14 +295,14 @@ type QueuedUserMessage = Extract<BrewvaTurnLoopMessage, { role: "user" }>;
 function buildProviderDynamicTailSummary(input: {
   payload: unknown;
   channelContext: unknown;
-  recallInjection: RecallInjectionFingerprintInput;
+  workbenchContext: WorkbenchContextFingerprintInput;
   visibleHistoryReduction: unknown;
 }): unknown {
   return {
     version: 1,
     payloadTail: summarizeProviderPayloadTail(input.payload),
     channelContext: input.channelContext,
-    recallInjection: input.recallInjection,
+    workbenchContext: input.workbenchContext,
     visibleHistoryReduction: input.visibleHistoryReduction,
   };
 }
@@ -579,6 +503,7 @@ export interface CreateBrewvaManagedAgentSessionOptions {
   ui?: BrewvaToolUiPort;
   logger?: HostedSessionLogger;
   googleCachedContentManager?: GoogleCachedContentManager;
+  compactionSummaryGenerator?: BrewvaCompactionSummaryGenerator;
 }
 
 type PendingQueuedItem =
@@ -711,6 +636,42 @@ interface PendingCompactionRequestState {
   onError?: BrewvaCompactionRequest["onError"];
 }
 
+interface ResolvedCompactionSummary {
+  summary: string;
+  strategy: BrewvaCompactionSummaryStrategy;
+  model?: BrewvaCompactionSummaryGenerationResult["model"];
+  usage?: BrewvaCompactionSummaryGenerationResult["usage"];
+  fallbackReason?: string;
+}
+
+function nonNegativeUsageNumber(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : 0;
+}
+
+function buildCompactionSummaryGenerationMetadata(
+  resolution: ResolvedCompactionSummary,
+): SessionCompactionGenerationMetadata {
+  return {
+    strategy: resolution.strategy,
+    ...(resolution.model ? { model: resolution.model } : {}),
+    ...(resolution.usage
+      ? {
+          usage: {
+            input: nonNegativeUsageNumber(resolution.usage.input),
+            output: nonNegativeUsageNumber(resolution.usage.output),
+            cacheRead: nonNegativeUsageNumber(resolution.usage.cacheRead),
+            cacheWrite: nonNegativeUsageNumber(resolution.usage.cacheWrite),
+            totalTokens: nonNegativeUsageNumber(resolution.usage.totalTokens),
+            cost: {
+              total: nonNegativeUsageNumber(resolution.usage.cost?.total),
+            },
+          },
+        }
+      : {}),
+    ...(resolution.fallbackReason ? { fallbackReason: resolution.fallbackReason } : {}),
+  };
+}
+
 const REQUIRED_HOSTED_PERSISTENCE_EVENTS = ["message_end", "session_compact"] as const;
 const PROMPT_FILE_MAX_BYTES = 50 * 1024;
 const PROMPT_BINARY_INLINE_MAX_BYTES = 5 * 1024 * 1024;
@@ -752,6 +713,14 @@ function inferRecoveryCrashPoint(
     default:
       return "wal_append";
   }
+}
+
+function compactionFallbackReason(error: unknown): string {
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message.trim();
+  }
+  const text = String(error).trim();
+  return text.length > 0 ? text : "llm_compaction_failed";
 }
 
 function deriveSessionPhaseFromLifecycleSnapshot(
@@ -1073,6 +1042,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
   readonly #resourceLoader: BrewvaHostedResourceLoader;
   readonly #agent: BrewvaTurnLoopController;
   readonly #runner: BrewvaHostPluginRunner;
+  readonly #compactionSummaryGenerator: BrewvaCompactionSummaryGenerator;
   readonly #registeredTools: BrewvaToolDefinition[];
   readonly #toolDefinitions = new Map<string, BrewvaToolDefinition>();
   readonly #toolPromptSnippets = new Map<string, string>();
@@ -1097,8 +1067,8 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
   #turnStartTimestamp = 0;
   #contextState: ContextState = { ...DEFAULT_CONTEXT_STATE };
   #activePromptSource: string | undefined;
-  #lastRecallInjectionFingerprint: RecallInjectionFingerprintInput = {
-    ...EMPTY_RECALL_INJECTION_FINGERPRINT,
+  #lastWorkbenchContextFingerprint: WorkbenchContextFingerprintInput = {
+    ...EMPTY_WORKBENCH_CONTEXT_FINGERPRINT,
   };
   readonly #logger: HostedSessionLogger | null;
   readonly #onProviderAssistantMessage:
@@ -1118,6 +1088,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     customTools: readonly BrewvaToolDefinition[];
     runner: BrewvaHostPluginRunner;
     agent: BrewvaTurnLoopController;
+    compactionSummaryGenerator: BrewvaCompactionSummaryGenerator;
     ui?: BrewvaToolUiPort;
     logger?: HostedSessionLogger;
     onProviderAssistantMessage?: (
@@ -1144,6 +1115,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     this.#registeredTools = [...input.customTools];
     this.#runner = input.runner;
     this.#agent = input.agent;
+    this.#compactionSummaryGenerator = input.compactionSummaryGenerator;
     this.#logger = input.logger ?? null;
     this.#onProviderAssistantMessage = input.onProviderAssistantMessage;
     this.#onDispose = input.onDispose;
@@ -1219,6 +1191,11 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     });
     const googleCachedContentManager =
       options.googleCachedContentManager ?? DEFAULT_GOOGLE_CACHED_CONTENT_MANAGER;
+    const compactionSummaryGenerator =
+      options.compactionSummaryGenerator ??
+      createHostedLlmCompactionSummaryGenerator({
+        resolveAuth: (model) => options.modelCatalog.getApiKeyAndHeaders(model),
+      });
     const sessionId = options.sessionStore.getSessionId();
     const releaseGoogleCachedContent = () => {
       // Best-effort cleanup uses the latest Google credential. If the user rotates accounts mid-session,
@@ -1250,6 +1227,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
       thinkingBudgets: options.settings.getThinkingBudgets(),
       maxRetryDelayMs: options.settings.getRetrySettings()?.maxDelayMs,
       sessionId,
+      streamFn: createHostedProviderStreamFunction(),
       resolveRequestAuth: async (model) => options.modelCatalog.getApiKeyAndHeaders(model),
       beforeToolCall: async (input: BrewvaTurnLoopBeforeToolCallContext) => {
         if (!session) {
@@ -1360,7 +1338,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
             transientReductionClassification: transientReduction?.classification ?? null,
             expectedCacheBreak: transientReduction?.expectedCacheBreak ?? false,
           };
-          const recallInjection = session.#lastRecallInjectionFingerprint;
+          const workbenchContext = session.#lastWorkbenchContextFingerprint;
           lastProviderFingerprint = createProviderRequestFingerprint({
             provider: model.provider,
             api: model.api,
@@ -1374,12 +1352,10 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
               buildProviderDynamicTailSummary({
                 payload: nextPayload,
                 channelContext,
-                recallInjection,
+                workbenchContext,
                 visibleHistoryReduction,
               }),
             ],
-            activeSkillSet: resolveActiveSkillSet(options.runtime, sessionId),
-            skillRoutingEpoch: resolveSkillRoutingEpoch(options.runtime, sessionId),
             channelContext,
             renderedCache: cacheRender,
             stickyLatches,
@@ -1388,7 +1364,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
             cacheRelevantHeaders: metadata?.headers,
             extraBody: metadata?.extraBody,
             visibleHistoryReduction,
-            recallInjection,
+            workbenchContext,
             providerFallback: metadata?.providerFallback ?? { active: false },
             payload: nextPayload,
           });
@@ -1431,6 +1407,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
       customTools: toolDefinitions,
       runner,
       agent,
+      compactionSummaryGenerator,
       ui: options.ui,
       runtime: options.runtime,
       logger: options.logger,
@@ -1476,11 +1453,19 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
           },
           observedAt: Date.now(),
         });
-        options.runtime.maintain.context.observeProviderCache(sessionId, {
-          source: lastProviderFingerprint.bucketKey,
-          fingerprint: lastProviderFingerprint,
-          render: lastCacheRender,
-          breakObservation,
+        const providerCacheObservation = options.runtime.maintain.context.observeProviderCache(
+          sessionId,
+          {
+            source: lastProviderFingerprint.bucketKey,
+            fingerprint: lastProviderFingerprint,
+            render: lastCacheRender,
+            breakObservation,
+          },
+        );
+        recordProviderCacheObservationEvidence({
+          workspaceRoot: options.runtime.workspaceRoot,
+          sessionId,
+          observed: providerCacheObservation,
         });
       },
       onDispose: () => {
@@ -1761,7 +1746,9 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
       },
       this.createHostContext(),
     );
-    this.#lastRecallInjectionFingerprint = resolveRecallInjectionFingerprint(beforeStart?.messages);
+    this.#lastWorkbenchContextFingerprint = resolveWorkbenchContextFingerprint(
+      beforeStart?.messages,
+    );
     if (beforeStart?.messages) {
       for (const message of beforeStart.messages) {
         messages.push({
@@ -2413,6 +2400,64 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     void this.executeDeferredCompaction();
   }
 
+  private async resolveCompactionSummary(input: {
+    sessionId: string;
+    messages: readonly unknown[];
+    customInstructions?: string;
+  }): Promise<ResolvedCompactionSummary> {
+    try {
+      const stateModel = this.#agent.state.model;
+      const model = stateModel ? this.#catalog.find(stateModel.provider, stateModel.id) : undefined;
+      if (!model) {
+        throw new Error("compaction_summary_model_unavailable");
+      }
+      const generated = await this.#compactionSummaryGenerator({
+        sessionId: input.sessionId,
+        cwd: this.#cwd,
+        model,
+        messages: input.messages,
+        systemPrompt: this.#agent.state.systemPrompt,
+        customInstructions: input.customInstructions,
+      });
+      return {
+        summary: normalizeCompactionSummaryForStorage(generated.summary),
+        strategy: generated.strategy ?? LLM_PRIMARY_COMPACTION_STRATEGY,
+        model: generated.model ?? {
+          provider: model.provider,
+          id: model.id,
+          api: model.api,
+        },
+        usage: generated.usage,
+      };
+    } catch (error) {
+      return {
+        summary: buildBrewvaDeterministicCompactionSummary(input.messages),
+        strategy: DETERMINISTIC_EMERGENCY_COMPACTION_STRATEGY,
+        fallbackReason: compactionFallbackReason(error),
+      };
+    }
+  }
+
+  private recordCompactionGenerationCost(
+    sessionId: string,
+    resolution: ResolvedCompactionSummary,
+  ): void {
+    if (!this.#runtime || !resolution.model || !resolution.usage) {
+      return;
+    }
+    this.#runtime.authority.cost.recordAssistantUsage({
+      sessionId,
+      model: `${resolution.model.provider}/${resolution.model.id}`,
+      inputTokens: nonNegativeUsageNumber(resolution.usage.input),
+      outputTokens: nonNegativeUsageNumber(resolution.usage.output),
+      cacheReadTokens: nonNegativeUsageNumber(resolution.usage.cacheRead),
+      cacheWriteTokens: nonNegativeUsageNumber(resolution.usage.cacheWrite),
+      totalTokens: nonNegativeUsageNumber(resolution.usage.totalTokens),
+      costUsd: nonNegativeUsageNumber(resolution.usage.cost?.total),
+      stopReason: "compaction_summary",
+    });
+  }
+
   private consumeToolResultStop(_toolResults: BrewvaTurnLoopToolResultMessage[]): boolean {
     if (!this.#stopAfterCurrentToolResults) {
       return false;
@@ -2439,6 +2484,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
         sourceLeafEntryId: string | null;
         firstKeptEntryId: string;
         tokensBefore: number;
+        summaryGeneration: SessionCompactionGenerationMetadata;
       };
       fromExtension: false;
     } | null = null;
@@ -2446,7 +2492,14 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
       const branchEntries = this.sessionManager.getBranch();
       const sessionContext = this.sessionManager.buildSessionContext();
       const sourceLeafEntryId = this.sessionManager.getLeafId() ?? null;
-      const summary = buildBrewvaDeterministicCompactionSummary(sessionContext.messages);
+      const summaryResolution = await this.resolveCompactionSummary({
+        sessionId: this.sessionManager.getSessionId(),
+        messages: sessionContext.messages,
+        customInstructions: request.customInstructions,
+      });
+      const summary = summaryResolution.summary;
+      const summaryGeneration = buildCompactionSummaryGenerationMetadata(summaryResolution);
+      this.recordCompactionGenerationCost(this.sessionManager.getSessionId(), summaryResolution);
       const tokensBefore = estimateBrewvaCompactionTokens(sessionContext.messages);
       const compactId = randomUUID();
       const preview = this.sessionManager.previewCompaction(
@@ -2458,7 +2511,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
       const beforeCompactEvent = {
         type: "session_before_compact" as const,
         preparation: {
-          strategy: "deterministic_projection_compaction",
+          ...summaryGeneration,
         },
         branchEntries,
         customInstructions: request.customInstructions,
@@ -2482,6 +2535,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
           sourceLeafEntryId: preview.sourceLeafEntryId,
           firstKeptEntryId: preview.firstKeptEntryId,
           tokensBefore: preview.tokensBefore,
+          summaryGeneration,
         },
         fromExtension: false as const,
       };
@@ -3013,9 +3067,6 @@ function sameContextState(left: ContextState, right: ContextState): boolean {
     left.budgetPressure === right.budgetPressure &&
     left.promptStabilityFingerprint === right.promptStabilityFingerprint &&
     left.transientReductionActive === right.transientReductionActive &&
-    left.historyBaselineAvailable === right.historyBaselineAvailable &&
-    left.reservedPrimaryTokens === right.reservedPrimaryTokens &&
-    left.reservedSupplementalTokens === right.reservedSupplementalTokens &&
-    left.lastInjectionScopeId === right.lastInjectionScopeId
+    left.historyBaselineAvailable === right.historyBaselineAvailable
   );
 }

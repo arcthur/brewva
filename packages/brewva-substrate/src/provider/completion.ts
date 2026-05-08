@@ -36,3 +36,16 @@ export interface BrewvaProviderCompletionResponse {
 export interface BrewvaProviderCompletionDriver {
   complete(input: BrewvaProviderCompletionRequest): Promise<BrewvaProviderCompletionResponse>;
 }
+
+export class UnsupportedBrewvaProviderApiError extends Error {
+  constructor(public readonly api: string) {
+    super(`Unsupported provider api for hosted completion: ${api}`);
+    this.name = "UnsupportedBrewvaProviderApiError";
+  }
+}
+
+export function isUnsupportedBrewvaProviderApiError(
+  error: unknown,
+): error is UnsupportedBrewvaProviderApiError {
+  return error instanceof UnsupportedBrewvaProviderApiError;
+}

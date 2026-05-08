@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -7,10 +7,9 @@ import {
   recordPromptStabilityEvidence,
   recordTransientReductionEvidence,
   registerEventStream,
-  registerQualityGate,
 } from "@brewva/brewva-gateway/runtime-plugins";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
-import { requireDefined, requireNumber, requireRecord } from "../../helpers/assertions.js";
+import { requireNumber, requireRecord } from "../../helpers/assertions.js";
 import {
   createPromptMessageUpdateEvent,
   createTextDeltaAssistantEvent,
@@ -18,181 +17,7 @@ import {
 import { createMockRuntimePluginApi, invokeHandlers } from "../../helpers/runtime-plugin.js";
 import { createOpsRuntimeConfig } from "../../helpers/runtime.js";
 
-function findBlockedResult(results: unknown[]): unknown {
-  return requireDefined(
-    results.find((result) => (result as { block?: boolean })?.block === true),
-    "Expected blocked runtime-plugin result.",
-  );
-}
-
 describe("Runtime plugin integration: observability guardrails", () => {
-  test("given blocked tool_call, when handlers run with stopOnBlock, then tool_call is recorded and tool_call_marked is omitted", () => {
-    const workspace = mkdtempSync(join(tmpdir(), "brewva-ext-blocked-"));
-    mkdirSync(join(workspace, ".brewva/skills/core/blocktool"), { recursive: true });
-    writeFileSync(
-      join(workspace, ".brewva/skills/core/blocktool/SKILL.md"),
-      `---
-name: blocktool
-description: blocktool skill
-tags: [blocktool]
-selection:
-  when_to_use: Use when the task needs the routed test skill.
-intent:
-  outputs: []
-effects:
-  allowed_effects: [workspace_read]
-  denied_effects: [workspace_write]
-resources:
-  default_lease:
-    max_tool_calls: 10
-    max_tokens: 10000
-  hard_ceiling:
-    max_tool_calls: 20
-    max_tokens: 20000
-execution_hints:
-  preferred_tools: [read]
-  fallback_tools: [edit]
-consumes: []
-requires: []
----
-blocktool`,
-      "utf8",
-    );
-
-    const runtime = new BrewvaRuntime({ cwd: workspace, config: createOpsRuntimeConfig() });
-    const sessionId = "ext-blocked-1";
-    expect(runtime.authority.skills.activate(sessionId, "blocktool").ok).toBe(true);
-
-    const { api, handlers } = createMockRuntimePluginApi();
-    registerEventStream(api, runtime);
-    registerQualityGate(api, runtime);
-
-    const results = invokeHandlers(
-      handlers,
-      "tool_call",
-      {
-        toolCallId: "tc-write-1",
-        toolName: "write",
-        input: { file_path: "src/a.ts", content: "x" },
-      },
-      {
-        cwd: workspace,
-        sessionManager: {
-          getSessionId: () => sessionId,
-        },
-      },
-      { stopOnBlock: true },
-    );
-
-    findBlockedResult(results);
-    expect(runtime.inspect.events.query(sessionId, { type: "tool_call", last: 1 })).toHaveLength(1);
-    expect(
-      runtime.inspect.events.query(sessionId, { type: "tool_call_marked", last: 1 }),
-    ).toHaveLength(0);
-    expect(
-      runtime.inspect.events.query(sessionId, { type: "file_snapshot_captured", last: 1 }),
-    ).toHaveLength(0);
-  });
-
-  test("given max_tool_calls exceeded, when normal and lifecycle tools are invoked, then normal tool is blocked and skill_complete is allowed", () => {
-    const workspace = mkdtempSync(join(tmpdir(), "brewva-ext-max-tool-calls-"));
-    mkdirSync(join(workspace, ".brewva/skills/core/maxcalls"), { recursive: true });
-    writeFileSync(
-      join(workspace, ".brewva/skills/core/maxcalls/SKILL.md"),
-      `---
-name: maxcalls
-description: maxcalls skill
-tags: [maxcalls]
-selection:
-  when_to_use: Use when the task needs the routed test skill.
-intent:
-  outputs: []
-effects:
-  allowed_effects: [workspace_read, workspace_write]
-resources:
-  default_lease:
-    max_tool_calls: 1
-    max_tokens: 10000
-  hard_ceiling:
-    max_tool_calls: 2
-    max_tokens: 20000
-execution_hints:
-  preferred_tools: [read, edit]
-  fallback_tools: []
-consumes: []
-requires: []
----
-maxcalls`,
-      "utf8",
-    );
-
-    const config = createOpsRuntimeConfig();
-    config.security.mode = "strict";
-
-    const runtime = new BrewvaRuntime({ cwd: workspace, config });
-    const sessionId = "ext-max-tool-calls-1";
-    expect(runtime.authority.skills.activate(sessionId, "maxcalls").ok).toBe(true);
-    expect(
-      runtime.inspect.skills.getActive(sessionId)?.contract.resources?.defaultLease?.maxToolCalls,
-    ).toBe(1);
-
-    const { api, handlers } = createMockRuntimePluginApi();
-    registerEventStream(api, runtime);
-    registerQualityGate(api, runtime);
-
-    runtime.authority.tools.markCall(sessionId, "read");
-
-    const blocked = invokeHandlers(
-      handlers,
-      "tool_call",
-      {
-        toolCallId: "tc-grep-1",
-        toolName: "edit",
-        input: { file_path: "src/a.ts", old_string: "a", new_string: "b" },
-      },
-      {
-        cwd: workspace,
-        sessionManager: {
-          getSessionId: () => sessionId,
-        },
-      },
-      { stopOnBlock: true },
-    );
-    findBlockedResult(blocked);
-
-    const lifecycle = invokeHandlers(
-      handlers,
-      "tool_call",
-      {
-        toolCallId: "tc-complete-2",
-        toolName: "skill_complete",
-        input: { outputs: {} },
-      },
-      {
-        cwd: workspace,
-        sessionManager: {
-          getSessionId: () => sessionId,
-        },
-      },
-      { stopOnBlock: true },
-    );
-    expect(lifecycle.find((result) => (result as { block?: boolean })?.block === true)).toBe(
-      undefined,
-    );
-
-    expect(runtime.inspect.events.query(sessionId, { type: "tool_call" })).toHaveLength(2);
-    expect(runtime.inspect.events.query(sessionId, { type: "tool_call_marked" })).toHaveLength(2);
-    const blockedEvents = runtime.inspect.events.query(sessionId, { type: "tool_call_blocked" });
-    requireDefined(
-      blockedEvents.find(
-        (event) =>
-          typeof event.payload?.reason === "string" &&
-          event.payload.reason.includes("maxToolCalls"),
-      ),
-      "Expected maxToolCalls blocked event.",
-    );
-  });
-
   test("given assistant delta events, when the message completes, then only the durable message_end summary is persisted", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-ext-throttle-"));
     const runtime = new BrewvaRuntime({ cwd: workspace, config: createOpsRuntimeConfig() });
@@ -409,7 +234,7 @@ maxcalls`,
     const prompt = runtime.maintain.context.observePromptStability(sessionId, {
       stablePrefixHash: "prefix-live",
       dynamicTailHash: "tail-live",
-      injectionScopeId: "leaf-live",
+      contextScopeId: "leaf-live",
       turn: 1,
       timestamp: 1_740_000_003_100,
     });
@@ -417,7 +242,8 @@ maxcalls`,
       workspaceRoot: runtime.workspaceRoot,
       sessionId,
       observed: prompt,
-      pressureLevel: "high",
+      compactionAdvised: true,
+      forcedCompaction: false,
       usageRatio: 0.9,
       pendingCompactionReason: "usage_threshold",
       gateRequired: false,
@@ -430,7 +256,8 @@ maxcalls`,
       clearedToolResults: 2,
       clearedChars: 1536,
       estimatedTokenSavings: 410,
-      pressureLevel: "high",
+      compactionAdvised: true,
+      forcedCompaction: false,
       turn: 1,
       timestamp: 1_740_000_003_110,
     });
@@ -504,6 +331,10 @@ maxcalls`,
       stablePrefixTargetMet: true,
       reductionEvidenceObserved: true,
       cacheAccountingObserved: true,
+      promptCacheHitTargetMet: true,
+      promptCacheStopLossPassed: true,
+      inputCostBaselineObserved: false,
+      inputCostStopLossPassed: true,
       ready: true,
       gaps: [],
     });

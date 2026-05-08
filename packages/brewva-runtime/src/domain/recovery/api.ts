@@ -30,7 +30,6 @@ export type {
 export { registerRecoveryDomain } from "./registrar.js";
 export type { RuntimeRecoveryDomainRegistration } from "./registrar.js";
 export {
-  buildRecoveryWorkingSetBlock,
   deriveDuplicateSideEffectSuppressionCount,
   deriveRecoveryCanonicalization,
   deriveRecoveryPosture,

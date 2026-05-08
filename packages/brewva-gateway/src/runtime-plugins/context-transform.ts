@@ -1,17 +1,18 @@
 import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import { coerceContextBudgetUsage } from "@brewva/brewva-runtime";
 import type { InternalHostPluginApi } from "@brewva/brewva-substrate/host-api";
+import type { BrewvaTurnLoopMessage } from "@brewva/brewva-substrate/turn";
 import { getHostedTurnTransitionCoordinator } from "../session/turn-transition.js";
 import type { HostedDelegationStore } from "../subagents/delegation-store.js";
 import {
   createHostedCompactionController,
   type HostedManualCompact,
 } from "./hosted-compaction-controller.js";
-import {
-  createHostedContextInjectionPipeline,
-  type HostedContextInjectionResult,
-} from "./hosted-context-injection-pipeline.js";
 import { createHostedContextTelemetry } from "./hosted-context-telemetry.js";
+import {
+  createHostedWorkbenchContextPipeline,
+  type HostedWorkbenchContextResult,
+} from "./hosted-workbench-context-pipeline.js";
 import { createRuntimeTurnClockStore, type RuntimeTurnClockStore } from "./runtime-turn-clock.js";
 
 export interface ContextTransformOptions {
@@ -23,10 +24,10 @@ export interface ContextTransformOptions {
 
 export interface ContextTransformLifecycle {
   turnStart: (event: unknown, ctx: unknown) => undefined;
-  context: (event: unknown, ctx: unknown) => undefined;
+  context: (event: unknown, ctx: unknown) => { messages: BrewvaTurnLoopMessage[] } | undefined;
   sessionCompact: (event: unknown, ctx: unknown) => undefined;
   sessionShutdown: (event: unknown, ctx: unknown) => undefined;
-  beforeAgentStart: (event: unknown, ctx: unknown) => Promise<HostedContextInjectionResult>;
+  beforeAgentStart: (event: unknown, ctx: unknown) => Promise<HostedWorkbenchContextResult>;
 }
 
 interface RuntimePluginSessionManager {
@@ -53,6 +54,7 @@ interface SessionCompactEvent {
     summary?: unknown;
     content?: unknown;
     text?: unknown;
+    summaryGeneration?: unknown;
   };
   fromExtension?: unknown;
 }
@@ -60,6 +62,10 @@ interface SessionCompactEvent {
 interface BeforeAgentStartEvent {
   prompt?: unknown;
   systemPrompt?: unknown;
+}
+
+interface ContextEvent {
+  messages?: unknown;
 }
 
 function asLifecycleContext(ctx: unknown): RuntimePluginLifecycleContext {
@@ -83,7 +89,7 @@ export function createContextTransformLifecycle(
   const compactionController = createHostedCompactionController(runtime, telemetry, turnClock, {
     autoCompactionWatchdogMs: options.autoCompactionWatchdogMs,
   });
-  const injectionPipeline = createHostedContextInjectionPipeline(
+  const workbenchContextPipeline = createHostedWorkbenchContextPipeline(
     extensionApi,
     runtime,
     telemetry,
@@ -105,7 +111,7 @@ export function createContextTransformLifecycle(
       });
       return undefined;
     },
-    context(_event, ctx) {
+    context(event, ctx) {
       const lifecycleContext = asLifecycleContext(ctx);
       compactionController.context({
         sessionId: lifecycleContext.sessionManager.getSessionId(),
@@ -114,7 +120,16 @@ export function createContextTransformLifecycle(
         idle: typeof lifecycleContext.isIdle === "function" ? lifecycleContext.isIdle() : false,
         compact: lifecycleContext.compact,
       });
-      return undefined;
+      const messages = (event as ContextEvent).messages;
+      if (!Array.isArray(messages)) {
+        return undefined;
+      }
+      return {
+        messages: workbenchContextPipeline.transformContext({
+          sessionId: lifecycleContext.sessionManager.getSessionId(),
+          messages: messages as BrewvaTurnLoopMessage[],
+        }),
+      };
     },
     sessionCompact(event, ctx) {
       const lifecycleContext = asLifecycleContext(ctx);
@@ -138,7 +153,7 @@ export function createContextTransformLifecycle(
     async beforeAgentStart(event, ctx) {
       const lifecycleContext = asLifecycleContext(ctx);
       const startEvent = event as BeforeAgentStartEvent;
-      return injectionPipeline.beforeAgentStart({
+      return workbenchContextPipeline.beforeAgentStart({
         sessionId: lifecycleContext.sessionManager.getSessionId(),
         sessionManager: lifecycleContext.sessionManager,
         prompt: typeof startEvent.prompt === "string" ? startEvent.prompt : "",

@@ -26,8 +26,8 @@ recovery, and bounded execution.
    rollback restores only tracked mutations for the target session and resets
    stale verification assumptions.
 7. Budget boundedness:
-   context injection, provider cache behavior, cost reporting, and parallelism
-   remain bounded by configured policy.
+   context composition, provider cache behavior, cost reporting, and
+   parallelism remain bounded by configured policy.
 8. Config immutability:
    `runtime.config` is deep-readonly after construction; routing overrides are
    applied before runtime assembly.

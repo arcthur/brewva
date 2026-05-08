@@ -1,7 +1,6 @@
 import type { BrewvaConfig } from "../config/types.js";
 import type { VerificationLevel } from "../core/shared.js";
 import type { VerificationOutcomeSnapshot } from "../domain/context/api.js";
-import type { ToolOutputDistillationEntry } from "../domain/context/api.js";
 import type { SessionCostSummary } from "../domain/cost/api.js";
 import type { GovernancePort } from "../domain/governance/api.js";
 import type { ResolvedToolAuthority } from "../domain/governance/api.js";
@@ -33,10 +32,6 @@ export interface RuntimeCompositionInput {
   getTruthState: (sessionId: string) => ReturnType<RuntimeKernelContext["getTruthState"]>;
   recordEvent: RuntimeKernelContext["recordEvent"];
   sanitizeInput: RuntimeKernelContext["sanitizeInput"];
-  getRecentToolOutputDistillations: (
-    sessionId: string,
-    maxEntries?: number,
-  ) => ToolOutputDistillationEntry[];
   getLatestVerificationOutcome: (sessionId: string) => VerificationOutcomeSnapshot | undefined;
   isContextBudgetEnabled: () => boolean;
   resolveCheckpointCostSummary: (sessionId: string) => SessionCostSummary;

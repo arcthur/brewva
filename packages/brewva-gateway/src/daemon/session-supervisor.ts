@@ -18,7 +18,7 @@ import {
   asBrewvaWalId,
   type BrewvaConfig,
   type BrewvaWalId,
-  type ContextPressureView,
+  type ContextStatusView,
   type ManagedToolMode,
   type RecoveryWalRecord,
   type SessionLifecycleSnapshot,
@@ -83,6 +83,31 @@ const DEFAULT_MAX_PENDING_TURNS_PER_SESSION = 32;
 const DEFAULT_RECOVERY_WAL_COMPACT_INTERVAL_MS = 120_000;
 
 type LoggerLike = Pick<StructuredLogger, "debug" | "info" | "warn" | "error" | "log">;
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function isContextStatusView(value: unknown): value is ContextStatusView {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+  const candidate = value as Partial<ContextStatusView>;
+  return (
+    isFiniteNumber(candidate.tokensUsed) &&
+    isFiniteNumber(candidate.tokensTotal) &&
+    isFiniteNumber(candidate.tokensRemaining) &&
+    isFiniteNumber(candidate.tokensUntilForcedCompact) &&
+    isFiniteNumber(candidate.predictedTurnGrowthTokens) &&
+    isFiniteNumber(candidate.tokensUntilPredictedOverflow) &&
+    typeof candidate.predictedOverflow === "boolean" &&
+    isFiniteNumber(candidate.usageRatio) &&
+    isFiniteNumber(candidate.hardLimitRatio) &&
+    isFiniteNumber(candidate.compactionThresholdRatio) &&
+    typeof candidate.compactionAdvised === "boolean" &&
+    typeof candidate.forcedCompaction === "boolean"
+  );
+}
 
 async function terminatePid(pid: number): Promise<void> {
   if (!isProcessAlive(pid)) {
@@ -640,33 +665,21 @@ export class SessionSupervisor implements SessionBackend {
     return frames;
   }
 
-  async querySessionContextPressure(sessionId: string): Promise<ContextPressureView | undefined> {
+  async querySessionContextStatus(sessionId: string): Promise<ContextStatusView | undefined> {
     const handle = this.workers.get(sessionId);
     if (!handle) {
       return undefined;
     }
     this.touchActivity(handle);
     const payload = await this.workerRpc.request(handle, {
-      kind: "sessionContextPressure.query",
+      kind: "sessionContextStatus.query",
       requestId: randomUUID(),
     });
-    const candidate = payload && typeof payload === "object" ? payload.contextPressure : undefined;
-    if (!candidate || typeof candidate !== "object") {
+    const candidate = payload && typeof payload === "object" ? payload.contextStatus : undefined;
+    if (!isContextStatusView(candidate)) {
       return undefined;
     }
-    const typed = candidate as Partial<ContextPressureView>;
-    if (
-      typeof typed.tokens !== "number" ||
-      typeof typed.limit !== "number" ||
-      (typed.level !== "normal" && typed.level !== "elevated" && typed.level !== "critical")
-    ) {
-      return undefined;
-    }
-    return {
-      tokens: typed.tokens,
-      limit: typed.limit,
-      level: typed.level,
-    };
+    return candidate;
   }
 
   async querySessionLifecycle(sessionId: string): Promise<SessionLifecycleSnapshot | undefined> {

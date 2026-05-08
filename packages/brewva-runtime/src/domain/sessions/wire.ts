@@ -49,10 +49,19 @@ export type SessionWireStatusState =
   | "error"
   | "closed";
 
-export interface ContextPressureView {
-  tokens: number;
-  limit: number;
-  level: "normal" | "elevated" | "critical";
+export interface ContextStatusView {
+  tokensUsed: number;
+  tokensTotal: number;
+  tokensRemaining: number;
+  tokensUntilForcedCompact: number;
+  predictedTurnGrowthTokens: number;
+  tokensUntilPredictedOverflow: number;
+  predictedOverflow: boolean;
+  usageRatio: number;
+  hardLimitRatio: number;
+  compactionThresholdRatio: number;
+  compactionAdvised: boolean;
+  forcedCompaction: boolean;
 }
 
 export interface ToolOutputDisplayView {
@@ -120,7 +129,7 @@ export type SessionWireFrame =
       state: SessionWireStatusState;
       reason?: string;
       detail?: string;
-      contextPressure?: ContextPressureView;
+      contextStatus?: ContextStatusView;
     })
   | (SessionWireFrameBase & {
       type: "turn.input";

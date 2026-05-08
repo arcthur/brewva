@@ -39,11 +39,11 @@ export function createResourceLeaseTool(options: BrewvaToolOptions): ToolDefinit
     {
       name: "resource_lease",
       label: "Resource Lease",
-      description: "Request, inspect, or cancel temporary budget expansions for the active skill.",
+      description: "Request, inspect, or cancel temporary task-scoped budget expansions.",
       promptSnippet:
-        "Negotiate temporary budget expansions when the active skill needs more execution headroom.",
+        "Negotiate temporary budget expansions when the current task needs more execution headroom.",
       promptGuidelines: [
-        "Use this when the active skill needs more budget than its default lease provides.",
+        "Use this when the current task needs more budget than its default lease provides.",
         "Prefer bounded TTLs and the smallest budget increase that unblocks the task.",
         "Action values are request, list, and cancel.",
       ],

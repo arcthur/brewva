@@ -9,7 +9,7 @@
   - `docs/architecture/exploration-and-effect-governance.md`
   - `docs/architecture/control-and-data-flow.md`
   - `docs/reference/runtime.md`
-  - `docs/reference/context-composer.md`
+  - `docs/reference/hosted-dynamic-context.md`
   - `docs/reference/events/README.md`
 
 ## Archive Summary
@@ -40,7 +40,7 @@ Read current behavior from:
 - `docs/architecture/exploration-and-effect-governance.md`
 - `docs/architecture/control-and-data-flow.md`
 - `docs/reference/runtime.md`
-- `docs/reference/context-composer.md`
+- `docs/reference/hosted-dynamic-context.md`
 - `docs/reference/events/README.md`
 - `docs/research/decisions/boundary-first-subtraction-and-model-native-recovery.md`
 

@@ -43,7 +43,7 @@ function createScopedMethodPort<TPort extends object>(
 function createScopedNestedGroup<TGroup extends object>(
   toolName: string,
   group: TGroup,
-  capabilityPrefix: "authority" | "inspect",
+  capabilityPrefix: "authority" | "inspect" | "maintain",
   allowedCapabilities: ReadonlySet<string>,
 ): TGroup {
   let changed = false;
@@ -78,6 +78,7 @@ export function createCapabilityScopedToolRuntime<T extends BrewvaToolRuntime>(
   let changed = false;
   let authority = runtime.authority;
   let inspect = runtime.inspect;
+  let maintain = runtime.maintain;
   let extensions = runtime.extensions;
 
   if (runtime.authority && typeof runtime.authority === "object") {
@@ -106,6 +107,19 @@ export function createCapabilityScopedToolRuntime<T extends BrewvaToolRuntime>(
     }
   }
 
+  if (runtime.maintain && typeof runtime.maintain === "object") {
+    const scopedMaintain = createScopedNestedGroup(
+      toolName,
+      runtime.maintain,
+      "maintain",
+      allowedCapabilities,
+    );
+    if (scopedMaintain !== runtime.maintain) {
+      maintain = scopedMaintain;
+      changed = true;
+    }
+  }
+
   if (runtime.extensions?.tools && typeof runtime.extensions.tools === "object") {
     const scopedToolsExtension = createScopedMethodPort(
       toolName,
@@ -130,6 +144,7 @@ export function createCapabilityScopedToolRuntime<T extends BrewvaToolRuntime>(
       ...runtime,
       authority,
       inspect,
+      ...(maintain ? { maintain } : {}),
       ...(extensions ? { extensions } : {}),
     },
     runtime,

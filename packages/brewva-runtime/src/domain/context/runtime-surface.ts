@@ -5,11 +5,9 @@ import {
 import type { SessionLifecycleService } from "../sessions/api.js";
 import type { TaskWatchdogService } from "../task/api.js";
 import type { ContextService } from "./context.js";
-import type { ContextInjectionCollector } from "./injection.js";
 import type { HistoryViewBaselineSnapshot } from "./types.js";
 
 export interface ContextSurfaceDependencies {
-  contextInjection: ContextInjectionCollector;
   getContextService(): ContextService;
   getSessionLifecycleService(): SessionLifecycleService;
   getTaskWatchdogService(): TaskWatchdogService;
@@ -26,8 +24,6 @@ export function createContextSurfaceMethods(deps: ContextSurfaceDependencies) {
     },
     onTurnEnd: (sessionId: string) => {
       deps.getSessionLifecycleService().ensureHydrated(sessionId);
-      deps.contextInjection.clearPending(sessionId);
-      deps.getContextService().clearReservedInjectionTokensForSession(sessionId);
     },
     onUserInput: (sessionId: string) => {
       deps.getSessionLifecycleService().ensureHydrated(sessionId);
@@ -54,6 +50,8 @@ export function createContextSurfaceMethods(deps: ContextSurfaceDependencies) {
       input: Parameters<ContextService["observeProviderCache"]>[1],
     ) => deps.getContextService().observeProviderCache(sessionId, input),
     getUsage: (sessionId: string) => deps.getContextService().getContextUsage(sessionId),
+    getStatus: (sessionId: string, usage?: Parameters<ContextService["getContextStatus"]>[1]) =>
+      deps.getContextService().getContextStatus(sessionId, usage),
     getPromptStability: (sessionId: string) =>
       deps.getContextService().getPromptStability(sessionId),
     getTransientReduction: (sessionId: string) =>
@@ -74,14 +72,6 @@ export function createContextSurfaceMethods(deps: ContextSurfaceDependencies) {
       sessionId: string,
       state: Parameters<ContextService["isVisibleReadStateCurrent"]>[1],
     ) => deps.getContextService().isVisibleReadStateCurrent(sessionId, state),
-    getReservedPrimaryTokens: (
-      sessionId: string,
-      injectionScopeId?: Parameters<ContextService["getReservedPrimaryTokens"]>[1],
-    ) => deps.getContextService().getReservedPrimaryTokens(sessionId, injectionScopeId),
-    getReservedSupplementalTokens: (
-      sessionId: string,
-      injectionScopeId?: Parameters<ContextService["getReservedSupplementalTokens"]>[1],
-    ) => deps.getContextService().getReservedSupplementalTokens(sessionId, injectionScopeId),
     getUsageRatio: (usage: Parameters<ContextService["getContextUsageRatio"]>[0]) =>
       deps.getContextService().getContextUsageRatio(usage),
     getHardLimitRatio: (
@@ -92,14 +82,6 @@ export function createContextSurfaceMethods(deps: ContextSurfaceDependencies) {
       sessionId: string,
       usage?: Parameters<ContextService["getContextCompactionThresholdRatio"]>[1],
     ) => deps.getContextService().getContextCompactionThresholdRatio(sessionId, usage),
-    getPressureStatus: (
-      sessionId: string,
-      usage?: Parameters<ContextService["getContextPressureStatus"]>[1],
-    ) => deps.getContextService().getContextPressureStatus(sessionId, usage),
-    getPressureLevel: (
-      sessionId: string,
-      usage?: Parameters<ContextService["getContextPressureLevel"]>[1],
-    ) => deps.getContextService().getContextPressureLevel(sessionId, usage),
     getCompactionGateStatus: (
       sessionId: string,
       usage?: Parameters<ContextService["getContextCompactionGateStatus"]>[1],
@@ -110,27 +92,6 @@ export function createContextSurfaceMethods(deps: ContextSurfaceDependencies) {
       usage?: Parameters<ContextService["checkContextCompactionGate"]>[2],
     ) => deps.getContextService().checkContextCompactionGate(sessionId, toolName, usage),
     getHistoryViewBaseline: (sessionId: string) => deps.getHistoryViewBaseline(sessionId),
-    registerProvider: (provider: Parameters<ContextService["registerContextSourceProvider"]>[0]) =>
-      deps.getContextService().registerContextSourceProvider(provider),
-    unregisterProvider: (
-      source: Parameters<ContextService["unregisterContextSourceProvider"]>[0],
-    ) => deps.getContextService().unregisterContextSourceProvider(source),
-    listProviders: () => deps.getContextService().listContextSourceProviders(),
-    buildInjection: (
-      sessionId: string,
-      prompt: Parameters<ContextService["buildContextInjection"]>[1],
-      usage?: Parameters<ContextService["buildContextInjection"]>[2],
-      options?: Parameters<ContextService["buildContextInjection"]>[3],
-    ) => deps.getContextService().buildContextInjection(sessionId, prompt, usage, options),
-    appendGuardedSupplementalBlocks: (
-      sessionId: string,
-      blocks: Parameters<ContextService["appendGuardedSupplementalBlocks"]>[1],
-      usage?: Parameters<ContextService["appendGuardedSupplementalBlocks"]>[2],
-      injectionScopeId?: Parameters<ContextService["appendGuardedSupplementalBlocks"]>[3],
-    ) =>
-      deps
-        .getContextService()
-        .appendGuardedSupplementalBlocks(sessionId, blocks, usage, injectionScopeId),
     checkAndRequestCompaction: (
       sessionId: string,
       usage: Parameters<ContextService["checkAndRequestCompaction"]>[1],
@@ -152,22 +113,18 @@ export const contextSurfaceContribution = {
   inspect: [
     "sanitizeInput",
     "getUsage",
+    "getStatus",
     "getPromptStability",
     "getTransientReduction",
     "getProviderCacheObservation",
     "getVisibleReadEpoch",
     "isVisibleReadStateCurrent",
-    "getReservedPrimaryTokens",
-    "getReservedSupplementalTokens",
     "getUsageRatio",
     "getHardLimitRatio",
     "getCompactionThresholdRatio",
-    "getPressureStatus",
-    "getPressureLevel",
     "getCompactionGateStatus",
     "checkCompactionGate",
     "getHistoryViewBaseline",
-    "listProviders",
     "getPendingCompactionReason",
     "getCompactionInstructions",
     "getCompactionWindowTurns",
@@ -182,10 +139,6 @@ export const contextSurfaceContribution = {
     "observeProviderCache",
     "advanceVisibleReadEpoch",
     "rememberVisibleReadState",
-    "registerProvider",
-    "unregisterProvider",
-    "buildInjection",
-    "appendGuardedSupplementalBlocks",
     "checkAndRequestCompaction",
     "requestCompaction",
   ],

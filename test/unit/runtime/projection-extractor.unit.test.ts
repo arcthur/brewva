@@ -16,30 +16,12 @@ function event(input: {
   payload?: Record<string, unknown>;
 }): BrewvaEventRecord {
   const timestamp = input.timestamp ?? 1_700_000_000_000;
-  const payload =
-    input.type === "skill_completed" && input.payload
-      ? {
-          ...input.payload,
-          ...(Object.prototype.hasOwnProperty.call(input.payload, "completedAt")
-            ? {}
-            : { completedAt: timestamp }),
-          ...(input.payload.outputs &&
-          typeof input.payload.outputs === "object" &&
-          !Array.isArray(input.payload.outputs)
-            ? {
-                outputKeys: Object.keys(
-                  input.payload.outputs as Record<string, unknown>,
-                ).toSorted(),
-              }
-            : {}),
-        }
-      : input.payload;
   return {
     id: input.id,
     sessionId: asBrewvaSessionId(input.sessionId ?? "projection-extractor-session"),
     type: asBrewvaEventType(input.type),
     timestamp,
-    payload: payload as BrewvaEventRecord["payload"],
+    payload: input.payload as BrewvaEventRecord["payload"],
   };
 }
 
@@ -179,117 +161,6 @@ describe("projection extractor", () => {
     );
 
     expect(result.upserts).toHaveLength(0);
-    expect(result.resolves).toHaveLength(0);
-  });
-
-  test("extracts workflow artifact candidates from skill completion outputs", () => {
-    const result = extractProjectionFromEvent(
-      event({
-        id: "evt-skill-complete-workflow",
-        type: "skill_completed",
-        payload: {
-          skillName: "plan",
-          outputKeys: [
-            "design_spec",
-            "execution_plan",
-            "execution_mode_hint",
-            "risk_register",
-            "implementation_targets",
-          ],
-          outputs: {
-            design_spec: "Document the runtime contract.",
-            execution_plan: [
-              {
-                step: "Update runtime helper",
-                intent: "Keep workflow derivation contract-first and explicit.",
-                owner: "runtime.workflow",
-                exit_criteria: "Workflow helper emits canonical design metadata.",
-                verification_intent: "Unit tests cover canonical artifact extraction.",
-              },
-              {
-                step: "Add contract tests",
-                intent: "Prove projections survive replay with the new plan schema.",
-                owner: "test.runtime",
-                exit_criteria: "Projection extraction covers canonical design outputs.",
-                verification_intent:
-                  "Projection extraction tests assert workflow artifact statements.",
-              },
-            ],
-            execution_mode_hint: "coordinated_rollout",
-            risk_register: [
-              {
-                risk: "Projection extraction could accept weak planning shapes and lose structure.",
-                category: "persisted_format",
-                severity: "medium",
-                mitigation: "Record canonical planning artifacts directly from skill outputs.",
-                required_evidence: ["projection_extractor_contract_tests"],
-                owner_lane: "review-boundaries",
-              },
-            ],
-            implementation_targets: [
-              {
-                target: "packages/brewva-runtime/src/domain/workflow/artifact-derivation.ts",
-                kind: "module",
-                owner_boundary: "runtime.workflow",
-                reason: "Projection extraction depends on workflow derivation helpers.",
-              },
-            ],
-          },
-        },
-      }),
-    );
-
-    expect(result.upserts).toHaveLength(2);
-    expect(result.upserts.map((unit) => unit.projectionKey).toSorted()).toEqual([
-      "workflow_artifact:design",
-      "workflow_artifact:execution_plan",
-    ]);
-    expect(result.upserts[0]?.metadata?.projectionGroup).toBe("workflow_artifact");
-    expect(result.upserts[0]?.statement).toContain("state=ready; freshness=unknown;");
-    expect(result.resolves).toHaveLength(0);
-  });
-
-  test("extracts expanded specialist workflow artifacts from skill completion outputs", () => {
-    const result = extractProjectionFromEvent(
-      event({
-        id: "evt-skill-complete-expanded-workflow",
-        type: "skill_completed",
-        payload: {
-          skillName: "ship",
-          outputKeys: [
-            "strategy_review",
-            "scope_decision",
-            "qa_report",
-            "qa_verdict",
-            "ship_report",
-            "ship_decision",
-            "retro_summary",
-          ],
-          outputs: {
-            strategy_review: "Hold scope around advisory workflow state first.",
-            scope_decision: "Defer release automation.",
-            qa_report: "Smoke-tested the main operator flow.",
-            qa_verdict: "pass",
-            ship_report: "Ready for PR handoff.",
-            ship_decision: "ready",
-            retro_summary: "The chain stayed visible end-to-end.",
-          },
-        },
-      }),
-    );
-
-    expect(result.upserts.map((unit) => unit.projectionKey).toSorted()).toEqual([
-      "workflow_artifact:qa",
-      "workflow_artifact:retro",
-      "workflow_artifact:ship",
-      "workflow_artifact:strategy_review",
-    ]);
-    expect(
-      result.upserts.find((unit) => unit.projectionKey === "workflow_artifact:qa")?.statement,
-    ).toContain("state=ready; freshness=fresh;");
-    expect(
-      result.upserts.find((unit) => unit.projectionKey === "workflow_artifact:ship")?.statement,
-    ).toContain("state=ready; freshness=fresh;");
     expect(result.resolves).toHaveLength(0);
   });
 

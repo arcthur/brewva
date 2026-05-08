@@ -276,17 +276,17 @@ Stable prefix candidates:
 Dynamic-tail candidates:
 
 - current turn content
-- context pressure and budget details
+- numeric context status and budget details
 - transient request-reduction summaries
-- recall and DuckDB session-index injections
-- skill-routing diagnostics and readiness state
+- recall results after explicit model tool calls
+- capability details requested by the model
 - Telegram, ingress, schedule, heartbeat, and other channel-derived context
 - cache diagnostics
 - time-sensitive or freshness-sensitive state
 
-Recall, skill routing, and channel-derived context must not drift silently into
-the stable prefix. They either stay in the dynamic tail or advance an explicit
-epoch.
+Model-requested recall results, skill-file excerpts, workbench changes, and
+channel-derived context must not drift silently into the stable prefix. They
+either stay in the dynamic tail or advance an explicit epoch.
 
 ## Tool Schema Snapshots
 
@@ -334,8 +334,7 @@ Fingerprint fields include:
 - tool snapshot hash
 - tool overlay hash
 - per-tool hashes
-- active skill set and skill-routing epoch
-- recall injection hash
+- workbench context hash
 - channel context hash
 - reasoning and thinking-budget hashes
 - sticky latch hash

@@ -43,7 +43,7 @@ describe("subagent structured outcome normalization", () => {
           {
             option: "Unify read-only public delegation under advisor.",
             summary:
-              "Keeps execution identity singular while leaving semantic workflow lanes in parent skills.",
+              "Keeps execution identity singular while leaving semantic workflow lanes in the parent workbench.",
             tradeoffs: ["Requires a broader contract and parser cutover."],
           },
         ],
@@ -66,7 +66,6 @@ describe("subagent structured outcome normalization", () => {
         "Whether any workspace overlays still rely on public review agent names.",
       ],
     });
-    expect(outcome.skillOutputs).toBeUndefined();
   });
 
   test("rejects design consult outcomes when required fields drift from the canonical contract", () => {
@@ -208,18 +207,18 @@ describe("subagent structured outcome normalization", () => {
     expect(outcome.data).toMatchObject({
       kind: "qa",
       verdict: "pass",
-    });
-    expect(outcome.skillOutputs).toMatchObject({
-      qa_verdict: "pass",
-      qa_checks: [
-        expect.objectContaining({
-          command: "bun test -- boundary-check",
-          exit_code: 0,
+      checks: [
+        {
+          name: "boundary-check",
           status: "pass",
-          summary: "boundary-check",
-          probe_type: "boundary",
+          command: "bun test -- boundary-check",
+          tool: "exec",
+          cwd: ".",
+          exit_code: 0,
           observed_output: "boundary-check passed",
-        }),
+          probe_type: "boundary",
+          evidence_refs: ["artifacts/boundary-check.txt"],
+        },
       ],
     });
   });
@@ -301,10 +300,7 @@ describe("subagent structured outcome normalization", () => {
     expect(outcome.data).toMatchObject({
       kind: "qa",
       verdict: "inconclusive",
-    });
-    expect(outcome.skillOutputs).toMatchObject({
-      qa_verdict: "inconclusive",
-      qa_confidence_gaps: expect.arrayContaining([
+      confidence_gaps: expect.arrayContaining([
         expect.stringContaining("discarded because the canonical execution evidence contract"),
       ]),
     });

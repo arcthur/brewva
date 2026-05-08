@@ -1,5 +1,5 @@
 import type {
-  ContextPressureView,
+  ContextStatusView,
   ManagedToolMode,
   SessionLifecycleSnapshot,
   SessionWireFrame,
@@ -39,7 +39,6 @@ export interface SchedulePromptTrigger {
   taskSpec?: TaskSpec | null;
   truthFacts?: TruthFact[];
   parentAnchor?: SchedulePromptAnchor | null;
-  activeSkillName?: string;
 }
 
 export type SendPromptTrigger = SchedulePromptTrigger;
@@ -93,7 +92,7 @@ export interface SessionBackend {
   stopSession(sessionId: string, reason?: string, timeoutMs?: number): Promise<boolean>;
   listWorkers(): SessionWorkerInfo[];
   querySessionWire(sessionId: string): Promise<SessionWireFrame[]>;
-  querySessionContextPressure(sessionId: string): Promise<ContextPressureView | undefined>;
+  querySessionContextStatus(sessionId: string): Promise<ContextStatusView | undefined>;
   querySessionLifecycle(sessionId: string): Promise<SessionLifecycleSnapshot | undefined>;
 }
 

@@ -14,8 +14,8 @@ import {
   buildChannelDispatchPrompt,
   collectPromptTurnOutputs,
 } from "../../../packages/brewva-gateway/src/channels/channel-agent-dispatch.js";
+import { resolveTelegramChannelPolicyState } from "../../../packages/brewva-gateway/src/channels/channel-policy.js";
 import type { ChannelSessionHandle } from "../../../packages/brewva-gateway/src/channels/channel-session-coordinator.js";
-import { resolveTelegramChannelSkillPolicyState } from "../../../packages/brewva-gateway/src/channels/skill-policy.js";
 import { createRuntimeFixture } from "../../helpers/runtime.js";
 
 function createInboundTurn(): TurnEnvelope {
@@ -43,15 +43,13 @@ describe("channel agent dispatch", () => {
     const { canonicalTurn, prompt } = buildChannelDispatchPrompt({
       turn,
       agentSessionId: "agent-session:reviewer",
-      skillPolicyState: resolveTelegramChannelSkillPolicyState({
-        availableSkillNames: ["telegram"],
-      }),
+      channelPolicyState: resolveTelegramChannelPolicyState(),
     });
 
     expect(canonicalTurn.sessionId).toBe("agent-session:reviewer");
     expect(canonicalTurn.meta?.channelSessionId).toBe("channel-session:telegram:1");
-    expect(prompt).toContain("[Brewva Channel Skill Policy]");
-    expect(prompt).toContain("Primary channel skill: telegram");
+    expect(prompt).toContain("[Brewva Channel Policy]");
+    expect(prompt).toContain("Transport: telegram");
     expect(prompt).toContain("approval_request:approval-1");
     expect(prompt).toContain("approval_title:Approve deploy");
   });
@@ -139,16 +137,14 @@ describe("channel agent dispatch", () => {
           ],
         };
       },
-      skillPolicyState: resolveTelegramChannelSkillPolicyState({
-        availableSkillNames: ["telegram"],
-      }),
+      channelPolicyState: resolveTelegramChannelPolicyState(),
     });
 
     await dispatcher.processUserTurnOnAgent(turn, "wal-1", "chat-1", "reviewer");
 
     expect(collectCalls).toEqual([
       {
-        prompt: expect.stringContaining("[Brewva Channel Skill Policy]"),
+        prompt: expect.stringContaining("[Brewva Channel Policy]"),
         sessionId: "agent-session:reviewer",
         turnId: "turn-approval-1",
       },

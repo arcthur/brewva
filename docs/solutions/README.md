@@ -18,7 +18,7 @@ Use this precedence order when repository knowledge sources disagree:
 2. promoted architecture or reference documentation
 3. active solution records under `docs/solutions/**`
 4. promotion candidates and draft protocol updates
-5. deliberation-memory hints
+5. session-local workbench notes and advisory recall hints
 
 This same order is reflected in broker recall ranking through source family,
 trust label, evidence strength, semantic score, freshness, curation, and search
@@ -51,10 +51,10 @@ They are not replacements for:
 
 - `docs/architecture/**`: stable invariants and implemented design
 - `docs/reference/**`: public contracts and normative technical surfaces
-- `skill_promotion_inspect` / `skill_promotion_review` /
-  `skill_promotion_promote`: agent behavior or protocol improvements
+- workbench notes: active model-operated working memory
+- repository skill files: reusable instructions and behavioral guidance
 
-One event may produce both a solution record and a promotion candidate, but the
+One event may produce both a solution record and an instruction update, but the
 artifacts should cross-reference each other explicitly.
 
 ## Path Convention
@@ -175,7 +175,7 @@ Use `knowledge_capture` to write or update canonical solution records.
   or successor precedent that displaced them; promotion candidates alone are
   not sufficient displacement routing
 - promotion-candidate derivative links should point into
-  `.brewva/skill-broker/**` so warm-memory follow-up remains inspectable
+  `.brewva/knowledge/**` so warm-memory follow-up remains inspectable
 - `precedent_audit` is the read-only maintenance surface for stale routing,
   higher-authority overlap, and explicit contradiction review before or after a
   capture

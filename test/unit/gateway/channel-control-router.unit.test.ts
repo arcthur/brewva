@@ -5,7 +5,7 @@ import { createChannelControlRouter } from "../../../packages/brewva-gateway/src
 import { createChannelUpdateLockManager } from "../../../packages/brewva-gateway/src/channels/channel-update-lock.js";
 import type { ChannelCommandMatch } from "../../../packages/brewva-gateway/src/channels/command-router.js";
 import { collectOpenSessionQuestions } from "../../../packages/brewva-gateway/src/operator-questions.js";
-import { recordHostedSkillCompleted } from "../../helpers/events.js";
+import { recordHostedDelegationOutcome } from "../../helpers/events.js";
 import { createRuntimeFixture } from "../../helpers/runtime.js";
 
 function createUserTurn(text: string, meta?: TurnEnvelope["meta"]): TurnEnvelope {
@@ -610,12 +610,32 @@ describe("channel control router ownership", () => {
     const runtime = createRuntimeFixture();
     const sessionId = "agent-session:worker";
 
-    recordHostedSkillCompleted({
+    recordHostedDelegationOutcome({
       runtime,
       sessionId,
-      skillName: "discovery",
-      outputs: {
-        open_questions: ["Which deployment target should the gateway use?"],
+      runId: "router-answer-question-1",
+      payload: {
+        delegate: "advisor",
+        kind: "consult",
+        consultKind: "review",
+      },
+      outcome: {
+        ok: true,
+        runId: "router-answer-question-1",
+        delegate: "advisor",
+        label: "advisor",
+        kind: "consult",
+        consultKind: "review",
+        status: "ok",
+        summary: "Open question available.",
+        data: {
+          kind: "consult",
+          consultKind: "review",
+          conclusion: "The run needs operator input.",
+          followUpQuestions: ["Which deployment target should the gateway use?"],
+        },
+        metrics: { durationMs: 1 },
+        evidenceRefs: [],
       },
     });
 

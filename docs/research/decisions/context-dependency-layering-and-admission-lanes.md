@@ -7,19 +7,19 @@
 - Status: accepted
 - Stable docs:
   - `docs/architecture/system-architecture.md`
-  - `docs/reference/context-composer.md`
+  - `docs/reference/hosted-dynamic-context.md`
   - `docs/reference/runtime.md`
   - `docs/reference/runtime-plugins.md`
   - `docs/journeys/internal/context-and-compaction.md`
 - Code anchors:
-  - `packages/brewva-runtime/src/domain/context/provider.ts`
+  - `<deleted: packages/brewva-runtime/src/domain/context/provider.ts>`
   - `packages/brewva-runtime/src/domain/context/builtins.ts`
   - `packages/brewva-runtime/src/domain/context/dependency-views.ts`
-  - `packages/brewva-runtime/src/domain/context/arena.ts`
-  - `packages/brewva-runtime/src/domain/context/injection.ts`
+  - `<deleted: packages/brewva-runtime/src/domain/context/arena.ts>`
+  - `<deleted: packages/brewva-runtime/src/domain/context/injection.ts>`
   - `packages/brewva-runtime/src/runtime/runtime.ts`
   - `packages/brewva-runtime/src/domain/context/context.ts`
-  - `packages/brewva-gateway/src/runtime-plugins/hosted-context-injection-pipeline.ts`
+  - `packages/brewva-gateway/src/runtime-plugins/hosted-workbench-context-pipeline.ts`
 
 ## Decision Summary
 
@@ -31,4 +31,4 @@
 
 ## Superseded by
 
-- None.
+- `docs/research/decisions/model-operated-working-memory-and-context-governance-reset.md`

@@ -26,7 +26,7 @@ export function createObsSnapshotTool(options: BrewvaToolOptions): ToolDefinitio
       const promptStability = obsSnapshotTool.runtime.inspect.context.getPromptStability(sessionId);
       const transientReduction =
         obsSnapshotTool.runtime.inspect.context.getTransientReduction(sessionId);
-      const pressure = obsSnapshotTool.runtime.inspect.context.getPressureStatus(sessionId, usage);
+      const contextStatus = obsSnapshotTool.runtime.inspect.context.getStatus(sessionId, usage);
       const cost = obsSnapshotTool.runtime.inspect.cost.getSummary(sessionId);
       const task = obsSnapshotTool.runtime.inspect.task.getState(sessionId);
       const verificationEvent = obsSnapshotTool.runtime.inspect.events.list(sessionId, {
@@ -44,8 +44,13 @@ export function createObsSnapshotTool(options: BrewvaToolOptions): ToolDefinitio
         "[ObsSnapshot]",
         `tape_pressure: ${tape.tapePressure}`,
         `tape_entries_total: ${tape.totalEntries}`,
-        `context_pressure: ${pressure.level}`,
-        `context_usage: ${formatPercent(pressure.usageRatio)}`,
+        `context_usage: ${formatPercent(contextStatus.usageRatio)}`,
+        `context_compaction_advised: ${contextStatus.compactionAdvised ? "yes" : "no"}`,
+        `context_forced_compaction: ${contextStatus.forcedCompaction ? "yes" : "no"}`,
+        `tokens_until_forced_compact: ${contextStatus.tokensUntilForcedCompact ?? "unknown"}`,
+        `predicted_turn_growth_tokens: ${contextStatus.predictedTurnGrowthTokens}`,
+        `tokens_until_predicted_overflow: ${contextStatus.tokensUntilPredictedOverflow ?? "unknown"}`,
+        `predicted_overflow: ${contextStatus.predictedOverflow ? "yes" : "no"}`,
         `prompt_prefix_stable: ${promptStability?.stablePrefix ?? "unknown"}`,
         `dynamic_tail_stable: ${promptStability?.stableTail ?? "unknown"}`,
         `prompt_scope_key: ${promptStability?.scopeKey ?? "none"}`,
@@ -80,7 +85,7 @@ export function createObsSnapshotTool(options: BrewvaToolOptions): ToolDefinitio
         tape,
         context: {
           usage,
-          pressure,
+          status: contextStatus,
           promptStability: promptStability ?? null,
           transientReduction: transientReduction ?? null,
         },

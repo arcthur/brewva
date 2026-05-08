@@ -97,14 +97,6 @@ function buildPolicy(input: ToolActionPolicyInput): ToolActionPolicy {
   });
 }
 
-function readActionArgument(args: Record<string, unknown> | undefined): string | undefined {
-  if (!args) return undefined;
-  const value = args.action;
-  if (typeof value !== "string") return undefined;
-  const normalized = value.trim().toLowerCase();
-  return normalized.length > 0 ? normalized : undefined;
-}
-
 function readCommandArgument(args: Record<string, unknown> | undefined): string | undefined {
   if (!args) return undefined;
   const value = args.command;
@@ -182,38 +174,6 @@ function memoryWrite(
     receiptPolicy: { kind: "control_plane", required: true },
     recoveryPolicy: { kind: "none" },
     effectClasses: input.effectClasses ?? ["memory_write"],
-    requiredRoutingScopes: input.requiredRoutingScopes,
-  });
-}
-
-function operatorReviewedMemoryWrite(input: {
-  effectClasses?: readonly ToolEffectClass[];
-  requiredRoutingScopes?: readonly SkillRoutingScope[];
-}): ToolActionPolicy {
-  return buildPolicy({
-    actionClass: "memory_write",
-    riskLevel: "medium",
-    defaultAdmission: "ask",
-    maxAdmission: "ask",
-    receiptPolicy: { kind: "control_plane", required: true },
-    recoveryPolicy: { kind: "none" },
-    effectClasses: input.effectClasses ?? ["memory_write"],
-    requiredRoutingScopes: input.requiredRoutingScopes,
-  });
-}
-
-function operatorReviewedWorkspacePatch(input: {
-  effectClasses?: readonly ToolEffectClass[];
-  requiredRoutingScopes?: readonly SkillRoutingScope[];
-}): ToolActionPolicy {
-  return buildPolicy({
-    actionClass: "workspace_patch",
-    riskLevel: "high",
-    defaultAdmission: "ask",
-    maxAdmission: "ask",
-    receiptPolicy: { kind: "mutation", required: true },
-    recoveryPolicy: { kind: "artifact_cleanup" },
-    effectClasses: input.effectClasses ?? ["workspace_write"],
     requiredRoutingScopes: input.requiredRoutingScopes,
   });
 }
@@ -379,30 +339,6 @@ const TOOL_ACTION_POLICY_BY_CLASS: Record<ToolActionClass, ToolActionPolicy> = {
   credential_access: credentialAccess(),
 };
 
-const NARRATIVE_MEMORY_READ_ACTIONS = new Set(["list", "show", "retrieve", "stats"]);
-const NARRATIVE_MEMORY_MEMORY_WRITE_ACTIONS = new Set(["remember", "review", "archive", "forget"]);
-
-const NARRATIVE_MEMORY_DEFAULT_POLICY = memoryWrite();
-const NARRATIVE_MEMORY_READ_POLICY = runtimeObserve("low");
-const NARRATIVE_MEMORY_MEMORY_WRITE_POLICY = memoryWrite();
-const NARRATIVE_MEMORY_PROMOTE_POLICY = memoryWrite({
-  effectClasses: ["memory_write", "workspace_write"],
-});
-
-function resolveNarrativeMemoryPolicy(
-  input: ToolActionPolicyResolverInput,
-): ToolActionPolicy | undefined {
-  if (normalizeToolName(input.toolName) !== "narrative_memory") return undefined;
-  const action = readActionArgument(input.args);
-  if (!action) return NARRATIVE_MEMORY_DEFAULT_POLICY;
-  if (NARRATIVE_MEMORY_READ_ACTIONS.has(action)) return NARRATIVE_MEMORY_READ_POLICY;
-  if (NARRATIVE_MEMORY_MEMORY_WRITE_ACTIONS.has(action)) {
-    return NARRATIVE_MEMORY_MEMORY_WRITE_POLICY;
-  }
-  if (action === "promote") return NARRATIVE_MEMORY_PROMOTE_POLICY;
-  return NARRATIVE_MEMORY_DEFAULT_POLICY;
-}
-
 function resolveExecPolicy(input: ToolActionPolicyResolverInput): ToolActionPolicy | undefined {
   if (normalizeToolName(input.toolName) !== "exec") return undefined;
   return execCanUseReadonlyPolicy(input.args)
@@ -421,7 +357,6 @@ function resolveSessionRewindPolicy(
 
 const EXACT_TOOL_ACTION_POLICY_RESOLVERS_BY_NAME: Record<string, ToolActionPolicyResolver> = {
   exec: resolveExecPolicy,
-  narrative_memory: resolveNarrativeMemoryPolicy,
   session_rewind: resolveSessionRewindPolicy,
 };
 
@@ -472,11 +407,12 @@ export const TOOL_ACTION_POLICY_BY_NAME: Record<string, ToolActionPolicy> = {
   resource_lease: budgetMutation(),
   reasoning_checkpoint: controlStateMutation(),
   reasoning_revert: controlStateMutation(),
-  session_compact: controlStateMutation(),
+  workbench_compact: memoryWrite(),
   session_rewind: SESSION_REWIND_WORKSPACE_POLICY,
   cost_view: runtimeObserve(),
-  deliberation_memory: runtimeObserve(),
-  narrative_memory: NARRATIVE_MEMORY_DEFAULT_POLICY,
+  workbench_note: memoryWrite(),
+  workbench_evict: memoryWrite(),
+  workbench_undo_evict: memoryWrite(),
   knowledge_capture: workspacePatch(),
   recall_search: buildPolicy({
     actionClass: "workspace_read",
@@ -494,7 +430,6 @@ export const TOOL_ACTION_POLICY_BY_NAME: Record<string, ToolActionPolicy> = {
   obs_query: runtimeObserve(),
   obs_slo_assert: runtimeObserve(),
   obs_snapshot: runtimeObserve(),
-  optimization_continuity: runtimeObserve(),
   question: runtimeObserve(),
   exec: localExecEffectful(),
   local_exec_readonly: localExecReadonly(),
@@ -540,17 +475,6 @@ export const TOOL_ACTION_POLICY_BY_NAME: Record<string, ToolActionPolicy> = {
   process: localExecEffectful({ riskLevel: "medium" }),
   schedule_intent: scheduleMutation(),
   follow_up: scheduleMutation(),
-  skill_load: controlStateMutation(),
-  skill_complete: controlStateMutation(),
-  skill_promotion_inspect: runtimeObserve(),
-  skill_promotion_review: operatorReviewedMemoryWrite({
-    effectClasses: ["memory_write"],
-    requiredRoutingScopes: ["operator", "meta"],
-  }),
-  skill_promotion_promote: operatorReviewedWorkspacePatch({
-    effectClasses: ["memory_write", "workspace_write"],
-    requiredRoutingScopes: ["operator", "meta"],
-  }),
   worker_results_merge: runtimeObserve(),
   worker_results_apply: workspacePatch(),
   subagent_run: delegation(),

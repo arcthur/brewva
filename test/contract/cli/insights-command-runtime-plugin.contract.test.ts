@@ -57,12 +57,6 @@ function recordWriteSession(
     type: "session_bootstrap",
     payload: {
       managedToolMode: "runtime_plugin",
-      skillLoad: {
-        routingEnabled: false,
-        routingScopes: ["core", "domain"],
-        routableSkills: [],
-        hiddenSkills: [],
-      },
     },
   });
   runtime.maintain.context.onTurnStart(input.sessionId, 1);

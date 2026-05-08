@@ -13,7 +13,6 @@ import {
   createBrewvaEventBus,
 } from "../execution/event-bus.js";
 import { runBrewvaTurnLoop, type BrewvaTurnLoopConfig } from "./loop.js";
-import { createBrewvaTurnProviderStreamFunction } from "./provider-stream.js";
 import type {
   BrewvaTurnEventScope,
   BrewvaTurnLoopController,
@@ -587,7 +586,7 @@ export function createBrewvaTurnLoopController(input: {
     part: import("./types.js").BrewvaTurnLoopFileContent,
     model: BrewvaRegisteredModel,
   ) => ResolvedFileContent | undefined;
-  streamFn?: BrewvaTurnLoopStreamFunction;
+  streamFn: BrewvaTurnLoopStreamFunction;
 }): BrewvaTurnLoopController {
   return new BrewvaTurnLoopControllerImpl({
     initialModel: input.initialModel,
@@ -607,6 +606,6 @@ export function createBrewvaTurnLoopController(input: {
     shouldStopAfterToolResults: input.shouldStopAfterToolResults,
     resolveRequestAuth: input.resolveRequestAuth,
     resolveFile: input.resolveFile,
-    streamFn: input.streamFn ?? createBrewvaTurnProviderStreamFunction(),
+    streamFn: input.streamFn,
   });
 }

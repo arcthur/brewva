@@ -12,7 +12,6 @@ import {
 } from "../../events/registry.js";
 import type { BrewvaEventRecord, BrewvaStructuredEvent } from "../../events/types.js";
 import type { RuntimeKernelContext } from "../../runtime/runtime-kernel.js";
-import { resolveSecurityPolicy } from "../../security/mode.js";
 import type { ParallelAcquireResult } from "../context/api.js";
 import type { FileChangeService } from "../patching/api.js";
 import type {
@@ -22,16 +21,12 @@ import type {
   WorkerResult,
 } from "../patching/api.js";
 import { RuntimeSessionStateStore } from "../sessions/api.js";
-import type { SkillLifecycleService } from "../skills/api.js";
-import type { SkillDocument } from "../skills/api.js";
 import type { ParallelBudgetManager } from "./budget.js";
-import type { ResourceLeaseService } from "./resource-lease.js";
 import type { ParallelResultStore } from "./results.js";
 import { deriveParallelBudgetStateFromEvents } from "./state.js";
 
 export interface ParallelServiceOptions {
   workspaceRoot: string;
-  securityConfig: RuntimeKernelContext["config"]["security"];
   parallel: RuntimeKernelContext["parallel"];
   parallelResults: RuntimeKernelContext["parallelResults"];
   sessionState: RuntimeKernelContext["sessionState"];
@@ -40,8 +35,6 @@ export interface ParallelServiceOptions {
   getCurrentTurn: RuntimeKernelContext["getCurrentTurn"];
   recordEvent: RuntimeKernelContext["recordEvent"];
   fileChangeService: Pick<FileChangeService, "applyPatchSet">;
-  resourceLeaseService: Pick<ResourceLeaseService, "getEffectiveBudget">;
-  skillLifecycleService: Pick<SkillLifecycleService, "getActiveSkill">;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -141,15 +134,12 @@ function recoverWorkerResultsFromEvents(
 }
 
 export class ParallelService {
-  private readonly securityPolicy: ReturnType<typeof resolveSecurityPolicy>;
   private readonly workspaceRoot: string;
   private readonly parallel: ParallelBudgetManager;
   private readonly parallelResults: ParallelResultStore;
   private readonly sessionState: RuntimeSessionStateStore;
   private readonly eventStore: RuntimeKernelContext["eventStore"];
-  private readonly getActiveSkill: (sessionId: string) => SkillDocument | undefined;
   private readonly getCurrentTurn: (sessionId: string) => number;
-  private readonly getEffectiveBudget: ResourceLeaseService["getEffectiveBudget"];
   private readonly recordEvent: (input: {
     sessionId: string;
     type: string;
@@ -161,16 +151,12 @@ export class ParallelService {
   private readonly applyPatchSet: FileChangeService["applyPatchSet"];
 
   constructor(options: ParallelServiceOptions) {
-    this.securityPolicy = resolveSecurityPolicy(options.securityConfig);
     this.workspaceRoot = options.workspaceRoot;
     this.parallel = options.parallel;
     this.parallelResults = options.parallelResults;
     this.sessionState = options.sessionState;
     this.eventStore = options.eventStore;
-    this.getActiveSkill = (sessionId) => options.skillLifecycleService.getActiveSkill(sessionId);
     this.getCurrentTurn = (sessionId) => options.getCurrentTurn(sessionId);
-    this.getEffectiveBudget = (sessionId, contract, skillName) =>
-      options.resourceLeaseService.getEffectiveBudget(sessionId, contract, skillName);
     this.recordEvent = (input) => options.recordEvent(input);
     this.applyPatchSet = (input) => options.fileChangeService.applyPatchSet(input);
     options.subscribeEvents?.((event) => {
@@ -340,63 +326,9 @@ export class ParallelService {
     options: { recordRejection: boolean },
   ): ParallelAcquireResult {
     this.reconcileParallelBudget(sessionId);
-    const state = this.sessionState.getCell(sessionId);
-    const skill = this.getActiveSkill(sessionId);
-    const effectiveBudget =
-      skill?.contract !== undefined
-        ? this.getEffectiveBudget(sessionId, skill.contract, skill.name)
-        : undefined;
-    const maxParallel = effectiveBudget?.maxParallel;
-
-    if (
-      skill &&
-      typeof maxParallel === "number" &&
-      maxParallel > 0 &&
-      this.securityPolicy.skillMaxParallelMode !== "off"
-    ) {
-      const activeRuns = this.parallel.getActiveRunCount(sessionId);
-      if (activeRuns >= maxParallel) {
-        const mode = this.securityPolicy.skillMaxParallelMode;
-        if (mode === "warn") {
-          const key = `maxParallel:${skill.name}`;
-          const seen = state.skillParallelWarnings;
-          if (!seen.has(key)) {
-            seen.add(key);
-            this.recordEvent({
-              sessionId,
-              type: "skill_parallel_warning",
-              turn: this.getCurrentTurn(sessionId),
-              payload: {
-                skill: skill.name,
-                activeRuns,
-                maxParallel,
-                mode,
-              },
-            });
-          }
-        } else if (mode === "enforce") {
-          if (options.recordRejection) {
-            this.recordEvent({
-              sessionId,
-              type: "parallel_slot_rejected",
-              turn: this.getCurrentTurn(sessionId),
-              payload: {
-                runId,
-                skill: skill.name,
-                reason: "skill_max_parallel",
-                activeRuns,
-                maxParallel,
-              },
-            });
-          }
-          return { accepted: false, reason: "skill_max_parallel" };
-        }
-      }
-    }
-
     const acquired = this.parallel.acquire(sessionId, runId);
     if (!acquired.accepted && options.recordRejection) {
-      this.recordParallelRejection(sessionId, runId, acquired.reason, skill?.name);
+      this.recordParallelRejection(sessionId, runId, acquired.reason);
     }
     return acquired;
   }
@@ -413,7 +345,7 @@ export class ParallelService {
       turn: this.getCurrentTurn(sessionId),
       payload: {
         runId,
-        skill: skillName ?? this.getActiveSkill(sessionId)?.name ?? null,
+        skill: skillName ?? null,
         reason: reason ?? "unknown",
       },
     });

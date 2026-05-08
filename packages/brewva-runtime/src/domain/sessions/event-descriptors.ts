@@ -13,15 +13,6 @@ import {
   type BrewvaEventLike,
 } from "../../events/descriptor-core.js";
 import type { RedoResult, RollbackResult } from "../patching/types.js";
-import { SEMANTIC_ARTIFACT_SCHEMA_IDS } from "../skills/types.js";
-import type {
-  ActiveSkillRuntimeState,
-  SemanticArtifactSchemaId,
-  SkillCompletionFailureRecord,
-  SkillOutputValidationIssue,
-  SkillRepairBudgetState,
-  SkillRepairGuidance,
-} from "../skills/types.js";
 import {
   SESSION_REWIND_COMPLETED_EVENT_TYPE,
   SESSION_TURN_TRANSITION_EVENT_TYPE,
@@ -99,10 +90,6 @@ function isSessionWireTransitionFamily(value: unknown): value is SessionWireTran
     value === "interrupt" ||
     value === "recovery"
   );
-}
-
-function isSemanticArtifactSchemaId(value: string): value is SemanticArtifactSchemaId {
-  return (SEMANTIC_ARTIFACT_SCHEMA_IDS as readonly string[]).includes(value);
 }
 
 function isSessionTurnTransitionReason(value: unknown): value is SessionTurnTransitionReason {
@@ -367,137 +354,9 @@ function readSessionRewindCompletedEventPayloadValue(
 
 function readUncleanShutdownReason(value: unknown): SessionUncleanShutdownReason | null {
   return value === "open_tool_calls_without_terminal_receipt" ||
-    value === "open_turn_without_terminal_receipt" ||
-    value === "active_skill_without_terminal_receipt"
+    value === "open_turn_without_terminal_receipt"
     ? value
     : null;
-}
-
-function readSkillOutputValidationIssue(value: unknown): SkillOutputValidationIssue | null {
-  const record = asRecord(value);
-  if (!record) {
-    return null;
-  }
-  const name = readString(record.name);
-  const reason = readString(record.reason);
-  if (!name || !reason) {
-    return null;
-  }
-  const schemaId = readString(record.schemaId);
-  return {
-    name,
-    reason,
-    ...(schemaId && isSemanticArtifactSchemaId(schemaId) ? { schemaId } : {}),
-  };
-}
-
-function readRepairBudget(value: unknown): SkillRepairBudgetState | null {
-  const record = asRecord(value);
-  if (!record) {
-    return null;
-  }
-  const maxAttempts = readNonNegativeNumber(record.maxAttempts);
-  const usedAttempts = readNonNegativeNumber(record.usedAttempts);
-  const remainingAttempts = readNonNegativeNumber(record.remainingAttempts);
-  const maxToolCalls = readNonNegativeNumber(record.maxToolCalls);
-  const usedToolCalls = readNonNegativeNumber(record.usedToolCalls);
-  const remainingToolCalls = readNonNegativeNumber(record.remainingToolCalls);
-  const tokenBudget = readNonNegativeNumber(record.tokenBudget);
-  if (
-    maxAttempts === null ||
-    usedAttempts === null ||
-    remainingAttempts === null ||
-    maxToolCalls === null ||
-    usedToolCalls === null ||
-    remainingToolCalls === null ||
-    tokenBudget === null
-  ) {
-    return null;
-  }
-  const enteredAtTokens = readNonNegativeNumber(record.enteredAtTokens);
-  const latestObservedTokens = readNonNegativeNumber(record.latestObservedTokens);
-  const usedTokens = readNonNegativeNumber(record.usedTokens);
-  return {
-    maxAttempts,
-    usedAttempts,
-    remainingAttempts,
-    maxToolCalls,
-    usedToolCalls,
-    remainingToolCalls,
-    tokenBudget,
-    ...(enteredAtTokens !== null ? { enteredAtTokens } : {}),
-    ...(latestObservedTokens !== null ? { latestObservedTokens } : {}),
-    ...(usedTokens !== null ? { usedTokens } : {}),
-  };
-}
-
-function readRepairGuidance(value: unknown): SkillRepairGuidance | undefined {
-  const record = asRecord(value);
-  if (!record) {
-    return undefined;
-  }
-  const minimumContractState = readString(record.minimumContractState);
-  if (!minimumContractState) {
-    return undefined;
-  }
-  const unresolvedFields = readStringArray(record.unresolvedFields);
-  const nextBlockingConsumer = readString(record.nextBlockingConsumer);
-  return {
-    unresolvedFields,
-    minimumContractState,
-    ...(nextBlockingConsumer ? { nextBlockingConsumer } : {}),
-  };
-}
-
-function readCompletionFailure(value: unknown): SkillCompletionFailureRecord | undefined {
-  const record = asRecord(value);
-  if (!record) {
-    return undefined;
-  }
-  const skillName = readString(record.skillName);
-  const phase =
-    record.phase === "repair_required" || record.phase === "failed_contract"
-      ? record.phase
-      : undefined;
-  const repairBudget = readRepairBudget(record.repairBudget);
-  if (!skillName || !phase || !repairBudget) {
-    return undefined;
-  }
-  const invalid = Array.isArray(record.invalid)
-    ? record.invalid
-        .map((entry) => readSkillOutputValidationIssue(entry))
-        .filter((entry): entry is SkillOutputValidationIssue => entry !== null)
-    : [];
-  return {
-    skillName,
-    occurredAt: readNonNegativeNumber(record.occurredAt) ?? 0,
-    phase,
-    outputKeys: readStringArray(record.outputKeys),
-    missing: readStringArray(record.missing),
-    invalid,
-    expectedOutputs: asRecord(record.expectedOutputs) ?? {},
-    repairGuidance: readRepairGuidance(record.repairGuidance),
-    repairBudget,
-  };
-}
-
-function readActiveSkillState(value: unknown): ActiveSkillRuntimeState | undefined {
-  const record = asRecord(value);
-  if (!record) {
-    return undefined;
-  }
-  const skillName = readString(record.skillName);
-  const phase =
-    record.phase === "active" || record.phase === "repair_required" ? record.phase : undefined;
-  if (!skillName || !phase) {
-    return undefined;
-  }
-  const latestFailure = readCompletionFailure(record.latestFailure);
-  return {
-    skillName,
-    phase,
-    ...(latestFailure ? { repairBudget: latestFailure.repairBudget, latestFailure } : {}),
-  };
 }
 
 function readOpenToolCallRecord(value: unknown): OpenToolCallRecord | null {
@@ -571,15 +430,11 @@ function readSessionUncleanShutdownDiagnosticValue(
         .filter((entry): entry is OpenTurnRecord => entry !== null)
     : [];
   const latestEventAt = readNonNegativeNumber(record.latestEventAt);
-  const activeSkill = readActiveSkillState(record.activeSkill);
-  const latestFailure = readCompletionFailure(record.latestFailure);
   return {
     detectedAt: readNonNegativeNumber(record.detectedAt) ?? 0,
     reasons,
     openToolCalls,
     ...(openTurns.length > 0 ? { openTurns } : {}),
-    ...(activeSkill ? { activeSkill } : {}),
-    ...(latestFailure ? { latestFailure } : {}),
     ...(readString(record.latestEventType)
       ? { latestEventType: readString(record.latestEventType)! }
       : {}),

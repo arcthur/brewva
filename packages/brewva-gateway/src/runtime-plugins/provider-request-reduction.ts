@@ -1,11 +1,15 @@
-import { type BrewvaHostedRuntimePort, type ContextBudgetUsage } from "@brewva/brewva-runtime";
+import {
+  type BrewvaHostedRuntimePort,
+  type ContextBudgetUsage,
+  type ProviderCacheObservationState,
+} from "@brewva/brewva-runtime";
 import type { InternalHostPluginApi } from "@brewva/brewva-substrate/host-api";
 import {
+  estimateProviderPayloadTextTokens,
   estimateStructuredTokenCount,
   normalizePercent,
   resolveContextUsageRatio,
   resolveContextUsageTokens,
-  type TokenEstimatorHints,
 } from "@brewva/brewva-token-estimation";
 import { getHostedTurnTransitionCoordinator } from "../session/turn-transition.js";
 import { recordTransientReductionEvidence } from "./context-evidence.js";
@@ -13,62 +17,6 @@ import { recordTransientReductionEvidence } from "./context-evidence.js";
 const CLEARED_TOOL_RESULT_PLACEHOLDER = "[cleared_for_request]";
 const RECENT_TOOL_RESULT_RETAIN_COUNT = 4;
 const MIN_CLEARABLE_TOOL_RESULT_CHARS = 512;
-const NON_TEXTUAL_PAYLOAD_TYPES = new Set([
-  "image",
-  "image_url",
-  "image_file",
-  "input_image",
-  "input_audio",
-  "audio",
-  "video",
-  "file",
-  "file_data",
-]);
-const NON_TEXTUAL_PAYLOAD_KEYS = new Set([
-  "image",
-  "image_url",
-  "imageUrl",
-  "image_file",
-  "imageFile",
-  "input_image",
-  "inputImage",
-  "input_audio",
-  "inputAudio",
-  "audio",
-  "video",
-  "file",
-  "file_data",
-  "fileData",
-]);
-const NON_TEXTUAL_STRING_KEYS = new Set([
-  "data",
-  "bytes",
-  "b64_json",
-  "base64",
-  "mimeType",
-  "mime_type",
-  "mediaType",
-  "media_type",
-]);
-const LOW_SIGNAL_STRING_KEYS = new Set([
-  "model",
-  "provider",
-  "type",
-  "id",
-  "call_id",
-  "tool_call_id",
-  "response_id",
-  "sessionId",
-  "session_id",
-  "cachePolicy",
-  "cache_policy",
-  "transport",
-  "tool_choice",
-  "parallel_tool_calls",
-  "encoding",
-  "format",
-  "role",
-]);
 interface ReductionCandidate {
   charLength: number;
   clear: () => void;
@@ -87,13 +35,14 @@ interface ReductionResult {
 interface ReductionEligibility {
   allowed: boolean;
   detail: string | null;
-  pressureLevel: "none" | "low" | "medium" | "high" | "critical" | "unknown";
+  compactionAdvised: boolean;
+  forcedCompaction: boolean;
+  cacheCold: boolean;
 }
 
-interface PayloadStringContext {
-  parent?: Record<string, unknown>;
-  key?: string;
-}
+type TransientReductionObservationInput = Parameters<
+  BrewvaHostedRuntimePort["maintain"]["context"]["observeTransientReduction"]
+>[1];
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -116,98 +65,6 @@ function resolveUsageContextWindow(usage: ContextBudgetUsage | undefined): numbe
     : null;
 }
 
-function isNonTextualPayloadRecord(record: Record<string, unknown>): boolean {
-  const type = typeof record.type === "string" ? record.type.toLowerCase() : null;
-  if (type && NON_TEXTUAL_PAYLOAD_TYPES.has(type)) {
-    return true;
-  }
-  for (const key of NON_TEXTUAL_PAYLOAD_KEYS) {
-    if (key in record) {
-      return true;
-    }
-  }
-  return false;
-}
-
-function shouldCountPayloadString(value: string, context: PayloadStringContext): boolean {
-  if (value.trim().length === 0) {
-    return false;
-  }
-  const key = context.key;
-  if (key && LOW_SIGNAL_STRING_KEYS.has(key)) {
-    return false;
-  }
-  if (key && NON_TEXTUAL_STRING_KEYS.has(key)) {
-    return false;
-  }
-  if (context.parent && isNonTextualPayloadRecord(context.parent)) {
-    return false;
-  }
-  return true;
-}
-
-function derivePayloadTokenEstimatorHints(
-  payload: unknown,
-  metadata?: {
-    provider?: string;
-    api?: string;
-    modelId?: string;
-  },
-): TokenEstimatorHints {
-  const record = asRecord(payload);
-  const modelId =
-    metadata?.modelId ??
-    (record && typeof record.model === "string"
-      ? record.model
-      : record && typeof record.modelId === "string"
-        ? record.modelId
-        : null);
-  const api =
-    metadata?.api ??
-    (record && typeof record.api === "string"
-      ? record.api
-      : record && typeof record.providerApi === "string"
-        ? record.providerApi
-        : null);
-  return {
-    api,
-    provider: metadata?.provider,
-    modelId,
-  };
-}
-
-function estimatePayloadTextTokens(
-  value: unknown,
-  context: PayloadStringContext = {},
-  hints: TokenEstimatorHints = {},
-): number {
-  if (typeof value === "string") {
-    return shouldCountPayloadString(value, context)
-      ? estimateStructuredTokenCount(value, hints)
-      : 0;
-  }
-  if (Array.isArray(value)) {
-    return value.reduce(
-      (sum, entry) => sum + estimatePayloadTextTokens(entry, { parent: context.parent }, hints),
-      0,
-    );
-  }
-
-  const record = asRecord(value);
-  if (!record) {
-    return 0;
-  }
-  if (isNonTextualPayloadRecord(record)) {
-    return 0;
-  }
-
-  let total = 0;
-  for (const [key, entry] of Object.entries(record)) {
-    total += estimatePayloadTextTokens(entry, { parent: record, key }, hints);
-  }
-  return total;
-}
-
 function buildEstimatedPayloadUsage(
   payload: unknown,
   runtimeUsage: ContextBudgetUsage | undefined,
@@ -222,11 +79,7 @@ function buildEstimatedPayloadUsage(
     return undefined;
   }
 
-  const estimatedTokens = estimatePayloadTextTokens(
-    payload,
-    {},
-    derivePayloadTokenEstimatorHints(payload, metadata),
-  );
+  const estimatedTokens = estimateProviderPayloadTextTokens(payload, metadata);
   if (estimatedTokens <= 0) {
     return undefined;
   }
@@ -244,6 +97,59 @@ function hasUsableRuntimeUsage(runtimeUsage: ContextBudgetUsage | undefined): bo
     resolveUsageContextWindow(runtimeUsage) !== null &&
     (resolveUsageTokens(runtimeUsage) !== null || resolveUsageRatio(runtimeUsage) !== null)
   );
+}
+
+function parseRetentionHours(value: string | undefined): number | null {
+  if (!value || value === "none") {
+    return null;
+  }
+  const match = /^(\d+)h$/.exec(value);
+  if (!match?.[1]) {
+    return null;
+  }
+  return Math.max(1, Number.parseInt(match[1], 10));
+}
+
+function resolveProviderCacheTtlMs(observation: ProviderCacheObservationState): number | null {
+  const explicitTtlSeconds = observation.render.cachedContentTtlSeconds;
+  if (
+    typeof explicitTtlSeconds === "number" &&
+    Number.isFinite(explicitTtlSeconds) &&
+    explicitTtlSeconds > 0
+  ) {
+    return Math.trunc(explicitTtlSeconds) * 1000;
+  }
+  if (observation.render.renderedRetention === "short") {
+    return 5 * 60 * 1000;
+  }
+  if (observation.render.renderedRetention === "long") {
+    const hours = parseRetentionHours(observation.render.capability?.longRetention);
+    return (hours ?? 1) * 60 * 60 * 1000;
+  }
+  return null;
+}
+
+function isProviderCacheLikelyCold(
+  observation: ProviderCacheObservationState | undefined,
+): boolean {
+  if (!observation) {
+    return false;
+  }
+  const breakObservation = observation.breakObservation;
+  if (breakObservation.status === "cold") {
+    return true;
+  }
+  if (
+    typeof breakObservation.reason === "string" &&
+    breakObservation.reason.startsWith("possible_cache_ttl_expiry_")
+  ) {
+    return true;
+  }
+  const ttlMs = resolveProviderCacheTtlMs(observation);
+  if (ttlMs === null) {
+    return false;
+  }
+  return Math.max(0, Date.now() - observation.updatedAt) >= ttlMs;
 }
 
 function buildEffectiveReductionUsage(
@@ -503,7 +409,9 @@ export function resolveTransientOutboundReductionEligibility(
     return {
       allowed: false,
       detail: "context budget is disabled",
-      pressureLevel: "unknown",
+      compactionAdvised: false,
+      forcedCompaction: false,
+      cacheCold: false,
     };
   }
 
@@ -512,7 +420,9 @@ export function resolveTransientOutboundReductionEligibility(
     return {
       allowed: false,
       detail: postureBlockReason,
-      pressureLevel: "unknown",
+      compactionAdvised: false,
+      forcedCompaction: false,
+      cacheCold: false,
     };
   }
 
@@ -525,20 +435,27 @@ export function resolveTransientOutboundReductionEligibility(
     return {
       allowed: false,
       detail: "context usage is unavailable",
-      pressureLevel: "unknown",
+      compactionAdvised: false,
+      forcedCompaction: false,
+      cacheCold: false,
     };
   }
 
   const gateStatus = runtime.inspect.context.getCompactionGateStatus(sessionId, usage);
+  const cacheCold = isProviderCacheLikelyCold(
+    runtime.inspect.context.getProviderCacheObservation(sessionId),
+  );
   if (
     gateStatus.required ||
     gateStatus.reason === "hard_limit" ||
-    gateStatus.pressure.level === "critical"
+    gateStatus.status.forcedCompaction
   ) {
     return {
       allowed: false,
       detail: "hard-limit posture requires replay-visible compaction handling",
-      pressureLevel: gateStatus.pressure.level,
+      compactionAdvised: gateStatus.status.compactionAdvised,
+      forcedCompaction: gateStatus.status.forcedCompaction,
+      cacheCold,
     };
   }
 
@@ -546,22 +463,28 @@ export function resolveTransientOutboundReductionEligibility(
     return {
       allowed: false,
       detail: "hard-limit compaction is already pending",
-      pressureLevel: gateStatus.pressure.level,
+      compactionAdvised: gateStatus.status.compactionAdvised,
+      forcedCompaction: gateStatus.status.forcedCompaction,
+      cacheCold,
     };
   }
 
-  if (gateStatus.pressure.level !== "high") {
+  if (!gateStatus.status.compactionAdvised && !cacheCold) {
     return {
       allowed: false,
-      detail: "context pressure is below the transient reduction threshold",
-      pressureLevel: gateStatus.pressure.level,
+      detail: "context status is below the transient reduction threshold",
+      compactionAdvised: gateStatus.status.compactionAdvised,
+      forcedCompaction: gateStatus.status.forcedCompaction,
+      cacheCold,
     };
   }
 
   return {
     allowed: true,
     detail: null,
-    pressureLevel: gateStatus.pressure.level,
+    compactionAdvised: gateStatus.status.compactionAdvised,
+    forcedCompaction: gateStatus.status.forcedCompaction,
+    cacheCold,
   };
 }
 
@@ -587,7 +510,7 @@ export function applyTransientOutboundReductionToPayload(
   }
 
   const cloned = structuredClone(record);
-  const hints = derivePayloadTokenEstimatorHints(cloned, metadata);
+  const hints = metadata;
   const candidates = collectReductionCandidates(cloned);
   if (candidates.length <= RECENT_TOOL_RESULT_RETAIN_COUNT) {
     return {
@@ -650,6 +573,19 @@ function resolveWarmProviderCachePreservationReason(
   return "warm provider cache is more valuable than transient reduction savings";
 }
 
+function observeAndRecordTransientReduction(
+  runtime: BrewvaHostedRuntimePort,
+  sessionId: string,
+  input: TransientReductionObservationInput,
+): void {
+  const observed = runtime.maintain.context.observeTransientReduction(sessionId, input);
+  recordTransientReductionEvidence({
+    workspaceRoot: runtime.workspaceRoot,
+    sessionId,
+    observed,
+  });
+}
+
 export function registerProviderRequestReduction(
   extensionApi: InternalHostPluginApi,
   runtime: BrewvaHostedRuntimePort,
@@ -671,19 +607,15 @@ export function registerProviderRequestReduction(
       },
     );
     if (!eligibility.allowed) {
-      const observed = runtime.maintain.context.observeTransientReduction(sessionId, {
+      observeAndRecordTransientReduction(runtime, sessionId, {
         status: "skipped",
         reason: eligibility.detail,
         eligibleToolResults: 0,
         clearedToolResults: 0,
-        pressureLevel: eligibility.pressureLevel,
+        compactionAdvised: eligibility.compactionAdvised,
+        forcedCompaction: eligibility.forcedCompaction,
         classification: "prefixPreserving",
         expectedCacheBreak: false,
-      });
-      recordTransientReductionEvidence({
-        workspaceRoot: runtime.workspaceRoot,
-        sessionId,
-        observed,
       });
       return undefined;
     }
@@ -693,49 +625,42 @@ export function registerProviderRequestReduction(
       api: event.api,
       modelId: event.modelId,
     });
-    const cachePreservationReason = resolveWarmProviderCachePreservationReason(
-      runtime,
-      sessionId,
-      result,
-    );
+    const cachePreservationReason = eligibility.cacheCold
+      ? null
+      : resolveWarmProviderCachePreservationReason(runtime, sessionId, result);
     if (cachePreservationReason) {
-      const observed = runtime.maintain.context.observeTransientReduction(sessionId, {
+      observeAndRecordTransientReduction(runtime, sessionId, {
         status: "skipped",
         reason: cachePreservationReason,
         eligibleToolResults: result.eligibleToolResults,
         clearedToolResults: 0,
         clearedChars: 0,
         estimatedTokenSavings: result.estimatedTokenSavings,
-        pressureLevel: eligibility.pressureLevel,
+        compactionAdvised: eligibility.compactionAdvised,
+        forcedCompaction: eligibility.forcedCompaction,
         classification: "prefixPreserving",
         expectedCacheBreak: false,
-      });
-      recordTransientReductionEvidence({
-        workspaceRoot: runtime.workspaceRoot,
-        sessionId,
-        observed,
       });
       return undefined;
     }
 
-    const observed = runtime.maintain.context.observeTransientReduction(sessionId, {
+    observeAndRecordTransientReduction(runtime, sessionId, {
       status: result.status,
       reason: result.detail,
       eligibleToolResults: result.eligibleToolResults,
       clearedToolResults: result.clearedToolResults,
       clearedChars: result.clearedChars,
       estimatedTokenSavings: result.estimatedTokenSavings,
-      pressureLevel: eligibility.pressureLevel,
+      compactionAdvised: eligibility.compactionAdvised,
+      forcedCompaction: eligibility.forcedCompaction,
       classification:
         result.status === "completed" && result.clearedToolResults > 0
-          ? "prefixResetting"
+          ? eligibility.cacheCold
+            ? "cacheCold"
+            : "prefixResetting"
           : "prefixPreserving",
-      expectedCacheBreak: result.status === "completed" && result.clearedToolResults > 0,
-    });
-    recordTransientReductionEvidence({
-      workspaceRoot: runtime.workspaceRoot,
-      sessionId,
-      observed,
+      expectedCacheBreak:
+        !eligibility.cacheCold && result.status === "completed" && result.clearedToolResults > 0,
     });
     return result.status === "completed" ? result.payload : undefined;
   });
@@ -748,7 +673,7 @@ export const PROVIDER_REQUEST_REDUCTION_TEST_ONLY = {
   applyTransientOutboundReductionToPayload,
   buildEffectiveReductionUsage,
   buildEstimatedPayloadUsage,
-  estimatePayloadTextTokens,
+  estimatePayloadTextTokens: estimateProviderPayloadTextTokens,
   resolveTransientOutboundReductionEligibility,
   resolveReductionPostureBlockReason,
 };

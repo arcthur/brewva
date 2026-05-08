@@ -14,7 +14,7 @@ const HIGH_USAGE: ContextBudgetUsage = {
 };
 
 describe("hosted compaction controller", () => {
-  test("resolves the compaction ladder in deterministic-first order", () => {
+  test("resolves the auto-compaction trigger ladder in safety order", () => {
     const runtime = createRuntimeFixture({
       context: {
         checkAndRequestCompaction: () => true,

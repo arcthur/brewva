@@ -197,7 +197,6 @@ function main(): void {
       "@brewva/brewva-session-index/evidence",
       "@brewva/brewva-recall",
       "@brewva/brewva-recall/broker",
-      "@brewva/brewva-recall/context",
       "@brewva/brewva-recall/knowledge",
       "@brewva/brewva-recall/evidence",
       "@brewva/brewva-channels-telegram",
@@ -300,7 +299,6 @@ function main(): void {
     }
     const recallRootModule = await import("@brewva/brewva-recall");
     const recallBrokerModule = await import("@brewva/brewva-recall/broker");
-    const recallContextModule = await import("@brewva/brewva-recall/context");
     const recallKnowledgeModule = await import("@brewva/brewva-recall/knowledge");
     const recallEvidenceModule = await import("@brewva/brewva-recall/evidence");
     const sessionIndexEvidenceModule = await import("@brewva/brewva-session-index/evidence");
@@ -317,9 +315,6 @@ function main(): void {
     }
     if (typeof recallBrokerModule.getOrCreateRecallBroker !== "function") {
       throw new Error("recall broker subpath missing getOrCreateRecallBroker export");
-    }
-    if (typeof recallContextModule.createRecallContextProvider !== "function") {
-      throw new Error("recall context subpath missing createRecallContextProvider export");
     }
     if (typeof recallKnowledgeModule.executeKnowledgeSearch !== "function") {
       throw new Error("recall knowledge subpath missing executeKnowledgeSearch export");

@@ -65,7 +65,6 @@ export interface ReviewLaneDelegationPacketInput {
   consultBrief: AdvisorConsultBrief;
   constraints?: readonly string[];
   sharedNotes?: readonly string[];
-  activeSkillName?: string;
   executionHints?: SubagentExecutionHints;
   contextRefs?: readonly SubagentContextRef[];
   contextBudget?: SubagentContextBudget;

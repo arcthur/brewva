@@ -15,8 +15,6 @@ import {
 } from "../evidence/api.js";
 import type { EffectCommitmentDeskService } from "../proposals/api.js";
 import { RuntimeSessionStateStore } from "../sessions/api.js";
-import type { SkillLifecycleService } from "../skills/api.js";
-import type { SkillDocument } from "../skills/api.js";
 import { buildVerificationToolResultProjectionPayload } from "../verification/api.js";
 import { buildLedgerDigest } from "./digest.js";
 import type { EvidenceLedger } from "./evidence-ledger.js";
@@ -86,7 +84,6 @@ export interface LedgerServiceOptions {
   sessionState: RuntimeKernelContext["sessionState"];
   getCurrentTurn: RuntimeKernelContext["getCurrentTurn"];
   recordEvent: RuntimeKernelContext["recordEvent"];
-  skillLifecycleService: Pick<SkillLifecycleService, "getActiveSkill">;
   effectCommitmentDeskService?: Pick<EffectCommitmentDeskService, "observeToolOutcome">;
 }
 
@@ -145,7 +142,6 @@ export class LedgerService {
   private readonly ledger: EvidenceLedger;
   private readonly sessionState: RuntimeSessionStateStore;
   private readonly getCurrentTurn: (sessionId: string) => number;
-  private readonly getActiveSkill: (sessionId: string) => SkillDocument | undefined;
   private readonly recordEvent: (input: {
     sessionId: string;
     type: string;
@@ -163,7 +159,6 @@ export class LedgerService {
     this.ledger = options.evidenceLedger;
     this.sessionState = options.sessionState;
     this.getCurrentTurn = (sessionId) => options.getCurrentTurn(sessionId);
-    this.getActiveSkill = (sessionId) => options.skillLifecycleService.getActiveSkill(sessionId);
     this.recordEvent = (input) => options.recordEvent(input);
     this.observeEffectCommitmentToolOutcome = options.effectCommitmentDeskService
       ? (input) => options.effectCommitmentDeskService?.observeToolOutcome(input)
@@ -182,11 +177,10 @@ export class LedgerService {
     skill?: string | null;
   }): string {
     const turn = input.turn ?? this.getCurrentTurn(input.sessionId);
-    const activeSkill = this.getActiveSkill(input.sessionId);
     const ledgerRow = this.ledger.append({
       sessionId: input.sessionId,
       turn,
-      skill: input.skill ?? activeSkill?.name,
+      skill: input.skill ?? undefined,
       tool: input.tool,
       argsSummary: input.argsSummary,
       outputSummary: input.outputSummary,
@@ -213,7 +207,6 @@ export class LedgerService {
     effectCommitmentRequestId?: string;
   }): string {
     const turn = this.getCurrentTurn(input.sessionId);
-    const activeSkill = this.getActiveSkill(input.sessionId);
     const verdict = resolveToolResultVerdict({
       verdict: input.verdict,
       channelSuccess: input.channelSuccess,
@@ -235,7 +228,7 @@ export class LedgerService {
     const ledgerRow = this.ledger.append({
       sessionId: input.sessionId,
       turn,
-      skill: activeSkill?.name,
+      skill: undefined,
       tool: input.toolName,
       argsSummary: JSON.stringify(input.args).slice(0, 400),
       outputSummary: input.outputText.slice(0, 500),

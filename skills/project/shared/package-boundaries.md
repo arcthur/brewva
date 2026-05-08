@@ -9,14 +9,12 @@ scope: package-boundaries
 
 | Package                        | Responsibility                                                                                                                                          | Must Not Own                                  |
 | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
-| `@brewva/brewva-runtime`       | governance kernel, contracts, gates, verification state, context boundaries                                                                             | CLI wiring or transport-specific behavior     |
+| `@brewva/brewva-runtime`       | governance kernel, contracts, gates, verification state, context status, workbench authority, and compaction receipts                                   | CLI wiring or transport-specific behavior     |
 | `@brewva/brewva-provider-core` | provider contracts, catalog lookup, typed registry, streaming, cache rendering, drivers                                                                 | replay authority or credential ownership      |
 | `@brewva/brewva-substrate`     | contract root plus explicit session, turn, prompt/resource, provenance, execution, compaction, tools, host-api, persistence, provider, and sdk subpaths | replay authority, credentials, hosted policy  |
 | `@brewva/brewva-search`        | shared normalization, mandatory CJK segmentation, and semantic query/content token policy                                                               | recall ranking or event evidence projection   |
-| `@brewva/brewva-recall`        | curated root plus explicit broker, context, knowledge, and evidence subpaths for ranking, curation semantics, trust labels, and result rendering        | event tape authority or database ownership    |
+| `@brewva/brewva-recall`        | curated root plus explicit broker, knowledge, and evidence subpaths for on-demand recall search, curation semantics, trust labels, and result rendering | event tape authority or database ownership    |
 | `@brewva/brewva-session-index` | curated root plus explicit evidence subpath for the rebuildable DuckDB query plane over session event tapes                                             | replay authority, tokenization policy, SQL UI |
-| `@brewva/brewva-deliberation`  | narrative memory, optimization continuity, and non-authoritative deliberation substrate                                                                 | kernel commitments or transport ownership     |
-| `@brewva/brewva-skill-broker`  | post-execution skill-promotion brokerage and persisted promotion review state                                                                           | turn-time skill routing or kernel authority   |
 | `@brewva/brewva-std`           | leaf standard primitives for async, collections, hashing, JSON, markdown, text, unknown readers, and Node-only filesystem helpers                       | product policy, runtime authority, or domains |
 | `@brewva/brewva-tools`         | family-sliced concrete tool adapters, pure tool contracts, managed-tool registry/capability spine, runtime-port helpers, and default bundle assembly    | orchestration policy or model routing         |
 | `@brewva/brewva-cli`           | user entrypoints and frontend command surface                                                                                                           | channel/control-plane ownership               |
@@ -30,7 +28,7 @@ scope: package-boundaries
   authority
 - search tokenization stays centralized in `@brewva/brewva-search`, including
   query/content token-mode policy and session-index token materialization
-- recall broker/context/knowledge/evidence imports use explicit
+- recall broker/knowledge/evidence imports use explicit
   `@brewva/brewva-recall/*` subpaths; the recall root is shared vocabulary only
 - session-index evidence imports use `@brewva/brewva-session-index/evidence`
   only for indexed evidence contracts; recall consumes typed query rows for

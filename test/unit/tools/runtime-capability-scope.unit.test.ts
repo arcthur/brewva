@@ -171,11 +171,40 @@ function createToolRuntimeFixture(): BrewvaToolRuntime {
         },
       },
     } as unknown as BrewvaToolRuntime["inspect"],
+    maintain: {
+      workbench: {
+        note(sessionId: string) {
+          return {
+            id: "note-1",
+            kind: "note",
+            content: "note",
+            sourceRefs: [],
+            reason: "test",
+            createdTurn: 1,
+            digest: "digest-note",
+            reversible: false,
+            baselineCommitted: false,
+            sessionId,
+          };
+        },
+        evict(sessionId: string) {
+          return {
+            id: "eviction-1",
+            kind: "eviction",
+            content: "",
+            sourceRefs: [],
+            reason: "test",
+            createdTurn: 1,
+            digest: "digest-eviction",
+            reversible: true,
+            baselineCommitted: false,
+            sessionId,
+          };
+        },
+      },
+    } as unknown as BrewvaToolRuntime["maintain"],
     extensions: {
       tools: {
-        appendGuardedSupplementalBlocks() {
-          return [{ familyId: "test-family", accepted: true }];
-        },
         resolveCredentialBindings() {
           return { API_TOKEN: "token" };
         },
@@ -218,6 +247,14 @@ describe("tool runtime capability scope", () => {
     expect(() => scoped.inspect.cost.getSummary("session-1")).toThrow(
       "managed Brewva tool 'grep' attempted to access protected runtime capability 'inspect.cost.getSummary' without declaring it.",
     );
+    expect(() =>
+      scoped.maintain?.workbench.note("session-1", {
+        content: "note",
+        reason: "test",
+      }),
+    ).toThrow(
+      "managed Brewva tool 'grep' attempted to access protected runtime capability 'maintain.workbench.note' without declaring it.",
+    );
   });
 
   test("allows only the protected runtime capabilities declared for each tool", () => {
@@ -251,6 +288,7 @@ describe("tool runtime capability scope", () => {
     const scheduleScoped = createCapabilityScopedToolRuntime(runtime, "schedule_intent");
     const taskScoped = createCapabilityScopedToolRuntime(runtime, "task_set_spec");
     const execScoped = createCapabilityScopedToolRuntime(runtime, "exec");
+    const workbenchScoped = createCapabilityScopedToolRuntime(runtime, "workbench_note");
 
     expect(
       (await scheduleScoped.authority.schedule.createIntent("session-1", {} as never)).ok,
@@ -267,21 +305,19 @@ describe("tool runtime capability scope", () => {
     expect(execScoped.extensions?.tools?.resolveCredentialBindings?.("session-1", "exec")).toEqual({
       API_TOKEN: "token",
     });
-    expect(() =>
-      execScoped.extensions?.tools?.appendGuardedSupplementalBlocks?.("session-1", []),
-    ).toThrow(
-      "managed Brewva tool 'exec' attempted to access protected runtime capability 'extensions.tools.appendGuardedSupplementalBlocks' without declaring it.",
-    );
 
-    const skillScoped = createCapabilityScopedToolRuntime(runtime, "skill_complete");
-    const verification = await skillScoped.authority.verification.verify(
-      "session-1",
-      undefined,
-      {},
-    );
-    expect(verification.passed).toBe(true);
-    expect(() => skillScoped.authority.skills.activate("session-1", "research")).toThrow(
-      "managed Brewva tool 'skill_complete' attempted to access protected runtime capability 'authority.skills.activate' without declaring it.",
+    const note = workbenchScoped.maintain?.workbench.note("session-1", {
+      content: "note",
+      reason: "test",
+    });
+    expect(note?.id).toBe("note-1");
+    expect(() =>
+      workbenchScoped.maintain?.workbench.evict("session-1", {
+        spanRefs: ["turn:1"],
+        reason: "test",
+      }),
+    ).toThrow(
+      "managed Brewva tool 'workbench_note' attempted to access protected runtime capability 'maintain.workbench.evict' without declaring it.",
     );
   });
 });

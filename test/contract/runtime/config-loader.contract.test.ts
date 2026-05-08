@@ -48,6 +48,13 @@ describe("Brewva config loader normalization", () => {
         key: "maxInjectionTokens",
         value: 2400,
       },
+      {
+        key: "arena",
+        value: {
+          enabled: true,
+        },
+        message: "has been removed",
+      },
     ] as const;
 
     for (const legacyCase of legacyCases) {
@@ -67,8 +74,33 @@ describe("Brewva config loader normalization", () => {
             cwd: workspace,
             config: config as unknown as typeof DEFAULT_BREWVA_CONFIG,
           }),
-      ).toThrow(new RegExp(`infrastructure\\.contextBudget\\.${legacyCase.key} has been replaced`));
+      ).toThrow(
+        new RegExp(
+          `infrastructure\\.contextBudget\\.${legacyCase.key} ${
+            "message" in legacyCase ? legacyCase.message : "has been replaced"
+          }`,
+        ),
+      );
     }
+  });
+
+  test("fails fast when removed tool-output distillation injection config is present", () => {
+    const workspace = createTestWorkspace("removed-tool-output-distillation-injection");
+    const config = structuredClone(DEFAULT_BREWVA_CONFIG) as unknown as Record<string, unknown>;
+    config["infrastructure"] = {
+      ...DEFAULT_BREWVA_CONFIG.infrastructure,
+      toolOutputDistillationInjection: {
+        enabled: true,
+      },
+    };
+
+    expect(
+      () =>
+        new BrewvaRuntime({
+          cwd: workspace,
+          config: config as unknown as typeof DEFAULT_BREWVA_CONFIG,
+        }),
+    ).toThrow(/unknown property "toolOutputDistillationInjection"/);
   });
 
   test("fails fast when removed adaptive projection fields are present", () => {

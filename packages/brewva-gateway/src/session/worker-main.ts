@@ -5,7 +5,7 @@ import {
   startScopedSchedule,
   type ScopedScheduleHandle,
 } from "@brewva/brewva-effect";
-import { type ContextPressureView, type SessionWireFrame } from "@brewva/brewva-runtime";
+import { type ContextStatusView, type SessionWireFrame } from "@brewva/brewva-runtime";
 import type { HostedSessionLogger } from "../host/logger.js";
 import { createRuntimeTurnClockStore } from "../runtime-plugins/runtime-turn-clock.js";
 import { recordSessionShutdownIfMissing } from "../utils/runtime.js";
@@ -172,7 +172,7 @@ function sendSessionWireFrame(sessionId: string, frame: SessionWireFrame): void 
   });
 }
 
-function projectSessionContextPressure(sessionId: string): ContextPressureView | undefined {
+function projectSessionContextStatus(sessionId: string): ContextStatusView | undefined {
   if (!sessionResult) {
     return undefined;
   }
@@ -183,26 +183,32 @@ function projectSessionContextPressure(sessionId: string): ContextPressureView |
   if (typeof usage.contextWindow !== "number" || !Number.isFinite(usage.contextWindow)) {
     return undefined;
   }
-  const limit = Math.max(0, usage.contextWindow);
-  if (limit <= 0) {
+  const tokensTotal = Math.max(0, usage.contextWindow);
+  if (tokensTotal <= 0) {
     return undefined;
   }
-  const pressure = sessionResult.runtime.inspect.context.getPressureStatus(sessionId, usage);
-  const level =
-    pressure.level === "high"
-      ? "elevated"
-      : pressure.level === "critical"
-        ? "critical"
-        : pressure.level === "none" || pressure.level === "low" || pressure.level === "medium"
-          ? "normal"
-          : undefined;
-  if (!level) {
+  const contextStatus = sessionResult.runtime.inspect.context.getStatus(sessionId, usage);
+  if (
+    contextStatus.usageRatio === null ||
+    contextStatus.tokensRemaining === null ||
+    contextStatus.tokensUntilForcedCompact === null ||
+    contextStatus.tokensUntilPredictedOverflow === null
+  ) {
     return undefined;
   }
   return {
-    tokens: Math.max(0, usage.tokens),
-    limit,
-    level,
+    tokensUsed: Math.max(0, usage.tokens),
+    tokensTotal,
+    tokensRemaining: contextStatus.tokensRemaining,
+    tokensUntilForcedCompact: contextStatus.tokensUntilForcedCompact,
+    predictedTurnGrowthTokens: contextStatus.predictedTurnGrowthTokens,
+    tokensUntilPredictedOverflow: contextStatus.tokensUntilPredictedOverflow,
+    predictedOverflow: contextStatus.predictedOverflow,
+    usageRatio: contextStatus.usageRatio,
+    hardLimitRatio: contextStatus.hardLimitRatio,
+    compactionThresholdRatio: contextStatus.compactionThresholdRatio,
+    compactionAdvised: contextStatus.compactionAdvised,
+    forcedCompaction: contextStatus.forcedCompaction,
   };
 }
 
@@ -632,8 +638,8 @@ async function handleSteer(
   }
 }
 
-async function handleSessionContextPressureQuery(
-  message: Extract<ParentToWorkerMessage, { kind: "sessionContextPressure.query" }>,
+async function handleSessionContextStatusQuery(
+  message: Extract<ParentToWorkerMessage, { kind: "sessionContextStatus.query" }>,
 ): Promise<void> {
   if (!sessionResult) {
     send({
@@ -641,7 +647,7 @@ async function handleSessionContextPressureQuery(
       requestId: message.requestId,
       ok: true,
       payload: {
-        contextPressure: undefined,
+        contextStatus: undefined,
       },
     });
     return;
@@ -653,7 +659,7 @@ async function handleSessionContextPressureQuery(
     requestId: message.requestId,
     ok: true,
     payload: {
-      contextPressure: projectSessionContextPressure(agentSessionId),
+      contextStatus: projectSessionContextStatus(agentSessionId),
     },
   });
 }
@@ -730,9 +736,9 @@ async function handleMessage(raw: unknown): Promise<void> {
     return;
   }
 
-  if (kind === "sessionContextPressure.query") {
-    await handleSessionContextPressureQuery(
-      raw as Extract<ParentToWorkerMessage, { kind: "sessionContextPressure.query" }>,
+  if (kind === "sessionContextStatus.query") {
+    await handleSessionContextStatusQuery(
+      raw as Extract<ParentToWorkerMessage, { kind: "sessionContextStatus.query" }>,
     );
     return;
   }

@@ -6,7 +6,7 @@ const EXPECTED_TERMS = [
   "Runtime Plugin",
   "Invocation Spine",
   "Context Compaction Gate",
-  "Context Arena",
+  "Workbench",
   "Working State",
   "Working Projection",
   "Iteration Fact",

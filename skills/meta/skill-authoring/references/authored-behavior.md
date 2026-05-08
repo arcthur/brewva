@@ -213,7 +213,8 @@ These excuses apply across all skills. Every skill activation should resist them
 ## Memory Nudge
 
 When a skill completes work that produces reusable insight, the model should
-actively consider whether the lesson belongs in deliberation memory.
+actively consider whether the lesson belongs in a workbench note or durable
+knowledge capture.
 
 Good memory candidates:
 

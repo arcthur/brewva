@@ -20,6 +20,7 @@ export const PUBLIC_DELEGATION_FORBIDDEN_FIELDS = new Set([
   "executionShape",
   "mode",
   "activeSkillName",
+  "preferredSkills",
   "consultBrief",
 ] as const);
 
@@ -80,9 +81,6 @@ const ExecutionHintsSchema = Type.Object({
     Type.Array(Type.String({ minLength: 1, maxLength: 200 }), { maxItems: 24 }),
   ),
   fallbackTools: Type.Optional(
-    Type.Array(Type.String({ minLength: 1, maxLength: 200 }), { maxItems: 24 }),
-  ),
-  preferredSkills: Type.Optional(
     Type.Array(Type.String({ minLength: 1, maxLength: 200 }), { maxItems: 24 }),
   ),
 });
@@ -155,7 +153,6 @@ const PacketFields = {
       maxItems: 24,
     }),
   ),
-  activeSkillName: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
   executionHints: Type.Optional(ExecutionHintsSchema),
   contextRefs: Type.Optional(Type.Array(ContextRefSchema, { maxItems: 48 })),
   contextBudget: Type.Optional(
@@ -178,7 +175,6 @@ export const TaskPacketSchema = Type.Object({
   deliverable: PacketFields.deliverable,
   constraints: PacketFields.constraints,
   sharedNotes: PacketFields.sharedNotes,
-  activeSkillName: PacketFields.activeSkillName,
   executionHints: PacketFields.executionHints,
   contextRefs: PacketFields.contextRefs,
   contextBudget: PacketFields.contextBudget,
@@ -255,7 +251,6 @@ export const DiagnosticSubagentRunParamsSchema = Type.Object({
   consultBrief: PacketFields.consultBrief,
   constraints: PacketFields.constraints,
   sharedNotes: PacketFields.sharedNotes,
-  activeSkillName: PacketFields.activeSkillName,
   executionHints: PacketFields.executionHints,
   contextRefs: PacketFields.contextRefs,
   contextBudget: PacketFields.contextBudget,
@@ -281,7 +276,6 @@ export const DiagnosticSubagentFanoutParamsSchema = Type.Object({
   consultBrief: PacketFields.consultBrief,
   constraints: PacketFields.constraints,
   sharedNotes: PacketFields.sharedNotes,
-  activeSkillName: PacketFields.activeSkillName,
   executionHints: PacketFields.executionHints,
   contextRefs: PacketFields.contextRefs,
   contextBudget: PacketFields.contextBudget,

@@ -1,6 +1,4 @@
 export {
-  appendToolRuntimeGuardedSupplementalBlocks,
-  canAppendToolRuntimeGuardedSupplementalBlocks,
   recordToolRuntimeEvent,
   registerToolRuntimeClearStateListener,
   resolveToolRuntimeAuthorityTools,

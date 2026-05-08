@@ -3,6 +3,7 @@ import { registerLedgerDomain } from "../domain/ledger/api.js";
 import { registerSkillsDomain } from "../domain/skills/api.js";
 import { registerTaskDomain } from "../domain/task/api.js";
 import { registerTruthDomain } from "../domain/truth/api.js";
+import { registerWorkbenchDomain } from "../domain/workbench/api.js";
 import type {
   RuntimeGovernanceServices,
   RuntimeServiceRegistrarOptions,
@@ -14,25 +15,22 @@ export function registerRuntimeWorkServices(
   governance: RuntimeGovernanceServices,
 ): RuntimeWorkServices {
   const taskDomain = registerTaskDomain(options);
-  const skillsDomain = registerSkillsDomain(options, {
-    taskService: taskDomain.services.taskService,
-  });
+  registerSkillsDomain(options);
   const truthDomain = registerTruthDomain(options);
   const ledgerDomain = registerLedgerDomain(options, {
-    skillLifecycleService: skillsDomain.services.skillLifecycleService,
     getEffectCommitmentDeskService: () => governance.getEffectCommitmentDeskService(),
   });
   const costDomain = registerCostDomain(options, {
     ledgerService: ledgerDomain.services.ledgerService,
-    skillLifecycleService: skillsDomain.services.skillLifecycleService,
   });
+  const workbenchDomain = registerWorkbenchDomain(options);
 
   return {
     taskService: taskDomain.services.taskService,
     taskWatchdogService: taskDomain.services.taskWatchdogService,
-    skillLifecycleService: skillsDomain.services.skillLifecycleService,
     truthService: truthDomain.services.truthService,
     ledgerService: ledgerDomain.services.ledgerService,
     costService: costDomain.services.costService,
+    workbenchService: workbenchDomain.services.workbenchService,
   };
 }

@@ -78,15 +78,6 @@
               "type": "object",
               "additionalProperties": false,
               "properties": {
-                "arena": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "properties": {
-                    "maxEntriesPerSession": {
-                      "type": "number"
-                    }
-                  }
-                },
                 "compaction": {
                   "type": "object",
                   "additionalProperties": false,
@@ -97,7 +88,7 @@
                     "minTurnsBetween": {
                       "type": "number"
                     },
-                    "pressureBypassPercent": {
+                    "cooldownBypassPercent": {
                       "type": "number"
                     }
                   }
@@ -108,7 +99,7 @@
                 "enabled": {
                   "type": "boolean"
                 },
-                "injection": {
+                "dynamicTail": {
                   "type": "object",
                   "additionalProperties": false,
                   "properties": {
@@ -143,6 +134,27 @@
                       "type": "number"
                     },
                     "hardLimitHeadroomTokens": {
+                      "type": "number"
+                    }
+                  }
+                },
+                "predictiveTurnGrowth": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "floorContextWindow": {
+                      "type": "number"
+                    },
+                    "largeContextWindow": {
+                      "type": "number"
+                    },
+                    "standardTokens": {
+                      "type": "number"
+                    },
+                    "largeTokens": {
+                      "type": "number"
+                    },
+                    "scalingFactor": {
                       "type": "number"
                     }
                   }
@@ -224,21 +236,6 @@
               }
             },
             "toolFailureInjection": {
-              "type": "object",
-              "additionalProperties": false,
-              "properties": {
-                "enabled": {
-                  "type": "boolean"
-                },
-                "maxEntries": {
-                  "type": "number"
-                },
-                "maxOutputChars": {
-                  "type": "number"
-                }
-              }
-            },
-            "toolOutputDistillationInjection": {
               "type": "object",
               "additionalProperties": false,
               "properties": {

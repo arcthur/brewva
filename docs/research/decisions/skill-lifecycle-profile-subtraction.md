@@ -31,4 +31,4 @@
 
 ## Superseded by
 
-- None.
+- `docs/research/decisions/model-operated-working-memory-and-context-governance-reset.md`

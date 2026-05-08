@@ -26,16 +26,6 @@ export function prepareSubagentEntry(input: {
   if (delegatedSkill && !skillDocument) {
     throw new Error(`unknown_skill:${delegatedSkill}`);
   }
-  if (childOwnsSkill && delegatedSkill) {
-    const activation = input.childRuntime.authority.skills.activate(
-      input.childSessionId,
-      delegatedSkill,
-    );
-    if (!activation.ok) {
-      throw new Error(`subagent_entry_skill_failed:${activation.reason}`);
-    }
-  }
-
   const prepared: PreparedSubagentEntry = {
     prompt: buildDelegationPrompt({
       target: input.target,

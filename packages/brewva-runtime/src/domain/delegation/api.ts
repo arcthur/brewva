@@ -26,10 +26,7 @@ export type {
   QaToolCheck,
   WorkerResultsAppliedEventPayload,
 } from "./types.js";
-export {
-  SUBAGENT_SKILL_OUTPUT_VALIDATION_FAILED_EVENT_TYPE,
-  WORKER_RESULTS_APPLY_FAILED_EVENT_TYPE,
-} from "./events.js";
+export { WORKER_RESULTS_APPLY_FAILED_EVENT_TYPE } from "./events.js";
 export {
   DELEGATION_EVENT_DESCRIPTORS,
   SUBAGENT_CANCELLED_EVENT_DESCRIPTOR,

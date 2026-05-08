@@ -13,8 +13,13 @@ import {
 } from "../../security/compaction-integrity.js";
 import type { GovernancePort } from "../governance/api.js";
 import type { RuntimeSessionStateStore } from "../sessions/api.js";
-import type { SkillDocument } from "../skills/api.js";
-import type { SessionCompactionCommitInput } from "./types.js";
+import type {
+  ProviderCacheObservationState,
+  SessionCompactionCacheImpact,
+  SessionCompactionCacheImpactSnapshot,
+  SessionCompactionCommitInput,
+  SessionCompactionGenerationMetadata,
+} from "./types.js";
 
 export interface ContextCompactionDeps {
   sessionState: RuntimeSessionStateStore;
@@ -36,9 +41,8 @@ export interface ContextCompactionDeps {
   >;
   governancePort?: GovernancePort;
   markPressureCompacted: RuntimeCallback<[sessionId: string]>;
-  markInjectionCompacted: RuntimeCallback<[sessionId: string]>;
+  commitWorkbenchBaseline?: RuntimeCallback<[sessionId: string], unknown>;
   getCurrentTurn: RuntimeCallback<[sessionId: string], number>;
-  getActiveSkill: RuntimeCallback<[sessionId: string], SkillDocument | undefined>;
   recordEvent: RuntimeCallback<
     [
       input: {
@@ -54,15 +58,110 @@ export interface ContextCompactionDeps {
   >;
 }
 
+function finiteNonNegativeNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
+}
+
+function normalizeCompactionGenerationMetadata(
+  input: SessionCompactionGenerationMetadata | undefined,
+): SessionCompactionGenerationMetadata | undefined {
+  if (!input || typeof input.strategy !== "string" || input.strategy.trim().length === 0) {
+    return undefined;
+  }
+  const model =
+    input.model &&
+    typeof input.model.provider === "string" &&
+    typeof input.model.id === "string" &&
+    typeof input.model.api === "string"
+      ? {
+          provider: input.model.provider,
+          id: input.model.id,
+          api: input.model.api,
+        }
+      : undefined;
+  const usage = input.usage
+    ? {
+        input: finiteNonNegativeNumber(input.usage.input),
+        output: finiteNonNegativeNumber(input.usage.output),
+        cacheRead: finiteNonNegativeNumber(input.usage.cacheRead),
+        cacheWrite: finiteNonNegativeNumber(input.usage.cacheWrite),
+        totalTokens: finiteNonNegativeNumber(input.usage.totalTokens),
+        cost: input.usage.cost
+          ? {
+              total: finiteNonNegativeNumber(input.usage.cost.total),
+            }
+          : undefined,
+      }
+    : undefined;
+  return {
+    strategy: input.strategy.trim(),
+    ...(model ? { model } : {}),
+    ...(usage ? { usage } : {}),
+    ...(input.fallbackReason && input.fallbackReason.trim().length > 0
+      ? { fallbackReason: input.fallbackReason.trim() }
+      : {}),
+  };
+}
+
+function normalizeCacheImpactSnapshot(
+  input: SessionCompactionCacheImpactSnapshot | null | undefined,
+): SessionCompactionCacheImpactSnapshot | null {
+  if (!input) {
+    return null;
+  }
+  return {
+    cacheReadTokens: Math.max(0, Math.trunc(input.cacheReadTokens)),
+    cacheWriteTokens: Math.max(0, Math.trunc(input.cacheWriteTokens)),
+    bucketKey: input.bucketKey,
+    stablePrefixHash: input.stablePrefixHash,
+    dynamicTailHash: input.dynamicTailHash,
+    visibleHistoryReductionHash: input.visibleHistoryReductionHash,
+    workbenchContextHash: input.workbenchContextHash,
+  };
+}
+
+function providerCacheObservationSnapshot(
+  observation: ProviderCacheObservationState | undefined,
+): SessionCompactionCacheImpactSnapshot | null {
+  if (!observation) {
+    return null;
+  }
+  return {
+    cacheReadTokens: observation.breakObservation.cacheReadTokens,
+    cacheWriteTokens: observation.breakObservation.cacheWriteTokens,
+    bucketKey: observation.fingerprint.bucketKey,
+    stablePrefixHash: observation.fingerprint.stablePrefixHash,
+    dynamicTailHash: observation.fingerprint.dynamicTailHash,
+    visibleHistoryReductionHash: observation.fingerprint.visibleHistoryReductionHash,
+    workbenchContextHash: observation.fingerprint.workbenchContextHash,
+  };
+}
+
+function normalizeCompactionCacheImpact(
+  input: SessionCompactionCacheImpact | undefined,
+  before: SessionCompactionCacheImpactSnapshot | null,
+): SessionCompactionCacheImpact {
+  return {
+    before: normalizeCacheImpactSnapshot(input?.before) ?? before,
+    after: normalizeCacheImpactSnapshot(input?.after),
+    explicitEpochChanges: Math.max(0, Math.trunc(input?.explicitEpochChanges ?? 1)),
+    prefixBytesChanged:
+      typeof input?.prefixBytesChanged === "number" && Number.isFinite(input.prefixBytesChanged)
+        ? Math.max(0, Math.trunc(input.prefixBytesChanged))
+        : null,
+    degradedReason:
+      typeof input?.degradedReason === "string" && input.degradedReason.trim().length > 0
+        ? input.degradedReason.trim()
+        : null,
+  };
+}
+
 export function commitSessionCompaction(
   deps: ContextCompactionDeps,
   sessionId: string,
   input: SessionCompactionCommitInput,
 ): BrewvaEventRecord {
   deps.markPressureCompacted(sessionId);
-  deps.markInjectionCompacted(sessionId);
-  deps.sessionState.clearInjectionFingerprintsForSession(sessionId);
-  deps.sessionState.clearReservedInjectionTokensForSession(sessionId);
 
   const turn = deps.getCurrentTurn(sessionId);
   const rawSummary = input.sanitizedSummary.trim();
@@ -72,6 +171,11 @@ export function commitSessionCompaction(
   let integrityViolations: string[] | null = null;
   let governanceSummary = "";
   let governanceViolations: string[] = [];
+  const summaryGeneration = normalizeCompactionGenerationMetadata(input.summaryGeneration);
+  const cacheImpact = normalizeCompactionCacheImpact(
+    input.cacheImpact,
+    providerCacheObservationSnapshot(deps.sessionState.getProviderCacheObservation(sessionId)),
+  );
   if (rawSummary) {
     const integrity = validateCompactionSummary(rawSummary);
     if (!integrity.clean) {
@@ -108,16 +212,19 @@ export function commitSessionCompaction(
       toTokens: input.toTokens,
       origin: input.origin,
       integrityViolations: integrityViolations,
+      ...(summaryGeneration ? { summaryGeneration } : {}),
+      cacheImpact,
     },
   });
   if (!event) {
     throw new Error("failed to record session_compact receipt");
   }
+  deps.commitWorkbenchBaseline?.(sessionId);
 
   deps.recordInfrastructureRow({
     sessionId,
     turn,
-    skill: deps.getActiveSkill(sessionId)?.name ?? null,
+    skill: null,
     tool: "brewva_session_compaction",
     argsSummary: "session_compaction",
     outputSummary: `from=${input.fromTokens ?? "unknown"} to=${input.toTokens ?? "unknown"}`,
@@ -127,6 +234,8 @@ export function commitSessionCompaction(
       summaryDigest: sha256Hex(summary ?? ""),
       fromTokens: input.fromTokens,
       toTokens: input.toTokens,
+      ...(summaryGeneration ? { summaryGeneration } : {}),
+      cacheImpact,
     }),
     verdict: "inconclusive",
     metadata: {
@@ -139,6 +248,8 @@ export function commitSessionCompaction(
       toTokens: input.toTokens,
       summaryChars: summary?.length ?? null,
       integrityViolations: integrityViolations,
+      ...(summaryGeneration ? { summaryGeneration } : {}),
+      cacheImpact,
     },
   });
 

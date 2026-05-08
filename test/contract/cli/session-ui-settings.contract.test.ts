@@ -1,67 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { createHostedSession as createBrewvaSession } from "@brewva/brewva-gateway/host";
 import { BrewvaRuntime, createTrustedLocalGovernancePort } from "@brewva/brewva-runtime";
 import { createTestWorkspace } from "../../helpers/workspace.js";
-
-function writeSkill(filePath: string, name: string): void {
-  mkdirSync(dirname(filePath), { recursive: true });
-  writeFileSync(
-    filePath,
-    [
-      "---",
-      `name: ${name}`,
-      `description: ${name} skill`,
-      "selection:",
-      "  when_to_use: Use when the task needs the routed test skill.",
-      "intent:",
-      "  outputs: []",
-      "effects:",
-      "  allowed_effects: [workspace_read]",
-      "resources:",
-      "  default_lease:",
-      "    max_tool_calls: 5",
-      "    max_tokens: 2000",
-      "  hard_ceiling:",
-      "    max_tool_calls: 10",
-      "    max_tokens: 4000",
-      "execution_hints:",
-      "  preferred_tools: [read]",
-      "  fallback_tools: []",
-      "consumes: []",
-      "---",
-      `# ${name}`,
-      "",
-      "## Intent",
-      "",
-      "test skill",
-      "",
-      "## Trigger",
-      "",
-      "test",
-      "",
-      "## Workflow",
-      "",
-      "### Step 1",
-      "",
-      "test",
-      "",
-      "## Stop Conditions",
-      "",
-      "- none",
-      "",
-      "## Anti-Patterns",
-      "",
-      "- none",
-      "",
-      "## Example",
-      "",
-      "Input: test",
-    ].join("\n"),
-    "utf8",
-  );
-}
 
 describe("brewva session ui settings wiring", () => {
   test("normalizes agentId into runtime identity", async () => {
@@ -135,9 +77,8 @@ describe("brewva session ui settings wiring", () => {
     }
   });
 
-  test("session_bootstrap payload records routing load report", async () => {
-    const workspace = createTestWorkspace("session-ui-skill-load-report");
-    writeSkill(join(workspace, ".brewva/skills/operator/custom-ops/SKILL.md"), "custom-ops");
+  test("session_bootstrap omits removed skill-load routing metadata", async () => {
+    const workspace = createTestWorkspace("session-ui-no-skill-load-report");
 
     const result = await createBrewvaSession({
       cwd: workspace,
@@ -148,161 +89,24 @@ describe("brewva session ui settings wiring", () => {
         type: "session_bootstrap",
         last: 1,
       })[0];
-      const payload = (bootstrap?.payload as
-        | {
-            runtimeConfig?: {
-              artifactRoots?: {
-                eventsDir?: string;
-                recoveryWalDir?: string;
+      const payload =
+        (bootstrap?.payload as
+          | {
+              runtimeConfig?: {
+                artifactRoots?: {
+                  eventsDir?: string;
+                  recoveryWalDir?: string;
+                };
               };
-            };
-            skillLoad?: {
-              routingEnabled?: boolean;
-              routingScopes?: string[];
-              routableSkills?: string[];
-              hiddenSkills?: string[];
-            };
-          }
-        | undefined) ?? { skillLoad: {} };
+              skillLoad?: unknown;
+            }
+          | undefined) ?? {};
 
-      expect(payload.skillLoad?.routingEnabled).toBe(true);
-      expect(payload.skillLoad?.routingScopes).toEqual(["core", "domain"]);
-      expect(payload.skillLoad?.routableSkills).toContain("repository-analysis");
-      expect(payload.skillLoad?.routableSkills).not.toContain("custom-ops");
-      expect(payload.skillLoad?.hiddenSkills).toContain("custom-ops");
+      expect(payload.skillLoad).toBeUndefined();
       expect(payload.runtimeConfig?.artifactRoots?.eventsDir).toBe(".orchestrator/events");
       expect(payload.runtimeConfig?.artifactRoots?.recoveryWalDir).toBe(
         ".orchestrator/recovery-wal",
       );
-    } finally {
-      result.session.dispose();
-    }
-  });
-
-  test("explicit routing disable keeps loaded skills out of auto routing", async () => {
-    const workspace = createTestWorkspace("session-ui-skill-routing-explicit-disable");
-    writeSkill(join(workspace, ".brewva/skills/operator/custom-ops/SKILL.md"), "custom-ops");
-    writeFileSync(
-      join(workspace, ".brewva/brewva.json"),
-      JSON.stringify(
-        {
-          skills: {
-            routing: {
-              enabled: false,
-              scopes: ["operator"],
-            },
-          },
-        },
-        null,
-        2,
-      ),
-      "utf8",
-    );
-
-    const result = await createBrewvaSession({
-      cwd: workspace,
-      configPath: ".brewva/brewva.json",
-    });
-    try {
-      const sessionId = result.session.sessionManager.getSessionId();
-      const bootstrap = result.runtime.inspect.events.query(sessionId, {
-        type: "session_bootstrap",
-        last: 1,
-      })[0];
-      const payload = (bootstrap?.payload as
-        | {
-            skillLoad?: {
-              routingEnabled?: boolean;
-              routingScopes?: string[];
-              routableSkills?: string[];
-              hiddenSkills?: string[];
-            };
-          }
-        | undefined) ?? { skillLoad: {} };
-
-      expect(payload.skillLoad?.routingEnabled).toBe(false);
-      expect(payload.skillLoad?.routingScopes).toEqual(["operator"]);
-      expect(payload.skillLoad?.routableSkills).toEqual([]);
-      expect(payload.skillLoad?.hiddenSkills).toContain("custom-ops");
-    } finally {
-      result.session.dispose();
-    }
-  });
-
-  test("scopes-only routing config opts hosted sessions into auto routing", async () => {
-    const workspace = createTestWorkspace("session-ui-skill-routing-scopes-only");
-    writeSkill(join(workspace, ".brewva/skills/operator/custom-ops/SKILL.md"), "custom-ops");
-    writeFileSync(
-      join(workspace, ".brewva/brewva.json"),
-      JSON.stringify(
-        {
-          skills: {
-            routing: {
-              scopes: ["operator"],
-            },
-          },
-        },
-        null,
-        2,
-      ),
-      "utf8",
-    );
-
-    const result = await createBrewvaSession({
-      cwd: workspace,
-      configPath: ".brewva/brewva.json",
-    });
-    try {
-      const sessionId = result.session.sessionManager.getSessionId();
-      const bootstrap = result.runtime.inspect.events.query(sessionId, {
-        type: "session_bootstrap",
-        last: 1,
-      })[0];
-      const payload = (bootstrap?.payload as
-        | {
-            skillLoad?: {
-              routingEnabled?: boolean;
-              routingScopes?: string[];
-              routableSkills?: string[];
-            };
-          }
-        | undefined) ?? { skillLoad: {} };
-
-      expect(payload.skillLoad?.routingEnabled).toBe(true);
-      expect(payload.skillLoad?.routingScopes).toEqual(["operator"]);
-      expect(payload.skillLoad?.routableSkills).toContain("custom-ops");
-    } finally {
-      result.session.dispose();
-    }
-  });
-
-  test("routingScopes option overrides skill routing exposure", async () => {
-    const workspace = createTestWorkspace("session-ui-skill-routing-override");
-    writeSkill(join(workspace, ".brewva/skills/operator/custom-ops/SKILL.md"), "custom-ops");
-
-    const result = await createBrewvaSession({
-      cwd: workspace,
-      routingScopes: ["core", "domain", "operator"],
-    });
-    try {
-      const sessionId = result.session.sessionManager.getSessionId();
-      const bootstrap = result.runtime.inspect.events.query(sessionId, {
-        type: "session_bootstrap",
-        last: 1,
-      })[0];
-      const payload = (bootstrap?.payload as
-        | {
-            skillLoad?: {
-              routingEnabled?: boolean;
-              routingScopes?: string[];
-              routableSkills?: string[];
-            };
-          }
-        | undefined) ?? { skillLoad: {} };
-
-      expect(payload.skillLoad?.routingEnabled).toBe(true);
-      expect(payload.skillLoad?.routingScopes).toEqual(["core", "domain", "operator"]);
-      expect(payload.skillLoad?.routableSkills).toContain("custom-ops");
     } finally {
       result.session.dispose();
     }
@@ -352,18 +156,15 @@ describe("brewva session ui settings wiring", () => {
         type: "session_bootstrap",
         last: 1,
       })[0];
-      const payload = (bootstrap?.payload as
-        | {
-            skillBroker?: unknown;
-            skillLoad?: {
-              routingEnabled?: boolean;
-              routingScopes?: string[];
-            };
-          }
-        | undefined) ?? { skillLoad: {} };
+      const payload =
+        (bootstrap?.payload as
+          | {
+              skillBroker?: unknown;
+              skillLoad?: unknown;
+            }
+          | undefined) ?? {};
       expect(payload.skillBroker).toBeUndefined();
-      expect(payload.skillLoad?.routingEnabled).toBe(true);
-      expect(payload.skillLoad?.routingScopes).toEqual(["core", "domain"]);
+      expect(payload.skillLoad).toBeUndefined();
     } finally {
       result.session.dispose();
     }
@@ -401,14 +202,12 @@ describe("brewva session ui settings wiring", () => {
         | {
             managedToolMode?: "runtime_plugin" | "direct";
             skillBroker?: unknown;
-            skillLoad?: {
-              routingEnabled?: boolean;
-            };
+            skillLoad?: unknown;
           }
-        | undefined) ?? { managedToolMode: "runtime_plugin", skillLoad: {} };
+        | undefined) ?? { managedToolMode: "runtime_plugin" };
       expect(payload.managedToolMode).toBe("direct");
       expect(payload.skillBroker).toBeUndefined();
-      expect(payload.skillLoad?.routingEnabled).toBe(true);
+      expect(payload.skillLoad).toBeUndefined();
     } finally {
       result.session.dispose();
     }

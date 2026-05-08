@@ -131,7 +131,6 @@ export function registerSessionsDomain(
   const sessionLifecycleService = new SessionLifecycleService({
     sessionState: options.sessionState,
     contextBudget: options.coreDependencies.contextBudget,
-    contextInjection: options.coreDependencies.contextInjection,
     fileChanges: options.coreDependencies.fileChanges,
     verificationGate: options.coreDependencies.verificationGate,
     parallel: options.coreDependencies.parallel,
@@ -142,13 +141,14 @@ export function registerSessionsDomain(
     eventStore: options.coreDependencies.eventStore,
     recoveryWalStore: options.coreDependencies.recoveryWalStore,
     reversibleMutationService: governanceServices.reversibleMutationService,
+    workbenchService: workServices.workbenchService,
     recordEvent: (input) => options.kernel.recordEvent(input),
-    contextService: contextServices.contextService,
   });
 
   sessionLifecycleService.onClearState((sessionId) => {
     recoveryDomain.services.toolLifecycleRecoveryWalService.clearSession(sessionId);
     governanceServices.reversibleMutationService.clear(sessionId);
+    workServices.workbenchService.clear(sessionId);
     governanceServices.clearEffectCommitmentDeskState(sessionId);
     options.coreDependencies.reasoningReplay.clear(sessionId);
   });

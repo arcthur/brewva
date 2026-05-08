@@ -3,11 +3,11 @@ const STATIC_CONTEXT_CONTRACT_BLOCK = [
   CONTEXT_CONTRACT_MARKER,
   "Operating model:",
   "- `tape_handoff` records durable handoff state; it does not reduce message tokens.",
-  "- `session_compact` reduces message-history pressure; it does not rewrite tape semantics.",
+  "- `workbench_compact` reduces message-history pressure; it does not rewrite tape semantics.",
   "- If a compaction gate or advisory block appears, follow it before broad tool work.",
   "- Prefer current task state, supplemental context, and working projection before replaying tape.",
   "Hard rules:",
-  "- call `session_compact` directly, never through `exec` or shell wrappers.",
+  "- call `workbench_compact` directly, never through `exec` or shell wrappers.",
 ].join("\n");
 
 export function buildContextContractBlock(): string {

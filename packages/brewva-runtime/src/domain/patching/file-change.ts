@@ -10,8 +10,6 @@ import { SessionCostTracker } from "../cost/api.js";
 import type { ReversibleMutationService } from "../governance/api.js";
 import type { LedgerService } from "../ledger/api.js";
 import { RuntimeSessionStateStore } from "../sessions/api.js";
-import type { SkillLifecycleService } from "../skills/api.js";
-import type { SkillDocument } from "../skills/api.js";
 import { isMutationTool } from "../verification/api.js";
 import { buildVerificationWriteMarkedPayload } from "../verification/api.js";
 import { FileChangeTracker } from "./file-change-tracker.js";
@@ -45,7 +43,6 @@ export interface FileChangeServiceOptions {
   getCurrentTurn: RuntimeKernelContext["getCurrentTurn"];
   recordEvent: RuntimeKernelContext["recordEvent"];
   ledgerService: Pick<LedgerService, "recordInfrastructureRow">;
-  skillLifecycleService: Pick<SkillLifecycleService, "getActiveSkill">;
   reversibleMutationService: Pick<
     ReversibleMutationService,
     "markWorkspacePatchSetRolledBack" | "markWorkspacePatchSetRedone"
@@ -67,7 +64,6 @@ export class FileChangeService {
     turn?: number;
     skill?: string | null;
   }) => string;
-  private readonly getActiveSkill: (sessionId: string) => SkillDocument | undefined;
   private readonly getCurrentTurn: (sessionId: string) => number;
   private readonly recordEvent: (input: {
     sessionId: string;
@@ -91,7 +87,6 @@ export class FileChangeService {
     this.fileChanges = options.fileChanges;
     this.costTracker = options.costTracker;
     this.recordInfrastructureRow = (input) => options.ledgerService.recordInfrastructureRow(input);
-    this.getActiveSkill = (sessionId) => options.skillLifecycleService.getActiveSkill(sessionId);
     this.getCurrentTurn = (sessionId) => options.getCurrentTurn(sessionId);
     this.recordEvent = (input) => options.recordEvent(input);
     this.markWorkspacePatchSetRolledBack = (sessionId, patchSetId) =>
@@ -202,7 +197,7 @@ export class FileChangeService {
       this.recordInfrastructureRow({
         sessionId: input.sessionId,
         turn: this.getCurrentTurn(input.sessionId),
-        skill: this.getActiveSkill(input.sessionId)?.name ?? null,
+        skill: null,
         tool: input.toolName,
         argsSummary: `patchSet=${input.patchSet.id}`,
         outputSummary: `applied=${applied.appliedPaths.length} failed=0`,
@@ -220,7 +215,7 @@ export class FileChangeService {
     this.recordInfrastructureRow({
       sessionId: input.sessionId,
       turn: this.getCurrentTurn(input.sessionId),
-      skill: this.getActiveSkill(input.sessionId)?.name ?? null,
+      skill: null,
       tool: input.toolName,
       argsSummary: `patchSet=${input.patchSet.id}`,
       outputSummary: `apply_failed=${applied.failedPaths.length}`,
@@ -288,7 +283,7 @@ export class FileChangeService {
     this.recordInfrastructureRow({
       sessionId,
       turn,
-      skill: this.getActiveSkill(sessionId)?.name ?? null,
+      skill: null,
       tool: "brewva_rollback",
       argsSummary: `patchSet=${rollback.patchSetId ?? "unknown"}`,
       outputSummary: `restored=${rollback.restoredPaths.length} failed=${rollback.failedPaths.length}`,
@@ -351,7 +346,7 @@ export class FileChangeService {
     this.recordInfrastructureRow({
       sessionId,
       turn,
-      skill: this.getActiveSkill(sessionId)?.name ?? null,
+      skill: null,
       tool: "brewva_redo",
       argsSummary: `patchSet=${result.patchSetId ?? "unknown"}`,
       outputSummary: `restored=${result.restoredPaths.length} failed=${result.failedPaths.length}`,

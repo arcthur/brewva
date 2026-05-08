@@ -7,13 +7,6 @@ import {
   type TruthFact,
 } from "@brewva/brewva-runtime";
 import {
-  readSkillActivatedEventPayload,
-  readSkillCompletionFailureEventPayload,
-  SESSION_SHUTDOWN_EVENT_TYPE,
-  SKILL_ACTIVATED_EVENT_TYPE,
-  SKILL_COMPLETED_EVENT_TYPE,
-  SKILL_COMPLETION_REJECTED_EVENT_TYPE,
-  SKILL_CONTRACT_FAILED_EVENT_TYPE,
   SCHEDULE_CHILD_SESSION_FAILED_EVENT_TYPE,
   SCHEDULE_CHILD_SESSION_FINISHED_EVENT_TYPE,
   SCHEDULE_CHILD_SESSION_STARTED_EVENT_TYPE,
@@ -29,7 +22,6 @@ export interface ScheduleContinuationSnapshot {
   taskSpec: TaskSpec | null;
   truthFacts: TruthFact[];
   parentAnchor: SchedulePromptAnchor | null;
-  activeSkillName?: string;
 }
 
 function clampText(value: string | undefined, maxChars: number): string | undefined {
@@ -47,35 +39,6 @@ export function buildScheduleWorkerSessionId(input: {
   return `schedule:${input.intentId}:${input.runIndex}`;
 }
 
-function deriveParentActiveSkillName(
-  runtime: BrewvaRuntime,
-  sessionId: string,
-): string | undefined {
-  let activeSkillName = runtime.inspect.skills.getActive(sessionId)?.name;
-  for (const event of runtime.inspect.events.list(sessionId)) {
-    if (event.type === SESSION_SHUTDOWN_EVENT_TYPE) {
-      activeSkillName = undefined;
-      continue;
-    }
-    if (event.type === SKILL_ACTIVATED_EVENT_TYPE) {
-      activeSkillName = readSkillActivatedEventPayload(event)?.skillName;
-      continue;
-    }
-    if (event.type === SKILL_COMPLETION_REJECTED_EVENT_TYPE) {
-      const failure = readSkillCompletionFailureEventPayload(event);
-      activeSkillName = failure?.phase === "repair_required" ? failure.skillName : undefined;
-      continue;
-    }
-    if (
-      event.type === SKILL_COMPLETED_EVENT_TYPE ||
-      event.type === SKILL_CONTRACT_FAILED_EVENT_TYPE
-    ) {
-      activeSkillName = undefined;
-    }
-  }
-  return activeSkillName;
-}
-
 export function collectScheduleContinuationSnapshot(
   runtime: BrewvaRuntime,
   input: { parentSessionId: string; continuityMode: ScheduleContinuityMode },
@@ -85,7 +48,6 @@ export function collectScheduleContinuationSnapshot(
       taskSpec: null,
       truthFacts: [],
       parentAnchor: null,
-      activeSkillName: undefined,
     };
   }
 
@@ -96,7 +58,6 @@ export function collectScheduleContinuationSnapshot(
     taskSpec: parentTask.spec ?? null,
     truthFacts: parentTruth.facts.map((fact) => structuredClone(fact)),
     parentAnchor: parentAnchor ?? null,
-    activeSkillName: deriveParentActiveSkillName(runtime, input.parentSessionId),
   };
 }
 
@@ -117,7 +78,6 @@ export function buildSchedulePromptTrigger(input: {
     taskSpec: input.snapshot.taskSpec,
     truthFacts: input.snapshot.truthFacts,
     parentAnchor: input.snapshot.parentAnchor,
-    activeSkillName: input.snapshot.activeSkillName,
   };
 }
 

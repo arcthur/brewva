@@ -171,7 +171,7 @@ export const DEFAULT_BREWVA_CONFIG: BrewvaConfig = {
     },
     contextBudget: {
       enabled: true,
-      injection: {
+      dynamicTail: {
         baseTokens: 1200,
         windowFraction: 0.002,
         maxTokens: 4800,
@@ -184,24 +184,23 @@ export const DEFAULT_BREWVA_CONFIG: BrewvaConfig = {
         hardLimitCeilingPercent: 0.97,
         hardLimitHeadroomTokens: 8_000,
       },
+      predictiveTurnGrowth: {
+        floorContextWindow: 100_000,
+        largeContextWindow: 800_000,
+        standardTokens: 35_000,
+        largeTokens: 50_000,
+        scalingFactor: 0.25,
+      },
       compactionInstructions:
         "Summarize stale tool outputs and keep only active objectives, unresolved failures, and latest verification evidence.",
       compaction: {
         minTurnsBetween: 2,
         minSecondsBetween: 45,
-        pressureBypassPercent: 0.94,
-      },
-      arena: {
-        maxEntriesPerSession: 4096,
+        cooldownBypassPercent: 0.94,
       },
     },
     toolFailureInjection: {
       enabled: true,
-      maxEntries: 3,
-      maxOutputChars: 300,
-    },
-    toolOutputDistillationInjection: {
-      enabled: false,
       maxEntries: 3,
       maxOutputChars: 300,
     },

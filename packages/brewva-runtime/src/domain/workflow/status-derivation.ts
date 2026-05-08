@@ -1,6 +1,4 @@
-import { readSkillCompletedEventPayload } from "../../events/descriptors.js";
 import type { BrewvaEventRecord } from "../../events/types.js";
-import type { SkillReadinessEntry } from "../skills/api.js";
 import type { TaskState } from "../task/types.js";
 import { deriveWorkflowArtifacts, latestArtifactByKind } from "./artifact-derivation.js";
 import { collectCoveredRequiredEvidence } from "./coverage-utils.js";
@@ -76,26 +74,6 @@ function deriveStrictestPlanningPosture(
   for (const artifact of artifacts) {
     const posture = readPlanningPosture(artifact.metadata?.planningPosture);
     if (!posture) continue;
-    if (!strictest || PLANNING_POSTURE_RANK[posture] > PLANNING_POSTURE_RANK[strictest]) {
-      strictest = posture;
-    }
-  }
-  return strictest;
-}
-
-function deriveStrictestPlanningPostureFromEvents(
-  events: readonly BrewvaEventRecord[],
-): PlanningPosture | undefined {
-  let strictest: PlanningPosture | undefined;
-  for (const event of events) {
-    if (event.type !== "skill_completed") {
-      continue;
-    }
-    const payload = readSkillCompletedEventPayload(event);
-    const posture = readPlanningPosture(payload?.outputs.planning_posture);
-    if (!posture) {
-      continue;
-    }
     if (!strictest || PLANNING_POSTURE_RANK[posture] > PLANNING_POSTURE_RANK[strictest]) {
       strictest = posture;
     }
@@ -487,7 +465,6 @@ export function deriveWorkflowStatus(input: {
   taskState?: Pick<TaskState, "spec" | "status" | "acceptance">;
   pendingWorkerResults?: number;
   pendingDelegationOutcomes?: number;
-  skillReadiness: readonly SkillReadinessEntry[];
   workspaceRoot?: string;
 }): WorkflowStatusSnapshot {
   const currentWorkspaceRevision = input.workspaceRoot
@@ -495,9 +472,7 @@ export function deriveWorkflowStatus(input: {
     : undefined;
   const artifacts = deriveWorkflowArtifacts(input.events);
   const latestArtifacts = latestArtifactByKind(artifacts);
-  const strictestPlanningPosture =
-    deriveStrictestPlanningPostureFromEvents(input.events) ??
-    deriveStrictestPlanningPosture(artifacts);
+  const strictestPlanningPosture = deriveStrictestPlanningPosture(artifacts);
   const taskBlockers = input.blockers ?? [];
   const pendingWorkerResults = Math.max(0, input.pendingWorkerResults ?? 0);
   const pendingDelegationOutcomes = Math.max(0, input.pendingDelegationOutcomes ?? 0);
@@ -744,7 +719,6 @@ export function deriveWorkflowStatus(input: {
     currentWorkspaceRevision,
     posture,
     finish,
-    skillReadiness: [...input.skillReadiness],
     artifacts: artifactsWithShipPosture,
     pendingWorkerResults,
     pendingDelegationOutcomes,

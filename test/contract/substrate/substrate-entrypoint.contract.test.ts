@@ -87,6 +87,9 @@ describe("substrate entrypoint surface", () => {
     expect(typeof compaction.buildBrewvaDeterministicCompactionSummary).toBe("function");
     expect(typeof compaction.findBrewvaCompactionCutPoint).toBe("function");
     expect(compaction.BREWVA_COMPACTION_SUMMARY_HEADER).toBe("[CompactSummary]");
+    expect(compaction.BREWVA_EMERGENCY_COMPACTION_SUMMARY_HEADER).toBe(
+      "[CompactSummary][EmergencyFallback]",
+    );
   });
 
   test("exports tool mechanisms only from the explicit tools subpath", async () => {
@@ -119,8 +122,8 @@ describe("substrate entrypoint surface", () => {
     const provider = await import("@brewva/brewva-substrate/provider");
 
     expect(typeof provider.createInMemoryModelCatalog).toBe("function");
-    expect(typeof provider.createFetchProviderCompletionDriver).toBe("function");
     expect(typeof provider.UnsupportedBrewvaProviderApiError).toBe("function");
+    expect("createFetchProviderCompletionDriver" in provider).toBe(false);
   });
 
   test("exports the turn loop only from the explicit turn subpath", async () => {
@@ -128,7 +131,7 @@ describe("substrate entrypoint surface", () => {
 
     expect(typeof turn.createBrewvaTurnLoopController).toBe("function");
     expect(typeof turn.runBrewvaTurnLoop).toBe("function");
-    expect(typeof turn.createBrewvaTurnProviderStreamFunction).toBe("function");
+    expect("createBrewvaTurnProviderStreamFunction" in turn).toBe(false);
   });
 
   test("exports substrate session composition only from the explicit sdk subpath", async () => {

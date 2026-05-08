@@ -72,6 +72,9 @@ export function createToolRuntimePort(runtime: BrewvaRuntime): BrewvaToolRuntime
     config: runtime.config,
     authority: runtime.authority,
     inspect: runtime.inspect,
+    maintain: {
+      workbench: runtime.maintain.workbench,
+    },
     extensions: {
       tools: runtime.extensions.tools,
     },

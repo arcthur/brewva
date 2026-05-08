@@ -10,14 +10,7 @@ export { createReasoningRevertTool } from "./reasoning-revert.js";
 export { createResourceLeaseTool } from "./resource-lease.js";
 export { createRollbackLastPatchTool } from "./rollback-last-patch.js";
 export { createScheduleIntentTool } from "./schedule-intent.js";
-export { createSessionCompactTool } from "./session-compact.js";
-export { createSkillCompleteTool } from "./skill-complete.js";
-export { createSkillLoadTool } from "./skill-load.js";
-export {
-  createSkillPromotionInspectTool,
-  createSkillPromotionPromoteTool,
-  createSkillPromotionReviewTool,
-} from "./skill-promotion.js";
+export { createWorkbenchCompactTool } from "./session-compact.js";
 export { createTapeTools } from "./tape.js";
 export { createTaskLedgerTools } from "./task-ledger.js";
 export { createWorkerResultsApplyTool, createWorkerResultsMergeTool } from "./worker-results.js";

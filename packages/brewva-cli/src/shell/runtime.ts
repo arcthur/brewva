@@ -173,7 +173,7 @@ function buildInteractiveQuestionRequest(input: {
     sessionId: input.sessionId,
     createdAt: Date.now(),
     presentationKind: "input_request",
-    sourceKind: "skill",
+    sourceKind: "tool",
     sourceEventId: `tool:${input.request.toolCallId}`,
     sourceLabel: "tool:question",
     questions,

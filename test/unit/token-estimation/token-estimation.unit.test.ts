@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   estimateModelTokens,
+  estimateProviderPayloadTextTokens,
   estimateStructuredTokenCount,
   estimateTokenCount,
   normalizePercent,
@@ -126,5 +127,39 @@ describe("token estimation", () => {
         modelId: "gpt-4o",
       }),
     ).toBeGreaterThan(0);
+  });
+
+  test("estimates provider payload text without counting media bytes and protocol labels", () => {
+    const estimate = estimateProviderPayloadTextTokens(
+      {
+        model: "gpt-5.4",
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "input_text", text: "Use the previous command result." },
+              { type: "input_image", image_url: "data:image/png;base64,AAAA" },
+            ],
+          },
+          {
+            role: "tool",
+            content: "important tool result ".repeat(64),
+          },
+        ],
+      },
+      {
+        provider: "openai",
+        api: "openai-responses",
+        modelId: "gpt-5.4",
+      },
+    );
+
+    expect(estimate).toBeGreaterThan(0);
+    expect(estimate).toBeLessThan(
+      estimateStructuredTokenCount("important tool result ".repeat(64), {
+        api: "openai-responses",
+        modelId: "gpt-5.4",
+      }) + 20,
+    );
   });
 });

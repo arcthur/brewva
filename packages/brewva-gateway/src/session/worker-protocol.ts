@@ -58,7 +58,7 @@ export type ParentToWorkerMessage =
       };
     }
   | {
-      kind: "sessionContextPressure.query";
+      kind: "sessionContextStatus.query";
       requestId: string;
     }
   | {

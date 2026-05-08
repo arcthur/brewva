@@ -10,7 +10,7 @@ import type { BrewvaBundledToolRuntime } from "../../../contracts/index.js";
 import { cloneBoxConfig } from "../box-plane-runtime.js";
 import type { BoxConfig, ExecutionBackend, SecurityMode } from "./shared.js";
 
-const TOOL_NAME_COMMAND_HINTS = new Set(["session_compact"]);
+const TOOL_NAME_COMMAND_HINTS = new Set(["workbench_compact"]);
 
 export const DENY_LIST_BEST_EFFORT_MESSAGE =
   "security.boundaryPolicy.commandDenyList is best-effort and must not be treated as a complete shell security boundary.";

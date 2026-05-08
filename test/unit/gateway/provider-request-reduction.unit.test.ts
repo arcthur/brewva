@@ -17,6 +17,65 @@ const CLEARED_TOOL_RESULT_PLACEHOLDER = "[cleared_for_request]";
 const MIN_CLEARABLE_TOOL_RESULT_CHARS = 512;
 const LARGE_TOOL_RESULT = "x".repeat(MIN_CLEARABLE_TOOL_RESULT_CHARS);
 
+function observeProviderCache(input: {
+  runtime: ReturnType<typeof createRuntimeFixture>;
+  sessionId: string;
+  status: "cold" | "warm" | "break" | "limited";
+  reason: string | null;
+  cacheReadTokens?: number;
+  timestamp?: number;
+}): void {
+  input.runtime.maintain.context.observeProviderCache(input.sessionId, {
+    source: `provider=openai|api=openai-responses|model=gpt-5.4|session=${input.sessionId}`,
+    timestamp: input.timestamp,
+    fingerprint: {
+      bucketKey: `provider=openai|api=openai-responses|model=gpt-5.4|session=${input.sessionId}`,
+      provider: "openai",
+      api: "openai-responses",
+      model: "gpt-5.4",
+      transport: "sse",
+      sessionId: input.sessionId,
+      cachePolicyHash: "policy",
+      toolSchemaSnapshotHash: "tools",
+      toolSchemaOverlayHash: "overlay",
+      perToolHashes: {},
+      stablePrefixHash: "stable",
+      dynamicTailHash: "tail",
+      requestHash: "request",
+      channelContextHash: "channel",
+      renderedCacheHash: "render",
+      cacheCapabilityHash: "capability",
+      stickyLatchHash: "latch",
+      reasoningHash: "reasoning",
+      thinkingBudgetHash: "budget",
+      cacheRelevantHeadersHash: "headers",
+      extraBodyHash: "extra",
+      visibleHistoryReductionHash: "visible",
+      workbenchContextHash: "workbench",
+      providerFallbackHash: "fallback",
+    },
+    render: {
+      status: "rendered",
+      reason: "rendered_openai_prompt_cache",
+      renderedRetention: "short",
+      bucketKey: `openai-responses|session=${input.sessionId}|retention=short|writeMode=readWrite`,
+    },
+    breakObservation: {
+      status: input.status,
+      classification: input.status === "cold" ? "cacheCold" : "prefixPreserving",
+      expected: false,
+      reason: input.reason,
+      previousCacheReadTokens: input.cacheReadTokens ?? 12_000,
+      cacheReadTokens: input.cacheReadTokens ?? 0,
+      cacheWriteTokens: 0,
+      cacheMissTokens: input.cacheReadTokens ?? 12_000,
+      thresholdTokens: 2_000,
+      relativeDropThreshold: 0.05,
+      changedFields: [],
+    },
+  });
+}
+
 function buildToolMessages(count: number): Array<Record<string, unknown>> {
   return buildToolMessagesWithSize(count, LARGE_TOOL_RESULT.length);
 }
@@ -196,7 +255,8 @@ describe("provider request reduction", () => {
     expect(runtime.inspect.context.getTransientReduction(sessionId)).toEqual(
       expect.objectContaining({
         status: "completed",
-        pressureLevel: "high",
+        compactionAdvised: true,
+        forcedCompaction: false,
       }),
     );
 
@@ -219,8 +279,9 @@ describe("provider request reduction", () => {
     expect(runtime.inspect.context.getTransientReduction(sessionId)).toEqual(
       expect.objectContaining({
         status: "skipped",
-        reason: "context pressure is below the transient reduction threshold",
-        pressureLevel: "none",
+        reason: "context status is below the transient reduction threshold",
+        compactionAdvised: false,
+        forcedCompaction: false,
       }),
     );
 
@@ -244,7 +305,8 @@ describe("provider request reduction", () => {
       expect.objectContaining({
         status: "skipped",
         reason: "recovery posture is active",
-        pressureLevel: "unknown",
+        compactionAdvised: false,
+        forcedCompaction: false,
       }),
     );
   });
@@ -270,7 +332,8 @@ describe("provider request reduction", () => {
       expect.objectContaining({
         status: "skipped",
         reason: "context usage is unavailable",
-        pressureLevel: "unknown",
+        compactionAdvised: false,
+        forcedCompaction: false,
       }),
     );
   });
@@ -301,8 +364,95 @@ describe("provider request reduction", () => {
     expect(runtime.inspect.context.getTransientReduction(sessionId)).toEqual(
       expect.objectContaining({
         status: "skipped",
-        reason: "context pressure is below the transient reduction threshold",
-        pressureLevel: "none",
+        reason: "context status is below the transient reduction threshold",
+        compactionAdvised: false,
+        forcedCompaction: false,
+      }),
+    );
+  });
+
+  test("allows request-local reduction below pressure threshold when the provider cache is already cold", () => {
+    const runtime = createRuntimeFixture();
+    const { api, handlers } = createMockRuntimePluginApi();
+    const sessionId = "provider-request-reduction-cache-cold";
+
+    registerProviderRequestReduction(api, createHostedRuntimePort(runtime));
+    runtime.maintain.context.observeUsage(sessionId, {
+      tokens: 20_000,
+      contextWindow: 100_000,
+      percent: 0.2,
+    });
+    observeProviderCache({
+      runtime,
+      sessionId,
+      status: "break",
+      reason: "possible_cache_ttl_expiry_5m",
+      cacheReadTokens: 0,
+    });
+
+    const payload = invokeBeforeProviderRequestChain(
+      handlers,
+      {
+        model: "gpt-5.4",
+        messages: buildToolMessages(6),
+      },
+      sessionId,
+    );
+
+    expect((payload.messages as Array<Record<string, unknown>>)[0]?.content).toBe(
+      CLEARED_TOOL_RESULT_PLACEHOLDER,
+    );
+    expect(runtime.inspect.context.getTransientReduction(sessionId)).toEqual(
+      expect.objectContaining({
+        status: "completed",
+        reason: null,
+        eligibleToolResults: 6,
+        clearedToolResults: 2,
+        compactionAdvised: false,
+        forcedCompaction: false,
+        classification: "cacheCold",
+        expectedCacheBreak: false,
+      }),
+    );
+  });
+
+  test("treats expired short-retention provider cache observations as cache cold", () => {
+    const runtime = createRuntimeFixture();
+    const { api, handlers } = createMockRuntimePluginApi();
+    const sessionId = "provider-request-reduction-cache-expired";
+
+    registerProviderRequestReduction(api, createHostedRuntimePort(runtime));
+    runtime.maintain.context.observeUsage(sessionId, {
+      tokens: 20_000,
+      contextWindow: 100_000,
+      percent: 0.2,
+    });
+    observeProviderCache({
+      runtime,
+      sessionId,
+      status: "warm",
+      reason: null,
+      cacheReadTokens: 8_000,
+      timestamp: Date.now() - 6 * 60 * 1000,
+    });
+
+    const payload = invokeBeforeProviderRequestChain(
+      handlers,
+      {
+        model: "gpt-5.4",
+        messages: buildToolMessages(6),
+      },
+      sessionId,
+    );
+
+    expect((payload.messages as Array<Record<string, unknown>>)[0]?.content).toBe(
+      CLEARED_TOOL_RESULT_PLACEHOLDER,
+    );
+    expect(runtime.inspect.context.getTransientReduction(sessionId)).toEqual(
+      expect.objectContaining({
+        status: "completed",
+        classification: "cacheCold",
+        expectedCacheBreak: false,
       }),
     );
   });
@@ -333,10 +483,6 @@ describe("provider request reduction", () => {
             latestSourceEventId: null,
             latestSourceEventType: null,
             recentTransitions: [],
-          },
-          skill: {
-            posture: "none",
-            activeSkillName: null,
           },
           approval: {
             status: "idle",
@@ -377,7 +523,8 @@ describe("provider request reduction", () => {
       expect.objectContaining({
         status: "skipped",
         reason: "recovery posture is active",
-        pressureLevel: "unknown",
+        compactionAdvised: false,
+        forcedCompaction: false,
       }),
     );
   });
@@ -415,10 +562,6 @@ describe("provider request reduction", () => {
             latestSourceEventId: null,
             latestSourceEventType: null,
             recentTransitions: [],
-          },
-          skill: {
-            posture: "repair_required",
-            activeSkillName: "learning-research",
           },
           approval: {
             status: "idle",
@@ -468,7 +611,8 @@ describe("provider request reduction", () => {
         reason: null,
         eligibleToolResults: 6,
         clearedToolResults: 2,
-        pressureLevel: "high",
+        compactionAdvised: true,
+        forcedCompaction: false,
       }),
     );
   });
@@ -504,7 +648,8 @@ describe("provider request reduction", () => {
         eligibleToolResults: 6,
         clearedToolResults: 2,
         clearedChars: `${LARGE_TOOL_RESULT}:1`.length + `${LARGE_TOOL_RESULT}:2`.length,
-        pressureLevel: "high",
+        compactionAdvised: true,
+        forcedCompaction: false,
       }),
     );
     expect(
@@ -528,7 +673,8 @@ describe("provider request reduction", () => {
         reason: null,
         eligibleToolResults: 6,
         clearedToolResults: 2,
-        pressureLevel: "high",
+        compactionAdvised: true,
+        forcedCompaction: false,
       }),
     ]);
   });
@@ -562,8 +708,6 @@ describe("provider request reduction", () => {
         stablePrefixHash: "stable",
         dynamicTailHash: "tail",
         requestHash: "request",
-        activeSkillSetHash: "skills",
-        skillRoutingEpoch: 0,
         channelContextHash: "channel",
         renderedCacheHash: "render",
         cacheCapabilityHash: "capability",
@@ -573,7 +717,7 @@ describe("provider request reduction", () => {
         cacheRelevantHeadersHash: "headers",
         extraBodyHash: "extra",
         visibleHistoryReductionHash: "visible",
-        recallInjectionHash: "recall",
+        workbenchContextHash: "recall",
         providerFallbackHash: "fallback",
       },
       render: {
@@ -665,7 +809,8 @@ describe("provider request reduction", () => {
         reason: "recovery posture is active",
         eligibleToolResults: 0,
         clearedToolResults: 0,
-        pressureLevel: "unknown",
+        compactionAdvised: false,
+        forcedCompaction: false,
       }),
     );
 
@@ -706,7 +851,8 @@ describe("provider request reduction", () => {
         reason: "recovery posture is active",
         eligibleToolResults: 0,
         clearedToolResults: 0,
-        pressureLevel: "unknown",
+        compactionAdvised: false,
+        forcedCompaction: false,
       }),
     ]);
   });

@@ -4,9 +4,9 @@
 
 - Status: `active`
 - Owner: runtime and gateway maintainers
-- Last reviewed: `2026-04-21`
+- Last reviewed: `2026-05-08`
 - Promotion target:
-  - `docs/reference/context-composer.md`
+  - `docs/reference/hosted-dynamic-context.md`
   - `docs/journeys/internal/context-and-compaction.md`
   - `docs/reference/configuration.md`
   - `docs/architecture/system-architecture.md`
@@ -14,54 +14,37 @@
 
 ## Problem Statement
 
-Brewva pays avoidable cost on repeated model calls because its hosted request
-construction path does not cleanly separate:
+The model-operated reset is accepted and the first implementation sweep is in
+place. This note remains active only because the cache and cost claims need
+representative long-session evidence before promotion.
+
+Brewva pays avoidable cost on repeated model calls unless its hosted request
+construction path keeps these concerns separate:
 
 - a stable prompt prefix
 - a deterministic, scope-aware dynamic tail
 - replay-visible history rewrites
 - cache-class request-local reductions
 
-The current repository already has two strong primitives:
+The model-operated reset keeps two strong primitives and removes the older
+provider-admission machinery:
 
-- deterministic context admission through `runtime.maintain.context.buildInjection(...)`
-- scope-aware duplicate injection dropping through the existing
-  `lastInjectedFingerprint` mechanism
+- a stable hosted system-prompt contract
+- a scope-aware dynamic tail rendered by the hosted workbench context pipeline
 
-However, the full model request still has four gaps:
+The current implementation has closed the main structural gaps:
 
-1. **The Brewva-owned system-prompt suffix mixes static rules with
-   window-derived pressure text.**
-   `applyContextContract()` currently formats compaction thresholds from the
-   effective context budget policy. Those thresholds are adaptive: they are
-   computed from `contextWindow` via `resolveAdaptiveThreshold(...)` in
-   `ContextBudgetManager`, using configured headroom-token and floor/ceiling
-   parameters. In practice the percentages are stable when `contextWindow` does
-   not change within a session, but they shift when the model changes, when the
-   provider falls back to a different context window, or on the first turn that
-   receives a `contextWindow` value after starting without one. This makes the
-   Brewva-owned prompt suffix unstable at model-transition boundaries and can
-   freeze stale numbers if session-cached.
-2. **The hosted dynamic tail is not canonicalized end-to-end before render.**
-   `buildInjection()` may already drop duplicate primary injection content by
-   scope, but `ContextComposer` still re-renders supplemental and capability
-   blocks from multiple inputs. If those upstream inputs contain unordered
-   collections, timestamps, freshness strings, or other turn-local noise, the
-   rendered tail changes even when the semantic state did not.
-3. **There is no replay-safe reduction stage between normal operation and
-   `session_compact`.**
-   Today `session_compact` is the only replay-visible history rewrite path.
-   Brewva lacks an intermediate request-local reduction stage that can shrink
-   the next outbound provider request without mutating durable history, WAL
-   recovery state, or compaction receipts.
-4. **Cache-efficiency observability is not aligned to Brewva durability rules.**
-   The hosted path records useful context telemetry such as `context_composed`,
-   but there is no explicit prompt-stability observation layer. The upstream Pi
-   substrate already exposes provider cache counters and session-scoped prompt
-   caching plumbing, so Brewva should not answer this gap by inventing a second
-   provider-accounting stack or a brand-new durable event family. Most of this
-   data is rebuildable telemetry or optional iteration metrics, not replay
-   truth.
+1. `applyContextContract(...)` is static and window-derived pressure guidance
+   lives in the dynamic tail.
+2. The hosted workbench context pipeline owns deterministic tail rendering
+   without becoming a context-source admission registry.
+3. `provider-request-reduction` performs clone-only transient reduction before
+   the provider request and never mutates durable history.
+4. Context evidence sidecars persist prompt-stability, transient-reduction, and
+   provider-cache samples without creating replay truth.
+
+The remaining problem is empirical: prove the shaped request path preserves
+cache locality and reduces pressure in realistic long sessions.
 
 These issues are provider-agnostic. Prefix stability and request-local
 reduction help OpenAI-style automatic prefix matching, Anthropic prompt cache
@@ -86,15 +69,18 @@ This RFC does not cover:
   `sessionId` forwarding, or provider-side prompt-cache key plumbing
 - changes to the compaction gate semantics, `session_compact` authority, or
   hosted auto-compaction breaker behavior
-- changes to the context arena admission policy or budget class system
+- changes to the accepted model-operated workbench, recall, and compaction
+  contract
 - changes to WAL, replay, tape contracts, or session replacement history
 
 ### Relationship to Existing Research
 
-This RFC complements `context-budget-behavior-in-long-running-sessions.md`
-(active). That note focuses on budget arithmetic and shaping rules. This RFC
-focuses on prompt stability, replay-safe reduction boundaries, and observability
-for the shaped content that the host sends to the model.
+This RFC absorbs the still-valid budget-limit concerns from archived
+`docs/research/archive/context-budget-behavior-in-long-running-sessions.md`.
+The old deterministic projection framing is no longer current; this note now
+owns prompt stability, replay-safe reduction boundaries, numeric pressure
+guidance, and observability for the shaped content that the host sends to the
+model.
 
 ## Competitive Analysis
 
@@ -252,8 +238,9 @@ Split the contract into two layers:
 - carries current threshold percentages, usage ratios, gate/advisory state,
   and any window-derived numbers
 
-This aligns with Brewva's existing product shape because the hosted path already
-has turn-scoped compaction gate/advisory blocks in `ContextComposer`.
+This aligns with Brewva's model-operated product shape because the hosted path
+keeps turn-scoped compaction gate/advisory facts in the dynamic tail rather
+than in the cached contract prefix.
 
 **Required rule.**
 No field derived from current `usage`, current `contextWindow`, or live provider
@@ -272,11 +259,11 @@ const STATIC_CONTRACT_BLOCK = [
   "[Brewva Context Contract]",
   "Operating model:",
   "- `tape_handoff` records durable handoff state; it does not reduce message tokens.",
-  "- `session_compact` reduces message-history pressure; it does not rewrite tape semantics.",
+  "- `workbench_compact` reduces message-history pressure; it does not rewrite tape semantics.",
   "- If a compaction gate or advisory block appears, follow it before broad tool work.",
   "- Prefer current task state, supplemental context, and working projection before replaying tape.",
   "Hard rules:",
-  "- call `session_compact` directly, never through `exec` or shell wrappers.",
+  "- call `workbench_compact` directly, never through `exec` or shell wrappers.",
 ].join("\\n");
 
 export function applyContextContract(systemPrompt: unknown): string {
@@ -287,9 +274,9 @@ export function applyContextContract(systemPrompt: unknown): string {
 
 The `runtime`, `sessionId`, and `usage` parameters are removed from
 `applyContextContract(...)` because the static contract no longer consumes them.
-The numeric threshold lines that previously lived here move into
-`ContextComposer` as a dynamic pressure guidance block (see existing
-`buildCompactionGateBlock` / `buildCompactionAdvisoryBlock` patterns).
+The numeric threshold lines that previously lived here move into the hosted
+dynamic tail as pressure guidance blocks (see existing `buildCompactionGateBlock`
+and `buildCompactionAdvisoryBlock` patterns).
 
 If the repository later wants config-derived stable contract text, the constant
 must be replaced with a cache keyed by a stable config snapshot fingerprint —
@@ -298,8 +285,8 @@ not by live usage data.
 ### 1b. Reuse Existing Scope-Aware Injection Baselines Instead of Post-Render String Reuse
 
 **Problem.**
-Hashing the fully rendered `ContextComposer` output and reusing the old string
-when the hash matches does not actually stabilize anything:
+Hashing the fully rendered hosted dynamic tail and reusing the old string when
+the hash matches does not actually stabilize anything:
 
 - if the hash matches, the text was already byte-identical
 - if timestamps, sort order, or freshness cues changed, the hash also changes
@@ -307,20 +294,16 @@ when the hash matches does not actually stabilize anything:
   already has scope or leaf granularity
 
 **Design.**
-Leverage the existing `buildInjection(...)` duplicate-fingerprint semantics as
-the source of truth for stable-context reuse:
+Use the hosted workbench context pipeline as the source of truth for dynamic-tail
+stability:
 
-- keep the current scope-aware primary-injection fingerprint keyed by
-  `sessionId + injectionScopeId`
-- do not add a new session-wide rendered-string cache for composed content
-- if the current scope matches the previous accepted primary injection
-  fingerprint, the hosted layer should emit **no new stable-context delta**
-  rather than replaying the previous rendered string
+- keep stable-prefix hashing separate from workbench-tail hashing
+- do not add a session-wide rendered-string cache for composed content
+- if the scope and rendered workbench digest are unchanged, treat the dynamic
+  tail as stable rather than replaying a hidden provider delta
 
 For Brewva this means:
 
-- `buildInjection(...).accepted === false` already indicates
-  "no new primary stable-context payload for this scope"
 - the hosted path should continue composing current dynamic advisory or
   supplemental blocks from current state
 - any new presentation baseline added in the future must be keyed by the same
@@ -333,17 +316,15 @@ as the rendering correctness mechanism.
 ### 1c. Canonicalize at the Source Boundary, Not with Global Post-Hoc Sorting
 
 **Problem.**
-Adding a generic secondary `block.id` sort in `ContextComposer` would make the
-output look deterministic while silently discarding semantic ordering that is
-already carried by provider registration order and explicit supplemental block
-assembly order.
+Adding a generic secondary `block.id` sort in the hosted dynamic tail renderer
+would make the output look deterministic while silently discarding semantic
+ordering that should already be carried by each block producer.
 
 **Design.**
 Determinism must be established at the source boundary:
 
-- provider registration order remains the primary semantic ordering contract for
-  admitted entries
-- `ContextComposer` preserves upstream order within each category
+- each block producer owns the semantic order for the entries it renders
+- the dynamic-tail renderer preserves upstream block order
 - any resolver that consumes unordered or async-derived collections must sort
   locally with a semantic key it understands
 - blocks that belong to the stable tail must not embed:
@@ -374,7 +355,7 @@ over:
 **Problem.**
 For providers that include tool definitions in their prompt prefix (OpenAI,
 Anthropic, most OSS backends), tool schema changes break the prefix cache even
-when the system prompt and context injection are perfectly stable. Tool surface
+when the system prompt and dynamic tail are perfectly stable. Tool surface
 changes happen when:
 
 - MCP servers connect or disconnect mid-session
@@ -486,7 +467,7 @@ alternatives:
 
 - **Transient reduction** lowers the provider-side token cost of the current
   outbound request. It is invisible to the model and to replay.
-- **Compaction advisory** steers the model toward calling `session_compact` to
+- **Compaction advisory** steers the model toward calling `workbench_compact` to
   reduce durable history. It is model-visible and produces a replay-visible
   receipt.
 
@@ -565,13 +546,13 @@ outbound payload. It is not:
 - a new hosted profile mode
 - a new admission lane
 - a hidden compaction authority
-- a reason for `ContextComposer` to own replay, recovery, or provider payload
-  mutation
+- a reason for the hosted dynamic tail renderer to own replay, recovery, or
+  provider payload mutation
 
-The implementation should keep the existing `minimal` / `standard` / `full`
-hosted profile set. If future cache or reduction work needs a different source
-set, it should first prove that the current descriptor-derived
-`sourceSelection` model cannot express the need.
+The implementation should not reintroduce `minimal` / `standard` / `full`
+provider-profile source sets. If future cache or reduction work needs more
+context, it should be expressed as an on-demand tool result or a model-authored
+workbench entry.
 
 Any new hook or transform in this area must replace or compress an existing
 decision point. Do not add another context hook, overlay, or profile-composition
@@ -688,7 +669,7 @@ Recommended placement:
 Recommended inputs:
 
 - static contract hash after `applyContextContract(...)`
-- scope key derived by runtime from `buildInjectionScopeKey(sessionId, injectionScopeId)`
+- scope key derived from the hosted context scope id
 - dynamic-tail hash derived from composed hidden content
 
 Scope behavior:
@@ -811,12 +792,12 @@ This remains a hosted prompt-shaping concern.
 
 ### Deterministic Tail Ownership
 
-`packages/brewva-gateway/src/runtime-plugins/hosted-context-injection-pipeline.ts`
+`packages/brewva-gateway/src/runtime-plugins/hosted-workbench-context-pipeline.ts`
 already owns:
 
 - usage observation through `runtime.maintain.context.observeUsage(...)`
 - scope identity resolution through `resolveInjectionScopeId(...)`
-- primary injection via `runtime.maintain.context.buildInjection(...)`
+- workbench notebook rendering through `runtime.inspect.workbench.list(...)`
 - system-prompt suffix application through `applyContextContract(...)`
 - hidden-tail composition through `composeContextBlocks(...)`
 - coarse telemetry emission through `telemetry.emitContextComposed(...)`
@@ -827,8 +808,9 @@ This should remain the single orchestration point for:
 - prompt-stability observation capture
 - eventual emission of selected metric observations
 
-`packages/brewva-gateway/src/runtime-plugins/context-composer.ts` and
-supplemental builders remain responsible for source-local normalization.
+`packages/brewva-gateway/src/runtime-plugins/hosted-workbench-context-pipeline.ts`
+and fixed dynamic block renderers remain responsible for source-local
+normalization.
 
 Concrete rule:
 
@@ -975,17 +957,17 @@ skipping active recovery and output-budget recovery posture. No new provider
 descriptor field, profile mode, hook family, durable context-cache event, or
 provider-specific cache API was added.
 
-### Phase 1: Prefix Determinism (P0)
+### Phase 1: Prefix Determinism (implemented)
 
 1. Split the `Context Contract` into:
 
 - static module-level constant contract text (no per-session state)
 - dynamic pressure guidance in the turn-scoped hidden tail
 
-1. Audit `ContextComposer` inputs and remove volatile fields from stable blocks.
+1. Audit hosted dynamic-tail inputs and remove volatile fields from stable blocks.
 2. Preserve source-level semantic order; normalize unordered collections at the
    source boundary instead of adding a global `block.id` sort.
-3. Reuse existing scope-aware primary-injection fingerprinting; do not add a
+3. Reuse existing scope-aware workbench-context fingerprinting; do not add a
    session-wide composed-string cache.
 4. Keep prompt-stability observation keyed only by the static contract hash and
    dynamic-tail hash in v1; do not add a separate tool-schema stability
@@ -995,7 +977,7 @@ provider-specific cache API was added.
 
 Validation:
 
-- existing context-budget and context-injection contract tests continue to pass
+- existing context-budget and hosted dynamic-context contract tests continue to pass
 - new unit test: static contract output is a constant; it does not accept
   `usage`, `contextWindow`, or `sessionId` parameters
 - new unit test: changing `contextWindow` changes only dynamic pressure
@@ -1006,7 +988,7 @@ Validation:
 - new unit test: source-local delegation diagnostics stay stable even when
   upstream run ordering differs
 
-### Phase 2: Replay-Safe Progressive Reduction (P1)
+### Phase 2: Replay-Safe Progressive Reduction (implemented)
 
 1. Add a gateway-local outbound request reduction interface next to the existing
    `before_provider_request` recovery adapter.
@@ -1042,7 +1024,7 @@ Validation:
 - new unit / contract coverage: live transient-reduction inspect state reports
   skipped vs completed outcomes without requiring a durable event family
 
-### Phase 3: Observability (P2)
+### Phase 3: Observability (implemented, evidence pending)
 
 1. Add hosted prompt-stability telemetry with a session-local tracker rather
    than by extending `context_composed` with raw hashes.
@@ -1072,7 +1054,7 @@ Validation:
 - Codex-style developer-message diff protocol as a general Brewva mechanism
 - changes to compaction summary generation, integrity validation, or governance
   review
-- replacing the `session_compact` tool or compaction gate mechanism
+- replacing the `workbench_compact` tool or compaction gate mechanism
 
 ## Risks and Mitigations
 

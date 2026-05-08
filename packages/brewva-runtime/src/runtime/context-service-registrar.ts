@@ -10,9 +10,9 @@ export function registerRuntimeContextServices(
   workServices: RuntimeWorkServices,
 ): RuntimeContextServices {
   const contextDomain = registerContextDomain(options, {
-    skillLifecycleService: workServices.skillLifecycleService,
     taskService: workServices.taskService,
     ledgerService: workServices.ledgerService,
+    workbenchService: workServices.workbenchService,
   });
 
   return {

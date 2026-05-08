@@ -1,7 +1,7 @@
 import type {
   ActiveReasoningBranchState,
   ContextBudgetUsage,
-  ContextPressureStatus,
+  ContextStatus,
   TapeSearchScope,
 } from "@brewva/brewva-runtime";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
@@ -45,17 +45,15 @@ function formatPercent(ratio: number | null): string {
   return `${(ratio * 100).toFixed(1)}%`;
 }
 
-function resolveContextAction(
-  level: "none" | "low" | "medium" | "high" | "critical" | "unknown",
-): string {
-  if (level === "critical") return "session_compact_now";
-  if (level === "high") return "session_compact_soon";
+function resolveContextAction(status: ContextStatus): string {
+  if (status.forcedCompaction) return "workbench_compact_now";
+  if (status.compactionAdvised || status.predictedOverflow) return "workbench_compact_soon";
   return "none";
 }
 
 function formatTapeInfoBlock(input: {
   tape: ReturnType<BrewvaToolOptions["runtime"]["inspect"]["tape"]["getTapeStatus"]>;
-  pressure: ContextPressureStatus;
+  contextStatus: ContextStatus;
   reasoning: ActiveReasoningBranchState;
 }): string {
   const lines = [
@@ -70,10 +68,15 @@ function formatTapeInfoBlock(input: {
     `last_anchor_name: ${input.tape.lastAnchor?.name ?? "none"}`,
     `last_anchor_id: ${input.tape.lastAnchor?.id ?? "none"}`,
     `last_checkpoint_id: ${input.tape.lastCheckpointId ?? "none"}`,
-    `context_pressure: ${input.pressure.level}`,
-    `context_usage: ${formatPercent(input.pressure.usageRatio)}`,
-    `context_hard_limit: ${formatPercent(input.pressure.hardLimitRatio)}`,
-    `required_action: ${resolveContextAction(input.pressure.level)}`,
+    `context_usage: ${formatPercent(input.contextStatus.usageRatio)}`,
+    `context_hard_limit: ${formatPercent(input.contextStatus.hardLimitRatio)}`,
+    `context_compaction_advised: ${input.contextStatus.compactionAdvised ? "yes" : "no"}`,
+    `context_forced_compaction: ${input.contextStatus.forcedCompaction ? "yes" : "no"}`,
+    `tokens_until_forced_compact: ${input.contextStatus.tokensUntilForcedCompact ?? "unknown"}`,
+    `predicted_turn_growth_tokens: ${input.contextStatus.predictedTurnGrowthTokens}`,
+    `tokens_until_predicted_overflow: ${input.contextStatus.tokensUntilPredictedOverflow ?? "unknown"}`,
+    `predicted_overflow: ${input.contextStatus.predictedOverflow ? "yes" : "no"}`,
+    `required_action: ${resolveContextAction(input.contextStatus)}`,
     `reasoning_active_branch: ${input.reasoning.activeBranchId}`,
     `reasoning_active_checkpoint: ${input.reasoning.activeCheckpointId ?? "none"}`,
     `reasoning_active_lineage_depth: ${input.reasoning.activeLineageCheckpointIds.length}`,
@@ -196,20 +199,20 @@ export function createTapeTools(options: BrewvaToolOptions): ToolDefinition[] {
   const tapeInfo = tapeInfoTool.define({
     name: "tape_info",
     label: "Tape Info",
-    description: "Show tape status and context pressure for the current session.",
+    description: "Show tape status and numeric context budget state for the current session.",
     parameters: Type.Object({}),
     async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
       const sessionId = getSessionId(ctx);
       const tape = tapeInfoTool.runtime.inspect.tape.getTapeStatus(sessionId);
       const usage =
         resolveToolContextUsage(ctx) ?? tapeInfoTool.runtime.inspect.context.getUsage(sessionId);
-      const pressure = tapeInfoTool.runtime.inspect.context.getPressureStatus(sessionId, usage);
+      const contextStatus = tapeInfoTool.runtime.inspect.context.getStatus(sessionId, usage);
       const reasoning = tapeInfoTool.runtime.inspect.reasoning.getActiveState(sessionId);
 
       return textResult(
         formatTapeInfoBlock({
           tape,
-          pressure,
+          contextStatus,
           reasoning,
         }),
         {
@@ -217,9 +220,14 @@ export function createTapeTools(options: BrewvaToolOptions): ToolDefinition[] {
           tape,
           reasoning,
           context: {
-            pressure: pressure.level,
+            compactionAdvised: contextStatus.compactionAdvised,
+            forcedCompaction: contextStatus.forcedCompaction,
             usageTokens: usage?.tokens ?? null,
-            usagePercent: pressure.usageRatio,
+            usagePercent: contextStatus.usageRatio,
+            tokensUntilForcedCompact: contextStatus.tokensUntilForcedCompact,
+            predictedTurnGrowthTokens: contextStatus.predictedTurnGrowthTokens,
+            tokensUntilPredictedOverflow: contextStatus.tokensUntilPredictedOverflow,
+            predictedOverflow: contextStatus.predictedOverflow,
           },
         },
       );

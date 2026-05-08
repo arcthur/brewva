@@ -38,6 +38,10 @@ import {
   type VerificationSurfaceDependencies,
 } from "../domain/verification/api.js";
 import {
+  workbenchRuntimeSurface,
+  type WorkbenchSurfaceDependencies,
+} from "../domain/workbench/api.js";
+import {
   bindSurfaceContribution,
   type BoundSurfaceContribution,
   type SurfaceContribution,
@@ -61,12 +65,14 @@ export interface RuntimeSurfaceDependencies
     TaskSurfaceDependencies,
     ToolsSurfaceDependencies,
     TruthSurfaceDependencies,
-    VerificationSurfaceDependencies {}
+    VerificationSurfaceDependencies,
+    WorkbenchSurfaceDependencies {}
 
 const runtimeSurfaceModules = [
   skillsRuntimeSurface,
   proposalsRuntimeSurface,
   reasoningRuntimeSurface,
+  workbenchRuntimeSurface,
   contextRuntimeSurface,
   toolsRuntimeSurface,
   taskRuntimeSurface,

@@ -24,7 +24,6 @@ import type { SessionLineageService } from "../domain/sessions/api.js";
 import type { SessionRewindService } from "../domain/sessions/api.js";
 import type { RuntimeSessionStateStore } from "../domain/sessions/api.js";
 import type { SessionWireService } from "../domain/sessions/api.js";
-import type { SkillLifecycleService } from "../domain/skills/api.js";
 import type { TapeService } from "../domain/tape/api.js";
 import type { TaskWatchdogService } from "../domain/task/api.js";
 import type { TaskService } from "../domain/task/api.js";
@@ -33,6 +32,7 @@ import type { ToolInvocationSpine } from "../domain/tools/api.js";
 import type { TruthService } from "../domain/truth/api.js";
 import type { VerificationReport } from "../domain/verification/api.js";
 import type { VerificationService } from "../domain/verification/api.js";
+import type { WorkbenchService } from "../domain/workbench/api.js";
 import type { RuntimeCoreDependencies } from "./core-registrar.js";
 import type { RuntimeKernelContext } from "./runtime-kernel.js";
 
@@ -43,12 +43,12 @@ import type { RuntimeKernelContext } from "./runtime-kernel.js";
  *       -> domain-owned services, surface contributions, and event ownership
  */
 export interface RuntimeServiceDependencies {
-  skillLifecycleService: SkillLifecycleService;
   taskService: TaskService;
   truthService: TruthService;
   ledgerService: LedgerService;
   costService: CostService;
   contextService: ContextService;
+  workbenchService: WorkbenchService;
   taskWatchdogService: TaskWatchdogService;
   eventPipeline: EventPipelineService;
   toolLifecycleRecoveryWalService: ToolLifecycleRecoveryWalService;
@@ -103,7 +103,6 @@ export interface RuntimeLazyServiceRegistrarOptions {
   contextService: ContextService;
   getProposalAdmissionService(): ProposalAdmissionService;
   getEffectCommitmentDeskService(): EffectCommitmentDeskService;
-  skillLifecycleService: SkillLifecycleService;
   ledgerService: LedgerService;
   reversibleMutationService: ReversibleMutationService;
   resolveToolAuthority: (toolName: string, args?: Record<string, unknown>) => ResolvedToolAuthority;
@@ -120,10 +119,10 @@ export interface RuntimeGovernanceServices {
 export interface RuntimeWorkServices {
   taskService: TaskService;
   taskWatchdogService: TaskWatchdogService;
-  skillLifecycleService: SkillLifecycleService;
   truthService: TruthService;
   ledgerService: LedgerService;
   costService: CostService;
+  workbenchService: WorkbenchService;
 }
 
 export interface RuntimeContextServices {

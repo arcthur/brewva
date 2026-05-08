@@ -45,7 +45,6 @@ export interface DelegationContextBudget {
 export interface DelegationExecutionHints {
   preferredTools?: string[];
   fallbackTools?: string[];
-  preferredSkills?: string[];
 }
 
 export type DelegationCompletionPredicate =
@@ -68,7 +67,6 @@ export interface DelegationPacket {
   consultBrief?: AdvisorConsultBrief;
   constraints?: string[];
   sharedNotes?: string[];
-  activeSkillName?: string;
   executionHints?: DelegationExecutionHints;
   contextRefs?: DelegationContextRef[];
   contextBudget?: DelegationContextBudget;

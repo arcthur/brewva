@@ -1,6 +1,5 @@
 import type { BrewvaConfig } from "../config/types.js";
 import type { VerificationOutcomeSnapshot } from "../domain/context/api.js";
-import type { ToolOutputDistillationEntry } from "../domain/context/api.js";
 import type { GovernancePort } from "../domain/governance/api.js";
 import type { RuntimeSessionStateStore } from "../domain/sessions/api.js";
 import type { RuntimeCoreDependencies } from "./core-registrar.js";
@@ -19,10 +18,6 @@ export interface RuntimeKernelRegistrarOptions {
   getTruthState(sessionId: string): ReturnType<RuntimeKernelContext["getTruthState"]>;
   recordEvent: RuntimeKernelContext["recordEvent"];
   sanitizeInput: RuntimeKernelContext["sanitizeInput"];
-  getRecentToolOutputDistillations(
-    sessionId: string,
-    maxEntries?: number,
-  ): ToolOutputDistillationEntry[];
   getLatestVerificationOutcome(sessionId: string): VerificationOutcomeSnapshot | undefined;
   isContextBudgetEnabled(): boolean;
 }
@@ -38,7 +33,6 @@ export function registerRuntimeKernelContext(
     governancePort: options.governancePort,
     sessionState: options.sessionState,
     contextBudget: options.coreDependencies.contextBudget,
-    contextInjection: options.coreDependencies.contextInjection,
     projectionEngine: options.coreDependencies.projectionEngine,
     turnReplay: options.coreDependencies.turnReplay,
     reasoningReplay: options.coreDependencies.reasoningReplay,
@@ -54,8 +48,6 @@ export function registerRuntimeKernelContext(
     getTruthState: (sessionId) => options.getTruthState(sessionId),
     recordEvent: (input) => options.recordEvent(input),
     sanitizeInput: (text) => options.sanitizeInput(text),
-    getRecentToolOutputDistillations: (sessionId, maxEntries) =>
-      options.getRecentToolOutputDistillations(sessionId, maxEntries),
     getLatestVerificationOutcome: (sessionId) => options.getLatestVerificationOutcome(sessionId),
     isContextBudgetEnabled: () => options.isContextBudgetEnabled(),
   };

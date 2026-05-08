@@ -4,19 +4,20 @@
 
 - Status: `active`
 - Owner: runtime and gateway maintainers
-- Last reviewed: `2026-04-21`
+- Last reviewed: `2026-05-08`
 - Promotion target:
   - `docs/architecture/system-architecture.md`
   - `docs/reference/session-lifecycle.md`
-  - `docs/reference/context-composer.md`
+  - `docs/reference/hosted-dynamic-context.md`
   - `docs/reference/working-projection.md`
   - `docs/journeys/internal/context-and-compaction.md`
 
 ## Problem Statement And Scope Boundaries
 
-Brewva already has strong durability boundaries, replay-first recovery, deterministic
-context admission, and explicit advisory-memory contracts. What it still lacks is a
-shared state contract between context governance and recovery.
+Brewva already has strong durability boundaries, replay-first recovery,
+model-operated working memory, and explicit history-view baseline contracts.
+This note remains active because damaged-baseline and degraded-recovery
+evidence still needs to prove that the recovery contract is operator-readable.
 
 The repository already distinguishes:
 
@@ -31,11 +32,11 @@ The model-visible context path has four failure modes this RFC keeps closed:
    durable authority outputs
 2. hosted transition snapshots and the recovery working set must remain formal
    read models rather than presentation-only prompt blocks
-3. request-local reduction, working projection, advisory memory, and
-   post-compact continuity must share the same provider layering and admission
+3. request-local reduction, working projection, advisory recall, and
+   post-compact continuity must share the same hosted dynamic-tail and recovery
    contract
-4. narrative memory and deliberation memory must remain advisory recall rather
-   than compact baselines or resume truth
+4. workbench notes, knowledge capture, and on-demand recall must remain
+   advisory context rather than compact baselines or resume truth
 
 This note covers:
 
@@ -47,7 +48,7 @@ This note covers:
 This note does not reopen:
 
 - the rule that `session_compact` is the only replay-visible history rewrite authority
-- the non-authoritative sibling-product status of narrative memory
+- the non-authoritative status of model-authored workbench notes and recall
 - the status of working projection as rebuildable state
 - provider-specific caching APIs
 - existing WAL, tape, approval, or reasoning-revert authority semantics
@@ -58,8 +59,8 @@ This note complements existing active research rather than replacing it:
 
 - `prefix-stable-context-management-and-progressive-compaction.md`
   focuses on stable prefixes, deterministic tails, and request-local reduction
-- `context-budget-behavior-in-long-running-sessions.md`
-  focuses on budget shaping and long-history behavior
+- `docs/research/decisions/model-operated-working-memory-and-context-governance-reset.md`
+  owns the accepted model-operated context and compaction contract
 - `recovery-robustness-under-interrupt-conditions.md`
   focuses on interrupt recovery, replay, and WAL interaction
 
@@ -97,9 +98,10 @@ formal history-view baseline and instead relies on ad hoc prompt patching.
 Brewva already has the right foundational boundaries:
 
 - durability taxonomy across tape, WAL, rebuildable state, and cache
-- a `ContextComposer` that owns presentation rather than admission or replay
+- a hosted dynamic-tail renderer that owns presentation rather than admission
+  or replay
 - working projection that is explicitly non-authoritative
-- narrative memory that is explicitly non-truth
+- workbench memory that is explicitly non-truth
 - an initial recovery working set that already behaves like a minimal resume contract
 
 That means Brewva does not need to copy Claude Code or Codex wholesale. It needs
@@ -133,7 +135,7 @@ Assessment:
 
 ### Option B: Use Advisory Memory As A Memory-First Compact Baseline
 
-This option uses deliberation or narrative memory in place of a compact-generated baseline.
+This option uses workbench notes or recall evidence in place of a compact-generated baseline.
 
 Benefits:
 
@@ -201,7 +203,7 @@ This plane remains unchanged and continues to include only:
 Rules:
 
 - replay correctness derives only from this plane plus workspace state
-- compaction summaries, working projection artifacts, and startup recall must not
+- compaction summaries, working projection artifacts, and advisory recall must not
   be promoted into this plane
 
 ### 2. History-View Plane
@@ -265,24 +267,25 @@ Rules:
 - keep all operational recovery guidance in this plane rather than leaking it into
   the history-view baseline
 
-### 4. Advisory Memory Plane
+### 4. Advisory Attention Plane
 
 This plane continues to carry:
 
-- narrative memory
-- deliberation memory
-- optimization continuity
-- startup recall
+- model-authored workbench notes
+- model-selected recall evidence
+- durable knowledge capture
+- on-demand recall tool results
 
 Rules:
 
 - it remains advisory
 - it continues to require provenance, freshness, and verify-before-trust cues
 - it must not become the sole source of a compact baseline
-- it must not introduce a second hidden budget plane outside existing arena and hosted shaping
+- it must not introduce hidden per-turn admission outside model-operated tools
+  and hosted dynamic-tail rendering
 
-Put differently: startup recall is allowed, but it must stay inside the current
-recall and working-admission system rather than becoming an independent planner budget.
+Put differently: recall is useful only when it remains model-invoked evidence
+rather than an independent planner budget.
 
 ## Recovery Pipeline
 
@@ -350,9 +353,9 @@ The correct sequence is:
 
 - rebuild the baseline
 - generate the working set
-- run the normal deterministic admission and composition path
+- run the normal workbench/status dynamic-tail rendering path
 
-This preserves the `ContextComposer` boundary: presentation only, not replay or recovery assembly.
+This preserves the dynamic-tail boundary: presentation only, not replay or recovery assembly.
 
 ## Governance Ladder
 
@@ -397,26 +400,27 @@ Its output should serve two purposes:
 Advisory memory may provide candidate material with provenance, but it should not
 be treated as the compact result itself.
 
-### Layer D: Advisory Startup Recall
+### Layer D: On-Demand Advisory Recall
 
-Startup recall is allowed, but only as an advisory context source:
+Recall is allowed, but only when the model asks for it as advisory evidence:
 
-- it must not live outside arena shaping
-- it must not bypass the normal admission path
+- it must not live outside the model-operated tool surface
+- it must not bypass workbench or hosted dynamic-tail rendering by becoming
+  hidden per-turn admission
 - it must not become the compact baseline
 
 ## Budget-Class Mapping And Admission Guarantees
 
-The four planes must align with the existing arena budget model:
+The four planes must align with the accepted hosted dynamic-context model:
 
 - authority-derived system contract remains `core`
 - the history-view baseline is `core`, must reserve a non-best-effort slice, and
-  must not be admitted only through generic supplemental-context append paths
-- the working-set plane is `working`
-- advisory memory remains `recall`
+  must not be rendered only through generic best-effort tail text
+- the working-set plane remains a recovery read model
+- advisory recall remains model-invoked evidence
 
 This mapping preserves the meaning of "baseline." If the history-view baseline were
-treated as an ordinary supplemental block, it would become truncatable best-effort
+treated as an ordinary optional block, it would become truncatable best-effort
 content rather than a model-visible continuity contract.
 
 ## Design Constraints
@@ -427,7 +431,7 @@ The following constraints must remain true:
 2. Narrative memory remains a non-authoritative sibling product.
 3. Working projection remains rebuildable state rather than a default workflow brief.
 4. Recovery consults durable artifacts before process-local helper state.
-5. `ContextComposer` does not take ownership of replay, admission, or recovery semantics.
+5. Dynamic-tail rendering does not take ownership of replay, admission, or recovery semantics.
 
 ## Enforcement Compression
 
@@ -437,16 +441,16 @@ changes cannot accidentally bypass.
 
 The hot path should stay explicit and narrow:
 
-- ordinary forward turns should read as identity, runtime status, task state,
-  and an optional history-view baseline through the normal admission path
-- recovery working set, working projection, tool-output distillation, and
-  advisory recall remain conditional paths rather than concepts every provider
-  author must understand up front
+- ordinary forward turns should read as identity, runtime status, workbench
+  context, and an optional history-view baseline through the hosted dynamic tail
+- recovery working set, working projection, and advisory recall remain
+  conditional paths rather than concepts every provider author must understand
+  up front
 
 Implementation should prefer:
 
-- typed provider construction or registry validation for valid
-  plane / budget / authority / preservation combinations
+- typed construction or runtime assertions for valid
+  authority / preservation / rendering combinations
 - one explicit recovery pipeline for:
   canonicalize -> hydrate authority -> rebuild baseline -> build working set ->
   normal admission
@@ -456,8 +460,9 @@ Implementation should prefer:
 Implementation should avoid:
 
 - new context planes, hosted profile modes, overlays, or hook families
-- adding provider descriptor fields unless an existing convention is removed or
-  converted into machine enforcement in the same change
+- adding provider descriptor fields or new context hooks unless an existing
+  convention is removed or converted into machine enforcement in the same
+  change
 - treating RFC prose as the only enforcement mechanism for provider invariants
 
 When a rule cannot be enforced through types, construction helpers, runtime
@@ -520,7 +525,8 @@ pipeline keeps its existing kernel entry point.
 ### Phase 3
 
 - upgrade request-local reduction into a recovery-aware reduction ladder
-- connect startup recall explicitly to the existing admission and budget path
+- prove on-demand recall remains advisory evidence during recovery and never
+  becomes hidden startup admission
 
 ### Phase 4
 
@@ -534,13 +540,13 @@ pipeline keeps its existing kernel entry point.
 
 - Session lifecycle and durability taxonomy:
   `docs/reference/session-lifecycle.md`
-- Context presentation contract:
-  `docs/reference/context-composer.md`
+- Hosted dynamic context contract:
+  `docs/reference/hosted-dynamic-context.md`
 - Working projection contract:
   `docs/reference/working-projection.md`
-- Narrative memory contract:
-  `docs/research/decisions/narrative-memory-product-and-bounded-semantic-recall.md`
-- Active prompt-shaping RFC:
+- Model-operated context contract:
+  `docs/research/decisions/model-operated-working-memory-and-context-governance-reset.md`
+- Active prefix and cache validation:
   `docs/research/active/prefix-stable-context-management-and-progressive-compaction.md`
 - Recovery working set implementation:
   `packages/brewva-runtime/src/domain/recovery/read-model.ts`
@@ -554,12 +560,9 @@ pipeline keeps its existing kernel entry point.
 - Hosted compaction event handling and branch checkpoints:
   `packages/brewva-gateway/src/runtime-plugins/event-stream.ts`
   `packages/brewva-runtime/src/domain/reasoning/events.ts`
-- Context admission and scope dedupe:
-  `packages/brewva-runtime/src/domain/context/context.ts`
-  `packages/brewva-runtime/src/domain/context/injection-orchestrator.ts`
-- Arena budget classes:
-  `packages/brewva-runtime/src/domain/context/sources.ts`
-  `packages/brewva-runtime/src/domain/context/arena.ts`
+- History-view baseline and dynamic-tail rendering:
+  `packages/brewva-runtime/src/domain/context/history-view-baseline.ts`
+  `packages/brewva-gateway/src/runtime-plugins/hosted-workbench-context-pipeline.ts`
 
 ## Validation Signals
 
@@ -568,7 +571,7 @@ Existing validation must not regress:
 - `test/live/cli/replay-and-persistence.live.test.ts`
 - `test/live/cli/signal-handling.live.test.ts`
 - `test/contract/runtime/context-budget.contract.test.ts`
-- `test/contract/runtime/context-injection.contract.test.ts`
+- `test/contract/runtime/model-operated-workbench-reset.contract.test.ts`
 
 Additional validation coverage for this contract includes:
 
@@ -583,7 +586,7 @@ Additional validation coverage for this contract includes:
 - proving that exact-history fallback over budget produces degraded recovery diagnostics
 - proving precedence rules across `compact -> compact`, `compact -> revert`, and
   `revert -> compact`
-- proving that missing or deleted startup recall does not affect replay correctness
+- proving that missing or deleted advisory recall evidence does not affect replay correctness
 
 ## Promotion Criteria
 

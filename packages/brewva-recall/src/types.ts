@@ -3,14 +3,7 @@ import type { SessionIndexDigest } from "@brewva/brewva-session-index";
 export const RECALL_BROKER_STATE_SCHEMA = "brewva.recall.broker.v5" as const;
 export const RECALL_CURATION_HALFLIFE_DAYS = 45;
 
-export const RECALL_SOURCE_FAMILIES = [
-  "tape_evidence",
-  "narrative_memory",
-  "deliberation_memory",
-  "optimization_continuity",
-  "promotion_draft",
-  "repository_precedent",
-] as const;
+export const RECALL_SOURCE_FAMILIES = ["tape_evidence", "repository_precedent"] as const;
 
 export const RECALL_SCOPE_VALUES = [
   "session_local",

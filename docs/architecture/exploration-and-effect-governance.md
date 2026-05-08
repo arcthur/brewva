@@ -21,9 +21,9 @@ The boundary is practical:
 ## Effect Governance
 
 Tool calls pass through action policy, capability scope, command policy,
-boundary policy, skill posture, context pressure, and approval state. Those
-inputs produce facts. The runtime authority decision owns allow, block, defer,
-receipt, and rollback meaning.
+boundary policy, skill posture, numeric context status, and approval state.
+Those inputs produce facts. The runtime authority decision owns allow, block,
+defer, receipt, and rollback meaning.
 
 ## Runtime Effect Substrate
 

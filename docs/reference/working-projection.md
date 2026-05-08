@@ -3,8 +3,7 @@
 ## Purpose
 
 `working projection` defines how the projection engine folds durable tape events
-into a bounded working snapshot and exposes that snapshot through the
-`brewva.projection-working` context source for the hosted context path.
+into a bounded rebuildable snapshot for inspection and recovery.
 
 It is `rebuildable state`, not a `durable source of truth`.
 
@@ -20,8 +19,8 @@ flowchart TD
   B --> C["Append-only projection units (active + resolved)"]
   C --> D["ProjectionEngine.refreshIfNeeded(...)"]
   D --> E["units.jsonl and per-session working snapshot file"]
-  E --> F["brewva.projection-working context source"]
-  F --> G["Hosted context injection"]
+  E --> F["runtime inspect surfaces"]
+  F --> G["Model may reference via tools or workbench notes"]
 ```
 
 ## Runtime Flow
@@ -33,8 +32,8 @@ flowchart TD
    unit log; they do not delete historical rows.
 4. `ProjectionEngine.refreshIfNeeded(...)` builds a bounded working snapshot
    from the `active` subset only.
-5. `brewva.projection-working` exposes the runtime-refreshed active snapshot,
-   not the full projection-unit log.
+5. Inspect surfaces expose the runtime-refreshed active snapshot, not the full
+   projection-unit log.
 6. The per-session working snapshot file (config `projection.workingFile`,
    default `working.md`) is a write-through artifact persisted under
    `.orchestrator/projection/...`; it mirrors the current snapshot but is not
@@ -85,7 +84,7 @@ flowchart TD
 - Projection engine: `packages/brewva-runtime/src/domain/projection/engine.ts`
 - Projection extractor: `packages/brewva-runtime/src/domain/projection/extractor.ts`
 - Runtime API: `packages/brewva-runtime/src/runtime/runtime.ts`
-- Hosted context composition: `packages/brewva-gateway/src/runtime-plugins/context-composer.ts`
+- Hosted dynamic context: `packages/brewva-gateway/src/runtime-plugins/hosted-workbench-context-pipeline.ts`
 
 ## Related Docs
 

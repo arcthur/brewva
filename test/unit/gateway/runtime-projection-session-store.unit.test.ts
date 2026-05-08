@@ -6,6 +6,7 @@ import {
   CONTEXT_ENTRY_RECORDED_EVENT_TYPE,
   SESSION_LINEAGE_NODE_CREATED_EVENT_TYPE,
 } from "@brewva/brewva-runtime";
+import { sha256Hex } from "@brewva/brewva-std/hash";
 import {
   readSessionBundleArtifact,
   replayImportedSessionEntries,
@@ -317,6 +318,119 @@ describe("hosted runtime tape session store", () => {
         ),
     ).toBe(true);
     expect(store.buildSessionContext().messages).toMatchObject([visibleUser, assistant]);
+  });
+
+  test("fails closed when replaying a compact summary with a mismatched digest", () => {
+    const workspace = createTestWorkspace("runtime-projection-session-store-compaction-digest");
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionId = "agent-session:compaction-digest";
+    const store = new HostedRuntimeTapeSessionStore(runtime, workspace, sessionId);
+
+    store.appendMessage({
+      role: "user",
+      content: [{ type: "text", text: "before compact" }],
+      timestamp: Date.now(),
+    } as StoredSessionMessage);
+    const leafEntryId = store.appendMessage({
+      role: "assistant",
+      content: [{ type: "text", text: "ready to compact" }],
+      api: "openai-responses",
+      provider: "openai",
+      model: "gpt-5.4",
+      usage: createUsage(),
+      stopReason: "stop",
+      timestamp: Date.now() + 1,
+    } as StoredSessionMessage);
+
+    runtime.extensions.hosted.events.record({
+      sessionId,
+      type: "session_compact",
+      payload: {
+        compactId: "compact-bad-digest",
+        sanitizedSummary: "[CompactSummary]\nTampered summary",
+        summaryDigest: sha256Hex("[CompactSummary]\nOriginal summary"),
+        sourceTurn: 1,
+        leafEntryId,
+        firstKeptEntryId: leafEntryId,
+        referenceContextDigest: null,
+        fromTokens: 1000,
+        toTokens: 100,
+        origin: "auto_compaction",
+      },
+    });
+
+    const restored = new HostedRuntimeTapeSessionStore(runtime, workspace, sessionId);
+    expect(restored.buildSessionContext().messages).toEqual([
+      expect.objectContaining({ role: "user" }),
+      expect.objectContaining({ role: "assistant" }),
+    ]);
+    expect(
+      restored
+        .buildSessionContext()
+        .messages.some((message) => message.role === "compactionSummary"),
+    ).toBe(false);
+  });
+
+  test("replays stored sanitized compact summaries instead of regenerating them", () => {
+    const workspace = createTestWorkspace("runtime-projection-session-store-compaction-replay");
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionId = "agent-session:compaction-replay";
+    const store = new HostedRuntimeTapeSessionStore(runtime, workspace, sessionId);
+
+    store.appendMessage({
+      role: "user",
+      content: [{ type: "text", text: "before compact" }],
+      timestamp: Date.now(),
+    } as StoredSessionMessage);
+    const leafEntryId = store.appendMessage({
+      role: "assistant",
+      content: [{ type: "text", text: "ready to compact" }],
+      api: "openai-responses",
+      provider: "openai",
+      model: "gpt-5.4",
+      usage: createUsage(),
+      stopReason: "stop",
+      timestamp: Date.now() + 1,
+    } as StoredSessionMessage);
+    const sanitizedSummary = "[CompactSummary]\nStored summary from the original compact event.";
+
+    runtime.extensions.hosted.events.record({
+      sessionId,
+      type: "session_compact",
+      payload: {
+        compactId: "compact-stored-summary",
+        sanitizedSummary,
+        summaryDigest: sha256Hex(sanitizedSummary),
+        sourceTurn: 1,
+        leafEntryId,
+        firstKeptEntryId: leafEntryId,
+        referenceContextDigest: null,
+        fromTokens: 1000,
+        toTokens: 100,
+        origin: "auto_compaction",
+        summaryGeneration: {
+          strategy: "llm_primary",
+          model: {
+            provider: "openai",
+            id: "gpt-5.4",
+            api: "openai-responses",
+          },
+        },
+      },
+    });
+
+    const restored = new HostedRuntimeTapeSessionStore(runtime, workspace, sessionId);
+
+    expect(
+      restored
+        .buildSessionContext()
+        .messages.find((message) => message.role === "compactionSummary"),
+    ).toEqual(
+      expect.objectContaining({
+        role: "compactionSummary",
+        summary: sanitizedSummary,
+      }),
+    );
   });
 
   test("rejects legacy hosted projection tapes without a lineage root", () => {

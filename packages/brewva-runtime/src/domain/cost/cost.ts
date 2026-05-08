@@ -5,8 +5,6 @@ import {
 import type { RuntimeKernelContext } from "../../runtime/runtime-kernel.js";
 import type { GovernancePort } from "../governance/api.js";
 import type { LedgerService } from "../ledger/api.js";
-import type { SkillLifecycleService } from "../skills/api.js";
-import type { SkillDocument } from "../skills/api.js";
 import type { SessionCostTracker } from "./tracker.js";
 import type { SessionCostSummary } from "./types.js";
 
@@ -15,7 +13,6 @@ export interface CostServiceOptions {
   getCurrentTurn: RuntimeKernelContext["getCurrentTurn"];
   recordEvent: RuntimeKernelContext["recordEvent"];
   ledgerService: Pick<LedgerService, "recordInfrastructureRow">;
-  skillLifecycleService: Pick<SkillLifecycleService, "getActiveSkill">;
   governancePort?: GovernancePort;
 }
 
@@ -34,7 +31,6 @@ export class CostService {
   }) => string;
   private readonly governancePort?: GovernancePort;
   private readonly getCurrentTurn: (sessionId: string) => number;
-  private readonly getActiveSkill: (sessionId: string) => SkillDocument | undefined;
   private readonly recordEvent: (input: {
     sessionId: string;
     type: string;
@@ -49,7 +45,6 @@ export class CostService {
     this.recordInfrastructureRow = (input) => options.ledgerService.recordInfrastructureRow(input);
     this.governancePort = options.governancePort;
     this.getCurrentTurn = (sessionId) => options.getCurrentTurn(sessionId);
-    this.getActiveSkill = (sessionId) => options.skillLifecycleService.getActiveSkill(sessionId);
     this.recordEvent = (input) => options.recordEvent(input);
   }
 
@@ -80,7 +75,6 @@ export class CostService {
         : providedTotalTokens;
 
     const turn = this.getCurrentTurn(input.sessionId);
-    const skillName = this.getActiveSkill(input.sessionId)?.name;
     const usageResult = this.costTracker.recordUsage(
       input.sessionId,
       {
@@ -94,7 +88,7 @@ export class CostService {
       },
       {
         turn,
-        skill: skillName,
+        skill: undefined,
       },
     );
     const summary = usageResult.summary;
@@ -102,7 +96,7 @@ export class CostService {
     const ledgerId = this.recordInfrastructureRow({
       sessionId: input.sessionId,
       turn,
-      skill: skillName ?? null,
+      skill: null,
       tool: "brewva_cost",
       argsSummary: `model=${input.model}`,
       outputSummary: `tokens=${effectiveTotalTokens} cost=${input.costUsd.toFixed(6)} usd`,
@@ -116,7 +110,7 @@ export class CostService {
           total: effectiveTotalTokens,
         },
         allocation: {
-          skill: skillName ?? "(none)",
+          skill: "(none)",
           turn,
           tools: summary.tools,
         },
@@ -135,7 +129,7 @@ export class CostService {
           cacheWrite: normalizedCacheWriteTokens,
           total: effectiveTotalTokens,
         },
-        skill: skillName ?? null,
+        skill: null,
         turn,
         costUsd: input.costUsd,
         sessionCostUsd: summary.totalCostUsd,
@@ -149,7 +143,7 @@ export class CostService {
       turn,
       payload: {
         model: input.model,
-        skill: skillName ?? null,
+        skill: null,
         ledgerId,
         inputTokens: normalizedInputTokens,
         outputTokens: normalizedOutputTokens,

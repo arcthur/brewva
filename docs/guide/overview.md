@@ -12,21 +12,21 @@ reference.
 - Ingress adapters: `packages/brewva-ingress/src/index.ts`
 - Gateway control plane: `packages/brewva-gateway/src/index.ts`
 - Tool registry: `packages/brewva-tools/src/index.ts`
-- Deliberation and memory substrate: `packages/brewva-deliberation`
-- Skill broker surfaces: `packages/brewva-skill-broker`
+- Model-operated workbench state: `packages/brewva-runtime/src/domain/workbench`
+- Skill catalog surfaces: `packages/brewva-runtime/src/domain/skills`
 - Runtime plugin wiring: `@brewva/brewva-gateway/runtime-plugins` (`packages/brewva-gateway/src/runtime-plugins/index.ts`)
 - CLI entrypoint: `packages/brewva-cli/src/index.ts`
 
 ## Runtime Responsibilities
 
-- Skill registry, activation, and contract enforcement
+- Skill catalog discovery and refresh
 - Evidence ledger recording, digest generation, and query
 - Verification gate evaluation and command-based verification checks
 - Context budget planning and compaction signaling
 - Event-first recovery via replayable runtime telemetry
 - Structured event persistence and replay support
 - Proposal admission with effect commitment authorization
-- Cost tracking with session budget alerts and skill contract budget enforcement
+- Cost tracking with session budget alerts
 
 ## Documentation Model
 

@@ -22,7 +22,6 @@ export function registerParallelDomain(
       sessionState: options.sessionState,
       getCurrentTurn: (sessionId) => options.kernel.getCurrentTurn(sessionId),
       recordEvent: (input) => options.kernel.recordEvent(input),
-      skillLifecycleService: options.skillLifecycleService,
     });
     return resourceLeaseService;
   };
@@ -33,7 +32,6 @@ export function registerParallelDomain(
       createParallelService: () => {
         parallelService ??= new ParallelService({
           workspaceRoot: options.workspaceRoot,
-          securityConfig: options.config.security,
           parallel: options.coreDependencies.parallel,
           parallelResults: options.coreDependencies.parallelResults,
           sessionState: options.sessionState,
@@ -42,8 +40,6 @@ export function registerParallelDomain(
           getCurrentTurn: (sessionId) => options.kernel.getCurrentTurn(sessionId),
           recordEvent: (input) => options.kernel.recordEvent(input),
           fileChangeService: support.getFileChangeService(),
-          resourceLeaseService: getResourceLeaseService(),
-          skillLifecycleService: options.skillLifecycleService,
         });
         return parallelService;
       },

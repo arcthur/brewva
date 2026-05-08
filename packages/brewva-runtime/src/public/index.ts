@@ -28,15 +28,9 @@ export type {
   ProjectGuidanceStrength,
   ResourceBudgetLimits,
   SemanticArtifactSchemaId,
-  SkillActivatedEventPayload,
-  SkillActivationResult,
   SkillCategory,
-  SkillCompletedEventPayload,
   SkillCompletionDefinition,
-  SkillCompletionFailureRecord,
-  SkillCompletionRejectedEventPayload,
   SkillContract,
-  SkillContractFailedEventPayload,
   SkillContractLike,
   SkillContractOverride,
   SkillCostHint,
@@ -51,18 +45,13 @@ export type {
   SkillOutputContract,
   SkillOutputEnumContract,
   SkillOutputJsonContract,
-  SkillOutputRecord,
   SkillOutputTextContract,
-  SkillOutputValidationIssue,
-  SkillOutputValidationResult,
   SkillOverlayCategory,
   SkillOverlayContract,
   SkillRefreshInput,
   SkillRefreshResult,
   SkillRegistryLoadReport,
   SkillRegistryRoot,
-  SkillRepairBudgetState,
-  SkillRepairGuidance,
   SkillResourceBudget,
   SkillResourcePolicy,
   SkillResourceSet,
@@ -74,16 +63,9 @@ export type {
   SkillsIndexEntry,
   SkillsIndexFile,
   SkillSystemInstallResult,
-  ActiveSkillRuntimeState,
 } from "../domain/skills/types.js";
 export type {
-  SkillReadinessEntry,
-  SkillReadinessQuery,
-  SkillReadinessState,
-} from "../domain/skills/readiness.js";
-export type {
   SkillArtifactIssueTier,
-  SkillConsumedOutputsView,
   SkillNormalizedBlockingState,
   SkillNormalizedOutputIssue,
   SkillNormalizedOutputsView,
@@ -315,7 +297,6 @@ export type {
   SessionLifecycleApprovalSnapshot,
   SessionLifecycleExecutionSnapshot,
   SessionLifecycleRecoverySnapshot,
-  SessionLifecycleSkillSnapshot,
   SessionLifecycleSnapshot,
   SessionLifecycleSnapshotBuildInput,
   SessionLifecycleSummaryKind,
@@ -325,7 +306,7 @@ export type {
 } from "../domain/sessions/lifecycle.js";
 export { SESSION_WIRE_SCHEMA } from "../domain/sessions/wire.js";
 export type {
-  ContextPressureView,
+  ContextStatusView,
   SessionWireAttemptReason,
   SessionWireCommittedStatus,
   SessionWireDurability,
@@ -373,14 +354,11 @@ export type {
   WorkerResultsAppliedEventPayload,
 } from "../domain/delegation/types.js";
 export type {
-  BuildContextInjectionOptions,
   ContextBudgetUsage,
   ContextCompactionDecision,
   ContextCompactionGateStatus,
   ContextCompactionReason,
-  ContextInjectionDecision,
-  ContextPressureLevel,
-  ContextPressureStatus,
+  ContextStatus,
   ExpectedProviderCacheBreak,
   HistoryViewBaselineOrigin,
   HistoryViewBaselineSnapshot,
@@ -408,6 +386,9 @@ export type {
   ResourceLeaseRequest,
   ResourceLeaseResult,
   SessionCompactionCommitInput,
+  SessionCompactionCacheImpact,
+  SessionCompactionCacheImpactSnapshot,
+  SessionCompactionGenerationMetadata,
   SessionCompactionOrigin,
   TapeAnchorState,
   TapeHandoffResult,
@@ -421,6 +402,20 @@ export type {
   TransientReductionState,
   VisibleReadState,
 } from "../domain/context/types.js";
+export type {
+  WorkbenchEntry,
+  WorkbenchEntryKind,
+  WorkbenchEvictInput,
+  WorkbenchEvictionSpanRefPrefix,
+  WorkbenchNoteInput,
+  WorkbenchUndoEvictionResult,
+} from "../domain/workbench/api.js";
+export {
+  WORKBENCH_EVICTION_SPAN_REF_PREFIXES,
+  listInvalidWorkbenchEvictionSpanRefs,
+  normalizeWorkbenchEvictionSpanRefs,
+  parseWorkbenchEvictionSpanRef,
+} from "../domain/workbench/api.js";
 export type {
   PatchApplyFailureReason,
   PatchApplyResult,
@@ -588,13 +583,6 @@ export {
   SEMANTIC_ARTIFACT_SCHEMA_IDS,
   isSemanticArtifactSchemaId,
 } from "../domain/skills/semantic-artifacts.js";
-export {
-  SKILL_REPAIR_ALLOWED_TOOL_NAMES,
-  SKILL_REPAIR_MAX_ATTEMPTS,
-  SKILL_REPAIR_MAX_TOOL_CALLS,
-  SKILL_REPAIR_TOKEN_BUDGET,
-} from "../domain/skills/repair-policy.js";
-export { deriveSkillReadiness } from "../domain/skills/readiness-derivation.js";
 export { classifyToolFailure, extractEvidenceArtifacts } from "../domain/evidence/artifacts.js";
 export type { CommandFailureClass, EvidenceArtifact } from "../domain/evidence/artifacts.js";
 export {
@@ -656,35 +644,6 @@ export type {
   PersonaProfile,
   ReadPersonaProfileInput,
 } from "../domain/context/identity.js";
-export {
-  ContextSourceProviderRegistry,
-  defineContextSourceProvider,
-} from "../domain/context/provider.js";
-export type {
-  AdvisoryRecallContextSourceProviderDefinition,
-  ContextAdmissionLane,
-  ContextAuthorityTier,
-  ContextDependencyPlane,
-  ContextPreservationPolicy,
-  ContextReadDependencyId,
-  ContextSourceProvider,
-  ContextSourceProviderCollect,
-  ContextSourceProviderDefinition,
-  ContextSourceProviderDescriptor,
-  ContextSourceProviderInput,
-  ContextSourceProviderRegistration,
-  HistoryViewContextSourceProviderDefinition,
-  OperatorProfileContextSourceProviderDefinition,
-  RuntimeContractStateContextSourceProviderDefinition,
-  RuntimeReadModelContextSourceProviderDefinition,
-  WorkingStateContextSourceProviderDefinition,
-} from "../domain/context/provider.js";
-export { CONTEXT_SOURCES } from "../domain/context/sources.js";
-export type {
-  ContextInjectionBudgetClass,
-  ContextInjectionCategory,
-  ContextSourceId,
-} from "../domain/context/sources.js";
 export { coerceContextBudgetUsage } from "../domain/context/usage.js";
 export {
   ActionPolicyRegistry,
@@ -923,15 +882,9 @@ export {
 export {
   FIELD_TO_PLANE,
   SELECTION_PROFILE_SOURCE_FIELDS,
-  buildSkillActivationEnvelope,
-  buildSkillHandoffProfile,
-  buildSkillRoutingCatalogEntry,
   buildSkillSelectionProfile,
   hasSelectionProfileSignals,
   type SkillFieldPath,
-  type SkillActivationEnvelope,
-  type SkillHandoffProfile,
-  type SkillRoutingCatalogEntry,
 } from "../domain/skills/profiles.js";
 export { discoverSkillRegistryRoots } from "../domain/skills/registry.js";
 export {
@@ -939,7 +892,3 @@ export {
   coercePlanningArtifactSet,
 } from "../domain/skills/planning-normalization.js";
 export { coerceReviewReportArtifact } from "../domain/skills/review-normalization.js";
-export {
-  deriveSkillPlanningEvidenceStateFromEvents,
-  resolveSkillVerificationEvidenceContext,
-} from "../domain/skills/validation/evidence.js";

@@ -86,7 +86,7 @@ Workflow walkthroughs:
 - Skills: `docs/reference/skills.md`
 - Runtime contract and ports: `docs/reference/runtime.md`
 - Provider streaming: `docs/reference/provider-streaming.md`
-- Context composer: `docs/reference/context-composer.md`
+- Hosted dynamic context: `docs/reference/hosted-dynamic-context.md`
 - Token cache: `docs/reference/token-cache.md`
 - Proactivity (removed, explicit heartbeat remains): `docs/reference/proactivity-engine.md`
 - Proposal boundary: `docs/reference/proposal-boundary.md`

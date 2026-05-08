@@ -27,18 +27,16 @@ function mergeExecutionHints(
   hints: SubagentExecutionHints | undefined,
 ): SubagentExecutionHints | undefined {
   if (!hints) {
-    return {
-      preferredSkills: ["review"],
-    };
+    return undefined;
   }
   const preferredTools = hints.preferredTools ? uniqueStrings(hints.preferredTools) : undefined;
   const fallbackTools = hints.fallbackTools ? uniqueStrings(hints.fallbackTools) : undefined;
-  const preferredSkills = uniqueStrings([...(hints.preferredSkills ?? []), "review"]);
-  return {
-    ...(preferredTools ? { preferredTools } : {}),
-    ...(fallbackTools ? { fallbackTools } : {}),
-    preferredSkills,
-  };
+  return preferredTools || fallbackTools
+    ? {
+        ...(preferredTools ? { preferredTools } : {}),
+        ...(fallbackTools ? { fallbackTools } : {}),
+      }
+    : undefined;
 }
 
 export function buildReviewLaneDelegationTasks(input: {
@@ -66,7 +64,6 @@ export function buildReviewLaneDelegationTasks(input: {
       "Use followUpQuestions only for non-blocking residual questions that can wait for a later turn.",
       ...input.activationPlan.activationBasis.map((reason) => `Activation basis: ${reason}`),
     ]),
-    activeSkillName: input.packet.activeSkillName ?? "review",
     executionHints,
     contextRefs: input.packet.contextRefs ? [...input.packet.contextRefs] : undefined,
     contextBudget: input.packet.contextBudget,

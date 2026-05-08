@@ -31,12 +31,12 @@ export function registerRuntimeServiceDependencies(
   );
 
   return {
-    skillLifecycleService: workServices.skillLifecycleService,
     taskService: workServices.taskService,
     truthService: workServices.truthService,
     ledgerService: workServices.ledgerService,
     costService: workServices.costService,
     contextService: contextServices.contextService,
+    workbenchService: workServices.workbenchService,
     taskWatchdogService: workServices.taskWatchdogService,
     eventPipeline: sessionServices.eventPipeline,
     toolLifecycleRecoveryWalService: sessionServices.toolLifecycleRecoveryWalService,

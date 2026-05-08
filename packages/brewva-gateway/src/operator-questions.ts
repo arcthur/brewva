@@ -4,10 +4,8 @@ import { type BrewvaRuntime } from "@brewva/brewva-runtime";
 import { type BrewvaEventRecord } from "@brewva/brewva-runtime/events";
 import {
   OPERATOR_QUESTION_ANSWERED_EVENT_TYPE,
-  SKILL_COMPLETED_EVENT_TYPE,
   SUBAGENT_COMPLETED_EVENT_TYPE,
   readDelegationLifecycleEventPayload,
-  readSkillCompletedEventPayload,
 } from "@brewva/brewva-runtime/events";
 import {
   validateQuestionAnswers,
@@ -39,7 +37,7 @@ export interface SessionQuestionRequest {
   sessionId: string;
   createdAt: number;
   presentationKind?: SessionQuestionPresentationKind;
-  sourceKind: "skill" | "delegation";
+  sourceKind: "delegation" | "tool";
   sourceEventId: string;
   sourceLabel: string;
   sourceSkillName?: string;
@@ -55,7 +53,7 @@ export interface SessionOpenQuestion {
   sessionId: string;
   createdAt: number;
   presentationKind?: SessionQuestionPresentationKind;
-  sourceKind: "skill" | "delegation";
+  sourceKind: "delegation" | "tool";
   sourceEventId: string;
   questionText: string;
   sourceLabel: string;
@@ -110,16 +108,8 @@ function readStringArray(value: unknown): string[] {
   return value.map((entry) => readString(entry)).filter((entry): entry is string => Boolean(entry));
 }
 
-function buildSkillQuestionId(eventId: string, index: number): string {
-  return `skill:${eventId}:${index + 1}`;
-}
-
 function buildDelegationQuestionId(runId: string, index: number): string {
   return `delegation:${runId}:${index + 1}`;
-}
-
-function buildStructuredSkillRequestId(eventId: string, requestIndex: number): string {
-  return `skill:${eventId}:request:${requestIndex + 1}`;
 }
 
 function buildStructuredDelegationRequestId(runId: string, requestIndex: number): string {
@@ -128,10 +118,6 @@ function buildStructuredDelegationRequestId(runId: string, requestIndex: number)
 
 function buildStructuredQuestionId(requestId: string, questionIndex: number): string {
   return `${requestId}:question:${questionIndex + 1}`;
-}
-
-function buildSkillSourceLabel(skillName: string | undefined): string {
-  return skillName ? `skill:${skillName}` : "skill";
 }
 
 function buildDelegationSourceLabel(input: {
@@ -331,47 +317,6 @@ function extractStructuredQuestionRequests(input: {
     );
   }
   return flattened;
-}
-
-function extractSkillQuestions(event: BrewvaEventRecord): SessionOpenQuestion[] {
-  const payload = readSkillCompletedEventPayload(event);
-  if (!payload) {
-    return [];
-  }
-  const outputs = payload.outputs;
-  const skillName = payload.skillName;
-  const sourceLabel = buildSkillSourceLabel(skillName);
-  const structured = extractStructuredQuestionRequests({
-    requestDefinitions: outputs.question_requests,
-    buildRequestId: (requestIndex) => buildStructuredSkillRequestId(event.id, requestIndex),
-    sessionId: event.sessionId,
-    createdAt: event.timestamp,
-    sourceKind: "skill",
-    sourceEventId: event.id,
-    sourceLabel,
-    sourceSkillName: skillName,
-  });
-  if (structured.length > 0) {
-    return structured;
-  }
-  const questions = readStringArray(outputs.open_questions);
-  return questions.map((questionText, index) => ({
-    questionId: buildSkillQuestionId(event.id, index),
-    sessionId: event.sessionId,
-    createdAt: event.timestamp,
-    presentationKind: "follow_up",
-    sourceKind: "skill",
-    sourceEventId: event.id,
-    questionText,
-    sourceLabel,
-    sourceSkillName: skillName,
-    requestId: buildSkillQuestionId(event.id, index),
-    requestPosition: 0,
-    requestSize: 1,
-    header: "Question",
-    options: [],
-    custom: true,
-  }));
 }
 
 async function extractDelegationQuestions(
@@ -681,7 +626,7 @@ export function coerceOperatorQuestionAnsweredPayload(
     !answerText ||
     !sourceEventId ||
     !Number.isFinite(answeredAt) ||
-    (sourceKind !== "skill" && sourceKind !== "delegation") ||
+    (sourceKind !== "delegation" && sourceKind !== "tool") ||
     (answerSource !== "channel" && answerSource !== "runtime_plugin")
   ) {
     return null;
@@ -713,10 +658,6 @@ export async function collectOpenSessionQuestions(
       if (payload) {
         answeredQuestionIds.add(payload.questionId);
       }
-      continue;
-    }
-    if (event.type === SKILL_COMPLETED_EVENT_TYPE) {
-      questions.push(...extractSkillQuestions(event));
       continue;
     }
     if (event.type === SUBAGENT_COMPLETED_EVENT_TYPE) {

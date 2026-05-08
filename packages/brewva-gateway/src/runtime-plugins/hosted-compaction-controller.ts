@@ -1,9 +1,13 @@
-import type { BrewvaHostedRuntimePort, ContextBudgetUsage } from "@brewva/brewva-runtime";
+import type {
+  BrewvaHostedRuntimePort,
+  ContextBudgetUsage,
+  SessionCompactionGenerationMetadata,
+} from "@brewva/brewva-runtime";
 import { sha256Hex } from "@brewva/brewva-std/hash";
 import {
   extractCompactionEntryId,
   extractCompactionSummary,
-  resolveInjectionScopeId,
+  resolveContextScopeId,
 } from "./context-shared.js";
 import {
   AUTO_COMPACTION_WATCHDOG_ERROR,
@@ -44,6 +48,7 @@ export interface HostedCompactionController extends HostedContextGateStatePort {
       summary?: unknown;
       content?: unknown;
       text?: unknown;
+      summaryGeneration?: unknown;
     };
     fromExtension?: unknown;
   }) => void;
@@ -104,6 +109,27 @@ function extractSourceLeafEntryId(input: unknown): string | null {
   }
   const normalized = compactionEntry.sourceLeafEntryId.trim();
   return normalized.length > 0 ? normalized : null;
+}
+
+function extractSummaryGeneration(
+  compactionEntry: unknown,
+): SessionCompactionGenerationMetadata | undefined {
+  if (!compactionEntry || typeof compactionEntry !== "object" || Array.isArray(compactionEntry)) {
+    return undefined;
+  }
+  const summaryGeneration = (compactionEntry as { summaryGeneration?: unknown }).summaryGeneration;
+  if (
+    !summaryGeneration ||
+    typeof summaryGeneration !== "object" ||
+    Array.isArray(summaryGeneration)
+  ) {
+    return undefined;
+  }
+  const strategy = (summaryGeneration as { strategy?: unknown }).strategy;
+  if (typeof strategy !== "string" || strategy.trim().length === 0) {
+    return undefined;
+  }
+  return summaryGeneration as SessionCompactionGenerationMetadata;
 }
 
 function getOrCreateGateState(
@@ -414,6 +440,7 @@ export function createHostedCompactionController(
           compactionEntry: input.compactionEntry,
         }) ?? `compact:${input.sessionId}:${state.turnIndex}`;
       const toTokens = normalizeUsageTokens(input.usage);
+      const summaryGeneration = extractSummaryGeneration(input.compactionEntry);
 
       runtime.authority.session.commitCompaction(input.sessionId, {
         compactId,
@@ -424,13 +451,14 @@ export function createHostedCompactionController(
           extractSourceLeafEntryId({
             compactionEntry: input.compactionEntry,
           }) ??
-          resolveInjectionScopeId(input.sessionManager) ??
+          resolveContextScopeId(input.sessionManager) ??
           null,
         referenceContextDigest:
           runtime.inspect.context.getPromptStability(input.sessionId)?.stablePrefixHash ?? null,
         fromTokens: state.lastObservedUsageTokens,
         toTokens,
         origin: input.fromExtension === true ? "extension_api" : "auto_compaction",
+        ...(summaryGeneration ? { summaryGeneration } : {}),
       });
       state.lastObservedUsageTokens = toTokens;
 

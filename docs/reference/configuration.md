@@ -39,7 +39,7 @@ Top-level config key count: 12.
 Construction-time runtime options are intentionally separate from persisted
 config:
 
-- `new BrewvaRuntime({ routingScopes })` is a hard override for skill routing
+- `new BrewvaRuntime({ routingScopes })` is a hard override for runtime routing
   scopes.
 - `new BrewvaRuntime({ routingDefaultScopes })` is a front-door default policy
   used only when config omitted explicit routing choices.
@@ -63,15 +63,14 @@ generated JSON schema listed above. New Effect-native runtime boundaries may
 use `@brewva/brewva-effect` config service helpers when they need a typed layer
 service or a test override layer.
 
-## Skill Routing
+## Skill Files
 
-`skills.routing.enabled` controls whether skill-first routing is active.
-`skills.routing.scopes` is the explicit scope allowlist for routing visibility.
-Scope alone does not make a skill routable; the skill must also expose a
-compiled selection signal.
+`skills.routing.enabled` and `skills.routing.scopes` are retained only as
+configuration metadata for repository inspection and migration. Hosted turns do
+not run a skill-first routing pass and do not force skill activation.
 
 Interactive hosted front doors use `routingDefaultScopes=["core", "domain"]`
-so skill-first routing is available without overriding explicit config.
+as a default runtime scope policy without turning skills into a stage gate.
 
 ## Verification
 
@@ -134,7 +133,8 @@ provider-safe tool-name syntax before they enter the hosted tool surface.
   optional self-improve recurring policy.
 - `parallel` controls runtime parallelism ceilings.
 - `channels` controls external orchestration limits and access control.
-- `infrastructure` controls event storage and context-budget thresholds.
+- `infrastructure` controls event storage, context-budget thresholds,
+  predictive turn-growth tuning, and cost/recovery infrastructure.
 
 ## Schema Maintenance
 

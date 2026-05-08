@@ -33,16 +33,13 @@ export function registerToolsDomain(
   let toolAccessPolicyService: ToolAccessPolicyService | undefined;
   const getToolAccessPolicyService = (): ToolAccessPolicyService => {
     toolAccessPolicyService ??= new ToolAccessPolicyService({
-      securityConfig: options.config.security,
       costTracker: options.coreDependencies.costTracker,
       sessionState: options.sessionState,
       getCurrentTurn: (sessionId) => options.kernel.getCurrentTurn(sessionId),
       recordEvent: (input) => options.kernel.recordEvent(input),
       alwaysAllowedTools: CONTROL_PLANE_TOOLS,
       resolveToolAuthority: (toolName, args) => options.resolveToolAuthority(toolName, args),
-      resourceLeaseService: support.getResourceLeaseService(),
-      skillLifecycleService: options.skillLifecycleService,
-      hasRoutingScope: (scope) => options.config.skills.routing.scopes.includes(scope),
+      hasRoutingScope: (scope) => new Set<string>(options.config.skills.routing.scopes).has(scope),
     });
     return toolAccessPolicyService;
   };
@@ -65,7 +62,6 @@ export function registerToolsDomain(
       recordEvent: (input) => options.kernel.recordEvent(input),
       resolveToolAuthority: (toolName, args) => options.resolveToolAuthority(toolName, args),
       toolAccessPolicyService: getToolAccessPolicyService(),
-      skillLifecycleService: options.skillLifecycleService,
       proposalAdmissionService: {
         submitProposal: (sessionId, proposal) =>
           options.getProposalAdmissionService().submitProposal(sessionId, proposal),

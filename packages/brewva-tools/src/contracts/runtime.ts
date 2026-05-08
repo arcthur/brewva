@@ -2,18 +2,18 @@ import type { BoxPlane } from "@brewva/brewva-box";
 import type { BrewvaToolRuntimePort as RuntimeToolRuntimePort } from "@brewva/brewva-runtime";
 import type { BrewvaToolDelegationQuery, BrewvaToolOrchestration } from "./delegation.js";
 import type { BrewvaToolRuntimeExtensions, BrewvaToolRuntimeToolsExtension } from "./metadata.js";
-import type { BrewvaSemanticReranker } from "./semantic-reranker.js";
 
 type BrewvaToolRuntimeBase = Pick<
   RuntimeToolRuntimePort,
   "cwd" | "workspaceRoot" | "agentId" | "config" | "authority" | "inspect"
->;
+> & {
+  readonly maintain?: RuntimeToolRuntimePort["maintain"];
+};
 
 export type BrewvaToolRuntime = BrewvaToolRuntimeBase & {
   extensions?: BrewvaToolRuntimeExtensions;
   orchestration?: BrewvaToolOrchestration;
   delegation?: BrewvaToolDelegationQuery;
-  semanticReranker?: BrewvaSemanticReranker;
 };
 
 type CapabilityScopedMethod<
@@ -28,7 +28,7 @@ type CapabilityScopedMethod<
 
 type CapabilityScopedRuntimePort<
   TPort extends object,
-  TPrefix extends "authority" | "inspect",
+  TPrefix extends "authority" | "inspect" | "maintain",
   TGroupName extends string,
   TCapabilities extends string,
 > = {
@@ -41,7 +41,7 @@ type CapabilityScopedRuntimePort<
 
 type CapabilityScopedRuntimeGroup<
   TGroupMap extends object,
-  TPrefix extends "authority" | "inspect",
+  TPrefix extends "authority" | "inspect" | "maintain",
   TCapabilities extends string,
 > = {
   [TGroupName in keyof TGroupMap]: TGroupMap[TGroupName] extends object
@@ -67,7 +67,7 @@ export type CapabilityScopedBrewvaToolRuntime<
   TCapabilities extends string,
 > = TRuntime extends undefined
   ? undefined
-  : Omit<TRuntime, "authority" | "inspect" | "extensions"> & {
+  : Omit<TRuntime, "authority" | "inspect" | "maintain" | "extensions"> & {
       authority: CapabilityScopedRuntimeGroup<
         RuntimeToolRuntimePort["authority"],
         "authority",
@@ -76,6 +76,11 @@ export type CapabilityScopedBrewvaToolRuntime<
       inspect: CapabilityScopedRuntimeGroup<
         RuntimeToolRuntimePort["inspect"],
         "inspect",
+        TCapabilities
+      >;
+      maintain?: CapabilityScopedRuntimeGroup<
+        RuntimeToolRuntimePort["maintain"],
+        "maintain",
         TCapabilities
       >;
       extensions?: {

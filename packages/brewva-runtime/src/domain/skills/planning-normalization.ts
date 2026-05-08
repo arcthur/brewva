@@ -1,4 +1,3 @@
-import { readSkillCompletedEventPayload } from "../../events/descriptors.js";
 import type { BrewvaEventRecord } from "../../events/types.js";
 import type { SkillNormalizedOutputIssue, SkillNormalizedOutputsView } from "./normalization.js";
 import type {
@@ -761,24 +760,9 @@ export function collectExecutionVerificationIntents(
 }
 
 export function collectLatestPlanningOutputTimestamps(
-  events: readonly BrewvaEventRecord[],
+  _events: readonly BrewvaEventRecord[],
 ): Partial<Record<PlanningEvidenceKey, number>> {
-  const latestByKey: Partial<Record<PlanningEvidenceKey, number>> = {};
-  for (const event of events) {
-    if (event.type !== "skill_completed") {
-      continue;
-    }
-    const outputs = readSkillCompletedEventPayload(event)?.outputs;
-    if (!outputs) {
-      continue;
-    }
-    for (const key of PLANNING_EVIDENCE_KEYS) {
-      if (hasOwn(outputs, key)) {
-        latestByKey[key] = Math.max(latestByKey[key] ?? 0, event.timestamp);
-      }
-    }
-  }
-  return latestByKey;
+  return {};
 }
 
 export function resolveLatestWorkspaceWriteTimestamp(events: readonly BrewvaEventRecord[]): number {

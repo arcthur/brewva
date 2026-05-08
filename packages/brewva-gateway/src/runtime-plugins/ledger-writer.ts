@@ -251,22 +251,26 @@ function buildOutputObservation(
   contextUsagePercent: number | null;
   contextTokens: number | null;
   contextWindow: number | null;
-  contextPressure: string;
+  contextCompactionState: string;
   contextHardLimitPercent: number;
   contextCompactionThresholdPercent: number;
 } {
   const usage = runtime.inspect.context.getUsage(sessionId);
-  const pressure = runtime.inspect.context.getPressureStatus(sessionId, usage);
+  const status = runtime.inspect.context.getStatus(sessionId, usage);
   return {
     rawChars: outputText.length,
     rawBytes: Buffer.byteLength(outputText, "utf8"),
     rawTokens: estimateTokens(outputText),
-    contextUsagePercent: pressure.usageRatio,
+    contextUsagePercent: status.usageRatio,
     contextTokens: typeof usage?.tokens === "number" ? usage.tokens : null,
     contextWindow: typeof usage?.contextWindow === "number" ? usage.contextWindow : null,
-    contextPressure: pressure.level,
-    contextHardLimitPercent: pressure.hardLimitRatio,
-    contextCompactionThresholdPercent: pressure.compactionThresholdRatio,
+    contextCompactionState: status.forcedCompaction
+      ? "forced_compaction"
+      : status.compactionAdvised
+        ? "compaction_advised"
+        : "below_threshold",
+    contextHardLimitPercent: status.hardLimitRatio,
+    contextCompactionThresholdPercent: status.compactionThresholdRatio,
   };
 }
 

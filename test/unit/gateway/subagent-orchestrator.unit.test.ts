@@ -620,44 +620,6 @@ describe("hosted subagent orchestrator", () => {
                                 summary: "E2E lane was intentionally skipped.",
                               },
                             ],
-                            skillOutputs: {
-                              qa_report:
-                                "Executed one baseline command and one constrained probe in the isolated harness.",
-                              qa_findings: [
-                                "The end-to-end probe stayed inconclusive because the test harness exposes no browser target.",
-                              ],
-                              qa_verdict: "inconclusive",
-                              qa_checks: [
-                                {
-                                  name: "unit",
-                                  status: "pass",
-                                  command: "bun test",
-                                  exit_code: 0,
-                                  cwd: ".",
-                                  observed_output: "12 tests passed",
-                                  probe_type: "baseline",
-                                  evidence_refs: ["session:child-structured-success:agent_end"],
-                                },
-                                {
-                                  name: "e2e",
-                                  status: "inconclusive",
-                                  tool: "browser_open",
-                                  observed_output:
-                                    "No browser target is configured in the isolated harness.",
-                                  probe_type: "environment_limit",
-                                  summary: "E2E lane was intentionally skipped.",
-                                },
-                              ],
-                              qa_missing_evidence: [
-                                "No browser-level flow or service-level end-to-end probe was attached.",
-                              ],
-                              qa_confidence_gaps: [
-                                "The isolated harness cannot confirm the full user-visible path.",
-                              ],
-                              qa_environment_limits: [
-                                "The test harness does not expose a browser or remote target.",
-                              ],
-                            },
                           }),
                           "</delegation_outcome_json>",
                         ].join("\n"),
@@ -727,10 +689,6 @@ describe("hosted subagent orchestrator", () => {
           summary: "E2E lane was intentionally skipped.",
         },
       ],
-    });
-    expect(outcome.skillOutputs).toMatchObject({
-      qa_verdict: "inconclusive",
-      qa_checks: expect.any(Array),
     });
     expect(outcome.summary).toBe("QA completed with one inconclusive probe.");
     expect(outcome.evidenceRefs).toEqual(
@@ -933,7 +891,7 @@ describe("hosted subagent orchestrator", () => {
     await rm(workspaceRoot, { recursive: true, force: true });
   });
 
-  test("rejects prose-only QA output when the structured outcome block is missing", async () => {
+  test("records a parse warning for prose-only QA output without failing the handoff", async () => {
     const workspaceRoot = createTempWorkspace("brewva-subagent-structured-fallback-");
     const runtime = new BrewvaRuntime({ cwd: workspaceRoot });
     const parentSessionId = "parent-session-structured-fallback";
@@ -996,19 +954,19 @@ describe("hosted subagent orchestrator", () => {
       },
     });
 
-    expect(result.ok).toBe(false);
+    expect(result.ok).toBe(true);
     const outcome = result.outcomes[0];
-    expect(outcome?.ok).toBe(false);
-    if (!outcome || outcome.ok) {
-      throw new Error("expected a failed QA outcome");
+    expect(outcome?.ok).toBe(true);
+    if (!outcome || !outcome.ok) {
+      throw new Error("expected a successful QA outcome");
     }
 
-    expect(outcome.error).toContain("subagent_skill_outputs_invalid:qa");
+    expect(outcome.summary).toContain("QA completed, but only a prose summary is available.");
     expect(
       runtime.inspect.events.list(parentSessionId, { type: "subagent_outcome_parse_failed" }),
     ).toHaveLength(1);
     expect(runtime.inspect.events.list(parentSessionId, { type: "subagent_failed" })).toHaveLength(
-      1,
+      0,
     );
 
     await rm(workspaceRoot, { recursive: true, force: true });

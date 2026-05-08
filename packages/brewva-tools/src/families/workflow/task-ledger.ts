@@ -43,7 +43,7 @@ function toRuntimeTaskAcceptanceStatus(
 }
 
 const taskSetSpecVerificationGuideline =
-  "TaskSpec no longer carries a verification profile. Use verification.commands only when the task needs explicit command checks; otherwise the active skill's completion definition controls verification.";
+  "TaskSpec no longer carries a verification profile. Use verification.commands only when the task needs explicit command checks; otherwise verification is derived from task acceptance and recorded evidence.";
 
 const taskItemStatusGuideline =
   "Status values are pending, in_progress, blocked, or done; use pending for not-started work and in_progress for active work.";

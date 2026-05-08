@@ -58,17 +58,6 @@ export interface BrewvaToolRuntimeExtensionMethods {
   ): BrewvaEventRecord | undefined;
   onClearState(listener: (sessionId: string) => void): void;
   resolveCredentialBindings(sessionId: string, toolName: string): Record<string, string>;
-  appendGuardedSupplementalBlocks(
-    sessionId: string,
-    blocks: readonly { familyId: string; content: string }[],
-    scopeId?: string,
-  ): Array<{
-    familyId: string;
-    accepted: boolean;
-    truncated?: boolean;
-    finalTokens?: number;
-    droppedReason?: "hard_limit" | "budget_exhausted";
-  }>;
 }
 
 export type BrewvaHostedEventExtensionPort = ExtensionPort<
@@ -217,7 +206,6 @@ export function createToolRuntimeExtensionPort(
       "extensions.tools.recordEvent",
       "extensions.tools.onClearState",
       "extensions.tools.resolveCredentialBindings",
-      "extensions.tools.appendGuardedSupplementalBlocks",
     ],
     methods: input,
   });

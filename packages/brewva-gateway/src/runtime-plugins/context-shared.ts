@@ -72,7 +72,7 @@ export function extractCompactionEntryId(input: unknown): string | undefined {
   return normalized.length > 0 ? normalized : undefined;
 }
 
-export function resolveInjectionScopeId(input: unknown): string | undefined {
+export function resolveContextScopeId(input: unknown): string | undefined {
   const sessionManager = input as
     | { getLeafId?: (() => string | null | undefined) | undefined }
     | undefined;

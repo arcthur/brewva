@@ -16,7 +16,7 @@ export type BrewvaToolInterruptBehavior = "cancel" | "block" | "allow_completion
 
 type RuntimeMethodCapabilityPath<
   TGroupMap extends object,
-  TPrefix extends "authority" | "inspect",
+  TPrefix extends "authority" | "inspect" | "maintain",
 > = {
   [TGroupName in keyof TGroupMap & string]: TGroupMap[TGroupName] extends object
     ? {
@@ -41,6 +41,7 @@ type ToolExtensionCapabilityPath = {
 export type BrewvaToolRequiredCapability =
   | RuntimeMethodCapabilityPath<RuntimeToolRuntimePort["authority"], "authority">
   | RuntimeMethodCapabilityPath<RuntimeToolRuntimePort["inspect"], "inspect">
+  | RuntimeMethodCapabilityPath<RuntimeToolRuntimePort["maintain"], "maintain">
   | ToolExtensionCapabilityPath;
 
 export interface BrewvaToolExecutionTraits extends CanonicalToolExecutionTraits {

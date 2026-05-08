@@ -522,7 +522,7 @@ describe("Tool invocation characterization", () => {
 
     expect(blocked).toMatchObject({
       allowed: false,
-      reason: expect.stringContaining("session_compact"),
+      reason: expect.stringContaining("workbench_compact"),
     });
     expect(summarizeEvents(runtime.inspect.events.query(sessionId))).toEqual([
       { type: "context_usage" },
@@ -539,7 +539,7 @@ describe("Tool invocation characterization", () => {
     const compactAllowed = runtime.authority.tools.start({
       sessionId,
       toolCallId: "tc-compact",
-      toolName: "session_compact",
+      toolName: "workbench_compact",
       args: { reason: "critical" },
       usage,
     });

@@ -5,12 +5,9 @@ import { runHostedTurnEnvelope } from "../session/turn-envelope.js";
 import { toErrorMessage } from "../utils/errors.js";
 import { clampText } from "../utils/runtime.js";
 import type { AgentRegistry } from "./agent-registry.js";
+import { buildChannelPolicyBlock, type TelegramChannelPolicyState } from "./channel-policy.js";
 import type { ChannelReplyWriter, ChannelToolTurnOutput } from "./channel-reply-writer.js";
 import type { ChannelSessionCoordinator } from "./channel-session-coordinator.js";
-import {
-  buildChannelSkillPolicyBlock,
-  type TelegramChannelSkillPolicyState,
-} from "./skill-policy.js";
 
 export interface PromptTurnOutputSession extends SubscribablePromptSession {}
 
@@ -141,14 +138,14 @@ export function canonicalizeInboundTurnSession(
 export function buildChannelDispatchPrompt(input: {
   turn: TurnEnvelope;
   agentSessionId: string;
-  skillPolicyState?: TelegramChannelSkillPolicyState;
+  channelPolicyState?: TelegramChannelPolicyState;
 }): {
   canonicalTurn: TurnEnvelope;
   prompt: string;
 } {
   const canonicalTurn = canonicalizeInboundTurnSession(input.turn, input.agentSessionId);
   const prompt = [
-    buildChannelSkillPolicyBlock(canonicalTurn, input.skillPolicyState),
+    buildChannelPolicyBlock(canonicalTurn, input.channelPolicyState),
     buildInboundPrompt(canonicalTurn),
   ]
     .filter((segment) => segment.trim().length > 0)
@@ -203,7 +200,7 @@ export function createChannelAgentDispatch(input: {
       turnId?: string;
     },
   ) => Promise<PromptTurnOutputs>;
-  skillPolicyState?: TelegramChannelSkillPolicyState;
+  channelPolicyState?: TelegramChannelPolicyState;
 }) {
   const executePromptForAgent = async (dispatch: {
     scopeKey: string;
@@ -255,7 +252,7 @@ export function createChannelAgentDispatch(input: {
     const { canonicalTurn, prompt } = buildChannelDispatchPrompt({
       turn,
       agentSessionId: state.agentSessionId,
-      skillPolicyState: input.skillPolicyState,
+      channelPolicyState: input.channelPolicyState,
     });
 
     if (!prompt) {

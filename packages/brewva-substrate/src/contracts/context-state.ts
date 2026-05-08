@@ -7,15 +7,10 @@ export interface ContextState {
   promptStabilityFingerprint?: string;
   transientReductionActive: boolean;
   historyBaselineAvailable: boolean;
-  reservedPrimaryTokens: number;
-  reservedSupplementalTokens: number;
-  lastInjectionScopeId?: string;
 }
 
 export const DEFAULT_CONTEXT_STATE: ContextState = {
   budgetPressure: "none",
   transientReductionActive: false,
   historyBaselineAvailable: false,
-  reservedPrimaryTokens: 0,
-  reservedSupplementalTokens: 0,
 };

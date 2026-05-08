@@ -1,24 +1,11 @@
-import type { ToolEffectClass } from "../governance/api.js";
-import {
-  listSkillAllowedEffects,
-  listSkillDeniedEffects,
-  listSkillOutputs,
-  resolveSkillDefaultLease,
-  resolveSkillEffectLevel,
-  resolveSkillHardCeiling,
-} from "./facets.js";
-import type { SkillConsumedOutputsView } from "./normalization.js";
-import type { SkillReadinessEntry, SkillReadinessState } from "./readiness.js";
 import type {
   SkillContract,
   SkillDocument,
-  SkillEffectLevel,
-  SkillResourceBudget,
   SkillRoutingScope,
   SkillSelectionPolicy,
 } from "./types.js";
 
-export type SkillLifecyclePlane = "discovery" | "selection" | "activation" | "handoff";
+export type SkillCatalogPlane = "discovery" | "selection";
 type SkillSelectionFieldPath = `selection.${Extract<keyof SkillSelectionPolicy, string>}`;
 export type SkillFieldPath =
   | keyof SkillContract
@@ -26,27 +13,27 @@ export type SkillFieldPath =
   | "authoredMarkdown.Trigger";
 
 export const FIELD_TO_PLANE = {
-  name: ["discovery", "selection", "activation", "handoff"],
-  category: ["discovery", "activation", "handoff"],
+  name: ["discovery", "selection"],
+  category: ["discovery"],
   routing: ["discovery"],
   selection: [],
   "selection.whenToUse": ["selection"],
   "selection.paths": ["selection"],
   "authoredMarkdown.Trigger": ["selection"],
-  intent: ["activation"],
-  effects: ["activation"],
-  resources: ["activation"],
+  intent: [],
+  effects: [],
+  resources: [],
   executionHints: [],
   composableWith: ["discovery"],
-  consumes: ["activation", "handoff"],
-  requires: ["activation", "handoff"],
+  consumes: [],
+  requires: [],
   stability: ["discovery"],
   description: ["discovery"],
-} as const satisfies Record<SkillFieldPath, readonly SkillLifecyclePlane[]>;
+} as const satisfies Record<SkillFieldPath, readonly SkillCatalogPlane[]>;
 
-export function listSkillFieldsForPlane(plane: SkillLifecyclePlane): SkillFieldPath[] {
+export function listSkillFieldsForPlane(plane: SkillCatalogPlane): SkillFieldPath[] {
   return (Object.keys(FIELD_TO_PLANE) as SkillFieldPath[]).filter((field) => {
-    const planes = FIELD_TO_PLANE[field] as readonly SkillLifecyclePlane[];
+    const planes = FIELD_TO_PLANE[field] as readonly SkillCatalogPlane[];
     return planes.includes(plane);
   });
 }
@@ -81,64 +68,6 @@ export interface SkillDiscoveryProfile {
   stability: NonNullable<SkillContract["stability"]>;
 }
 
-export interface SkillActivationEnvelope {
-  activeSkill: {
-    name: string;
-    category: SkillDocument["category"];
-    baseDir: string;
-  };
-  effectPosture: {
-    level: SkillEffectLevel;
-    allowedEffects: ToolEffectClass[];
-    deniedEffects: ToolEffectClass[];
-  };
-  budget: {
-    defaultLease?: SkillResourceBudget;
-    hardCeiling?: SkillResourceBudget;
-  };
-  requiredOutputs: string[];
-  requiredInputs: string[];
-  optionalInputs: string[];
-  readiness: SkillReadinessState | "unknown";
-  missingRequiredInputs: string[];
-  consumedOutputs: Array<{
-    key: string;
-    value: string;
-  }>;
-  normalizationIssues: SkillConsumedOutputsView["issues"];
-  instructions: string;
-}
-
-export interface SkillHandoffProfile {
-  name: string;
-  category: SkillDocument["category"];
-  actionability: SkillReadinessState;
-  requires: string[];
-  consumes: string[];
-  missingRequiredInputs: string[];
-  satisfiedRequiredInputs: string[];
-  satisfiedConsumedInputs: string[];
-  blockingIssues: SkillConsumedOutputsView["issues"];
-  sourceSkillNames: string[];
-  sourceEventIds: string[];
-}
-
-export interface SkillHandoffProfileSource {
-  name: string;
-  category: SkillDocument["category"];
-  contract?: Pick<SkillContract, "requires" | "consumes">;
-  requires?: readonly string[];
-  consumes?: readonly string[];
-}
-
-export interface SkillRoutingCatalogEntry {
-  name: string;
-  category: SkillDocument["category"];
-  selection: SkillSelectionProfile;
-  requires: string[];
-  consumes: string[];
-}
-
 function extractMarkdownSection(markdown: string | undefined, heading: string): string {
   if (!markdown) return "";
   const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -154,12 +83,6 @@ function extractMarkdownBullets(markdown: string | undefined, heading: string): 
     .filter((line) => line.startsWith("- "))
     .map((line) => line.slice(2).trim())
     .filter(Boolean);
-}
-
-function summarizeConsumedValue(value: unknown): string {
-  const text = typeof value === "string" ? value : JSON.stringify(value);
-  const normalized = text && text.length > 0 ? text : String(value);
-  return normalized.length > 500 ? `${normalized.slice(0, 497)}...` : normalized;
 }
 
 function buildSelectionModelProfile(
@@ -223,78 +146,5 @@ export function buildSkillDiscoveryProfile(
     baseDir: skill.baseDir,
     routingScope: skill.contract.routing?.scope,
     stability: skill.contract.stability ?? "stable",
-  };
-}
-
-export function buildSkillActivationEnvelope(
-  skill: SkillDocument,
-  input: {
-    consumedOutputs?: SkillConsumedOutputsView;
-    readiness?: SkillReadinessEntry;
-    maxConsumedOutputs?: number;
-  } = {},
-): SkillActivationEnvelope {
-  const maxConsumedOutputs = input.maxConsumedOutputs ?? 8;
-  const consumedOutputs = Object.entries(input.consumedOutputs?.outputs ?? {})
-    .slice(0, maxConsumedOutputs)
-    .map(([key, value]) => ({
-      key,
-      value: summarizeConsumedValue(value),
-    }));
-
-  return {
-    activeSkill: {
-      name: skill.name,
-      category: skill.category,
-      baseDir: skill.baseDir,
-    },
-    effectPosture: {
-      level: resolveSkillEffectLevel(skill.contract),
-      allowedEffects: listSkillAllowedEffects(skill.contract),
-      deniedEffects: listSkillDeniedEffects(skill.contract),
-    },
-    budget: {
-      defaultLease: resolveSkillDefaultLease(skill.contract),
-      hardCeiling: resolveSkillHardCeiling(skill.contract),
-    },
-    requiredOutputs: listSkillOutputs(skill.contract),
-    requiredInputs: [...(skill.contract.requires ?? [])],
-    optionalInputs: [...(skill.contract.consumes ?? [])],
-    readiness: input.readiness?.readiness ?? "unknown",
-    missingRequiredInputs: [...(input.readiness?.missingRequires ?? [])],
-    consumedOutputs,
-    normalizationIssues: [...(input.consumedOutputs?.issues ?? [])],
-    instructions: skill.markdown,
-  };
-}
-
-export function buildSkillHandoffProfile(
-  skill: SkillHandoffProfileSource,
-  readiness?: SkillReadinessEntry,
-): SkillHandoffProfile {
-  return {
-    name: skill.name,
-    category: skill.category,
-    actionability: readiness?.readiness ?? "available",
-    requires: [...(skill.contract?.requires ?? skill.requires ?? [])],
-    consumes: [...(skill.contract?.consumes ?? skill.consumes ?? [])],
-    missingRequiredInputs: [...(readiness?.missingRequires ?? [])],
-    satisfiedRequiredInputs: [...(readiness?.satisfiedRequires ?? [])],
-    satisfiedConsumedInputs: [...(readiness?.satisfiedConsumes ?? [])],
-    blockingIssues: [...(readiness?.issues ?? [])],
-    sourceSkillNames: [...(readiness?.sourceSkillNames ?? [])],
-    sourceEventIds: [...(readiness?.sourceEventIds ?? [])],
-  };
-}
-
-export function buildSkillRoutingCatalogEntry(
-  skill: Pick<SkillDocument, "name" | "category" | "authoredMarkdown" | "contract">,
-): SkillRoutingCatalogEntry {
-  return {
-    name: skill.name,
-    category: skill.category,
-    selection: buildSkillSelectionProfile(skill),
-    requires: [...(skill.contract.requires ?? [])],
-    consumes: [...(skill.contract.consumes ?? [])],
   };
 }

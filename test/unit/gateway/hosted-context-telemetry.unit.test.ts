@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { CONTEXT_COMPOSED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
-import type { ContextComposerResult } from "../../../packages/brewva-gateway/src/runtime-plugins/context-composer.js";
+import type { HostedContextRenderResult } from "../../../packages/brewva-gateway/src/runtime-plugins/hosted-context-blocks.js";
 import { createHostedContextTelemetry } from "../../../packages/brewva-gateway/src/runtime-plugins/hosted-context-telemetry.js";
 import { createRuntimeFixture } from "../../helpers/runtime.js";
 
@@ -22,46 +22,29 @@ describe("hosted context telemetry", () => {
       },
     });
     const telemetry = createHostedContextTelemetry(runtime);
-    const composed: ContextComposerResult = {
+    const rendered: HostedContextRenderResult = {
       blocks: [
         {
-          id: "narrative-1",
-          category: "narrative",
-          provenance: "primary_source",
+          id: "active-workbench",
           content: "n",
           estimatedTokens: 10,
         },
         {
-          id: "constraint-1",
-          category: "constraint",
-          provenance: "composer_policy_block",
+          id: "context-status",
           content: "c",
           estimatedTokens: 4,
         },
-        {
-          id: "diagnostic-1",
-          category: "diagnostic",
-          provenance: "guarded_supplemental",
-          content: "d",
-          estimatedTokens: 2,
-        },
       ],
       content: "payload",
-      metrics: {
-        totalTokens: 16,
-        narrativeTokens: 10,
-        constraintTokens: 4,
-        diagnosticTokens: 2,
-        narrativeRatio: 0.625,
-      },
+      totalTokens: 14,
       surfacedDelegationRunIds: [],
     };
 
     telemetry.emitContextComposed({
       sessionId: "s-telemetry",
       turn: 3,
-      composed,
-      injectionAccepted: true,
+      rendered,
+      workbenchContextRendered: true,
     });
 
     expect(recorded).toHaveLength(1);
@@ -70,27 +53,10 @@ describe("hosted context telemetry", () => {
       turn: 3,
       type: CONTEXT_COMPOSED_EVENT_TYPE,
       payload: {
-        narrativeBlockCount: 1,
-        constraintBlockCount: 1,
-        diagnosticBlockCount: 1,
-        totalTokens: 16,
-        narrativeTokens: 10,
-        narrativeRatio: 0.625,
-        injectionAccepted: true,
-        primarySourceBlockCount: 1,
-        guardedSupplementalBlockCount: 1,
-        composerPolicyBlockCount: 1,
-        primarySourceTokens: 10,
-        guardedSupplementalTokens: 2,
-        composerPolicyBlockTokens: 4,
-        guardedSupplementalFamilies: [
-          {
-            familyId: "diagnostic-1",
-            blockCount: 1,
-            tokenCount: 2,
-            laneReason: "unspecified",
-          },
-        ],
+        blockCount: 2,
+        totalTokens: 14,
+        workbenchContextRendered: true,
+        blockIds: ["active-workbench", "context-status"],
       },
     });
     expect(recorded[0]?.timestamp).toEqual(expect.any(Number));

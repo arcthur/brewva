@@ -25,6 +25,12 @@ export interface TokenEstimatorHints {
   encoding?: BrewvaTokenEncoding | null;
 }
 
+export interface ProviderPayloadTokenEstimateMetadata {
+  provider?: string | null;
+  api?: string | null;
+  modelId?: string | null;
+}
+
 export interface BrewvaTokenEstimate {
   tokens: number;
   encoding: BrewvaTokenEncoding;
@@ -153,6 +159,178 @@ export function estimateStructuredModelTokens(
 
 export function estimateStructuredTokenCount(value: unknown, hints?: TokenEstimatorHints): number {
   return estimateStructuredModelTokens(value, hints).tokens;
+}
+
+const NON_TEXTUAL_PAYLOAD_TYPES = new Set([
+  "image",
+  "image_url",
+  "image_file",
+  "input_image",
+  "input_audio",
+  "audio",
+  "video",
+  "file",
+  "file_data",
+]);
+
+const NON_TEXTUAL_PAYLOAD_KEYS = new Set([
+  "image",
+  "image_url",
+  "imageUrl",
+  "image_file",
+  "imageFile",
+  "input_image",
+  "inputImage",
+  "input_audio",
+  "inputAudio",
+  "audio",
+  "video",
+  "file",
+  "file_data",
+  "fileData",
+]);
+
+const NON_TEXTUAL_STRING_KEYS = new Set([
+  "data",
+  "bytes",
+  "b64_json",
+  "base64",
+  "mimeType",
+  "mime_type",
+  "mediaType",
+  "media_type",
+]);
+
+const LOW_SIGNAL_PROVIDER_PAYLOAD_STRING_KEYS = new Set([
+  "model",
+  "provider",
+  "type",
+  "id",
+  "call_id",
+  "tool_call_id",
+  "response_id",
+  "sessionId",
+  "session_id",
+  "cachePolicy",
+  "cache_policy",
+  "transport",
+  "tool_choice",
+  "parallel_tool_calls",
+  "encoding",
+  "format",
+  "role",
+]);
+
+interface PayloadStringContext {
+  parent?: Record<string, unknown>;
+  key?: string;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  return value as Record<string, unknown>;
+}
+
+function isNonTextualPayloadRecord(record: Record<string, unknown>): boolean {
+  const type = typeof record.type === "string" ? record.type.toLowerCase() : null;
+  if (type && NON_TEXTUAL_PAYLOAD_TYPES.has(type)) {
+    return true;
+  }
+  for (const key of NON_TEXTUAL_PAYLOAD_KEYS) {
+    if (key in record) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function shouldCountProviderPayloadString(value: string, context: PayloadStringContext): boolean {
+  if (value.trim().length === 0) {
+    return false;
+  }
+  const key = context.key;
+  if (key && LOW_SIGNAL_PROVIDER_PAYLOAD_STRING_KEYS.has(key)) {
+    return false;
+  }
+  if (key && NON_TEXTUAL_STRING_KEYS.has(key)) {
+    return false;
+  }
+  if (context.parent && isNonTextualPayloadRecord(context.parent)) {
+    return false;
+  }
+  return true;
+}
+
+function deriveProviderPayloadTokenEstimatorHints(
+  payload: unknown,
+  metadata?: ProviderPayloadTokenEstimateMetadata,
+): TokenEstimatorHints {
+  const record = asRecord(payload);
+  const modelId =
+    metadata?.modelId ??
+    (record && typeof record.model === "string"
+      ? record.model
+      : record && typeof record.modelId === "string"
+        ? record.modelId
+        : null);
+  const api =
+    metadata?.api ??
+    (record && typeof record.api === "string"
+      ? record.api
+      : record && typeof record.providerApi === "string"
+        ? record.providerApi
+        : null);
+  return {
+    api,
+    provider: metadata?.provider,
+    modelId,
+  };
+}
+
+function estimateProviderPayloadTextTokensInner(
+  value: unknown,
+  context: PayloadStringContext,
+  hints: TokenEstimatorHints,
+): number {
+  if (typeof value === "string") {
+    return shouldCountProviderPayloadString(value, context)
+      ? estimateStructuredTokenCount(value, hints)
+      : 0;
+  }
+  if (Array.isArray(value)) {
+    return value.reduce(
+      (sum, entry) =>
+        sum + estimateProviderPayloadTextTokensInner(entry, { parent: context.parent }, hints),
+      0,
+    );
+  }
+
+  const record = asRecord(value);
+  if (!record) {
+    return 0;
+  }
+  if (isNonTextualPayloadRecord(record)) {
+    return 0;
+  }
+
+  let total = 0;
+  for (const [key, entry] of Object.entries(record)) {
+    total += estimateProviderPayloadTextTokensInner(entry, { parent: record, key }, hints);
+  }
+  return total;
+}
+
+export function estimateProviderPayloadTextTokens(
+  payload: unknown,
+  metadata?: ProviderPayloadTokenEstimateMetadata,
+): number {
+  return estimateProviderPayloadTextTokensInner(
+    payload,
+    {},
+    deriveProviderPayloadTokenEstimatorHints(payload, metadata),
+  );
 }
 
 export function normalizePercent(

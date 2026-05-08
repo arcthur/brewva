@@ -206,10 +206,6 @@ describe("session wire status seeds", () => {
           latestSourceEventType: null,
           recentTransitions: [],
         },
-        skill: {
-          posture: "none",
-          activeSkillName: null,
-        },
         approval: {
           status: "pending",
           pendingCount: 1,
@@ -260,10 +256,6 @@ describe("session wire status seeds", () => {
           latestSourceEventType: "reasoning_revert_recorded",
           recentTransitions: [],
         },
-        skill: {
-          posture: "none",
-          activeSkillName: null,
-        },
         approval: {
           status: "idle",
           pendingCount: 0,
@@ -311,10 +303,6 @@ describe("session wire status seeds", () => {
           latestSourceEventId: null,
           latestSourceEventType: null,
           recentTransitions: [],
-        },
-        skill: {
-          posture: "none",
-          activeSkillName: null,
         },
         approval: {
           status: "idle",

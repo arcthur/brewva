@@ -6,53 +6,72 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache-blue.svg?style=for-the-badge" alt="Apache License"></a>
 </p>
 
-Brewva is an AI-native coding-agent runtime built with Bun and TypeScript. It keeps agent execution explicit, evented, and recoverable: intelligence can explore and propose, but the runtime authorizes effects and records durable system commitments.
+Brewva is an AI-native coding-agent runtime built with Bun and TypeScript. It
+lets the model operate its own working memory while the runtime keeps effects,
+cost, cache, replay, and recovery explicit.
 
-**Intelligence explores. Kernel authorizes effects. Tape remembers commitments.**
+**Model owns attention. Kernel owns consequence. Tape owns truth. Runtime owns physics.**
 
 ## What Brewva Optimizes For
 
-- Deterministic runtime boundaries for context, tools, verification, cost, and state mutation
-- A shared invocation spine with an explicit `safe | effectful` execution boundary
-- Per-tool least privilege through repo-owned capability declarations and scoped runtime facades
-- Tape-first durability and replay, with working state rebuilt from event history
-- Explicit proposal and governance boundaries instead of implicit agent-side mutation
+- Model-operated working memory through `workbench_note`, `workbench_evict`,
+  `workbench_undo_evict`, on-demand `recall_search`, and LLM-driven
+  `workbench_compact`
+- Consequence governance through explicit `safe | effectful` execution and
+  approval-bearing commitment boundaries
+- Per-tool least privilege through repo-owned capability declarations and
+  scoped runtime facades
+- Tape-first durability and replay, with working state rebuilt from committed
+  history and stored compact baselines
+- Cache-aware request shaping, numeric context status, and provider usage
+  accounting as first-class runtime physics
+- Gateway-owned model calls for main turns, compaction, model routing, provider
+  cache policy, and cost tracking
 - Replay-first approval and rollback flows instead of hidden in-memory authority
-- Bounded autonomy through policy-driven execution, context pressure controls, and failure handling
-- Extensible operator surfaces through CLI, gateway, runtime plugins, channel adapters, and ingress packages
+- Extensible operator surfaces through CLI, gateway, runtime plugins, channel
+  adapters, and ingress packages
 
 The runtime is optimized around one question:
 
-`Why can we trust this agent action?`
+`How can the model stay autonomous without making effects or recovery untrustworthy?`
 
 ## Architecture
 
 ```mermaid
 flowchart TD
-  AGENT["Agent (LLM)"]
-  SPINE["Invocation Spine<br/>usage + WAL/events + ledger + tracking"]
-  EFFECT["Effect Gate<br/>safe / effectful"]
-  BOUNDARY["Commitment Boundary<br/>receipts + operator/governance decisions"]
-  DURABILITY["Durability Layer<br/>Event Tape + Replay + Recovery WAL"]
-  PROJECTION["Working Projection<br/>units.jsonl + working.md"]
-  OPERATORS["Operator Surfaces<br/>CLI + Gateway + Runtime Plugins + Channels"]
+  MODEL["Model<br/>owns attention"]
+  WORKBENCH["Workbench Plane<br/>notes + evictions + on-demand recall"]
+  GATEWAY["Gateway Model Boundary<br/>main turn + LLM compaction + cache policy"]
+  PHYSICS["Runtime Physics<br/>context status + cost + provider limits"]
+  KERNEL["Kernel<br/>effect gates + verification + approvals"]
+  TAPE["Tape<br/>receipts + replay + compact baselines"]
+  OPERATOR["Operator Surfaces<br/>CLI + Gateway + Runtime Plugins + Channels"]
 
-  AGENT --> SPINE
-  SPINE --> EFFECT
-  EFFECT --> BOUNDARY
-  BOUNDARY --> DURABILITY
-  DURABILITY --> PROJECTION
-  OPERATORS --> EFFECT
-  OPERATORS --> BOUNDARY
-  OPERATORS --> DURABILITY
+  MODEL --> WORKBENCH
+  WORKBENCH --> GATEWAY
+  GATEWAY --> PHYSICS
+  MODEL --> KERNEL
+  PHYSICS --> KERNEL
+  KERNEL --> TAPE
+  TAPE --> WORKBENCH
+  OPERATOR --> KERNEL
+  OPERATOR --> TAPE
 ```
 
 Current runtime shape:
 
+- the model curates active attention through workbench tools and on-demand
+  recall instead of a hidden per-turn context admission pipeline.
+- LLM-driven compaction is the primary continuation path; deterministic
+  compaction is an emergency degraded fallback.
 - `safe` execution keeps read-only and observational work on the direct path.
-- `effectful` execution records receipts, preserves rollbackability for reversible mutations, and routes approval-bound effects through `effect_commitment`.
-- when no host `governancePort` authorizes an approval-bound effect, Brewva opens a replayable operator desk instead of silently permitting the action.
-- pending and approved commitment requests are rebuilt from tape after restart, so approval flow is replay-first rather than process-local.
+- `effectful` execution records receipts, preserves rollbackability for
+  reversible mutations, and routes approval-bound effects through
+  `effect_commitment`.
+- when no host `governancePort` authorizes an approval-bound effect, Brewva
+  opens a replayable operator desk instead of silently permitting the action.
+- pending and approved commitment requests are rebuilt from tape after restart,
+  so approval flow is replay-first rather than process-local.
 
 Repository-level change fitness may still integrate with Brewva through host
 policy or imported evidence, but that remains adjacent to the default runtime
@@ -72,11 +91,14 @@ Implementation detail and system boundaries:
 
 ## Package Surfaces
 
-- `@brewva/brewva-runtime`: runtime contracts, replay, projection, verification, governance, cost, and WAL durability
-- `@brewva/brewva-tools`: runtime-aware tools for code, tape, task, schedule, observability, and explicit subagent flows
-- `@brewva/brewva-deliberation`: evidence-backed narrative memory and optimization-continuity substrate
-- `@brewva/brewva-skill-broker`: post-execution skill-promotion brokerage and persisted draft/review flow
-- `@brewva/brewva-gateway/runtime-plugins`: runtime plugin wiring, integration guards, and hidden-context composition
+- `@brewva/brewva-runtime`: runtime contracts, replay, projection,
+  verification, governance, cost, workbench operation records, numeric context
+  status, and WAL durability
+- `@brewva/brewva-tools`: runtime-aware tools for code, tape, task, schedule,
+  observability, workbench memory, recall, and explicit subagent flows
+- `@brewva/brewva-gateway/runtime-plugins`: runtime plugin wiring,
+  integration guards, workbench context composition, and cache-aware request
+  shaping
 - `@brewva/brewva-cli`: interactive CLI, print/json modes, replay/undo, daemon, and the user-facing front door into gateway-hosted channels
 - `@brewva/brewva-gateway`: local control-plane daemon, worker supervision, and subagent/session orchestration
 - `@brewva/brewva-channels-telegram`: Telegram adapter and transport
@@ -84,15 +106,16 @@ Implementation detail and system boundaries:
 - `distribution/brewva` and `distribution/brewva-*`: launcher and per-platform binary packages
 - `distribution/worker`: edge deployment templates for webhook ingress
 
-## Skill Surface
+## Skill And Memory Surface
 
-Skills define semantic work contracts. Delegated workers define execution
-envelopes. The parent runtime owns active skill state, completion, task truth,
-and patch adoption.
+Skills are model-readable repository guidance, not hosted runtime gates.
+Delegated workers define execution envelopes. The runtime owns effect
+governance, verification, task truth, and patch adoption; the model owns which
+guidance to read and what to preserve in the workbench.
 
 The stable taxonomy is role-based:
 
-- `core` and `domain` carry most routable work territory
+- `core` and `domain` carry most authored work territory
 - `operator` and `meta` are loaded and inspectable, but usually hidden from
   default routing scopes
 - project overlays and shared guidance tighten repository behavior without
@@ -101,7 +124,7 @@ The stable taxonomy is role-based:
 For taxonomy and exact generated inventories, see `docs/guide/features.md` and
 `docs/reference/skills.md`.
 
-One common delivery chain is:
+One common advisory chain is:
 
 `repository-analysis -> discovery -> strategy -> learning-research -> plan -> prep -> implementation -> review -> qa -> ship -> retro -> knowledge-capture`
 
@@ -119,6 +142,10 @@ than a kernel-managed stage planner.
 
 `planning_posture` is an upstream handoff output for non-trivial work, not a
 standalone skill or a hidden runtime planner.
+
+For active continuity, the model writes workbench notes, evicts stale spans,
+calls recall on demand, and compacts when context status says the physical
+window is approaching a hard limit.
 
 ## Quick Start
 

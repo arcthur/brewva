@@ -9,8 +9,8 @@ import {
   buildBrewvaPromptText,
   type BrewvaPromptContentPart,
 } from "@brewva/brewva-substrate/prompt";
-import { requireDefined, requireNonEmptyString } from "../../helpers/assertions.js";
-import { recordHostedSkillCompleted } from "../../helpers/events.js";
+import { requireDefined } from "../../helpers/assertions.js";
+import { recordHostedDelegationOutcome } from "../../helpers/events.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 type RegisteredCommand = {
@@ -70,21 +70,36 @@ describe("questions interactive command runtime plugin", () => {
       config: structuredClone(DEFAULT_BREWVA_CONFIG),
     });
     const sessionId = "questions-command-session-1";
-    const questionEvent = requireDefined(
-      recordHostedSkillCompleted({
-        runtime,
-        sessionId,
-        skillName: "plan",
-        outputs: {
-          open_questions: ["Which deployment target should the gateway use?"],
+    const runId = "questions-command-run-1";
+    recordHostedDelegationOutcome({
+      runtime,
+      sessionId,
+      runId,
+      payload: {
+        delegate: "advisor",
+        kind: "consult",
+        consultKind: "review",
+      },
+      outcome: {
+        ok: true,
+        runId,
+        delegate: "advisor",
+        label: "advisor",
+        kind: "consult",
+        consultKind: "review",
+        status: "ok",
+        summary: "Open question available.",
+        data: {
+          kind: "consult",
+          consultKind: "review",
+          conclusion: "The run needs operator input.",
+          followUpQuestions: ["Which deployment target should the gateway use?"],
         },
-      }),
-      "Expected question event to be recorded.",
-    );
-    const questionEventId = requireNonEmptyString(
-      questionEvent.id,
-      "Expected recorded question event id.",
-    );
+        metrics: { durationMs: 1 },
+        evidenceRefs: [],
+      },
+    });
+    const questionId = `delegation:${runId}:1`;
 
     const beforeEventCount = runtime.inspect.events.query(sessionId).length;
     const { api, commands } = createCommandApiMock();
@@ -113,7 +128,7 @@ describe("questions interactive command runtime plugin", () => {
     expect(rendered).toContain("Operator inbox: 1");
     expect(rendered).toContain("Input requests: 0 · Follow-up questions: 1");
     expect(rendered).toContain("Follow-up questions:");
-    expect(rendered).toContain(questionEventId);
+    expect(rendered).toContain(questionId);
     expect(rendered).toContain("Which deployment target should the gateway use?");
     expect(notifications.at(-1)?.level).toBe("info");
   });
@@ -126,18 +141,36 @@ describe("questions interactive command runtime plugin", () => {
       config: structuredClone(DEFAULT_BREWVA_CONFIG),
     });
     const sessionId = "questions-answer-session-1";
-    const questionEvent = requireDefined(
-      recordHostedSkillCompleted({
-        runtime,
-        sessionId,
-        skillName: "plan",
-        outputs: {
-          open_questions: ["Which deployment target should the gateway use?"],
+    const runId = "questions-answer-run-1";
+    recordHostedDelegationOutcome({
+      runtime,
+      sessionId,
+      runId,
+      payload: {
+        delegate: "advisor",
+        kind: "consult",
+        consultKind: "review",
+      },
+      outcome: {
+        ok: true,
+        runId,
+        delegate: "advisor",
+        label: "advisor",
+        kind: "consult",
+        consultKind: "review",
+        status: "ok",
+        summary: "Answerable question available.",
+        data: {
+          kind: "consult",
+          consultKind: "review",
+          conclusion: "The run needs operator input.",
+          followUpQuestions: ["Which deployment target should the gateway use?"],
         },
-      }),
-      "Expected answerable question event to be recorded.",
-    );
-    const questionId = `skill:${requireNonEmptyString(questionEvent.id, "Expected question event id.")}:1`;
+        metrics: { durationMs: 1 },
+        evidenceRefs: [],
+      },
+    });
+    const questionId = `delegation:${runId}:1`;
 
     const { api, commands, sentMessages } = createCommandApiMock();
     await createQuestionsCommandRuntimePlugin(runtime).register(api);

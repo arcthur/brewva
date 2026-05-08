@@ -16,7 +16,6 @@ export function registerRuntimeLazyDomainServices(
 ): RuntimeLazyServiceFactories {
   const patchingDomain = registerPatchingDomain(options, {
     ledgerService: options.ledgerService,
-    skillLifecycleService: options.skillLifecycleService,
     reversibleMutationService: options.reversibleMutationService,
   });
   const reasoningDomain = registerReasoningDomain(options);

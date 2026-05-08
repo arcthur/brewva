@@ -65,7 +65,6 @@ describe("repository catalog contracts", () => {
 
     for (const name of ["plan", "strategy", "prep", "extract", "git"]) {
       expect(runtime.inspect.skills.get(name)?.name).toBe(name);
-      expect(runtime.authority.skills.activate(`skill-catalog-new-${name}`, name).ok).toBe(true);
     }
   });
 

@@ -47,7 +47,7 @@ describe("operator question collection", () => {
       requestId: "request-1",
       sessionId: "session-1",
       createdAt: Date.now(),
-      sourceKind: "skill",
+      sourceKind: "tool",
       sourceEventId: "event-1",
       sourceLabel: "skill:plan",
       questions: [

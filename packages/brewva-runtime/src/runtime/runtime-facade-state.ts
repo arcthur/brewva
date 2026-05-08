@@ -9,7 +9,6 @@ import {
 } from "../domain/context/api.js";
 import { normalizeAgentId } from "../domain/context/api.js";
 import { HISTORY_VIEW_BASELINE_RESERVED_BUDGET_RATIO } from "../domain/context/api.js";
-import type { ToolOutputDistillationEntry } from "../domain/context/api.js";
 import type {
   HistoryViewBaselineSnapshot,
   RecoveryPostureSnapshot,
@@ -30,14 +29,10 @@ import { ensureBundledSystemSkills } from "../domain/skills/api.js";
 import type { SkillRefreshInput, SkillRefreshResult } from "../domain/skills/api.js";
 import { resolveTaskTargetDescriptor } from "../domain/task/api.js";
 import type { TaskTargetDescriptor, TaskState } from "../domain/task/api.js";
-import { TOOL_OUTPUT_DISTILLED_EVENT_TYPE } from "../domain/tools/api.js";
 import type { TruthState } from "../domain/truth/api.js";
 import { VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE } from "../domain/verification/api.js";
 import type { VerificationReport } from "../domain/verification/api.js";
-import {
-  readToolOutputDistilledEventPayload,
-  readVerificationOutcomeRecordedEventPayload,
-} from "../events/descriptors.js";
+import { readVerificationOutcomeRecordedEventPayload } from "../events/descriptors.js";
 import type { BrewvaEventRecord } from "../events/types.js";
 import { sanitizeContextText } from "../security/sanitize.js";
 import {
@@ -87,7 +82,6 @@ class RuntimeFacadeStateController implements BrewvaHostedRuntimePort {
   declare private readonly parallel: RuntimeCoreDependencyMap["parallel"];
   declare private readonly parallelResults: RuntimeCoreDependencyMap["parallelResults"];
   declare private readonly contextBudget: RuntimeCoreDependencyMap["contextBudget"];
-  declare private readonly contextInjection: RuntimeCoreDependencyMap["contextInjection"];
   declare private readonly fileChanges: RuntimeCoreDependencyMap["fileChanges"];
   declare private readonly costTracker: SessionCostTracker;
 
@@ -106,13 +100,13 @@ class RuntimeFacadeStateController implements BrewvaHostedRuntimePort {
   private readonly effectRuntimeLayer: ReturnType<typeof createRuntimeEffectLayer>;
   private readonly clearEffectCommitmentDeskState: (sessionId: string) => void;
   declare private readonly contextService: RuntimeServiceDependencyMap["contextService"];
+  declare private readonly workbenchService: RuntimeServiceDependencyMap["workbenchService"];
   declare private readonly costService: RuntimeServiceDependencyMap["costService"];
   declare private readonly eventPipeline: RuntimeServiceDependencyMap["eventPipeline"];
   declare private readonly ledgerService: RuntimeServiceDependencyMap["ledgerService"];
   declare private readonly taskWatchdogService: RuntimeServiceDependencyMap["taskWatchdogService"];
   declare private readonly sessionLifecycleService: RuntimeServiceDependencyMap["sessionLifecycleService"];
   declare private readonly sessionLineageService: RuntimeServiceDependencyMap["sessionLineageService"];
-  declare private readonly skillLifecycleService: RuntimeServiceDependencyMap["skillLifecycleService"];
   declare private readonly taskService: RuntimeServiceDependencyMap["taskService"];
   declare private readonly truthService: RuntimeServiceDependencyMap["truthService"];
   declare private readonly toolLifecycleRecoveryWalService: RuntimeServiceDependencyMap["toolLifecycleRecoveryWalService"];
@@ -194,8 +188,6 @@ class RuntimeFacadeStateController implements BrewvaHostedRuntimePort {
         getTruthState: (sessionId) => this.getTruthState(sessionId),
         recordEvent: (input) => this.recordEvent(input),
         sanitizeInput: (text) => this.sanitizeInput(text),
-        getRecentToolOutputDistillations: (sessionId, maxEntries) =>
-          this.getRecentToolOutputDistillations(sessionId, maxEntries),
         getLatestVerificationOutcome: (sessionId) => this.getLatestVerificationOutcome(sessionId),
         isContextBudgetEnabled: () => this.isContextBudgetEnabled(),
         resolveCheckpointCostSummary: (sessionId) => this.resolveCheckpointCostSummary(sessionId),
@@ -216,19 +208,18 @@ class RuntimeFacadeStateController implements BrewvaHostedRuntimePort {
     this.eventStore = coreDependencies.eventStore;
     this.recoveryWalStore = coreDependencies.recoveryWalStore;
     this.contextBudget = coreDependencies.contextBudget;
-    this.contextInjection = coreDependencies.contextInjection;
     this.turnReplay = coreDependencies.turnReplay;
     this.reasoningReplay = coreDependencies.reasoningReplay;
     this.fileChanges = coreDependencies.fileChanges;
     this.costTracker = coreDependencies.costTracker;
     this.projectionEngine = coreDependencies.projectionEngine;
     this.kernel = kernel;
-    this.skillLifecycleService = serviceDependencies.skillLifecycleService;
     this.taskService = serviceDependencies.taskService;
     this.truthService = serviceDependencies.truthService;
     this.ledgerService = serviceDependencies.ledgerService;
     this.costService = serviceDependencies.costService;
     this.contextService = serviceDependencies.contextService;
+    this.workbenchService = serviceDependencies.workbenchService;
     this.taskWatchdogService = serviceDependencies.taskWatchdogService;
     this.sessionLineageService = serviceDependencies.sessionLineageService;
     this.eventPipeline = serviceDependencies.eventPipeline;
@@ -253,11 +244,10 @@ class RuntimeFacadeStateController implements BrewvaHostedRuntimePort {
     const surfaces = createRuntimeSemanticSurfaces({
       runtimeConfig: this.runtimeConfig,
       skillRegistry: this.skillRegistry,
-      getSkillLifecycleService: () => this.skillLifecycleService,
       getProposalAdmissionService: () => this.getProposalAdmissionService(),
       getEffectCommitmentDeskService: () => this.getEffectCommitmentDeskService(),
-      contextInjection: this.contextInjection,
       getContextService: () => this.contextService,
+      getWorkbenchService: () => this.workbenchService,
       getSessionLifecycleService: () => this.sessionLifecycleService,
       getSessionLineageService: () => this.sessionLineageService,
       getTaskWatchdogService: () => this.taskWatchdogService,
@@ -492,8 +482,6 @@ class RuntimeFacadeStateController implements BrewvaHostedRuntimePort {
         latestSourceEventType: recoveryContext.transitionState.latestSourceEventType,
         recentTransitions: recoveryContext.transitionState.recentTransitions,
       },
-      activeSkillState: this.skillLifecycleService.getActiveSkillState(sessionId),
-      latestSkillFailure: this.skillLifecycleService.getLatestSkillFailure(sessionId),
       pendingApprovals: this.getEffectCommitmentDeskService().listPending(sessionId),
       openToolCalls: recoveryContext.canonicalization.openToolCalls,
       frames: this.getSessionWireService().query(sessionId),
@@ -586,44 +574,6 @@ class RuntimeFacadeStateController implements BrewvaHostedRuntimePort {
 
   private getCurrentTurn(sessionId: string): number {
     return this.sessionState.getCurrentTurn(sessionId);
-  }
-
-  private getRecentToolOutputDistillations(
-    sessionId: string,
-    maxEntries = 12,
-  ): ToolOutputDistillationEntry[] {
-    const limit = Number.isFinite(maxEntries) ? Math.max(1, Math.floor(maxEntries)) : 12;
-    const candidateEvents = this.eventStore.list(sessionId, {
-      type: TOOL_OUTPUT_DISTILLED_EVENT_TYPE,
-      last: Math.max(limit * 4, limit),
-    });
-
-    const entries: ToolOutputDistillationEntry[] = [];
-    for (const event of candidateEvents) {
-      const payload = readToolOutputDistilledEventPayload(event);
-      if (!payload) continue;
-      const turn =
-        typeof event.turn === "number" && Number.isFinite(event.turn)
-          ? Math.max(0, Math.floor(event.turn))
-          : 0;
-      const timestamp = Number.isFinite(event.timestamp) ? event.timestamp : Date.now();
-
-      entries.push({
-        toolName: payload.toolName,
-        strategy: payload.strategy,
-        summaryText: payload.summaryText,
-        rawTokens: payload.rawTokens,
-        summaryTokens: payload.summaryTokens,
-        compressionRatio: payload.compressionRatio,
-        artifactRef: payload.artifactRef,
-        isError: payload.isError,
-        verdict: payload.verdict ?? undefined,
-        turn,
-        timestamp,
-      });
-    }
-
-    return entries.slice(-limit);
   }
 
   private getLatestVerificationOutcome(sessionId: string):

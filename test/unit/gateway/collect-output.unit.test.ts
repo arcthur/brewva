@@ -257,7 +257,7 @@ describe("gateway collect output", () => {
           listener?.({
             type: "tool_execution_end",
             toolCallId: "tc-compact",
-            toolName: "session_compact",
+            toolName: "workbench_compact",
             result: "requested",
             isError: false,
           } as BrewvaPromptSessionEvent);
@@ -382,7 +382,7 @@ describe("gateway collect output", () => {
           listener?.({
             type: "tool_execution_end",
             toolCallId: "tc-compact-breaker",
-            toolName: "session_compact",
+            toolName: "workbench_compact",
             result: "requested",
             isError: false,
           } as BrewvaPromptSessionEvent);

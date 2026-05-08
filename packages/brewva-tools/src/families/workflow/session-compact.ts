@@ -21,15 +21,15 @@ function normalizeErrorMessage(error: unknown): string {
   return "unknown_error";
 }
 
-export function createSessionCompactTool(options: BrewvaBundledToolOptions): ToolDefinition {
-  const sessionCompactTool = createRuntimeBoundBrewvaToolFactory(
+export function createWorkbenchCompactTool(options: BrewvaBundledToolOptions): ToolDefinition {
+  const workbenchCompactTool = createRuntimeBoundBrewvaToolFactory(
     options.runtime,
-    "session_compact",
+    "workbench_compact",
   );
-  return sessionCompactTool.define({
-    name: "session_compact",
-    label: "Session Compact",
-    description: "Compact LLM message history for the current session.",
+  return workbenchCompactTool.define({
+    name: "workbench_compact",
+    label: "Workbench Compact",
+    description: "Compact LLM message history into the current workbench baseline.",
     parameters: Type.Object({
       reason: Type.Optional(Type.String({ minLength: 1, maxLength: 240 })),
     }),
@@ -37,7 +37,7 @@ export function createSessionCompactTool(options: BrewvaBundledToolOptions): Too
       const sessionId = getSessionId(ctx);
       const reason = normalizeReason(params.reason);
       const usage = ctx.getContextUsage();
-      const contextPort = resolveToolRuntimeContextPort(sessionCompactTool.runtime);
+      const contextPort = resolveToolRuntimeContextPort(workbenchCompactTool.runtime);
       const usagePercent =
         contextPort?.getUsageRatio?.(usage) ??
         (typeof usage?.percent === "number"
@@ -53,7 +53,7 @@ export function createSessionCompactTool(options: BrewvaBundledToolOptions): Too
           customInstructions,
           onError: (error) => {
             compactError = normalizeErrorMessage(error);
-            recordToolRuntimeEvent(sessionCompactTool.runtime, {
+            recordToolRuntimeEvent(workbenchCompactTool.runtime, {
               sessionId,
               type: "session_compact_failed",
               payload: {
@@ -69,7 +69,7 @@ export function createSessionCompactTool(options: BrewvaBundledToolOptions): Too
             error: compactError,
           });
         }
-        recordToolRuntimeEvent(sessionCompactTool.runtime, {
+        recordToolRuntimeEvent(workbenchCompactTool.runtime, {
           sessionId,
           type: "session_compact_requested",
           payload: {
@@ -80,7 +80,7 @@ export function createSessionCompactTool(options: BrewvaBundledToolOptions): Too
         });
       } catch (error) {
         const errorMessage = normalizeErrorMessage(error);
-        recordToolRuntimeEvent(sessionCompactTool.runtime, {
+        recordToolRuntimeEvent(workbenchCompactTool.runtime, {
           sessionId,
           type: "session_compact_request_failed",
           payload: {
@@ -95,7 +95,7 @@ export function createSessionCompactTool(options: BrewvaBundledToolOptions): Too
       }
 
       return textResult(
-        "Session compaction requested; the gateway will resume the interrupted turn after compaction.",
+        "Workbench compaction requested; the gateway will resume the interrupted turn after compaction.",
         {
           ok: true,
           reason: reason ?? null,

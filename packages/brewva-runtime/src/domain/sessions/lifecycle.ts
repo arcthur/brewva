@@ -1,7 +1,6 @@
 import type { BrewvaToolCallId, BrewvaToolName } from "../../core/identifiers.js";
 import type { RecoveryPendingFamily, RecoveryPostureMode } from "../context/api.js";
 import type { PendingEffectCommitmentRequest } from "../proposals/api.js";
-import type { ActiveSkillRuntimeState, SkillCompletionFailureRecord } from "../skills/api.js";
 import type { IntegrityStatus } from "./integrity.js";
 import type { OpenToolCallRecord, SessionHydrationState } from "./types.js";
 import type { SessionWireFrame } from "./wire.js";
@@ -62,13 +61,6 @@ export interface SessionLifecycleRecoverySnapshot {
   recentTransitions: SessionLifecycleTransitionSnapshot[];
 }
 
-export interface SessionLifecycleSkillSnapshot {
-  posture: "none" | "active" | "repair_required";
-  activeSkillName: string | null;
-  activeSkillState?: ActiveSkillRuntimeState;
-  latestFailure?: SkillCompletionFailureRecord;
-}
-
 export interface SessionLifecycleApprovalSnapshot {
   status: "idle" | "pending";
   pendingCount: number;
@@ -92,7 +84,6 @@ export interface SessionLifecycleSnapshot {
   hydration: SessionHydrationState;
   execution: SessionLifecycleExecutionSnapshot;
   recovery: SessionLifecycleRecoverySnapshot;
-  skill: SessionLifecycleSkillSnapshot;
   approval: SessionLifecycleApprovalSnapshot;
   tooling: SessionLifecycleToolingSnapshot;
   integrity: IntegrityStatus;
@@ -104,8 +95,6 @@ export interface SessionLifecycleSnapshotBuildInput {
   hydration: SessionHydrationState;
   integrity: IntegrityStatus;
   recovery: SessionLifecycleRecoverySnapshot;
-  activeSkillState?: ActiveSkillRuntimeState;
-  latestSkillFailure?: SkillCompletionFailureRecord;
   pendingApprovals: PendingEffectCommitmentRequest[];
   openToolCalls: OpenToolCallRecord[];
   frames: readonly SessionWireFrame[];

@@ -26,8 +26,8 @@ const DISPLACEMENT_TARGET_KINDS = new Set(["stable_doc", "solution_record"] as c
 const STABLE_DOC_PREFIXES = ["docs/architecture/", "docs/reference/"] as const;
 export const SOLUTION_DOC_PREFIX = "docs/solutions/";
 const PROMOTION_CANDIDATE_PREFIXES = [
-  ".brewva/skill-broker/materialized/",
-  ".brewva/skill-broker/",
+  ".brewva/knowledge/materialized/",
+  ".brewva/knowledge/",
 ] as const;
 
 export function readTrimmedString(value: unknown): string | undefined {

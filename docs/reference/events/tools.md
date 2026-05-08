@@ -50,4 +50,4 @@ target roots. Browser outputs remain workspace-root scoped.
 - `packages/brewva-runtime/src/domain/tools/tool-invocation-spine.ts`
 - `packages/brewva-runtime/src/domain/verification/verification.ts`
 - `packages/brewva-runtime/src/domain/governance/reversible-mutation.ts`
-- `packages/brewva-runtime/src/domain/context/tool-output-distilled.ts`
+- `packages/brewva-runtime/src/domain/tools/event-descriptors.ts`

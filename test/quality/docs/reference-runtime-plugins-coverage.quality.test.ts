@@ -25,7 +25,9 @@ const EXPECTED_SYMBOLS = [
   "registerQualityGate",
   "registerLedgerWriter",
   "registerToolResultDistiller",
-  "registerCompletionGuard",
+  "createHostedWorkbenchContextPipeline",
+  "buildCapabilityView",
+  "renderCapabilityView",
 ];
 
 describe("docs/reference runtime plugins coverage", () => {

@@ -294,7 +294,7 @@ export function resolveDelegationModelRoute(input: {
   }
 
   const keywordText = normalizeKeywordText(normalizeObjectiveText(input.packet));
-  const effectiveSkillName = input.target.skillName ?? input.packet.activeSkillName;
+  const effectiveSkillName = input.target.skillName;
   let resolvedRoute: ResolvedDelegationModelRoute | undefined;
   let resolvedScore = 0;
 

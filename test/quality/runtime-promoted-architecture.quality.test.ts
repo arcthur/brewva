@@ -97,7 +97,7 @@ describe("runtime promoted architecture guard", () => {
     expect(publicIndexSource).toContain("../domain/delegation/adoption.js");
     expect(publicIndexSource).toContain("../domain/reasoning/revert-summary.js");
     expect(publicIndexSource).toContain("../domain/skills/semantic-artifacts.js");
-    expect(publicIndexSource).toContain("../domain/skills/repair-policy.js");
+    expect(publicIndexSource).not.toContain("../domain/skills/repair-policy.js");
     expect(channelsSource).not.toMatch(/export \* from /u);
     expect(existsSync(resolve(repoRoot, "packages/brewva-runtime/src/markdown.ts"))).toBe(false);
     expect(eventsSource).not.toMatch(/export \* from /u);
@@ -356,7 +356,6 @@ describe("runtime promoted architecture guard", () => {
       "packages/brewva-runtime/src/domain/ledger/runtime-surface.ts",
       "packages/brewva-runtime/src/domain/sessions/runtime-surface.ts",
       "packages/brewva-runtime/src/domain/tools/runtime-surface.ts",
-      "packages/brewva-runtime/src/domain/skills/runtime-surface.ts",
       "packages/brewva-runtime/src/domain/task/runtime-surface.ts",
       "packages/brewva-runtime/src/domain/truth/runtime-surface.ts",
       "packages/brewva-runtime/src/domain/verification/runtime-surface.ts",
@@ -399,9 +398,9 @@ describe("runtime promoted architecture guard", () => {
     expect(replaySource).toContain("./domain/tape/api.js");
     expect(credentialsSource).toContain("createCredentialVaultService");
     expect(credentialsSource).not.toMatch(/export\s+\{\s*CredentialVaultService\b/u);
-    expect(contextSource).toContain("createContextArena");
     expect(contextSource).toContain("createContextBudgetManager");
-    expect(contextSource).toContain("createContextInjectionCollector");
+    expect(contextSource).not.toContain("createContextArena");
+    expect(contextSource).not.toContain("createContextInjectionCollector");
     expect(eventLogSource).toContain("createBrewvaEventStore");
     expect(eventLogSource).not.toMatch(/export\s+\{\s*BrewvaEventStore\b/u);
     expect(parallelSource).toContain("createParallelBudgetManager");

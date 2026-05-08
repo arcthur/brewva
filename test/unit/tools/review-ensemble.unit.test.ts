@@ -126,9 +126,9 @@ describe("review ensemble protocol", () => {
     expect(tasks[0]).toEqual(
       expect.objectContaining({
         label: "review-correctness",
-        activeSkillName: "review",
       }),
     );
+    expect(tasks[0]).not.toHaveProperty("activeSkillName");
     expect(tasks[0]?.objective).toContain("Lane focus:");
     expect(tasks[0]?.sharedNotes).toEqual(
       expect.arrayContaining([

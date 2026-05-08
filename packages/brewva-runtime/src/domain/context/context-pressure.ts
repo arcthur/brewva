@@ -1,291 +1,158 @@
 import type { BrewvaConfig } from "../../config/types.js";
-import { CONTEXT_COMPACTION_REQUESTED_EVENT_TYPE } from "../../events/registry.js";
-import type { BrewvaEventRecord } from "../../events/types.js";
-import type { RuntimeCallback } from "../../runtime/callback.js";
 import { resolveContextUsageRatio } from "../../utils/token.js";
-import { normalizeToolName } from "../../utils/tool-name.js";
-import { ContextBudgetManager } from "./budget.js";
-import type {
-  ContextBudgetUsage,
-  ContextCompactionGateStatus,
-  ContextCompactionReason,
-  ContextPressureLevel,
-  ContextPressureStatus,
-} from "./types.js";
+import type { ContextBudgetManager } from "./budget.js";
+import type { ContextBudgetUsage, ContextCompactionGateStatus, ContextStatus } from "./types.js";
 
-interface ContextPressureServiceOptions {
-  config: BrewvaConfig;
-  contextBudget: ContextBudgetManager;
-  alwaysAllowedTools?: string[];
-  getCurrentTurn: RuntimeCallback<[sessionId: string], number>;
-  recordEvent: RuntimeCallback<
-    [
-      input: {
-        sessionId: string;
-        type: string;
-        turn?: number;
-        payload?: object;
-        timestamp?: number;
-        skipTapeCheckpoint?: boolean;
-      },
-    ],
-    BrewvaEventRecord | undefined
-  >;
+export type PredictiveTurnGrowthPolicy =
+  BrewvaConfig["infrastructure"]["contextBudget"]["predictiveTurnGrowth"];
+
+export function estimatePredictiveTurnGrowthTokens(
+  contextWindow: number,
+  policy: PredictiveTurnGrowthPolicy,
+): number {
+  const normalizedWindow = Math.max(0, Math.trunc(contextWindow));
+  if (normalizedWindow <= 0) {
+    return 0;
+  }
+  const floorContextWindow = Math.max(1, Math.trunc(policy.floorContextWindow));
+  const largeContextWindow = Math.max(floorContextWindow, Math.trunc(policy.largeContextWindow));
+  const standardTokens = Math.max(1, Math.trunc(policy.standardTokens));
+  const largeTokens = Math.max(1, Math.trunc(policy.largeTokens));
+  const scalingFactor = Math.max(0, Math.min(1, policy.scalingFactor));
+
+  if (normalizedWindow < floorContextWindow) {
+    return 0;
+  }
+  if (normalizedWindow >= largeContextWindow) {
+    return largeTokens;
+  }
+  const scaledGrowth = Math.floor(normalizedWindow * scalingFactor);
+  return Math.max(1, Math.min(standardTokens, Math.max(standardTokens, scaledGrowth)));
 }
 
-export class ContextPressureService {
-  private readonly config: BrewvaConfig;
-  private readonly contextBudget: ContextBudgetManager;
-  private readonly alwaysAllowedToolSet: Set<string>;
-  private readonly getCurrentTurn: ContextPressureServiceOptions["getCurrentTurn"];
-  private readonly recordEvent: ContextPressureServiceOptions["recordEvent"];
+export function getContextUsage(
+  contextBudget: ContextBudgetManager,
+  sessionId: string,
+): ContextBudgetUsage | undefined {
+  const usage = contextBudget.getLastContextUsage(sessionId);
+  if (!usage) return undefined;
+  return {
+    tokens: usage.tokens,
+    contextWindow: usage.contextWindow,
+    percent: usage.percent,
+  };
+}
 
-  constructor(options: ContextPressureServiceOptions) {
-    this.config = options.config;
-    this.contextBudget = options.contextBudget;
-    this.alwaysAllowedToolSet = new Set(
-      (options.alwaysAllowedTools ?? [])
-        .map((toolName) => normalizeToolName(toolName))
-        .filter((toolName) => toolName.length > 0),
-    );
-    this.getCurrentTurn = options.getCurrentTurn;
-    this.recordEvent = options.recordEvent;
-  }
+export function getContextUsageRatio(usage: ContextBudgetUsage | undefined): number | null {
+  return resolveContextUsageRatio(usage);
+}
 
-  observeContextUsage(sessionId: string, usage: ContextBudgetUsage | undefined): void {
-    this.contextBudget.observeUsage(sessionId, usage);
-    if (!usage) return;
-    this.recordEvent({
-      sessionId,
-      type: "context_usage",
-      payload: {
-        tokens: usage.tokens,
-        contextWindow: usage.contextWindow,
-        percent: this.getContextUsageRatio(usage),
-      },
-    });
-  }
+export function getContextHardLimitRatio(
+  contextBudget: ContextBudgetManager,
+  sessionId: string,
+  usage?: ContextBudgetUsage,
+): number {
+  return Math.max(0, Math.min(1, contextBudget.getEffectiveHardLimitPercent(sessionId, usage)));
+}
 
-  getContextUsage(sessionId: string): ContextBudgetUsage | undefined {
-    const usage = this.contextBudget.getLastContextUsage(sessionId);
-    if (!usage) return undefined;
-    return {
-      tokens: usage.tokens,
-      contextWindow: usage.contextWindow,
-      percent: usage.percent,
-    };
-  }
+export function getContextCompactionThresholdRatio(
+  contextBudget: ContextBudgetManager,
+  sessionId: string,
+  usage?: ContextBudgetUsage,
+): number {
+  return Math.max(
+    0,
+    Math.min(1, contextBudget.getEffectiveCompactionThresholdPercent(sessionId, usage)),
+  );
+}
 
-  getContextUsageRatio(usage: ContextBudgetUsage | undefined): number | null {
-    return resolveContextUsageRatio(usage);
-  }
-
-  getContextHardLimitRatio(sessionId: string, usage?: ContextBudgetUsage): number {
-    return Math.max(
-      0,
-      Math.min(1, this.contextBudget.getEffectiveHardLimitPercent(sessionId, usage)),
-    );
-  }
-
-  getContextCompactionThresholdRatio(sessionId: string, usage?: ContextBudgetUsage): number {
-    return Math.max(
-      0,
-      Math.min(1, this.contextBudget.getEffectiveCompactionThresholdPercent(sessionId, usage)),
-    );
-  }
-
-  getContextPressureStatus(sessionId: string, usage?: ContextBudgetUsage): ContextPressureStatus {
-    const effectiveUsage = usage ?? this.getContextUsage(sessionId);
-    const usageRatio = this.getContextUsageRatio(effectiveUsage);
-    if (usageRatio === null) {
-      return {
-        level: "unknown",
-        usageRatio: null,
-        hardLimitRatio: this.getContextHardLimitRatio(sessionId, effectiveUsage),
-        compactionThresholdRatio: this.getContextCompactionThresholdRatio(
-          sessionId,
-          effectiveUsage,
-        ),
-      };
-    }
-
-    const hardLimitRatio = this.getContextHardLimitRatio(sessionId, effectiveUsage);
-    const compactionThresholdRatio = this.getContextCompactionThresholdRatio(
-      sessionId,
-      effectiveUsage,
-    );
-
-    let level: ContextPressureLevel = "none";
-    if (usageRatio >= hardLimitRatio) {
-      level = "critical";
-    } else if (usageRatio >= compactionThresholdRatio) {
-      level = "high";
-    } else {
-      // Keep medium/low bands proportional to compaction pressure so signals scale with user-configured thresholds.
-      const mediumThreshold = Math.max(0.5, compactionThresholdRatio * 0.75);
-      if (usageRatio >= mediumThreshold) {
-        level = "medium";
-      } else {
-        const lowThreshold = Math.max(0.25, compactionThresholdRatio * 0.5);
-        if (usageRatio >= lowThreshold) {
-          level = "low";
-        }
-      }
-    }
-
-    return {
-      level,
-      usageRatio,
-      hardLimitRatio,
-      compactionThresholdRatio,
-    };
-  }
-
-  getContextPressureLevel(sessionId: string, usage?: ContextBudgetUsage): ContextPressureLevel {
-    return this.getContextPressureStatus(sessionId, usage).level;
-  }
-
-  getRecentCompactionWindowTurns(): number {
-    return Math.max(1, this.config.infrastructure.contextBudget.compaction.minTurnsBetween);
-  }
-
-  getContextCompactionGateStatus(
-    sessionId: string,
-    usage?: ContextBudgetUsage,
-  ): ContextCompactionGateStatus {
-    const pressure = this.getContextPressureStatus(sessionId, usage);
-    const windowTurns = this.getRecentCompactionWindowTurns();
-
-    const lastCompactionTurn = this.contextBudget.getLastCompactionTurn(sessionId);
-    const turnsSinceCompaction =
-      lastCompactionTurn === null
-        ? null
-        : Math.max(0, this.getCurrentTurn(sessionId) - lastCompactionTurn);
-    const recentCompaction =
-      turnsSinceCompaction !== null && Number.isFinite(turnsSinceCompaction)
-        ? turnsSinceCompaction < windowTurns
-        : false;
-    const pendingReason = this.getPendingCompactionReason(sessionId);
-    const required =
-      this.config.infrastructure.contextBudget.enabled &&
-      pressure.level === "critical" &&
-      !recentCompaction;
-    const reason: ContextCompactionReason | null = required
-      ? (pendingReason ?? (pressure.level === "critical" ? "hard_limit" : "usage_threshold"))
+export function getContextStatus(input: {
+  contextBudget: ContextBudgetManager;
+  sessionId: string;
+  usage?: ContextBudgetUsage;
+}): ContextStatus {
+  const effectiveUsage = input.usage ?? getContextUsage(input.contextBudget, input.sessionId);
+  const contextWindow = Math.max(0, Math.trunc(effectiveUsage?.contextWindow ?? 0));
+  const tokens =
+    typeof effectiveUsage?.tokens === "number" && Number.isFinite(effectiveUsage.tokens)
+      ? Math.max(0, Math.trunc(effectiveUsage.tokens))
       : null;
+  const usageRatio = getContextUsageRatio(effectiveUsage);
+  const hardLimitRatio = getContextHardLimitRatio(
+    input.contextBudget,
+    input.sessionId,
+    effectiveUsage,
+  );
+  const compactionThresholdRatio = getContextCompactionThresholdRatio(
+    input.contextBudget,
+    input.sessionId,
+    effectiveUsage,
+  );
+  const hardLimitTokens = Math.floor(hardLimitRatio * contextWindow);
+  const predictedTurnGrowthTokens =
+    input.contextBudget.getPredictiveTurnGrowthTokens(contextWindow);
+  const tokensUntilPredictedOverflow =
+    tokens === null ? null : Math.max(0, hardLimitTokens - predictedTurnGrowthTokens - tokens);
+  const predictedOverflow =
+    tokens !== null && predictedTurnGrowthTokens > 0
+      ? tokens + predictedTurnGrowthTokens >= hardLimitTokens
+      : false;
 
-    return {
-      required,
-      reason,
-      pressure,
-      recentCompaction,
-      windowTurns,
-      lastCompactionTurn,
-      turnsSinceCompaction,
-    };
-  }
+  return {
+    tokensUsed: tokens,
+    tokensTotal: contextWindow,
+    tokensRemaining: tokens === null ? null : Math.max(0, contextWindow - tokens),
+    tokensUntilForcedCompact: tokens === null ? null : Math.max(0, hardLimitTokens - tokens),
+    predictedTurnGrowthTokens,
+    tokensUntilPredictedOverflow,
+    predictedOverflow,
+    usageRatio,
+    hardLimitRatio,
+    compactionThresholdRatio,
+    compactionAdvised: usageRatio !== null && usageRatio >= compactionThresholdRatio,
+    forcedCompaction: usageRatio !== null && usageRatio >= hardLimitRatio,
+  };
+}
 
-  checkContextCompactionGate(
-    sessionId: string,
-    toolName: string,
-    usage?: ContextBudgetUsage,
-  ): { allowed: boolean; reason?: string } {
-    return this.evaluateContextCompactionGate(sessionId, toolName, usage, { emitEvent: true });
-  }
+export function getRecentCompactionWindowTurns(config: BrewvaConfig): number {
+  return Math.max(1, config.infrastructure.contextBudget.compaction.minTurnsBetween);
+}
 
-  explainContextCompactionGate(
-    sessionId: string,
-    toolName: string,
-    usage?: ContextBudgetUsage,
-  ): { allowed: boolean; reason?: string } {
-    return this.evaluateContextCompactionGate(sessionId, toolName, usage, { emitEvent: false });
-  }
+export function getContextCompactionGateStatus(input: {
+  config: BrewvaConfig;
+  contextBudget: ContextBudgetManager;
+  sessionId: string;
+  usage?: ContextBudgetUsage;
+  getCurrentTurn: (sessionId: string) => number;
+}): ContextCompactionGateStatus {
+  const status = getContextStatus({
+    contextBudget: input.contextBudget,
+    sessionId: input.sessionId,
+    usage: input.usage,
+  });
+  const windowTurns = getRecentCompactionWindowTurns(input.config);
+  const lastCompactionTurn = input.contextBudget.getLastCompactionTurn(input.sessionId);
+  const turnsSinceCompaction =
+    lastCompactionTurn === null
+      ? null
+      : Math.max(0, input.getCurrentTurn(input.sessionId) - lastCompactionTurn);
+  const recentCompaction =
+    turnsSinceCompaction !== null && Number.isFinite(turnsSinceCompaction)
+      ? turnsSinceCompaction < windowTurns
+      : false;
+  const pendingReason = input.contextBudget.getPendingCompactionReason(input.sessionId);
+  const required =
+    input.config.infrastructure.contextBudget.enabled &&
+    status.forcedCompaction &&
+    !recentCompaction;
 
-  private evaluateContextCompactionGate(
-    sessionId: string,
-    toolName: string,
-    usage: ContextBudgetUsage | undefined,
-    options: {
-      emitEvent: boolean;
-    },
-  ): { allowed: boolean; reason?: string } {
-    const normalizedToolName = normalizeToolName(toolName);
-    if (normalizedToolName === "session_compact") {
-      return { allowed: true };
-    }
-    if (this.alwaysAllowedToolSet.has(normalizedToolName)) {
-      return { allowed: true };
-    }
-
-    const gate = this.getContextCompactionGateStatus(sessionId, usage);
-    if (!gate.required) {
-      return { allowed: true };
-    }
-
-    const usageRatio =
-      typeof gate.pressure.usageRatio === "number"
-        ? gate.pressure.usageRatio
-        : gate.pressure.hardLimitRatio;
-    const usagePercent = Math.max(0, Math.min(1, usageRatio)) * 100;
-    const hardLimitPercent = Math.max(0, Math.min(1, gate.pressure.hardLimitRatio)) * 100;
-    const allowedTools = [
-      "session_compact",
-      ...[...this.alwaysAllowedToolSet].toSorted((a, b) => a.localeCompare(b)),
-    ];
-    const reason = `Context usage is critical (${usagePercent.toFixed(1)}% >= hard limit ${hardLimitPercent.toFixed(1)}%). Call tool 'session_compact' first, then continue with other tools. Allowed during gate: ${allowedTools.join(", ")}.`;
-    if (options.emitEvent) {
-      this.recordEvent({
-        sessionId,
-        type: "context_compaction_gate_blocked_tool",
-        turn: this.getCurrentTurn(sessionId),
-        payload: {
-          blockedTool: toolName,
-          reason: "critical_context_pressure_without_compaction",
-          usagePercent: gate.pressure.usageRatio,
-          hardLimitPercent: gate.pressure.hardLimitRatio,
-        },
-      });
-    }
-    return { allowed: false, reason };
-  }
-
-  checkAndRequestCompaction(sessionId: string, usage: ContextBudgetUsage | undefined): boolean {
-    const decision = this.contextBudget.shouldRequestCompaction(sessionId, usage);
-    if (!decision.shouldCompact) return false;
-    this.requestCompaction(sessionId, decision.reason ?? "usage_threshold", decision.usage);
-    return true;
-  }
-
-  requestCompaction(
-    sessionId: string,
-    reason: ContextCompactionReason,
-    usage?: ContextBudgetUsage,
-  ): void {
-    const pendingReason = this.contextBudget.getPendingCompactionReason(sessionId);
-    if (pendingReason === reason) {
-      return;
-    }
-    this.contextBudget.requestCompaction(sessionId, reason);
-    this.recordEvent({
-      sessionId,
-      type: CONTEXT_COMPACTION_REQUESTED_EVENT_TYPE,
-      payload: {
-        reason,
-        usagePercent: this.getContextUsageRatio(usage),
-        tokens: usage?.tokens ?? null,
-      },
-    });
-  }
-
-  getPendingCompactionReason(sessionId: string): ContextCompactionReason | null {
-    return this.contextBudget.getPendingCompactionReason(sessionId);
-  }
-
-  getCompactionInstructions(): string {
-    return this.contextBudget.getCompactionInstructions();
-  }
-
-  markCompacted(sessionId: string): void {
-    this.contextBudget.markCompacted(sessionId);
-  }
+  return {
+    required,
+    reason: required ? (pendingReason ?? "hard_limit") : null,
+    status,
+    recentCompaction,
+    windowTurns,
+    lastCompactionTurn,
+    turnsSinceCompaction,
+  };
 }

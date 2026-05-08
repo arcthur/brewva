@@ -11,7 +11,7 @@
   - `docs/architecture/system-architecture.md`
   - `docs/reference/runtime.md`
   - `docs/reference/skills.md`
-  - `docs/reference/context-composer.md`
+  - `docs/reference/hosted-dynamic-context.md`
   - `docs/reference/tools.md`
   - `docs/journeys/operator/intent-driven-scheduling.md`
 
@@ -24,10 +24,10 @@ The lasting decisions were:
 
 - kernel authority stays narrow
 - deliberation artifacts are evidence-backed and non-authoritative
-- `@brewva/brewva-deliberation` owns memory and optimization-continuity
-  artifacts rather than kernel commitments
-- `@brewva/brewva-skill-broker` owns post-execution promotion flow rather than
-  turn-time skill brokerage
+- the deleted dedicated deliberation package previously owned memory and
+  optimization-continuity artifacts rather than kernel commitments
+- `<deleted: @brewva/brewva-skill-broker>` previously owned post-execution
+  promotion flow rather than turn-time skill brokerage
 - optimization remains model-native protocol behavior instead of runtime-owned
   planning authority
 
@@ -40,14 +40,14 @@ Read current behavior from:
 - `docs/architecture/system-architecture.md`
 - `docs/reference/runtime.md`
 - `docs/reference/skills.md`
-- `docs/reference/context-composer.md`
+- `docs/reference/hosted-dynamic-context.md`
 - `docs/reference/tools.md`
 - `docs/journeys/operator/intent-driven-scheduling.md`
 
-Implemented homes now include:
+Historical implementation homes included:
 
-- `packages/brewva-deliberation/src`
-- `packages/brewva-skill-broker/src`
+- the deleted dedicated deliberation implementation directory
+- `<deleted: packages/brewva-skill-broker/src>`
 - hosted registration and read-only exposure paths in `packages/brewva-gateway`
 
 ## Why Keep This Note

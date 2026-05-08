@@ -8,7 +8,6 @@
         "@brewva/brewva-box": "workspace:*",
         "@brewva/brewva-channels-telegram": "workspace:*",
         "@brewva/brewva-cli": "workspace:*",
-        "@brewva/brewva-deliberation": "workspace:*",
         "@brewva/brewva-effect": "workspace:*",
         "@brewva/brewva-gateway": "workspace:*",
         "@brewva/brewva-ingress": "workspace:*",
@@ -18,7 +17,6 @@
         "@brewva/brewva-runtime": "workspace:*",
         "@brewva/brewva-search": "workspace:*",
         "@brewva/brewva-session-index": "workspace:*",
-        "@brewva/brewva-skill-broker": "workspace:*",
         "@brewva/brewva-std": "workspace:*",
         "@brewva/brewva-substrate": "workspace:*",
         "@brewva/brewva-token-estimation": "workspace:*",
@@ -118,15 +116,6 @@
         "solid-js": "1.9.12",
       },
     },
-    "packages/brewva-deliberation": {
-      "name": "@brewva/brewva-deliberation",
-      "version": "0.1.0",
-      "dependencies": {
-        "@brewva/brewva-runtime": "workspace:*",
-        "@brewva/brewva-search": "workspace:*",
-        "@brewva/brewva-std": "workspace:*",
-      },
-    },
     "packages/brewva-effect": {
       "name": "@brewva/brewva-effect",
       "version": "0.1.0",
@@ -141,14 +130,12 @@
       "version": "0.1.0",
       "dependencies": {
         "@brewva/brewva-channels-telegram": "workspace:*",
-        "@brewva/brewva-deliberation": "workspace:*",
         "@brewva/brewva-effect": "workspace:*",
         "@brewva/brewva-ingress": "workspace:*",
         "@brewva/brewva-mcp-adapter": "workspace:*",
         "@brewva/brewva-provider-core": "workspace:*",
         "@brewva/brewva-recall": "workspace:*",
         "@brewva/brewva-runtime": "workspace:*",
-        "@brewva/brewva-skill-broker": "workspace:*",
         "@brewva/brewva-std": "workspace:*",
         "@brewva/brewva-substrate": "workspace:*",
         "@brewva/brewva-token-estimation": "workspace:*",
@@ -201,11 +188,9 @@
       "name": "@brewva/brewva-recall",
       "version": "0.1.0",
       "dependencies": {
-        "@brewva/brewva-deliberation": "workspace:*",
         "@brewva/brewva-runtime": "workspace:*",
         "@brewva/brewva-search": "workspace:*",
         "@brewva/brewva-session-index": "workspace:*",
-        "@brewva/brewva-skill-broker": "workspace:*",
         "@brewva/brewva-std": "workspace:*",
         "fuse.js": "^7.3.0",
       },
@@ -239,16 +224,6 @@
         "@brewva/brewva-search": "workspace:*",
         "@brewva/brewva-std": "workspace:*",
         "@duckdb/node-api": "1.5.2-r.1",
-      },
-    },
-    "packages/brewva-skill-broker": {
-      "name": "@brewva/brewva-skill-broker",
-      "version": "0.1.0",
-      "dependencies": {
-        "@brewva/brewva-deliberation": "workspace:*",
-        "@brewva/brewva-runtime": "workspace:*",
-        "@brewva/brewva-search": "workspace:*",
-        "@brewva/brewva-std": "workspace:*",
       },
     },
     "packages/brewva-std": {
@@ -293,12 +268,10 @@
       "version": "0.1.0",
       "dependencies": {
         "@brewva/brewva-box": "workspace:*",
-        "@brewva/brewva-deliberation": "workspace:*",
         "@brewva/brewva-effect": "workspace:*",
         "@brewva/brewva-recall": "workspace:*",
         "@brewva/brewva-runtime": "workspace:*",
         "@brewva/brewva-search": "workspace:*",
-        "@brewva/brewva-skill-broker": "workspace:*",
         "@brewva/brewva-std": "workspace:*",
         "@brewva/brewva-substrate": "workspace:*",
         "@brewva/brewva-tool-protocol": "workspace:*",
@@ -406,8 +379,6 @@
 
     "@brewva/brewva-darwin-arm64": ["@brewva/brewva-darwin-arm64@workspace:distribution/brewva-darwin-arm64"],
 
-    "@brewva/brewva-deliberation": ["@brewva/brewva-deliberation@workspace:packages/brewva-deliberation"],
-
     "@brewva/brewva-effect": ["@brewva/brewva-effect@workspace:packages/brewva-effect"],
 
     "@brewva/brewva-gateway": ["@brewva/brewva-gateway@workspace:packages/brewva-gateway"],
@@ -429,8 +400,6 @@
     "@brewva/brewva-search": ["@brewva/brewva-search@workspace:packages/brewva-search"],
 
     "@brewva/brewva-session-index": ["@brewva/brewva-session-index@workspace:packages/brewva-session-index"],
-
-    "@brewva/brewva-skill-broker": ["@brewva/brewva-skill-broker@workspace:packages/brewva-skill-broker"],
 
     "@brewva/brewva-std": ["@brewva/brewva-std@workspace:packages/brewva-std"],
 

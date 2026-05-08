@@ -39,7 +39,6 @@ import {
   buildDelegationRunRecordSeed,
   buildPatchArtifactRefs,
   buildWorkerResult,
-  formatSkillValidationError,
   resolveDelegationExecutionPlan,
   resolveRunSummary,
   sanitizeFragment,
@@ -314,7 +313,6 @@ async function main(): Promise<void> {
           parentSessionId: specParentSessionId,
           createdAt: spec.createdAt,
           label: spec.label,
-          parentSkill: parentRuntime.inspect.skills.getActive(spec.parentSessionId)?.name,
           boundary: executionPlan.boundary,
           modelRoute: executionPlan.modelRoute,
           delivery: existing?.delivery,
@@ -404,37 +402,6 @@ async function main(): Promise<void> {
         },
       });
     }
-    const skillValidation =
-      childOwnsSkill && childSessionId
-        ? childSession.runtime.inspect.skills.validateOutputs(
-            childSessionId,
-            structuredOutcome.skillOutputs ?? {},
-          )
-        : undefined;
-    if (childOwnsSkill && delegatedSkill && skillValidation && !skillValidation.ok) {
-      parentRuntime.extensions.hosted.events.record({
-        sessionId: spec.parentSessionId,
-        type: "subagent_skill_output_validation_failed",
-        payload: {
-          runId: spec.runId,
-          delegate: spec.delegate,
-          label: spec.label ?? null,
-          kind: targetRecord.resultMode,
-          consultKind: targetRecord.consultKind ?? null,
-          childSessionId,
-          skillName: delegatedSkill,
-          missing: skillValidation.missing,
-          invalid: skillValidation.invalid,
-        },
-      });
-      throw new Error(
-        formatSkillValidationError({
-          skillName: delegatedSkill,
-          missing: skillValidation.missing,
-          invalid: skillValidation.invalid,
-        }),
-      );
-    }
     const structuredSummary = structuredOutcome.data
       ? summarizeStructuredOutcomeData(structuredOutcome.data)
       : undefined;
@@ -486,8 +453,6 @@ async function main(): Promise<void> {
       summary,
       assistantText: output.assistantText.trim(),
       data: structuredOutcome.data,
-      skillOutputs: structuredOutcome.skillOutputs,
-      skillValidation,
       metrics: {
         durationMs: Math.max(0, Date.now() - startedAt),
         inputTokens: childCostSummary.inputTokens,
@@ -536,7 +501,6 @@ async function main(): Promise<void> {
       updatedAt: Date.now(),
       workerSessionId: childSessionId,
       label: spec.label,
-      parentSkill: parentRuntime.inspect.skills.getActive(spec.parentSessionId)?.name,
       kind: targetRecord.resultMode,
       consultKind: targetRecord.consultKind,
       boundary: executionPlan.boundary,
@@ -545,7 +509,6 @@ async function main(): Promise<void> {
         target: targetRecord,
         resultData,
         patchChangeCount: patches?.changes.length,
-        skillValidationOk: skillValidation?.ok,
       }),
       summary,
       resultData,
@@ -636,7 +599,6 @@ async function main(): Promise<void> {
       updatedAt: Date.now(),
       workerSessionId: childSessionId,
       label: spec.label,
-      parentSkill: parentRuntime.inspect.skills.getActive(spec.parentSessionId)?.name,
       kind: targetRecord.resultMode,
       consultKind: targetRecord.consultKind,
       boundary: executionPlan.boundary,
@@ -645,7 +607,6 @@ async function main(): Promise<void> {
         target: targetRecord,
         resultData: undefined,
         patchChangeCount: patches?.changes.length,
-        skillValidationOk: false,
       }),
       summary: message,
       error: message,

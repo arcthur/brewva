@@ -7,7 +7,6 @@ import { TASK_LEDGER_SCHEMA, asBrewvaSessionId } from "@brewva/brewva-runtime";
 import { type BrewvaEventRecord } from "@brewva/brewva-runtime/events";
 import { TASK_EVENT_TYPE } from "@brewva/brewva-runtime/events";
 import { ProjectionEngine } from "../../../packages/brewva-runtime/src/domain/projection/engine.js";
-import { buildCanonicalReviewReport } from "../../helpers/semantic-artifacts.js";
 
 function taskSpecEvent(input: {
   id: string;
@@ -31,27 +30,6 @@ function taskSpecEvent(input: {
         goal: input.goal,
       },
     },
-  };
-}
-
-function skillCompletedEvent(input: {
-  id: string;
-  sessionId: string;
-  timestamp: number;
-  skillName: string;
-  outputs: Record<string, unknown>;
-}): BrewvaEventRecord {
-  return {
-    id: input.id,
-    sessionId: asBrewvaSessionId(input.sessionId),
-    type: "skill_completed",
-    timestamp: input.timestamp,
-    payload: {
-      skillName: input.skillName,
-      outputKeys: Object.keys(input.outputs).toSorted(),
-      outputs: input.outputs,
-      completedAt: input.timestamp,
-    } as BrewvaEventRecord["payload"],
   };
 }
 
@@ -165,109 +143,5 @@ describe("projection engine", () => {
     expect(rebuilt).toBeDefined();
     expect(rebuilt?.content).toContain("Rebuild working snapshot from persisted units");
     expect(existsSync(workingSnapshotPath(workspace, sessionId))).toBe(true);
-  });
-
-  test("rebuilds workflow projection units from tape and preserves workflow state markers", () => {
-    const workspace = mkdtempSync(join(tmpdir(), "brewva-projection-engine-workflow-"));
-    const engine = new ProjectionEngine({
-      enabled: true,
-      rootDir: workspace,
-      workingFile: "working.md",
-      maxWorkingChars: 2_000,
-    });
-
-    const sessionId = asBrewvaSessionId("projection-engine-workflow");
-    const events: BrewvaEventRecord[] = [
-      skillCompletedEvent({
-        id: "evt-workflow-design",
-        sessionId,
-        timestamp: 100,
-        skillName: "plan",
-        outputs: {
-          design_spec: "Lock the workflow artifact contract.",
-          execution_plan: [
-            {
-              step: "Derive posture",
-              intent: "Project canonical workflow state from durable events.",
-              owner: "runtime.workflow",
-              exit_criteria: "Workflow posture is derived without hidden control flow.",
-              verification_intent: "Unit coverage proves posture derivation remains advisory-only.",
-            },
-            {
-              step: "Expose advisory context",
-              intent: "Publish the workflow state through working projection surfaces.",
-              owner: "runtime.context",
-              exit_criteria: "Working projection contains stable workflow artifact statements.",
-              verification_intent:
-                "Projection rebuild tests preserve workflow artifact statements after replay.",
-            },
-          ],
-          execution_mode_hint: "coordinated_rollout",
-          risk_register: [
-            {
-              risk: "Workflow projection could drift into hidden choreography.",
-              category: "public_api",
-              severity: "high",
-              mitigation: "Keep workflow status advisory-only and inspectable.",
-              required_evidence: ["workflow_projection_tests"],
-              owner_lane: "review-boundaries",
-            },
-          ],
-          implementation_targets: [
-            {
-              target: "packages/brewva-runtime/src/domain/workflow/artifact-derivation.ts",
-              kind: "module",
-              owner_boundary: "runtime.workflow",
-              reason: "Workflow artifact derivation is implemented here.",
-            },
-          ],
-        },
-      }),
-      {
-        id: "evt-workflow-write",
-        sessionId,
-        type: "verification_write_marked",
-        timestamp: 110,
-        payload: {
-          toolName: "edit",
-        },
-      },
-      skillCompletedEvent({
-        id: "evt-workflow-review",
-        sessionId,
-        timestamp: 120,
-        skillName: "review",
-        outputs: {
-          review_report: buildCanonicalReviewReport("Workflow chain is ready."),
-          review_findings: [],
-          merge_decision: "ready",
-        },
-      }),
-    ];
-
-    const rebuilt = engine.rebuildSessionFromTape({
-      sessionId,
-      events,
-      mode: "always",
-    });
-
-    expect(rebuilt.reason).toBe("replayed");
-    expect(rebuilt.replayedEvents).toBe(3);
-
-    const snapshot = engine.getWorkingProjection(sessionId);
-    expect(snapshot).toBeDefined();
-    expect(snapshot?.content).toContain("[WorkingProjection]");
-    expect(snapshot?.content).toContain(
-      "workflow.design: state=ready; freshness=stale; Lock the workflow artifact contract.",
-    );
-    expect(snapshot?.content).toContain(
-      "workflow.execution_plan: state=ready; freshness=stale; Execution plan with 2 step(s): Derive posture, Expose advisory context.",
-    );
-    expect(snapshot?.content).toContain(
-      "workflow.implementation: state=ready; freshness=fresh; Workspace mutation observed via edit; downstream review and verification may need refresh.",
-    );
-    expect(snapshot?.content).toContain(
-      "workflow.review: state=ready; freshness=fresh; decision=ready; Workflow chain is ready.",
-    );
   });
 });

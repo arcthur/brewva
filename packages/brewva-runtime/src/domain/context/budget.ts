@@ -6,11 +6,12 @@ import {
   resolveContextUsageTokens,
   truncateTextToTokenBudget,
 } from "../../utils/token.js";
+import { estimatePredictiveTurnGrowthTokens } from "./context-pressure.js";
 import type {
+  ContextAdmissionDecision,
   ContextBudgetUsage,
   ContextCompactionDecision,
   ContextCompactionReason,
-  ContextInjectionDecision,
 } from "./types.js";
 
 interface SessionBudgetState {
@@ -22,7 +23,7 @@ interface SessionBudgetState {
 }
 
 export interface EffectiveContextBudgetPolicy {
-  injectionTokens: number;
+  dynamicTailTokens: number;
   compactionThresholdPercent: number;
   hardLimitPercent: number;
 }
@@ -79,26 +80,28 @@ export class ContextBudgetManager {
       }),
     );
 
-    const baseInjectionTokens = Math.max(1, Math.floor(this.config.injection.baseTokens));
-    const adaptiveInjectionTokens =
-      contextWindow === null ? 0 : Math.floor(contextWindow * this.config.injection.windowFraction);
-    const injectionTokens = Math.max(
+    const baseDynamicTailTokens = Math.max(1, Math.floor(this.config.dynamicTail.baseTokens));
+    const adaptiveDynamicTailTokens =
+      contextWindow === null
+        ? 0
+        : Math.floor(contextWindow * this.config.dynamicTail.windowFraction);
+    const dynamicTailTokens = Math.max(
       1,
       Math.min(
-        Math.max(baseInjectionTokens, Math.floor(this.config.injection.maxTokens)),
-        baseInjectionTokens + adaptiveInjectionTokens,
+        Math.max(baseDynamicTailTokens, Math.floor(this.config.dynamicTail.maxTokens)),
+        baseDynamicTailTokens + adaptiveDynamicTailTokens,
       ),
     );
 
     return {
-      injectionTokens,
+      dynamicTailTokens,
       compactionThresholdPercent,
       hardLimitPercent,
     };
   }
 
-  getEffectiveInjectionTokenBudget(sessionId: string, usage?: ContextBudgetUsage): number {
-    return this.getEffectivePolicy(sessionId, usage).injectionTokens;
+  getEffectiveDynamicTailTokenBudget(sessionId: string, usage?: ContextBudgetUsage): number {
+    return this.getEffectivePolicy(sessionId, usage).dynamicTailTokens;
   }
 
   getEffectiveCompactionThresholdPercent(sessionId: string, usage?: ContextBudgetUsage): number {
@@ -109,11 +112,15 @@ export class ContextBudgetManager {
     return this.getEffectivePolicy(sessionId, usage).hardLimitPercent;
   }
 
-  planInjection(
+  getPredictiveTurnGrowthTokens(contextWindow: number): number {
+    return estimatePredictiveTurnGrowthTokens(contextWindow, this.config.predictiveTurnGrowth);
+  }
+
+  planDynamicTailAdmission(
     sessionId: string,
     inputText: string,
     usage?: ContextBudgetUsage,
-  ): ContextInjectionDecision {
+  ): ContextAdmissionDecision {
     if (!this.config.enabled) {
       const tokens = estimateTokenCount(inputText);
       return {
@@ -143,8 +150,8 @@ export class ContextBudgetManager {
       };
     }
 
-    let tokenBudget = effectivePolicy.injectionTokens;
-    const projectedTokenBudget = this.resolveProjectedInjectionTokenBudget(
+    let tokenBudget = effectivePolicy.dynamicTailTokens;
+    const projectedTokenBudget = this.resolveProjectedDynamicTailTokenBudget(
       currentUsage,
       effectivePolicy.hardLimitPercent,
     );
@@ -184,10 +191,13 @@ export class ContextBudgetManager {
     this.observeUsage(sessionId, usage);
     const state = this.getOrCreate(sessionId);
     const current = usage ?? state.lastContextUsage;
-    const usagePercent = resolveContextUsageRatio(current);
     if (state.pendingCompactionReason) {
       return { shouldCompact: true, reason: state.pendingCompactionReason, usage: current };
     }
+    if (!current) {
+      return { shouldCompact: false };
+    }
+    const usagePercent = resolveContextUsageRatio(current);
     if (usagePercent === null) {
       return { shouldCompact: false, usage: current };
     }
@@ -195,12 +205,12 @@ export class ContextBudgetManager {
     const effectivePolicy = this.getEffectivePolicy(sessionId, usage);
     const hardLimitPercent = effectivePolicy.hardLimitPercent;
     const compactionThresholdPercent = effectivePolicy.compactionThresholdPercent;
-    const pressureBypassPercent = normalizePercent(this.config.compaction.pressureBypassPercent);
+    const cooldownBypassPercent = normalizePercent(this.config.compaction.cooldownBypassPercent);
     // This stays static on purpose. A fixed bypass line lets large-window models skip cooldown
-    // earlier than the adaptive hard limit would, which is desirable once pressure is already high.
+    // earlier than the adaptive hard limit would, which is desirable near forced compaction.
     const bypassCooldown =
       usagePercent >= hardLimitPercent ||
-      (pressureBypassPercent !== null && usagePercent >= pressureBypassPercent);
+      (cooldownBypassPercent !== null && usagePercent >= cooldownBypassPercent);
 
     if (!bypassCooldown) {
       const sinceLastCompaction = Math.max(0, state.turnIndex - state.lastCompactionTurn);
@@ -223,6 +233,21 @@ export class ContextBudgetManager {
     }
     if (usagePercent >= compactionThresholdPercent) {
       return { shouldCompact: true, reason: "usage_threshold", usage: current };
+    }
+    const currentTokens = resolveContextUsageTokens(current);
+    if (
+      currentTokens !== null &&
+      Number.isFinite(current?.contextWindow) &&
+      current.contextWindow > 0
+    ) {
+      const hardLimitTokens = Math.floor(hardLimitPercent * current.contextWindow);
+      const predictedTurnGrowthTokens = this.getPredictiveTurnGrowthTokens(current.contextWindow);
+      if (
+        predictedTurnGrowthTokens > 0 &&
+        currentTokens + predictedTurnGrowthTokens >= hardLimitTokens
+      ) {
+        return { shouldCompact: true, reason: "predicted_overflow", usage: current };
+      }
     }
     return { shouldCompact: false, usage: current };
   }
@@ -294,7 +319,7 @@ export class ContextBudgetManager {
     return Math.max(floorPercent, Math.min(ceilingPercent, byHeadroom));
   }
 
-  private resolveProjectedInjectionTokenBudget(
+  private resolveProjectedDynamicTailTokenBudget(
     usage: ContextBudgetUsage | undefined,
     hardLimitPercent: number,
   ): number | null {

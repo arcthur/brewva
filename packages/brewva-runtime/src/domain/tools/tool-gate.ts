@@ -45,7 +45,6 @@ import type {
   EffectCommitmentProposal,
 } from "../proposals/api.js";
 import { RuntimeSessionStateStore } from "../sessions/api.js";
-import type { SkillLifecycleService } from "../skills/api.js";
 import {
   ToolAccessPolicyService,
   type ToolAccessDecision,
@@ -118,7 +117,6 @@ export interface ToolGateServiceOptions {
     ToolAccessPolicyService,
     "checkToolAccess" | "explainToolAccess" | "collectToolAuthorityFacts"
   >;
-  skillLifecycleService: Pick<SkillLifecycleService, "consumeRepairToolAccess">;
   proposalAdmissionService: Pick<ProposalAdmissionService, "submitProposal">;
   effectCommitmentDeskService: Pick<
     EffectCommitmentDeskService,
@@ -134,11 +132,6 @@ export class ToolGateService {
     toolName: string,
     args?: Record<string, unknown>,
   ) => ResolvedToolAuthority;
-  private readonly consumeRepairToolAccess: (
-    sessionId: string,
-    toolName: string,
-    usage?: ContextBudgetUsage,
-  ) => { allowed: boolean; reason?: string };
   private readonly getCurrentTurn: (sessionId: string) => number;
   private readonly recordEvent: (input: {
     sessionId: string;
@@ -166,8 +159,6 @@ export class ToolGateService {
     this.securityConfig = options.securityConfig;
     this.sessionState = options.sessionState;
     this.resolveToolAuthority = (toolName, args) => options.resolveToolAuthority(toolName, args);
-    this.consumeRepairToolAccess = (sessionId, toolName, usage) =>
-      options.skillLifecycleService.consumeRepairToolAccess(sessionId, toolName, usage);
     this.getCurrentTurn = (sessionId) => options.getCurrentTurn(sessionId);
     this.recordEvent = (input) => options.recordEvent(input);
     this.checkToolAccessPolicy = (sessionId, toolName, args) =>
@@ -649,8 +640,6 @@ export class ToolGateService {
       };
     }
 
-    this.commitRepairToolAccess(input.sessionId, normalizedToolName, input.usage);
-
     const effectCommitmentRequestId = gateDecision.effectCommitmentRequestId?.trim();
     if (
       effectCommitmentRequestId &&
@@ -734,12 +723,6 @@ export class ToolGateService {
     );
 
     if (!manifestDecision.allowed) {
-      this.settleTerminalRepairBlock(
-        input.sessionId,
-        authority.normalizedToolName,
-        input.usage,
-        manifestFacts.repairAccess,
-      );
       this.recordToolCallBlocked({
         sessionId: input.sessionId,
         toolName: input.toolName,
@@ -811,34 +794,6 @@ export class ToolGateService {
       allowed: true,
       basis: "effect_commitment_inflight",
     };
-  }
-
-  private commitRepairToolAccess(
-    sessionId: string,
-    toolName: string,
-    usage?: ContextBudgetUsage,
-  ): void {
-    const repairConsumption = this.consumeRepairToolAccess(sessionId, toolName, usage);
-    if (!repairConsumption.allowed) {
-      throw new Error(
-        `effect_authority_repair_fact_drift:${toolName}:${repairConsumption.reason ?? "unknown"}`,
-      );
-    }
-  }
-
-  private settleTerminalRepairBlock(
-    sessionId: string,
-    toolName: string,
-    usage: ContextBudgetUsage | undefined,
-    repairAccess: EffectAuthorityFactDecision | undefined,
-  ): void {
-    if (repairAccess?.allowed !== false || repairAccess.terminalFailure !== true) {
-      return;
-    }
-    const repairConsumption = this.consumeRepairToolAccess(sessionId, toolName, usage);
-    if (repairConsumption.allowed) {
-      throw new Error(`effect_authority_repair_fact_drift:${toolName}:terminal_failure_cleared`);
-    }
   }
 
   private recordEffectAuthorityDecision(

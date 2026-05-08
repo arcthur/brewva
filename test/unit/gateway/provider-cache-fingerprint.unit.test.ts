@@ -108,9 +108,7 @@ describe("provider cache fingerprinting", () => {
       },
       toolSchemaSnapshot: snapshot,
       stablePrefixParts: ["system prompt", "stable tool prelude"],
-      dynamicTailParts: ["recall injection", "telegram channel context"],
-      activeSkillSet: ["review"],
-      skillRoutingEpoch: 2,
+      dynamicTailParts: ["model-requested recall results", "telegram channel context"],
       channelContext: "telegram",
       renderedCache: {
         status: "rendered",
@@ -138,7 +136,7 @@ describe("provider cache fingerprinting", () => {
       cacheRelevantHeaders: { "x-provider-beta": "cache-control" },
       extraBody: { output_config: { effort: "high" } },
       visibleHistoryReduction: { epoch: 1, status: "none" },
-      recallInjection: { present: true, scope: "dynamic_tail" },
+      workbenchContext: { present: true, scope: "dynamic_tail" },
       providerFallback: { active: false },
       payload: {
         model: "gpt-5.4",
@@ -148,8 +146,6 @@ describe("provider cache fingerprinting", () => {
     });
 
     expect(fingerprint.stablePrefixHash).not.toBe(fingerprint.dynamicTailHash);
-    expect(fingerprint.activeSkillSetHash).not.toBe("");
-    expect(fingerprint.skillRoutingEpoch).toBe(2);
     expect(fingerprint.channelContextHash).not.toBe("");
     expect(fingerprint.renderedCacheHash).not.toBe("");
     expect(fingerprint.cacheCapabilityHash).not.toBe("");
@@ -159,7 +155,7 @@ describe("provider cache fingerprinting", () => {
     expect(fingerprint.cacheRelevantHeadersHash).not.toBe("");
     expect(fingerprint.extraBodyHash).not.toBe("");
     expect(fingerprint.visibleHistoryReductionHash).not.toBe("");
-    expect(fingerprint.recallInjectionHash).not.toBe("");
+    expect(fingerprint.workbenchContextHash).not.toBe("");
     expect(fingerprint.providerFallbackHash).not.toBe("");
     expect(fingerprint.requestHash).not.toContain("redacted by hash");
     for (const [field, value] of Object.entries(fingerprint)) {
@@ -189,8 +185,6 @@ describe("provider cache fingerprinting", () => {
       toolSchemaSnapshot: createToolSchemaSnapshot([]),
       stablePrefixParts: ["stable"],
       dynamicTailParts: ["tail"],
-      activeSkillSet: [],
-      skillRoutingEpoch: 0,
       channelContext: "",
       payload: { input: "first" },
     });
@@ -255,8 +249,6 @@ describe("provider cache fingerprinting", () => {
       toolSchemaSnapshot: createToolSchemaSnapshot([]),
       stablePrefixParts: ["stable"],
       dynamicTailParts: [{ lastMessages: [] }],
-      activeSkillSet: [],
-      skillRoutingEpoch: 0,
       channelContext: "",
       payload: { input: "same" },
     });
@@ -297,8 +289,6 @@ describe("provider cache fingerprinting", () => {
       toolSchemaSnapshot: createToolSchemaSnapshot([]),
       stablePrefixParts: ["stable"],
       dynamicTailParts: ["tail"],
-      activeSkillSet: [],
-      skillRoutingEpoch: 0,
       channelContext: "",
       payload: { input: "first" },
     });
@@ -347,8 +337,6 @@ describe("provider cache fingerprinting", () => {
       toolSchemaSnapshot: createToolSchemaSnapshot([]),
       stablePrefixParts: ["stable"],
       dynamicTailParts: ["tail"],
-      activeSkillSet: [],
-      skillRoutingEpoch: 0,
       channelContext: "",
       payload: { input: "first" },
     });
@@ -394,8 +382,6 @@ describe("provider cache fingerprinting", () => {
         toolSchemaSnapshot: createToolSchemaSnapshot([]),
         stablePrefixParts: ["stable"],
         dynamicTailParts: ["tail"],
-        activeSkillSet: [],
-        skillRoutingEpoch: 0,
         channelContext: "",
         payload: { input: "first" },
       });
@@ -451,8 +437,6 @@ describe("provider cache fingerprinting", () => {
       toolSchemaSnapshot: createToolSchemaSnapshot([]),
       stablePrefixParts: ["stable"],
       dynamicTailParts: ["tail"],
-      activeSkillSet: [],
-      skillRoutingEpoch: 0,
       channelContext: "",
       payload: { input: "same" },
     });
@@ -497,8 +481,6 @@ describe("provider cache fingerprinting", () => {
       toolSchemaSnapshot: createToolSchemaSnapshot([]),
       stablePrefixParts: ["stable"],
       dynamicTailParts: ["tail"],
-      activeSkillSet: [],
-      skillRoutingEpoch: 0,
       channelContext: "",
       payload: { input: "same" },
     });
@@ -576,8 +558,6 @@ describe("provider cache fingerprinting", () => {
       toolSchemaSnapshot: createToolSchemaSnapshot([]),
       stablePrefixParts: ["stable"],
       dynamicTailParts: ["tail"],
-      activeSkillSet: [],
-      skillRoutingEpoch: 0,
       channelContext: "",
       payload: { input: "same" },
     });
@@ -646,8 +626,6 @@ describe("provider cache fingerprinting", () => {
       toolSchemaSnapshot: createToolSchemaSnapshot([]),
       stablePrefixParts: ["stable"],
       dynamicTailParts: ["tail"],
-      activeSkillSet: [],
-      skillRoutingEpoch: 0,
       channelContext: "",
     };
 
@@ -722,8 +700,6 @@ describe("provider cache fingerprinting", () => {
       toolSchemaSnapshot: createToolSchemaSnapshot([]),
       stablePrefixParts: ["stable"],
       dynamicTailParts: ["tail"],
-      activeSkillSet: [],
-      skillRoutingEpoch: 0,
       channelContext: "",
       renderedCache: {
         status: "rendered",
@@ -757,8 +733,6 @@ describe("provider cache fingerprinting", () => {
       toolSchemaSnapshot: createToolSchemaSnapshot([]),
       stablePrefixParts: ["stable"],
       dynamicTailParts: ["tail"],
-      activeSkillSet: [],
-      skillRoutingEpoch: 0,
       channelContext: "",
       renderedCache: {
         status: "rendered",

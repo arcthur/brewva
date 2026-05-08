@@ -48,7 +48,7 @@ describe("exec command guardrails", () => {
       execTool.execute(
         "tc-exec-tool-misroute",
         {
-          command: "session_compact",
+          command: "workbench_compact",
         },
         undefined,
         undefined,
@@ -58,7 +58,7 @@ describe("exec command guardrails", () => {
 
     const blockedEvent = events.find((event) => event.type === "exec.failed");
     expect(blockedEvent?.payload?.blockedAsToolNameMisroute).toBe(true);
-    expect(blockedEvent?.payload?.suggestedTool).toBe("session_compact");
+    expect(blockedEvent?.payload?.suggestedTool).toBe("workbench_compact");
   });
 
   test("command deny list blocks shell wrapper inline scripts", async () => {

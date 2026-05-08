@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
-  DEFAULT_TELEGRAM_SKILL_NAME,
+  DEFAULT_TELEGRAM_CHANNEL_NAME,
   SUPPORTED_CHANNELS,
   buildChannelDispatchPrompt,
   canonicalizeInboundTurnSession,
@@ -227,7 +227,7 @@ describe("channel mode prompt output collector", () => {
     expect(outputs.assistantText).toBe("telegram resumed");
   });
 
-  test("builds telegram dispatch prompt with the unified skill policy", () => {
+  test("builds telegram dispatch prompt with channel policy", () => {
     const turn: TurnEnvelope = {
       schema: "brewva.turn.v1",
       kind: "user",
@@ -245,8 +245,8 @@ describe("channel mode prompt output collector", () => {
     });
 
     expect(canonicalTurn.sessionId).toBe("agent-session");
-    expect(prompt).toContain("[Brewva Channel Skill Policy]");
-    expect(prompt).toContain(`Primary channel skill: ${DEFAULT_TELEGRAM_SKILL_NAME}`);
+    expect(prompt).toContain("[Brewva Channel Policy]");
+    expect(prompt).toContain(`Transport: ${DEFAULT_TELEGRAM_CHANNEL_NAME}`);
     expect(prompt).toContain("[channel:telegram] conversation:12345");
     expect(prompt).toContain("hello from telegram");
   });

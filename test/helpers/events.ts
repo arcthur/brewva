@@ -1,5 +1,5 @@
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { join, relative } from "node:path";
 import type { BrewvaRuntime } from "@brewva/brewva-runtime";
 import type { BrewvaEventRecord } from "@brewva/brewva-runtime/events";
 
@@ -215,30 +215,43 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-export function recordHostedSkillCompleted(input: {
+export function recordHostedDelegationOutcome(input: {
   runtime: BrewvaRuntime;
   sessionId: string;
-  skillName: string;
-  outputs: Record<string, unknown>;
+  runId: string;
+  outcome: Record<string, unknown>;
+  payload?: Record<string, unknown>;
   timestamp?: number;
-  turn?: number;
-  completedAt?: number;
-  semanticBindings?: Record<string, string>;
-}): BrewvaEventRecord | undefined {
-  const completedAt = input.completedAt ?? input.timestamp ?? Date.now();
-  return input.runtime.extensions.hosted.events.record({
-    sessionId: input.sessionId,
-    type: "skill_completed",
-    ...(input.timestamp !== undefined ? { timestamp: input.timestamp } : {}),
-    ...(input.turn !== undefined ? { turn: input.turn } : {}),
-    payload: {
-      skillName: input.skillName,
-      outputKeys: Object.keys(input.outputs).toSorted(),
-      outputs: input.outputs,
-      completedAt,
-      ...(input.semanticBindings ? { semanticBindings: input.semanticBindings } : {}),
-    },
-  });
+  artifactName?: string;
+}): { event: BrewvaEventRecord | undefined; artifactPath: string } {
+  const artifactsDir = join(input.runtime.workspaceRoot, ".artifacts");
+  mkdirSync(artifactsDir, { recursive: true });
+  const artifactPath = join(artifactsDir, `${input.artifactName ?? input.runId}.json`);
+  writeFileSync(artifactPath, JSON.stringify(input.outcome, null, 2), "utf8");
+  const relativeArtifactPath = relative(input.runtime.workspaceRoot, artifactPath).replaceAll(
+    "\\",
+    "/",
+  );
+  const payload = input.payload ?? {};
+  return {
+    artifactPath: relativeArtifactPath,
+    event: input.runtime.extensions.hosted.events.record({
+      sessionId: input.sessionId,
+      type: "subagent_completed",
+      ...(input.timestamp !== undefined ? { timestamp: input.timestamp } : {}),
+      payload: {
+        runId: input.runId,
+        status: "completed",
+        ...payload,
+        artifactRefs: [
+          {
+            kind: "delegation_outcome",
+            path: relativeArtifactPath,
+          },
+        ],
+      },
+    }),
+  };
 }
 
 export function buildVerificationOutcomeRecordedPayload(input?: {

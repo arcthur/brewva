@@ -50,7 +50,7 @@ describe("effect authority manifest", () => {
   test("control-plane status cannot override invariant authority requirements", () => {
     const decision = decideEffectAuthorityManifest(
       baseFacts({
-        toolName: "session_compact",
+        toolName: "reasoning_revert",
         actionClass: "control_state_mutation",
         authoritySource: "missing",
         controlPlaneTool: true,
@@ -68,7 +68,7 @@ describe("effect authority manifest", () => {
     );
 
     expect(decision.allowed).toBe(false);
-    expect(decision.reason).toBe("Tool 'session_compact' requires an exact action policy.");
+    expect(decision.reason).toBe("Tool 'reasoning_revert' requires an exact action policy.");
     expect(decision.manifestBasis.invariantBasis).toContain("exact_action_policy_required");
     expect(decision.manifestBasis.overlayBasis).toContain("control_plane_tool");
   });

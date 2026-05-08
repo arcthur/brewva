@@ -28,12 +28,3 @@ export interface SkillNormalizedOutputsView {
   normalizerVersion: string;
   sourceEventId?: string;
 }
-
-export interface SkillConsumedOutputsView {
-  outputs: Record<string, unknown>;
-  issues: SkillNormalizedOutputIssue[];
-  blockingState: SkillNormalizedBlockingState;
-  normalizerVersion: string;
-  sourceSkillNames: string[];
-  sourceEventIds: string[];
-}

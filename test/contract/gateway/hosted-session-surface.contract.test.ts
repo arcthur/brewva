@@ -81,10 +81,10 @@ describe("gateway contract: hosted session surface", () => {
     const providerStreamPath = resolve(
       repoRoot,
       "packages",
-      "brewva-substrate",
+      "brewva-gateway",
       "src",
-      "turn",
-      "provider-stream.ts",
+      "host",
+      "hosted-provider-stream.ts",
     );
     const hostedAuthStorePath = resolve(
       repoRoot,
@@ -214,7 +214,8 @@ describe("gateway contract: hosted session surface", () => {
     expect(turnIndexSource).toContain("runBrewvaTurnLoop");
     expect(turnIndexSource).toContain("BrewvaTurnLoopController");
     expect(turnIndexSource).not.toContain("BrewvaAgentEngine");
-    expect(turnControllerSource).toContain("createBrewvaTurnProviderStreamFunction");
+    expect(turnControllerSource).not.toContain("createBrewvaTurnProviderStreamFunction");
+    expect(managedSessionSource).toContain("createHostedProviderStreamFunction");
     expect(turnControllerSource).not.toContain("@mariozechner/pi-agent-core");
     expect(turnControllerSource).not.toContain("@mariozechner/pi-ai");
     expect(turnControllerSource).not.toContain("@mariozechner/pi-coding-agent");

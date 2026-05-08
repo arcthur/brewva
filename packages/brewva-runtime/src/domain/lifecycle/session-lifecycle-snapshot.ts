@@ -181,42 +181,9 @@ function resolveExecutionSnapshot(
   return current;
 }
 
-function resolveSkillPosture(
-  input: SessionLifecycleSnapshotBuildInput,
-): SessionLifecycleSnapshot["skill"] {
-  const activeSkillState = input.activeSkillState
-    ? structuredClone(input.activeSkillState)
-    : undefined;
-  const latestFailure = input.latestSkillFailure
-    ? structuredClone(input.latestSkillFailure)
-    : undefined;
-  if (activeSkillState?.phase === "repair_required") {
-    return {
-      posture: "repair_required",
-      activeSkillName: activeSkillState.skillName,
-      activeSkillState,
-      ...(latestFailure ? { latestFailure } : {}),
-    };
-  }
-  if (activeSkillState) {
-    return {
-      posture: "active",
-      activeSkillName: activeSkillState.skillName,
-      activeSkillState,
-      ...(latestFailure ? { latestFailure } : {}),
-    };
-  }
-  return {
-    posture: "none",
-    activeSkillName: latestFailure?.skillName ?? null,
-    ...(latestFailure ? { latestFailure } : {}),
-  };
-}
-
 function resolveSummarySnapshot(
   input: SessionLifecycleSnapshotBuildInput & {
     execution: SessionLifecycleExecutionSnapshot;
-    skill: SessionLifecycleSnapshot["skill"];
   },
 ): SessionLifecycleSummarySnapshot {
   if (input.hydration.status === "cold") {
@@ -267,14 +234,6 @@ function resolveSummarySnapshot(
     };
   }
 
-  if (input.skill.posture === "repair_required") {
-    return {
-      kind: "blocked",
-      reason: "skill_repair_required",
-      detail: input.skill.activeSkillName,
-    };
-  }
-
   if (input.execution.kind === "model_streaming" || input.execution.kind === "tool_executing") {
     return {
       kind: "active",
@@ -298,12 +257,10 @@ export function buildSessionLifecycleSnapshot(
     ...input,
     approval,
   });
-  const skill = resolveSkillPosture(input);
   return {
     hydration: structuredClone(input.hydration),
     execution,
     recovery: structuredClone(input.recovery),
-    skill,
     approval,
     tooling: {
       openToolCalls: input.openToolCalls.map((record) => ({ ...record })),
@@ -312,7 +269,6 @@ export function buildSessionLifecycleSnapshot(
     summary: resolveSummarySnapshot({
       ...input,
       execution,
-      skill,
     }),
   };
 }

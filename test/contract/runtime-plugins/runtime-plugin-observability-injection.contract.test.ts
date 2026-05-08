@@ -62,7 +62,7 @@ function createHostContext(workspace: string, sessionId: string): BrewvaHostCont
 }
 
 describe("Runtime plugin integration: observability injection", () => {
-  test("given host plugin runner contract, when emitBeforeAgentStart executes, then brewva context message is included", async () => {
+  test("given host plugin runner contract, when emitBeforeAgentStart executes, then brewva workbench context message is included", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-ext-dual-injection-"));
     mkdirSync(join(workspace, ".orchestrator"), { recursive: true });
     mkdirSync(join(workspace, ".brewva"), { recursive: true });
@@ -115,7 +115,7 @@ describe("Runtime plugin integration: observability injection", () => {
       .join("\n");
 
     expect(result?.systemPrompt).toContain("[Brewva Context Contract]");
-    expect(messageTypes).toEqual(["brewva-context-injection"]);
+    expect(messageTypes).toEqual(["brewva-workbench-context"]);
     expect(mergedContent.length).toBeGreaterThan(0);
     expect(mergedContent.includes("brewva.memory-recall")).toBe(false);
   });
@@ -188,7 +188,7 @@ describe("Runtime plugin integration: observability injection", () => {
           rawChars?: number;
           rawBytes?: number;
           rawTokens?: number;
-          contextPressure?: string;
+          contextCompactionState?: string;
           artifactRef?: string | null;
         }
       | undefined;
@@ -197,7 +197,10 @@ describe("Runtime plugin integration: observability injection", () => {
     expect(observedPayload?.rawChars).toBeGreaterThan(0);
     expect(observedPayload?.rawBytes).toBeGreaterThan(0);
     expect(observedPayload?.rawTokens).toBeGreaterThan(0);
-    requireNonEmptyString(observedPayload?.contextPressure, "Expected contextPressure.");
+    requireNonEmptyString(
+      observedPayload?.contextCompactionState,
+      "Expected contextCompactionState.",
+    );
     requireNonEmptyString(observedPayload?.artifactRef, "Expected observed artifactRef.");
 
     const artifactPersisted = runtime.inspect.events.query(sessionId, {

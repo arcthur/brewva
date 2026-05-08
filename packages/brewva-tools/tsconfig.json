@@ -9,8 +9,6 @@
     { "path": "../brewva-runtime" },
     { "path": "../brewva-search" },
     { "path": "../brewva-substrate" },
-    { "path": "../brewva-deliberation" },
-    { "path": "../brewva-skill-broker" },
     { "path": "../brewva-std" },
     { "path": "../brewva-recall" }
   ],

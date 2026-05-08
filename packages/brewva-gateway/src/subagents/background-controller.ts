@@ -319,7 +319,6 @@ export function createDetachedSubagentBackgroundController(
     async startRun(input) {
       const runId = randomUUID();
       const createdAt = Date.now();
-      const parentSkill = options.runtime.inspect.skills.getActive(input.parentSessionId)?.name;
       const delegate =
         input.delegate ??
         input.target.agentSpecName ??
@@ -346,7 +345,6 @@ export function createDetachedSubagentBackgroundController(
             createdAt,
             updatedAt: createdAt,
             label: input.label,
-            parentSkill,
             delivery: buildDeliveryRecord(input.delivery, createdAt),
           }),
           "failed",
@@ -360,7 +358,6 @@ export function createDetachedSubagentBackgroundController(
         parentSessionId: asBrewvaSessionId(input.parentSessionId),
         createdAt,
         label: input.label,
-        parentSkill,
         boundary: executionPlan.boundary,
         modelRoute: executionPlan.modelRoute,
         delivery: buildDeliveryRecord(input.delivery, createdAt),

@@ -56,16 +56,7 @@ import {
   readSessionLineageSelectionRecordedEventPayload,
   readSessionLineageSummaryRecordedEventPayload,
 } from "../domain/sessions/lineage-event-descriptors.js";
-import {
-  SKILLS_EVENT_DESCRIPTORS,
-  SKILL_ACTIVATED_EVENT_DESCRIPTOR,
-  SKILL_COMPLETED_EVENT_DESCRIPTOR,
-  SKILL_COMPLETION_REJECTED_EVENT_DESCRIPTOR,
-  SKILL_CONTRACT_FAILED_EVENT_DESCRIPTOR,
-  readSkillActivatedEventPayload,
-  readSkillCompletedEventPayload,
-  readSkillCompletionFailureEventPayload,
-} from "../domain/skills/event-descriptors.js";
+import { SKILLS_EVENT_DESCRIPTORS } from "../domain/skills/event-descriptors.js";
 import {
   TASK_EVENT_DESCRIPTORS,
   TASK_STALL_ADJUDICATED_EVENT_DESCRIPTOR,
@@ -94,6 +85,17 @@ import {
   readVerificationWriteMarkedEventPayload,
 } from "../domain/verification/event-descriptors.js";
 import {
+  WORKBENCH_BASELINE_COMMITTED_EVENT_DESCRIPTOR,
+  WORKBENCH_EVENT_DESCRIPTORS,
+  WORKBENCH_EVICTION_RECORDED_EVENT_DESCRIPTOR,
+  WORKBENCH_EVICTION_UNDONE_EVENT_DESCRIPTOR,
+  WORKBENCH_NOTE_RECORDED_EVENT_DESCRIPTOR,
+  readWorkbenchBaselineCommittedEventPayload,
+  readWorkbenchEvictionRecordedEventPayload,
+  readWorkbenchEvictionUndoneEventPayload,
+  readWorkbenchNoteRecordedEventPayload,
+} from "../domain/workbench/event-descriptors.js";
+import {
   asTypedBrewvaEventRecord,
   readBrewvaEventPayload,
   type BrewvaEventDescriptor,
@@ -107,6 +109,7 @@ export const BREWVA_TYPED_EVENT_DESCRIPTORS = [
   ...TOOLS_EVENT_DESCRIPTORS,
   ...SKILLS_EVENT_DESCRIPTORS,
   ...VERIFICATION_EVENT_DESCRIPTORS,
+  ...WORKBENCH_EVENT_DESCRIPTORS,
   ...TASK_EVENT_DESCRIPTORS,
   ...REASONING_EVENT_DESCRIPTORS,
   ...DELEGATION_EVENT_DESCRIPTORS,
@@ -130,10 +133,6 @@ export {
   SESSION_REWIND_COMPLETED_EVENT_DESCRIPTOR,
   SESSION_TURN_TRANSITION_EVENT_DESCRIPTOR,
   SESSION_UNCLEAN_SHUTDOWN_RECONCILED_EVENT_DESCRIPTOR,
-  SKILL_ACTIVATED_EVENT_DESCRIPTOR,
-  SKILL_COMPLETED_EVENT_DESCRIPTOR,
-  SKILL_COMPLETION_REJECTED_EVENT_DESCRIPTOR,
-  SKILL_CONTRACT_FAILED_EVENT_DESCRIPTOR,
   SUBAGENT_CANCELLED_EVENT_DESCRIPTOR,
   SUBAGENT_COMPLETED_EVENT_DESCRIPTOR,
   SUBAGENT_DELIVERY_SURFACED_EVENT_DESCRIPTOR,
@@ -153,6 +152,10 @@ export {
   TURN_RENDER_COMMITTED_EVENT_DESCRIPTOR,
   VERIFICATION_OUTCOME_RECORDED_EVENT_DESCRIPTOR,
   VERIFICATION_WRITE_MARKED_EVENT_DESCRIPTOR,
+  WORKBENCH_BASELINE_COMMITTED_EVENT_DESCRIPTOR,
+  WORKBENCH_EVICTION_RECORDED_EVENT_DESCRIPTOR,
+  WORKBENCH_EVICTION_UNDONE_EVENT_DESCRIPTOR,
+  WORKBENCH_NOTE_RECORDED_EVENT_DESCRIPTOR,
   WORKER_RESULTS_APPLIED_EVENT_DESCRIPTOR,
   readCapabilityStateRecordedEventPayload,
   readBrewvaEventPayload,
@@ -170,9 +173,6 @@ export {
   readSessionRewindCompletedEventPayload,
   readSessionTurnTransitionEventPayload,
   readSessionUncleanShutdownDiagnosticEventPayload,
-  readSkillActivatedEventPayload,
-  readSkillCompletedEventPayload,
-  readSkillCompletionFailureEventPayload,
   readTaskStallAdjudicatedEventPayload,
   readTaskStuckDetectedEventPayload,
   readToolCallBlockedEventPayload,
@@ -183,6 +183,10 @@ export {
   readTurnRenderCommittedEventPayload,
   readVerificationOutcomeRecordedEventPayload,
   readVerificationWriteMarkedEventPayload,
+  readWorkbenchBaselineCommittedEventPayload,
+  readWorkbenchEvictionRecordedEventPayload,
+  readWorkbenchEvictionUndoneEventPayload,
+  readWorkbenchNoteRecordedEventPayload,
   readWorkerResultsAppliedEventPayload,
 };
 

@@ -2,9 +2,9 @@ import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
-import { createSkillLoadTool } from "@brewva/brewva-tools/workflow";
+import type { BrewvaToolDefinition } from "@brewva/brewva-substrate/tools";
 
-export type ToolExecutionContext = Parameters<ReturnType<typeof createSkillLoadTool>["execute"]>[4];
+export type ToolExecutionContext = Parameters<BrewvaToolDefinition["execute"]>[4];
 
 export function extractTextContent(result: {
   content: Array<{ type: string; text?: string }>;

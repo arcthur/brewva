@@ -7,7 +7,7 @@ import { buildBrewvaTools } from "@brewva/brewva-tools";
 import {
   createReasoningCheckpointTool,
   createReasoningRevertTool,
-  createSessionCompactTool,
+  createWorkbenchCompactTool,
   createTapeTools,
 } from "@brewva/brewva-tools/workflow";
 import { requireDefined } from "../../helpers/assertions.js";
@@ -40,17 +40,17 @@ function requireTool<T extends { name: string }>(tools: T[], name: string): T {
 }
 
 describe("session coordination tool contracts", () => {
-  test("session_compact requests SDK compaction with runtime instructions without sending a hidden follow-up", async () => {
+  test("workbench_compact requests SDK compaction with runtime instructions without sending a hidden follow-up", async () => {
     const runtime = createCleanRuntime();
     const sessionId = "s11";
     let compactCalls = 0;
     let capturedInstructions: string | undefined;
     let hiddenFollowUpCalls = 0;
 
-    const tool = createSessionCompactTool({ runtime: createBundledToolRuntime(runtime) });
+    const tool = createWorkbenchCompactTool({ runtime: createBundledToolRuntime(runtime) });
     const result = await tool.execute(
       "tc-compact",
-      { reason: "context pressure reached high" },
+      { reason: "forced compaction status" },
       undefined,
       undefined,
       mergeContext(sessionId, {
@@ -69,7 +69,7 @@ describe("session coordination tool contracts", () => {
     );
 
     const text = extractTextContent(result);
-    expect(text).toContain("Session compaction requested");
+    expect(text).toContain("Workbench compaction requested");
     expect(compactCalls).toBe(1);
     expect(capturedInstructions).toBe(runtime.inspect.context.getCompactionInstructions());
     expect(hiddenFollowUpCalls).toBe(0);
@@ -81,14 +81,14 @@ describe("session coordination tool contracts", () => {
     expect(payload?.usagePercent).toBe(0.9);
   });
 
-  test("session_compact normalizes usagePercent even when runtime getUsageRatio is unavailable", async () => {
+  test("workbench_compact normalizes usagePercent even when runtime getUsageRatio is unavailable", async () => {
     const events: Array<{
       sessionId: string;
       type: string;
       payload?: Record<string, unknown>;
     }> = [];
 
-    const tool = createSessionCompactTool({
+    const tool = createWorkbenchCompactTool({
       runtime: {
         inspect: {
           context: {
@@ -129,10 +129,10 @@ describe("session coordination tool contracts", () => {
     expect(payload?.usagePercent).toBe(0.95);
   });
 
-  test("session_compact fails fast when the host reports compaction unsupported synchronously", async () => {
+  test("workbench_compact fails fast when the host reports compaction unsupported synchronously", async () => {
     const runtime = createCleanRuntime();
     const sessionId = "s11-unsupported";
-    const tool = createSessionCompactTool({ runtime: createBundledToolRuntime(runtime) });
+    const tool = createWorkbenchCompactTool({ runtime: createBundledToolRuntime(runtime) });
 
     const result = await tool.execute(
       "tc-compact-unsupported",
@@ -219,7 +219,7 @@ describe("session coordination tool contracts", () => {
     );
   });
 
-  test("tape_handoff writes an anchor and tape_info reports tape and context pressure", async () => {
+  test("tape_handoff writes an anchor and tape_info reports tape and context status", async () => {
     const tapeInfoWorkspace = mkdtempSync(join(tmpdir(), "brewva-tools-tape-info-"));
     const runtime = new BrewvaRuntime({ cwd: tapeInfoWorkspace });
     const sessionId = "s12";
@@ -289,7 +289,8 @@ describe("session coordination tool contracts", () => {
     const infoText = extractTextContent(infoResult);
     expect(infoText).toContain("[TapeInfo]");
     expect(infoText).toContain("tape_pressure:");
-    expect(infoText).toContain("context_pressure: high");
+    expect(infoText).toContain("context_compaction_advised: yes");
+    expect(infoText).toContain("context_forced_compaction: no");
     expect(infoText).toContain("output_search_recent_calls: 2");
     expect(infoText).toContain("output_search_throttled_calls: 1");
     expect(infoText).toContain("output_search_cache_hit_rate: 57.1%");

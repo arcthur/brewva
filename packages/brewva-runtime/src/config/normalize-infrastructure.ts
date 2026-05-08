@@ -22,25 +22,20 @@ export function normalizeInfrastructureConfig(
   const contextBudgetInput = isRecord(infrastructureInput.contextBudget)
     ? infrastructureInput.contextBudget
     : {};
-  const contextBudgetInjectionInput = isRecord(contextBudgetInput.injection)
-    ? contextBudgetInput.injection
+  const contextBudgetDynamicTailInput = isRecord(contextBudgetInput.dynamicTail)
+    ? contextBudgetInput.dynamicTail
     : {};
   const contextBudgetThresholdsInput = isRecord(contextBudgetInput.thresholds)
     ? contextBudgetInput.thresholds
     : {};
+  const contextBudgetPredictiveTurnGrowthInput = isRecord(contextBudgetInput.predictiveTurnGrowth)
+    ? contextBudgetInput.predictiveTurnGrowth
+    : {};
   const contextBudgetCompactionInput = isRecord(contextBudgetInput.compaction)
     ? contextBudgetInput.compaction
     : {};
-  const contextBudgetArenaInput = isRecord(contextBudgetInput.arena)
-    ? contextBudgetInput.arena
-    : {};
   const toolFailureInjectionInput = isRecord(infrastructureInput.toolFailureInjection)
     ? infrastructureInput.toolFailureInjection
-    : {};
-  const toolOutputDistillationInjectionInput = isRecord(
-    infrastructureInput.toolOutputDistillationInjection,
-  )
-    ? infrastructureInput.toolOutputDistillationInjection
     : {};
   const interruptRecoveryInput = isRecord(infrastructureInput.interruptRecovery)
     ? infrastructureInput.interruptRecovery
@@ -52,21 +47,20 @@ export function normalizeInfrastructureConfig(
     ? infrastructureInput.recoveryWal
     : {};
   const defaultContextBudget = defaults.contextBudget;
-  const defaultContextBudgetInjection = defaultContextBudget.injection;
+  const defaultContextBudgetDynamicTail = defaultContextBudget.dynamicTail;
   const defaultContextBudgetThresholds = defaultContextBudget.thresholds;
+  const defaultContextBudgetPredictiveTurnGrowth = defaultContextBudget.predictiveTurnGrowth;
   const defaultContextCompaction = defaultContextBudget.compaction;
-  const defaultContextArena = defaultContextBudget.arena;
   const defaultToolFailureInjection = defaults.toolFailureInjection;
-  const defaultToolOutputDistillationInjection = defaults.toolOutputDistillationInjection;
-  const normalizedInjectionBaseTokens = normalizePositiveInteger(
-    contextBudgetInjectionInput.baseTokens,
-    defaultContextBudgetInjection.baseTokens,
+  const normalizedDynamicTailBaseTokens = normalizePositiveInteger(
+    contextBudgetDynamicTailInput.baseTokens,
+    defaultContextBudgetDynamicTail.baseTokens,
   );
-  const normalizedInjectionMaxTokens = Math.max(
-    normalizedInjectionBaseTokens,
+  const normalizedDynamicTailMaxTokens = Math.max(
+    normalizedDynamicTailBaseTokens,
     normalizePositiveInteger(
-      contextBudgetInjectionInput.maxTokens,
-      defaultContextBudgetInjection.maxTokens,
+      contextBudgetDynamicTailInput.maxTokens,
+      defaultContextBudgetDynamicTail.maxTokens,
     ),
   );
   const normalizedHardLimitFloorPercent = normalizeUnitInterval(
@@ -97,6 +91,10 @@ export function normalizeInfrastructureConfig(
       ),
     ),
   );
+  const normalizedPredictiveFloorContextWindow = normalizePositiveInteger(
+    contextBudgetPredictiveTurnGrowthInput.floorContextWindow,
+    defaultContextBudgetPredictiveTurnGrowth.floorContextWindow,
+  );
 
   return {
     events: {
@@ -108,13 +106,13 @@ export function normalizeInfrastructureConfig(
     },
     contextBudget: {
       enabled: normalizeBoolean(contextBudgetInput.enabled, defaultContextBudget.enabled),
-      injection: {
-        baseTokens: normalizedInjectionBaseTokens,
+      dynamicTail: {
+        baseTokens: normalizedDynamicTailBaseTokens,
         windowFraction: normalizeUnitInterval(
-          contextBudgetInjectionInput.windowFraction,
-          defaultContextBudgetInjection.windowFraction,
+          contextBudgetDynamicTailInput.windowFraction,
+          defaultContextBudgetDynamicTail.windowFraction,
         ),
-        maxTokens: normalizedInjectionMaxTokens,
+        maxTokens: normalizedDynamicTailMaxTokens,
       },
       thresholds: {
         compactionFloorPercent: normalizedCompactionFloorPercent,
@@ -130,6 +128,28 @@ export function normalizeInfrastructureConfig(
           defaultContextBudgetThresholds.hardLimitHeadroomTokens,
         ),
       },
+      predictiveTurnGrowth: {
+        floorContextWindow: normalizedPredictiveFloorContextWindow,
+        largeContextWindow: Math.max(
+          normalizedPredictiveFloorContextWindow,
+          normalizePositiveInteger(
+            contextBudgetPredictiveTurnGrowthInput.largeContextWindow,
+            defaultContextBudgetPredictiveTurnGrowth.largeContextWindow,
+          ),
+        ),
+        standardTokens: normalizePositiveInteger(
+          contextBudgetPredictiveTurnGrowthInput.standardTokens,
+          defaultContextBudgetPredictiveTurnGrowth.standardTokens,
+        ),
+        largeTokens: normalizePositiveInteger(
+          contextBudgetPredictiveTurnGrowthInput.largeTokens,
+          defaultContextBudgetPredictiveTurnGrowth.largeTokens,
+        ),
+        scalingFactor: normalizeUnitInterval(
+          contextBudgetPredictiveTurnGrowthInput.scalingFactor,
+          defaultContextBudgetPredictiveTurnGrowth.scalingFactor,
+        ),
+      },
       compactionInstructions: normalizeNonEmptyString(
         contextBudgetInput.compactionInstructions,
         defaultContextBudget.compactionInstructions,
@@ -143,15 +163,9 @@ export function normalizeInfrastructureConfig(
           contextBudgetCompactionInput.minSecondsBetween,
           defaultContextCompaction.minSecondsBetween,
         ),
-        pressureBypassPercent: normalizeUnitInterval(
-          contextBudgetCompactionInput.pressureBypassPercent,
-          defaultContextCompaction.pressureBypassPercent,
-        ),
-      },
-      arena: {
-        maxEntriesPerSession: normalizePositiveInteger(
-          contextBudgetArenaInput.maxEntriesPerSession,
-          defaultContextArena.maxEntriesPerSession,
+        cooldownBypassPercent: normalizeUnitInterval(
+          contextBudgetCompactionInput.cooldownBypassPercent,
+          defaultContextCompaction.cooldownBypassPercent,
         ),
       },
     },
@@ -167,20 +181,6 @@ export function normalizeInfrastructureConfig(
       maxOutputChars: normalizePositiveInteger(
         toolFailureInjectionInput.maxOutputChars,
         defaultToolFailureInjection.maxOutputChars,
-      ),
-    },
-    toolOutputDistillationInjection: {
-      enabled: normalizeBoolean(
-        toolOutputDistillationInjectionInput.enabled,
-        defaultToolOutputDistillationInjection.enabled,
-      ),
-      maxEntries: normalizePositiveInteger(
-        toolOutputDistillationInjectionInput.maxEntries,
-        defaultToolOutputDistillationInjection.maxEntries,
-      ),
-      maxOutputChars: normalizePositiveInteger(
-        toolOutputDistillationInjectionInput.maxOutputChars,
-        defaultToolOutputDistillationInjection.maxOutputChars,
       ),
     },
     interruptRecovery: {

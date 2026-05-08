@@ -78,6 +78,62 @@ describe("project insights aggregation", () => {
     );
   });
 
+  test("surfaces compaction generation economics in inspect output", () => {
+    const workspace = createTestWorkspace("inspect-compaction-generation-economics");
+    writeFileSync(join(workspace, ".brewva", "brewva.json"), "{}\n", "utf8");
+    const runtime = new BrewvaRuntime({
+      cwd: workspace,
+      config: structuredClone(DEFAULT_BREWVA_CONFIG),
+    });
+    const sessionId = "inspect-compaction-generation-economics-session";
+
+    runtime.extensions.hosted.events.record({
+      sessionId,
+      type: "session_compact",
+      turn: 4,
+      payload: {
+        compactId: "compact-inspect",
+        sanitizedSummary: "[CompactSummary]\nInspect economics",
+        summaryDigest: "digest-placeholder",
+        sourceTurn: 4,
+        leafEntryId: null,
+        referenceContextDigest: null,
+        fromTokens: 96_000,
+        toTokens: 18_000,
+        origin: "auto_compaction",
+        summaryGeneration: {
+          strategy: "llm_primary_compaction",
+          usage: {
+            input: 1000,
+            output: 250,
+            cacheRead: 700,
+            cacheWrite: 50,
+            totalTokens: 1300,
+            cost: {
+              total: 0.18,
+            },
+          },
+        },
+      },
+    });
+
+    const report = buildInspectReport(runtime, sessionId);
+
+    expect(report.contextEvidence).toMatchObject({
+      totalCompactionEvents: 1,
+      totalCompactionGenerationEvents: 1,
+      totalLlmPrimaryCompactionEvents: 1,
+      totalCompactionGenerationTokens: 1300,
+      totalCompactionGenerationCacheReadTokens: 700,
+      totalCompactionGenerationCacheWriteTokens: 50,
+      totalCompactionGenerationCostUsd: 0.18,
+      sessionsWithCompactionGenerationCacheAccounting: 1,
+    });
+    expect(formatInspectText(report)).toContain(
+      "Context evidence: ready=no gaps=stable_prefix_below_target,transient_reduction_deferral_evidence_missing,cache_accounting_missing compactions=1 generation=1 llmPrimary=1 deterministicEmergency=0 genTokens=1300 genCacheRead=700 genCacheWrite=50 genCost=$0.180000",
+    );
+  });
+
   test("tracks failed session analyses separately from excluded sessions", async () => {
     const workspace = createTestWorkspace("insights-failure-accounting");
     writeFileSync(join(workspace, ".brewva", "brewva.json"), "{}\n", "utf8");
@@ -93,12 +149,6 @@ describe("project insights aggregation", () => {
         type: "session_bootstrap",
         payload: {
           managedToolMode: "direct",
-          skillLoad: {
-            routingEnabled: false,
-            routingScopes: ["core", "domain"],
-            routableSkills: [],
-            hiddenSkills: [],
-          },
         },
       });
       runtime.maintain.context.onTurnStart(sessionId, 1);
@@ -143,12 +193,6 @@ describe("project insights aggregation", () => {
       type: "session_bootstrap",
       payload: {
         managedToolMode: "direct",
-        skillLoad: {
-          routingEnabled: false,
-          routingScopes: ["core", "domain"],
-          routableSkills: [],
-          hiddenSkills: [],
-        },
       },
     });
     runtime.maintain.context.onTurnStart(sessionId, 1);
@@ -200,12 +244,6 @@ describe("project insights aggregation", () => {
       type: "session_bootstrap",
       payload: {
         managedToolMode: "direct",
-        skillLoad: {
-          routingEnabled: false,
-          routingScopes: ["core", "domain"],
-          routableSkills: [],
-          hiddenSkills: [],
-        },
       },
     });
 

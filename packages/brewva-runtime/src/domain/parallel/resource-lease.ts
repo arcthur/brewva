@@ -15,13 +15,9 @@ import type {
 } from "../context/api.js";
 import { RuntimeSessionStateStore } from "../sessions/api.js";
 import { resolveSkillDefaultLease, resolveSkillHardCeiling } from "../skills/api.js";
-import type { SkillLifecycleService } from "../skills/api.js";
-import type {
-  ResourceBudgetLimits,
-  SkillContract,
-  SkillDocument,
-  SkillResourceBudget,
-} from "../skills/api.js";
+import type { ResourceBudgetLimits, SkillContract, SkillResourceBudget } from "../skills/api.js";
+
+const MODEL_OPERATED_LEASE_SCOPE = "session";
 
 export interface ResourceLeaseServiceOptions {
   sessionState: RuntimeSessionStateStore;
@@ -34,7 +30,6 @@ export interface ResourceLeaseServiceOptions {
     timestamp?: number;
     skipTapeCheckpoint?: boolean;
   }): unknown;
-  skillLifecycleService: Pick<SkillLifecycleService, "getActiveSkill">;
 }
 
 function cloneBudget(budget: ResourceBudgetLimits | undefined): ResourceLeaseBudget {
@@ -135,13 +130,11 @@ export class ResourceLeaseService {
   private readonly sessionState: RuntimeSessionStateStore;
   private readonly getCurrentTurn: ResourceLeaseServiceOptions["getCurrentTurn"];
   private readonly recordEvent: ResourceLeaseServiceOptions["recordEvent"];
-  private readonly getActiveSkill: (sessionId: string) => SkillDocument | undefined;
 
   constructor(options: ResourceLeaseServiceOptions) {
     this.sessionState = options.sessionState;
     this.getCurrentTurn = (sessionId) => options.getCurrentTurn(sessionId);
     this.recordEvent = (input) => options.recordEvent(input);
-    this.getActiveSkill = (sessionId) => options.skillLifecycleService.getActiveSkill(sessionId);
   }
 
   requestLease(sessionId: string, request: ResourceLeaseRequest): ResourceLeaseResult {
@@ -151,11 +144,7 @@ export class ResourceLeaseService {
     }
 
     this.expireLeases(sessionId);
-    const skill = this.getActiveSkill(sessionId);
-    if (!skill) {
-      return { ok: false, reason: "Resource leases require an active skill." };
-    }
-    const currentLeaseBudget = this.getGrantedBudget(sessionId, skill?.name);
+    const currentLeaseBudget = this.getGrantedBudget(sessionId);
     const requestedBudget: ResourceLeaseBudget = {
       maxToolCalls: normalizePositiveInteger(request.budget?.maxToolCalls),
       maxTokens: normalizePositiveInteger(request.budget?.maxTokens),
@@ -163,23 +152,15 @@ export class ResourceLeaseService {
     };
     const grantedBudget = clampAdditionalBudget({
       requested: requestedBudget,
-      base: resolveSkillDefaultLease(skill?.contract),
+      base: undefined,
       currentLeaseBudget,
-      hardCeiling: resolveSkillHardCeiling(skill?.contract),
+      hardCeiling: undefined,
     });
 
     if (!budgetHasValues(grantedBudget)) {
-      const defaultLease = resolveSkillDefaultLease(skill?.contract);
-      const hardCeiling = resolveSkillHardCeiling(skill?.contract);
-      const noHeadroom =
-        defaultLease?.maxToolCalls === hardCeiling?.maxToolCalls &&
-        defaultLease?.maxTokens === hardCeiling?.maxTokens &&
-        defaultLease?.maxParallel === hardCeiling?.maxParallel;
       return {
         ok: false,
-        reason: noHeadroom
-          ? `Lease request did not produce any additional budget expansion for skill '${skill.name}'. Increase resources.hard_ceiling above resources.default_lease to create lease headroom.`
-          : "Lease request did not produce any additional budget expansion.",
+        reason: "Lease request did not include any positive budget expansion.",
       };
     }
 
@@ -189,7 +170,7 @@ export class ResourceLeaseService {
     const lease: ResourceLeaseRecord = {
       id: randomUUID(),
       sessionId: asBrewvaSessionId(sessionId),
-      skillName: skill.name,
+      skillName: MODEL_OPERATED_LEASE_SCOPE,
       reason,
       budget: grantedBudget,
       createdAt: now,
@@ -211,18 +192,11 @@ export class ResourceLeaseService {
 
   listLeases(sessionId: string, query: ResourceLeaseQuery = {}): ResourceLeaseRecord[] {
     this.expireLeases(sessionId);
-    const activeSkillName = this.getActiveSkill(sessionId)?.name;
     return [...this.sessionState.getCell(sessionId).resourceLeases.values()]
       .filter((lease) => query.includeInactive === true || lease.status === "active")
       .filter((lease) => {
         if (!query.skillName) return true;
         return lease.skillName === query.skillName;
-      })
-      .filter((lease) => {
-        if (query.skillName !== undefined || query.includeInactive === true) {
-          return true;
-        }
-        return activeSkillName !== undefined && lease.skillName === activeSkillName;
       })
       .map((lease) => cloneLease(lease))
       .toSorted((left, right) => right.createdAt - left.createdAt);
@@ -257,9 +231,8 @@ export class ResourceLeaseService {
 
   getGrantedBudget(sessionId: string, skillName?: string): ResourceLeaseBudget {
     this.expireLeases(sessionId);
-    const activeSkillName = skillName ?? this.getActiveSkill(sessionId)?.name;
     let budget: ResourceLeaseBudget = {};
-    for (const lease of this.getApplicableActiveLeases(sessionId, activeSkillName)) {
+    for (const lease of this.getApplicableActiveLeases(sessionId, skillName)) {
       budget = sumBudget(budget, lease.budget);
     }
     return budget;
@@ -314,7 +287,8 @@ export class ResourceLeaseService {
     const state = this.sessionState.getCell(sessionId);
     return [...state.resourceLeases.values()].filter((lease) => {
       if (lease.status !== "active") return false;
-      return lease.skillName === skillName;
+      if (skillName === undefined) return true;
+      return lease.skillName === MODEL_OPERATED_LEASE_SCOPE || lease.skillName === skillName;
     });
   }
 

@@ -13,9 +13,6 @@ import {
   readEffectCommitmentApprovalRequestedEventPayload,
   readEffectCommitmentApprovalResolutionEventPayload,
   readEffectCommitmentDecisionReceiptRecordedEventPayload,
-  readSkillActivatedEventPayload,
-  readSkillCompletedEventPayload,
-  readSkillCompletionFailureEventPayload,
   readSessionTurnTransitionEventPayload,
   readSessionUncleanShutdownDiagnosticEventPayload,
   readSessionRewindCompletedEventPayload,
@@ -27,9 +24,6 @@ import {
   readToolResultRecordedEventPayload,
   readReasoningRevertEventPayload,
   REASONING_REVERT_EVENT_TYPE,
-  SKILL_ACTIVATED_EVENT_TYPE,
-  SKILL_COMPLETED_EVENT_TYPE,
-  SKILL_COMPLETION_REJECTED_EVENT_TYPE,
   readVerificationOutcomeRecordedEventPayload,
   readVerificationWriteMarkedEventPayload,
   SESSION_REWIND_COMPLETED_EVENT_TYPE,
@@ -53,9 +47,72 @@ import {
   readContextEntryRecordedEventPayload,
   readSessionLineageNodeCreatedEventPayload,
   readSessionLineageOutcomeRecordedEventPayload,
+  readWorkbenchBaselineCommittedEventPayload,
+  readWorkbenchEvictionRecordedEventPayload,
+  readWorkbenchEvictionUndoneEventPayload,
+  readWorkbenchNoteRecordedEventPayload,
+  WORKBENCH_BASELINE_COMMITTED_EVENT_TYPE,
+  WORKBENCH_EVICTION_RECORDED_EVENT_TYPE,
+  WORKBENCH_EVICTION_UNDONE_EVENT_TYPE,
+  WORKBENCH_NOTE_RECORDED_EVENT_TYPE,
 } from "@brewva/brewva-runtime/events";
 
 describe("runtime event descriptors", () => {
+  test("reads model-authored workbench event payloads", () => {
+    expect(
+      readWorkbenchNoteRecordedEventPayload({
+        type: WORKBENCH_NOTE_RECORDED_EVENT_TYPE,
+        payload: {
+          id: "note-1",
+          digest: "digest-note",
+          content: "Current objective: finish Phase A cleanup.",
+          sourceRefs: ["turn:1"],
+          reason: "Preserve the active objective.",
+        },
+      }),
+    ).toEqual({
+      id: "note-1",
+      digest: "digest-note",
+      content: "Current objective: finish Phase A cleanup.",
+      sourceRefs: ["turn:1"],
+      reason: "Preserve the active objective.",
+    });
+
+    expect(
+      readWorkbenchEvictionRecordedEventPayload({
+        type: WORKBENCH_EVICTION_RECORDED_EVENT_TYPE,
+        payload: {
+          id: "eviction-1",
+          digest: "digest-eviction",
+          replacementNote: "Only the import path mattered.",
+          spanRefs: ["tool:read-large-output"],
+          reason: "Raw output should leave active attention.",
+          preservedQuotes: ["Cannot find module"],
+        },
+      })?.spanRefs,
+    ).toEqual(["tool:read-large-output"]);
+
+    expect(
+      readWorkbenchEvictionUndoneEventPayload({
+        type: WORKBENCH_EVICTION_UNDONE_EVENT_TYPE,
+        payload: {
+          id: "eviction-1",
+          digest: "digest-eviction",
+          reason: "Need the span again.",
+        },
+      })?.reason,
+    ).toBe("Need the span again.");
+
+    expect(
+      readWorkbenchBaselineCommittedEventPayload({
+        type: WORKBENCH_BASELINE_COMMITTED_EVENT_TYPE,
+        payload: {
+          entryIds: ["note-1", "eviction-1"],
+        },
+      })?.entryIds,
+    ).toEqual(["note-1", "eviction-1"]);
+  });
+
   test("reads lineage node payloads with discriminated fork points", () => {
     expect(
       readSessionLineageNodeCreatedEventPayload({
@@ -820,148 +877,6 @@ describe("runtime event descriptors", () => {
       decision: "accept",
       ledgerId: "ledger-1",
       verdict: "pass",
-    });
-  });
-
-  test("reads shared skill lifecycle payloads", () => {
-    expect(
-      readSkillActivatedEventPayload({
-        type: SKILL_ACTIVATED_EVENT_TYPE,
-        payload: {
-          skillName: "plan",
-        },
-      }),
-    ).toEqual({
-      skillName: "plan",
-    });
-
-    expect(
-      readSkillCompletedEventPayload({
-        type: SKILL_COMPLETED_EVENT_TYPE,
-        payload: {
-          skillName: "plan",
-          outputKeys: ["planning_posture"],
-          outputs: {
-            planning_posture: "complex",
-          },
-          completedAt: 123,
-          semanticBindings: {
-            planning_posture: "planning.execution_plan.v2",
-          },
-        },
-      }),
-    ).toEqual({
-      skillName: "plan",
-      outputKeys: ["planning_posture"],
-      outputs: {
-        planning_posture: "complex",
-      },
-      completedAt: 123,
-      semanticBindings: {
-        planning_posture: "planning.execution_plan.v2",
-      },
-    });
-  });
-
-  test("rejects skill_completed payloads when canonical fields are omitted", () => {
-    expect(
-      readSkillCompletedEventPayload({
-        type: SKILL_COMPLETED_EVENT_TYPE,
-        timestamp: 456,
-        payload: {
-          skillName: "plan",
-          outputs: {
-            planning_posture: "complex",
-            open_questions: ["What remains unknown?"],
-          },
-        },
-      }),
-    ).toBeNull();
-  });
-
-  test("rejects skill_completed payloads when outputKeys drift from outputs", () => {
-    expect(
-      readSkillCompletedEventPayload({
-        type: SKILL_COMPLETED_EVENT_TYPE,
-        payload: {
-          skillName: "plan",
-          outputKeys: ["open_questions"],
-          outputs: {
-            planning_posture: "complex",
-            open_questions: ["Should we wait for CI?"],
-          },
-          completedAt: 123,
-        },
-      }),
-    ).toBeNull();
-  });
-
-  test("reads shared skill completion failures", () => {
-    expect(
-      readSkillCompletionFailureEventPayload({
-        type: SKILL_COMPLETION_REJECTED_EVENT_TYPE,
-        payload: {
-          skillName: "plan",
-          occurredAt: 123,
-          phase: "repair_required",
-          outputKeys: ["planning_posture"],
-          missing: [],
-          invalid: [
-            {
-              name: "planning_posture",
-              reason: "missing_value",
-            },
-          ],
-          expectedOutputs: {
-            planning_posture: {
-              kind: "enum",
-            },
-          },
-          repairGuidance: {
-            unresolvedFields: ["planning_posture"],
-            minimumContractState: "Provide planning_posture.",
-          },
-          repairBudget: {
-            maxAttempts: 3,
-            usedAttempts: 1,
-            remainingAttempts: 2,
-            maxToolCalls: 6,
-            usedToolCalls: 0,
-            remainingToolCalls: 6,
-            tokenBudget: 12000,
-          },
-        },
-      }),
-    ).toEqual({
-      skillName: "plan",
-      occurredAt: 123,
-      phase: "repair_required",
-      outputKeys: ["planning_posture"],
-      missing: [],
-      invalid: [
-        {
-          name: "planning_posture",
-          reason: "missing_value",
-        },
-      ],
-      expectedOutputs: {
-        planning_posture: {
-          kind: "enum",
-        },
-      },
-      repairGuidance: {
-        unresolvedFields: ["planning_posture"],
-        minimumContractState: "Provide planning_posture.",
-      },
-      repairBudget: {
-        maxAttempts: 3,
-        usedAttempts: 1,
-        remainingAttempts: 2,
-        maxToolCalls: 6,
-        usedToolCalls: 0,
-        remainingToolCalls: 6,
-        tokenBudget: 12000,
-      },
     });
   });
 

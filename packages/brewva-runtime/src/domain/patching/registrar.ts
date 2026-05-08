@@ -2,7 +2,6 @@ import type { RuntimeLazyServiceRegistrarOptions } from "../../runtime/service-r
 import { MutationRollbackService } from "../governance/api.js";
 import type { ReversibleMutationService } from "../governance/api.js";
 import type { LedgerService } from "../ledger/api.js";
-import type { SkillLifecycleService } from "../skills/api.js";
 import { FileChangeService } from "./file-change.js";
 
 export interface RuntimePatchingDomainRegistration {
@@ -16,7 +15,6 @@ export function registerPatchingDomain(
   options: RuntimeLazyServiceRegistrarOptions,
   support: {
     ledgerService: LedgerService;
-    skillLifecycleService: SkillLifecycleService;
     reversibleMutationService: ReversibleMutationService;
   },
 ): RuntimePatchingDomainRegistration {
@@ -29,7 +27,6 @@ export function registerPatchingDomain(
       getCurrentTurn: (sessionId) => options.kernel.getCurrentTurn(sessionId),
       recordEvent: (input) => options.kernel.recordEvent(input),
       ledgerService: support.ledgerService,
-      skillLifecycleService: support.skillLifecycleService,
       reversibleMutationService: support.reversibleMutationService,
     });
     return fileChangeService;

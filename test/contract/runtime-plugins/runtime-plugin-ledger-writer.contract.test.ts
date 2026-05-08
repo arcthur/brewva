@@ -74,7 +74,7 @@ describe("Runtime plugin gaps: ledger writer", () => {
       "tool_execution_end",
       {
         toolCallId: "tc-fallback",
-        toolName: "skill_complete",
+        toolName: "custom_commit_tool",
         isError: true,
       },
       ctx,
@@ -83,7 +83,7 @@ describe("Runtime plugin gaps: ledger writer", () => {
     expect(finished).toHaveLength(1);
     expect(finished[0].sessionId).toBe("lw-fallback-1");
     expect(finished[0].toolCallId).toBe("tc-fallback");
-    expect(finished[0].toolName).toBe("skill_complete");
+    expect(finished[0].toolName).toBe("custom_commit_tool");
     expect(finished[0].channelSuccess).toBe(false);
     expect(finished[0].verdict).toBe("fail");
     expect(finished[0].args).toEqual({});
@@ -97,7 +97,7 @@ describe("Runtime plugin gaps: ledger writer", () => {
       "tool_result",
       {
         toolCallId: "tc-fallback",
-        toolName: "skill_complete",
+        toolName: "custom_commit_tool",
         input: { outputs: { ok: true } },
         isError: false,
         content: [{ type: "text", text: "done" }],

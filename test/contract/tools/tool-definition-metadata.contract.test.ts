@@ -120,7 +120,7 @@ describe("managed Brewva tool definition metadata", () => {
     expect(actualManagedToolNames).toEqual(MANAGED_BREWVA_TOOL_NAMES);
   });
 
-  test("skill promotion apply remains a reserved contract name, not a live tool", () => {
+  test("skill promotion tools are no longer model-facing managed tools", () => {
     const runtime = {
       extensions: { tools: {} },
     } as Parameters<typeof buildBrewvaTools>[0]["runtime"];
@@ -128,12 +128,21 @@ describe("managed Brewva tool definition metadata", () => {
     const toolNames = tools.map((tool) => tool.name);
     const actionPolicies = TOOL_ACTION_POLICY_BY_NAME as Record<string, unknown>;
 
-    expect(toolNames).toContain("skill_promotion_inspect");
-    expect(toolNames).toContain("skill_promotion_review");
-    expect(toolNames).toContain("skill_promotion_promote");
+    expect(toolNames).not.toContain("skill_promotion_inspect");
+    expect(toolNames).not.toContain("skill_promotion_review");
+    expect(toolNames).not.toContain("skill_promotion_promote");
     expect(toolNames).not.toContain("skill_promotion_apply");
+    expect(MANAGED_BREWVA_TOOL_NAMES).not.toContain("skill_promotion_inspect");
+    expect(MANAGED_BREWVA_TOOL_NAMES).not.toContain("skill_promotion_review");
+    expect(MANAGED_BREWVA_TOOL_NAMES).not.toContain("skill_promotion_promote");
     expect(MANAGED_BREWVA_TOOL_NAMES).not.toContain("skill_promotion_apply");
+    expect(getBrewvaToolSurface("skill_promotion_inspect")).toBeUndefined();
+    expect(getBrewvaToolSurface("skill_promotion_review")).toBeUndefined();
+    expect(getBrewvaToolSurface("skill_promotion_promote")).toBeUndefined();
     expect(getBrewvaToolSurface("skill_promotion_apply")).toBeUndefined();
+    expect(actionPolicies.skill_promotion_inspect).toBeUndefined();
+    expect(actionPolicies.skill_promotion_review).toBeUndefined();
+    expect(actionPolicies.skill_promotion_promote).toBeUndefined();
     expect(actionPolicies.skill_promotion_apply).toBeUndefined();
     expect(getExactToolActionPolicy("skill_promotion_apply")).toBeUndefined();
     expect(buildBrewvaTools({ runtime, toolNames: ["skill_promotion_apply"] })).toEqual([]);

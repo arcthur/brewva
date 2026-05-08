@@ -24,7 +24,6 @@ const EXPECTED_CONTRACT_FILES = [
   "index.ts",
   "metadata.ts",
   "runtime.ts",
-  "semantic-reranker.ts",
   "subagent.ts",
   "surface.ts",
 ] as const;

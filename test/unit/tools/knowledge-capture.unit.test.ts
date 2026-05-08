@@ -75,7 +75,7 @@ describe("knowledge capture tool", () => {
             {
               relation: "related",
               target_kind: "promotion_candidate",
-              ref: ".brewva/skill-broker/materialized/runtime-rules/wal-recovery",
+              ref: ".brewva/knowledge/materialized/runtime-rules/wal-recovery",
               note: "follow-up protocol refinement",
             },
           ],
@@ -244,7 +244,7 @@ describe("knowledge capture tool", () => {
             {
               relation: "related",
               target_kind: "promotion_candidate",
-              ref: ".brewva/skill-broker/materialized/runtime-rules/replay-guidance",
+              ref: ".brewva/knowledge/materialized/runtime-rules/replay-guidance",
             },
           ],
         },

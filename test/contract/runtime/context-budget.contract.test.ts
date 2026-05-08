@@ -9,7 +9,7 @@ describe("Context budget manager", () => {
       ...DEFAULT_BREWVA_CONFIG.infrastructure.contextBudget,
     });
 
-    const decision = manager.planInjection("budget-conservative-1", "x".repeat(15), {
+    const decision = manager.planDynamicTailAdmission("budget-conservative-1", "x".repeat(15), {
       tokens: 500,
       contextWindow: 2000,
       percent: 0.25,
@@ -22,14 +22,14 @@ describe("Context budget manager", () => {
 
   test("applies conservative truncation at token boundary", () => {
     const budgetConfig = structuredClone(DEFAULT_BREWVA_CONFIG.infrastructure.contextBudget);
-    budgetConfig.injection.baseTokens = 32;
-    budgetConfig.injection.windowFraction = 0;
-    budgetConfig.injection.maxTokens = 32;
+    budgetConfig.dynamicTail.baseTokens = 32;
+    budgetConfig.dynamicTail.windowFraction = 0;
+    budgetConfig.dynamicTail.maxTokens = 32;
     const manager = createContextBudgetManager(budgetConfig);
 
     const inputText = Array.from({ length: 200 }, (_, index) => `token${index}`).join(" ");
 
-    const decision = manager.planInjection("budget-conservative-2", inputText);
+    const decision = manager.planDynamicTailAdmission("budget-conservative-2", inputText);
     expect(decision.accepted).toBe(true);
     expect(decision.finalText.length).toBeLessThan(inputText.length);
     expect(decision.finalTokens).toBeLessThanOrEqual(32);
@@ -135,7 +135,7 @@ describe("Context budget manager", () => {
     });
     expect(subOnePercentUsage.shouldCompact).toBe(false);
 
-    const injection = manager.planInjection(sessionId, "hello", {
+    const injection = manager.planDynamicTailAdmission(sessionId, "hello", {
       tokens: 3_597,
       contextWindow: 272_000,
       percent: 1.3224264705882354,
@@ -173,7 +173,7 @@ describe("Context budget manager", () => {
     };
     expect(manager.getEffectiveCompactionThresholdPercent(sessionId, largeWindowUsage)).toBe(0.9);
     expect(manager.getEffectiveHardLimitPercent(sessionId, largeWindowUsage)).toBe(0.97);
-    expect(manager.getEffectiveInjectionTokenBudget(sessionId, largeWindowUsage)).toBe(3200);
+    expect(manager.getEffectiveDynamicTailTokenBudget(sessionId, largeWindowUsage)).toBe(3200);
 
     const smallWindowUsage = {
       tokens: 26_000,
@@ -182,7 +182,7 @@ describe("Context budget manager", () => {
     };
     expect(manager.getEffectiveCompactionThresholdPercent(sessionId, smallWindowUsage)).toBe(0.82);
     expect(manager.getEffectiveHardLimitPercent(sessionId, smallWindowUsage)).toBe(0.94);
-    expect(manager.getEffectiveInjectionTokenBudget(sessionId, smallWindowUsage)).toBe(1264);
+    expect(manager.getEffectiveDynamicTailTokenBudget(sessionId, smallWindowUsage)).toBe(1264);
   });
 
   test("falls back to tokens/contextWindow when percent telemetry is missing", () => {
@@ -191,7 +191,7 @@ describe("Context budget manager", () => {
     });
     const sessionId = "adaptive-budget-null-percent";
 
-    const decision = manager.planInjection(sessionId, "hello", {
+    const decision = manager.planDynamicTailAdmission(sessionId, "hello", {
       tokens: 195_000,
       contextWindow: 200_000,
       percent: null,
@@ -214,7 +214,7 @@ describe("Context budget manager", () => {
     });
     const sessionId = "adaptive-budget-projected-hard-limit";
 
-    const decision = manager.planInjection(sessionId, "x".repeat(20_000), {
+    const decision = manager.planDynamicTailAdmission(sessionId, "x".repeat(20_000), {
       tokens: 969_000,
       contextWindow: 1_000_000,
       percent: 0.969,
@@ -229,7 +229,7 @@ describe("Context budget manager", () => {
     });
     const sessionId = "adaptive-budget-remaining-headroom";
 
-    const decision = manager.planInjection(sessionId, "x".repeat(20_000), {
+    const decision = manager.planDynamicTailAdmission(sessionId, "x".repeat(20_000), {
       tokens: 969_500,
       contextWindow: 1_000_000,
       percent: 0.9695,

@@ -234,8 +234,8 @@ describe("cli transcript model", () => {
 
   test("renders failed tool verdicts as error status even when execution returned normally", () => {
     const messages = upsertToolExecutionIntoTranscriptMessages([], {
-      toolCallId: "tool-skill-complete-1",
-      toolName: "skill_complete",
+      toolCallId: "tool-custom-commit-1",
+      toolName: "custom_commit_tool",
       result: {
         content: [{ type: "text", text: "Skill completion rejected." }],
         details: {
@@ -251,10 +251,10 @@ describe("cli transcript model", () => {
       parts: [
         {
           type: "tool",
-          toolName: "skill_complete",
+          toolName: "custom_commit_tool",
           trust: {
-            phase: "commit",
-            label: "Commit",
+            phase: "inspect",
+            label: "Inspect",
           },
           status: "error",
         },

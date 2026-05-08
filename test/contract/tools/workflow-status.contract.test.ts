@@ -1,69 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { HostedDelegationStore } from "@brewva/brewva-gateway";
 import { BrewvaRuntime, CURRENT_DELEGATION_CONTRACT_VERSION } from "@brewva/brewva-runtime";
 import { createWorkflowStatusTool } from "@brewva/brewva-tools/workflow";
-import { recordHostedSkillCompleted } from "../../helpers/events.js";
-import { buildCanonicalReviewReport } from "../../helpers/semantic-artifacts.js";
 import { extractTextContent, mergeContext } from "./tools-flow.helpers.js";
-
-function writeSkill(
-  filePath: string,
-  input: {
-    name: string;
-    outputs?: string[];
-    consumes?: string[];
-    requires?: string[];
-  },
-): void {
-  const outputs = input.outputs ?? [];
-  mkdirSync(dirname(filePath), { recursive: true });
-  writeFileSync(
-    filePath,
-    [
-      "---",
-      `name: ${input.name}`,
-      `description: ${input.name} skill`,
-      "selection:",
-      "  when_to_use: Use when the task needs the routed test skill.",
-      "intent:",
-      `  outputs: [${outputs.join(", ")}]`,
-      ...(outputs.length > 0
-        ? [
-            "  output_contracts:",
-            ...outputs.flatMap((outputName) => [
-              `    ${outputName}:`,
-              "      kind: text",
-              "      min_length: 1",
-            ]),
-          ]
-        : []),
-      "effects:",
-      "  allowed_effects: [workspace_read]",
-      "resources:",
-      "  default_lease:",
-      "    max_tool_calls: 10",
-      "    max_tokens: 10000",
-      "  hard_ceiling:",
-      "    max_tool_calls: 20",
-      "    max_tokens: 20000",
-      "execution_hints:",
-      "  preferred_tools: [read]",
-      "  fallback_tools: []",
-      `consumes: [${(input.consumes ?? []).join(", ")}]`,
-      `requires: [${(input.requires ?? []).join(", ")}]`,
-      "---",
-      `# ${input.name}`,
-      "",
-      "## Intent",
-      "",
-      "Test skill.",
-    ].join("\n"),
-    "utf8",
-  );
-}
 
 function withDelegationStatus(runtime: BrewvaRuntime, store: HostedDelegationStore) {
   const runtimeWithDelegation = Object.create(runtime) as BrewvaRuntime & {
@@ -79,96 +21,80 @@ function withDelegationStatus(runtime: BrewvaRuntime, store: HostedDelegationSto
   return runtimeWithDelegation;
 }
 
-describe("workflow_status contract", () => {
-  test("surfaces structured skill readiness in text and machine-readable details", async () => {
-    const workspace = mkdtempSync(join(tmpdir(), "brewva-tools-workflow-status-readiness-"));
-    writeSkill(join(workspace, ".brewva/skills/core/readiness-producer/SKILL.md"), {
-      name: "readiness-producer",
-      outputs: ["design_spec"],
-    });
-    writeSkill(join(workspace, ".brewva/skills/core/readiness-ready/SKILL.md"), {
-      name: "readiness-ready",
-      consumes: ["design_spec"],
-      requires: ["design_spec"],
-    });
-    writeSkill(join(workspace, ".brewva/skills/core/readiness-blocked/SKILL.md"), {
-      name: "readiness-blocked",
-      consumes: ["review_report"],
-      requires: ["missing_plan"],
-    });
-
-    const runtime = new BrewvaRuntime({ cwd: workspace });
-    const sessionId = "workflow-status-skill-readiness";
-    expect(runtime.authority.skills.activate(sessionId, "readiness-producer").ok).toBe(true);
-    expect(
-      runtime.authority.skills.complete(sessionId, {
-        design_spec: "Readiness should be visible in workflow status.",
-      }).ok,
-    ).toBe(true);
-
-    const tool = createWorkflowStatusTool({ runtime });
-    const result = await tool.execute(
-      "tc-workflow-status-readiness",
-      {},
-      undefined,
-      undefined,
-      mergeContext(sessionId, { cwd: workspace }),
-    );
-
-    const text = extractTextContent(result);
-    expect(text).toContain("skill_readiness:");
-    expect(text).toContain("- readiness-ready: ready");
-    expect(text).toContain("- readiness-blocked: blocked");
-    expect(text).toContain("missing_requires=missing_plan");
-    expect(text).toContain("declared_consumes=review_report");
-    expect(text).toContain("satisfied_consumes=design_spec");
-
-    const details = result.details as
-      | { skillReadiness?: Array<{ name: string; readiness: string; missingRequires: string[] }> }
-      | undefined;
-    expect(details?.skillReadiness).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          name: "readiness-ready",
-          readiness: "ready",
-          missingRequires: [],
-        }),
-        expect.objectContaining({
-          name: "readiness-blocked",
-          readiness: "blocked",
-          missingRequires: ["missing_plan"],
-        }),
-      ]),
-    );
+function recordVerificationOutcome(input: {
+  runtime: BrewvaRuntime;
+  sessionId: string;
+  timestamp: number;
+  outcome: "pass" | "fail";
+  failedChecks?: string[];
+  missingChecks?: string[];
+  missingEvidence?: string[];
+  evidenceFreshness?: "fresh" | "stale" | "mixed" | "none";
+}) {
+  input.runtime.extensions.hosted.events.record({
+    sessionId: input.sessionId,
+    type: "verification_outcome_recorded",
+    timestamp: input.timestamp,
+    payload: {
+      outcome: input.outcome,
+      level: "standard",
+      failedChecks: input.failedChecks ?? [],
+      missingChecks: input.missingChecks ?? [],
+      missingEvidence: input.missingEvidence ?? [],
+      evidenceFreshness: input.evidenceFreshness ?? "fresh",
+    } as Record<string, unknown>,
   });
+}
 
-  test("reports stale review and verification after a later write", async () => {
+function recordDelegatedQa(input: {
+  runtime: BrewvaRuntime;
+  sessionId: string;
+  timestamp: number;
+  verdict: "pass" | "fail" | "inconclusive";
+}) {
+  input.runtime.extensions.hosted.events.record({
+    sessionId: input.sessionId,
+    type: "subagent_completed",
+    timestamp: input.timestamp,
+    payload: {
+      runId: `qa-${input.timestamp}`,
+      delegate: "qa",
+      status: "completed",
+      kind: "qa",
+      summary: `Delegated QA verdict: ${input.verdict}.`,
+      resultData: {
+        kind: "qa",
+        verdict: input.verdict,
+        checks: [
+          {
+            name: "operator-smoke",
+            status: input.verdict === "pass" ? "pass" : "inconclusive",
+            command: "bun test",
+            exit_code: input.verdict === "pass" ? 0 : 1,
+            observed_output:
+              input.verdict === "pass"
+                ? "operator smoke passed"
+                : "operator smoke remained inconclusive",
+            probe_type: "adversarial",
+            evidence_refs: ["snapshots/operator-flow.json"],
+          },
+        ],
+      },
+    },
+  });
+}
+
+describe("workflow_status contract", () => {
+  test("reports stale verification after a later write", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-tools-workflow-status-stale-"));
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionId = "workflow-status-stale";
 
-    recordHostedSkillCompleted({
+    recordVerificationOutcome({
       runtime,
       sessionId,
       timestamp: 100,
-      skillName: "review",
-      outputs: {
-        review_report: buildCanonicalReviewReport("Review ready."),
-        review_findings: [],
-        merge_decision: "ready",
-      },
-    });
-    runtime.extensions.hosted.events.record({
-      sessionId,
-      type: "verification_outcome_recorded",
-      timestamp: 110,
-      payload: {
-        outcome: "pass",
-        level: "standard",
-        activeSkill: "implementation",
-        failedChecks: [],
-        evidenceFreshness: "fresh",
-      } as Record<string, unknown>,
+      outcome: "pass",
     });
     runtime.extensions.hosted.events.record({
       sessionId,
@@ -195,33 +121,13 @@ describe("workflow_status contract", () => {
     expect(text).toContain("[WorkflowStatus]");
     expect(text).toContain("[Finish]");
     expect(text).toContain("state: blocked");
-    expect(text).toContain("review: stale");
     expect(text).toContain("verified: false");
-    expect(text).toContain("ship: blocked");
+    expect(text).toContain("ship: missing");
     expect(text).toContain("Verification artifact is stale after later workspace mutations.");
     expect(text).toContain("artifacts (latest 4):");
-    expect(text).toContain("- review | state=ready | freshness=stale");
+    expect(text).toContain("- implementation | state=ready | freshness=fresh");
     expect(text).toContain("- verification | state=ready | freshness=stale");
-    expect((result.details as { verdict?: string } | undefined)?.verdict).toBe("fail");
-    expect(
-      result.details as
-        | {
-            finish?: { state?: string; verified?: boolean };
-            posture?: { review?: string; ship?: string };
-          }
-        | undefined,
-    ).toEqual(
-      expect.objectContaining({
-        finish: expect.objectContaining({
-          state: "blocked",
-          verified: false,
-        }),
-        posture: expect.objectContaining({
-          review: "stale",
-          ship: "blocked",
-        }),
-      }),
-    );
+    expect((result.details as { verdict?: string } | undefined)?.verdict).toBe("inconclusive");
   });
 
   test("blocks ship posture while worker results are still pending", async () => {
@@ -229,27 +135,11 @@ describe("workflow_status contract", () => {
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionId = "workflow-status-pending";
 
-    recordHostedSkillCompleted({
+    recordVerificationOutcome({
       runtime,
       sessionId,
       timestamp: 100,
-      skillName: "review",
-      outputs: {
-        review_report: buildCanonicalReviewReport("Ready to merge."),
-        review_findings: [],
-        merge_decision: "ready",
-      },
-    });
-    runtime.extensions.hosted.events.record({
-      sessionId,
-      type: "verification_outcome_recorded",
-      timestamp: 110,
-      payload: {
-        outcome: "pass",
-        level: "standard",
-        failedChecks: [],
-        evidenceFreshness: "fresh",
-      } as Record<string, unknown>,
+      outcome: "pass",
     });
     runtime.maintain.session.recordWorkerResult(sessionId, {
       workerId: "worker-1",
@@ -272,10 +162,8 @@ describe("workflow_status contract", () => {
     );
 
     const text = extractTextContent(result);
-    expect(text).toContain("implementation: pending");
-    expect(text).toContain("qa: missing");
     expect(text).toContain("pending_worker_results: 1");
-    expect(text).toContain("ship: blocked");
+    expect(text).toContain("ship: missing");
     expect(text).toContain("Pending worker results require merge/apply (1 result).");
     expect(
       (result.details as { pendingWorkerResults?: Array<{ workerId: string }> } | undefined)
@@ -288,52 +176,20 @@ describe("workflow_status contract", () => {
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionId = "workflow-status-missing";
 
-    recordHostedSkillCompleted({
+    recordDelegatedQa({
       runtime,
       sessionId,
       timestamp: 100,
-      skillName: "review",
-      outputs: {
-        review_report: buildCanonicalReviewReport("Ready to merge."),
-        review_findings: [],
-        merge_decision: "ready",
-      },
+      verdict: "pass",
     });
-    recordHostedSkillCompleted({
+    recordVerificationOutcome({
       runtime,
       sessionId,
-      timestamp: 110,
-      skillName: "qa",
-      outputs: {
-        qa_report: "QA passed.",
-        qa_findings: [],
-        qa_verdict: "pass",
-        qa_checks: [
-          {
-            name: "operator-smoke",
-            status: "pass",
-            summary: "Operator smoke check passed under executable QA.",
-            command: "bun test",
-            exit_code: 0,
-            observed_output: "operator smoke passed",
-            probe_type: "adversarial",
-            evidence_refs: ["snapshots/operator-flow.json"],
-          },
-        ],
-      },
-    });
-    runtime.extensions.hosted.events.record({
-      sessionId,
-      type: "verification_outcome_recorded",
       timestamp: 120,
-      payload: {
-        outcome: "fail",
-        level: "standard",
-        failedChecks: [],
-        missingChecks: ["tests"],
-        missingEvidence: ["tests"],
-        evidenceFreshness: "none",
-      } as Record<string, unknown>,
+      outcome: "fail",
+      missingChecks: ["tests"],
+      missingEvidence: ["tests"],
+      evidenceFreshness: "none",
     });
 
     const tool = createWorkflowStatusTool({ runtime });
@@ -352,30 +208,47 @@ describe("workflow_status contract", () => {
     expect(text).toContain("[Finish]");
     expect(text).toContain("state: blocked");
     expect(text).toContain("verified: false");
-    expect(text).toContain("ship: blocked");
+    expect(text).toContain("ship: missing");
     expect(text).toContain("Verification missing fresh evidence for tests.");
+    expect(text).toContain("- qa | state=ready | freshness=fresh");
     expect(text).toContain("- verification | state=blocked | freshness=fresh");
     expect((result.details as { verdict?: string } | undefined)?.verdict).toBe("fail");
-    expect(
-      result.details as
-        | {
-            finish?: { state?: string; blockers?: string[] };
-            posture?: { blockers?: string[]; verification?: string; ship?: string };
-          }
-        | undefined,
-    ).toEqual(
-      expect.objectContaining({
-        finish: expect.objectContaining({
-          state: "blocked",
-          blockers: expect.arrayContaining(["Verification missing fresh evidence for tests."]),
-        }),
-        posture: expect.objectContaining({
-          verification: "blocked",
-          ship: "blocked",
-          blockers: expect.arrayContaining(["Verification missing fresh evidence for tests."]),
-        }),
-      }),
+  });
+
+  test("reports delegated QA as an advisory artifact without a skill output contract", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-tools-workflow-status-qa-"));
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionId = "workflow-status-qa";
+
+    recordDelegatedQa({
+      runtime,
+      sessionId,
+      timestamp: 100,
+      verdict: "pass",
+    });
+
+    const tool = createWorkflowStatusTool({ runtime });
+    const result = await tool.execute(
+      "tc-workflow-status-qa",
+      {
+        include_artifacts: true,
+        history_limit: 2,
+      },
+      undefined,
+      undefined,
+      mergeContext(sessionId, { cwd: workspace }),
     );
+
+    const text = extractTextContent(result);
+    expect(text).toContain("qa: ready");
+    expect(text).toContain("- qa | state=ready | freshness=fresh");
+    expect(text).toContain("Delegated QA verdict: pass.");
+    expect(
+      (result.details as { artifacts?: Array<{ kind: string }> } | undefined)?.artifacts,
+    ).toEqual([
+      expect.objectContaining({ kind: "qa" }),
+      expect.objectContaining({ kind: "ship_posture" }),
+    ]);
   });
 
   test("reports pending delegation outcome handoffs alongside workflow posture", async () => {
@@ -453,33 +326,6 @@ describe("workflow_status contract", () => {
         handoffState: "pending_parent_turn",
       },
     ]);
-    expect(
-      (
-        result.details as
-          | {
-              pendingDelegationOutcomesCount?: number;
-              posture?: { blockers?: string[] };
-            }
-          | undefined
-      )?.pendingDelegationOutcomesCount,
-    ).toBe(1);
-    expect(
-      result.details as
-        | {
-            finish?: { state?: string };
-            posture?: { blockers?: string[] };
-          }
-        | undefined,
-    ).toEqual(
-      expect.objectContaining({
-        finish: expect.objectContaining({ state: "blocked" }),
-        posture: expect.objectContaining({
-          blockers: expect.arrayContaining([
-            "Pending delegation outcomes require parent attention (1 outcome).",
-          ]),
-        }),
-      }),
-    );
   });
 
   test("surfaces the latest stall adjudication as advisory workflow state", async () => {
@@ -542,173 +388,6 @@ describe("workflow_status contract", () => {
         rationale: "Tape pressure is high while the session is stalled.",
       }),
     );
-  });
-
-  test("surfaces expanded workflow stages when specialist artifacts are present", async () => {
-    const workspace = mkdtempSync(join(tmpdir(), "brewva-tools-workflow-status-expanded-"));
-    const runtime = new BrewvaRuntime({ cwd: workspace });
-    const sessionId = "workflow-status-expanded";
-
-    recordHostedSkillCompleted({
-      runtime,
-      sessionId,
-      timestamp: 100,
-      skillName: "discovery",
-      outputs: {
-        problem_frame: "Operators need clearer workflow visibility.",
-        user_pains: ["Missing stages are easy to overlook."],
-        scope_recommendation: "Start with advisory workflow state.",
-      },
-    });
-    recordHostedSkillCompleted({
-      runtime,
-      sessionId,
-      timestamp: 110,
-      skillName: "strategy",
-      outputs: {
-        strategy_review: "Hold scope around advisory workflow state first.",
-        scope_decision: "Do not build a planner.",
-        strategic_risks: ["Duplicated status surfaces"],
-      },
-    });
-    recordHostedSkillCompleted({
-      runtime,
-      sessionId,
-      timestamp: 120,
-      skillName: "review",
-      outputs: {
-        review_report: buildCanonicalReviewReport("Review ready."),
-        review_findings: [],
-        merge_decision: "ready",
-      },
-    });
-    recordHostedSkillCompleted({
-      runtime,
-      sessionId,
-      timestamp: 130,
-      skillName: "qa",
-      outputs: {
-        qa_report: "Smoke-tested the operator path.",
-        qa_findings: [],
-        qa_verdict: "pass",
-        qa_checks: [
-          {
-            name: "operator-smoke",
-            status: "pass",
-            summary: "Operator smoke check passed under executable QA.",
-            command: "bun test",
-            exit_code: 0,
-            observed_output: "operator smoke passed",
-            probe_type: "adversarial",
-            evidence_refs: ["snapshots/operator-flow.json"],
-          },
-        ],
-      },
-    });
-    runtime.extensions.hosted.events.record({
-      sessionId,
-      type: "verification_outcome_recorded",
-      timestamp: 140,
-      payload: {
-        outcome: "pass",
-        level: "standard",
-        failedChecks: [],
-        evidenceFreshness: "fresh",
-      } as Record<string, unknown>,
-    });
-    recordHostedSkillCompleted({
-      runtime,
-      sessionId,
-      timestamp: 150,
-      skillName: "ship",
-      outputs: {
-        ship_report: "Ready for PR handoff.",
-        release_checklist: ["CI green"],
-        ship_decision: "ready",
-      },
-    });
-    recordHostedSkillCompleted({
-      runtime,
-      sessionId,
-      timestamp: 160,
-      skillName: "retro",
-      outputs: {
-        retro_summary: "The chain stayed inspectable.",
-        retro_findings: ["QA should consume risk_register next."],
-        followup_recommendation: "Tighten QA inputs.",
-      },
-    });
-
-    const tool = createWorkflowStatusTool({ runtime });
-    const result = await tool.execute(
-      "tc-workflow-status-expanded",
-      {
-        include_artifacts: true,
-        history_limit: 6,
-      },
-      undefined,
-      undefined,
-      mergeContext(sessionId, { cwd: workspace }),
-    );
-
-    const text = extractTextContent(result);
-    expect(text).toContain("discovery: ready");
-    expect(text).toContain("strategy: ready");
-    expect(text).toContain("qa: ready");
-    expect(text).toContain("ship: ready");
-    expect(text).toContain("retro: ready");
-    expect(text).toContain("- ship | state=ready | freshness=fresh");
-    expect(text).toContain("- qa | state=ready | freshness=fresh");
-    expect((result.details as { verdict?: string } | undefined)?.verdict).toBe("pass");
-  });
-
-  test("prefers core workflow artifacts over synthetic ship posture when artifacts are limited", async () => {
-    const workspace = mkdtempSync(join(tmpdir(), "brewva-tools-workflow-status-limit-"));
-    const runtime = new BrewvaRuntime({ cwd: workspace });
-    const sessionId = "workflow-status-limit";
-
-    recordHostedSkillCompleted({
-      runtime,
-      sessionId,
-      timestamp: 100,
-      skillName: "review",
-      outputs: {
-        review_report: buildCanonicalReviewReport("Ready to merge."),
-        review_findings: [],
-        merge_decision: "ready",
-      },
-    });
-    runtime.extensions.hosted.events.record({
-      sessionId,
-      type: "verification_outcome_recorded",
-      timestamp: 110,
-      payload: {
-        outcome: "pass",
-        level: "standard",
-        failedChecks: [],
-        evidenceFreshness: "fresh",
-      } as Record<string, unknown>,
-    });
-
-    const tool = createWorkflowStatusTool({ runtime });
-    const result = await tool.execute(
-      "tc-workflow-status-limit",
-      {
-        include_artifacts: true,
-        history_limit: 1,
-      },
-      undefined,
-      undefined,
-      mergeContext(sessionId, { cwd: workspace }),
-    );
-
-    const text = extractTextContent(result);
-    expect(text).toContain("artifacts (latest 1):");
-    expect(text).toContain("- verification | state=ready | freshness=fresh");
-    expect(text).not.toContain("- ship_posture");
-    expect(
-      (result.details as { artifacts?: Array<{ kind: string }> } | undefined)?.artifacts?.[0]?.kind,
-    ).toBe("verification");
   });
 
   test("surfaces acceptance as a separate closure posture", async () => {

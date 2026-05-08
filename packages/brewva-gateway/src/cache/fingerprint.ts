@@ -20,8 +20,6 @@ export interface ProviderRequestFingerprintInput {
   toolSchemaSnapshot: ToolSchemaSnapshot;
   stablePrefixParts: unknown[];
   dynamicTailParts: unknown[];
-  activeSkillSet: string[];
-  skillRoutingEpoch: number;
   channelContext: unknown;
   renderedCache?: ProviderCacheRenderResult;
   cacheCapability?: ProviderCacheCapability;
@@ -31,7 +29,7 @@ export interface ProviderRequestFingerprintInput {
   cacheRelevantHeaders?: Record<string, string>;
   extraBody?: unknown;
   visibleHistoryReduction?: unknown;
-  recallInjection?: unknown;
+  workbenchContext?: unknown;
   providerFallback?: unknown;
   payload: unknown;
 }
@@ -39,7 +37,6 @@ export interface ProviderRequestFingerprintInput {
 export function createProviderRequestFingerprint(
   input: ProviderRequestFingerprintInput,
 ): ProviderRequestFingerprint {
-  const activeSkillSet = input.activeSkillSet.toSorted();
   return {
     bucketKey: buildProviderCacheBucketKey({
       provider: input.provider,
@@ -60,8 +57,6 @@ export function createProviderRequestFingerprint(
     stablePrefixHash: redactedStableJsonSha256Hex(input.stablePrefixParts),
     dynamicTailHash: redactedStableJsonSha256Hex(input.dynamicTailParts),
     requestHash: redactedStableJsonSha256Hex(input.payload),
-    activeSkillSetHash: redactedStableJsonSha256Hex(activeSkillSet),
-    skillRoutingEpoch: Math.max(0, Math.trunc(input.skillRoutingEpoch)),
     channelContextHash: redactedStableJsonSha256Hex(input.channelContext),
     renderedCacheHash: redactedStableJsonSha256Hex(input.renderedCache ?? null),
     cacheCapabilityHash: redactedStableJsonSha256Hex(
@@ -73,7 +68,7 @@ export function createProviderRequestFingerprint(
     cacheRelevantHeadersHash: redactedStableJsonSha256Hex(input.cacheRelevantHeaders ?? null),
     extraBodyHash: redactedStableJsonSha256Hex(input.extraBody ?? null),
     visibleHistoryReductionHash: redactedStableJsonSha256Hex(input.visibleHistoryReduction ?? null),
-    recallInjectionHash: redactedStableJsonSha256Hex(input.recallInjection ?? null),
+    workbenchContextHash: redactedStableJsonSha256Hex(input.workbenchContext ?? null),
     providerFallbackHash: redactedStableJsonSha256Hex(input.providerFallback ?? null),
   };
 }

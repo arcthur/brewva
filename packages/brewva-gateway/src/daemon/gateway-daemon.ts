@@ -16,7 +16,7 @@ import {
   BrewvaRuntime,
   SESSION_WIRE_SCHEMA,
   type BrewvaScheduleSelfImproveConfig,
-  type ContextPressureView,
+  type ContextStatusView,
   type SessionWireFrame,
   type SessionWireStatusState,
   type TaskSpec,
@@ -85,7 +85,6 @@ const DEFAULT_MAX_PAYLOAD_BYTES = 256 * 1024;
 const DEFAULT_HEARTBEAT_TICK_INTERVAL_MS = 15_000;
 const WEBSOCKET_CLOSE_TIMEOUT_MS = 3_000;
 const HTTP_CLOSE_TIMEOUT_MS = 3_000;
-const SELF_IMPROVE_SKILL_NAME = "self-improve";
 const SESSION_SCOPED_EVENTS = new Set<GatewayEvent>(["session.wire.frame"]);
 
 export type ConnectionPhase = "connected" | "authenticating" | "authenticated" | "closing";
@@ -122,7 +121,7 @@ interface ConnectionState {
 }
 
 interface SessionStatusSnapshot extends SessionStatusSeed {
-  contextPressure?: ContextPressureView;
+  contextStatus?: ContextStatusView;
 }
 
 interface ReplayBufferedEvent {
@@ -241,7 +240,7 @@ function buildSessionStatusFrame(input: {
   state: SessionWireStatusState;
   reason?: string;
   detail?: string;
-  contextPressure?: ContextPressureView;
+  contextStatus?: ContextStatusView;
 }): Extract<SessionWireFrame, { type: "session.status" }> {
   return {
     schema: SESSION_WIRE_SCHEMA,
@@ -254,7 +253,7 @@ function buildSessionStatusFrame(input: {
     state: input.state,
     reason: input.reason,
     detail: input.detail,
-    contextPressure: input.contextPressure,
+    contextStatus: input.contextStatus,
   };
 }
 
@@ -847,20 +846,6 @@ export class GatewayDaemon {
     const currentTaskSpec = currentTaskSpecRaw ? normalizeTaskSpec(currentTaskSpecRaw) : null;
     if (JSON.stringify(currentTaskSpec) !== JSON.stringify(expectedTaskSpec)) {
       runtime.authority.task.setSpec(policy.parentSessionId, expectedTaskSpec);
-    }
-
-    const activeSkill = runtime.inspect.skills.getActive(policy.parentSessionId)?.name;
-    if (activeSkill === SELF_IMPROVE_SKILL_NAME) {
-      return;
-    }
-    const activated = runtime.authority.skills.activate(
-      policy.parentSessionId,
-      SELF_IMPROVE_SKILL_NAME,
-    );
-    if (!activated.ok) {
-      throw new Error(
-        `Failed to activate ${SELF_IMPROVE_SKILL_NAME} policy session: ${activated.reason}`,
-      );
     }
   }
 
@@ -1981,13 +1966,13 @@ export class GatewayDaemon {
     return worker.pendingRequests > 0 ? "running" : "idle";
   }
 
-  private async querySessionContextPressure(
+  private async querySessionContextStatus(
     sessionId: string,
-  ): Promise<ContextPressureView | undefined> {
+  ): Promise<ContextStatusView | undefined> {
     try {
-      return await this.supervisor.querySessionContextPressure(sessionId);
+      return await this.supervisor.querySessionContextStatus(sessionId);
     } catch (error) {
-      this.logger.warn("session context pressure query failed", {
+      this.logger.warn("session context status query failed", {
         sessionId,
         error: toErrorMessage(error),
       });
@@ -2016,7 +2001,7 @@ export class GatewayDaemon {
   }): Promise<Extract<SessionWireFrame, { type: "session.status" }>> {
     return buildSessionStatusFrame({
       ...input,
-      contextPressure: await this.querySessionContextPressure(input.sessionId),
+      contextStatus: await this.querySessionContextStatus(input.sessionId),
     });
   }
 
@@ -2060,10 +2045,10 @@ export class GatewayDaemon {
     }
     this.pendingSessionStatusBySession.set(sessionId, seed);
 
-    // Context-pressure sampling is best-effort. Under rapid state churn we
+    // Context-status sampling is best-effort. Under rapid state churn we
     // prefer dropping stale async snapshots over emitting out-of-order status
     // frames, even if that means the surviving status carries slightly older
-    // pressure data for one transition window.
+    // context data for one transition window.
     void this.buildSessionStatusFrameForSession({
       sessionId,
       ...seed,
@@ -2075,7 +2060,7 @@ export class GatewayDaemon {
         this.pendingSessionStatusBySession.delete(sessionId);
         this.sessionStatusBySession.set(sessionId, {
           ...seed,
-          contextPressure: statusFrame.contextPressure,
+          contextStatus: statusFrame.contextStatus,
         });
         this.broadcastSessionEvent("session.wire.frame", statusFrame, sessionId);
       })
@@ -2187,7 +2172,7 @@ export class GatewayDaemon {
         if (!this.sessionStatusBySession.has(normalizedSessionId)) {
           this.sessionStatusBySession.set(normalizedSessionId, {
             ...statusSeed,
-            contextPressure: statusFrame.contextPressure,
+            contextStatus: statusFrame.contextStatus,
           });
         }
       }

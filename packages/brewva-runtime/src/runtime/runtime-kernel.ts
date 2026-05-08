@@ -1,8 +1,6 @@
 import type { BrewvaConfig } from "../config/types.js";
 import type { ContextBudgetManager } from "../domain/context/api.js";
-import type { ContextInjectionCollector } from "../domain/context/api.js";
 import type { VerificationOutcomeSnapshot } from "../domain/context/api.js";
-import type { ToolOutputDistillationEntry } from "../domain/context/api.js";
 import type { ContextBudgetUsage } from "../domain/context/api.js";
 import type { SessionCostTracker } from "../domain/cost/api.js";
 import type { GovernancePort } from "../domain/governance/api.js";
@@ -28,7 +26,6 @@ export interface RuntimeKernelContext {
   governancePort?: GovernancePort;
   sessionState: RuntimeSessionStateStore;
   contextBudget: ContextBudgetManager;
-  contextInjection: ContextInjectionCollector;
   projectionEngine: ProjectionEngine;
   turnReplay: TurnReplayEngine;
   reasoningReplay: ReasoningReplayEngine;
@@ -44,10 +41,6 @@ export interface RuntimeKernelContext {
   getTruthState(sessionId: string): TruthState;
   recordEvent: RuntimeRecordEvent;
   sanitizeInput(text: string): string;
-  getRecentToolOutputDistillations(
-    sessionId: string,
-    maxEntries?: number,
-  ): ToolOutputDistillationEntry[];
   getLatestVerificationOutcome(sessionId: string): VerificationOutcomeSnapshot | undefined;
   isContextBudgetEnabled(): boolean;
   observeContextUsage?(sessionId: string, usage: ContextBudgetUsage | undefined): void;

@@ -1,7 +1,5 @@
 import { asBrewvaToolCallId, asBrewvaToolName } from "../../core/identifiers.js";
 import {
-  readSkillActivatedEventPayload,
-  readSkillCompletionFailureEventPayload,
   readSessionTurnTransitionEventPayload,
   readSessionUncleanShutdownDiagnosticEventPayload,
   readToolCallBlockedEventPayload,
@@ -11,10 +9,6 @@ import {
   SESSION_UNCLEAN_SHUTDOWN_RECONCILED_EVENT_TYPE,
   SESSION_SHUTDOWN_EVENT_TYPE,
   SESSION_TURN_TRANSITION_EVENT_TYPE,
-  SKILL_ACTIVATED_EVENT_TYPE,
-  SKILL_COMPLETED_EVENT_TYPE,
-  SKILL_COMPLETION_REJECTED_EVENT_TYPE,
-  SKILL_CONTRACT_FAILED_EVENT_TYPE,
   TOOL_CALL_EVENT_TYPE,
   TOOL_CALL_BLOCKED_EVENT_TYPE,
   TOOL_EXECUTION_END_EVENT_TYPE,
@@ -88,35 +82,6 @@ function derivePersistedUncleanShutdownDiagnostic(
     };
   }
   return latest;
-}
-
-function deriveHasActiveSkillWithoutTerminalReceipt(events: readonly BrewvaEventRecord[]): boolean {
-  let activeSkillName: string | null = null;
-  for (const event of events) {
-    if (event.type === SESSION_SHUTDOWN_EVENT_TYPE) {
-      activeSkillName = null;
-      continue;
-    }
-    if (event.type === SKILL_ACTIVATED_EVENT_TYPE) {
-      activeSkillName = readSkillActivatedEventPayload(event)?.skillName ?? null;
-      continue;
-    }
-    if (event.type === SKILL_COMPLETION_REJECTED_EVENT_TYPE) {
-      const failure = readSkillCompletionFailureEventPayload(event);
-      if (!failure) {
-        continue;
-      }
-      activeSkillName = failure.phase === "repair_required" ? failure.skillName : null;
-      continue;
-    }
-    if (
-      event.type === SKILL_COMPLETED_EVENT_TYPE ||
-      event.type === SKILL_CONTRACT_FAILED_EVENT_TYPE
-    ) {
-      activeSkillName = null;
-    }
-  }
-  return activeSkillName !== null;
 }
 
 const DUPLICATE_SIDE_EFFECT_SUPPRESSION_REASON_PREFIXES = [
@@ -241,9 +206,6 @@ export function deriveRecoveryCanonicalization(
   }
   if (openTurns.length > 0) {
     reasons.push("open_turn_without_terminal_receipt");
-  }
-  if (deriveHasActiveSkillWithoutTerminalReceipt(events)) {
-    reasons.push("active_skill_without_terminal_receipt");
   }
   if (reasons.length > 0) {
     return {
@@ -405,47 +367,4 @@ export function deriveRecoveryWorkingSet(input: {
     resumeContract:
       "continue from the current working projection and task state; do not replay completed tool side effects unless correctness requires it.",
   };
-}
-
-export function buildRecoveryWorkingSetBlock(
-  snapshot: RecoveryWorkingSetSnapshot | undefined,
-): string | null {
-  if (!snapshot) {
-    return null;
-  }
-  const lines = ["[RecoveryWorkingSet]"];
-  if (snapshot.latestReason) {
-    lines.push(`latest_reason: ${snapshot.latestReason}`);
-  }
-  if (snapshot.latestStatus) {
-    lines.push(`latest_status: ${snapshot.latestStatus}`);
-  }
-  if (snapshot.pendingFamily) {
-    lines.push(`pending_family: ${snapshot.pendingFamily}`);
-  }
-  if (snapshot.taskGoal) {
-    lines.push(`task_goal: ${snapshot.taskGoal}`);
-  }
-  if (snapshot.taskPhase) {
-    lines.push(`task_phase: ${snapshot.taskPhase}`);
-  }
-  if (snapshot.taskHealth) {
-    lines.push(`task_health: ${snapshot.taskHealth}`);
-  }
-  if (snapshot.acceptanceStatus) {
-    lines.push(`acceptance_status: ${snapshot.acceptanceStatus}`);
-  }
-  if (snapshot.openBlockers > 0) {
-    lines.push(`open_blockers: ${snapshot.openBlockers}`);
-  }
-  if (snapshot.openToolCalls > 0) {
-    lines.push(`open_tool_calls: ${snapshot.openToolCalls}`);
-  }
-  if (snapshot.duplicateSideEffectSuppressionCount > 0) {
-    lines.push(
-      `duplicate_side_effect_suppression_count: ${snapshot.duplicateSideEffectSuppressionCount}`,
-    );
-  }
-  lines.push(`resume_contract: ${snapshot.resumeContract}`);
-  return lines.join("\n");
 }

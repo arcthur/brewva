@@ -38,9 +38,9 @@ Vocabulary:
 - `status quo`: what the target human does today instead.
 - `posture`: the scope/timing stance inherited by downstream planning.
 
-`composable_with` is a lifecycle gate for known-safe concurrent activation, not
-a taxonomy coverage checklist. Absence means "complete the active skill first";
-it does not imply that a skill is less important.
+`composable_with` is authoring metadata for known-safe concurrent use, not a
+runtime lifecycle gate or taxonomy coverage checklist. Absence does not imply
+that a skill is less important.
 
 ## Manual Chains
 

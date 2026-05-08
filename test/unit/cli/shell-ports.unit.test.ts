@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
 import { OPERATOR_QUESTION_ANSWERED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
 import {
@@ -24,7 +24,18 @@ import {
   resolveOpenSessionQuestionRequest,
 } from "../../../packages/brewva-gateway/src/operator-questions.js";
 import type { StoredSessionMessage } from "../../../packages/brewva-gateway/src/session/runtime-session-transcript.js";
-import { recordHostedSkillCompleted } from "../../helpers/events.js";
+
+function writeDelegationOutcomeArtifact(
+  workspaceRoot: string,
+  runId: string,
+  payload: Record<string, unknown>,
+): string {
+  const artifactsDir = join(workspaceRoot, ".artifacts");
+  mkdirSync(artifactsDir, { recursive: true });
+  const path = join(artifactsDir, `${runId}.json`);
+  writeFileSync(path, JSON.stringify(payload, null, 2));
+  return relative(workspaceRoot, path).replaceAll("\\", "/");
+}
 
 describe("cli shell session port", () => {
   test("exposes the current session lineage status", () => {
@@ -389,16 +400,24 @@ describe("cli shell session port", () => {
   });
 
   test("operator question request answers record receipts from the resolved request without recollecting", async () => {
-    const runtime = new BrewvaRuntime({
-      cwd: mkdtempSync(join(tmpdir(), "brewva-shell-port-question-request-")),
-    });
+    const workspaceRoot = mkdtempSync(join(tmpdir(), "brewva-shell-port-question-request-"));
+    const runtime = new BrewvaRuntime({ cwd: workspaceRoot });
     const sessionId = "shell-port-question-session";
-    const skillCompleted = recordHostedSkillCompleted({
-      runtime,
-      sessionId,
-      skillName: "plan",
-      outputs: {
-        question_requests: [
+    const runId = "question-request-run";
+    const artifactPath = writeDelegationOutcomeArtifact(workspaceRoot, runId, {
+      ok: true,
+      runId,
+      delegate: "advisor",
+      label: "advisor",
+      kind: "consult",
+      consultKind: "review",
+      status: "ok",
+      summary: "Operator questions are ready.",
+      data: {
+        kind: "consult",
+        consultKind: "review",
+        conclusion: "The run needs operator answers before proceeding.",
+        questionRequests: [
           {
             title: "Deployment",
             questions: [
@@ -418,11 +437,26 @@ describe("cli shell session port", () => {
           },
         ],
       },
+      metrics: {
+        durationMs: 1,
+      },
+      evidenceRefs: [],
     });
-    if (!skillCompleted) {
-      throw new Error("expected skill_completed event");
-    }
-    const requestId = `skill:${skillCompleted.id}:request:1`;
+    runtime.extensions.hosted.events.record({
+      sessionId,
+      type: "subagent_completed",
+      payload: {
+        runId,
+        delegate: "advisor",
+        artifactRefs: [
+          {
+            kind: "delegation_outcome",
+            path: artifactPath,
+          },
+        ],
+      },
+    });
+    const requestId = `delegation:${runId}:request:1`;
     const request = await resolveOpenSessionQuestionRequest(runtime, sessionId, requestId);
     if (!request) {
       throw new Error("expected open question request");

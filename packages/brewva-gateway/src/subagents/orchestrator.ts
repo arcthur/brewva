@@ -57,7 +57,6 @@ import {
   buildForkDelegationContractRecordFields,
   buildPatchArtifactRefs,
   buildWorkerResult,
-  formatSkillValidationError,
   resolveDelegationExecutionPlan,
   resolveDelegationRecordIdentity,
   resolveDelegationTarget,
@@ -125,7 +124,6 @@ function mergeTaskPacket(
     deliverable: taskPacket.deliverable ?? sharedPacket?.deliverable,
     constraints: [...(sharedPacket?.constraints ?? []), ...(taskPacket.constraints ?? [])],
     sharedNotes: [...(sharedPacket?.sharedNotes ?? []), ...(taskPacket.sharedNotes ?? [])],
-    activeSkillName: taskPacket.activeSkillName ?? sharedPacket?.activeSkillName,
     consultBrief: taskPacket.consultBrief ?? sharedPacket?.consultBrief,
     executionHints: {
       preferredTools: [
@@ -135,10 +133,6 @@ function mergeTaskPacket(
       fallbackTools: [
         ...(sharedPacket?.executionHints?.fallbackTools ?? []),
         ...(taskPacket.executionHints?.fallbackTools ?? []),
-      ],
-      preferredSkills: [
-        ...(sharedPacket?.executionHints?.preferredSkills ?? []),
-        ...(taskPacket.executionHints?.preferredSkills ?? []),
       ],
     },
     contextRefs: [...(sharedPacket?.contextRefs ?? []), ...(taskPacket.contextRefs ?? [])],
@@ -330,17 +324,12 @@ function deliverDelegationOutcome(input: {
   });
   let supplementalAppended = false;
   if (input.delivery.returnMode === "supplemental") {
-    input.runtime.maintain.context.appendGuardedSupplementalBlocks(
-      input.sessionId,
-      [
-        {
-          familyId: "subagent-outcome",
-          content,
-        },
-      ],
-      undefined,
-      input.delivery.returnScopeId ?? `subagent:${input.delegate}`,
-    );
+    input.runtime.maintain.workbench.note(input.sessionId, {
+      content,
+      sourceRefs: [input.outcome.runId],
+      reason: input.delivery.returnScopeId ?? `subagent:${input.delegate}`,
+      retentionHint: "session",
+    });
     supplementalAppended = true;
   }
   return {
@@ -477,17 +466,6 @@ export function createHostedSubagentAdapter(
       resolvedTarget.target,
       input.request.packet,
     );
-    const parentSkill = options.runtime.inspect.skills.getActive(input.fromSessionId)?.name;
-    if (
-      parentSkill === "plan" &&
-      (resolvedTarget.target.resultMode !== "consult" ||
-        (resolvedTarget.target.boundary ?? "safe") !== "safe")
-    ) {
-      return {
-        ok: false,
-        error: "plan_posture_blocks_effectful_delegation",
-      };
-    }
     if (
       resolvedTarget.target.skillName &&
       !options.runtime.inspect.skills.get(resolvedTarget.target.skillName)
@@ -561,7 +539,6 @@ export function createHostedSubagentAdapter(
   }): LiveHostedDelegationRun {
     const runId = randomUUID();
     const startedAt = Date.now();
-    const parentSkill = options.runtime.inspect.skills.getActive(input.parentSessionId)?.name;
     const delegate = input.delegate ?? resolveDelegationLabel(input.target);
 
     let child: HostedSubagentSessionResult | undefined;
@@ -585,7 +562,6 @@ export function createHostedSubagentAdapter(
           updatedAt: Date.now(),
           status: "failed",
           label: input.label,
-          parentSkill,
           delivery: buildDeliveryRecordFromRequest(input.delivery, Date.now()),
         }),
         status: "failed",
@@ -658,7 +634,6 @@ export function createHostedSubagentAdapter(
         parentSessionId: asBrewvaSessionId(input.parentSessionId),
         createdAt: startedAt,
         label: input.label,
-        parentSkill,
         boundary: executionPlan.boundary,
         modelRoute: executionPlan.modelRoute,
         delivery: buildDeliveryRecordFromRequest(input.delivery, startedAt),
@@ -825,37 +800,6 @@ export function createHostedSubagentAdapter(
             },
           });
         }
-        const skillValidation =
-          childOwnsSkill && childSessionId
-            ? child.runtime.inspect.skills.validateOutputs(
-                childSessionId,
-                structuredOutcome.skillOutputs ?? {},
-              )
-            : undefined;
-        if (childOwnsSkill && delegatedSkill && skillValidation && !skillValidation.ok) {
-          options.runtime.extensions.hosted.events.record({
-            sessionId: input.parentSessionId,
-            type: "subagent_skill_output_validation_failed",
-            payload: {
-              runId,
-              delegate,
-              label: input.label ?? null,
-              kind: input.target.resultMode,
-              consultKind: input.target.consultKind ?? null,
-              childSessionId,
-              skillName: delegatedSkill,
-              missing: skillValidation.missing,
-              invalid: skillValidation.invalid,
-            },
-          });
-          throw new Error(
-            formatSkillValidationError({
-              skillName: delegatedSkill,
-              missing: skillValidation.missing,
-              invalid: skillValidation.invalid,
-            }),
-          );
-        }
         const fallbackSummary =
           structuredOutcome.data && summarizeStructuredOutcomeData(structuredOutcome.data)
             ? summarizeStructuredOutcomeData(structuredOutcome.data)!
@@ -899,8 +843,6 @@ export function createHostedSubagentAdapter(
           summary,
           assistantText: output.assistantText.trim(),
           data: structuredOutcome.data,
-          skillOutputs: structuredOutcome.skillOutputs,
-          skillValidation,
           metrics: {
             durationMs: Math.max(0, Date.now() - startedAt),
             inputTokens: childCostSummary.inputTokens,
@@ -964,7 +906,6 @@ export function createHostedSubagentAdapter(
             target: input.target,
             resultData,
             patchChangeCount: patches?.changes.length,
-            skillValidationOk: skillValidation?.ok,
           }),
           summary,
           error: undefined,
@@ -1097,7 +1038,6 @@ export function createHostedSubagentAdapter(
             target: input.target,
             resultData: undefined,
             patchChangeCount: workerResult?.patches?.changes.length,
-            skillValidationOk: false,
           }),
           summary: message,
           error: message,

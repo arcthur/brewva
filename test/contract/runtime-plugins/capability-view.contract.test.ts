@@ -28,7 +28,7 @@ describe("capability view", () => {
           },
         },
         {
-          name: "session_compact",
+          name: "workbench_compact",
           description: "Compact session context.",
           parameters: {
             type: "object",
@@ -285,17 +285,17 @@ describe("capability view", () => {
       prompt: "continue",
       allTools: [
         {
-          name: "skill_load",
-          description: "Load a skill.",
-          parameters: { type: "object", properties: {} },
-        },
-        {
           name: "obs_query",
           description: "Query runtime events.",
           parameters: { type: "object", properties: {} },
         },
+        {
+          name: "workflow_status",
+          description: "Inspect workflow status.",
+          parameters: { type: "object", properties: {} },
+        },
       ],
-      activeToolNames: ["skill_load"],
+      activeToolNames: ["workflow_status"],
     });
 
     expect(result.inventory.hiddenBySurface.operator).toBe(1);
@@ -335,7 +335,7 @@ describe("capability view", () => {
       prompt: "continue",
       allTools: [
         {
-          name: "session_compact",
+          name: "workbench_compact",
           description: "Compact session context.",
           parameters: { type: "object", properties: {} },
         },
@@ -345,7 +345,7 @@ describe("capability view", () => {
           parameters: { type: "object", properties: { query: { type: "string" } } },
         },
       ],
-      activeToolNames: ["session_compact"],
+      activeToolNames: ["workbench_compact"],
     });
 
     expect(result.inventory.hiddenBySurface.skill).toBe(1);
@@ -397,12 +397,12 @@ describe("capability view", () => {
     expect(rendered[2]?.content).not.toContain("rollbackable:");
   });
 
-  test("renders control-plane and delegation actions as effectful semantic actions", () => {
+  test("renders compact memory and delegation actions as effectful semantic actions", () => {
     const result = buildCapabilityView({
-      prompt: "inspect $session_compact and $subagent_run",
+      prompt: "inspect $workbench_compact and $subagent_run",
       allTools: [
         {
-          name: "session_compact",
+          name: "workbench_compact",
           description: "Compact session context.",
           parameters: { type: "object", properties: {} },
         },
@@ -412,16 +412,16 @@ describe("capability view", () => {
           parameters: { type: "object", properties: {} },
         },
       ],
-      activeToolNames: ["session_compact", "subagent_run"],
+      activeToolNames: ["workbench_compact", "subagent_run"],
     });
 
     expect(result.details[0]).toMatchObject({
-      name: "session_compact",
-      actionClass: "control_state_mutation",
+      name: "workbench_compact",
+      actionClass: "memory_write",
       boundary: "effectful",
-      effects: ["control_state_mutation"],
+      effects: ["memory_write"],
       receiptPolicy: { kind: "control_plane", required: true },
-      recoveryPolicy: { kind: "forward_correction" },
+      recoveryPolicy: { kind: "none" },
     });
     expect(result.details[1]).toMatchObject({
       name: "subagent_run",
@@ -438,7 +438,7 @@ describe("capability view", () => {
       prompt: "inspect $task_set_spec",
       allTools: [
         {
-          name: "session_compact",
+          name: "workbench_compact",
           description: "Compact session context.",
           parameters: { type: "object", properties: {} },
         },
@@ -453,7 +453,7 @@ describe("capability view", () => {
           parameters: { type: "object", properties: {} },
         },
       ],
-      activeToolNames: ["session_compact"],
+      activeToolNames: ["workbench_compact"],
     });
 
     const rendered = renderCapabilityView({

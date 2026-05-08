@@ -33,17 +33,6 @@ function runSubcommand(
   });
 }
 
-function buildImpactMap(summary: string) {
-  return {
-    summary,
-    affected_paths: ["packages/brewva-runtime/src/runtime/runtime.ts"],
-    boundaries: ["runtime.authority.skills"],
-    high_risk_touchpoints: ["runtime inspection surface"],
-    change_categories: ["public_api"],
-    changed_file_classes: ["public_api"],
-  };
-}
-
 describe("inspect subcommand", () => {
   test(
     "rebuilds a replay-first session report from persisted artifacts",
@@ -68,12 +57,6 @@ describe("inspect subcommand", () => {
           type: "session_bootstrap",
           payload: {
             managedToolMode: "direct",
-            skillLoad: {
-              routingEnabled: false,
-              routingScopes: ["core", "domain"],
-              routableSkills: [],
-              hiddenSkills: [],
-            },
           },
         });
         runtime.maintain.context.onTurnStart(sessionId, 1);
@@ -158,7 +141,7 @@ describe("inspect subcommand", () => {
           };
           ledger: { integrityValid: boolean; rows: number };
           consistency: { ledgerIntegrity: string };
-          bootstrap: { routingEnabled: boolean | null };
+          bootstrap: { workspaceRoot: string | null; configPath: string | null };
           analysis?: {
             directory: string;
             verdict: string;
@@ -184,7 +167,7 @@ describe("inspect subcommand", () => {
         expect(payload.ledger.rows).toBeGreaterThan(0);
         expect(payload.ledger.integrityValid).toBe(true);
         expect(payload.consistency.ledgerIntegrity).toBe("ok");
-        expect(payload.bootstrap.routingEnabled).toBe(false);
+        expect("routingEnabled" in payload.bootstrap).toBe(false);
         expect(payload.analysis?.directory).toBe(".");
         expect(payload.analysis?.verdict).toBe("mixed");
         expect(
@@ -239,17 +222,6 @@ describe("inspect subcommand", () => {
           },
         });
 
-        for (let index = 0; index < 60; index += 1) {
-          const syntheticSessionId = `output-reg-${index}`;
-          runtime.authority.skills.activate(syntheticSessionId, "repository-analysis");
-          runtime.authority.skills.complete(syntheticSessionId, {
-            repository_snapshot: `synthetic registry session ${index}`,
-            impact_map: buildImpactMap(`synthetic impact map ${index}`),
-            planning_posture: "moderate",
-            unknowns: ["synthetic only"],
-          });
-        }
-
         const result = runInspect(
           ["--cwd", workspace, "--config", ".brewva/brewva.json", "--json"],
           {
@@ -299,12 +271,6 @@ describe("inspect subcommand", () => {
           type: "session_bootstrap",
           payload: {
             managedToolMode: "direct",
-            skillLoad: {
-              routingEnabled: false,
-              routingScopes: ["core", "domain"],
-              routableSkills: [],
-              hiddenSkills: [],
-            },
           },
         });
         runtime.maintain.context.onTurnStart(sessionId, 1);

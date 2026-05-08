@@ -77,7 +77,7 @@ function writeWorkspaceConfig(workspace: string): void {
             compaction: {
               minTurnsBetween: 1,
               minSecondsBetween: 0,
-              pressureBypassPercent: 0,
+              cooldownBypassPercent: 0,
             },
           },
         },

@@ -80,7 +80,6 @@ describe("task progress watchdog", () => {
         config: createOpsRuntimeConfig(),
       });
       const sessionId = "watchdog-no-task-state-1";
-      await runtime.maintain.context.buildInjection(sessionId, "Inspect the repository");
 
       const watchdog = new TaskProgressWatchdog({
         runtime,

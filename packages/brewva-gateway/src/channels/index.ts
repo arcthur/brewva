@@ -11,4 +11,4 @@ export * from "./coordinator.js";
 export * from "./eviction.js";
 export * from "./orchestration-config.js";
 export * from "./routing-scope.js";
-export * from "./skill-policy.js";
+export * from "./channel-policy.js";

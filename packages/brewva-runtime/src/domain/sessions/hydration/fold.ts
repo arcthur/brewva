@@ -1,10 +1,5 @@
 import type { BrewvaEventRecord } from "../../../events/types.js";
 import type { ResourceLeaseRecord } from "../../context/api.js";
-import type {
-  ActiveSkillRuntimeState,
-  SkillCompletionFailureRecord,
-  SkillOutputRecord,
-} from "../../skills/api.js";
 import type { VerificationCheckRun, VerificationSessionState } from "../../verification/api.js";
 import type { IntegrityIssue } from "../integrity.js";
 import type { RuntimeSessionStateCell } from "../session-state.js";
@@ -66,15 +61,9 @@ export function applySessionHydrationFold<State>(
 
 export interface SkillHydrationState {
   turn: number;
-  activeSkill?: string;
-  activeSkillState?: ActiveSkillRuntimeState;
-  latestSkillFailure?: SkillCompletionFailureRecord;
   toolCalls: number;
   toolContractWarnings: Set<string>;
   governanceMetadataWarnings: Set<string>;
-  skillBudgetWarnings: Set<string>;
-  skillParallelWarnings: Set<string>;
-  skillOutputs: Map<string, SkillOutputRecord>;
 }
 
 export interface ToolLifecycleHydrationState {

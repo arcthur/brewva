@@ -7,7 +7,7 @@ import {
   TOOL_CONTRACT_WARNING_EVENT_TYPE,
   TOOL_RESULT_RECORDED_EVENT_TYPE,
 } from "@brewva/brewva-runtime/events";
-import type { ComposedContextBlock } from "./context-composer.js";
+import { makeHostedContextBlock, type HostedContextBlock } from "./hosted-context-blocks.js";
 import type { TurnLifecyclePort } from "./turn-lifecycle-port.js";
 
 const RECENT_TOOL_RESULT_WINDOW = 12;
@@ -341,21 +341,14 @@ export function buildReadPathRecoveryBlock(state: ReadPathRecoveryState): string
 export function buildReadPathRecoveryBlocks(
   runtime: RuntimeEventQueryPort,
   sessionId: string,
-): ComposedContextBlock[] {
+): HostedContextBlock[] {
   const state = analyzeReadPathRecoveryState(runtime, sessionId);
   const content = buildReadPathRecoveryBlock(state);
   if (!content) {
     return [];
   }
-  return [
-    {
-      id: "read-path-recovery",
-      category: "constraint",
-      provenance: "composer_policy_block",
-      content,
-      estimatedTokens: 0,
-    },
-  ];
+  const block = makeHostedContextBlock("read-path-recovery", content);
+  return block ? [block] : [];
 }
 
 export function buildReadPathGuardWarningPayload(input: {

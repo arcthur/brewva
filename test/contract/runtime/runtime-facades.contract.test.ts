@@ -7,7 +7,7 @@ import {
   DEFAULT_BREWVA_CONFIG,
   buildScheduleIntentFiredEvent,
 } from "@brewva/brewva-runtime";
-import { setStaticContextPressureThresholds } from "../../fixtures/config.js";
+import { setStaticContextStatusThresholds } from "../../fixtures/config.js";
 import { patchDateNow } from "../../helpers/global-state.js";
 import { getRuntimeInternals } from "../../helpers/runtime-internals.js";
 import { createOpsRuntimeConfig } from "../../helpers/runtime.js";
@@ -160,7 +160,6 @@ describe("runtime facade coverage", () => {
       const runtime = new BrewvaRuntime({ cwd: workspace, config });
 
       runtime.maintain.context.onTurnStart(sessionId, 1);
-      expect(runtime.authority.skills.activate(sessionId, "plan").ok).toBe(true);
       runtime.extensions.hosted.events.record({
         sessionId,
         type: "tool_execution_start",
@@ -194,20 +193,13 @@ describe("runtime facade coverage", () => {
         }),
       ]);
       expect(reloaded.inspect.session.getUncleanShutdownDiagnostic(sessionId)).toMatchObject({
-        reasons: expect.arrayContaining([
-          "open_tool_calls_without_terminal_receipt",
-          "active_skill_without_terminal_receipt",
-        ]),
+        reasons: expect.arrayContaining(["open_tool_calls_without_terminal_receipt"]),
         openToolCalls: [
           expect.objectContaining({
             toolCallId: "read-1",
             toolName: "read",
           }),
         ],
-        activeSkill: expect.objectContaining({
-          skillName: "plan",
-          phase: "active",
-        }),
         latestEventType: "tool_execution_start",
       });
       expect(
@@ -216,7 +208,7 @@ describe("runtime facade coverage", () => {
       expect(reloaded.inspect.recovery.getPosture(sessionId)).toEqual(
         expect.objectContaining({
           mode: "degraded",
-          degradedReason: expect.stringContaining("active_skill_without_terminal_receipt"),
+          degradedReason: "open_tool_calls_without_terminal_receipt",
         }),
       );
       expect(reloaded.inspect.lifecycle.getSnapshot(sessionId)).toEqual(
@@ -234,28 +226,6 @@ describe("runtime facade coverage", () => {
     } finally {
       restoreNow();
     }
-  });
-
-  test("hosted event recording rejects non-canonical skill_completed payloads", () => {
-    const runtime = new BrewvaRuntime({
-      cwd: createTestWorkspace("runtime-facade-skill-completed"),
-    });
-    const sessionId = "runtime-facade-skill-completed-1";
-
-    expect(() =>
-      runtime.extensions.hosted.events.record({
-        sessionId,
-        timestamp: 1_740_000_123_456,
-        type: "skill_completed",
-        payload: {
-          skillName: "plan",
-          outputs: {
-            planning_posture: "complex",
-            open_questions: ["What deployment constraint is still unresolved?"],
-          },
-        },
-      }),
-    ).toThrow(/invalid_recorded_event_payload:skill_completed/);
   });
 
   test("hosted event recording rejects non-canonical tool_output_distilled payloads", () => {
@@ -642,28 +612,19 @@ describe("runtime facade coverage", () => {
           turnId: "turn-2",
         },
       });
-      expect(runtime.authority.skills.activate(sessionId, "plan").ok).toBe(true);
-
       now += 10_000;
       const reloaded = new BrewvaRuntime({ cwd: workspace, config });
 
       expect(reloaded.inspect.session.getOpenToolCalls(sessionId)).toEqual([]);
       expect(reloaded.inspect.session.getUncleanShutdownDiagnostic(sessionId)).toMatchObject({
-        reasons: expect.arrayContaining([
-          "open_turn_without_terminal_receipt",
-          "active_skill_without_terminal_receipt",
-        ]),
+        reasons: expect.arrayContaining(["open_turn_without_terminal_receipt"]),
         openToolCalls: [],
         openTurns: [
           expect.objectContaining({
             turn: 2,
           }),
         ],
-        activeSkill: expect.objectContaining({
-          skillName: "plan",
-          phase: "active",
-        }),
-        latestEventType: "skill_activated",
+        latestEventType: "turn_start",
       });
       expect(
         reloaded.inspect.events.query(sessionId, { type: "unclean_shutdown_reconciled" }),
@@ -1064,7 +1025,7 @@ describe("runtime facade coverage", () => {
 
   test("context facade normalizes usage ratios, reads stored pressure, and exposes compaction window turns", () => {
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
-    setStaticContextPressureThresholds(config, {
+    setStaticContextStatusThresholds(config, {
       hardLimitPercent: 0.8,
       compactionThresholdPercent: 0.7,
     });
@@ -1090,7 +1051,13 @@ describe("runtime facade coverage", () => {
       percent: 95,
     });
 
-    expect(runtime.inspect.context.getPressureLevel(sessionId)).toBe("critical");
+    expect(runtime.inspect.context.getStatus(sessionId)).toMatchObject({
+      compactionAdvised: true,
+      forcedCompaction: true,
+      usageRatio: 0.95,
+      hardLimitRatio: 0.8,
+      compactionThresholdRatio: 0.7,
+    });
     expect(runtime.inspect.context.getCompactionWindowTurns()).toBe(5);
   });
 
@@ -1106,7 +1073,7 @@ describe("runtime facade coverage", () => {
     const observed = runtime.maintain.context.observePromptStability(sessionId, {
       stablePrefixHash: sha256("system-prefix"),
       dynamicTailHash: sha256("dynamic-tail"),
-      injectionScopeId: "leaf-one",
+      contextScopeId: "leaf-one",
       turn: 4,
       timestamp: 1_740_000_000_400,
     });
@@ -1143,7 +1110,8 @@ describe("runtime facade coverage", () => {
       clearedToolResults: 1,
       clearedChars: 1536,
       estimatedTokenSavings: 431,
-      pressureLevel: "high",
+      compactionAdvised: true,
+      forcedCompaction: false,
       turn: 5,
       timestamp: 1_740_000_000_500,
     });
@@ -1157,7 +1125,8 @@ describe("runtime facade coverage", () => {
       clearedToolResults: 1,
       clearedChars: 1536,
       estimatedTokenSavings: 431,
-      pressureLevel: "high",
+      compactionAdvised: true,
+      forcedCompaction: false,
       classification: null,
       expectedCacheBreak: false,
     });
@@ -1168,7 +1137,7 @@ describe("runtime facade coverage", () => {
     expect(runtime.inspect.context.getTransientReduction(sessionId)).toBeUndefined();
   });
 
-  test("context lifecycle hooks hydrate cold sessions and clear turn-local injection reservations", async () => {
+  test("context lifecycle hooks hydrate cold sessions without owning dynamic prompt state", () => {
     const runtime = new BrewvaRuntime({
       cwd: createTestWorkspace("runtime-facade-context-lifecycle"),
     });
@@ -1179,7 +1148,6 @@ describe("runtime facade coverage", () => {
           getExistingCell(sessionId: string):
             | {
                 hydration: { status: string };
-                reservedContextInjectionTokensByScope: Map<string, unknown>;
               }
             | undefined;
         };
@@ -1193,26 +1161,9 @@ describe("runtime facade coverage", () => {
     expect(sessionState.getExistingCell(sessionId)?.hydration.status).toBe("ready");
 
     runtime.maintain.context.onTurnStart(sessionId, 1);
-    await runtime.maintain.context.buildInjection(
-      sessionId,
-      "Summarize the current runtime posture.",
-      {
-        tokens: 256,
-        contextWindow: 8_192,
-        percent: 0.03,
-      },
-    );
-
-    expect(
-      sessionState.getExistingCell(sessionId)?.reservedContextInjectionTokensByScope.size ?? 0,
-    ).toBeGreaterThan(0);
-
     runtime.maintain.context.onTurnEnd(sessionId);
 
     expect(sessionState.getExistingCell(sessionId)?.hydration.status).toBe("ready");
-    expect(
-      sessionState.getExistingCell(sessionId)?.reservedContextInjectionTokensByScope.size ?? 0,
-    ).toBe(0);
   });
 
   test("cost.getSummary returns zeroed state for untouched sessions and keeps per-session totals isolated", () => {

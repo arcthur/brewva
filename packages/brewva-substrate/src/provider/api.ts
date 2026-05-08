@@ -22,10 +22,6 @@ export {
   type BrewvaProviderCompletionRequest,
   type BrewvaProviderCompletionResponse,
   type BrewvaProviderCompletionUsage,
-} from "./completion.js";
-export {
   UnsupportedBrewvaProviderApiError,
-  createFetchProviderCompletionDriver,
   isUnsupportedBrewvaProviderApiError,
-  type CreateFetchProviderCompletionDriverOptions,
-} from "./fetch-provider-driver.js";
+} from "./completion.js";

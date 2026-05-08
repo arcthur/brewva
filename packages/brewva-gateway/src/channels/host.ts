@@ -43,6 +43,7 @@ import type {
 } from "./channel-command-contracts.js";
 import { createChannelControlRouter } from "./channel-control-router.js";
 import { runChannelHostLifecycle } from "./channel-host-lifecycle.js";
+import { resolveTelegramChannelPolicyState } from "./channel-policy.js";
 import { createChannelReplyWriter } from "./channel-reply-writer.js";
 import { createChannelSessionCoordinator } from "./channel-session-coordinator.js";
 import { createChannelSessionQueries } from "./channel-session-queries.js";
@@ -54,7 +55,6 @@ import { createChannelUpdateLockManager } from "./channel-update-lock.js";
 import { CommandRouter } from "./command-router.js";
 import { ChannelCoordinator } from "./coordinator.js";
 import { resolveChannelOrchestrationConfig } from "./orchestration-config.js";
-import { resolveTelegramChannelSkillPolicyState } from "./skill-policy.js";
 
 export interface RunChannelModeOptions {
   cwd?: string;
@@ -114,25 +114,7 @@ export async function runChannelModeOperation(options: RunChannelModeOptions): P
   });
   options.onRuntimeReady?.(runtime);
 
-  const telegramSkillPolicyState = resolveTelegramChannelSkillPolicyState({
-    availableSkillNames: runtime.inspect.skills.list().map((skill) => skill.name),
-  });
-  if (channel === "telegram" && telegramSkillPolicyState.missingSkillNames.length > 0) {
-    runtime.extensions.hosted.events.record({
-      sessionId: "channel:system",
-      type: "channel_skill_policy_degraded",
-      payload: {
-        channel: "telegram",
-        missingSkillNames: telegramSkillPolicyState.missingSkillNames,
-      },
-      skipTapeCheckpoint: true,
-    });
-    if (options.verbose) {
-      console.error(
-        `[channel:telegram] skill policy degraded: missing skills ${telegramSkillPolicyState.missingSkillNames.join(", ")}`,
-      );
-    }
-  }
+  const telegramChannelPolicyState = resolveTelegramChannelPolicyState();
 
   const createSession = options.dependencies?.createSession ?? createHostedSession;
   const collectPromptOutputs =
@@ -237,7 +219,7 @@ export async function runChannelModeOperation(options: RunChannelModeOptions): P
     sessionCoordinator,
     replyWriter,
     collectPromptTurnOutputs: collectPromptOutputs,
-    skillPolicyState: telegramSkillPolicyState,
+    channelPolicyState: telegramChannelPolicyState,
   });
 
   coordinator = new ChannelCoordinator({

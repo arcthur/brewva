@@ -1,5 +1,3 @@
-import { CONTEXT_SOURCES } from "../domain/context/sources.js";
-
 /**
  * Patterns that indicate direct prompt-injection attempts.
  * Matching is case-insensitive.
@@ -53,7 +51,7 @@ export function sanitizeContextText(text: string): string {
 }
 
 /**
- * Trust tiers for context injection sources.
+ * Trust tiers for runtime-authored text.
  *
  * - `system`:   Runtime-generated, trusted content (identity, task state, gates).
  * - `internal`: Runtime-derived status and routing context.
@@ -62,19 +60,18 @@ export function sanitizeContextText(text: string): string {
 export type SourceTrustTier = "system" | "internal" | "external";
 
 const SOURCE_TRUST_MAP: Record<string, SourceTrustTier> = {
-  [CONTEXT_SOURCES.identity]: "system",
-  [CONTEXT_SOURCES.agentConstitution]: "internal",
-  [CONTEXT_SOURCES.agentMemory]: "internal",
-  [CONTEXT_SOURCES.historyViewBaseline]: "internal",
-  [CONTEXT_SOURCES.taskState]: "system",
-  [CONTEXT_SOURCES.recoveryWorkingSet]: "internal",
-  [CONTEXT_SOURCES.recallBroker]: "internal",
-  [CONTEXT_SOURCES.deliberationMemory]: "internal",
-  [CONTEXT_SOURCES.optimizationContinuity]: "internal",
-  [CONTEXT_SOURCES.skillPromotionDrafts]: "internal",
-  [CONTEXT_SOURCES.runtimeStatus]: "internal",
-  [CONTEXT_SOURCES.toolOutputsDistilled]: "internal",
-  [CONTEXT_SOURCES.projectionWorking]: "internal",
+  "brewva.identity": "system",
+  "brewva.task-state": "system",
+  "brewva.context-status": "system",
+  "brewva.workbench": "system",
+  "brewva.agent-constitution": "internal",
+  "brewva.agent-memory": "internal",
+  "brewva.deliberation-memory": "internal",
+  "brewva.skill-promotion-drafts": "internal",
+  "brewva.runtime-status": "internal",
+  "brewva.skill-diagnosis": "internal",
+  "brewva.tool-outputs-distilled": "internal",
+  "brewva.projection-working": "internal",
 };
 
 export function getSourceTrustTier(source: string): SourceTrustTier {

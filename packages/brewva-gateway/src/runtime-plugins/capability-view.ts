@@ -167,12 +167,11 @@ export interface CapabilityRenderedBlock {
 }
 
 const GOVERNANCE_TOOL_NAMES = new Set<string>([
-  "session_compact",
+  "workbench_compact",
   "resource_lease",
   "tape_handoff",
   "tape_info",
   "tape_search",
-  "skill_complete",
   "task_set_spec",
   "task_view_state",
 ]);

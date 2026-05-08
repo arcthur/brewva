@@ -10,7 +10,6 @@ export {
   type BrewvaTurnScopeShape,
 } from "./effect-runtime.js";
 export { runBrewvaTurnLoop, type BrewvaTurnLoopConfig } from "./loop.js";
-export { createBrewvaTurnProviderStreamFunction } from "./provider-stream.js";
 export type {
   BrewvaTurnLoopAfterToolCallContext,
   BrewvaTurnLoopAssistantMessage,

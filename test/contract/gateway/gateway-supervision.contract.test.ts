@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   asBrewvaSessionId,
-  type ContextPressureView,
+  type ContextStatusView,
   type SessionWireFrame,
 } from "@brewva/brewva-runtime";
 import type WebSocket from "ws";
@@ -21,6 +21,24 @@ import {
   waitForRawFrame,
   withTimeout,
 } from "./gateway-raw.helpers.js";
+
+function makeContextStatus(overrides: Partial<ContextStatusView> = {}): ContextStatusView {
+  return {
+    tokensUsed: 1200,
+    tokensTotal: 8000,
+    tokensRemaining: 6800,
+    tokensUntilForcedCompact: 5200,
+    predictedTurnGrowthTokens: 2000,
+    tokensUntilPredictedOverflow: 3200,
+    predictedOverflow: false,
+    usageRatio: 0.15,
+    hardLimitRatio: 0.95,
+    compactionThresholdRatio: 0.8,
+    compactionAdvised: false,
+    forcedCompaction: false,
+    ...overrides,
+  };
+}
 
 describe("gateway supervision and subscriptions", () => {
   test("routes session-scoped worker events only to subscribed connections", async () => {
@@ -292,11 +310,13 @@ describe("gateway supervision and subscriptions", () => {
             toolOutputs: [],
           },
         ],
-        querySessionContextPressure: async () => ({
-          tokens: 4200,
-          limit: 8000,
-          level: "elevated",
-        }),
+        querySessionContextStatus: async () =>
+          makeContextStatus({
+            tokensUsed: 4200,
+            tokensRemaining: 3800,
+            usageRatio: 0.525,
+            compactionAdvised: true,
+          }),
       }),
     });
     try {
@@ -344,11 +364,12 @@ describe("gateway supervision and subscriptions", () => {
       expect(observedFrames[4]).toMatchObject({
         type: "session.status",
         state: "idle",
-        contextPressure: {
-          tokens: 4200,
-          limit: 8000,
-          level: "elevated",
-        },
+        contextStatus: makeContextStatus({
+          tokensUsed: 4200,
+          tokensRemaining: 3800,
+          usageRatio: 0.525,
+          compactionAdvised: true,
+        }),
       });
     } finally {
       harness.dispose();
@@ -364,7 +385,7 @@ describe("gateway supervision and subscriptions", () => {
     const harness = createDaemonHarness([], {
       sessionBackend: createSessionBackendStub({
         querySessionWire: async () => await replayQuery,
-        querySessionContextPressure: async () => undefined,
+        querySessionContextStatus: async () => undefined,
       }),
     });
 
@@ -552,18 +573,12 @@ describe("gateway supervision and subscriptions", () => {
     }
   });
 
-  test("derives live session status frames with context pressure", async () => {
-    let contextPressure:
-      | {
-          tokens: number;
-          limit: number;
-          level: "normal" | "elevated" | "critical";
-        }
-      | undefined;
+  test("derives live session status frames with context status", async () => {
+    let contextStatus: ContextStatusView | undefined;
     const frames: unknown[] = [];
     const harness = createDaemonHarness([], {
       sessionBackend: createSessionBackendStub({
-        querySessionContextPressure: async () => contextPressure,
+        querySessionContextStatus: async () => contextStatus,
       }),
     });
     try {
@@ -592,11 +607,15 @@ describe("gateway supervision and subscriptions", () => {
       });
       frames.length = 0;
 
-      contextPressure = {
-        tokens: 9700,
-        limit: 10000,
-        level: "critical",
-      };
+      contextStatus = makeContextStatus({
+        tokensUsed: 9700,
+        tokensTotal: 10000,
+        tokensRemaining: 300,
+        tokensUntilForcedCompact: 0,
+        usageRatio: 0.97,
+        compactionAdvised: true,
+        forcedCompaction: true,
+      });
       injectWorkerEvent(harness.daemon, "session.wire.frame", {
         sessionId: "session-live-status",
         frame: {
@@ -658,43 +677,31 @@ describe("gateway supervision and subscriptions", () => {
         type: "session.status",
         sessionId: "session-live-status",
         state: "running",
-        contextPressure: {
-          tokens: 9700,
-          limit: 10000,
-          level: "critical",
-        },
+        contextStatus,
       });
-      expect((wireFrames[1] as { contextPressure?: unknown }).contextPressure).toEqual({
-        tokens: 9700,
-        limit: 10000,
-        level: "critical",
-      });
+      expect((wireFrames[1] as { contextStatus?: unknown }).contextStatus).toEqual(contextStatus);
     } finally {
       harness.dispose();
     }
   });
 
   test("suppresses stale running status frames after a later terminal idle transition", async () => {
-    let resolveRunningPressure: ((value: ContextPressureView | undefined) => void) | undefined;
-    let contextPressureQueries = 0;
+    let resolveRunningStatus: ((value: ContextStatusView | undefined) => void) | undefined;
+    let contextStatusQueries = 0;
     const frames: unknown[] = [];
     const harness = createDaemonHarness([], {
       sessionBackend: createSessionBackendStub({
-        querySessionContextPressure: async () => {
-          contextPressureQueries += 1;
-          if (contextPressureQueries === 1) {
+        querySessionContextStatus: async () => {
+          contextStatusQueries += 1;
+          if (contextStatusQueries === 1) {
             return undefined;
           }
-          if (contextPressureQueries === 2) {
-            return await new Promise<ContextPressureView | undefined>((resolveQuery) => {
-              resolveRunningPressure = resolveQuery;
+          if (contextStatusQueries === 2) {
+            return await new Promise<ContextStatusView | undefined>((resolveQuery) => {
+              resolveRunningStatus = resolveQuery;
             });
           }
-          return {
-            tokens: 1200,
-            limit: 8000,
-            level: "normal",
-          };
+          return makeContextStatus();
         },
       }),
     });
@@ -757,11 +764,16 @@ describe("gateway supervision and subscriptions", () => {
         },
       });
 
-      resolveRunningPressure?.({
-        tokens: 7600,
-        limit: 8000,
-        level: "critical",
-      });
+      resolveRunningStatus?.(
+        makeContextStatus({
+          tokensUsed: 7600,
+          tokensRemaining: 400,
+          tokensUntilForcedCompact: 0,
+          usageRatio: 0.95,
+          compactionAdvised: true,
+          forcedCompaction: true,
+        }),
+      );
 
       await new Promise<void>((resolveReady) => {
         const timer = setTimeout(resolveReady, 150);

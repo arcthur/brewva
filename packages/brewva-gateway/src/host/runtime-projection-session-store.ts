@@ -21,6 +21,7 @@ import {
   readSessionRewindCompletedEventPayload,
   SESSION_REWIND_COMPLETED_EVENT_TYPE,
 } from "@brewva/brewva-runtime/events";
+import { sha256Hex } from "@brewva/brewva-std/hash";
 import { DEFAULT_CONTEXT_STATE, type ContextState } from "@brewva/brewva-substrate/contracts";
 import {
   buildManagedSessionContext,
@@ -40,6 +41,7 @@ import {
   readTranscriptMessageFromPayload,
   type StoredSessionMessage,
 } from "../session/runtime-session-transcript.js";
+import { shouldExcludeSessionEntryForWorkbench } from "./workbench-visibility.js";
 type CustomMessageContentPart = { type: string };
 
 const SESSION_COMPACT_EVENT_TYPE = "session_compact";
@@ -70,29 +72,13 @@ function readOptionalNumber(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
-function parseScopeId(scopeKey: string | undefined): string | undefined {
-  if (!scopeKey) {
-    return undefined;
-  }
-  const separatorIndex = scopeKey.indexOf("::");
-  if (separatorIndex < 0) {
-    return undefined;
-  }
-  const scopeId = scopeKey.slice(separatorIndex + 2).trim();
-  return scopeId.length > 0 && scopeId !== "root" ? scopeId : undefined;
-}
-
-function mapContextPressureLevel(level: string | undefined): ContextState["budgetPressure"] {
-  switch (level) {
-    case "low":
-    case "medium":
-    case "high":
-      return level;
-    case "critical":
-      return "high";
-    default:
-      return "none";
-  }
+function mapContextBudgetPressure(status: {
+  compactionAdvised: boolean;
+  forcedCompaction: boolean;
+}): ContextState["budgetPressure"] {
+  if (status.forcedCompaction) return "high";
+  if (status.compactionAdvised) return "medium";
+  return "none";
 }
 
 function toEntryTimestamp(timestamp: number): string {
@@ -133,7 +119,8 @@ function readCanonicalCompactionPayload(payload: unknown): {
   fromTokens: number | null;
   toTokens: number | null;
   origin: string;
-  summaryDigest?: string;
+  summaryDigest: string;
+  summaryGeneration?: unknown;
   integrityViolations?: unknown;
 } | null {
   if (!isRecord(payload)) {
@@ -144,7 +131,11 @@ function readCanonicalCompactionPayload(payload: unknown): {
     typeof payload.sanitizedSummary === "string" ? payload.sanitizedSummary : "";
   const sourceTurn = readOptionalNumber(payload.sourceTurn);
   const origin = readOptionalString(payload.origin);
-  if (!compactId || sourceTurn === undefined || !origin) {
+  const summaryDigest = readOptionalString(payload.summaryDigest);
+  if (!compactId || sourceTurn === undefined || !origin || !summaryDigest) {
+    return null;
+  }
+  if (summaryDigest !== sha256Hex(sanitizedSummary)) {
     return null;
   }
   return {
@@ -166,7 +157,8 @@ function readCanonicalCompactionPayload(payload: unknown): {
         ? payload.toTokens
         : null,
     origin,
-    summaryDigest: readOptionalString(payload.summaryDigest),
+    summaryDigest,
+    summaryGeneration: payload.summaryGeneration,
     integrityViolations: payload.integrityViolations,
   };
 }
@@ -238,27 +230,17 @@ export class HostedRuntimeTapeSessionStore {
 
   readContextState(): ContextState {
     const usage = this.runtime.inspect.context.getUsage(this.sessionId);
-    const pressure = this.runtime.inspect.context.getPressureStatus(this.sessionId, usage);
+    const contextStatus = this.runtime.inspect.context.getStatus(this.sessionId, usage);
     const promptStability = this.runtime.inspect.context.getPromptStability(this.sessionId);
-    const injectionScopeId = parseScopeId(promptStability?.scopeKey);
 
     return {
       ...DEFAULT_CONTEXT_STATE,
-      budgetPressure: mapContextPressureLevel(pressure.level),
+      budgetPressure: mapContextBudgetPressure(contextStatus),
       promptStabilityFingerprint: promptStability?.stablePrefixHash,
       transientReductionActive:
         this.runtime.inspect.context.getTransientReduction(this.sessionId)?.status === "completed",
       historyBaselineAvailable:
         this.runtime.inspect.context.getHistoryViewBaseline(this.sessionId) !== undefined,
-      reservedPrimaryTokens: this.runtime.inspect.context.getReservedPrimaryTokens(
-        this.sessionId,
-        injectionScopeId,
-      ),
-      reservedSupplementalTokens: this.runtime.inspect.context.getReservedSupplementalTokens(
-        this.sessionId,
-        injectionScopeId,
-      ),
-      lastInjectionScopeId: injectionScopeId,
     };
   }
 
@@ -369,9 +351,25 @@ export class HostedRuntimeTapeSessionStore {
       .filter(isLlmVisibleContextEntry);
     const entries: BrewvaSessionEntry[] = [];
     let parentEntryId: string | null = null;
-    for (const contextEntry of contextEntries) {
+    const workbenchEntries = this.runtime.inspect.workbench.list(this.sessionId);
+    for (const [index, contextEntry] of contextEntries.entries()) {
       const entry = this.#contextEntryRecordToSessionEntry(contextEntry, parentEntryId);
       if (!entry) {
+        continue;
+      }
+      const sourceEvent =
+        this.#eventsById.get(contextEntry.sourceEventId) ??
+        this.runtime.inspect.events
+          .list(this.sessionId)
+          .find((candidate) => candidate.id === contextEntry.sourceEventId);
+      if (
+        shouldExcludeSessionEntryForWorkbench({
+          entry,
+          sourceEvent,
+          index,
+          workbenchEntries,
+        })
+      ) {
         continue;
       }
       entries.push(entry);
@@ -1209,6 +1207,7 @@ export class HostedRuntimeTapeSessionStore {
           toTokens: compaction.toTokens,
           origin: compaction.origin,
           summaryDigest: compaction.summaryDigest,
+          summaryGeneration: compaction.summaryGeneration,
           integrityViolations: compaction.integrityViolations,
         },
         fromHook: true,

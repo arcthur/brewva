@@ -29,7 +29,7 @@ describe("reference page size", () => {
     const repoRoot = resolve(import.meta.dirname, "../../..");
     const referenceRoot = resolve(repoRoot, "docs/reference");
     const allowedLargePages = new Set([
-      "docs/reference/context-composer.md",
+      "docs/reference/hosted-dynamic-context.md",
       "docs/reference/runtime-plugins.md",
       "docs/reference/session-lifecycle.md",
       "docs/reference/token-cache.md",

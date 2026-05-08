@@ -40,17 +40,14 @@ export function createTestConfig(
   return config;
 }
 
-export function setStaticContextInjectionBudget(
-  config: BrewvaConfig,
-  maxTokens: number,
-): BrewvaConfig {
-  config.infrastructure.contextBudget.injection.baseTokens = maxTokens;
-  config.infrastructure.contextBudget.injection.windowFraction = 0;
-  config.infrastructure.contextBudget.injection.maxTokens = maxTokens;
+export function setStaticDynamicTailBudget(config: BrewvaConfig, maxTokens: number): BrewvaConfig {
+  config.infrastructure.contextBudget.dynamicTail.baseTokens = maxTokens;
+  config.infrastructure.contextBudget.dynamicTail.windowFraction = 0;
+  config.infrastructure.contextBudget.dynamicTail.maxTokens = maxTokens;
   return config;
 }
 
-export function setStaticContextPressureThresholds(
+export function setStaticContextStatusThresholds(
   config: BrewvaConfig,
   input: {
     compactionThresholdPercent?: number;

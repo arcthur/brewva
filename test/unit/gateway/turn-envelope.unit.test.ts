@@ -357,31 +357,6 @@ describe("hosted turn envelope", () => {
     });
   });
 
-  test("records schedule skill activation warning before running the loop", async () => {
-    const runtime = createRuntime("brewva-turn-envelope-schedule-warning-");
-    const sessionId = "session-envelope-schedule-warning";
-
-    await runHostedTurnEnvelope({
-      session: emptySession as Parameters<typeof runHostedTurnEnvelope>[0]["session"],
-      runtime,
-      sessionId,
-      prompt: "scheduled skill work",
-      source: "schedule",
-      turnId: "turn-schedule-warning-1",
-      trigger: {
-        kind: "schedule",
-        continuityMode: "inherit",
-        activeSkillName: "missing-skill",
-      },
-      runLoop: async () => createLoopResult(),
-    });
-
-    expect(eventPayloads(runtime, sessionId, "schedule_trigger_apply_warning")[0]).toMatchObject({
-      warning: "skill_activation_failed",
-      skillName: "missing-skill",
-    });
-  });
-
   test("records WAL recovery transitions around recovered turns", async () => {
     const runtime = createRuntime("brewva-turn-envelope-wal-");
     const sessionId = "session-envelope-wal";

@@ -49,7 +49,6 @@ function sourceBaseWeight(
       : 1.7;
   }
   if (entry.sourceFamily === "repository_precedent") return 3.25;
-  if (entry.sourceFamily === "promotion_draft") return 2.35;
   return 1.25;
 }
 

@@ -57,7 +57,6 @@ describe("substrate dependency boundary", () => {
       resolve(repoRoot, "packages", "brewva-gateway", "src", "session", "compaction-recovery.ts"),
       resolve(repoRoot, "packages", "brewva-gateway", "src", "host", "hosted-session-bootstrap.ts"),
       resolve(repoRoot, "packages", "brewva-gateway", "src", "host", "hosted-provider-driver.ts"),
-      resolve(repoRoot, "packages", "brewva-gateway", "src", "host", "semantic-reranker.ts"),
       resolve(repoRoot, "packages", "brewva-gateway", "src", "subagents", "model-routing.ts"),
       resolve(repoRoot, "packages", "brewva-cli", "src", "inspect-command-runtime-plugin.ts"),
       resolve(repoRoot, "packages", "brewva-cli", "src", "insights-command-runtime-plugin.ts"),

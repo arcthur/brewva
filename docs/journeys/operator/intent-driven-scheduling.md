@@ -14,7 +14,6 @@
 - `brewva --daemon`
 - `brewva gateway scheduler-pause`
 - `brewva gateway scheduler-resume`
-- `optimization_continuity`
 
 ## Objective
 
@@ -82,8 +81,8 @@ flowchart TD
   - `max_runs`
   - `all_of`
   - `any_of`
-- `optimization_continuity` remains an inspection surface; it does not turn the
-  scheduler into a hidden optimizer
+- scheduling remains an explicit control surface; it does not turn the runtime
+  into a hidden optimizer
 
 ## Failure And Recovery
 
@@ -113,7 +112,6 @@ flowchart TD
   - `schedule_child_session_failed`
 - inspection surfaces:
   - `runtime.inspect.schedule.getProjectionSnapshot()`
-  - `optimization_continuity`
 
 ## Code Pointers
 
@@ -123,7 +121,6 @@ flowchart TD
 - Schedule events: `packages/brewva-runtime/src/domain/schedule/events.ts`
 - Schedule projection: `packages/brewva-runtime/src/domain/schedule/projection.ts`
 - Cron / timezone: `packages/brewva-runtime/src/domain/schedule/cron.ts`
-- Continuity inspection tool: `packages/brewva-tools/src/families/memory/optimization-continuity.ts`
 - Scheduler daemon dispatch: `packages/brewva-cli/src/index.ts`
 - Scheduler daemon implementation: `packages/brewva-cli/src/daemon-mode.ts`
 - Live scheduler controls: `packages/brewva-gateway/src/cli.ts`

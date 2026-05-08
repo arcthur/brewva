@@ -6,17 +6,24 @@ inconsistent.
 This page is incident-first operator guidance, not the full command, event, or
 runtime contract.
 
-## `skill_complete` Is Rejected
+## Verification Or Acceptance Is Blocked
 
-- Cause: missing required outputs or missing verification evidence.
-- Check: `brewva inspect --session <id>` for latest verification outcome and active skill output requirements.
-- Action: provide all required outputs and run required verification checks.
+- Cause: missing verification evidence, stale evidence after a write boundary,
+  or an effect receipt that has not reached an accepted task state.
+- Check: `brewva inspect --session <id>` for latest verification outcome,
+  task state, workbench baseline, and effect receipts.
+- Action: run the required verification checks, record the evidence, and update
+  task/workbench state if the model's working memory is stale.
 
 ## `tool_call` Is Blocked
 
-- Cause: denied effects on the active contract, effect-authorization enforcement, token/tool-call budget enforcement, or cost budget violation.
-- Check: `brewva inspect --session <id>` for active skill, cost summary, and latest verification/task state.
-- Action: switch active skill, adjust `security.mode` (`permissive`/`standard`/`strict`) to change effective enforcement strategy, or resolve budget policy constraints.
+- Cause: denied effects, effect-authorization enforcement, token/tool-call
+  budget enforcement, or cost budget violation.
+- Check: `brewva inspect --session <id>` for cost summary, latest
+  verification/task state, and recent tool denial receipts.
+- Action: use an allowed tool path, adjust `security.mode`
+  (`permissive`/`standard`/`strict`) to change effective enforcement strategy,
+  request a bounded resource lease, or resolve budget policy constraints.
 
 ## `--replay` Returns No Session
 

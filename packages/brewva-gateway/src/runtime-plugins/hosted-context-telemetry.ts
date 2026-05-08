@@ -13,8 +13,8 @@ import {
 } from "@brewva/brewva-runtime/events";
 import {
   buildContextComposedEventPayload,
-  type ContextComposerResult,
-} from "./context-composer.js";
+  type HostedContextRenderResult,
+} from "./hosted-context-blocks.js";
 
 export const AUTO_COMPACTION_WATCHDOG_ERROR = "auto_compaction_watchdog_timeout";
 
@@ -57,8 +57,8 @@ export interface HostedContextTelemetry {
   emitContextComposed: (input: {
     sessionId: string;
     turn: number;
-    composed: ContextComposerResult;
-    injectionAccepted: boolean;
+    rendered: HostedContextRenderResult;
+    workbenchContextRendered: boolean;
   }) => void;
   normalizeRuntimeError: (error: unknown) => string;
 }
@@ -142,8 +142,8 @@ export function createHostedContextTelemetry(
         type: CONTEXT_COMPACTION_GATE_ARMED_EVENT_TYPE,
         payload: {
           reason: input.reason,
-          usagePercent: input.gateStatus.pressure.usageRatio,
-          hardLimitPercent: input.gateStatus.pressure.hardLimitRatio,
+          usagePercent: input.gateStatus.status.usageRatio,
+          hardLimitPercent: input.gateStatus.status.hardLimitRatio,
         },
       });
       emitRuntimeEvent({
@@ -152,10 +152,10 @@ export function createHostedContextTelemetry(
         type: CRITICAL_WITHOUT_COMPACT_EVENT_TYPE,
         payload: {
           reason: input.reason,
-          usagePercent: input.gateStatus.pressure.usageRatio,
-          hardLimitPercent: input.gateStatus.pressure.hardLimitRatio,
-          contextPressure: input.gateStatus.pressure.level,
-          requiredTool: "session_compact",
+          usagePercent: input.gateStatus.status.usageRatio,
+          hardLimitPercent: input.gateStatus.status.hardLimitRatio,
+          forcedCompaction: input.gateStatus.status.forcedCompaction,
+          requiredTool: "workbench_compact",
         },
       });
     },
@@ -166,11 +166,12 @@ export function createHostedContextTelemetry(
         type: CONTEXT_COMPACTION_ADVISORY_EVENT_TYPE,
         payload: {
           reason: input.reason,
-          usagePercent: input.gateStatus.pressure.usageRatio,
-          compactionThresholdPercent: input.gateStatus.pressure.compactionThresholdRatio,
-          hardLimitPercent: input.gateStatus.pressure.hardLimitRatio,
-          contextPressure: input.gateStatus.pressure.level,
-          requiredTool: "session_compact",
+          usagePercent: input.gateStatus.status.usageRatio,
+          compactionThresholdPercent: input.gateStatus.status.compactionThresholdRatio,
+          hardLimitPercent: input.gateStatus.status.hardLimitRatio,
+          compactionAdvised: input.gateStatus.status.compactionAdvised,
+          forcedCompaction: input.gateStatus.status.forcedCompaction,
+          requiredTool: "workbench_compact",
         },
       });
     },
@@ -200,7 +201,7 @@ export function createHostedContextTelemetry(
         sessionId: input.sessionId,
         turn: input.turn,
         type: CONTEXT_COMPOSED_EVENT_TYPE,
-        payload: buildContextComposedEventPayload(input.composed, input.injectionAccepted),
+        payload: buildContextComposedEventPayload(input.rendered, input.workbenchContextRendered),
       });
     },
     normalizeRuntimeError,

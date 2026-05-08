@@ -1,12 +1,6 @@
-import {
-  getOrCreateDeliberationMemoryPlane,
-  getOrCreateNarrativeMemoryPlane,
-  getOrCreateOptimizationContinuityPlane,
-} from "@brewva/brewva-deliberation";
 import { tokenizeSearchQuery } from "@brewva/brewva-search";
 import { createSessionIndex, type SessionIndex } from "@brewva/brewva-session-index";
 import { isSessionIndexTextIndexedEvent } from "@brewva/brewva-session-index/evidence";
-import { getOrCreateSkillPromotionBroker } from "@brewva/brewva-skill-broker";
 import { uniqueNonEmptyStrings as uniqueStrings } from "@brewva/brewva-std/collections";
 import { resolveRuntimeSourceIdentity } from "@brewva/brewva-std/runtime-identity";
 import { classifyRecallTapeEvent } from "../evidence/index.js";
@@ -36,13 +30,7 @@ import {
   type RecallRankingContext,
 } from "./ranking.js";
 import { type RecallBrokerRuntime } from "./runtime-port.js";
-import {
-  mapDeliberationArtifact,
-  mapKnowledgeDoc,
-  mapNarrativeRecord,
-  mapOptimizationLineage,
-  mapPromotionDraft,
-} from "./source-mappers.js";
+import { mapKnowledgeDoc } from "./source-mappers.js";
 import { parseTapeStableId } from "./stable-id.js";
 import {
   mapSessionIndexDigest,
@@ -118,8 +106,7 @@ export class RecallBroker {
     runtime.inspect.events.subscribe((event) => {
       if (
         isSessionIndexTextIndexedEvent(event) ||
-        RECALL_STATE_INVALIDATING_EVENT_TYPES.has(event.type) ||
-        event.type.startsWith("skill_promotion_")
+        RECALL_STATE_INVALIDATING_EVENT_TYPES.has(event.type)
       ) {
         this.dirty = true;
       }
@@ -196,84 +183,6 @@ export class RecallBroker {
         scope,
         limit,
       )),
-    );
-    results.push(
-      ...getOrCreateNarrativeMemoryPlane(this.runtime)
-        .retrieve(query, {
-          limit,
-          targetRoots,
-        })
-        .map((entry) =>
-          mapNarrativeRecord(
-            entry.record,
-            entry.score,
-            entry.matchedTerms.length > 0 ? entry.matchedTerms : ["retrieval_match"],
-            scope,
-            rankingContext,
-          ),
-        ),
-    );
-    results.push(
-      ...getOrCreateDeliberationMemoryPlane(this.runtime)
-        .retrieve(query, limit, targetRoots)
-        .map((entry) =>
-          mapDeliberationArtifact(
-            entry.artifact,
-            entry.score,
-            entry.artifact.tags.length > 0 ? entry.artifact.tags.slice(0, 4) : ["retrieval_match"],
-            scope,
-            rankingContext,
-          ),
-        ),
-    );
-    const optimizationEntries = getOrCreateOptimizationContinuityPlane(this.runtime).retrieve(
-      query,
-      limit,
-    );
-    const promotionDrafts = getOrCreateSkillPromotionBroker(this.runtime).list({ limit });
-    const scopedSessionIds = await this.filterSessionIdsByScope(
-      sessionIndex,
-      input.sessionId,
-      scope,
-      targetRoots,
-      uniqueStrings([
-        ...optimizationEntries
-          .map((entry) => entry.artifact.rootSessionId ?? "")
-          .filter((sessionId) => sessionId.length > 0),
-        ...promotionDrafts.flatMap((draft) => draft.sessionIds),
-      ]),
-    );
-    results.push(
-      ...optimizationEntries
-        .filter(
-          (entry) =>
-            scope === "workspace_wide" ||
-            !entry.artifact.rootSessionId ||
-            scopedSessionIds.has(entry.artifact.rootSessionId),
-        )
-        .map((entry) =>
-          mapOptimizationLineage(
-            entry.artifact,
-            entry.score,
-            uniqueStrings([
-              entry.artifact.status,
-              entry.artifact.loopKey,
-              ...(entry.artifact.scope ?? []),
-            ]).slice(0, 4),
-            scope,
-            rankingContext,
-          ),
-        ),
-    );
-    results.push(
-      ...promotionDrafts
-        .filter(
-          (draft) =>
-            scope === "workspace_wide" ||
-            draft.sessionIds.some((sessionId) => scopedSessionIds.has(sessionId)),
-        )
-        .map((draft) => mapPromotionDraft(draft, queryTokens, scope, rankingContext))
-        .filter((entry): entry is RecallSearchEntry => Boolean(entry)),
     );
     results.push(
       ...executeKnowledgeSearch([this.runtime.workspaceRoot], { query, limit }).results.map(
@@ -469,90 +378,6 @@ export class RecallBroker {
         sessionIndex,
         targetRoots,
         scope,
-        rankingContext,
-      );
-    }
-    if (stableId.startsWith("narrative:")) {
-      const record = getOrCreateNarrativeMemoryPlane(this.runtime).getRecord(
-        stableId.slice("narrative:".length),
-      );
-      return record
-        ? mapNarrativeRecord(record, 0.4, ["stable_id"], scope, rankingContext)
-        : undefined;
-    }
-    if (stableId.startsWith("deliberation:")) {
-      const artifact = getOrCreateDeliberationMemoryPlane(this.runtime).getArtifact(
-        stableId.slice("deliberation:".length),
-      );
-      return artifact
-        ? mapDeliberationArtifact(artifact, 0.4, ["stable_id"], scope, rankingContext)
-        : undefined;
-    }
-    if (stableId.startsWith("optimization:")) {
-      const lineage = getOrCreateOptimizationContinuityPlane(this.runtime).getLineage(
-        stableId.slice("optimization:".length),
-      );
-      if (!lineage) {
-        return undefined;
-      }
-      if (
-        scope !== "workspace_wide" &&
-        lineage.rootSessionId &&
-        !(await this.isSessionInScope(
-          sessionIndex,
-          lineage.rootSessionId,
-          targetRoots,
-          scope,
-          rankingContext,
-        ))
-      ) {
-        return undefined;
-      }
-      return mapOptimizationLineage(
-        lineage,
-        0.4,
-        uniqueStrings([lineage.status, lineage.loopKey, "stable_id"]).slice(0, 4),
-        scope,
-        rankingContext,
-      );
-    }
-    if (stableId.startsWith("promotion:")) {
-      const draft = getOrCreateSkillPromotionBroker(this.runtime).getDraft(
-        stableId.slice("promotion:".length),
-      );
-      if (!draft) {
-        return undefined;
-      }
-      if (
-        scope !== "workspace_wide" &&
-        draft.sessionIds.length > 0 &&
-        (
-          await this.filterSessionIdsByScope(
-            sessionIndex,
-            rankingContext.currentSessionId,
-            scope,
-            targetRoots,
-            draft.sessionIds,
-          )
-        ).size === 0
-      ) {
-        return undefined;
-      }
-      return finalizeRecallEntry(
-        {
-          stableId: `promotion:${draft.id}`,
-          sourceFamily: "promotion_draft",
-          trustLabel: "Advisory posture",
-          evidenceStrength: "moderate",
-          scope,
-          semanticScore: 0.4,
-          title: draft.title,
-          summary: draft.summary,
-          excerpt: compactText(draft.proposalText, 220),
-          freshness: freshnessFromTimestamp(draft.lastValidatedAt),
-          matchReasons: ["stable_id", ...draft.tags.slice(0, 3)],
-          sessionId: draft.sessionIds.at(-1),
-        },
         rankingContext,
       );
     }

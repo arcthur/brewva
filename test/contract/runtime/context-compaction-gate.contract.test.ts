@@ -8,7 +8,7 @@ import {
 } from "./runtime-contract.helpers.js";
 
 describe("context compaction gate", () => {
-  test("blocks non-session_compact tools at critical pressure and unblocks after compaction", async () => {
+  test("blocks non-workbench_compact tools at critical pressure and unblocks after compaction", async () => {
     const workspace = createWorkspace("core-compaction-gate");
     writeConfig(
       workspace,
@@ -52,7 +52,7 @@ describe("context compaction gate", () => {
       usage,
     });
     expect(blocked.allowed).toBe(false);
-    expect(blocked.reason).toContain("session_compact");
+    expect(blocked.reason).toContain("workbench_compact");
     expect(
       runtime.inspect.events.query(sessionId, { type: "context_compaction_gate_blocked_tool" }),
     ).toHaveLength(1);
@@ -60,7 +60,7 @@ describe("context compaction gate", () => {
     const compactAllowed = runtime.authority.tools.start({
       sessionId,
       toolCallId: "tc-compact",
-      toolName: "session_compact",
+      toolName: "workbench_compact",
       args: { reason: "critical" },
       usage,
     });

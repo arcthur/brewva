@@ -9,7 +9,7 @@
   - `docs/reference/token-cache.md`
   - `docs/reference/runtime.md`
   - `docs/reference/runtime-plugins.md`
-  - `docs/reference/context-composer.md`
+  - `docs/reference/hosted-dynamic-context.md`
   - `docs/reference/configuration.md`
   - `docs/architecture/system-architecture.md`
 - Code anchors:

@@ -208,7 +208,7 @@ export interface BrewvaConfig {
     };
     contextBudget: {
       enabled: boolean;
-      injection: {
+      dynamicTail: {
         baseTokens: number;
         windowFraction: number;
         maxTokens: number;
@@ -221,22 +221,21 @@ export interface BrewvaConfig {
         hardLimitCeilingPercent: number;
         hardLimitHeadroomTokens: number;
       };
+      predictiveTurnGrowth: {
+        floorContextWindow: number;
+        largeContextWindow: number;
+        standardTokens: number;
+        largeTokens: number;
+        scalingFactor: number;
+      };
       compactionInstructions: string;
       compaction: {
         minTurnsBetween: number;
         minSecondsBetween: number;
-        pressureBypassPercent: number;
-      };
-      arena: {
-        maxEntriesPerSession: number;
+        cooldownBypassPercent: number;
       };
     };
     toolFailureInjection: {
-      enabled: boolean;
-      maxEntries: number;
-      maxOutputChars: number;
-    };
-    toolOutputDistillationInjection: {
       enabled: boolean;
       maxEntries: number;
       maxOutputChars: number;
@@ -324,7 +323,6 @@ export interface BrewvaConfigFile {
       | "events"
       | "contextBudget"
       | "toolFailureInjection"
-      | "toolOutputDistillationInjection"
       | "interruptRecovery"
       | "costTracking"
       | "recoveryWal"
@@ -333,9 +331,6 @@ export interface BrewvaConfigFile {
     events?: Partial<BrewvaConfig["infrastructure"]["events"]>;
     contextBudget?: DeepPartial<BrewvaConfig["infrastructure"]["contextBudget"]>;
     toolFailureInjection?: Partial<BrewvaConfig["infrastructure"]["toolFailureInjection"]>;
-    toolOutputDistillationInjection?: Partial<
-      BrewvaConfig["infrastructure"]["toolOutputDistillationInjection"]
-    >;
     interruptRecovery?: Partial<BrewvaConfig["infrastructure"]["interruptRecovery"]>;
     costTracking?: Partial<
       Omit<BrewvaConfig["infrastructure"]["costTracking"], "maxCostUsdPerSession">

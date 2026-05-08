@@ -60,8 +60,6 @@ describe("gateway contract: schedule runner", () => {
       summary: "The release prep is partially complete.",
       nextSteps: "Resolve the last reviewer comment.",
     });
-    expect(runtime.authority.skills.activate(parentSessionId, "self-improve").ok).toBe(true);
-
     const openedSessionIds: string[] = [];
     const stoppedSessionIds: string[] = [];
     let sentPrompt:
@@ -106,7 +104,7 @@ describe("gateway contract: schedule runner", () => {
       },
       listWorkers: () => [],
       querySessionWire: async () => [],
-      querySessionContextPressure: async () => undefined,
+      querySessionContextStatus: async () => undefined,
       querySessionLifecycle: async () => undefined,
     };
 
@@ -125,7 +123,7 @@ describe("gateway contract: schedule runner", () => {
       expect(stoppedSessionIds).toEqual(["schedule:intent-1:1"]);
       expect(sentPrompt?.sessionId).toBe("schedule:intent-1:1");
       expect(sentPrompt?.options?.source).toBe("schedule");
-      expect(sentPrompt?.options?.trigger).toEqual({
+      expect(sentPrompt?.options?.trigger).toMatchObject({
         kind: "schedule",
         continuityMode: "inherit",
         taskSpec: {
@@ -146,7 +144,6 @@ describe("gateway contract: schedule runner", () => {
           summary: "The release prep is partially complete.",
           nextSteps: "Resolve the last reviewer comment.",
         }),
-        activeSkillName: "self-improve",
       });
       expect(sentPrompt?.prompt).toContain("[Schedule Wakeup]");
       expect(sentPrompt?.prompt).toContain("reason: nightly follow-up");
@@ -276,7 +273,7 @@ describe("gateway contract: schedule runner", () => {
       stopSession: async () => true,
       listWorkers: () => [],
       querySessionWire: async () => [],
-      querySessionContextPressure: async () => undefined,
+      querySessionContextStatus: async () => undefined,
       querySessionLifecycle: async () => undefined,
     };
 
@@ -344,7 +341,7 @@ describe("gateway contract: schedule runner", () => {
       },
       listWorkers: () => [],
       querySessionWire: async () => [],
-      querySessionContextPressure: async () => undefined,
+      querySessionContextStatus: async () => undefined,
       querySessionLifecycle: async () => undefined,
     };
 

@@ -188,11 +188,9 @@ export function buildInspectSections(report: SessionInspectReport): CliOverlaySe
       ],
     },
     {
-      id: "skills",
-      title: "Skills + Verification",
+      id: "verification",
+      title: "Verification",
       lines: [
-        `Active skill: ${base.skills.activeSkill ?? "none"}`,
-        `Completed skills: ${renderListValue(base.skills.completedSkills)}`,
         `Verification outcome: ${base.verification.outcome ?? "n/a"}`,
         `Verification level: ${base.verification.level ?? "n/a"}`,
         `Failed checks: ${renderListValue(base.verification.failedChecks)}`,
@@ -217,13 +215,10 @@ export function buildInspectSections(report: SessionInspectReport): CliOverlaySe
       ],
     },
     {
-      id: "routing",
-      title: "Bootstrap + Routing",
+      id: "bootstrap",
+      title: "Bootstrap",
       lines: [
-        `Routing enabled: ${renderNullableBoolean(base.bootstrap.routingEnabled)}`,
-        `Routing scopes: ${renderListValue(base.bootstrap.routingScopes)}`,
-        `Routable skills: ${renderListValue(base.bootstrap.routableSkills)}`,
-        `Hidden skills: ${renderListValue(base.bootstrap.hiddenSkills)}`,
+        `Workspace root: ${base.bootstrap.workspaceRoot ?? "n/a"}`,
         `Config path: ${base.bootstrap.configPath ?? "n/a"}`,
         `Events dir: ${base.bootstrap.eventsDir ?? "n/a"}`,
         `Recovery WAL dir: ${base.bootstrap.recoveryWalDir ?? "n/a"}`,
@@ -907,13 +902,6 @@ function formatForkPoint(forkPoint: ForkPoint): string {
       forkPoint satisfies never;
       return "unknown";
   }
-}
-
-function renderNullableBoolean(value: boolean | null): string {
-  if (value === null) {
-    return "n/a";
-  }
-  return value ? "yes" : "no";
 }
 
 function renderNotificationSummary(notification: {

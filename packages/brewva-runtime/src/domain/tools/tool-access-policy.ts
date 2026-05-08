@@ -5,8 +5,6 @@ import {
 import type { BrewvaEventRecord } from "../../events/types.js";
 import type { RuntimeKernelContext } from "../../runtime/runtime-kernel.js";
 import type { CommandPolicySummary } from "../../security/command-policy.js";
-import { resolveSecurityPolicy } from "../../security/mode.js";
-import { checkToolAccess as evaluateSkillToolAccess } from "../../security/tool-policy.js";
 import type { VirtualReadonlyPolicySummary } from "../../security/virtual-readonly-policy.js";
 import { normalizeToolName } from "../../utils/tool-name.js";
 import type { ContextBudgetUsage } from "../context/api.js";
@@ -22,11 +20,8 @@ import {
   type EffectAuthorityManifestFacts,
 } from "../governance/api.js";
 import type { ResolvedToolAuthority } from "../governance/api.js";
-import type { ResourceLeaseService } from "../parallel/api.js";
 import type { DecisionReceipt } from "../proposals/api.js";
 import { RuntimeSessionStateStore } from "../sessions/api.js";
-import type { SkillLifecycleService } from "../skills/api.js";
-import type { SkillDocument, SkillRoutingScope } from "../skills/api.js";
 import type { ToolCallBlockedEventPayload } from "./types.js";
 
 export interface ToolAccessDecision {
@@ -48,10 +43,8 @@ export interface ToolAccessExplanation extends ToolAccessDecision {
 
 interface ToolAccessContext {
   state: ReturnType<RuntimeSessionStateStore["getCell"]>;
-  skill: SkillDocument | undefined;
   normalizedToolName: string;
   authority: ResolvedToolAuthority;
-  access: ReturnType<typeof evaluateSkillToolAccess>;
   routingAccess: { allowed: boolean; reason?: string };
 }
 
@@ -62,36 +55,24 @@ interface ToolAuthorityFactCollectionOptions {
 }
 
 export interface ToolAccessPolicyServiceOptions {
-  securityConfig: RuntimeKernelContext["config"]["security"];
   costTracker: RuntimeKernelContext["costTracker"];
   sessionState: RuntimeKernelContext["sessionState"];
   getCurrentTurn: RuntimeKernelContext["getCurrentTurn"];
   recordEvent: RuntimeKernelContext["recordEvent"];
   alwaysAllowedTools: string[];
   resolveToolAuthority: (toolName: string, args?: Record<string, unknown>) => ResolvedToolAuthority;
-  resourceLeaseService: Pick<ResourceLeaseService, "getEffectiveBudget">;
-  skillLifecycleService: Pick<SkillLifecycleService, "getActiveSkill" | "explainRepairToolAccess">;
-  hasRoutingScope: (scope: SkillRoutingScope) => boolean;
+  hasRoutingScope: (scope: string) => boolean;
 }
 
 export class ToolAccessPolicyService {
-  private readonly securityPolicy: ReturnType<typeof resolveSecurityPolicy>;
   private readonly costTracker: SessionCostTracker;
   private readonly sessionState: RuntimeSessionStateStore;
-  private readonly alwaysAllowedTools: string[];
   private readonly alwaysAllowedToolSet: Set<string>;
   private readonly resolveToolAuthority: (
     toolName: string,
     args?: Record<string, unknown>,
   ) => ResolvedToolAuthority;
-  private readonly getActiveSkill: (sessionId: string) => SkillDocument | undefined;
-  private readonly explainRepairToolAccess: (
-    sessionId: string,
-    toolName: string,
-    usage?: ContextBudgetUsage,
-  ) => { allowed: boolean; reason?: string; terminalFailure?: boolean };
   private readonly getCurrentTurn: (sessionId: string) => number;
-  private readonly getEffectiveBudget: ResourceLeaseService["getEffectiveBudget"];
   private readonly recordEvent: (input: {
     sessionId: string;
     type: string;
@@ -100,25 +81,18 @@ export class ToolAccessPolicyService {
     timestamp?: number;
     skipTapeCheckpoint?: boolean;
   }) => BrewvaEventRecord | undefined;
-  private readonly hasRoutingScope: (scope: SkillRoutingScope) => boolean;
+  private readonly hasRoutingScope: (scope: string) => boolean;
 
   constructor(options: ToolAccessPolicyServiceOptions) {
-    this.securityPolicy = resolveSecurityPolicy(options.securityConfig);
     this.costTracker = options.costTracker;
     this.sessionState = options.sessionState;
-    this.alwaysAllowedTools = options.alwaysAllowedTools;
     this.alwaysAllowedToolSet = new Set(
       options.alwaysAllowedTools
         .map((toolName) => normalizeToolName(toolName))
         .filter((toolName) => toolName.length > 0),
     );
     this.resolveToolAuthority = (toolName, args) => options.resolveToolAuthority(toolName, args);
-    this.getActiveSkill = (sessionId) => options.skillLifecycleService.getActiveSkill(sessionId);
-    this.explainRepairToolAccess = (sessionId, toolName, usage) =>
-      options.skillLifecycleService.explainRepairToolAccess(sessionId, toolName, usage);
     this.getCurrentTurn = (sessionId) => options.getCurrentTurn(sessionId);
-    this.getEffectiveBudget = (sessionId, contract, skillName) =>
-      options.resourceLeaseService.getEffectiveBudget(sessionId, contract, skillName);
     this.recordEvent = (input) => options.recordEvent(input);
     this.hasRoutingScope = (scope) => options.hasRoutingScope(scope);
   }
@@ -147,21 +121,8 @@ export class ToolAccessPolicyService {
     args?: Record<string, unknown>,
   ): ToolAccessContext {
     const state = this.sessionState.getCell(sessionId);
-    const skill = this.getActiveSkill(sessionId);
     const normalizedToolName = normalizeToolName(toolName);
     const authority = this.resolveToolAuthority(normalizedToolName, args);
-    const access = evaluateSkillToolAccess(
-      skill?.contract,
-      toolName,
-      {
-        enforceDeniedEffects: this.securityPolicy.enforceDeniedEffects,
-        effectAuthorizationMode: this.securityPolicy.effectAuthorizationMode,
-        alwaysAllowedTools: this.alwaysAllowedTools,
-        resolveToolGovernanceDescriptor: (nextToolName, nextArgs) =>
-          this.resolveToolAuthority(nextToolName, nextArgs).descriptor,
-      },
-      args,
-    );
     const requiredRoutingScopes = authority.descriptor?.requiredRoutingScopes ?? [];
     const routingAccess =
       requiredRoutingScopes.length === 0 ||
@@ -173,10 +134,8 @@ export class ToolAccessPolicyService {
           };
     return {
       state,
-      skill,
       normalizedToolName,
       authority,
-      access,
       routingAccess,
     };
   }
@@ -192,7 +151,7 @@ export class ToolAccessPolicyService {
       this.recordBlockedCall(
         sessionId,
         context.normalizedToolName,
-        context.skill?.name,
+        undefined,
         decision.reason ?? "Tool call blocked.",
         { resolution: context.authority.source, manifestBasis: decision.manifestBasis },
       );
@@ -225,17 +184,15 @@ export class ToolAccessPolicyService {
     context: ToolAccessContext,
     sessionId: string,
     emitEvents: boolean,
-    usage?: ContextBudgetUsage,
+    _usage?: ContextBudgetUsage,
     capabilityAccess?: EffectAuthorityFactDecision,
   ): EffectAuthorityManifestFacts {
-    const { state, skill, normalizedToolName, authority, access, routingAccess } = context;
+    const { state, normalizedToolName, authority, routingAccess } = context;
 
     if (emitEvents) {
-      this.recordToolContractWarning(sessionId, state, skill, normalizedToolName, access.warning);
-      this.recordGovernanceMetadataWarning(sessionId, state, skill, normalizedToolName, authority);
+      this.recordGovernanceMetadataWarning(sessionId, state, normalizedToolName, authority);
     }
 
-    const repairAccess = this.explainRepairToolAccess(sessionId, normalizedToolName, usage);
     const budget = this.costTracker.getBudgetStatus(sessionId);
     const budgetAccess =
       budget.blocked && !this.alwaysAllowedToolSet.has(normalizedToolName)
@@ -245,7 +202,6 @@ export class ToolAccessPolicyService {
             reason: budget.reason ?? "Session budget exceeded.",
           }
         : { allowed: true, basis: "session_budget" };
-    const skillBudgetAccess = this.resolveSkillBudgetAccess(sessionId, context, emitEvents);
 
     return {
       toolName: normalizedToolName,
@@ -261,12 +217,6 @@ export class ToolAccessPolicyService {
       recoveryPolicy: authority.recoveryPolicy,
       policyBasis: authority.policyBasis,
       controlPlaneTool: this.alwaysAllowedToolSet.has(normalizedToolName),
-      skillAccess: {
-        allowed: access.allowed,
-        basis: "skill_effect_contract",
-        reason: access.reason,
-        advisory: access.warning,
-      },
       routingAccess: {
         allowed: routingAccess.allowed,
         basis: "routing_scope",
@@ -276,201 +226,20 @@ export class ToolAccessPolicyService {
         allowed: true,
         basis: "runtime_capability_scope",
       },
-      repairAccess: {
-        allowed: repairAccess.allowed,
-        basis: "repair_posture",
-        reason: repairAccess.reason,
-        terminalFailure: repairAccess.allowed ? undefined : repairAccess.terminalFailure,
-      },
       budgetAccess,
-      skillTokenAccess: skillBudgetAccess.tokenAccess,
-      skillToolCallAccess: skillBudgetAccess.toolCallAccess,
     };
-  }
-
-  private resolveSkillBudgetAccess(
-    sessionId: string,
-    context: ToolAccessContext,
-    emitEvents: boolean,
-  ): {
-    tokenAccess?: EffectAuthorityFactDecision;
-    toolCallAccess?: EffectAuthorityFactDecision;
-  } {
-    const { state, skill, normalizedToolName } = context;
-    if (!skill || this.alwaysAllowedToolSet.has(normalizedToolName)) {
-      return {};
-    }
-
-    const effectiveBudget = this.getEffectiveBudget(sessionId, skill.contract, skill.name);
-    const tokenAccess = this.resolveSkillTokenAccess({
-      sessionId,
-      state,
-      skill,
-      normalizedToolName,
-      maxTokens: effectiveBudget?.maxTokens,
-      emitEvents,
-    });
-    const toolCallAccess = this.resolveSkillToolCallAccess({
-      sessionId,
-      state,
-      skill,
-      normalizedToolName,
-      maxToolCalls: effectiveBudget?.maxToolCalls,
-      emitEvents,
-    });
-    return { tokenAccess, toolCallAccess };
-  }
-
-  private resolveSkillTokenAccess(input: {
-    sessionId: string;
-    state: ToolAccessContext["state"];
-    skill: SkillDocument;
-    normalizedToolName: string;
-    maxTokens?: number;
-    emitEvents: boolean;
-  }): EffectAuthorityFactDecision | undefined {
-    if (this.securityPolicy.skillMaxTokensMode === "off" || typeof input.maxTokens !== "number") {
-      return undefined;
-    }
-    const usedTokens = this.costTracker.getSkillTotalTokens(input.sessionId, input.skill.name);
-    if (usedTokens < input.maxTokens) {
-      return { allowed: true, basis: "skill_token_budget" };
-    }
-    const reason = `Skill '${input.skill.name}' exceeded maxTokens=${input.maxTokens} (used=${usedTokens}).`;
-    if (this.securityPolicy.skillMaxTokensMode === "warn") {
-      this.recordSkillBudgetWarning({
-        sessionId: input.sessionId,
-        state: input.state,
-        skillName: input.skill.name,
-        budget: "tokens",
-        used: usedTokens,
-        max: input.maxTokens,
-        mode: this.securityPolicy.skillMaxTokensMode,
-        emitEvents: input.emitEvents,
-      });
-      return { allowed: true, basis: "skill_token_budget", advisory: reason };
-    }
-    return { allowed: false, basis: "skill_token_budget", reason };
-  }
-
-  private resolveSkillToolCallAccess(input: {
-    sessionId: string;
-    state: ToolAccessContext["state"];
-    skill: SkillDocument;
-    normalizedToolName: string;
-    maxToolCalls?: number;
-    emitEvents: boolean;
-  }): EffectAuthorityFactDecision | undefined {
-    if (
-      this.securityPolicy.skillMaxToolCallsMode === "off" ||
-      typeof input.maxToolCalls !== "number"
-    ) {
-      return undefined;
-    }
-    const usedCalls = input.state.toolCalls;
-    if (usedCalls < input.maxToolCalls) {
-      return { allowed: true, basis: "skill_tool_call_budget" };
-    }
-    const reason = `Skill '${input.skill.name}' exceeded maxToolCalls=${input.maxToolCalls} (used=${usedCalls}).`;
-    if (this.securityPolicy.skillMaxToolCallsMode === "warn") {
-      this.recordSkillBudgetWarning({
-        sessionId: input.sessionId,
-        state: input.state,
-        skillName: input.skill.name,
-        budget: "tool_calls",
-        used: usedCalls,
-        max: input.maxToolCalls,
-        mode: this.securityPolicy.skillMaxToolCallsMode,
-        emitEvents: input.emitEvents,
-      });
-      return { allowed: true, basis: "skill_tool_call_budget", advisory: reason };
-    }
-    return { allowed: false, basis: "skill_tool_call_budget", reason };
-  }
-
-  private recordSkillBudgetWarning(input: {
-    sessionId: string;
-    state: ToolAccessContext["state"];
-    skillName: string;
-    budget: "tokens" | "tool_calls";
-    used: number;
-    max: number;
-    mode: "warn";
-    emitEvents: boolean;
-  }): void {
-    if (!input.emitEvents) {
-      return;
-    }
-    const key =
-      input.budget === "tokens"
-        ? `maxTokens:${input.skillName}`
-        : `maxToolCalls:${input.skillName}`;
-    if (input.state.skillBudgetWarnings.has(key)) {
-      return;
-    }
-    input.state.skillBudgetWarnings.add(key);
-    this.recordEvent({
-      sessionId: input.sessionId,
-      type: "skill_budget_warning",
-      turn: this.getCurrentTurn(input.sessionId),
-      payload:
-        input.budget === "tokens"
-          ? {
-              skill: input.skillName,
-              usedTokens: input.used,
-              maxTokens: input.max,
-              budget: input.budget,
-              mode: input.mode,
-            }
-          : {
-              skill: input.skillName,
-              usedToolCalls: input.used,
-              maxToolCalls: input.max,
-              budget: input.budget,
-              mode: input.mode,
-            },
-    });
-  }
-
-  private recordToolContractWarning(
-    sessionId: string,
-    state: ToolAccessContext["state"],
-    skill: SkillDocument | undefined,
-    toolName: string,
-    warning: string | undefined,
-  ): void {
-    if (!warning || !skill) {
-      return;
-    }
-    const key = `${skill.name}:${toolName}`;
-    if (state.toolContractWarnings.has(key)) {
-      return;
-    }
-    state.toolContractWarnings.add(key);
-    this.recordEvent({
-      sessionId,
-      type: "tool_contract_warning",
-      turn: this.getCurrentTurn(sessionId),
-      payload: {
-        skill: skill.name,
-        toolName,
-        mode: this.securityPolicy.effectAuthorizationMode,
-        reason: warning,
-      },
-    });
   }
 
   private recordGovernanceMetadataWarning(
     sessionId: string,
     state: ToolAccessContext["state"],
-    skill: SkillDocument | undefined,
     toolName: string,
     authority: ResolvedToolAuthority,
   ): void {
-    if (!skill || (authority.source !== "hint" && authority.source !== "missing")) {
+    if (authority.source !== "hint" && authority.source !== "missing") {
       return;
     }
-    const key = `${skill.name}:${toolName}`;
+    const key = toolName;
     if (state.governanceMetadataWarnings.has(key)) {
       return;
     }
@@ -480,7 +249,6 @@ export class ToolAccessPolicyService {
       type: GOVERNANCE_METADATA_MISSING_EVENT_TYPE,
       turn: this.getCurrentTurn(sessionId),
       payload: {
-        skill: skill.name,
         toolName,
         resolution: authority.source,
         message:

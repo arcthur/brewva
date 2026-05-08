@@ -42,16 +42,6 @@ export function createRuntimeExtensions(
     recordEvent: hostedEvents.record,
     onClearState: input.maintain.session.onClearState,
     resolveCredentialBindings: input.maintain.session.resolveCredentialBindings,
-    appendGuardedSupplementalBlocks: (sessionId, blocks, scopeId) =>
-      input.maintain.context
-        .appendGuardedSupplementalBlocks(sessionId, blocks, undefined, scopeId)
-        .map((result) => ({
-          familyId: result.familyId,
-          accepted: result.accepted,
-          truncated: result.truncated,
-          finalTokens: result.finalTokens,
-          droppedReason: result.droppedReason,
-        })),
   });
   return Object.freeze({
     hosted: Object.freeze({

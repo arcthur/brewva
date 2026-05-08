@@ -310,14 +310,14 @@ const SEMANTIC_ARTIFACT_SCHEMAS: Readonly<
     outputContract: RISK_REGISTER_OUTPUT_CONTRACT,
     example: [
       {
-        risk: "Repair posture could trap the session without a clear terminal state after repeated contract failures.",
+        risk: "A failed verification loop could trap the session without a clear terminal state after repeated evidence gaps.",
         category: "cross_session_state",
         severity: "high",
         mitigation:
-          "Persist repair state and budget in the skill lifecycle so exhaustion transitions deterministically to failed_contract.",
+          "Persist task blockers and verification evidence so exhaustion transitions deterministically to a blocked or rejected task state.",
         required_evidence: [
-          "repair state persisted",
-          "workflow_status shows remaining repair budget",
+          "task blocker persisted",
+          "workflow_status shows remaining verification gaps",
         ],
         owner_lane: "review-operability",
       },
@@ -330,11 +330,10 @@ const SEMANTIC_ARTIFACT_SCHEMAS: Readonly<
     outputContract: IMPLEMENTATION_TARGETS_OUTPUT_CONTRACT,
     example: [
       {
-        target: "packages/brewva-runtime/src/domain/skills/skill-lifecycle.ts",
+        target: "packages/brewva-runtime/src/domain/workflow/status-derivation.ts",
         kind: "source",
-        owner_boundary: "runtime-skill-lifecycle",
-        reason:
-          "Completion rejection and repair transitions are owned by the skill lifecycle service.",
+        owner_boundary: "runtime-workflow-status",
+        reason: "Task blockers and verification transitions are derived from evidence receipts.",
       },
     ],
   },
@@ -382,14 +381,14 @@ const SEMANTIC_ARTIFACT_SCHEMAS: Readonly<
     family: "implementation",
     description: "Concrete changed file list.",
     outputContract: FILE_ARRAY_REQUIRED,
-    example: ["packages/brewva-runtime/src/domain/skills/skill-lifecycle.ts"],
+    example: ["packages/brewva-runtime/src/domain/workbench/service.ts"],
   },
   "implementation.verification_evidence.v2": {
     id: "implementation.verification_evidence.v2",
     family: "implementation",
     description: "Verification evidence emitted by implementation.",
     outputContract: STRING_ARRAY_REQUIRED,
-    example: ["bun test test/contract/tools/tools-skill-complete.contract.test.ts"],
+    example: ["bun test test/unit/tools/workbench-tools.unit.test.ts"],
   },
   "review.review_report.v2": {
     id: "review.review_report.v2",
@@ -470,11 +469,11 @@ const SEMANTIC_ARTIFACT_SCHEMAS: Readonly<
     outputContract: QA_CHECKS_OUTPUT_CONTRACT,
     example: [
       {
-        name: "repair posture blocks read tool",
+        name: "verification blocker is visible",
         status: "pass",
-        summary: "Read tool was hidden and blocked while the active skill was in repair_required.",
-        evidence_refs: ["event:skill_completion_rejected"],
-        observed_output: "tool_call_blocked: repair_posture_active",
+        summary: "workflow_status exposed the missing evidence before finish was accepted.",
+        evidence_refs: ["event:verification_report_recorded"],
+        observed_output: "finish_blocked: missing_evidence",
       },
     ],
   },

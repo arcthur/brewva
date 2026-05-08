@@ -96,29 +96,6 @@ function createPipelineKernel(input: {
 }
 
 describe("recovery read model", () => {
-  test("derives active skill degradation directly from tape events before hydration state exists", () => {
-    const canonicalization = deriveRecoveryCanonicalization([
-      {
-        id: "ev-skill-1",
-        sessionId: asBrewvaSessionId("s-recovery-read-model"),
-        type: "skill_activated",
-        timestamp: 1,
-        turn: 1,
-        payload: {
-          skillName: "plan",
-        },
-      },
-    ]);
-
-    expect(canonicalization).toEqual({
-      mode: "degraded",
-      degradedReason: "active_skill_without_terminal_receipt",
-      reasons: ["active_skill_without_terminal_receipt"],
-      openToolCalls: [],
-      openTurns: [],
-    });
-  });
-
   test("reuses a durable unclean-shutdown receipt as the canonical pre-hydration signal", () => {
     const canonicalization = deriveRecoveryCanonicalization([
       {

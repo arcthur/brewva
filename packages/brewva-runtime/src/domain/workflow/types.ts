@@ -1,5 +1,4 @@
 import type { JsonValue } from "@brewva/brewva-std/json";
-import type { SkillReadinessEntry } from "../skills/api.js";
 
 export const WORKFLOW_ARTIFACT_KINDS = [
   "discovery",
@@ -89,7 +88,6 @@ export interface WorkflowStatusSnapshot {
   currentWorkspaceRevision?: string;
   posture: WorkflowPosture;
   finish: WorkflowFinishView;
-  skillReadiness: SkillReadinessEntry[];
   artifacts: WorkflowArtifact[];
   pendingWorkerResults: number;
   pendingDelegationOutcomes: number;

@@ -7,6 +7,10 @@ import {
   type HostedTransitionSnapshot,
 } from "@brewva/brewva-gateway";
 import {
+  buildContextEvidenceReport,
+  type ContextEvidenceAggregateReport,
+} from "@brewva/brewva-gateway/runtime-plugins";
+import {
   BrewvaRuntime,
   createOperatorRuntimePort,
   loadBrewvaInspectConfigResolution,
@@ -19,8 +23,6 @@ import {
 import { type BrewvaEventRecord } from "@brewva/brewva-runtime/events";
 import {
   MODEL_PRESET_SELECT_EVENT_TYPE,
-  readSkillActivatedEventPayload,
-  readSkillCompletedEventPayload,
   readVerificationOutcomeRecordedEventPayload,
   TASK_EVENT_TYPE,
   SUBAGENT_RUNNING_EVENT_TYPE,
@@ -61,12 +63,6 @@ interface InspectBootstrapPayload {
       projectionDir?: string;
       ledgerPath?: string;
     };
-  };
-  skillLoad?: {
-    routingEnabled?: boolean;
-    routingScopes?: string[];
-    routableSkills?: string[];
-    hiddenSkills?: string[];
   };
 }
 
@@ -196,10 +192,6 @@ interface InspectReport {
     recoveryWalDir: string | null;
     projectionDir: string | null;
     ledgerPath: string | null;
-    routingEnabled: boolean | null;
-    routingScopes: string[];
-    routableSkills: string[];
-    hiddenSkills: string[];
   };
   task: {
     goal: string | null;
@@ -214,12 +206,12 @@ interface InspectReport {
     activeFacts: number;
     updatedAt: string | null;
   };
-  skills: {
-    activeSkill: string | null;
-    completedSkills: string[];
-  };
   verification: InspectVerification;
   hostedTransitions: HostedTransitionSnapshot;
+  contextEvidence: ContextEvidenceAggregateReport & {
+    promotionReady: boolean;
+    promotionGaps: string[];
+  };
   ledger: {
     path: string;
     rows: number;
@@ -362,31 +354,6 @@ function readLatestEventPayload<T extends object>(
   return {
     payload: coerce(event.payload as Record<string, unknown>),
     timestamp: event.timestamp,
-  };
-}
-
-function buildSkillInspection(events: BrewvaEventRecord[]): InspectReport["skills"] {
-  let activeSkill: string | null = null;
-  const completedSkills = new Set<string>();
-
-  for (const event of events) {
-    const activated = readSkillActivatedEventPayload(event);
-    if (activated?.skillName) {
-      activeSkill = activated.skillName;
-      continue;
-    }
-    const completed = readSkillCompletedEventPayload(event);
-    if (completed?.skillName) {
-      completedSkills.add(completed.skillName);
-      if (activeSkill === completed.skillName) {
-        activeSkill = null;
-      }
-    }
-  }
-
-  return {
-    activeSkill,
-    completedSkills: [...completedSkills].toSorted((left, right) => left.localeCompare(right)),
   };
 }
 
@@ -622,8 +589,10 @@ function buildInspectReport(
     bootstrapArtifactRoots.recoveryWalDir.trim().length > 0
       ? bootstrapArtifactRoots.recoveryWalDir
       : runtime.config.infrastructure.recoveryWal.dir;
-  const skillState = buildSkillInspection(events);
   const verification = buildVerificationInspection(runtime, sessionId);
+  const contextEvidenceReport = buildContextEvidenceReport(runtime, {
+    sessionIds: [sessionId],
+  });
   const ledgerIntegrity = runtime.inspect.ledger.verifyIntegrity(sessionId);
   const ledgerRows = runtime.inspect.ledger.listRows(sessionId);
   const latestModelPresetEvent = events
@@ -809,25 +778,6 @@ function buildInspectReport(
         bootstrapArtifactRoots.ledgerPath.trim().length > 0
           ? bootstrapArtifactRoots.ledgerPath
           : null,
-      routingEnabled:
-        typeof bootstrap?.skillLoad?.routingEnabled === "boolean"
-          ? bootstrap.skillLoad.routingEnabled
-          : null,
-      routingScopes: Array.isArray(bootstrap?.skillLoad?.routingScopes)
-        ? bootstrap.skillLoad.routingScopes.filter(
-            (value): value is string => typeof value === "string",
-          )
-        : [],
-      routableSkills: Array.isArray(bootstrap?.skillLoad?.routableSkills)
-        ? bootstrap.skillLoad.routableSkills.filter(
-            (value): value is string => typeof value === "string",
-          )
-        : [],
-      hiddenSkills: Array.isArray(bootstrap?.skillLoad?.hiddenSkills)
-        ? bootstrap.skillLoad.hiddenSkills.filter(
-            (value): value is string => typeof value === "string",
-          )
-        : [],
     },
     task: {
       goal: taskState.spec?.goal ?? null,
@@ -842,9 +792,13 @@ function buildInspectReport(
       activeFacts: truthState.facts.filter((fact) => fact.status === "active").length,
       updatedAt: toIso(truthState.updatedAt),
     },
-    skills: skillState,
     verification,
     hostedTransitions: projectHostedTransitionSnapshot(structuredEvents),
+    contextEvidence: {
+      ...contextEvidenceReport.aggregate,
+      promotionReady: contextEvidenceReport.promotionReadiness.ready,
+      promotionGaps: contextEvidenceReport.promotionReadiness.gaps,
+    },
     ledger: {
       path: runtime.inspect.ledger.getPath(),
       rows: ledgerRows.length,
@@ -925,14 +879,14 @@ function formatInspectText(report: InspectReport): string {
     report.lineage.supported
       ? `Lineage: selected=${renderSelectedLineageChannels(report.lineage.selectedByChannel)} summaries=${report.lineage.summaryCount} outcomes=${report.lineage.outcomeCount} adopted=${report.lineage.adoptedOutcomeCount}`
       : "Lineage: selected=none summaries=0 outcomes=0 adopted=0",
-    `Bootstrap: routingEnabled=${renderNullableBoolean(report.bootstrap.routingEnabled)} scopes=${renderList(report.bootstrap.routingScopes)}`,
+    `Bootstrap: workspaceRoot=${report.bootstrap.workspaceRoot ?? "n/a"} config=${report.bootstrap.configPath ?? "n/a"}`,
     `Task: phase=${report.task.phase ?? "n/a"} health=${report.task.health ?? "n/a"} items=${report.task.items} blockers=${report.task.blockers} updatedAt=${report.task.updatedAt ?? "n/a"}`,
     `Task: goal=${report.task.goal ?? "n/a"}`,
     `Truth: active=${report.truth.activeFacts}/${report.truth.totalFacts} updatedAt=${report.truth.updatedAt ?? "n/a"}`,
-    `Skills: active=${report.skills.activeSkill ?? "none"} completed=${renderList(report.skills.completedSkills)}`,
     `Verification: outcome=${report.verification.outcome ?? "n/a"} level=${report.verification.level ?? "n/a"} failed=${renderList(report.verification.failedChecks)} missing_checks=${renderList(report.verification.missingChecks)} missing_evidence=${renderList(report.verification.missingEvidence)}`,
     `Hosted transitions: sequence=${report.hostedTransitions.sequence} latest=${renderHostedLatest(report.hostedTransitions.latest)} pending=${report.hostedTransitions.pendingFamily ?? "none"} operatorVisible=${report.hostedTransitions.operatorVisibleFactGeneration}`,
     `Hosted breakers: compaction_retry=${renderHostedBreaker(report.hostedTransitions, "compaction_retry")} provider_fallback_retry=${renderHostedBreaker(report.hostedTransitions, "provider_fallback_retry")} max_output_recovery=${renderHostedBreaker(report.hostedTransitions, "max_output_recovery")}`,
+    `Context evidence: ready=${report.contextEvidence.promotionReady ? "yes" : "no"} gaps=${renderList(report.contextEvidence.promotionGaps)} compactions=${report.contextEvidence.totalCompactionEvents} generation=${report.contextEvidence.totalCompactionGenerationEvents} llmPrimary=${report.contextEvidence.totalLlmPrimaryCompactionEvents} deterministicEmergency=${report.contextEvidence.totalDeterministicEmergencyCompactionEvents} genTokens=${report.contextEvidence.totalCompactionGenerationTokens} genCacheRead=${report.contextEvidence.totalCompactionGenerationCacheReadTokens} genCacheWrite=${report.contextEvidence.totalCompactionGenerationCacheWriteTokens} genCost=$${report.contextEvidence.totalCompactionGenerationCostUsd.toFixed(6)}`,
     `Ledger: rows=${report.ledger.rows} integrity=${report.ledger.integrityValid ? "valid" : "invalid"} path=${report.ledger.path}`,
     `Projection: enabled=${report.projection.enabled ? "yes" : "no"} working=${report.projection.workingExists ? "present" : "missing"} path=${report.projection.workingPath}`,
     `Recovery WAL: enabled=${report.recoveryWal.enabled ? "yes" : "no"} pending=${report.recoveryWal.pendingCount} sessionPending=${report.recoveryWal.pendingSessionCount} file=${report.recoveryWal.filePath}`,
@@ -983,12 +937,6 @@ function formatInspectText(report: InspectReport): string {
       );
     }
   }
-  if (report.bootstrap.routableSkills.length > 0) {
-    lines.push(`Routable skills: ${report.bootstrap.routableSkills.join(", ")}`);
-  }
-  if (report.bootstrap.hiddenSkills.length > 0) {
-    lines.push(`Hidden skills: ${report.bootstrap.hiddenSkills.join(", ")}`);
-  }
   if (
     report.bootstrap.configPath ||
     report.bootstrap.eventsDir ||
@@ -1026,11 +974,6 @@ function formatInspectText(report: InspectReport): string {
 
 function printInspectText(report: InspectReport): void {
   console.log(formatInspectText(report));
-}
-
-function renderNullableBoolean(value: boolean | null): string {
-  if (value === null) return "n/a";
-  return value ? "yes" : "no";
 }
 
 function renderList(values: string[]): string {

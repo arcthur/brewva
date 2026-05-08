@@ -10,31 +10,37 @@ export interface ContextBudgetUsage {
 
 export type TapePressureLevel = "none" | "low" | "medium" | "high";
 
-export type ContextPressureLevel = "none" | "low" | "medium" | "high" | "critical" | "unknown";
-
-export type ContextCompactionReason = "usage_threshold" | "hard_limit";
-
-export interface ContextPressureStatus {
-  level: ContextPressureLevel;
-  usageRatio: number | null;
-  hardLimitRatio: number;
-  compactionThresholdRatio: number;
-}
+export type ContextCompactionReason = "usage_threshold" | "hard_limit" | "predicted_overflow";
 
 export interface ContextCompactionGateStatus {
   required: boolean;
   reason: ContextCompactionReason | null;
-  pressure: ContextPressureStatus;
+  status: ContextStatus;
   recentCompaction: boolean;
   windowTurns: number;
   lastCompactionTurn: number | null;
   turnsSinceCompaction: number | null;
 }
 
+export interface ContextStatus {
+  tokensUsed: number | null;
+  tokensTotal: number;
+  tokensRemaining: number | null;
+  tokensUntilForcedCompact: number | null;
+  predictedTurnGrowthTokens: number;
+  tokensUntilPredictedOverflow: number | null;
+  predictedOverflow: boolean;
+  usageRatio: number | null;
+  hardLimitRatio: number;
+  compactionThresholdRatio: number;
+  compactionAdvised: boolean;
+  forcedCompaction: boolean;
+}
+
 export interface PromptStabilityObservationInput {
   stablePrefixHash: string;
   dynamicTailHash: string;
-  injectionScopeId?: string;
+  contextScopeId?: string;
   turn?: number;
   timestamp?: number;
 }
@@ -56,7 +62,8 @@ export interface TransientReductionObservationInput {
   clearedToolResults: number;
   clearedChars?: number;
   estimatedTokenSavings?: number;
-  pressureLevel?: ContextPressureLevel | "unknown";
+  compactionAdvised?: boolean;
+  forcedCompaction?: boolean;
   classification?: ProviderCacheBreakClassification;
   expectedCacheBreak?: boolean;
   turn?: number;
@@ -72,7 +79,8 @@ export interface TransientReductionState {
   clearedToolResults: number;
   clearedChars: number;
   estimatedTokenSavings: number;
-  pressureLevel: ContextPressureLevel | "unknown";
+  compactionAdvised: boolean;
+  forcedCompaction: boolean;
   classification: ProviderCacheBreakClassification | null;
   expectedCacheBreak: boolean;
 }
@@ -100,8 +108,6 @@ export interface ProviderCacheFingerprintState {
   stablePrefixHash: ProviderCacheFingerprintDigest;
   dynamicTailHash: ProviderCacheFingerprintDigest;
   requestHash: ProviderCacheFingerprintDigest;
-  activeSkillSetHash: ProviderCacheFingerprintDigest;
-  skillRoutingEpoch: number;
   channelContextHash: ProviderCacheFingerprintDigest;
   renderedCacheHash: ProviderCacheFingerprintDigest;
   cacheCapabilityHash: ProviderCacheFingerprintDigest;
@@ -111,7 +117,7 @@ export interface ProviderCacheFingerprintState {
   cacheRelevantHeadersHash: ProviderCacheFingerprintDigest;
   extraBodyHash: ProviderCacheFingerprintDigest;
   visibleHistoryReductionHash: ProviderCacheFingerprintDigest;
-  recallInjectionHash: ProviderCacheFingerprintDigest;
+  workbenchContextHash: ProviderCacheFingerprintDigest;
   providerFallbackHash: ProviderCacheFingerprintDigest;
 }
 
@@ -209,6 +215,46 @@ export interface SessionCompactionCommitInput {
   fromTokens: number | null;
   toTokens: number | null;
   origin: SessionCompactionOrigin;
+  summaryGeneration?: SessionCompactionGenerationMetadata;
+  cacheImpact?: SessionCompactionCacheImpact;
+}
+
+export interface SessionCompactionGenerationMetadata {
+  strategy: string;
+  model?: {
+    provider: string;
+    id: string;
+    api: string;
+  };
+  usage?: {
+    input?: number;
+    output?: number;
+    cacheRead?: number;
+    cacheWrite?: number;
+    totalTokens?: number;
+    cost?: {
+      total?: number;
+    };
+  };
+  fallbackReason?: string;
+}
+
+export interface SessionCompactionCacheImpactSnapshot {
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  bucketKey: string | null;
+  stablePrefixHash: ProviderCacheFingerprintDigest | null;
+  dynamicTailHash: ProviderCacheFingerprintDigest | null;
+  visibleHistoryReductionHash: ProviderCacheFingerprintDigest | null;
+  workbenchContextHash: ProviderCacheFingerprintDigest | null;
+}
+
+export interface SessionCompactionCacheImpact {
+  before: SessionCompactionCacheImpactSnapshot | null;
+  after: SessionCompactionCacheImpactSnapshot | null;
+  explicitEpochChanges: number;
+  prefixBytesChanged: number | null;
+  degradedReason: string | null;
 }
 
 export interface HistoryViewBaselineSnapshot {
@@ -333,19 +379,13 @@ export interface TapeSearchResult {
   matches: TapeSearchMatch[];
 }
 
-export interface ContextInjectionDecision {
+export interface ContextAdmissionDecision {
   accepted: boolean;
   finalText: string;
   originalTokens: number;
   finalTokens: number;
   truncated: boolean;
   droppedReason?: "hard_limit";
-}
-
-export interface BuildContextInjectionOptions {
-  injectionScopeId?: string;
-  sourceSelection?: ReadonlySet<string>;
-  referenceContextDigest?: string | null;
 }
 
 export interface ContextCompactionDecision {

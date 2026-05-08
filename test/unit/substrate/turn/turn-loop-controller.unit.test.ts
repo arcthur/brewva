@@ -108,6 +108,7 @@ describe("turn loop controller", () => {
       onPayload: async (payload) => payload,
       transformContext: async (messages) => messages,
       resolveRequestAuth: async () => ({ ok: true, apiKey: "unused-key" }),
+      streamFn: () => createStream(createAssistantMessage([{ type: "text", text: "unused" }])),
     });
 
     expect(engine.state.model).toBeUndefined();
@@ -1012,7 +1013,7 @@ describe("turn loop controller", () => {
           {
             type: "toolCall",
             id: "tool-compact-1",
-            name: "session_compact",
+            name: "workbench_compact",
             arguments: {},
           },
         ],
@@ -1052,7 +1053,7 @@ describe("turn loop controller", () => {
       transformContext: async (messages) => messages,
       resolveRequestAuth: async () => ({ ok: true, apiKey: "tool-key" }),
       shouldStopAfterToolResults: async (toolResults) =>
-        toolResults.some((result) => result.toolName === "session_compact"),
+        toolResults.some((result) => result.toolName === "workbench_compact"),
       streamFn,
     });
 
@@ -1062,7 +1063,7 @@ describe("turn loop controller", () => {
 
     engine.setTools([
       {
-        name: "session_compact",
+        name: "workbench_compact",
         label: "Session Compact",
         description: "Compacts session state",
         parameters: Type.Object({}),

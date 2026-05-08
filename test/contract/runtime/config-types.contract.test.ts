@@ -61,7 +61,7 @@ describe("BrewvaConfigFile typing", () => {
             enabled: true,
             threshold: 4,
             mode: "block",
-            exemptTools: ["skill_complete"],
+            exemptTools: ["workbench_compact"],
           },
         },
       },

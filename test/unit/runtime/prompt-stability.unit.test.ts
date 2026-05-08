@@ -12,7 +12,7 @@ describe("prompt stability runtime state", () => {
     const first = runtime.maintain.context.observePromptStability(sessionId, {
       stablePrefixHash: "prefix-1",
       dynamicTailHash: "tail-1",
-      injectionScopeId: "leaf-a",
+      contextScopeId: "leaf-a",
       turn: 1,
       timestamp: 101,
     });
@@ -29,7 +29,7 @@ describe("prompt stability runtime state", () => {
     const unchanged = runtime.maintain.context.observePromptStability(sessionId, {
       stablePrefixHash: "prefix-1",
       dynamicTailHash: "tail-1",
-      injectionScopeId: "leaf-a",
+      contextScopeId: "leaf-a",
       turn: 2,
       timestamp: 102,
     });
@@ -39,7 +39,7 @@ describe("prompt stability runtime state", () => {
     const changedPrefix = runtime.maintain.context.observePromptStability(sessionId, {
       stablePrefixHash: "prefix-2",
       dynamicTailHash: "tail-1",
-      injectionScopeId: "leaf-a",
+      contextScopeId: "leaf-a",
       turn: 3,
       timestamp: 103,
     });
@@ -49,7 +49,7 @@ describe("prompt stability runtime state", () => {
     const changedTail = runtime.maintain.context.observePromptStability(sessionId, {
       stablePrefixHash: "prefix-2",
       dynamicTailHash: "tail-2",
-      injectionScopeId: "leaf-a",
+      contextScopeId: "leaf-a",
       turn: 4,
       timestamp: 104,
     });
@@ -59,7 +59,7 @@ describe("prompt stability runtime state", () => {
     const changedScope = runtime.maintain.context.observePromptStability(sessionId, {
       stablePrefixHash: "prefix-3",
       dynamicTailHash: "tail-2",
-      injectionScopeId: "leaf-b",
+      contextScopeId: "leaf-b",
       turn: 5,
       timestamp: 105,
     });
@@ -86,7 +86,8 @@ describe("prompt stability runtime state", () => {
       clearedToolResults: 2,
       clearedChars: 2048,
       estimatedTokenSavings: 580,
-      pressureLevel: "high",
+      compactionAdvised: true,
+      forcedCompaction: false,
       turn: 3,
       timestamp: 203,
     });
@@ -100,7 +101,8 @@ describe("prompt stability runtime state", () => {
       clearedToolResults: 2,
       clearedChars: 2048,
       estimatedTokenSavings: 580,
-      pressureLevel: "high",
+      compactionAdvised: true,
+      forcedCompaction: false,
       classification: null,
       expectedCacheBreak: false,
     });
@@ -134,8 +136,6 @@ describe("prompt stability runtime state", () => {
         stablePrefixHash: "prefix-1",
         dynamicTailHash: "tail-1",
         requestHash: "request-1",
-        activeSkillSetHash: "skills-1",
-        skillRoutingEpoch: 1,
         channelContextHash: "channel-1",
         renderedCacheHash: "render-1",
         cacheCapabilityHash: "capability-1",
@@ -145,7 +145,7 @@ describe("prompt stability runtime state", () => {
         cacheRelevantHeadersHash: "headers-1",
         extraBodyHash: "extra-1",
         visibleHistoryReductionHash: "visible-1",
-        recallInjectionHash: "recall-1",
+        workbenchContextHash: "recall-1",
         providerFallbackHash: "fallback-1",
       },
       render: {

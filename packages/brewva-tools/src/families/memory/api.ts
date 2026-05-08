@@ -1,4 +1,3 @@
-export { createDeliberationMemoryTool } from "./deliberation-memory.js";
 export {
   coerceImpactMapArtifact,
   deriveImpactMapChangeCategories,
@@ -10,11 +9,8 @@ export { createKnowledgeCaptureTool } from "./knowledge-capture.js";
 export { createKnowledgeSearchTool } from "./knowledge-search.js";
 export {
   buildLearningResearchOutputs,
-  isLearningResearchContractSkill,
   LEARNING_RESEARCH_OUTPUT_KEYS,
 } from "../../shared/learning-research.js";
-export { createNarrativeMemoryTool } from "./narrative-memory.js";
-export { createOptimizationContinuityTool } from "./optimization-continuity.js";
 export {
   auditPrecedentRecord,
   createPrecedentAuditTool,
@@ -22,6 +18,11 @@ export {
 } from "./precedent-audit.js";
 export { createPrecedentSweepTool } from "./precedent-sweep.js";
 export { createRecallCurateTool, createRecallSearchTool } from "./recall.js";
+export {
+  createWorkbenchEvictTool,
+  createWorkbenchNoteTool,
+  createWorkbenchUndoEvictTool,
+} from "./workbench.js";
 export {
   DERIVATIVE_RELATIONS,
   DERIVATIVE_TARGET_KINDS,

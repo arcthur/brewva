@@ -15,7 +15,6 @@ import {
 import { type BrewvaStructuredEvent } from "@brewva/brewva-runtime/events";
 import {
   EFFECT_AUTHORITY_DECIDED_EVENT_TYPE,
-  SCHEDULE_TRIGGER_APPLY_WARNING_EVENT_TYPE,
   readSessionTurnTransitionEventPayload,
   SESSION_TURN_TRANSITION_EVENT_TYPE,
   TOOL_RESULT_RECORDED_EVENT_TYPE,
@@ -402,24 +401,10 @@ function applyEnvelopeSchedulePrelude(input: {
       scheduleTriggerWarningRecorded: false,
     };
   }
-  const appliedTrigger = applySchedulePromptTrigger(input.runtime, input.sessionId, input.trigger);
-  let scheduleTriggerWarningRecorded = false;
-  if (input.trigger.activeSkillName && !appliedTrigger.skillApplied) {
-    input.runtime.extensions.hosted.events.record({
-      sessionId: input.sessionId,
-      type: SCHEDULE_TRIGGER_APPLY_WARNING_EVENT_TYPE,
-      payload: {
-        warning: "skill_activation_failed",
-        skillName: input.trigger.activeSkillName,
-        continuityMode: input.trigger.continuityMode,
-        reason: appliedTrigger.skillActivationReason ?? "unknown",
-      },
-    });
-    scheduleTriggerWarningRecorded = true;
-  }
+  applySchedulePromptTrigger(input.runtime, input.sessionId, input.trigger);
   return {
     scheduleTriggerApplied: true,
-    scheduleTriggerWarningRecorded,
+    scheduleTriggerWarningRecorded: false,
   };
 }
 

@@ -17,14 +17,6 @@ describe("context transform compaction contract", () => {
         observeUsage: () => undefined,
         checkAndRequestCompaction: () => true,
         markCompacted: () => undefined,
-        buildInjection: async () => ({
-          text: "",
-          entries: [],
-          accepted: false,
-          originalTokens: 0,
-          finalTokens: 0,
-          truncated: false,
-        }),
       },
       events: {
         record: (input: { type: string; payload?: { reason?: string } }) => {
@@ -81,14 +73,6 @@ describe("context transform compaction contract", () => {
         checkAndRequestCompaction: () => true,
         getPendingCompactionReason: () => "usage_threshold",
         markCompacted: () => undefined,
-        buildInjection: async () => ({
-          text: "",
-          entries: [],
-          accepted: false,
-          originalTokens: 0,
-          finalTokens: 0,
-          truncated: false,
-        }),
       },
       events: {
         record: (input: { type: string; payload?: { reason?: string } }) => {
@@ -163,14 +147,6 @@ describe("context transform compaction contract", () => {
         checkAndRequestCompaction: () => true,
         getPendingCompactionReason: () => "usage_threshold",
         markCompacted: () => undefined,
-        buildInjection: async () => ({
-          text: "",
-          entries: [],
-          accepted: false,
-          originalTokens: 0,
-          finalTokens: 0,
-          truncated: false,
-        }),
       },
       events: {
         record: (input: { type: string; payload?: { reason?: string } }) => {
@@ -233,14 +209,6 @@ describe("context transform compaction contract", () => {
         checkAndRequestCompaction: () => true,
         getPendingCompactionReason: () => "usage_threshold",
         markCompacted: () => undefined,
-        buildInjection: async () => ({
-          text: "",
-          entries: [],
-          accepted: false,
-          originalTokens: 0,
-          finalTokens: 0,
-          truncated: false,
-        }),
       },
       events: {
         record: (input: { type: string; payload?: { reason?: string } }) => {
@@ -300,14 +268,6 @@ describe("context transform compaction contract", () => {
         checkAndRequestCompaction: () => true,
         getPendingCompactionReason: () => "usage_threshold",
         markCompacted: () => undefined,
-        buildInjection: async () => ({
-          text: "",
-          entries: [],
-          accepted: false,
-          originalTokens: 0,
-          finalTokens: 0,
-          truncated: false,
-        }),
       },
       events: {
         record: (input: { type: string; payload?: { reason?: string } }) => {
@@ -362,14 +322,6 @@ describe("context transform compaction contract", () => {
         checkAndRequestCompaction: () => true,
         getPendingCompactionReason: () => "usage_threshold",
         markCompacted: () => undefined,
-        buildInjection: async () => ({
-          text: "",
-          entries: [],
-          accepted: false,
-          originalTokens: 0,
-          finalTokens: 0,
-          truncated: false,
-        }),
       },
       events: {
         record: (input: { type: string; payload?: { error?: string } }) => {

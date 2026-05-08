@@ -10,8 +10,6 @@ import type { RuntimeKernelContext } from "../../runtime/runtime-kernel.js";
 import { runShellCommand } from "../../utils/exec.js";
 import type { GovernancePort } from "../governance/api.js";
 import type { LedgerService } from "../ledger/api.js";
-import type { SkillLifecycleService } from "../skills/api.js";
-import type { SkillDocument } from "../skills/api.js";
 import type { TaskState } from "../task/api.js";
 import type { VerificationGate } from "./gate.js";
 import type { VerificationOutcomeRecordedEventPayload, VerificationReport } from "./types.js";
@@ -34,15 +32,13 @@ function sanitizeKeyToken(value: string): string {
 
 function buildVerificationLessonKey(input: {
   level: VerificationLevel;
-  activeSkillName?: string;
   checkNames: string[];
 }): string {
   const normalizedChecks = [...new Set(input.checkNames.map((name) => sanitizeKeyToken(name)))]
     .filter(Boolean)
     .toSorted();
   const checks = normalizedChecks.length > 0 ? normalizedChecks.join("+") : "none";
-  const skill = input.activeSkillName ? sanitizeKeyToken(input.activeSkillName) : "none";
-  return `verification:${sanitizeKeyToken(input.level)}:${skill}:${checks}`;
+  return `verification:${sanitizeKeyToken(input.level)}:${checks}`;
 }
 
 export interface VerificationServiceOptions {
@@ -52,7 +48,6 @@ export interface VerificationServiceOptions {
   getTaskState: RuntimeKernelContext["getTaskState"];
   recordEvent: RuntimeKernelContext["recordEvent"];
   governancePort?: GovernancePort;
-  skillLifecycleService: Pick<SkillLifecycleService, "getActiveSkill">;
   ledgerService: Pick<LedgerService, "recordToolResult">;
 }
 
@@ -67,7 +62,6 @@ export class VerificationService {
   private readonly verification: VerificationGate;
   private readonly governancePort?: GovernancePort;
   private readonly getTaskState: (sessionId: string) => TaskState;
-  private readonly getActiveSkill: (sessionId: string) => SkillDocument | undefined;
   private readonly recordEvent: (input: {
     sessionId: string;
     type: string;
@@ -92,7 +86,6 @@ export class VerificationService {
     this.verification = options.verificationGate;
     this.governancePort = options.governancePort;
     this.getTaskState = (sessionId) => options.getTaskState(sessionId);
-    this.getActiveSkill = (sessionId) => options.skillLifecycleService.getActiveSkill(sessionId);
     this.recordEvent = (input) => options.recordEvent(input);
     this.recordToolResult = (input) => options.ledgerService.recordToolResult(input);
   }
@@ -103,11 +96,6 @@ export class VerificationService {
   ): VerificationLevel {
     if (requestedLevel) {
       return requestedLevel;
-    }
-    const activeSkill = this.getActiveSkill(sessionId);
-    const skillLevel = activeSkill?.contract.intent?.completionDefinition?.verificationLevel;
-    if (skillLevel) {
-      return skillLevel;
     }
     return this.verification.resolvePreferredLevel(
       sessionId,
@@ -145,7 +133,6 @@ export class VerificationService {
     const verificationState = this.verification.stateStore.get(sessionId);
     const taskState = this.getTaskState(sessionId);
     const taskGoal = taskState.spec?.goal?.trim() ?? "";
-    const activeSkillName = this.getActiveSkill(sessionId)?.name;
     const outcome: "pass" | "fail" | "skipped" = report.skipped
       ? "skipped"
       : report.passed
@@ -154,10 +141,9 @@ export class VerificationService {
     const checkNames = report.checks.map((check) => check.name);
     const lessonKey = buildVerificationLessonKey({
       level,
-      activeSkillName: activeSkillName ?? undefined,
       checkNames,
     });
-    const pattern = `verification:${sanitizeKeyToken(level)}:${activeSkillName ? sanitizeKeyToken(activeSkillName) : "none"}`;
+    const pattern = `verification:${sanitizeKeyToken(level)}`;
     const failedChecks = [...report.failedChecks];
     const missingChecks = [...report.missingChecks];
     const referenceWriteAt = verificationState.lastWriteAt ?? 0;
@@ -201,7 +187,6 @@ export class VerificationService {
       .slice(0, 12)
       .join(", ");
     const strategyParts = [`verification_level=${level}`];
-    if (activeSkillName) strategyParts.push(`skill=${activeSkillName}`);
     if (statusSummary) strategyParts.push(`checks=${statusSummary}`);
     const strategy = compactText(strategyParts.join("; "), 600);
 
@@ -288,7 +273,7 @@ export class VerificationService {
         evidence: check.evidence ?? null,
       })),
       provenanceVersion: "v2",
-      activeSkill: activeSkillName ?? null,
+      activeSkill: null,
       referenceWriteAt: referenceWriteAt > 0 ? referenceWriteAt : null,
       evidenceFreshness,
       commandsExecuted,

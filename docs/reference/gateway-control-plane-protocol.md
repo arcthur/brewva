@@ -229,8 +229,9 @@ Important protocol rules:
   not the loop's process-local state.
 - durable session-wire frames carry `sourceEventId` and `sourceEventType`;
   cache frames and replay control frames do not.
-- `session.status.contextPressure` is a live cache projection derived from
-  runtime context inspect data.
+- `session.status.contextStatus` is a live cache projection derived from
+  runtime context inspect data. It carries numeric token status and boolean
+  `compactionAdvised` / `forcedCompaction` signals, not pressure levels.
 - replay and live are semantically aligned but not frame-isomorphic; replay does
   not promise frame-for-frame reproduction of live preview traffic.
 

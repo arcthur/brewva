@@ -487,7 +487,7 @@ describe("Runtime plugin integration: observability ledger", () => {
       "tool_execution_start",
       {
         toolCallId: "tc-compact",
-        toolName: "session_compact",
+        toolName: "workbench_compact",
       },
       ctx,
     );
@@ -496,8 +496,8 @@ describe("Runtime plugin integration: observability ledger", () => {
       "tool_call",
       {
         toolCallId: "tc-compact",
-        toolName: "session_compact",
-        input: { reason: "critical context pressure" },
+        toolName: "workbench_compact",
+        input: { reason: "forced compaction status" },
       },
       ctx,
     );
@@ -506,8 +506,8 @@ describe("Runtime plugin integration: observability ledger", () => {
       "tool_result",
       {
         toolCallId: "tc-compact",
-        toolName: "session_compact",
-        input: { reason: "critical context pressure" },
+        toolName: "workbench_compact",
+        input: { reason: "forced compaction status" },
         isError: false,
         content: [
           {

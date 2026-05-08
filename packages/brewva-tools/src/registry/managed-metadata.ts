@@ -63,7 +63,7 @@ export const MANAGED_BREWVA_TOOL_METADATA_BY_NAME = {
   reasoning_revert: metadata("control_plane", "control_state_mutation", [
     "authority.reasoning.revert",
   ]),
-  session_compact: metadata("control_plane", "control_state_mutation", [
+  workbench_compact: metadata("base", "memory_write", [
     "inspect.context.getCompactionInstructions",
     "inspect.context.getUsageRatio",
     "extensions.tools.recordEvent",
@@ -89,16 +89,9 @@ export const MANAGED_BREWVA_TOOL_METADATA_BY_NAME = {
     "extensions.tools.onClearState",
     "extensions.tools.recordEvent",
   ]),
-  deliberation_memory: metadata("skill", "runtime_observe", [
-    "inspect.events.list",
-    "inspect.events.listSessionIds",
-    "inspect.events.subscribe",
-    "inspect.task.getTargetDescriptor",
-  ]),
-  narrative_memory: metadata("operator", "memory_write", [
-    "inspect.task.getTargetDescriptor",
-    "extensions.tools.recordEvent",
-  ]),
+  workbench_note: metadata("base", "memory_write", ["maintain.workbench.note"]),
+  workbench_evict: metadata("base", "memory_write", ["maintain.workbench.evict"]),
+  workbench_undo_evict: metadata("base", "memory_write", ["maintain.workbench.undoEviction"]),
   knowledge_capture: metadata("skill", "workspace_patch", ["inspect.task.getTargetDescriptor"]),
   recall_search: metadata("skill", "workspace_read", [
     "inspect.events.getLogPath",
@@ -137,17 +130,12 @@ export const MANAGED_BREWVA_TOOL_METADATA_BY_NAME = {
     "extensions.tools.recordEvent",
   ]),
   question: metadata("base", "runtime_observe"),
-  skill_load: metadata("control_plane", "control_state_mutation", [
-    "authority.skills.activate",
-    "inspect.skills.getConsumedOutputs",
-    "inspect.skills.getReadiness",
-  ]),
   tape_handoff: metadata("skill", "control_state_mutation", [
     "authority.tape.recordTapeHandoff",
     "inspect.tape.getTapeStatus",
   ]),
   tape_info: metadata("control_plane", "runtime_observe", [
-    "inspect.context.getPressureStatus",
+    "inspect.context.getStatus",
     "inspect.context.getUsage",
     "inspect.tape.getTapeStatus",
     "inspect.reasoning.getActiveState",
@@ -192,9 +180,6 @@ export const MANAGED_BREWVA_TOOL_METADATA_BY_NAME = {
     "inspect.session.getOpenToolCalls",
     "inspect.session.getUncleanShutdownDiagnostic",
     "inspect.session.listWorkerResults",
-    "inspect.skills.getActiveState",
-    "inspect.skills.getLatestFailure",
-    "inspect.skills.getReadiness",
     "inspect.task.getState",
   ]),
   follow_up: metadata("skill", "schedule_mutation", [
@@ -216,49 +201,10 @@ export const MANAGED_BREWVA_TOOL_METADATA_BY_NAME = {
     "authority.schedule.updateIntent",
     "authority.schedule.cancelIntent",
   ]),
-  skill_complete: metadata("control_plane", "control_state_mutation", [
-    "authority.skills.recordCompletionFailure",
-    "authority.verification.verify",
-    "authority.skills.complete",
-    "inspect.context.getUsage",
-    "inspect.events.query",
-    "inspect.events.queryStructured",
-    "inspect.skills.getActive",
-    "inspect.skills.getConsumedOutputs",
-    "inspect.task.getTargetDescriptor",
-    "inspect.skills.validateOutputs",
-  ]),
-  skill_promotion_inspect: metadata("control_plane", "runtime_observe", [
-    "inspect.events.list",
-    "inspect.events.listSessionIds",
-    "inspect.events.subscribe",
-    "inspect.skills.list",
-    "extensions.tools.recordEvent",
-  ]),
-  skill_promotion_review: metadata("operator", "memory_write", [
-    "inspect.events.list",
-    "inspect.events.listSessionIds",
-    "inspect.events.subscribe",
-    "inspect.skills.list",
-    "extensions.tools.recordEvent",
-  ]),
-  skill_promotion_promote: metadata("skill", "workspace_patch", [
-    "inspect.events.list",
-    "inspect.events.listSessionIds",
-    "inspect.events.subscribe",
-    "inspect.skills.list",
-    "extensions.tools.recordEvent",
-  ]),
-  subagent_run: metadata("skill", "delegation", [
-    "extensions.tools.appendGuardedSupplementalBlocks",
-  ]),
-  subagent_fanout: metadata("skill", "delegation", [
-    "extensions.tools.appendGuardedSupplementalBlocks",
-  ]),
+  subagent_run: metadata("skill", "delegation"),
+  subagent_fanout: metadata("skill", "delegation"),
   subagent_fork: metadata("skill", "delegation"),
-  subagent_run_diagnostic: metadata("control_plane", "delegation", [
-    "extensions.tools.appendGuardedSupplementalBlocks",
-  ]),
+  subagent_run_diagnostic: metadata("control_plane", "delegation"),
   subagent_status: metadata("skill", "delegation"),
   subagent_cancel: metadata("skill", "delegation"),
   task_add_item: metadata("control_plane", "memory_write", ["authority.task.addItem"]),
@@ -279,7 +225,7 @@ export const MANAGED_BREWVA_TOOL_METADATA_BY_NAME = {
     "extensions.tools.recordEvent",
   ]),
   obs_snapshot: metadata("operator", "runtime_observe", [
-    "inspect.context.getPressureStatus",
+    "inspect.context.getStatus",
     "inspect.context.getPromptStability",
     "inspect.context.getTransientReduction",
     "inspect.context.getUsage",
@@ -287,11 +233,6 @@ export const MANAGED_BREWVA_TOOL_METADATA_BY_NAME = {
     "inspect.tape.getTapeStatus",
     "inspect.events.list",
     "inspect.task.getState",
-  ]),
-  optimization_continuity: metadata("skill", "runtime_observe", [
-    "inspect.events.list",
-    "inspect.events.listSessionIds",
-    "inspect.events.subscribe",
   ]),
   iteration_fact: metadata("skill", "memory_write", [
     "authority.events.recordMetricObservation",

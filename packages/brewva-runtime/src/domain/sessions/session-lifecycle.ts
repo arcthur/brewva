@@ -1,8 +1,6 @@
 import type { BrewvaEventStore } from "../../events/store.js";
 import type { RuntimeKernelContext } from "../../runtime/runtime-kernel.js";
 import type { ContextBudgetManager } from "../context/api.js";
-import type { ContextService } from "../context/api.js";
-import type { ContextInjectionCollector } from "../context/api.js";
 import type { SessionCostTracker } from "../cost/api.js";
 import type { ReversibleMutationService } from "../governance/api.js";
 import type { ParallelBudgetManager } from "../parallel/api.js";
@@ -13,6 +11,7 @@ import type { ProjectionEngine } from "../projection/api.js";
 import type { RecoveryWalStore } from "../recovery/api.js";
 import type { TurnReplayEngine } from "../tape/api.js";
 import type { VerificationGate } from "../verification/api.js";
+import type { WorkbenchService } from "../workbench/api.js";
 import type { IntegrityStatus } from "./integrity.js";
 import { SessionHydrationCoordinator } from "./session-hydration-coordinator.js";
 import { SessionIntegrityCoordinator } from "./session-integrity-coordinator.js";
@@ -26,7 +25,6 @@ import type {
 export interface SessionLifecycleServiceOptions {
   sessionState: RuntimeKernelContext["sessionState"];
   contextBudget: RuntimeKernelContext["contextBudget"];
-  contextInjection: RuntimeKernelContext["contextInjection"];
   fileChanges: RuntimeKernelContext["fileChanges"];
   verificationGate: RuntimeKernelContext["verificationGate"];
   parallel: RuntimeKernelContext["parallel"];
@@ -37,15 +35,13 @@ export interface SessionLifecycleServiceOptions {
   eventStore: RuntimeKernelContext["eventStore"];
   recoveryWalStore: RecoveryWalStore;
   reversibleMutationService: ReversibleMutationService;
+  workbenchService?: WorkbenchService;
   recordEvent: RuntimeKernelContext["recordEvent"];
-  contextService: Pick<ContextService, "clearReservedInjectionTokensForSession">;
 }
 
 export class SessionLifecycleService {
   private readonly sessionState: RuntimeSessionStateStore;
   private readonly contextBudget: ContextBudgetManager;
-  private readonly contextInjection: ContextInjectionCollector;
-  private readonly clearReservedInjectionTokensForSession: (sessionId: string) => void;
   private readonly fileChanges: FileChangeTracker;
   private readonly verification: VerificationGate;
   private readonly parallel: ParallelBudgetManager;
@@ -55,6 +51,7 @@ export class SessionLifecycleService {
   private readonly turnReplay: TurnReplayEngine;
   private readonly events: BrewvaEventStore;
   private readonly reversibleMutations: ReversibleMutationService;
+  private readonly workbenchService: WorkbenchService | undefined;
   private readonly hydrationCoordinator: SessionHydrationCoordinator;
   private readonly integrityCoordinator: SessionIntegrityCoordinator;
   private readonly clearStateListeners = new Set<(sessionId: string) => void>();
@@ -62,9 +59,6 @@ export class SessionLifecycleService {
   constructor(options: SessionLifecycleServiceOptions) {
     this.sessionState = options.sessionState;
     this.contextBudget = options.contextBudget;
-    this.contextInjection = options.contextInjection;
-    this.clearReservedInjectionTokensForSession = (sessionId) =>
-      options.contextService.clearReservedInjectionTokensForSession(sessionId);
     this.fileChanges = options.fileChanges;
     this.verification = options.verificationGate;
     this.parallel = options.parallel;
@@ -74,6 +68,7 @@ export class SessionLifecycleService {
     this.turnReplay = options.turnReplay;
     this.events = options.eventStore;
     this.reversibleMutations = options.reversibleMutationService;
+    this.workbenchService = options.workbenchService;
     this.hydrationCoordinator = new SessionHydrationCoordinator({
       costTracker: this.costTracker,
       verificationGate: this.verification,
@@ -93,8 +88,6 @@ export class SessionLifecycleService {
     const effectiveTurn = Math.max(current, turnIndex);
     state.turn = effectiveTurn;
     this.contextBudget.beginTurn(sessionId, effectiveTurn);
-    this.contextInjection.clearPending(sessionId);
-    this.clearReservedInjectionTokensForSession(sessionId);
   }
 
   ensureHydrated(sessionId: string): void {
@@ -160,7 +153,6 @@ export class SessionLifecycleService {
     this.contextBudget.clear(sessionId);
     this.costTracker.clear(sessionId);
 
-    this.contextInjection.clearSession(sessionId);
     this.projectionEngine.clearSessionCache(sessionId);
 
     this.turnReplay.clear(sessionId);
@@ -197,6 +189,7 @@ export class SessionLifecycleService {
     }
 
     this.reversibleMutations.restoreFromEvents(sessionId, events);
+    this.workbenchService?.restoreFromEvents(sessionId, events);
     this.hydrationCoordinator.hydrate({
       sessionId,
       state,
@@ -215,6 +208,7 @@ export class SessionLifecycleService {
     this.costTracker.clear(sessionId);
     this.verification.stateStore.clear(sessionId);
     this.reversibleMutations.clear(sessionId);
+    this.workbenchService?.clear(sessionId);
     this.parallel.clear(sessionId);
   }
 }

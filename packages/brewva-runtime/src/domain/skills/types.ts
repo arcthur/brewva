@@ -1,4 +1,4 @@
-import type { RuntimeSuccess, VerificationLevel } from "../../core/shared.js";
+import type { VerificationLevel } from "../../core/shared.js";
 import type { ToolEffectClass } from "../governance/api.js";
 import { SEMANTIC_ARTIFACT_SCHEMA_IDS } from "./semantic-artifacts.js";
 export { SEMANTIC_ARTIFACT_SCHEMA_IDS } from "./semantic-artifacts.js";
@@ -259,91 +259,4 @@ export interface SkillRefreshResult {
   systemInstall: SkillSystemInstallResult;
   loadReport: SkillRegistryLoadReport;
   indexPath: string;
-}
-
-export type SkillActivationResult =
-  | RuntimeSuccess<{
-      skill: SkillDocument;
-    }>
-  | {
-      ok: false;
-      reason: string;
-    };
-
-export interface SkillOutputValidationIssue {
-  name: string;
-  reason: string;
-  schemaId?: SemanticArtifactSchemaId;
-}
-
-export type SkillOutputValidationResult =
-  | RuntimeSuccess<{
-      missing: string[];
-      invalid: SkillOutputValidationIssue[];
-    }>
-  | {
-      ok: false;
-      missing: string[];
-      invalid: SkillOutputValidationIssue[];
-    };
-
-export interface SkillOutputRecord {
-  skillName: string;
-  completedAt: number;
-  outputs: Record<string, unknown>;
-  sourceEventId?: string;
-  semanticBindings?: SkillSemanticBindings;
-}
-
-export interface SkillActivatedEventPayload {
-  skillName: string;
-}
-
-export interface SkillCompletedEventPayload {
-  skillName: string;
-  outputKeys: string[];
-  outputs: Record<string, unknown>;
-  completedAt: number;
-  semanticBindings?: SkillSemanticBindings;
-}
-
-export interface SkillRepairBudgetState {
-  maxAttempts: number;
-  usedAttempts: number;
-  remainingAttempts: number;
-  maxToolCalls: number;
-  usedToolCalls: number;
-  remainingToolCalls: number;
-  tokenBudget: number;
-  enteredAtTokens?: number;
-  latestObservedTokens?: number;
-  usedTokens?: number;
-}
-
-export interface SkillRepairGuidance {
-  unresolvedFields: string[];
-  nextBlockingConsumer?: string;
-  minimumContractState: string;
-}
-
-export interface SkillCompletionFailureRecord {
-  skillName: string;
-  occurredAt: number;
-  phase: "repair_required" | "failed_contract";
-  outputKeys: string[];
-  missing: string[];
-  invalid: SkillOutputValidationIssue[];
-  expectedOutputs: Record<string, unknown>;
-  repairGuidance?: SkillRepairGuidance;
-  repairBudget: SkillRepairBudgetState;
-}
-
-export type SkillCompletionRejectedEventPayload = SkillCompletionFailureRecord;
-export type SkillContractFailedEventPayload = SkillCompletionFailureRecord;
-
-export interface ActiveSkillRuntimeState {
-  skillName: string;
-  phase: "active" | "repair_required";
-  repairBudget?: SkillRepairBudgetState;
-  latestFailure?: SkillCompletionFailureRecord;
 }

@@ -54,7 +54,7 @@ describe("delegation prompt and catalog composition", () => {
     expect(prompt).toContain("[truncated]");
   });
 
-  test("renders active skill and execution hints in the delegated prompt", () => {
+  test("renders execution hints without parent skill state in the delegated prompt", () => {
     const prompt = buildDelegationPrompt({
       target: {
         name: "advisor",
@@ -71,20 +71,18 @@ describe("delegation prompt and catalog composition", () => {
       },
       packet: {
         objective: "Review the runtime merge path",
-        activeSkillName: "review",
         executionHints: {
           preferredTools: ["lsp_diagnostics"],
           fallbackTools: ["grep"],
-          preferredSkills: ["review"],
         },
       },
     });
 
-    expect(prompt).toContain("Parent skill: review");
     expect(prompt).toContain("Consult kind: review");
     expect(prompt).toContain("## Execution Hints");
     expect(prompt).toContain("Preferred tools: lsp_diagnostics");
-    expect(prompt).toContain("Preferred skills: review");
+    expect(prompt).not.toContain("Parent skill:");
+    expect(prompt).not.toContain("Preferred skills:");
   });
 
   test("injects semantic skill markdown for consult runs without requiring skillOutputs", () => {

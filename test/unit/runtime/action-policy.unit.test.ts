@@ -65,18 +65,18 @@ describe("tool action policy", () => {
     expect(toolActionPolicyCreatesRollbackAnchor(policy)).toBe(false);
   });
 
-  test("control-plane mutation and delegation derive effectful execution descriptors", () => {
-    const controlPolicy = requireDefined(
-      TOOL_ACTION_POLICY_BY_NAME.session_compact,
-      "missing session_compact policy",
+  test("session compact memory writes and delegation derive effectful execution descriptors", () => {
+    const compactPolicy = requireDefined(
+      TOOL_ACTION_POLICY_BY_NAME.workbench_compact,
+      "missing workbench_compact policy",
     );
     const delegationPolicy = requireDefined(
       TOOL_ACTION_POLICY_BY_NAME.subagent_run,
       "missing subagent_run policy",
     );
 
-    expect(deriveToolGovernanceDescriptor(controlPolicy)).toEqual({
-      effects: ["control_state_mutation"],
+    expect(deriveToolGovernanceDescriptor(compactPolicy)).toEqual({
+      effects: ["memory_write"],
       defaultRisk: "medium",
       boundary: "effectful",
       rollbackable: false,

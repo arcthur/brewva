@@ -3,11 +3,7 @@ import type { BrewvaToolCallId, BrewvaToolName } from "../../core/identifiers.js
 import type { JsonValue } from "../../core/shared.js";
 import type { RedoResult, RollbackResult } from "../patching/api.js";
 import type { ReasoningCheckpointRecord, ReasoningRevertRecord } from "../reasoning/types.js";
-import type {
-  ActiveSkillRuntimeState,
-  SkillCompletionFailureRecord,
-  SkillRoutingScope,
-} from "../skills/api.js";
+import type { SkillRoutingScope } from "../skills/api.js";
 import type { IntegrityIssue } from "./integrity.js";
 
 export type ManagedToolMode = "runtime_plugin" | "direct";
@@ -47,16 +43,13 @@ export interface OpenTurnRecord {
 
 export type SessionUncleanShutdownReason =
   | "open_tool_calls_without_terminal_receipt"
-  | "open_turn_without_terminal_receipt"
-  | "active_skill_without_terminal_receipt";
+  | "open_turn_without_terminal_receipt";
 
 export interface SessionUncleanShutdownDiagnostic {
   detectedAt: number;
   reasons: SessionUncleanShutdownReason[];
   openToolCalls: OpenToolCallRecord[];
   openTurns?: OpenTurnRecord[];
-  activeSkill?: ActiveSkillRuntimeState;
-  latestFailure?: SkillCompletionFailureRecord;
   latestEventType?: string;
   latestEventAt?: number;
 }
