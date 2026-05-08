@@ -4,8 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
 import { PATCH_RECORDED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
-import { createGrepTool } from "@brewva/brewva-tools";
-import { runRipgrep } from "../../../packages/brewva-tools/src/grep.js";
+import { createGrepTool, runRipgrep } from "@brewva/brewva-tools/navigation";
 import { createBundledToolRuntime } from "../../helpers/runtime.js";
 
 function extractText(result: { content: Array<{ type: string; text?: string }> }): string {

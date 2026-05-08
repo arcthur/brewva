@@ -41,6 +41,12 @@
       "import": "./dist/node/fs.js",
       "default": "./dist/node/fs.js"
     },
+    "./runtime-identity": {
+      "types": "./dist/runtime-identity.d.ts",
+      "bun": "./src/runtime-identity.ts",
+      "import": "./dist/runtime-identity.js",
+      "default": "./dist/runtime-identity.js"
+    },
     "./text": {
       "types": "./dist/text.d.ts",
       "bun": "./src/text.ts",

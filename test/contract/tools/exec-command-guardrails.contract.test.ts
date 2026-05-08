@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { createExecTool } from "@brewva/brewva-tools";
+import { createExecTool } from "@brewva/brewva-tools/execution";
 import { requireDefined, requireNonEmptyString } from "../../helpers/assertions.js";
 import { createRuntimeForExecTests, fakeContext } from "./tools-exec-process.helpers.js";
 

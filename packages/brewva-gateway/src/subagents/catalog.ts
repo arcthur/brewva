@@ -10,7 +10,7 @@ import type {
   SubagentContextBudget,
   SubagentExecutionBoundary,
   SubagentResultMode,
-} from "@brewva/brewva-tools";
+} from "@brewva/brewva-tools/contracts";
 import {
   asString,
   asStringArray,

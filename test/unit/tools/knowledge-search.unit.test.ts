@@ -3,7 +3,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { findKnowledgeDocByRelativePath } from "@brewva/brewva-recall/knowledge";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
-import { createKnowledgeSearchTool } from "@brewva/brewva-tools";
+import { createKnowledgeSearchTool } from "@brewva/brewva-tools/memory";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 function extractText(result: { content: Array<{ type: string; text?: string }> }): string {

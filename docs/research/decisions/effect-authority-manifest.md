@@ -22,7 +22,7 @@
   - `packages/brewva-runtime/src/domain/proposals/proposal-admission-effect-commitment.ts`
   - `packages/brewva-runtime/src/security/command-policy.ts`
   - `packages/brewva-runtime/src/security/virtual-readonly-policy.ts`
-  - `packages/brewva-tools/src/runtime-capability-scope.ts`
+  - `packages/brewva-tools/src/registry/capability-scope.ts`
 
 ## Decision Summary
 

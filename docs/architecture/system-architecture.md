@@ -178,8 +178,10 @@ compatibility story.
   evidence, narrative/deliberation memory, promotion drafts, and repository
   precedent. Its root is shared vocabulary; broker/context/knowledge/evidence
   implementations use explicit subpaths.
-- `@brewva/brewva-tools`: managed tool bundle and capability-scoped runtime
-  facades.
+- `@brewva/brewva-tools`: family-sliced managed tool adapters, centralized
+  managed-tool capability registry, capability-scoped runtime facades,
+  controlled runtime-port helpers, and default bundle assembly. It does not own
+  hosted orchestration or model routing policy.
 - `@brewva/brewva-gateway`: hosted sessions, daemon, runtime plugins,
   subagents, and local control-plane orchestration.
 - `@brewva/brewva-cli` and `@brewva/brewva-tui`: operator shell, one-shot CLI,

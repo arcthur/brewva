@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { BoxExecSpec, BoxHandle, BoxPlane, BoxScope } from "@brewva/brewva-box";
-import { createExecTool, createProcessTool } from "@brewva/brewva-tools";
+import { createExecTool, createProcessTool } from "@brewva/brewva-tools/execution";
 import {
   createRuntimeForExecTests,
   extractTextContent,

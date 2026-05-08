@@ -4,7 +4,7 @@ import {
 } from "@brewva/brewva-deliberation";
 import type { BrewvaRuntime } from "@brewva/brewva-runtime";
 import { NARRATIVE_MEMORY_RECORDED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
-import type { BrewvaSemanticReranker } from "@brewva/brewva-tools";
+import type { BrewvaSemanticReranker } from "@brewva/brewva-tools/contracts";
 import type { TurnLifecyclePort } from "./turn-lifecycle-port.js";
 
 interface ToolEvidenceEntry {

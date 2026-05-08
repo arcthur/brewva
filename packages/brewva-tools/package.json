@@ -11,6 +11,54 @@
       "bun": "./src/index.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
+    },
+    "./contracts": {
+      "types": "./dist/contracts/index.d.ts",
+      "bun": "./src/contracts/index.ts",
+      "import": "./dist/contracts/index.js",
+      "default": "./dist/contracts/index.js"
+    },
+    "./registry": {
+      "types": "./dist/registry/index.d.ts",
+      "bun": "./src/registry/index.ts",
+      "import": "./dist/registry/index.js",
+      "default": "./dist/registry/index.js"
+    },
+    "./runtime-port": {
+      "types": "./dist/runtime-port/index.d.ts",
+      "bun": "./src/runtime-port/index.ts",
+      "import": "./dist/runtime-port/index.js",
+      "default": "./dist/runtime-port/index.js"
+    },
+    "./navigation": {
+      "types": "./dist/families/navigation/api.d.ts",
+      "bun": "./src/families/navigation/api.ts",
+      "import": "./dist/families/navigation/api.js",
+      "default": "./dist/families/navigation/api.js"
+    },
+    "./execution": {
+      "types": "./dist/families/execution/api.d.ts",
+      "bun": "./src/families/execution/api.ts",
+      "import": "./dist/families/execution/api.js",
+      "default": "./dist/families/execution/api.js"
+    },
+    "./memory": {
+      "types": "./dist/families/memory/api.d.ts",
+      "bun": "./src/families/memory/api.ts",
+      "import": "./dist/families/memory/api.js",
+      "default": "./dist/families/memory/api.js"
+    },
+    "./delegation": {
+      "types": "./dist/families/delegation/api.d.ts",
+      "bun": "./src/families/delegation/api.ts",
+      "import": "./dist/families/delegation/api.js",
+      "default": "./dist/families/delegation/api.js"
+    },
+    "./workflow": {
+      "types": "./dist/families/workflow/api.d.ts",
+      "bun": "./src/families/workflow/api.ts",
+      "import": "./dist/families/workflow/api.js",
+      "default": "./dist/families/workflow/api.js"
     }
   },
   "dependencies": {

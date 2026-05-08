@@ -1,13 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { buildCapabilityView, renderCapabilityView } from "@brewva/brewva-gateway/runtime-plugins";
+import { createExecTool, createProcessTool } from "@brewva/brewva-tools/execution";
+import { createGrepTool } from "@brewva/brewva-tools/navigation";
 import {
   createTaskLedgerTools,
-  createExecTool,
-  createGrepTool,
-  createProcessTool,
   createResourceLeaseTool,
   createScheduleIntentTool,
-} from "@brewva/brewva-tools";
+} from "@brewva/brewva-tools/workflow";
 import { requireDefined } from "../../helpers/assertions.js";
 import { createRuntimeFixture } from "./fixtures/runtime.js";
 

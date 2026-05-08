@@ -34,9 +34,9 @@ runtime contract.
 
 - Cause: parallel read scans are forced to sequential mode, scan includes too many files, or files are intermittently unreadable.
 - Check:
-  - `packages/brewva-tools/src/utils/parallel-read.ts`
-  - `packages/brewva-tools/src/lsp.ts`
-  - `packages/brewva-tools/src/ast-grep.ts`
+  - `packages/brewva-tools/src/runtime-port/parallel-read.ts`
+  - `packages/brewva-tools/src/families/navigation/lsp.ts`
+  - `packages/brewva-tools/src/families/navigation/ast-grep.ts`
   - `docs/reference/events/README.md` (`tool_parallel_read`)
 - Action:
   - Start with `brewva inspect --session <id>` to confirm tape/projection health, then inspect session events for `tool_parallel_read` payloads.

@@ -16,7 +16,7 @@ import type {
   SemanticRerankerNarrativeExtractionResult,
   SemanticRerankerRerankInput,
   SemanticRerankerRerankResult,
-} from "@brewva/brewva-tools";
+} from "@brewva/brewva-tools/contracts";
 import { createHostedProviderDriver } from "./hosted-provider-driver.js";
 
 interface HostedSemanticRerankerOptions {

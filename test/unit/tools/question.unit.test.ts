@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { BrewvaToolContext } from "@brewva/brewva-substrate/tools";
-import { createQuestionTool } from "../../../packages/brewva-tools/src/question.js";
+import { createQuestionTool } from "@brewva/brewva-tools/delegation";
 
 function createToolContext(overrides?: {
   custom?(

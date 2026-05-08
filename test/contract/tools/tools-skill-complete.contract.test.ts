@@ -9,7 +9,7 @@ import {
   asBrewvaSessionId,
   type DelegationRunRecord,
 } from "@brewva/brewva-runtime";
-import { createSkillCompleteTool, createSkillLoadTool } from "@brewva/brewva-tools";
+import { createSkillCompleteTool, createSkillLoadTool } from "@brewva/brewva-tools/workflow";
 
 type ToolExecutionContext = Parameters<ReturnType<typeof createSkillLoadTool>["execute"]>[4];
 
@@ -342,7 +342,7 @@ describe("skill_complete tool", () => {
         repository_snapshot: "Repository snapshot was incorrectly placed at the top level.",
         impact_map: [
           {
-            path: "packages/brewva-tools/src/skill-complete.ts",
+            path: "packages/brewva-tools/src/families/workflow/skill-complete.ts",
             reason: "Skill completion parses the tool arguments.",
           },
         ],

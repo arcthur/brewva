@@ -1,8 +1,5 @@
-import {
-  ALWAYS_ON_REVIEW_LANES,
-  type AdvisorConsultKind,
-  type SubagentResultMode,
-} from "@brewva/brewva-tools";
+import type { AdvisorConsultKind, SubagentResultMode } from "@brewva/brewva-tools/contracts";
+import { ALWAYS_ON_REVIEW_LANES } from "@brewva/brewva-tools/delegation";
 
 export const STRUCTURED_OUTCOME_OPEN = "<delegation_outcome_json>";
 export const STRUCTURED_OUTCOME_CLOSE = "</delegation_outcome_json>";

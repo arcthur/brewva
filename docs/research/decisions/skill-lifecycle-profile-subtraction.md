@@ -14,7 +14,7 @@
 - Code anchors:
   - `packages/brewva-runtime/src/domain/skills/profiles.ts`
   - `packages/brewva-gateway/src/runtime-plugins/skill-first.ts`
-  - `packages/brewva-tools/src/skill-load.ts`
+  - `packages/brewva-tools/src/families/workflow/skill-load.ts`
   - `test/contract/runtime/skill-lifecycle-profiles.contract.test.ts`
   - `test/contract/runtime-plugins/skill-routing-eval.contract.test.ts`
   - `test/contract/runtime/skill-document-parsing.contract.test.ts`

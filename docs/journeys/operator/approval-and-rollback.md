@@ -125,7 +125,7 @@ flowchart TD
 - Effect-commitment desk: `packages/brewva-runtime/src/domain/proposals/effect-commitment-desk.ts`
 - `PatchSet` rollback: `packages/brewva-runtime/src/domain/patching/file-change.ts`
 - Receipt-aware rollback: `packages/brewva-runtime/src/domain/governance/mutation-rollback.ts`
-- Rollback tool: `packages/brewva-tools/src/rollback-last-patch.ts`
+- Rollback tool: `packages/brewva-tools/src/families/workflow/rollback-last-patch.ts`
 
 ## Related Docs
 

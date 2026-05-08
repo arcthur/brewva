@@ -18,7 +18,7 @@ scope: package-boundaries
 | `@brewva/brewva-deliberation`  | narrative memory, optimization continuity, and non-authoritative deliberation substrate                                                                 | kernel commitments or transport ownership     |
 | `@brewva/brewva-skill-broker`  | post-execution skill-promotion brokerage and persisted promotion review state                                                                           | turn-time skill routing or kernel authority   |
 | `@brewva/brewva-std`           | leaf standard primitives for async, collections, hashing, JSON, markdown, text, unknown readers, and Node-only filesystem helpers                       | product policy, runtime authority, or domains |
-| `@brewva/brewva-tools`         | concrete tool adapters and runtime-aware helpers                                                                                                        | orchestration policy                          |
+| `@brewva/brewva-tools`         | family-sliced concrete tool adapters, pure tool contracts, managed-tool registry/capability spine, runtime-port helpers, and default bundle assembly    | orchestration policy or model routing         |
 | `@brewva/brewva-cli`           | user entrypoints and frontend command surface                                                                                                           | channel/control-plane ownership               |
 | `@brewva/brewva-gateway`       | daemon control plane, session supervision, channel host, and runtime wiring                                                                             | kernel semantics                              |
 
@@ -70,6 +70,13 @@ scope: package-boundaries
 - substrate public/domain API files use curated exports. They must not grow
   wildcard barrels or revive old source-path shims for moved implementation
   files
+- tools root exports default bundle construction only. Tool vocabulary,
+  registry/capability helpers, runtime-port helpers, and family adapters use
+  explicit `@brewva/brewva-tools/*` subpaths; old top-level implementation
+  files and broad factory barrels are not compatibility surfaces
+- tools managed capability policy is centralized in
+  `@brewva/brewva-tools/registry`; family adapters receive scoped runtime
+  facades and must fail closed when an undeclared capability is accessed
 - provider session resources are a controlled lifecycle port; hosted callers
   that replace session context or change provider/model must await
   `clearSession(sessionId)` before continuing

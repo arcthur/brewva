@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
+import { resolveRuntimeSourceIdentity } from "@brewva/brewva-std/runtime-identity";
 
 export interface PlaneSessionDigest {
   sessionId: string;
@@ -20,12 +21,13 @@ export function getOrCreatePlaneForRuntime<TPlane>(input: {
   runtime: object;
   create: () => TPlane;
 }): TPlane {
-  const existing = input.planes.get(input.runtime);
+  const runtimeKey = resolveRuntimeSourceIdentity(input.runtime);
+  const existing = input.planes.get(runtimeKey);
   if (existing) {
     return existing;
   }
   const created = input.create();
-  input.planes.set(input.runtime, created);
+  input.planes.set(runtimeKey, created);
   return created;
 }
 

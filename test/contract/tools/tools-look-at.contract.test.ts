@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
-import { createLookAtTool } from "@brewva/brewva-tools";
+import { createLookAtTool } from "@brewva/brewva-tools/navigation";
 import { createRuntimeConfig } from "../../helpers/runtime.js";
 
 function extractTextContent(result: { content: Array<{ type: string; text?: string }> }): string {

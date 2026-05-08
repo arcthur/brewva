@@ -1,20 +1,20 @@
 # Tool Family: Delegation
 
-Delegation tools connect skill activation, subagent execution, worker-result
-adoption, and task state.
+Delegation tools connect subagent execution, A2A communication, operator
+questions, and review synthesis.
 
 ## Boundary
 
-Skills define semantic contracts. Subagents and workers are control-plane
-execution envelopes. The parent session owns active skill state, task truth,
-and patch adoption.
+Subagents and A2A calls are control-plane execution envelopes. Review synthesis
+is advisory semantics over delegated evidence. The parent session owns active
+task truth and any patch adoption.
 
 ## Surfaces
 
-- skill load, completion, and promotion inspection/review/promotion
 - subagent run, fanout, fork, status, diagnostic, and cancel
-- worker result merge and apply
-- task spec, item, blocker, acceptance, and state views
+- A2A broadcast, list, and send
+- operator question prompts
+- review-lane planning, review classification, and review synthesis
 
 ## Adoption
 
@@ -32,3 +32,8 @@ reference, but it does not import the child branch's raw transcript.
 Delegation does not create cross-agent saga behavior or automatic
 partial-failure repair. Parent-owned merge/apply actions create the receipt
 that matters.
+
+Review synthesis and review classification are publicly curated through
+`@brewva/brewva-tools/delegation` only. Workflow tools may consume the same
+private shared implementation internally, but workflow does not expose a second
+public review surface.

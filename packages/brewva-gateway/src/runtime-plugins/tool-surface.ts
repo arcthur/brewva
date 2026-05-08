@@ -30,7 +30,7 @@ import {
   OPERATOR_BREWVA_TOOL_NAMES,
   SKILL_BREWVA_TOOL_NAMES,
   isManagedBrewvaToolName,
-} from "@brewva/brewva-tools";
+} from "@brewva/brewva-tools/registry";
 import {
   buildSkillDiagnosisReceiptPayload,
   buildSkillDiagnosisPolicyBlock,

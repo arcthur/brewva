@@ -6,7 +6,7 @@ import {
   type SkillOutputContract,
 } from "@brewva/brewva-runtime";
 import { estimateTokenCount } from "@brewva/brewva-token-estimation";
-import type { DelegationPacket, SubagentContextRef } from "@brewva/brewva-tools";
+import type { DelegationPacket, SubagentContextRef } from "@brewva/brewva-tools/contracts";
 import { buildStructuredOutcomeContract, getCanonicalSubagentPrompt } from "./protocol.js";
 import type { HostedDelegationTarget } from "./targets.js";
 

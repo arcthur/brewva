@@ -6,7 +6,7 @@ const DEFAULT_SCAN_PATHS = [
   "packages/brewva-runtime/src/security/boundary-policy.ts",
   "packages/brewva-runtime/src/security/command-policy.ts",
   "packages/brewva-runtime/src/domain/tools/tool-gate.ts",
-  "packages/brewva-tools/src/exec.ts",
+  "packages/brewva-tools/src/families/execution/exec.ts",
 ] as const;
 
 export interface SecurityPatternViolation {

@@ -19,7 +19,7 @@ import {
   type IdentifierOccurrence,
   type OxcError,
   type SourceSymbol,
-} from "../../../packages/brewva-tools/src/parsing/index.js";
+} from "../../../packages/brewva-tools/src/families/navigation/parsing/index.js";
 
 const COMMENT_AND_STRING_AWARE_SOURCE = `// rename foo here? no
 /* foo also lives in a block comment */

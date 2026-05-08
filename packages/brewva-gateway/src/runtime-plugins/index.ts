@@ -12,13 +12,12 @@ import type {
 } from "@brewva/brewva-substrate/host-api";
 import { defineInternalHostPlugin } from "@brewva/brewva-substrate/host-api";
 import type { BrewvaToolDefinition } from "@brewva/brewva-substrate/tools";
-import {
-  buildBrewvaTools,
-  createBrewvaToolCatalog,
-  getBrewvaToolSurface,
-  type BrewvaSemanticReranker,
-  type BrewvaToolOrchestration,
-} from "@brewva/brewva-tools";
+import { buildBrewvaTools } from "@brewva/brewva-tools";
+import type {
+  BrewvaSemanticReranker,
+  BrewvaToolOrchestration,
+} from "@brewva/brewva-tools/contracts";
+import { createBrewvaToolCatalog, getBrewvaToolSurface } from "@brewva/brewva-tools/registry";
 import { DEFAULT_HOSTED_ROUTING_SCOPES } from "../host/routing-defaults.js";
 import type { HostedDelegationStore } from "../subagents/delegation-store.js";
 import {

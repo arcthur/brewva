@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { registerQualityGate } from "@brewva/brewva-gateway/runtime-plugins";
-import { createGrepTool, createScheduleIntentTool } from "@brewva/brewva-tools";
+import { createGrepTool } from "@brewva/brewva-tools/navigation";
+import { createScheduleIntentTool } from "@brewva/brewva-tools/workflow";
 import { createMockRuntimePluginApi, invokeHandler } from "../../helpers/runtime-plugin.js";
 import { createRuntimeFixture } from "./fixtures/runtime.js";
 

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type { BrewvaToolRuntime } from "@brewva/brewva-tools";
-import { createCapabilityScopedToolRuntime } from "../../../packages/brewva-tools/src/runtime-capability-scope.js";
+import type { BrewvaToolRuntime } from "@brewva/brewva-tools/contracts";
+import { createCapabilityScopedToolRuntime } from "@brewva/brewva-tools/registry";
 
 function createToolRuntimeFixture(): BrewvaToolRuntime {
   return {

@@ -482,8 +482,8 @@ Runtime and gateway anchors:
 - `packages/brewva-runtime/src/domain/context/arena.ts`
 - `packages/brewva-runtime/src/domain/context/provider.ts`
 - `packages/brewva-runtime/src/domain/context/context.ts`
-- `packages/brewva-tools/src/skill-load.ts`
-- `packages/brewva-tools/src/recall.ts`
+- `packages/brewva-tools/src/families/workflow/skill-load.ts`
+- `packages/brewva-tools/src/families/memory/recall.ts`
 
 Evaluation anchors:
 

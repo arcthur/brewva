@@ -9,10 +9,10 @@
   - `docs/reference/tools.md`
   - `docs/reference/events/README.md`
 - Code anchors:
-  - `packages/brewva-tools/src/search-advisor.ts`
-  - `packages/brewva-tools/src/grep.ts`
-  - `packages/brewva-tools/src/toc.ts`
-  - `packages/brewva-tools/src/toc-search-core.ts`
+  - `packages/brewva-tools/src/families/navigation/search-advisor.ts`
+  - `packages/brewva-tools/src/families/navigation/grep.ts`
+  - `packages/brewva-tools/src/families/navigation/toc.ts`
+  - `packages/brewva-tools/src/families/navigation/toc-search-core.ts`
   - `test/unit/tools/search-advisor.unit.test.ts`
   - `test/unit/tools/tools-grep.unit.test.ts`
   - `test/contract/tools/tools-toc.contract.test.ts`

@@ -14,11 +14,8 @@ import type {
 import { shortSha256Hex } from "@brewva/brewva-std/hash";
 import type { BrewvaToolContentPart } from "@brewva/brewva-substrate/tools";
 import type { ToolCatalog, ToolDescriptor } from "@brewva/brewva-tool-protocol";
-import {
-  defineBrewvaTool,
-  type BrewvaToolRequiredCapability,
-  type BrewvaToolSurface,
-} from "@brewva/brewva-tools";
+import type { BrewvaToolRequiredCapability } from "@brewva/brewva-tools/contracts";
+import { defineBrewvaTool, type BrewvaToolSurface } from "@brewva/brewva-tools/registry";
 import type { HostedSessionCustomTool } from "./hosted-session-driver.js";
 
 const HOSTED_MCP_TOOL_NAME_PREFIX = "mcp";

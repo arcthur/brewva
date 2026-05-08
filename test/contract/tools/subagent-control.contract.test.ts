@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { HostedDelegationStore } from "@brewva/brewva-gateway";
 import { BrewvaRuntime, CURRENT_DELEGATION_CONTRACT_VERSION } from "@brewva/brewva-runtime";
+import type { SubagentRunRequest } from "@brewva/brewva-tools/contracts";
 import {
   createSubagentCancelTool,
   createSubagentStatusTool,
-  type SubagentRunRequest,
-} from "@brewva/brewva-tools";
+} from "@brewva/brewva-tools/delegation";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 function fakeContext(sessionId: string): any {

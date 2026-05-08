@@ -22,7 +22,7 @@
   - `packages/brewva-gateway/src/runtime-plugins/skill-first.ts`
   - `packages/brewva-gateway/src/runtime-plugins/tool-surface.ts`
   - `packages/brewva-gateway/src/runtime-plugins/completion-guard.ts`
-  - `packages/brewva-tools/src/skill-promotion.ts`
+  - `packages/brewva-tools/src/families/workflow/skill-promotion.ts`
 
 ## Decision Summary
 

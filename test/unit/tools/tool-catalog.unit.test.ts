@@ -5,7 +5,7 @@ import {
   createBrewvaToolCatalog,
   defineBrewvaTool,
   getBrewvaToolDescriptor,
-} from "@brewva/brewva-tools";
+} from "@brewva/brewva-tools/registry";
 import { Type } from "@sinclair/typebox";
 
 describe("tool catalog", () => {

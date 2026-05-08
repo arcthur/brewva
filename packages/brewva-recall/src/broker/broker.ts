@@ -8,6 +8,7 @@ import { createSessionIndex, type SessionIndex } from "@brewva/brewva-session-in
 import { isSessionIndexTextIndexedEvent } from "@brewva/brewva-session-index/evidence";
 import { getOrCreateSkillPromotionBroker } from "@brewva/brewva-skill-broker";
 import { uniqueNonEmptyStrings as uniqueStrings } from "@brewva/brewva-std/collections";
+import { resolveRuntimeSourceIdentity } from "@brewva/brewva-std/runtime-identity";
 import { classifyRecallTapeEvent } from "../evidence/index.js";
 import { executeKnowledgeSearch, findKnowledgeDocByRelativePath } from "../knowledge/index.js";
 import {
@@ -618,7 +619,7 @@ export class RecallBroker {
 }
 
 export function getOrCreateRecallBroker(runtime: RecallBrokerRuntime): RecallBroker {
-  const key = runtime as unknown as object;
+  const key = resolveRuntimeSourceIdentity(runtime as unknown as object);
   const existing = brokerByRuntime.get(key);
   if (existing) {
     return existing;

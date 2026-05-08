@@ -14,7 +14,7 @@ import type {
   SubagentOutcome,
   SubagentOutcomeArtifactRef,
   SubagentRunRequest,
-} from "@brewva/brewva-tools";
+} from "@brewva/brewva-tools/contracts";
 import { createHostedSession } from "../host/create-hosted-session.js";
 import type { HostedSessionLogger } from "../host/logger.js";
 import { resolveSubagentSessionShutdownReason } from "../session/shutdown-receipts.js";

@@ -90,7 +90,7 @@ Use this precedent whenever changing:
 
 - `packages/brewva-runtime/src/security/command-policy.ts`
 - `packages/brewva-runtime/src/security/boundary-policy.ts`
-- `packages/brewva-tools/src/exec.ts`
+- `packages/brewva-tools/src/families/execution/exec.ts`
 - `security.execution.*` defaults or box lifecycle behavior
 - `local_exec_readonly` action policy admission
 - `box.*` event payloads or command audit behavior
@@ -102,6 +102,6 @@ Use this precedent whenever changing:
 - `docs/reference/tools.md`
 - `docs/reference/events/README.md`
 - `packages/brewva-runtime/src/security/command-policy.ts`
-- `packages/brewva-tools/src/exec.ts`
+- `packages/brewva-tools/src/families/execution/exec.ts`
 - `test/unit/runtime/command-policy.unit.test.ts`
 - `test/contract/tools/exec-command-policy.contract.test.ts`

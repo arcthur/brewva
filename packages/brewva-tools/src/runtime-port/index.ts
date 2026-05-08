@@ -1,0 +1,35 @@
+export {
+  appendToolRuntimeGuardedSupplementalBlocks,
+  canAppendToolRuntimeGuardedSupplementalBlocks,
+  recordToolRuntimeEvent,
+  registerToolRuntimeClearStateListener,
+  resolveToolRuntimeAuthorityTools,
+  resolveToolRuntimeContextPort,
+  resolveToolRuntimeCredentialBindings,
+  resolveToolRuntimeEventPort,
+  resolveToolRuntimeTaskPort,
+  type ToolRuntimeEventInput,
+} from "./extensions.js";
+export {
+  getToolSessionId,
+  readTextBatch,
+  recordParallelReadTelemetry,
+  resolveAdaptiveBatchSize,
+  resolveParallelReadConfig,
+  summarizeReadBatch,
+  withParallelReadSlot,
+  type ParallelReadConfig,
+  type ParallelReadMode,
+  type ParallelReadReason,
+  type ParallelReadSlotOptions,
+  type ParallelReadTelemetry,
+  type ReadBatchItem,
+  type ReadBatchSummary,
+  type ReadTextBatchOptions,
+} from "./parallel-read.js";
+export {
+  isPathInsideRoots,
+  resolveScopedPath,
+  resolveToolTargetScope,
+  type ToolTargetScope,
+} from "./target-scope.js";

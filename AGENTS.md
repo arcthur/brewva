@@ -53,5 +53,5 @@
 - Runtime skills: `packages/brewva-runtime/src/domain/skills/contract.ts`, `packages/brewva-runtime/src/domain/skills/registry.ts`.
 - Session query plane: `packages/brewva-session-index/src/index.ts`, consumed by `packages/brewva-recall/src/broker.ts` and `packages/brewva-cli/src/insights.ts`.
 - Gateway skill routing and plugins: `packages/brewva-gateway/src/runtime-plugins/skill-first.ts`, `packages/brewva-gateway/src/runtime-plugins/local-hook-port.ts`.
-- Managed tool capabilities: `packages/brewva-tools/src/managed-tool-metadata-registry.ts`, `packages/brewva-tools/src/utils/runtime-bound-tool.ts`.
+- Managed tool capabilities: `packages/brewva-tools/src/registry/managed-metadata.ts`, `packages/brewva-tools/src/registry/runtime-bound-tool.ts`.
 - Expanded lookup map: `skills/project/shared/source-map.md`.

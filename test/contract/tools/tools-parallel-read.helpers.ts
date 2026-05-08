@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DEFAULT_BREWVA_CONFIG, BrewvaRuntime, type BrewvaConfig } from "@brewva/brewva-runtime";
-import type { BrewvaBundledToolRuntime } from "@brewva/brewva-tools";
+import type { BrewvaBundledToolRuntime } from "@brewva/brewva-tools/contracts";
 import { createBundledToolRuntime as createBundledToolRuntimeFromRuntime } from "../../helpers/runtime.js";
 
 export function extractTextContent(result: {

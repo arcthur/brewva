@@ -1,6 +1,7 @@
 import { readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
+import { resolveBrewvaModelSelection } from "@brewva/brewva-gateway/model-routing";
 import { createRecallContextProvider } from "@brewva/brewva-recall/context";
 import {
   BrewvaRuntime,
@@ -19,15 +20,14 @@ import type {
   BrewvaManagedPromptSession,
   BrewvaModelPreset,
 } from "@brewva/brewva-substrate/session";
-import {
-  attachBrewvaToolExecutionTraits,
-  buildReadPathDiscoveryObservationPayload,
-  buildBrewvaTools,
-  resolveBrewvaModelSelection,
-  type BrewvaToolExecutionTraits,
-  type BrewvaSemanticReranker,
-  type BrewvaToolOrchestration,
-} from "@brewva/brewva-tools";
+import { buildBrewvaTools } from "@brewva/brewva-tools";
+import type {
+  BrewvaToolExecutionTraits,
+  BrewvaSemanticReranker,
+  BrewvaToolOrchestration,
+} from "@brewva/brewva-tools/contracts";
+import { buildReadPathDiscoveryObservationPayload } from "@brewva/brewva-tools/navigation";
+import { attachBrewvaToolExecutionTraits } from "@brewva/brewva-tools/registry";
 import { createReadUnchangedState } from "../cache/index.js";
 import {
   createHostedTurnPipeline,

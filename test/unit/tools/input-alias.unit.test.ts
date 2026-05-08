@@ -6,7 +6,7 @@ import {
   collectStringEnumContractMismatches,
   collectStringEnumContracts,
   lowerStringEnumContractParameters,
-} from "../../../packages/brewva-tools/src/utils/input-alias.js";
+} from "../../../packages/brewva-tools/src/registry/string-enum-contract.js";
 
 const requireFromBrewvaTools = createRequire(
   new URL("../../../packages/brewva-tools/package.json", import.meta.url),

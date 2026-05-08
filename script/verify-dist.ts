@@ -203,8 +203,17 @@ function main(): void {
       "@brewva/brewva-channels-telegram",
       "@brewva/brewva-ingress",
       "@brewva/brewva-tools",
+      "@brewva/brewva-tools/contracts",
+      "@brewva/brewva-tools/registry",
+      "@brewva/brewva-tools/runtime-port",
+      "@brewva/brewva-tools/navigation",
+      "@brewva/brewva-tools/execution",
+      "@brewva/brewva-tools/memory",
+      "@brewva/brewva-tools/delegation",
+      "@brewva/brewva-tools/workflow",
       "@brewva/brewva-tui",
       "@brewva/brewva-gateway/host",
+      "@brewva/brewva-gateway/model-routing",
       "@brewva/brewva-gateway/runtime-plugins",
       "@brewva/brewva-cli",
       "@brewva/brewva-gateway",
@@ -323,7 +332,7 @@ function main(): void {
     }
     const { BrewvaRuntime, createToolRuntimePort } = await import("@brewva/brewva-runtime");
     const semanticArtifactsModule = await import("@brewva/brewva-runtime/semantic-artifacts");
-    const { createOutputSearchTool } = await import("@brewva/brewva-tools");
+    const { createOutputSearchTool } = await import("@brewva/brewva-tools/navigation");
     const runtime = new BrewvaRuntime({ cwd: isolatedWorkspace });
     if ("getSemanticArtifactOutputContract" in (await import("@brewva/brewva-runtime"))) {
       throw new Error("runtime root dist entry unexpectedly re-exported semantic artifact catalog helpers");

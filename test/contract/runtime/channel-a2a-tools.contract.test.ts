@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { createA2ATools } from "@brewva/brewva-tools";
+import { createA2ATools } from "@brewva/brewva-tools/delegation";
 import { requireDefined } from "../../helpers/assertions.js";
 
 function fakeContext(sessionId: string): any {

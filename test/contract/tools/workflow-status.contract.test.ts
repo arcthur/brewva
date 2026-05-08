@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { HostedDelegationStore } from "@brewva/brewva-gateway";
 import { BrewvaRuntime, CURRENT_DELEGATION_CONTRACT_VERSION } from "@brewva/brewva-runtime";
-import { createWorkflowStatusTool } from "@brewva/brewva-tools";
+import { createWorkflowStatusTool } from "@brewva/brewva-tools/workflow";
 import { recordHostedSkillCompleted } from "../../helpers/events.js";
 import { buildCanonicalReviewReport } from "../../helpers/semantic-artifacts.js";
 import { extractTextContent, mergeContext } from "./tools-flow.helpers.js";

@@ -5,12 +5,9 @@ import { join } from "node:path";
 import { registerEventStream, registerLedgerWriter } from "@brewva/brewva-gateway/runtime-plugins";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
 import { VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
-import {
-  createObsQueryTool,
-  createObsSloAssertTool,
-  createOutputSearchTool,
-  defineBrewvaTool,
-} from "@brewva/brewva-tools";
+import { createOutputSearchTool } from "@brewva/brewva-tools/navigation";
+import { defineBrewvaTool } from "@brewva/brewva-tools/registry";
+import { createObsQueryTool, createObsSloAssertTool } from "@brewva/brewva-tools/workflow";
 import { createMockRuntimePluginApi, invokeHandlers } from "../../helpers/runtime-plugin.js";
 import { createBundledToolRuntime } from "../../helpers/runtime.js";
 

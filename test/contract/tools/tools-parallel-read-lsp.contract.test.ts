@@ -3,12 +3,10 @@ import { chmodSync, mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
-import {
-  buildBrewvaTools,
-  createLspTools,
-  resolveParallelReadConfig,
-  type BrewvaBundledToolRuntime,
-} from "@brewva/brewva-tools";
+import { buildBrewvaTools } from "@brewva/brewva-tools";
+import type { BrewvaBundledToolRuntime } from "@brewva/brewva-tools/contracts";
+import { createLspTools } from "@brewva/brewva-tools/navigation";
+import { resolveParallelReadConfig } from "@brewva/brewva-tools/runtime-port";
 import { requireDefined, requireNumber, requireRecord } from "../../helpers/assertions.js";
 import {
   createRuntime,

@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { mkdirSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { walkWorkspaceFiles } from "../../../packages/brewva-tools/src/shared/workspace-walk.js";
+import { walkWorkspaceFiles } from "../../../packages/brewva-tools/src/families/navigation/internal/workspace-walk.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
-describe("tool shared helpers", () => {
+describe("navigation workspace walk helper", () => {
   test("walkWorkspaceFiles dedupes symlink loops while preserving .config", () => {
     const workspace = createTestWorkspace("tool-walk");
     mkdirSync(join(workspace, "src"), { recursive: true });

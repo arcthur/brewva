@@ -565,16 +565,32 @@ describe("Effect runtime foundation boundary", () => {
   });
 
   test("tools process and exec lanes expose Effect-native runtime entrypoints", () => {
-    const registrySource = readFileSync(
-      join(repoRoot, "packages/brewva-tools/src/exec-process-registry.ts"),
-      "utf8",
-    );
+    const registrySource = [
+      "api.ts",
+      "host.ts",
+      "box.ts",
+      "sessions.ts",
+      "internal/lifecycle.ts",
+      "internal/output.ts",
+      "internal/state.ts",
+    ]
+      .map((file) =>
+        readFileSync(
+          join(
+            repoRoot,
+            "packages/brewva-tools/src/families/execution/exec-process-registry",
+            file,
+          ),
+          "utf8",
+        ),
+      )
+      .join("\n");
     const hostLaneSource = readFileSync(
-      join(repoRoot, "packages/brewva-tools/src/exec/host-lane.ts"),
+      join(repoRoot, "packages/brewva-tools/src/families/execution/exec/host-lane.ts"),
       "utf8",
     );
     const boxLaneSource = readFileSync(
-      join(repoRoot, "packages/brewva-tools/src/exec/box-lane.ts"),
+      join(repoRoot, "packages/brewva-tools/src/families/execution/exec/box-lane.ts"),
       "utf8",
     );
 

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { asBrewvaSessionId, parseScheduleIntentEvent } from "@brewva/brewva-runtime";
-import { createScheduleIntentTool } from "@brewva/brewva-tools";
+import { createScheduleIntentTool } from "@brewva/brewva-tools/workflow";
 import {
   createScheduleToolRuntime,
   extractTextContent,

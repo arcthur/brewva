@@ -162,9 +162,9 @@ Operator expectations:
 - Workspace isolation: `packages/brewva-gateway/src/subagents/workspace.ts`
 - Runtime parallel state: `packages/brewva-runtime/src/domain/parallel/parallel.ts`
 - Delegation store: `packages/brewva-gateway/src/subagents/delegation-store.ts`
-- Run / fan-out tools: `packages/brewva-tools/src/subagent-run.ts`
-- Status / cancel tools: `packages/brewva-tools/src/subagent-control.ts`
-- Worker adoption: `packages/brewva-tools/src/worker-results.ts`
+- Run / fan-out tools: `packages/brewva-tools/src/families/delegation/subagent-run/api.ts`
+- Status / cancel tools: `packages/brewva-tools/src/families/delegation/subagent-control.ts`
+- Worker adoption: `packages/brewva-tools/src/families/workflow/worker-results.ts`
 
 ## Related Docs
 

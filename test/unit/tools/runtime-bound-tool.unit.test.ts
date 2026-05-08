@@ -1,12 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import type { BrewvaToolRuntime } from "@brewva/brewva-tools";
-import { Type } from "@sinclair/typebox";
-import { textResult } from "../../../packages/brewva-tools/src/utils/result.js";
+import { resolveRuntimeSourceIdentity } from "@brewva/brewva-std/runtime-identity";
+import type { BrewvaToolRuntime } from "@brewva/brewva-tools/contracts";
 import {
   createManagedBrewvaToolFactory,
+  getBrewvaToolMetadata,
   createRuntimeBoundBrewvaToolFactory,
-} from "../../../packages/brewva-tools/src/utils/runtime-bound-tool.js";
-import { getBrewvaToolMetadata } from "../../../packages/brewva-tools/src/utils/tool.js";
+} from "@brewva/brewva-tools/registry";
+import { Type } from "@sinclair/typebox";
+import { textResult } from "../../../packages/brewva-tools/src/utils/result.js";
 
 function createToolRuntimeFixture(): BrewvaToolRuntime {
   return {
@@ -144,5 +145,12 @@ describe("runtime-bound managed Brewva tool factory", () => {
     ).toThrow(
       "managed Brewva tool definition mismatch: expected 'resource_lease', received 'rollback_last_patch'.",
     );
+  });
+
+  test("keeps scoped runtime facades attached to the source runtime identity", () => {
+    const runtime = createToolRuntimeFixture();
+    const factory = createRuntimeBoundBrewvaToolFactory(runtime, "resource_lease");
+
+    expect(resolveRuntimeSourceIdentity(factory.runtime as object)).toBe(runtime);
   });
 });

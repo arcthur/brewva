@@ -10,7 +10,7 @@ import {
   createSkillPromotionInspectTool,
   createSkillPromotionPromoteTool,
   createSkillPromotionReviewTool,
-} from "@brewva/brewva-tools";
+} from "@brewva/brewva-tools/workflow";
 import { recordHostedSkillCompleted } from "../../helpers/events.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 

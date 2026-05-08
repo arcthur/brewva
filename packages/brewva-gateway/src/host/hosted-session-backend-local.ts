@@ -1,3 +1,4 @@
+import { resolveBrewvaModelSelection } from "@brewva/brewva-gateway/model-routing";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
 import { MODEL_PRESET_SELECT_EVENT_TYPE } from "@brewva/brewva-runtime/events";
 import { BREWVA_THINKING_LEVELS } from "@brewva/brewva-substrate/contracts";
@@ -9,7 +10,6 @@ import type {
   BrewvaModelPresetState,
   BrewvaPromptThinkingLevel,
 } from "@brewva/brewva-substrate/session";
-import { resolveBrewvaModelSelection } from "@brewva/brewva-tools";
 import { createHostedTurnPipeline } from "../runtime-plugins/index.js";
 import {
   createHostedModelServices as createLocalHostedModelServices,

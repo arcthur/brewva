@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { asBrewvaSessionId } from "@brewva/brewva-runtime";
-import { createFollowUpTool } from "@brewva/brewva-tools";
+import { createFollowUpTool } from "@brewva/brewva-tools/workflow";
 import {
   createScheduleToolRuntime,
   extractTextContent,

@@ -117,13 +117,13 @@ flowchart TD
 
 ## Code Pointers
 
-- Tool contracts: `packages/brewva-tools/src/follow-up.ts`,
-  `packages/brewva-tools/src/schedule-intent.ts`
+- Tool contracts: `packages/brewva-tools/src/families/workflow/follow-up.ts`,
+  `packages/brewva-tools/src/families/workflow/schedule-intent.ts`
 - Scheduler service: `packages/brewva-runtime/src/domain/schedule/service.ts`
 - Schedule events: `packages/brewva-runtime/src/domain/schedule/events.ts`
 - Schedule projection: `packages/brewva-runtime/src/domain/schedule/projection.ts`
 - Cron / timezone: `packages/brewva-runtime/src/domain/schedule/cron.ts`
-- Continuity inspection tool: `packages/brewva-tools/src/optimization-continuity.ts`
+- Continuity inspection tool: `packages/brewva-tools/src/families/memory/optimization-continuity.ts`
 - Scheduler daemon dispatch: `packages/brewva-cli/src/index.ts`
 - Scheduler daemon implementation: `packages/brewva-cli/src/daemon-mode.ts`
 - Live scheduler controls: `packages/brewva-gateway/src/cli.ts`

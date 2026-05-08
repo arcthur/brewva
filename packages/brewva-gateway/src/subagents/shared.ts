@@ -27,7 +27,7 @@ import type {
   SubagentExecutionShape,
   SubagentOutcomeArtifactRef,
   SubagentRunRequest,
-} from "@brewva/brewva-tools";
+} from "@brewva/brewva-tools/contracts";
 import {
   assertHostedExecutionEnvelopeTightening,
   buildHostedDelegationTargetFromAgentSpec,

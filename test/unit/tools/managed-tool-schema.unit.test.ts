@@ -2,7 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createProcessTool, createReadSpansTool } from "@brewva/brewva-tools";
+import { createProcessTool } from "@brewva/brewva-tools/execution";
+import { createReadSpansTool } from "@brewva/brewva-tools/navigation";
 
 function extractTextContent(result: { content: Array<{ type: string; text?: string }> }): string {
   const textPart = result.content.find(

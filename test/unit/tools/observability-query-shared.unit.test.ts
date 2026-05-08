@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { runObservabilityQuery } from "../../../packages/brewva-tools/src/observability/shared.js";
+import { runObservabilityQuery } from "../../../packages/brewva-tools/src/families/workflow/observability/shared.js";
 
 describe("observability shared query", () => {
   test("single-type queries prefilter at the event store boundary", () => {

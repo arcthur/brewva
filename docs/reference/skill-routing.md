@@ -5,8 +5,8 @@ Implementation anchors:
 - `packages/brewva-gateway/src/runtime-plugins/skill-first.ts`
 - `packages/brewva-gateway/src/runtime-plugins/hosted-context-injection-pipeline.ts`
 - `packages/brewva-runtime/src/domain/skills/profiles.ts`
-- `packages/brewva-tools/src/skill-load.ts`
-- `packages/brewva-tools/src/workflow-status.ts`
+- `packages/brewva-tools/src/families/workflow/skill-load.ts`
+- `packages/brewva-tools/src/families/workflow/workflow-status.ts`
 - `packages/brewva-runtime/src/domain/skills/skill-lifecycle.ts`
 
 This document describes how Brewva routes tasks to skills and how skills

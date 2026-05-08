@@ -1,16 +1,16 @@
 import { describe, expect, test } from "bun:test";
 import { createRequire } from "node:module";
 import { TOOL_ACTION_POLICY_BY_NAME, getExactToolActionPolicy } from "@brewva/brewva-runtime";
+import { buildBrewvaTools } from "@brewva/brewva-tools";
+import { createA2ATools } from "@brewva/brewva-tools/delegation";
 import {
   MANAGED_BREWVA_TOOL_NAMES,
   attachBrewvaToolExecutionTraits,
-  buildBrewvaTools,
-  createA2ATools,
   defineBrewvaTool,
   getBrewvaToolMetadata,
   getBrewvaToolSurface,
   resolveBrewvaToolExecutionTraits,
-} from "@brewva/brewva-tools";
+} from "@brewva/brewva-tools/registry";
 import { requireDefined } from "../../helpers/assertions.js";
 
 const requireFromBrewvaTools = createRequire(

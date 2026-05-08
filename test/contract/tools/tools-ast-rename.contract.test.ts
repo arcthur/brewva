@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createLspTools } from "@brewva/brewva-tools";
+import { createLspTools } from "@brewva/brewva-tools/navigation";
 import { requireDefined } from "../../helpers/assertions.js";
 import {
   createBundledToolRuntime,

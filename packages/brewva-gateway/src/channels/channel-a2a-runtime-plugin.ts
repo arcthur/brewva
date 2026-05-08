@@ -1,4 +1,5 @@
-import { createA2ATools, type A2ABroadcastResult, type A2ASendResult } from "@brewva/brewva-tools";
+import type { A2ABroadcastResult, A2ASendResult } from "@brewva/brewva-tools/contracts";
+import { createA2ATools } from "@brewva/brewva-tools/delegation";
 import {
   defineInternalRuntimePlugin,
   type InternalRuntimePlugin,

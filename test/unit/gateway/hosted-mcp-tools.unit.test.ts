@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createToolCatalog } from "@brewva/brewva-tool-protocol";
-import { getBrewvaToolMetadata } from "@brewva/brewva-tools";
+import { getBrewvaToolMetadata } from "@brewva/brewva-tools/registry";
 import {
   buildHostedMcpToolName,
   createHostedMcpToolBundle,

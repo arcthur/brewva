@@ -157,7 +157,7 @@ flowchart TD
 - Hosted session entrypoint: `packages/brewva-gateway/src/host/create-hosted-session.ts`
 - Hosted session implementation: `packages/brewva-gateway/src/host/hosted-session-bootstrap.ts`
 - Hosted runtime plugins: `packages/brewva-gateway/src/runtime-plugins/index.ts`
-- Completion tool: `packages/brewva-tools/src/skill-complete.ts`
+- Completion tool: `packages/brewva-tools/src/families/workflow/skill-complete.ts`
 - Workflow artifact derivation:
   `packages/brewva-runtime/src/domain/workflow/artifact-derivation.ts`
 - Workflow status derivation:

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { createExecTool } from "@brewva/brewva-tools";
+import { createExecTool } from "@brewva/brewva-tools/execution";
 import { requireDefined, requireRecord } from "../../helpers/assertions.js";
 import {
   createRuntimeForExecTests,

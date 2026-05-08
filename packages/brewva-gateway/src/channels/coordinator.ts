@@ -1,5 +1,5 @@
 import { mapConcurrent } from "@brewva/brewva-std/async";
-import type { A2ABroadcastResult, A2ASendResult } from "@brewva/brewva-tools";
+import type { A2ABroadcastResult, A2ASendResult } from "@brewva/brewva-tools/contracts";
 
 export interface CoordinatorDispatchInput {
   agentId: string;

@@ -15,7 +15,7 @@ import type {
   DelegationPacket,
   SubagentCancelResult,
   SubagentRunRequest,
-} from "@brewva/brewva-tools";
+} from "@brewva/brewva-tools/contracts";
 import { isProcessAlive } from "../daemon/pid.js";
 import { sleep } from "../utils/async.js";
 import {

@@ -305,7 +305,7 @@ describe("workflow derivation", () => {
           outputKeys: ["change_set", "files_changed"],
           outputs: {
             change_set: "Implemented closure view.",
-            files_changed: ["packages/brewva-tools/src/workflow-status.ts"],
+            files_changed: ["packages/brewva-tools/src/families/workflow/workflow-status.ts"],
           },
         },
       }),

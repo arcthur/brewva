@@ -1,5 +1,5 @@
 import type { BrewvaRuntime } from "@brewva/brewva-runtime";
-import type { DelegationPacket } from "@brewva/brewva-tools";
+import type { DelegationPacket } from "@brewva/brewva-tools/contracts";
 import { buildDelegationPrompt } from "./prompt.js";
 import type { HostedDelegationTarget } from "./targets.js";
 

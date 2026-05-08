@@ -37,6 +37,7 @@ Every accepted decision inherits these rules:
 - [substrate-domain-slicing-and-root-surface-compression](./substrate-domain-slicing-and-root-surface-compression.md)
 - [substrate-sdk-diagnostics-and-compaction-mechanism-ports](./substrate-sdk-diagnostics-and-compaction-mechanism-ports.md)
 - [substrate-turn-loop-internalization](./substrate-turn-loop-internalization.md)
+- [tools-family-slicing-and-capability-contracts](./tools-family-slicing-and-capability-contracts.md)
 - [workflow-artifacts-and-posture-control-plane](./workflow-artifacts-and-posture-control-plane.md)
 
 ### Delegation, Product, And Knowledge

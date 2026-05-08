@@ -10,14 +10,14 @@ import {
   type ToolRecoveryPolicy,
   type ToolRiskLevel,
 } from "@brewva/brewva-runtime";
+import type { BrewvaToolRequiredCapability } from "@brewva/brewva-tools/contracts";
 import {
   collectStringEnumContracts,
   getBrewvaToolRequiredCapabilities,
   getBrewvaToolSurface,
-  type BrewvaToolRequiredCapability,
   type BrewvaToolSurface,
   type StringEnumContractEntry,
-} from "@brewva/brewva-tools";
+} from "@brewva/brewva-tools/registry";
 
 interface ToolLike {
   name: string;

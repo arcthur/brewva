@@ -18,7 +18,7 @@
   - `packages/brewva-recall/src/broker/broker.ts`
   - `packages/brewva-recall/src/context/provider.ts`
   - `packages/brewva-session-index/src/factory.ts`
-  - `packages/brewva-tools/src/recall.ts`
+  - `packages/brewva-tools/src/families/memory/recall.ts`
   - `packages/brewva-gateway/src/host/hosted-session-bootstrap.ts`
   - `packages/brewva-gateway/src/runtime-plugins/deliberation-maintenance.ts`
   - `test/eval/recall-runtime.ts`

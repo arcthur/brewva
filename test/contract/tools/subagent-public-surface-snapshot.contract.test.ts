@@ -1,10 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { loadHostedDelegationCatalog } from "@brewva/brewva-gateway";
-import {
-  createSubagentFanoutTool,
-  createSubagentRunTool,
-  type BrewvaManagedToolDefinition,
-} from "@brewva/brewva-tools";
+import type { BrewvaManagedToolDefinition } from "@brewva/brewva-tools/contracts";
+import { createSubagentFanoutTool, createSubagentRunTool } from "@brewva/brewva-tools/delegation";
 
 function collectPromptText(tool: BrewvaManagedToolDefinition): string {
   return [

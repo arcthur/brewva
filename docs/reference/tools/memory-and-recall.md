@@ -27,12 +27,11 @@ runtime replay authority.
 
 ## Surfaces
 
-- cost, observability, ledger, and tape inspection
-- output search and output distillation
 - recall search and recall curation
 - narrative and deliberation memory
 - knowledge capture and knowledge search
 - precedent audit and sweep
+- solution-record parsing and rendering
 - iteration facts and optimization continuity
 
 ## Retrieval Scope

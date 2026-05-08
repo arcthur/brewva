@@ -21,7 +21,7 @@ import type {
   BrewvaPromptSessionEvent,
 } from "@brewva/brewva-substrate/session";
 import type { BrewvaToolDefinition } from "@brewva/brewva-substrate/tools";
-import { resolveBrewvaToolExecutionTraits } from "@brewva/brewva-tools";
+import { resolveBrewvaToolExecutionTraits } from "@brewva/brewva-tools/registry";
 import { buildTranscriptMessagePayload } from "../session/runtime-session-transcript.js";
 import { ToolAttemptBindingRegistry } from "../session/tool-attempt-binding.js";
 import { getHostedTurnTransitionCoordinator } from "../session/turn-transition.js";

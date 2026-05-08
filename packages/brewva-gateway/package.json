@@ -23,6 +23,12 @@
       "bun": "./src/host.ts",
       "import": "./dist/host.js",
       "default": "./dist/host.js"
+    },
+    "./model-routing": {
+      "types": "./dist/model-routing/index.d.ts",
+      "bun": "./src/model-routing/index.ts",
+      "import": "./dist/model-routing/index.js",
+      "default": "./dist/model-routing/index.js"
     }
   },
   "dependencies": {

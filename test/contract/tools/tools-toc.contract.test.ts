@@ -3,7 +3,7 @@ import { chmodSync, mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG, type BrewvaConfig } from "@brewva/brewva-runtime";
 import { PATCH_RECORDED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
-import { createReadSpansTool, createTocTools } from "@brewva/brewva-tools";
+import { createReadSpansTool, createTocTools } from "@brewva/brewva-tools/navigation";
 import { requireDefined } from "../../helpers/assertions.js";
 import { createBundledToolRuntime } from "../../helpers/runtime.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";

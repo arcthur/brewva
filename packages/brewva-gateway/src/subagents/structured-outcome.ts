@@ -17,7 +17,7 @@ import type {
   QaSubagentOutcomeData,
   SubagentOutcomeData,
   SubagentResultMode,
-} from "@brewva/brewva-tools";
+} from "@brewva/brewva-tools/contracts";
 import { STRUCTURED_OUTCOME_CLOSE, STRUCTURED_OUTCOME_OPEN } from "./protocol.js";
 
 function isRecord(value: unknown): value is Record<string, unknown> {

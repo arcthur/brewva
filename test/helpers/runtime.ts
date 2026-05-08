@@ -10,7 +10,7 @@ import {
   type BrewvaInspectionPort,
   type BrewvaMaintenancePort,
 } from "@brewva/brewva-runtime";
-import type { BrewvaBundledToolRuntime } from "@brewva/brewva-tools";
+import type { BrewvaBundledToolRuntime } from "@brewva/brewva-tools/contracts";
 
 type DeepPartial<T> = {
   [K in keyof T]?: T[K] extends (...args: infer A) => infer R

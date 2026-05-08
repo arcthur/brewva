@@ -9,7 +9,7 @@ import type {
   SubagentContextBudget,
   SubagentExecutionBoundary,
   SubagentResultMode,
-} from "@brewva/brewva-tools";
+} from "@brewva/brewva-tools/contracts";
 
 export type HostedDelegationBuiltinToolName = "read" | "edit" | "write";
 export type HostedWorkspaceSubagentConfigKind = "envelope" | "agentSpec";

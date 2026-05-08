@@ -10,7 +10,7 @@ import type {
   SubagentContextBudget,
   SubagentExecutionBoundary,
   SubagentResultMode,
-} from "@brewva/brewva-tools";
+} from "@brewva/brewva-tools/contracts";
 import type { HostedContextProfile, HostedDelegationBuiltinToolName } from "./config-files.js";
 
 export type { HostedDelegationBuiltinToolName } from "./config-files.js";

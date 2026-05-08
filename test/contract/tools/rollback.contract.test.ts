@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
-import { createRollbackLastPatchTool } from "@brewva/brewva-tools";
+import { createRollbackLastPatchTool } from "@brewva/brewva-tools/workflow";
 import { extractTextContent, fakeContext } from "./tools-flow.helpers.js";
 
 describe("rollback_last_patch contract", () => {

@@ -23,7 +23,7 @@ import type {
   SubagentResultMode,
   SubagentExecutionShape,
   SubagentRunRequest,
-} from "@brewva/brewva-tools";
+} from "@brewva/brewva-tools/contracts";
 import type { HostedDelegationTarget } from "./targets.js";
 
 export interface DetachedSubagentRunSpec {

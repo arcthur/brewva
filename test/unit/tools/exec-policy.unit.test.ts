@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { DEFAULT_BREWVA_CONFIG, type ToolBoxPolicy } from "@brewva/brewva-runtime";
-import { applyToolBoxPolicy } from "../../../packages/brewva-tools/src/exec/policy.js";
-import type { BoxConfig } from "../../../packages/brewva-tools/src/exec/shared.js";
+import { applyToolBoxPolicy } from "../../../packages/brewva-tools/src/families/execution/exec/policy.js";
+import type { BoxConfig } from "../../../packages/brewva-tools/src/families/execution/exec/shared.js";
 
 function defaultBoxConfig(): BoxConfig {
   return structuredClone(DEFAULT_BREWVA_CONFIG.security.execution.box);

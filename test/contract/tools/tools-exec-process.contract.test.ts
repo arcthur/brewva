@@ -3,7 +3,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { BoxExecSpec, BoxHandle, BoxPlane, BoxScope } from "@brewva/brewva-box";
-import { createExecTool, createProcessTool } from "@brewva/brewva-tools";
+import { createExecTool, createProcessTool } from "@brewva/brewva-tools/execution";
 import { requireDefined, requireNonEmptyString } from "../../helpers/assertions.js";
 import {
   createRuntimeForExecTests,

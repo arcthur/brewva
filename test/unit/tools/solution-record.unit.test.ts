@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { parseSolutionDocument } from "../../../packages/brewva-tools/src/solution-record.js";
+import { parseSolutionDocument } from "@brewva/brewva-tools/memory";
 
 describe("solution record parsing", () => {
   test("fails fast when frontmatter contains malformed YAML", () => {

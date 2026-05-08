@@ -13,7 +13,7 @@ import {
   validateQuestionAnswers,
   type BrewvaQuestionAnswerSpec,
 } from "@brewva/brewva-substrate/host-api";
-import type { SubagentOutcome } from "@brewva/brewva-tools";
+import type { SubagentOutcome } from "@brewva/brewva-tools/contracts";
 
 const OPERATOR_QUESTION_ANSWERED_SCHEMA = "brewva.operator-question-answered.v1";
 

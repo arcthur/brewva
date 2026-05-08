@@ -8,7 +8,7 @@ import {
   streamManagedSessionOutput,
   startManagedExec,
   waitForManagedSessionActivityEffect,
-} from "../../../packages/brewva-tools/src/exec-process-registry.js";
+} from "../../../packages/brewva-tools/src/families/execution/exec-process-registry/api.js";
 
 describe("managed exec Effect runtime integration", () => {
   test("streams managed host output and completes on process exit", async () => {

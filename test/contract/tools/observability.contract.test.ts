@@ -12,7 +12,7 @@ import {
   createObsQueryTool,
   createObsSloAssertTool,
   createObsSnapshotTool,
-} from "@brewva/brewva-tools";
+} from "@brewva/brewva-tools/workflow";
 import { buildVerificationOutcomeRecordedPayload } from "../../helpers/events.js";
 import { createBundledToolRuntime, createRuntimeConfig } from "../../helpers/runtime.js";
 import { cleanupWorkspace, createTestWorkspace } from "../../helpers/workspace.js";

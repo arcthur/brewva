@@ -4,7 +4,10 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
-import { createWorkerResultsApplyTool, createWorkerResultsMergeTool } from "@brewva/brewva-tools";
+import {
+  createWorkerResultsApplyTool,
+  createWorkerResultsMergeTool,
+} from "@brewva/brewva-tools/workflow";
 import { createRuntimeConfig } from "../../helpers/runtime.js";
 import { cleanupWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
 import { extractTextContent, fakeContext } from "./tools-flow.helpers.js";

@@ -19,9 +19,9 @@
   - `packages/brewva-runtime/src/domain/tape/reasoning-replay.ts`
   - `packages/brewva-runtime/src/domain/reasoning/reasoning.ts`
   - `packages/brewva-runtime/src/events/registry.ts`
-  - `packages/brewva-tools/src/reasoning-checkpoint.ts`
-  - `packages/brewva-tools/src/reasoning-revert.ts`
-  - `packages/brewva-tools/src/tape.ts`
+  - `packages/brewva-tools/src/families/workflow/reasoning-checkpoint.ts`
+  - `packages/brewva-tools/src/families/workflow/reasoning-revert.ts`
+  - `packages/brewva-tools/src/families/workflow/tape.ts`
 
 ## Decision Summary
 

@@ -8,7 +8,7 @@ import {
   type HostedDelegationTarget,
 } from "@brewva/brewva-gateway";
 import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
-import type { DelegationPacket } from "@brewva/brewva-tools";
+import type { DelegationPacket } from "@brewva/brewva-tools/contracts";
 
 function createTempWorkspace(prefix: string): string {
   return mkdtempSync(join(tmpdir(), prefix));

@@ -2,7 +2,7 @@ import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
-import { createSkillLoadTool } from "@brewva/brewva-tools";
+import { createSkillLoadTool } from "@brewva/brewva-tools/workflow";
 
 export type ToolExecutionContext = Parameters<ReturnType<typeof createSkillLoadTool>["execute"]>[4];
 

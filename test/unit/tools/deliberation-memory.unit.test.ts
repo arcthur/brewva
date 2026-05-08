@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
-import { createDeliberationMemoryTool } from "@brewva/brewva-tools";
+import { createDeliberationMemoryTool } from "@brewva/brewva-tools/memory";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 function extractText(result: { content: Array<{ type: string; text?: string }> }): string {

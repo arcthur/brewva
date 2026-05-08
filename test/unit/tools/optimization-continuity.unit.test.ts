@@ -5,7 +5,7 @@ import {
   BrewvaRuntime,
   buildScheduleIntentFiredEvent,
 } from "@brewva/brewva-runtime";
-import { createOptimizationContinuityTool } from "@brewva/brewva-tools";
+import { createOptimizationContinuityTool } from "@brewva/brewva-tools/memory";
 import { recordHostedSkillCompleted } from "../../helpers/events.js";
 import { patchDateNow } from "../../helpers/global-state.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";

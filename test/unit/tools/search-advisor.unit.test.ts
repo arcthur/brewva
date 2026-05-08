@@ -7,15 +7,15 @@ import {
   TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE,
 } from "@brewva/brewva-runtime/events";
 import { normalizeSearchText } from "@brewva/brewva-search";
-import { buildReadPathDiscoveryObservationPayload } from "../../../packages/brewva-tools/src/read-path-discovery.js";
 import {
   attachSearchIntentPreviewCandidates,
+  buildReadPathDiscoveryObservationPayload,
   buildDelimiterInsensitivePattern,
   buildSearchAdvisorSnapshot,
   normalizeSearchAdvisorQuery,
   registerSearchIntent,
-  resetSearchAdvisorStateForTests,
-} from "../../../packages/brewva-tools/src/search-advisor.js";
+} from "@brewva/brewva-tools/navigation";
+import { resetSearchAdvisorStateForTests } from "../../../packages/brewva-tools/src/families/navigation/search-advisor/test-support.js";
 import { createBundledToolRuntime, createRuntimeFixture } from "../../helpers/runtime.js";
 
 describe("SearchAdvisor", () => {

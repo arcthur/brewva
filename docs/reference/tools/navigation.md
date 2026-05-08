@@ -1,16 +1,20 @@
 # Tool Family: Navigation
 
-Navigation tools read repository structure, source spans, symbols, references,
-and diagnostics. They should improve orientation without changing workspace
-state.
+Navigation tools orient the agent in repository, browser, source, symbol,
+search, and output-artifact space.
 
 ## Boundary
 
-Navigation tools are read-only. They may produce inspection evidence, but they
-do not create mutation receipts or approval truth.
+Most navigation tools are read-only and produce inspection evidence rather than
+approval truth. Structural source-change tools in this family, such as
+AST-backed replacement or rename helpers, still go through runtime capability
+checks and receipt recording; the family boundary does not bypass mutation
+governance.
 
 Representative surfaces:
 
+- browser state, screenshots, PDFs, and snapshots
+- grep, search-advisor recovery, output search, and TOC search
 - language-server navigation and rename preparation
 - table-of-contents document and search views
 - structural search
@@ -26,6 +30,7 @@ expanding authority.
 
 ## Failure Semantics
 
-Navigation failures are inspection failures. They should return explicit
-diagnostics and avoid mutating session truth beyond replay-visible tool result
-records.
+Navigation failures should return explicit diagnostics and avoid mutating
+session truth beyond replay-visible tool result records. Source-changing
+navigation helpers must surface denial, defer, or failure through the same
+runtime receipt path as other effect-bearing tools.

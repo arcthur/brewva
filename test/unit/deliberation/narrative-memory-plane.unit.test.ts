@@ -20,7 +20,7 @@ describe("narrative memory plane", () => {
       schema: "brewva.task.v1",
       goal: "Keep collaboration memory explicit and non-authoritative.",
       targets: {
-        files: ["packages/brewva-tools/src/narrative-memory.ts"],
+        files: ["packages/brewva-tools/src/families/memory/narrative-memory.ts"],
       },
     });
 

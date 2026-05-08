@@ -3,13 +3,13 @@ import { mkdirSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { buildBrewvaTools } from "@brewva/brewva-tools";
 import {
-  buildBrewvaTools,
   createReasoningCheckpointTool,
   createReasoningRevertTool,
   createSessionCompactTool,
   createTapeTools,
-} from "@brewva/brewva-tools";
+} from "@brewva/brewva-tools/workflow";
 import { requireDefined } from "../../helpers/assertions.js";
 import { createBundledToolRuntime, createRuntimeConfig } from "../../helpers/runtime.js";
 import { cleanupWorkspace, createTestWorkspace } from "../../helpers/workspace.js";

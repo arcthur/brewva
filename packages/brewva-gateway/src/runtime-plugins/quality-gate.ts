@@ -21,7 +21,7 @@ import { buildBrewvaEditDiffPreview } from "@brewva/brewva-substrate/tools";
 import {
   collectStringEnumContractMismatches,
   getBrewvaAgentParameters,
-} from "@brewva/brewva-tools";
+} from "@brewva/brewva-tools/registry";
 
 interface QualityGateToolCallResult {
   block?: boolean;

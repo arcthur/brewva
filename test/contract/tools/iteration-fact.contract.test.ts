@@ -3,7 +3,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BrewvaRuntime, buildScheduleIntentFiredEvent } from "@brewva/brewva-runtime";
-import { createIterationFactTool } from "@brewva/brewva-tools";
+import { createIterationFactTool } from "@brewva/brewva-tools/workflow";
 import { requireNonEmptyString } from "../../helpers/assertions.js";
 import { extractTextContent, mergeContext } from "./tools-flow.helpers.js";
 

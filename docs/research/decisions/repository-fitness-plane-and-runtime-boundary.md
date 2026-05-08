@@ -13,7 +13,7 @@
 - Code anchors:
   - `packages/brewva-runtime/src/domain/verification/verification.ts`
   - `packages/brewva-runtime/src/domain/tools/tool-gate.ts`
-  - `packages/brewva-tools/src/workflow-status.ts`
+  - `packages/brewva-tools/src/families/workflow/workflow-status.ts`
 
 ## Decision Summary
 

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, extname, join, resolve } from "node:path";
+import { resolveBrewvaModelSelection } from "@brewva/brewva-gateway/model-routing";
 import {
   buildProviderCacheBucketKey,
   resolveProviderCacheCapability,
@@ -104,7 +105,6 @@ import {
   type BrewvaTurnLoopToolResultMessage,
   type BrewvaTurnLoopTransport,
 } from "@brewva/brewva-substrate/turn";
-import { resolveBrewvaModelSelection } from "@brewva/brewva-tools";
 import {
   GoogleCachedContentManager,
   ProviderCacheBreakDetector,

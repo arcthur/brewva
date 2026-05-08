@@ -133,7 +133,7 @@ flowchart TD
 - Replay engine: `packages/brewva-runtime/src/domain/tape/replay-engine.ts`
 - Patch-set rollback: `packages/brewva-runtime/src/domain/patching/file-change.ts`
 - Receipt-aware rollback: `packages/brewva-runtime/src/domain/governance/mutation-rollback.ts`
-- Rollback tool: `packages/brewva-tools/src/rollback-last-patch.ts`
+- Rollback tool: `packages/brewva-tools/src/families/workflow/rollback-last-patch.ts`
 
 ## Related Docs
 

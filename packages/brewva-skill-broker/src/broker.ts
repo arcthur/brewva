@@ -25,6 +25,7 @@ import {
 } from "@brewva/brewva-runtime/events";
 import { tokenizeSearchContent, tokenizeSearchQuery } from "@brewva/brewva-search";
 import { uniqueNonEmptyStrings as uniqueStrings } from "@brewva/brewva-std/collections";
+import { resolveRuntimeSourceIdentity } from "@brewva/brewva-std/runtime-identity";
 import { readNonEmptyString as readString } from "@brewva/brewva-std/text";
 import { isRecord } from "@brewva/brewva-std/unknown";
 import { FileSkillPromotionStore } from "./file-store.js";
@@ -1028,7 +1029,7 @@ export function getOrCreateSkillPromotionBroker(
     minRefreshIntervalMs?: number;
   } = {},
 ): SkillPromotionBroker {
-  const key = runtime as unknown as object;
+  const key = resolveRuntimeSourceIdentity(runtime as unknown as object);
   const existing = brokerByRuntime.get(key);
   if (existing) {
     return existing;

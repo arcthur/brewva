@@ -1,0 +1,127 @@
+import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
+import type { BrewvaBundledToolRuntime } from "../contracts/index.js";
+import {
+  createQuestionTool,
+  createSubagentCancelTool,
+  createSubagentFanoutTool,
+  createSubagentForkTool,
+  createSubagentRunDiagnosticTool,
+  createSubagentRunTool,
+  createSubagentStatusTool,
+} from "../families/delegation/api.js";
+import { createExecTool, createProcessTool } from "../families/execution/api.js";
+import {
+  createDeliberationMemoryTool,
+  createKnowledgeCaptureTool,
+  createKnowledgeSearchTool,
+  createNarrativeMemoryTool,
+  createOptimizationContinuityTool,
+  createPrecedentAuditTool,
+  createPrecedentSweepTool,
+  createRecallCurateTool,
+  createRecallSearchTool,
+} from "../families/memory/api.js";
+import {
+  createAstGrepTools,
+  createBrowserTools,
+  createGitDiffTool,
+  createGitLogTool,
+  createGitStatusTool,
+  createGrepTool,
+  createLookAtTool,
+  createLspTools,
+  createOutputSearchTool,
+  createReadSpansTool,
+  createTocTools,
+} from "../families/navigation/api.js";
+import {
+  createCostViewTool,
+  createFollowUpTool,
+  createIterationFactTool,
+  createLedgerQueryTool,
+  createObsQueryTool,
+  createObsSloAssertTool,
+  createObsSnapshotTool,
+  createReasoningCheckpointTool,
+  createReasoningRevertTool,
+  createResourceLeaseTool,
+  createRollbackLastPatchTool,
+  createScheduleIntentTool,
+  createSessionCompactTool,
+  createSkillCompleteTool,
+  createSkillLoadTool,
+  createSkillPromotionInspectTool,
+  createSkillPromotionPromoteTool,
+  createSkillPromotionReviewTool,
+  createTapeTools,
+  createTaskLedgerTools,
+  createWorkerResultsApplyTool,
+  createWorkerResultsMergeTool,
+  createWorkflowStatusTool,
+} from "../families/workflow/api.js";
+import { validateBrewvaToolRequiredCapabilities } from "../registry/tool.js";
+
+export function buildDefaultBundledBrewvaTools(
+  runtime: BrewvaBundledToolRuntime,
+): ToolDefinition[] {
+  const tools = [
+    ...createLspTools({ runtime }),
+    ...createTocTools({ runtime }),
+    ...createAstGrepTools(),
+    createReadSpansTool({ runtime }),
+    createLookAtTool({ runtime }),
+    createGrepTool({ runtime }),
+    createGitStatusTool({ runtime }),
+    createGitDiffTool({ runtime }),
+    createGitLogTool({ runtime }),
+    createExecTool({ runtime }),
+    ...createBrowserTools({ runtime }),
+    createProcessTool({ runtime }),
+    createQuestionTool(),
+    createCostViewTool({ runtime }),
+    createDeliberationMemoryTool({ runtime }),
+    createNarrativeMemoryTool({ runtime }),
+    createKnowledgeCaptureTool({ runtime }),
+    createRecallSearchTool({ runtime }),
+    createRecallCurateTool({ runtime }),
+    createKnowledgeSearchTool({ runtime }),
+    createPrecedentAuditTool({ runtime }),
+    createPrecedentSweepTool({ runtime }),
+    createObsQueryTool({ runtime }),
+    createObsSloAssertTool({ runtime }),
+    createObsSnapshotTool({ runtime }),
+    createOptimizationContinuityTool({ runtime }),
+    createLedgerQueryTool({ runtime }),
+    createIterationFactTool({ runtime }),
+    createOutputSearchTool({ runtime }),
+    createWorkflowStatusTool({ runtime }),
+    createFollowUpTool({ runtime }),
+    createScheduleIntentTool({ runtime }),
+    ...createTapeTools({ runtime }),
+    createReasoningCheckpointTool({ runtime }),
+    createReasoningRevertTool({ runtime }),
+    createSessionCompactTool({ runtime }),
+    createResourceLeaseTool({ runtime }),
+    createRollbackLastPatchTool({ runtime }),
+    createWorkerResultsMergeTool({ runtime }),
+    createWorkerResultsApplyTool({ runtime }),
+    createSkillLoadTool({ runtime }),
+    createSkillCompleteTool({ runtime }),
+    createSkillPromotionInspectTool({ runtime }),
+    createSkillPromotionReviewTool({ runtime }),
+    createSkillPromotionPromoteTool({ runtime }),
+    createSubagentRunTool({ runtime }),
+    createSubagentFanoutTool({ runtime }),
+    createSubagentForkTool({ runtime }),
+    createSubagentRunDiagnosticTool({ runtime }),
+    createSubagentStatusTool({ runtime }),
+    createSubagentCancelTool({ runtime }),
+    ...createTaskLedgerTools({ runtime }),
+  ];
+
+  for (const tool of tools) {
+    validateBrewvaToolRequiredCapabilities(tool);
+  }
+
+  return tools;
+}

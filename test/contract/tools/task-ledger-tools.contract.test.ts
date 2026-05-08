@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
-import { createTaskLedgerTools } from "@brewva/brewva-tools";
+import { createTaskLedgerTools } from "@brewva/brewva-tools/workflow";
 import { requireDefined } from "../../helpers/assertions.js";
 import { cleanupTestWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
 import { extractTextContent, fakeContext } from "./tools-flow.helpers.js";

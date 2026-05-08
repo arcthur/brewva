@@ -67,6 +67,7 @@ describe("brewva std utility boundary", () => {
       "./json",
       "./markdown",
       "./node/fs",
+      "./runtime-identity",
       "./text",
       "./unknown",
     ]) {

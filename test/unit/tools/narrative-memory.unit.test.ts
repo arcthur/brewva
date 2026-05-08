@@ -13,7 +13,7 @@ import {
   NARRATIVE_MEMORY_RECORDED_EVENT_TYPE,
   NARRATIVE_MEMORY_REVIEWED_EVENT_TYPE,
 } from "@brewva/brewva-runtime/events";
-import { createNarrativeMemoryTool } from "@brewva/brewva-tools";
+import { createNarrativeMemoryTool } from "@brewva/brewva-tools/memory";
 import { createBundledToolRuntime } from "../../helpers/runtime.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
@@ -47,7 +47,7 @@ describe("narrative memory tool", () => {
       schema: "brewva.task.v1",
       goal: "Keep collaboration memory explicit.",
       targets: {
-        files: ["packages/brewva-tools/src/narrative-memory.ts"],
+        files: ["packages/brewva-tools/src/families/memory/narrative-memory.ts"],
       },
     });
 
@@ -249,7 +249,7 @@ describe("narrative memory tool", () => {
       schema: "brewva.task.v1",
       goal: "Reject invalid narrative state transitions.",
       targets: {
-        files: ["packages/brewva-tools/src/narrative-memory.ts"],
+        files: ["packages/brewva-tools/src/families/memory/narrative-memory.ts"],
       },
     });
 
@@ -366,7 +366,7 @@ describe("narrative memory tool", () => {
       schema: "brewva.task.v1",
       goal: "Keep explicit narrative writes inside the RFC boundary.",
       targets: {
-        files: ["packages/brewva-tools/src/narrative-memory.ts"],
+        files: ["packages/brewva-tools/src/families/memory/narrative-memory.ts"],
       },
     });
 
@@ -395,7 +395,8 @@ describe("narrative memory tool", () => {
         action: "remember",
         class: "project_context_note",
         title: "Source File Pointer",
-        content: "The implementation lives in packages/brewva-tools/src/narrative-memory.ts.",
+        content:
+          "The implementation lives in packages/brewva-tools/src/families/memory/narrative-memory.ts.",
       } as never,
       undefined,
       undefined,

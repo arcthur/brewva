@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
-import { createPrecedentAuditTool } from "@brewva/brewva-tools";
+import { createPrecedentAuditTool } from "@brewva/brewva-tools/memory";
 import { cleanupWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
 
 let workspace = "";

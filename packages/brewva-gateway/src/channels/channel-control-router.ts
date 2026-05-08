@@ -6,7 +6,7 @@ import {
   CHANNEL_UPDATE_REQUESTED_EVENT_TYPE,
   OPERATOR_QUESTION_ANSWERED_EVENT_TYPE,
 } from "@brewva/brewva-runtime/events";
-import { formatCostViewText } from "@brewva/brewva-tools";
+import { formatCostViewText } from "@brewva/brewva-tools/workflow";
 import {
   buildOperatorQuestionAnswerPrompt,
   buildOperatorQuestionAnsweredPayload,

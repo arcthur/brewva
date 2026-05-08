@@ -28,7 +28,7 @@ import type {
   SubagentRunResult,
   SubagentStartResult,
   SubagentStatusResult,
-} from "@brewva/brewva-tools";
+} from "@brewva/brewva-tools/contracts";
 import type { SubscribablePromptSession } from "../session/contracts.js";
 import { resolveSubagentSessionShutdownReason } from "../session/shutdown-receipts.js";
 import { runHostedTurnEnvelope } from "../session/turn-envelope.js";
