@@ -237,4 +237,80 @@ describe("Context budget manager", () => {
     expect(decision.accepted).toBe(true);
     expect(decision.finalTokens).toBeLessThanOrEqual(499);
   });
+
+  test("derives effective headroom from provider-reported maxOutputTokens when it exceeds configured headroom", () => {
+    const config = structuredClone(DEFAULT_BREWVA_CONFIG);
+    const configuredHardHeadroom =
+      config.infrastructure.contextBudget.thresholds.hardLimitHeadroomTokens;
+    const manager = createContextBudgetManager(config.infrastructure.contextBudget);
+    const sessionId = "max-output-headroom-1";
+
+    const usageWithoutMaxOutput = {
+      tokens: 0,
+      contextWindow: 200_000,
+      percent: 0,
+    };
+    const usageWithLargerMaxOutput = {
+      ...usageWithoutMaxOutput,
+      maxOutputTokens: configuredHardHeadroom + 50_000,
+    };
+    const usageWithSmallerMaxOutput = {
+      ...usageWithoutMaxOutput,
+      maxOutputTokens: Math.max(1, Math.floor(configuredHardHeadroom / 2)),
+    };
+
+    const baselineHardPercent = manager.getEffectiveHardLimitPercent(
+      sessionId,
+      usageWithoutMaxOutput,
+    );
+    const adaptedHardPercent = manager.getEffectiveHardLimitPercent(
+      sessionId,
+      usageWithLargerMaxOutput,
+    );
+    const smallerHardPercent = manager.getEffectiveHardLimitPercent(
+      sessionId,
+      usageWithSmallerMaxOutput,
+    );
+
+    expect(adaptedHardPercent).toBeLessThan(baselineHardPercent);
+    expect(smallerHardPercent).toBe(baselineHardPercent);
+  });
+
+  test("ignores invalid or non-positive maxOutputTokens values", () => {
+    const config = structuredClone(DEFAULT_BREWVA_CONFIG);
+    const manager = createContextBudgetManager(config.infrastructure.contextBudget);
+    const sessionId = "max-output-headroom-2";
+
+    const baseUsage = {
+      tokens: 0,
+      contextWindow: 200_000,
+      percent: 0,
+    };
+    const baseline = manager.getEffectiveHardLimitPercent(sessionId, baseUsage);
+
+    expect(
+      manager.getEffectiveHardLimitPercent(sessionId, {
+        ...baseUsage,
+        maxOutputTokens: 0,
+      }),
+    ).toBe(baseline);
+    expect(
+      manager.getEffectiveHardLimitPercent(sessionId, {
+        ...baseUsage,
+        maxOutputTokens: -1000,
+      }),
+    ).toBe(baseline);
+    expect(
+      manager.getEffectiveHardLimitPercent(sessionId, {
+        ...baseUsage,
+        maxOutputTokens: Number.NaN,
+      }),
+    ).toBe(baseline);
+    expect(
+      manager.getEffectiveHardLimitPercent(sessionId, {
+        ...baseUsage,
+        maxOutputTokens: null,
+      }),
+    ).toBe(baseline);
+  });
 });

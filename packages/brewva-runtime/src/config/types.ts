@@ -233,6 +233,9 @@ export interface BrewvaConfig {
         minTurnsBetween: number;
         minSecondsBetween: number;
         cooldownBypassPercent: number;
+        summaryMaxOutputRatio: number;
+        protectedTools: string[];
+        tailProtectTokens: number;
       };
     };
     toolFailureInjection: {

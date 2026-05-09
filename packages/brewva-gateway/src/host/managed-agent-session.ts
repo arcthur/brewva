@@ -2418,6 +2418,8 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
         messages: input.messages,
         systemPrompt: this.#agent.state.systemPrompt,
         customInstructions: input.customInstructions,
+        summaryMaxOutputRatio:
+          this.#runtime?.config.infrastructure.contextBudget.compaction.summaryMaxOutputRatio,
       });
       return {
         summary: normalizeCompactionSummaryForStorage(generated.summary),

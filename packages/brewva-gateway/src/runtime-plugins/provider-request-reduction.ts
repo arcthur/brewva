@@ -17,8 +17,19 @@ import { recordTransientReductionEvidence } from "./context-evidence.js";
 const CLEARED_TOOL_RESULT_PLACEHOLDER = "[cleared_for_request]";
 const RECENT_TOOL_RESULT_RETAIN_COUNT = 4;
 const MIN_CLEARABLE_TOOL_RESULT_CHARS = 512;
+const DEFAULT_TAIL_PROTECT_TOKENS = 40_000;
+const DEFAULT_PROTECTED_TOOLS: readonly string[] = [
+  "workbench_note",
+  "workbench_evict",
+  "workbench_undo_evict",
+  "workbench_compact",
+  "recall_search",
+  "recall_curate",
+  "tape_handoff",
+];
 interface ReductionCandidate {
   charLength: number;
+  toolName?: string;
   clear: () => void;
 }
 
@@ -224,35 +235,94 @@ function collectOpenAIResponsesCandidates(
   if (!Array.isArray(inputItems)) {
     return;
   }
+  const toolNameByCallId = new Map<string, string>();
   for (const item of inputItems) {
     const record = asRecord(item);
-    if (!record || record.type !== "function_call_output") {
+    if (!record || record.type !== "function_call") {
       continue;
     }
-    const stringCandidate = buildStringCandidate(record, "output", record.output);
-    if (stringCandidate) {
-      candidates.push(stringCandidate);
-      continue;
-    }
-    const textArrayCandidate = buildTextArrayCandidate(record, "output", record.output, {
-      textType: "input_text",
-      buildReplacement: () => [
-        {
-          type: "input_text",
-          text: CLEARED_TOOL_RESULT_PLACEHOLDER,
-        },
-      ],
-    });
-    if (textArrayCandidate) {
-      candidates.push(textArrayCandidate);
+    if (typeof record.call_id === "string" && typeof record.name === "string") {
+      toolNameByCallId.set(record.call_id, record.name);
     }
   }
+  for (const item of inputItems) {
+    const record = asRecord(item);
+    if (!record) {
+      continue;
+    }
+    if (record.type === "function_call_output") {
+      const callId = typeof record.call_id === "string" ? record.call_id : undefined;
+      const toolName = callId ? (toolNameByCallId.get(callId) ?? callId) : undefined;
+      const stringCandidate = buildStringCandidate(record, "output", record.output);
+      if (stringCandidate) {
+        candidates.push({ ...stringCandidate, toolName });
+        continue;
+      }
+      const textArrayCandidate = buildTextArrayCandidate(record, "output", record.output, {
+        textType: "input_text",
+        buildReplacement: () => [
+          {
+            type: "input_text",
+            text: CLEARED_TOOL_RESULT_PLACEHOLDER,
+          },
+        ],
+      });
+      if (textArrayCandidate) {
+        candidates.push({ ...textArrayCandidate, toolName });
+      }
+    }
+  }
+}
+
+function collectMessageToolNameById(messages: readonly unknown[]): Map<string, string> {
+  const toolNameById = new Map<string, string>();
+  for (const message of messages) {
+    const record = asRecord(message);
+    if (!record) {
+      continue;
+    }
+    if (Array.isArray(record.tool_calls)) {
+      for (const toolCall of record.tool_calls) {
+        const toolCallRecord = asRecord(toolCall);
+        if (!toolCallRecord || typeof toolCallRecord.id !== "string") {
+          continue;
+        }
+        const functionRecord = asRecord(toolCallRecord.function);
+        const name =
+          typeof functionRecord?.name === "string"
+            ? functionRecord.name
+            : typeof toolCallRecord.name === "string"
+              ? toolCallRecord.name
+              : undefined;
+        if (name) {
+          toolNameById.set(toolCallRecord.id, name);
+        }
+      }
+    }
+    if (!Array.isArray(record.content)) {
+      continue;
+    }
+    for (const block of record.content) {
+      const blockRecord = asRecord(block);
+      if (
+        !blockRecord ||
+        (blockRecord.type !== "tool_use" && blockRecord.type !== "toolCall") ||
+        typeof blockRecord.id !== "string" ||
+        typeof blockRecord.name !== "string"
+      ) {
+        continue;
+      }
+      toolNameById.set(blockRecord.id, blockRecord.name);
+    }
+  }
+  return toolNameById;
 }
 
 function collectMessageCandidates(messages: unknown, candidates: ReductionCandidate[]): void {
   if (!Array.isArray(messages)) {
     return;
   }
+  const toolNameById = collectMessageToolNameById(messages);
   for (const message of messages) {
     const record = asRecord(message);
     if (!record) {
@@ -260,9 +330,23 @@ function collectMessageCandidates(messages: unknown, candidates: ReductionCandid
     }
 
     if (record.role === "tool") {
+      const toolCallId =
+        typeof record.tool_call_id === "string"
+          ? record.tool_call_id
+          : typeof record.tool_use_id === "string"
+            ? record.tool_use_id
+            : undefined;
+      const toolName =
+        typeof record.name === "string"
+          ? record.name
+          : typeof record.tool_name === "string"
+            ? record.tool_name
+            : toolCallId
+              ? toolNameById.get(toolCallId)
+              : undefined;
       const stringCandidate = buildStringCandidate(record, "content", record.content);
       if (stringCandidate) {
-        candidates.push(stringCandidate);
+        candidates.push({ ...stringCandidate, toolName });
       } else {
         const textArrayCandidate = buildTextArrayCandidate(record, "content", record.content, {
           textType: "text",
@@ -274,7 +358,7 @@ function collectMessageCandidates(messages: unknown, candidates: ReductionCandid
           ],
         });
         if (textArrayCandidate) {
-          candidates.push(textArrayCandidate);
+          candidates.push({ ...textArrayCandidate, toolName });
         }
       }
     }
@@ -287,9 +371,25 @@ function collectMessageCandidates(messages: unknown, candidates: ReductionCandid
       if (!blockRecord || blockRecord.type !== "tool_result") {
         continue;
       }
+      const toolUseId =
+        typeof blockRecord.tool_use_id === "string"
+          ? blockRecord.tool_use_id
+          : typeof blockRecord.tool_call_id === "string"
+            ? blockRecord.tool_call_id
+            : typeof blockRecord.id === "string"
+              ? blockRecord.id
+              : undefined;
+      const toolName =
+        typeof blockRecord.name === "string"
+          ? blockRecord.name
+          : typeof blockRecord.tool_name === "string"
+            ? blockRecord.tool_name
+            : toolUseId
+              ? toolNameById.get(toolUseId)
+              : undefined;
       const stringCandidate = buildStringCandidate(blockRecord, "content", blockRecord.content);
       if (stringCandidate) {
-        candidates.push(stringCandidate);
+        candidates.push({ ...stringCandidate, toolName });
         continue;
       }
       const textArrayCandidate = buildTextArrayCandidate(
@@ -307,7 +407,7 @@ function collectMessageCandidates(messages: unknown, candidates: ReductionCandid
         },
       );
       if (textArrayCandidate) {
-        candidates.push(textArrayCandidate);
+        candidates.push({ ...textArrayCandidate, toolName });
       }
     }
   }
@@ -331,6 +431,8 @@ function collectGoogleFunctionResponseCandidates(
       if (!functionResponse) {
         continue;
       }
+      const toolName =
+        typeof functionResponse.name === "string" ? functionResponse.name : undefined;
       if (Array.isArray(functionResponse.parts) && functionResponse.parts.length > 0) {
         continue;
       }
@@ -341,14 +443,14 @@ function collectGoogleFunctionResponseCandidates(
       if (typeof response.output === "string") {
         const candidate = buildStringCandidate(response, "output", response.output);
         if (candidate) {
-          candidates.push(candidate);
+          candidates.push({ ...candidate, toolName });
         }
         continue;
       }
       if (typeof response.error === "string") {
         const candidate = buildStringCandidate(response, "error", response.error);
         if (candidate) {
-          candidates.push(candidate);
+          candidates.push({ ...candidate, toolName });
         }
       }
     }
@@ -495,6 +597,10 @@ export function applyTransientOutboundReductionToPayload(
     api?: string;
     modelId?: string;
   },
+  options?: {
+    protectedTools?: readonly string[];
+    tailProtectTokens?: number;
+  },
 ): ReductionResult {
   const record = asRecord(payload);
   if (!record) {
@@ -512,22 +618,56 @@ export function applyTransientOutboundReductionToPayload(
   const cloned = structuredClone(record);
   const hints = metadata;
   const candidates = collectReductionCandidates(cloned);
-  if (candidates.length <= RECENT_TOOL_RESULT_RETAIN_COUNT) {
+  const protectedTools = new Set(options?.protectedTools ?? DEFAULT_PROTECTED_TOOLS);
+  const nonProtectedCandidates = candidates.filter(
+    (c) => !c.toolName || !protectedTools.has(c.toolName),
+  );
+
+  if (nonProtectedCandidates.length <= RECENT_TOOL_RESULT_RETAIN_COUNT) {
     return {
       payload,
       status: "skipped",
       detail: "provider payload does not contain enough older compactable tool results",
-      eligibleToolResults: candidates.length,
+      eligibleToolResults: nonProtectedCandidates.length,
       clearedToolResults: 0,
       clearedChars: 0,
       estimatedTokenSavings: 0,
     };
   }
 
-  const clearedCandidates = candidates.slice(
-    0,
-    candidates.length - RECENT_TOOL_RESULT_RETAIN_COUNT,
-  );
+  const tailProtectTokens = options?.tailProtectTokens ?? DEFAULT_TAIL_PROTECT_TOKENS;
+  const alwaysRetainedStart = nonProtectedCandidates.length - RECENT_TOOL_RESULT_RETAIN_COUNT;
+
+  // Walk backward from the tail boundary, accumulating token estimates.
+  // Candidates whose cumulative tail is within the tail-protect budget are also safe.
+  // Everything before that boundary is eligible for clearing.
+  let tailAccum = 0;
+  let firstClearableIndex = alwaysRetainedStart;
+  for (let i = alwaysRetainedStart - 1; i >= 0; i--) {
+    tailAccum += Math.max(0, Math.trunc(nonProtectedCandidates[i]!.charLength / 4));
+    if (tailAccum > tailProtectTokens) {
+      // Accumulated tail exceeds the budget — all candidates before this point are clearable.
+      firstClearableIndex = i + 1;
+      break;
+    }
+    // This candidate's tail still fits in the budget — it is protected.
+    firstClearableIndex = i;
+  }
+
+  const clearedCandidates = nonProtectedCandidates.slice(0, firstClearableIndex);
+
+  if (clearedCandidates.length === 0) {
+    return {
+      payload,
+      status: "skipped",
+      detail: "tail protect budget preserves all eligible candidates",
+      eligibleToolResults: nonProtectedCandidates.length,
+      clearedToolResults: 0,
+      clearedChars: 0,
+      estimatedTokenSavings: 0,
+    };
+  }
+
   const clearedChars = clearedCandidates.reduce((sum, candidate) => sum + candidate.charLength, 0);
   for (const candidate of clearedCandidates) {
     candidate.clear();
@@ -538,7 +678,7 @@ export function applyTransientOutboundReductionToPayload(
     payload: cloned,
     status: "completed",
     detail: null,
-    eligibleToolResults: candidates.length,
+    eligibleToolResults: nonProtectedCandidates.length,
     clearedToolResults: clearedCandidates.length,
     clearedChars,
     estimatedTokenSavings: Math.max(
@@ -620,11 +760,18 @@ export function registerProviderRequestReduction(
       return undefined;
     }
 
-    const result = applyTransientOutboundReductionToPayload(event.payload, {
-      provider: event.provider,
-      api: event.api,
-      modelId: event.modelId,
-    });
+    const result = applyTransientOutboundReductionToPayload(
+      event.payload,
+      {
+        provider: event.provider,
+        api: event.api,
+        modelId: event.modelId,
+      },
+      {
+        protectedTools: runtime.config.infrastructure.contextBudget.compaction.protectedTools,
+        tailProtectTokens: runtime.config.infrastructure.contextBudget.compaction.tailProtectTokens,
+      },
+    );
     const cachePreservationReason = eligibility.cacheCold
       ? null
       : resolveWarmProviderCachePreservationReason(runtime, sessionId, result);

@@ -82,22 +82,31 @@
                   "type": "object",
                   "additionalProperties": false,
                   "properties": {
+                    "cooldownBypassPercent": {
+                      "type": "number"
+                    },
                     "minSecondsBetween": {
                       "type": "number"
                     },
                     "minTurnsBetween": {
                       "type": "number"
                     },
-                    "cooldownBypassPercent": {
+                    "protectedTools": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "summaryMaxOutputRatio": {
+                      "type": "number"
+                    },
+                    "tailProtectTokens": {
                       "type": "number"
                     }
                   }
                 },
                 "compactionInstructions": {
                   "type": "string"
-                },
-                "enabled": {
-                  "type": "boolean"
                 },
                 "dynamicTail": {
                   "type": "object",
@@ -110,6 +119,30 @@
                       "type": "number"
                     },
                     "windowFraction": {
+                      "type": "number"
+                    }
+                  }
+                },
+                "enabled": {
+                  "type": "boolean"
+                },
+                "predictiveTurnGrowth": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "floorContextWindow": {
+                      "type": "number"
+                    },
+                    "largeContextWindow": {
+                      "type": "number"
+                    },
+                    "largeTokens": {
+                      "type": "number"
+                    },
+                    "scalingFactor": {
+                      "type": "number"
+                    },
+                    "standardTokens": {
                       "type": "number"
                     }
                   }
@@ -134,27 +167,6 @@
                       "type": "number"
                     },
                     "hardLimitHeadroomTokens": {
-                      "type": "number"
-                    }
-                  }
-                },
-                "predictiveTurnGrowth": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "properties": {
-                    "floorContextWindow": {
-                      "type": "number"
-                    },
-                    "largeContextWindow": {
-                      "type": "number"
-                    },
-                    "standardTokens": {
-                      "type": "number"
-                    },
-                    "largeTokens": {
-                      "type": "number"
-                    },
-                    "scalingFactor": {
                       "type": "number"
                     }
                   }

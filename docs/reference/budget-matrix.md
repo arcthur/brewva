@@ -68,3 +68,27 @@ runtime decision loop:
   lifecycle events before normal execution continues.
 - Deleted context-arena ceilings are not replay contracts; recovery relies on
   workbench entries, compaction baselines, and request-shaping events.
+
+## Adaptive Headroom And Outbound Reduction
+
+`infrastructure.contextBudget.thresholds.*HeadroomTokens` are tuning floors,
+not fixed reservations. When a provider reports `maxOutputTokens` in usage
+telemetry the manager substitutes `max(configured, maxOutputTokens)` for that
+turn so larger output windows do not silently push the conversation past the
+projected hard limit. `coerceContextBudgetUsage` is the entrypoint that
+extracts the field from raw provider responses; usage objects without
+`maxOutputTokens` fall back to the configured headroom.
+
+The transient outbound provider-request reduction plugin honors two
+compaction-scoped policies on top of the recent-window protection:
+
+- `protectedTools` exempts critical tool families from clearing so workbench
+  and recall observations cannot be silently dropped from a high-pressure
+  outbound copy.
+- `tailProtectTokens` walks the candidate tail backwards and preserves
+  candidates whose cumulative tail token estimate fits within the budget.
+  Only the prefix beyond that boundary is eligible for reduction.
+
+Outbound reduction is non-durable and does not change the replay record; the
+durable transcript and `session_compact` receipts remain the authoritative
+sources.

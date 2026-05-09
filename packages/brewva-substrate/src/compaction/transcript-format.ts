@@ -1,7 +1,16 @@
 import { estimateStructuredTokenCount } from "@brewva/brewva-token-estimation";
 
+const COMPACTION_TOOL_RESULT_MAX_CHARS = 2_000;
+const COMPACTION_IMAGE_PLACEHOLDER_CHARS = 4_800;
+
 function normalizeSummaryText(text: string): string {
   return text.replace(/\s+/gu, " ").trim();
+}
+
+function truncateForSummary(text: string, maxChars: number): string {
+  if (text.length <= maxChars) return text;
+  const truncatedChars = text.length - maxChars;
+  return `${text.slice(0, maxChars)} [... ${truncatedChars} more characters truncated]`;
 }
 
 function summarizeUnknownMessageContent(content: unknown): string {
@@ -24,6 +33,10 @@ function summarizeUnknownMessageContent(content: unknown): string {
     }
     if (record.type === "toolCall" && typeof record.name === "string") {
       fragments.push(`[toolCall:${record.name}]`);
+      continue;
+    }
+    if (record.type === "image" || record.type === "image_url" || record.type === "input_image") {
+      fragments.push(`[image ~${COMPACTION_IMAGE_PLACEHOLDER_CHARS} chars]`);
     }
   }
   return normalizeSummaryText(fragments.join(" "));
@@ -52,7 +65,10 @@ export function summarizeBrewvaCompactionMessage(message: unknown): string | nul
   if (record.role === "toolResult") {
     const toolName = typeof record.toolName === "string" ? record.toolName : "tool";
     const body = summarizeUnknownMessageContent(record.content);
-    return body.length > 0 ? `toolResult(${toolName}): ${body}` : `toolResult(${toolName})`;
+    if (body.length === 0) {
+      return `toolResult(${toolName})`;
+    }
+    return `toolResult(${toolName}): ${truncateForSummary(body, COMPACTION_TOOL_RESULT_MAX_CHARS)}`;
   }
   if (record.role === "custom") {
     const customType = typeof record.customType === "string" ? record.customType : "custom";

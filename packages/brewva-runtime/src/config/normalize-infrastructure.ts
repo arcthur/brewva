@@ -5,6 +5,7 @@ import {
   normalizeNonNegativeNumber,
   normalizeNonEmptyString,
   normalizePositiveInteger,
+  normalizeStringArray,
   normalizeUnitInterval,
 } from "./normalization-shared.js";
 import type { BrewvaConfig } from "./types.js";
@@ -95,6 +96,17 @@ export function normalizeInfrastructureConfig(
     contextBudgetPredictiveTurnGrowthInput.floorContextWindow,
     defaultContextBudgetPredictiveTurnGrowth.floorContextWindow,
   );
+  const normalizedPredictiveStandardTokens = normalizePositiveInteger(
+    contextBudgetPredictiveTurnGrowthInput.standardTokens,
+    defaultContextBudgetPredictiveTurnGrowth.standardTokens,
+  );
+  const normalizedPredictiveLargeTokens = Math.max(
+    normalizedPredictiveStandardTokens,
+    normalizePositiveInteger(
+      contextBudgetPredictiveTurnGrowthInput.largeTokens,
+      defaultContextBudgetPredictiveTurnGrowth.largeTokens,
+    ),
+  );
 
   return {
     events: {
@@ -137,14 +149,8 @@ export function normalizeInfrastructureConfig(
             defaultContextBudgetPredictiveTurnGrowth.largeContextWindow,
           ),
         ),
-        standardTokens: normalizePositiveInteger(
-          contextBudgetPredictiveTurnGrowthInput.standardTokens,
-          defaultContextBudgetPredictiveTurnGrowth.standardTokens,
-        ),
-        largeTokens: normalizePositiveInteger(
-          contextBudgetPredictiveTurnGrowthInput.largeTokens,
-          defaultContextBudgetPredictiveTurnGrowth.largeTokens,
-        ),
+        standardTokens: normalizedPredictiveStandardTokens,
+        largeTokens: normalizedPredictiveLargeTokens,
         scalingFactor: normalizeUnitInterval(
           contextBudgetPredictiveTurnGrowthInput.scalingFactor,
           defaultContextBudgetPredictiveTurnGrowth.scalingFactor,
@@ -166,6 +172,18 @@ export function normalizeInfrastructureConfig(
         cooldownBypassPercent: normalizeUnitInterval(
           contextBudgetCompactionInput.cooldownBypassPercent,
           defaultContextCompaction.cooldownBypassPercent,
+        ),
+        summaryMaxOutputRatio: normalizeUnitInterval(
+          contextBudgetCompactionInput.summaryMaxOutputRatio,
+          defaultContextCompaction.summaryMaxOutputRatio,
+        ),
+        protectedTools: normalizeStringArray(
+          contextBudgetCompactionInput.protectedTools,
+          defaultContextCompaction.protectedTools,
+        ),
+        tailProtectTokens: normalizeNonNegativeInteger(
+          contextBudgetCompactionInput.tailProtectTokens,
+          defaultContextCompaction.tailProtectTokens,
         ),
       },
     },

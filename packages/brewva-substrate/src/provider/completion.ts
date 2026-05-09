@@ -10,6 +10,7 @@ export interface BrewvaProviderCompletionRequest {
   systemPrompt: string;
   userText: string;
   auth: BrewvaProviderCompletionAuth;
+  maxOutputTokens?: number;
 }
 
 export interface BrewvaProviderCompletionUsage {

@@ -33,6 +33,7 @@ class HostedProviderCoreCompletionDriver implements BrewvaProviderCompletionDriv
         {
           apiKey: input.auth.apiKey,
           headers: input.auth.headers,
+          ...(input.maxOutputTokens ? { maxTokens: input.maxOutputTokens } : {}),
         },
       );
       return {

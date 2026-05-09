@@ -9,6 +9,7 @@ import {
   requestContextCompaction,
 } from "../../../packages/brewva-runtime/src/domain/context/context-compaction-gate.js";
 import {
+  estimatePredictiveTurnGrowthTokens,
   getContextCompactionGateStatus,
   getContextUsageRatio,
 } from "../../../packages/brewva-runtime/src/domain/context/context-pressure.js";
@@ -104,6 +105,22 @@ function createPressureHarness(input: {
 }
 
 describe("context status derivation", () => {
+  test("uses predictive turn-growth scaling between floor and large context windows", () => {
+    const policy = {
+      floorContextWindow: 1_000,
+      largeContextWindow: 10_000,
+      standardTokens: 200,
+      largeTokens: 400,
+      scalingFactor: 0.05,
+    };
+
+    expect(estimatePredictiveTurnGrowthTokens(999, policy)).toBe(0);
+    expect(estimatePredictiveTurnGrowthTokens(1_000, policy)).toBe(200);
+    expect(estimatePredictiveTurnGrowthTokens(6_000, policy)).toBe(300);
+    expect(estimatePredictiveTurnGrowthTokens(9_000, policy)).toBe(400);
+    expect(estimatePredictiveTurnGrowthTokens(10_000, policy)).toBe(400);
+  });
+
   test("derives predictive overflow headroom from the hard compaction boundary", () => {
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
     config.infrastructure.contextBudget.enabled = true;

@@ -94,4 +94,33 @@ describe("substrate compaction mechanisms", () => {
     ).toBe(false);
     expect(shouldCompactBrewvaContext({ tokens: null, contextWindow: 100 })).toBe(false);
   });
+
+  test("truncates oversized tool result bodies for the compaction transcript", () => {
+    const longBody = "x".repeat(5_000);
+    const message = {
+      role: "toolResult",
+      toolName: "read",
+      content: [{ type: "text", text: longBody }],
+    };
+    const summary = summarizeBrewvaCompactionMessage(message)!;
+    expect(summary.startsWith("toolResult(read): ")).toBe(true);
+    expect(summary).toContain("more characters truncated");
+    expect(summary.length).toBeLessThan(longBody.length);
+  });
+
+  test("renders image-bearing tool results as compact placeholders", () => {
+    const message = {
+      role: "toolResult",
+      toolName: "screenshot",
+      content: [
+        { type: "text", text: "before" },
+        { type: "image", url: "data:image/png;base64,..." },
+        { type: "text", text: "after" },
+      ],
+    };
+    const summary = summarizeBrewvaCompactionMessage(message)!;
+    expect(summary).toContain("before");
+    expect(summary).toContain("after");
+    expect(summary).toContain("[image");
+  });
 });

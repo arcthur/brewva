@@ -1024,6 +1024,56 @@ Validation:
 - new unit / contract coverage: live transient-reduction inspect state reports
   skipped vs completed outcomes without requiring a durable event family
 
+#### Refinements absorbed from upstream context-management research
+
+The first iteration of `provider-request-reduction` cleared the oldest tool
+result bodies above a count-based recent-window. Cross-reading pi-mono and
+opencode showed two refinements that fit the brewva architecture without
+changing replay semantics:
+
+- a per-tool protection list keeps capability-critical tool families
+  (`workbench_*`, `recall_search`, `recall_curate`, `tape_handoff`) out of the
+  candidate set, so outbound reduction can never silently drop a model-authored
+  anchor or a durable handoff entry. The list lives under
+  `infrastructure.contextBudget.compaction.protectedTools` and is read at the
+  before-provider-request boundary.
+- a tail token budget (`tailProtectTokens`, default `40_000`) walks the
+  candidate tail backwards and preserves candidates whose cumulative tail
+  token estimate fits within the budget. Setting the budget to `0` falls back
+  to the count-based recent window only.
+
+These are still copy-only and never reach durable history. Compaction summary
+generation now anchors update mode through a `<previous-summary>` block when
+the transcript already contains a `compactionSummary` message, with separate
+initial and update instruction blocks so the model knows when to re-anchor
+versus extend prior structure. The summary's `maxOutputTokens` is derived from
+the active model's `maxTokens` field times
+`infrastructure.contextBudget.compaction.summaryMaxOutputRatio` so summaries
+stay within the active model's output capability. A ratio of `0` omits the
+explicit hosted compaction output cap. Headroom thresholds in the budget
+manager substitute `max(configured, maxOutputTokens)` whenever provider
+telemetry reports a `maxOutputTokens` field, so larger output windows do not
+silently push the conversation past the projected hard limit.
+
+The compaction transcript itself absorbs three additional refinements that pi
+and opencode use to keep summarization input dense:
+
+- the serialized transcript is wrapped in `<conversation>...</conversation>`
+  tags so the model treats it as data instead of a conversation to continue;
+- tool result bodies are truncated to roughly 2 000 characters per entry with
+  an explicit truncation marker, since full tool outputs rarely add summary
+  signal beyond the first two thousand characters;
+- non-textual content parts (images, image URLs) are rendered as compact
+  `[image ~N chars]` placeholders rather than dropped silently, so estimated
+  pressure stays honest without leaking opaque media payloads into the prompt;
+- prior `compactionSummary` messages are filtered out of the digest transcript
+  whenever the same content is hoisted into the `<previous-summary>` anchor
+  block. This mirrors pi's `boundaryStart = prevCompactionIndex + 1` and
+  opencode's `completedCompactions` hidden index set: the anchor is the only
+  authoritative source of the prior summary, the new transcript only carries
+  conversation that happened after the anchor, and the model never sees the
+  same anchored summary serialized twice.
+
 ### Phase 3: Observability (implemented, evidence pending)
 
 1. Add hosted prompt-stability telemetry with a session-local tracker rather

@@ -5,6 +5,7 @@ type UsageLike =
       tokens?: unknown;
       contextWindow?: unknown;
       percent?: unknown;
+      maxOutputTokens?: unknown;
     }
   | null
   | undefined;
@@ -23,9 +24,11 @@ export function coerceContextBudgetUsage(input: unknown): ContextBudgetUsage | u
 
   const tokens = normalizeFiniteNumber(usage.tokens);
   const percent = normalizeFiniteNumber(usage.percent);
+  const maxOutputTokens = normalizeFiniteNumber(usage.maxOutputTokens);
   return {
     tokens: tokens !== null && tokens >= 0 ? tokens : null,
     contextWindow,
     percent,
+    maxOutputTokens: maxOutputTokens !== null && maxOutputTokens > 0 ? maxOutputTokens : null,
   };
 }

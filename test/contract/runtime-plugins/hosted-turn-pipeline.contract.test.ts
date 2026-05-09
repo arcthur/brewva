@@ -68,6 +68,7 @@ function createRuntimeFixture(
       config.skills.routing.enabled = true;
       config.skills.routing.scopes = ["core", "domain"];
       config.infrastructure.events.level = "debug";
+      config.infrastructure.contextBudget.compaction.tailProtectTokens = 0;
     }),
   });
   const rawEventQuery = runtime.inspect.events.query.bind(runtime.inspect.events);

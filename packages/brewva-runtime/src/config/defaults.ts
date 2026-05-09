@@ -197,6 +197,17 @@ export const DEFAULT_BREWVA_CONFIG: BrewvaConfig = {
         minTurnsBetween: 2,
         minSecondsBetween: 45,
         cooldownBypassPercent: 0.94,
+        summaryMaxOutputRatio: 0.8,
+        protectedTools: [
+          "workbench_note",
+          "workbench_evict",
+          "workbench_undo_evict",
+          "workbench_compact",
+          "recall_search",
+          "recall_curate",
+          "tape_handoff",
+        ],
+        tailProtectTokens: 40_000,
       },
     },
     toolFailureInjection: {

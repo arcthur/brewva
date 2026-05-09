@@ -398,8 +398,13 @@ describe("managed agent session compaction", () => {
     expect(capturedRequest?.userText).toContain(
       "The newest 2 transcript messages will be kept verbatim outside this summary.",
     );
-    expect(capturedRequest?.userText).toContain("treat it as the anchored previous summary");
-    expect(capturedRequest?.userText).toContain("compactionSummary");
+    expect(capturedRequest?.userText).toContain("anchored previous summary");
+    expect(capturedRequest?.userText).toContain("<previous-summary>");
+    expect(capturedRequest?.userText).toContain("Previous anchored objective.");
+    expect(capturedRequest?.userText.match(/compactionSummary:/gu)).toBeNull();
+    const anchorMarker = "Previous anchored objective.";
+    const occurrences = capturedRequest?.userText.split(anchorMarker).length ?? 0;
+    expect(occurrences - 1).toBe(1);
   });
 
   test("default LLM compaction strips invented dropped digests", async () => {
@@ -444,6 +449,411 @@ describe("managed agent session compaction", () => {
     expect(result.summary).toContain("## Dropped Digests");
     expect(result.summary).toMatch(/- digest=[a-f0-9]{16}/u);
     expect(result.summary).not.toContain("feedfacefeedface");
+  });
+
+  test("default LLM compaction preserves dropped digests carried by the previous summary anchor", async () => {
+    const anchoredDigest = "0123456789abcdef";
+    const generator = createHostedLlmCompactionSummaryGenerator({
+      resolveAuth: async () => ({ ok: true, apiKey: "test-key" }),
+      completeDriver: {
+        async complete() {
+          return {
+            content: [
+              "[CompactSummary]",
+              "## Current Objective",
+              "Continue anchored work.",
+              "## Current State",
+              "Previous summary remains valid.",
+              "## Failed Attempts",
+              "None observed.",
+              "## Next Step",
+              "Continue.",
+              "## Dropped Digests",
+              `- digest=${anchoredDigest}`,
+              "- digest=feedfacefeedface",
+            ].join("\n"),
+          };
+        },
+      },
+    });
+
+    const result = await generator({
+      sessionId: "managed-agent-session-compaction-anchor-digests",
+      cwd: "/tmp/brewva",
+      model: TEST_MODEL,
+      systemPrompt: "Stable system prompt.",
+      messages: [
+        {
+          role: "compactionSummary",
+          summary: [
+            "[CompactSummary]",
+            "## Current Objective",
+            "Continue anchored work.",
+            "## Dropped Digests",
+            `- digest=${anchoredDigest}`,
+          ].join("\n"),
+        },
+        {
+          role: "user",
+          content: [{ type: "text", text: "New evidence after anchor." }],
+        },
+      ],
+    });
+
+    expect(result.summary).toContain(anchoredDigest);
+    expect(result.summary).not.toContain("feedfacefeedface");
+  });
+
+  test("default LLM compaction prompt uses initial-mode instructions when no prior compactionSummary exists", async () => {
+    let capturedRequest:
+      | {
+          systemPrompt: string;
+          userText: string;
+        }
+      | undefined;
+    const generator = createHostedLlmCompactionSummaryGenerator({
+      resolveAuth: async () => ({ ok: true, apiKey: "test-key" }),
+      completeDriver: {
+        async complete(input) {
+          capturedRequest = {
+            systemPrompt: input.systemPrompt,
+            userText: input.userText,
+          };
+          return {
+            content: [
+              "[CompactSummary]",
+              "## Current Objective",
+              "First-time compaction.",
+              "## Current State",
+              "Initial state captured.",
+              "## Failed Attempts",
+              "None observed.",
+              "## Next Step",
+              "Continue from the new summary.",
+              "## Dropped Digests",
+            ].join("\n"),
+          };
+        },
+      },
+    });
+
+    await generator({
+      sessionId: "managed-agent-session-compaction-initial",
+      cwd: "/tmp/brewva",
+      model: TEST_MODEL,
+      systemPrompt: "Stable system prompt.",
+      messages: [
+        {
+          role: "user",
+          content: [{ type: "text", text: "Run the build." }],
+        },
+        {
+          role: "assistant",
+          content: [{ type: "text", text: "Building now." }],
+        },
+      ],
+    });
+
+    expect(capturedRequest?.userText).not.toContain("<previous-summary>");
+    expect(capturedRequest?.userText).not.toContain("anchored previous summary");
+    expect(capturedRequest?.userText).toContain(
+      "Write a compact summary with exactly these sections",
+    );
+  });
+
+  test("default LLM compaction generator derives maxOutputTokens from model.maxTokens × summaryMaxOutputRatio", async () => {
+    let captured:
+      | {
+          maxOutputTokens?: number;
+        }
+      | undefined;
+    const generator = createHostedLlmCompactionSummaryGenerator({
+      resolveAuth: async () => ({ ok: true, apiKey: "test-key" }),
+      completeDriver: {
+        async complete(input) {
+          captured = { maxOutputTokens: input.maxOutputTokens };
+          return {
+            content: [
+              "[CompactSummary]",
+              "## Current Objective",
+              "Captured.",
+              "## Current State",
+              "Captured.",
+              "## Failed Attempts",
+              "None observed.",
+              "## Next Step",
+              "Continue.",
+              "## Dropped Digests",
+            ].join("\n"),
+          };
+        },
+      },
+    });
+
+    await generator({
+      sessionId: "managed-agent-session-compaction-budget",
+      cwd: "/tmp/brewva",
+      model: { ...TEST_MODEL, maxTokens: 10_000 },
+      systemPrompt: "Stable system prompt.",
+      messages: [
+        {
+          role: "user",
+          content: [{ type: "text", text: "Continue working." }],
+        },
+      ],
+      summaryMaxOutputRatio: 0.6,
+    });
+
+    expect(captured?.maxOutputTokens).toBe(6_000);
+  });
+
+  test("default LLM compaction generator omits maxOutputTokens when model.maxTokens is missing", async () => {
+    let captured:
+      | {
+          maxOutputTokens?: number;
+        }
+      | undefined;
+    const generator = createHostedLlmCompactionSummaryGenerator({
+      resolveAuth: async () => ({ ok: true, apiKey: "test-key" }),
+      completeDriver: {
+        async complete(input) {
+          captured = { maxOutputTokens: input.maxOutputTokens };
+          return {
+            content: [
+              "[CompactSummary]",
+              "## Current Objective",
+              "Captured.",
+              "## Current State",
+              "Captured.",
+              "## Failed Attempts",
+              "None observed.",
+              "## Next Step",
+              "Continue.",
+              "## Dropped Digests",
+            ].join("\n"),
+          };
+        },
+      },
+    });
+
+    await generator({
+      sessionId: "managed-agent-session-compaction-no-budget",
+      cwd: "/tmp/brewva",
+      model: { ...TEST_MODEL, maxTokens: 0 },
+      systemPrompt: "Stable system prompt.",
+      messages: [
+        {
+          role: "user",
+          content: [{ type: "text", text: "Continue working." }],
+        },
+      ],
+    });
+
+    expect(captured?.maxOutputTokens).toBeUndefined();
+  });
+
+  test("default LLM compaction generator treats summaryMaxOutputRatio zero as no output cap", async () => {
+    let captured:
+      | {
+          maxOutputTokens?: number;
+        }
+      | undefined;
+    const generator = createHostedLlmCompactionSummaryGenerator({
+      resolveAuth: async () => ({ ok: true, apiKey: "test-key" }),
+      completeDriver: {
+        async complete(input) {
+          captured = { maxOutputTokens: input.maxOutputTokens };
+          return {
+            content: [
+              "[CompactSummary]",
+              "## Current Objective",
+              "Captured.",
+              "## Current State",
+              "Captured.",
+              "## Failed Attempts",
+              "None observed.",
+              "## Next Step",
+              "Continue.",
+              "## Dropped Digests",
+            ].join("\n"),
+          };
+        },
+      },
+    });
+
+    await generator({
+      sessionId: "managed-agent-session-compaction-zero-ratio",
+      cwd: "/tmp/brewva",
+      model: { ...TEST_MODEL, maxTokens: 10_000 },
+      systemPrompt: "Stable system prompt.",
+      messages: [
+        {
+          role: "user",
+          content: [{ type: "text", text: "Continue working." }],
+        },
+      ],
+      summaryMaxOutputRatio: 0,
+    });
+
+    expect(captured?.maxOutputTokens).toBeUndefined();
+  });
+
+  test("default LLM compaction prompt wraps transcript in <conversation> tags", async () => {
+    let capturedRequest:
+      | {
+          userText: string;
+        }
+      | undefined;
+    const generator = createHostedLlmCompactionSummaryGenerator({
+      resolveAuth: async () => ({ ok: true, apiKey: "test-key" }),
+      completeDriver: {
+        async complete(input) {
+          capturedRequest = { userText: input.userText };
+          return {
+            content: [
+              "[CompactSummary]",
+              "## Current Objective",
+              "Captured.",
+              "## Current State",
+              "Captured.",
+              "## Failed Attempts",
+              "None observed.",
+              "## Next Step",
+              "Continue.",
+              "## Dropped Digests",
+            ].join("\n"),
+          };
+        },
+      },
+    });
+
+    await generator({
+      sessionId: "managed-agent-session-compaction-conversation",
+      cwd: "/tmp/brewva",
+      model: TEST_MODEL,
+      systemPrompt: "Stable system prompt.",
+      messages: [
+        {
+          role: "user",
+          content: [{ type: "text", text: "Verify the prompt structure." }],
+        },
+      ],
+    });
+
+    expect(capturedRequest?.userText).toContain("<conversation>");
+    expect(capturedRequest?.userText).toContain("</conversation>");
+    expect(capturedRequest?.userText).not.toMatch(/^Transcript:/u);
+  });
+
+  test("default LLM compaction prompt does not double-inject prior compactionSummary into transcript", async () => {
+    let capturedRequest:
+      | {
+          userText: string;
+        }
+      | undefined;
+    const generator = createHostedLlmCompactionSummaryGenerator({
+      resolveAuth: async () => ({ ok: true, apiKey: "test-key" }),
+      completeDriver: {
+        async complete(input) {
+          capturedRequest = { userText: input.userText };
+          return {
+            content: [
+              "[CompactSummary]",
+              "## Current Objective",
+              "Captured.",
+              "## Current State",
+              "Captured.",
+              "## Failed Attempts",
+              "None observed.",
+              "## Next Step",
+              "Continue.",
+              "## Dropped Digests",
+            ].join("\n"),
+          };
+        },
+      },
+    });
+
+    const priorAnchorText = "Earlier durable anchor body unique-marker-7r3";
+    await generator({
+      sessionId: "managed-agent-session-compaction-anchor-dedupe",
+      cwd: "/tmp/brewva",
+      model: TEST_MODEL,
+      systemPrompt: "Stable system prompt.",
+      messages: [
+        {
+          role: "compactionSummary",
+          summary: priorAnchorText,
+        },
+        {
+          role: "user",
+          content: [{ type: "text", text: "New work after compaction." }],
+        },
+      ],
+    });
+
+    const userText = capturedRequest?.userText ?? "";
+    const occurrences = userText.split(priorAnchorText).length - 1;
+    expect(occurrences).toBe(1);
+    expect(userText).toContain("<previous-summary>");
+    expect(userText.match(/compactionSummary:/gu)).toBeNull();
+  });
+
+  test("default LLM compaction prompt only serializes messages after the latest prior compactionSummary", async () => {
+    let capturedRequest:
+      | {
+          userText: string;
+        }
+      | undefined;
+    const generator = createHostedLlmCompactionSummaryGenerator({
+      resolveAuth: async () => ({ ok: true, apiKey: "test-key" }),
+      completeDriver: {
+        async complete(input) {
+          capturedRequest = { userText: input.userText };
+          return {
+            content: [
+              "[CompactSummary]",
+              "## Current Objective",
+              "Captured.",
+              "## Current State",
+              "Captured.",
+              "## Failed Attempts",
+              "None observed.",
+              "## Next Step",
+              "Continue.",
+              "## Dropped Digests",
+            ].join("\n"),
+          };
+        },
+      },
+    });
+
+    await generator({
+      sessionId: "managed-agent-session-compaction-anchor-boundary",
+      cwd: "/tmp/brewva",
+      model: TEST_MODEL,
+      systemPrompt: "Stable system prompt.",
+      messages: [
+        {
+          role: "user",
+          content: [{ type: "text", text: "pre-anchor unique-marker-r6t" }],
+        },
+        {
+          role: "compactionSummary",
+          summary: "Anchored summary unique-marker-p3s.",
+        },
+        {
+          role: "user",
+          content: [{ type: "text", text: "post-anchor unique-marker-x9k" }],
+        },
+      ],
+    });
+
+    const userText = capturedRequest?.userText ?? "";
+    const conversation = /<conversation>\n([\s\S]*?)\n<\/conversation>/u.exec(userText)?.[1] ?? "";
+    expect(userText).toContain("Anchored summary unique-marker-p3s.");
+    expect(conversation).not.toContain("pre-anchor unique-marker-r6t");
+    expect(conversation).toContain("post-anchor unique-marker-x9k");
   });
 
   test("compacts history into a durable projection entry and replaces the active context", async () => {

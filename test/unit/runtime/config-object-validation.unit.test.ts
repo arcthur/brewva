@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { BrewvaConfigLoadError } from "@brewva/brewva-runtime";
+import { DEFAULT_BREWVA_CONFIG } from "../../../packages/brewva-runtime/src/config/defaults.js";
 import {
   forensicallyValidateLoadedBrewvaConfigObject,
   validateLoadedBrewvaConfigObject,
@@ -114,5 +115,44 @@ describe("config object validation boundary", () => {
         message: "Skipped inspect config because the top-level value is not an object.",
       },
     ]);
+  });
+});
+
+describe("default config protectedTools alignment with real tool registry", () => {
+  const REAL_TOOL_NAMES = new Set<string>([
+    "workbench_note",
+    "workbench_evict",
+    "workbench_undo_evict",
+    "workbench_compact",
+    "recall_search",
+    "recall_curate",
+    "tape_handoff",
+    "tape_info",
+    "tape_search",
+  ]);
+
+  test("each default protectedTools entry resolves to a real tool name", () => {
+    const protectedTools = DEFAULT_BREWVA_CONFIG.infrastructure.contextBudget.compaction
+      .protectedTools as readonly string[];
+    for (const name of protectedTools) {
+      expect(REAL_TOOL_NAMES.has(name)).toBe(true);
+    }
+  });
+
+  test("default protectedTools no longer references the historical recall_query typo", () => {
+    const protectedTools = DEFAULT_BREWVA_CONFIG.infrastructure.contextBudget.compaction
+      .protectedTools as readonly string[];
+    expect(protectedTools).not.toContain("recall_query");
+  });
+
+  test("default protectedTools covers model-authored workbench mutation receipts", () => {
+    const protectedTools = new Set(
+      DEFAULT_BREWVA_CONFIG.infrastructure.contextBudget.compaction
+        .protectedTools as readonly string[],
+    );
+    expect(protectedTools.has("workbench_note")).toBe(true);
+    expect(protectedTools.has("workbench_evict")).toBe(true);
+    expect(protectedTools.has("workbench_undo_evict")).toBe(true);
+    expect(protectedTools.has("workbench_compact")).toBe(true);
   });
 });

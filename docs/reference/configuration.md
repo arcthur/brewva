@@ -136,6 +136,43 @@ provider-safe tool-name syntax before they enter the hosted tool surface.
 - `infrastructure` controls event storage, context-budget thresholds,
   predictive turn-growth tuning, and cost/recovery infrastructure.
 
+## Context Budget Compaction
+
+`infrastructure.contextBudget.compaction` governs how the runtime triggers and
+shapes session compactions. In addition to cooldown and bypass thresholds, the
+following keys tune summary generation and outbound provider-request reduction:
+
+- `summaryMaxOutputRatio` (`number`, default `0.8`): fraction of the active
+  model's `maxTokens` that the LLM compaction summary may consume. The hosted
+  compaction generator forwards
+  `floor(model.maxTokens * summaryMaxOutputRatio)` as the model's
+  `maxOutputTokens` so the summary stays well within the model's single-turn
+  output capability and leaves headroom for the next turn's reasoning. Set
+  `summaryMaxOutputRatio=0` to omit the explicit hosted compaction output cap.
+- `protectedTools` (`string[]`, default
+  `["workbench_note", "workbench_evict", "workbench_undo_evict", "workbench_compact", "recall_search", "recall_curate", "tape_handoff"]`):
+  tool names whose tool-result messages are exempt from transient outbound
+  provider-request reduction. Adding a tool here keeps its observations and
+  return digests in the outbound payload even when the request would otherwise
+  be a candidate for clearing.
+- `tailProtectTokens` (`number` in tokens, default `40000`): cumulative tail
+  budget protected from outbound reduction. Walking from the most recent tool
+  result backwards, candidates whose accumulated tail token estimate fits
+  within this budget are preserved verbatim. Set to `0` to fall back to the
+  count-based recent-window protection only. Set to a large value to disable
+  reduction in practice when the tail is small.
+
+The hard-limit and compaction-threshold headroom values in
+`infrastructure.contextBudget.thresholds` are now adaptive per turn: when a
+provider reports `maxOutputTokens` in usage telemetry, the manager derives the
+effective headroom as `max(configured, maxOutputTokens)` so large output
+windows do not silently push the conversation through the projected hard
+limit.
+
+`infrastructure.contextBudget.predictiveTurnGrowth` is normalized into
+monotonic bounds: `largeContextWindow` is at least `floorContextWindow`, and
+`largeTokens` is at least `standardTokens`.
+
 ## Schema Maintenance
 
 Regenerate the JSON schema after config type/default changes:

@@ -219,6 +219,36 @@ describe("Brewva config loader normalization", () => {
     expect(loaded.projection.maxWorkingChars).toBe(2400);
   });
 
+  test("normalizes predictive turn-growth tuning into monotonic bounds", () => {
+    const workspace = createTestWorkspace("predictive-turn-growth-monotonic");
+    writeFileSync(
+      join(workspace, ".brewva/brewva.json"),
+      JSON.stringify(
+        {
+          infrastructure: {
+            contextBudget: {
+              predictiveTurnGrowth: {
+                floorContextWindow: 100_000,
+                largeContextWindow: 50_000,
+                standardTokens: 50_000,
+                largeTokens: 10_000,
+              },
+            },
+          },
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const loaded = loadBrewvaConfig({ cwd: workspace, configPath: ".brewva/brewva.json" });
+    expect(loaded.infrastructure.contextBudget.predictiveTurnGrowth.largeContextWindow).toBe(
+      100_000,
+    );
+    expect(loaded.infrastructure.contextBudget.predictiveTurnGrowth.largeTokens).toBe(50_000);
+  });
+
   test("normalizes skills.routing scopes", () => {
     const workspace = createTestWorkspace("routing-scopes");
     writeFileSync(

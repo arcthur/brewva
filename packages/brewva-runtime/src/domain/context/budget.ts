@@ -53,6 +53,7 @@ export class ContextBudgetManager {
       tokens: usage.tokens,
       contextWindow: usage.contextWindow,
       percent: resolveContextUsageRatio(usage),
+      maxOutputTokens: usage.maxOutputTokens,
     };
   }
 
@@ -64,11 +65,23 @@ export class ContextBudgetManager {
       current.contextWindow > 0
         ? current.contextWindow
         : null;
+
+    const effectiveHardLimitHeadroom = this.resolveEffectiveHeadroom(
+      contextWindow,
+      this.config.thresholds.hardLimitHeadroomTokens,
+      current?.maxOutputTokens,
+    );
+    const effectiveCompactionHeadroom = this.resolveEffectiveHeadroom(
+      contextWindow,
+      this.config.thresholds.compactionHeadroomTokens,
+      current?.maxOutputTokens,
+    );
+
     const hardLimitPercent = this.resolveAdaptiveThreshold({
       contextWindow,
       floorPercent: this.config.thresholds.hardLimitFloorPercent,
       ceilingPercent: this.config.thresholds.hardLimitCeilingPercent,
-      headroomTokens: this.config.thresholds.hardLimitHeadroomTokens,
+      headroomTokens: effectiveHardLimitHeadroom,
     });
     const compactionThresholdPercent = Math.min(
       hardLimitPercent,
@@ -76,7 +89,7 @@ export class ContextBudgetManager {
         contextWindow,
         floorPercent: this.config.thresholds.compactionFloorPercent,
         ceilingPercent: this.config.thresholds.compactionCeilingPercent,
-        headroomTokens: this.config.thresholds.compactionHeadroomTokens,
+        headroomTokens: effectiveCompactionHeadroom,
       }),
     );
 
@@ -242,6 +255,9 @@ export class ContextBudgetManager {
     ) {
       const hardLimitTokens = Math.floor(hardLimitPercent * current.contextWindow);
       const predictedTurnGrowthTokens = this.getPredictiveTurnGrowthTokens(current.contextWindow);
+      if (currentTokens >= hardLimitTokens) {
+        return { shouldCompact: true, reason: "hard_limit", usage: current };
+      }
       if (
         predictedTurnGrowthTokens > 0 &&
         currentTokens + predictedTurnGrowthTokens >= hardLimitTokens
@@ -277,6 +293,7 @@ export class ContextBudgetManager {
       tokens: state.lastContextUsage.tokens,
       contextWindow: state.lastContextUsage.contextWindow,
       percent: state.lastContextUsage.percent,
+      maxOutputTokens: state.lastContextUsage.maxOutputTokens,
     };
   }
 
@@ -292,6 +309,22 @@ export class ContextBudgetManager {
 
   getCompactionInstructions(): string {
     return this.config.compactionInstructions;
+  }
+
+  private resolveEffectiveHeadroom(
+    contextWindow: number | null,
+    configHeadroomTokens: number,
+    maxOutputTokens: number | null | undefined,
+  ): number {
+    const configured = Math.max(0, Math.trunc(configHeadroomTokens));
+    if (
+      typeof maxOutputTokens === "number" &&
+      Number.isFinite(maxOutputTokens) &&
+      maxOutputTokens > 0
+    ) {
+      return Math.max(configured, Math.trunc(maxOutputTokens));
+    }
+    return configured;
   }
 
   private resolveUsage(

@@ -27,7 +27,7 @@ export function estimatePredictiveTurnGrowthTokens(
     return largeTokens;
   }
   const scaledGrowth = Math.floor(normalizedWindow * scalingFactor);
-  return Math.max(1, Math.min(standardTokens, Math.max(standardTokens, scaledGrowth)));
+  return Math.max(1, Math.min(largeTokens, Math.max(standardTokens, scaledGrowth)));
 }
 
 export function getContextUsage(
@@ -40,6 +40,7 @@ export function getContextUsage(
     tokens: usage.tokens,
     contextWindow: usage.contextWindow,
     percent: usage.percent,
+    maxOutputTokens: usage.maxOutputTokens,
   };
 }
 

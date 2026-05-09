@@ -6,6 +6,7 @@ export interface ContextBudgetUsage {
   tokens: number | null;
   contextWindow: number;
   percent: number | null;
+  maxOutputTokens?: number | null;
 }
 
 export type TapePressureLevel = "none" | "low" | "medium" | "high";
