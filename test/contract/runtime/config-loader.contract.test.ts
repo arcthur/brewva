@@ -249,6 +249,36 @@ describe("Brewva config loader normalization", () => {
     expect(loaded.infrastructure.contextBudget.predictiveTurnGrowth.largeTokens).toBe(50_000);
   });
 
+  test("normalizes model-physics budget tuning", () => {
+    const workspace = createTestWorkspace("model-physics-normalization");
+    writeFileSync(
+      join(workspace, ".brewva/brewva.json"),
+      JSON.stringify(
+        {
+          infrastructure: {
+            contextBudget: {
+              modelPhysics: {
+                effectiveContextWindowPercent: 0,
+                autoCompactLimitRatio: 0,
+                controllableBaselineTokens: -10,
+              },
+            },
+          },
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const loaded = loadBrewvaConfig({ cwd: workspace, configPath: ".brewva/brewva.json" });
+    expect(loaded.infrastructure.contextBudget.modelPhysics.effectiveContextWindowPercent).toBe(
+      0.01,
+    );
+    expect(loaded.infrastructure.contextBudget.modelPhysics.autoCompactLimitRatio).toBe(0.01);
+    expect(loaded.infrastructure.contextBudget.modelPhysics.controllableBaselineTokens).toBe(0);
+  });
+
   test("normalizes skills.routing scopes", () => {
     const workspace = createTestWorkspace("routing-scopes");
     writeFileSync(

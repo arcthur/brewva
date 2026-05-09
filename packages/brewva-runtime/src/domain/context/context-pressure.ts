@@ -90,6 +90,25 @@ export function getContextStatus(input: {
     effectiveUsage,
   );
   const hardLimitTokens = Math.floor(hardLimitRatio * contextWindow);
+  const policy = input.contextBudget.getEffectivePolicy(input.sessionId, effectiveUsage);
+  const effectiveTokensTotal = policy.effectiveContextWindow ?? contextWindow;
+  const autoCompactLimitTokens =
+    policy.autoCompactLimitTokens ?? Math.floor(compactionThresholdRatio * contextWindow);
+  const controllableBaselineTokens = Math.min(
+    effectiveTokensTotal,
+    Math.max(0, Math.trunc(policy.controllableBaselineTokens)),
+  );
+  const controllableTokensTotal = Math.max(0, effectiveTokensTotal - controllableBaselineTokens);
+  const controllableTokensUsed =
+    tokens === null ? null : Math.max(0, tokens - controllableBaselineTokens);
+  const controllableTokensRemaining =
+    controllableTokensUsed === null
+      ? null
+      : Math.max(0, controllableTokensTotal - controllableTokensUsed);
+  const controllableContextRemainingRatio =
+    controllableTokensRemaining === null || controllableTokensTotal <= 0
+      ? null
+      : controllableTokensRemaining / controllableTokensTotal;
   const predictedTurnGrowthTokens =
     input.contextBudget.getPredictiveTurnGrowthTokens(contextWindow);
   const tokensUntilPredictedOverflow =
@@ -102,7 +121,14 @@ export function getContextStatus(input: {
   return {
     tokensUsed: tokens,
     tokensTotal: contextWindow,
+    effectiveTokensTotal,
     tokensRemaining: tokens === null ? null : Math.max(0, contextWindow - tokens),
+    autoCompactLimitTokens,
+    controllableBaselineTokens,
+    controllableTokensUsed,
+    controllableTokensTotal,
+    controllableTokensRemaining,
+    controllableContextRemainingRatio,
     tokensUntilForcedCompact: tokens === null ? null : Math.max(0, hardLimitTokens - tokens),
     predictedTurnGrowthTokens,
     tokensUntilPredictedOverflow,

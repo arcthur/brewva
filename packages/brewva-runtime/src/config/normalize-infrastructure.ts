@@ -32,6 +32,9 @@ export function normalizeInfrastructureConfig(
   const contextBudgetPredictiveTurnGrowthInput = isRecord(contextBudgetInput.predictiveTurnGrowth)
     ? contextBudgetInput.predictiveTurnGrowth
     : {};
+  const contextBudgetModelPhysicsInput = isRecord(contextBudgetInput.modelPhysics)
+    ? contextBudgetInput.modelPhysics
+    : {};
   const contextBudgetCompactionInput = isRecord(contextBudgetInput.compaction)
     ? contextBudgetInput.compaction
     : {};
@@ -51,6 +54,7 @@ export function normalizeInfrastructureConfig(
   const defaultContextBudgetDynamicTail = defaultContextBudget.dynamicTail;
   const defaultContextBudgetThresholds = defaultContextBudget.thresholds;
   const defaultContextBudgetPredictiveTurnGrowth = defaultContextBudget.predictiveTurnGrowth;
+  const defaultContextBudgetModelPhysics = defaultContextBudget.modelPhysics;
   const defaultContextCompaction = defaultContextBudget.compaction;
   const defaultToolFailureInjection = defaults.toolFailureInjection;
   const normalizedDynamicTailBaseTokens = normalizePositiveInteger(
@@ -154,6 +158,26 @@ export function normalizeInfrastructureConfig(
         scalingFactor: normalizeUnitInterval(
           contextBudgetPredictiveTurnGrowthInput.scalingFactor,
           defaultContextBudgetPredictiveTurnGrowth.scalingFactor,
+        ),
+      },
+      modelPhysics: {
+        effectiveContextWindowPercent: Math.max(
+          0.01,
+          normalizeUnitInterval(
+            contextBudgetModelPhysicsInput.effectiveContextWindowPercent,
+            defaultContextBudgetModelPhysics.effectiveContextWindowPercent,
+          ),
+        ),
+        autoCompactLimitRatio: Math.max(
+          0.01,
+          normalizeUnitInterval(
+            contextBudgetModelPhysicsInput.autoCompactLimitRatio,
+            defaultContextBudgetModelPhysics.autoCompactLimitRatio,
+          ),
+        ),
+        controllableBaselineTokens: normalizeNonNegativeInteger(
+          contextBudgetModelPhysicsInput.controllableBaselineTokens,
+          defaultContextBudgetModelPhysics.controllableBaselineTokens,
         ),
       },
       compactionInstructions: normalizeNonEmptyString(

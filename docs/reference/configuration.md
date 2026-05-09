@@ -134,7 +134,8 @@ provider-safe tool-name syntax before they enter the hosted tool surface.
 - `parallel` controls runtime parallelism ceilings.
 - `channels` controls external orchestration limits and access control.
 - `infrastructure` controls event storage, context-budget thresholds,
-  predictive turn-growth tuning, and cost/recovery infrastructure.
+  model-physics budget tuning, predictive turn-growth tuning, and
+  cost/recovery infrastructure.
 
 ## Context Budget Compaction
 
@@ -168,6 +169,27 @@ provider reports `maxOutputTokens` in usage telemetry, the manager derives the
 effective headroom as `max(configured, maxOutputTokens)` so large output
 windows do not silently push the conversation through the projected hard
 limit.
+
+`infrastructure.contextBudget.modelPhysics` defines provider/model physical
+budget assumptions. These values are not context sources and do not route the
+model through a staged plan:
+
+- `effectiveContextWindowPercent` (`number`, default `0.95`): the usable
+  fraction of a provider's advertised context window. Hard-limit thresholds
+  are capped at this ratio so Brewva keeps a physical reserve even when a
+  model reports a large raw window.
+- `autoCompactLimitRatio` (`number`, default `0.9`): the physical hard
+  ceiling for the compact-soon line. The adaptive compaction threshold (from
+  `compactionFloorPercent`/`compactionCeilingPercent` plus headroom) is an
+  advisory suggestion that varies with window size; `autoCompactLimitRatio`
+  overrides it when the adaptive calculation would produce a higher ratio. If
+  the adaptive threshold says 0.93 but `autoCompactLimitRatio` is 0.9, the
+  effective compact-soon line stays at 0.9. This keeps compaction nudges ahead
+  of the hard physical boundary while preserving model choice about when to
+  write or evict workbench state.
+- `controllableBaselineTokens` (`number`, default `12000`): baseline system
+  and protocol budget subtracted from context-status telemetry to expose
+  `controllable_*` remaining metrics. It is diagnostic only.
 
 `infrastructure.contextBudget.predictiveTurnGrowth` is normalized into
 monotonic bounds: `largeContextWindow` is at least `floorContextWindow`, and

@@ -228,6 +228,11 @@ export interface BrewvaConfig {
         largeTokens: number;
         scalingFactor: number;
       };
+      modelPhysics: {
+        effectiveContextWindowPercent: number;
+        autoCompactLimitRatio: number;
+        controllableBaselineTokens: number;
+      };
       compactionInstructions: string;
       compaction: {
         minTurnsBetween: number;

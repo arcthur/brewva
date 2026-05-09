@@ -69,7 +69,17 @@ runtime decision loop:
 - Deleted context-arena ceilings are not replay contracts; recovery relies on
   workbench entries, compaction baselines, and request-shaping events.
 
-## Adaptive Headroom And Outbound Reduction
+## Model Physics, Adaptive Headroom, And Outbound Reduction
+
+`infrastructure.contextBudget.modelPhysics.*` is the physical budget layer:
+`effectiveContextWindowPercent` caps the hard boundary below the provider's
+advertised window, `autoCompactLimitRatio` caps the compact-soon line (it is a
+physical hard ceiling that overrides the adaptive compaction threshold when the
+adaptive calculation would produce a higher ratio — adaptive is advisory,
+`autoCompactLimitRatio` is the limit), and `controllableBaselineTokens` powers
+diagnostic remaining-context metrics. These fields do not admit or inject
+context; they only describe runtime physics for status, gates, and cache-aware
+request shaping.
 
 `infrastructure.contextBudget.thresholds.*HeadroomTokens` are tuning floors,
 not fixed reservations. When a provider reports `maxOutputTokens` in usage

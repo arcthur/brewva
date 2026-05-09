@@ -60,6 +60,12 @@ The dynamic tail is a fixed ordered list. Empty blocks are omitted:
 Blocks carry only `id`, `content`, and `estimatedTokens`. They do not carry
 category, provenance, family id, lane reason, or retention policy.
 
+Compaction gate/advisory blocks are nudge-throttled per session. The first
+appearance of a stable gate/advisory state is rendered in full; repeated
+appearances use a terse action line, with periodic full reminders. This keeps
+the dynamic tail small and cache-stable while still telling the model when the
+runtime physics require or advise `workbench_compact`.
+
 ## Workbench Boundary
 
 Workbench entries are model-authored notebook entries written through:

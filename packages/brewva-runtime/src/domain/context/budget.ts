@@ -26,6 +26,9 @@ export interface EffectiveContextBudgetPolicy {
   dynamicTailTokens: number;
   compactionThresholdPercent: number;
   hardLimitPercent: number;
+  effectiveContextWindow: number | null;
+  autoCompactLimitTokens: number | null;
+  controllableBaselineTokens: number;
 }
 
 export class ContextBudgetManager {
@@ -65,6 +68,11 @@ export class ContextBudgetManager {
       current.contextWindow > 0
         ? current.contextWindow
         : null;
+    const effectiveContextWindow = this.resolveEffectiveContextWindow(contextWindow);
+    const autoCompactLimitRatio = normalizePercent(this.config.modelPhysics.autoCompactLimitRatio);
+    const autoCompactLimitPercent = autoCompactLimitRatio ?? 1;
+    const autoCompactLimitTokens =
+      contextWindow === null ? null : Math.floor(contextWindow * autoCompactLimitPercent);
 
     const effectiveHardLimitHeadroom = this.resolveEffectiveHeadroom(
       contextWindow,
@@ -77,14 +85,18 @@ export class ContextBudgetManager {
       current?.maxOutputTokens,
     );
 
-    const hardLimitPercent = this.resolveAdaptiveThreshold({
-      contextWindow,
-      floorPercent: this.config.thresholds.hardLimitFloorPercent,
-      ceilingPercent: this.config.thresholds.hardLimitCeilingPercent,
-      headroomTokens: effectiveHardLimitHeadroom,
-    });
+    const hardLimitPercent = Math.min(
+      this.resolveEffectiveContextWindowPercent(),
+      this.resolveAdaptiveThreshold({
+        contextWindow,
+        floorPercent: this.config.thresholds.hardLimitFloorPercent,
+        ceilingPercent: this.config.thresholds.hardLimitCeilingPercent,
+        headroomTokens: effectiveHardLimitHeadroom,
+      }),
+    );
     const compactionThresholdPercent = Math.min(
       hardLimitPercent,
+      autoCompactLimitPercent,
       this.resolveAdaptiveThreshold({
         contextWindow,
         floorPercent: this.config.thresholds.compactionFloorPercent,
@@ -110,6 +122,12 @@ export class ContextBudgetManager {
       dynamicTailTokens,
       compactionThresholdPercent,
       hardLimitPercent,
+      effectiveContextWindow,
+      autoCompactLimitTokens,
+      controllableBaselineTokens: Math.max(
+        0,
+        Math.trunc(this.config.modelPhysics.controllableBaselineTokens),
+      ),
     };
   }
 
@@ -123,6 +141,14 @@ export class ContextBudgetManager {
 
   getEffectiveHardLimitPercent(sessionId: string, usage?: ContextBudgetUsage): number {
     return this.getEffectivePolicy(sessionId, usage).hardLimitPercent;
+  }
+
+  getEffectiveContextWindow(sessionId: string, usage?: ContextBudgetUsage): number | null {
+    return this.getEffectivePolicy(sessionId, usage).effectiveContextWindow;
+  }
+
+  getControllableBaselineTokens(sessionId: string, usage?: ContextBudgetUsage): number {
+    return this.getEffectivePolicy(sessionId, usage).controllableBaselineTokens;
   }
 
   getPredictiveTurnGrowthTokens(contextWindow: number): number {
@@ -325,6 +351,20 @@ export class ContextBudgetManager {
       return Math.max(configured, Math.trunc(maxOutputTokens));
     }
     return configured;
+  }
+
+  private resolveEffectiveContextWindow(contextWindow: number | null): number | null {
+    if (contextWindow === null || contextWindow <= 0) {
+      return null;
+    }
+    return Math.max(1, Math.floor(contextWindow * this.resolveEffectiveContextWindowPercent()));
+  }
+
+  private resolveEffectiveContextWindowPercent(): number {
+    return Math.max(
+      0.01,
+      Math.min(1, normalizePercent(this.config.modelPhysics.effectiveContextWindowPercent) ?? 1),
+    );
   }
 
   private resolveUsage(

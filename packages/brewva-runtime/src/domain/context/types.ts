@@ -26,7 +26,14 @@ export interface ContextCompactionGateStatus {
 export interface ContextStatus {
   tokensUsed: number | null;
   tokensTotal: number;
+  effectiveTokensTotal: number;
   tokensRemaining: number | null;
+  autoCompactLimitTokens: number;
+  controllableBaselineTokens: number;
+  controllableTokensUsed: number | null;
+  controllableTokensTotal: number;
+  controllableTokensRemaining: number | null;
+  controllableContextRemainingRatio: number | null;
   tokensUntilForcedCompact: number | null;
   predictedTurnGrowthTokens: number;
   tokensUntilPredictedOverflow: number | null;

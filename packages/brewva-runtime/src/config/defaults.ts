@@ -191,6 +191,11 @@ export const DEFAULT_BREWVA_CONFIG: BrewvaConfig = {
         largeTokens: 50_000,
         scalingFactor: 0.25,
       },
+      modelPhysics: {
+        effectiveContextWindowPercent: 0.95,
+        autoCompactLimitRatio: 0.9,
+        controllableBaselineTokens: 12_000,
+      },
       compactionInstructions:
         "Summarize stale tool outputs and keep only active objectives, unresolved failures, and latest verification evidence.",
       compaction: {

@@ -65,5 +65,7 @@ export function setStaticContextStatusThresholds(
     compactionThresholdPercent,
     input.hardLimitPercent,
   );
+  config.infrastructure.contextBudget.modelPhysics.effectiveContextWindowPercent = 1;
+  config.infrastructure.contextBudget.modelPhysics.autoCompactLimitRatio = input.hardLimitPercent;
   return config;
 }

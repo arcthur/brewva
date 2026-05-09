@@ -99,7 +99,7 @@ describe("Context budget manager", () => {
       percent: 0.95,
     });
     expect(pressure.shouldCompact).toBe(true);
-    expect(pressure.reason).toBe("usage_threshold");
+    expect(pressure.reason).toBe("hard_limit");
 
     manager.beginTurn(sessionId, 3);
     nowMs += 1_000;
@@ -109,7 +109,7 @@ describe("Context budget manager", () => {
       percent: 0.95,
     });
     expect(continuedPressure.shouldCompact).toBe(true);
-    expect(continuedPressure.reason).toBe("usage_threshold");
+    expect(continuedPressure.reason).toBe("hard_limit");
   });
 
   test("normalizes percentage-point context usage into ratio", () => {
@@ -143,10 +143,10 @@ describe("Context budget manager", () => {
     expect(injection.accepted).toBe(true);
 
     const highUsage = manager.shouldRequestCompaction(sessionId, {
-      tokens: 258_400,
+      tokens: 255_680,
       contextWindow: 272_000,
-      // 95% in percentage-point form
-      percent: 95,
+      // 94% in percentage-point form
+      percent: 94,
     });
     expect(highUsage.shouldCompact).toBe(true);
     expect(highUsage.reason).toBe("usage_threshold");
@@ -172,7 +172,7 @@ describe("Context budget manager", () => {
       percent: 0.895,
     };
     expect(manager.getEffectiveCompactionThresholdPercent(sessionId, largeWindowUsage)).toBe(0.9);
-    expect(manager.getEffectiveHardLimitPercent(sessionId, largeWindowUsage)).toBe(0.97);
+    expect(manager.getEffectiveHardLimitPercent(sessionId, largeWindowUsage)).toBe(0.95);
     expect(manager.getEffectiveDynamicTailTokenBudget(sessionId, largeWindowUsage)).toBe(3200);
 
     const smallWindowUsage = {
@@ -183,6 +183,33 @@ describe("Context budget manager", () => {
     expect(manager.getEffectiveCompactionThresholdPercent(sessionId, smallWindowUsage)).toBe(0.82);
     expect(manager.getEffectiveHardLimitPercent(sessionId, smallWindowUsage)).toBe(0.94);
     expect(manager.getEffectiveDynamicTailTokenBudget(sessionId, smallWindowUsage)).toBe(1264);
+  });
+
+  test("keeps model physics as hard physical limits instead of a context source", () => {
+    const config = structuredClone(DEFAULT_BREWVA_CONFIG);
+    config.infrastructure.contextBudget.modelPhysics = {
+      effectiveContextWindowPercent: 0.92,
+      autoCompactLimitRatio: 0.84,
+      controllableBaselineTokens: 12_000,
+    };
+    config.infrastructure.contextBudget.thresholds.compactionHeadroomTokens = 0;
+    const manager = createContextBudgetManager(config.infrastructure.contextBudget);
+    const sessionId = "model-physics-budget-1";
+    const usage = {
+      tokens: 84_500,
+      contextWindow: 100_000,
+      percent: 0.845,
+    };
+
+    const policy = manager.getEffectivePolicy(sessionId, usage);
+    expect(policy.effectiveContextWindow).toBe(92_000);
+    expect(policy.autoCompactLimitTokens).toBe(84_000);
+    expect(policy.compactionThresholdPercent).toBe(0.84);
+    expect(policy.hardLimitPercent).toBe(0.92);
+
+    const decision = manager.shouldRequestCompaction(sessionId, usage);
+    expect(decision.shouldCompact).toBe(true);
+    expect(decision.reason).toBe("usage_threshold");
   });
 
   test("falls back to tokens/contextWindow when percent telemetry is missing", () => {
@@ -215,9 +242,9 @@ describe("Context budget manager", () => {
     const sessionId = "adaptive-budget-projected-hard-limit";
 
     const decision = manager.planDynamicTailAdmission(sessionId, "x".repeat(20_000), {
-      tokens: 969_000,
+      tokens: 949_000,
       contextWindow: 1_000_000,
-      percent: 0.969,
+      percent: 0.949,
     });
     expect(decision.accepted).toBe(true);
     expect(decision.finalTokens).toBeLessThanOrEqual(999);
@@ -230,9 +257,9 @@ describe("Context budget manager", () => {
     const sessionId = "adaptive-budget-remaining-headroom";
 
     const decision = manager.planDynamicTailAdmission(sessionId, "x".repeat(20_000), {
-      tokens: 969_500,
+      tokens: 949_500,
       contextWindow: 1_000_000,
-      percent: 0.9695,
+      percent: 0.9495,
     });
     expect(decision.accepted).toBe(true);
     expect(decision.finalTokens).toBeLessThanOrEqual(499);

@@ -62,6 +62,11 @@ interface ModelAwarePromptDispatchSession extends PromptDispatchSession {
   readonly getAvailableThinkingLevels?: () => PromptSessionThinkingLevel[];
   readonly setModel?: (model: PromptSessionModel) => Promise<void> | void;
   readonly setThinkingLevel?: (level: PromptSessionThinkingLevel) => void;
+  readonly requestCompaction?: (request?: {
+    customInstructions?: string;
+    onComplete?: (event: unknown) => void;
+    onError?: (error: Error) => void;
+  }) => void;
   readonly waitForIdle?: () => Promise<void>;
 }
 
@@ -197,6 +202,78 @@ function resolveFallbackThinkingLevel(
     return preferredLevel;
   }
   return available[available.length - 1] ?? "off";
+}
+
+function shouldCompactBeforeModelDownshift(input: {
+  runtime: BrewvaRuntime;
+  sessionId: string;
+  currentModel: PromptSessionModel;
+  targetModel: PromptSessionModel;
+}): boolean {
+  if (
+    input.currentModel.contextWindow <= 0 ||
+    input.targetModel.contextWindow <= 0 ||
+    input.targetModel.contextWindow >= input.currentModel.contextWindow
+  ) {
+    return false;
+  }
+
+  const usage = input.runtime.inspect.context.getUsage(input.sessionId);
+  if (typeof usage?.tokens !== "number" || !Number.isFinite(usage.tokens)) {
+    return false;
+  }
+
+  const targetUsage = {
+    ...usage,
+    contextWindow: input.targetModel.contextWindow,
+    maxOutputTokens: input.targetModel.maxTokens,
+  };
+  const gateStatus = input.runtime.inspect.context.getCompactionGateStatus(
+    input.sessionId,
+    targetUsage,
+  );
+  if (gateStatus.recentCompaction) {
+    return false;
+  }
+  const targetStatus = gateStatus.status;
+  return (
+    targetStatus.forcedCompaction ||
+    targetStatus.compactionAdvised ||
+    targetStatus.predictedOverflow
+  );
+}
+
+async function compactBeforeModelDownshift(input: {
+  runtime: BrewvaRuntime;
+  session: CompactionRecoverySessionLike;
+  controller: InstalledCompactionRecoveryController;
+  sessionId: string;
+  currentModel: PromptSessionModel;
+  targetModel: PromptSessionModel;
+}): Promise<void> {
+  if (!shouldCompactBeforeModelDownshift(input)) {
+    return;
+  }
+
+  const requestCompaction = (input.session as ModelAwarePromptDispatchSession).requestCompaction;
+  if (typeof requestCompaction !== "function") {
+    return;
+  }
+
+  const afterGeneration = input.controller.getRequestedGeneration();
+  await new Promise<void>((resolve, reject) => {
+    try {
+      requestCompaction.call(input.session, {
+        customInstructions:
+          "Compact before switching to a fallback model with a smaller context window. Preserve the current objective, latest user correction, failed attempt, and next step.",
+        onComplete: () => resolve(),
+        onError: (error) => reject(error),
+      });
+    } catch (error) {
+      reject(error);
+    }
+  });
+  await input.controller.waitForSettled(afterGeneration);
 }
 
 async function withTemporaryModel<T>(
@@ -426,6 +503,16 @@ const providerFallbackPolicy: PromptRecoveryPolicy = {
     });
 
     try {
+      if (currentModel) {
+        await compactBeforeModelDownshift({
+          runtime: input.runtime,
+          session: input.session,
+          controller: input.controller,
+          sessionId: input.sessionId,
+          currentModel,
+          targetModel: fallbackModel,
+        });
+      }
       await withTemporaryModel(input.session, fallbackModel, async () => {
         await dispatchProviderFallbackRecoveryPrompt({
           session: input.session,

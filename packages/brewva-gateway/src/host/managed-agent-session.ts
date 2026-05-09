@@ -1581,6 +1581,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
 
     let modelChanged = false;
     if (selection) {
+      await this.compactBeforeModelDownshiftIfNeeded(previousModel, selection.model);
       this.#agent.setModel(selection.model);
       this.applyThinkingLevel(selection.thinkingLevel ?? this.thinkingLevel, {
         persistDefault: false,
@@ -1815,6 +1816,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     }
 
     const previousModel = this.model;
+    await this.compactBeforeModelDownshiftIfNeeded(previousModel, resolved);
     this.#agent.setModel(resolved);
     this.setThinkingLevel(this.thinkingLevel);
 
@@ -1838,6 +1840,66 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
         this.createHostContext(),
       );
     }
+  }
+
+  private shouldCompactBeforeModelDownshift(
+    previousModel: BrewvaSessionModelDescriptor | undefined,
+    nextModel: BrewvaSessionModelDescriptor,
+  ): boolean {
+    if (
+      !this.#runtime ||
+      this.isStreaming ||
+      this.#isCompacting ||
+      !previousModel ||
+      previousModel.contextWindow <= 0 ||
+      nextModel.contextWindow <= 0 ||
+      nextModel.contextWindow >= previousModel.contextWindow
+    ) {
+      return false;
+    }
+
+    const sessionId = this.sessionManager.getSessionId();
+    const usage = this.#runtime.inspect.context.getUsage(sessionId);
+    if (typeof usage?.tokens !== "number" || !Number.isFinite(usage.tokens)) {
+      return false;
+    }
+
+    const targetUsage = {
+      ...usage,
+      contextWindow: nextModel.contextWindow,
+      maxOutputTokens: nextModel.maxTokens,
+    };
+    const gateStatus = this.#runtime.inspect.context.getCompactionGateStatus(
+      sessionId,
+      targetUsage,
+    );
+    if (gateStatus.recentCompaction) {
+      return false;
+    }
+    const targetStatus = gateStatus.status;
+    return (
+      targetStatus.forcedCompaction ||
+      targetStatus.compactionAdvised ||
+      targetStatus.predictedOverflow
+    );
+  }
+
+  private async compactBeforeModelDownshiftIfNeeded(
+    previousModel: BrewvaSessionModelDescriptor | undefined,
+    nextModel: BrewvaSessionModelDescriptor,
+  ): Promise<void> {
+    if (!this.shouldCompactBeforeModelDownshift(previousModel, nextModel)) {
+      return;
+    }
+
+    await new Promise<void>((settleCompaction, rejectCompaction) => {
+      this.requestCompaction({
+        customInstructions:
+          "Compact before switching to a model with a smaller context window. Preserve the current objective, latest user correction, failed attempt, and next step.",
+        onComplete: () => settleCompaction(),
+        onError: (error) => rejectCompaction(error),
+      });
+    });
   }
 
   setThinkingLevel(level: BrewvaPromptThinkingLevel): void {
@@ -2380,7 +2442,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     return eventForListeners;
   }
 
-  private requestCompaction(request?: BrewvaCompactionRequest): void {
+  requestCompaction(request?: BrewvaCompactionRequest): void {
     if (this.#isCompacting || this.#pendingCompactionRequest) {
       request?.onError?.(new Error("Hosted compaction is already in progress."));
       return;

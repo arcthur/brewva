@@ -126,6 +126,21 @@
                 "enabled": {
                   "type": "boolean"
                 },
+                "modelPhysics": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "autoCompactLimitRatio": {
+                      "type": "number"
+                    },
+                    "controllableBaselineTokens": {
+                      "type": "number"
+                    },
+                    "effectiveContextWindowPercent": {
+                      "type": "number"
+                    }
+                  }
+                },
                 "predictiveTurnGrowth": {
                   "type": "object",
                   "additionalProperties": false,

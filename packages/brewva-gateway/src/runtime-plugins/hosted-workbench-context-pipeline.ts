@@ -26,6 +26,18 @@ import { buildPromptStabilityObservation } from "./prompt-stability.js";
 import { buildReadPathRecoveryBlocks } from "./read-path-recovery.js";
 
 export const HOSTED_WORKBENCH_CONTEXT_MESSAGE_TYPE = "brewva-workbench-context";
+const COMPACTION_NUDGE_FULL_EVERY_TURNS = 5;
+
+type CompactionNudgeMode = "full" | "brief";
+
+interface CompactionNudgeState {
+  key: string;
+  firstTurn: number;
+  lastTurn: number;
+  renderCount: number;
+}
+
+const compactionNudgeStateBySession = new Map<string, CompactionNudgeState>();
 
 export interface HostedContextSessionManager {
   getLeafId?: () => string | null | undefined;
@@ -276,33 +288,88 @@ function observePromptStability(
   });
 }
 
-function buildCompactionGateBlock(
-  status: ContextCompactionGateStatus["status"],
-): HostedContextBlock {
-  const content = [
-    "[ContextCompactionGate]",
-    "Context has reached the forced compaction limit.",
-    `usage_ratio: ${status.usageRatio ?? "unknown"}`,
-    `hard_limit_ratio: ${status.hardLimitRatio}`,
-    "Call tool `workbench_compact` immediately before any other tool call.",
-    "Do not run `workbench_compact` via `exec` or shell.",
-  ].join("\n");
-  return makeHostedContextBlock("compaction-gate", content)!;
+function resolveCompactionNudgeMode(input: {
+  sessionId: string;
+  turn: number;
+  gateRequired: boolean;
+  pendingCompactionReason: string | null;
+}): CompactionNudgeMode | null {
+  const key = input.gateRequired
+    ? "gate:required"
+    : input.pendingCompactionReason
+      ? `advisory:${input.pendingCompactionReason}`
+      : null;
+  if (!key) {
+    compactionNudgeStateBySession.delete(input.sessionId);
+    return null;
+  }
+
+  const previous = compactionNudgeStateBySession.get(input.sessionId);
+  const next =
+    previous?.key === key
+      ? {
+          ...previous,
+          lastTurn: input.turn,
+          renderCount: previous.renderCount + 1,
+        }
+      : {
+          key,
+          firstTurn: input.turn,
+          lastTurn: input.turn,
+          renderCount: 1,
+        };
+  compactionNudgeStateBySession.set(input.sessionId, next);
+
+  if (next.renderCount === 1 || (next.renderCount - 1) % COMPACTION_NUDGE_FULL_EVERY_TURNS === 0) {
+    return "full";
+  }
+  return "brief";
+}
+
+function buildCompactionGateBlock(input: {
+  status: ContextCompactionGateStatus["status"];
+  mode: CompactionNudgeMode;
+}): HostedContextBlock {
+  const content =
+    input.mode === "brief"
+      ? [
+          "[ContextCompactionGate]",
+          "required: yes",
+          `tokens_until_forced_compact: ${input.status.tokensUntilForcedCompact ?? "unknown"}`,
+          "action: call `workbench_compact` now.",
+        ]
+      : [
+          "[ContextCompactionGate]",
+          "Context has reached the forced compaction limit.",
+          `usage_ratio: ${input.status.usageRatio ?? "unknown"}`,
+          `hard_limit_ratio: ${input.status.hardLimitRatio}`,
+          "Call tool `workbench_compact` immediately before any other tool call.",
+          "Do not run `workbench_compact` via `exec` or shell.",
+        ];
+  return makeHostedContextBlock("compaction-gate", content.join("\n"))!;
 }
 
 function buildCompactionAdvisoryBlock(input: {
   reason: string;
   status: ContextCompactionGateStatus["status"];
+  mode: CompactionNudgeMode;
 }): HostedContextBlock {
-  const content = [
-    "[ContextCompactionAdvisory]",
-    `pending_compaction_reason: ${input.reason}`,
-    `usage_ratio: ${input.status.usageRatio ?? "unknown"}`,
-    `compact_soon_threshold_ratio: ${input.status.compactionThresholdRatio}`,
-    "Prefer `workbench_compact` before long tool chains or broad repository scans.",
-    "If no further tool work is needed, answer directly instead of compacting first.",
-  ].join("\n");
-  return makeHostedContextBlock("compaction-advisory", content)!;
+  const content =
+    input.mode === "brief"
+      ? [
+          "[ContextCompactionAdvisory]",
+          `pending_compaction_reason: ${input.reason}`,
+          "action: prefer `workbench_compact` before another long tool chain.",
+        ]
+      : [
+          "[ContextCompactionAdvisory]",
+          `pending_compaction_reason: ${input.reason}`,
+          `usage_ratio: ${input.status.usageRatio ?? "unknown"}`,
+          `compact_soon_threshold_ratio: ${input.status.compactionThresholdRatio}`,
+          "Prefer `workbench_compact` before long tool chains or broad repository scans.",
+          "If no further tool work is needed, answer directly instead of compacting first.",
+        ];
+  return makeHostedContextBlock("compaction-advisory", content.join("\n"))!;
 }
 
 function buildWorkbenchBlock(
@@ -350,7 +417,13 @@ function buildContextStatusBlock(
     "[Context Status]",
     `tokens_used: ${status.tokensUsed ?? "unknown"}`,
     `tokens_total: ${status.tokensTotal}`,
+    `effective_tokens_total: ${status.effectiveTokensTotal ?? "unknown"}`,
     `tokens_remaining: ${status.tokensRemaining ?? "unknown"}`,
+    `auto_compact_limit_tokens: ${status.autoCompactLimitTokens ?? "unknown"}`,
+    `controllable_tokens_remaining: ${status.controllableTokensRemaining ?? "unknown"}`,
+    `controllable_context_remaining_ratio: ${
+      status.controllableContextRemainingRatio ?? "unknown"
+    }`,
     `tokens_until_forced_compact: ${status.tokensUntilForcedCompact ?? "unknown"}`,
     `predicted_turn_growth_tokens: ${status.predictedTurnGrowthTokens}`,
     `tokens_until_predicted_overflow: ${status.tokensUntilPredictedOverflow ?? "unknown"}`,
@@ -381,6 +454,7 @@ function buildCapabilityBlocks(capabilityView: BuildCapabilityViewResult): Hoste
 function buildHostedDynamicTail(input: {
   runtime: BrewvaHostedRuntimePort;
   sessionId: string;
+  turn: number;
   usage?: ContextBudgetUsage;
   gateStatus: ContextCompactionGateStatus;
   pendingCompactionReason: string | null;
@@ -391,13 +465,25 @@ function buildHostedDynamicTail(input: {
     delegationStore: input.delegationStore,
     sessionId: input.sessionId,
   });
+  const compactionNudgeMode = resolveCompactionNudgeMode({
+    sessionId: input.sessionId,
+    turn: input.turn,
+    gateRequired: input.gateStatus.required,
+    pendingCompactionReason: input.pendingCompactionReason,
+  });
   return renderHostedContextBlocks({
     blocks: [
-      input.gateStatus.required ? buildCompactionGateBlock(input.gateStatus.status) : null,
+      input.gateStatus.required && compactionNudgeMode
+        ? buildCompactionGateBlock({
+            status: input.gateStatus.status,
+            mode: compactionNudgeMode,
+          })
+        : null,
       !input.gateStatus.required && input.pendingCompactionReason
         ? buildCompactionAdvisoryBlock({
             reason: input.pendingCompactionReason,
             status: input.gateStatus.status,
+            mode: compactionNudgeMode ?? "full",
           })
         : null,
       buildContextStatusBlock(input.runtime, {
@@ -465,6 +551,7 @@ export function createHostedWorkbenchContextPipeline(
       const rendered = buildHostedDynamicTail({
         runtime,
         sessionId: input.sessionId,
+        turn,
         usage: input.usage,
         gateStatus,
         pendingCompactionReason,

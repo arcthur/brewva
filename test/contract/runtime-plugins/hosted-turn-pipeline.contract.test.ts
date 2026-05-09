@@ -303,6 +303,48 @@ describe("hosted turn pipeline", () => {
     expect(calls.observedContext[0]?.sessionId).toBe("hosted-before-start");
   });
 
+  test("throttles repeated compaction nudges without hiding the action", async () => {
+    const { api, handlers } = createMockRuntimePluginApi();
+    const { runtime } = createRuntimeFixture();
+    await createHostedTurnPipeline({
+      runtime,
+      registerTools: false,
+    }).register(api);
+
+    const firstResults = await invokeHandlersAsync<{
+      message?: { content?: string };
+    }>(
+      handlers,
+      "before_agent_start",
+      {
+        type: "before_agent_start",
+        prompt: "continue task",
+        systemPrompt: "base prompt",
+      },
+      createSessionContext("hosted-nudge-throttle"),
+    );
+    const secondResults = await invokeHandlersAsync<{
+      message?: { content?: string };
+    }>(
+      handlers,
+      "before_agent_start",
+      {
+        type: "before_agent_start",
+        prompt: "continue task again",
+        systemPrompt: "base prompt",
+      },
+      createSessionContext("hosted-nudge-throttle"),
+    );
+
+    const firstContent = firstResults.find((result) => result?.message?.content)?.message?.content;
+    const secondContent = secondResults.find((result) => result?.message?.content)?.message
+      ?.content;
+    expect(firstContent).toContain("Context has reached the forced compaction limit.");
+    expect(secondContent).toContain("[ContextCompactionGate]");
+    expect(secondContent).toContain("action: call `workbench_compact` now.");
+    expect(secondContent).not.toContain("Context has reached the forced compaction limit.");
+  });
+
   test("runs local pre_admission hooks before hosted tool-surface resolution", async () => {
     const { api, handlers } = createMockRuntimePluginApi();
     const { runtime, calls } = createRuntimeFixture();

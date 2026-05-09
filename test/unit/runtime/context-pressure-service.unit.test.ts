@@ -90,7 +90,7 @@ function createPressureHarness(input: {
     },
     requestCompaction(
       sessionId: string,
-      reason: "usage_threshold" | "hard_limit",
+      reason: "usage_threshold" | "hard_limit" | "predicted_overflow",
       usage?: ContextBudgetUsage,
     ) {
       requestContextCompaction({
@@ -190,6 +190,42 @@ describe("context status derivation", () => {
         tokensUntilPredictedOverflow: 0,
         predictedOverflow: true,
         forcedCompaction: false,
+      }),
+    );
+  });
+
+  test("exposes effective and controllable context headroom from model physics", () => {
+    const config = structuredClone(DEFAULT_BREWVA_CONFIG);
+    config.infrastructure.contextBudget.enabled = true;
+    config.infrastructure.contextBudget.modelPhysics = {
+      effectiveContextWindowPercent: 0.95,
+      autoCompactLimitRatio: 0.9,
+      controllableBaselineTokens: 12_000,
+    };
+
+    const budget = new ContextBudgetManager(config.infrastructure.contextBudget);
+    const service = createPressureHarness({
+      config,
+      contextBudget: budget,
+      getCurrentTurn: () => 1,
+      recordEvent: () => undefined as BrewvaEventRecord | undefined,
+    });
+
+    const status = service.getContextCompactionGateStatus("physics-session", {
+      tokens: 20_000,
+      contextWindow: 100_000,
+      percent: 0.2,
+    }).status;
+
+    expect(status).toEqual(
+      expect.objectContaining({
+        effectiveTokensTotal: 95_000,
+        autoCompactLimitTokens: 90_000,
+        controllableBaselineTokens: 12_000,
+        controllableTokensUsed: 8_000,
+        controllableTokensTotal: 83_000,
+        controllableTokensRemaining: 75_000,
+        controllableContextRemainingRatio: 75_000 / 83_000,
       }),
     );
   });

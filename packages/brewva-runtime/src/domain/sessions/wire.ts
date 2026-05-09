@@ -52,7 +52,14 @@ export type SessionWireStatusState =
 export interface ContextStatusView {
   tokensUsed: number;
   tokensTotal: number;
+  effectiveTokensTotal?: number;
   tokensRemaining: number;
+  autoCompactLimitTokens?: number;
+  controllableBaselineTokens?: number;
+  controllableTokensUsed?: number;
+  controllableTokensTotal?: number;
+  controllableTokensRemaining?: number;
+  controllableContextRemainingRatio?: number | null;
   tokensUntilForcedCompact: number;
   predictedTurnGrowthTokens: number;
   tokensUntilPredictedOverflow: number;
