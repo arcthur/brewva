@@ -143,6 +143,8 @@ function updateCommandIntent(
       return handled({ effects: [{ type: "overlay.openSessions" }] });
     case "session.inspect":
       return handled({ effects: [{ type: "overlay.openInspect" }] });
+    case "session.transcript":
+      return handled({ effects: [{ type: "transcript.externalPager" }] });
     case "session.lineage":
       return handled({ effects: [{ type: "overlay.openLineage" }] });
     case "session.queue":

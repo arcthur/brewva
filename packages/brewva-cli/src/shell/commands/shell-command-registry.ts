@@ -69,6 +69,13 @@ const builtInShellCommands: readonly ShellCommand[] = [
     keybinding: { key: "i", ctrl: true, meta: false, shift: false },
   },
   {
+    id: "session.transcript",
+    title: "Transcript snapshot",
+    description: "Open a read-only transcript snapshot in the external pager.",
+    category: "Session",
+    slash: { name: "transcript" },
+  },
+  {
     id: "session.lineage",
     title: "Lineage tree",
     description: "Browse and checkout session lineage branches.",

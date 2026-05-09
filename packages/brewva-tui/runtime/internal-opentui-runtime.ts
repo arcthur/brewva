@@ -1,6 +1,8 @@
 import { createCliRenderer, getDataPaths } from "@opentui/core";
+import { createTestRenderer } from "@opentui/core/testing";
 import {
   createElement as createSolidElement,
+  createScrollbackWriter,
   insert as solidInsert,
   render as solidRender,
   spread as solidSpread,
@@ -14,6 +16,7 @@ import type {
   OpenTuiRenderer,
   OpenTuiRoot,
   OpenTuiScrollBoxHandle,
+  OpenTuiScrollbackRenderOptions,
   OpenTuiSmokeOptions,
   OpenTuiSmokeResult,
   OpenTuiScreenMode,
@@ -244,6 +247,84 @@ export async function openTuiTestRender(
   options: OpenTuiTestRenderOptions,
 ): Promise<OpenTuiTestRenderSetup> {
   return await solidTestRender(node, options);
+}
+
+function normalizeScrollbackDimension(value: number, axis: "width" | "height"): number {
+  if (!Number.isFinite(value)) {
+    throw new Error(`OpenTUI scrollback render requires a finite ${axis}.`);
+  }
+  return Math.max(1, Math.trunc(value));
+}
+
+function normalizeScrollbackFrame(frame: string, lineCount: number): string[] {
+  const lines = frame
+    .split("\n")
+    .slice(0, lineCount)
+    .map((line) => line.replace(/\s+$/u, ""));
+  while (lines.length > 0 && lines[lines.length - 1] === "") {
+    lines.pop();
+  }
+  return lines;
+}
+
+export async function renderOpenTuiScrollbackLines(
+  node: OpenTuiSolidNode,
+  options: OpenTuiScrollbackRenderOptions,
+): Promise<string[]> {
+  const width = normalizeScrollbackDimension(options.width, "width");
+  const initialHeight =
+    options.height === undefined ? 1 : normalizeScrollbackDimension(options.height, "height");
+  const testSetup = await createTestRenderer({
+    width,
+    height: initialHeight,
+    testing: true,
+    consoleMode: "disabled",
+    screenMode: "main-screen",
+  });
+  const writer = createScrollbackWriter(() => node() as never, { width });
+  let snapshot:
+    | ({
+        height?: number;
+        teardown?(): void;
+        root: { id?: string | number; destroyRecursively?(): void };
+      } & Record<string, unknown>)
+    | undefined;
+  try {
+    const producedSnapshot = writer({
+      width,
+      widthMethod: testSetup.renderer.widthMethod,
+      tailColumn: 0,
+      renderContext: testSetup.renderer,
+    });
+    snapshot = producedSnapshot as unknown as typeof snapshot;
+    const renderedHeight = normalizeScrollbackDimension(
+      producedSnapshot.height ?? initialHeight,
+      "height",
+    );
+    if (testSetup.renderer.height !== renderedHeight) {
+      testSetup.resize(width, renderedHeight);
+    }
+    (
+      testSetup.renderer.root as unknown as {
+        add(node: unknown): void;
+      }
+    ).add(producedSnapshot.root);
+    await testSetup.renderOnce();
+    await new Promise((resolve) => setTimeout(resolve, 16));
+    await testSetup.renderOnce();
+    return normalizeScrollbackFrame(testSetup.captureCharFrame(), renderedHeight);
+  } finally {
+    if (snapshot?.root?.id !== undefined) {
+      (
+        testSetup.renderer.root as unknown as {
+          remove(id: string | number): void;
+        }
+      ).remove(snapshot.root.id);
+    }
+    snapshot?.teardown?.();
+    snapshot?.root?.destroyRecursively?.();
+    testSetup.renderer.destroy();
+  }
 }
 
 export function createOpenTuiSolidElement(

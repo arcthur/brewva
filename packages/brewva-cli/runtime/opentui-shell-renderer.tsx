@@ -17,6 +17,7 @@ import type { CliShellRuntimeOptions } from "../src/shell/runtime.js";
 import type { CliShellSessionBundle } from "../src/shell/types.js";
 import { BrewvaOpenTuiShell } from "./shell/app.js";
 import { createToolRenderCache, type ToolRenderCache } from "./shell/tool-render.js";
+import { renderCliTranscriptScrollbackLines } from "./shell/transcript-scrollback.js";
 
 export { BrewvaOpenTuiShell } from "./shell/app.js";
 
@@ -66,6 +67,29 @@ class CliInteractiveOpenTuiShellRuntime {
     }
   }
 
+  async openExternalTranscriptPager(): Promise<boolean> {
+    const width = Math.max(40, (this.#renderer?.width ?? process.stdout.columns ?? 120) - 4);
+    const lines = await renderCliTranscriptScrollbackLines({ runtime: this.shellRuntime, width });
+    if (lines.length === 0) {
+      this.shellRuntime.ui.notify("The current session transcript is empty.", "info");
+      return true;
+    }
+    const pager = getExternalPagerCommand();
+    if (!pager) {
+      return false;
+    }
+    this.unmount();
+    try {
+      return await openExternalPagerWithShell(
+        pager,
+        `Transcript ${this.shellRuntime.getSessionIdentity().sessionId}`,
+        lines,
+      );
+    } finally {
+      await this.mount();
+    }
+  }
+
   private async mount(): Promise<void> {
     this.#renderer = await createOpenTuiCliRenderer();
     await render(
@@ -98,6 +122,9 @@ export async function renderCliInteractiveOpenTuiShell(
     },
     async openExternalPager(title, lines) {
       return (await interactiveRuntime?.openExternalPager(title, lines)) ?? false;
+    },
+    async openExternalTranscriptPager() {
+      return (await interactiveRuntime?.openExternalTranscriptPager()) ?? false;
     },
   });
   interactiveRuntime = new CliInteractiveOpenTuiShellRuntime(shellRuntime);

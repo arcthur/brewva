@@ -121,6 +121,11 @@ export interface OpenTuiTestRenderOptions {
   onDestroy?(): void;
 }
 
+export interface OpenTuiScrollbackRenderOptions {
+  width: number;
+  height?: number;
+}
+
 const UNSUPPORTED_RUNTIME_MESSAGE =
   "OpenTUI runtime is only available from Bun source execution or packaged Brewva binaries; direct Node.js dist execution cannot load the native interactive runtime.";
 
@@ -192,6 +197,13 @@ export async function openTuiTestRender(
   _node: OpenTuiSolidNode,
   _options: OpenTuiTestRenderOptions,
 ): Promise<OpenTuiTestRenderSetup> {
+  throw createUnsupportedRuntimeError();
+}
+
+export async function renderOpenTuiScrollbackLines(
+  _node: OpenTuiSolidNode,
+  _options: OpenTuiScrollbackRenderOptions,
+): Promise<string[]> {
   throw createUnsupportedRuntimeError();
 }
 

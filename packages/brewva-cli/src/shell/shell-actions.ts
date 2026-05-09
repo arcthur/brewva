@@ -116,6 +116,7 @@ export type ShellEffect =
   | { type: "overlay.openInspect" }
   | { type: "overlay.openNotifications" }
   | { type: "pager.externalActive" }
+  | { type: "transcript.externalPager" }
   | { type: "transcript.navigate"; kind: "pageUp" | "pageDown" | "top" | "bottom" }
   | { type: "session.projectEvent"; event: BrewvaPromptSessionEvent }
   | { type: "session.abort"; notification?: string }

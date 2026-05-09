@@ -31,8 +31,10 @@ Key ideas:
 - streaming presentation is a renderer concern, not a runtime authority change
 - slash completion starts with `/`
 - workspace path completion starts with `@`
-- `/model`, `/inspect`, `/inbox`, `/undo`, `/rewind`, `/redo`, `/answer`, and
-  `/theme` are interactive veneers over runtime or host state
+- `/model`, `/inspect`, `/transcript`, `/inbox`, `/undo`, `/rewind`, `/redo`,
+  `/answer`, and `/theme` are interactive veneers over runtime or host state
+- `/transcript` opens a read-only snapshot of the current session transcript in
+  the configured external pager
 
 Keyboard details are in `docs/reference/commands/interactive.md`.
 

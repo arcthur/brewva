@@ -153,6 +153,21 @@ describe("shell runtime architecture", () => {
     });
   });
 
+  test("shell update routes transcript snapshot commands to the transcript pager effect", () => {
+    expect(
+      updateShellIntent(createUpdateContext(), {
+        type: "command.invoke",
+        commandId: "session.transcript",
+        args: "",
+        source: "slash",
+      }),
+    ).toEqual({
+      handled: true,
+      actions: [],
+      effects: [{ type: "transcript.externalPager" }],
+    });
+  });
+
   test("shell update opens operator overlays through data actions", () => {
     const context = createUpdateContext({
       operatorSnapshot: {

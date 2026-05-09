@@ -20,9 +20,9 @@
     }
   },
   "dependencies": {
-    "@opentui/core": "0.1.100",
-    "@opentui/solid": "0.1.100",
-    "get-east-asian-width": "^1.5.0",
+    "@opentui/core": "0.2.6",
+    "@opentui/solid": "0.2.6",
+    "get-east-asian-width": "^1.6.0",
     "solid-js": "1.9.12"
   },
   "engines": {

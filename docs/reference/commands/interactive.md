@@ -35,11 +35,15 @@ Stable interactive slash commands include:
 - `/model`
 - `/inbox`
 - `/inspect`
+- `/transcript`
 - `/undo`
 - `/rewind`
 - `/redo`
 - `/answer <question-id> <answer>`
 - `/theme`
+
+`/transcript` opens a read-only snapshot of the current session transcript in the
+configured external pager.
 
 Slash commands are presentation and control-plane veneers. Runtime receipts and
 inspection state remain owned by the runtime surfaces they call.

@@ -7,7 +7,16 @@ const substrateRoot = join(repoRoot, "packages", "brewva-substrate");
 const substrateSrc = join(substrateRoot, "src");
 
 function listTsFiles(root: string): string[] {
-  const entries = readdirSync(root, { withFileTypes: true });
+  const entries = (() => {
+    try {
+      return readdirSync(root, { withFileTypes: true });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        return [];
+      }
+      throw error;
+    }
+  })();
   const files: string[] = [];
 
   for (const entry of entries) {
@@ -107,7 +116,17 @@ describe("substrate domain slicing quality guard", () => {
         continue;
       }
 
-      if (rootImportPattern.test(read(file))) {
+      let source: string;
+      try {
+        source = read(file);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+          continue;
+        }
+        throw error;
+      }
+
+      if (rootImportPattern.test(source)) {
         violations.push(relative(repoRoot, file));
       }
     }

@@ -262,13 +262,21 @@ describe("shell command provider", () => {
     });
     expect(provider.slashCommands().map((command) => command.id)).toContain("agent.model");
     expect(provider.slashCommands().map((command) => command.id)).toContain("session.lineage");
+    expect(provider.slashCommands().map((command) => command.id)).toContain("session.transcript");
     expect(provider.createSlashCommandIntent("lineage", { args: "", source: "slash" })).toEqual({
       type: "command.invoke",
       commandId: "session.lineage",
       args: "",
       source: "slash",
     });
+    expect(provider.createSlashCommandIntent("transcript", { args: "", source: "slash" })).toEqual({
+      type: "command.invoke",
+      commandId: "session.transcript",
+      args: "",
+      source: "slash",
+    });
     expect(provider.slashCommands().map((command) => command.id)).toContain("operator.inbox");
+    expect(provider.helpCommands().map((command) => command.id)).toContain("session.transcript");
     expect(provider.helpCommands().map((command) => command.id)).not.toContain("agent.connect");
     expect(provider.helpCommands().map((command) => command.id)).not.toContain("session.queue");
     expect(provider.helpCommands().map((command) => command.id)).not.toContain("view.thinking");

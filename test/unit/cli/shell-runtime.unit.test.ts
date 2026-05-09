@@ -69,6 +69,7 @@ function createFakeBundle(
   options: {
     promptHandler?: (text: string) => Promise<void>;
     sessionId?: string;
+    transcriptSeed?: unknown[];
     replaySessions?: BrewvaReplaySession[];
     sessionWireBySessionId?: Record<string, SessionWireFrame[]>;
     models?: BrewvaSessionModelDescriptor[];
@@ -176,7 +177,7 @@ function createFakeBundle(
         return null;
       },
       buildSessionContext() {
-        return { messages: [] };
+        return { messages: options.transcriptSeed ?? [] };
       },
     },
     settingsManager: {
@@ -4470,6 +4471,54 @@ describe("shell runtime", () => {
       },
     ]);
     expect(editorCalls).toEqual([]);
+    runtime.dispose();
+  });
+
+  test("transcript snapshot command opens the external pager via the runtime hook", async () => {
+    const { bundle } = createFakeBundle({
+      transcriptSeed: [
+        {
+          role: "user",
+          content: [{ type: "text", text: "Show the current plan." }],
+        },
+      ],
+    });
+    const transcriptPagerCalls: number[] = [];
+    const runtime = new CliShellRuntime(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+      async openExternalTranscriptPager() {
+        transcriptPagerCalls.push(1);
+        return true;
+      },
+    });
+
+    const handled = await invokePaletteCommand(runtime, "session.transcript");
+
+    expect(handled).toBe(true);
+    expect(transcriptPagerCalls).toEqual([1]);
+    runtime.dispose();
+  });
+
+  test("transcript snapshot command warns when the transcript pager is unavailable", async () => {
+    const { bundle } = createFakeBundle();
+    const runtime = new CliShellRuntime(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+      async openExternalTranscriptPager() {
+        return false;
+      },
+    });
+
+    const handled = await invokePaletteCommand(runtime, "session.transcript");
+
+    expect(handled).toBe(true);
+    expect(runtime.getViewState().notifications.at(-1)).toMatchObject({
+      level: "warning",
+      message: "No external pager is available for the current shell.",
+    });
     runtime.dispose();
   });
 

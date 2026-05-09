@@ -101,6 +101,7 @@ export interface CliShellRuntimeOptions {
   onBundleChange?(bundle: CliShellSessionBundle): void;
   openExternalEditor?(title: string, prefill?: string): Promise<string | undefined>;
   openExternalPager?(title: string, lines: readonly string[]): Promise<boolean>;
+  openExternalTranscriptPager?(): Promise<boolean>;
   operatorPollIntervalMs?: number;
   promptStore?: CliShellPromptStorePort;
   completionAgents?: readonly ShellCompletionAgent[] | (() => readonly ShellCompletionAgent[]);
@@ -1117,6 +1118,13 @@ export class CliShellRuntime {
       case "pager.externalActive":
         await this.openActivePagerExternally();
         return;
+      case "transcript.externalPager": {
+        const opened = await this.openExternalTranscriptPager();
+        if (!opened && !this.#disposed) {
+          this.ui.notify("No external pager is available for the current shell.", "warning");
+        }
+        return;
+      }
       case "transcript.navigate":
         this.requestTranscriptNavigation(effect.kind);
         return;
@@ -1696,5 +1704,12 @@ export class CliShellRuntime {
       return false;
     }
     return await openExternalPagerWithShell(pager, title, lines);
+  }
+
+  private async openExternalTranscriptPager(): Promise<boolean> {
+    if (this.options.openExternalTranscriptPager) {
+      return await this.options.openExternalTranscriptPager();
+    }
+    return false;
   }
 }
