@@ -55,6 +55,7 @@
     "test:property:fuzz": "BREWVA_PROPERTY_MODE=fuzz bun run script/run-property-tests.ts",
     "test:quality": "bun test test/quality --timeout 600000",
     "test:system": "bun test test/system --timeout 600000",
+    "test:tui": "CI= bun test test/unit/cli/opentui-shell-renderer.unit.test.ts --timeout 600000",
     "test:unit": "bun test test/unit --timeout 600000",
     "test:webhook-smoke": "bun run script/smoke-telegram-webhook-edge.ts",
     "test:webhook-smoke:live": "bun run script/smoke-telegram-webhook-live.ts",
