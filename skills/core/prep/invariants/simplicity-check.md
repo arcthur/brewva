@@ -13,6 +13,10 @@ Rules:
 
 - Normalize requested and proposed feature labels by trimming and lowercasing.
 - Any proposed feature not present in `requested_features` is speculative.
+- Treat unrequested configurability, option surfaces, and extension seams as
+  speculative features.
+- Add a flag for impossible scenario error handling unless an existing contract
+  or observed failure makes the scenario possible.
 - Maximum new abstractions is `max(requested_features.length * 2, 1)`.
 - `over_abstracted` is true when `abstraction_count` exceeds the maximum.
 - Add a flag when `estimated_line_count > 200`; this is a warning, not a hard block by itself.

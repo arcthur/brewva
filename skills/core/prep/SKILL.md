@@ -79,14 +79,19 @@ NO CODE BEFORE TARGETS, SIMPLICITY VERDICT, AND SUCCESS CRITERIA ARE EXPLICIT
 
 ### Phase 1: Resolve ambiguity
 
-State every assumption you are making about the request. Name everything unclear.
+State every assumption you are making about the request. Name everything
+unclear. Do not choose silently when multiple interpretations would change the
+implementation target or success criteria.
 
 **If the request has multiple valid interpretations**: Stop. Present them. Do not pick silently.
 **If the request is unambiguous**: Proceed to Phase 2.
 
 ### Phase 2: Apply simplicity check
 
-Identify the proposed approach: what files change, roughly how many lines, how many new abstractions, which features were requested vs. proposed.
+Identify the proposed approach: what files change, roughly how many lines, how
+many new abstractions, which features were requested vs. proposed. Count
+unrequested configurability and impossible-scenario handling as proposed
+features unless the request or existing contract requires them.
 
 Evaluate the approach with `invariants/simplicity-check.md`. This skill is
 read-only; use host-provided simplicity-check output when already available,
@@ -97,7 +102,9 @@ otherwise apply the invariant manually.
 
 ### Phase 3: Declare targets and success criteria
 
-Enumerate exact files or paths that need to change — nothing more. For each, explain the connection to the request. Define at least one concrete verifiable check that proves the task is done.
+Enumerate exact files or paths that need to change — nothing more. For each,
+explain the connection to the request. Define at least one success criterion as
+a runnable command or observable check before editing.
 
 **If a target file has no direct connection to the request**: Remove it. If you cannot remove it, stop and escalate to `plan`.
 **If success criteria cannot be stated as a runnable command or observable check**: Stop. The task needs more definition before coding begins.

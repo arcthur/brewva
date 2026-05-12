@@ -229,4 +229,26 @@ describe("skill layout quality", () => {
     expect(occurrences).toEqual([]);
     expect(referenceContent).toContain("Violating the letter");
   });
+
+  it("keeps coding discipline guardrails in prep and implementation skills", () => {
+    const repoRoot = resolve(import.meta.dirname, "../../..");
+    const prep = readFileSync(resolve(repoRoot, "skills/core/prep/SKILL.md"), "utf8");
+    const simplicity = readFileSync(
+      resolve(repoRoot, "skills/core/prep/invariants/simplicity-check.md"),
+      "utf8",
+    );
+    const implementation = readFileSync(
+      resolve(repoRoot, "skills/core/implementation/SKILL.md"),
+      "utf8",
+    );
+
+    expect(prep).toContain("Do not choose silently");
+    expect(prep).toContain("runnable command or observable check before editing");
+    expect(simplicity).toContain("unrequested configurability");
+    expect(simplicity).toContain("impossible scenario");
+    expect(implementation).toMatch(
+      /Every\s+changed\s+file\s+must\s+trace\s+to\s+`implementation_targets`/,
+    );
+    expect(implementation).toContain("pre-existing dead code");
+  });
 });

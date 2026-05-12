@@ -96,7 +96,10 @@ Respect `execution_mode_hint` when present. Override it if actual scope disagree
 
 ### Phase 2: Apply the change
 
-Read before editing. Keep the diff local. Avoid incidental cleanup.
+Read before editing. Keep the diff local. Avoid incidental cleanup. Every
+changed file must trace to `implementation_targets`, required verification, or
+cleanup made necessary by this change. Mention pre-existing dead code instead
+of deleting it unless this change made it orphaned.
 
 Run `scripts/check_scope_drift.py` with current `implementation_targets` and `files_changed`.
 
