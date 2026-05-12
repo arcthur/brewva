@@ -197,12 +197,12 @@ describe("runtime promoted architecture guard", () => {
     expect(governanceRegistrarSource).not.toContain("../services/proposal-admission.js");
     expect(workRegistrarSource).toContain("../domain/task/api.js");
     expect(workRegistrarSource).toContain("../domain/skills/api.js");
-    expect(workRegistrarSource).toContain("../domain/truth/api.js");
+    expect(workRegistrarSource).toContain("../domain/claim/api.js");
     expect(workRegistrarSource).toContain("../domain/ledger/api.js");
     expect(workRegistrarSource).toContain("../domain/cost/api.js");
     expect(workRegistrarSource).not.toContain("../domain/task/task.js");
     expect(workRegistrarSource).not.toContain("../domain/skills/skill-lifecycle.js");
-    expect(workRegistrarSource).not.toContain("../domain/truth/truth.js");
+    expect(workRegistrarSource).not.toContain("../domain/claim/claim.js");
     expect(workRegistrarSource).not.toContain("../domain/ledger/ledger.js");
     expect(workRegistrarSource).not.toContain("../domain/cost/cost.js");
     expect(contextRegistrarSource).toContain("../domain/context/api.js");
@@ -221,7 +221,7 @@ describe("runtime promoted architecture guard", () => {
     expect(surfacesSource).toContain("../domain/reasoning/api.js");
     expect(surfacesSource).toContain("../domain/tape/api.js");
     expect(surfacesSource).toContain("../domain/task/api.js");
-    expect(surfacesSource).toContain("../domain/truth/api.js");
+    expect(surfacesSource).toContain("../domain/claim/api.js");
     expect(surfacesSource).toContain("../domain/events/api.js");
     expect(surfacesSource).toContain("../domain/ledger/api.js");
     expect(surfacesSource).toContain("../domain/schedule/api.js");
@@ -244,7 +244,7 @@ describe("runtime promoted architecture guard", () => {
     expect(surfacesSource).not.toContain("bindMethods(methodGroups.proposals, [");
     expect(surfacesSource).not.toContain("bindMethods(methodGroups.reasoning, [");
     expect(surfacesSource).not.toContain("bindMethods(methodGroups.task, [");
-    expect(surfacesSource).not.toContain("bindMethods(methodGroups.truth, [");
+    expect(surfacesSource).not.toContain("bindMethods(methodGroups.claim, [");
     expect(surfacesSource).not.toContain("bindMethods(methodGroups.events, [");
     expect(eventsSurfaceSource).not.toContain("getTapeService()");
     expect(eventsSurfaceSource).not.toContain("recordTapeHandoff");
@@ -316,7 +316,7 @@ describe("runtime promoted architecture guard", () => {
       existsSync(resolve(repoRoot, "packages/brewva-runtime/src/domain/context/registrar.ts")),
     ).toBe(true);
     expect(
-      existsSync(resolve(repoRoot, "packages/brewva-runtime/src/domain/truth/registrar.ts")),
+      existsSync(resolve(repoRoot, "packages/brewva-runtime/src/domain/claim/registrar.ts")),
     ).toBe(true);
     expect(
       existsSync(resolve(repoRoot, "packages/brewva-runtime/src/domain/ledger/registrar.ts")),
@@ -357,7 +357,7 @@ describe("runtime promoted architecture guard", () => {
       "packages/brewva-runtime/src/domain/sessions/runtime-surface.ts",
       "packages/brewva-runtime/src/domain/tools/runtime-surface.ts",
       "packages/brewva-runtime/src/domain/task/runtime-surface.ts",
-      "packages/brewva-runtime/src/domain/truth/runtime-surface.ts",
+      "packages/brewva-runtime/src/domain/claim/runtime-surface.ts",
       "packages/brewva-runtime/src/domain/verification/runtime-surface.ts",
     ];
 

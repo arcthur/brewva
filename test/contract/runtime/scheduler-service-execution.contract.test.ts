@@ -24,7 +24,7 @@ describe("scheduler service execution contract", () => {
       listEvents: (targetSessionId, query) => runtime.inspect.events.list(targetSessionId, query),
       recordEvent: (input) => runtime.extensions.hosted.events.record(input),
       subscribeEvents: (listener) => runtime.inspect.events.subscribe(listener),
-      getTruthState: (targetSessionId) => runtime.inspect.truth.getState(targetSessionId),
+      getClaimState: (targetSessionId) => runtime.inspect.claim.getState(targetSessionId),
       getTaskState: (targetSessionId) => runtime.inspect.task.getState(targetSessionId),
     };
 
@@ -122,8 +122,8 @@ describe("scheduler service execution contract", () => {
     scheduler.stop();
   });
 
-  test("converges by structured predicate for truth_resolved", async () => {
-    const workspace = createWorkspace("predicate-truth");
+  test("converges by structured predicate for claim_resolved", async () => {
+    const workspace = createWorkspace("predicate-claim");
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionId = "scheduler-predicate-session";
     const now = Date.now();
@@ -140,7 +140,7 @@ describe("scheduler service execution contract", () => {
         nextRunAt: now - 1_000,
         maxRuns: 5,
         convergenceCondition: {
-          kind: "truth_resolved",
+          kind: "claim_resolved",
           factId: "ci_green",
         },
       }) as unknown as Record<string, unknown>,
@@ -151,7 +151,7 @@ describe("scheduler service execution contract", () => {
       runtime: schedulerRuntimePort(runtime),
       executeIntent: async (intent) => {
         const evaluationSessionId = `${intent.parentSessionId}-child`;
-        runtime.authority.truth.upsertFact(evaluationSessionId, {
+        runtime.authority.claim.upsert(evaluationSessionId, {
           id: "ci_green",
           kind: "ci_pipeline",
           severity: "info",

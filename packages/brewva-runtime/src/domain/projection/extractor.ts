@@ -1,6 +1,6 @@
 import type { BrewvaEventRecord } from "../../events/types.js";
+import { CLAIM_EVENT_TYPE, coerceClaimLedgerPayload } from "../claim/api.js";
 import { TASK_EVENT_TYPE, coerceTaskLedgerPayload } from "../task/api.js";
-import { TRUTH_EVENT_TYPE, coerceTruthLedgerPayload } from "../truth/api.js";
 import { deriveWorkflowArtifacts, deriveWorkflowArtifactsFromEvent } from "../workflow/api.js";
 import type {
   ProjectionExtractionResult,
@@ -70,42 +70,42 @@ export function formatWorkflowProjectionStatement(input: {
   return `state=${input.state}; freshness=${input.freshness}; ${input.summary}`;
 }
 
-function extractTruth(event: BrewvaEventRecord): ProjectionExtractionResult {
-  const payload = coerceTruthLedgerPayload(event.payload);
+function extractClaim(event: BrewvaEventRecord): ProjectionExtractionResult {
+  const payload = coerceClaimLedgerPayload(event.payload);
   if (!payload) return emptyResult();
 
-  if (payload.kind === "fact_resolved") {
+  if (payload.kind === "claim_resolved") {
     return {
       upserts: [],
       resolves: [
         {
           sessionId: event.sessionId,
-          sourceType: "truth_fact",
-          sourceId: payload.factId,
+          sourceType: "claim",
+          sourceId: payload.claimId,
           resolvedAt: payload.resolvedAt ?? event.timestamp,
         },
       ],
     };
   }
 
-  const fact = payload.fact;
+  const claim = payload.claim;
   const baseRef = createProjectionSourceRef(event);
-  const evidenceRefs = fact.evidenceIds.map((evidenceId) =>
+  const evidenceRefs = claim.evidenceIds.map((evidenceId) =>
     createProjectionSourceRef(event, evidenceId),
   );
   const candidate: ProjectionUnitCandidate = {
     sessionId: event.sessionId,
-    status: fact.status === "resolved" ? "resolved" : "active",
-    projectionKey: `truth_fact:${fact.id}`,
-    label: `truth.${normalizeLabelSegment(fact.kind) || "fact"}`,
-    statement: fact.summary.trim(),
+    status: claim.status === "resolved" ? "resolved" : "active",
+    projectionKey: `claim:${claim.id}`,
+    label: `claim.${normalizeLabelSegment(claim.kind) || "claim"}`,
+    statement: claim.summary.trim(),
     sourceRefs: [baseRef, ...evidenceRefs],
     metadata: {
-      truthFactId: fact.id,
-      truthKind: fact.kind,
-      severity: fact.severity,
-      source: "truth_event",
-      projectionGroup: "truth_fact",
+      claimId: claim.id,
+      claimKind: claim.kind,
+      severity: claim.severity,
+      source: "claim_event",
+      projectionGroup: "claim",
     },
   };
   return {
@@ -217,7 +217,7 @@ function extractTask(event: BrewvaEventRecord): ProjectionExtractionResult {
           source: "task_event",
           taskKind: "blocker_recorded",
           taskBlockerId: payload.blocker.id,
-          truthFactId: payload.blocker.truthFactId ?? null,
+          claimId: payload.blocker.claimId ?? null,
           projectionGroup: "task_blocker",
         },
       });
@@ -315,7 +315,7 @@ export function extractWorkflowProjectionFromEvents(
 }
 
 export function extractProjectionFromEvent(event: BrewvaEventRecord): ProjectionExtractionResult {
-  if (event.type === TRUTH_EVENT_TYPE) return extractTruth(event);
+  if (event.type === CLAIM_EVENT_TYPE) return extractClaim(event);
   if (event.type === TASK_EVENT_TYPE) return extractTask(event);
   const workflow = extractWorkflow(event);
   if (workflow.upserts.length > 0 || workflow.resolves.length > 0) {

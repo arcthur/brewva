@@ -1,4 +1,9 @@
+import { claimRuntimeSurface, type ClaimSurfaceDependencies } from "../domain/claim/api.js";
 import { contextRuntimeSurface, type ContextSurfaceDependencies } from "../domain/context/api.js";
+import {
+  conventionsRuntimeSurface,
+  type ConventionsSurfaceDependencies,
+} from "../domain/conventions/api.js";
 import { costRuntimeSurface, type CostSurfaceDependencies } from "../domain/cost/api.js";
 import { eventsRuntimeSurface, type EventsSurfaceDependencies } from "../domain/events/api.js";
 import { ledgerRuntimeSurface, type LedgerSurfaceDependencies } from "../domain/ledger/api.js";
@@ -32,7 +37,6 @@ import { skillsRuntimeSurface, type SkillsSurfaceDependencies } from "../domain/
 import { tapeRuntimeSurface, type TapeSurfaceDependencies } from "../domain/tape/api.js";
 import { taskRuntimeSurface, type TaskSurfaceDependencies } from "../domain/task/api.js";
 import { toolsRuntimeSurface, type ToolsSurfaceDependencies } from "../domain/tools/api.js";
-import { truthRuntimeSurface, type TruthSurfaceDependencies } from "../domain/truth/api.js";
 import {
   verificationRuntimeSurface,
   type VerificationSurfaceDependencies,
@@ -50,6 +54,7 @@ import {
 export interface RuntimeSurfaceDependencies
   extends
     ContextSurfaceDependencies,
+    ConventionsSurfaceDependencies,
     CostSurfaceDependencies,
     EventsSurfaceDependencies,
     LedgerSurfaceDependencies,
@@ -64,19 +69,20 @@ export interface RuntimeSurfaceDependencies
     TapeSurfaceDependencies,
     TaskSurfaceDependencies,
     ToolsSurfaceDependencies,
-    TruthSurfaceDependencies,
+    ClaimSurfaceDependencies,
     VerificationSurfaceDependencies,
     WorkbenchSurfaceDependencies {}
 
 const runtimeSurfaceModules = [
   skillsRuntimeSurface,
   proposalsRuntimeSurface,
+  conventionsRuntimeSurface,
   reasoningRuntimeSurface,
   workbenchRuntimeSurface,
   contextRuntimeSurface,
   toolsRuntimeSurface,
   taskRuntimeSurface,
-  truthRuntimeSurface,
+  claimRuntimeSurface,
   ledgerRuntimeSurface,
   scheduleRuntimeSurface,
   recoveryRuntimeSurface,

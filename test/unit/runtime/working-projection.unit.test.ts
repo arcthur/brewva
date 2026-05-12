@@ -39,8 +39,8 @@ describe("working projection snapshot", () => {
       units: [
         unit({
           id: "u1",
-          projectionKey: "truth_fact:ci",
-          label: "truth.command_failure",
+          projectionKey: "claim:ci",
+          label: "claim.command_failure",
           statement: "Current deployment is blocked by CI",
         }),
         unit({
@@ -82,8 +82,8 @@ describe("working projection snapshot", () => {
       units: [
         unit({
           id: "u1",
-          projectionKey: "truth_fact:long",
-          label: "truth.long",
+          projectionKey: "claim:long",
+          label: "claim.long",
           statement: "a".repeat(2_000),
         }),
       ],

@@ -124,10 +124,21 @@ export type ToolMutationStrategy = "workspace_patchset";
 
 export type ToolMutationRollbackKind = "patchset";
 
-export interface ToolMutationReceipt {
+export type MutationSubject =
+  | {
+      kind: "tool";
+      toolCallId: BrewvaToolCallId;
+      toolName: BrewvaToolName;
+    }
+  | {
+      kind: "convention";
+      requestId: string;
+      target: Record<string, unknown>;
+    };
+
+export interface MutationReceipt {
   id: string;
-  toolCallId: BrewvaToolCallId;
-  toolName: BrewvaToolName;
+  subject: MutationSubject;
   boundary: "effectful";
   strategy: ToolMutationStrategy;
   rollbackKind: ToolMutationRollbackKind;
@@ -155,6 +166,7 @@ export type ToolMutationRollbackFailureReason =
 export type ToolMutationRollbackResult = RollbackOutcome<ToolMutationRollbackFailureReason> & {
   receiptId?: string;
   patchSetId?: string;
+  subject?: MutationSubject;
   toolName?: string;
   strategy?: ToolMutationStrategy;
   rollbackKind?: ToolMutationRollbackKind;

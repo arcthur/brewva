@@ -14,6 +14,12 @@ import { formatISO } from "date-fns";
 import { resolveGlobalBrewvaRootDir, resolveProjectBrewvaRootDir } from "../../config/paths.js";
 import type { BrewvaConfig } from "../../config/types.js";
 import {
+  RETIREMENT_SENSITIVITIES,
+  conventionRetirementSensitivity,
+  isConventionKind,
+  isRetirementSensitivity,
+} from "../conventions/api.js";
+import {
   createEmptySkillResources,
   mergeOverlayContract,
   mergeSkillResources,
@@ -85,6 +91,9 @@ function cloneProjectGuidanceEntry(entry: ProjectGuidanceEntry): ProjectGuidance
     filePath: entry.filePath,
     strength: entry.strength,
     scope: entry.scope,
+    conventionKind: entry.conventionKind,
+    retirementSensitivity: entry.retirementSensitivity,
+    ...(entry.owner ? { owner: entry.owner } : {}),
   };
 }
 
@@ -363,7 +372,13 @@ function parseProjectGuidanceFile(filePath: string): ProjectGuidanceSource {
   if (!parsed.hasFrontmatter) {
     failProjectGuidance(filePath, "missing required metadata frontmatter.");
   }
-  const allowedKeys = new Set(["strength", "scope"]);
+  const allowedKeys = new Set([
+    "strength",
+    "scope",
+    "convention_kind",
+    "retirement_sensitivity",
+    "owner",
+  ]);
   const unexpected = Object.keys(parsed.data).filter((key) => !allowedKeys.has(key));
   if (unexpected.length > 0) {
     failProjectGuidance(
@@ -380,10 +395,48 @@ function parseProjectGuidanceFile(filePath: string): ProjectGuidanceSource {
   if (typeof parsed.data.scope !== "string" || parsed.data.scope.trim().length === 0) {
     failProjectGuidance(filePath, "frontmatter.scope must be a non-empty string.");
   }
+  if (!isConventionKind(parsed.data.convention_kind)) {
+    failProjectGuidance(filePath, "frontmatter.convention_kind must be a known convention kind.");
+  }
+  if (!isRetirementSensitivity(parsed.data.retirement_sensitivity)) {
+    failProjectGuidance(
+      filePath,
+      `frontmatter.retirement_sensitivity must be one of: ${RETIREMENT_SENSITIVITIES.join(" | ")}.`,
+    );
+  }
+  const expectedRetirementSensitivity = conventionRetirementSensitivity(
+    parsed.data.convention_kind,
+  );
+  if (parsed.data.retirement_sensitivity !== expectedRetirementSensitivity) {
+    failProjectGuidance(
+      filePath,
+      `frontmatter.retirement_sensitivity must match convention_kind default: ${expectedRetirementSensitivity}.`,
+    );
+  }
+  const owner =
+    typeof parsed.data.owner === "string" && parsed.data.owner.trim().length > 0
+      ? parsed.data.owner.trim()
+      : undefined;
+  if (parsed.data.owner !== undefined && !owner) {
+    failProjectGuidance(filePath, "frontmatter.owner must be a non-empty string when provided.");
+  }
+  if (
+    (parsed.data.retirement_sensitivity === "non_retirable_without_owner" ||
+      parsed.data.retirement_sensitivity === "pinned") &&
+    !owner
+  ) {
+    failProjectGuidance(
+      filePath,
+      "frontmatter.owner is required for pinned or non-retirable convention guidance.",
+    );
+  }
   return {
     filePath,
     strength: parsed.data.strength,
     scope: parsed.data.scope.trim(),
+    conventionKind: parsed.data.convention_kind,
+    retirementSensitivity: parsed.data.retirement_sensitivity,
+    ...(owner ? { owner } : {}),
     markdown: parsed.body.trim(),
   };
 }
@@ -409,7 +462,8 @@ function renderProjectGuidance(entries: ProjectGuidanceSource[]): string {
   const sections = entries.map((entry) => {
     const title = basename(entry.filePath).replace(/\.md$/i, "");
     const markdown = demoteProjectGuidanceHeadings(entry.markdown.trim());
-    return `## Project Guidance: ${title}\n\nMetadata: strength=${entry.strength}; scope=${entry.scope}\n\n${markdown}`;
+    const owner = entry.owner ? `; owner=${entry.owner}` : "";
+    return `## Project Guidance: ${title}\n\nMetadata: strength=${entry.strength}; scope=${entry.scope}; convention_kind=${entry.conventionKind}; retirement_sensitivity=${entry.retirementSensitivity}${owner}\n\n${markdown}`;
   });
   return joinMarkdownSections(sections);
 }

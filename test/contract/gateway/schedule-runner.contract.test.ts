@@ -49,7 +49,7 @@ describe("gateway contract: schedule runner", () => {
       schema: "brewva.task.v1",
       goal: "Finish the release checklist",
     });
-    runtime.authority.truth.upsertFact(parentSessionId, {
+    runtime.authority.claim.upsert(parentSessionId, {
       id: "fact-1",
       kind: "status",
       severity: "warn",
@@ -130,7 +130,7 @@ describe("gateway contract: schedule runner", () => {
           schema: "brewva.task.v1",
           goal: "Finish the release checklist",
         },
-        truthFacts: [
+        claims: [
           expect.objectContaining({
             id: "fact-1",
             kind: "status",
@@ -161,7 +161,7 @@ describe("gateway contract: schedule runner", () => {
       expect(sentPrompt?.prompt).not.toContain("time_zone:");
       expect(sentPrompt?.prompt).not.toContain("goal_ref:");
       expect(sentPrompt?.prompt).not.toContain("inherited_task_spec:");
-      expect(sentPrompt?.prompt).not.toContain("inherited_truth_facts:");
+      expect(sentPrompt?.prompt).not.toContain("inherited_operational_claims:");
       expect(sentPrompt?.prompt).not.toContain("parent_anchor_id:");
       expect(sentPrompt?.prompt).not.toContain("parent_anchor_name:");
 
@@ -170,7 +170,7 @@ describe("gateway contract: schedule runner", () => {
       });
       expect(wakeups).toHaveLength(1);
       expect(wakeups[0]?.payload?.intentId).toBe("intent-1");
-      expect(wakeups[0]?.payload?.inheritedTruthFacts).toBe(1);
+      expect(wakeups[0]?.payload?.inheritedOperationalClaims).toBe(1);
 
       const started = runtime.inspect.events.query(parentSessionId, {
         type: SCHEDULE_CHILD_SESSION_STARTED_EVENT_TYPE,
@@ -194,14 +194,14 @@ describe("gateway contract: schedule runner", () => {
       }),
       snapshot: {
         taskSpec: null,
-        truthFacts: [],
+        claims: [],
         parentAnchor: null,
       },
     });
 
     expect(prompt).toContain("[Schedule Wakeup]");
     expect(prompt).toContain("reason: nightly follow-up");
-    expect(prompt).toContain("Run this pass fresh. Prior task and truth state are not preloaded.");
+    expect(prompt).toContain("Run this pass fresh. Prior task and claim state are not preloaded.");
     expect(prompt).not.toContain("task_goal:");
     expect(prompt).not.toContain("parent_anchor_summary:");
     expect(prompt).not.toContain("parent_anchor_next_steps:");
@@ -212,7 +212,7 @@ describe("gateway contract: schedule runner", () => {
     expect(prompt).not.toContain("time_zone:");
     expect(prompt).not.toContain("goal_ref:");
     expect(prompt).not.toContain("inherited_task_spec:");
-    expect(prompt).not.toContain("inherited_truth_facts:");
+    expect(prompt).not.toContain("inherited_operational_claims:");
     expect(prompt).not.toContain("parent_anchor_id:");
     expect(prompt).not.toContain("parent_anchor_name:");
   });
@@ -225,7 +225,7 @@ describe("gateway contract: schedule runner", () => {
       schema: "brewva.task.v1",
       goal: "Finish the release checklist",
     });
-    runtime.authority.truth.upsertFact(parentSessionId, {
+    runtime.authority.claim.upsert(parentSessionId, {
       id: "fact-1",
       kind: "status",
       severity: "warn",
@@ -294,7 +294,7 @@ describe("gateway contract: schedule runner", () => {
       expect(sentPrompt?.prompt).toContain("[Schedule Wakeup]");
       expect(sentPrompt?.prompt).toContain("reason: nightly follow-up");
       expect(sentPrompt?.prompt).toContain(
-        "Run this pass fresh. Prior task and truth state are not preloaded.",
+        "Run this pass fresh. Prior task and claim state are not preloaded.",
       );
       expect(sentPrompt?.prompt).not.toContain("task_goal:");
       expect(sentPrompt?.prompt).not.toContain("parent_anchor_summary:");
@@ -307,7 +307,7 @@ describe("gateway contract: schedule runner", () => {
       expect(wakeups[0]?.payload).toMatchObject({
         intentId: "intent-1",
         inheritedTaskSpec: false,
-        inheritedTruthFacts: 0,
+        inheritedOperationalClaims: 0,
         parentAnchorId: null,
       });
     } finally {

@@ -7,7 +7,7 @@ questions, and review synthesis.
 
 Subagents and A2A calls are control-plane execution envelopes. Review synthesis
 is advisory semantics over delegated evidence. The parent session owns active
-task truth and any patch adoption.
+task state, operational claims, and any patch adoption.
 
 ## Surfaces
 
@@ -20,7 +20,7 @@ task truth and any patch adoption.
 
 Patch-producing workers return artifacts for parent-controlled adoption.
 Delegated QA runs return typed outcome data, not worker patches. Consult runs
-stay advisory unless the parent records a new task/truth or adoption event.
+stay advisory unless the parent records a new task/claim or adoption event.
 
 Delegated sessions create child lineage nodes. Child outcomes are recorded as
 state-only by default; parent-visible model context requires an explicit

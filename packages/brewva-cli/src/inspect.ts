@@ -16,7 +16,7 @@ import {
   loadBrewvaInspectConfigResolution,
   createTrustedLocalGovernancePort,
   foldTaskLedgerEvents,
-  foldTruthLedgerEvents,
+  foldClaimLedgerEvents,
   type BrewvaForensicConfigWarning,
   type BrewvaOperatorRuntimePort,
 } from "@brewva/brewva-runtime";
@@ -29,7 +29,7 @@ import {
   SUBAGENT_SPAWNED_EVENT_TYPE,
   TAPE_ANCHOR_EVENT_TYPE,
   TAPE_CHECKPOINT_EVENT_TYPE,
-  TRUTH_EVENT_TYPE,
+  CLAIM_EVENT_TYPE,
   VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
 } from "@brewva/brewva-runtime/events";
 import { PATCH_HISTORY_FILE } from "@brewva/brewva-runtime/patch-history";
@@ -201,9 +201,9 @@ interface InspectReport {
     blockers: number;
     updatedAt: string | null;
   };
-  truth: {
-    totalFacts: number;
-    activeFacts: number;
+  claim: {
+    totalClaims: number;
+    activeClaims: number;
     updatedAt: string | null;
   };
   verification: InspectVerification;
@@ -560,9 +560,9 @@ function buildInspectReport(
   const events = runtime.inspect.events.query(sessionId);
   const structuredEvents = runtime.inspect.events.queryStructured(sessionId);
   const taskEvents = runtime.inspect.events.query(sessionId, { type: TASK_EVENT_TYPE });
-  const truthEvents = runtime.inspect.events.query(sessionId, { type: TRUTH_EVENT_TYPE });
+  const claimEvents = runtime.inspect.events.query(sessionId, { type: CLAIM_EVENT_TYPE });
   const taskState = foldTaskLedgerEvents(taskEvents);
-  const truthState = foldTruthLedgerEvents(truthEvents);
+  const claimState = foldClaimLedgerEvents(claimEvents);
   const tapeStatus = runtime.inspect.tape.getTapeStatus(sessionId);
   const hydration = runtime.inspect.session.getHydration(sessionId);
   const integrity = runtime.inspect.session.getIntegrity(sessionId);
@@ -787,10 +787,10 @@ function buildInspectReport(
       blockers: taskState.blockers.length,
       updatedAt: toIso(taskState.updatedAt),
     },
-    truth: {
-      totalFacts: truthState.facts.length,
-      activeFacts: truthState.facts.filter((fact) => fact.status === "active").length,
-      updatedAt: toIso(truthState.updatedAt),
+    claim: {
+      totalClaims: claimState.claims.length,
+      activeClaims: claimState.claims.filter((claim) => claim.status === "active").length,
+      updatedAt: toIso(claimState.updatedAt),
     },
     verification,
     hostedTransitions: projectHostedTransitionSnapshot(structuredEvents),
@@ -882,7 +882,7 @@ function formatInspectText(report: InspectReport): string {
     `Bootstrap: workspaceRoot=${report.bootstrap.workspaceRoot ?? "n/a"} config=${report.bootstrap.configPath ?? "n/a"}`,
     `Task: phase=${report.task.phase ?? "n/a"} health=${report.task.health ?? "n/a"} items=${report.task.items} blockers=${report.task.blockers} updatedAt=${report.task.updatedAt ?? "n/a"}`,
     `Task: goal=${report.task.goal ?? "n/a"}`,
-    `Truth: active=${report.truth.activeFacts}/${report.truth.totalFacts} updatedAt=${report.truth.updatedAt ?? "n/a"}`,
+    `Claim: active=${report.claim.activeClaims}/${report.claim.totalClaims} updatedAt=${report.claim.updatedAt ?? "n/a"}`,
     `Verification: outcome=${report.verification.outcome ?? "n/a"} level=${report.verification.level ?? "n/a"} failed=${renderList(report.verification.failedChecks)} missing_checks=${renderList(report.verification.missingChecks)} missing_evidence=${renderList(report.verification.missingEvidence)}`,
     `Hosted transitions: sequence=${report.hostedTransitions.sequence} latest=${renderHostedLatest(report.hostedTransitions.latest)} pending=${report.hostedTransitions.pendingFamily ?? "none"} operatorVisible=${report.hostedTransitions.operatorVisibleFactGeneration}`,
     `Hosted breakers: compaction_retry=${renderHostedBreaker(report.hostedTransitions, "compaction_retry")} provider_fallback_retry=${renderHostedBreaker(report.hostedTransitions, "provider_fallback_retry")} max_output_recovery=${renderHostedBreaker(report.hostedTransitions, "max_output_recovery")}`,

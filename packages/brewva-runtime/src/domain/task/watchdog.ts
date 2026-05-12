@@ -114,7 +114,7 @@ export function computeTaskSemanticProgressAt(input: {
 
   latest = maxTimestamp(latest, input.lastVerificationAt ?? null);
 
-  // Deliberately exclude status_set: task status can change from context/truth/budget
+  // Deliberately exclude status_set: task status can change from context/claim/budget
   // alignment without any task-ledger progress, and the watchdog should not reset on that.
   for (let index = input.taskEvents.length - 1; index >= 0; index -= 1) {
     const event = input.taskEvents[index];

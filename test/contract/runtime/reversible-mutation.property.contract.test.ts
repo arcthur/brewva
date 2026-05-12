@@ -120,9 +120,9 @@ describe("reversible mutation properties", () => {
         });
 
         expect(started.allowed).toBe(true);
-        expect(started.mutationReceipt?.id.startsWith(`mutation:edit:${input.toolCallId}:`)).toBe(
-          true,
-        );
+        expect(
+          started.mutationReceipt?.id.startsWith(`mutation:tool:edit:${input.toolCallId}:`),
+        ).toBe(true);
         expect(Number.isFinite(Number(started.mutationReceipt?.id.split(":").at(-1)))).toBe(true);
 
         writeValue(absolutePath, input.nextValue);

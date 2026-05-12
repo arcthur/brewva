@@ -343,7 +343,7 @@ export function createRecallCurateTool(options: BrewvaToolOptions): ToolDefiniti
     name: "recall_curate",
     label: "Recall Curate",
     description:
-      "Record explicit operator feedback for surfaced recall items without mutating truth or typed materialization directly.",
+      "Record explicit operator feedback for surfaced recall items without mutating claim or typed materialization directly.",
     parameters: Type.Object({
       stable_ids: Type.Array(Type.String({ minLength: 1, maxLength: 256 }), {
         minItems: 1,

@@ -45,7 +45,7 @@ export function schedulerRuntimePort(runtime: BrewvaRuntime): SchedulerRuntimePo
     listEvents: (targetSessionId, query) => runtime.inspect.events.list(targetSessionId, query),
     recordEvent: (input) => runtime.extensions.hosted.events.record(input),
     subscribeEvents: (listener) => runtime.inspect.events.subscribe(listener),
-    getTruthState: (targetSessionId) => runtime.inspect.truth.getState(targetSessionId),
+    getClaimState: (targetSessionId) => runtime.inspect.claim.getState(targetSessionId),
     getTaskState: (targetSessionId) => runtime.inspect.task.getState(targetSessionId),
   };
 }

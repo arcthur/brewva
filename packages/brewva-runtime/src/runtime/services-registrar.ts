@@ -32,7 +32,7 @@ export function registerRuntimeServiceDependencies(
 
   return {
     taskService: workServices.taskService,
-    truthService: workServices.truthService,
+    claimService: workServices.claimService,
     ledgerService: workServices.ledgerService,
     costService: workServices.costService,
     contextService: contextServices.contextService,
@@ -46,6 +46,7 @@ export function registerRuntimeServiceDependencies(
     getTapeService: () => sessionServices.getTapeService(),
     getEffectCommitmentDeskService: () => governanceServices.getEffectCommitmentDeskService(),
     getProposalAdmissionService: () => governanceServices.getProposalAdmissionService(),
+    getConventionAdmissionService: () => governanceServices.getConventionAdmissionService(),
     clearEffectCommitmentDeskState: (sessionId: string) =>
       governanceServices.clearEffectCommitmentDeskState(sessionId),
   };

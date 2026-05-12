@@ -22,7 +22,9 @@ function buildRollbackFailureResult(
     ok: false,
     receiptId: mutation.receipt.id,
     patchSetId: mutation.patchSetId ?? undefined,
-    toolName: mutation.receipt.toolName,
+    subject: mutation.receipt.subject,
+    toolName:
+      mutation.receipt.subject.kind === "tool" ? mutation.receipt.subject.toolName : undefined,
     strategy: mutation.receipt.strategy,
     rollbackKind: mutation.receipt.rollbackKind,
     restoredPaths: [],
@@ -40,7 +42,9 @@ function buildRollbackSuccessResult(
     ok: true,
     receiptId: mutation.receipt.id,
     patchSetId: mutation.patchSetId ?? undefined,
-    toolName: mutation.receipt.toolName,
+    subject: mutation.receipt.subject,
+    toolName:
+      mutation.receipt.subject.kind === "tool" ? mutation.receipt.subject.toolName : undefined,
     strategy: mutation.receipt.strategy,
     rollbackKind: mutation.receipt.rollbackKind,
     restoredPaths,
@@ -105,7 +109,9 @@ export class MutationRollbackService {
       turn: this.getCurrentTurn(sessionId),
       payload: {
         receiptId: mutation.receipt.id,
-        toolName: mutation.receipt.toolName,
+        subject: mutation.receipt.subject,
+        toolName:
+          mutation.receipt.subject.kind === "tool" ? mutation.receipt.subject.toolName : null,
         strategy: mutation.receipt.strategy,
         rollbackKind: mutation.receipt.rollbackKind,
         ok: result.ok,

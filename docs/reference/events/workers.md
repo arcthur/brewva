@@ -6,7 +6,7 @@ selection, and channel orchestration event families.
 ## Schedule
 
 Schedule events record intent recovery, wakeups, trigger warnings, and child
-session lifecycle. Schedule intent truth lives in the schedule projection and
+session lifecycle. Schedule intent state lives in the schedule projection and
 runtime authority surface; events explain why a scheduled execution ran,
 failed, or deferred.
 

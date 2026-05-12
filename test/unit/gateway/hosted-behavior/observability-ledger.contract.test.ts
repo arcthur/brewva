@@ -777,7 +777,7 @@ describe("Hosted behavior integration: observability ledger", () => {
     expect(recordedPayload?.outputArtifact?.artifactRef).toBe(artifactRef);
   });
 
-  test("given obs_slo_assert explicit verdicts, when ledger writer records the tool result, then ledger verdicts and truth sync follow the declared verdict", async () => {
+  test("given obs_slo_assert explicit verdicts, when ledger writer records the tool result, then ledger verdicts and claim sync follow the declared verdict", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-ext-obs-assert-"));
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionId = "ext-obs-assert-1";
@@ -849,9 +849,9 @@ describe("Hosted behavior integration: observability ledger", () => {
 
     expect(runtime.inspect.ledger.listRows(sessionId).at(-1)?.verdict).toBe("fail");
     expect(
-      runtime.inspect.truth
+      runtime.inspect.claim
         .getState(sessionId)
-        .facts.some(
+        .claims.some(
           (fact) => fact.kind === "observability_slo_violation" && fact.status === "active",
         ),
     ).toBe(true);

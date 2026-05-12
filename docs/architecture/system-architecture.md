@@ -66,7 +66,7 @@ but public contracts should expose the narrowest ring that owns the decision.
 Planes describe product behavior:
 
 - `Authority Plane`: receipts, event tape, Recovery WAL, rollback snapshots,
-  approval truth, verification evidence, and replay-visible commitments.
+  approval claims, verification evidence, and replay-visible commitments.
 - `Workbench Plane`: model-authored notebook entries, evictions, source
   references, preserved quotes, on-demand recall results selected by the model,
   and sanitized compact baselines. It is provenance-bearing and inspectable,

@@ -67,7 +67,7 @@ flowchart LR
 flowchart TD
   A["startup"] --> B["load event tape"]
   B --> C["checkpoint + delta replay"]
-  C --> D["hydrate task/truth/cost/verification"]
+  C --> D["hydrate task/claim/cost/verification"]
   D --> E{"projection present?"}
   E -->|yes| F["refresh working snapshot"]
   E -->|no| G["rebuild projection from tape"]

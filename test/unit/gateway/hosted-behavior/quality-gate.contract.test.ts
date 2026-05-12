@@ -457,7 +457,7 @@ describe("Hosted behavior gaps: quality gate", () => {
     expect(result.content?.[0]?.text).toContain("[InvocationRepair]");
     expect(result.content?.[0]?.text).toContain('convergenceCondition.kind: got="phase_gate"');
     expect(result.content?.[0]?.text).toContain(
-      "accepted=truth_resolved|task_phase|max_runs|all_of|any_of",
+      "accepted=claim_resolved|task_phase|max_runs|all_of|any_of",
     );
     expect(result.content?.[0]?.text).toContain('convergenceCondition.phase: got="complete"');
   });

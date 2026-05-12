@@ -2,9 +2,9 @@ import type { VerificationCheckRun } from "./types.js";
 
 export const VERIFIER_BLOCKER_PREFIX = "verifier:" as const;
 export const GOVERNANCE_BLOCKER_ID = "verifier:governance:verify-spec";
-export const GOVERNANCE_TRUTH_FACT_ID = "truth:governance:verify-spec";
-export const VERIFICATION_CHECK_FAILED_TRUTH_KIND = "verification_check_failed" as const;
-export const VERIFICATION_CHECK_MISSING_TRUTH_KIND = "verification_check_missing" as const;
+export const GOVERNANCE_CLAIM_ID = "claim:governance:verify-spec";
+export const VERIFICATION_CHECK_FAILED_CLAIM_KIND = "verification_check_failed" as const;
+export const VERIFICATION_CHECK_MISSING_CLAIM_KIND = "verification_check_missing" as const;
 
 export function normalizeVerifierCheckForId(name: string): string {
   const normalized = name.trim().toLowerCase();
@@ -14,7 +14,7 @@ export function normalizeVerifierCheckForId(name: string): string {
 
 export function buildVerifierBlockerMessage(input: {
   checkName: string;
-  truthFactId: string;
+  claimId: string;
   issueKind: "fail" | "missing";
   run?: VerificationCheckRun;
 }): string {
@@ -22,7 +22,7 @@ export function buildVerifierBlockerMessage(input: {
     input.issueKind === "fail"
       ? `verification failed: ${input.checkName}`
       : `verification missing fresh evidence: ${input.checkName}`,
-    `truth=${input.truthFactId}`,
+    `claim=${input.claimId}`,
   ];
   if (input.run?.ledgerId) {
     parts.push(`evidence=${input.run.ledgerId}`);

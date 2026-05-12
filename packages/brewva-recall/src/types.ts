@@ -12,7 +12,7 @@ export const RECALL_SCOPE_VALUES = [
 ] as const;
 
 export const RECALL_TRUST_LABELS = [
-  "Kernel truth",
+  "Kernel claim",
   "Verified evidence",
   "Repository precedent",
   "Advisory posture",

@@ -6,7 +6,7 @@ import type {
   ScheduleContinuityMode,
   TaskSpec,
   ToolOutputView,
-  TruthFact,
+  OperationalClaim,
 } from "@brewva/brewva-runtime";
 import type { BrewvaSteerOutcome } from "@brewva/brewva-substrate/session";
 
@@ -37,7 +37,7 @@ export interface SchedulePromptTrigger {
   kind: "schedule";
   continuityMode: ScheduleContinuityMode;
   taskSpec?: TaskSpec | null;
-  truthFacts?: TruthFact[];
+  claims?: OperationalClaim[];
   parentAnchor?: SchedulePromptAnchor | null;
 }
 

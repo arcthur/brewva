@@ -22,6 +22,7 @@ Every accepted decision inherits these rules:
 - [boundary-policy-credential-vault-and-loop-guard](./boundary-policy-credential-vault-and-loop-guard.md)
 - [brewva-standard-utility-boundary](./brewva-standard-utility-boundary.md)
 - [capability-compression-and-output-distillation](./capability-compression-and-output-distillation.md)
+- [convention-lifecycle-governance](./convention-lifecycle-governance.md)
 - [context-dependency-layering-and-admission-lanes](./context-dependency-layering-and-admission-lanes.md)
 - [default-path-re-hardening-and-advisory-surface-narrowing](./default-path-re-hardening-and-advisory-surface-narrowing.md)
 - [durability-taxonomy-and-rebuildable-surface-narrowing](./durability-taxonomy-and-rebuildable-surface-narrowing.md)

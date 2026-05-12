@@ -1,6 +1,9 @@
 ---
 strength: invariant
 scope: critical-rules
+convention_kind: safety_boundary
+retirement_sensitivity: pinned
+owner: runtime-maintainers
 ---
 
 # Brewva Project Critical Rules

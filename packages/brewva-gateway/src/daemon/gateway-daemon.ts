@@ -516,7 +516,7 @@ export class GatewayDaemon {
           listEvents: (sessionId, query) => schedulerRuntime.inspect.events.list(sessionId, query),
           recordEvent: (input) => schedulerRuntime.extensions.hosted.events.record(input),
           subscribeEvents: (listener) => schedulerRuntime.inspect.events.subscribe(listener),
-          getTruthState: (sessionId) => schedulerRuntime.inspect.truth.getState(sessionId),
+          getClaimState: (sessionId) => schedulerRuntime.inspect.claim.getState(sessionId),
           getTaskState: (sessionId) => schedulerRuntime.inspect.task.getState(sessionId),
           recoveryWal: {
             appendPending: (envelope, source, walOptions) =>

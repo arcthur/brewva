@@ -12,7 +12,7 @@ Input: "Keep improving coverage. Stop when 85% or after 3 flat runs."
     "loop_key": "coverage-raise-2026-04-06",
     "baseline": { "value": 70.0, "source": "bun test --coverage" },
     "metric": { "key": "coverage_pct", "direction": "up", "unit": "%", "min_delta": 1.0 },
-    "convergence_condition": { "kind": "truth_resolved", "factId": "coverage_gte_85" },
+    "convergence_condition": { "kind": "claim_resolved", "factId": "coverage_gte_85" },
     "max_runs": 12,
     "escalation_policy": { "trigger": "3 consecutive below_noise_floor", "next_owner": "plan" }
   },

@@ -11,16 +11,16 @@ import {
   REVERSIBLE_MUTATION_ROLLED_BACK_EVENT_TYPE,
   ROLLBACK_EVENT_TYPE,
   TOOL_RESULT_RECORDED_EVENT_TYPE,
-  TRUTH_EVENT_TYPE,
+  CLAIM_EVENT_TYPE,
   VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
   type BrewvaEventRecord,
 } from "@brewva/brewva-runtime/events";
 import type { RecallEvidenceStrength, RecallTrustLabel } from "../types.js";
 
-export const RECALL_KERNEL_TRUTH_TAPE_EVENT_TYPES = [TRUTH_EVENT_TYPE] as const;
+export const RECALL_KERNEL_CLAIM_TAPE_EVENT_TYPES = [CLAIM_EVENT_TYPE] as const;
 
 export const RECALL_STRONG_TAPE_EVENT_TYPES = [
-  TRUTH_EVENT_TYPE,
+  CLAIM_EVENT_TYPE,
   TOOL_RESULT_RECORDED_EVENT_TYPE,
   REASONING_REVERT_EVENT_TYPE,
   EFFECT_COMMITMENT_APPROVAL_REQUESTED_EVENT_TYPE,
@@ -36,16 +36,16 @@ export const RECALL_STRONG_TAPE_EVENT_TYPES = [
   VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
 ] as const;
 
-const RECALL_KERNEL_TRUTH_TAPE_EVENT_TYPE_SET: ReadonlySet<string> = new Set(
-  RECALL_KERNEL_TRUTH_TAPE_EVENT_TYPES,
+const RECALL_KERNEL_CLAIM_TAPE_EVENT_TYPE_SET: ReadonlySet<string> = new Set(
+  RECALL_KERNEL_CLAIM_TAPE_EVENT_TYPES,
 );
 
 const RECALL_STRONG_TAPE_EVENT_TYPE_SET: ReadonlySet<string> = new Set(
   RECALL_STRONG_TAPE_EVENT_TYPES,
 );
 
-export function isKernelTruthRecallTapeEvent(event: Pick<BrewvaEventRecord, "type">): boolean {
-  return RECALL_KERNEL_TRUTH_TAPE_EVENT_TYPE_SET.has(event.type);
+export function isKernelClaimRecallTapeEvent(event: Pick<BrewvaEventRecord, "type">): boolean {
+  return RECALL_KERNEL_CLAIM_TAPE_EVENT_TYPE_SET.has(event.type);
 }
 
 export function isStrongRecallTapeEvent(event: Pick<BrewvaEventRecord, "type">): boolean {
@@ -59,9 +59,9 @@ export function classifyRecallTapeEvent(
   trustLabel: RecallTrustLabel;
   evidenceStrength: RecallEvidenceStrength;
 } {
-  if (isKernelTruthRecallTapeEvent(event)) {
+  if (isKernelClaimRecallTapeEvent(event)) {
     return {
-      trustLabel: "Kernel truth",
+      trustLabel: "Kernel claim",
       evidenceStrength: "strong",
     };
   }

@@ -5,6 +5,13 @@ import {
   TOOL_RESULT_RECORDED_EVENT_TYPE,
 } from "../../events/registry.js";
 import type { BrewvaEventRecord } from "../../events/types.js";
+import {
+  CLAIM_EVENT_TYPE,
+  coerceClaimLedgerPayload,
+  createEmptyClaimState,
+  reduceClaimState,
+} from "../claim/api.js";
+import type { ClaimState } from "../claim/api.js";
 import type { ToolFailureEntry } from "../context/api.js";
 import {
   applyBudgetAlertPayload,
@@ -28,13 +35,6 @@ import {
 } from "../task/api.js";
 import type { TaskState } from "../task/api.js";
 import type { ToolResultRecordedEventPayload } from "../tools/api.js";
-import {
-  TRUTH_EVENT_TYPE,
-  coerceTruthLedgerPayload,
-  createEmptyTruthState,
-  reduceTruthState,
-} from "../truth/api.js";
-import type { TruthState } from "../truth/api.js";
 import { TAPE_ANCHOR_EVENT_TYPE, TAPE_CHECKPOINT_EVENT_TYPE } from "./events.js";
 import {
   coerceTapeCheckpointPayload,
@@ -82,7 +82,7 @@ export interface TurnReplayView {
   latestEventId: string | null;
   checkpointEventId: string | null;
   taskState: TaskState;
-  truthState: TruthState;
+  claimState: ClaimState;
   costState: ReplayCostState;
   evidenceState: ReplayEvidenceState;
   projectionState: ReplayProjectionState;
@@ -129,7 +129,7 @@ function cloneTaskState(state: TaskState): TaskState {
     status: state.status
       ? {
           ...state.status,
-          truthFactIds: state.status.truthFactIds ? [...state.status.truthFactIds] : undefined,
+          claimIds: state.status.claimIds ? [...state.status.claimIds] : undefined,
         }
       : undefined,
     acceptance: state.acceptance
@@ -143,16 +143,16 @@ function cloneTaskState(state: TaskState): TaskState {
   };
 }
 
-function cloneTruthState(state: TruthState): TruthState {
+function cloneClaimState(state: ClaimState): ClaimState {
   const cloneDetails = (
-    details: TruthState["facts"][number]["details"] | undefined,
-  ): TruthState["facts"][number]["details"] => (details ? cloneJsonValue(details) : undefined);
+    details: ClaimState["claims"][number]["details"] | undefined,
+  ): ClaimState["claims"][number]["details"] => (details ? cloneJsonValue(details) : undefined);
 
   return {
-    facts: state.facts.map((fact) => ({
-      ...fact,
-      evidenceIds: [...fact.evidenceIds],
-      details: cloneDetails(fact.details),
+    claims: state.claims.map((claim) => ({
+      ...claim,
+      evidenceIds: [...claim.evidenceIds],
+      details: cloneDetails(claim.details),
     })),
     updatedAt: state.updatedAt,
   };
@@ -437,7 +437,7 @@ function applyEventToView(
       latestEventId: event.id,
       checkpointEventId: event.id,
       taskState: cloneTaskState(payload.state.task),
-      truthState: cloneTruthState(payload.state.truth),
+      claimState: cloneClaimState(payload.state.claim),
       costState: toReplayCostState(costFoldState),
       costFoldState,
       evidenceState: checkpointEvidenceToReplay(payload.state.evidence),
@@ -446,7 +446,7 @@ function applyEventToView(
   }
 
   let taskState = previous.taskState;
-  let truthState = previous.truthState;
+  let claimState = previous.claimState;
   let costState = previous.costState;
   let costFoldState = cloneCostFoldState(previous.costFoldState);
   let evidenceState = previous.evidenceState;
@@ -457,10 +457,10 @@ function applyEventToView(
     if (payload) {
       taskState = reduceTaskState(taskState, payload, event.timestamp);
     }
-  } else if (event.type === TRUTH_EVENT_TYPE) {
-    const payload = coerceTruthLedgerPayload(event.payload);
+  } else if (event.type === CLAIM_EVENT_TYPE) {
+    const payload = coerceClaimLedgerPayload(event.payload);
     if (payload) {
-      truthState = reduceTruthState(truthState, payload, event.timestamp);
+      claimState = reduceClaimState(claimState, payload, event.timestamp);
     }
   } else if (event.type === TAPE_ANCHOR_EVENT_TYPE) {
     const nextAnchorEpoch = evidenceState.anchorEpoch + 1;
@@ -518,7 +518,7 @@ function applyEventToView(
     latestEventId: event.id,
     checkpointEventId: previous.checkpointEventId,
     taskState,
-    truthState,
+    claimState,
     costState,
     costFoldState,
     evidenceState,
@@ -568,8 +568,8 @@ export class TurnReplayEngine {
     return cloneTaskState(this.replay(sessionId).taskState);
   }
 
-  getTruthState(sessionId: string): TruthState {
-    return cloneTruthState(this.replay(sessionId).truthState);
+  getClaimState(sessionId: string): ClaimState {
+    return cloneClaimState(this.replay(sessionId).claimState);
   }
 
   getCostSummary(sessionId: string): SessionCostSummary {
@@ -616,7 +616,7 @@ export class TurnReplayEngine {
     let checkpointIndex = -1;
     let checkpointEventId: string | null = null;
     let taskState: TaskState = createEmptyTaskState();
-    let truthState: TruthState = createEmptyTruthState();
+    let claimState: ClaimState = createEmptyClaimState();
     let costFoldState: CostFoldState = createEmptyCostState();
     let costState: ReplayCostState = toReplayCostState(costFoldState);
     let evidenceState: ReplayEvidenceState = createEmptyEvidenceState();
@@ -630,7 +630,7 @@ export class TurnReplayEngine {
       checkpointIndex = index;
       checkpointEventId = event.id;
       taskState = cloneTaskState(payload.state.task);
-      truthState = cloneTruthState(payload.state.truth);
+      claimState = cloneClaimState(payload.state.claim);
       costFoldState = checkpointCostToReplay(
         payload.state.cost,
         payload.state.costSkillLastTurnByName,
@@ -646,7 +646,7 @@ export class TurnReplayEngine {
       latestEventId: checkpointEventId,
       checkpointEventId,
       taskState,
-      truthState,
+      claimState,
       costState,
       costFoldState,
       evidenceState,

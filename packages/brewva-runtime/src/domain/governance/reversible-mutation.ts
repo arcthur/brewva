@@ -11,18 +11,14 @@ import type { RuntimeKernelContext } from "../../runtime/runtime-kernel.js";
 import { normalizeToolName } from "../../utils/tool-name.js";
 import type { PatchSet } from "../patching/api.js";
 import type { ResolvedToolAuthority } from "./tool-governance.js";
-import type {
-  ToolMutationReceipt,
-  ToolMutationRollbackKind,
-  ToolMutationStrategy,
-} from "./types.js";
+import type { MutationReceipt, ToolMutationRollbackKind, ToolMutationStrategy } from "./types.js";
 
 interface PendingReversibleMutation {
-  receipt: ToolMutationReceipt;
+  receipt: MutationReceipt;
 }
 
 export interface RecordedReversibleMutation {
-  receipt: ToolMutationReceipt;
+  receipt: MutationReceipt;
   changed: boolean;
   rollbackRef?: string | null;
   patchSetId?: string | null;
@@ -34,10 +30,25 @@ export interface PrepareReversibleMutationInput {
   toolName: string;
 }
 
+export interface PrepareConventionMutationInput {
+  sessionId: string;
+  requestId: string;
+  target: Record<string, unknown>;
+}
+
 export interface RecordReversibleMutationInput {
   sessionId: string;
   toolCallId: string;
   toolName: string;
+  channelSuccess: boolean;
+  verdict?: "pass" | "fail" | "inconclusive";
+  patchSet?: PatchSet;
+  metadata?: Record<string, unknown>;
+}
+
+export interface RecordConventionMutationInput {
+  sessionId: string;
+  requestId: string;
   channelSuccess: boolean;
   verdict?: "pass" | "fail" | "inconclusive";
   patchSet?: PatchSet;
@@ -66,7 +77,7 @@ function resolveMutationStrategy(authority: ResolvedToolAuthority): {
   return null;
 }
 
-function buildReceipt(input: {
+function buildToolReceipt(input: {
   toolCallId: string;
   toolName: string;
   authority: ResolvedToolAuthority;
@@ -74,20 +85,43 @@ function buildReceipt(input: {
   rollbackKind: ToolMutationRollbackKind;
   turn: number;
   timestamp: number;
-}): ToolMutationReceipt {
+}): MutationReceipt {
+  const toolCallId = input.toolCallId.trim() || randomUUID();
+  const toolName = normalizeToolName(input.toolName);
   return {
-    id: [
-      "mutation",
-      normalizeToolName(input.toolName),
-      input.toolCallId.trim() || randomUUID(),
-      String(input.timestamp),
-    ].join(":"),
-    toolCallId: asBrewvaToolCallId(input.toolCallId.trim() || randomUUID()),
-    toolName: asBrewvaToolName(normalizeToolName(input.toolName)),
+    id: ["mutation", "tool", toolName, toolCallId, String(input.timestamp)].join(":"),
+    subject: {
+      kind: "tool",
+      toolCallId: asBrewvaToolCallId(toolCallId),
+      toolName: asBrewvaToolName(toolName),
+    },
     boundary: "effectful",
     strategy: input.strategy,
     rollbackKind: input.rollbackKind,
     effects: [...(input.authority.descriptor?.effects ?? [])],
+    turn: input.turn,
+    timestamp: input.timestamp,
+  };
+}
+
+function buildConventionReceipt(input: {
+  requestId: string;
+  target: Record<string, unknown>;
+  turn: number;
+  timestamp: number;
+}): MutationReceipt {
+  const requestId = input.requestId.trim() || randomUUID();
+  return {
+    id: ["mutation", "convention", requestId, String(input.timestamp)].join(":"),
+    subject: {
+      kind: "convention",
+      requestId,
+      target: structuredClone(input.target),
+    },
+    boundary: "effectful",
+    strategy: "workspace_patchset",
+    rollbackKind: "patchset",
+    effects: ["control_state_mutation", "workspace_write"],
     turn: input.turn,
     timestamp: input.timestamp,
   };
@@ -100,7 +134,7 @@ function readObjectRecord(value: unknown): Record<string, unknown> | null {
   return value as Record<string, unknown>;
 }
 
-function readMutationReceipt(value: unknown): ToolMutationReceipt | null {
+function readMutationReceipt(value: unknown): MutationReceipt | null {
   const receipt = readObjectRecord(value);
   if (!receipt) {
     return null;
@@ -108,13 +142,8 @@ function readMutationReceipt(value: unknown): ToolMutationReceipt | null {
   if (typeof receipt.id !== "string" || !receipt.id.trim()) {
     return null;
   }
-  if (typeof receipt.toolCallId !== "string") {
-    return null;
-  }
-  const toolName = typeof receipt.toolName === "string" ? normalizeToolName(receipt.toolName) : "";
-  if (!toolName) {
-    return null;
-  }
+  const subject = readObjectRecord(receipt.subject);
+  if (!subject) return null;
   if (receipt.boundary !== "effectful") {
     return null;
   }
@@ -134,13 +163,36 @@ function readMutationReceipt(value: unknown): ToolMutationReceipt | null {
   }
   const effects = Array.isArray(receipt.effects)
     ? receipt.effects.filter(
-        (effect): effect is ToolMutationReceipt["effects"][number] => typeof effect === "string",
+        (effect): effect is MutationReceipt["effects"][number] => typeof effect === "string",
       )
     : [];
+  let normalizedSubject: MutationReceipt["subject"] | null = null;
+  if (subject.kind === "tool") {
+    const toolName =
+      typeof subject.toolName === "string" ? normalizeToolName(subject.toolName) : "";
+    const toolCallId = typeof subject.toolCallId === "string" ? subject.toolCallId.trim() : "";
+    if (toolName && toolCallId) {
+      normalizedSubject = {
+        kind: "tool",
+        toolCallId: asBrewvaToolCallId(toolCallId),
+        toolName: asBrewvaToolName(toolName),
+      };
+    }
+  } else if (subject.kind === "convention") {
+    const requestId = typeof subject.requestId === "string" ? subject.requestId.trim() : "";
+    const target = readObjectRecord(subject.target);
+    if (requestId && target) {
+      normalizedSubject = {
+        kind: "convention",
+        requestId,
+        target: structuredClone(target),
+      };
+    }
+  }
+  if (!normalizedSubject) return null;
   return {
     id: receipt.id.trim(),
-    toolCallId: asBrewvaToolCallId(receipt.toolCallId.trim()),
-    toolName: asBrewvaToolName(toolName),
+    subject: normalizedSubject,
     boundary: "effectful",
     strategy: "workspace_patchset",
     rollbackKind: "patchset",
@@ -164,7 +216,7 @@ export class ReversibleMutationService {
     this.resolveToolAuthority = (toolName) => options.resolveToolAuthority(toolName);
   }
 
-  prepare(input: PrepareReversibleMutationInput): ToolMutationReceipt | undefined {
+  prepare(input: PrepareReversibleMutationInput): MutationReceipt | undefined {
     const authority = this.resolveToolAuthority(input.toolName);
     const resolved = resolveMutationStrategy(authority);
     if (!resolved) {
@@ -172,7 +224,7 @@ export class ReversibleMutationService {
     }
     const turn = this.getCurrentTurn(input.sessionId);
     const timestamp = Date.now();
-    const receipt = buildReceipt({
+    const receipt = buildToolReceipt({
       toolCallId: input.toolCallId,
       toolName: input.toolName,
       authority,
@@ -185,6 +237,29 @@ export class ReversibleMutationService {
       receipt,
     };
     this.getPendingSession(input.sessionId).set(input.toolCallId, pending);
+    this.recordEvent({
+      sessionId: input.sessionId,
+      type: REVERSIBLE_MUTATION_PREPARED_EVENT_TYPE,
+      turn,
+      timestamp,
+      payload: {
+        receipt,
+      },
+    });
+    return receipt;
+  }
+
+  prepareConvention(input: PrepareConventionMutationInput): MutationReceipt {
+    const turn = this.getCurrentTurn(input.sessionId);
+    const timestamp = Date.now();
+    const pendingKey = input.requestId.trim() || randomUUID();
+    const receipt = buildConventionReceipt({
+      requestId: pendingKey,
+      target: input.target,
+      turn,
+      timestamp,
+    });
+    this.getPendingSession(input.sessionId).set(pendingKey, { receipt });
     this.recordEvent({
       sessionId: input.sessionId,
       type: REVERSIBLE_MUTATION_PREPARED_EVENT_TYPE,
@@ -244,6 +319,85 @@ export class ReversibleMutationService {
       sessionId: input.sessionId,
       type: REVERSIBLE_MUTATION_RECORDED_EVENT_TYPE,
       turn: this.getCurrentTurn(input.sessionId),
+      payload: basePayload,
+    });
+  }
+
+  recordConvention(input: RecordConventionMutationInput): void {
+    this.recordPendingMutation({
+      sessionId: input.sessionId,
+      pendingKey: input.requestId,
+      channelSuccess: input.channelSuccess,
+      verdict: input.verdict,
+      patchSet: input.patchSet,
+    });
+  }
+
+  private recordPendingMutation(input: {
+    sessionId: string;
+    pendingKey: string;
+    channelSuccess: boolean;
+    verdict?: "pass" | "fail" | "inconclusive";
+    patchSet?: PatchSet;
+  }): void {
+    const pendingSession = this.pendingBySession.get(input.sessionId);
+    const pending = pendingSession?.get(input.pendingKey);
+    if (!pending) {
+      return;
+    }
+    pendingSession?.delete(input.pendingKey);
+    if (pendingSession && pendingSession.size === 0) {
+      this.pendingBySession.delete(input.sessionId);
+    }
+
+    this.recordResolvedPendingMutation(input.sessionId, pending, input);
+  }
+
+  private recordResolvedPendingMutation(
+    sessionId: string,
+    pending: PendingReversibleMutation,
+    input: {
+      channelSuccess: boolean;
+      verdict?: "pass" | "fail" | "inconclusive";
+      patchSet?: PatchSet;
+    },
+  ): void {
+    const basePayload: Record<string, unknown> = {
+      receipt: pending.receipt,
+      channelSuccess: input.channelSuccess,
+      verdict: input.verdict ?? null,
+      changed: false,
+    };
+    const recorded: RecordedReversibleMutation = {
+      receipt: structuredClone(pending.receipt),
+      changed: false,
+    };
+
+    if (pending.receipt.strategy === "workspace_patchset") {
+      const patchSet = input.patchSet;
+      basePayload.changed = Boolean(patchSet);
+      basePayload.patchSetId = patchSet?.id ?? null;
+      basePayload.rollbackRef = patchSet ? `patchset://${patchSet.id}` : null;
+      recorded.changed = Boolean(patchSet);
+      recorded.patchSetId = patchSet?.id ?? null;
+      recorded.rollbackRef = patchSet ? `patchset://${patchSet.id}` : null;
+      basePayload.patchChanges =
+        patchSet?.changes.map((change) => ({
+          path: change.path,
+          action: change.action,
+        })) ?? [];
+    } else {
+      basePayload.rollbackRef = null;
+      recorded.rollbackRef = null;
+    }
+
+    const sessionHistory = this.recordedBySession.get(sessionId) ?? [];
+    sessionHistory.push(recorded);
+    this.recordedBySession.set(sessionId, sessionHistory);
+    this.recordEvent({
+      sessionId,
+      type: REVERSIBLE_MUTATION_RECORDED_EVENT_TYPE,
+      turn: this.getCurrentTurn(sessionId),
       payload: basePayload,
     });
   }

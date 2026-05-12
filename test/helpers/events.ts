@@ -320,7 +320,7 @@ export function buildToolResultRecordedPayload(input?: {
     outputDistillation: {
       summaryText: outputText,
     },
-    truthProjection: null,
+    claimProjection: null,
     verificationProjection: null,
     failureClass: channelSuccess ? null : "execution",
     failureContext: {

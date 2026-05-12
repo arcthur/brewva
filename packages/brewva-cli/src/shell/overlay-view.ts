@@ -177,14 +177,14 @@ export function buildInspectSections(report: SessionInspectReport): CliOverlaySe
     },
     {
       id: "task",
-      title: "Task + Truth",
+      title: "Task + Claim",
       lines: [
         `Goal: ${base.task.goal ?? "n/a"}`,
         `Task phase: ${base.task.phase ?? "n/a"}`,
         `Task health: ${base.task.health ?? "n/a"}`,
         `Task items: ${base.task.items}`,
         `Task blockers: ${base.task.blockers}`,
-        `Truth: ${base.truth.activeFacts}/${base.truth.totalFacts} active`,
+        `Claim: ${base.claim.activeClaims}/${base.claim.totalClaims} active`,
       ],
     },
     {

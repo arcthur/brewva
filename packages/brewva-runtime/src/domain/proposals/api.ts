@@ -16,11 +16,10 @@ export type {
   EffectCommitmentRequestListQuery,
   EffectCommitmentRequestRecord,
   EffectCommitmentRequestState,
-  EvidenceRef,
-  EvidenceSourceType,
   PendingEffectCommitmentRequest,
   ProposalDecision,
 } from "./types.js";
+export type { EvidenceRef, EvidenceSourceType } from "../evidence/api.js";
 export {
   PROPOSAL_DECIDED_EVENT_TYPE,
   PROPOSAL_RECEIVED_EVENT_TYPE,

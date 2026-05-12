@@ -8,11 +8,11 @@ import type {
   RuntimeWorkServices,
 } from "../../runtime/service-registrar-types.js";
 import type { RuntimeLazyServiceRegistrarOptions } from "../../runtime/service-registrar-types.js";
+import { ClaimProjectorService } from "../claim/api.js";
 import type { FileChangeService } from "../patching/api.js";
 import type { ReasoningService } from "../reasoning/api.js";
 import { registerRecoveryDomain } from "../recovery/api.js";
 import { registerTapeDomain } from "../tape/api.js";
-import { TruthProjectorService } from "../truth/api.js";
 import { VerificationGate } from "../verification/api.js";
 import { VerificationProjectorService } from "../verification/api.js";
 import { SESSIONS_EVENT_DESCRIPTORS } from "./event-descriptors.js";
@@ -43,28 +43,28 @@ interface RuntimeProjectionSubscriberRegistrarOptions {
   verificationGate: VerificationGate;
   eventPipeline: EventPipelineService;
   taskService: RuntimeWorkServices["taskService"];
-  truthService: RuntimeWorkServices["truthService"];
+  claimService: RuntimeWorkServices["claimService"];
 }
 
 function registerProjectionSubscribers(options: RuntimeProjectionSubscriberRegistrarOptions): void {
-  const truthProjector = new TruthProjectorService({
+  const claimProjector = new ClaimProjectorService({
     cwd: options.cwd,
     getTaskState: (sessionId) => options.kernel.getTaskState(sessionId),
-    getTruthState: (sessionId) => options.kernel.getTruthState(sessionId),
+    getClaimState: (sessionId) => options.kernel.getClaimState(sessionId),
     eventPipeline: options.eventPipeline,
     taskService: options.taskService,
-    truthService: options.truthService,
+    claimService: options.claimService,
   });
   const verificationProjector = new VerificationProjectorService({
     getTaskState: (sessionId) => options.kernel.getTaskState(sessionId),
-    getTruthState: (sessionId) => options.kernel.getTruthState(sessionId),
+    getClaimState: (sessionId) => options.kernel.getClaimState(sessionId),
     verificationStateStore: options.verificationGate.stateStore,
     eventPipeline: options.eventPipeline,
     taskService: options.taskService,
-    truthService: options.truthService,
+    claimService: options.claimService,
   });
 
-  void truthProjector;
+  void claimProjector;
   void verificationProjector;
 }
 
@@ -109,7 +109,7 @@ export function registerSessionsDomain(
     verificationGate: options.coreDependencies.verificationGate,
     eventPipeline,
     taskService: workServices.taskService,
-    truthService: workServices.truthService,
+    claimService: workServices.claimService,
   });
 
   const recoveryDomain = registerRecoveryDomain(

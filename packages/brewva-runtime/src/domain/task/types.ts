@@ -52,7 +52,7 @@ export interface TaskStatus {
   health: TaskHealth;
   reason?: string;
   updatedAt: number;
-  truthFactIds?: string[];
+  claimIds?: string[];
 }
 
 export interface TaskItem {
@@ -68,7 +68,7 @@ export interface TaskBlocker {
   message: string;
   createdAt: number;
   source?: string;
-  truthFactId?: string;
+  claimId?: string;
 }
 
 export type TaskAcceptanceStatus = "pending" | "accepted" | "rejected";
@@ -146,7 +146,7 @@ export type TaskLedgerEventPayload =
         id: string;
         message: string;
         source?: string;
-        truthFactId?: string;
+        claimId?: string;
       };
     }
   | {

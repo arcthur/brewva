@@ -12,7 +12,7 @@ function isConvergencePredicate(value: unknown): boolean {
   if (typeof value.kind !== "string") return false;
 
   switch (value.kind) {
-    case "truth_resolved":
+    case "claim_resolved":
       return typeof value.factId === "string" && value.factId.trim().length > 0;
     case "task_phase":
       return typeof value.phase === "string" && value.phase.trim().length > 0;

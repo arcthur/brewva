@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { TASK_LEDGER_SCHEMA, TRUTH_LEDGER_SCHEMA, asBrewvaSessionId } from "@brewva/brewva-runtime";
+import { TASK_LEDGER_SCHEMA, CLAIM_LEDGER_SCHEMA, asBrewvaSessionId } from "@brewva/brewva-runtime";
 import { type BrewvaEventRecord } from "@brewva/brewva-runtime/events";
 import {
   TASK_EVENT_TYPE,
-  TRUTH_EVENT_TYPE,
+  CLAIM_EVENT_TYPE,
   asBrewvaEventType,
 } from "@brewva/brewva-runtime/events";
 import { extractProjectionFromEvent } from "../../../packages/brewva-runtime/src/domain/projection/extractor.js";
@@ -26,16 +26,17 @@ function event(input: {
 }
 
 describe("projection extractor", () => {
-  test("extracts truth upsert into deterministic projection unit candidate", () => {
+  test("extracts claim upsert into deterministic projection unit candidate", () => {
     const result = extractProjectionFromEvent(
       event({
-        id: "evt-truth-upsert",
-        type: TRUTH_EVENT_TYPE,
+        id: "evt-claim-upsert",
+        type: CLAIM_EVENT_TYPE,
         payload: {
-          schema: TRUTH_LEDGER_SCHEMA,
-          kind: "fact_upserted",
-          fact: {
-            id: "truth:command:1",
+          schema: CLAIM_LEDGER_SCHEMA,
+          kind: "claim_upserted",
+          claimId: "claim:command:1",
+          claim: {
+            id: "claim:command:1",
             kind: "command_failure",
             status: "active",
             severity: "error",
@@ -49,9 +50,9 @@ describe("projection extractor", () => {
     );
 
     expect(result.upserts).toHaveLength(1);
-    expect(result.upserts[0]?.projectionKey).toBe("truth_fact:truth:command:1");
-    expect(result.upserts[0]?.label).toBe("truth.command_failure");
-    expect(result.upserts[0]?.metadata?.truthFactId).toBe("truth:command:1");
+    expect(result.upserts[0]?.projectionKey).toBe("claim:claim:command:1");
+    expect(result.upserts[0]?.label).toBe("claim.command_failure");
+    expect(result.upserts[0]?.metadata?.claimId).toBe("claim:command:1");
     expect(result.resolves).toHaveLength(0);
   });
 
@@ -105,7 +106,7 @@ describe("projection extractor", () => {
           blocker: {
             id: "blocker-1",
             message: "Verification is failing: bun test exits 1",
-            truthFactId: "truth:verifier:tests",
+            claimId: "claim:verifier:tests",
           },
         },
       }),
@@ -115,7 +116,7 @@ describe("projection extractor", () => {
     expect(result.upserts[0]?.projectionKey).toBe("task_blocker:blocker-1");
     expect(result.upserts[0]?.label).toBe("task.blocker");
     expect(result.upserts[0]?.metadata?.taskBlockerId).toBe("blocker-1");
-    expect(result.upserts[0]?.metadata?.truthFactId).toBe("truth:verifier:tests");
+    expect(result.upserts[0]?.metadata?.claimId).toBe("claim:verifier:tests");
     expect(result.resolves).toHaveLength(0);
   });
 

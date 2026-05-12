@@ -59,6 +59,18 @@ EFFECT_CLASSES = {
 }
 COST_HINTS = {"low", "medium", "high"}
 PROJECT_GUIDANCE_STRENGTHS = {"invariant", "workflow_gate", "preference", "lookup"}
+CONVENTION_KIND_RETIREMENT = {
+    "project_fact": "auto_decay_allowed",
+    "user_preference": "auto_decay_allowed",
+    "style_rule": "auto_decay_allowed",
+    "workflow_rule": "review_only",
+    "routing_rule": "review_only",
+    "verification_rule": "review_only",
+    "permission_rule": "non_retirable_without_owner",
+    "safety_boundary": "pinned",
+    "compliance_rule": "pinned",
+}
+RETIREMENT_SENSITIVITIES = set(CONVENTION_KIND_RETIREMENT.values())
 VERIFICATION_LEVELS = {"quick", "standard", "strict"}
 SEMANTIC_ARTIFACT_SCHEMA_IDS = {
     "planning.design_spec.v2",
@@ -563,7 +575,13 @@ def validate_project_guidance(path: Path) -> tuple[bool, str]:
     if not isinstance(frontmatter, dict):
         return False, "Project guidance frontmatter must be a YAML dictionary"
 
-    allowed_keys = {"strength", "scope"}
+    allowed_keys = {
+        "strength",
+        "scope",
+        "convention_kind",
+        "retirement_sensitivity",
+        "owner",
+    }
     unexpected_keys = set(frontmatter.keys()) - allowed_keys
     if unexpected_keys:
         return False, (
@@ -581,6 +599,32 @@ def validate_project_guidance(path: Path) -> tuple[bool, str]:
     scope = frontmatter.get("scope")
     if not isinstance(scope, str) or not scope.strip():
         return False, "Field 'scope' must be a non-empty string"
+
+    convention_kind = frontmatter.get("convention_kind")
+    if convention_kind not in CONVENTION_KIND_RETIREMENT:
+        return False, "Field 'convention_kind' must be a known convention kind"
+
+    retirement_sensitivity = frontmatter.get("retirement_sensitivity")
+    if retirement_sensitivity not in RETIREMENT_SENSITIVITIES:
+        return False, (
+            "Field 'retirement_sensitivity' must be one of: "
+            + " | ".join(sorted(RETIREMENT_SENSITIVITIES))
+        )
+
+    expected_retirement = CONVENTION_KIND_RETIREMENT[convention_kind]
+    if retirement_sensitivity != expected_retirement:
+        return False, (
+            "Field 'retirement_sensitivity' must match convention_kind default: "
+            + expected_retirement
+        )
+
+    owner = frontmatter.get("owner")
+    if owner is not None and (not isinstance(owner, str) or not owner.strip()):
+        return False, "Field 'owner' must be a non-empty string when provided"
+    if retirement_sensitivity in {"non_retirable_without_owner", "pinned"} and not owner:
+        return False, (
+            "Field 'owner' is required for pinned or non-retirable convention guidance"
+        )
 
     return True, "Project guidance is valid!"
 

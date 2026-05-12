@@ -54,15 +54,15 @@ describe("projection store", () => {
 
     const first = store.upsertUnit(
       candidate({
-        projectionKey: "truth_fact:verification:1",
-        label: "truth.verification_failed",
+        projectionKey: "claim:verification:1",
+        label: "claim.verification_failed",
         statement: "verification requires attention",
       }),
     );
     const second = store.upsertUnit(
       candidate({
-        projectionKey: "truth_fact:verification:1",
-        label: "truth.verification_failed",
+        projectionKey: "claim:verification:1",
+        label: "claim.verification_failed",
         statement: "verification requires attention",
       }),
     );
@@ -72,7 +72,7 @@ describe("projection store", () => {
     expect(store.listUnits("projection-store-session")).toHaveLength(1);
   });
 
-  test("resolveUnits supports truth_fact directives", () => {
+  test("resolveUnits supports claim directives", () => {
     const rootDir = mkdtempSync(join(tmpdir(), "brewva-projection-store-resolve-"));
     const store = new ProjectionStore({
       rootDir,
@@ -81,19 +81,19 @@ describe("projection store", () => {
 
     const verification = store.upsertUnit(
       candidate({
-        projectionKey: "truth_fact:verification:1",
-        label: "truth.verification_failed",
+        projectionKey: "claim:verification:1",
+        label: "claim.verification_failed",
         statement: "verification requires attention",
         metadata: {
-          truthFactId: "truth:verification:1",
+          claimId: "claim:verification:1",
         },
       }),
     ).unit;
 
     const resolved = store.resolveUnits({
       sessionId: "projection-store-session",
-      sourceType: "truth_fact",
-      sourceId: "truth:verification:1",
+      sourceType: "claim",
+      sourceId: "claim:verification:1",
       resolvedAt: Date.now(),
     });
 

@@ -1,6 +1,8 @@
 ---
 strength: lookup
 scope: source-map
+convention_kind: project_fact
+retirement_sensitivity: auto_decay_allowed
 ---
 
 # Brewva Source Map

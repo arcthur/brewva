@@ -53,7 +53,7 @@ describe("hosted runtime tape session store", () => {
 
       const userMessage = {
         role: "user",
-        content: [{ type: "text", text: "hello from runtime truth" }],
+        content: [{ type: "text", text: "hello from runtime claim" }],
         timestamp: Date.now(),
       };
       const assistantMessage = {

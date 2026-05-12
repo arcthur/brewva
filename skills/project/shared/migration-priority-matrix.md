@@ -1,6 +1,8 @@
 ---
 strength: preference
 scope: migration-priority
+convention_kind: workflow_rule
+retirement_sensitivity: review_only
 ---
 
 # Governance Priority Matrix

@@ -76,11 +76,11 @@ describe("Verification blockers", () => {
       state1.blockers.find((blocker) => blocker.id === "verifier:tests"),
       "expected verifier:tests blocker after failing verification",
     );
-    expect(blocker1.truthFactId).toBe("truth:verifier:tests");
+    expect(blocker1.claimId).toBe("claim:verifier:tests");
     expect(
-      runtime.inspect.truth
+      runtime.inspect.claim
         .getState(sessionId)
-        .facts.find((fact) => fact.id === "truth:verifier:tests")?.status,
+        .claims.find((fact) => fact.id === "claim:verifier:tests")?.status,
     ).toBe("active");
 
     writeConfig(
@@ -113,9 +113,9 @@ describe("Verification blockers", () => {
     expect(report2.passed).toBe(true);
     expect(blockerIds(reloaded, sessionId)).not.toContain("verifier:tests");
     expect(
-      reloaded.inspect.truth
+      reloaded.inspect.claim
         .getState(sessionId)
-        .facts.find((fact) => fact.id === "truth:verifier:tests")?.status,
+        .claims.find((fact) => fact.id === "claim:verifier:tests")?.status,
     ).toBe("resolved");
   });
 
@@ -223,9 +223,9 @@ describe("Verification blockers", () => {
       }).length,
     ).toBeGreaterThan(0);
     expect(
-      runtime.inspect.truth
+      runtime.inspect.claim
         .getState(sessionId)
-        .facts.find((fact) => fact.id === "truth:governance:verify-spec")?.status,
+        .claims.find((fact) => fact.id === "claim:governance:verify-spec")?.status,
     ).toBe("resolved");
   });
 
@@ -312,7 +312,7 @@ describe("Verification blockers", () => {
     expect(outcomes[0]?.payload?.outcome).toBe("skipped");
   });
 
-  test("projects missing fresh verification evidence as a warn truth fact and resolves it after a fresh rerun", async () => {
+  test("projects missing fresh verification evidence as a warn claim fact and resolves it after a fresh rerun", async () => {
     const workspace = createTestWorkspace("verification-missing-blocker");
     writeConfig(
       workspace,
@@ -353,13 +353,13 @@ describe("Verification blockers", () => {
       "expected verifier:tests blocker after missing verification evidence",
     );
     expect(blocker.message).toContain("verification missing fresh evidence: tests");
-    expect(blocker.truthFactId).toBe("truth:verifier:tests");
+    expect(blocker.claimId).toBe("claim:verifier:tests");
 
     const fact = requireDefined(
-      runtime.inspect.truth
+      runtime.inspect.claim
         .getState(sessionId)
-        .facts.find((entry) => entry.id === "truth:verifier:tests"),
-      "expected truth:verifier:tests fact after missing verification evidence",
+        .claims.find((entry) => entry.id === "claim:verifier:tests"),
+      "expected claim:verifier:tests fact after missing verification evidence",
     );
     expect(fact.kind).toBe("verification_check_missing");
     expect(fact.severity).toBe("warn");
@@ -386,9 +386,9 @@ describe("Verification blockers", () => {
     expect(second.passed).toBe(true);
     expect(blockerIds(runtime, sessionId)).not.toContain("verifier:tests");
     expect(
-      runtime.inspect.truth
+      runtime.inspect.claim
         .getState(sessionId)
-        .facts.find((entry) => entry.id === "truth:verifier:tests")?.status,
+        .claims.find((entry) => entry.id === "claim:verifier:tests")?.status,
     ).toBe("resolved");
   });
 
@@ -430,9 +430,9 @@ describe("Verification blockers", () => {
     expect(report.missingEvidence).toEqual([]);
     expect(blockerIds(runtime, sessionId)).toContain("verifier:tests");
     expect(
-      runtime.inspect.truth
+      runtime.inspect.claim
         .getState(sessionId)
-        .facts.find((fact) => fact.id === "truth:verifier:tests")?.status,
+        .claims.find((fact) => fact.id === "claim:verifier:tests")?.status,
     ).toBe("active");
 
     const outcome = latestOutcomePayload(runtime, sessionId);

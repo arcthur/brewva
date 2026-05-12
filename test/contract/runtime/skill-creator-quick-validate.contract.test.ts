@@ -108,7 +108,7 @@ describe("skill-authoring quick validator", () => {
     }
   });
 
-  test("rejects project guidance frontmatter beyond strength and scope", () => {
+  test("rejects unsupported project guidance frontmatter", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-guidance-quick-validate-invalid-"));
 
     try {
@@ -150,9 +150,15 @@ describe("skill-authoring quick validator", () => {
       mkdirSync(join(workspace, "skills/project/shared"), { recursive: true });
       writeFileSync(
         guidancePath,
-        ["\uFEFF---", "strength: lookup", "scope: project-rules", "---", "# Project Rules"].join(
-          "\r\n",
-        ),
+        [
+          "\uFEFF---",
+          "strength: lookup",
+          "scope: project-rules",
+          "convention_kind: project_fact",
+          "retirement_sensitivity: auto_decay_allowed",
+          "---",
+          "# Project Rules",
+        ].join("\r\n"),
         "utf8",
       );
 

@@ -142,7 +142,7 @@ describe("recall broker", () => {
     expect(result.results[precedentIndex]?.trustLabel).toBe("Repository precedent");
   });
 
-  test("classifies kernel truth and patch receipts as strong runtime evidence", async () => {
+  test("classifies kernel claim and patch receipts as strong runtime evidence", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-recall-broker-"));
     mkdirSync(join(workspace, "packages", "gateway"), { recursive: true });
     mkdirSync(join(workspace, "docs", "solutions", "gateway"), { recursive: true });
@@ -173,10 +173,10 @@ describe("recall broker", () => {
     });
     runtime.extensions.hosted.events.record({
       sessionId: priorSessionId,
-      type: "truth_event",
+      type: "claim_event",
       payload: {
-        schema: "brewva.truth.ledger.v1",
-        summary: "Epsilon durable receipt marker entered kernel truth.",
+        schema: "brewva.claim.ledger.v1",
+        summary: "Epsilon durable receipt marker entered kernel claim.",
       } as Record<string, unknown>,
     });
     runtime.extensions.hosted.events.record({
@@ -204,8 +204,8 @@ describe("recall broker", () => {
       intent: "durable_runtime_receipts",
       limit: 8,
     });
-    const truthIndex = result.results.findIndex(
-      (entry) => entry.sourceFamily === "tape_evidence" && entry.title.startsWith("truth_event"),
+    const claimIndex = result.results.findIndex(
+      (entry) => entry.sourceFamily === "tape_evidence" && entry.title.startsWith("claim_event"),
     );
     const patchIndex = result.results.findIndex(
       (entry) => entry.sourceFamily === "tape_evidence" && entry.title.startsWith("patch_recorded"),
@@ -214,12 +214,12 @@ describe("recall broker", () => {
       (entry) => entry.sourceFamily === "repository_precedent",
     );
 
-    expect(truthIndex).toBeGreaterThanOrEqual(0);
+    expect(claimIndex).toBeGreaterThanOrEqual(0);
     expect(patchIndex).toBeGreaterThanOrEqual(0);
     expect(precedentIndex).toBeGreaterThanOrEqual(0);
-    expect(result.results[truthIndex]).toEqual(
+    expect(result.results[claimIndex]).toEqual(
       expect.objectContaining({
-        trustLabel: "Kernel truth",
+        trustLabel: "Kernel claim",
         evidenceStrength: "strong",
       }),
     );
@@ -229,7 +229,7 @@ describe("recall broker", () => {
         evidenceStrength: "strong",
       }),
     );
-    expect(truthIndex).toBeLessThan(precedentIndex);
+    expect(claimIndex).toBeLessThan(precedentIndex);
     expect(patchIndex).toBeLessThan(precedentIndex);
   });
 

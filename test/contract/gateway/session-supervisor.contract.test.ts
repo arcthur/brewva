@@ -21,7 +21,7 @@ interface SentPromptMessage {
         schema: "brewva.task.v1";
         goal: string;
       } | null;
-      truthFacts?: Array<{
+      claims?: Array<{
         id: string;
         kind: string;
         severity: "info" | "warn" | "error";
@@ -561,7 +561,7 @@ describe("session supervisor safeguards", () => {
             schema: "brewva.task.v1",
             goal: "Finish the release checklist",
           },
-          truthFacts: [
+          claims: [
             {
               id: "fact-1",
               kind: "status",
@@ -588,7 +588,7 @@ describe("session supervisor safeguards", () => {
           schema: "brewva.task.v1",
           goal: "Finish the release checklist",
         },
-        truthFacts: [
+        claims: [
           {
             id: "fact-1",
             kind: "status",

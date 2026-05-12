@@ -26,7 +26,7 @@ export function registerTaskDomain(
       hardLimitPercent: options.kernel.contextBudget.getEffectiveHardLimitPercent(sessionId, usage),
     }),
     getTaskState: (sessionId) => options.kernel.getTaskState(sessionId),
-    getTruthState: (sessionId) => options.kernel.getTruthState(sessionId),
+    getClaimState: (sessionId) => options.kernel.getClaimState(sessionId),
     evaluateCompletion: (sessionId) => options.evaluateCompletion(sessionId),
     recordEvent: (input) => options.kernel.recordEvent(input),
   });

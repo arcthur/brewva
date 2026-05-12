@@ -24,7 +24,7 @@ const BANNED_PATTERNS: RegExp[] = [
   /\bfinishToolCall\b/u,
   /\bruntime\.recordEvent\b/u,
   /\bruntime\.buildContextInjection\b/u,
-  /\bbrewva\.truth\b(?![.-])/u,
+  /\bbrewva\.claim\b(?![.-])/u,
   /\bbrewva\.memory\b(?![.-])/u,
   /\bbrewva\.working-memory\b/u,
   /\bbrewva\.memory_recall\b/u,

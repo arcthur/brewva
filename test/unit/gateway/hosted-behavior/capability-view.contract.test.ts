@@ -254,7 +254,7 @@ describe("capability view", () => {
         }),
         expect.objectContaining({
           pathText: "convergenceCondition.kind",
-          acceptedValues: ["truth_resolved", "task_phase", "max_runs", "all_of", "any_of"],
+          acceptedValues: ["claim_resolved", "task_phase", "max_runs", "all_of", "any_of"],
         }),
         expect.objectContaining({
           pathText: "convergenceCondition.phase",
@@ -279,7 +279,7 @@ describe("capability view", () => {
     expect(rendered[2]?.content).toContain("param.action:");
     expect(rendered[2]?.content).toContain("param.convergenceCondition.kind:");
     expect(rendered[2]?.content).toContain(
-      "values=truth_resolved|task_phase|max_runs|all_of|any_of",
+      "values=claim_resolved|task_phase|max_runs|all_of|any_of",
     );
   });
 

@@ -221,7 +221,7 @@ export async function runDaemon(parsed: RunDaemonOptions): Promise<void> {
         listEvents: (sessionId, query) => runtime.inspect.events.list(sessionId, query),
         recordEvent: (input) => runtime.extensions.hosted.events.record(input),
         subscribeEvents: (listener) => runtime.inspect.events.subscribe(listener),
-        getTruthState: (sessionId) => runtime.inspect.truth.getState(sessionId),
+        getClaimState: (sessionId) => runtime.inspect.claim.getState(sessionId),
         getTaskState: (sessionId) => runtime.inspect.task.getState(sessionId),
         recoveryWal: {
           appendPending: (envelope, source, options) =>

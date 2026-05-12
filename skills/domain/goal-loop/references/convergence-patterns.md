@@ -8,7 +8,7 @@ runtime-native `convergenceCondition` plus a schedule shape.
 Pick the predicate from the system of record:
 
 - use `task_phase` when task ledger state defines completion
-- use `truth_resolved` when a fact or external condition defines completion
+- use `claim_resolved` when a claim or external condition defines completion
 - use `all_of` when multiple observable gates must all pass
 - use `any_of` when any one of several observable outcomes is sufficient
 - use `max_runs` only as a hard safety rail, not as the business definition of done
@@ -18,7 +18,7 @@ Pick the predicate from the system of record:
 | Goal shape                                                       | Preferred predicate | Typical schedule bias                      | Notes                                                  |
 | ---------------------------------------------------------------- | ------------------- | ------------------------------------------ | ------------------------------------------------------ |
 | Deliver a multi-step task to done                                | `task_phase=done`   | short delay or cron                        | Best default for iterative execution work              |
-| Wait for an external fact to become true                         | `truth_resolved`    | cron                                       | Use when completion lives outside the task ledger      |
+| Wait for an external claim to become true                        | `claim_resolved`    | cron                                       | Use when completion lives outside the task ledger      |
 | Finish only after task state and verification are both satisfied | `all_of(...)`       | short delay first, then cron if long-lived | Keeps "done" tied to observable evidence               |
 | Accept one of several valid terminal states                      | `any_of(...)`       | cron                                       | Use sparingly; terminal states must still be objective |
 
@@ -53,7 +53,7 @@ Use when the work is mostly checking whether an external condition has changed.
 continuityMode: fresh
 maxRuns: 48
 convergenceCondition:
-  kind: truth_resolved
+  kind: claim_resolved
   factId: release_window_open
 schedule_target:
   type: cron
@@ -77,7 +77,7 @@ convergenceCondition:
   predicates:
     - kind: task_phase
       phase: done
-    - kind: truth_resolved
+    - kind: claim_resolved
       factId: verification_green
 schedule_target:
   type: delay

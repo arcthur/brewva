@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import {
   BrewvaRuntime,
   DEFAULT_BREWVA_CONFIG,
-  buildTruthFactUpsertedEvent,
+  buildClaimUpsertedEvent,
   type BrewvaConfig,
 } from "@brewva/brewva-runtime";
 import { getRuntimeInternals } from "../../helpers/runtime-internals.js";
@@ -85,7 +85,7 @@ describe("session state cleanup", () => {
       channelSuccess: true,
     });
     runtime.inspect.task.getState(sessionId);
-    runtime.inspect.truth.getState(sessionId);
+    runtime.inspect.claim.getState(sessionId);
     runtime.authority.cost.recordAssistantUsage({
       sessionId,
       model: "test-model",
@@ -141,7 +141,7 @@ describe("session state cleanup", () => {
     expect(internals.turnReplay.hasSession(sessionId)).toBe(true);
   });
 
-  test("keeps replay cache for non-folding events and incrementally folds truth updates", async () => {
+  test("keeps replay cache for non-folding events and incrementally folds claim updates", async () => {
     const workspace = createTestWorkspace("replay-filter");
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionId = "replay-filter-1";
@@ -167,13 +167,13 @@ describe("session state cleanup", () => {
 
     runtime.extensions.hosted.events.record({
       sessionId,
-      type: "truth_event",
-      payload: buildTruthFactUpsertedEvent({
-        id: "truth-1",
+      type: "claim_event",
+      payload: buildClaimUpsertedEvent({
+        id: "claim-1",
         kind: "test",
         status: "active",
         severity: "warn",
-        summary: "truth update",
+        summary: "claim update",
         evidenceIds: ["led-1"],
         firstSeenAt: Date.now(),
         lastSeenAt: Date.now(),
@@ -181,9 +181,9 @@ describe("session state cleanup", () => {
     });
     expect(internals.turnReplay.hasSession(sessionId)).toBe(true);
 
-    const truthState = runtime.inspect.truth.getState(sessionId);
-    expect(truthState.facts).toHaveLength(1);
-    expect(truthState.facts[0]?.id).toBe("truth-1");
+    const claimState = runtime.inspect.claim.getState(sessionId);
+    expect(claimState.claims).toHaveLength(1);
+    expect(claimState.claims[0]?.id).toBe("claim-1");
     expect(internals.turnReplay.hasSession(sessionId)).toBe(true);
   });
 

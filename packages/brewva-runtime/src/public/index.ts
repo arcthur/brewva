@@ -73,6 +73,8 @@ export type {
 export type {
   EffectAuthorityManifestBasis,
   EffectiveToolActionPolicy,
+  MutationReceipt,
+  MutationSubject,
   PatchSetRedoFailureReason,
   PatchSetRollbackFailureReason,
   ToolActionAdmissionOverrides,
@@ -87,7 +89,6 @@ export type {
   ToolExecutionBoundary,
   ToolGovernanceDescriptor,
   ToolGovernanceRisk,
-  ToolMutationReceipt,
   ToolMutationRollbackFailureReason,
   ToolMutationRollbackKind,
   ToolMutationRollbackResult,
@@ -96,6 +97,24 @@ export type {
   ToolRecoveryPolicy,
   ToolRiskLevel,
 } from "../domain/governance/types.js";
+export type {
+  ApplyApprovedConventionChangeResult,
+  BlastRadius,
+  ConventionChangeRequest,
+  ConventionDecision,
+  ConventionDecisionReceipt,
+  ConventionDigest,
+  ConventionKind,
+  ConventionLane,
+  ConventionRequestRecord,
+  ConventionRequestState,
+  ConventionReviewSurface,
+  ConventionState,
+  ConventionTarget,
+  ConventionTransition,
+  DecideConventionChangeResult,
+  RetirementSensitivity,
+} from "../domain/conventions/types.js";
 export type {
   DecideEffectCommitmentInput,
   DecideEffectCommitmentResult,
@@ -114,11 +133,23 @@ export type {
   EffectCommitmentRequestListQuery,
   EffectCommitmentRequestRecord,
   EffectCommitmentRequestState,
-  EvidenceRef,
-  EvidenceSourceType,
   PendingEffectCommitmentRequest,
   ProposalDecision,
 } from "../domain/proposals/types.js";
+export type {
+  EvidenceDiversityCluster,
+  EvidenceDiversitySummary,
+  EvidencePolarity,
+  EvidenceRef,
+  EvidenceSourceType,
+  EvidenceTrustLevel,
+} from "../domain/evidence/types.js";
+export {
+  computeEvidenceDiversity,
+  isEvidenceSourceType,
+  normalizeEvidenceRef,
+  normalizeEvidenceRefs,
+} from "../domain/evidence/api.js";
 export { isHydratedTaskState } from "../domain/task/types.js";
 export type {
   HydratedTaskState,
@@ -186,14 +217,14 @@ export type {
   LedgerDigest,
 } from "../domain/ledger/types.js";
 export type {
-  TruthFact,
-  TruthFactResolveResult,
-  TruthFactSeverity,
-  TruthFactStatus,
-  TruthFactUpsertResult,
-  TruthLedgerEventPayload,
-  TruthState,
-} from "../domain/truth/types.js";
+  OperationalClaim,
+  ClaimResolveResult,
+  ClaimSeverity,
+  ClaimStatus,
+  ClaimUpsertResult,
+  ClaimLedgerEventPayload,
+  ClaimState,
+} from "../domain/claim/types.js";
 export {
   VERIFICATION_OUTCOME_SCHEMA,
   VERIFICATION_WRITE_MARKED_SCHEMA,
@@ -739,16 +770,16 @@ export type {
   TaskWatchdogEligibility,
 } from "../domain/task/watchdog.js";
 export {
-  TRUTH_EVENT_TYPE,
-  TRUTH_LEDGER_SCHEMA,
-  buildTruthFactResolvedEvent,
-  buildTruthFactUpsertedEvent,
-  coerceTruthLedgerPayload,
-  createEmptyTruthState,
-  foldTruthLedgerEvents,
-  isTruthLedgerPayload,
-  reduceTruthState,
-} from "../domain/truth/ledger.js";
+  CLAIM_EVENT_TYPE,
+  CLAIM_LEDGER_SCHEMA,
+  buildClaimResolvedEvent,
+  buildClaimUpsertedEvent,
+  coerceClaimLedgerPayload,
+  createEmptyClaimState,
+  foldClaimLedgerEvents,
+  isClaimLedgerPayload,
+  reduceClaimState,
+} from "../domain/claim/ledger.js";
 export { TAPE_ANCHOR_EVENT_TYPE, TAPE_CHECKPOINT_EVENT_TYPE } from "../domain/tape/events.js";
 export {
   TAPE_ANCHOR_SCHEMA,
@@ -784,11 +815,11 @@ export type {
   ReasoningCheckpointPayload,
   ReasoningRevertPayload,
 } from "../domain/reasoning/payloads.js";
-export { projectTruthFromToolResult } from "../domain/truth/tool-result-projector.js";
+export { projectClaimsFromToolResult } from "../domain/claim/tool-result-projector.js";
 export type {
-  ToolResultTruthProjectionInput,
-  TruthToolResultProjectorContext,
-} from "../domain/truth/tool-result-projector.js";
+  ToolResultClaimProjectionInput,
+  ClaimToolResultProjectorContext,
+} from "../domain/claim/tool-result-projector.js";
 export { normalizeToolName } from "../utils/tool-name.js";
 export { SCHEDULE_EVENT_TYPE } from "../domain/schedule/events.js";
 export {

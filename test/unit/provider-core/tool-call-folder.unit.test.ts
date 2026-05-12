@@ -558,7 +558,7 @@ describe("streaming parse Type.Recursive coverage", () => {
     const ConvergencePredicateSchema = Type.Recursive((Self) =>
       Type.Union([
         Type.Object({
-          kind: Type.Literal("truth_resolved"),
+          kind: Type.Literal("claim_resolved"),
           factId: Type.String(),
         }),
         Type.Object({

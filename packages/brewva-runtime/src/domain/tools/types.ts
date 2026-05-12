@@ -47,7 +47,7 @@ export interface ToolResultRecordedEventPayload {
   outputObservation: Record<string, JsonValue> | null;
   outputArtifact: Record<string, JsonValue> | null;
   outputDistillation: Record<string, JsonValue> | null;
-  truthProjection: Record<string, JsonValue> | null;
+  claimProjection: Record<string, JsonValue> | null;
   verificationProjection: Record<string, JsonValue> | null;
   failureClass: ToolResultFailureClass | null;
   failureContext: ToolResultFailureContextPayload | null;

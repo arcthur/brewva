@@ -366,7 +366,7 @@ describe("runtime event descriptors", () => {
             failureClass: "execution",
             turn: 7,
           },
-          truthProjection: {
+          claimProjection: {
             toolName: "exec",
             args: {
               command: "cat missing.txt",
@@ -406,7 +406,7 @@ describe("runtime event descriptors", () => {
         failureClass: "execution",
         turn: 7,
       },
-      truthProjection: {
+      claimProjection: {
         toolName: "exec",
         args: {
           command: "cat missing.txt",

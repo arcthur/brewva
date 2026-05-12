@@ -3,11 +3,11 @@ import { BrewvaRuntime } from "@brewva/brewva-runtime";
 import { requireDefined } from "../../helpers/assertions.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
-describe("Truth extraction from lsp_diagnostics", () => {
-  test("records diagnostic truth facts and resolves on clean output", () => {
-    const workspace = createTestWorkspace("truth-from-lsp-diagnostics");
+describe("Claim extraction from lsp_diagnostics", () => {
+  test("records diagnostic operational claims and resolves on clean output", () => {
+    const workspace = createTestWorkspace("claim-from-lsp-diagnostics");
     const runtime = new BrewvaRuntime({ cwd: workspace });
-    const sessionId = "truth-from-lsp-diagnostics-1";
+    const sessionId = "claim-from-lsp-diagnostics-1";
 
     const diagnosticsOutput = [
       "src/foo.ts(10,5): error TS2322: Type 'number' is not assignable to type 'string'.",
@@ -21,10 +21,10 @@ describe("Truth extraction from lsp_diagnostics", () => {
       channelSuccess: true,
     });
 
-    const truth1 = runtime.inspect.truth.getState(sessionId);
+    const claim1 = runtime.inspect.claim.getState(sessionId);
     const fact1 = requireDefined(
-      truth1.facts.find((fact) => fact.kind === "diagnostic"),
-      "Expected active diagnostic truth fact.",
+      claim1.claims.find((fact) => fact.kind === "diagnostic"),
+      "Expected active diagnostic claim.",
     );
     expect(fact1.status).toBe("active");
     expect(fact1.summary).toContain("TS2322");
@@ -32,9 +32,9 @@ describe("Truth extraction from lsp_diagnostics", () => {
     const task1 = runtime.inspect.task.getState(sessionId);
     const blocker1 = requireDefined(
       task1.blockers.find((blocker) => blocker.id === fact1.id),
-      "Expected blocker linked to diagnostic fact.",
+      "Expected blocker linked to diagnostic claim.",
     );
-    expect(blocker1.truthFactId).toBe(fact1.id);
+    expect(blocker1.claimId).toBe(fact1.id);
 
     runtime.authority.tools.recordResult({
       sessionId,
@@ -44,10 +44,10 @@ describe("Truth extraction from lsp_diagnostics", () => {
       channelSuccess: true,
     });
 
-    const truth2 = runtime.inspect.truth.getState(sessionId);
+    const claim2 = runtime.inspect.claim.getState(sessionId);
     const fact2 = requireDefined(
-      truth2.facts.find((fact) => fact.id === fact1.id),
-      "Expected diagnostic fact after clean rerun.",
+      claim2.claims.find((fact) => fact.id === fact1.id),
+      "Expected diagnostic claim after clean rerun.",
     );
     expect(fact2.status).toBe("resolved");
 
@@ -55,10 +55,10 @@ describe("Truth extraction from lsp_diagnostics", () => {
     expect(task2.blockers.map((blocker) => blocker.id)).not.toContain(fact1.id);
   });
 
-  test("clean output resolves only diagnostic facts for that file", () => {
-    const workspace = createTestWorkspace("truth-from-lsp-diagnostics-scoped");
+  test("clean output resolves only diagnostic claims for that file", () => {
+    const workspace = createTestWorkspace("claim-from-lsp-diagnostics-scoped");
     const runtime = new BrewvaRuntime({ cwd: workspace });
-    const sessionId = "truth-from-lsp-diagnostics-2";
+    const sessionId = "claim-from-lsp-diagnostics-2";
 
     runtime.authority.tools.recordResult({
       sessionId,
@@ -85,15 +85,15 @@ describe("Truth extraction from lsp_diagnostics", () => {
       channelSuccess: true,
     });
 
-    const truth = runtime.inspect.truth.getState(sessionId);
-    const foo = truth.facts.find(
+    const claim = runtime.inspect.claim.getState(sessionId);
+    const foo = claim.claims.find(
       (fact) => fact.summary.includes("src/foo.ts") && fact.summary.includes("TS2322"),
     );
-    const bar = truth.facts.find(
+    const bar = claim.claims.find(
       (fact) => fact.summary.includes("src/bar.ts") && fact.summary.includes("TS2304"),
     );
-    const fooFact = requireDefined(foo, "Expected foo diagnostic fact.");
-    const barFact = requireDefined(bar, "Expected bar diagnostic fact.");
+    const fooFact = requireDefined(foo, "Expected foo diagnostic claim.");
+    const barFact = requireDefined(bar, "Expected bar diagnostic claim.");
     expect(fooFact.status).toBe("resolved");
     expect(barFact.status).toBe("active");
 
@@ -104,9 +104,9 @@ describe("Truth extraction from lsp_diagnostics", () => {
   });
 
   test("stale diagnostic codes resolve when unfiltered output changes", () => {
-    const workspace = createTestWorkspace("truth-from-lsp-diagnostics-stale");
+    const workspace = createTestWorkspace("claim-from-lsp-diagnostics-stale");
     const runtime = new BrewvaRuntime({ cwd: workspace });
-    const sessionId = "truth-from-lsp-diagnostics-3";
+    const sessionId = "claim-from-lsp-diagnostics-3";
 
     runtime.authority.tools.recordResult({
       sessionId,
@@ -128,11 +128,11 @@ describe("Truth extraction from lsp_diagnostics", () => {
       channelSuccess: true,
     });
 
-    const truth = runtime.inspect.truth.getState(sessionId);
-    const ts2322 = truth.facts.find(
+    const claim = runtime.inspect.claim.getState(sessionId);
+    const ts2322 = claim.claims.find(
       (fact) => fact.summary.includes("src/foo.ts") && fact.summary.includes("TS2322"),
     );
-    const ts2304 = truth.facts.find(
+    const ts2304 = claim.claims.find(
       (fact) => fact.summary.includes("src/foo.ts") && fact.summary.includes("TS2304"),
     );
 
@@ -148,9 +148,9 @@ describe("Truth extraction from lsp_diagnostics", () => {
   });
 
   test("scope-mismatch unavailable output does not resolve active facts", () => {
-    const workspace = createTestWorkspace("truth-from-lsp-diagnostics-scope-mismatch");
+    const workspace = createTestWorkspace("claim-from-lsp-diagnostics-scope-mismatch");
     const runtime = new BrewvaRuntime({ cwd: workspace });
-    const sessionId = "truth-from-lsp-diagnostics-4";
+    const sessionId = "claim-from-lsp-diagnostics-4";
 
     runtime.authority.tools.recordResult({
       sessionId,
@@ -176,8 +176,8 @@ describe("Truth extraction from lsp_diagnostics", () => {
       },
     });
 
-    const truth = runtime.inspect.truth.getState(sessionId);
-    const fact = truth.facts.find(
+    const claim = runtime.inspect.claim.getState(sessionId);
+    const fact = claim.claims.find(
       (entry) => entry.summary.includes("src/foo.ts") && entry.summary.includes("TS2322"),
     );
     const activeFact = requireDefined(fact, "Expected scope-mismatch to preserve active fact.");

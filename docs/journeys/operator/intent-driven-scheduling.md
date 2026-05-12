@@ -71,12 +71,12 @@ flowchart TD
   `nextRunAt`; replay treats the event-carried `nextRunAt` as authoritative
 - `follow_up` is the bounded ergonomic layer; `schedule_intent` remains the
   precise control surface
-- `continuityMode=inherit` carries the parent `TaskSpec`, truth facts, and
+- `continuityMode=inherit` carries the parent `TaskSpec`, operational claims, and
   anchor context
 - `continuityMode=fresh` intentionally does not inherit parent state
 - convergence conditions are explicit user-authored predicates, not a runtime
   planner:
-  - `truth_resolved`
+  - `claim_resolved`
   - `task_phase`
   - `max_runs`
   - `all_of`

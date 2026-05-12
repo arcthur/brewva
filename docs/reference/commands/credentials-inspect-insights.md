@@ -22,11 +22,11 @@ the credentials subcommand is the lower-level operational surface.
 
 `brewva inspect` is the canonical replay-first operator view for a persisted
 session. It summarizes hydration, degraded replay issues, tape volume, task and
-truth state, verification posture, hosted transition snapshot, active model
+claim state, verification posture, hosted transition snapshot, active model
 preset, ledger paths, and evidence gaps.
 
 Directory-scoped inspect requests should remain deterministic and should not
-create new runtime truth.
+create new runtime authority.
 
 ## Insights
 

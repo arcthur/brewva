@@ -100,14 +100,14 @@ function coerceTaskStatus(value: unknown): TaskStatus | null {
       : null;
   if (!phase || !health || updatedAt === null) return null;
 
-  const truthFactIds = normalizeStringArray(value.truthFactIds);
+  const claimIds = normalizeStringArray(value.claimIds);
 
   return {
     phase,
     health,
     reason: normalizeNonEmptyString(value.reason),
     updatedAt,
-    truthFactIds,
+    claimIds,
   };
 }
 
@@ -208,11 +208,11 @@ export function reduceTaskState(
     if (existing) {
       const nextMessage = payload.blocker.message;
       const nextSource = payload.blocker.source ?? existing.source;
-      const nextTruth = payload.blocker.truthFactId ?? existing.truthFactId;
+      const nextClaimId = payload.blocker.claimId ?? existing.claimId;
       const changed =
         existing.message !== nextMessage ||
         existing.source !== nextSource ||
-        existing.truthFactId !== nextTruth;
+        existing.claimId !== nextClaimId;
       return {
         ...state,
         blockers: changed
@@ -222,7 +222,7 @@ export function reduceTaskState(
                     ...blocker,
                     message: nextMessage,
                     source: nextSource,
-                    truthFactId: nextTruth,
+                    claimId: nextClaimId,
                   }
                 : blocker,
             )
@@ -236,7 +236,7 @@ export function reduceTaskState(
       message: payload.blocker.message,
       createdAt: timestamp,
       source: payload.blocker.source,
-      truthFactId: payload.blocker.truthFactId,
+      claimId: payload.blocker.claimId,
     };
     return {
       ...state,
@@ -342,7 +342,7 @@ export function buildBlockerRecordedEvent(input: {
   id?: string;
   message: string;
   source?: string;
-  truthFactId?: string;
+  claimId?: string;
 }): BlockerRecordedEvent {
   return {
     schema: TASK_LEDGER_SCHEMA,
@@ -351,7 +351,7 @@ export function buildBlockerRecordedEvent(input: {
       id: input.id ?? buildId("blocker"),
       message: input.message,
       source: input.source,
-      truthFactId: input.truthFactId,
+      claimId: input.claimId,
     },
   };
 }
@@ -444,7 +444,7 @@ export function coerceTaskLedgerPayload(value: unknown): TaskLedgerEventPayload 
     const message = normalizeNonEmptyString(blocker.message);
     if (!id || !message) return null;
     const source = normalizeNonEmptyString(blocker.source);
-    const truthFactId = normalizeNonEmptyString(blocker.truthFactId);
+    const claimId = normalizeNonEmptyString(blocker.claimId);
     return {
       schema: TASK_LEDGER_SCHEMA,
       kind,
@@ -452,7 +452,7 @@ export function coerceTaskLedgerPayload(value: unknown): TaskLedgerEventPayload 
         id,
         message,
         source,
-        truthFactId,
+        claimId,
       },
     };
   }
@@ -527,11 +527,11 @@ export function formatTaskStateBlock(state: TaskState): string {
     if (status.reason) {
       lines.push(`status.reason=${status.reason}`);
     }
-    const truthFactIds = status.truthFactIds ?? [];
-    if (truthFactIds.length > 0) {
-      lines.push("status.truthFacts:");
-      for (const truthFactId of truthFactIds.slice(0, 6)) {
-        lines.push(`- ${truthFactId}`);
+    const claimIds = status.claimIds ?? [];
+    if (claimIds.length > 0) {
+      lines.push("status.claims:");
+      for (const claimId of claimIds.slice(0, 6)) {
+        lines.push(`- ${claimId}`);
       }
     }
   }
@@ -541,10 +541,10 @@ export function formatTaskStateBlock(state: TaskState): string {
     lines.push("blockers:");
     for (const blocker of blockers.slice(0, 4)) {
       const source = blocker.source ? ` source=${blocker.source}` : "";
-      const truth = blocker.truthFactId ? ` truth=${blocker.truthFactId}` : "";
+      const claim = blocker.claimId ? ` claim=${blocker.claimId}` : "";
       const messageLines = blocker.message.split("\n");
       const firstLine = messageLines[0] ?? "";
-      lines.push(`- [${blocker.id}] ${firstLine}${source}${truth}`.trim());
+      lines.push(`- [${blocker.id}] ${firstLine}${source}${claim}`.trim());
       for (const line of messageLines.slice(1)) {
         lines.push(`  ${line}`);
       }
@@ -635,10 +635,10 @@ function coerceTaskState(value: unknown): TaskState | null {
     const message = normalizeNonEmptyString(raw.message);
     const createdAt = typeof raw.createdAt === "number" ? raw.createdAt : null;
     const source = normalizeNonEmptyString(raw.source);
-    const truthFactId = normalizeNonEmptyString(raw.truthFactId);
+    const claimId = normalizeNonEmptyString(raw.claimId);
     if (!id || !message) continue;
     if (createdAt === null) continue;
-    blockers.push({ id, message, createdAt, source, truthFactId });
+    blockers.push({ id, message, createdAt, source, claimId });
   }
 
   const updatedAtValue = value.updatedAt;

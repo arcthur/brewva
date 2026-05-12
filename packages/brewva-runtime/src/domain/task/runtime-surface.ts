@@ -37,7 +37,7 @@ export interface RuntimeTaskSurfaceMethods {
       id?: string;
       message: string;
       source?: string;
-      truthFactId?: string;
+      claimId?: string;
     },
   ): TaskBlockerRecordResult;
   recordAcceptance(

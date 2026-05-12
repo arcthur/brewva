@@ -156,11 +156,11 @@ import type {
   BrewvaStructuredEvent,
 } from "../../events/types.js";
 import type { RuntimeCallback } from "../../runtime/callback.js";
+import { CLAIM_EVENT_TYPE } from "../claim/api.js";
 import { REASONING_CHECKPOINT_EVENT_TYPE, REASONING_REVERT_EVENT_TYPE } from "../reasoning/api.js";
 import { SCHEDULE_EVENT_TYPE } from "../schedule/api.js";
 import { TAPE_ANCHOR_EVENT_TYPE, TAPE_CHECKPOINT_EVENT_TYPE } from "../tape/api.js";
 import { TASK_EVENT_TYPE } from "../task/api.js";
-import { TRUTH_EVENT_TYPE } from "../truth/api.js";
 
 const AUDIT_EVENT_TYPES = new Set<string>([
   TAPE_ANCHOR_EVENT_TYPE,
@@ -168,7 +168,7 @@ const AUDIT_EVENT_TYPES = new Set<string>([
   REASONING_CHECKPOINT_EVENT_TYPE,
   REASONING_REVERT_EVENT_TYPE,
   TASK_EVENT_TYPE,
-  TRUTH_EVENT_TYPE,
+  CLAIM_EVENT_TYPE,
   EFFECT_AUTHORITY_DECIDED_EVENT_TYPE,
   TOOL_EFFECT_GATE_SELECTED_EVENT_TYPE,
   TOOL_OUTPUT_OBSERVED_EVENT_TYPE,

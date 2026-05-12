@@ -1,7 +1,7 @@
 export {
-  RECALL_KERNEL_TRUTH_TAPE_EVENT_TYPES,
+  RECALL_KERNEL_CLAIM_TAPE_EVENT_TYPES,
   RECALL_STRONG_TAPE_EVENT_TYPES,
   classifyRecallTapeEvent,
-  isKernelTruthRecallTapeEvent,
+  isKernelClaimRecallTapeEvent,
   isStrongRecallTapeEvent,
 } from "./classification.js";

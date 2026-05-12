@@ -1,8 +1,8 @@
+import { registerClaimDomain } from "../domain/claim/api.js";
 import { registerCostDomain } from "../domain/cost/api.js";
 import { registerLedgerDomain } from "../domain/ledger/api.js";
 import { registerSkillsDomain } from "../domain/skills/api.js";
 import { registerTaskDomain } from "../domain/task/api.js";
-import { registerTruthDomain } from "../domain/truth/api.js";
 import { registerWorkbenchDomain } from "../domain/workbench/api.js";
 import type {
   RuntimeGovernanceServices,
@@ -16,7 +16,7 @@ export function registerRuntimeWorkServices(
 ): RuntimeWorkServices {
   const taskDomain = registerTaskDomain(options);
   registerSkillsDomain(options);
-  const truthDomain = registerTruthDomain(options);
+  const claimDomain = registerClaimDomain(options);
   const ledgerDomain = registerLedgerDomain(options, {
     getEffectCommitmentDeskService: () => governance.getEffectCommitmentDeskService(),
   });
@@ -28,7 +28,7 @@ export function registerRuntimeWorkServices(
   return {
     taskService: taskDomain.services.taskService,
     taskWatchdogService: taskDomain.services.taskWatchdogService,
-    truthService: truthDomain.services.truthService,
+    claimService: claimDomain.services.claimService,
     ledgerService: ledgerDomain.services.ledgerService,
     costService: costDomain.services.costService,
     workbenchService: workbenchDomain.services.workbenchService,

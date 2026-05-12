@@ -1,9 +1,9 @@
 import type { JsonValue } from "@brewva/brewva-std/json";
 import { toJsonValue } from "@brewva/brewva-std/json";
 import { isRecord, normalizeNonEmptyString } from "../../utils/coerce.js";
+import type { ClaimState } from "../claim/api.js";
 import type { SessionCostSummary } from "../cost/api.js";
 import type { TaskSpec, TaskState } from "../task/api.js";
-import type { TruthState } from "../truth/api.js";
 
 export const TAPE_ANCHOR_SCHEMA = "brewva.tape.anchor.v1" as const;
 export const TAPE_CHECKPOINT_SCHEMA = "brewva.tape.checkpoint.v3" as const;
@@ -29,8 +29,8 @@ const TASK_HEALTH_VALUES = [
   "budget_pressure",
   "unknown",
 ] as const;
-const TRUTH_FACT_STATUSES = ["active", "resolved"] as const;
-const TRUTH_FACT_SEVERITIES = ["info", "warn", "error"] as const;
+const CLAIM_STATUSES = ["active", "resolved"] as const;
+const CLAIM_SEVERITIES = ["info", "warn", "error"] as const;
 
 export interface TapeAnchorPayload {
   schema: typeof TAPE_ANCHOR_SCHEMA;
@@ -44,7 +44,7 @@ export interface TapeCheckpointPayload {
   schema: typeof TAPE_CHECKPOINT_SCHEMA;
   state: {
     task: TaskState;
-    truth: TruthState;
+    claim: ClaimState;
     cost: SessionCostSummary;
     costSkillLastTurnByName: Record<string, number>;
     evidence: TapeCheckpointEvidenceState;
@@ -144,12 +144,12 @@ function isTaskAcceptanceStatus(
   );
 }
 
-function isTruthFactStatus(value: unknown): value is TruthState["facts"][number]["status"] {
-  return typeof value === "string" && (TRUTH_FACT_STATUSES as readonly string[]).includes(value);
+function isClaimStatus(value: unknown): value is ClaimState["claims"][number]["status"] {
+  return typeof value === "string" && (CLAIM_STATUSES as readonly string[]).includes(value);
 }
 
-function isTruthFactSeverity(value: unknown): value is TruthState["facts"][number]["severity"] {
-  return typeof value === "string" && (TRUTH_FACT_SEVERITIES as readonly string[]).includes(value);
+function isClaimSeverity(value: unknown): value is ClaimState["claims"][number]["severity"] {
+  return typeof value === "string" && (CLAIM_SEVERITIES as readonly string[]).includes(value);
 }
 
 function coerceCheckpointTaskState(value: unknown): TaskState | null {
@@ -181,14 +181,14 @@ function coerceCheckpointTaskState(value: unknown): TaskState | null {
     const message = normalizeNonEmptyString(rawBlocker.message);
     const createdAt = normalizeFiniteNumber(rawBlocker.createdAt);
     const source = normalizeNonEmptyString(rawBlocker.source);
-    const truthFactId = normalizeNonEmptyString(rawBlocker.truthFactId);
+    const claimId = normalizeNonEmptyString(rawBlocker.claimId);
     if (!id || !message || createdAt === null) return null;
     blockers.push({
       id,
       message,
       createdAt,
       source,
-      truthFactId,
+      claimId,
     });
   }
 
@@ -263,18 +263,18 @@ function coerceCheckpointTaskState(value: unknown): TaskState | null {
     const health = isTaskHealth(value.status.health) ? value.status.health : null;
     const updatedAt = normalizeFiniteNumber(value.status.updatedAt);
     if (!phase || !health || updatedAt === null) return null;
-    let truthFactIds: string[] | undefined;
-    if (value.status.truthFactIds !== undefined) {
-      const normalizedTruthFactIds = normalizeStringArray(value.status.truthFactIds);
-      if (!normalizedTruthFactIds) return null;
-      truthFactIds = normalizedTruthFactIds;
+    let claimIds: string[] | undefined;
+    if (value.status.claimIds !== undefined) {
+      const normalizedOperationalClaimIds = normalizeStringArray(value.status.claimIds);
+      if (!normalizedOperationalClaimIds) return null;
+      claimIds = normalizedOperationalClaimIds;
     }
     status = {
       phase,
       health,
       reason: normalizeNonEmptyString(value.status.reason),
       updatedAt,
-      truthFactIds,
+      claimIds,
     };
   }
 
@@ -311,22 +311,22 @@ function coerceCheckpointTaskState(value: unknown): TaskState | null {
   };
 }
 
-function coerceCheckpointTruthState(value: unknown): TruthState | null {
+function coerceCheckpointClaimState(value: unknown): ClaimState | null {
   if (!isRecord(value)) return null;
-  if (!Array.isArray(value.facts)) return null;
+  if (!Array.isArray(value.claims)) return null;
 
-  const facts: TruthState["facts"] = [];
-  for (const rawFact of value.facts) {
-    if (!isRecord(rawFact)) return null;
-    const id = normalizeNonEmptyString(rawFact.id);
-    const kind = normalizeNonEmptyString(rawFact.kind);
-    const status = isTruthFactStatus(rawFact.status) ? rawFact.status : null;
-    const severity = isTruthFactSeverity(rawFact.severity) ? rawFact.severity : null;
-    const summary = normalizeNonEmptyString(rawFact.summary);
-    const evidenceIds = normalizeStringArray(rawFact.evidenceIds);
-    const firstSeenAt = normalizeFiniteNumber(rawFact.firstSeenAt);
-    const lastSeenAt = normalizeFiniteNumber(rawFact.lastSeenAt);
-    const resolvedAt = normalizeOptionalFiniteNumber(rawFact.resolvedAt);
+  const claims: ClaimState["claims"] = [];
+  for (const rawClaim of value.claims) {
+    if (!isRecord(rawClaim)) return null;
+    const id = normalizeNonEmptyString(rawClaim.id);
+    const kind = normalizeNonEmptyString(rawClaim.kind);
+    const status = isClaimStatus(rawClaim.status) ? rawClaim.status : null;
+    const severity = isClaimSeverity(rawClaim.severity) ? rawClaim.severity : null;
+    const summary = normalizeNonEmptyString(rawClaim.summary);
+    const evidenceIds = normalizeStringArray(rawClaim.evidenceIds);
+    const firstSeenAt = normalizeFiniteNumber(rawClaim.firstSeenAt);
+    const lastSeenAt = normalizeFiniteNumber(rawClaim.lastSeenAt);
+    const resolvedAt = normalizeOptionalFiniteNumber(rawClaim.resolvedAt);
     if (
       !id ||
       !kind ||
@@ -340,15 +340,15 @@ function coerceCheckpointTruthState(value: unknown): TruthState | null {
       return null;
     }
 
-    facts.push({
+    claims.push({
       id,
       kind,
       status,
       severity,
       summary,
       evidenceIds,
-      details: isRecord(rawFact.details)
-        ? (rawFact.details as TruthState["facts"][number]["details"])
+      details: isRecord(rawClaim.details)
+        ? (rawClaim.details as ClaimState["claims"][number]["details"])
         : undefined,
       firstSeenAt,
       lastSeenAt,
@@ -364,7 +364,7 @@ function coerceCheckpointTruthState(value: unknown): TruthState | null {
   }
 
   return {
-    facts,
+    claims,
     updatedAt,
   };
 }
@@ -640,7 +640,7 @@ export function buildTapeAnchorPayload(input: {
 
 export function buildTapeCheckpointPayload(input: {
   taskState: TaskState;
-  truthState: TruthState;
+  claimState: ClaimState;
   costSummary: SessionCostSummary;
   costSkillLastTurnByName?: Record<string, number>;
   evidenceState: TapeCheckpointEvidenceState;
@@ -654,7 +654,7 @@ export function buildTapeCheckpointPayload(input: {
     schema: TAPE_CHECKPOINT_SCHEMA,
     state: {
       task: input.taskState,
-      truth: input.truthState,
+      claim: input.claimState,
       cost: input.costSummary,
       costSkillLastTurnByName: input.costSkillLastTurnByName ?? {},
       evidence: input.evidenceState,
@@ -692,8 +692,8 @@ export function coerceTapeCheckpointPayload(value: unknown): TapeCheckpointPaylo
   if (value.schema !== TAPE_CHECKPOINT_SCHEMA) return null;
   if (!isRecord(value.state)) return null;
   const task = coerceCheckpointTaskState(value.state.task);
-  const truth = coerceCheckpointTruthState(value.state.truth);
-  if (!task || !truth) return null;
+  const claim = coerceCheckpointClaimState(value.state.claim);
+  if (!task || !claim) return null;
 
   const reason = normalizeNonEmptyString(value.reason);
   const createdAt =
@@ -724,7 +724,7 @@ export function coerceTapeCheckpointPayload(value: unknown): TapeCheckpointPaylo
     schema: TAPE_CHECKPOINT_SCHEMA,
     state: {
       task,
-      truth,
+      claim,
       cost,
       costSkillLastTurnByName,
       evidence,

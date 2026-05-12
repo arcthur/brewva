@@ -70,7 +70,7 @@ export function createKnowledgeSearchTool(options: BrewvaToolOptions): ToolDefin
       "Use this before non-trivial planning or review to retrieve repository precedents explicitly instead of relying on hidden memory.",
     promptGuidelines: [
       "Use query plus module, boundary, or tags when you already know the likely area.",
-      "Treat source_type and authority_rank as decision context. Search results are precedents, not kernel truth.",
+      "Treat source_type and authority_rank as decision context. Search results are precedents, not kernel claim.",
     ],
     parameters: Type.Object({
       query: Type.Optional(Type.String({ minLength: 1, maxLength: 2_000 })),

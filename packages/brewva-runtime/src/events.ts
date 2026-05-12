@@ -338,13 +338,13 @@ export {
 } from "./domain/task/api.js";
 
 export {
-  TRUTH_EVENT_TYPE,
-  TRUTH_LEDGER_SCHEMA,
-  buildTruthFactResolvedEvent,
-  buildTruthFactUpsertedEvent,
-  coerceTruthLedgerPayload,
-  createEmptyTruthState,
-  foldTruthLedgerEvents,
-  isTruthLedgerPayload,
-  reduceTruthState,
-} from "./domain/truth/api.js";
+  CLAIM_EVENT_TYPE,
+  CLAIM_LEDGER_SCHEMA,
+  buildClaimResolvedEvent,
+  buildClaimUpsertedEvent,
+  coerceClaimLedgerPayload,
+  createEmptyClaimState,
+  foldClaimLedgerEvents,
+  isClaimLedgerPayload,
+  reduceClaimState,
+} from "./domain/claim/api.js";

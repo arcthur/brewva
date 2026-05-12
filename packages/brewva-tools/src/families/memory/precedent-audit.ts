@@ -33,7 +33,7 @@ export function createPrecedentAuditTool(options: BrewvaToolOptions): ToolDefini
       "Use this when refreshing, displacing, or validating docs/solutions records so authority conflicts and stale routing stay explicit.",
     promptGuidelines: [
       "Prefer this before marking a record stale or superseded, or when a stable doc may have displaced an older precedent.",
-      "Treat audit findings as repository-maintenance guidance, not runtime truth or hidden planner state.",
+      "Treat audit findings as repository-maintenance guidance, not runtime claim or hidden planner state.",
     ],
     parameters: Type.Object({
       solution_doc_path: Type.Optional(Type.String({ minLength: 1, maxLength: 512 })),

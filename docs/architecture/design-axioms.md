@@ -60,7 +60,7 @@ public contracts.
     smallest authority-facing layer that preserves effect governance, replay,
     verification, and rollback semantics.
 14. `Kernel contracts admit only correctness-bearing judgments.`
-    If a wrong judgment would not change replay correctness, approval truth,
+    If a wrong judgment would not change replay correctness, approval claim,
     rollback correctness, or recovery correctness, it does not belong in the
     kernel contract.
 15. `Platform growth stays opt-in until multi-agent semantics mature.`
@@ -143,7 +143,7 @@ Rings are about authority, not package names.
   - receipts
   - event tape
   - WAL and rollback material
-  - approval and verification truth
+  - approval and verification claims
 - `Workbench Plane`
   - model-authored notes
   - evictions and preserved quotes

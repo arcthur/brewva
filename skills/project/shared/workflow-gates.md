@@ -1,6 +1,8 @@
 ---
 strength: workflow_gate
 scope: workflow-gates
+convention_kind: workflow_rule
+retirement_sensitivity: review_only
 ---
 
 # Brewva Workflow Gates

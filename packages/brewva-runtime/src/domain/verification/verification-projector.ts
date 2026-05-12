@@ -13,25 +13,25 @@ import {
 } from "../../events/registry.js";
 import type { BrewvaStructuredEvent } from "../../events/types.js";
 import type { RuntimeKernelContext } from "../../runtime/runtime-kernel.js";
+import type { ClaimService } from "../claim/api.js";
+import type {
+  ClaimResolveResult,
+  ClaimSeverity,
+  ClaimStatus,
+  ClaimUpsertResult,
+} from "../claim/api.js";
 import type { EventPipelineService } from "../sessions/api.js";
 import type { TaskService } from "../task/api.js";
 import type { TaskBlockerRecordResult, TaskBlockerResolveResult } from "../task/api.js";
-import type { TruthService } from "../truth/api.js";
-import type {
-  TruthFactResolveResult,
-  TruthFactSeverity,
-  TruthFactStatus,
-  TruthFactUpsertResult,
-} from "../truth/api.js";
 import { readVerificationToolResultProjectionPayload } from "./projector-payloads.js";
 import type { VerificationCheckRun, VerificationOutcomeRecordedEventPayload } from "./types.js";
 import {
   buildVerifierBlockerMessage,
   GOVERNANCE_BLOCKER_ID,
-  GOVERNANCE_TRUTH_FACT_ID,
+  GOVERNANCE_CLAIM_ID,
   normalizeVerifierCheckForId,
-  VERIFICATION_CHECK_FAILED_TRUTH_KIND,
-  VERIFICATION_CHECK_MISSING_TRUTH_KIND,
+  VERIFICATION_CHECK_FAILED_CLAIM_KIND,
+  VERIFICATION_CHECK_MISSING_CLAIM_KIND,
   VERIFIER_BLOCKER_PREFIX,
 } from "./verifier-blockers.js";
 
@@ -57,54 +57,49 @@ function toFreshRun(
 
 export interface VerificationProjectorServiceOptions {
   getTaskState: RuntimeKernelContext["getTaskState"];
-  getTruthState: RuntimeKernelContext["getTruthState"];
+  getClaimState: RuntimeKernelContext["getClaimState"];
   verificationStateStore: RuntimeKernelContext["verificationGate"]["stateStore"];
   eventPipeline: Pick<EventPipelineService, "subscribeEvents">;
   taskService: Pick<TaskService, "recordTaskBlocker" | "resolveTaskBlocker">;
-  truthService: Pick<TruthService, "upsertTruthFact" | "resolveTruthFact">;
+  claimService: Pick<ClaimService, "upsert" | "resolve">;
 }
 
 export class VerificationProjectorService {
   private readonly getTaskState: RuntimeKernelContext["getTaskState"];
-  private readonly getTruthState: RuntimeKernelContext["getTruthState"];
+  private readonly getClaimState: RuntimeKernelContext["getClaimState"];
   private readonly stateStore: RuntimeKernelContext["verificationGate"]["stateStore"];
   private readonly recordTaskBlocker: (
     sessionId: string,
-    input: { id?: string; message: string; source?: string; truthFactId?: string },
+    input: { id?: string; message: string; source?: string; claimId?: string },
   ) => TaskBlockerRecordResult;
   private readonly resolveTaskBlocker: (
     sessionId: string,
     blockerId: string,
   ) => TaskBlockerResolveResult;
-  private readonly upsertTruthFact: (
+  private readonly upsert: (
     sessionId: string,
     input: {
       id: string;
       kind: string;
-      severity: TruthFactSeverity;
+      severity: ClaimSeverity;
       summary: string;
       details?: Record<string, unknown>;
       evidenceIds?: string[];
-      status?: TruthFactStatus;
+      status?: ClaimStatus;
     },
-  ) => TruthFactUpsertResult;
-  private readonly resolveTruthFact: (
-    sessionId: string,
-    truthFactId: string,
-  ) => TruthFactResolveResult;
+  ) => ClaimUpsertResult;
+  private readonly resolve: (sessionId: string, claimId: string) => ClaimResolveResult;
 
   constructor(options: VerificationProjectorServiceOptions) {
     this.getTaskState = (sessionId) => options.getTaskState(sessionId);
-    this.getTruthState = (sessionId) => options.getTruthState(sessionId);
+    this.getClaimState = (sessionId) => options.getClaimState(sessionId);
     this.stateStore = options.verificationStateStore;
     this.recordTaskBlocker = (sessionId, input) =>
       options.taskService.recordTaskBlocker(sessionId, input);
     this.resolveTaskBlocker = (sessionId, blockerId) =>
       options.taskService.resolveTaskBlocker(sessionId, blockerId);
-    this.upsertTruthFact = (sessionId, input) =>
-      options.truthService.upsertTruthFact(sessionId, input);
-    this.resolveTruthFact = (sessionId, truthFactId) =>
-      options.truthService.resolveTruthFact(sessionId, truthFactId);
+    this.upsert = (sessionId, input) => options.claimService.upsert(sessionId, input);
+    this.resolve = (sessionId, claimId) => options.claimService.resolve(sessionId, claimId);
     options.eventPipeline.subscribeEvents((event) => {
       this.handleEvent(event);
     });
@@ -163,8 +158,8 @@ export class VerificationProjectorService {
         continue;
       }
       this.resolveTaskBlocker(sessionId, blocker.id);
-      if (blocker.truthFactId) {
-        this.resolveTruthFact(sessionId, blocker.truthFactId);
+      if (blocker.claimId) {
+        this.resolve(sessionId, blocker.claimId);
       }
     }
   }
@@ -188,13 +183,13 @@ export class VerificationProjectorService {
     for (const result of checkResults) {
       if (result.status !== "fail" && result.status !== "missing") continue;
       const blockerId = `${VERIFIER_BLOCKER_PREFIX}${normalizeVerifierCheckForId(result.name)}`;
-      const truthFactId = `truth:verifier:${normalizeVerifierCheckForId(result.name)}`;
+      const claimId = `claim:verifier:${normalizeVerifierCheckForId(result.name)}`;
       const provenance = provenanceByCheck.get(result.name);
       const freshRun = toFreshRun(provenance);
       const issueKind = result.status;
       const message = buildVerifierBlockerMessage({
         checkName: result.name,
-        truthFactId,
+        claimId,
         issueKind,
         run: freshRun,
       });
@@ -206,18 +201,18 @@ export class VerificationProjectorService {
         existing &&
         existing.message === message &&
         (existing.source ?? "") === source &&
-        (existing.truthFactId ?? "") === truthFactId
+        (existing.claimId ?? "") === claimId
       ) {
         continue;
       }
 
       const evidenceIds = freshRun?.ledgerId ? [freshRun.ledgerId] : [];
-      this.upsertTruthFact(sessionId, {
-        id: truthFactId,
+      this.upsert(sessionId, {
+        id: claimId,
         kind:
           issueKind === "fail"
-            ? VERIFICATION_CHECK_FAILED_TRUTH_KIND
-            : VERIFICATION_CHECK_MISSING_TRUTH_KIND,
+            ? VERIFICATION_CHECK_FAILED_CLAIM_KIND
+            : VERIFICATION_CHECK_MISSING_CLAIM_KIND,
         severity: issueKind === "fail" ? "error" : "warn",
         summary:
           issueKind === "fail"
@@ -239,22 +234,22 @@ export class VerificationProjectorService {
         id: blockerId,
         message,
         source,
-        truthFactId,
+        claimId,
       });
     }
 
-    const truthState = this.getTruthState(sessionId);
+    const claimState = this.getClaimState(sessionId);
     for (const blocker of taskState.blockers) {
       if (!blocker.id.startsWith(VERIFIER_BLOCKER_PREFIX)) continue;
       if (openIssueIds.has(blocker.id)) continue;
       this.resolveTaskBlocker(sessionId, blocker.id);
-      const truthFactId =
-        blocker.truthFactId ?? `truth:verifier:${blocker.id.slice(VERIFIER_BLOCKER_PREFIX.length)}`;
-      const active = truthState.facts.find(
-        (fact) => fact.id === truthFactId && fact.status === "active",
+      const claimId =
+        blocker.claimId ?? `claim:verifier:${blocker.id.slice(VERIFIER_BLOCKER_PREFIX.length)}`;
+      const active = claimState.claims.find(
+        (fact) => fact.id === claimId && fact.status === "active",
       );
       if (active) {
-        this.resolveTruthFact(sessionId, truthFactId);
+        this.resolve(sessionId, claimId);
       }
     }
   }
@@ -265,8 +260,8 @@ export class VerificationProjectorService {
     const reason = typeof payload.reason === "string" ? payload.reason.trim() : "";
     if (!reason) return;
 
-    this.upsertTruthFact(sessionId, {
-      id: GOVERNANCE_TRUTH_FACT_ID,
+    this.upsert(sessionId, {
+      id: GOVERNANCE_CLAIM_ID,
       kind: "governance_verify_spec_failed",
       severity: "error",
       summary: `governance verification failed: ${reason}`,
@@ -279,17 +274,17 @@ export class VerificationProjectorService {
       id: GOVERNANCE_BLOCKER_ID,
       message: `governance verification failed: ${reason}`,
       source: "governance_verify_spec",
-      truthFactId: GOVERNANCE_TRUTH_FACT_ID,
+      claimId: GOVERNANCE_CLAIM_ID,
     });
   }
 
   private applyGovernancePass(sessionId: string): void {
-    const truthState = this.getTruthState(sessionId);
-    const active = truthState.facts.find(
-      (fact) => fact.id === GOVERNANCE_TRUTH_FACT_ID && fact.status === "active",
+    const claimState = this.getClaimState(sessionId);
+    const active = claimState.claims.find(
+      (fact) => fact.id === GOVERNANCE_CLAIM_ID && fact.status === "active",
     );
     if (active) {
-      this.resolveTruthFact(sessionId, GOVERNANCE_TRUTH_FACT_ID);
+      this.resolve(sessionId, GOVERNANCE_CLAIM_ID);
     }
 
     const taskState = this.getTaskState(sessionId);

@@ -15,7 +15,7 @@ export interface RuntimeKernelRegistrarOptions {
   coreDependencies: RuntimeCoreDependencies;
   getCurrentTurn(sessionId: string): number;
   getTaskState(sessionId: string): ReturnType<RuntimeKernelContext["getTaskState"]>;
-  getTruthState(sessionId: string): ReturnType<RuntimeKernelContext["getTruthState"]>;
+  getClaimState(sessionId: string): ReturnType<RuntimeKernelContext["getClaimState"]>;
   recordEvent: RuntimeKernelContext["recordEvent"];
   sanitizeInput: RuntimeKernelContext["sanitizeInput"];
   getLatestVerificationOutcome(sessionId: string): VerificationOutcomeSnapshot | undefined;
@@ -45,7 +45,7 @@ export function registerRuntimeKernelContext(
     costTracker: options.coreDependencies.costTracker,
     getCurrentTurn: (sessionId) => options.getCurrentTurn(sessionId),
     getTaskState: (sessionId) => options.getTaskState(sessionId),
-    getTruthState: (sessionId) => options.getTruthState(sessionId),
+    getClaimState: (sessionId) => options.getClaimState(sessionId),
     recordEvent: (input) => options.recordEvent(input),
     sanitizeInput: (text) => options.sanitizeInput(text),
     getLatestVerificationOutcome: (sessionId) => options.getLatestVerificationOutcome(sessionId),

@@ -57,7 +57,7 @@ instructions. It is not the product layer that decides salience.
 The CLI/TUI shell is an experience ring surface. It owns overlays, keybindings,
 transcript rendering, model selection, provider connection flows, inbox,
 approvals, memory-operation visibility, cache/cost summaries, and drill-down
-views. These surfaces render runtime truth and workbench evidence; they do not
+views. These surfaces render runtime claims and workbench evidence; they do not
 create authority.
 
 ## Kernel Product

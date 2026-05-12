@@ -16,7 +16,7 @@ loop_contract:
     unit: "%"
     min_delta: 1.0
   convergence_condition:
-    kind: truth_resolved
+    kind: claim_resolved
     factId: coverage_gte_85
   max_runs: 12
   escalation_policy:

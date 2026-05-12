@@ -56,7 +56,7 @@ export interface ProjectionUnitCandidate {
 export type ProjectionUnitResolveDirective =
   | {
       sessionId: string;
-      sourceType: "truth_fact" | "task_blocker";
+      sourceType: "claim" | "task_blocker";
       sourceId: string;
       resolvedAt: number;
     }

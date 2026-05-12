@@ -23,7 +23,7 @@ Implementation anchors:
 Provider token cache is an efficiency plane.
 
 It can reduce latency and provider input cost, but it is never replay
-authority. WAL, event tape, proposals, receipts, task/truth state, and
+authority. WAL, event tape, proposals, receipts, task/claim state, and
 rollback material remain the only authority-bearing surfaces.
 
 Token-cache state is rebuildable and disposable:

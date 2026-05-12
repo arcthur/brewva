@@ -1,6 +1,8 @@
 import type { BrewvaConfig } from "../config/types.js";
 import type { VerificationLevel } from "../core/shared.js";
+import type { ClaimService } from "../domain/claim/api.js";
 import type { ContextService } from "../domain/context/api.js";
+import type { ConventionAdmissionService } from "../domain/conventions/api.js";
 import type { CostService } from "../domain/cost/api.js";
 import type { SessionCostSummary } from "../domain/cost/api.js";
 import type { CredentialVaultService } from "../domain/credentials/api.js";
@@ -29,7 +31,6 @@ import type { TaskWatchdogService } from "../domain/task/api.js";
 import type { TaskService } from "../domain/task/api.js";
 import type { ToolGateService } from "../domain/tools/api.js";
 import type { ToolInvocationSpine } from "../domain/tools/api.js";
-import type { TruthService } from "../domain/truth/api.js";
 import type { VerificationReport } from "../domain/verification/api.js";
 import type { VerificationService } from "../domain/verification/api.js";
 import type { WorkbenchService } from "../domain/workbench/api.js";
@@ -44,7 +45,7 @@ import type { RuntimeKernelContext } from "./runtime-kernel.js";
  */
 export interface RuntimeServiceDependencies {
   taskService: TaskService;
-  truthService: TruthService;
+  claimService: ClaimService;
   ledgerService: LedgerService;
   costService: CostService;
   contextService: ContextService;
@@ -58,6 +59,7 @@ export interface RuntimeServiceDependencies {
   getTapeService(): TapeService;
   getEffectCommitmentDeskService(): EffectCommitmentDeskService;
   getProposalAdmissionService(): ProposalAdmissionService;
+  getConventionAdmissionService(): ConventionAdmissionService;
   clearEffectCommitmentDeskState(sessionId: string): void;
 }
 
@@ -103,6 +105,7 @@ export interface RuntimeLazyServiceRegistrarOptions {
   contextService: ContextService;
   getProposalAdmissionService(): ProposalAdmissionService;
   getEffectCommitmentDeskService(): EffectCommitmentDeskService;
+  getConventionAdmissionService(): ConventionAdmissionService;
   ledgerService: LedgerService;
   reversibleMutationService: ReversibleMutationService;
   resolveToolAuthority: (toolName: string, args?: Record<string, unknown>) => ResolvedToolAuthority;
@@ -113,13 +116,14 @@ export interface RuntimeGovernanceServices {
   reversibleMutationService: ReversibleMutationService;
   getEffectCommitmentDeskService(): EffectCommitmentDeskService;
   getProposalAdmissionService(): ProposalAdmissionService;
+  getConventionAdmissionService(): ConventionAdmissionService;
   clearEffectCommitmentDeskState(sessionId: string): void;
 }
 
 export interface RuntimeWorkServices {
   taskService: TaskService;
   taskWatchdogService: TaskWatchdogService;
-  truthService: TruthService;
+  claimService: ClaimService;
   ledgerService: LedgerService;
   costService: CostService;
   workbenchService: WorkbenchService;

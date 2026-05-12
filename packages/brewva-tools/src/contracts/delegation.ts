@@ -24,7 +24,7 @@ export type DelegationRefKind =
   | "projection"
   | "workspace_span"
   | "task"
-  | "truth"
+  | "claim"
   | "tool_result";
 
 export interface DelegationRef {

@@ -1,13 +1,13 @@
 import type { BrewvaConfig } from "../../config/types.js";
 import type { RuntimeCallback } from "../../runtime/callback.js";
 import { resolveContextUsageRatio } from "../../utils/token.js";
+import type { ClaimState } from "../claim/api.js";
 import type { ContextBudgetUsage } from "../context/api.js";
-import type { TruthState } from "../truth/api.js";
 import type { VerificationReport } from "../verification/api.js";
 import {
   GOVERNANCE_BLOCKER_ID,
-  VERIFICATION_CHECK_FAILED_TRUTH_KIND,
-  VERIFICATION_CHECK_MISSING_TRUTH_KIND,
+  VERIFICATION_CHECK_FAILED_CLAIM_KIND,
+  VERIFICATION_CHECK_MISSING_CLAIM_KIND,
   VERIFIER_BLOCKER_PREFIX,
 } from "../verification/api.js";
 import { TASK_EVENT_TYPE } from "./events.js";
@@ -38,7 +38,7 @@ import type {
 export interface TaskStatusAlignmentInput {
   sessionId: string;
   promptText: string;
-  truthState: TruthState;
+  claimState: ClaimState;
   usage?: ContextBudgetUsage;
 }
 
@@ -53,7 +53,7 @@ export interface TaskServiceOptions {
     }
   >;
   getTaskState: RuntimeCallback<[sessionId: string], TaskState>;
-  getTruthState: RuntimeCallback<[sessionId: string], TruthState>;
+  getClaimState: RuntimeCallback<[sessionId: string], ClaimState>;
   evaluateCompletion: RuntimeCallback<[sessionId: string], VerificationReport>;
   recordEvent: RuntimeCallback<
     [
@@ -81,7 +81,7 @@ export class TaskService {
     hardLimitPercent: number;
   };
   private readonly getTaskState: (sessionId: string) => TaskState;
-  private readonly getTruthState: (sessionId: string) => TruthState;
+  private readonly getClaimState: (sessionId: string) => ClaimState;
   private readonly evaluateCompletion: (sessionId: string) => VerificationReport;
   private readonly recordEvent: TaskServiceOptions["recordEvent"];
 
@@ -91,7 +91,7 @@ export class TaskService {
     this.resolveContextBudgetThresholds = (sessionId, usage) =>
       options.resolveContextBudgetThresholds(sessionId, usage);
     this.getTaskState = options.getTaskState;
-    this.getTruthState = options.getTruthState;
+    this.getClaimState = options.getClaimState;
     this.evaluateCompletion = options.evaluateCompletion;
     this.recordEvent = options.recordEvent;
   }
@@ -100,7 +100,7 @@ export class TaskService {
     this.maybeAlignTaskStatus({
       sessionId,
       promptText: "",
-      truthState: this.getTruthState(sessionId),
+      claimState: this.getClaimState(sessionId),
     });
   }
 
@@ -110,20 +110,20 @@ export class TaskService {
     if (left.health !== right.health) return false;
     if ((left.reason ?? "") !== (right.reason ?? "")) return false;
 
-    const leftTruth = left.truthFactIds ?? [];
-    const rightTruth = right.truthFactIds ?? [];
-    if (leftTruth.length !== rightTruth.length) return false;
-    for (let i = 0; i < leftTruth.length; i += 1) {
-      if (leftTruth[i] !== rightTruth[i]) return false;
+    const leftClaims = left.claimIds ?? [];
+    const rightClaims = right.claimIds ?? [];
+    if (leftClaims.length !== rightClaims.length) return false;
+    for (let i = 0; i < leftClaims.length; i += 1) {
+      if (leftClaims[i] !== rightClaims[i]) return false;
     }
     return true;
   }
 
   private classifySoftVerifierHealth(
     blockers: TaskState["blockers"],
-    truthState: TruthState,
+    claimState: ClaimState,
   ): TaskHealth {
-    const factsById = new Map(truthState.facts.map((fact) => [fact.id, fact]));
+    const factsById = new Map(claimState.claims.map((fact) => [fact.id, fact]));
     let sawMissing = false;
     let sawFailure = false;
 
@@ -131,23 +131,23 @@ export class TaskService {
       if (blocker.id === GOVERNANCE_BLOCKER_ID) {
         continue;
       }
-      const truthFactId = blocker.truthFactId?.trim();
-      if (!truthFactId) {
-        throw new Error(`verifier_blocker_missing_truth_fact:${blocker.id}`);
+      const claimId = blocker.claimId?.trim();
+      if (!claimId) {
+        throw new Error(`verifier_blocker_missing_claim:${blocker.id}`);
       }
-      const fact = factsById.get(truthFactId);
+      const fact = factsById.get(claimId);
       if (!fact || fact.status !== "active") {
-        throw new Error(`verifier_blocker_missing_active_truth_fact:${truthFactId}`);
+        throw new Error(`verifier_blocker_missing_active_claim:${claimId}`);
       }
-      if (fact?.kind === VERIFICATION_CHECK_FAILED_TRUTH_KIND) {
+      if (fact?.kind === VERIFICATION_CHECK_FAILED_CLAIM_KIND) {
         sawFailure = true;
         continue;
       }
-      if (fact?.kind === VERIFICATION_CHECK_MISSING_TRUTH_KIND) {
+      if (fact?.kind === VERIFICATION_CHECK_MISSING_CLAIM_KIND) {
         sawMissing = true;
         continue;
       }
-      throw new Error(`verifier_blocker_unknown_truth_kind:${fact.kind}`);
+      throw new Error(`verifier_blocker_unknown_claim_kind:${fact.kind}`);
     }
 
     if (sawFailure) {
@@ -156,7 +156,7 @@ export class TaskService {
     if (sawMissing) {
       return "verification_missing";
     }
-    throw new Error("verifier_blockers_present_without_canonical_truth_facts");
+    throw new Error("verifier_blockers_present_without_canonical_claims");
   }
 
   private computeTaskStatus(input: TaskStatusAlignmentInput): TaskStatus {
@@ -178,13 +178,15 @@ export class TaskService {
     const acceptanceRequired = state.spec?.acceptance?.required === true;
     const acceptanceStatus = state.acceptance?.status ?? "pending";
 
-    const activeTruthFacts = input.truthState.facts.filter((fact) => fact.status === "active");
+    const activeOperationalClaims = input.claimState.claims.filter(
+      (fact) => fact.status === "active",
+    );
     const severityRank = (severity: string): number => {
       if (severity === "error") return 3;
       if (severity === "warn") return 2;
       return 1;
     };
-    const truthFactIds = activeTruthFacts
+    const claimIds = activeOperationalClaims
       .toSorted((left, right) => {
         const severity = severityRank(right.severity) - severityRank(left.severity);
         if (severity !== 0) return severity;
@@ -218,7 +220,7 @@ export class TaskService {
       reason = `open_items=${openItems.length}`;
     } else if (hasSoftVerifierBlocker) {
       phase = "verify";
-      health = this.classifySoftVerifierHealth(verifierBlockers, input.truthState);
+      health = this.classifySoftVerifierHealth(verifierBlockers, input.claimState);
       reason = health === "verification_missing" ? "verification_missing" : "verification_failed";
     } else if (items.length === 0) {
       phase = "investigate";
@@ -268,7 +270,7 @@ export class TaskService {
       health,
       reason,
       updatedAt: Date.now(),
-      truthFactIds: truthFactIds.length > 0 ? truthFactIds : undefined,
+      claimIds: claimIds.length > 0 ? claimIds : undefined,
     };
   }
 
@@ -355,7 +357,7 @@ export class TaskService {
       id?: string;
       message: string;
       source?: string;
-      truthFactId?: string;
+      claimId?: string;
     },
   ): TaskBlockerRecordResult {
     const message = input.message?.trim();
@@ -364,15 +366,15 @@ export class TaskService {
     }
 
     const blockerId = input.id?.trim();
-    if (blockerId?.startsWith(VERIFIER_BLOCKER_PREFIX) && !input.truthFactId?.trim()) {
-      return { ok: false, reason: "verifier_blocker_requires_truth_fact" };
+    if (blockerId?.startsWith(VERIFIER_BLOCKER_PREFIX) && !input.claimId?.trim()) {
+      return { ok: false, reason: "verifier_blocker_requires_claim" };
     }
 
     const payload = buildBlockerRecordedEvent({
       id: blockerId || undefined,
       message,
       source: input.source?.trim() || undefined,
-      truthFactId: input.truthFactId?.trim() || undefined,
+      claimId: input.claimId?.trim() || undefined,
     });
     this.recordEvent({
       sessionId,

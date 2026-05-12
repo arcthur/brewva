@@ -68,11 +68,11 @@ describe("inspect subcommand", () => {
           message: "verification still failing",
           source: "test",
         });
-        runtime.authority.truth.upsertFact(sessionId, {
-          id: "truth:inspect",
+        runtime.authority.claim.upsert(sessionId, {
+          id: "claim:inspect",
           kind: "diagnostic",
           severity: "warn",
-          summary: "inspect truth fact",
+          summary: "inspect claim fact",
         });
         runtime.extensions.hosted.events.record({
           sessionId,
@@ -127,7 +127,7 @@ describe("inspect subcommand", () => {
         const payload = JSON.parse(result.stdout) as {
           sessionId: string;
           task: { goal: string | null; blockers: number };
-          truth: { activeFacts: number };
+          claim: { activeClaims: number };
           verification: { outcome: string | null; failedChecks: string[]; missingChecks: string[] };
           hostedTransitions: {
             sequence: number;
@@ -152,7 +152,7 @@ describe("inspect subcommand", () => {
         expect(payload.sessionId).toBe(sessionId);
         expect(payload.task.goal).toBe("Inspect persisted runtime state");
         expect(payload.task.blockers).toBeGreaterThanOrEqual(1);
-        expect(payload.truth.activeFacts).toBeGreaterThanOrEqual(1);
+        expect(payload.claim.activeClaims).toBeGreaterThanOrEqual(1);
         expect(payload.verification.outcome).toBe("fail");
         expect(payload.verification.failedChecks).toEqual(["tests"]);
         expect(payload.verification.missingChecks).toEqual([]);

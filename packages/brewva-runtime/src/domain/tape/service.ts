@@ -6,6 +6,7 @@ import {
 import type { BrewvaConfig } from "../../config/types.js";
 import type { BrewvaEventQuery, BrewvaEventRecord } from "../../events/types.js";
 import type { RuntimeCallback } from "../../runtime/callback.js";
+import type { ClaimState } from "../claim/api.js";
 import type {
   OutputSearchTelemetryState,
   TapeHandoffResult,
@@ -18,7 +19,6 @@ import type {
 import type { SessionCostSummary } from "../cost/api.js";
 import { RuntimeSessionStateStore } from "../sessions/api.js";
 import type { TaskState } from "../task/api.js";
-import type { TruthState } from "../truth/api.js";
 import { TAPE_ANCHOR_EVENT_TYPE, TAPE_CHECKPOINT_EVENT_TYPE } from "./events.js";
 import {
   buildTapeAnchorPayload,
@@ -42,7 +42,7 @@ export interface TapeServiceOptions {
   queryEvents: RuntimeCallback<[sessionId: string, query?: BrewvaEventQuery], BrewvaEventRecord[]>;
   getCurrentTurn: RuntimeCallback<[sessionId: string], number>;
   getTaskState: RuntimeCallback<[sessionId: string], TaskState>;
-  getTruthState: RuntimeCallback<[sessionId: string], TruthState>;
+  getClaimState: RuntimeCallback<[sessionId: string], ClaimState>;
   getCostSummary: RuntimeCallback<[sessionId: string], SessionCostSummary>;
   getCostSkillLastTurnByName: RuntimeCallback<[sessionId: string], Record<string, number>>;
   getCheckpointEvidenceState: RuntimeCallback<[sessionId: string], TapeCheckpointEvidenceState>;
@@ -83,7 +83,7 @@ export class TapeService {
   ) => BrewvaEventRecord[];
   private readonly getCurrentTurn: (sessionId: string) => number;
   private readonly getTaskState: (sessionId: string) => TaskState;
-  private readonly getTruthState: (sessionId: string) => TruthState;
+  private readonly getClaimState: (sessionId: string) => ClaimState;
   private readonly getCostSummary: (sessionId: string) => SessionCostSummary;
   private readonly getCostSkillLastTurnByName: (sessionId: string) => Record<string, number>;
   private readonly getCheckpointEvidenceState: (sessionId: string) => TapeCheckpointEvidenceState;
@@ -98,7 +98,7 @@ export class TapeService {
     this.queryEvents = options.queryEvents;
     this.getCurrentTurn = options.getCurrentTurn;
     this.getTaskState = options.getTaskState;
-    this.getTruthState = options.getTruthState;
+    this.getClaimState = options.getClaimState;
     this.getCostSummary = options.getCostSummary;
     this.getCostSkillLastTurnByName = options.getCostSkillLastTurnByName;
     this.getCheckpointEvidenceState = options.getCheckpointEvidenceState;
@@ -556,7 +556,7 @@ export class TapeService {
     try {
       const payload = buildTapeCheckpointPayload({
         taskState: this.getTaskState(sessionId),
-        truthState: this.getTruthState(sessionId),
+        claimState: this.getClaimState(sessionId),
         costSummary: this.getCostSummary(sessionId),
         costSkillLastTurnByName: this.getCostSkillLastTurnByName(sessionId),
         evidenceState: this.getCheckpointEvidenceState(sessionId),

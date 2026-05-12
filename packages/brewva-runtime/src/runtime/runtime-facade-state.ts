@@ -3,6 +3,7 @@ import { resolveWorkspaceRootDir } from "../config/paths.js";
 import type { BrewvaConfig } from "../config/types.js";
 import type { DeepReadonly } from "../core/index.js";
 import type { VerificationLevel } from "../core/shared.js";
+import type { ClaimState } from "../domain/claim/api.js";
 import {
   resolveHistoryViewBaselineView,
   resolveRecoveryWorkingSetView,
@@ -29,7 +30,6 @@ import { ensureBundledSystemSkills } from "../domain/skills/api.js";
 import type { SkillRefreshInput, SkillRefreshResult } from "../domain/skills/api.js";
 import { resolveTaskTargetDescriptor } from "../domain/task/api.js";
 import type { TaskTargetDescriptor, TaskState } from "../domain/task/api.js";
-import type { TruthState } from "../domain/truth/api.js";
 import { VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE } from "../domain/verification/api.js";
 import type { VerificationReport } from "../domain/verification/api.js";
 import { readVerificationOutcomeRecordedEventPayload } from "../events/descriptors.js";
@@ -108,11 +108,12 @@ class RuntimeFacadeStateController implements BrewvaHostedRuntimePort {
   declare private readonly sessionLifecycleService: RuntimeServiceDependencyMap["sessionLifecycleService"];
   declare private readonly sessionLineageService: RuntimeServiceDependencyMap["sessionLineageService"];
   declare private readonly taskService: RuntimeServiceDependencyMap["taskService"];
-  declare private readonly truthService: RuntimeServiceDependencyMap["truthService"];
+  declare private readonly claimService: RuntimeServiceDependencyMap["claimService"];
   declare private readonly toolLifecycleRecoveryWalService: RuntimeServiceDependencyMap["toolLifecycleRecoveryWalService"];
   private readonly tapeServiceGetter: RuntimeServiceDependencyMap["getTapeService"];
   private readonly effectCommitmentDeskServiceGetter: RuntimeServiceDependencyMap["getEffectCommitmentDeskService"];
   private readonly proposalAdmissionServiceGetter: RuntimeServiceDependencyMap["getProposalAdmissionService"];
+  private readonly conventionAdmissionServiceGetter: RuntimeServiceDependencyMap["getConventionAdmissionService"];
   private verificationService:
     | ReturnType<RuntimeLazyFactories["createVerificationService"]>
     | undefined;
@@ -185,7 +186,7 @@ class RuntimeFacadeStateController implements BrewvaHostedRuntimePort {
           ),
         getCurrentTurn: (sessionId) => this.getCurrentTurn(sessionId),
         getTaskState: (sessionId) => this.getTaskState(sessionId),
-        getTruthState: (sessionId) => this.getTruthState(sessionId),
+        getClaimState: (sessionId) => this.getClaimState(sessionId),
         recordEvent: (input) => this.recordEvent(input),
         sanitizeInput: (text) => this.sanitizeInput(text),
         getLatestVerificationOutcome: (sessionId) => this.getLatestVerificationOutcome(sessionId),
@@ -215,7 +216,7 @@ class RuntimeFacadeStateController implements BrewvaHostedRuntimePort {
     this.projectionEngine = coreDependencies.projectionEngine;
     this.kernel = kernel;
     this.taskService = serviceDependencies.taskService;
-    this.truthService = serviceDependencies.truthService;
+    this.claimService = serviceDependencies.claimService;
     this.ledgerService = serviceDependencies.ledgerService;
     this.costService = serviceDependencies.costService;
     this.contextService = serviceDependencies.contextService;
@@ -229,6 +230,8 @@ class RuntimeFacadeStateController implements BrewvaHostedRuntimePort {
     this.effectCommitmentDeskServiceGetter = () =>
       serviceDependencies.getEffectCommitmentDeskService();
     this.proposalAdmissionServiceGetter = () => serviceDependencies.getProposalAdmissionService();
+    this.conventionAdmissionServiceGetter = () =>
+      serviceDependencies.getConventionAdmissionService();
     this.clearEffectCommitmentDeskState = (sessionId) =>
       serviceDependencies.clearEffectCommitmentDeskState(sessionId);
     this.lazyServiceFactories = lazyServiceFactories;
@@ -246,13 +249,14 @@ class RuntimeFacadeStateController implements BrewvaHostedRuntimePort {
       skillRegistry: this.skillRegistry,
       getProposalAdmissionService: () => this.getProposalAdmissionService(),
       getEffectCommitmentDeskService: () => this.getEffectCommitmentDeskService(),
+      getConventionAdmissionService: () => this.getConventionAdmissionService(),
       getContextService: () => this.contextService,
       getWorkbenchService: () => this.workbenchService,
       getSessionLifecycleService: () => this.sessionLifecycleService,
       getSessionLineageService: () => this.sessionLineageService,
       getTaskWatchdogService: () => this.taskWatchdogService,
       getTaskService: () => this.taskService,
-      getTruthService: () => this.truthService,
+      getClaimService: () => this.claimService,
       getLedgerService: () => this.ledgerService,
       recoveryWalStore: this.recoveryWalStore,
       eventStore: this.eventStore,
@@ -277,7 +281,7 @@ class RuntimeFacadeStateController implements BrewvaHostedRuntimePort {
       getHistoryViewBaseline: (sessionId) => this.getHistoryViewBaseline(sessionId),
       getTaskTargetDescriptor: (sessionId) => this.getTaskTargetDescriptor(sessionId),
       getTaskState: (sessionId) => this.getTaskState(sessionId),
-      getTruthState: (sessionId) => this.getTruthState(sessionId),
+      getClaimState: (sessionId) => this.getClaimState(sessionId),
       getRecoveryPosture: (sessionId) => this.getRecoveryPosture(sessionId),
       getRecoveryWorkingSet: (sessionId) => this.getRecoveryWorkingSet(sessionId),
       recordEvent: (input) => this.recordEvent(input),
@@ -362,6 +366,12 @@ class RuntimeFacadeStateController implements BrewvaHostedRuntimePort {
     RuntimeServiceDependencyMap["getProposalAdmissionService"]
   > {
     return this.proposalAdmissionServiceGetter();
+  }
+
+  private getConventionAdmissionService(): ReturnType<
+    RuntimeServiceDependencyMap["getConventionAdmissionService"]
+  > {
+    return this.conventionAdmissionServiceGetter();
   }
 
   private getVerificationService(): ReturnType<RuntimeLazyFactories["createVerificationService"]> {
@@ -499,8 +509,8 @@ class RuntimeFacadeStateController implements BrewvaHostedRuntimePort {
     });
   }
 
-  private getTruthState(sessionId: string): TruthState {
-    return this.turnReplay.getTruthState(sessionId);
+  private getClaimState(sessionId: string): ClaimState {
+    return this.turnReplay.getClaimState(sessionId);
   }
 
   private recordEvent<TPayload extends object>(

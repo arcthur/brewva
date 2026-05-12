@@ -37,7 +37,7 @@ state.
 
 Iteration metric and guard events persist bounded optimization evidence. They
 are lineage-aware facts for repeated improvement loops, not a replacement for
-task/truth state or verification reports.
+task/claim state or verification reports.
 
 ## Implementation Anchors
 

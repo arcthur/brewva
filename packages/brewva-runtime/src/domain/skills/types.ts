@@ -1,4 +1,5 @@
 import type { VerificationLevel } from "../../core/shared.js";
+import type { ConventionKind, RetirementSensitivity } from "../conventions/api.js";
 import type { ToolEffectClass } from "../governance/api.js";
 import { SEMANTIC_ARTIFACT_SCHEMA_IDS } from "./semantic-artifacts.js";
 export { SEMANTIC_ARTIFACT_SCHEMA_IDS } from "./semantic-artifacts.js";
@@ -16,6 +17,9 @@ export interface ProjectGuidanceEntry {
   filePath: string;
   strength: ProjectGuidanceStrength;
   scope: string;
+  conventionKind: ConventionKind;
+  retirementSensitivity: RetirementSensitivity;
+  owner?: string;
 }
 
 export type SemanticArtifactSchemaId = (typeof SEMANTIC_ARTIFACT_SCHEMA_IDS)[number];

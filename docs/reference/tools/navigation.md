@@ -6,7 +6,7 @@ search, and output-artifact space.
 ## Boundary
 
 Most navigation tools are read-only and produce inspection evidence rather than
-approval truth. Structural source-change tools in this family, such as
+approval receipts. Structural source-change tools in this family, such as
 AST-backed replacement or rename helpers, still go through runtime capability
 checks and receipt recording; the family boundary does not bypass mutation
 governance.
@@ -31,6 +31,6 @@ expanding authority.
 ## Failure Semantics
 
 Navigation failures should return explicit diagnostics and avoid mutating
-session truth beyond replay-visible tool result records. Source-changing
+session state beyond replay-visible tool result records. Source-changing
 navigation helpers must surface denial, defer, or failure through the same
 runtime receipt path as other effect-bearing tools.

@@ -1,26 +1,22 @@
 import { normalizeJsonRecord } from "@brewva/brewva-std/json";
 import type { RuntimeKernelContext } from "../../runtime/runtime-kernel.js";
-import {
-  TRUTH_EVENT_TYPE,
-  buildTruthFactResolvedEvent,
-  buildTruthFactUpsertedEvent,
-} from "./ledger.js";
+import { CLAIM_EVENT_TYPE, buildClaimResolvedEvent, buildClaimUpsertedEvent } from "./ledger.js";
 import type {
-  TruthFact,
-  TruthFactResolveResult,
-  TruthFactSeverity,
-  TruthFactStatus,
-  TruthFactUpsertResult,
-  TruthState,
+  OperationalClaim,
+  ClaimResolveResult,
+  ClaimSeverity,
+  ClaimStatus,
+  ClaimUpsertResult,
+  ClaimState,
 } from "./types.js";
 
-export interface TruthServiceOptions {
-  getTruthState: RuntimeKernelContext["getTruthState"];
+export interface ClaimServiceOptions {
+  getClaimState: RuntimeKernelContext["getClaimState"];
   recordEvent: RuntimeKernelContext["recordEvent"];
 }
 
-export class TruthService {
-  private readonly getTruthState: (sessionId: string) => TruthState;
+export class ClaimService {
+  private readonly getClaimState: (sessionId: string) => ClaimState;
   private readonly recordEvent: (input: {
     sessionId: string;
     type: string;
@@ -30,23 +26,23 @@ export class TruthService {
     skipTapeCheckpoint?: boolean;
   }) => unknown;
 
-  constructor(options: TruthServiceOptions) {
-    this.getTruthState = (sessionId) => options.getTruthState(sessionId);
+  constructor(options: ClaimServiceOptions) {
+    this.getClaimState = (sessionId) => options.getClaimState(sessionId);
     this.recordEvent = (input) => options.recordEvent(input);
   }
 
-  upsertTruthFact(
+  upsert(
     sessionId: string,
     input: {
       id: string;
       kind: string;
-      severity: TruthFactSeverity;
+      severity: ClaimSeverity;
       summary: string;
       details?: Record<string, unknown>;
       evidenceIds?: string[];
-      status?: TruthFactStatus;
+      status?: ClaimStatus;
     },
-  ): TruthFactUpsertResult {
+  ): ClaimUpsertResult {
     const id = input.id?.trim();
     if (!id) return { ok: false, reason: "missing_id" };
 
@@ -57,14 +53,14 @@ export class TruthService {
     if (!summary) return { ok: false, reason: "missing_summary" };
 
     const now = Date.now();
-    const state = this.getTruthState(sessionId);
-    const existing = state.facts.find((fact) => fact.id === id);
-    const status: TruthFactStatus = input.status ?? "active";
+    const state = this.getClaimState(sessionId);
+    const existing = state.claims.find((claim) => claim.id === id);
+    const status: ClaimStatus = input.status ?? "active";
     const evidenceIds = [
       ...new Set([...(existing?.evidenceIds ?? []), ...(input.evidenceIds ?? [])]),
     ];
 
-    const fact: TruthFact = {
+    const claim: OperationalClaim = {
       id,
       kind,
       status,
@@ -79,21 +75,21 @@ export class TruthService {
 
     this.recordEvent({
       sessionId,
-      type: TRUTH_EVENT_TYPE,
-      payload: buildTruthFactUpsertedEvent(fact),
+      type: CLAIM_EVENT_TYPE,
+      payload: buildClaimUpsertedEvent(claim),
     });
-    return { ok: true, fact };
+    return { ok: true, claim };
   }
 
-  resolveTruthFact(sessionId: string, truthFactId: string): TruthFactResolveResult {
-    const id = truthFactId?.trim();
+  resolve(sessionId: string, claimId: string): ClaimResolveResult {
+    const id = claimId?.trim();
     if (!id) return { ok: false, reason: "missing_id" };
 
     this.recordEvent({
       sessionId,
-      type: TRUTH_EVENT_TYPE,
-      payload: buildTruthFactResolvedEvent({
-        factId: id,
+      type: CLAIM_EVENT_TYPE,
+      payload: buildClaimResolvedEvent({
+        claimId: id,
         resolvedAt: Date.now(),
       }),
     });

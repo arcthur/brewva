@@ -1,6 +1,9 @@
 ---
 strength: invariant
 scope: package-boundaries
+convention_kind: safety_boundary
+retirement_sensitivity: pinned
+owner: runtime-maintainers
 ---
 
 # Package Boundaries and Invariants

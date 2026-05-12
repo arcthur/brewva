@@ -176,8 +176,8 @@ export class ProjectionStore {
       if (unit.status !== "active") continue;
 
       const matched = (() => {
-        if (directive.sourceType === "truth_fact") {
-          return unit.metadata?.truthFactId === directive.sourceId;
+        if (directive.sourceType === "claim") {
+          return unit.metadata?.claimId === directive.sourceId;
         }
         if (directive.sourceType === "task_blocker") {
           return unit.metadata?.taskBlockerId === directive.sourceId;

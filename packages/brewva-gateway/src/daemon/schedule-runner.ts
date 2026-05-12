@@ -4,7 +4,7 @@ import {
   type ScheduleContinuityMode,
   type ScheduleIntentProjectionRecord,
   type TaskSpec,
-  type TruthFact,
+  type OperationalClaim,
 } from "@brewva/brewva-runtime";
 import {
   SCHEDULE_CHILD_SESSION_FAILED_EVENT_TYPE,
@@ -20,7 +20,7 @@ import type {
 
 export interface ScheduleContinuationSnapshot {
   taskSpec: TaskSpec | null;
-  truthFacts: TruthFact[];
+  claims: OperationalClaim[];
   parentAnchor: SchedulePromptAnchor | null;
 }
 
@@ -46,17 +46,17 @@ export function collectScheduleContinuationSnapshot(
   if (input.continuityMode !== "inherit") {
     return {
       taskSpec: null,
-      truthFacts: [],
+      claims: [],
       parentAnchor: null,
     };
   }
 
   const parentAnchor = runtime.inspect.tape.getTapeStatus(input.parentSessionId).lastAnchor;
   const parentTask = runtime.inspect.task.getState(input.parentSessionId);
-  const parentTruth = runtime.inspect.truth.getState(input.parentSessionId);
+  const parentClaim = runtime.inspect.claim.getState(input.parentSessionId);
   return {
     taskSpec: parentTask.spec ?? null,
-    truthFacts: parentTruth.facts.map((fact) => structuredClone(fact)),
+    claims: parentClaim.claims.map((fact) => structuredClone(fact)),
     parentAnchor: parentAnchor ?? null,
   };
 }
@@ -76,7 +76,7 @@ export function buildSchedulePromptTrigger(input: {
     kind: "schedule",
     continuityMode: input.continuityMode,
     taskSpec: input.snapshot.taskSpec,
-    truthFacts: input.snapshot.truthFacts,
+    claims: input.snapshot.claims,
     parentAnchor: input.snapshot.parentAnchor,
   };
 }
@@ -88,7 +88,7 @@ export function buildScheduleWakeupMessage(input: {
   const lines = ["[Schedule Wakeup]", `reason: ${input.intent.reason}`];
 
   if (input.intent.continuityMode === "fresh") {
-    lines.push("Run this pass fresh. Prior task and truth state are not preloaded.");
+    lines.push("Run this pass fresh. Prior task and claim state are not preloaded.");
   }
   if (input.snapshot.taskSpec) {
     lines.push(`task_goal: ${clampText(input.snapshot.taskSpec.goal, 320) ?? "none"}`);
@@ -154,7 +154,7 @@ export async function executeScheduleIntentRun(input: {
       timeZone: input.intent.timeZone ?? null,
       goalRef: input.intent.goalRef ?? null,
       inheritedTaskSpec: snapshot.taskSpec !== null,
-      inheritedTruthFacts: snapshot.truthFacts.length,
+      inheritedOperationalClaims: snapshot.claims.length,
       parentAnchorId: snapshot.parentAnchor?.id ?? null,
     },
   });

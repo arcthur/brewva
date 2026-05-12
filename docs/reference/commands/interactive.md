@@ -7,7 +7,7 @@ sessions, and pager drill-down.
 ## Shell Contract
 
 - one conversation shell remains the base surface
-- overlays render over the same session truth
+- overlays render over the same session state
 - the base layout is transcript canvas, multiline composer, and bottom status
   bar
 - transient operator details render through overlays, pagers, notifications,

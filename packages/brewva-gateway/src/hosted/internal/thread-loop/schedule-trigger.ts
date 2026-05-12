@@ -3,7 +3,7 @@ import type { SchedulePromptTrigger } from "../../../daemon/api.js";
 
 export interface AppliedSchedulePromptTrigger {
   taskSpecApplied: boolean;
-  truthFactsApplied: number;
+  claimsApplied: number;
   anchorApplied: boolean;
 }
 
@@ -15,7 +15,7 @@ export function applySchedulePromptTrigger(
   if (trigger.continuityMode !== "inherit") {
     return {
       taskSpecApplied: false,
-      truthFactsApplied: 0,
+      claimsApplied: 0,
       anchorApplied: false,
     };
   }
@@ -26,9 +26,9 @@ export function applySchedulePromptTrigger(
     taskSpecApplied = true;
   }
 
-  let truthFactsApplied = 0;
-  for (const fact of trigger.truthFacts ?? []) {
-    const result = runtime.authority.truth.upsertFact(sessionId, {
+  let claimsApplied = 0;
+  for (const fact of trigger.claims ?? []) {
+    const result = runtime.authority.claim.upsert(sessionId, {
       id: fact.id,
       kind: fact.kind,
       severity: fact.severity,
@@ -38,7 +38,7 @@ export function applySchedulePromptTrigger(
       status: fact.status,
     });
     if (result.ok) {
-      truthFactsApplied += 1;
+      claimsApplied += 1;
     }
   }
 
@@ -54,7 +54,7 @@ export function applySchedulePromptTrigger(
 
   return {
     taskSpecApplied,
-    truthFactsApplied,
+    claimsApplied,
     anchorApplied,
   };
 }

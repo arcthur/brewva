@@ -65,7 +65,7 @@ const ContextRefSchema = Type.Object({
       Type.Literal("projection"),
       Type.Literal("workspace_span"),
       Type.Literal("task"),
-      Type.Literal("truth"),
+      Type.Literal("claim"),
       Type.Literal("tool_result"),
     ],
     { description: "Reference kinds made available to the delegated run." },

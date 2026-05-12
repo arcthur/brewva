@@ -28,7 +28,7 @@ import type { EvidenceLedgerRow, EvidenceQuery } from "./types.js";
 
 const LEDGER_DIGEST_WINDOW = 12;
 const LEDGER_MAX_DIGEST_TOKENS = 1200;
-const TRUTH_PROJECTOR_TOOLS = new Set(["exec", "lsp_diagnostics", "obs_slo_assert"]);
+const CLAIM_PROJECTOR_TOOLS = new Set(["exec", "lsp_diagnostics", "obs_slo_assert"]);
 
 function normalizeFailureClass(value: unknown): CommandFailureClass | undefined {
   if (
@@ -87,7 +87,7 @@ export interface LedgerServiceOptions {
   effectCommitmentDeskService?: Pick<EffectCommitmentDeskService, "observeToolOutcome">;
 }
 
-function buildTruthProjectionPayload(input: {
+function buildClaimProjectionPayload(input: {
   toolName: string;
   args: Record<string, unknown>;
   outputText: string;
@@ -101,7 +101,7 @@ function buildTruthProjectionPayload(input: {
   };
 }): Record<string, unknown> | null {
   const normalizedToolName = normalizeToolName(input.toolName);
-  if (!normalizedToolName || !TRUTH_PROJECTOR_TOOLS.has(normalizedToolName)) {
+  if (!normalizedToolName || !CLAIM_PROJECTOR_TOOLS.has(normalizedToolName)) {
     return null;
   }
 
@@ -190,7 +190,7 @@ export class LedgerService {
     });
 
     // Infrastructure rows are part of the evidence chain, but they intentionally do not
-    // participate in truth sync or verification evidence classification.
+    // participate in claim sync or verification evidence classification.
     this.maybeCompactLedger(input.sessionId, turn);
     return ledgerRow.id;
   }
@@ -279,7 +279,7 @@ export class LedgerService {
         outputObservation,
         outputArtifact,
         outputDistillation,
-        truthProjection: buildTruthProjectionPayload({
+        claimProjection: buildClaimProjectionPayload({
           toolName: input.toolName,
           args: input.args,
           outputText: input.outputText,

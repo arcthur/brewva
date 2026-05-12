@@ -17,32 +17,27 @@ import {
 import { parseTscDiagnostics } from "../evidence/api.js";
 import { readToolFailureContextMetadata } from "../ledger/api.js";
 import type { TaskBlockerRecordResult, TaskBlockerResolveResult, TaskState } from "../task/api.js";
-import type {
-  TruthFactResolveResult,
-  TruthFactSeverity,
-  TruthFactUpsertResult,
-  TruthState,
-} from "./types.js";
+import type { ClaimResolveResult, ClaimSeverity, ClaimUpsertResult, ClaimState } from "./types.js";
 
-export interface TruthToolResultProjectorContext {
+export interface ClaimToolResultProjectorContext {
   cwd: string;
   getTaskState(sessionId: string): TaskState;
-  getTruthState(sessionId: string): TruthState;
-  upsertTruthFact(
+  getClaimState(sessionId: string): ClaimState;
+  upsert(
     sessionId: string,
     input: {
       id: string;
       kind: string;
-      severity: TruthFactSeverity;
+      severity: ClaimSeverity;
       summary: string;
       details?: Record<string, unknown>;
       evidenceIds?: string[];
     },
-  ): TruthFactUpsertResult;
-  resolveTruthFact(sessionId: string, truthFactId: string): TruthFactResolveResult;
+  ): ClaimUpsertResult;
+  resolve(sessionId: string, claimId: string): ClaimResolveResult;
   recordTaskBlocker(
     sessionId: string,
-    input: { id: string; message: string; source?: string; truthFactId?: string },
+    input: { id: string; message: string; source?: string; claimId?: string },
   ): TaskBlockerRecordResult;
   resolveTaskBlocker(sessionId: string, blockerId: string): TaskBlockerResolveResult;
 }
@@ -170,17 +165,17 @@ function isBenignSearchNoMatchFailure(input: {
   return isSearchCommand;
 }
 
-function resolveActiveCommandFailureFacts(
-  ctx: TruthToolResultProjectorContext,
+function resolveActiveCommandFailureClaims(
+  ctx: ClaimToolResultProjectorContext,
   sessionId: string,
 ): void {
-  const truthState = ctx.getTruthState(sessionId);
-  for (const fact of truthState.facts) {
+  const claimState = ctx.getClaimState(sessionId);
+  for (const fact of claimState.claims) {
     if (fact.kind !== "command_failure" || fact.status !== "active") {
       continue;
     }
-    ctx.resolveTruthFact(sessionId, fact.id);
-    resolveTruthBackedBlocker(ctx, sessionId, fact.id);
+    ctx.resolve(sessionId, fact.id);
+    resolveClaimBackedBlocker(ctx, sessionId, fact.id);
   }
 }
 
@@ -198,13 +193,13 @@ function resolveCommandFailureClass(failure: EvidenceArtifact | undefined): Comm
   return "execution";
 }
 
-function truthFactIdForCommand(command: string): string {
+function claimIdForCommand(command: string): string {
   const normalized = redactSecrets(command).trim().toLowerCase();
   const digest = sha256Hex(normalized).slice(0, 16);
-  return `truth:command:${digest}`;
+  return `claim:command:${digest}`;
 }
 
-function normalizeTruthFilePath(cwd: string, filePath: string): string {
+function normalizeClaimFilePath(cwd: string, filePath: string): string {
   return resolve(cwd, filePath).replace(/\\/g, "/");
 }
 
@@ -215,13 +210,13 @@ function displayFilePath(cwd: string, filePath: string): string {
   return rel;
 }
 
-function truthFactPrefixForDiagnosticFile(cwd: string, filePath: string): string {
-  const digest = sha256Hex(normalizeTruthFilePath(cwd, filePath)).slice(0, 16);
-  return `truth:diagnostic:${digest}:`;
+function claimPrefixForDiagnosticFile(cwd: string, filePath: string): string {
+  const digest = sha256Hex(normalizeClaimFilePath(cwd, filePath)).slice(0, 16);
+  return `claim:diagnostic:${digest}:`;
 }
 
-function truthFactIdForDiagnostic(cwd: string, filePath: string, code: string): string {
-  const prefix = truthFactPrefixForDiagnosticFile(cwd, filePath);
+function claimIdForDiagnostic(cwd: string, filePath: string, code: string): string {
+  const prefix = claimPrefixForDiagnosticFile(cwd, filePath);
   const normalizedCode = code
     .trim()
     .toLowerCase()
@@ -266,12 +261,12 @@ function dedupeArtifacts(artifacts: EvidenceArtifact[]): EvidenceArtifact[] {
   return out;
 }
 
-function recordTruthBackedBlocker(
-  ctx: TruthToolResultProjectorContext,
+function recordClaimBackedBlocker(
+  ctx: ClaimToolResultProjectorContext,
   sessionId: string,
   input: {
     blockerId: string;
-    truthFactId: string;
+    claimId: string;
     message: string;
     source: string;
   },
@@ -282,7 +277,7 @@ function recordTruthBackedBlocker(
     existing &&
     existing.message === input.message &&
     (existing.source ?? "") === input.source &&
-    (existing.truthFactId ?? "") === input.truthFactId
+    (existing.claimId ?? "") === input.claimId
   ) {
     return;
   }
@@ -290,12 +285,12 @@ function recordTruthBackedBlocker(
     id: input.blockerId,
     message: input.message,
     source: input.source,
-    truthFactId: input.truthFactId,
+    claimId: input.claimId,
   });
 }
 
-function resolveTruthBackedBlocker(
-  ctx: TruthToolResultProjectorContext,
+function resolveClaimBackedBlocker(
+  ctx: ClaimToolResultProjectorContext,
   sessionId: string,
   blockerId: string,
 ): void {
@@ -306,7 +301,7 @@ function resolveTruthBackedBlocker(
   ctx.resolveTaskBlocker(sessionId, blockerId);
 }
 
-export interface ToolResultTruthProjectionInput {
+export interface ToolResultClaimProjectionInput {
   sessionId: string;
   toolName: string;
   args: Record<string, unknown>;
@@ -334,7 +329,7 @@ type ObservabilityAssertionSpec = {
 
 type ObservabilityAssertionRecord = {
   verdict: "pass" | "fail" | "inconclusive";
-  severity: TruthFactSeverity;
+  severity: ClaimSeverity;
   observedValue: number | null;
   sampleSize: number;
   queryRef: string | null;
@@ -407,7 +402,7 @@ function normalizeObservabilityAssertionSpec(
 }
 
 function normalizeObservabilityAssertion(
-  input: ToolResultTruthProjectionInput,
+  input: ToolResultClaimProjectionInput,
 ): ObservabilityAssertionRecord | undefined {
   if (input.toolName !== "obs_slo_assert") {
     return undefined;
@@ -444,7 +439,7 @@ function normalizeObservabilityAssertion(
   }
 
   const severityRaw = assertion.severity;
-  const severity: TruthFactSeverity =
+  const severity: ClaimSeverity =
     severityRaw === "info" || severityRaw === "warn" || severityRaw === "error"
       ? severityRaw
       : "warn";
@@ -473,12 +468,12 @@ function normalizeObservabilityAssertion(
 
 function observabilityAssertionFactId(assertion: ObservabilityAssertionRecord): string {
   const digest = sha256Hex(JSON.stringify(assertion.spec)).slice(0, 16);
-  return `truth:observability:${digest}`;
+  return `claim:observability:${digest}`;
 }
 
-function projectObservabilityAssertionTruth(
-  ctx: TruthToolResultProjectorContext,
-  input: ToolResultTruthProjectionInput,
+function projectObservabilityAssertionClaims(
+  ctx: ClaimToolResultProjectorContext,
+  input: ToolResultClaimProjectionInput,
 ): void {
   const assertion = normalizeObservabilityAssertion(input);
   if (!assertion) {
@@ -491,12 +486,12 @@ function projectObservabilityAssertionTruth(
   }
 
   if (assertion.verdict === "pass") {
-    const truthState = ctx.getTruthState(input.sessionId);
-    const active = truthState.facts.find((fact) => fact.id === factId && fact.status === "active");
+    const claimState = ctx.getClaimState(input.sessionId);
+    const active = claimState.claims.find((fact) => fact.id === factId && fact.status === "active");
     if (active) {
-      ctx.resolveTruthFact(input.sessionId, factId);
+      ctx.resolve(input.sessionId, factId);
     }
-    resolveTruthBackedBlocker(ctx, input.sessionId, factId);
+    resolveClaimBackedBlocker(ctx, input.sessionId, factId);
     return;
   }
 
@@ -511,7 +506,7 @@ function projectObservabilityAssertionTruth(
         : assertion.observedValue.toFixed(2);
   const summary = `observability SLO violated: ${assertion.spec.metric} ${assertion.spec.aggregation} ${assertion.spec.operator} ${thresholdText} (observed=${observedText})`;
 
-  ctx.upsertTruthFact(input.sessionId, {
+  ctx.upsert(input.sessionId, {
     id: factId,
     kind: "observability_slo_violation",
     severity: assertion.severity,
@@ -534,17 +529,17 @@ function projectObservabilityAssertionTruth(
     },
   });
 
-  recordTruthBackedBlocker(ctx, input.sessionId, {
+  recordClaimBackedBlocker(ctx, input.sessionId, {
     blockerId: factId,
-    truthFactId: factId,
+    claimId: factId,
     message: summary,
-    source: "truth_extractor",
+    source: "claim_extractor",
   });
 }
 
-export function projectTruthFromToolResult(
-  ctx: TruthToolResultProjectorContext,
-  input: ToolResultTruthProjectionInput,
+export function projectClaimsFromToolResult(
+  ctx: ClaimToolResultProjectorContext,
+  input: ToolResultClaimProjectionInput,
 ): void {
   const normalizedTool = normalizeToolName(input.toolName);
 
@@ -563,23 +558,23 @@ export function projectTruthFromToolResult(
   const artifacts = dedupeArtifacts([...metadataArtifacts, ...extractedArtifacts]);
 
   if (normalizedTool === "exec") {
-    projectExecTruth(ctx, input, artifacts);
+    projectExecClaims(ctx, input, artifacts);
     return;
   }
 
   if (normalizedTool === "lsp_diagnostics") {
-    projectDiagnosticsTruth(ctx, input);
+    projectDiagnosticsClaims(ctx, input);
     return;
   }
 
   if (normalizedTool === "obs_slo_assert") {
-    projectObservabilityAssertionTruth(ctx, input);
+    projectObservabilityAssertionClaims(ctx, input);
   }
 }
 
-function projectExecTruth(
-  ctx: TruthToolResultProjectorContext,
-  input: ToolResultTruthProjectionInput,
+function projectExecClaims(
+  ctx: ClaimToolResultProjectorContext,
+  input: ToolResultClaimProjectionInput,
   artifacts: EvidenceArtifact[],
 ): void {
   const commandFromArgs = extractShellCommandFromArgs(input.args);
@@ -594,14 +589,14 @@ function projectExecTruth(
 
   const commandSummary = redactAndClamp(command, 160);
   const commandDetail = redactAndClamp(command, 480);
-  const factId = truthFactIdForCommand(command);
+  const factId = claimIdForCommand(command);
 
   if (isToolResultInconclusive(input.verdict)) {
     return;
   }
 
   if (isToolResultPass(input.verdict)) {
-    resolveActiveCommandFailureFacts(ctx, input.sessionId);
+    resolveActiveCommandFailureClaims(ctx, input.sessionId);
     return;
   }
 
@@ -619,23 +614,23 @@ function projectExecTruth(
       exitCode,
     })
   ) {
-    resolveActiveCommandFailureFacts(ctx, input.sessionId);
+    resolveActiveCommandFailureClaims(ctx, input.sessionId);
     return;
   }
 
   if (failureClass !== "execution") {
-    resolveActiveCommandFailureFacts(ctx, input.sessionId);
+    resolveActiveCommandFailureClaims(ctx, input.sessionId);
     return;
   }
 
-  resolveActiveCommandFailureFacts(ctx, input.sessionId);
+  resolveActiveCommandFailureClaims(ctx, input.sessionId);
 
   const summary =
     exitCode === null
       ? `command failed: ${commandSummary}`
       : `command failed: ${commandSummary} (exitCode=${exitCode})`;
 
-  ctx.upsertTruthFact(input.sessionId, {
+  ctx.upsert(input.sessionId, {
     id: factId,
     kind: "command_failure",
     severity: "error",
@@ -656,9 +651,9 @@ function projectExecTruth(
   });
 }
 
-function projectDiagnosticsTruth(
-  ctx: TruthToolResultProjectorContext,
-  input: ToolResultTruthProjectionInput,
+function projectDiagnosticsClaims(
+  ctx: ClaimToolResultProjectorContext,
+  input: ToolResultClaimProjectionInput,
 ): void {
   const rawSeverity = input.args.severity;
   const severityFilter = typeof rawSeverity === "string" ? rawSeverity.trim() : "";
@@ -667,8 +662,8 @@ function projectDiagnosticsTruth(
   const rawFilePath = input.args.filePath;
   const targetFilePath = typeof rawFilePath === "string" ? rawFilePath.trim() : "";
   if (!targetFilePath) return;
-  const targetFileKey = normalizeTruthFilePath(ctx.cwd, targetFilePath);
-  const targetPrefix = truthFactPrefixForDiagnosticFile(ctx.cwd, targetFileKey);
+  const targetFileKey = normalizeClaimFilePath(ctx.cwd, targetFilePath);
+  const targetPrefix = claimPrefixForDiagnosticFile(ctx.cwd, targetFileKey);
 
   const trimmedOutput = input.outputText.trim();
   const outputLower = trimmedOutput.toLowerCase();
@@ -695,12 +690,12 @@ function projectDiagnosticsTruth(
     !scopeMismatch &&
     (detailsExitCode === null || detailsExitCode === 0)
   ) {
-    const truthState = ctx.getTruthState(input.sessionId);
-    for (const fact of truthState.facts) {
+    const claimState = ctx.getClaimState(input.sessionId);
+    for (const fact of claimState.claims) {
       if (fact.status !== "active") continue;
       if (!fact.id.startsWith(targetPrefix)) continue;
-      ctx.resolveTruthFact(input.sessionId, fact.id);
-      resolveTruthBackedBlocker(ctx, input.sessionId, fact.id);
+      ctx.resolve(input.sessionId, fact.id);
+      resolveClaimBackedBlocker(ctx, input.sessionId, fact.id);
     }
     return;
   }
@@ -764,21 +759,21 @@ function projectDiagnosticsTruth(
   }
 
   diagnostics = diagnostics.filter(
-    (diagnostic) => normalizeTruthFilePath(ctx.cwd, diagnostic.file) === targetFileKey,
+    (diagnostic) => normalizeClaimFilePath(ctx.cwd, diagnostic.file) === targetFileKey,
   );
   if (diagnostics.length === 0) {
     return;
   }
 
-  type TruthDiagnosticSample = {
+  type ClaimDiagnosticSample = {
     line: number;
     column: number;
     message: string;
   };
   type CodeAggregate = {
     count: number;
-    severity: TruthFactSeverity;
-    samples: TruthDiagnosticSample[];
+    severity: ClaimSeverity;
+    samples: ClaimDiagnosticSample[];
   };
 
   const aggregates = new Map<string, CodeAggregate>();
@@ -786,7 +781,7 @@ function projectDiagnosticsTruth(
     const code = diagnostic.code.trim();
     if (!code) continue;
 
-    const truthSeverity: TruthFactSeverity =
+    const claimSeverity: ClaimSeverity =
       diagnostic.severity === "error"
         ? "error"
         : diagnostic.severity === "warning"
@@ -795,15 +790,15 @@ function projectDiagnosticsTruth(
 
     const bucket = aggregates.get(code) ?? {
       count: 0,
-      severity: truthSeverity,
+      severity: claimSeverity,
       samples: [],
     };
 
     bucket.count += 1;
-    if (bucket.severity !== "error" && truthSeverity === "error") {
+    if (bucket.severity !== "error" && claimSeverity === "error") {
       bucket.severity = "error";
     }
-    if (bucket.severity === "info" && truthSeverity === "warn") {
+    if (bucket.severity === "info" && claimSeverity === "warn") {
       bucket.severity = "warn";
     }
 
@@ -824,12 +819,12 @@ function projectDiagnosticsTruth(
   const currentFactIds = new Set<string>();
 
   for (const [code, aggregate] of aggregates.entries()) {
-    const factId = truthFactIdForDiagnostic(ctx.cwd, targetFileKey, code);
+    const factId = claimIdForDiagnostic(ctx.cwd, targetFileKey, code);
     currentFactIds.add(factId);
 
     const summary = `diagnostic: ${fileDisplay} ${code} x${aggregate.count}`;
 
-    ctx.upsertTruthFact(input.sessionId, {
+    ctx.upsert(input.sessionId, {
       id: factId,
       kind: "diagnostic",
       severity: aggregate.severity,
@@ -850,22 +845,22 @@ function projectDiagnosticsTruth(
       },
     });
 
-    recordTruthBackedBlocker(ctx, input.sessionId, {
+    recordClaimBackedBlocker(ctx, input.sessionId, {
       blockerId: factId,
-      truthFactId: factId,
+      claimId: factId,
       message: summary,
-      source: "truth_extractor",
+      source: "claim_extractor",
     });
   }
 
   if (unfiltered) {
-    const truthState = ctx.getTruthState(input.sessionId);
-    for (const fact of truthState.facts) {
+    const claimState = ctx.getClaimState(input.sessionId);
+    for (const fact of claimState.claims) {
       if (fact.status !== "active") continue;
       if (!fact.id.startsWith(targetPrefix)) continue;
       if (currentFactIds.has(fact.id)) continue;
-      ctx.resolveTruthFact(input.sessionId, fact.id);
-      resolveTruthBackedBlocker(ctx, input.sessionId, fact.id);
+      ctx.resolve(input.sessionId, fact.id);
+      resolveClaimBackedBlocker(ctx, input.sessionId, fact.id);
     }
   }
 }

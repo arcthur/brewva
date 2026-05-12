@@ -229,14 +229,15 @@ operator explanation, but they are not a rival lifecycle state machine.
 - Redo (`--redo`): reapply the latest undone session rewind window
 - JSON one-shot (`--mode json`/`--json`): emits normal stream plus final `brewva_event_bundle`
 - Interactive CLI: uses the same managed session substrate as hosted execution;
-  product differences stay in operator UX and transport, not in runtime truth
+  product differences stay in operator UX and transport, not in runtime
+  authority state
   - once mode resolution commits to interactive execution, CLI boots the
     OpenTUI-backed shell in `alternate-screen`
   - ordinary non-streaming prompts run through the `interactive` hosted-loop
     profile; streaming follow-up remains a low-level agent-loop continuation
   - approvals, questions, tasks, inspect, lineage checkout, session switching,
     and pager drill-down remain presentation over Brewva-owned session state
-    rather than a second lifecycle truth
+    rather than a second lifecycle authority
   - `/lineage` opens the channel-local lineage tree, records advisory selection
     on checkout, and refreshes the visible transcript from the selected
     context-entry path
@@ -259,7 +260,7 @@ Session lifecycle behavior is anchored to the repository durability taxonomy:
 
 - `durable source of truth`
   - event tape, checkpoints, reasoning-branch receipts, proposal receipts,
-    approval events, task/truth events, and schedule intent events
+    approval events, task/claim events, and schedule intent events
 - `durable transient`
   - Recovery WAL and rollback patch/snapshot history used for bounded recovery or
     undo
@@ -320,7 +321,7 @@ permanent degradation.
 - Projection rebuild remains a separate on-demand projection-engine path. It is
   not part of `SessionLifecycleService` hydration and it does not gate replay
   correctness.
-- Reasoning-branch truth is reconstructed from durable `reasoning_checkpoint`
+- Reasoning-branch state is reconstructed from durable `reasoning_checkpoint`
   and `reasoning_revert` receipts. Recovery WAL does not hold the active
   branch; it only carries the in-flight turn envelope.
 - Session-local runtime state is hydrated lazily through `ensureHydrated(...)`.
@@ -396,7 +397,7 @@ permanent degradation.
   prompt WAL: the WAL replays the pending turn envelope, while tape determines
   whether branch reset must be re-applied first.
 - Channel approval helper state is not part of recovery correctness.
-  Approval truth and request resolution remain replay-derived from durable
+  Approval claims and request resolution remain replay-derived from durable
   runtime events, with optional process-local UI cache only.
 - Telegram polling restart offset is derived from durably accepted channel
   Recovery WAL ingress watermark state (`meta.ingressSequence`, projected from

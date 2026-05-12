@@ -16,6 +16,8 @@ import {
   type BrewvaEventLike,
   type BrewvaTypedEventRecord,
 } from "../../events/descriptor-core.js";
+import { normalizeEvidenceRef } from "../evidence/api.js";
+import type { EvidenceRef } from "../evidence/api.js";
 import {
   DECISION_RECEIPT_RECORDED_EVENT_TYPE,
   EFFECT_COMMITMENT_APPROVAL_CONSUMED_EVENT_TYPE,
@@ -33,7 +35,6 @@ import type {
   EffectCommitmentDiffPreview,
   EffectCommitmentDiffPreviewFile,
   EffectCommitmentProposal,
-  EvidenceRef,
   ProposalDecision,
 } from "./types.js";
 
@@ -106,19 +107,6 @@ function isProposalDecision(value: unknown): value is ProposalDecision {
   return value === "accept" || value === "reject" || value === "defer";
 }
 
-function isEvidenceSourceType(value: unknown): value is EvidenceRef["sourceType"] {
-  return (
-    value === "event" ||
-    value === "ledger" ||
-    value === "task" ||
-    value === "truth" ||
-    value === "workspace_artifact" ||
-    value === "operator_note" ||
-    value === "verification" ||
-    value === "tool_result"
-  );
-}
-
 function readEffectCommitmentDiffPreviewFileValue(
   value: unknown,
 ): EffectCommitmentDiffPreviewFile | null {
@@ -172,24 +160,7 @@ function readEffectCommitmentDiffPreviewValue(
 }
 
 function readEvidenceRefValue(value: unknown): EvidenceRef | null {
-  const record = asRecord(value);
-  if (!record) {
-    return null;
-  }
-  const id = readString(record.id);
-  const sourceType = record.sourceType;
-  const locator = readString(record.locator);
-  const createdAt = readNonNegativeNumber(record.createdAt);
-  if (!id || !isEvidenceSourceType(sourceType) || !locator || createdAt === null) {
-    return null;
-  }
-  return {
-    id,
-    sourceType,
-    locator,
-    ...(readString(record.hash) ? { hash: readString(record.hash)! } : {}),
-    createdAt,
-  };
+  return normalizeEvidenceRef(value);
 }
 
 function readEvidenceRefsValue(value: unknown): EvidenceRef[] | null {

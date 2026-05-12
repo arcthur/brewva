@@ -10,7 +10,7 @@ import type { TaskPhase } from "../task/api.js";
 export type ScheduleContinuityMode = "inherit" | "fresh";
 
 export type ConvergencePredicate =
-  | { kind: "truth_resolved"; factId: string }
+  | { kind: "claim_resolved"; factId: string }
   | { kind: "task_phase"; phase: TaskPhase }
   | { kind: "max_runs"; limit: number }
   | { kind: "all_of"; predicates: ConvergencePredicate[] }

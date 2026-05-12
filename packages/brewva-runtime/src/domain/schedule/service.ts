@@ -14,8 +14,8 @@ import type {
   BrewvaStructuredEvent,
 } from "../../events/types.js";
 import { buildTurnEnvelope, type TurnEnvelope } from "../channels/api.js";
+import type { ClaimState } from "../claim/api.js";
 import type { TaskState } from "../task/api.js";
-import type { TruthState } from "../truth/api.js";
 import {
   getNextCronRunAt,
   normalizeTimeZone,
@@ -178,7 +178,7 @@ export interface SchedulerRuntimePort {
     skipTapeCheckpoint?: boolean;
   }): BrewvaEventRecord | undefined;
   subscribeEvents(listener: (event: BrewvaStructuredEvent) => void): () => void;
-  getTruthState(sessionId: string): TruthState;
+  getClaimState(sessionId: string): ClaimState;
   getTaskState(sessionId: string): TaskState;
   recoveryWal?: {
     appendPending(
@@ -1213,9 +1213,9 @@ export class SchedulerService {
     if (!predicate) return false;
 
     switch (predicate.kind) {
-      case "truth_resolved": {
-        const truth = this.runtimePort.getTruthState(input.sessionId);
-        return truth.facts.some(
+      case "claim_resolved": {
+        const claim = this.runtimePort.getClaimState(input.sessionId);
+        return claim.claims.some(
           (fact) => fact.id === predicate.factId && fact.status === "resolved",
         );
       }

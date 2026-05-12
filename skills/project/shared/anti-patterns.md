@@ -1,6 +1,8 @@
 ---
 strength: invariant
 scope: anti-patterns
+convention_kind: workflow_rule
+retirement_sensitivity: review_only
 ---
 
 # Brewva Anti-Patterns

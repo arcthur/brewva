@@ -62,7 +62,12 @@ function buildKernelEffectCommitmentDecision(input: {
 }
 
 export interface RuntimeProposalsDomainRegistration {
-  services: Omit<RuntimeGovernanceServices, "reversibleMutationService">;
+  services: Pick<
+    RuntimeGovernanceServices,
+    | "getEffectCommitmentDeskService"
+    | "getProposalAdmissionService"
+    | "clearEffectCommitmentDeskState"
+  >;
   surfaceContribution: typeof proposalsSurfaceContribution;
   eventDescriptors: readonly BrewvaEventDescriptor<string, unknown>[];
 }

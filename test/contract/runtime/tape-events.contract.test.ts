@@ -22,14 +22,14 @@ function buildValidCheckpointPayload() {
       ],
       updatedAt: 3,
     },
-    truthState: {
-      facts: [
+    claimState: {
+      claims: [
         {
           id: "fact-1",
           kind: "test",
           status: "active",
           severity: "warn",
-          summary: "truth summary",
+          summary: "claim summary",
           evidenceIds: ["led-1"],
           firstSeenAt: 1,
           lastSeenAt: 2,
@@ -100,16 +100,16 @@ describe("tape checkpoint payload coercion", () => {
     expect(coerceTapeCheckpointPayload(payload)).toBeNull();
   });
 
-  test("given checkpoint payload with invalid truth fact structure, when coercing payload, then payload is rejected", () => {
+  test("given checkpoint payload with invalid claim fact structure, when coercing payload, then payload is rejected", () => {
     const payload = buildValidCheckpointPayload() as unknown as {
       state: {
-        truth: {
-          facts: Array<Record<string, unknown>>;
+        claim: {
+          claims: Array<Record<string, unknown>>;
         };
       };
     };
-    const first = payload.state.truth.facts[0];
-    if (!first) throw new Error("expected truth fact");
+    const first = payload.state.claim.claims[0];
+    if (!first) throw new Error("expected claim fact");
     delete first.evidenceIds;
     expect(coerceTapeCheckpointPayload(payload)).toBeNull();
   });

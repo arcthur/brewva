@@ -16,7 +16,7 @@ Current heartbeat behavior is intentionally direct:
 
 There is no separate wake plan, skip plan, or replayable wake metadata event.
 The live control plane may emit `heartbeat.fired`, but that event is not
-durable tape truth and it is not replayed as runtime wake metadata.
+durable event-tape authority and it is not replayed as runtime wake metadata.
 
 ## Heartbeat Rule Shape
 

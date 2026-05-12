@@ -9,7 +9,7 @@ It is `rebuildable state`, not a `durable source of truth`.
 
 It is also distinct from the `history-view baseline`: baseline authority comes
 from durable `session_compact` receipts, while working projection is a separate
-rebuildable execution snapshot for task, truth, and workflow-facing context.
+rebuildable execution snapshot for task, claim, and workflow-facing context.
 
 ## Runtime Behavior
 
@@ -56,7 +56,7 @@ flowchart TD
 
 - working projection is a projection, not a `durable source of truth`
 - the durable source of truth remains tape events, receipts, and authoritative task,
-  truth, and schedule events
+  claim, and schedule events
 - working projection does not own history rewrite authority; that belongs to
   the receipt-derived history-view baseline
 - projection files are optional rebuildable helpers, not hydration

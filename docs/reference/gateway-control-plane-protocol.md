@@ -179,7 +179,7 @@ Reopening the same public `sessionId` resets the live status lifecycle; later
 subscribe snapshots are derived fresh from replay plus current worker state.
 
 Gateway session-status seeding is an adapter over runtime lifecycle, not a
-parallel truth source. When runtime lifecycle is available, gateway seeds
+parallel authority source. When runtime lifecycle is available, gateway seeds
 `session.status` from `inspect.lifecycle.getSnapshot(sessionId)` and only falls
 back to bounded frame-history reduction for compatibility or replay bootstrap
 cases that the aggregate cannot yet represent directly.

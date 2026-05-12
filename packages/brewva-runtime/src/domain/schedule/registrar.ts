@@ -27,7 +27,7 @@ export function registerScheduleDomain(
                   options.coreDependencies.eventStore.list(sessionId, query),
                 recordEvent: (input) => options.eventPipeline.recordEvent(input),
                 subscribeEvents: (listener) => options.eventPipeline.subscribeEvents(listener),
-                getTruthState: (sessionId) => options.kernel.getTruthState(sessionId),
+                getClaimState: (sessionId) => options.kernel.getClaimState(sessionId),
                 getTaskState: (sessionId) => options.kernel.getTaskState(sessionId),
                 recoveryWal: {
                   appendPending: (envelope, source, walOptions) =>

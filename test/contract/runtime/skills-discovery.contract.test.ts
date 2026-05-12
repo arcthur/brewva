@@ -352,6 +352,8 @@ describe("skill discovery and loading", () => {
         "---",
         "strength: invariant",
         "scope: project-rules",
+        "convention_kind: workflow_rule",
+        "retirement_sensitivity: review_only",
         "---",
         "",
         "# Project Rules",
@@ -416,6 +418,8 @@ describe("skill discovery and loading", () => {
       filePath: resolve(projectGuidancePath),
       strength: "invariant",
       scope: "project-rules",
+      conventionKind: "workflow_rule",
+      retirementSensitivity: "review_only",
     });
     expect(skill.contract.resources?.defaultLease?.maxToolCalls).toBe(5);
   });
@@ -433,6 +437,8 @@ describe("skill discovery and loading", () => {
         "---",
         "strength: preference",
         "scope: project-rules",
+        "convention_kind: user_preference",
+        "retirement_sensitivity: auto_decay_allowed",
         "---",
         "# Project Rules",
         "",
@@ -454,6 +460,8 @@ describe("skill discovery and loading", () => {
       filePath: resolve(projectGuidancePath),
       strength: "preference",
       scope: "project-rules",
+      conventionKind: "user_preference",
+      retirementSensitivity: "auto_decay_allowed",
     });
 
     const index = JSON.parse(
@@ -461,13 +469,21 @@ describe("skill discovery and loading", () => {
     ) as {
       skills?: Array<{
         name?: string;
-        projectGuidance?: Array<{ filePath?: string; strength?: string; scope?: string }>;
+        projectGuidance?: Array<{
+          filePath?: string;
+          strength?: string;
+          scope?: string;
+          conventionKind?: string;
+          retirementSensitivity?: string;
+        }>;
       }>;
     };
     expect(index.skills?.find((entry) => entry.name === "foo")?.projectGuidance).toContainEqual({
       filePath: resolve(projectGuidancePath),
       strength: "preference",
       scope: "project-rules",
+      conventionKind: "user_preference",
+      retirementSensitivity: "auto_decay_allowed",
     });
   });
 
@@ -650,6 +666,8 @@ describe("skill discovery and loading", () => {
         "---",
         "strength: invariant",
         "scope: project-rules",
+        "convention_kind: workflow_rule",
+        "retirement_sensitivity: review_only",
         "---",
         "# Project Rules",
         "",
@@ -683,6 +701,8 @@ describe("skill discovery and loading", () => {
         "---",
         "strength: preference",
         "scope: external-rules",
+        "convention_kind: user_preference",
+        "retirement_sensitivity: auto_decay_allowed",
         "---",
         "# External Rules",
         "",
@@ -780,7 +800,15 @@ describe("skill discovery and loading", () => {
     writeFileSync(baseScriptPath, "print('base')\n", "utf8");
     writeFileSync(
       projectSharedPath,
-      ["---", "strength: lookup", "scope: project", "---", "# shared"].join("\n"),
+      [
+        "---",
+        "strength: lookup",
+        "scope: project",
+        "convention_kind: project_fact",
+        "retirement_sensitivity: auto_decay_allowed",
+        "---",
+        "# shared",
+      ].join("\n"),
       "utf8",
     );
     writeFileSync(projectScriptPath, "#!/usr/bin/env bash\nexit 0\n", "utf8");
@@ -871,7 +899,15 @@ describe("skill discovery and loading", () => {
     writeFileSync(baseScriptPath, "print('base')\n", "utf8");
     writeFileSync(
       sharedPath,
-      ["---", "strength: lookup", "scope: project", "---", "# shared"].join("\n"),
+      [
+        "---",
+        "strength: lookup",
+        "scope: project",
+        "convention_kind: project_fact",
+        "retirement_sensitivity: auto_decay_allowed",
+        "---",
+        "# shared",
+      ].join("\n"),
       "utf8",
     );
     writeFileSync(scriptPath, "#!/usr/bin/env bash\nexit 0\n", "utf8");

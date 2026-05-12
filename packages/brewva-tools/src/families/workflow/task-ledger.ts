@@ -227,7 +227,7 @@ export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinitio
         id: Type.Optional(Type.String()),
         message: Type.String(),
         source: Type.Optional(Type.String()),
-        truthFactId: Type.Optional(Type.String()),
+        claimId: Type.Optional(Type.String()),
       }),
       async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
         const sessionId = getSessionId(ctx);
@@ -235,7 +235,7 @@ export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinitio
           id: params.id,
           message: params.message,
           source: params.source,
-          truthFactId: params.truthFactId,
+          claimId: params.claimId,
         });
         if (!result.ok) {
           return failTextResult(`Blocker rejected (${result.reason ?? "unknown_error"}).`, result);

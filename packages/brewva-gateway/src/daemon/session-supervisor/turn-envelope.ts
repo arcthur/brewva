@@ -1,4 +1,4 @@
-import type { TruthFact } from "@brewva/brewva-runtime";
+import type { OperationalClaim } from "@brewva/brewva-runtime";
 import { buildTurnEnvelope, type TurnEnvelope } from "@brewva/brewva-runtime/channels";
 import { readNonEmptyString } from "@brewva/brewva-std/text";
 import { isRecord } from "@brewva/brewva-std/unknown";
@@ -45,15 +45,15 @@ function readTaskSpecField(
   return value as unknown as SchedulePromptTrigger["taskSpec"];
 }
 
-function readTruthFactsField(
+function readOperationalClaimsField(
   record: Record<string, unknown>,
   key: string,
-): TruthFact[] | undefined {
+): OperationalClaim[] | undefined {
   const value = record[key];
   if (!Array.isArray(value)) {
     return undefined;
   }
-  return value.filter((entry): entry is TruthFact => isRecord(entry));
+  return value.filter((entry): entry is OperationalClaim => isRecord(entry));
 }
 
 function readSchedulePromptAnchor(value: unknown): SchedulePromptAnchor | null | undefined {
@@ -137,7 +137,7 @@ export function extractTriggerFromEnvelope(envelope: TurnEnvelope): SendPromptTr
     kind: "schedule",
     continuityMode,
     taskSpec: readTaskSpecField(raw, "taskSpec"),
-    truthFacts: readTruthFactsField(raw, "truthFacts"),
+    claims: readOperationalClaimsField(raw, "claims"),
     parentAnchor: readSchedulePromptAnchor(raw.parentAnchor),
   };
   return trigger;

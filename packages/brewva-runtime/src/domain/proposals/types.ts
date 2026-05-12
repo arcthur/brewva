@@ -1,5 +1,6 @@
 import type { BrewvaToolCallId, BrewvaToolName } from "../../core/identifiers.js";
 import type { RuntimeResult } from "../../core/runtime-result.js";
+import type { EvidenceRef } from "../evidence/api.js";
 import type {
   EffectAuthorityManifestBasis,
   ToolEffectClass,
@@ -7,24 +8,6 @@ import type {
 } from "../governance/api.js";
 
 export type ProposalDecision = "accept" | "reject" | "defer";
-
-export type EvidenceSourceType =
-  | "event"
-  | "ledger"
-  | "task"
-  | "truth"
-  | "workspace_artifact"
-  | "operator_note"
-  | "verification"
-  | "tool_result";
-
-export interface EvidenceRef {
-  id: string;
-  sourceType: EvidenceSourceType;
-  locator: string;
-  hash?: string;
-  createdAt: number;
-}
 
 export interface EffectCommitmentDiffPreviewFile {
   path: string;

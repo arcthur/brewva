@@ -29,7 +29,7 @@ export interface RuntimeCompositionInput {
   resolveToolAuthority: (toolName: string, args?: Record<string, unknown>) => ResolvedToolAuthority;
   getCurrentTurn: (sessionId: string) => number;
   getTaskState: (sessionId: string) => ReturnType<RuntimeKernelContext["getTaskState"]>;
-  getTruthState: (sessionId: string) => ReturnType<RuntimeKernelContext["getTruthState"]>;
+  getClaimState: (sessionId: string) => ReturnType<RuntimeKernelContext["getClaimState"]>;
   recordEvent: RuntimeKernelContext["recordEvent"];
   sanitizeInput: RuntimeKernelContext["sanitizeInput"];
   getLatestVerificationOutcome: (sessionId: string) => VerificationOutcomeSnapshot | undefined;

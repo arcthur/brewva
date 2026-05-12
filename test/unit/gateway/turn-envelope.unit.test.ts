@@ -329,7 +329,7 @@ describe("hosted turn envelope", () => {
           schema: "brewva.task.v1",
           goal: "Inherited schedule goal",
         },
-        truthFacts: [
+        claims: [
           {
             id: "fact-1",
             kind: "constraint",
@@ -349,7 +349,7 @@ describe("hosted turn envelope", () => {
     });
 
     expect(observedGoal).toEqual(["Inherited schedule goal"]);
-    expect(runtime.inspect.truth.getState(sessionId).facts.map((fact) => fact.id)).toContain(
+    expect(runtime.inspect.claim.getState(sessionId).claims.map((fact) => fact.id)).toContain(
       "fact-1",
     );
     expect(eventPayloads(runtime, sessionId, "turn_input_recorded")[0]).toMatchObject({

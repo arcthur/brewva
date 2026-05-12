@@ -112,19 +112,19 @@ async function writeJsonFileAsync(filePath: string, entries: readonly unknown[])
 
 function scheduleJsonlWrite(filePath: string, entries: readonly unknown[]): void {
   void writeJsonlFileAsync(filePath, entries).catch(() => {
-    // Persistence is best-effort; in-memory state is the source of truth.
+    // Persistence is best-effort; in-memory state is the source of claim.
   });
 }
 
 function scheduleJsonlAppend(filePath: string, entry: unknown): void {
   void appendJsonlAsync(filePath, entry).catch(() => {
-    // Persistence is best-effort; in-memory state is the source of truth.
+    // Persistence is best-effort; in-memory state is the source of claim.
   });
 }
 
 function scheduleJsonWrite(filePath: string, entries: readonly unknown[]): void {
   void writeJsonFileAsync(filePath, entries).catch(() => {
-    // Persistence is best-effort; in-memory state is the source of truth.
+    // Persistence is best-effort; in-memory state is the source of claim.
   });
 }
 

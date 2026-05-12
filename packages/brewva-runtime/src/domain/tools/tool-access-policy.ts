@@ -11,8 +11,8 @@ import type { ContextBudgetUsage } from "../context/api.js";
 import type { SessionCostTracker } from "../cost/api.js";
 import type {
   EffectAuthorityManifestBasis,
+  MutationReceipt,
   ToolExecutionBoundary,
-  ToolMutationReceipt,
 } from "../governance/api.js";
 import {
   decideEffectAuthorityManifest,
@@ -33,7 +33,7 @@ export interface ToolAccessDecision {
   boundary?: ToolExecutionBoundary;
   commitmentReceipt?: DecisionReceipt;
   effectCommitmentRequestId?: string;
-  mutationReceipt?: ToolMutationReceipt;
+  mutationReceipt?: MutationReceipt;
   manifestBasis?: EffectAuthorityManifestBasis;
 }
 

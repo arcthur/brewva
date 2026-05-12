@@ -40,7 +40,7 @@ Use ordinary capabilities:
 - file/search tools to inspect skill markdown
 - `workbench_note` for model-authored durable working notes
 - `workbench_evict` to evict stale context with optional replacement notes
-- `task_set_spec` and `task_view_state` for task truth
+- `task_set_spec` and `task_view_state` for task state
 - `workflow_status` for derived progress inspection
 - verification tools for evidence and acceptance
 

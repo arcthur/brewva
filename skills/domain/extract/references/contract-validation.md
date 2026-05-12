@@ -99,7 +99,7 @@ Validation evidence should live in:
 - raw `exec` output
 - `zca_validation` inside `skill_complete`
 
-Do not depend on `truth_upsert`, because it is not part of the default tool surface used here.
+Do not depend on a direct claim-upsert tool, because it is not part of the default tool surface used here.
 
 Recommended `zca_validation` fields:
 

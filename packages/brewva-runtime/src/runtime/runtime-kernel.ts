@@ -1,4 +1,5 @@
 import type { BrewvaConfig } from "../config/types.js";
+import type { ClaimState } from "../domain/claim/api.js";
 import type { ContextBudgetManager } from "../domain/context/api.js";
 import type { VerificationOutcomeSnapshot } from "../domain/context/api.js";
 import type { ContextBudgetUsage } from "../domain/context/api.js";
@@ -14,7 +15,6 @@ import type { RuntimeSessionStateStore } from "../domain/sessions/api.js";
 import type { ReasoningReplayEngine } from "../domain/tape/api.js";
 import type { TurnReplayEngine } from "../domain/tape/api.js";
 import type { TaskState } from "../domain/task/api.js";
-import type { TruthState } from "../domain/truth/api.js";
 import type { VerificationGate } from "../domain/verification/api.js";
 import type { BrewvaEventStore } from "../events/store.js";
 
@@ -38,7 +38,7 @@ export interface RuntimeKernelContext {
   costTracker: SessionCostTracker;
   getCurrentTurn(sessionId: string): number;
   getTaskState(sessionId: string): TaskState;
-  getTruthState(sessionId: string): TruthState;
+  getClaimState(sessionId: string): ClaimState;
   recordEvent: RuntimeRecordEvent;
   sanitizeInput(text: string): string;
   getLatestVerificationOutcome(sessionId: string): VerificationOutcomeSnapshot | undefined;

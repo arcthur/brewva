@@ -6,6 +6,8 @@ import {
 } from "../../events/registry.js";
 import type { BrewvaEventRecord } from "../../events/types.js";
 import type { RuntimeKernelContext } from "../../runtime/runtime-kernel.js";
+import { normalizeEvidenceRefs } from "../evidence/api.js";
+import type { EvidenceRef } from "../evidence/api.js";
 import type { ResolvedToolAuthority } from "../governance/api.js";
 import {
   commitEffectCommitmentProposal,
@@ -17,7 +19,6 @@ import type {
   EffectCommitmentListQuery,
   EffectCommitmentProposal,
   EffectCommitmentRecord,
-  EvidenceRef,
   ProposalDecision,
 } from "./types.js";
 
@@ -157,26 +158,7 @@ export class ProposalAdmissionService {
   }
 
   private normalizeEvidenceRefs(evidenceRefs: EvidenceRef[]): EvidenceRef[] {
-    return evidenceRefs
-      .filter(
-        (entry) =>
-          typeof entry.id === "string" &&
-          entry.id.trim().length > 0 &&
-          typeof entry.sourceType === "string" &&
-          entry.sourceType.trim().length > 0 &&
-          typeof entry.locator === "string" &&
-          entry.locator.trim().length > 0 &&
-          typeof entry.createdAt === "number" &&
-          Number.isFinite(entry.createdAt),
-      )
-      .map((entry) => ({
-        id: entry.id.trim(),
-        sourceType: entry.sourceType,
-        locator: entry.locator.trim(),
-        hash:
-          typeof entry.hash === "string" && entry.hash.trim().length > 0 ? entry.hash : undefined,
-        createdAt: Math.max(0, Math.floor(entry.createdAt)),
-      }));
+    return normalizeEvidenceRefs(evidenceRefs);
   }
 
   private decideProposal(

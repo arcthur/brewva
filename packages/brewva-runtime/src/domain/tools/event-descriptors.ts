@@ -181,7 +181,7 @@ function readToolResultRecordedEventPayloadValue(
     outputObservation: readJsonRecord(record.outputObservation) ?? null,
     outputArtifact: readJsonRecord(record.outputArtifact) ?? null,
     outputDistillation: readJsonRecord(record.outputDistillation) ?? null,
-    truthProjection: readJsonRecord(record.truthProjection) ?? null,
+    claimProjection: readJsonRecord(record.claimProjection) ?? null,
     verificationProjection: readJsonRecord(record.verificationProjection) ?? null,
     failureClass: isToolResultFailureClass(record.failureClass) ? record.failureClass : null,
     failureContext: readToolResultFailureContextPayloadValue(record.failureContext),

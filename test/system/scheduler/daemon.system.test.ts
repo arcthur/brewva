@@ -192,18 +192,18 @@ describe("system: scheduler daemon", () => {
 
       const parentSessionId = asBrewvaSessionId("scheduler-parent-session");
       const parentTaskGoal = "Finish the release checklist";
-      const truthSummary = "Release notes are waiting for final reviewer approval.";
+      const claimSummary = "Release notes are waiting for final reviewer approval.";
 
       const setupRuntime = new BrewvaRuntime({ cwd: workspace, configPath: ".brewva/brewva.json" });
       setupRuntime.authority.task.setSpec(parentSessionId, {
         schema: "brewva.task.v1",
         goal: parentTaskGoal,
       });
-      setupRuntime.authority.truth.upsertFact(parentSessionId, {
+      setupRuntime.authority.claim.upsert(parentSessionId, {
         id: "fact-release-review",
         kind: "status",
         severity: "warn",
-        summary: truthSummary,
+        summary: claimSummary,
       });
       setupRuntime.authority.tape.recordTapeHandoff(parentSessionId, {
         name: "release-checkpoint",
@@ -280,17 +280,17 @@ describe("system: scheduler daemon", () => {
           intentId: "intent-scheduler-daemon",
           parentSessionId,
           inheritedTaskSpec: true,
-          inheritedTruthFacts: 1,
+          inheritedOperationalClaims: 1,
         });
 
         const childTask = persisted.inspect.task.getState(childSessionId);
         expect(childTask.spec?.goal).toBe(parentTaskGoal);
-        const childTruth = persisted.inspect.truth.getState(childSessionId);
-        expect(childTruth.facts).toEqual(
+        const childClaim = persisted.inspect.claim.getState(childSessionId);
+        expect(childClaim.claims).toEqual(
           expect.arrayContaining([
             expect.objectContaining({
               id: "fact-release-review",
-              summary: truthSummary,
+              summary: claimSummary,
               status: "active",
             }),
           ]),

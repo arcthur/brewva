@@ -14,7 +14,7 @@ describe("platform growth governance docs", () => {
     const runtime = readDoc("docs/reference/runtime.md");
 
     expect(axioms).toContain("replay correctness");
-    expect(axioms).toContain("approval truth");
+    expect(axioms).toContain("approval claim");
     expect(axioms).toContain("rollback correctness");
     expect(axioms).toContain("recovery correctness");
     expect(axioms).toContain("`single tool call`");

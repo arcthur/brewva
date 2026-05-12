@@ -45,7 +45,7 @@ const ListStatusSchema = buildStringEnumSchema(SCHEDULE_LIST_STATUSES, {
 });
 
 const CONVERGENCE_KIND_VALUES = [
-  "truth_resolved",
+  "claim_resolved",
   "task_phase",
   "max_runs",
   "all_of",
@@ -69,7 +69,7 @@ const ConvergencePredicateSchema = attachStringEnumContractPaths(
   Type.Recursive((Self) =>
     Type.Union([
       Type.Object({
-        kind: Type.Literal("truth_resolved"),
+        kind: Type.Literal("claim_resolved"),
         factId: Type.String({ minLength: 1, maxLength: 300 }),
       }),
       Type.Object({
@@ -96,7 +96,7 @@ const ConvergencePredicateSchema = attachStringEnumContractPaths(
       contract: {
         canonicalValues: CONVERGENCE_KIND_VALUES,
         guidance:
-          "Use truth_resolved for fact-based convergence, task_phase for task-state convergence, max_runs for bounded retries, and all_of or any_of to compose multiple predicates.",
+          "Use claim_resolved for fact-based convergence, task_phase for task-state convergence, max_runs for bounded retries, and all_of or any_of to compose multiple predicates.",
       },
     },
   ],
@@ -130,7 +130,7 @@ function normalizeConvergencePredicate(value: unknown): ConvergencePredicate | u
   const candidate = value as Record<string, unknown>;
   const kind = candidate.kind;
 
-  if (kind === "truth_resolved") {
+  if (kind === "claim_resolved") {
     const factId = normalizeOptionalString(candidate.factId);
     return factId ? { kind, factId } : undefined;
   }

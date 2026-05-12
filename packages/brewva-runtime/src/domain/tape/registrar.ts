@@ -23,7 +23,7 @@ export function registerTapeDomain(
             options.coreDependencies.eventStore.list(sessionId, query),
           getCurrentTurn: (sessionId) => options.kernel.getCurrentTurn(sessionId),
           getTaskState: (sessionId) => options.kernel.getTaskState(sessionId),
-          getTruthState: (sessionId) => options.kernel.getTruthState(sessionId),
+          getClaimState: (sessionId) => options.kernel.getClaimState(sessionId),
           getCostSummary: (sessionId) => options.resolveCheckpointCostSummary(sessionId),
           getCostSkillLastTurnByName: (sessionId) =>
             options.resolveCheckpointCostSkillLastTurnByName(sessionId),

@@ -147,7 +147,7 @@ export function createRuntimeEffectLayerInput(
       resolveToolAuthority: input.resolveToolAuthority,
       getCurrentTurn: input.getCurrentTurn,
       getTaskState: input.getTaskState,
-      getTruthState: input.getTruthState,
+      getClaimState: input.getClaimState,
       recordEvent: input.recordEvent,
       sanitizeInput: input.sanitizeInput,
       getLatestVerificationOutcome: input.getLatestVerificationOutcome,
@@ -251,7 +251,7 @@ function createRuntimeKernelLayer(
           sessionState: hooks.sessionState,
           getCurrentTurn: (sessionId) => hooks.getCurrentTurn(sessionId),
           getTaskState: (sessionId) => hooks.getTaskState(sessionId),
-          getTruthState: (sessionId) => hooks.getTruthState(sessionId),
+          getClaimState: (sessionId) => hooks.getClaimState(sessionId),
           recordEvent: hooks.recordEvent,
           sanitizeInput: hooks.sanitizeInput,
           getLatestVerificationOutcome: (sessionId) =>
@@ -335,6 +335,7 @@ function createRuntimeLazyServiceFactoriesLayer(
           getProposalAdmissionService: () => serviceDependencies.getProposalAdmissionService(),
           getEffectCommitmentDeskService: () =>
             serviceDependencies.getEffectCommitmentDeskService(),
+          getConventionAdmissionService: () => serviceDependencies.getConventionAdmissionService(),
           ledgerService: serviceDependencies.ledgerService,
           reversibleMutationService: serviceDependencies.reversibleMutationService,
           resolveToolAuthority: hooks.resolveToolAuthority,

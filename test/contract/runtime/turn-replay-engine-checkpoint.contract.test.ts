@@ -64,8 +64,8 @@ describe("TurnReplayEngine checkpoint replay", () => {
         blockers: [],
         updatedAt: 3,
       },
-      truthState: {
-        facts: [],
+      claimState: {
+        claims: [],
         updatedAt: 3,
       },
     });
@@ -120,8 +120,8 @@ describe("TurnReplayEngine checkpoint replay", () => {
             blockers: [],
             updatedAt: 1,
           },
-          truthState: {
-            facts: [],
+          claimState: {
+            claims: [],
             updatedAt: 1,
           },
           costSummary: {
@@ -284,8 +284,8 @@ describe("TurnReplayEngine checkpoint replay", () => {
         blockers: [],
         updatedAt: 2,
       },
-      truthState: {
-        facts: [],
+      claimState: {
+        claims: [],
         updatedAt: 2,
       },
     });

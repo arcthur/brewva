@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { BrewvaEventRecord } from "@brewva/brewva-runtime/events";
 import { createTurnReplayEngine } from "@brewva/brewva-runtime/replay";
-import { checkpointEvent, taskEvent, truthEvent } from "./turn-replay-engine.helpers.js";
+import { checkpointEvent, claimEvent, taskEvent } from "./turn-replay-engine.helpers.js";
 
 describe("TurnReplayEngine core replay", () => {
   test("replay is deterministic and state getters return defensive copies", () => {
@@ -14,9 +14,9 @@ describe("TurnReplayEngine core replay", () => {
         timestamp: 1,
         text: "item-1",
       }),
-      truthEvent({
+      claimEvent({
         sessionId,
-        id: "evt-truth-1",
+        id: "evt-claim-1",
         timestamp: 2,
         factId: "fact-1",
       }),
@@ -35,10 +35,10 @@ describe("TurnReplayEngine core replay", () => {
     const taskStateB = engine.getTaskState(sessionId);
     expect(taskStateB.items[0]?.text).toBe("item-1");
 
-    const truthStateA = engine.getTruthState(sessionId);
-    truthStateA.facts[0]!.evidenceIds.push("led-2");
-    const truthStateB = engine.getTruthState(sessionId);
-    expect(truthStateB.facts[0]?.evidenceIds).toEqual(["led-1"]);
+    const claimStateA = engine.getClaimState(sessionId);
+    claimStateA.claims[0]!.evidenceIds.push("led-2");
+    const claimStateB = engine.getClaimState(sessionId);
+    expect(claimStateB.claims[0]?.evidenceIds).toEqual(["led-1"]);
   });
 
   test("new events are observed only after invalidate within the same turn", () => {
@@ -99,7 +99,7 @@ describe("TurnReplayEngine core replay", () => {
     const second = engine.replay(sessionId);
     expect(second.turn).toBe(2);
     expect(second.taskState).toBe(first.taskState);
-    expect(second.truthState).toBe(first.truthState);
+    expect(second.claimState).toBe(first.claimState);
   });
 
   test("without checkpoint replays task events from tape start", () => {
@@ -111,9 +111,9 @@ describe("TurnReplayEngine core replay", () => {
         timestamp: 2,
         text: "from-task-event",
       }),
-      truthEvent({
+      claimEvent({
         sessionId,
-        id: "evt-truth-1",
+        id: "evt-claim-1",
         timestamp: 3,
         factId: "fact-1",
       }),
@@ -126,7 +126,7 @@ describe("TurnReplayEngine core replay", () => {
     const view = engine.replay(sessionId);
     expect(view.taskState.items).toHaveLength(1);
     expect(view.taskState.items[0]?.text).toBe("from-task-event");
-    expect(view.truthState.facts).toHaveLength(1);
+    expect(view.claimState.claims).toHaveLength(1);
   });
 
   test("replays from latest tape checkpoint and ignores earlier events", () => {
@@ -155,8 +155,8 @@ describe("TurnReplayEngine core replay", () => {
           blockers: [],
           updatedAt: 2,
         },
-        truthState: {
-          facts: [
+        claimState: {
+          claims: [
             {
               id: "fact-checkpoint",
               kind: "checkpoint_fact",
@@ -177,9 +177,9 @@ describe("TurnReplayEngine core replay", () => {
         timestamp: 3,
         text: "fresh-item",
       }),
-      truthEvent({
+      claimEvent({
         sessionId,
-        id: "evt-truth-new",
+        id: "evt-claim-new",
         timestamp: 4,
         factId: "fact-new",
       }),
@@ -196,7 +196,7 @@ describe("TurnReplayEngine core replay", () => {
       "fresh-item",
     ]);
     expect(view.taskState.items.map((item) => item.text)).not.toContain("stale-item");
-    expect(view.truthState.facts.map((fact) => fact.id)).toEqual(["fact-checkpoint", "fact-new"]);
+    expect(view.claimState.claims.map((fact) => fact.id)).toEqual(["fact-checkpoint", "fact-new"]);
   });
 
   test("observeEvent incrementally updates cached view without invalidation", () => {

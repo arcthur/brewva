@@ -7,7 +7,7 @@ watchdog surfaces.
 ## Ledger And Projection
 
 Ledger and projection events are the runtime's strongest replay-facing record.
-They include tape anchors, checkpoints, task/truth folding inputs, projection
+They include tape anchors, checkpoints, task/claim folding inputs, projection
 refresh signals, and evidence ledger compaction records.
 
 Read these events as state-transition evidence, not as user-interface
@@ -46,7 +46,7 @@ Context compaction events should be read with `runtime.inspect.context.*`:
 
 Watchdog events such as task-stall adjudication, critical-without-compact, and
 integrity checks expose runtime reliability posture. They are operational
-evidence. They do not replace task/truth state or verification reports.
+evidence. They do not replace task/claim state or verification reports.
 
 ## Implementation Anchors
 

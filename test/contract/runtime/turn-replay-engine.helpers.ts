@@ -2,13 +2,13 @@ import {
   asBrewvaSessionId,
   buildItemAddedEvent,
   buildTapeCheckpointPayload,
-  buildTruthFactUpsertedEvent,
+  buildClaimUpsertedEvent,
 } from "@brewva/brewva-runtime";
 import type { TaskState } from "@brewva/brewva-runtime";
 import {
   TASK_EVENT_TYPE,
   TAPE_CHECKPOINT_EVENT_TYPE,
-  TRUTH_EVENT_TYPE,
+  CLAIM_EVENT_TYPE,
 } from "@brewva/brewva-runtime/events";
 import type { BrewvaEventRecord } from "@brewva/brewva-runtime/events";
 
@@ -30,7 +30,7 @@ export function taskEvent(input: {
   };
 }
 
-export function truthEvent(input: {
+export function claimEvent(input: {
   sessionId: string;
   id: string;
   timestamp: number;
@@ -39,9 +39,9 @@ export function truthEvent(input: {
   return {
     id: input.id,
     sessionId: asBrewvaSessionId(input.sessionId),
-    type: TRUTH_EVENT_TYPE,
+    type: CLAIM_EVENT_TYPE,
     timestamp: input.timestamp,
-    payload: buildTruthFactUpsertedEvent({
+    payload: buildClaimUpsertedEvent({
       id: input.factId,
       kind: "test_fact",
       status: "active",
@@ -59,8 +59,8 @@ export function checkpointEvent(input: {
   id: string;
   timestamp: number;
   taskState: TaskState;
-  truthState: {
-    facts: Array<{
+  claimState: {
+    claims: Array<{
       id: string;
       kind: string;
       status: "active" | "resolved";
@@ -81,7 +81,7 @@ export function checkpointEvent(input: {
     timestamp: input.timestamp,
     payload: buildTapeCheckpointPayload({
       taskState: input.taskState,
-      truthState: input.truthState,
+      claimState: input.claimState,
       costSummary: {
         inputTokens: 0,
         outputTokens: 0,

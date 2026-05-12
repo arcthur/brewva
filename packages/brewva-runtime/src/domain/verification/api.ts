@@ -43,7 +43,7 @@ export { VerificationProjectorService } from "./verification-projector.js";
 export type { VerificationService } from "./verification.js";
 export {
   GOVERNANCE_BLOCKER_ID,
-  VERIFICATION_CHECK_FAILED_TRUTH_KIND,
-  VERIFICATION_CHECK_MISSING_TRUTH_KIND,
+  VERIFICATION_CHECK_FAILED_CLAIM_KIND,
+  VERIFICATION_CHECK_MISSING_CLAIM_KIND,
   VERIFIER_BLOCKER_PREFIX,
 } from "./verifier-blockers.js";

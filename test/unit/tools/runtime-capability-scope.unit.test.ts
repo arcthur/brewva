@@ -65,11 +65,11 @@ function createToolRuntimeFixture(): BrewvaToolRuntime {
           return { ok: true, sessionId };
         },
       },
-      truth: {
-        upsertFact(sessionId: string) {
+      claim: {
+        upsert(sessionId: string) {
           return { ok: true, sessionId };
         },
-        resolveFact(sessionId: string) {
+        resolve(sessionId: string) {
           return { ok: true, sessionId };
         },
       },
@@ -227,8 +227,8 @@ describe("tool runtime capability scope", () => {
     expect(() => scoped.authority.proposals.submit("session-1", {} as never)).toThrow(
       "managed Brewva tool 'grep' attempted to access protected runtime capability 'authority.proposals.submit' without declaring it.",
     );
-    expect(() => scoped.authority.truth.upsertFact("session-1", {} as never)).toThrow(
-      "managed Brewva tool 'grep' attempted to access protected runtime capability 'authority.truth.upsertFact' without declaring it.",
+    expect(() => scoped.authority.claim.upsert("session-1", {} as never)).toThrow(
+      "managed Brewva tool 'grep' attempted to access protected runtime capability 'authority.claim.upsert' without declaring it.",
     );
     expect(() =>
       scoped.authority.cost.recordAssistantUsage({

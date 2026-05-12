@@ -17,7 +17,7 @@ const TURN_REPLAY_ENGINE_METHODS = [
   "replay",
   "observeEvent",
   "getTaskState",
-  "getTruthState",
+  "getClaimState",
   "getCostSummary",
   "getCostSkillLastTurnByName",
   "getRecentToolFailures",

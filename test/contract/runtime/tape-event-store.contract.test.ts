@@ -33,8 +33,8 @@ describe("BrewvaEventStore tape helpers", () => {
           blockers: [],
           updatedAt: null,
         },
-        truthState: {
-          facts: [],
+        claimState: {
+          claims: [],
           updatedAt: null,
         },
         costSummary: {

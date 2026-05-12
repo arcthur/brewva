@@ -4,14 +4,14 @@ import type { BrewvaStructuredEvent } from "../../events/types.js";
 import type { RuntimeKernelContext } from "../../runtime/runtime-kernel.js";
 import type { EventPipelineService } from "../sessions/api.js";
 import type { TaskService } from "../task/api.js";
-import { projectTruthFromToolResult } from "./tool-result-projector.js";
-import type { TruthService } from "./truth.js";
+import type { ClaimService } from "./claim.js";
+import { projectClaimsFromToolResult } from "./tool-result-projector.js";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function coerceTruthProjectionInput(value: unknown): {
+function coerceClaimProjectionInput(value: unknown): {
   toolName: string;
   args: Record<string, unknown>;
   outputText: string;
@@ -60,41 +60,39 @@ function coerceTruthProjectionInput(value: unknown): {
   };
 }
 
-export interface TruthProjectorServiceOptions {
+export interface ClaimProjectorServiceOptions {
   cwd: RuntimeKernelContext["cwd"];
   getTaskState: RuntimeKernelContext["getTaskState"];
-  getTruthState: RuntimeKernelContext["getTruthState"];
+  getClaimState: RuntimeKernelContext["getClaimState"];
   eventPipeline: Pick<EventPipelineService, "subscribeEvents">;
   taskService: Pick<TaskService, "recordTaskBlocker" | "resolveTaskBlocker">;
-  truthService: Pick<TruthService, "upsertTruthFact" | "resolveTruthFact">;
+  claimService: Pick<ClaimService, "upsert" | "resolve">;
 }
 
-export class TruthProjectorService {
-  constructor(options: TruthProjectorServiceOptions) {
+export class ClaimProjectorService {
+  constructor(options: ClaimProjectorServiceOptions) {
     options.eventPipeline.subscribeEvents((event) => {
       this.handleEvent(options, event);
     });
   }
 
-  private handleEvent(options: TruthProjectorServiceOptions, event: BrewvaStructuredEvent): void {
+  private handleEvent(options: ClaimProjectorServiceOptions, event: BrewvaStructuredEvent): void {
     if (event.type !== TOOL_RESULT_RECORDED_EVENT_TYPE) {
       return;
     }
     const payload = readToolResultRecordedEventPayload(event);
-    const projection = coerceTruthProjectionInput(payload?.truthProjection);
+    const projection = coerceClaimProjectionInput(payload?.claimProjection);
     if (!projection) {
       return;
     }
 
-    projectTruthFromToolResult(
+    projectClaimsFromToolResult(
       {
         cwd: options.cwd,
         getTaskState: (sessionId) => options.getTaskState(sessionId),
-        getTruthState: (sessionId) => options.getTruthState(sessionId),
-        upsertTruthFact: (sessionId, input) =>
-          options.truthService.upsertTruthFact(sessionId, input),
-        resolveTruthFact: (sessionId, truthFactId) =>
-          options.truthService.resolveTruthFact(sessionId, truthFactId),
+        getClaimState: (sessionId) => options.getClaimState(sessionId),
+        upsert: (sessionId, input) => options.claimService.upsert(sessionId, input),
+        resolve: (sessionId, claimId) => options.claimService.resolve(sessionId, claimId),
         recordTaskBlocker: (sessionId, input) =>
           options.taskService.recordTaskBlocker(sessionId, input),
         resolveTaskBlocker: (sessionId, blockerId) =>
