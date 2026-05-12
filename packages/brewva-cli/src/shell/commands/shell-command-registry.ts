@@ -255,7 +255,7 @@ const reservedShellSlashNames: readonly ShellSlashReservation[] = [
     name: "questions",
     owner: "runtime.questions",
     message:
-      "Use /inbox in the interactive shell; /questions remains a headless runtime-plugin command.",
+      "Use /inbox in the interactive shell; /questions remains a headless extension command.",
   },
   {
     name: "insights",

@@ -8,7 +8,7 @@ import type {
   CliShellUiPort,
   ProviderAuthMethod,
   ProviderAuthPrompt,
-  ProviderConnection,
+  ProviderConnectionDescriptor,
   ProviderOAuthAuthorization,
   SessionViewPort,
 } from "../types.js";
@@ -63,10 +63,10 @@ export class ShellProviderAuthFlow {
     return this.context.getUi();
   }
 
-  async listProviderConnections(): Promise<ProviderConnection[]> {
+  async listProviderConnections(): Promise<ProviderConnectionDescriptor[]> {
     const connectionPort = this.context.getBundle().providerConnections;
     if (connectionPort) {
-      return connectionPort.listProviders();
+      return [...(await connectionPort.catalog.listProviders())];
     }
 
     const allModels = await this.context.getSessionPort().listModels({ includeUnavailable: true });
@@ -248,13 +248,14 @@ export class ShellProviderAuthFlow {
   }
 
   private buildProviderPickerItems(
-    providers: readonly ProviderConnection[],
+    providers: readonly ProviderConnectionDescriptor[],
     query: string,
   ): NonNullable<Extract<CliShellOverlayPayload, { kind: "providerPicker" }>["items"]> {
     const scored = providers
       .map((provider) => ({ provider, score: providerSearchScore(provider, query) }))
       .filter(
-        (entry): entry is { provider: ProviderConnection; score: number } => entry.score !== null,
+        (entry): entry is { provider: ProviderConnectionDescriptor; score: number } =>
+          entry.score !== null,
       );
     const ordered = query.trim()
       ? scored.toSorted((left, right) => right.score - left.score).map((entry) => entry.provider)
@@ -506,7 +507,7 @@ export class ShellProviderAuthFlow {
     method: ProviderAuthMethod;
     inputs: Record<string, string>;
   }): Promise<void> {
-    const authorization = await input.connectionPort.authorizeOAuth(
+    const authorization = await input.connectionPort.authFlow.authorizeOAuth(
       input.providerId,
       input.method.id,
       input.inputs,
@@ -529,13 +530,13 @@ export class ShellProviderAuthFlow {
       this.ui.notify("Provider connection is unavailable for this session.", "warning");
       return;
     }
-    const providers = await connectionPort.listProviders();
+    const providers = await connectionPort.catalog.listProviders();
     const provider = providers.find((candidate) => candidate.id === providerId);
     if (!provider) {
       this.ui.notify(`Unknown provider: ${providerId}`, "warning");
       return;
     }
-    const authMethods = connectionPort.listAuthMethods(provider.id);
+    const authMethods = connectionPort.renderer.listAuthMethods(provider.id);
     const method = await this.selectAuthMethod(authMethods, provider.name);
     if (!method) {
       return;

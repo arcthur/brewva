@@ -8,13 +8,18 @@ import {
   withBrewvaObservability,
 } from "@brewva/brewva-effect";
 import type { BrewvaWalId } from "@brewva/brewva-runtime";
-import { validateSessionWireFramePayload } from "../../protocol/validate.js";
 import type {
   ParentToWorkerMessage,
   WorkerToParentMessage,
-} from "../../session/worker-protocol.js";
+} from "../../hosted/internal/thread-loop/worker/api.js";
+import { validateSessionWireFramePayload } from "../../protocol/api.js";
 import { SessionBackendStateError } from "../session-backend.js";
 import type { SendPromptOutput } from "../session-backend.js";
+import {
+  createWorkerBusyState,
+  createWorkerClosedState,
+  createWorkerReadyState,
+} from "../types.js";
 import {
   type WorkerHandle,
   type WorkerRpcControllerDeps,
@@ -87,6 +92,11 @@ export class SessionWorkerRpcController {
     });
 
     handle.child.on("exit", (code, signal) => {
+      handle.lifecycleState = createWorkerClosedState(
+        String(handle.child.pid ?? handle.sessionId),
+        handle.sessionId,
+        signal ?? String(code ?? "exit"),
+      );
       this.deps.logger.info("worker exited", {
         sessionId: handle.sessionId,
         pid: handle.child.pid,
@@ -289,6 +299,10 @@ export class SessionWorkerRpcController {
         const readyDeferred = handle.readyDeferred;
         handle.readyRequestId = undefined;
         handle.readyDeferred = undefined;
+        handle.lifecycleState = createWorkerReadyState(
+          String(handle.child.pid ?? handle.sessionId),
+          handle.sessionId,
+        );
         this.deps.touchActivity(handle);
         if (readyDeferred) {
           succeedDeferred(readyDeferred, message.payload);
@@ -319,15 +333,29 @@ export class SessionWorkerRpcController {
           });
           if (handle.activeTurnId === frame.turnId) {
             handle.activeTurnId = null;
+            handle.lifecycleState = createWorkerReadyState(
+              String(handle.child.pid ?? handle.sessionId),
+              handle.sessionId,
+            );
           }
           this.deps.onTurnQueueReady(handle);
         } else if (frame.type === "session.closed" && handle.activeTurnId) {
           this.markRecoveryWalFailed(handle, handle.activeTurnId, frame.reason);
           this.rejectPendingTurn(handle, handle.activeTurnId, frame.reason ?? "session closed");
+          handle.lifecycleState = createWorkerClosedState(
+            String(handle.child.pid ?? handle.sessionId),
+            handle.sessionId,
+            frame.reason ?? "session closed",
+          );
           handle.activeTurnId = null;
           this.deps.onTurnQueueReady(handle);
         } else if (frame.type === "attempt.started" && frame.reason === "initial") {
           handle.activeTurnId = frame.turnId;
+          handle.lifecycleState = createWorkerBusyState(
+            String(handle.child.pid ?? handle.sessionId),
+            handle.sessionId,
+            frame.turnId,
+          );
         }
       }
       this.deps.onWorkerEvent?.(message);

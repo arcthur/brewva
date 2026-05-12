@@ -8,7 +8,7 @@
 - Stable docs:
   - `docs/reference/token-cache.md`
   - `docs/reference/runtime.md`
-  - `docs/reference/runtime-plugins.md`
+  - `docs/reference/extensions.md`
   - `docs/reference/hosted-dynamic-context.md`
   - `docs/reference/configuration.md`
   - `docs/architecture/system-architecture.md`
@@ -19,10 +19,10 @@
   - `packages/brewva-provider-core/src/providers/_shared/payload-metadata.ts`
   - `packages/brewva-substrate/src/turn/types.ts`
   - `packages/brewva-substrate/src/turn/provider-stream.ts`
-  - `packages/brewva-gateway/src/cache/`
-  - `packages/brewva-gateway/src/host/managed-agent-session.ts`
-  - `packages/brewva-gateway/src/host/hosted-session-bootstrap.ts`
-  - `packages/brewva-gateway/src/host/hosted-settings-backend.ts`
+  - `packages/brewva-gateway/src/hosted/internal/provider/cache/`
+  - `packages/brewva-gateway/src/hosted/internal/session/managed-agent/session.ts`
+  - `packages/brewva-gateway/src/hosted/internal/session/init/session-assembly.ts`
+  - `packages/brewva-gateway/src/hosted/internal/session/settings/hosted-settings-backend.ts`
 
 ## Decision Summary
 

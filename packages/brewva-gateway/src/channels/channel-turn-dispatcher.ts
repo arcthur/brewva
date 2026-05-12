@@ -3,12 +3,9 @@ import { type TurnEnvelope, type TurnPart } from "@brewva/brewva-runtime/channel
 import { type RecoveryWalStore } from "@brewva/brewva-runtime/recovery";
 import { LRUCache } from "lru-cache";
 import { toErrorMessage } from "../utils/errors.js";
-import type {
-  ChannelCommandDispatchResult,
-  ChannelPreparedCommand,
-} from "./channel-command-dispatch.js";
 import type { ChannelReplyWriter } from "./channel-reply-writer.js";
-import type { ChannelCommandMatch, CommandRouter } from "./command-router.js";
+import type { ChannelCommandDispatchResult, ChannelPreparedCommand } from "./command/dispatch.js";
+import type { ChannelCommandMatch, CommandRouter } from "./command/parser.js";
 import {
   createChannelEffectSerialQueue,
   type ChannelEffectSerialQueue,
@@ -46,7 +43,6 @@ export interface ChannelTurnDispatcher {
       awaitCompletion?: boolean;
     },
   ): Promise<void>;
-  resolveIngestedSessionId(turn: TurnEnvelope): string | undefined;
   getLastTurn(scopeKey: string): TurnEnvelope | undefined;
   listQueueTails(): Promise<void>[];
 }
@@ -60,9 +56,10 @@ export function createChannelTurnDispatcher(input: {
   replyWriter: ChannelReplyWriter;
   resolveScopeKey(turn: TurnEnvelope): string;
   resolveFocusedAgentId(scopeKey: string): string;
-  isAgentActive(agentId: string): boolean;
-  resolveLiveSessionId(scopeKey: string, agentId: string): string | undefined;
-  resolveApprovalTargetAgentId(scopeKey: string, requestId: string): string | undefined;
+  resolveApprovalTargetAgentIdDurably(
+    scopeKey: string,
+    requestId: string,
+  ): Promise<string | undefined>;
   processUserTurnOnAgent(
     turn: TurnEnvelope,
     walId: BrewvaWalId,
@@ -96,10 +93,10 @@ export function createChannelTurnDispatcher(input: {
   const readLastTurn = (scopeKey: string): TurnEnvelope | undefined =>
     lastTurnByScope.get(scopeKey);
 
-  const resolveApprovalTargetAgentIdForTurn = (
+  const resolveApprovalTargetAgentIdForDispatch = async (
     turn: TurnEnvelope,
     scopeKey: string,
-  ): string | undefined => {
+  ): Promise<string | undefined> => {
     if (!input.orchestrationEnabled || turn.kind !== "approval") {
       return undefined;
     }
@@ -107,31 +104,7 @@ export function createChannelTurnDispatcher(input: {
     if (!requestId) {
       return undefined;
     }
-    return input.resolveApprovalTargetAgentId(scopeKey, requestId);
-  };
-
-  const resolveTargetAgentId = (turn: TurnEnvelope, scopeKey: string): string => {
-    let targetAgentId = input.orchestrationEnabled
-      ? input.resolveFocusedAgentId(scopeKey)
-      : input.defaultAgentId;
-
-    if (input.orchestrationEnabled) {
-      const approvalAgentId = resolveApprovalTargetAgentIdForTurn(turn, scopeKey);
-      if (approvalAgentId) {
-        targetAgentId = approvalAgentId;
-      }
-    }
-
-    if (input.orchestrationEnabled && turn.kind === "user") {
-      const text = extractInboundText(turn);
-      const matched: ChannelCommandMatch =
-        text.length > 0 ? input.commandRouter.match(text) : { kind: "none" };
-      if (matched.kind === "route-agent" && input.isAgentActive(matched.agentId)) {
-        targetAgentId = matched.agentId;
-      }
-    }
-
-    return targetAgentId;
+    return await input.resolveApprovalTargetAgentIdDurably(scopeKey, requestId);
   };
 
   const processInboundTurn = async (
@@ -206,9 +179,27 @@ export function createChannelTurnDispatcher(input: {
         preparedCommand?.release?.();
       }
 
+      const durableApprovalAgentId = await resolveApprovalTargetAgentIdForDispatch(turn, scopeKey);
+      if (input.orchestrationEnabled && turn.kind === "approval" && !durableApprovalAgentId) {
+        input.runtime.extensions.hosted.events.record({
+          sessionId: turn.sessionId,
+          type: "channel_approval_target_unresolved",
+          payload: {
+            scopeKey,
+            turnId: turn.turnId,
+            requestId: turn.approval?.requestId ?? null,
+          },
+        });
+        await input.replyWriter.sendControllerReply(
+          turn,
+          scopeKey,
+          "Approval request is no longer active for this workspace.",
+        );
+        input.recoveryWalStore.markDone(walId);
+        return;
+      }
       const fallbackAgentId = input.orchestrationEnabled
-        ? (resolveApprovalTargetAgentIdForTurn(turn, scopeKey) ??
-          input.resolveFocusedAgentId(scopeKey))
+        ? (durableApprovalAgentId ?? input.resolveFocusedAgentId(scopeKey))
         : input.defaultAgentId;
       await input.processUserTurnOnAgent(turn, walId, scopeKey, fallbackAgentId);
       input.recoveryWalStore.markDone(walId);
@@ -304,13 +295,6 @@ export function createChannelTurnDispatcher(input: {
         void next.catch(() => undefined);
       }
     },
-
-    resolveIngestedSessionId(turn: TurnEnvelope): string | undefined {
-      const scopeKey = input.resolveScopeKey(turn);
-      const targetAgentId = resolveTargetAgentId(turn, scopeKey);
-      return input.resolveLiveSessionId(scopeKey, targetAgentId);
-    },
-
     getLastTurn(scopeKey: string): TurnEnvelope | undefined {
       return readLastTurn(scopeKey);
     },

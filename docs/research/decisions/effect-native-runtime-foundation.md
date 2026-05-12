@@ -14,7 +14,7 @@
   - `docs/reference/configuration.md`
   - `docs/reference/events/README.md`
   - `docs/reference/provider-streaming.md`
-  - `docs/reference/runtime-plugins.md`
+  - `docs/reference/extensions.md`
 - Code anchors:
   - `packages/brewva-effect/src/index.ts`
   - `packages/brewva-effect/src/edge.ts`

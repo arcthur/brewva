@@ -8,19 +8,19 @@
 - Stable docs:
   - `docs/architecture/system-architecture.md`
   - `docs/reference/session-lifecycle.md`
-  - `docs/reference/runtime-plugins.md`
+  - `docs/reference/extensions.md`
   - `docs/journeys/internal/context-and-compaction.md`
   - `docs/reference/gateway-control-plane-protocol.md`
 - Code anchors:
   - `packages/brewva-substrate/src/turn/loop.ts`
   - `packages/brewva-substrate/src/turn/controller.ts`
-  - `packages/brewva-gateway/src/session/thread-loop-types.ts`
-  - `packages/brewva-gateway/src/session/thread-loop-profiles.ts`
-  - `packages/brewva-gateway/src/session/thread-loop-decision-resolver.ts`
-  - `packages/brewva-gateway/src/session/hosted-thread-loop.ts`
-  - `packages/brewva-gateway/src/session/compaction-generation-coordinator.ts`
-  - `packages/brewva-gateway/src/session/hosted-prompt-attempt.ts`
-  - `packages/brewva-gateway/src/session/error-classification.ts`
+  - `packages/brewva-gateway/src/hosted/internal/thread-loop/thread-loop-types.ts`
+  - `packages/brewva-gateway/src/hosted/internal/thread-loop/thread-loop-profiles.ts`
+  - `packages/brewva-gateway/src/hosted/internal/thread-loop/thread-loop-decision-resolver.ts`
+  - `packages/brewva-gateway/src/hosted/internal/thread-loop/hosted-thread-loop.ts`
+  - `packages/brewva-gateway/src/hosted/internal/compaction/recovery.ts`
+  - `packages/brewva-gateway/src/hosted/internal/thread-loop/hosted-prompt-attempt.ts`
+  - `packages/brewva-gateway/src/hosted/internal/thread-loop/error-classification.ts`
 
 ## Decision Summary
 

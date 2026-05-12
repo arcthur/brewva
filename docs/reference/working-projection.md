@@ -84,7 +84,7 @@ flowchart TD
 - Projection engine: `packages/brewva-runtime/src/domain/projection/engine.ts`
 - Projection extractor: `packages/brewva-runtime/src/domain/projection/extractor.ts`
 - Runtime API: `packages/brewva-runtime/src/runtime/runtime.ts`
-- Hosted dynamic context: `packages/brewva-gateway/src/runtime-plugins/hosted-workbench-context-pipeline.ts`
+- Hosted dynamic context: `packages/brewva-gateway/src/hosted/internal/context/workbench-context.ts`
 
 ## Related Docs
 

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { AgentRegistry } from "@brewva/brewva-gateway";
+import { AgentRegistry } from "@brewva/brewva-gateway/channels";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 describe("channel agent registry", () => {

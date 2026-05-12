@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { resolveBrewvaModelSelection } from "@brewva/brewva-gateway/model-routing";
+import { resolveBrewvaModelSelection } from "@brewva/brewva-gateway/policy/model-routing";
 import { createInMemoryModelCatalog } from "@brewva/brewva-substrate/provider";
 
 function createRegistry() {

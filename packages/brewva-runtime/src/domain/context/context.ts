@@ -33,6 +33,7 @@ import type {
 } from "./types.js";
 
 export interface ContextServiceDeps {
+  workspaceRoot: RuntimeKernelContext["workspaceRoot"];
   config: RuntimeKernelContext["config"];
   contextBudget: RuntimeKernelContext["contextBudget"];
   sessionState: RuntimeKernelContext["sessionState"];
@@ -102,6 +103,7 @@ export interface ContextService {
       summaryDigest: string;
       sourceTurn: number;
       leafEntryId: string | null;
+      firstKeptEntryId?: string | null;
       referenceContextDigest: string | null;
       fromTokens: number | null;
       toTokens: number | null;
@@ -113,6 +115,7 @@ export interface ContextService {
 
 export function createContextService(options: ContextServiceDeps): ContextService {
   const contextCompactionDeps: ContextCompactionDeps = {
+    workspaceRoot: options.workspaceRoot,
     sessionState: options.sessionState,
     recordInfrastructureRow: (input) => options.ledgerService.recordInfrastructureRow(input),
     governancePort: options.governancePort,

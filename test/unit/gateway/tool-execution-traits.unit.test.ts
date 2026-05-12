@@ -5,7 +5,7 @@ import { attachBrewvaToolExecutionTraits } from "@brewva/brewva-tools/registry";
 import {
   createHostedToolExecutionCoordinator,
   wrapToolDefinitionWithHostedExecutionTraits,
-} from "../../../packages/brewva-gateway/src/tool-execution-traits.js";
+} from "../../../packages/brewva-gateway/src/hosted/internal/session/tools/execution-traits.js";
 
 const requireFromBrewvaTools = createRequire(
   new URL("../../../packages/brewva-tools/package.json", import.meta.url),

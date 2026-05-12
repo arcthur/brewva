@@ -1,15 +1,16 @@
 # Orchestration
 
-Orchestration is driven by runtime state management plus runtime-plugin lifecycle handlers.
+Orchestration is driven by runtime state management plus hosted lane behavior.
 
 - Runtime governance facade and service wiring: `packages/brewva-runtime/src/runtime/runtime.ts`
-- Runtime plugin registration: `@brewva/brewva-gateway/runtime-plugins` (`packages/brewva-gateway/src/runtime-plugins/index.ts`)
+- Hosted session entrypoint: `@brewva/brewva-gateway/hosted` (`packages/brewva-gateway/src/hosted/api.ts`)
+- Opt-in extension facade: `@brewva/brewva-gateway/extensions` (`packages/brewva-gateway/src/extensions/api.ts`)
 
-This guide focuses on the hosted turn pipeline, delegated worker routing, and
-operator-visible control-plane behavior. For the full runtime-plugin factory
-contract and session lifecycle details, use:
+This guide focuses on the hosted lane, delegated worker routing, and
+operator-visible control-plane behavior. For extension and session lifecycle
+details, use:
 
-- `docs/reference/runtime-plugins.md`
+- `docs/reference/extensions.md`
 - `docs/reference/session-lifecycle.md`
 - `docs/reference/runtime.md`
 
@@ -43,14 +44,13 @@ Platform-growth rule:
   are acceptable opt-in surfaces; hidden default-path orchestration growth is
   not
 
-## Hosted Pipeline
+## Hosted Lane
 
 1. Gateway host creates a session through the stable host entrypoint
-   `@brewva/brewva-gateway/host`
-   (`packages/brewva-gateway/src/host/create-hosted-session.ts`), with the
-   current implementation in
-   `packages/brewva-gateway/src/host/hosted-session-bootstrap.ts`
-2. Gateway host installs `createHostedTurnPipeline` (`@brewva/brewva-gateway/runtime-plugins`)
+   `@brewva/brewva-gateway/hosted`
+   (`packages/brewva-gateway/src/hosted/api.ts`), with the current implementation in
+   `packages/brewva-gateway/src/hosted/internal/session/init/session-assembly.ts`
+2. Gateway session assembly privately installs hosted behavior through substrate host-api adapters
 3. `before_agent_start` runs lifecycle plumbing (`context-transform`) and renders the hosted dynamic context tail
 4. `tool_call` passes quality/security/budget gates (`quality-gate`)
 5. `ledger-writer` records durable tool outcomes (normally from SDK `tool_result`; can fallback to `tool_execution_end` when `tool_result` is missing). Persisted governance event is `tool_result_recorded`.
@@ -59,8 +59,8 @@ Platform-growth rule:
 
 ## Tool Registration Modes
 
-1. `registerTools: true` registers managed Brewva tools through the hosted pipeline
-2. `registerTools: false` keeps the same hosted lifecycle pipeline, but tool registration is delegated to the host session setup
+1. `registerTools: true` registers managed Brewva tools through hosted session assembly
+2. `registerTools: false` keeps the same hosted lifecycle behavior, but tool registration is delegated to the host session setup
 3. Runtime lifecycle, event streaming, context shaping, ledger finalization, and completion guard stay identical across both modes
 
 ## Runtime Subsystems
@@ -197,6 +197,6 @@ governance, rollback, and event truth.
 - `docs/guide/channel-agent-workspace.md`
 - `docs/journeys/operator/interactive-session.md`
 - `docs/journeys/operator/background-and-parallelism.md`
-- `docs/reference/runtime-plugins.md`
+- `docs/reference/extensions.md`
 - `docs/reference/session-lifecycle.md`
 - `docs/reference/runtime.md`

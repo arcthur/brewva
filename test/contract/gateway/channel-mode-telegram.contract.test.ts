@@ -12,7 +12,7 @@ import {
   type ChannelModeLauncher,
   type RunChannelModeDependencies,
 } from "@brewva/brewva-gateway";
-import { createHostedSession } from "@brewva/brewva-gateway/host";
+import { createHostedSession } from "@brewva/brewva-gateway/hosted";
 import { DEFAULT_BREWVA_CONFIG, type BrewvaRuntime } from "@brewva/brewva-runtime";
 import { type ChannelTurnBridge, type TurnEnvelope } from "@brewva/brewva-runtime/channels";
 import { OPERATOR_QUESTION_ANSWERED_EVENT_TYPE } from "@brewva/brewva-runtime/events";

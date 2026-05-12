@@ -10,7 +10,7 @@
   - `docs/architecture/exploration-and-effect-governance.md`
   - `docs/reference/events/README.md`
   - `docs/reference/runtime.md`
-  - `docs/reference/runtime-plugins.md`
+  - `docs/reference/extensions.md`
   - `docs/reference/session-lifecycle.md`
   - `docs/journeys/internal/context-and-compaction.md`
 - Code anchors:

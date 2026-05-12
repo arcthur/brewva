@@ -9,7 +9,7 @@
   - `docs/architecture/cognitive-product-architecture.md`
   - `docs/reference/runtime.md`
   - `docs/reference/tools.md`
-  - `docs/reference/runtime-plugins.md`
+  - `docs/reference/extensions.md`
   - `docs/reference/artifacts-and-paths.md`
   - `docs/guide/features.md`
 - Code anchors:
@@ -17,7 +17,7 @@
   - `test/contract/runtime/identity-context.contract.test.ts`
   - `test/unit/gateway/subagent-catalog.unit.test.ts`
   - `test/contract/tools/subagent-run.contract.test.ts`
-  - `test/contract/runtime-plugins/capability-view.contract.test.ts`
+  - `test/contract/extensions/capability-view.contract.test.ts`
   - `<deleted: test/unit/deliberation/memory-plane.unit.test.ts>`
   - `<deleted: test/unit/deliberation/optimization-plane.unit.test.ts>`
   - `<deleted: test/contract/runtime/task-ledger.contract.test.ts>`

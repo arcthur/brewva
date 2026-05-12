@@ -14,7 +14,7 @@ reference.
 - Tool registry: `packages/brewva-tools/src/index.ts`
 - Model-operated workbench state: `packages/brewva-runtime/src/domain/workbench`
 - Skill catalog surfaces: `packages/brewva-runtime/src/domain/skills`
-- Runtime plugin wiring: `@brewva/brewva-gateway/runtime-plugins` (`packages/brewva-gateway/src/runtime-plugins/index.ts`)
+- Extension wiring: `@brewva/brewva-gateway/extensions` (`packages/brewva-gateway/src/hosted/internal/session/host-api-installation.ts`)
 - CLI entrypoint: `packages/brewva-cli/src/index.ts`
 
 ## Runtime Responsibilities

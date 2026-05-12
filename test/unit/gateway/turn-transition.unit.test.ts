@@ -5,7 +5,7 @@ import {
   getHostedTurnTransitionCoordinator,
   projectHostedTransitionSnapshot,
   recordSessionTurnTransition,
-} from "../../../packages/brewva-gateway/src/session/turn-transition.js";
+} from "../../../packages/brewva-gateway/src/hosted/internal/thread-loop/turn-transition.js";
 import { buildToolCallBlockedPayload } from "../../helpers/events.js";
 import { createRuntimeFixture } from "../../helpers/runtime.js";
 

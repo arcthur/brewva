@@ -3,7 +3,7 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import { createBrewvaEditToolDefinition } from "@brewva/brewva-substrate/tools";
-import { createQualityGateLifecycle } from "../../../packages/brewva-gateway/src/runtime-plugins/quality-gate.js";
+import { createQualityGateLifecycle } from "../../../packages/brewva-gateway/src/hosted/internal/session/tools/quality-gate.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 describe("quality gate diff preview", () => {

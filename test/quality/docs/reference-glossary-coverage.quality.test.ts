@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const EXPECTED_TERMS = [
-  "Runtime Plugin",
+  "Hosted Extension",
   "Invocation Spine",
   "Context Compaction Gate",
   "Workbench",

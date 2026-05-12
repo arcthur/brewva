@@ -8,7 +8,7 @@ import {
   createProviderRequestFingerprint,
   createToolSchemaSnapshot,
   createToolSchemaSnapshotStore,
-} from "../../../packages/brewva-gateway/src/cache/index.js";
+} from "../../../packages/brewva-gateway/src/hosted/internal/provider/cache/index.js";
 
 describe("provider cache fingerprinting", () => {
   test("attributes tool schema drift with per-tool hashes", () => {

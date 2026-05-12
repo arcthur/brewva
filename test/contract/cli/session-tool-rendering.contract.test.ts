@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { createHostedSession as createBrewvaSession } from "@brewva/brewva-gateway/host";
+import { createHostedSession as createBrewvaSession } from "@brewva/brewva-gateway/hosted";
 import { cleanupTestWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
 
 interface StaticComponentLike {

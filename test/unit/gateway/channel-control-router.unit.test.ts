@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import type { TurnEnvelope } from "@brewva/brewva-runtime/channels";
 import { OPERATOR_QUESTION_ANSWERED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
-import { createChannelControlRouter } from "../../../packages/brewva-gateway/src/channels/channel-control-router.js";
-import { createChannelUpdateLockManager } from "../../../packages/brewva-gateway/src/channels/channel-update-lock.js";
-import type { ChannelCommandMatch } from "../../../packages/brewva-gateway/src/channels/command-router.js";
-import { collectOpenSessionQuestions } from "../../../packages/brewva-gateway/src/operator-questions.js";
+import type { ChannelCommandMatch } from "../../../packages/brewva-gateway/src/channels/command/parser.js";
+import { createChannelControlRouter } from "../../../packages/brewva-gateway/src/channels/command/router.js";
+import { createChannelUpdateLockManager } from "../../../packages/brewva-gateway/src/channels/session/update-lock.js";
+import { collectOpenSessionQuestions } from "../../../packages/brewva-gateway/src/ingress/internal/operator-questions.js";
 import { recordHostedDelegationOutcome } from "../../helpers/events.js";
 import { createRuntimeFixture } from "../../helpers/runtime.js";
 
@@ -371,6 +371,22 @@ describe("channel control router ownership", () => {
       routeTask: "review this",
     });
     expect(fixture.setFocusCalls).toEqual([{ scopeKey: "scope-1", agentId: "worker-2" }]);
+  });
+
+  test("given a mention for an inactive agent, when the router handles it, then it replies inline and does not reroute", async () => {
+    const fixture = createAclRouterFixture();
+
+    const result = await fixture.router.handleCommand(
+      { kind: "route-agent", agentId: "inactive", task: "review this", viaMention: true },
+      createUserTurn("@inactive review this", { senderUsername: "owner" }),
+      "scope-1",
+    );
+
+    expect(result).toEqual({ handled: true });
+    expect(fixture.replies.at(-1)?.text).toBe(
+      "Mention unavailable: agent @inactive is not active in this workspace.",
+    );
+    expect(fixture.setFocusCalls).toEqual([]);
   });
 
   test("given owner-only commands from a non-owner, when the router handles them, then it denies them before side effects", async () => {

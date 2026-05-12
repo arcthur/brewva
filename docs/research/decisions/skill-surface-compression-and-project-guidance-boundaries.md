@@ -8,7 +8,7 @@
 - Stable docs:
   - `docs/reference/skills.md`
   - `docs/reference/skill-routing.md`
-  - `docs/reference/runtime-plugins.md`
+  - `docs/reference/extensions.md`
   - `docs/guide/category-and-skills.md`
   - `docs/architecture/system-architecture.md`
 - Code anchors:

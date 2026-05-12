@@ -211,9 +211,12 @@ function main(): void {
       "@brewva/brewva-tools/delegation",
       "@brewva/brewva-tools/workflow",
       "@brewva/brewva-tui",
-      "@brewva/brewva-gateway/host",
-      "@brewva/brewva-gateway/model-routing",
-      "@brewva/brewva-gateway/runtime-plugins",
+      "@brewva/brewva-runtime/channels",
+      "@brewva/brewva-runtime/recovery",
+      "@brewva/brewva-gateway/channels",
+      "@brewva/brewva-gateway/hosted",
+      "@brewva/brewva-gateway/policy/model-routing",
+      "@brewva/brewva-gateway/extensions",
       "@brewva/brewva-cli",
       "@brewva/brewva-gateway",
     ];
@@ -223,28 +226,37 @@ function main(): void {
         throw new Error("expected dist entrypoint, got " + entry.path);
       }
     }
-    const [cliModule, tuiModule, hostModule, runtimePluginsModule, gatewayModule] = await Promise.all([
+    const [cliModule, tuiModule, channelsModule, hostModule, extensionsModule, gatewayModule, runtimeChannelsModule, runtimeRecoveryModule] = await Promise.all([
       import("@brewva/brewva-cli"),
       import("@brewva/brewva-tui"),
-      import("@brewva/brewva-gateway/host"),
-      import("@brewva/brewva-gateway/runtime-plugins"),
+      import("@brewva/brewva-gateway/channels"),
+      import("@brewva/brewva-gateway/hosted"),
+      import("@brewva/brewva-gateway/extensions"),
       import("@brewva/brewva-gateway"),
+      import("@brewva/brewva-runtime/channels"),
+      import("@brewva/brewva-runtime/recovery"),
       ...packages
         .filter(
           (name) =>
             name !== "@brewva/brewva-cli" &&
             name !== "@brewva/brewva-tui" &&
-            name !== "@brewva/brewva-gateway/host" &&
-            name !== "@brewva/brewva-gateway/runtime-plugins" &&
-            name !== "@brewva/brewva-gateway",
+            name !== "@brewva/brewva-gateway/channels" &&
+            name !== "@brewva/brewva-gateway/hosted" &&
+            name !== "@brewva/brewva-gateway/extensions" &&
+            name !== "@brewva/brewva-gateway" &&
+            name !== "@brewva/brewva-runtime/channels" &&
+            name !== "@brewva/brewva-runtime/recovery",
         )
         .map((name) => import(name)),
     ]);
+    if (typeof channelsModule.runChannelMode !== "function") {
+      throw new Error("gateway channels subpath missing runChannelMode export");
+    }
     if (typeof hostModule.createHostedSession !== "function") {
       throw new Error("gateway host subpath missing createHostedSession export");
     }
-    if (typeof runtimePluginsModule.createHostedTurnPipeline !== "function") {
-      throw new Error("gateway runtime-plugins subpath missing createHostedTurnPipeline export");
+    if (typeof extensionsModule.defineHostedExtensionPlugin !== "function") {
+      throw new Error("gateway extensions subpath missing defineHostedExtensionPlugin export");
     }
     if (typeof tuiModule.detectTerminalCapabilities !== "function") {
       throw new Error("tui root entry missing detectTerminalCapabilities export");
@@ -254,6 +266,12 @@ function main(): void {
     }
     if (typeof cliModule.parseArgs !== "function") {
       throw new Error("cli root entry missing parseArgs export");
+    }
+    if (typeof runtimeChannelsModule.normalizeChannelId !== "function") {
+      throw new Error("runtime channels subpath missing normalizeChannelId export");
+    }
+    if (typeof runtimeRecoveryModule.createRecoveryWalStore !== "function") {
+      throw new Error("runtime recovery subpath missing createRecoveryWalStore export");
     }
     if ("createBrewvaSession" in cliModule || "registerRuntimeCoreEventBridge" in cliModule) {
       throw new Error("cli root entry unexpectedly re-exported gateway host helpers");
@@ -283,7 +301,7 @@ function main(): void {
     if ("registerRuntimeCoreEventBridge" in hostModule) {
       throw new Error("gateway host subpath still exports removed session event bridge helper");
     }
-    if ("createHostedSession" in gatewayModule || "createHostedTurnPipeline" in gatewayModule) {
+    if ("createHostedSession" in gatewayModule || "createHostedBehaviorHostAdapter" in gatewayModule) {
       throw new Error("gateway root entry unexpectedly re-exported subpath-only APIs");
     }
     const isolatedHome = mkdtempSync(join(tmpdir(), "brewva-dist-home-"));

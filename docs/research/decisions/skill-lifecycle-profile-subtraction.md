@@ -8,15 +8,15 @@
 - Stable docs:
   - `docs/reference/skills.md`
   - `docs/reference/skill-routing.md`
-  - `docs/reference/runtime-plugins.md`
+  - `docs/reference/extensions.md`
   - `docs/reference/tools.md`
   - `docs/architecture/cognitive-product-architecture.md`
 - Code anchors:
   - `packages/brewva-runtime/src/domain/skills/profiles.ts`
-  - `packages/brewva-gateway/src/runtime-plugins/skill-first.ts`
+  - `packages/brewva-gateway/src/hosted/internal/session/skill-first.ts`
   - `packages/brewva-tools/src/families/workflow/skill-load.ts`
   - `test/contract/runtime/skill-lifecycle-profiles.contract.test.ts`
-  - `test/contract/runtime-plugins/skill-routing-eval.contract.test.ts`
+  - `test/contract/extensions/skill-routing-eval.contract.test.ts`
   - `test/contract/runtime/skill-document-parsing.contract.test.ts`
   - `test/contract/runtime/skills-discovery.contract.test.ts`
   - `test/contract/tools/tools-skill-complete.contract.test.ts`

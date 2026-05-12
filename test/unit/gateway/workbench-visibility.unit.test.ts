@@ -6,7 +6,7 @@ import type { BrewvaTurnLoopMessage } from "@brewva/brewva-substrate/turn";
 import {
   applyWorkbenchEvictionsToMessages,
   shouldExcludeSessionEntryForWorkbench,
-} from "../../../packages/brewva-gateway/src/host/workbench-visibility.js";
+} from "../../../packages/brewva-gateway/src/hosted/internal/session/projection/workbench-visibility.js";
 
 function eviction(sourceRefs: string[]): WorkbenchEntry {
   return {

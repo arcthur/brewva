@@ -7,6 +7,7 @@ import {
   normalizeAgentId,
   parseJsonc,
   type BrewvaConfig,
+  type SkillRoutingScope,
 } from "@brewva/brewva-runtime";
 
 export interface AgentRuntimeHandle {
@@ -28,6 +29,8 @@ export interface AgentRuntimeManagerOptions {
   controllerRuntime: BrewvaRuntime;
   maxLiveRuntimes: number;
   idleRuntimeTtlMs: number;
+  routingScopes?: SkillRoutingScope[];
+  routingDefaultScopes?: SkillRoutingScope[];
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -106,6 +109,8 @@ export class AgentRuntimeManager {
   readonly idleRuntimeTtlMs: number;
 
   private readonly controllerRuntime: BrewvaRuntime;
+  private readonly routingScopes?: SkillRoutingScope[];
+  private readonly routingDefaultScopes?: SkillRoutingScope[];
   private readonly handles = new Map<string, AgentRuntimeHandle>();
   private readonly creating = new Map<string, Promise<AgentRuntimeHandle>>();
 
@@ -114,6 +119,10 @@ export class AgentRuntimeManager {
     this.workspaceRoot = options.controllerRuntime.workspaceRoot;
     this.maxLiveRuntimes = Math.max(1, Math.floor(options.maxLiveRuntimes));
     this.idleRuntimeTtlMs = Math.max(1, Math.floor(options.idleRuntimeTtlMs));
+    this.routingScopes = options.routingScopes ? [...new Set(options.routingScopes)] : undefined;
+    this.routingDefaultScopes = options.routingDefaultScopes
+      ? [...new Set(options.routingDefaultScopes)]
+      : undefined;
   }
 
   listRuntimes(): AgentRuntimeSummary[] {
@@ -235,6 +244,8 @@ export class AgentRuntimeManager {
       agentId,
       config,
       governancePort: createTrustedLocalGovernancePort({ profile: "team" }),
+      routingScopes: this.routingScopes,
+      routingDefaultScopes: this.routingDefaultScopes,
     });
   }
 

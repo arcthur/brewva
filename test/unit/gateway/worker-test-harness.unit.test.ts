@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   buildWorkerTestHarnessEnv,
   resolveWorkerTestHarness,
-} from "../../../packages/brewva-gateway/src/session/worker-test-harness.js";
+} from "../../../packages/brewva-gateway/src/hosted/internal/thread-loop/worker/test-harness.js";
 
 describe("worker test harness", () => {
   test("round-trips watchdog and fake assistant overrides through the shared harness", () => {

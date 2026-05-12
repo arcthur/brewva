@@ -2,7 +2,7 @@ import { resolve } from "node:path";
 import {
   buildContextEvidenceReport,
   persistContextEvidenceReport,
-} from "@brewva/brewva-gateway/runtime-plugins";
+} from "@brewva/brewva-gateway/hosted";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
 
 interface CliOptions {

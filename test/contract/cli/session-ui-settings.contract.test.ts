@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { createHostedSession as createBrewvaSession } from "@brewva/brewva-gateway/host";
+import { createHostedSession as createBrewvaSession } from "@brewva/brewva-gateway/hosted";
 import { BrewvaRuntime, createTrustedLocalGovernancePort } from "@brewva/brewva-runtime";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
@@ -200,11 +200,11 @@ describe("brewva session ui settings wiring", () => {
       })[0];
       const payload = (bootstrap?.payload as
         | {
-            managedToolMode?: "runtime_plugin" | "direct";
+            managedToolMode?: "hosted" | "direct";
             skillBroker?: unknown;
             skillLoad?: unknown;
           }
-        | undefined) ?? { managedToolMode: "runtime_plugin" };
+        | undefined) ?? { managedToolMode: "hosted" };
       expect(payload.managedToolMode).toBe("direct");
       expect(payload.skillBroker).toBeUndefined();
       expect(payload.skillLoad).toBeUndefined();

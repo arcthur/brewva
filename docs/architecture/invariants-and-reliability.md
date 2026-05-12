@@ -85,7 +85,7 @@ recovery, and bounded execution.
 - `packages/brewva-runtime/src/domain/tools/tool-gate.ts`
 - `packages/brewva-runtime/src/domain/governance/reversible-mutation.ts`
 - `packages/brewva-runtime/src/domain/governance/effect-authority-manifest.ts`
-- `packages/brewva-gateway/src/session/turn-envelope.ts`
+- `packages/brewva-gateway/src/hosted/internal/thread-loop/turn-envelope.ts`
 - `packages/brewva-effect/src/index.ts`
 - `packages/brewva-effect/src/runtime-spine.ts`
 - `packages/brewva-effect/src/schedules.ts`

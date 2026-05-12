@@ -4,13 +4,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
 import type { BrewvaModelCatalog } from "@brewva/brewva-substrate/provider";
-import { loadHostedDelegationCatalog } from "../../../packages/brewva-gateway/src/subagents/catalog.js";
+import { loadHostedDelegationCatalog } from "../../../packages/brewva-gateway/src/delegation/catalog/registry.js";
 import {
   assertDelegationShapeNarrowing,
   resolveDelegationExecutionPlan,
-  resolveDelegationTarget,
-} from "../../../packages/brewva-gateway/src/subagents/shared.js";
-import type { HostedDelegationTarget } from "../../../packages/brewva-gateway/src/subagents/targets.js";
+} from "../../../packages/brewva-gateway/src/delegation/execution-plan.js";
+import { resolveDelegationTarget } from "../../../packages/brewva-gateway/src/delegation/target-resolution.js";
+import type { HostedDelegationTarget } from "../../../packages/brewva-gateway/src/delegation/targets.js";
 
 function makeTarget(overrides: Partial<HostedDelegationTarget> = {}): HostedDelegationTarget {
   return {
@@ -82,7 +82,7 @@ describe("subagent shared execution resolution", () => {
     ).toThrow("subagent_result_mode_override_not_allowed");
     expect(() =>
       assertDelegationShapeNarrowing(target, {
-        managedToolMode: "runtime_plugin",
+        managedToolMode: "hosted",
       }),
     ).toThrow("subagent_managed_tool_mode_widening_not_allowed");
   });

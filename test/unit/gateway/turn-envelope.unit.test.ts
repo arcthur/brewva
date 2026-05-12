@@ -22,7 +22,7 @@ import type { BrewvaPromptContentPart } from "@brewva/brewva-substrate/prompt";
 import {
   runHostedTurnEnvelope,
   type HostedTurnEnvelopeLoopResult,
-} from "../../../packages/brewva-gateway/src/session/turn-envelope.js";
+} from "../../../packages/brewva-gateway/src/hosted/internal/thread-loop/turn-envelope.js";
 
 function createRuntime(prefix: string): BrewvaRuntime {
   return new BrewvaRuntime({

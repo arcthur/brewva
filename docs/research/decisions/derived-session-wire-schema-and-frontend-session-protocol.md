@@ -18,9 +18,9 @@
   - `packages/brewva-runtime/src/domain/sessions/session-wire.ts`
   - `packages/brewva-runtime/src/events/registry.ts`
   - `packages/brewva-gateway/src/daemon/gateway-daemon.ts`
-  - `packages/brewva-gateway/src/daemon/session-supervisor.ts`
-  - `packages/brewva-gateway/src/daemon/session-binding-tape.ts`
-  - `packages/brewva-gateway/src/daemon/session-wire-status.ts`
+  - `packages/brewva-gateway/src/daemon/session-supervisor/index.ts`
+  - `packages/brewva-gateway/src/daemon/session-supervisor/session-binding-tape.ts`
+  - `packages/brewva-gateway/src/daemon/internal/session-wire-status.ts`
 
 ## Decision Summary
 

@@ -9,11 +9,11 @@
   - `docs/architecture/design-axioms.md`
   - `docs/architecture/system-architecture.md`
   - `docs/reference/runtime.md`
-  - `docs/reference/runtime-plugins.md`
+  - `docs/reference/extensions.md`
   - `docs/reference/session-lifecycle.md`
 - Code anchors:
   - `packages/brewva-substrate/src/**`
-  - `packages/brewva-gateway/src/host/**`
+  - `packages/brewva-gateway/src/hosted/internal/session/**`
   - `packages/brewva-cli/src/cli-runtime.ts`
 
 ## Decision Summary

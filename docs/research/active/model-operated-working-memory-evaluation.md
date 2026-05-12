@@ -51,12 +51,12 @@ This note does not reopen:
 - Recovery baseline validation:
   `docs/research/active/recovery-first-context-governance-and-history-view-baselines.md`
 - Context evidence reporting:
-  `packages/brewva-gateway/src/runtime-plugins/context-evidence.ts`
-  `packages/brewva-gateway/src/runtime-plugins/context-evidence/store.ts`
+  `packages/brewva-gateway/src/hosted/internal/context/evidence/context-evidence.ts`
+  `packages/brewva-gateway/src/hosted/internal/context/evidence/context-evidence/store.ts`
   `script/report-context-evidence.ts`
 - Compaction and request shaping:
-  `packages/brewva-gateway/src/host/compaction-summary-generator.ts`
-  `packages/brewva-gateway/src/runtime-plugins/provider-request-reduction.ts`
+  `packages/brewva-gateway/src/hosted/internal/compaction/summary-generator.ts`
+  `packages/brewva-gateway/src/hosted/internal/provider/request/provider-request-reduction.ts`
 - Model-operated memory tools:
   `packages/brewva-tools/src/families/memory/workbench.ts`
   `packages/brewva-tools/src/families/memory/recall.ts`

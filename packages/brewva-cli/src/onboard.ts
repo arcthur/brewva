@@ -1,6 +1,6 @@
 import { parseArgs as parseNodeArgs } from "node:util";
 import { BrewvaEffect, runEdgeOperation } from "@brewva/brewva-effect";
-import { runGatewayCliOperation } from "@brewva/brewva-gateway";
+import { runGatewayCliOperation } from "@brewva/brewva-gateway/admin";
 import type { ManagedToolMode, RuntimeResult } from "@brewva/brewva-runtime";
 
 type CliValueResult<T> = RuntimeResult<{ value: T }>;
@@ -61,7 +61,7 @@ Options:
   --dry-run              Print the generated supervisor file instead of writing it
   --json                 Emit machine-readable JSON output
   --no-start             Install the service but do not activate/start it
-  --managed-tools <mode> Managed tool mode to persist (direct | runtime_plugin)
+  --managed-tools <mode> Managed tool mode to persist (direct | hosted)
   --cwd <path>           Working directory for gateway start
   --config <path>        Config path forwarded to gateway start
   --model <route>        Default hosted model route
@@ -113,12 +113,12 @@ function pushOnboardBooleanFlag(args: string[], name: string, value: unknown): v
 
 function resolveManagedToolModeFlag(raw: unknown): CliValueResult<ManagedToolMode> {
   if (raw === undefined) {
-    return okCliValue("runtime_plugin");
+    return okCliValue("hosted");
   }
-  if (raw === "direct" || raw === "runtime_plugin") {
+  if (raw === "direct" || raw === "hosted") {
     return okCliValue(raw);
   }
-  return cliValueError("Error: invalid --managed-tools value. Use 'direct' or 'runtime_plugin'.");
+  return cliValueError("Error: invalid --managed-tools value. Use 'direct' or 'hosted'.");
 }
 
 export async function runOnboardCliOperation(argv: string[]): Promise<number> {

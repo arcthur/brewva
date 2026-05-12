@@ -155,13 +155,14 @@ Operator expectations:
 
 ## Code Pointers
 
-- Orchestrator: `packages/brewva-gateway/src/subagents/orchestrator.ts`
-- Catalog / config: `packages/brewva-gateway/src/subagents/catalog.ts`
-- Background controller: `packages/brewva-gateway/src/subagents/background-controller.ts`
-- Background protocol: `packages/brewva-gateway/src/subagents/background-protocol.ts`
-- Workspace isolation: `packages/brewva-gateway/src/subagents/workspace.ts`
+- Orchestrator: `packages/brewva-gateway/src/delegation/orchestrator.ts`
+- Catalog / config: `packages/brewva-gateway/src/delegation/catalog/registry.ts`
+- Background controller: `packages/brewva-gateway/src/delegation/background/controller.ts`
+- Background runner: `packages/brewva-gateway/src/delegation/background/runner-main.ts`
+- Background protocol: `packages/brewva-gateway/src/delegation/background/protocol.ts`
+- Workspace isolation: `packages/brewva-gateway/src/delegation/workspace.ts`
 - Runtime parallel state: `packages/brewva-runtime/src/domain/parallel/parallel.ts`
-- Delegation store: `packages/brewva-gateway/src/subagents/delegation-store.ts`
+- Delegation store: `packages/brewva-gateway/src/delegation/delegation-store.ts`
 - Run / fan-out tools: `packages/brewva-tools/src/families/delegation/subagent-run/api.ts`
 - Status / cancel tools: `packages/brewva-tools/src/families/delegation/subagent-control.ts`
 - Worker adoption: `packages/brewva-tools/src/families/workflow/worker-results.ts`

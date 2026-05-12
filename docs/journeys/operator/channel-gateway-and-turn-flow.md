@@ -53,8 +53,9 @@ flowchart TD
 1. Telegram updates enter the system through polling or webhook ingress.
 2. The projector and adapter dedupe layer normalize raw updates into
    `TurnEnvelope`.
-3. The bridge records pre-WAL ingest telemetry and then hands the turn to the
-   channel loop, where dispatcher-owned Recovery WAL acceptance begins.
+3. The bridge hands the turn to the channel loop, dispatcher-owned Recovery WAL
+   acceptance begins, and ingest telemetry is emitted after that handoff
+   completes.
 4. The command router resolves slash commands, `@agent` routing, and ACL
    decisions.
 5. Channel scope binds to the agent session while preserving the original
@@ -76,9 +77,9 @@ flowchart TD
 - webhook edge `code=accepted` and Fly ingress `202 accepted` are upstream
   transport-acceptance signals only; they do not by themselves prove a
   replay-relevant turn, bridge ingest telemetry, or hosted turn completion
-- `channel_turn_ingested` is bridge handoff telemetry emitted before
-  dispatcher-owned `appendPending(...)`; durable recovery ownership starts only
-  after the Recovery WAL row exists
+- `channel_turn_ingested` is post-handoff bridge telemetry emitted after the
+  dispatcher accepts the turn into Recovery WAL; it marks local ingress
+  admission order, not hosted turn completion
 - `channel_turn_emitted` records successful bridge delivery of the prepared
   outbound turn; `channel_turn_bridge_error` records failures from that same
   outbound bridge path
@@ -123,9 +124,9 @@ flowchart TD
 ## Code Pointers
 
 - Channel host: `packages/brewva-gateway/src/channels/host.ts`
-- Bootstrap: `packages/brewva-gateway/src/channels/channel-bootstrap.ts`
-- Session coordinator: `packages/brewva-gateway/src/channels/channel-session-coordinator.ts`
-- Command router: `packages/brewva-gateway/src/channels/channel-control-router.ts`
+- Bootstrap: `packages/brewva-gateway/src/channels/launcher.ts`
+- Session coordinator: `packages/brewva-gateway/src/channels/session/coordinator.ts`
+- Command router: `packages/brewva-gateway/src/channels/command/router.ts`
 - Turn dispatcher: `packages/brewva-gateway/src/channels/channel-turn-dispatcher.ts`
 - Agent dispatch: `packages/brewva-gateway/src/channels/channel-agent-dispatch.ts`
 - Reply writer: `packages/brewva-gateway/src/channels/channel-reply-writer.ts`

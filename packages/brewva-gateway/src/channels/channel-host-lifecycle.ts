@@ -14,9 +14,9 @@ import { createNonOverlappingTaskRunner } from "@brewva/brewva-std/async";
 import { waitForAllSettledWithTimeout } from "../utils/async.js";
 import { toErrorMessage } from "../utils/errors.js";
 import type { AgentRuntimeManager } from "./agent-runtime-manager.js";
-import type { ChannelModeLaunchBundle } from "./channel-bootstrap.js";
-import type { ChannelSessionCoordinator } from "./channel-session-coordinator.js";
 import type { ChannelTurnDispatcher } from "./channel-turn-dispatcher.js";
+import type { ChannelModeLaunchBundle } from "./launcher.js";
+import type { ChannelSessionCoordinator } from "./session/coordinator.js";
 
 export interface RunChannelHostLifecycleInput {
   runtime: BrewvaRuntime;

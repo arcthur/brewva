@@ -14,7 +14,7 @@ Implementation references:
 - Worker entrypoint template: `distribution/worker/telegram-webhook-worker.ts`
 - Fly ingress server: `packages/brewva-ingress/src/telegram-ingress.ts`
 - Channel bootstrap and webhook config resolution:
-  `packages/brewva-gateway/src/channels/channel-bootstrap.ts`
+  `packages/brewva-gateway/src/channels/launcher.ts`
 - Channel composition shell: `packages/brewva-gateway/src/channels/host.ts`
 
 ## Topology
@@ -118,8 +118,8 @@ When forwarding to Fly ingress, `2xx` and `409` are both treated as success:
 - `ingressStatus=202`: Fly ingress accepted the webhook request and the running
   host path handled it without immediate ingress failure. This is upstream
   acceptance, not proof that a replay-relevant `TurnEnvelope` was projected,
-  that `channel_turn_ingested` was recorded, or that a new Recovery WAL row was
-  durably admitted.
+  that `channel_turn_ingested` was recorded after local handoff, or that any
+  hosted turn work completed successfully.
 - `ingressStatus=409`: channel-host idempotency hit. The Worker still returns
   `200 accepted`, but this does not represent a fresh admission.
 

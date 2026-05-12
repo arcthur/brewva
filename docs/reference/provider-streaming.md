@@ -137,7 +137,7 @@ the next provider turn.
 
 ## Hosted MCP Bridge
 
-Hosted MCP tools now enter the hosted pipeline through one explicit bridge:
+Hosted MCP tools now enter the hosted behavior through one explicit bridge:
 
 - `createHostedMcpToolBundle(...)`
 - `CreateHostedSessionOptions.mcpToolSources`

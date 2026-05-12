@@ -34,7 +34,7 @@ describe("platform growth governance docs", () => {
     const orchestration = readDoc("docs/guide/orchestration.md");
     const gatewayGuide = readDoc("docs/guide/gateway-control-plane-daemon.md");
     const gatewayProtocol = readDoc("docs/reference/gateway-control-plane-protocol.md");
-    const runtimePlugins = readDoc("docs/reference/runtime-plugins.md");
+    const extensions = readDoc("docs/reference/extensions.md");
     const tools = readDoc("docs/reference/tools.md");
 
     expect(orchestration).toContain("not a distributed transaction coordinator");
@@ -51,9 +51,9 @@ describe("platform growth governance docs", () => {
     expect(gatewayProtocol).toContain("generalized compensation");
     expect(gatewayProtocol).toContain("automatic partial-failure repair");
 
-    expect(runtimePlugins).toContain("opt-in control-plane behavior");
-    expect(runtimePlugins).toContain("cross-agent saga semantics");
-    expect(runtimePlugins).toContain("partial-failure repair");
+    expect(extensions).toContain("opt-in control-plane behavior");
+    expect(extensions).toContain("cross-agent saga semantics");
+    expect(extensions).toContain("partial-failure repair");
 
     expect(tools).toContain("not a distributed transaction");
     expect(tools).toContain("cross-agent saga behavior");

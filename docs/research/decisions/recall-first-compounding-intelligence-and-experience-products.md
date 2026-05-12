@@ -19,8 +19,8 @@
   - `<deleted: packages/brewva-recall/src/context/provider.ts>`
   - `packages/brewva-session-index/src/factory.ts`
   - `packages/brewva-tools/src/families/memory/recall.ts`
-  - `packages/brewva-gateway/src/host/hosted-session-bootstrap.ts`
-  - `<deleted: packages/brewva-gateway/src/runtime-plugins/deliberation-maintenance.ts>`
+  - `packages/brewva-gateway/src/hosted/internal/session/init/session-assembly.ts`
+  - `<deleted: packages/brewva-gateway/src/hosted/internal/session/deliberation-maintenance.ts>`
   - `test/eval/recall-runtime.ts`
   - `test/eval/datasets/recall-cross-session-broker.yaml`
 

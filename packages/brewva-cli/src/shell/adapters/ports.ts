@@ -10,7 +10,7 @@ import {
   validateQuestionRequestAnswers,
   validateSingleQuestionAnswer,
 } from "@brewva/brewva-gateway";
-import { runHostedPromptTurn, selectNextModelPresetName } from "@brewva/brewva-gateway/host";
+import { runHostedPromptTurn, selectNextModelPresetName } from "@brewva/brewva-gateway/hosted";
 import {
   SESSION_REWIND_DIVERGENCE_SCHEMA,
   buildReasoningRevertSummaryDetails,
@@ -515,7 +515,7 @@ export function createOperatorSurfacePort(input: {
         payload: buildOperatorQuestionAnsweredPayload({
           question,
           answerText: validatedAnswer.answerText,
-          source: "runtime_plugin",
+          source: "hosted",
         }),
       });
     },
@@ -547,7 +547,7 @@ export function createOperatorSurfacePort(input: {
           payload: buildOperatorQuestionAnsweredPayload({
             question,
             answerText,
-            source: "runtime_plugin",
+            source: "hosted",
           }),
         });
       }

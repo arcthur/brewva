@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { BrewvaModelCatalog } from "@brewva/brewva-substrate/provider";
-import { resolveDelegationModelRoute } from "../../../packages/brewva-gateway/src/subagents/model-routing.js";
-import type { HostedDelegationTarget } from "../../../packages/brewva-gateway/src/subagents/targets.js";
+import { resolveDelegationModelRoute } from "../../../packages/brewva-gateway/src/delegation/model-routing.js";
+import type { HostedDelegationTarget } from "../../../packages/brewva-gateway/src/delegation/targets.js";
 
 type RegisteredModel = ReturnType<BrewvaModelCatalog["getAll"]>[number];
 

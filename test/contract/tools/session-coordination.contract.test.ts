@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { sha256Hex } from "@brewva/brewva-std/hash";
 import { buildBrewvaTools } from "@brewva/brewva-tools";
 import {
   createReasoningCheckpointTool,
@@ -36,6 +37,17 @@ function requireTool<T extends { name: string }>(tools: T[], name: string): T {
   return requireDefined(
     tools.find((tool) => tool.name === name),
     `Expected tool ${name}.`,
+  );
+}
+
+function getHistoryViewBaselineArtifactPath(workspaceRoot: string, sessionId: string): string {
+  return join(
+    workspaceRoot,
+    ".orchestrator",
+    "history-view",
+    "sessions",
+    `sess_${Buffer.from(sessionId, "utf8").toString("base64url")}`,
+    "baseline.json",
   );
 }
 
@@ -173,13 +185,14 @@ describe("session coordination tool contracts", () => {
   test("authority.session.commitCompaction records the durable compaction receipt and updates history-view baseline", () => {
     const runtime = createCleanRuntime();
     const sessionId = "s11-commit";
+    const sanitizedSummary = "[CompactSummary]\nKeep only the latest verification failures.";
 
     runtime.maintain.context.onTurnStart(sessionId, 1);
 
     runtime.authority.session.commitCompaction(sessionId, {
       compactId: "cmp-42",
-      sanitizedSummary: "[CompactSummary]\nKeep only the latest verification failures.",
-      summaryDigest: "digest-42",
+      sanitizedSummary,
+      summaryDigest: sha256Hex(sanitizedSummary),
       sourceTurn: 1,
       leafEntryId: "leaf-42",
       referenceContextDigest: "prefix-42",
@@ -195,7 +208,7 @@ describe("session coordination tool contracts", () => {
     expect(compactEvent?.payload).toEqual(
       expect.objectContaining({
         compactId: "cmp-42",
-        sanitizedSummary: "[CompactSummary]\nKeep only the latest verification failures.",
+        sanitizedSummary,
         summaryDigest: expect.any(String),
         sourceTurn: 1,
         leafEntryId: "leaf-42",
@@ -211,12 +224,13 @@ describe("session coordination tool contracts", () => {
     expect(runtime.inspect.context.getHistoryViewBaseline(sessionId)).toEqual(
       expect.objectContaining({
         compactId: "cmp-42",
-        sanitizedSummary: "[CompactSummary]\nKeep only the latest verification failures.",
+        sanitizedSummary,
         summaryDigest: expect.any(String),
         leafEntryId: "leaf-42",
         referenceContextDigest: "prefix-42",
       }),
     );
+    expect(existsSync(getHistoryViewBaselineArtifactPath(workspace, sessionId))).toBeTrue();
   });
 
   test("tape_handoff writes an anchor and tape_info reports tape and context status", async () => {

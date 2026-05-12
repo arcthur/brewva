@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test";
 import {
   STRUCTURED_OUTCOME_CLOSE,
   STRUCTURED_OUTCOME_OPEN,
-} from "../../../packages/brewva-gateway/src/subagents/protocol.js";
-import { extractStructuredOutcomeData } from "../../../packages/brewva-gateway/src/subagents/structured-outcome.js";
+} from "../../../packages/brewva-gateway/src/delegation/protocol.js";
+import { extractStructuredOutcomeData } from "../../../packages/brewva-gateway/src/delegation/structured-outcome.js";
 
 function buildAssistantText(payload: Record<string, unknown>): string {
   return [

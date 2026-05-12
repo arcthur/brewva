@@ -12,13 +12,13 @@
   - `docs/guide/cli.md`
   - `docs/guide/orchestration.md`
 - Code anchors:
-  - `packages/brewva-gateway/src/host/model-presets.ts`
-  - `packages/brewva-gateway/src/host/hosted-settings-backend.ts`
-  - `packages/brewva-gateway/src/host/hosted-session-backend-local.ts`
-  - `packages/brewva-gateway/src/host/managed-agent-session.ts`
-  - `packages/brewva-gateway/src/subagents/model-routing.ts`
-  - `packages/brewva-gateway/src/subagents/catalog.ts`
-  - `packages/brewva-gateway/src/host/runtime-projection-session-store.ts`
+  - `packages/brewva-gateway/src/hosted/internal/session/settings/model-presets.ts`
+  - `packages/brewva-gateway/src/hosted/internal/session/settings/hosted-settings-backend.ts`
+  - `packages/brewva-gateway/src/hosted/internal/session/hosted-session-backend-local.ts`
+  - `packages/brewva-gateway/src/hosted/internal/session/managed-agent/session.ts`
+  - `packages/brewva-gateway/src/delegation/model-routing.ts`
+  - `packages/brewva-gateway/src/delegation/catalog/registry.ts`
+  - `packages/brewva-gateway/src/hosted/internal/session/projection/runtime-projection-session-store.ts`
   - `packages/brewva-runtime/src/domain/delegation/types.ts`
 
 ## Decision Summary

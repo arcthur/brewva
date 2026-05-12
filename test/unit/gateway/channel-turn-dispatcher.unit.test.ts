@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { TurnEnvelope } from "@brewva/brewva-runtime/channels";
 import { type RecoveryWalStore } from "@brewva/brewva-runtime/recovery";
 import { createChannelTurnDispatcher } from "../../../packages/brewva-gateway/src/channels/channel-turn-dispatcher.js";
-import { CommandRouter } from "../../../packages/brewva-gateway/src/channels/command-router.js";
+import { CommandRouter } from "../../../packages/brewva-gateway/src/channels/command/parser.js";
 import { createRuntimeFixture } from "../../helpers/runtime.js";
 
 function createUserTurn(
@@ -34,7 +34,8 @@ function createRecoveryWalStoreStub(): RecoveryWalStore {
 }
 
 describe("channel turn dispatcher ingress routing", () => {
-  test("given a user mention that targets an active agent, when resolveIngestedSessionId runs, then the dispatcher returns the live session for the mentioned agent", () => {
+  test("given a user mention route, when the dispatcher enqueues the turn, then it routes the rewritten task to the target agent", async () => {
+    const routed: Array<{ agentId: string; text: string }> = [];
     const dispatcher = createChannelTurnDispatcher({
       runtime: createRuntimeFixture(),
       recoveryWalStore: createRecoveryWalStoreStub(),
@@ -47,24 +48,32 @@ describe("channel turn dispatcher ingress routing", () => {
       },
       resolveScopeKey: () => "telegram:12345",
       resolveFocusedAgentId: () => "default",
-      isAgentActive: (agentId) => agentId === "reviewer",
-      resolveLiveSessionId: (_scopeKey, agentId) =>
-        agentId === "reviewer" ? "agent-session:reviewer" : undefined,
-      resolveApprovalTargetAgentId: () => undefined,
-      processUserTurnOnAgent: async () => undefined,
-      handleCommand: async () => ({ handled: false }),
+      resolveApprovalTargetAgentIdDurably: async () => undefined,
+      processUserTurnOnAgent: async (turn, _walId, _scopeKey, targetAgentId) => {
+        const text = turn.parts[0]?.type === "text" ? turn.parts[0].text : "";
+        routed.push({ agentId: targetAgentId, text });
+      },
+      handleCommand: async (match) =>
+        match.kind === "route-agent"
+          ? {
+              handled: false,
+              routeAgentId: match.agentId,
+              routeTask: match.task,
+            }
+          : { handled: false },
       prepareCommand: async (match) => ({ match, handled: false }),
       isShuttingDown: () => false,
     });
 
-    const sessionId = dispatcher.resolveIngestedSessionId(
-      createUserTurn("@reviewer run the release checklist"),
-    );
+    await dispatcher.enqueueInboundTurn(createUserTurn("@reviewer run the release checklist"), {
+      awaitCompletion: true,
+    });
 
-    expect(sessionId).toBe("agent-session:reviewer");
+    expect(routed).toEqual([{ agentId: "reviewer", text: "run the release checklist" }]);
   });
 
-  test("given an approval turn with a resolved approval target, when resolveIngestedSessionId runs, then the dispatcher prefers the approval target session", () => {
+  test("given an approval turn with a resolved approval target, when the dispatcher enqueues it, then it prefers the approval target agent", async () => {
+    const routed: string[] = [];
     const dispatcher = createChannelTurnDispatcher({
       runtime: createRuntimeFixture(),
       recoveryWalStore: createRecoveryWalStoreStub(),
@@ -77,11 +86,10 @@ describe("channel turn dispatcher ingress routing", () => {
       },
       resolveScopeKey: () => "telegram:12345",
       resolveFocusedAgentId: () => "default",
-      isAgentActive: () => true,
-      resolveLiveSessionId: (_scopeKey, agentId) =>
-        agentId === "approver" ? "agent-session:approver" : "agent-session:default",
-      resolveApprovalTargetAgentId: () => "approver",
-      processUserTurnOnAgent: async () => undefined,
+      resolveApprovalTargetAgentIdDurably: async () => "approver",
+      processUserTurnOnAgent: async (_turn, _walId, _scopeKey, targetAgentId) => {
+        routed.push(targetAgentId);
+      },
       handleCommand: async () => ({ handled: false }),
       prepareCommand: async (match) => ({ match, handled: false }),
       isShuttingDown: () => false,
@@ -97,9 +105,9 @@ describe("channel turn dispatcher ingress routing", () => {
       },
     };
 
-    const sessionId = dispatcher.resolveIngestedSessionId(approvalTurn);
+    await dispatcher.enqueueInboundTurn(approvalTurn, { awaitCompletion: true });
 
-    expect(sessionId).toBe("agent-session:approver");
+    expect(routed).toEqual(["approver"]);
   });
 
   test("given many scopes, when last-turn cache exceeds capacity, then least recently used scopes are evicted", async () => {
@@ -115,9 +123,7 @@ describe("channel turn dispatcher ingress routing", () => {
       },
       resolveScopeKey: (turn) => turn.conversationId,
       resolveFocusedAgentId: () => "default",
-      isAgentActive: () => true,
-      resolveLiveSessionId: () => "agent-session:default",
-      resolveApprovalTargetAgentId: () => undefined,
+      resolveApprovalTargetAgentIdDurably: async () => undefined,
       processUserTurnOnAgent: async () => undefined,
       handleCommand: async () => ({ handled: false }),
       prepareCommand: async (match) => ({ match, handled: false }),
@@ -182,9 +188,7 @@ describe("channel turn dispatcher ingress routing", () => {
       },
       resolveScopeKey: () => "telegram:12345",
       resolveFocusedAgentId: () => "default",
-      isAgentActive: () => true,
-      resolveLiveSessionId: () => "agent-session:default",
-      resolveApprovalTargetAgentId: () => undefined,
+      resolveApprovalTargetAgentIdDurably: async () => undefined,
       processUserTurnOnAgent: async (turn) => {
         steps.push(`process:${turn.parts[0]?.type === "text" ? turn.parts[0].text : "unknown"}`);
       },
@@ -239,9 +243,7 @@ describe("channel turn dispatcher ingress routing", () => {
       },
       resolveScopeKey: () => "telegram:12345",
       resolveFocusedAgentId: () => "default",
-      isAgentActive: () => true,
-      resolveLiveSessionId: () => "agent-session:default",
-      resolveApprovalTargetAgentId: () => undefined,
+      resolveApprovalTargetAgentIdDurably: async () => undefined,
       processUserTurnOnAgent: async () => {
         steps.push("process");
         throw new Error("route failed");
@@ -270,5 +272,85 @@ describe("channel turn dispatcher ingress routing", () => {
     expect(caught).toBeInstanceOf(Error);
     expect((caught as Error).message).toBe("route failed");
     expect(steps).toEqual(["inflight", "process", "failed"]);
+  });
+
+  test("given an approval turn without a live target, when the durable approval resolver finds the archived agent, then dispatch routes to that agent", async () => {
+    const routed: string[] = [];
+    const dispatcher = createChannelTurnDispatcher({
+      runtime: createRuntimeFixture(),
+      recoveryWalStore: createRecoveryWalStoreStub(),
+      orchestrationEnabled: true,
+      defaultAgentId: "default",
+      commandRouter: new CommandRouter(),
+      replyWriter: {
+        sendControllerReply: async () => undefined,
+        sendAgentOutputs: async () => 0,
+      },
+      resolveScopeKey: () => "telegram:12345",
+      resolveFocusedAgentId: () => "default",
+      resolveApprovalTargetAgentIdDurably: async () => "approver",
+      processUserTurnOnAgent: async (_turn, _walId, _scopeKey, targetAgentId) => {
+        routed.push(targetAgentId);
+      },
+      handleCommand: async () => ({ handled: false }),
+      prepareCommand: async (match) => ({ match, handled: false }),
+      isShuttingDown: () => false,
+    });
+
+    const approvalTurn: TurnEnvelope = {
+      ...createUserTurn("approve"),
+      kind: "approval",
+      approval: {
+        requestId: "approval-archived",
+        title: "Approve effect",
+        actions: [{ id: "approve", label: "Approve" }],
+      },
+    };
+
+    await dispatcher.enqueueInboundTurn(approvalTurn, { awaitCompletion: true });
+
+    expect(routed).toEqual(["approver"]);
+  });
+
+  test("given an approval turn without any live or durable target, when the dispatcher processes it, then it does not fall back to the focused agent", async () => {
+    const replies: string[] = [];
+    const routed: string[] = [];
+    const dispatcher = createChannelTurnDispatcher({
+      runtime: createRuntimeFixture(),
+      recoveryWalStore: createRecoveryWalStoreStub(),
+      orchestrationEnabled: true,
+      defaultAgentId: "default",
+      commandRouter: new CommandRouter(),
+      replyWriter: {
+        sendControllerReply: async (_turn, _scopeKey, text) => {
+          replies.push(text);
+        },
+        sendAgentOutputs: async () => 0,
+      },
+      resolveScopeKey: () => "telegram:12345",
+      resolveFocusedAgentId: () => "default",
+      resolveApprovalTargetAgentIdDurably: async () => undefined,
+      processUserTurnOnAgent: async (_turn, _walId, _scopeKey, targetAgentId) => {
+        routed.push(targetAgentId);
+      },
+      handleCommand: async () => ({ handled: false }),
+      prepareCommand: async (match) => ({ match, handled: false }),
+      isShuttingDown: () => false,
+    });
+
+    const approvalTurn: TurnEnvelope = {
+      ...createUserTurn("approve"),
+      kind: "approval",
+      approval: {
+        requestId: "approval-missing",
+        title: "Approve effect",
+        actions: [{ id: "approve", label: "Approve" }],
+      },
+    };
+
+    await dispatcher.enqueueInboundTurn(approvalTurn, { awaitCompletion: true });
+
+    expect(routed).toEqual([]);
+    expect(replies).toEqual(["Approval request is no longer active for this workspace."]);
   });
 });

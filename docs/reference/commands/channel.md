@@ -1,7 +1,7 @@
-# Commands: Channel And Runtime Plugins
+# Commands: Channel And Extensions
 
-Channel mode runs external ingress and egress orchestration. Runtime-plugin
-commands expose a small slash-command veneer for managed or headless sessions.
+Channel mode runs external ingress and egress orchestration. Extension commands
+expose a small slash-command veneer for managed or headless sessions.
 
 ## Channel Mode
 
@@ -18,9 +18,9 @@ Telegram inputs map into channel-scoped configuration and webhook environment
 variables. For the deployment path, see
 `docs/guide/telegram-webhook-edge-ingress.md`.
 
-## Runtime-Plugin Commands
+## Extension Commands
 
-Managed or headless sessions register runtime-plugin commands such as inspect,
+Managed or headless sessions register extension commands such as inspect,
 insights, questions, answer, agent overlay validation, and update. They are
 thin control-plane veneers over replay-visible session state.
 

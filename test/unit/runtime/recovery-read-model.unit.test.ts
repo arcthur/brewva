@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { existsSync, mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { asBrewvaSessionId, type TaskState } from "@brewva/brewva-runtime";
 import {
   type BrewvaEventRecord,
@@ -6,6 +9,8 @@ import {
   type ToolCallBlockedEventPayload,
   type ToolLifecycleEventPayload,
 } from "@brewva/brewva-runtime/events";
+import { sha256Hex } from "@brewva/brewva-std/hash";
+import { getHistoryViewBaselineArtifactPath } from "../../../packages/brewva-runtime/src/domain/context/history-view-baseline-artifact.js";
 import { runRecoveryContextPipeline } from "../../../packages/brewva-runtime/src/domain/context/read-models.js";
 import {
   deriveDuplicateSideEffectSuppressionCount,
@@ -82,8 +87,12 @@ function createPipelineKernel(input: {
   events: ReturnType<RuntimeKernelContext["eventStore"]["list"]>;
   taskState?: TaskState;
   onListEvents?: () => void;
+  workspaceRoot?: string;
 }): RuntimeKernelContext {
+  const workspaceRoot =
+    input.workspaceRoot ?? mkdtempSync(join(tmpdir(), "brewva-recovery-read-model-"));
   return {
+    workspaceRoot,
     eventStore: {
       list: () => {
         input.onListEvents?.();
@@ -382,5 +391,642 @@ describe("recovery read model", () => {
       }),
     );
     expect(result.workingSet).toBeUndefined();
+  });
+
+  test("persists a receipt-derived baseline artifact when the pipeline resolves from session_compact", () => {
+    const sessionId = asBrewvaSessionId("s-recovery-baseline-artifact");
+    const sanitizedSummary = "[CompactSummary]\nArtifact baseline.";
+    const kernel = createPipelineKernel({
+      events: [
+        {
+          id: "ev-compact-artifact",
+          sessionId,
+          type: "session_compact",
+          timestamp: 5,
+          turn: 4,
+          payload: {
+            compactId: "cmp-artifact",
+            sanitizedSummary,
+            summaryDigest: sha256Hex(sanitizedSummary),
+            sourceTurn: 4,
+            leafEntryId: "leaf-artifact",
+            referenceContextDigest: "prefix-artifact",
+            fromTokens: 1200,
+            toTokens: 420,
+            origin: "extension_api",
+          },
+        },
+      ],
+    });
+
+    const result = runRecoveryContextPipeline(kernel, {
+      sessionId,
+      referenceContextDigest: "prefix-artifact",
+      maxBaselineTokens: 4000,
+    });
+
+    expect(result.baselineState.snapshot).toEqual(
+      expect.objectContaining({
+        compactId: "cmp-artifact",
+        rebuildSource: "receipt",
+      }),
+    );
+    expect(
+      existsSync(getHistoryViewBaselineArtifactPath(kernel.workspaceRoot, sessionId)),
+    ).toBeTrue();
+  });
+
+  test("uses completed reasoning revert authority as the baseline when the target leaf has no compact baseline", () => {
+    const sessionId = asBrewvaSessionId("s-recovery-revert-baseline");
+    const kernel = createPipelineKernel({
+      events: [
+        {
+          id: "ev-checkpoint-a",
+          sessionId,
+          type: "reasoning_checkpoint",
+          timestamp: 1,
+          turn: 1,
+          payload: {
+            schema: "brewva.reasoning.checkpoint.v1",
+            checkpointId: "checkpoint-a",
+            checkpointSequence: 1,
+            branchId: `${sessionId}:reasoning-branch-0`,
+            branchSequence: 0,
+            boundary: "operator_marker",
+            leafEntryId: "leaf-a",
+            createdAt: 1,
+          },
+        },
+        {
+          id: "ev-revert-a",
+          sessionId,
+          type: "reasoning_revert",
+          timestamp: 2,
+          turn: 2,
+          payload: {
+            schema: "brewva.reasoning.revert.v1",
+            revertId: "revert-a",
+            revertSequence: 1,
+            toCheckpointId: "checkpoint-a",
+            fromCheckpointId: "checkpoint-a",
+            fromBranchId: `${sessionId}:reasoning-branch-0`,
+            newBranchId: `${sessionId}:reasoning-branch-1`,
+            newBranchSequence: 1,
+            trigger: "operator_request",
+            continuityPacket: {
+              schema: "brewva.reasoning.continuity.v1",
+              text: "Keep only the restored branch facts.",
+            },
+            targetLeafEntryId: "leaf-a",
+            createdAt: 2,
+          },
+        },
+      ],
+    });
+
+    const result = runRecoveryContextPipeline(kernel, { sessionId });
+
+    expect(result.baselineState.snapshot).toEqual(
+      expect.objectContaining({
+        compactId: "reasoning-revert:revert-a",
+        origin: "reasoning_revert",
+        leafEntryId: "leaf-a",
+        rebuildSource: "receipt",
+      }),
+    );
+  });
+
+  test("fills the revert baseline leaf anchor from the target checkpoint when the receipt omits targetLeafEntryId", () => {
+    const sessionId = asBrewvaSessionId("s-recovery-revert-leaf-fallback");
+    const kernel = createPipelineKernel({
+      events: [
+        {
+          id: "ev-checkpoint-a",
+          sessionId,
+          type: "reasoning_checkpoint",
+          timestamp: 1,
+          turn: 1,
+          payload: {
+            schema: "brewva.reasoning.checkpoint.v1",
+            checkpointId: "checkpoint-a",
+            checkpointSequence: 1,
+            branchId: `${sessionId}:reasoning-branch-0`,
+            branchSequence: 0,
+            boundary: "operator_marker",
+            leafEntryId: "leaf-a",
+            createdAt: 1,
+          },
+        },
+        {
+          id: "ev-revert-a",
+          sessionId,
+          type: "reasoning_revert",
+          timestamp: 2,
+          turn: 2,
+          payload: {
+            schema: "brewva.reasoning.revert.v1",
+            revertId: "revert-a",
+            revertSequence: 1,
+            toCheckpointId: "checkpoint-a",
+            fromCheckpointId: "checkpoint-a",
+            fromBranchId: `${sessionId}:reasoning-branch-0`,
+            newBranchId: `${sessionId}:reasoning-branch-1`,
+            newBranchSequence: 1,
+            trigger: "operator_request",
+            continuityPacket: {
+              schema: "brewva.reasoning.continuity.v1",
+              text: "Keep only the restored branch facts.",
+            },
+            createdAt: 2,
+          },
+        },
+      ],
+    });
+
+    const result = runRecoveryContextPipeline(kernel, { sessionId });
+
+    expect(result.baselineState.snapshot).toEqual(
+      expect.objectContaining({
+        compactId: "reasoning-revert:revert-a",
+        leafEntryId: "leaf-a",
+      }),
+    );
+  });
+
+  test("compact to revert precedence keeps the surviving leaf baseline clean even when a superseded leaf had a bad compact", () => {
+    const sessionId = asBrewvaSessionId("s-recovery-compact-revert-precedence");
+    const summaryA = "[CompactSummary]\nLeaf A baseline.";
+    const kernel = createPipelineKernel({
+      events: [
+        {
+          id: "ev-checkpoint-a",
+          sessionId,
+          type: "reasoning_checkpoint",
+          timestamp: 1,
+          turn: 1,
+          payload: {
+            schema: "brewva.reasoning.checkpoint.v1",
+            checkpointId: "checkpoint-a",
+            checkpointSequence: 1,
+            branchId: `${sessionId}:reasoning-branch-0`,
+            branchSequence: 0,
+            boundary: "operator_marker",
+            leafEntryId: "leaf-a",
+            createdAt: 1,
+          },
+        },
+        {
+          id: "ev-compact-a",
+          sessionId,
+          type: "session_compact",
+          timestamp: 2,
+          turn: 1,
+          payload: {
+            compactId: "cmp-a",
+            sanitizedSummary: summaryA,
+            summaryDigest: sha256Hex(summaryA),
+            sourceTurn: 1,
+            leafEntryId: "leaf-a",
+            referenceContextDigest: null,
+            fromTokens: 400,
+            toTokens: 120,
+            origin: "extension_api",
+          },
+        },
+        {
+          id: "ev-compact-b-bad",
+          sessionId,
+          type: "session_compact",
+          timestamp: 3,
+          turn: 2,
+          payload: {
+            compactId: "cmp-b",
+            sanitizedSummary: "[CompactSummary]\nLeaf B broken baseline.",
+            summaryDigest: "bad-digest",
+            sourceTurn: 2,
+            leafEntryId: "leaf-b",
+            referenceContextDigest: null,
+            fromTokens: 500,
+            toTokens: 150,
+            origin: "extension_api",
+          },
+        },
+        {
+          id: "ev-revert-a",
+          sessionId,
+          type: "reasoning_revert",
+          timestamp: 4,
+          turn: 2,
+          payload: {
+            schema: "brewva.reasoning.revert.v1",
+            revertId: "revert-a",
+            revertSequence: 1,
+            toCheckpointId: "checkpoint-a",
+            fromCheckpointId: "checkpoint-a",
+            fromBranchId: `${sessionId}:reasoning-branch-0`,
+            newBranchId: `${sessionId}:reasoning-branch-1`,
+            newBranchSequence: 1,
+            trigger: "operator_request",
+            continuityPacket: {
+              schema: "brewva.reasoning.continuity.v1",
+              text: "Restore leaf A.",
+            },
+            targetLeafEntryId: "leaf-a",
+            createdAt: 4,
+          },
+        },
+      ],
+    });
+
+    const result = runRecoveryContextPipeline(kernel, { sessionId });
+
+    expect(result.baselineState.snapshot).toEqual(
+      expect.objectContaining({
+        compactId: "cmp-a",
+        leafEntryId: "leaf-a",
+      }),
+    );
+    expect(result.baselineState.degradedReason).toBeNull();
+  });
+
+  test("a newer checkpoint without a compact baseline advances the active leaf instead of reusing the older leaf baseline", () => {
+    const sessionId = asBrewvaSessionId("s-recovery-checkpoint-advances-active-leaf");
+    const summaryA = "[CompactSummary]\nLeaf A baseline.";
+    const kernel = createPipelineKernel({
+      events: [
+        {
+          id: "ev-checkpoint-a",
+          sessionId,
+          type: "reasoning_checkpoint",
+          timestamp: 1,
+          turn: 1,
+          payload: {
+            schema: "brewva.reasoning.checkpoint.v1",
+            checkpointId: "checkpoint-a",
+            checkpointSequence: 1,
+            branchId: `${sessionId}:reasoning-branch-0`,
+            branchSequence: 0,
+            boundary: "operator_marker",
+            leafEntryId: "leaf-a",
+            createdAt: 1,
+          },
+        },
+        {
+          id: "ev-compact-a",
+          sessionId,
+          type: "session_compact",
+          timestamp: 2,
+          turn: 1,
+          payload: {
+            compactId: "cmp-a",
+            sanitizedSummary: summaryA,
+            summaryDigest: sha256Hex(summaryA),
+            sourceTurn: 1,
+            leafEntryId: "leaf-a",
+            referenceContextDigest: null,
+            fromTokens: 400,
+            toTokens: 120,
+            origin: "extension_api",
+          },
+        },
+        {
+          id: "ev-checkpoint-b",
+          sessionId,
+          type: "reasoning_checkpoint",
+          timestamp: 3,
+          turn: 2,
+          payload: {
+            schema: "brewva.reasoning.checkpoint.v1",
+            checkpointId: "checkpoint-b",
+            checkpointSequence: 2,
+            branchId: `${sessionId}:reasoning-branch-0`,
+            branchSequence: 0,
+            parentCheckpointId: "checkpoint-a",
+            boundary: "verification_boundary",
+            leafEntryId: "leaf-b",
+            createdAt: 3,
+          },
+        },
+        {
+          id: "ev-input-2",
+          sessionId,
+          type: "turn_input_recorded",
+          timestamp: 4,
+          turn: 2,
+          payload: {
+            turnId: "turn-2",
+            trigger: "user",
+            promptText: "continue on branch b",
+          },
+        },
+        {
+          id: "ev-render-2",
+          sessionId,
+          type: "turn_render_committed",
+          timestamp: 5,
+          turn: 2,
+          payload: {
+            turnId: "turn-2",
+            attemptId: "attempt-2",
+            status: "completed",
+            assistantText: "branch b reply",
+            toolOutputs: [],
+          },
+        },
+      ],
+    });
+
+    const result = runRecoveryContextPipeline(kernel, {
+      sessionId,
+      maxBaselineTokens: 4000,
+    });
+
+    expect(result.baselineState.snapshot).toEqual(
+      expect.objectContaining({
+        rebuildSource: "exact_history",
+        leafEntryId: "leaf-b",
+      }),
+    );
+  });
+
+  test("a bad compact on a newer leaf invalidates the active baseline instead of inheriting the older leaf", () => {
+    const sessionId = asBrewvaSessionId("s-recovery-bad-compact-invalidates-active-leaf");
+    const summaryA = "[CompactSummary]\nLeaf A baseline.";
+    const kernel = createPipelineKernel({
+      events: [
+        {
+          id: "ev-compact-a",
+          sessionId,
+          type: "session_compact",
+          timestamp: 1,
+          turn: 1,
+          payload: {
+            compactId: "cmp-a",
+            sanitizedSummary: summaryA,
+            summaryDigest: sha256Hex(summaryA),
+            sourceTurn: 1,
+            leafEntryId: "leaf-a",
+            referenceContextDigest: null,
+            fromTokens: 400,
+            toTokens: 120,
+            origin: "extension_api",
+          },
+        },
+        {
+          id: "ev-compact-b-bad",
+          sessionId,
+          type: "session_compact",
+          timestamp: 2,
+          turn: 2,
+          payload: {
+            compactId: "cmp-b",
+            sanitizedSummary: "[CompactSummary]\nLeaf B broken baseline.",
+            summaryDigest: "bad-digest",
+            sourceTurn: 2,
+            leafEntryId: "leaf-b",
+            referenceContextDigest: null,
+            fromTokens: 500,
+            toTokens: 150,
+            origin: "extension_api",
+          },
+        },
+      ],
+    });
+
+    const result = runRecoveryContextPipeline(kernel, { sessionId });
+
+    expect(result.baselineState.snapshot).toBeUndefined();
+    expect(result.baselineState.degradedReason).toBe("summary_digest_mismatch");
+    expect(result.baselineState.postureMode).toBe("diagnostic_only");
+  });
+
+  test("revert to compact precedence lets a new compact replace the revert baseline on the active leaf", () => {
+    const sessionId = asBrewvaSessionId("s-recovery-revert-compact-precedence");
+    const summaryB = "[CompactSummary]\nNew branch compact baseline.";
+    const kernel = createPipelineKernel({
+      events: [
+        {
+          id: "ev-checkpoint-a",
+          sessionId,
+          type: "reasoning_checkpoint",
+          timestamp: 1,
+          turn: 1,
+          payload: {
+            schema: "brewva.reasoning.checkpoint.v1",
+            checkpointId: "checkpoint-a",
+            checkpointSequence: 1,
+            branchId: `${sessionId}:reasoning-branch-0`,
+            branchSequence: 0,
+            boundary: "operator_marker",
+            leafEntryId: "leaf-a",
+            createdAt: 1,
+          },
+        },
+        {
+          id: "ev-revert-a",
+          sessionId,
+          type: "reasoning_revert",
+          timestamp: 2,
+          turn: 2,
+          payload: {
+            schema: "brewva.reasoning.revert.v1",
+            revertId: "revert-a",
+            revertSequence: 1,
+            toCheckpointId: "checkpoint-a",
+            fromBranchId: `${sessionId}:reasoning-branch-0`,
+            newBranchId: `${sessionId}:reasoning-branch-1`,
+            newBranchSequence: 1,
+            trigger: "operator_request",
+            continuityPacket: {
+              schema: "brewva.reasoning.continuity.v1",
+              text: "Restore leaf A.",
+            },
+            targetLeafEntryId: "leaf-a",
+            createdAt: 2,
+          },
+        },
+        {
+          id: "ev-compact-b",
+          sessionId,
+          type: "session_compact",
+          timestamp: 3,
+          turn: 3,
+          payload: {
+            compactId: "cmp-b",
+            sanitizedSummary: summaryB,
+            summaryDigest: sha256Hex(summaryB),
+            sourceTurn: 3,
+            leafEntryId: "leaf-a",
+            referenceContextDigest: null,
+            fromTokens: 320,
+            toTokens: 90,
+            origin: "hosted_recovery",
+          },
+        },
+      ],
+    });
+
+    const result = runRecoveryContextPipeline(kernel, { sessionId });
+
+    expect(result.baselineState.snapshot).toEqual(
+      expect.objectContaining({
+        compactId: "cmp-b",
+        origin: "hosted_recovery",
+        leafEntryId: "leaf-a",
+      }),
+    );
+  });
+
+  test("ignores reasoning revert events that fail active-lineage validation", () => {
+    const sessionId = asBrewvaSessionId("s-recovery-ignore-invalid-revert");
+    const summaryA = "[CompactSummary]\nLeaf A baseline.";
+    const kernel = createPipelineKernel({
+      events: [
+        {
+          id: "ev-checkpoint-a",
+          sessionId,
+          type: "reasoning_checkpoint",
+          timestamp: 1,
+          turn: 1,
+          payload: {
+            schema: "brewva.reasoning.checkpoint.v1",
+            checkpointId: "checkpoint-a",
+            checkpointSequence: 1,
+            branchId: `${sessionId}:reasoning-branch-0`,
+            branchSequence: 0,
+            boundary: "operator_marker",
+            leafEntryId: "leaf-a",
+            createdAt: 1,
+          },
+        },
+        {
+          id: "ev-compact-a",
+          sessionId,
+          type: "session_compact",
+          timestamp: 2,
+          turn: 1,
+          payload: {
+            compactId: "cmp-a",
+            sanitizedSummary: summaryA,
+            summaryDigest: sha256Hex(summaryA),
+            sourceTurn: 1,
+            leafEntryId: "leaf-a",
+            referenceContextDigest: null,
+            fromTokens: 400,
+            toTokens: 120,
+            origin: "extension_api",
+          },
+        },
+        {
+          id: "ev-revert-invalid",
+          sessionId,
+          type: "reasoning_revert",
+          timestamp: 3,
+          turn: 2,
+          payload: {
+            schema: "brewva.reasoning.revert.v1",
+            revertId: "revert-invalid",
+            revertSequence: 1,
+            toCheckpointId: "checkpoint-a",
+            fromCheckpointId: "checkpoint-a",
+            fromBranchId: `${sessionId}:reasoning-branch-wrong`,
+            newBranchId: `${sessionId}:reasoning-branch-1`,
+            newBranchSequence: 1,
+            trigger: "operator_request",
+            continuityPacket: {
+              schema: "brewva.reasoning.continuity.v1",
+              text: "This invalid revert should be ignored.",
+            },
+            targetLeafEntryId: "leaf-z",
+            createdAt: 3,
+          },
+        },
+      ],
+    });
+
+    const result = runRecoveryContextPipeline(kernel, { sessionId });
+
+    expect(result.baselineState.snapshot).toEqual(
+      expect.objectContaining({
+        compactId: "cmp-a",
+        leafEntryId: "leaf-a",
+      }),
+    );
+  });
+
+  test("clears a stale baseline artifact when recovery falls back to exact history", () => {
+    const sessionId = asBrewvaSessionId("s-recovery-clear-stale-artifact");
+    const workspaceRoot = mkdtempSync(join(tmpdir(), "brewva-recovery-read-model-shared-"));
+    const sanitizedSummary = "[CompactSummary]\nArtifact baseline.";
+
+    const artifactKernel = createPipelineKernel({
+      workspaceRoot,
+      events: [
+        {
+          id: "ev-compact-artifact",
+          sessionId,
+          type: "session_compact",
+          timestamp: 1,
+          turn: 1,
+          payload: {
+            compactId: "cmp-artifact",
+            sanitizedSummary,
+            summaryDigest: sha256Hex(sanitizedSummary),
+            sourceTurn: 1,
+            leafEntryId: "leaf-artifact",
+            referenceContextDigest: null,
+            fromTokens: 300,
+            toTokens: 90,
+            origin: "extension_api",
+          },
+        },
+      ],
+    });
+    runRecoveryContextPipeline(artifactKernel, { sessionId });
+    expect(existsSync(getHistoryViewBaselineArtifactPath(workspaceRoot, sessionId))).toBeTrue();
+
+    const fallbackKernel = createPipelineKernel({
+      workspaceRoot,
+      events: [
+        {
+          id: "ev-input-1",
+          sessionId,
+          type: "turn_input_recorded",
+          timestamp: 2,
+          turn: 1,
+          payload: {
+            turnId: "turn-1",
+            trigger: "user",
+            promptText: "inspect current branch",
+          },
+        },
+        {
+          id: "ev-render-1",
+          sessionId,
+          type: "turn_render_committed",
+          timestamp: 3,
+          turn: 1,
+          payload: {
+            turnId: "turn-1",
+            attemptId: "attempt-1",
+            status: "completed",
+            assistantText: "branch snapshot",
+            toolOutputs: [],
+          },
+        },
+      ],
+    });
+
+    const result = runRecoveryContextPipeline(fallbackKernel, {
+      sessionId,
+      maxBaselineTokens: 4000,
+    });
+
+    expect(result.baselineState.snapshot).toEqual(
+      expect.objectContaining({
+        rebuildSource: "exact_history",
+      }),
+    );
+    expect(existsSync(getHistoryViewBaselineArtifactPath(workspaceRoot, sessionId))).toBeFalse();
   });
 });

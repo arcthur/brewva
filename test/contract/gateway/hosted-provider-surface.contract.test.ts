@@ -3,42 +3,49 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 describe("gateway contract: hosted provider surface", () => {
-  test("keeps provider-side semantic reranker deleted from hosted bootstrap", () => {
+  test("keeps provider-side semantic reranker deleted from hosted session assembly", () => {
     const repoRoot = resolve(import.meta.dirname, "../../..");
     const semanticRerankerPath = resolve(
       repoRoot,
       "packages",
       "brewva-gateway",
       "src",
-      "host",
+      "hosted",
+      "internal",
+      "session",
       "semantic-reranker.ts",
     );
-    const hostedBootstrapPath = resolve(
+    const hostedSessionAssemblyPath = resolve(
       repoRoot,
       "packages",
       "brewva-gateway",
       "src",
-      "host",
-      "hosted-session-bootstrap.ts",
+      "hosted",
+      "internal",
+      "session",
+      "init",
+      "session-assembly.ts",
     );
-    const hostedProviderDriverPath = resolve(
+    const hostedProviderClientPath = resolve(
       repoRoot,
       "packages",
       "brewva-gateway",
       "src",
-      "host",
-      "hosted-provider-driver.ts",
+      "hosted",
+      "internal",
+      "provider",
+      "completion-client.ts",
     );
 
-    const bootstrapSource = readFileSync(hostedBootstrapPath, "utf8");
-    const driverSource = readFileSync(hostedProviderDriverPath, "utf8");
+    const sessionAssemblySource = readFileSync(hostedSessionAssemblyPath, "utf8");
+    const factorySource = readFileSync(hostedProviderClientPath, "utf8");
 
     expect(existsSync(semanticRerankerPath)).toBe(false);
-    expect(bootstrapSource).not.toContain("semanticReranker");
-    expect(bootstrapSource).not.toContain("createHostedSemanticReranker");
-    expect(driverSource).toContain("createHostedProviderDriver");
-    expect(driverSource).toContain("completeSimple");
-    expect(driverSource).toContain("UnsupportedBrewvaProviderApiError");
-    expect(driverSource).not.toContain("@mariozechner/pi-ai");
+    expect(sessionAssemblySource).not.toContain("semanticReranker");
+    expect(sessionAssemblySource).not.toContain("createHostedSemanticReranker");
+    expect(factorySource).toContain("createHostedProviderCompletionClient");
+    expect(factorySource).toContain("completeSimple");
+    expect(factorySource).toContain("UnsupportedBrewvaProviderApiError");
+    expect(factorySource).not.toContain("@mariozechner/pi-ai");
   });
 });

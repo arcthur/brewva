@@ -8,18 +8,18 @@
 - Stable docs:
   - `docs/reference/tools.md`
   - `docs/reference/commands.md`
-  - `docs/reference/runtime-plugins.md`
+  - `docs/reference/extensions.md`
   - `docs/reference/skills.md`
   - `docs/reference/configuration.md`
   - `docs/reference/events/README.md`
   - `docs/guide/orchestration.md`
   - `docs/guide/cli.md`
 - Code anchors:
-  - `packages/brewva-gateway/src/subagents/model-routing.ts`
-  - `packages/brewva-gateway/src/subagents/catalog.ts`
-  - `packages/brewva-gateway/src/subagents/config-files.ts`
-  - `packages/brewva-gateway/src/session/task-stall-adjudication.ts`
-  - `packages/brewva-gateway/src/session/task-progress-watchdog.ts`
+  - `packages/brewva-gateway/src/delegation/model-routing.ts`
+  - `packages/brewva-gateway/src/delegation/catalog/registry.ts`
+  - `packages/brewva-gateway/src/delegation/config-files.ts`
+  - `packages/brewva-gateway/src/hosted/internal/thread-loop/watchdog/task-stall-adjudication.ts`
+  - `packages/brewva-gateway/src/hosted/internal/thread-loop/watchdog/task-progress-watchdog.ts`
   - `packages/brewva-gateway/src/operator-questions.ts`
   - `packages/brewva-gateway/src/agent-overlay-inspection.ts`
   - `packages/brewva-gateway/src/channels/command-router.ts`

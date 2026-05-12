@@ -11,7 +11,7 @@ import type {
   CliShellOverlayPayload,
   CliShellSessionBundle,
   CliShellUiPort,
-  ProviderConnection,
+  ProviderConnectionDescriptor,
   SessionViewPort,
 } from "../types.js";
 import {
@@ -44,7 +44,7 @@ export interface ShellModelSelectionFlowContext {
 }
 
 export interface ShellProviderAuthActions {
-  listProviderConnections(): Promise<ProviderConnection[]>;
+  listProviderConnections(): Promise<ProviderConnectionDescriptor[]>;
   buildProviderPickerPayload(input?: {
     query?: string;
     selectedProviderId?: string;

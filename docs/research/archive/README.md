@@ -46,6 +46,15 @@ runtime, product, and session contracts.
 - [`rfc-stateful-box-plane-and-boxlite-execution-runtime.md`](./rfc-stateful-box-plane-and-boxlite-execution-runtime.md)
 - [`rfc-valibot-streaming-parse-and-typebox-boundary.md`](./rfc-valibot-streaming-parse-and-typebox-boundary.md)
 
+## Gateway And Hosted-Lane Migrations
+
+These notes capture the destructive gateway refactors that narrowed public
+gateway seams and collapsed default hosted behavior into the current hosted
+lane.
+
+- [`gateway-host-first-refactor-and-control-plane-seam-hardening.md`](./gateway-host-first-refactor-and-control-plane-seam-hardening.md)
+- [`gateway-hosted-lane-consolidation-rfc.md`](./gateway-hosted-lane-consolidation-rfc.md)
+
 ## Reading Rule
 
 When an archived note conflicts with an accepted decision, stable docs, or

@@ -13,7 +13,7 @@
   - `docs/reference/tools/memory-and-recall.md`
   - `docs/reference/tools/delegation.md`
   - `docs/reference/tools/workflow-and-scheduling.md`
-  - `docs/reference/runtime-plugins.md`
+  - `docs/reference/extensions.md`
   - `skills/project/shared/package-boundaries.md`
   - `skills/project/shared/source-map.md`
 - Code anchors:
@@ -28,7 +28,7 @@
   - `packages/brewva-tools/src/families/delegation/api.ts`
   - `packages/brewva-tools/src/families/workflow/api.ts`
   - `packages/brewva-tools/package.json`
-  - `packages/brewva-gateway/src/model-routing/`
+  - `packages/brewva-gateway/src/policy/model-routing/`
   - `test/contract/tools/tools-entrypoint-surface.contract.test.ts`
   - `test/quality/tools-domain-slicing.quality.test.ts`
   - `test/quality/tools-large-adapter-boundary.quality.test.ts`
@@ -68,7 +68,7 @@
   `@brewva/brewva-tools/delegation`. Workflow tools may consume the shared
   implementation internally but must not expose a second public review surface.
 - Model routing policy is gateway-owned through
-  `@brewva/brewva-gateway/model-routing`; it is not a tools package concern.
+  `@brewva/brewva-gateway/policy/model-routing`; it is not a tools package concern.
 - The heavy navigation parsing/search dependency set remains package-level for
   this decision. Splitting navigation adapters into a separate package or
   optional/lazy dependency model requires a focused follow-up decision.

@@ -5,22 +5,22 @@ import {
   type BrewvaPromptContentPart,
 } from "@brewva/brewva-substrate/prompt";
 import type { BrewvaPromptSessionEvent } from "@brewva/brewva-substrate/session";
-import { registerProviderRequestRecovery } from "../../../packages/brewva-gateway/src/runtime-plugins/provider-request-recovery.js";
-import { COMPACTION_RECOVERY_TEST_ONLY } from "../../../packages/brewva-gateway/src/session/compaction-recovery.js";
-import { runHostedThreadLoop } from "../../../packages/brewva-gateway/src/session/hosted-thread-loop.js";
-import { getThreadLoopProfile } from "../../../packages/brewva-gateway/src/session/thread-loop-profiles.js";
+import { COMPACTION_RECOVERY_TEST_ONLY } from "../../../packages/brewva-gateway/src/hosted/internal/compaction/recovery.js";
+import { registerProviderRequestRecovery } from "../../../packages/brewva-gateway/src/hosted/internal/provider/request/provider-request-recovery.js";
+import { runHostedThreadLoop } from "../../../packages/brewva-gateway/src/hosted/internal/thread-loop/hosted-thread-loop.js";
+import { getThreadLoopProfile } from "../../../packages/brewva-gateway/src/hosted/internal/thread-loop/state.js";
+import { createMockExtensionApi, invokeHandler } from "../../helpers/extension.js";
 import {
   createPromptMessageEndEvent,
   createPromptMessageUpdateEvent,
   createTextDeltaAssistantEvent,
 } from "../../helpers/prompt-session-events.js";
-import { createMockRuntimePluginApi, invokeHandler } from "../../helpers/runtime-plugin.js";
 import { createRuntimeFixture } from "../../helpers/runtime.js";
 
 describe("output budget recovery chain", () => {
   test("retries the same prompt with output-budget escalation before bounded max-output follow-up recovery", async () => {
     const runtime = createRuntimeFixture();
-    const { api, handlers } = createMockRuntimePluginApi();
+    const { api, handlers } = createMockExtensionApi();
     registerProviderRequestRecovery(api, runtime);
 
     const sessionId = "unit-output-budget-recovery";

@@ -56,7 +56,7 @@ Managed tools are grouped by behavior rather than listed in this guide:
 - skill, subagent, worker-result, and task delegation
 - workflow, scheduling, leases, tape, and resource coordination
 
-Channel-specific A2A tools are registered by channel runtime plugins when
+Channel-specific A2A tools are registered by channel extensions when
 orchestration is enabled. They are not part of the default bundle.
 
 ## Skill And Delegation Model

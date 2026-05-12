@@ -9,7 +9,7 @@ import {
 import {
   buildContextEvidenceReport,
   type ContextEvidenceAggregateReport,
-} from "@brewva/brewva-gateway/runtime-plugins";
+} from "@brewva/brewva-gateway/hosted";
 import {
   BrewvaRuntime,
   createOperatorRuntimePort,
@@ -53,7 +53,7 @@ const INSPECT_PARSE_OPTIONS = {
 } as const;
 
 interface InspectBootstrapPayload {
-  managedToolMode?: "runtime_plugin" | "direct";
+  managedToolMode?: "hosted" | "direct";
   runtimeConfig?: {
     workspaceRoot?: string;
     configPath?: string | null;
@@ -185,7 +185,7 @@ interface InspectReport {
     unsupportedReason: string | null;
   };
   bootstrap: {
-    managedToolMode: "runtime_plugin" | "direct" | null;
+    managedToolMode: "hosted" | "direct" | null;
     workspaceRoot: string | null;
     configPath: string | null;
     eventsDir: string | null;
@@ -745,7 +745,7 @@ function buildInspectReport(
     lineage: buildLineageInspection(runtime, sessionId),
     bootstrap: {
       managedToolMode:
-        bootstrap?.managedToolMode === "runtime_plugin" || bootstrap?.managedToolMode === "direct"
+        bootstrap?.managedToolMode === "hosted" || bootstrap?.managedToolMode === "direct"
           ? bootstrap.managedToolMode
           : null,
       workspaceRoot:

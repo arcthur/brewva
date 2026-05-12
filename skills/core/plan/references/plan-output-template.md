@@ -59,7 +59,7 @@ planning artifacts.
       "reason": "Own completion validation, repair budgeting, and canonical output enforcement."
     },
     {
-      "target": "packages/brewva-gateway/src/runtime-plugins/tool-surface.ts",
+      "target": "packages/brewva-gateway/src/hosted/internal/session/tool-surface.ts",
       "kind": "runtime-plugin",
       "owner_boundary": "gateway tool visibility",
       "reason": "Apply repair posture restrictions and expose control-plane tools intentionally."

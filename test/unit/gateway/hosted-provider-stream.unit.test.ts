@@ -7,7 +7,7 @@ import {
   registerApiProvider,
   unregisterApiProviders,
 } from "@brewva/brewva-provider-core/registry";
-import { createHostedProviderStreamFunction } from "../../../packages/brewva-gateway/src/host/hosted-provider-stream.js";
+import { createHostedProviderStreamFunction } from "../../../packages/brewva-gateway/src/hosted/internal/provider/stream.js";
 import { createProviderEventStream } from "../../helpers/effect-stream.js";
 
 const SOURCE_ID = "hosted-provider-stream-unit-test";

@@ -1,6 +1,10 @@
 import process from "node:process";
 import { BrewvaEffect, runEdgeOperation } from "@brewva/brewva-effect";
-import { createProviderConnectionPort, runHostedPromptTurn } from "@brewva/brewva-gateway/host";
+import {
+  createProviderConnectionPort,
+  createProviderConnectionSeams,
+  runHostedPromptTurn,
+} from "@brewva/brewva-gateway/hosted";
 import type { BrewvaRuntime, SessionPromptSnapshot } from "@brewva/brewva-runtime";
 import type {
   BrewvaManagedPromptSession,
@@ -30,6 +34,8 @@ export interface CliInteractiveShellOptions {
 export interface CliInteractiveSessionOptions extends CliInteractiveShellOptions {
   runtime: BrewvaRuntime;
   providerConnections?: BrewvaSessionResult["providerConnections"];
+  initPhases: BrewvaSessionResult["initPhases"];
+  phase: BrewvaSessionResult["phase"];
   orchestration?: BrewvaSessionResult["orchestration"];
 }
 
@@ -79,6 +85,8 @@ function toCliShellSessionBundle(input: {
   session: BrewvaManagedPromptSession;
   runtime: BrewvaRuntime;
   providerConnections?: BrewvaSessionResult["providerConnections"];
+  initPhases: BrewvaSessionResult["initPhases"];
+  phase: BrewvaSessionResult["phase"];
   orchestration?: BrewvaSessionResult["orchestration"];
 }): CliShellSessionBundle {
   return {
@@ -88,11 +96,15 @@ function toCliShellSessionBundle(input: {
     providerConnections:
       input.providerConnections ??
       (input.session.modelRegistry
-        ? createProviderConnectionPort({
-            runtime: input.runtime,
-            modelRegistry: input.session.modelRegistry,
-          })
+        ? createProviderConnectionSeams(
+            createProviderConnectionPort({
+              runtime: input.runtime,
+              modelRegistry: input.session.modelRegistry,
+            }),
+          )
         : undefined),
+    initPhases: input.initPhases,
+    phase: input.phase,
     orchestration: input.orchestration,
   };
 }
@@ -206,6 +218,8 @@ export async function runCliInteractiveSessionOperation(
       session,
       runtime: options.runtime,
       providerConnections: options.providerConnections,
+      initPhases: options.initPhases,
+      phase: options.phase,
       orchestration: options.orchestration,
     }),
     {
@@ -226,6 +240,8 @@ export async function runCliInteractiveSessionOperation(
         options.onSessionChange?.({
           session: bundle.session,
           runtime: bundle.runtime,
+          initPhases: bundle.initPhases,
+          phase: bundle.phase,
           orchestration: bundle.orchestration,
         });
       },

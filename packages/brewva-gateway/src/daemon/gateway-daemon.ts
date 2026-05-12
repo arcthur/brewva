@@ -14,7 +14,6 @@ import {
 } from "@brewva/brewva-effect";
 import {
   BrewvaRuntime,
-  SESSION_WIRE_SCHEMA,
   type BrewvaScheduleSelfImproveConfig,
   type ContextStatusView,
   type SessionWireFrame,
@@ -37,13 +36,14 @@ import {
 import { createDeferred } from "@brewva/brewva-std/async";
 import { safeParseJson } from "@brewva/brewva-std/json";
 import { WebSocketServer, type RawData, type WebSocket } from "ws";
-import { loadOrCreateGatewayToken, rotateGatewayToken } from "../auth.js";
-import { assertLoopbackHost, normalizeGatewayHost } from "../network.js";
-import type { GatewayErrorShape } from "../protocol/index.js";
+import { loadOrCreateGatewayToken, rotateGatewayToken } from "../ingress/api.js";
+import { assertLoopbackHost, normalizeGatewayHost } from "../ingress/api.js";
+import { FileGatewayStateStore, type GatewayStateStore } from "../ingress/api.js";
 import {
   ErrorCodes,
   type ConnectParams,
   type GatewayEvent,
+  type GatewayErrorShape,
   type GatewayMethod,
   type RequestFrame,
   type ResponseFrame,
@@ -51,16 +51,32 @@ import {
   GatewayMethods,
   PROTOCOL_VERSION,
   gatewayError,
-} from "../protocol/index.js";
-import {
   validateParamsForMethod,
   validateRequestFrame,
-  validateSessionWireFramePayload,
-} from "../protocol/validate.js";
-import { FileGatewayStateStore, type GatewayStateStore } from "../state-store.js";
+} from "../protocol/api.js";
 import { toErrorMessage } from "../utils/errors.js";
 import { rawToText } from "../utils/ws.js";
 import { HeartbeatScheduler, type HeartbeatRule } from "./heartbeat-policy.js";
+import {
+  buildReplayControlFrame,
+  buildSessionStatusFrame,
+  findLastBufferedSessionStatusFrame,
+  getReplayBufferedEvents,
+  normalizeProjectedSessionWireFramePayload,
+  projectSessionWireFrame,
+  readBufferedSessionWireFrames,
+  rememberDeliveredReplayDurableFrame,
+  type ReplayBufferedEvent,
+  type ReplayDeliveredDurableFrameIdsBySession,
+  type ReplayStateBySession,
+} from "./internal/replay-buffer.js";
+import {
+  deriveSessionStatusSeedFromLifecycleSnapshot,
+  deriveSessionStatusSeedFromFrame,
+  deriveSessionStatusSeedFromHistory,
+  sameSessionStatusSeed,
+  type SessionStatusSeed,
+} from "./internal/session-wire-status.js";
 import { StructuredLogger } from "./logger.js";
 import { readPidRecord, removePidRecord, writePidRecord, type GatewayPidRecord } from "./pid.js";
 import { executeScheduleIntentRun } from "./schedule-runner.js";
@@ -70,14 +86,16 @@ import {
   type SessionBackend,
   type SessionWorkerInfo,
 } from "./session-backend.js";
-import { SessionSupervisor } from "./session-supervisor.js";
+import { SessionSupervisor } from "./session-supervisor/index.js";
 import {
-  deriveSessionStatusSeedFromLifecycleSnapshot,
-  deriveSessionStatusSeedFromFrame,
-  deriveSessionStatusSeedFromHistory,
-  sameSessionStatusSeed,
-  type SessionStatusSeed,
-} from "./session-wire-status.js";
+  createDaemonListeningEvent,
+  createDaemonSchedulerPausedEvent,
+  createDaemonSchedulerResumedEvent,
+  createDaemonStartingEvent,
+  createDaemonStoppedEvent,
+  createDaemonStoppingEvent,
+  type DaemonLifecycleEvent,
+} from "./types.js";
 
 const DEFAULT_PORT = 43111;
 const DEFAULT_TICK_INTERVAL_MS = 5_000;
@@ -100,17 +118,8 @@ interface ConnectionState {
   phase: ConnectionPhase;
   authenticatedToken?: string;
   subscribedSessions: Set<string>;
-  replayStateBySession: Map<
-    string,
-    {
-      bufferedEvents: Array<{
-        event: GatewayEvent;
-        payload?: unknown;
-        seq: number;
-      }>;
-    }
-  >;
-  replayDeliveredDurableFrameIdsBySession: Map<string, Set<string>>;
+  replayStateBySession: ReplayStateBySession;
+  replayDeliveredDurableFrameIdsBySession: ReplayDeliveredDurableFrameIdsBySession;
   connectedAt: number;
   lastSeenAt: number;
   client?: {
@@ -122,164 +131,6 @@ interface ConnectionState {
 
 interface SessionStatusSnapshot extends SessionStatusSeed {
   contextStatus?: ContextStatusView;
-}
-
-interface ReplayBufferedEvent {
-  event: GatewayEvent;
-  payload?: unknown;
-  seq: number;
-}
-
-function isDurableSessionWireFrame(value: unknown): value is SessionWireFrame {
-  const validated = validateSessionWireFramePayload(value);
-  return validated.ok && validated.frame.durability === "durable";
-}
-
-function normalizeProjectedSessionWireFramePayload(
-  payload: unknown,
-): { ok: true; sessionId: string; frame: SessionWireFrame } | { ok: false; error: string } {
-  if (payload && typeof payload === "object") {
-    const outer = payload as { sessionId?: unknown; frame?: unknown };
-    if (outer.frame && typeof outer.frame === "object") {
-      const rawFrame = outer.frame as SessionWireFrame;
-      const projectedSessionId =
-        typeof outer.sessionId === "string" && outer.sessionId.trim().length > 0
-          ? outer.sessionId.trim()
-          : rawFrame.sessionId;
-      const projectedFrame = projectSessionWireFrame(projectedSessionId, rawFrame);
-      const validated = validateSessionWireFramePayload(projectedFrame);
-      if (!validated.ok) {
-        return validated;
-      }
-      return {
-        ok: true,
-        sessionId: projectedSessionId,
-        frame: validated.frame,
-      };
-    }
-  }
-  const validated = validateSessionWireFramePayload(payload);
-  if (!validated.ok) {
-    return validated;
-  }
-  return {
-    ok: true,
-    sessionId: validated.frame.sessionId,
-    frame: validated.frame,
-  };
-}
-
-function rememberDeliveredReplayDurableFrame(
-  replayDeliveredDurableFrameIdsBySession: ConnectionState["replayDeliveredDurableFrameIdsBySession"],
-  sessionId: string,
-  payload: unknown,
-): boolean {
-  if (!isDurableSessionWireFrame(payload)) {
-    return true;
-  }
-  const tracker = replayDeliveredDurableFrameIdsBySession.get(sessionId);
-  if (!tracker) {
-    return true;
-  }
-  // Replay/live overlap dedupe must stay exact for the active replay window.
-  // The tracker is scoped to replay only and cleared immediately after flush.
-  if (tracker.has(payload.frameId)) {
-    return false;
-  }
-  tracker.add(payload.frameId);
-  return true;
-}
-
-function getReplayBufferedEvents(
-  replayStateBySession: ConnectionState["replayStateBySession"],
-  sessionId: string,
-): ReplayBufferedEvent[] {
-  return replayStateBySession.get(sessionId)?.bufferedEvents ?? [];
-}
-
-function readBufferedSessionWireFrames(
-  bufferedEvents: readonly ReplayBufferedEvent[],
-  sessionId: string,
-): SessionWireFrame[] {
-  const frames: SessionWireFrame[] = [];
-  for (const entry of bufferedEvents) {
-    if (entry.event !== "session.wire.frame") {
-      continue;
-    }
-    const validated = validateSessionWireFramePayload(entry.payload);
-    if (!validated.ok || validated.frame.sessionId !== sessionId) {
-      continue;
-    }
-    frames.push(validated.frame);
-  }
-  return frames;
-}
-
-function findLastBufferedSessionStatusFrame(
-  bufferedEvents: readonly ReplayBufferedEvent[],
-  sessionId: string,
-): Extract<SessionWireFrame, { type: "session.status" }> | null {
-  for (let index = bufferedEvents.length - 1; index >= 0; index -= 1) {
-    const entry = bufferedEvents[index];
-    if (!entry || entry.event !== "session.wire.frame") {
-      continue;
-    }
-    const validated = validateSessionWireFramePayload(entry.payload);
-    if (!validated.ok || validated.frame.sessionId !== sessionId) {
-      continue;
-    }
-    if (validated.frame.type === "session.status") {
-      return validated.frame;
-    }
-  }
-  return null;
-}
-
-function buildSessionStatusFrame(input: {
-  sessionId: string;
-  state: SessionWireStatusState;
-  reason?: string;
-  detail?: string;
-  contextStatus?: ContextStatusView;
-}): Extract<SessionWireFrame, { type: "session.status" }> {
-  return {
-    schema: SESSION_WIRE_SCHEMA,
-    sessionId: asBrewvaSessionId(input.sessionId),
-    frameId: `session.status:${input.sessionId}:${Date.now()}:${randomUUID()}`,
-    ts: Date.now(),
-    source: "live",
-    durability: "cache",
-    type: "session.status",
-    state: input.state,
-    reason: input.reason,
-    detail: input.detail,
-    contextStatus: input.contextStatus,
-  };
-}
-
-function projectSessionWireFrame(sessionId: string, frame: SessionWireFrame): SessionWireFrame {
-  if (frame.sessionId === sessionId) {
-    return frame;
-  }
-  return {
-    ...frame,
-    sessionId: asBrewvaSessionId(sessionId),
-  };
-}
-
-function buildReplayControlFrame(
-  sessionId: string,
-  type: Extract<SessionWireFrame["type"], "replay.begin" | "replay.complete">,
-): SessionWireFrame {
-  return {
-    schema: SESSION_WIRE_SCHEMA,
-    sessionId: asBrewvaSessionId(sessionId),
-    frameId: `${type}:${sessionId}:${Date.now()}:${randomUUID()}`,
-    ts: Date.now(),
-    source: "replay",
-    durability: "cache",
-    type,
-  };
 }
 
 function isGatewayErrorShape(value: unknown): value is GatewayErrorShape {
@@ -497,6 +348,7 @@ export class GatewayDaemon {
   private readonly sessionStatusBySession = new Map<string, SessionStatusSnapshot>();
   private readonly pendingSessionStatusBySession = new Map<string, SessionStatusSeed>();
   private readonly sessionStatusRevisionBySession = new Map<string, number>();
+  private lifecycleEvent: DaemonLifecycleEvent | null = null;
 
   private wss: WebSocketServer | null = null;
   private healthHttpServer: Server | null = null;
@@ -709,6 +561,7 @@ export class GatewayDaemon {
 
   async start(): Promise<void> {
     try {
+      this.lifecycleEvent = createDaemonStartingEvent(this.pidFilePath);
       const pidRecord: GatewayPidRecord = {
         pid: process.pid,
         host: this.host,
@@ -759,6 +612,7 @@ export class GatewayDaemon {
       if (address && typeof address === "object") {
         this.currentPort = address.port;
       }
+      this.lifecycleEvent = createDaemonListeningEvent(this.host, this.currentPort);
 
       if (this.configuredHealthHttpPort !== undefined) {
         const healthServer = createServer((request, response) => {
@@ -1010,6 +864,7 @@ export class GatewayDaemon {
       return;
     }
     this.stopping = true;
+    this.lifecycleEvent = createDaemonStoppingEvent(reason);
 
     this.logger.info("gateway daemon stopping", { reason });
     this.broadcastEvent("shutdown", {
@@ -1055,6 +910,7 @@ export class GatewayDaemon {
 
     this.uninstallSignalHandlers();
     this.removeOwnedPidRecordIfPresent();
+    this.lifecycleEvent = createDaemonStoppedEvent(reason);
     this.logger.info("gateway daemon stopped", { reason });
     this.stopDeferred.resolve(undefined);
   }
@@ -1748,6 +1604,9 @@ export class GatewayDaemon {
             : undefined,
       };
       this.scheduler.syncExecutionState();
+      this.lifecycleEvent = createDaemonSchedulerPausedEvent(
+        this.schedulerExecutionState.reason ?? "operator_request",
+      );
       return {
         paused: true,
         changed: true,
@@ -1804,6 +1663,7 @@ export class GatewayDaemon {
       paused: false,
     };
     this.scheduler.syncExecutionState();
+    this.lifecycleEvent = createDaemonSchedulerResumedEvent();
     return {
       paused: false,
       changed: true,

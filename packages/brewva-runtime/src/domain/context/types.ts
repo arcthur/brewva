@@ -211,7 +211,10 @@ export interface VisibleReadState {
 }
 
 export type SessionCompactionOrigin = "extension_api" | "auto_compaction" | "hosted_recovery";
-export type HistoryViewBaselineOrigin = SessionCompactionOrigin | "exact_history";
+export type HistoryViewBaselineOrigin =
+  | SessionCompactionOrigin
+  | "exact_history"
+  | "reasoning_revert";
 
 export interface SessionCompactionCommitInput {
   compactId: string;
@@ -219,6 +222,7 @@ export interface SessionCompactionCommitInput {
   summaryDigest: string;
   sourceTurn: number;
   leafEntryId: string | null;
+  firstKeptEntryId?: string | null;
   referenceContextDigest: string | null;
   fromTokens: number | null;
   toTokens: number | null;
@@ -277,7 +281,7 @@ export interface HistoryViewBaselineSnapshot {
   origin: HistoryViewBaselineOrigin;
   eventId: string;
   timestamp: number;
-  rebuildSource: "receipt" | "cache" | "exact_history";
+  rebuildSource: "artifact" | "receipt" | "cache" | "exact_history";
   diagnostics: string[];
 }
 

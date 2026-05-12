@@ -14,7 +14,8 @@ import {
   runCliInteractiveSession,
   runCliPrintSession,
 } from "../../../packages/brewva-cli/src/cli-runtime.js";
-import type { ProviderConnectionPort } from "../../../packages/brewva-gateway/src/host/provider-connection.js";
+import type { ProviderConnectionSeams } from "../../../packages/brewva-gateway/src/hosted/api.js";
+import type { HostedSessionPhase } from "../../../packages/brewva-gateway/src/hosted/internal/session/session-phase/api.js";
 import {
   createPromptMessageEndEvent,
   createPromptMessageUpdateEvent,
@@ -174,41 +175,76 @@ describe("cli runtime interactive mode", () => {
       },
     } as Pick<BrewvaManagedPromptSession, "getRegisteredTools">;
     const providerConnections = {
-      async listProviders() {
-        return [];
+      credential: {
+        async listProviders() {
+          return [];
+        },
+        async connectApiKey() {},
+        async disconnect() {},
+        async refresh() {},
       },
-      listAuthMethods() {
-        return [
-          {
-            id: "chatgpt_browser",
-            kind: "oauth",
-            type: "oauth",
-            label: "ChatGPT Pro/Plus (browser)",
-          },
-          {
-            id: "chatgpt_headless",
-            kind: "oauth",
-            type: "oauth",
-            label: "ChatGPT Pro/Plus (headless)",
-          },
-          {
-            id: "api_key",
-            kind: "api_key",
-            type: "api",
-            label: "Manually enter API Key",
-            credentialRef: "vault://openai/apiKey",
-          },
-        ];
+      authFlow: {
+        listAuthMethods() {
+          return [
+            {
+              id: "chatgpt_browser",
+              kind: "oauth",
+              type: "oauth",
+              label: "ChatGPT Pro/Plus (browser)",
+            },
+            {
+              id: "chatgpt_headless",
+              kind: "oauth",
+              type: "oauth",
+              label: "ChatGPT Pro/Plus (headless)",
+            },
+            {
+              id: "api_key",
+              kind: "api_key",
+              type: "api",
+              label: "Manually enter API Key",
+              credentialRef: "vault://openai/apiKey",
+            },
+          ];
+        },
+        async authorizeOAuth() {
+          return undefined;
+        },
+        async completeOAuth() {},
       },
-      async connectApiKey() {},
-      async authorizeOAuth() {
-        return undefined;
+      catalog: {
+        async listProviders() {
+          return [];
+        },
       },
-      async completeOAuth() {},
-      async disconnect() {},
-      async refresh() {},
-    } satisfies ProviderConnectionPort;
-    let initialProviderConnections: ProviderConnectionPort | undefined;
+      renderer: {
+        listAuthMethods() {
+          return [
+            {
+              id: "chatgpt_browser",
+              kind: "oauth",
+              type: "oauth",
+              label: "ChatGPT Pro/Plus (browser)",
+            },
+            {
+              id: "chatgpt_headless",
+              kind: "oauth",
+              type: "oauth",
+              label: "ChatGPT Pro/Plus (headless)",
+            },
+            {
+              id: "api_key",
+              kind: "api_key",
+              type: "api",
+              label: "Manually enter API Key",
+              credentialRef: "vault://openai/apiKey",
+            },
+          ];
+        },
+      },
+    } satisfies ProviderConnectionSeams;
+    const phase: HostedSessionPhase = { kind: "init" };
+    let initialProviderConnections: ProviderConnectionSeams | undefined;
 
     await runCliInteractiveSession(
       session as BrewvaManagedPromptSession,
@@ -221,6 +257,8 @@ describe("cli runtime interactive mode", () => {
             session: session as BrewvaManagedPromptSession,
             runtime,
             providerConnections,
+            initPhases: [phase],
+            phase,
           };
         },
         async createSession() {
@@ -228,8 +266,12 @@ describe("cli runtime interactive mode", () => {
             session: session as BrewvaManagedPromptSession,
             runtime,
             providerConnections,
+            initPhases: [phase],
+            phase,
           };
         },
+        initPhases: [phase],
+        phase,
       },
       async (bundle) => {
         initialProviderConnections = bundle.providerConnections;
@@ -238,7 +280,7 @@ describe("cli runtime interactive mode", () => {
 
     expect(initialProviderConnections).toBe(providerConnections);
     expect(
-      initialProviderConnections?.listAuthMethods("openai").map((method) => method.label),
+      initialProviderConnections?.renderer.listAuthMethods("openai").map((method) => method.label),
     ).toEqual([
       "ChatGPT Pro/Plus (browser)",
       "ChatGPT Pro/Plus (headless)",

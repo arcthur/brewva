@@ -12,7 +12,6 @@ import {
   type CreateBrewvaHostPluginRunnerOptions,
   defineInternalHostPlugin,
   type BrewvaToolUiPort,
-  type RuntimePluginCapability,
 } from "@brewva/brewva-substrate/host-api";
 import type { BrewvaPromptContentPart } from "@brewva/brewva-substrate/prompt";
 import {
@@ -32,15 +31,15 @@ import type { BrewvaToolContext } from "@brewva/brewva-substrate/tools";
 import {
   createHostedLlmCompactionSummaryGenerator,
   type BrewvaCompactionSummaryGenerator,
-} from "../../../packages/brewva-gateway/src/host/compaction-summary-generator.js";
-import type { HostedSessionLogger } from "../../../packages/brewva-gateway/src/host/logger.js";
+} from "../../../packages/brewva-gateway/src/hosted/internal/compaction/summary-generator.js";
+import { createHostedBehaviorHostAdapter } from "../../../packages/brewva-gateway/src/hosted/internal/session/host-api-installation.js";
 import {
   MANAGED_AGENT_SESSION_TEST_ONLY,
   createBrewvaManagedAgentSession,
-} from "../../../packages/brewva-gateway/src/host/managed-agent-session.js";
-import { runHostedPromptTurn } from "../../../packages/brewva-gateway/src/host/run-hosted-prompt-turn.js";
-import { HostedRuntimeTapeSessionStore } from "../../../packages/brewva-gateway/src/host/runtime-projection-session-store.js";
-import { createHostedTurnPipeline } from "../../../packages/brewva-gateway/src/runtime-plugins/index.js";
+} from "../../../packages/brewva-gateway/src/hosted/internal/session/managed-agent/session.js";
+import { HostedRuntimeTapeSessionStore } from "../../../packages/brewva-gateway/src/hosted/internal/session/projection/runtime-projection-session-store.js";
+import type { HostedSessionLogger } from "../../../packages/brewva-gateway/src/hosted/internal/shared/logger.js";
+import { runHostedPromptTurn } from "../../../packages/brewva-gateway/src/hosted/internal/thread-loop/run-hosted-prompt-turn.js";
 import {
   fauxAssistantMessage,
   registerFauxProvider,
@@ -49,7 +48,8 @@ import { createProviderEventStream } from "../../helpers/effect-stream.js";
 import { createToolcallDeltaAssistantEvent } from "../../helpers/prompt-session-events.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
-type TestRuntimePlugin = NonNullable<CreateBrewvaHostPluginRunnerOptions["plugins"]>[number];
+type TestHostPlugin = NonNullable<CreateBrewvaHostPluginRunnerOptions["plugins"]>[number];
+type TestHostPluginCapability = TestHostPlugin["capabilities"][number];
 
 function createDeferred<T = void>(): {
   promise: Promise<T>;
@@ -70,11 +70,11 @@ async function flushMicrotasks(): Promise<void> {
   await Promise.resolve();
 }
 
-function testRuntimePlugin(
+function testHostPlugin(
   name: string,
-  capabilities: readonly RuntimePluginCapability[],
-  register: TestRuntimePlugin["register"],
-): TestRuntimePlugin {
+  capabilities: readonly TestHostPluginCapability[],
+  register: TestHostPlugin["register"],
+): TestHostPlugin {
   return defineInternalHostPlugin({
     name,
     capabilities,
@@ -223,7 +223,7 @@ async function createManagedSessionFixture(
 ) {
   const workspace = createTestWorkspace(testName);
   const runtime = new BrewvaRuntime({ cwd: workspace });
-  const sessionStore = new HostedRuntimeTapeSessionStore(runtime, workspace, `${testName}-session`);
+  const sessionStore = new HostedRuntimeTapeSessionStore(runtime, `${testName}-session`);
   sessionStore.appendModelChange(TEST_MODEL.provider, TEST_MODEL.id);
   sessionStore.appendThinkingLevelChange("high");
 
@@ -254,7 +254,7 @@ async function createManagedSessionFixture(
     modelCatalog,
     resourceLoader: await createResourceLoader(workspace),
     customTools: [],
-    runtimePlugins: [createHostedTurnPipeline({ runtime, registerTools: false })],
+    extensions: [createHostedBehaviorHostAdapter({ runtime, registerTools: false })],
     initialModel: TEST_MODEL,
     initialThinkingLevel: "high" as BrewvaPromptThinkingLevel,
     logger: options?.logger,
@@ -346,7 +346,7 @@ describe("managed agent session compaction", () => {
       | undefined;
     const generator = createHostedLlmCompactionSummaryGenerator({
       resolveAuth: async () => ({ ok: true, apiKey: "test-key" }),
-      completeDriver: {
+      completionClient: {
         async complete(input) {
           capturedRequest = {
             systemPrompt: input.systemPrompt,
@@ -410,7 +410,7 @@ describe("managed agent session compaction", () => {
   test("default LLM compaction strips invented dropped digests", async () => {
     const generator = createHostedLlmCompactionSummaryGenerator({
       resolveAuth: async () => ({ ok: true, apiKey: "test-key" }),
-      completeDriver: {
+      completionClient: {
         async complete(input) {
           const allowedDigest = /digest=([a-f0-9]{16})/u.exec(input.userText)?.[1] ?? "missing";
           return {
@@ -455,7 +455,7 @@ describe("managed agent session compaction", () => {
     const anchoredDigest = "0123456789abcdef";
     const generator = createHostedLlmCompactionSummaryGenerator({
       resolveAuth: async () => ({ ok: true, apiKey: "test-key" }),
-      completeDriver: {
+      completionClient: {
         async complete() {
           return {
             content: [
@@ -513,7 +513,7 @@ describe("managed agent session compaction", () => {
       | undefined;
     const generator = createHostedLlmCompactionSummaryGenerator({
       resolveAuth: async () => ({ ok: true, apiKey: "test-key" }),
-      completeDriver: {
+      completionClient: {
         async complete(input) {
           capturedRequest = {
             systemPrompt: input.systemPrompt,
@@ -569,7 +569,7 @@ describe("managed agent session compaction", () => {
       | undefined;
     const generator = createHostedLlmCompactionSummaryGenerator({
       resolveAuth: async () => ({ ok: true, apiKey: "test-key" }),
-      completeDriver: {
+      completionClient: {
         async complete(input) {
           captured = { maxOutputTokens: input.maxOutputTokens };
           return {
@@ -615,7 +615,7 @@ describe("managed agent session compaction", () => {
       | undefined;
     const generator = createHostedLlmCompactionSummaryGenerator({
       resolveAuth: async () => ({ ok: true, apiKey: "test-key" }),
-      completeDriver: {
+      completionClient: {
         async complete(input) {
           captured = { maxOutputTokens: input.maxOutputTokens };
           return {
@@ -660,7 +660,7 @@ describe("managed agent session compaction", () => {
       | undefined;
     const generator = createHostedLlmCompactionSummaryGenerator({
       resolveAuth: async () => ({ ok: true, apiKey: "test-key" }),
-      completeDriver: {
+      completionClient: {
         async complete(input) {
           captured = { maxOutputTokens: input.maxOutputTokens };
           return {
@@ -706,7 +706,7 @@ describe("managed agent session compaction", () => {
       | undefined;
     const generator = createHostedLlmCompactionSummaryGenerator({
       resolveAuth: async () => ({ ok: true, apiKey: "test-key" }),
-      completeDriver: {
+      completionClient: {
         async complete(input) {
           capturedRequest = { userText: input.userText };
           return {
@@ -753,7 +753,7 @@ describe("managed agent session compaction", () => {
       | undefined;
     const generator = createHostedLlmCompactionSummaryGenerator({
       resolveAuth: async () => ({ ok: true, apiKey: "test-key" }),
-      completeDriver: {
+      completionClient: {
         async complete(input) {
           capturedRequest = { userText: input.userText };
           return {
@@ -807,7 +807,7 @@ describe("managed agent session compaction", () => {
       | undefined;
     const generator = createHostedLlmCompactionSummaryGenerator({
       resolveAuth: async () => ({ ok: true, apiKey: "test-key" }),
-      completeDriver: {
+      completionClient: {
         async complete(input) {
           capturedRequest = { userText: input.userText };
           return {
@@ -1160,7 +1160,6 @@ describe("managed agent session compaction", () => {
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionStore = new HostedRuntimeTapeSessionStore(
       runtime,
-      workspace,
       "managed-agent-session-default-llm-compaction-session",
     );
     const fauxProvider = registerFauxProvider({
@@ -1215,7 +1214,7 @@ describe("managed agent session compaction", () => {
         modelCatalog,
         resourceLoader: await createResourceLoader(workspace),
         customTools: [],
-        runtimePlugins: [createHostedTurnPipeline({ runtime, registerTools: false })],
+        extensions: [createHostedBehaviorHostAdapter({ runtime, registerTools: false })],
         initialModel: replayModel,
         initialThinkingLevel: "off",
       });
@@ -1687,7 +1686,6 @@ describe("managed agent session compaction", () => {
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionStore = new HostedRuntimeTapeSessionStore(
       runtime,
-      workspace,
       "managed-agent-session-provider-cache-clear-session",
     );
     const fauxProvider = registerFauxProvider({
@@ -1727,7 +1725,7 @@ describe("managed agent session compaction", () => {
         modelCatalog,
         resourceLoader: await createResourceLoader(workspace),
         customTools: [],
-        runtimePlugins: [createHostedTurnPipeline({ runtime, registerTools: false })],
+        extensions: [createHostedBehaviorHostAdapter({ runtime, registerTools: false })],
         initialModel: model,
         initialThinkingLevel: "off",
       });
@@ -1780,7 +1778,6 @@ describe("managed agent session compaction", () => {
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionStore = new HostedRuntimeTapeSessionStore(
       runtime,
-      workspace,
       "managed-agent-session-model-switch-awaits-clear-session",
     );
     const nextModel: BrewvaRegisteredModel = {
@@ -1826,7 +1823,7 @@ describe("managed agent session compaction", () => {
       modelCatalog,
       resourceLoader: await createResourceLoader(workspace),
       customTools: [],
-      runtimePlugins: [createHostedTurnPipeline({ runtime, registerTools: false })],
+      extensions: [createHostedBehaviorHostAdapter({ runtime, registerTools: false })],
       initialModel: TEST_MODEL,
       initialThinkingLevel: "high",
     });
@@ -1912,7 +1909,6 @@ describe("managed agent session compaction", () => {
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionStore = new HostedRuntimeTapeSessionStore(
       runtime,
-      workspace,
       "managed-agent-session-replay-session",
     );
     const fauxProvider = registerFauxProvider({
@@ -1932,7 +1928,7 @@ describe("managed agent session compaction", () => {
     });
     const replayModel = fauxProvider.getModel();
     const observedContexts: Array<Array<{ role?: unknown; content?: unknown }>> = [];
-    const captureContextPlugin = testRuntimePlugin(
+    const captureContextPlugin = testHostPlugin(
       "capture-replay-context",
       ["context_messages.write"],
       (api) => {
@@ -2014,9 +2010,9 @@ describe("managed agent session compaction", () => {
         modelCatalog,
         resourceLoader: await createResourceLoader(workspace),
         customTools: [],
-        runtimePlugins: [
+        extensions: [
           captureContextPlugin,
-          createHostedTurnPipeline({ runtime, registerTools: false }),
+          createHostedBehaviorHostAdapter({ runtime, registerTools: false }),
         ],
         initialModel: replayModel,
         initialThinkingLevel: "off",
@@ -2084,7 +2080,6 @@ describe("managed agent session compaction", () => {
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionStore = new HostedRuntimeTapeSessionStore(
       runtime,
-      workspace,
       "managed-agent-session-file-parts-session",
     );
     const fauxProvider = registerFauxProvider({
@@ -2104,7 +2099,7 @@ describe("managed agent session compaction", () => {
     });
     const replayModel = fauxProvider.getModel();
     const observedContexts: Array<Array<{ role?: unknown; content?: unknown }>> = [];
-    const captureContextPlugin = testRuntimePlugin(
+    const captureContextPlugin = testHostPlugin(
       "capture-file-parts-context",
       ["context_messages.write"],
       (api) => {
@@ -2160,9 +2155,9 @@ describe("managed agent session compaction", () => {
         modelCatalog,
         resourceLoader: await createResourceLoader(workspace),
         customTools: [],
-        runtimePlugins: [
+        extensions: [
           captureContextPlugin,
-          createHostedTurnPipeline({ runtime, registerTools: false }),
+          createHostedBehaviorHostAdapter({ runtime, registerTools: false }),
         ],
         initialModel: replayModel,
         initialThinkingLevel: "off",
@@ -2217,7 +2212,6 @@ describe("managed agent session compaction", () => {
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionStore = new HostedRuntimeTapeSessionStore(
       runtime,
-      workspace,
       "managed-agent-session-history-phase-session",
     );
     sessionStore.appendModelChange(TEST_MODEL.provider, TEST_MODEL.id);
@@ -2254,7 +2248,7 @@ describe("managed agent session compaction", () => {
     };
 
     const observedPhases: string[] = [];
-    const plugin = testRuntimePlugin("observe-session-phase", [], (api) => {
+    const plugin = testHostPlugin("observe-session-phase", [], (api) => {
       api.on("session_phase_change", (event) => {
         observedPhases.push(event.phase.kind);
       });
@@ -2286,7 +2280,7 @@ describe("managed agent session compaction", () => {
       modelCatalog,
       resourceLoader: await createResourceLoader(workspace),
       customTools: [],
-      runtimePlugins: [plugin, createHostedTurnPipeline({ runtime, registerTools: false })],
+      extensions: [plugin, createHostedBehaviorHostAdapter({ runtime, registerTools: false })],
       initialModel: TEST_MODEL,
       initialThinkingLevel: "high",
     });
@@ -2328,7 +2322,6 @@ describe("managed agent session compaction", () => {
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionStore = new HostedRuntimeTapeSessionStore(
       runtime,
-      workspace,
       "managed-agent-session-history-phase-warning-session",
     );
     sessionStore.appendModelChange(TEST_MODEL.provider, TEST_MODEL.id);
@@ -2390,7 +2383,7 @@ describe("managed agent session compaction", () => {
       modelCatalog,
       resourceLoader: await createResourceLoader(workspace),
       customTools: [],
-      runtimePlugins: [createHostedTurnPipeline({ runtime, registerTools: false })],
+      extensions: [createHostedBehaviorHostAdapter({ runtime, registerTools: false })],
       initialModel: TEST_MODEL,
       initialThinkingLevel: "high",
     });
@@ -2408,7 +2401,6 @@ describe("managed agent session compaction", () => {
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionStore = new HostedRuntimeTapeSessionStore(
       runtime,
-      workspace,
       "managed-agent-session-history-tool-phase-session",
     );
     sessionStore.appendModelChange(TEST_MODEL.provider, TEST_MODEL.id);
@@ -2470,7 +2462,7 @@ describe("managed agent session compaction", () => {
       modelCatalog,
       resourceLoader: await createResourceLoader(workspace),
       customTools: [],
-      runtimePlugins: [createHostedTurnPipeline({ runtime, registerTools: false })],
+      extensions: [createHostedBehaviorHostAdapter({ runtime, registerTools: false })],
       initialModel: TEST_MODEL,
       initialThinkingLevel: "high",
     });
@@ -2503,7 +2495,6 @@ describe("managed agent session compaction", () => {
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionStore = new HostedRuntimeTapeSessionStore(
       runtime,
-      workspace,
       "managed-agent-session-history-recovery-phase-session",
     );
     sessionStore.appendModelChange(TEST_MODEL.provider, TEST_MODEL.id);
@@ -2571,7 +2562,7 @@ describe("managed agent session compaction", () => {
       modelCatalog,
       resourceLoader: await createResourceLoader(workspace),
       customTools: [],
-      runtimePlugins: [createHostedTurnPipeline({ runtime, registerTools: false })],
+      extensions: [createHostedBehaviorHostAdapter({ runtime, registerTools: false })],
       initialModel: TEST_MODEL,
       initialThinkingLevel: "high",
     });
@@ -2604,7 +2595,6 @@ describe("managed agent session compaction", () => {
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionStore = new HostedRuntimeTapeSessionStore(
       runtime,
-      workspace,
       "managed-agent-session-history-recovery-warning-session",
     );
     sessionStore.appendModelChange(TEST_MODEL.provider, TEST_MODEL.id);
@@ -2672,7 +2662,7 @@ describe("managed agent session compaction", () => {
       modelCatalog,
       resourceLoader: await createResourceLoader(workspace),
       customTools: [],
-      runtimePlugins: [createHostedTurnPipeline({ runtime, registerTools: false })],
+      extensions: [createHostedBehaviorHostAdapter({ runtime, registerTools: false })],
       initialModel: TEST_MODEL,
       initialThinkingLevel: "high",
     });
@@ -2747,14 +2737,13 @@ describe("managed agent session compaction", () => {
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionStore = new HostedRuntimeTapeSessionStore(
       runtime,
-      workspace,
       "managed-agent-session-custom-message-hooks-session",
     );
     sessionStore.appendModelChange(TEST_MODEL.provider, TEST_MODEL.id);
     sessionStore.appendThinkingLevelChange("high");
 
     const observedEvents: string[] = [];
-    const plugin = testRuntimePlugin("observe-custom-message-hooks", [], (api) => {
+    const plugin = testHostPlugin("observe-custom-message-hooks", [], (api) => {
       api.on("message_start", () => {
         observedEvents.push("message_start");
       });
@@ -2789,7 +2778,7 @@ describe("managed agent session compaction", () => {
       modelCatalog,
       resourceLoader: await createResourceLoader(workspace),
       customTools: [],
-      runtimePlugins: [plugin, createHostedTurnPipeline({ runtime, registerTools: false })],
+      extensions: [plugin, createHostedBehaviorHostAdapter({ runtime, registerTools: false })],
       initialModel: TEST_MODEL,
       initialThinkingLevel: "high",
     });
@@ -2835,7 +2824,6 @@ describe("managed agent session compaction", () => {
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionStore = new HostedRuntimeTapeSessionStore(
       runtime,
-      workspace,
       "managed-agent-session-missing-persistence-plugins-session",
     );
     sessionStore.appendModelChange(TEST_MODEL.provider, TEST_MODEL.id);
@@ -2868,7 +2856,7 @@ describe("managed agent session compaction", () => {
         modelCatalog,
         resourceLoader: await createResourceLoader(workspace),
         customTools: [],
-        runtimePlugins: [],
+        extensions: [],
         initialModel: TEST_MODEL,
         initialThinkingLevel: "high",
       }),
@@ -2885,7 +2873,7 @@ describe("managed agent session compaction", () => {
       thinkingLevel: string;
       previousThinkingLevel?: string;
     }> = [];
-    const plugin = testRuntimePlugin("observe-thinking-level", [], (api) => {
+    const plugin = testHostPlugin("observe-thinking-level", [], (api) => {
       api.on("thinking_level_select", (event) => {
         observedThinkingLevels.push({
           thinkingLevel: event.thinkingLevel,
@@ -2922,7 +2910,7 @@ describe("managed agent session compaction", () => {
       modelCatalog,
       resourceLoader: await createResourceLoader(workspace),
       customTools: [],
-      runtimePlugins: [plugin, createHostedTurnPipeline({ runtime, registerTools: false })],
+      extensions: [plugin, createHostedBehaviorHostAdapter({ runtime, registerTools: false })],
       initialModel: TEST_MODEL,
       initialThinkingLevel: "high",
     });
@@ -2960,7 +2948,6 @@ describe("managed agent session compaction", () => {
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionStore = new HostedRuntimeTapeSessionStore(
       runtime,
-      workspace,
       "managed-agent-session-compaction-post-commit-failure-session",
     );
 
@@ -3003,7 +2990,7 @@ describe("managed agent session compaction", () => {
       const observedContexts: Array<
         Array<{ role?: unknown; summary?: unknown; content?: unknown }>
       > = [];
-      const captureContextPlugin = testRuntimePlugin(
+      const captureContextPlugin = testHostPlugin(
         "capture-compaction-context",
         ["context_messages.write"],
         (api) => {
@@ -3019,7 +3006,7 @@ describe("managed agent session compaction", () => {
           });
         },
       );
-      const throwingPlugin = testRuntimePlugin("throw-after-compaction-commit", [], (api) => {
+      const throwingPlugin = testHostPlugin("throw-after-compaction-commit", [], (api) => {
         api.on("session_compact", () => {
           throw new Error("post-commit plugin failure");
         });
@@ -3064,9 +3051,9 @@ describe("managed agent session compaction", () => {
         modelCatalog,
         resourceLoader: await createResourceLoader(workspace),
         customTools: [],
-        runtimePlugins: [
+        extensions: [
           captureContextPlugin,
-          createHostedTurnPipeline({ runtime, registerTools: false }),
+          createHostedBehaviorHostAdapter({ runtime, registerTools: false }),
           throwingPlugin,
         ],
         initialModel: replayModel,
@@ -3120,7 +3107,6 @@ describe("managed agent session compaction", () => {
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionStore = new HostedRuntimeTapeSessionStore(
       runtime,
-      workspace,
       "managed-agent-session-context-state-session",
     );
 
@@ -3194,7 +3180,7 @@ describe("managed agent session compaction", () => {
       modelCatalog,
       resourceLoader: await createResourceLoader(workspace),
       customTools: [],
-      runtimePlugins: [createHostedTurnPipeline({ runtime, registerTools: false })],
+      extensions: [createHostedBehaviorHostAdapter({ runtime, registerTools: false })],
       initialModel: TEST_MODEL,
       initialThinkingLevel: "high",
     });
@@ -3251,12 +3237,11 @@ describe("managed agent session compaction", () => {
     }
   });
 
-  test("forwards tool and session state changes through host runtime plugins", async () => {
+  test("forwards tool and session state changes through host extensions", async () => {
     const workspace = createTestWorkspace("managed-agent-session-plugin-state-events");
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionStore = new HostedRuntimeTapeSessionStore(
       runtime,
-      workspace,
       "managed-agent-session-plugin-state-events-session",
     );
     sessionStore.appendModelChange(TEST_MODEL.provider, TEST_MODEL.id);
@@ -3265,7 +3250,7 @@ describe("managed agent session compaction", () => {
     const observedPhases: string[] = [];
     const observedSessionPhases: string[] = [];
     const observedContextStates: ContextState[] = [];
-    const plugin = testRuntimePlugin("observe-session-state-events", [], (api) => {
+    const plugin = testHostPlugin("observe-session-state-events", [], (api) => {
       api.on("tool_execution_phase_change", (event) => {
         observedPhases.push(event.phase);
       });
@@ -3303,7 +3288,7 @@ describe("managed agent session compaction", () => {
       modelCatalog,
       resourceLoader: await createResourceLoader(workspace),
       customTools: [],
-      runtimePlugins: [plugin, createHostedTurnPipeline({ runtime, registerTools: false })],
+      extensions: [plugin, createHostedBehaviorHostAdapter({ runtime, registerTools: false })],
       initialModel: TEST_MODEL,
       initialThinkingLevel: "high",
     });
@@ -3417,13 +3402,12 @@ describe("managed agent session compaction", () => {
     }
   });
 
-  test("runtime plugin tool registration after session initialization reaches the provider turn", async () => {
+  test("host extension tool registration after session initialization reaches the provider turn", async () => {
     const workspace = createTestWorkspace("managed-agent-session-dynamic-tool-registration");
     writeRoutableSkill(workspace);
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionStore = new HostedRuntimeTapeSessionStore(
       runtime,
-      workspace,
       "managed-agent-session-dynamic-tool-registration-session",
     );
     const fauxProvider = registerFauxProvider({
@@ -3489,7 +3473,7 @@ describe("managed agent session compaction", () => {
         modelCatalog,
         resourceLoader: await createResourceLoader(workspace),
         customTools: [],
-        runtimePlugins: [createHostedTurnPipeline({ runtime, registerTools: true })],
+        extensions: [createHostedBehaviorHostAdapter({ runtime, registerTools: true })],
         initialModel: model,
         initialThinkingLevel: "off",
       });
@@ -3525,11 +3509,7 @@ describe("managed agent session compaction", () => {
     try {
       const workspace = createTestWorkspace("managed-session-queue");
       const runtime = new BrewvaRuntime({ cwd: workspace });
-      const sessionStore = new HostedRuntimeTapeSessionStore(
-        runtime,
-        workspace,
-        "managed-session-queue",
-      );
+      const sessionStore = new HostedRuntimeTapeSessionStore(runtime, "managed-session-queue");
       const modelCatalog = createInMemoryModelCatalog();
       const model: BrewvaRegisteredModel = {
         provider: "faux-queue",
@@ -3558,7 +3538,7 @@ describe("managed agent session compaction", () => {
         modelCatalog,
         resourceLoader: await createResourceLoader(workspace),
         customTools: [],
-        runtimePlugins: [createHostedTurnPipeline({ runtime, registerTools: false })],
+        extensions: [createHostedBehaviorHostAdapter({ runtime, registerTools: false })],
         initialModel: model,
         initialThinkingLevel: "off",
       });
@@ -3618,7 +3598,6 @@ describe("managed agent session compaction", () => {
       const runtime = new BrewvaRuntime({ cwd: workspace });
       const sessionStore = new HostedRuntimeTapeSessionStore(
         runtime,
-        workspace,
         "managed-session-queued-preset-dispatch",
       );
       const modelCatalog = createInMemoryModelCatalog();
@@ -3648,7 +3627,7 @@ describe("managed agent session compaction", () => {
         modelCatalog,
         resourceLoader: await createResourceLoader(workspace),
         customTools: [],
-        runtimePlugins: [createHostedTurnPipeline({ runtime, registerTools: false })],
+        extensions: [createHostedBehaviorHostAdapter({ runtime, registerTools: false })],
         initialModel: model,
         initialThinkingLevel: "off",
         initialModelPresetState: {

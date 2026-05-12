@@ -43,7 +43,7 @@ describe("delegation prompt and catalog composition", () => {
           },
           {
             kind: "workspace_span",
-            locator: "packages/brewva-gateway/src/host/create-hosted-session.ts#L1",
+            locator: "packages/brewva-gateway/src/hosted/api.ts#L1",
             summary: "Hosted session wiring",
           },
         ],

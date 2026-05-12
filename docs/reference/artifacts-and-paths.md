@@ -45,15 +45,18 @@ shape (`projection.dir=.orchestrator/projection`,
 - Projection cache state (`rebuildable state`): `.orchestrator/projection/state.json`
 - These projection files are rebuildable execution helpers. They are not the
   history-view baseline and they are not receipt authority.
+- History-view baseline artifact (`rebuildable state`):
+  `.orchestrator/history-view/sessions/sess_<base64url(sessionId)>/baseline.json`
 - Tape checkpoints (`durable source of truth`): `checkpoint` events embedded in the per-session event tape (`.orchestrator/events/sess_<base64url(sessionId)>.jsonl`)
 - Runtime recovery source (`durable source of truth`): event tape replay (`checkpoint + delta`); no standalone runtime session-state snapshot file
-- History-view baseline (`runtime_contract`, receipt-derived view): no
-  standalone baseline snapshot file; operator-visible baseline state is rebuilt
-  from `session_compact` receipts on the per-session event tape and exposed
+- History-view baseline (`runtime_contract`, receipt-derived view): operator-visible
+  baseline state is rebuilt from `session_compact` receipts on the per-session
+  event tape, persisted as the history-view baseline artifact, and exposed
   through inspect/context surfaces
 - The baseline therefore stays runtime-contract context even though the current
-  inspect/context view is rebuilt on demand. Its correctness depends on durable
-  `session_compact` receipts, not on `.orchestrator/projection/**`.
+  inspect/context view is rebuildable. Its correctness depends on durable
+  `session_compact` receipts, not on `.orchestrator/projection/**`; the
+  history-view artifact is a rebuildable derivative, not a second truth source.
 - Projection cache is never a recovery precondition; runtime may rebuild it on
   demand from durable tape replay (or refresh from existing projection units
   when they are already present)
@@ -165,6 +168,7 @@ runtime path.
 
 - Runtime: `packages/brewva-runtime/src`
 - Tools: `packages/brewva-tools/src`
-- Runtime plugins: `packages/brewva-gateway/src/runtime-plugins`
-- Gateway subagents: `packages/brewva-gateway/src/subagents`
+- Hosted lane internals: `packages/brewva-gateway/src/hosted/internal/{session,thread-loop}`
+- Hosted extension facade: `packages/brewva-gateway/src/extensions`
+- Gateway delegation: `packages/brewva-gateway/src/delegation`
 - CLI: `packages/brewva-cli/src`

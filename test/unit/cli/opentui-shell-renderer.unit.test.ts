@@ -45,7 +45,7 @@ import { CliShellRuntime } from "../../../packages/brewva-cli/src/shell/runtime.
 import type {
   CliShellSessionBundle,
   ProviderAuthMethod,
-  ProviderConnection,
+  ProviderConnectionDescriptor,
   ProviderOAuthAuthorization,
 } from "../../../packages/brewva-cli/src/shell/types.js";
 
@@ -220,7 +220,7 @@ function createFakeBundle(
     replaySessions?: BrewvaReplaySession[];
     sessionWireBySessionId?: Record<string, SessionWireFrame[]>;
     toolDefinitions?: Map<string, BrewvaToolDefinition>;
-    providers?: ProviderConnection[];
+    providers?: ProviderConnectionDescriptor[];
     authMethods?: Record<string, ProviderAuthMethod[]>;
     authorizeOAuth?: (
       provider: string,
@@ -417,25 +417,39 @@ function createFakeBundle(
     },
     providerConnections: options.providers
       ? {
-          async listProviders() {
-            return options.providers ?? [];
+          catalog: {
+            async listProviders() {
+              return options.providers ?? [];
+            },
           },
-          listAuthMethods(provider: string) {
-            return options.authMethods?.[provider] ?? [];
+          renderer: {
+            listAuthMethods(provider: string) {
+              return options.authMethods?.[provider] ?? [];
+            },
           },
-          async connectApiKey() {},
-          async authorizeOAuth(
-            provider: string,
-            methodId: string,
-            inputs?: Record<string, string>,
-          ) {
-            return options.authorizeOAuth?.(provider, methodId, inputs);
+          credential: {
+            async listProviders() {
+              return options.providers ?? [];
+            },
+            async connectApiKey() {},
+            async disconnect() {},
+            async refresh() {},
           },
-          async completeOAuth(provider: string, methodId: string, code?: string) {
-            await options.completeOAuth?.(provider, methodId, code);
+          authFlow: {
+            listAuthMethods(provider: string) {
+              return options.authMethods?.[provider] ?? [];
+            },
+            async authorizeOAuth(
+              provider: string,
+              methodId: string,
+              inputs?: Record<string, string>,
+            ) {
+              return options.authorizeOAuth?.(provider, methodId, inputs);
+            },
+            async completeOAuth(provider: string, methodId: string, code?: string) {
+              await options.completeOAuth?.(provider, methodId, code);
+            },
           },
-          async disconnect() {},
-          async refresh() {},
         }
       : undefined,
   } as unknown as CliShellSessionBundle;
@@ -1717,7 +1731,7 @@ describe("opentui solid shell runtime", () => {
   });
 
   test("renders OAuth manual callback input with keyboard entry", async () => {
-    const providers: ProviderConnection[] = [
+    const providers: ProviderConnectionDescriptor[] = [
       {
         id: "openai",
         name: "OpenAI",

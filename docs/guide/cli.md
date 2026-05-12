@@ -70,9 +70,9 @@ For Telegram/webhook ingress, see
 the selected config file, normal CLI startup fails during config load. Rewrite
 or delete those fields before rerunning Brewva.
 
-## Runtime-Plugin Commands
+## Hosted Extension Commands
 
-Managed or headless sessions can register runtime-plugin commands for inspect,
+Managed or headless sessions can register hosted extension commands for inspect,
 insights, questions, answers, agent overlays, and updates. Channel
 orchestration adds agent list/status, steer, create/delete/focus, run, discuss,
 and direct `@agent` routing when enabled.

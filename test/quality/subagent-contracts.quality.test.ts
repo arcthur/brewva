@@ -10,9 +10,11 @@ function readRepoFile(relativePath: string): string {
 
 describe("subagent contract guard", () => {
   it("keeps detached subagent durable specs on v7 only", () => {
-    const readerSource = readRepoFile("packages/brewva-gateway/src/subagents/runner-main.ts");
+    const readerSource = readRepoFile(
+      "packages/brewva-gateway/src/delegation/background/runner-main.ts",
+    );
     const protocolSource = readRepoFile(
-      "packages/brewva-gateway/src/subagents/background-protocol.ts",
+      "packages/brewva-gateway/src/delegation/background/protocol.ts",
     );
 
     expect(readerSource).toContain("brewva.subagent-run-spec.v7");
@@ -21,7 +23,7 @@ describe("subagent contract guard", () => {
   });
 
   it("keeps markdown worker overlays scoped to the supported project roots", () => {
-    const loaderSource = readRepoFile("packages/brewva-gateway/src/subagents/config-files.ts");
+    const loaderSource = readRepoFile("packages/brewva-gateway/src/delegation/config-files.ts");
 
     expect(loaderSource).toContain('resolve(workspaceRoot, ".brewva", "agents")');
     expect(loaderSource).toContain('resolve(workspaceRoot, ".config", "brewva", "agents")');

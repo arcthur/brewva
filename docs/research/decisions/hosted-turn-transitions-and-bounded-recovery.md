@@ -13,7 +13,7 @@
   - `docs/reference/events/README.md`
   - `docs/journeys/internal/context-and-compaction.md`
 - Code anchors:
-  - `packages/brewva-gateway/src/session/turn-transition.ts`
+  - `packages/brewva-gateway/src/hosted/internal/thread-loop/turn-transition.ts`
 
 ## Decision Summary
 

@@ -38,4 +38,4 @@ inputs where the family is marked rebuildable.
 - `packages/brewva-runtime/src/domain/schedule/service.ts`
 - `packages/brewva-runtime/src/domain/workflow/artifact-derivation.ts`
 - `packages/brewva-runtime/src/domain/workflow/status-derivation.ts`
-- `packages/brewva-gateway/src/subagents`
+- `packages/brewva-gateway/src/delegation`

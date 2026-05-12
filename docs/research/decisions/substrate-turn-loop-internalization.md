@@ -8,13 +8,13 @@
 - Stable docs:
   - `docs/architecture/system-architecture.md`
   - `docs/reference/session-lifecycle.md`
-  - `docs/reference/runtime-plugins.md`
+  - `docs/reference/extensions.md`
   - `docs/reference/token-cache.md`
   - `docs/reference/configuration.md`
 - Code anchors:
   - `packages/brewva-substrate/src/turn/`
   - `packages/brewva-substrate/package.json`
-  - `packages/brewva-gateway/src/host/managed-agent-session.ts`
+  - `packages/brewva-gateway/src/hosted/internal/session/managed-agent/session.ts`
   - `test/unit/substrate/turn/`
 
 ## Decision Summary

@@ -10,7 +10,7 @@
   - `docs/journeys/internal/context-and-compaction.md`
   - `docs/reference/configuration.md`
   - `docs/architecture/system-architecture.md`
-  - `docs/reference/runtime-plugins.md`
+  - `docs/reference/extensions.md`
 
 ## Problem Statement
 
@@ -611,7 +611,7 @@ stay separate:
 
 1. **Hosted composition telemetry**
 
-- `packages/brewva-gateway/src/runtime-plugins/hosted-context-telemetry.ts`
+- `packages/brewva-gateway/src/hosted/internal/context/hosted-context-telemetry.ts`
 - currently emits `context_composed` through `recordRuntimeEvent(...)`
 - appropriate for coarse composition facts such as block counts, token
   totals, and `injectionAccepted`
@@ -761,7 +761,7 @@ second request-construction path.
 
 ### Gateway Lifecycle Ring
 
-`packages/brewva-gateway/src/runtime-plugins/index.ts` is the canonical hosted
+`packages/brewva-gateway/src/hosted/internal/session/host-api-installation.ts` is the canonical hosted
 registration root.
 
 It already wires the three relevant Pi lifecycle seams:
@@ -778,7 +778,7 @@ Implication:
 
 ### Stable Prefix Ownership
 
-`packages/brewva-gateway/src/runtime-plugins/context-contract.ts` is the current
+`packages/brewva-gateway/src/hosted/internal/context/context-contract.ts` is the current
 owner of the Brewva-owned system-prompt suffix.
 
 Concrete change boundary:
@@ -792,7 +792,7 @@ This remains a hosted prompt-shaping concern.
 
 ### Deterministic Tail Ownership
 
-`packages/brewva-gateway/src/runtime-plugins/hosted-workbench-context-pipeline.ts`
+`packages/brewva-gateway/src/hosted/internal/context/workbench-context.ts`
 already owns:
 
 - usage observation through `runtime.maintain.context.observeUsage(...)`
@@ -808,7 +808,7 @@ This should remain the single orchestration point for:
 - prompt-stability observation capture
 - eventual emission of selected metric observations
 
-`packages/brewva-gateway/src/runtime-plugins/hosted-workbench-context-pipeline.ts`
+`packages/brewva-gateway/src/hosted/internal/context/workbench-context.ts`
 and fixed dynamic block renderers remain responsible for source-local
 normalization.
 
@@ -819,7 +819,7 @@ Concrete rule:
 
 ### Request-Local Reduction Ownership
 
-`packages/brewva-gateway/src/runtime-plugins/provider-request-recovery.ts`
+`packages/brewva-gateway/src/hosted/internal/provider/request/provider-request-recovery.ts`
 already demonstrates the correct `before_provider_request` contract:
 
 - clone provider payload
@@ -836,13 +836,13 @@ Recommended implementation shape:
   `provider-request-reduction.ts`, or factor a shared mutator chain used by both
   recovery and reduction
 - keep reducer state runtime-local and lossy, similar to
-  `packages/brewva-gateway/src/session/prompt-recovery-state.ts`
+  `packages/brewva-gateway/src/hosted/internal/thread-loop/recovery/output-budget-state.ts`
 - gate reduction by hosted transition posture rather than by provider heuristics
   alone
 
 ### Recovery Posture Source Of Truth
 
-`packages/brewva-gateway/src/session/turn-transition.ts` is the current durable
+`packages/brewva-gateway/src/hosted/internal/thread-loop/turn-transition.ts` is the current durable
 source for hosted recovery posture.
 
 The first rollout of transient outbound reduction should treat the following as
@@ -863,7 +863,7 @@ conditions.
 
 Provider cache counters already enter Brewva through the normal Pi event flow:
 
-1. `packages/brewva-gateway/src/runtime-plugins/event-stream.ts`
+1. `packages/brewva-gateway/src/hosted/internal/context/evidence/event-stream.ts`
 
 - receives upstream assistant `message_end`
 - forwards the message into `recordAssistantUsageFromMessage(...)`
@@ -910,7 +910,7 @@ Recommended placement by artifact type:
 
 The existing test and contract layout already suggests the right rollout points:
 
-- `test/contract/runtime-plugins/hosted-turn-pipeline.contract.test.ts`
+- `test/unit/gateway/hosted-behavior/hosted-behavior-host-api.contract.test.ts`
   - hosted `before_agent_start` wiring remains canonical
 - `test/unit/gateway/hosted-context-telemetry.unit.test.ts`
   - keep `context_composed` payload coarse and deterministic

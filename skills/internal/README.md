@@ -8,7 +8,7 @@ Current phase ownership still lives in code:
 - verification: `runtime.authority.verification.*` and `VerificationService`
 - finishing: `SessionLifecycleService`
 - recovery: continuity policy, scheduler recovery, and Recovery WAL recovery
-- automatic debug-loop control: `packages/brewva-gateway/src/runtime-plugins/debug-loop.ts`
+- automatic debug-loop control: `packages/brewva-gateway/src/hosted/internal/session/debug-loop.ts`
 
 This directory exists so future structured internal phase docs can live beside
 the public capability catalog without reintroducing the old lifecycle-skill taxonomy.

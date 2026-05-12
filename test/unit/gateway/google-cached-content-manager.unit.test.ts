@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { GoogleCachedContentManager } from "../../../packages/brewva-gateway/src/cache/google-cached-content-manager.js";
+import { GoogleCachedContentManager } from "../../../packages/brewva-gateway/src/hosted/internal/provider/cache/google-cached-content-manager.js";
 import { patchDateNow, patchProcessEnv } from "../../helpers/global-state.js";
 
 const LONG_POLICY = {

@@ -144,7 +144,7 @@ describe("gateway cli routing", () => {
     } finally {
       console.error = originalError;
     }
-    expect(errors.join("\n")).toContain('--managed-tools must be "runtime_plugin" or "direct"');
+    expect(errors.join("\n")).toContain('--managed-tools must be "hosted" or "direct"');
   });
 
   test("rejects deprecated rotate-token grace flag", async () => {

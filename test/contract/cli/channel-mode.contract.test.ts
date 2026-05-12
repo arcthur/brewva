@@ -6,7 +6,7 @@ import {
   canonicalizeInboundTurnSession,
   collectPromptTurnOutputs,
   resolveSupportedChannel,
-} from "@brewva/brewva-gateway";
+} from "@brewva/brewva-gateway/channels";
 import type { TurnEnvelope } from "@brewva/brewva-runtime/channels";
 import type { BrewvaPromptContentPart } from "@brewva/brewva-substrate/prompt";
 import type { BrewvaPromptSessionEvent } from "@brewva/brewva-substrate/session";

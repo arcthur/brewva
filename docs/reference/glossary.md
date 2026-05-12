@@ -15,7 +15,7 @@
 - Channel Gateway: external channel ingress/egress gateway used by `--channel` mode
 - Channel Host: hosted runtime loop behind `brewva --channel ...`; binds channel scopes to agent sessions and runs tool-governed turns
 - Gateway (Control Plane): local daemon exposed via `brewva gateway ...`, providing a typed WebSocket API to control-plane clients
-- Runtime Plugin: the canonical Brewva hosted session integration unit registered through `@brewva/brewva-gateway/runtime-plugins`; implemented on top of the upstream `ExtensionFactory` contract
+- Hosted Extension: the canonical opt-in Brewva hosted session integration unit registered through `@brewva/brewva-gateway/extensions`; implemented on top of the substrate host-api contract
 - Proposal: the public approval-bearing authorization envelope; current stable public shape is `EffectCommitmentProposal`
 - DecisionReceipt: the durable kernel decision record for a public `EffectCommitmentProposal`; captures the decision, policy basis, reasons, committed effects, evidence references, turn, and timestamp
 - Workbench: model-authored working-memory notebook exposed through `workbench_note` and `workbench_evict`

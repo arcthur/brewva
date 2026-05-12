@@ -17,13 +17,13 @@ import {
   createSessionViewPort,
 } from "../../../packages/brewva-cli/src/shell/adapters/ports.js";
 import type { CliShellSessionBundle } from "../../../packages/brewva-cli/src/shell/types.js";
-import { HostedRuntimeTapeSessionStore } from "../../../packages/brewva-gateway/src/host/runtime-projection-session-store.js";
+import { HostedRuntimeTapeSessionStore } from "../../../packages/brewva-gateway/src/hosted/internal/session/projection/runtime-projection-session-store.js";
+import type { StoredSessionMessage } from "../../../packages/brewva-gateway/src/hosted/internal/thread-loop/runtime-session-transcript.js";
 import {
   buildOperatorQuestionAnsweredPayload,
   flattenQuestionRequest,
   resolveOpenSessionQuestionRequest,
-} from "../../../packages/brewva-gateway/src/operator-questions.js";
-import type { StoredSessionMessage } from "../../../packages/brewva-gateway/src/session/runtime-session-transcript.js";
+} from "../../../packages/brewva-gateway/src/ingress/internal/operator-questions.js";
 
 function writeDelegationOutcomeArtifact(
   workspaceRoot: string,
@@ -113,7 +113,7 @@ describe("cli shell session port", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-shell-port-lineage-checkout-"));
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionId = "shell-port-lineage-checkout-session";
-    const store = new HostedRuntimeTapeSessionStore(runtime, workspace, sessionId);
+    const store = new HostedRuntimeTapeSessionStore(runtime, sessionId);
     const mainEntryId = store.appendMessage({
       role: "user",
       content: [{ type: "text", text: "main checkpoint" }],
@@ -205,7 +205,7 @@ describe("cli shell session port", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-shell-port-lineage-checkout-failure-"));
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionId = "shell-port-lineage-checkout-failure-session";
-    const store = new HostedRuntimeTapeSessionStore(runtime, workspace, sessionId);
+    const store = new HostedRuntimeTapeSessionStore(runtime, sessionId);
     const mainEntryId = store.appendMessage({
       role: "user",
       content: [{ type: "text", text: "main checkpoint" }],
@@ -494,7 +494,7 @@ describe("cli shell session port", () => {
           payload: buildOperatorQuestionAnsweredPayload({
             question: firstQuestion,
             answerText: "Yes",
-            source: "runtime_plugin",
+            source: "hosted",
           }),
         });
       },

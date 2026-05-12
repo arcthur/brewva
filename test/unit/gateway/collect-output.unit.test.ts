@@ -13,9 +13,9 @@ import {
   type BrewvaPromptContentPart,
 } from "@brewva/brewva-substrate/prompt";
 import type { BrewvaPromptSessionEvent } from "@brewva/brewva-substrate/session";
-import { collectSessionPromptOutput } from "../../../packages/brewva-gateway/src/session/collect-output.js";
-import { runHostedThreadLoop } from "../../../packages/brewva-gateway/src/session/hosted-thread-loop.js";
-import { resolveThreadLoopProfile } from "../../../packages/brewva-gateway/src/session/thread-loop-profiles.js";
+import { collectSessionPromptOutput } from "../../../packages/brewva-gateway/src/hosted/internal/thread-loop/collect-output.js";
+import { runHostedThreadLoop } from "../../../packages/brewva-gateway/src/hosted/internal/thread-loop/hosted-thread-loop.js";
+import { resolveThreadLoopProfile } from "../../../packages/brewva-gateway/src/hosted/internal/thread-loop/state.js";
 
 type SessionLike = {
   subscribe: (listener: (event: BrewvaPromptSessionEvent) => void) => () => void;

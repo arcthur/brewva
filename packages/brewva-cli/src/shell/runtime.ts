@@ -1285,7 +1285,11 @@ export class CliShellRuntime {
         if (!connectionPort) {
           throw new Error("Provider connection is unavailable for this session.");
         }
-        await connectionPort.connectApiKey(effect.providerId, effect.apiKey, effect.inputs);
+        await connectionPort.credential.connectApiKey(
+          effect.providerId,
+          effect.apiKey,
+          effect.inputs,
+        );
         return;
       }
       case "provider.completeOAuth": {
@@ -1293,7 +1297,11 @@ export class CliShellRuntime {
         if (!connectionPort) {
           throw new Error("Provider connection is unavailable for this session.");
         }
-        await connectionPort.completeOAuth(effect.providerId, effect.methodId, effect.code);
+        await connectionPort.authFlow.completeOAuth(
+          effect.providerId,
+          effect.methodId,
+          effect.code,
+        );
         return;
       }
       case "provider.disconnect": {
@@ -1301,7 +1309,7 @@ export class CliShellRuntime {
         if (!connectionPort) {
           throw new Error("Provider connection is unavailable for this session.");
         }
-        await connectionPort.disconnect(effect.providerId);
+        await connectionPort.credential.disconnect(effect.providerId);
         return;
       }
       case "clipboard.copy":

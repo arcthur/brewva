@@ -1,4 +1,5 @@
 import { SESSION_WIRE_SCHEMA, type SessionWireFrame } from "@brewva/brewva-runtime";
+import { isRecord, readFiniteNumberValue } from "@brewva/brewva-std/unknown";
 import { Ajv, type ErrorObject } from "ajv";
 import {
   ConnectParamsSchema,
@@ -119,14 +120,6 @@ const methodValidators: {
   },
 };
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
-
-function isFiniteNumber(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value);
-}
-
 function isOptionalString(value: unknown): boolean {
   return value === undefined || typeof value === "string";
 }
@@ -144,16 +137,16 @@ function isContextStatus(value: unknown): boolean {
     return false;
   }
   return (
-    isFiniteNumber(value.tokensUsed) &&
-    isFiniteNumber(value.tokensTotal) &&
-    isFiniteNumber(value.tokensRemaining) &&
-    isFiniteNumber(value.tokensUntilForcedCompact) &&
-    isFiniteNumber(value.predictedTurnGrowthTokens) &&
-    isFiniteNumber(value.tokensUntilPredictedOverflow) &&
+    readFiniteNumberValue(value.tokensUsed) !== undefined &&
+    readFiniteNumberValue(value.tokensTotal) !== undefined &&
+    readFiniteNumberValue(value.tokensRemaining) !== undefined &&
+    readFiniteNumberValue(value.tokensUntilForcedCompact) !== undefined &&
+    readFiniteNumberValue(value.predictedTurnGrowthTokens) !== undefined &&
+    readFiniteNumberValue(value.tokensUntilPredictedOverflow) !== undefined &&
     typeof value.predictedOverflow === "boolean" &&
-    isFiniteNumber(value.usageRatio) &&
-    isFiniteNumber(value.hardLimitRatio) &&
-    isFiniteNumber(value.compactionThresholdRatio) &&
+    readFiniteNumberValue(value.usageRatio) !== undefined &&
+    readFiniteNumberValue(value.hardLimitRatio) !== undefined &&
+    readFiniteNumberValue(value.compactionThresholdRatio) !== undefined &&
     typeof value.compactionAdvised === "boolean" &&
     typeof value.forcedCompaction === "boolean"
   );
@@ -201,7 +194,7 @@ function hasSessionWireBase(value: Record<string, unknown>): string | null {
   if (typeof value.frameId !== "string" || !value.frameId.trim()) {
     return "frameId must be a non-empty string";
   }
-  if (!isFiniteNumber(value.ts)) {
+  if (readFiniteNumberValue(value.ts) === undefined) {
     return "ts must be a finite number";
   }
   if (!isSource(value.source)) {

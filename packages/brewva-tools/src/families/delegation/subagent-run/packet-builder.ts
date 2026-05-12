@@ -184,7 +184,7 @@ function buildExecutionShape(
   const boundary = normalizeBoundary(value.boundary);
   const model = typeof value.model === "string" ? value.model : undefined;
   const managedToolMode =
-    value.managedToolMode === "direct" || value.managedToolMode === "runtime_plugin"
+    value.managedToolMode === "direct" || value.managedToolMode === "hosted"
       ? value.managedToolMode
       : undefined;
   if (!resultMode && !boundary && !model && !managedToolMode) {

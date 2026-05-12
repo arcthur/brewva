@@ -4,7 +4,7 @@ import {
   adjudicateTaskStallPacket,
   buildTaskStallInspectionPacket,
   maybeAdjudicateLatestTaskStall,
-} from "../../../packages/brewva-gateway/src/session/task-stall-adjudication.js";
+} from "../../../packages/brewva-gateway/src/hosted/internal/thread-loop/watchdog/task-stall-adjudication.js";
 import { createOpsRuntimeConfig } from "../../helpers/runtime.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 

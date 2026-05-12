@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { CONTEXT_COMPOSED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
-import type { HostedContextRenderResult } from "../../../packages/brewva-gateway/src/runtime-plugins/hosted-context-blocks.js";
-import { createHostedContextTelemetry } from "../../../packages/brewva-gateway/src/runtime-plugins/hosted-context-telemetry.js";
+import type { HostedContextRenderResult } from "../../../packages/brewva-gateway/src/hosted/internal/context/hosted-context-blocks.js";
+import { createHostedContextTelemetry } from "../../../packages/brewva-gateway/src/hosted/internal/context/hosted-context-telemetry.js";
 import { createRuntimeFixture } from "../../helpers/runtime.js";
 
 describe("hosted context telemetry", () => {

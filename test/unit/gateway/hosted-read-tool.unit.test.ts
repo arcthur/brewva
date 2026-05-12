@@ -3,14 +3,14 @@ import { mkdirSync, readFileSync, statSync, utimesSync, writeFileSync } from "no
 import { join } from "node:path";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
 import {
+  TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE,
+  TOOL_READ_PATH_GATE_ARMED_EVENT_TYPE,
+} from "@brewva/brewva-runtime/events";
+import {
   createBrewvaReadToolDefinition,
   type BrewvaReadToolOptions,
 } from "@brewva/brewva-substrate/tools";
-import { createCompactReadTool } from "../../../packages/brewva-gateway/src/host/hosted-session-bootstrap.js";
-import {
-  TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE,
-  TOOL_READ_PATH_GATE_ARMED_EVENT_TYPE,
-} from "../../../packages/brewva-gateway/src/runtime-plugins/read-path-recovery.js";
+import { createCompactReadTool } from "../../../packages/brewva-gateway/src/hosted/internal/session/init/session-assembly.js";
 import { createOpsRuntimeConfig } from "../../helpers/runtime.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 

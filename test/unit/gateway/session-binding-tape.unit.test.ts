@@ -6,7 +6,7 @@ import {
   appendGatewaySessionBindingReceipt,
   listGatewaySessionBindings,
   resolveGatewaySessionBindingLogPath,
-} from "../../../packages/brewva-gateway/src/daemon/session-binding-tape.js";
+} from "../../../packages/brewva-gateway/src/daemon/session-supervisor/session-binding-tape.js";
 
 describe("gateway session binding tape", () => {
   test("records replay bindings durably and deduplicates identical segment receipts", () => {

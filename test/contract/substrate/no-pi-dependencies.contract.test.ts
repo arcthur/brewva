@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 
 const PI_IMPORT_PATTERN = /@mariozechner\/pi-/u;
@@ -27,6 +27,9 @@ function walk(dir: string): string[] {
 }
 
 function collectFiles(root: string): string[] {
+  if (!existsSync(root)) {
+    return [];
+  }
   const stat = statSync(root);
   if (stat.isDirectory()) {
     return walk(root);
@@ -42,10 +45,38 @@ describe("substrate dependency boundary", () => {
       resolve(repoRoot, "packages", "brewva-substrate"),
       resolve(repoRoot, "packages", "brewva-substrate", "src", "turn"),
       resolve(repoRoot, "packages", "brewva-tools"),
-      resolve(repoRoot, "packages", "brewva-gateway", "src", "runtime-plugins"),
-      resolve(repoRoot, "packages", "brewva-gateway", "src", "session", "contracts.ts"),
-      resolve(repoRoot, "packages", "brewva-gateway", "src", "session", "collect-output.ts"),
-      resolve(repoRoot, "packages", "brewva-gateway", "src", "tool-execution-traits.ts"),
+      resolve(repoRoot, "packages", "brewva-gateway", "src", "extensions"),
+      resolve(
+        repoRoot,
+        "packages",
+        "brewva-gateway",
+        "src",
+        "hosted",
+        "internal",
+        "thread-loop",
+        "contracts.ts",
+      ),
+      resolve(
+        repoRoot,
+        "packages",
+        "brewva-gateway",
+        "src",
+        "hosted",
+        "internal",
+        "thread-loop",
+        "collect-output.ts",
+      ),
+      resolve(
+        repoRoot,
+        "packages",
+        "brewva-gateway",
+        "src",
+        "hosted",
+        "internal",
+        "session",
+        "internal",
+        "tool-execution-traits.ts",
+      ),
       resolve(
         repoRoot,
         "packages",
@@ -54,28 +85,53 @@ describe("substrate dependency boundary", () => {
         "channels",
         "channel-agent-dispatch.ts",
       ),
-      resolve(repoRoot, "packages", "brewva-gateway", "src", "session", "compaction-recovery.ts"),
-      resolve(repoRoot, "packages", "brewva-gateway", "src", "host", "hosted-session-bootstrap.ts"),
-      resolve(repoRoot, "packages", "brewva-gateway", "src", "host", "hosted-provider-driver.ts"),
-      resolve(repoRoot, "packages", "brewva-gateway", "src", "subagents", "model-routing.ts"),
-      resolve(repoRoot, "packages", "brewva-cli", "src", "inspect-command-runtime-plugin.ts"),
-      resolve(repoRoot, "packages", "brewva-cli", "src", "insights-command-runtime-plugin.ts"),
-      resolve(repoRoot, "packages", "brewva-cli", "src", "questions-command-runtime-plugin.ts"),
       resolve(
         repoRoot,
         "packages",
-        "brewva-cli",
+        "brewva-gateway",
         "src",
-        "agent-overlays-command-runtime-plugin.ts",
+        "hosted",
+        "internal",
+        "thread-loop",
+        "compaction-recovery.ts",
       ),
-      resolve(repoRoot, "packages", "brewva-cli", "src", "update-command-runtime-plugin.ts"),
+      resolve(
+        repoRoot,
+        "packages",
+        "brewva-gateway",
+        "src",
+        "hosted",
+        "internal",
+        "session",
+        "init",
+        "session-assembly.ts",
+      ),
+      resolve(
+        repoRoot,
+        "packages",
+        "brewva-gateway",
+        "src",
+        "hosted",
+        "internal",
+        "session",
+        "provider",
+        "completion-client.ts",
+      ),
+      resolve(repoRoot, "packages", "brewva-gateway", "src", "delegation", "model-routing.ts"),
+      resolve(repoRoot, "packages", "brewva-cli", "src", "inspect-command-extension.ts"),
+      resolve(repoRoot, "packages", "brewva-cli", "src", "insights-command-extension.ts"),
+      resolve(repoRoot, "packages", "brewva-cli", "src", "questions-command-extension.ts"),
+      resolve(repoRoot, "packages", "brewva-cli", "src", "agent-overlays-command-extension.ts"),
+      resolve(repoRoot, "packages", "brewva-cli", "src", "update-command-extension.ts"),
       resolve(
         repoRoot,
         "packages",
         "brewva-gateway",
         "src",
         "channels",
-        "channel-a2a-runtime-plugin.ts",
+        "bridges",
+        "a2a",
+        "extension.ts",
       ),
     ];
 

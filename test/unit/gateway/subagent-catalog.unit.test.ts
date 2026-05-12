@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { loadHostedDelegationCatalog } from "../../../packages/brewva-gateway/src/subagents/catalog.js";
+import { loadHostedDelegationCatalog } from "../../../packages/brewva-gateway/src/delegation/catalog/registry.js";
 
 function createWorkspace(prefix: string): string {
   return mkdtempSync(join(tmpdir(), prefix));

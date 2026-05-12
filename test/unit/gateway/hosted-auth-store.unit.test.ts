@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { HostedAuthStore } from "../../../packages/brewva-gateway/src/host/hosted-auth-store.js";
+import { HostedAuthStore } from "../../../packages/brewva-gateway/src/hosted/internal/session/settings/hosted-auth-store.js";
 import { patchDateNow, patchProcessEnv } from "../../helpers/global-state.js";
 
 const INTRINSIC_FETCH = globalThis.fetch;

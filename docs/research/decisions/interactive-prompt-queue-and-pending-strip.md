@@ -13,7 +13,7 @@
 - Code anchors:
   - `packages/brewva-substrate/src/turn/controller.ts`
   - `packages/brewva-substrate/src/turn/loop.ts`
-  - `packages/brewva-gateway/src/host/managed-agent-session.ts`
+  - `packages/brewva-gateway/src/hosted/internal/session/managed-agent/session.ts`
   - `packages/brewva-substrate/src/session/prompt-session.ts`
   - `packages/brewva-substrate/src/session/session-host.ts`
   - `packages/brewva-cli/src/shell/types.ts`

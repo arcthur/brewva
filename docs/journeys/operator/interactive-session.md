@@ -97,7 +97,7 @@ flowchart TD
 ## Execution Semantics
 
 - workflow remains an advisory surface, not a runtime-owned stage machine
-- `managedToolMode=runtime_plugin` and `managedToolMode=direct` only change how
+- `managedToolMode=hosted` and `managedToolMode=direct` only change how
   managed tools are registered; they do not change the hosted lifecycle spine
   or the hosted/tool/operator port split
 - workbench entries are model-authored notebook entries with source references,
@@ -146,8 +146,9 @@ flowchart TD
 
 - CLI entrypoint: `packages/brewva-cli/src/index.ts`
 - Hosted session implementation:
-  `packages/brewva-gateway/src/host/hosted-session-bootstrap.ts`
-- Hosted runtime plugins: `packages/brewva-gateway/src/runtime-plugins/index.ts`
+  `packages/brewva-gateway/src/hosted/internal/session/init/session-assembly.ts`
+- Hosted behavior installation:
+  `packages/brewva-gateway/src/hosted/internal/session/host-api-installation.ts`
 - Workbench runtime surface:
   `packages/brewva-runtime/src/domain/workbench/runtime-surface.ts`
 - Workbench tools: `packages/brewva-tools/src/families/memory/workbench.ts`

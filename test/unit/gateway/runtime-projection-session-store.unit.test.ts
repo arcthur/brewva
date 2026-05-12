@@ -6,13 +6,14 @@ import {
   CONTEXT_ENTRY_RECORDED_EVENT_TYPE,
   SESSION_LINEAGE_NODE_CREATED_EVENT_TYPE,
 } from "@brewva/brewva-runtime";
+import { readContextEntryRecordedEventPayload } from "@brewva/brewva-runtime/events";
 import { sha256Hex } from "@brewva/brewva-std/hash";
 import {
   readSessionBundleArtifact,
   replayImportedSessionEntries,
 } from "@brewva/brewva-substrate/persistence";
-import { HostedRuntimeTapeSessionStore } from "../../../packages/brewva-gateway/src/host/runtime-projection-session-store.js";
-import type { StoredSessionMessage } from "../../../packages/brewva-gateway/src/session/runtime-session-transcript.js";
+import { HostedRuntimeTapeSessionStore } from "../../../packages/brewva-gateway/src/hosted/internal/session/projection/runtime-projection-session-store.js";
+import type { StoredSessionMessage } from "../../../packages/brewva-gateway/src/hosted/internal/thread-loop/runtime-session-transcript.js";
 import { patchDateNow } from "../../helpers/global-state.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
@@ -48,7 +49,7 @@ describe("hosted runtime tape session store", () => {
       const workspace = createTestWorkspace("runtime-projection-session-store");
       const runtime = new BrewvaRuntime({ cwd: workspace });
       const sessionId = "agent-session:projection";
-      const store = new HostedRuntimeTapeSessionStore(runtime, workspace, sessionId);
+      const store = new HostedRuntimeTapeSessionStore(runtime, sessionId);
 
       const userMessage = {
         role: "user",
@@ -82,7 +83,7 @@ describe("hosted runtime tape session store", () => {
       const restoredLeafId = store.getLeafId();
       store.branchWithSummary(restoredLeafId, "checkpoint restored", { source: "unit-test" }, true);
 
-      const restored = new HostedRuntimeTapeSessionStore(runtime, workspace, sessionId);
+      const restored = new HostedRuntimeTapeSessionStore(runtime, sessionId);
       const context = restored.buildSessionContext();
       const eventTypes = runtime.inspect.events.list(sessionId).map((event) => event.type);
 
@@ -128,7 +129,7 @@ describe("hosted runtime tape session store", () => {
     const workspace = createTestWorkspace("runtime-projection-session-store-target-lineage");
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionId = "agent-session:target-lineage";
-    const store = new HostedRuntimeTapeSessionStore(runtime, workspace, sessionId);
+    const store = new HostedRuntimeTapeSessionStore(runtime, sessionId);
 
     const firstMainEntryId = store.appendMessage({
       role: "user",
@@ -179,7 +180,7 @@ describe("hosted runtime tape session store", () => {
     const workspace = createTestWorkspace("runtime-projection-session-store-checkout-lineage");
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionId = "agent-session:checkout-lineage";
-    const store = new HostedRuntimeTapeSessionStore(runtime, workspace, sessionId);
+    const store = new HostedRuntimeTapeSessionStore(runtime, sessionId);
     const checkoutStore = store as HostedRuntimeTapeSessionStore & {
       checkoutLineageNode(lineageNodeId: string, leafEntryId?: string | null): void;
     };
@@ -236,7 +237,7 @@ describe("hosted runtime tape session store", () => {
     const workspace = createTestWorkspace("runtime-projection-session-store-checkout-mismatch");
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionId = "agent-session:checkout-mismatch";
-    const store = new HostedRuntimeTapeSessionStore(runtime, workspace, sessionId);
+    const store = new HostedRuntimeTapeSessionStore(runtime, sessionId);
     const checkoutStore = store as HostedRuntimeTapeSessionStore & {
       checkoutLineageNode(lineageNodeId: string, leafEntryId?: string | null): void;
     };
@@ -278,7 +279,7 @@ describe("hosted runtime tape session store", () => {
     const workspace = createTestWorkspace("runtime-projection-session-store-admission");
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionId = "agent-session:admission";
-    const store = new HostedRuntimeTapeSessionStore(runtime, workspace, sessionId);
+    const store = new HostedRuntimeTapeSessionStore(runtime, sessionId);
 
     const visibleUser = {
       role: "user",
@@ -324,7 +325,7 @@ describe("hosted runtime tape session store", () => {
     const workspace = createTestWorkspace("runtime-projection-session-store-compaction-digest");
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionId = "agent-session:compaction-digest";
-    const store = new HostedRuntimeTapeSessionStore(runtime, workspace, sessionId);
+    const store = new HostedRuntimeTapeSessionStore(runtime, sessionId);
 
     store.appendMessage({
       role: "user",
@@ -359,7 +360,7 @@ describe("hosted runtime tape session store", () => {
       },
     });
 
-    const restored = new HostedRuntimeTapeSessionStore(runtime, workspace, sessionId);
+    const restored = new HostedRuntimeTapeSessionStore(runtime, sessionId);
     expect(restored.buildSessionContext().messages).toEqual([
       expect.objectContaining({ role: "user" }),
       expect.objectContaining({ role: "assistant" }),
@@ -375,7 +376,7 @@ describe("hosted runtime tape session store", () => {
     const workspace = createTestWorkspace("runtime-projection-session-store-compaction-replay");
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionId = "agent-session:compaction-replay";
-    const store = new HostedRuntimeTapeSessionStore(runtime, workspace, sessionId);
+    const store = new HostedRuntimeTapeSessionStore(runtime, sessionId);
 
     store.appendMessage({
       role: "user",
@@ -419,7 +420,7 @@ describe("hosted runtime tape session store", () => {
       },
     });
 
-    const restored = new HostedRuntimeTapeSessionStore(runtime, workspace, sessionId);
+    const restored = new HostedRuntimeTapeSessionStore(runtime, sessionId);
 
     expect(
       restored
@@ -429,6 +430,44 @@ describe("hosted runtime tape session store", () => {
       expect.objectContaining({
         role: "compactionSummary",
         summary: sanitizedSummary,
+      }),
+    );
+  });
+
+  test("appendCompaction records a canonical compact payload that produces a context entry", () => {
+    const workspace = createTestWorkspace("runtime-projection-session-store-canonical-compaction");
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionId = "agent-session:canonical-compaction";
+    const store = new HostedRuntimeTapeSessionStore(runtime, sessionId);
+
+    store.appendMessage({
+      role: "user",
+      content: [{ type: "text", text: "before compact" }],
+      timestamp: Date.now(),
+    } as StoredSessionMessage);
+    const firstKeptEntryId = store.appendMessage({
+      role: "assistant",
+      content: [{ type: "text", text: "keep this message" }],
+      api: "openai-responses",
+      provider: "openai",
+      model: "gpt-5.4",
+      usage: createUsage(),
+      stopReason: "stop",
+      timestamp: Date.now() + 1,
+    } as StoredSessionMessage);
+
+    store.appendCompaction("[CompactSummary]\nCanonical compact.", firstKeptEntryId, 1200);
+
+    const contextEntry = runtime.inspect.events
+      .list(sessionId)
+      .filter((event) => event.type === CONTEXT_ENTRY_RECORDED_EVENT_TYPE)
+      .map((event) => readContextEntryRecordedEventPayload(event))
+      .find((payload) => payload?.sourceEventType === "session_compact");
+
+    expect(contextEntry).toEqual(
+      expect.objectContaining({
+        entryKind: "compaction",
+        sourceEventType: "session_compact",
       }),
     );
   });
@@ -474,7 +513,7 @@ describe("hosted runtime tape session store", () => {
       },
     });
 
-    expect(() => new HostedRuntimeTapeSessionStore(runtime, workspace, sessionId)).toThrow(
+    expect(() => new HostedRuntimeTapeSessionStore(runtime, sessionId)).toThrow(
       "session_lineage_root_missing",
     );
   });
@@ -483,7 +522,7 @@ describe("hosted runtime tape session store", () => {
     const workspace = createTestWorkspace("runtime-projection-session-store-clean-rewind");
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionId = "agent-session:clean-rewind";
-    const store = new HostedRuntimeTapeSessionStore(runtime, workspace, sessionId);
+    const store = new HostedRuntimeTapeSessionStore(runtime, sessionId);
 
     store.appendMessage({
       role: "user",
@@ -530,7 +569,7 @@ describe("hosted runtime tape session store", () => {
       throw new Error(`expected clean rewind to succeed, got ${rewind.reason}`);
     }
 
-    const restored = new HostedRuntimeTapeSessionStore(runtime, workspace, sessionId);
+    const restored = new HostedRuntimeTapeSessionStore(runtime, sessionId);
     const branchSummaryMessages = restored
       .buildSessionContext()
       .messages.filter(
@@ -564,7 +603,7 @@ describe("hosted runtime tape session store", () => {
     const workspace = createTestWorkspace("runtime-projection-session-store-undo-intra-node");
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionId = "agent-session:undo-intra-node";
-    const store = new HostedRuntimeTapeSessionStore(runtime, workspace, sessionId);
+    const store = new HostedRuntimeTapeSessionStore(runtime, sessionId);
 
     store.appendMessage({
       role: "user",
@@ -679,7 +718,7 @@ describe("hosted runtime tape session store", () => {
       throw new Error("expected legacy Pi import artifact");
     }
 
-    const store = new HostedRuntimeTapeSessionStore(runtime, workspace, artifact.sessionId);
+    const store = new HostedRuntimeTapeSessionStore(runtime, artifact.sessionId);
     replayImportedSessionEntries(store, artifact.entries);
 
     expect(store.buildSessionContext()).toMatchObject({
@@ -702,6 +741,144 @@ describe("hosted runtime tape session store", () => {
         "model_select",
         "message_end",
         "branch_summary_recorded",
+      ]),
+    );
+  });
+
+  test("preserves control-entry parent chains during imported replay", () => {
+    const workspace = createTestWorkspace("runtime-projection-session-store-control-parent-chain");
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionId = "agent-session:control-parent-chain";
+    const store = new HostedRuntimeTapeSessionStore(runtime, sessionId);
+
+    const idMap = replayImportedSessionEntries(store, [
+      {
+        type: "message",
+        id: "u1",
+        parentId: null,
+        timestamp: new Date("2026-04-10T00:00:00.000Z").toISOString(),
+        message: {
+          role: "user",
+          content: [{ type: "text", text: "root user" }],
+          timestamp: 1,
+        } as StoredSessionMessage,
+      },
+      {
+        type: "thinking_level_change",
+        id: "t1",
+        parentId: "u1",
+        timestamp: new Date("2026-04-10T00:00:01.000Z").toISOString(),
+        thinkingLevel: "high",
+      },
+      {
+        type: "message",
+        id: "a1",
+        parentId: "t1",
+        timestamp: new Date("2026-04-10T00:00:02.000Z").toISOString(),
+        message: {
+          role: "assistant",
+          content: [{ type: "text", text: "child assistant" }],
+          api: "openai-responses",
+          provider: "openai",
+          model: "gpt-5.4",
+          usage: createUsage(),
+          stopReason: "stop",
+          timestamp: 2,
+        } as StoredSessionMessage,
+      },
+    ]);
+
+    const importedThinkingId = idMap.get("t1");
+    const importedUserId = idMap.get("u1");
+    if (!importedThinkingId || !importedUserId) {
+      throw new Error("expected imported ids");
+    }
+
+    store.branch(importedThinkingId);
+    store.appendMessage({
+      role: "assistant",
+      content: [{ type: "text", text: "branched after thinking change" }],
+      api: "openai-responses",
+      provider: "openai",
+      model: "openai/gpt-5.4",
+      usage: createUsage(),
+      stopReason: "stop",
+      timestamp: 3,
+    } as StoredSessionMessage);
+
+    const latestContextEntry = runtime.inspect.events
+      .list(sessionId)
+      .filter((event) => event.type === CONTEXT_ENTRY_RECORDED_EVENT_TYPE)
+      .map((event) => readContextEntryRecordedEventPayload(event))
+      .at(-1);
+
+    expect(latestContextEntry).toEqual(
+      expect.objectContaining({
+        parentEntryId: importedUserId,
+      }),
+    );
+  });
+
+  test("normalizes imported branch-summary parents to the nearest context entry", () => {
+    const workspace = createTestWorkspace("runtime-projection-session-store-branch-summary-parent");
+    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const sessionId = "agent-session:branch-summary-parent";
+    const store = new HostedRuntimeTapeSessionStore(runtime, sessionId);
+
+    replayImportedSessionEntries(store, [
+      {
+        type: "message",
+        id: "u1",
+        parentId: null,
+        timestamp: new Date("2026-04-10T00:00:00.000Z").toISOString(),
+        message: {
+          role: "user",
+          content: [{ type: "text", text: "root user" }],
+          timestamp: 1,
+        } as StoredSessionMessage,
+      },
+      {
+        type: "thinking_level_change",
+        id: "t1",
+        parentId: "u1",
+        timestamp: new Date("2026-04-10T00:00:01.000Z").toISOString(),
+        thinkingLevel: "high",
+      },
+      {
+        type: "branch_summary",
+        id: "b1",
+        parentId: "t1",
+        timestamp: new Date("2026-04-10T00:00:02.000Z").toISOString(),
+        fromId: "u1",
+        summary: "imported summary",
+      },
+    ]);
+
+    const userContextEntry = runtime.inspect.events
+      .list(sessionId)
+      .filter((event) => event.type === CONTEXT_ENTRY_RECORDED_EVENT_TYPE)
+      .map((event) => readContextEntryRecordedEventPayload(event))
+      .find((payload) => payload?.entryKind === "message");
+    const branchSummaryContextEntry = runtime.inspect.events
+      .list(sessionId)
+      .filter((event) => event.type === CONTEXT_ENTRY_RECORDED_EVENT_TYPE)
+      .map((event) => readContextEntryRecordedEventPayload(event))
+      .find((payload) => payload?.entryKind === "branch_summary");
+
+    if (!userContextEntry) {
+      throw new Error("expected user context entry");
+    }
+    expect(branchSummaryContextEntry).toEqual(
+      expect.objectContaining({
+        parentEntryId: userContextEntry.entryId,
+      }),
+    );
+    expect(store.buildSessionContext().messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: "branchSummary",
+          summary: "imported summary",
+        }),
       ]),
     );
   });

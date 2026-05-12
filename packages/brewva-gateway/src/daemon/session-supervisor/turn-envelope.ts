@@ -1,5 +1,7 @@
 import type { TruthFact } from "@brewva/brewva-runtime";
 import { buildTurnEnvelope, type TurnEnvelope } from "@brewva/brewva-runtime/channels";
+import { readNonEmptyString } from "@brewva/brewva-std/text";
+import { isRecord } from "@brewva/brewva-std/unknown";
 import type {
   SchedulePromptAnchor,
   SchedulePromptTrigger,
@@ -7,18 +9,11 @@ import type {
 } from "../session-backend.js";
 
 export function normalizeOptionalString(value: string | undefined): string | undefined {
-  if (typeof value !== "string") return undefined;
-  const normalized = value.trim();
-  return normalized.length > 0 ? normalized : undefined;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+  return readNonEmptyString(value);
 }
 
 function readStringField(record: Record<string, unknown>, key: string): string | undefined {
-  const value = record[key];
-  return typeof value === "string" ? normalizeOptionalString(value) : undefined;
+  return readNonEmptyString(record[key]);
 }
 
 function readEnumField<T extends string>(

@@ -5,7 +5,7 @@
 The default is now `false`; set it explicitly to enable multi-agent workspace
 orchestration. Leaving it `false` routes turns to a single default agent session.
 This page focuses on channel-workspace behavior and recovery boundaries, not on
-the full command or runtime-plugin contract.
+the full command or hosted extension contract.
 
 ## What It Enables
 
@@ -74,5 +74,5 @@ This override happens in runtime manager code and cannot be bypassed by agent-lo
 - Hosted and channel lifecycle semantics: `docs/guide/orchestration.md`,
   `docs/reference/session-lifecycle.md`
 - Operator channel walkthrough: `docs/journeys/operator/channel-gateway-and-turn-flow.md`
-- Runtime plugin wiring: `docs/reference/runtime-plugins.md`
+- Extension wiring: `docs/reference/extensions.md`
 - Workspace artifacts and durability classes: `docs/reference/artifacts-and-paths.md`

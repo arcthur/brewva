@@ -4,7 +4,7 @@ import {
   getHostedBuiltInModels,
   getHostedBuiltInProviders,
   supportsHostedExtendedThinkingModel,
-} from "../../../packages/brewva-gateway/src/host/hosted-provider-helpers.js";
+} from "../../../packages/brewva-gateway/src/hosted/internal/provider/built-in-catalog.js";
 
 describe("hosted provider helpers", () => {
   test("reports xhigh support for the same model families as Pi", () => {

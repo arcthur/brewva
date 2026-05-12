@@ -32,10 +32,10 @@ import type {
   CliShellSessionBundle,
   ProviderAuthMethod,
   ProviderOAuthAuthorization,
-  ProviderConnection,
+  ProviderConnectionDescriptor,
 } from "../../../packages/brewva-cli/src/shell/types.js";
-import { HostedRuntimeTapeSessionStore } from "../../../packages/brewva-gateway/src/host/runtime-projection-session-store.js";
-import type { StoredSessionMessage } from "../../../packages/brewva-gateway/src/session/runtime-session-transcript.js";
+import { HostedRuntimeTapeSessionStore } from "../../../packages/brewva-gateway/src/hosted/internal/session/projection/runtime-projection-session-store.js";
+import type { StoredSessionMessage } from "../../../packages/brewva-gateway/src/hosted/internal/thread-loop/runtime-session-transcript.js";
 import { patchDateNow } from "../../helpers/global-state.js";
 import {
   createPromptMessageUpdateEvent,
@@ -74,7 +74,7 @@ function createFakeBundle(
     sessionWireBySessionId?: Record<string, SessionWireFrame[]>;
     models?: BrewvaSessionModelDescriptor[];
     availableModelKeys?: string[];
-    providers?: ProviderConnection[];
+    providers?: ProviderConnectionDescriptor[];
     authMethods?: Record<string, ProviderAuthMethod[]>;
     authorizeOAuth?: (
       provider: string,
@@ -309,37 +309,61 @@ function createFakeBundle(
     runtime,
     providerConnections: options.providers
       ? {
-          async listProviders() {
-            return options.providers ?? [];
+          catalog: {
+            async listProviders() {
+              return options.providers ?? [];
+            },
           },
-          listAuthMethods(provider: string) {
-            return (
-              options.authMethods?.[provider] ?? [
-                {
-                  id: "api_key" as const,
-                  kind: "api_key" as const,
-                  type: "api" as const,
-                  label: "API key",
-                  credentialRef: `vault://${provider}/apiKey`,
-                },
-              ]
-            );
+          renderer: {
+            listAuthMethods(provider: string) {
+              return (
+                options.authMethods?.[provider] ?? [
+                  {
+                    id: "api_key" as const,
+                    kind: "api_key" as const,
+                    type: "api" as const,
+                    label: "API key",
+                    credentialRef: `vault://${provider}/apiKey`,
+                  },
+                ]
+              );
+            },
           },
-          async connectApiKey(provider: string, key: string) {
-            providerConnects.push({ provider, key });
+          credential: {
+            async listProviders() {
+              return options.providers ?? [];
+            },
+            async connectApiKey(provider: string, key: string) {
+              providerConnects.push({ provider, key });
+            },
+            async disconnect() {},
+            async refresh() {},
           },
-          async authorizeOAuth(
-            provider: string,
-            methodId: string,
-            inputs?: Record<string, string>,
-          ) {
-            return options.authorizeOAuth?.(provider, methodId, inputs);
+          authFlow: {
+            listAuthMethods(provider: string) {
+              return (
+                options.authMethods?.[provider] ?? [
+                  {
+                    id: "api_key" as const,
+                    kind: "api_key" as const,
+                    type: "api" as const,
+                    label: "API key",
+                    credentialRef: `vault://${provider}/apiKey`,
+                  },
+                ]
+              );
+            },
+            async authorizeOAuth(
+              provider: string,
+              methodId: string,
+              inputs?: Record<string, string>,
+            ) {
+              return options.authorizeOAuth?.(provider, methodId, inputs);
+            },
+            async completeOAuth(provider: string, methodId: string, code?: string) {
+              await options.completeOAuth?.(provider, methodId, code);
+            },
           },
-          async completeOAuth(provider: string, methodId: string, code?: string) {
-            await options.completeOAuth?.(provider, methodId, code);
-          },
-          async disconnect() {},
-          async refresh() {},
         }
       : undefined,
   } as unknown as CliShellSessionBundle;
@@ -479,7 +503,7 @@ describe("shell runtime", () => {
     expect(runtime.getViewState().notifications.at(-1)).toMatchObject({
       level: "warning",
       message:
-        "Use /inbox in the interactive shell; /questions remains a headless runtime-plugin command.",
+        "Use /inbox in the interactive shell; /questions remains a headless extension command.",
     });
 
     runtime.dispose();
@@ -587,11 +611,7 @@ describe("shell runtime", () => {
   test("lineage overlay checkout updates the hosted branch and visible transcript", async () => {
     const { bundle } = createFakeBundle({ sessionId: "lineage-checkout-session" });
     const workspace = mkdtempSync(join(tmpdir(), "brewva-shell-lineage-checkout-"));
-    const store = new HostedRuntimeTapeSessionStore(
-      bundle.runtime,
-      workspace,
-      "lineage-checkout-session",
-    );
+    const store = new HostedRuntimeTapeSessionStore(bundle.runtime, "lineage-checkout-session");
     const mainEntryId = store.appendMessage({
       role: "user",
       content: [{ type: "text", text: "main checkpoint" }],
@@ -1297,7 +1317,7 @@ describe("shell runtime", () => {
         reasoning: true,
       },
     ];
-    const providers: ProviderConnection[] = [
+    const providers: ProviderConnectionDescriptor[] = [
       {
         id: "openai",
         name: "OpenAI",
@@ -1411,7 +1431,7 @@ describe("shell runtime", () => {
         reasoning: true,
       },
     ];
-    const providers: ProviderConnection[] = [
+    const providers: ProviderConnectionDescriptor[] = [
       {
         id: "openai",
         name: "OpenAI",
@@ -1538,7 +1558,7 @@ describe("shell runtime", () => {
   });
 
   test("model picker c shortcut opens the provider connection picker", async () => {
-    const providers: ProviderConnection[] = [
+    const providers: ProviderConnectionDescriptor[] = [
       {
         id: "openai",
         name: "OpenAI",
@@ -1598,7 +1618,7 @@ describe("shell runtime", () => {
   });
 
   test("picker backspace on an empty query does not rebuild the active overlay", async () => {
-    const providers: ProviderConnection[] = [
+    const providers: ProviderConnectionDescriptor[] = [
       {
         id: "openai",
         name: "OpenAI",
@@ -1636,7 +1656,7 @@ describe("shell runtime", () => {
   });
 
   test("provider picker supports ctrl-n/ctrl-p navigation before opening connect flow", async () => {
-    const providers: ProviderConnection[] = [
+    const providers: ProviderConnectionDescriptor[] = [
       {
         id: "openai",
         name: "OpenAI",
@@ -1740,7 +1760,7 @@ describe("shell runtime", () => {
   });
 
   test("Kimi connect flow selects platform before accepting pasted API keys", async () => {
-    const providers: ProviderConnection[] = [
+    const providers: ProviderConnectionDescriptor[] = [
       {
         id: "kimi-coding",
         name: "Kimi",
@@ -1837,7 +1857,7 @@ describe("shell runtime", () => {
   });
 
   test("provider connect flow warns when a provider exposes no in-TUI auth methods", async () => {
-    const providers: ProviderConnection[] = [
+    const providers: ProviderConnectionDescriptor[] = [
       {
         id: "external",
         name: "External Provider",
@@ -1881,7 +1901,7 @@ describe("shell runtime", () => {
   });
 
   test("provider connect flow supports OAuth method selection and auto completion", async () => {
-    const providers: ProviderConnection[] = [
+    const providers: ProviderConnectionDescriptor[] = [
       {
         id: "openai",
         name: "OpenAI",
@@ -1988,7 +2008,7 @@ describe("shell runtime", () => {
   });
 
   test("provider connect flow lets browser OAuth paste a redirect URL from the wait dialog", async () => {
-    const providers: ProviderConnection[] = [
+    const providers: ProviderConnectionDescriptor[] = [
       {
         id: "openai",
         name: "OpenAI",
@@ -2081,7 +2101,7 @@ describe("shell runtime", () => {
   });
 
   test("provider connect flow closes manual OAuth input when browser OAuth completes", async () => {
-    const providers: ProviderConnection[] = [
+    const providers: ProviderConnectionDescriptor[] = [
       {
         id: "openai",
         name: "OpenAI",
@@ -2162,7 +2182,7 @@ describe("shell runtime", () => {
   });
 
   test("provider connect flow does not switch auth methods when browser OAuth fails", async () => {
-    const providers: ProviderConnection[] = [
+    const providers: ProviderConnectionDescriptor[] = [
       {
         id: "openai",
         name: "OpenAI",
@@ -2280,7 +2300,7 @@ describe("shell runtime", () => {
   });
 
   test("provider connect flow collects conditional OAuth prompts", async () => {
-    const providers: ProviderConnection[] = [
+    const providers: ProviderConnectionDescriptor[] = [
       {
         id: "github-copilot",
         name: "GitHub Copilot",

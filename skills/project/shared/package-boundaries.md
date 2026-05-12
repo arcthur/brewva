@@ -18,7 +18,7 @@ scope: package-boundaries
 | `@brewva/brewva-std`           | leaf standard primitives for async, collections, hashing, JSON, markdown, text, unknown readers, and Node-only filesystem helpers                       | product policy, runtime authority, or domains |
 | `@brewva/brewva-tools`         | family-sliced concrete tool adapters, pure tool contracts, managed-tool registry/capability spine, runtime-port helpers, and default bundle assembly    | orchestration policy or model routing         |
 | `@brewva/brewva-cli`           | user entrypoints and frontend command surface                                                                                                           | channel/control-plane ownership               |
-| `@brewva/brewva-gateway`       | daemon control plane, session supervision, channel host, and runtime wiring                                                                             | kernel semantics                              |
+| `@brewva/brewva-gateway`       | domain-sliced control-plane/admin seams, session supervision, channel host, hosted extension composition, and gateway-owned shared utilities            | kernel semantics                              |
 
 ## Invariants
 
@@ -75,6 +75,18 @@ scope: package-boundaries
 - tools managed capability policy is centralized in
   `@brewva/brewva-tools/registry`; family adapters receive scoped runtime
   facades and must fail closed when an undeclared capability is accessed
+- gateway public/domain entrypoints stay explicit by domain (`/admin`, `/ingress`,
+  `/host`, `/session`, `/channels`, `/daemon`, `/delegation`,
+  `/extensions`, `/protocol`); control-plane CLI routing lives under
+  `/admin`, while `/ingress` stays transport/auth oriented
+- gateway extension callers use `@brewva/brewva-gateway/extensions`
+  or `src/extensions/api.ts`; default hosted implementation stays under
+  `src/hosted/` owner modules
+- gateway provider connection metadata uses `ProviderConnectionDescriptor`;
+  the split control seam remains `credential`, `authFlow`, `catalog`, and
+  `renderer`
+- gateway `src/utils` is the only shared root under gateway source; it must not
+  import gateway domains
 - provider session resources are a controlled lifecycle port; hosted callers
   that replace session context or change provider/model must await
   `clearSession(sessionId)` before continuing

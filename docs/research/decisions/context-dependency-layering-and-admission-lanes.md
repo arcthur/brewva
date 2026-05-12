@@ -9,7 +9,7 @@
   - `docs/architecture/system-architecture.md`
   - `docs/reference/hosted-dynamic-context.md`
   - `docs/reference/runtime.md`
-  - `docs/reference/runtime-plugins.md`
+  - `docs/reference/extensions.md`
   - `docs/journeys/internal/context-and-compaction.md`
 - Code anchors:
   - `<deleted: packages/brewva-runtime/src/domain/context/provider.ts>`
@@ -19,7 +19,7 @@
   - `<deleted: packages/brewva-runtime/src/domain/context/injection.ts>`
   - `packages/brewva-runtime/src/runtime/runtime.ts`
   - `packages/brewva-runtime/src/domain/context/context.ts`
-  - `packages/brewva-gateway/src/runtime-plugins/hosted-workbench-context-pipeline.ts`
+  - `packages/brewva-gateway/src/hosted/internal/context/hosted-workbench-context-pipeline.ts`
 
 ## Decision Summary
 

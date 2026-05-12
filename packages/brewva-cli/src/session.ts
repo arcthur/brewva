@@ -2,4 +2,4 @@ export {
   createHostedSession as createBrewvaSession,
   type CreateHostedSessionOptions as CreateBrewvaSessionOptions,
   type HostedSessionResult as BrewvaSessionResult,
-} from "@brewva/brewva-gateway/host";
+} from "@brewva/brewva-gateway/hosted";

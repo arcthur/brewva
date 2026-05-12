@@ -12,10 +12,10 @@ Implementation anchors:
 - `packages/brewva-provider-core/src/providers/openai-completions/index.ts`
 - `packages/brewva-provider-core/src/providers/openai-responses/index.ts`
 - `packages/brewva-provider-core/src/providers/openai-codex-responses/index.ts`
-- `packages/brewva-gateway/src/cache/`
-- `packages/brewva-gateway/src/host/managed-agent-session.ts`
-- `packages/brewva-gateway/src/host/hosted-session-bootstrap.ts`
-- `packages/brewva-gateway/src/runtime-plugins/provider-request-reduction.ts`
+- `packages/brewva-gateway/src/hosted/internal/provider/cache/`
+- `packages/brewva-gateway/src/hosted/internal/session/managed-agent/session.ts`
+- `packages/brewva-gateway/src/hosted/internal/session/init/session-assembly.ts`
+- `packages/brewva-gateway/src/hosted/internal/provider/request/provider-request-reduction.ts`
 - `packages/brewva-runtime/src/domain/context/types.ts`
 
 ## Role

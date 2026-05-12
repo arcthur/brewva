@@ -27,7 +27,7 @@ describe("brewva-tools public entrypoints", () => {
       import("@brewva/brewva-tools/memory"),
       import("@brewva/brewva-tools/delegation"),
       import("@brewva/brewva-tools/workflow"),
-      import("@brewva/brewva-gateway/model-routing"),
+      import("@brewva/brewva-gateway/policy/model-routing"),
     ]);
 
     expect(registry.MANAGED_BREWVA_TOOL_NAMES).toContain("grep");

@@ -210,9 +210,7 @@ export const SessionsOpenParamsSchema = Type.Object(
     configPath: Type.Optional(NonEmptyString),
     model: Type.Optional(NonEmptyString),
     agentId: Type.Optional(NonEmptyString),
-    managedToolMode: Type.Optional(
-      Type.Union([Type.Literal("runtime_plugin"), Type.Literal("direct")]),
-    ),
+    managedToolMode: Type.Optional(Type.Union([Type.Literal("hosted"), Type.Literal("direct")])),
   },
   { additionalProperties: false },
 );

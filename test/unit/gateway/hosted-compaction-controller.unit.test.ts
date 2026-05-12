@@ -3,8 +3,8 @@ import type { ContextBudgetUsage } from "@brewva/brewva-runtime";
 import {
   HOSTED_COMPACTION_LADDER_TEST_ONLY,
   createHostedCompactionController,
-} from "../../../packages/brewva-gateway/src/runtime-plugins/hosted-compaction-controller.js";
-import { createHostedContextTelemetry } from "../../../packages/brewva-gateway/src/runtime-plugins/hosted-context-telemetry.js";
+} from "../../../packages/brewva-gateway/src/hosted/internal/context/hosted-compaction-controller.js";
+import { createHostedContextTelemetry } from "../../../packages/brewva-gateway/src/hosted/internal/context/hosted-context-telemetry.js";
 import { createRuntimeFixture } from "../../helpers/runtime.js";
 
 const HIGH_USAGE: ContextBudgetUsage = {
@@ -183,6 +183,7 @@ describe("hosted compaction controller", () => {
       compactionEntry: {
         id: "cmp-1",
         summary: "Compacted working set",
+        firstKeptEntryId: "entry-keep",
       },
       fromExtension: true,
     });
@@ -194,6 +195,7 @@ describe("hosted compaction controller", () => {
         summaryDigest: expect.any(String),
         sourceTurn: 0,
         leafEntryId: null,
+        firstKeptEntryId: "entry-keep",
         referenceContextDigest: null,
         fromTokens: 990,
         toTokens: 990,

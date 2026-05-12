@@ -72,7 +72,9 @@ Every accepted decision inherits these rules:
 
 - [canonical-hosted-turn-envelope](./canonical-hosted-turn-envelope.md)
 - [derived-session-wire-schema-and-frontend-session-protocol](./derived-session-wire-schema-and-frontend-session-protocol.md)
+- [gateway-domain-slicing-and-control-plane-ports](./gateway-domain-slicing-and-control-plane-ports.md)
 - [gateway-experience-ring-decomposition](./gateway-experience-ring-decomposition.md)
+- [gateway-hosted-lane-consolidation](./gateway-hosted-lane-consolidation.md)
 - [hosted-thread-loop-and-unified-recovery-decisions](./hosted-thread-loop-and-unified-recovery-decisions.md)
 - [hosted-turn-transitions-and-bounded-recovery](./hosted-turn-transitions-and-bounded-recovery.md)
 - [in-flight-steer-control-primitive](./in-flight-steer-control-primitive.md)

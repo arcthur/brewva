@@ -75,7 +75,7 @@ Planes describe product behavior:
   fingerprints, request-local reductions, numeric context status, cache edit
   application, and provider cache observations.
 - `Hosted Control Plane`: heartbeat, scheduling, hosted turns, subagents,
-  channel adapters, and runtime-plugin orchestration. It is opt-in behavior,
+  channel adapters, and hosted extension orchestration. It is opt-in behavior,
   not the default cognitive path.
 - `Experience Plane`: operator display, approval UX, inspect views, transcript
   rendering, and cache/cost/memory diagnostics.
@@ -174,7 +174,7 @@ or default-path backpressure guarantees across the broader control plane.
 No cross-agent saga semantics.
 No generalized compensation graphs.
 
-New orchestration breadth that widens the default hosted or runtime-plugin path
+New orchestration breadth that widens the default hosted or extension path
 must land as opt-in control-plane behavior or as an explicit exception with a
 compatibility story.
 
@@ -215,7 +215,7 @@ compatibility story.
   managed-tool capability registry, capability-scoped runtime facades,
   controlled runtime-port helpers, and default bundle assembly. It does not own
   hosted orchestration or model routing policy.
-- `@brewva/brewva-gateway`: hosted sessions, daemon, runtime plugins,
+- `@brewva/brewva-gateway`: hosted sessions, daemon, hosted extensions,
   subagents, local control-plane orchestration, hosted provider execution,
   cache-aware request shaping, and LLM-driven compaction.
 - `@brewva/brewva-cli` and `@brewva/brewva-tui`: operator shell, one-shot CLI,

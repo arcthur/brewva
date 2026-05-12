@@ -22,11 +22,11 @@ import {
   type BrewvaTurnLoopToolResultMessage,
 } from "@brewva/brewva-substrate/turn";
 import { Type } from "@sinclair/typebox";
-import { createChannelControlRouter } from "../../../packages/brewva-gateway/src/channels/channel-control-router.js";
-import { createChannelUpdateLockManager } from "../../../packages/brewva-gateway/src/channels/channel-update-lock.js";
-import { createBrewvaManagedAgentSession } from "../../../packages/brewva-gateway/src/host/managed-agent-session.js";
-import { HostedRuntimeTapeSessionStore } from "../../../packages/brewva-gateway/src/host/runtime-projection-session-store.js";
-import { createHostedTurnPipeline } from "../../../packages/brewva-gateway/src/runtime-plugins/index.js";
+import { createChannelControlRouter } from "../../../packages/brewva-gateway/src/channels/command/router.js";
+import { createChannelUpdateLockManager } from "../../../packages/brewva-gateway/src/channels/session/update-lock.js";
+import { createHostedBehaviorHostAdapter } from "../../../packages/brewva-gateway/src/hosted/internal/session/host-api-installation.js";
+import { createBrewvaManagedAgentSession } from "../../../packages/brewva-gateway/src/hosted/internal/session/managed-agent/session.js";
+import { HostedRuntimeTapeSessionStore } from "../../../packages/brewva-gateway/src/hosted/internal/session/projection/runtime-projection-session-store.js";
 import { registerFauxProvider } from "../../../packages/brewva-provider-core/src/providers/faux/index.js";
 import {
   createConnectionState,
@@ -235,7 +235,7 @@ async function createManagedSessionFixture(
 ) {
   const workspace = createTestWorkspace(testName);
   const runtime = new BrewvaRuntime({ cwd: workspace });
-  const sessionStore = new HostedRuntimeTapeSessionStore(runtime, workspace, `${testName}-session`);
+  const sessionStore = new HostedRuntimeTapeSessionStore(runtime, `${testName}-session`);
   const fauxProvider = registerFauxProvider({
     api: `${testName}-faux`,
     provider: `${testName}-provider`,
@@ -269,7 +269,7 @@ async function createManagedSessionFixture(
       agentDir: join(workspace, ".brewva-agent"),
     }),
     customTools: options?.customTools ?? [],
-    runtimePlugins: [createHostedTurnPipeline({ runtime, registerTools: false })],
+    extensions: [createHostedBehaviorHostAdapter({ runtime, registerTools: false })],
     initialModel: model,
     initialThinkingLevel: "off",
   });
@@ -836,7 +836,6 @@ describe("in-flight steer control primitive", () => {
       const originalContext = fixture.sessionStore.buildSessionContext();
       const restoredStore = new HostedRuntimeTapeSessionStore(
         fixture.runtime,
-        fixture.workspace,
         fixture.sessionStore.getSessionId(),
       );
       const restoredContext = restoredStore.buildSessionContext();

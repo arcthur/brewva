@@ -11,11 +11,11 @@ import { GATEWAY_SESSION_BOUND_EVENT_TYPE } from "@brewva/brewva-runtime/events"
 import {
   GATEWAY_SESSION_BINDING_CONTROL_SESSION_ID,
   resolveGatewaySessionBindingLogPath,
-} from "../../../packages/brewva-gateway/src/daemon/session-binding-tape.js";
+} from "../../../packages/brewva-gateway/src/daemon/session-supervisor/session-binding-tape.js";
 import {
   buildWorkerTestHarnessEnv,
   WORKER_TEST_HARNESS_ENV_KEYS,
-} from "../../../packages/brewva-gateway/src/session/worker-test-harness.js";
+} from "../../../packages/brewva-gateway/src/hosted/internal/thread-loop/worker/test-harness.js";
 import { patchProcessEnv } from "../../helpers/global-state.js";
 import { createOpsRuntimeConfig } from "../../helpers/runtime.js";
 import { createTestWorkspace, writeTestConfig } from "../../helpers/workspace.js";

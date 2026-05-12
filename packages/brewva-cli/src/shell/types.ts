@@ -2,10 +2,10 @@ import type { SessionOpenQuestion } from "@brewva/brewva-gateway";
 import type {
   ProviderAuthMethod,
   ProviderAuthPrompt,
-  ProviderConnection,
-  ProviderConnectionPort,
+  ProviderConnectionDescriptor,
+  ProviderConnectionSeams,
   ProviderOAuthAuthorization,
-} from "@brewva/brewva-gateway/host";
+} from "@brewva/brewva-gateway/hosted";
 import type { BrewvaRuntime } from "@brewva/brewva-runtime";
 import type {
   DecideEffectCommitmentInput,
@@ -45,7 +45,9 @@ export interface CliShellSessionBundle {
   session: BrewvaManagedPromptSession;
   runtime: BrewvaRuntime;
   toolDefinitions: ReadonlyMap<string, BrewvaToolDefinition>;
-  providerConnections?: ProviderConnectionPort;
+  providerConnections?: ProviderConnectionSeams;
+  initPhases: BrewvaSessionResult["initPhases"];
+  phase: BrewvaSessionResult["phase"];
   orchestration?: BrewvaSessionResult["orchestration"];
 }
 
@@ -375,7 +377,7 @@ export interface CliModelPickerOverlayPayload {
 }
 
 export interface CliProviderPickerItem extends CliPickerItem {
-  provider: ProviderConnection;
+  provider: ProviderConnectionDescriptor;
 }
 
 export interface CliProviderPickerOverlayPayload {
@@ -383,7 +385,7 @@ export interface CliProviderPickerOverlayPayload {
   title: string;
   query: string;
   selectedIndex: number;
-  providers: ProviderConnection[];
+  providers: ProviderConnectionDescriptor[];
   items: CliProviderPickerItem[];
 }
 
@@ -460,7 +462,7 @@ export type CliShellOverlayPayload =
 export type {
   ProviderAuthMethod,
   ProviderAuthPrompt,
-  ProviderConnection,
+  ProviderConnectionDescriptor,
   ProviderOAuthAuthorization,
 };
 

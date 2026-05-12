@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import type { HostedSessionResult } from "@brewva/brewva-gateway/hosted";
 import {
   BrewvaRuntime,
   createTrustedLocalGovernancePort,
@@ -8,8 +9,7 @@ import type { TurnEnvelope } from "@brewva/brewva-runtime/channels";
 import { createDeferred } from "@brewva/brewva-std/async";
 import { AgentRegistry } from "../../../packages/brewva-gateway/src/channels/agent-registry.js";
 import { AgentRuntimeManager } from "../../../packages/brewva-gateway/src/channels/agent-runtime-manager.js";
-import { createChannelSessionCoordinator } from "../../../packages/brewva-gateway/src/channels/channel-session-coordinator.js";
-import type { HostedSessionResult } from "../../../packages/brewva-gateway/src/host/create-hosted-session.js";
+import { createChannelSessionCoordinator } from "../../../packages/brewva-gateway/src/channels/session/coordinator.js";
 import { cleanupTestWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
 
 function createUserTurn(scopeKey: string): TurnEnvelope {
@@ -89,7 +89,7 @@ async function createCoordinatorFixture(options: {
     createSession: options.createSession as Parameters<
       typeof createChannelSessionCoordinator
     >[0]["createSession"],
-    createRuntimePlugins: () => [],
+    createExtensions: () => [],
     sessionOptions: {
       managedToolMode: "direct",
     },
@@ -332,6 +332,43 @@ describe("channel session coordinator ownership", () => {
       expect(
         fixture.eventRecords.filter((event) => event.type === "channel_conversation_bound"),
       ).toHaveLength(1);
+    } finally {
+      await fixture.coordinator.disposeAllSessions();
+      fixture.coordinator.disposeRuntime("worker");
+      cleanupTestWorkspace(fixture.workspace);
+    }
+  });
+
+  test("given a live session receives a newer turn, when representative turn lookup runs, then it returns the latest preserved turn context", async () => {
+    let fixture: Awaited<ReturnType<typeof createCoordinatorFixture>> | undefined;
+
+    fixture = await createCoordinatorFixture({
+      cleanupGracefulTimeoutMs: 25,
+      createSession: async () =>
+        createHostedSessionResult(
+          await fixture!.runtimeManager.getOrCreateRuntime("worker"),
+          "agent-session:representative",
+        ),
+    });
+
+    try {
+      const firstTurn = createUserTurn("scope-representative");
+      const handle = await fixture.coordinator.getOrCreateSession(
+        "scope-representative",
+        "worker",
+        firstTurn,
+      );
+      const secondTurn: TurnEnvelope = {
+        ...firstTurn,
+        turnId: "turn:scope-representative:latest",
+        parts: [{ type: "text", text: "latest" }],
+      };
+
+      await fixture.coordinator.getOrCreateSession("scope-representative", "worker", secondTurn);
+
+      expect(
+        fixture.coordinator.getRepresentativeTurnByAgentSessionId(handle.agentSessionId)?.turnId,
+      ).toBe("turn:scope-representative:latest");
     } finally {
       await fixture.coordinator.disposeAllSessions();
       fixture.coordinator.disposeRuntime("worker");

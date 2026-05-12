@@ -296,7 +296,7 @@ describe("Effect runtime foundation boundary", () => {
 
   test("gateway supervisor loops use Brewva scoped schedule handles", () => {
     const sessionSupervisorSource = readFileSync(
-      join(repoRoot, "packages/brewva-gateway/src/daemon/session-supervisor.ts"),
+      join(repoRoot, "packages/brewva-gateway/src/daemon/session-supervisor/index.ts"),
       "utf8",
     );
     const gatewayDaemonSource = readFileSync(
@@ -308,7 +308,7 @@ describe("Effect runtime foundation boundary", () => {
       "utf8",
     );
     const workerMainSource = readFileSync(
-      join(repoRoot, "packages/brewva-gateway/src/session/worker-main.ts"),
+      join(repoRoot, "packages/brewva-gateway/src/hosted/internal/thread-loop/worker/main.ts"),
       "utf8",
     );
     const channelLifecycleSource = readFileSync(
@@ -316,7 +316,10 @@ describe("Effect runtime foundation boundary", () => {
       "utf8",
     );
     const taskWatchdogSource = readFileSync(
-      join(repoRoot, "packages/brewva-gateway/src/session/task-progress-watchdog.ts"),
+      join(
+        repoRoot,
+        "packages/brewva-gateway/src/hosted/internal/thread-loop/watchdog/task-progress-watchdog.ts",
+      ),
       "utf8",
     );
     const workerRpcSource = readFileSync(
@@ -370,7 +373,7 @@ describe("Effect runtime foundation boundary", () => {
   test("public Node and Bun edges run one Effect operation per logical boundary", () => {
     const cliSource = readFileSync(join(repoRoot, "packages/brewva-cli/src/index.ts"), "utf8");
     const gatewayCliSource = readFileSync(
-      join(repoRoot, "packages/brewva-gateway/src/cli.ts"),
+      join(repoRoot, "packages/brewva-gateway/src/admin/internal/cli.ts"),
       "utf8",
     );
     const channelHostSource = readFileSync(
@@ -381,12 +384,12 @@ describe("Effect runtime foundation boundary", () => {
       join(repoRoot, "packages/brewva-gateway/src/channels/channel-host-lifecycle.ts"),
       "utf8",
     );
-    const channelBootstrapSource = readFileSync(
-      join(repoRoot, "packages/brewva-gateway/src/channels/channel-bootstrap.ts"),
+    const telegramLauncherSource = readFileSync(
+      join(repoRoot, "packages/brewva-gateway/src/channels/bridges/telegram/launcher.ts"),
       "utf8",
     );
     const channelSessionCoordinatorSource = readFileSync(
-      join(repoRoot, "packages/brewva-gateway/src/channels/channel-session-coordinator.ts"),
+      join(repoRoot, "packages/brewva-gateway/src/channels/session/coordinator.ts"),
       "utf8",
     );
     const channelTurnDispatcherSource = readFileSync(
@@ -398,7 +401,7 @@ describe("Effect runtime foundation boundary", () => {
       "utf8",
     );
     const workerMainSource = readFileSync(
-      join(repoRoot, "packages/brewva-gateway/src/session/worker-main.ts"),
+      join(repoRoot, "packages/brewva-gateway/src/hosted/internal/thread-loop/worker/main.ts"),
       "utf8",
     );
 
@@ -417,9 +420,9 @@ describe("Effect runtime foundation boundary", () => {
     expect(channelLifecycleSource).toContain("addScopedFinalizer(");
     expect(channelLifecycleSource).toContain("fromAbortableBoundaryPromise");
     expect(channelLifecycleSource).not.toContain("new Promise<void>((resolve, reject)");
-    expect(channelBootstrapSource).toContain("listenServerEffect");
-    expect(channelBootstrapSource).toContain("closeServerEffect");
-    expect(channelBootstrapSource).not.toContain("new Promise<void>((resolve, reject)");
+    expect(telegramLauncherSource).toContain("listenServerEffect");
+    expect(telegramLauncherSource).toContain("closeServerEffect");
+    expect(telegramLauncherSource).not.toContain("new Promise<void>((resolve, reject)");
     expect(channelSessionCoordinatorSource).toContain("createChannelEffectSerialQueue");
     expect(channelSessionCoordinatorSource).not.toContain("queueTail");
     expect(channelSessionCoordinatorSource).not.toContain("new Map<string, Promise<void>>");

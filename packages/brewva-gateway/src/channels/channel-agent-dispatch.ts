@@ -1,20 +1,19 @@
 import { BrewvaRuntime, type ToolOutputView } from "@brewva/brewva-runtime";
 import type { TurnEnvelope, TurnPart } from "@brewva/brewva-runtime/channels";
-import type { SubscribablePromptSession } from "../session/contracts.js";
-import { runHostedTurnEnvelope } from "../session/turn-envelope.js";
+import { runHostedTurnEnvelope } from "../hosted/api.js";
 import { toErrorMessage } from "../utils/errors.js";
 import { clampText } from "../utils/runtime.js";
 import type { AgentRegistry } from "./agent-registry.js";
-import { buildChannelPolicyBlock, type TelegramChannelPolicyState } from "./channel-policy.js";
 import type { ChannelReplyWriter, ChannelToolTurnOutput } from "./channel-reply-writer.js";
-import type { ChannelSessionCoordinator } from "./channel-session-coordinator.js";
-
-export interface PromptTurnOutputSession extends SubscribablePromptSession {}
-
-export interface PromptTurnOutputs {
-  assistantText: string;
-  toolOutputs: ChannelToolTurnOutput[];
-}
+import {
+  buildChannelPolicyBlock,
+  type TelegramChannelPolicyState,
+} from "./policy/channel-policy.js";
+import type {
+  ChannelPromptTurnOutputSession as PromptTurnOutputSession,
+  ChannelPromptTurnOutputs as PromptTurnOutputs,
+} from "./ports.js";
+import type { ChannelSessionCoordinator } from "./session/coordinator.js";
 
 export interface ChannelDispatchResult {
   ok: true;
@@ -220,12 +219,15 @@ export function createChannelAgentDispatch(input: {
         dispatch.agentId,
         dispatch.turn,
       );
+      const internalTurnId = `${dispatch.turn.turnId}:${dispatch.reason}:${input.sessionCoordinator.nextOutboundSequence(
+        state,
+      )}`;
       const outputs = await input.sessionCoordinator.enqueueSessionTask(state, async () => {
         input.sessionCoordinator.touchSession(state);
         return input.collectPromptTurnOutputs(state.session, dispatch.prompt, {
           runtime: state.runtime,
           sessionId: state.agentSessionId,
-          turnId: dispatch.turn.turnId,
+          turnId: internalTurnId,
         });
       });
       await input.registry.touchAgent(dispatch.agentId, Date.now(), true);

@@ -8,7 +8,7 @@
 - Stable docs:
   - `docs/architecture/system-architecture.md`
   - `docs/reference/session-lifecycle.md`
-  - `docs/reference/runtime-plugins.md`
+  - `docs/reference/extensions.md`
   - `docs/reference/token-cache.md`
   - `docs/reference/configuration.md`
   - `skills/project/shared/package-boundaries.md`

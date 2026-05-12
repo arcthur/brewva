@@ -6,7 +6,7 @@ import type { ReasoningCheckpointRecord, ReasoningRevertRecord } from "../reason
 import type { SkillRoutingScope } from "../skills/api.js";
 import type { IntegrityIssue } from "./integrity.js";
 
-export type ManagedToolMode = "runtime_plugin" | "direct";
+export type ManagedToolMode = "hosted" | "direct";
 
 export interface CreateBrewvaSessionOptions {
   cwd?: string;

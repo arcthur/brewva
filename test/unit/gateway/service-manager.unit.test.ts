@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { resolveSupervisorKind } from "../../../packages/brewva-gateway/src/daemon/service-manager.js";
+import { resolveSupervisorKind } from "../../../packages/brewva-gateway/src/admin/internal/service-manager.js";
 
 describe("gateway service manager", () => {
   test("resolves the default supervisor for supported platforms", () => {

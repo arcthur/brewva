@@ -23,6 +23,7 @@ export function registerContextDomain(
   return {
     services: {
       contextService: createContextService({
+        workspaceRoot: options.kernel.workspaceRoot,
         config: options.config,
         contextBudget: options.coreDependencies.contextBudget,
         sessionState: options.sessionState,

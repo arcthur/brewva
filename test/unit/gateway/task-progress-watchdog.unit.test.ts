@@ -3,7 +3,7 @@ import { BrewvaRuntime } from "@brewva/brewva-runtime";
 import {
   TASK_PROGRESS_WATCHDOG_TEST_ONLY,
   TaskProgressWatchdog,
-} from "../../../packages/brewva-gateway/src/session/task-progress-watchdog.js";
+} from "../../../packages/brewva-gateway/src/hosted/internal/thread-loop/watchdog/task-progress-watchdog.js";
 import { patchDateNow } from "../../helpers/global-state.js";
 import { createOpsRuntimeConfig } from "../../helpers/runtime.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";

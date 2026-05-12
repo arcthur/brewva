@@ -2,7 +2,7 @@ import type {
   BrewvaModelPreferences,
   BrewvaSessionModelDescriptor,
 } from "@brewva/brewva-substrate/session";
-import type { ProviderAuthMethod, ProviderConnection } from "../types.js";
+import type { ProviderAuthMethod, ProviderConnectionDescriptor } from "../types.js";
 
 export const RECENT_MODEL_LIMIT = 10;
 const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
@@ -77,7 +77,10 @@ function bestSearchScore(query: string, candidates: readonly string[]): number |
   return best;
 }
 
-export function providerSearchScore(provider: ProviderConnection, query: string): number | null {
+export function providerSearchScore(
+  provider: ProviderConnectionDescriptor,
+  query: string,
+): number | null {
   return bestSearchScore(query, [
     provider.id,
     provider.name,
@@ -92,7 +95,7 @@ export function providerDisplayName(provider: string): string {
 }
 
 export function providerCoversModelProvider(
-  provider: ProviderConnection,
+  provider: ProviderConnectionDescriptor,
   modelProvider: string,
 ): boolean {
   return provider.id === modelProvider || (provider.modelProviders ?? []).includes(modelProvider);
@@ -112,7 +115,7 @@ export function authMethodModelProviderFilter(
   return method.modelProviderFilter ?? method.credentialProvider ?? providerId;
 }
 
-export function providerConnectionFooter(provider: ProviderConnection): string {
+export function providerConnectionFooter(provider: ProviderConnectionDescriptor): string {
   if (!provider.connected) {
     if (provider.id === "openai" || provider.id === "openai-codex") {
       return "OAuth/API key";

@@ -136,7 +136,7 @@ To reduce ambiguity and long-term compatibility complexity, the control plane us
 Primary implementation surfaces:
 
 - `packages/brewva-gateway/src/protocol/schema.ts`
-- `packages/brewva-gateway/src/client.ts`
+- `packages/brewva-gateway/src/ingress/internal/client.ts`
 - `packages/brewva-gateway/src/daemon/gateway-daemon.ts`
 
 ## Related Docs
@@ -144,7 +144,7 @@ Primary implementation surfaces:
 - Operator lifecycle walkthrough: `docs/journeys/operator/gateway-control-plane-lifecycle.md`
 - Protocol and method details: `docs/reference/gateway-control-plane-protocol.md`
 - Main CLI subcommand entry: `packages/brewva-cli/src/index.ts`
-- Gateway CLI implementation: `packages/brewva-gateway/src/cli.ts`
+- Gateway CLI implementation: `packages/brewva-gateway/src/admin/internal/cli.ts`
 - Command surface reference: `docs/reference/commands.md`
 - Session lifecycle and artifacts: `docs/reference/session-lifecycle.md`,
   `docs/reference/artifacts-and-paths.md`

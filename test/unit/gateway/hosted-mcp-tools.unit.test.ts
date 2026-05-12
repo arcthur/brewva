@@ -4,7 +4,7 @@ import { getBrewvaToolMetadata } from "@brewva/brewva-tools/registry";
 import {
   buildHostedMcpToolName,
   createHostedMcpToolBundle,
-} from "../../../packages/brewva-gateway/src/host/mcp-tools.js";
+} from "../../../packages/brewva-gateway/src/hosted/internal/session/init/mcp-tools.js";
 
 describe("hosted MCP tools", () => {
   test("bridges MCP catalog entries into executable hosted tools without trusting annotations", async () => {

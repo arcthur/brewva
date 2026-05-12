@@ -7,7 +7,7 @@
 - Status: accepted
 - Stable docs:
   - `docs/reference/runtime.md`
-  - `docs/reference/runtime-plugins.md`
+  - `docs/reference/extensions.md`
   - `docs/reference/events/README.md`
   - `docs/reference/tools.md`
   - `docs/architecture/system-architecture.md`

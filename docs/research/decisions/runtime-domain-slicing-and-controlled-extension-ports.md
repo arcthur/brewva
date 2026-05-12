@@ -8,7 +8,7 @@
 - Stable docs:
   - `docs/architecture/system-architecture.md`
   - `docs/reference/runtime.md`
-  - `docs/reference/runtime-plugins.md`
+  - `docs/reference/extensions.md`
   - `docs/reference/events/README.md`
   - `docs/guide/understanding-runtime-system.md`
 - Code anchors:

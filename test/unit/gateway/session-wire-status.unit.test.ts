@@ -9,7 +9,7 @@ import {
   deriveSessionStatusSeedFromLifecycleSnapshot,
   deriveSessionStatusSeedFromFrame,
   deriveSessionStatusSeedFromHistory,
-} from "../../../packages/brewva-gateway/src/daemon/session-wire-status.js";
+} from "../../../packages/brewva-gateway/src/daemon/internal/session-wire-status.js";
 
 const SESSION_ID = asBrewvaSessionId("session-wire-status");
 

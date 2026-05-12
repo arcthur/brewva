@@ -95,6 +95,18 @@ function extractGatewayCommands(source: string): string[] {
       names.add(name);
     }
   }
+  for (const match of source.matchAll(/kind:\s*"([a-z][a-z-]+)"/g)) {
+    const name = match[1];
+    if (name && name !== "help" && name !== "unknown") {
+      names.add(name);
+    }
+  }
+  for (const match of source.matchAll(/case "([a-z][a-z-]+)"/g)) {
+    const name = match[1];
+    if (name && name !== "help" && name !== "unknown") {
+      names.add(name);
+    }
+  }
   return [...names].toSorted((left, right) => left.localeCompare(right));
 }
 
@@ -319,7 +331,7 @@ function renderRuntimeSurface(): string {
 
 function renderCliFlags(): string {
   const cliSource = readRepoFile("packages/brewva-cli/src/index.ts");
-  const gatewaySource = readRepoFile("packages/brewva-gateway/src/cli.ts");
+  const gatewaySource = readRepoFile("packages/brewva-gateway/src/admin/internal/cli.ts");
   const flags = [
     ...new Set([...extractLongFlags(cliSource), ...extractGatewayOptionKeys(gatewaySource)]),
   ].toSorted((left, right) => left.localeCompare(right));

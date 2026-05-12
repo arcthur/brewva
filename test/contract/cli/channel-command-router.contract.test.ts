@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { CommandRouter } from "@brewva/brewva-gateway";
+import { CommandRouter } from "@brewva/brewva-gateway/channels";
 
 describe("channel command router", () => {
   const router = new CommandRouter();

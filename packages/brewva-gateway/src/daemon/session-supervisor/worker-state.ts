@@ -6,8 +6,8 @@ import type {
   ParentToWorkerMessage,
   WorkerResultErrorCode,
   WorkerToParentMessage,
-} from "../../session/worker-protocol.js";
-import type { ChildRegistryEntry } from "../../state-store.js";
+} from "../../hosted/internal/thread-loop/worker/api.js";
+import type { ChildRegistryEntry } from "../../ingress/api.js";
 import type { StructuredLogger } from "../logger.js";
 import type {
   SendPromptOutput,
@@ -15,6 +15,7 @@ import type {
   SendPromptTrigger,
   SessionWorkerInfo,
 } from "../session-backend.js";
+import type { WorkerLifecycleState } from "../types.js";
 
 export interface PendingRequest {
   deferred: BrewvaDeferred.Deferred<Record<string, unknown> | undefined, Error>;
@@ -56,6 +57,7 @@ export interface WorkerHandle {
   readyRequestId?: string;
   readyDeferred?: BrewvaDeferred.Deferred<WorkerReadyPayload, Error>;
   lastHeartbeatAt: number;
+  lifecycleState: WorkerLifecycleState;
 }
 
 export interface WorkerReadyPayload {

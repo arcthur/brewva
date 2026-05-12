@@ -14,10 +14,10 @@ import {
   recordAbnormalSessionShutdown,
   recordSessionShutdownIfMissing,
   recordSessionTurnTransition,
-  runChannelModeOperation,
-  runGatewayCliOperation,
 } from "@brewva/brewva-gateway";
-import { DEFAULT_HOSTED_ROUTING_SCOPES } from "@brewva/brewva-gateway/host";
+import { runGatewayCliOperation } from "@brewva/brewva-gateway/admin";
+import { runChannelMode } from "@brewva/brewva-gateway/channels";
+import { DEFAULT_HOSTED_ROUTING_SCOPES } from "@brewva/brewva-gateway/hosted";
 import {
   BrewvaConfigLoadError,
   BrewvaRuntime,
@@ -30,7 +30,7 @@ import {
   type TaskSpec,
 } from "@brewva/brewva-runtime";
 import { formatISO } from "date-fns";
-import { createAgentOverlaysCommandRuntimePlugin } from "./agent-overlays-command-runtime-plugin.js";
+import { createAgentOverlaysCommandExtension } from "./agent-overlays-command-extension.js";
 import type { CliInteractiveSessionOptions } from "./cli-runtime.js";
 import { runCliPrintSession } from "./cli-runtime.js";
 import { runCredentialsCli } from "./credentials.js";
@@ -42,17 +42,17 @@ import {
   writeGatewayAssistantText,
 } from "./gateway-print.js";
 import { handleInsightsChannelCommand } from "./insights-channel-command.js";
-import { createInsightsCommandRuntimePlugin } from "./insights-command-runtime-plugin.js";
+import { createInsightsCommandExtension } from "./insights-command-extension.js";
 import { handleInspectChannelCommand } from "./inspect-channel-command.js";
-import { createInspectCommandRuntimePlugin } from "./inspect-command-runtime-plugin.js";
+import { createInspectCommandExtension } from "./inspect-command-extension.js";
 import { resolveTargetSession, runInspectCli } from "./inspect.js";
 import { resolveEffectiveCliMode } from "./interactive-mode.js";
 import { writeJsonLine } from "./json-lines.js";
 import { runOnboardCliOperation } from "./onboard.js";
 import { handleQuestionsChannelCommand } from "./questions-channel-command.js";
-import { createQuestionsCommandRuntimePlugin } from "./questions-command-runtime-plugin.js";
+import { createQuestionsCommandExtension } from "./questions-command-extension.js";
 import { createBrewvaSession } from "./session.js";
-import { createUpdateCommandRuntimePlugin } from "./update-command-runtime-plugin.js";
+import { createUpdateCommandExtension } from "./update-command-extension.js";
 
 const NODE_VERSION_RANGE = "^20.19.0 || >=22.13.0";
 const BREWVA_SHELL_SMOKE_ENV = "BREWVA_SHELL_SMOKE";
@@ -188,8 +188,8 @@ Options:
   --agent <id>          Agent self bundle id (.brewva/agents/<id>/{identity,constitution,memory}.md)
   --task <json>         TaskSpec JSON (schema: brewva.task.v1)
   --task-file <path>    TaskSpec JSON file
-  --managed-tools <runtime_plugin|direct>
-                       Register managed Brewva tools through the hosted runtime plugin or provide them directly (default: runtime_plugin)
+  --managed-tools <hosted|direct>
+                       Register managed Brewva tools through the hosted extension or provide them directly (default: hosted)
   --print, -p           Run one-shot mode
   --interactive, -i     Force interactive shell mode
   --mode <text|json>    One-shot output mode
@@ -429,13 +429,13 @@ function describeFlagValue(raw: unknown): string {
 
 function resolveManagedToolModeFlag(raw: unknown): CliValueResult<ManagedToolMode> {
   if (raw === undefined) {
-    return okCliValue("runtime_plugin");
+    return okCliValue("hosted");
   }
-  if (raw === "runtime_plugin" || raw === "direct") {
+  if (raw === "hosted" || raw === "direct") {
     return okCliValue(raw);
   }
   return cliValueError(
-    `Error: --managed-tools must be "runtime_plugin" or "direct" (received "${describeFlagValue(raw)}").`,
+    `Error: --managed-tools must be "hosted" or "direct" (received "${describeFlagValue(raw)}").`,
   );
 }
 
@@ -821,7 +821,7 @@ async function runCliRootOperation(): Promise<void> {
       process.exitCode = 1;
       return;
     }
-    await runChannelModeOperation({
+    await runChannelMode({
       cwd: parsed.cwd,
       configPath: parsed.configPath,
       model: parsed.model,
@@ -1060,12 +1060,12 @@ async function runCliRootOperation(): Promise<void> {
     routingDefaultScopes: [...DEFAULT_HOSTED_ROUTING_SCOPES],
   });
   const operatorRuntime = createOperatorRuntimePort(runtime);
-  const createRuntimePlugins = () => [
-    createInspectCommandRuntimePlugin(operatorRuntime),
-    createInsightsCommandRuntimePlugin(operatorRuntime),
-    createQuestionsCommandRuntimePlugin(runtime),
-    createAgentOverlaysCommandRuntimePlugin(runtime),
-    createUpdateCommandRuntimePlugin(runtime),
+  const createExtensions = () => [
+    createInspectCommandExtension(operatorRuntime),
+    createInsightsCommandExtension(operatorRuntime),
+    createQuestionsCommandExtension(runtime),
+    createAgentOverlaysCommandExtension(runtime),
+    createUpdateCommandExtension(runtime),
   ];
   const openEmbeddedSession = (sessionId?: string) =>
     createBrewvaSession({
@@ -1076,7 +1076,7 @@ async function runCliRootOperation(): Promise<void> {
       agentId: parsed.agentId,
       managedToolMode: parsed.managedToolMode,
       sessionId,
-      internalRuntimePlugins: createRuntimePlugins(),
+      extensions: createExtensions(),
     });
   let sessionResult = await openEmbeddedSession(parsed.sessionId);
   let session = sessionResult.session;
@@ -1178,6 +1178,8 @@ async function runCliRootOperation(): Promise<void> {
       const interactiveOptions: CliInteractiveSessionOptions = {
         runtime,
         providerConnections: sessionResult.providerConnections,
+        initPhases: sessionResult.initPhases,
+        phase: sessionResult.phase,
         orchestration,
         cwd: parsed.cwd ?? runtime.cwd,
         initialMessage,
@@ -1267,13 +1269,13 @@ if (isBunMain ?? isNodeMain) {
 
 export { parseArgs };
 export { handleInspectChannelCommand } from "./inspect-channel-command.js";
-export { createInspectCommandRuntimePlugin } from "./inspect-command-runtime-plugin.js";
+export { createInspectCommandExtension } from "./inspect-command-extension.js";
 export { handleInsightsChannelCommand } from "./insights-channel-command.js";
-export { createInsightsCommandRuntimePlugin } from "./insights-command-runtime-plugin.js";
+export { createInsightsCommandExtension } from "./insights-command-extension.js";
 export { handleQuestionsChannelCommand } from "./questions-channel-command.js";
-export { createQuestionsCommandRuntimePlugin } from "./questions-command-runtime-plugin.js";
-export { createAgentOverlaysCommandRuntimePlugin } from "./agent-overlays-command-runtime-plugin.js";
-export { createUpdateCommandRuntimePlugin } from "./update-command-runtime-plugin.js";
+export { createQuestionsCommandExtension } from "./questions-command-extension.js";
+export { createAgentOverlaysCommandExtension } from "./agent-overlays-command-extension.js";
+export { createUpdateCommandExtension } from "./update-command-extension.js";
 export { runInsightsCli };
 export { runOnboardCli } from "./onboard.js";
 export { JsonLineWriter, type JsonLineWritable, writeJsonLine } from "./json-lines.js";

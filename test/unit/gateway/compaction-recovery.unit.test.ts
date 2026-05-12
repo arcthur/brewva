@@ -17,8 +17,8 @@ import {
   dispatchPromptWithCompactionSettlement,
   getCompactionGenerationState,
   installSessionCompactionRecovery,
-} from "../../../packages/brewva-gateway/src/session/compaction-recovery.js";
-import type { ThreadLoopRecoveryPolicyName } from "../../../packages/brewva-gateway/src/session/thread-loop-types.js";
+} from "../../../packages/brewva-gateway/src/hosted/internal/compaction/recovery.js";
+import type { ThreadLoopRecoveryPolicyName } from "../../../packages/brewva-gateway/src/hosted/internal/thread-loop/state.js";
 import { buildToolCallBlockedPayload } from "../../helpers/events.js";
 
 function textPrompt(text: string): BrewvaPromptContentPart[] {

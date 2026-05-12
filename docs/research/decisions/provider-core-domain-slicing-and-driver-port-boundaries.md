@@ -20,7 +20,7 @@
   - `packages/brewva-provider-core/src/cache/`
   - `packages/brewva-provider-core/src/providers/`
   - `packages/brewva-substrate/src/turn/types.ts`
-  - `packages/brewva-gateway/src/host/managed-agent-session.ts`
+  - `packages/brewva-gateway/src/hosted/internal/session/managed-agent/session.ts`
 
 ## Decision Summary
 

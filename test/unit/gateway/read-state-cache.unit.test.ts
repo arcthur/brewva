@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { createReadUnchangedState } from "../../../packages/brewva-gateway/src/cache/index.js";
+import { createReadUnchangedState } from "../../../packages/brewva-gateway/src/hosted/internal/provider/cache/index.js";
 
 describe("read unchanged state", () => {
   test("returns unchanged only when the previous content is still visible and the file signature matches", () => {

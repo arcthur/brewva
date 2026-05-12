@@ -23,7 +23,10 @@ describe("token estimation boundary", () => {
       "utf8",
     );
     const distillerSource = readFileSync(
-      resolve(repoRoot, "packages/brewva-gateway/src/runtime-plugins/tool-output-distiller.ts"),
+      resolve(
+        repoRoot,
+        "packages/brewva-gateway/src/hosted/internal/session/tools/tool-output-distiller.ts",
+      ),
       "utf8",
     );
 

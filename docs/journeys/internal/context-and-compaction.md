@@ -86,7 +86,7 @@ flowchart TD
 ## Execution Semantics
 
 - there is no provider registry or automatic prompt-injection admission path;
-  runtime plugins may not reintroduce pseudo-sources through side channels
+  hosted extensions may not reintroduce pseudo-sources through side channels
 - guarded diagnostic families are explicit dynamic-tail blocks:
   - they stay headroom-governed
   - they do not participate in hidden provider selection or arena budget floors
@@ -218,17 +218,17 @@ flowchart TD
 - Context-critical allowlist: `packages/brewva-runtime/src/security/control-plane-tools.ts`
 - Context budget policy: `packages/brewva-runtime/src/domain/context/budget.ts`
 - Compaction integrity: `packages/brewva-runtime/src/domain/context/context-compaction.ts`
-- Hosted compaction controller: `packages/brewva-gateway/src/runtime-plugins/hosted-compaction-controller.ts`
-- Hosted context shell: `packages/brewva-gateway/src/runtime-plugins/context-transform.ts`
-- Context evidence sidecar/report: `packages/brewva-gateway/src/runtime-plugins/context-evidence.ts`
-- Provider request reduction: `packages/brewva-gateway/src/runtime-plugins/provider-request-reduction.ts`
-- Provider request recovery: `packages/brewva-gateway/src/runtime-plugins/provider-request-recovery.ts`
-- Compaction telemetry: `packages/brewva-gateway/src/runtime-plugins/hosted-context-telemetry.ts`
-- Turn resume path: `packages/brewva-gateway/src/session/compaction-recovery.ts`
+- Hosted compaction controller: `packages/brewva-gateway/src/hosted/internal/context/hosted-compaction-controller.ts`
+- Hosted context shell: `packages/brewva-gateway/src/hosted/internal/context/context-transform.ts`
+- Context evidence sidecar/report: `packages/brewva-gateway/src/hosted/internal/context/evidence/context-evidence.ts`
+- Provider request reduction: `packages/brewva-gateway/src/hosted/internal/provider/request/provider-request-reduction.ts`
+- Provider request recovery: `packages/brewva-gateway/src/hosted/internal/provider/request/provider-request-recovery.ts`
+- Compaction telemetry: `packages/brewva-gateway/src/hosted/internal/context/hosted-context-telemetry.ts`
+- Turn resume path: `packages/brewva-gateway/src/hosted/internal/compaction/recovery.ts`
 
 ## Related Docs
 
-- Runtime plugins: `docs/reference/runtime-plugins.md`
+- Runtime plugins: `docs/reference/extensions.md`
 - Configuration: `docs/reference/configuration.md`
 - Hosted dynamic context: `docs/reference/hosted-dynamic-context.md`
 - Working projection: `docs/reference/working-projection.md`

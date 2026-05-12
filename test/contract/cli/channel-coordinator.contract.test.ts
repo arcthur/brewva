@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { ChannelCoordinator } from "@brewva/brewva-gateway";
+import { ChannelCoordinator } from "@brewva/brewva-gateway/channels";
 
 describe("channel coordinator", () => {
   test("fanOut limits concurrent dispatch bursts while preserving result order", async () => {

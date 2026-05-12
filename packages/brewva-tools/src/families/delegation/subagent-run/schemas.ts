@@ -52,7 +52,7 @@ const ConsultKindSchema = buildStringEnumSchema(
   },
 );
 
-const ManagedToolModeSchema = buildStringEnumSchema(["direct", "runtime_plugin"] as const, {
+const ManagedToolModeSchema = buildStringEnumSchema(["direct", "hosted"] as const, {
   guidance: "Direct is default. Runtime plugin mode may only narrow within the chosen preset.",
 });
 

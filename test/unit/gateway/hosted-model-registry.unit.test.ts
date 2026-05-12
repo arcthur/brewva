@@ -2,11 +2,11 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { HostedAuthStore } from "../../../packages/brewva-gateway/src/host/hosted-auth-store.js";
+import { HostedAuthStore } from "../../../packages/brewva-gateway/src/hosted/internal/session/settings/hosted-auth-store.js";
 import {
   createHostedModelServices,
   HostedModelRegistry,
-} from "../../../packages/brewva-gateway/src/host/hosted-model-registry.js";
+} from "../../../packages/brewva-gateway/src/hosted/internal/session/settings/hosted-model-registry.js";
 import { patchProcessEnv } from "../../helpers/global-state.js";
 
 const TEST_ENV_KEY = "BREWVA_HOSTED_MODEL_REGISTRY_TEST_KEY";

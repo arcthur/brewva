@@ -14,8 +14,8 @@ import {
   buildChannelDispatchPrompt,
   collectPromptTurnOutputs,
 } from "../../../packages/brewva-gateway/src/channels/channel-agent-dispatch.js";
-import { resolveTelegramChannelPolicyState } from "../../../packages/brewva-gateway/src/channels/channel-policy.js";
-import type { ChannelSessionHandle } from "../../../packages/brewva-gateway/src/channels/channel-session-coordinator.js";
+import { resolveTelegramChannelPolicyState } from "../../../packages/brewva-gateway/src/channels/policy/channel-policy.js";
+import type { ChannelSessionHandle } from "../../../packages/brewva-gateway/src/channels/session/coordinator.js";
 import { createRuntimeFixture } from "../../helpers/runtime.js";
 
 function createInboundTurn(): TurnEnvelope {
@@ -158,6 +158,68 @@ describe("channel agent dispatch", () => {
     expect(eventTypes).toContain("channel_turn_dispatch_start");
     expect(eventTypes).toContain("channel_turn_dispatch_end");
     expect(eventTypes).toContain("channel_turn_outbound_complete");
+  });
+
+  test("executePromptForAgent assigns a distinct internal turn id for repeated delegated runs on the same inbound turn", async () => {
+    const runtime = createRuntimeFixture();
+    const turn = createInboundTurn();
+    const collectCalls: Array<{ turnId?: string }> = [];
+    let nextSequence = 0;
+    const state = {
+      scopeKey: "chat-1",
+      agentId: "reviewer",
+      runtime,
+      agentSessionId: "agent-session:reviewer",
+      session: {
+        session: {},
+      },
+    } as unknown as ChannelSessionHandle;
+
+    const dispatcher = createChannelAgentDispatch({
+      registry: {
+        touchAgent: async () => undefined,
+      },
+      sessionCoordinator: {
+        getOrCreateSession: async () => state,
+        enqueueSessionTask: async (_state, task) => task(),
+        touchSession: () => undefined,
+        nextOutboundSequence: () => {
+          nextSequence += 1;
+          return nextSequence;
+        },
+      },
+      replyWriter: {
+        sendAgentOutputs: async () => 0,
+      },
+      collectPromptTurnOutputs: async (_session, _prompt, options) => {
+        collectCalls.push({ turnId: options?.turnId });
+        return {
+          assistantText: "ok",
+          toolOutputs: [],
+        };
+      },
+      channelPolicyState: resolveTelegramChannelPolicyState(),
+    });
+
+    await dispatcher.executePromptForAgent({
+      scopeKey: "chat-1",
+      agentId: "reviewer",
+      prompt: "first delegated task",
+      reason: "a2a",
+      turn,
+    });
+    await dispatcher.executePromptForAgent({
+      scopeKey: "chat-1",
+      agentId: "reviewer",
+      prompt: "second delegated task",
+      reason: "a2a",
+      turn,
+    });
+
+    expect(collectCalls).toEqual([
+      { turnId: "turn-approval-1:a2a:1" },
+      { turnId: "turn-approval-1:a2a:2" },
+    ]);
   });
 
   test("collectPromptTurnOutputs resumes a pending reasoning revert inline and clears superseded channel outputs", async () => {

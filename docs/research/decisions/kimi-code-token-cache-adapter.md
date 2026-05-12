@@ -13,7 +13,7 @@
   - `packages/brewva-provider-core/src/cache/render/openai-completions.ts`
   - `packages/brewva-provider-core/src/providers/anthropic/index.ts`
   - `packages/brewva-provider-core/src/providers/openai-completions/index.ts`
-  - `packages/brewva-gateway/src/host/provider-connection.ts`
+  - `packages/brewva-gateway/src/hosted/internal/provider/connection-port.ts`
   - `test/unit/provider-core/cache-policy.unit.test.ts`
   - `test/live/provider/token-cache.live.test.ts`
   - `packages/brewva-provider-core/src/catalog/models.generated.ts`

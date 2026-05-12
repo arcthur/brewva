@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 describe("gateway contract: hosted session surface", () => {
@@ -10,55 +10,72 @@ describe("gateway contract: hosted session surface", () => {
       "packages",
       "brewva-gateway",
       "src",
-      "host",
-      "hosted-session-bootstrap.ts",
+      "hosted",
+      "internal",
+      "session",
+      "init",
+      "session-assembly.ts",
     );
-    const hostedDriverPath = resolve(
+    const hostedFactoryPath = resolve(
       repoRoot,
       "packages",
       "brewva-gateway",
       "src",
-      "host",
-      "hosted-session-driver.ts",
+      "hosted",
+      "internal",
+      "session",
+      "session-factory.ts",
     );
     const hostedRuntimePath = resolve(
       repoRoot,
       "packages",
       "brewva-gateway",
       "src",
-      "host",
-      "hosted-session-runtime.ts",
+      "hosted",
+      "internal",
+      "session",
+      "session-runtime.ts",
     );
-    const hostedBackendPath = resolve(
+    const hostedServicesPath = resolve(
       repoRoot,
       "packages",
       "brewva-gateway",
       "src",
-      "host",
-      "hosted-session-backend.ts",
+      "hosted",
+      "internal",
+      "session",
+      "local-session-services.ts",
     );
-    const hostedLocalBackendPath = resolve(
+    const hostedLocalServicesPath = resolve(
       repoRoot,
       "packages",
       "brewva-gateway",
       "src",
-      "host",
-      "hosted-session-backend-local.ts",
+      "hosted",
+      "internal",
+      "session",
+      "local-session-services.ts",
     );
     const managedSessionPath = resolve(
       repoRoot,
       "packages",
       "brewva-gateway",
       "src",
-      "host",
-      "managed-agent-session.ts",
+      "hosted",
+      "internal",
+      "session",
+      "managed-agent",
+      "session.ts",
     );
     const runtimeProjectionStorePath = resolve(
       repoRoot,
       "packages",
       "brewva-gateway",
       "src",
-      "host",
+      "hosted",
+      "internal",
+      "session",
+      "projection",
       "runtime-projection-session-store.ts",
     );
     const substratePackagePath = resolve(repoRoot, "packages", "brewva-substrate", "package.json");
@@ -83,15 +100,20 @@ describe("gateway contract: hosted session surface", () => {
       "packages",
       "brewva-gateway",
       "src",
-      "host",
-      "hosted-provider-stream.ts",
+      "hosted",
+      "internal",
+      "provider",
+      "stream.ts",
     );
     const hostedAuthStorePath = resolve(
       repoRoot,
       "packages",
       "brewva-gateway",
       "src",
-      "host",
+      "hosted",
+      "internal",
+      "session",
+      "settings",
       "hosted-auth-store.ts",
     );
     const hostedModelRegistryPath = resolve(
@@ -99,7 +121,10 @@ describe("gateway contract: hosted session surface", () => {
       "packages",
       "brewva-gateway",
       "src",
-      "host",
+      "hosted",
+      "internal",
+      "session",
+      "settings",
       "hosted-model-registry.ts",
     );
     const createHostedSessionPath = resolve(
@@ -107,16 +132,18 @@ describe("gateway contract: hosted session surface", () => {
       "packages",
       "brewva-gateway",
       "src",
-      "host",
+      "hosted",
+      "internal",
+      "session",
       "create-hosted-session.ts",
     );
     const gatewayPackageJsonPath = resolve(repoRoot, "packages", "brewva-gateway", "package.json");
 
     const bootstrapSource = readFileSync(hostedBootstrapPath, "utf8");
-    const driverSource = readFileSync(hostedDriverPath, "utf8");
+    const factorySource = readFileSync(hostedFactoryPath, "utf8");
     const runtimeSource = readFileSync(hostedRuntimePath, "utf8");
-    const backendSource = readFileSync(hostedBackendPath, "utf8");
-    const localBackendSource = readFileSync(hostedLocalBackendPath, "utf8");
+    const servicesSource = readFileSync(hostedServicesPath, "utf8");
+    const localServicesSource = readFileSync(hostedLocalServicesPath, "utf8");
     const managedSessionSource = readFileSync(managedSessionPath, "utf8");
     const runtimeProjectionStoreSource = readFileSync(runtimeProjectionStorePath, "utf8");
     const substratePackageSource = readFileSync(substratePackagePath, "utf8");
@@ -125,7 +152,6 @@ describe("gateway contract: hosted session surface", () => {
     const providerStreamSource = readFileSync(providerStreamPath, "utf8");
     const hostedAuthStoreSource = readFileSync(hostedAuthStorePath, "utf8");
     const hostedModelRegistrySource = readFileSync(hostedModelRegistryPath, "utf8");
-    const createHostedSessionSource = readFileSync(createHostedSessionPath, "utf8");
     const gatewayPackageJsonSource = readFileSync(gatewayPackageJsonPath, "utf8");
 
     expect(bootstrapSource).toContain("BrewvaManagedPromptSession");
@@ -139,63 +165,63 @@ describe("gateway contract: hosted session surface", () => {
     expect(bootstrapSource).not.toContain("resolveBootstrapSelection");
     expect(bootstrapSource).not.toContain(".createServices(");
     expect(bootstrapSource).not.toContain(".createSession(");
-    expect(driverSource).toContain("createHostedSessionDriver");
-    expect(driverSource).toContain("createRuntime(");
-    expect(driverSource).toContain("requestedModel");
-    expect(driverSource).toContain("internalRuntimePlugins");
-    expect(driverSource).toContain("readonly settings: HostedSessionSettingsView");
-    expect(driverSource).toContain("readonly modelCatalog: BrewvaModelCatalog");
-    expect(driverSource).not.toContain("HostedSessionResourceLoader");
-    expect(driverSource).not.toContain("export type HostedSessionCreateResult");
-    expect(driverSource).not.toContain("DefaultResourceLoader");
-    expect(driverSource).not.toContain("createAgentSession(");
-    expect(driverSource).not.toContain("requirePiSettingsManager");
-    expect(driverSource).not.toContain("@mariozechner/pi-coding-agent");
-    expect(driverSource).not.toContain("pi-hosted-session-runtime");
-    expect(driverSource).not.toContain("createPiHostedSessionDriver");
-    expect(driverSource).not.toContain("createPiHostedSettingsManager");
-    expect(driverSource).not.toContain("requirePiHostedSessionBridge");
+    expect(factorySource).toContain("createHostedSessionFactory");
+    expect(factorySource).toContain("createRuntime(");
+    expect(factorySource).toContain("requestedModel");
+    expect(factorySource).toContain("extensions");
+    expect(factorySource).toContain("readonly settings: HostedSessionSettingsView");
+    expect(factorySource).toContain("readonly modelCatalog: BrewvaModelCatalog");
+    expect(factorySource).not.toContain("HostedSessionResourceLoader");
+    expect(factorySource).not.toContain("export type HostedSessionCreateResult");
+    expect(factorySource).not.toContain("DefaultResourceLoader");
+    expect(factorySource).not.toContain("createAgentSession(");
+    expect(factorySource).not.toContain("requirePiSettingsManager");
+    expect(factorySource).not.toContain("@mariozechner/pi-coding-agent");
+    expect(factorySource).not.toContain("pi-session-runtime");
+    expect(factorySource).not.toContain("createPiHostedSessionFactory");
+    expect(factorySource).not.toContain("createPiHostedSettingsManager");
+    expect(factorySource).not.toContain("requirePiHostedSessionBridge");
 
-    expect(runtimeSource).toContain("createHostedSessionRuntimeDriver");
+    expect(runtimeSource).toContain("createHostedSessionRuntimeFactory");
     expect(runtimeSource).toContain("createHostedSessionRuntimeSettings");
     expect(runtimeSource).not.toContain("requireHostedSessionPiBridge");
     expect(runtimeSource).not.toContain("HostedPiSessionBridge");
     expect(runtimeSource).not.toContain("@mariozechner/pi-coding-agent");
-    expect(runtimeSource).not.toContain("pi-hosted-session-runtime");
-    expect(runtimeSource).not.toContain("createPiHostedSessionDriver");
+    expect(runtimeSource).not.toContain("pi-session-runtime");
+    expect(runtimeSource).not.toContain("createPiHostedSessionFactory");
     expect(runtimeSource).not.toContain("createPiHostedSettingsManager");
     expect(runtimeSource).toContain("createHostedSessionModelServices");
     expect(runtimeSource).toContain("createHostedSessionServicesBundle");
     expect(runtimeSource).toContain("createHostedSessionResult");
 
-    expect(backendSource).toContain("createHostedSessionSettingsHandle");
-    expect(backendSource).toContain("createHostedSessionModelServices");
-    expect(backendSource).toContain("createHostedSessionServicesBundle");
-    expect(backendSource).toContain("createHostedSessionResult");
-    expect(backendSource).not.toContain("AuthStorage.create(");
-    expect(backendSource).not.toContain("ModelRegistry.create(");
-    expect(backendSource).not.toContain("@mariozechner/pi-coding-agent");
-    expect(backendSource).not.toContain("createAgentSession(");
-    expect(backendSource).not.toContain("DefaultResourceLoader");
-    expect(backendSource).not.toContain("pi-hosted-session-backend");
-    expect(backendSource).not.toContain("createPiHostedSessionBackendAdapter");
+    expect(servicesSource).toContain("createHostedSessionSettingsHandle");
+    expect(servicesSource).toContain("createHostedSessionModelServices");
+    expect(servicesSource).toContain("createHostedSessionServicesBundle");
+    expect(servicesSource).toContain("createHostedSessionResult");
+    expect(servicesSource).not.toContain("AuthStorage.create(");
+    expect(servicesSource).not.toContain("ModelRegistry.create(");
+    expect(servicesSource).not.toContain("@mariozechner/pi-coding-agent");
+    expect(servicesSource).not.toContain("createAgentSession(");
+    expect(servicesSource).not.toContain("DefaultResourceLoader");
+    expect(servicesSource).not.toContain("pi-hosted-session-backend");
+    expect(servicesSource).not.toContain("createPiHostedSessionBackendAdapter");
 
-    expect(localBackendSource).toContain("createHostedResourceLoader");
-    expect(localBackendSource).toContain("createBrewvaManagedAgentSession");
-    expect(localBackendSource).toContain("HostedRuntimeTapeSessionStore");
-    expect(localBackendSource).not.toContain("HostedRuntimeProjectionSessionStore");
-    expect(localBackendSource).toContain(
+    expect(localServicesSource).toContain("createHostedResourceLoader");
+    expect(localServicesSource).toContain("createBrewvaManagedAgentSession");
+    expect(localServicesSource).toContain("HostedRuntimeTapeSessionStore");
+    expect(localServicesSource).not.toContain("HostedRuntimeProjectionSessionStore");
+    expect(localServicesSource).toContain(
       "createHostedModelServices as createLocalHostedModelServices",
     );
-    expect(localBackendSource).toContain("readHostedSettingsHandle");
-    expect(localBackendSource).not.toContain("DefaultResourceLoader");
-    expect(localBackendSource).not.toContain("SessionManager");
-    expect(localBackendSource).not.toContain("new BrewvaManagedSessionStore");
-    expect(localBackendSource).not.toContain("createAgentSession(");
-    expect(localBackendSource).not.toContain("new AgentSession(");
-    expect(localBackendSource).not.toContain("@mariozechner/pi-coding-agent");
-    expect(localBackendSource).not.toContain("AuthStorage.create(");
-    expect(localBackendSource).not.toContain("ModelRegistry.create(");
+    expect(localServicesSource).toContain("readHostedSettingsHandle");
+    expect(localServicesSource).not.toContain("DefaultResourceLoader");
+    expect(localServicesSource).not.toContain("SessionManager");
+    expect(localServicesSource).not.toContain("new BrewvaManagedSessionStore");
+    expect(localServicesSource).not.toContain("createAgentSession(");
+    expect(localServicesSource).not.toContain("new AgentSession(");
+    expect(localServicesSource).not.toContain("@mariozechner/pi-coding-agent");
+    expect(localServicesSource).not.toContain("AuthStorage.create(");
+    expect(localServicesSource).not.toContain("ModelRegistry.create(");
     expect(runtimeProjectionStoreSource).not.toContain("hosted_session_projection_");
     expect(runtimeProjectionStoreSource).not.toContain("migrateLegacyHostedProjectionEvents");
 
@@ -251,8 +277,7 @@ describe("gateway contract: hosted session surface", () => {
     expect(providerStreamSource).not.toContain("as unknown as ProviderContext");
     expect(providerStreamSource).not.toContain("as unknown as ProviderAssistantMessageEventStream");
 
-    expect(createHostedSessionSource).not.toContain("requireHostedPiSession");
-    expect(createHostedSessionSource).not.toContain("HostedPiSessionBridge");
+    expect(existsSync(createHostedSessionPath)).toBe(false);
     expect(gatewayPackageJsonSource).not.toContain('"@mariozechner/pi-coding-agent"');
     expect(gatewayPackageJsonSource).not.toContain('"@mariozechner/pi-ai"');
     expect(gatewayPackageJsonSource).not.toContain('"@mariozechner/pi-agent-core"');

@@ -163,7 +163,7 @@ describe("Evidence artifact extraction", () => {
   test("extracts trusted skill effect denials as policy_denied instead of execution", () => {
     const artifacts = extractEvidenceArtifacts({
       toolName: "exec",
-      args: { command: "ls -1 packages/brewva-gateway/src/runtime-plugins" },
+      args: { command: "ls -1 packages/brewva-gateway/src/hosted/internal/thread-loop/context" },
       outputText: "Tool 'exec' performs denied effects for skill 'design': local_exec.",
       isError: true,
       trustedFailureClass: "policy_denied",

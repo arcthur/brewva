@@ -2,11 +2,11 @@
 
 Implementation anchors:
 
-- `packages/brewva-gateway/src/runtime-plugins/hosted-workbench-context-pipeline.ts`
-- `packages/brewva-gateway/src/runtime-plugins/hosted-context-blocks.ts`
-- `packages/brewva-gateway/src/runtime-plugins/hosted-context-support.ts`
-- `packages/brewva-gateway/src/runtime-plugins/context-contract.ts`
-- `packages/brewva-gateway/src/runtime-plugins/context-transform.ts` (lifecycle shell only)
+- `packages/brewva-gateway/src/hosted/internal/context/workbench-context.ts`
+- `packages/brewva-gateway/src/hosted/internal/context/hosted-context-blocks.ts`
+- `packages/brewva-gateway/src/hosted/internal/context/hosted-context-support.ts`
+- `packages/brewva-gateway/src/hosted/internal/context/context-contract.ts`
+- `packages/brewva-gateway/src/hosted/internal/context/context-transform.ts` (lifecycle shell only)
 
 ## Role
 
@@ -37,7 +37,7 @@ A hosted turn has one stable request shape:
 
 - stable system prompt plus `[Brewva Context Contract]`
 - stable managed tool definitions
-- one hidden dynamic tail rendered by `createHostedWorkbenchContextPipeline`
+- one hidden dynamic tail rendered by `createHostedWorkbenchContextController`
 - ordinary conversation messages and tool results
 
 There is no `ContextSourceProvider` registry, no supplemental family registry,

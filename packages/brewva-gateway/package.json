@@ -12,23 +12,59 @@
       "import": "./dist/index.js",
       "default": "./dist/index.js"
     },
-    "./runtime-plugins": {
-      "types": "./dist/runtime-plugins.d.ts",
-      "bun": "./src/runtime-plugins.ts",
-      "import": "./dist/runtime-plugins.js",
-      "default": "./dist/runtime-plugins.js"
+    "./hosted": {
+      "types": "./dist/hosted/api.d.ts",
+      "bun": "./src/hosted/api.ts",
+      "import": "./dist/hosted/api.js",
+      "default": "./dist/hosted/api.js"
     },
-    "./host": {
-      "types": "./dist/host.d.ts",
-      "bun": "./src/host.ts",
-      "import": "./dist/host.js",
-      "default": "./dist/host.js"
+    "./channels": {
+      "types": "./dist/channels/api.d.ts",
+      "bun": "./src/channels/api.ts",
+      "import": "./dist/channels/api.js",
+      "default": "./dist/channels/api.js"
     },
-    "./model-routing": {
-      "types": "./dist/model-routing/index.d.ts",
-      "bun": "./src/model-routing/index.ts",
-      "import": "./dist/model-routing/index.js",
-      "default": "./dist/model-routing/index.js"
+    "./daemon": {
+      "types": "./dist/daemon/api.d.ts",
+      "bun": "./src/daemon/api.ts",
+      "import": "./dist/daemon/api.js",
+      "default": "./dist/daemon/api.js"
+    },
+    "./admin": {
+      "types": "./dist/admin/api.d.ts",
+      "bun": "./src/admin/api.ts",
+      "import": "./dist/admin/api.js",
+      "default": "./dist/admin/api.js"
+    },
+    "./ingress": {
+      "types": "./dist/ingress/api.d.ts",
+      "bun": "./src/ingress/api.ts",
+      "import": "./dist/ingress/api.js",
+      "default": "./dist/ingress/api.js"
+    },
+    "./extensions": {
+      "types": "./dist/extensions/api.d.ts",
+      "bun": "./src/extensions/api.ts",
+      "import": "./dist/extensions/api.js",
+      "default": "./dist/extensions/api.js"
+    },
+    "./delegation": {
+      "types": "./dist/delegation/api.d.ts",
+      "bun": "./src/delegation/api.ts",
+      "import": "./dist/delegation/api.js",
+      "default": "./dist/delegation/api.js"
+    },
+    "./policy/model-routing": {
+      "types": "./dist/policy/model-routing/api.d.ts",
+      "bun": "./src/policy/model-routing/api.ts",
+      "import": "./dist/policy/model-routing/api.js",
+      "default": "./dist/policy/model-routing/api.js"
+    },
+    "./protocol": {
+      "types": "./dist/protocol/api.d.ts",
+      "bun": "./src/protocol/api.ts",
+      "import": "./dist/protocol/api.js",
+      "default": "./dist/protocol/api.js"
     }
   },
   "dependencies": {

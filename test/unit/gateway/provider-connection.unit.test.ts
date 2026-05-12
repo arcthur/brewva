@@ -5,13 +5,13 @@ import { createServer, type Server } from "node:http";
 import { hostname, tmpdir, userInfo } from "node:os";
 import { join } from "node:path";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
-import { HostedAuthStore } from "../../../packages/brewva-gateway/src/host/hosted-auth-store.js";
-import { HostedModelRegistry } from "../../../packages/brewva-gateway/src/host/hosted-model-registry.js";
 import {
   configureCredentialVaultModelAuth,
   createProviderConnectionPort,
-  type ProviderAuthHandler,
-} from "../../../packages/brewva-gateway/src/host/provider-connection.js";
+} from "../../../packages/brewva-gateway/src/hosted/internal/provider/connection-port.js";
+import type { ProviderAuthHandler } from "../../../packages/brewva-gateway/src/hosted/internal/provider/types.js";
+import { HostedAuthStore } from "../../../packages/brewva-gateway/src/hosted/internal/session/settings/hosted-auth-store.js";
+import { HostedModelRegistry } from "../../../packages/brewva-gateway/src/hosted/internal/session/settings/hosted-model-registry.js";
 import { patchProcessEnv } from "../../helpers/global-state.js";
 
 const INTRINSIC_FETCH = globalThis.fetch;

@@ -32,8 +32,8 @@ function listProductionFiles(): string[] {
 describe("hosted turn envelope boundary", () => {
   test("keeps production hosted thread loop access behind the turn envelope", () => {
     const allowed = new Set([
-      "packages/brewva-gateway/src/session/turn-envelope.ts",
-      "packages/brewva-gateway/src/session/hosted-thread-loop.ts",
+      "packages/brewva-gateway/src/hosted/internal/thread-loop/turn-envelope.ts",
+      "packages/brewva-gateway/src/hosted/internal/thread-loop/hosted-thread-loop.ts",
     ]);
 
     const offenders = listProductionFiles()
@@ -45,8 +45,8 @@ describe("hosted turn envelope boundary", () => {
 
   test("keeps production profile resolution behind the turn envelope", () => {
     const allowed = new Set([
-      "packages/brewva-gateway/src/session/turn-envelope.ts",
-      "packages/brewva-gateway/src/session/thread-loop-profiles.ts",
+      "packages/brewva-gateway/src/hosted/internal/thread-loop/turn-envelope.ts",
+      "packages/brewva-gateway/src/hosted/internal/thread-loop/state.ts",
     ]);
 
     const offenders = listProductionFiles()
@@ -65,7 +65,7 @@ describe("hosted turn envelope boundary", () => {
     ];
 
     const offenders = listProductionFiles().filter((file) => {
-      if (file === "packages/brewva-gateway/src/session/turn-envelope.ts") {
+      if (file === "packages/brewva-gateway/src/hosted/internal/thread-loop/turn-envelope.ts") {
         return false;
       }
       const source = readRepoFile(file);
@@ -95,7 +95,9 @@ describe("hosted turn envelope boundary", () => {
   });
 
   test("keeps worker session-wire relay suppression separate from active turn ownership", () => {
-    const source = readRepoFile("packages/brewva-gateway/src/session/worker-main.ts");
+    const source = readRepoFile(
+      "packages/brewva-gateway/src/hosted/internal/thread-loop/worker/main.ts",
+    );
     const subscriptionMatch = source.match(
       /unsubscribeSessionWire = sessionResult\.runtime\.inspect\.sessionWire\.subscribe\([\s\S]*?\n    \);/u,
     );

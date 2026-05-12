@@ -1,4 +1,4 @@
-import type { ChannelCommandMatch } from "./command-router.js";
+import type { ChannelCommandMatch } from "./command/parser.js";
 
 export type ChannelOperatorAction =
   | {

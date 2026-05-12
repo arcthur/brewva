@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 
 const FILE_PATTERNS: Array<{ relativePath: string; banned: RegExp[] }> = [
   {
-    relativePath: "docs/reference/runtime-plugins.md",
+    relativePath: "docs/reference/extensions.md",
     banned: [/\bPi API providers\b/u, /\bbefore Pi emits the final hosted completion\b/u],
   },
   {

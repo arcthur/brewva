@@ -8,7 +8,7 @@
 - Stable docs:
   - `docs/architecture/system-architecture.md`
   - `docs/reference/session-lifecycle.md`
-  - `docs/reference/runtime-plugins.md`
+  - `docs/reference/extensions.md`
   - `skills/project/shared/package-boundaries.md`
   - `skills/project/shared/source-map.md`
 - Code anchors:
@@ -24,7 +24,7 @@
 
 - `@brewva/brewva-substrate/sdk` is the one-call and two-stage in-memory composition surface for direct substrate hosts.
 - SDK services return `BrewvaSubstrateDiagnostic` values for recoverable startup or composition issues; invariant failures still throw.
-- SDK runtime plugin wiring covers turn-loop-aligned events and provider/context/tool hooks without synthesizing gateway hosted prompt input policy.
+- SDK host-api wiring covers turn-loop-aligned events and provider/context/tool hooks without synthesizing gateway hosted prompt input policy.
 - `@brewva/brewva-substrate/provenance` owns reusable source-info vocabulary for prompt, tool, SDK, resource, and future extension-discovered artifacts.
 - `@brewva/brewva-substrate/execution` owns a sequential event-bus primitive that separates subscriber bus access from controller emit authority; listener settlement remains part of caller settlement.
 - `@brewva/brewva-substrate/tools` owns `wrapBrewvaTool(...)` for metadata-preserving cross-cutting tool decoration.

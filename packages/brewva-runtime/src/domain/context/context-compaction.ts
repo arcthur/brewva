@@ -13,6 +13,7 @@ import {
 } from "../../security/compaction-integrity.js";
 import type { GovernancePort } from "../governance/api.js";
 import type { RuntimeSessionStateStore } from "../sessions/api.js";
+import { writeHistoryViewBaselineArtifact } from "./history-view-baseline-artifact.js";
 import type {
   ProviderCacheObservationState,
   SessionCompactionCacheImpact,
@@ -22,6 +23,7 @@ import type {
 } from "./types.js";
 
 export interface ContextCompactionDeps {
+  workspaceRoot: string;
   sessionState: RuntimeSessionStateStore;
   recordInfrastructureRow: RuntimeCallback<
     [
@@ -207,6 +209,7 @@ export function commitSessionCompaction(
       summaryDigest: sha256Hex(summary ?? ""),
       sourceTurn: input.sourceTurn,
       leafEntryId: input.leafEntryId,
+      ...(input.firstKeptEntryId !== undefined ? { firstKeptEntryId: input.firstKeptEntryId } : {}),
       referenceContextDigest: input.referenceContextDigest,
       fromTokens: input.fromTokens,
       toTokens: input.toTokens,
@@ -219,6 +222,22 @@ export function commitSessionCompaction(
   if (!event) {
     throw new Error("failed to record session_compact receipt");
   }
+  const snapshot = {
+    compactId,
+    sanitizedSummary: summary ?? "",
+    summaryDigest: sha256Hex(summary ?? ""),
+    sourceTurn: input.sourceTurn,
+    leafEntryId: input.leafEntryId,
+    referenceContextDigest: input.referenceContextDigest,
+    fromTokens: input.fromTokens,
+    toTokens: input.toTokens,
+    origin: input.origin,
+    eventId: event.id,
+    timestamp: event.timestamp,
+    rebuildSource: "artifact" as const,
+    diagnostics: [],
+  };
+  writeHistoryViewBaselineArtifact(deps.workspaceRoot, sessionId, snapshot);
   deps.commitWorkbenchBaseline?.(sessionId);
 
   deps.recordInfrastructureRow({

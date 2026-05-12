@@ -13,7 +13,7 @@ Output:
       "packages/brewva-runtime/src/runtime/runtime.ts",
       "packages/brewva-runtime/src/public/index.ts",
       "packages/brewva-gateway/src/host/create-hosted-session.ts",
-      "packages/brewva-gateway/src/runtime-plugins/index.ts",
+      "packages/brewva-gateway/src/hosted/internal/session/index.ts",
       "packages/brewva-cli/src/index.ts"
     ],
     "boundaries": [
@@ -22,7 +22,7 @@ Output:
         "to": "brewva-gateway",
         "surface": "@brewva/brewva-runtime, @brewva/brewva-runtime/runtime-extensions, dedicated runtime subpaths"
       },
-      { "from": "brewva-gateway", "to": "brewva-cli", "surface": "@brewva/brewva-gateway/host" }
+      { "from": "brewva-gateway", "to": "brewva-cli", "surface": "@brewva/brewva-gateway/hosted" }
     ],
     "high_risk_touchpoints": [
       {

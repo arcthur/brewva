@@ -111,10 +111,10 @@ flowchart TD
 
 ## Code Pointers
 
-- Gateway CLI: `packages/brewva-gateway/src/cli.ts`
+- Gateway CLI: `packages/brewva-gateway/src/admin/internal/cli.ts`
 - Gateway daemon: `packages/brewva-gateway/src/daemon/gateway-daemon.ts`
 - Protocol schema: `packages/brewva-gateway/src/protocol/schema.ts`
-- Client: `packages/brewva-gateway/src/client.ts`
+- Client: `packages/brewva-gateway/src/ingress/internal/client.ts`
 - Main CLI entry: `packages/brewva-cli/src/index.ts`
 
 ## Related Docs

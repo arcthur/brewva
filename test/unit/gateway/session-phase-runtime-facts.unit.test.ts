@@ -8,7 +8,7 @@ import {
 import {
   deriveSessionPhaseFromRuntimeFactFrame,
   deriveSessionPhaseFromRuntimeFactHistory,
-} from "../../../packages/brewva-gateway/src/session/session-phase-runtime-facts.js";
+} from "../../../packages/brewva-gateway/src/hosted/internal/session/session-phase/runtime-facts.js";
 
 describe("session phase runtime facts", () => {
   test("preserves tool identity when approval is requested", () => {

@@ -30,7 +30,7 @@ only collects caveats and intentionally narrow behavior.
 - `--backend gateway` does not support interactive mode, JSON mode,
   `--undo`/`--replay`, `--daemon`, `--channel`, or TaskSpec (`--task`, `--task-file`).
 - `--managed-tools direct` does not disable hosted lifecycle ports; it only
-  switches managed Brewva tools from runtime-plugin registration to direct host
+  switches managed Brewva tools from hosted registration to direct host
   provisioning.
 
 ## Schedule Runtime

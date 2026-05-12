@@ -38,7 +38,7 @@ describe("docs/reference gateway CLI coverage", () => {
   it("documents gateway subcommands and flags", () => {
     const repoRoot = resolve(import.meta.dirname, "../../..");
     const cliSource = readFileSync(
-      resolve(repoRoot, "packages/brewva-gateway/src/cli.ts"),
+      resolve(repoRoot, "packages/brewva-gateway/src/admin/internal/cli.ts"),
       "utf-8",
     );
     const docs = readFileSync(resolve(repoRoot, "docs/reference/commands.md"), "utf-8");

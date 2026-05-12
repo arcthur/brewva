@@ -14,7 +14,7 @@ Protocol boundary:
 
 - Transport: WebSocket.
 - Address shape: `ws://<loopback-host>:<port>`.
-- Security rule: server accepts loopback hosts only (see `packages/brewva-gateway/src/network.ts`).
+- Security rule: server accepts loopback hosts only (see `packages/brewva-gateway/src/ingress/internal/network.ts`).
 
 ## Frame Model
 
@@ -41,7 +41,7 @@ Error payload structure:
    - `auth.token` must match the current gateway token.
 4. On success, server returns `hello-ok` with methods, events, and policy limits (for example `maxPayloadBytes`).
 
-Client implementation: `packages/brewva-gateway/src/client.ts`.  
+Client implementation: `packages/brewva-gateway/src/ingress/internal/client.ts`.
 Server implementation: `packages/brewva-gateway/src/daemon/gateway-daemon.ts`.
 
 ## Methods (`GatewayMethods`)
@@ -262,4 +262,4 @@ Optional HTTP probe endpoint (`--health-http-port`, default path `/healthz`) res
 
 - `brewva.gateway.health-http.v1`
 
-Implementation: `packages/brewva-gateway/src/cli.ts`.
+Implementation: `packages/brewva-gateway/src/admin/internal/cli.ts`.

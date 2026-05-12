@@ -46,6 +46,7 @@ describe("context-compaction module", () => {
     const pressureMarks: string[] = [];
 
     const deps: ContextCompactionDeps = {
+      workspaceRoot: "/tmp/context-compaction",
       sessionState,
       recordInfrastructureRow: (row) => {
         ledgerRows.push(row as Record<string, unknown>);
@@ -128,6 +129,7 @@ describe("context-compaction module", () => {
     }> = [];
 
     const deps: ContextCompactionDeps = {
+      workspaceRoot: "/tmp/context-compaction",
       sessionState,
       recordInfrastructureRow: () => "ev_test",
       markPressureCompacted: () => undefined,
@@ -216,6 +218,7 @@ describe("context-compaction module", () => {
     }> = [];
 
     const deps: ContextCompactionDeps = {
+      workspaceRoot: "/tmp/context-compaction",
       sessionState,
       recordInfrastructureRow: () => "ev_test",
       markPressureCompacted: () => undefined,
@@ -267,6 +270,7 @@ describe("context-compaction module", () => {
     }> = [];
 
     const deps: ContextCompactionDeps = {
+      workspaceRoot: "/tmp/context-compaction",
       sessionState,
       recordInfrastructureRow: () => "ev_test",
       governancePort: {
@@ -308,6 +312,7 @@ describe("context-compaction module", () => {
     }> = [];
 
     const deps: ContextCompactionDeps = {
+      workspaceRoot: "/tmp/context-compaction",
       sessionState,
       recordInfrastructureRow: () => "ev_test",
       governancePort: {
@@ -350,6 +355,7 @@ describe("context-compaction module", () => {
     }> = [];
 
     const deps: ContextCompactionDeps = {
+      workspaceRoot: "/tmp/context-compaction",
       sessionState,
       recordInfrastructureRow: () => "ev_test",
       governancePort: {

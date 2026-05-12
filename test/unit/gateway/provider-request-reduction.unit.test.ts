@@ -1,16 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import { recordSessionTurnTransition } from "@brewva/brewva-gateway";
+import { createHostedRuntimePort } from "@brewva/brewva-runtime";
+import { readContextEvidenceRecords } from "../../../packages/brewva-gateway/src/hosted/internal/context/evidence/context-evidence.js";
 import {
-  readContextEvidenceRecords,
   registerProviderRequestRecovery,
   registerProviderRequestReduction,
-} from "@brewva/brewva-gateway/runtime-plugins";
-import { createHostedRuntimePort } from "@brewva/brewva-runtime";
-import { armNextPromptOutputBudgetEscalation } from "../../../packages/brewva-gateway/src/session/prompt-recovery-state.js";
-import {
-  createMockRuntimePluginApi,
-  type RuntimePluginTestHandler,
-} from "../../helpers/runtime-plugin.js";
+} from "../../../packages/brewva-gateway/src/hosted/internal/session/host-api-installation.js";
+import { armNextPromptOutputBudgetEscalation } from "../../../packages/brewva-gateway/src/hosted/internal/thread-loop/recovery/output-budget-state.js";
+import { createMockExtensionApi, type ExtensionTestHandler } from "../../helpers/extension.js";
 import { createRuntimeConfig, createRuntimeFixture } from "../../helpers/runtime.js";
 
 const CLEARED_TOOL_RESULT_PLACEHOLDER = "[cleared_for_request]";
@@ -102,7 +99,7 @@ function buildToolMessagesWithSize(
 }
 
 function invokeBeforeProviderRequestChain(
-  handlers: Map<string, RuntimePluginTestHandler[]>,
+  handlers: Map<string, ExtensionTestHandler[]>,
   payload: Record<string, unknown>,
   sessionId: string,
 ): Record<string, unknown> {
@@ -126,7 +123,7 @@ function invokeBeforeProviderRequestChain(
 describe("provider request reduction", () => {
   test("clears only older OpenAI-style tool result messages in the outbound copy", () => {
     const runtime = createReductionTestRuntime();
-    const { api, handlers } = createMockRuntimePluginApi();
+    const { api, handlers } = createMockExtensionApi();
     const sessionId = "provider-request-reduction-openai";
 
     registerProviderRequestReduction(api, createHostedRuntimePort(runtime));
@@ -195,7 +192,7 @@ describe("provider request reduction", () => {
 
   test("reduces OpenAI Responses text-only tool outputs but preserves recent items", () => {
     const runtime = createReductionTestRuntime();
-    const { api, handlers } = createMockRuntimePluginApi();
+    const { api, handlers } = createMockExtensionApi();
     const sessionId = "provider-request-reduction-responses";
 
     registerProviderRequestReduction(api, createHostedRuntimePort(runtime));
@@ -248,7 +245,7 @@ describe("provider request reduction", () => {
         ];
       }),
     });
-    const { api, handlers } = createMockRuntimePluginApi();
+    const { api, handlers } = createMockExtensionApi();
     const sessionId = "provider-request-reduction-responses-protected";
 
     registerProviderRequestReduction(api, createHostedRuntimePort(runtime));
@@ -308,7 +305,7 @@ describe("provider request reduction", () => {
         config.infrastructure.contextBudget.compaction.protectedTools = ["workbench_compact"];
       }),
     });
-    const { api, handlers } = createMockRuntimePluginApi();
+    const { api, handlers } = createMockExtensionApi();
     const sessionId = "provider-request-reduction-chat-tool-call-protected";
 
     registerProviderRequestReduction(api, createHostedRuntimePort(runtime));
@@ -371,7 +368,7 @@ describe("provider request reduction", () => {
         config.infrastructure.contextBudget.compaction.protectedTools = ["workbench_compact"];
       }),
     });
-    const { api, handlers } = createMockRuntimePluginApi();
+    const { api, handlers } = createMockExtensionApi();
     const sessionId = "provider-request-reduction-anthropic-tool-use-protected";
 
     registerProviderRequestReduction(api, createHostedRuntimePort(runtime));
@@ -447,7 +444,7 @@ describe("provider request reduction", () => {
         config.infrastructure.contextBudget.compaction.protectedTools = ["workbench_compact"];
       }),
     });
-    const { api, handlers } = createMockRuntimePluginApi();
+    const { api, handlers } = createMockExtensionApi();
     const sessionId = "provider-request-reduction-google-function-response-protected";
 
     registerProviderRequestReduction(api, createHostedRuntimePort(runtime));
@@ -501,7 +498,7 @@ describe("provider request reduction", () => {
 
   test("allows transient reduction only for high pressure outside recovery posture", () => {
     const runtime = createReductionTestRuntime();
-    const { api, handlers } = createMockRuntimePluginApi();
+    const { api, handlers } = createMockExtensionApi();
     const sessionId = "provider-request-reduction-eligibility";
 
     registerProviderRequestReduction(api, createHostedRuntimePort(runtime));
@@ -582,7 +579,7 @@ describe("provider request reduction", () => {
 
   test("skips transient reduction when live usage is unavailable", () => {
     const runtime = createReductionTestRuntime();
-    const { api, handlers } = createMockRuntimePluginApi();
+    const { api, handlers } = createMockExtensionApi();
     const sessionId = "provider-request-reduction-model-window";
 
     registerProviderRequestReduction(api, createHostedRuntimePort(runtime));
@@ -609,7 +606,7 @@ describe("provider request reduction", () => {
 
   test("runtime usage takes precedence over payload estimation when live usage is available", () => {
     const runtime = createReductionTestRuntime();
-    const { api, handlers } = createMockRuntimePluginApi();
+    const { api, handlers } = createMockExtensionApi();
     const sessionId = "provider-request-reduction-runtime-usage-precedence";
 
     registerProviderRequestReduction(api, createHostedRuntimePort(runtime));
@@ -642,7 +639,7 @@ describe("provider request reduction", () => {
 
   test("allows request-local reduction below pressure threshold when the provider cache is already cold", () => {
     const runtime = createReductionTestRuntime();
-    const { api, handlers } = createMockRuntimePluginApi();
+    const { api, handlers } = createMockExtensionApi();
     const sessionId = "provider-request-reduction-cache-cold";
 
     registerProviderRequestReduction(api, createHostedRuntimePort(runtime));
@@ -687,7 +684,7 @@ describe("provider request reduction", () => {
 
   test("treats expired short-retention provider cache observations as cache cold", () => {
     const runtime = createReductionTestRuntime();
-    const { api, handlers } = createMockRuntimePluginApi();
+    const { api, handlers } = createMockExtensionApi();
     const sessionId = "provider-request-reduction-cache-expired";
 
     registerProviderRequestReduction(api, createHostedRuntimePort(runtime));
@@ -728,7 +725,7 @@ describe("provider request reduction", () => {
 
   test("diagnostic-only recovery posture blocks transient reduction", () => {
     const runtime = createReductionTestRuntime();
-    const { api, handlers } = createMockRuntimePluginApi();
+    const { api, handlers } = createMockExtensionApi();
     const sessionId = "provider-request-reduction-diagnostic-only";
 
     registerProviderRequestReduction(api, createHostedRuntimePort(runtime));
@@ -800,7 +797,7 @@ describe("provider request reduction", () => {
 
   test("ordinary blocked tool lifecycle does not masquerade as recovery posture", () => {
     const runtime = createReductionTestRuntime();
-    const { api, handlers } = createMockRuntimePluginApi();
+    const { api, handlers } = createMockExtensionApi();
     const sessionId = "provider-request-reduction-open-tool-call";
 
     registerProviderRequestReduction(api, createHostedRuntimePort(runtime));
@@ -888,7 +885,7 @@ describe("provider request reduction", () => {
 
   test("records live transient reduction state when a high-pressure outbound payload is reduced", () => {
     const runtime = createReductionTestRuntime();
-    const { api, handlers } = createMockRuntimePluginApi();
+    const { api, handlers } = createMockExtensionApi();
     const sessionId = "provider-request-reduction-observation";
 
     registerProviderRequestReduction(api, createHostedRuntimePort(runtime));
@@ -950,7 +947,7 @@ describe("provider request reduction", () => {
 
   test("preserves a valuable warm provider cache when reduction savings are smaller", () => {
     const runtime = createReductionTestRuntime();
-    const { api, handlers } = createMockRuntimePluginApi();
+    const { api, handlers } = createMockExtensionApi();
     const sessionId = "provider-request-reduction-cache-aware";
 
     registerProviderRequestReduction(api, createHostedRuntimePort(runtime));
@@ -1032,7 +1029,7 @@ describe("provider request reduction", () => {
 
   test("skips reduction during output-budget recovery and preserves the recovery payload patch", () => {
     const runtime = createReductionTestRuntime();
-    const { api, handlers } = createMockRuntimePluginApi();
+    const { api, handlers } = createMockExtensionApi();
     const sessionId = "provider-request-reduction-output-budget";
 
     registerProviderRequestReduction(api, createHostedRuntimePort(runtime));
@@ -1137,7 +1134,7 @@ describe("provider request reduction", () => {
       }),
     });
     const sessionId = "protected-tools-1";
-    const { api, handlers } = createMockRuntimePluginApi();
+    const { api, handlers } = createMockExtensionApi();
     registerProviderRequestReduction(api, createHostedRuntimePort(runtime));
     runtime.maintain.context.observeUsage(sessionId, {
       tokens: 9000,
@@ -1177,7 +1174,7 @@ describe("provider request reduction", () => {
       }),
     });
     const sessionId = "tail-protect-large-1";
-    const { api, handlers } = createMockRuntimePluginApi();
+    const { api, handlers } = createMockExtensionApi();
     registerProviderRequestReduction(api, createHostedRuntimePort(runtime));
     runtime.maintain.context.observeUsage(sessionId, {
       tokens: 9000,
@@ -1201,7 +1198,7 @@ describe("provider request reduction", () => {
       }),
     });
     const sessionId = "tail-protect-finite-1";
-    const { api, handlers } = createMockRuntimePluginApi();
+    const { api, handlers } = createMockExtensionApi();
     registerProviderRequestReduction(api, createHostedRuntimePort(runtime));
     runtime.maintain.context.observeUsage(sessionId, {
       tokens: 9000,

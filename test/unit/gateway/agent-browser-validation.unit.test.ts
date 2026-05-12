@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { distillToolOutput } from "@brewva/brewva-gateway/runtime-plugins";
+import { distillToolOutput } from "../../../packages/brewva-gateway/src/hosted/internal/session/tools/tool-output-distiller.js";
 
 describe("agent-browser validation evidence", () => {
   test("distills large browser snapshots while preserving artifact-oriented evidence", () => {

@@ -11,6 +11,7 @@ import {
 import type { BrewvaEventRecord } from "../../events/types.js";
 import { estimateTokenCount } from "../../utils/token.js";
 import { coerceReasoningRevertPayload } from "../reasoning/api.js";
+import { ReasoningReplayEngine } from "../tape/api.js";
 import type { HistoryViewBaselineSnapshot, SessionCompactionCommitInput } from "./types.js";
 
 const EXACT_HISTORY_MAX_TURNS = 4;
@@ -141,6 +142,11 @@ interface ExactHistoryTurnRecord {
   timestamp: number;
 }
 
+interface LeafIntegrityState {
+  reason: string;
+  timestamp: number;
+}
+
 function normalizeMaxBaselineTokens(value: number | null | undefined): number | null {
   if (typeof value !== "number" || !Number.isFinite(value)) {
     return null;
@@ -167,6 +173,7 @@ function buildExactHistorySnapshot(input: {
   selectedTurns: readonly ExactHistoryTurnRecord[];
   latestEventId: string;
   latestTimestamp: number;
+  activeLeafEntryId: string | null;
 }): HistoryViewBaselineSnapshot {
   const lines = ["[ExactHistoryBaseline]"];
   for (const turn of input.selectedTurns) {
@@ -184,11 +191,11 @@ function buildExactHistorySnapshot(input: {
   const transcript = lines.join("\n");
   const lastTurn = input.selectedTurns[input.selectedTurns.length - 1]!;
   return {
-    compactId: `exact-history:${lastTurn.turn}`,
+    compactId: `exact-history:${input.activeLeafEntryId ?? "root"}:${lastTurn.turn}`,
     sanitizedSummary: transcript,
     summaryDigest: sha256Hex(transcript),
     sourceTurn: lastTurn.turn,
-    leafEntryId: null,
+    leafEntryId: input.activeLeafEntryId,
     referenceContextDigest: null,
     fromTokens: null,
     toTokens: null,
@@ -205,13 +212,47 @@ function buildExactHistoryFallback(
   options: HistoryViewBaselineDerivationOptions,
 ): HistoryViewBaselineDerivation {
   const turns = new Map<number, ExactHistoryTurnRecord>();
-  let sawReasoningRevert = false;
+  const validatedReasoning = buildValidatedReasoningState(events);
+  let activeLeafEntryId: string | null = null;
+  let branchAmbiguous = false;
   let latestTimestamp = 0;
   let latestEventId = "exact-history";
 
   for (const event of events) {
+    if (event.type === "reasoning_checkpoint") {
+      const checkpoint = event.payload as Record<string, unknown> | null;
+      const checkpointId = readString(checkpoint?.checkpointId);
+      const checkpointLeafEntryId = checkpointId
+        ? validatedReasoning.checkpointLeafEntryIds.get(checkpointId)
+        : undefined;
+      if (checkpointId && checkpointLeafEntryId !== undefined) {
+        activeLeafEntryId = checkpointLeafEntryId;
+      }
+      continue;
+    }
     if (event.type === "reasoning_revert") {
-      sawReasoningRevert = true;
+      if (!validatedReasoning.acceptedRevertEventIds.has(event.id)) {
+        continue;
+      }
+      const payload = coerceReasoningRevertPayload(event.payload);
+      const targetTurn = payload
+        ? validatedReasoning.checkpointTurns.get(payload.toCheckpointId)
+        : undefined;
+      if (!payload || targetTurn === undefined) {
+        branchAmbiguous = true;
+        continue;
+      }
+      activeLeafEntryId =
+        payload.targetLeafEntryId ??
+        validatedReasoning.checkpointLeafEntryIds.get(payload.toCheckpointId) ??
+        null;
+      latestEventId = event.id;
+      latestTimestamp = event.timestamp;
+      for (const turn of turns.keys()) {
+        if (turn > targetTurn) {
+          turns.delete(turn);
+        }
+      }
       continue;
     }
     const turn = readTurnNumber(event);
@@ -254,7 +295,7 @@ function buildExactHistoryFallback(
         turn.promptText !== null || turn.assistantText !== null || turn.toolOutputsCount > 0,
     )
     .toSorted((left, right) => left.turn - right.turn);
-  if (sawReasoningRevert) {
+  if (branchAmbiguous) {
     return {
       degradedReason: "exact_history_branch_ambiguous",
       postureMode: "diagnostic_only",
@@ -274,6 +315,7 @@ function buildExactHistoryFallback(
         selectedTurns: candidateTurns,
         latestEventId,
         latestTimestamp,
+        activeLeafEntryId,
       });
       if (!baselineFitsTokenBudget(candidateSnapshot, maxBaselineTokens)) {
         if (fittedTurns.length === 0) {
@@ -298,6 +340,7 @@ function buildExactHistoryFallback(
     selectedTurns,
     latestEventId,
     latestTimestamp,
+    activeLeafEntryId,
   });
   if (!baselineFitsTokenBudget(snapshot, maxBaselineTokens)) {
     return {
@@ -317,14 +360,26 @@ export function deriveHistoryViewBaselineState(
   options: HistoryViewBaselineDerivationOptions = {},
 ): HistoryViewBaselineDerivation {
   const baselinesByLeaf = new Map<string, HistoryViewBaselineSnapshot>();
+  const validatedReasoning = buildValidatedReasoningState(events);
   let activeLeafKey = "__root__";
   let current: HistoryViewBaselineSnapshot | undefined;
-  let latestIntegrityReason: string | null = null;
-  let latestIntegrityTimestamp = -1;
+  const integrityByLeaf = new Map<string, LeafIntegrityState>();
   const referenceContextDigest = normalizeNullableString(options.referenceContextDigest);
   const maxBaselineTokens = normalizeMaxBaselineTokens(options.maxBaselineTokens);
 
   for (const event of events) {
+    if (event.type === "reasoning_checkpoint") {
+      const checkpoint = event.payload as Record<string, unknown> | null;
+      const checkpointId = readString(checkpoint?.checkpointId);
+      const checkpointLeafEntryId = checkpointId
+        ? validatedReasoning.checkpointLeafEntryIds.get(checkpointId)
+        : undefined;
+      if (checkpointLeafEntryId !== undefined) {
+        activeLeafKey = leafKey(checkpointLeafEntryId);
+        current = baselinesByLeaf.get(activeLeafKey);
+      }
+      continue;
+    }
     if (event.type === SESSION_COMPACT_EVENT_TYPE) {
       const baseline = buildHistoryViewBaselineSnapshot(event);
       if (!baseline) {
@@ -337,12 +392,17 @@ export function deriveHistoryViewBaselineState(
           : !baselineFitsTokenBudget(baseline, maxBaselineTokens)
             ? "history_view_baseline_over_budget"
             : null);
+      const key = leafKey(baseline.leafEntryId);
       if (integrityIssue) {
-        latestIntegrityReason = integrityIssue;
-        latestIntegrityTimestamp = event.timestamp;
+        integrityByLeaf.set(key, {
+          reason: integrityIssue,
+          timestamp: event.timestamp,
+        });
+        baselinesByLeaf.delete(key);
+        activeLeafKey = key;
+        current = undefined;
         continue;
       }
-      const key = leafKey(baseline.leafEntryId);
       baselinesByLeaf.set(key, baseline);
       activeLeafKey = key;
       current = baseline;
@@ -350,40 +410,63 @@ export function deriveHistoryViewBaselineState(
     }
 
     if (event.type === "reasoning_revert") {
+      if (!validatedReasoning.acceptedRevertEventIds.has(event.id)) {
+        continue;
+      }
       const payload = coerceReasoningRevertPayload(event.payload);
       if (!payload) {
         continue;
       }
-      activeLeafKey = leafKey(payload.targetLeafEntryId ?? null);
-      current = baselinesByLeaf.get(activeLeafKey);
+      const targetLeafEntryId =
+        payload.targetLeafEntryId ??
+        validatedReasoning.checkpointLeafEntryIds.get(payload.toCheckpointId) ??
+        null;
+      activeLeafKey = leafKey(targetLeafEntryId);
+      current = baselinesByLeaf.get(activeLeafKey) ?? {
+        compactId: `reasoning-revert:${payload.revertId}`,
+        sanitizedSummary: payload.continuityPacket.text,
+        summaryDigest: sha256Hex(payload.continuityPacket.text),
+        sourceTurn: readTurnNumber(event) ?? 0,
+        leafEntryId: targetLeafEntryId,
+        referenceContextDigest: null,
+        fromTokens: null,
+        toTokens: null,
+        origin: "reasoning_revert",
+        eventId: event.id,
+        timestamp: event.timestamp,
+        rebuildSource: "receipt",
+        diagnostics: [],
+      };
     }
   }
 
   if (current) {
+    const currentIntegrity = integrityByLeaf.get(activeLeafKey) ?? null;
     const degradeForIntegrity =
-      latestIntegrityReason !== null && latestIntegrityTimestamp >= current.timestamp;
+      currentIntegrity !== null && currentIntegrity.timestamp >= current.timestamp;
     return {
       snapshot: current,
-      degradedReason: degradeForIntegrity ? latestIntegrityReason : null,
+      degradedReason: degradeForIntegrity ? (currentIntegrity?.reason ?? null) : null,
       postureMode: degradeForIntegrity ? "degraded" : null,
     };
   }
 
   const fallback = buildExactHistoryFallback(events, options);
-  if (fallback.snapshot && latestIntegrityReason) {
+  const fallbackIntegrity = integrityByLeaf.get(activeLeafKey) ?? null;
+  if (fallback.snapshot && fallbackIntegrity) {
     return {
       snapshot: {
         ...fallback.snapshot,
-        diagnostics: [...fallback.snapshot.diagnostics, latestIntegrityReason],
+        diagnostics: [...fallback.snapshot.diagnostics, fallbackIntegrity.reason],
       },
-      degradedReason: latestIntegrityReason,
+      degradedReason: fallbackIntegrity.reason,
       postureMode: "degraded",
     };
   }
-  if (latestIntegrityReason && !fallback.snapshot) {
+  if (fallbackIntegrity && !fallback.snapshot) {
     return {
       snapshot: undefined,
-      degradedReason: latestIntegrityReason,
+      degradedReason: fallbackIntegrity.reason,
       postureMode: "diagnostic_only",
     };
   }
@@ -397,4 +480,30 @@ export function buildHistoryViewBaselineBlock(
     return null;
   }
   return ["[HistoryViewBaseline]", snapshot.sanitizedSummary].join("\n");
+}
+
+function buildValidatedReasoningState(events: readonly BrewvaEventRecord[]): {
+  checkpointTurns: ReadonlyMap<string, number>;
+  checkpointLeafEntryIds: ReadonlyMap<string, string | null>;
+  acceptedRevertEventIds: ReadonlySet<string>;
+} {
+  const sessionId = events[0]?.sessionId;
+  if (!sessionId) {
+    return {
+      checkpointTurns: new Map<string, number>(),
+      checkpointLeafEntryIds: new Map<string, string | null>(),
+      acceptedRevertEventIds: new Set<string>(),
+    };
+  }
+  const replay = new ReasoningReplayEngine({
+    listEvents: () => [...events],
+  });
+  const state = replay.replay(sessionId);
+  return {
+    checkpointTurns: new Map(state.checkpoints.map((entry) => [entry.checkpointId, entry.turn])),
+    checkpointLeafEntryIds: new Map(
+      state.checkpoints.map((entry) => [entry.checkpointId, entry.leafEntryId ?? null]),
+    ),
+    acceptedRevertEventIds: new Set(state.reverts.map((entry) => entry.eventId)),
+  };
 }

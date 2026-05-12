@@ -72,7 +72,7 @@ describe("model-operated Phase A architecture guard", () => {
       existsSync(join(repoRoot, "packages/brewva-substrate/src/provider/fetch-provider-driver.ts")),
     ).toBe(false);
     expect(
-      existsSync(join(repoRoot, "packages/brewva-gateway/src/host/hosted-provider-stream.ts")),
+      existsSync(join(repoRoot, "packages/brewva-gateway/src/hosted/internal/provider/stream.ts")),
     ).toBe(true);
   });
 
@@ -144,13 +144,13 @@ describe("model-operated Phase A architecture guard", () => {
       "packages/brewva-runtime/src/domain/context/skill-routing.ts",
       "packages/brewva-runtime/src/domain/context/tool-output-distilled.ts",
       "packages/brewva-recall/src/context/provider.ts",
-      "packages/brewva-gateway/src/runtime-plugins/context-composer.ts",
-      "packages/brewva-gateway/src/runtime-plugins/context-composer-governance.ts",
-      "packages/brewva-gateway/src/runtime-plugins/context-composer-supplemental.ts",
-      "packages/brewva-gateway/src/runtime-plugins/context-composer-support.ts",
-      "packages/brewva-gateway/src/runtime-plugins/context-supplemental.ts",
-      "packages/brewva-gateway/src/runtime-plugins/hosted-context-injection-pipeline.ts",
-      "packages/brewva-gateway/src/runtime-plugins/skill-first.ts",
+      "packages/brewva-gateway/src/hosted/internal/session/context-composer.ts",
+      "packages/brewva-gateway/src/hosted/internal/session/context-composer-governance.ts",
+      "packages/brewva-gateway/src/hosted/internal/session/context-composer-supplemental.ts",
+      "packages/brewva-gateway/src/hosted/internal/session/context-composer-support.ts",
+      "packages/brewva-gateway/src/hosted/internal/session/context-supplemental.ts",
+      "packages/brewva-gateway/src/hosted/internal/session/hosted-context-injection-pipeline.ts",
+      "packages/brewva-gateway/src/hosted/internal/session/skill-first.ts",
       "packages/brewva-tools/src/families/workflow/skill-load.ts",
       "packages/brewva-tools/src/families/workflow/skill-complete.ts",
       "packages/brewva-tools/src/families/memory/deliberation-memory.ts",
@@ -163,9 +163,11 @@ describe("model-operated Phase A architecture guard", () => {
   });
 
   test("hosted dynamic context does not reintroduce a typed admission composer", () => {
-    const gatewayRuntimePluginSources = collectSourceFiles(
-      "packages/brewva-gateway/src/runtime-plugins",
-    )
+    const gatewayHostedContextSources = [
+      ...collectSourceFiles("packages/brewva-gateway/src/hosted/internal/thread-loop/context"),
+      ...collectSourceFiles("packages/brewva-gateway/src/hosted/internal/thread-loop/evidence"),
+      ...collectSourceFiles("packages/brewva-gateway/src/hosted/internal/session/tools"),
+    ]
       .map((file) => readFileSync(file, "utf8"))
       .join("\n");
 
@@ -180,14 +182,14 @@ describe("model-operated Phase A architecture guard", () => {
       "laneReason",
       "familyId",
     ]) {
-      expect(gatewayRuntimePluginSources).not.toContain(forbiddenTerm);
+      expect(gatewayHostedContextSources).not.toContain(forbiddenTerm);
     }
   });
 
   test("replay paths consume stored compaction summaries without model regeneration", () => {
     const replaySources = [
-      "packages/brewva-gateway/src/host/runtime-projection-session-store.ts",
-      "packages/brewva-gateway/src/session/compaction-recovery.ts",
+      "packages/brewva-gateway/src/hosted/internal/session/projection/runtime-projection-session-store.ts",
+      "packages/brewva-gateway/src/hosted/internal/compaction/recovery.ts",
       "packages/brewva-runtime/src/domain/sessions/session-lifecycle.ts",
       "packages/brewva-runtime/src/domain/sessions/session-hydration-coordinator.ts",
     ]
@@ -198,8 +200,8 @@ describe("model-operated Phase A architecture guard", () => {
       "createHostedLlmCompactionSummaryGenerator",
       "BrewvaCompactionSummaryGenerator",
       "compactionSummaryGenerator",
-      "completeDriver",
-      "createHostedProviderDriver",
+      "completionClient",
+      "createHostedProviderCompletionClient",
     ]) {
       expect(replaySources).not.toContain(forbiddenTerm);
     }

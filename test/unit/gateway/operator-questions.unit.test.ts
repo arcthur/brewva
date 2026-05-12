@@ -10,7 +10,7 @@ import {
   listOpenQuestionRequests,
   validateQuestionRequestAnswers,
   type SessionQuestionRequest,
-} from "../../../packages/brewva-gateway/src/operator-questions.js";
+} from "../../../packages/brewva-gateway/src/ingress/internal/operator-questions.js";
 
 const tempDirs: string[] = [];
 

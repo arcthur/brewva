@@ -40,7 +40,7 @@ This note does not reopen:
 - Cost tracker: `packages/brewva-runtime/src/domain/cost/tracker.ts`
 - Runtime cost surface wiring: `packages/brewva-runtime/src/runtime/runtime.ts`
 - Session bootstrap and reporting path:
-  `packages/brewva-gateway/src/host/create-hosted-session.ts`
+  `packages/brewva-gateway/src/hosted/api.ts`
 
 ## Validation Signals
 

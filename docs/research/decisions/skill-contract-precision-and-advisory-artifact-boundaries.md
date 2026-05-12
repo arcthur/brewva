@@ -11,12 +11,12 @@
   - `docs/reference/skill-routing.md`
   - `docs/reference/runtime.md`
   - `docs/reference/tools.md`
-  - `docs/reference/runtime-plugins.md`
+  - `docs/reference/extensions.md`
 - Code anchors:
   - `test/contract/tools/tools-skill-complete.contract.test.ts`
   - `test/unit/runtime/skill-validation-pipeline.unit.test.ts`
   - `packages/brewva-runtime/src/domain/workflow/artifact-derivation.ts`
-  - `packages/brewva-gateway/src/runtime-plugins/completion-guard.ts`
+  - `packages/brewva-gateway/src/hosted/internal/session/completion-guard.ts`
 
 ## Decision Summary
 

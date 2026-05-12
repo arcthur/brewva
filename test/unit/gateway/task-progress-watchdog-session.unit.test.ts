@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { asBrewvaSessionId } from "@brewva/brewva-runtime";
-import { createGatewaySession } from "../../../packages/brewva-gateway/src/session/create-session.js";
-import { TaskProgressWatchdog } from "../../../packages/brewva-gateway/src/session/task-progress-watchdog.js";
+import { createHostedSession as createGatewaySession } from "../../../packages/brewva-gateway/src/hosted/api.js";
+import { TaskProgressWatchdog } from "../../../packages/brewva-gateway/src/hosted/internal/thread-loop/watchdog/task-progress-watchdog.js";
 import { patchDateNow } from "../../helpers/global-state.js";
 import { createOpsRuntimeConfig } from "../../helpers/runtime.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";

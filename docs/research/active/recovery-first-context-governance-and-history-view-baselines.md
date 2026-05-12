@@ -556,13 +556,13 @@ pipeline keeps its existing kernel entry point.
   `packages/brewva-runtime/src/domain/sessions/hydration/fold-tool-lifecycle.ts`
 - Compaction bookkeeping and sanitization:
   `packages/brewva-runtime/src/domain/context/context-compaction.ts`
-  `packages/brewva-gateway/src/runtime-plugins/context-shared.ts`
+  `packages/brewva-gateway/src/hosted/internal/context/context-shared.ts`
 - Hosted compaction event handling and branch checkpoints:
-  `packages/brewva-gateway/src/runtime-plugins/event-stream.ts`
+  `packages/brewva-gateway/src/hosted/internal/context/evidence/event-stream.ts`
   `packages/brewva-runtime/src/domain/reasoning/events.ts`
 - History-view baseline and dynamic-tail rendering:
   `packages/brewva-runtime/src/domain/context/history-view-baseline.ts`
-  `packages/brewva-gateway/src/runtime-plugins/hosted-workbench-context-pipeline.ts`
+  `packages/brewva-gateway/src/hosted/internal/context/workbench-context.ts`
 
 ## Validation Signals
 

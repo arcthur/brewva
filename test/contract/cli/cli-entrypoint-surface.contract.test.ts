@@ -4,7 +4,7 @@ describe("cli entrypoint surface", () => {
   test("keeps session helpers on gateway host instead of cli root", async () => {
     const [cli, gatewayHost] = await Promise.all([
       import("@brewva/brewva-cli"),
-      import("@brewva/brewva-gateway/host"),
+      import("@brewva/brewva-gateway/hosted"),
     ]);
 
     expect(typeof cli.parseArgs).toBe("function");

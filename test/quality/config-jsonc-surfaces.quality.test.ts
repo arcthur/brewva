@@ -12,7 +12,7 @@ describe("JSONC config surface guard", () => {
   it("keeps human-authored runtime and gateway config entrypoints on parseJsonc", () => {
     const runtimeConfigLoader = readRepoFile("packages/brewva-runtime/src/config/loader.ts");
     const subagentConfigLoader = readRepoFile(
-      "packages/brewva-gateway/src/subagents/config-files.ts",
+      "packages/brewva-gateway/src/delegation/config-files.ts",
     );
     const agentRuntimeManager = readRepoFile(
       "packages/brewva-gateway/src/channels/agent-runtime-manager.ts",

@@ -14,11 +14,11 @@
   - `docs/reference/skills.md`
   - `docs/reference/configuration.md`
 - Code anchors:
-  - `packages/brewva-gateway/src/host/create-hosted-session.ts`
-  - `packages/brewva-gateway/src/subagents/background-controller.ts`
-  - `packages/brewva-gateway/src/subagents/background-protocol.ts`
-  - `packages/brewva-gateway/src/subagents/orchestrator.ts`
-  - `packages/brewva-gateway/src/subagents/runner-main.ts`
+  - `packages/brewva-gateway/src/hosted/api.ts`
+  - `packages/brewva-gateway/src/delegation/background/controller.ts`
+  - `packages/brewva-gateway/src/delegation/background/protocol.ts`
+  - `packages/brewva-gateway/src/delegation/orchestrator.ts`
+  - `packages/brewva-gateway/src/delegation/background/runner-main.ts`
   - `packages/brewva-runtime/src/domain/context/builtins.ts`
   - `packages/brewva-runtime/src/domain/iteration/facts.ts`
   - `packages/brewva-runtime/src/domain/sessions/event-pipeline.ts`

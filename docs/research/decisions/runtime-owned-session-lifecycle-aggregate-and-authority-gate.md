@@ -16,10 +16,10 @@
   - `packages/brewva-runtime/src/domain/lifecycle/session-lifecycle-snapshot.ts`
   - `packages/brewva-runtime/src/runtime/runtime.ts`
   - `packages/brewva-runtime/src/domain/recovery/read-model.ts`
-  - `packages/brewva-gateway/src/host/managed-agent-session.ts`
-  - `packages/brewva-gateway/src/daemon/session-wire-status.ts`
-  - `packages/brewva-gateway/src/runtime-plugins/provider-request-reduction.ts`
-  - `packages/brewva-gateway/src/session/reasoning-revert-recovery.ts`
+  - `packages/brewva-gateway/src/hosted/internal/session/managed-agent/session.ts`
+  - `packages/brewva-gateway/src/daemon/internal/session-wire-status.ts`
+  - `packages/brewva-gateway/src/hosted/internal/provider/request/provider-request-reduction.ts`
+  - `packages/brewva-gateway/src/hosted/internal/thread-loop/reasoning-revert-recovery.ts`
 
 ## Decision Summary
 

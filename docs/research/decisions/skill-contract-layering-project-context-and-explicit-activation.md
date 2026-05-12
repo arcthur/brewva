@@ -9,7 +9,7 @@
   - `docs/architecture/system-architecture.md`
   - `docs/reference/skills.md`
   - `docs/reference/runtime.md`
-  - `docs/reference/runtime-plugins.md`
+  - `docs/reference/extensions.md`
   - `docs/reference/tools.md`
 - Code anchors:
   - `N/A`

@@ -199,7 +199,7 @@ describe("brewva cli args", () => {
     );
     expect(result).toBeNull();
     expect(
-      errors.some((line) => line.includes('--managed-tools must be "runtime_plugin" or "direct"')),
+      errors.some((line) => line.includes('--managed-tools must be "hosted" or "direct"')),
     ).toBe(true);
   });
 });

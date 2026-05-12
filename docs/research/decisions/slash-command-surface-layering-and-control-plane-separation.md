@@ -7,7 +7,7 @@
 - Status: accepted
 - Stable docs:
   - `docs/reference/commands.md`
-  - `docs/reference/runtime-plugins.md`
+  - `docs/reference/extensions.md`
   - `docs/guide/cli.md`
   - `docs/guide/channel-agent-workspace.md`
   - `docs/journeys/operator/interactive-session.md`

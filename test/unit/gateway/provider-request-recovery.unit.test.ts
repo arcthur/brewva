@@ -1,14 +1,14 @@
 import { describe, expect, test } from "bun:test";
-import { registerProviderRequestRecovery } from "@brewva/brewva-gateway/runtime-plugins";
-import { armNextPromptOutputBudgetEscalation } from "../../../packages/brewva-gateway/src/session/prompt-recovery-state.js";
-import { recordSessionTurnTransition } from "../../../packages/brewva-gateway/src/session/turn-transition.js";
-import { createMockRuntimePluginApi, invokeHandler } from "../../helpers/runtime-plugin.js";
+import { registerProviderRequestRecovery } from "../../../packages/brewva-gateway/src/hosted/internal/provider/request/provider-request-recovery.js";
+import { armNextPromptOutputBudgetEscalation } from "../../../packages/brewva-gateway/src/hosted/internal/thread-loop/recovery/output-budget-state.js";
+import { recordSessionTurnTransition } from "../../../packages/brewva-gateway/src/hosted/internal/thread-loop/turn-transition.js";
+import { createMockExtensionApi, invokeHandler } from "../../helpers/extension.js";
 import { createRuntimeFixture } from "../../helpers/runtime.js";
 
 describe("provider request recovery", () => {
   test("patches the next provider payload with an escalated output budget and records completion", () => {
     const runtime = createRuntimeFixture();
-    const { api, handlers } = createMockRuntimePluginApi();
+    const { api, handlers } = createMockExtensionApi();
     const sessionId = "provider-request-recovery-completed";
 
     registerProviderRequestRecovery(api, runtime);
@@ -74,7 +74,7 @@ describe("provider request recovery", () => {
 
   test("records skipped escalation when the provider payload has no supported output-budget field", () => {
     const runtime = createRuntimeFixture();
-    const { api, handlers } = createMockRuntimePluginApi();
+    const { api, handlers } = createMockExtensionApi();
     const sessionId = "provider-request-recovery-skipped";
 
     registerProviderRequestRecovery(api, runtime);
@@ -131,7 +131,7 @@ describe("provider request recovery", () => {
 
   test("recognizes supported output-budget fields across top-level and nested payloads", () => {
     const runtime = createRuntimeFixture();
-    const { api, handlers } = createMockRuntimePluginApi();
+    const { api, handlers } = createMockExtensionApi();
     const sessionId = "provider-request-recovery-supported-fields";
 
     registerProviderRequestRecovery(api, runtime);

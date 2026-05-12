@@ -7,8 +7,8 @@ import { REASONING_REVERT_EVENT_TYPE } from "@brewva/brewva-runtime/events";
 import {
   REASONING_REVERT_RECOVERY_TEST_ONLY,
   preparePendingSessionReasoningRevertResume,
-} from "../../../packages/brewva-gateway/src/session/reasoning-revert-recovery.js";
-import { recordSessionTurnTransition } from "../../../packages/brewva-gateway/src/session/turn-transition.js";
+} from "../../../packages/brewva-gateway/src/hosted/internal/thread-loop/reasoning-revert-recovery.js";
+import { recordSessionTurnTransition } from "../../../packages/brewva-gateway/src/hosted/internal/thread-loop/turn-transition.js";
 
 function createRuntimeEventBridge() {
   const runtime = new BrewvaRuntime({
@@ -147,6 +147,14 @@ describe("reasoning revert recovery controller", () => {
       }),
     ]);
     expect(replacedMessages).toEqual([rebuiltMessages]);
+    expect(
+      eventBridge.runtime.inspect.context.getHistoryViewBaseline("agent-session-reasoning-revert"),
+    ).toEqual(
+      expect.objectContaining({
+        origin: "reasoning_revert",
+        leafEntryId: seeded.targetLeafEntryId,
+      }),
+    );
 
     prepared?.complete();
 

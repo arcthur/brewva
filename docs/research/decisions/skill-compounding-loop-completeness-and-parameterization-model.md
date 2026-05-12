@@ -13,7 +13,7 @@
 - Code anchors:
   - `packages/brewva-gateway/src/daemon/gateway-daemon.ts`
   - `packages/brewva-gateway/src/daemon/schedule-runner.ts`
-  - `packages/brewva-gateway/src/session/schedule-trigger.ts`
+  - `packages/brewva-gateway/src/hosted/internal/thread-loop/schedule-trigger.ts`
 
 ## Decision Summary
 

@@ -2,7 +2,7 @@
 
 This page describes hosted-session ordering, durability, and recovery
 boundaries. Runtime-plugin factory options, port ownership, and command-plugin
-composition live in `docs/reference/runtime-plugins.md`.
+composition live in `docs/reference/extensions.md`.
 
 Hosted and CLI entrypoints now converge on the same repo-owned substrate route:
 `createHostedSession(...)` and `createBrewvaSession(...)` bootstrap the same
@@ -177,8 +177,8 @@ operator explanation, but they are not a rival lifecycle state machine.
    - non-TTY and other low-capability terminals may fall back to one-shot text
      mode when the interactive shell is not viable
 2. Create session + runtime through the stable host entrypoint
-   (`packages/brewva-gateway/src/host/create-hosted-session.ts`; implementation
-   lives in `packages/brewva-gateway/src/host/hosted-session-bootstrap.ts`)
+   (`packages/brewva-gateway/src/hosted/api.ts`; implementation lives in
+   `packages/brewva-gateway/src/hosted/internal/session/init/session-assembly.ts`)
    - runtime config is loaded/normalized first
    - startup UI setting (`ui.quietStartup`) is applied from `runtime.config.ui` into session settings overrides
    - CLI and hosted routes share the same substrate-owned session bootstrap
@@ -187,11 +187,11 @@ operator explanation, but they are not a rival lifecycle state machine.
      from substrate services, a session host, a host plugin runner, and the
      turn loop; that SDK route is a mechanism entrypoint and does not create a
      hosted envelope, runtime, recovery policy, or terminal render receipt
-3. Register lifecycle handlers through the canonical hosted pipeline (`packages/brewva-gateway/src/runtime-plugins/index.ts`)
-   - `managedToolMode=runtime_plugin`: register managed Brewva tools through the runtime plugin API
+3. Register lifecycle handlers through the canonical hosted behavior (`packages/brewva-gateway/src/hosted/internal/session/host-api-installation.ts`)
+   - `managedToolMode=hosted`: register managed Brewva tools through the hosted behavior API
    - `managedToolMode=direct`: provide managed Brewva tools directly from the host
 4. Enter the canonical hosted turn envelope
-   (`packages/brewva-gateway/src/session/turn-envelope.ts`)
+   (`packages/brewva-gateway/src/hosted/internal/thread-loop/turn-envelope.ts`)
    - entrypoints construct a session and semantic turn request; they do not
      reimplement profile resolution, turn-id/runtime-turn binding,
      schedule-trigger prelude, WAL resume transitions, or terminal render
@@ -247,8 +247,8 @@ operator explanation, but they are not a rival lifecycle state machine.
   transport replay stream
 - `--managed-tools direct`: keeps the same hosted lifecycle shape, but managed
   Brewva tools are provided directly by the host instead of being registered by
-  the runtime plugin package; wiring details live in
-  `docs/reference/runtime-plugins.md`
+  the hosted behavior package; wiring details live in
+  `docs/reference/extensions.md`
 - Channel gateway (`--channel`): run adapter bridge loop; bind conversations to scopes, then scopes to agent sessions, and dispatch inbound turns serially per scope
   through the canonical hosted turn envelope using the `channel` hosted-loop
   profile
@@ -372,12 +372,13 @@ permanent degradation.
   `projection_ingested` and `projection_refreshed` remain projection telemetry,
   not semantic rebuild inputs.
 - That projection rebuild does not recreate history authority on its own. The
-  history-view baseline still comes from durable `session_compact` receipts plus
-  reference-context compatibility checks. If no compatible compaction baseline
-  exists, `inspect.context.getHistoryViewBaseline(...)` can still expose a
-  bounded `exact_history` continuity snapshot derived from
-  `turn_input_recorded` / `turn_render_committed`, but that fallback is not a
-  replacement for receipt-backed history rewrite authority.
+  history-view baseline still comes from durable `session_compact` receipts or
+  a completed reasoning branch reset, plus reference-context compatibility
+  checks. If no compatible receipt-backed baseline exists,
+  `inspect.context.getHistoryViewBaseline(...)` can still expose a bounded
+  `exact_history` continuity snapshot rebuilt from the surviving branch's
+  `turn_input_recorded` / `turn_render_committed` history, but that fallback is
+  not a replacement for receipt-backed history rewrite authority.
 - Before a recovered prompt runs, `HostedThreadLoop` checks whether the latest
   durable reasoning revert has already completed `reasoning_revert_resume`.
   If not, the loop resolves `revert_then_stream`, rebuilds the active branch
@@ -408,9 +409,9 @@ permanent degradation.
   `pending`, `inflight`, `done`, `failed`, and `expired` rows can all advance
   the Telegram polling watermark, because retry responsibility stays local to
   Recovery WAL recovery instead of upstream redelivery.
-- `channel_turn_ingested` is earlier bridge telemetry emitted when the adapter
-  hands a turn to the host before dispatcher-owned `appendPending(...)` writes
-  the Recovery WAL row, so it must not be read as durable ingress acceptance.
+- `channel_turn_ingested` is bridge telemetry emitted after dispatcher-owned
+  `appendPending(...)` durably accepts the inbound turn, but before any hosted
+  execution completes; it marks ingress admission order rather than success.
 - `channel_turn_emitted` is successful bridge send telemetry for the prepared
   outbound turn, not replay-critical delivery truth.
 - `channel_turn_bridge_error` currently records failures from that outbound

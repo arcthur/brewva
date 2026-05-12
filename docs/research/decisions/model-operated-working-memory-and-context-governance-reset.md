@@ -10,7 +10,7 @@
   - `docs/architecture/system-architecture.md`
   - `docs/architecture/cognitive-product-architecture.md`
   - `docs/reference/hosted-dynamic-context.md`
-  - `docs/reference/runtime-plugins.md`
+  - `docs/reference/extensions.md`
   - `docs/reference/token-cache.md`
   - `docs/reference/tools/memory-and-recall.md`
   - `docs/journeys/internal/context-and-compaction.md`
@@ -19,9 +19,9 @@
   - `packages/brewva-runtime/src/domain/context/context-pressure.ts`
   - `packages/brewva-runtime/src/domain/context/context-compaction-gate.ts`
   - `packages/brewva-runtime/src/domain/context/history-view-baseline.ts`
-  - `packages/brewva-gateway/src/host/compaction-summary-generator.ts`
-  - `packages/brewva-gateway/src/runtime-plugins/hosted-workbench-context-pipeline.ts`
-  - `packages/brewva-gateway/src/runtime-plugins/provider-request-reduction.ts`
+  - `packages/brewva-gateway/src/hosted/internal/compaction/summary-generator.ts`
+  - `packages/brewva-gateway/src/hosted/internal/context/hosted-workbench-context-pipeline.ts`
+  - `packages/brewva-gateway/src/hosted/internal/provider/request/provider-request-reduction.ts`
   - `packages/brewva-tools/src/families/memory/workbench.ts`
   - `packages/brewva-tools/src/families/memory/recall.ts`
   - `<deleted: packages/brewva-runtime/src/domain/context/provider.ts>`
