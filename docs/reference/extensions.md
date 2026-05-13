@@ -32,13 +32,19 @@ callers should treat the hosted lane as a closed default path and use only the
 facade symbols listed above for opt-in behavior.
 
 Runtime extension handles are exposed only through narrowed repo-owned ports:
-`createHostedRuntimePort(...)` for hosted control-plane code and
-`createToolRuntimePort(...)` for bundled tools. The raw `BrewvaRuntime` root
-does not expose `extensions`.
+the `hosted` port from `createBrewvaRuntime(...)` for hosted control-plane code
+and the `tool` port for bundled tools. `BrewvaRuntimeRoot` does not expose
+`extensions`, and no root-reflective helper can recover them.
 
 Runtime extension ports are typed method ports only. They do not carry branded
 runtime capability tokens or reflective `capabilities` arrays; capability
 declaration remains a gateway/plugin concern, not a runtime-port guardrail.
+
+Hosted context materialization is gateway-owned. The planner produces an
+internal `{ modelContext, effects, audit }` command plan, and the committer is
+the only code path that interprets effect payloads. Extension-facing views must
+stay redacted and read-only; full effect command payloads remain inside hosted
+owner modules.
 
 ## Boundary
 

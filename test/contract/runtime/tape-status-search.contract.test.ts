@@ -2,13 +2,13 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import { requireNonEmptyString } from "../../helpers/assertions.js";
 
 describe("tape status and search", () => {
   test("recordTapeHandoff writes anchor and resets entriesSinceAnchor", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-tape-status-"));
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const sessionId = "tape-status-1";
 
     runtime.authority.task.spec.set(sessionId, {
@@ -43,7 +43,7 @@ describe("tape status and search", () => {
 
   test("searchTape scopes current phase by latest anchor", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-tape-search-"));
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const sessionId = "tape-search-1";
 
     runtime.authority.tape.handoff.record(sessionId, {
@@ -82,7 +82,7 @@ describe("tape status and search", () => {
 
   test("searchTape uses token overlap for Chinese event text", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-tape-search-cjk-"));
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const sessionId = "tape-search-cjk";
 
     runtime.authority.tape.handoff.record(sessionId, {

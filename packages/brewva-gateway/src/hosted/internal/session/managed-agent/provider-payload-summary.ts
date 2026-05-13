@@ -1,4 +1,4 @@
-import type { BrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaRuntimeRoot } from "@brewva/brewva-runtime";
 import type { ExpectedProviderCacheBreak } from "@brewva/brewva-runtime/context";
 import { redactedStableJsonStringify, sha256Hex } from "@brewva/brewva-std/hash";
 import { isRecord } from "@brewva/brewva-std/unknown";
@@ -65,7 +65,7 @@ export function buildProviderDynamicTailSummary(input: {
 }
 
 export function resolveExpectedProviderCacheBreak(
-  runtime: BrewvaRuntime,
+  runtime: BrewvaRuntimeRoot,
   sessionId: string,
 ): ExpectedProviderCacheBreak | undefined {
   const transientReduction = runtime.inspect.context.prompt.getTransientReduction(sessionId);

@@ -3,7 +3,8 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import process from "node:process";
-import { BrewvaRuntime, createHostedRuntimePort } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaRuntimeOptions } from "@brewva/brewva-runtime";
 import type { BrewvaPromptContentPart } from "@brewva/brewva-substrate/prompt";
 import { buildBrewvaPromptText } from "@brewva/brewva-substrate/prompt";
 import type {
@@ -22,8 +23,8 @@ import {
   createTextDeltaAssistantEvent,
 } from "../../helpers/prompt-session-events.js";
 
-function createHostedTestRuntime(options: ConstructorParameters<typeof BrewvaRuntime>[0]) {
-  return createHostedRuntimePort(new BrewvaRuntime(options));
+function createHostedTestRuntime(options: BrewvaRuntimeOptions) {
+  return createBrewvaRuntime(options).hosted;
 }
 
 describe("cli runtime print mode", () => {
@@ -122,7 +123,7 @@ describe("cli runtime print mode", () => {
         const prompt = buildBrewvaPromptText(parts);
         sentMessages.push(prompt);
         if (sentMessages.length === 1) {
-          createHostedRuntimePort(runtime).extensions.hosted.events.record({
+          runtime.extensions.hosted.events.record({
             sessionId: "cli-print-session",
             type: "session_compact",
             payload: {

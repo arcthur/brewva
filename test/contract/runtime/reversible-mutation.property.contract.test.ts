@@ -1,7 +1,8 @@
 import { describe, expect } from "bun:test";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { BrewvaRuntime, createOperatorRuntimePort } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import fc from "fast-check";
 import { propertyTest } from "../../helpers/property.js";
 import { cleanupWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
@@ -40,7 +41,7 @@ function writeValue(filePath: string, value: number): void {
 }
 
 function prepareWorkspace(input: EditCase): {
-  runtime: BrewvaRuntime;
+  runtime: BrewvaHostedRuntimePort;
   sessionId: string;
   relativePath: string;
   absolutePath: string;
@@ -52,9 +53,9 @@ function prepareWorkspace(input: EditCase): {
   const absolutePath = join(workspace, relativePath);
   writeValue(absolutePath, input.initialValue);
 
-  const runtime = new BrewvaRuntime({ cwd: workspace });
+  const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
   const sessionId = `reversible-property-${input.toolCallId}`;
-  createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+  runtime.operator.context.lifecycle.onTurnStart(sessionId, 1);
   return {
     runtime,
     sessionId,

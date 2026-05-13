@@ -2,11 +2,8 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import {
-  BrewvaRuntime,
-  createHostedRuntimePort,
-  createOperatorRuntimePort,
-} from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import { requireNonEmptyString } from "../../helpers/assertions.js";
 import { createRuntimeConfig } from "../../helpers/runtime.js";
 import { cleanupWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
@@ -31,11 +28,11 @@ afterEach(() => {
   if (workspace) cleanupWorkspace(workspace);
 });
 
-function createCleanRuntime(cwd = workspace): BrewvaRuntime {
-  return new BrewvaRuntime({
+function createCleanRuntime(cwd = workspace): BrewvaHostedRuntimePort {
+  return createBrewvaRuntime({
     cwd,
     config: createRuntimeConfig(),
-  });
+  }).hosted;
 }
 
 describe("worker results patchset lifecycle", () => {
@@ -71,7 +68,7 @@ describe("worker results patchset lifecycle", () => {
     expect(conflictReport.status).toBe("conflicts");
     expect(conflictReport.conflicts.length).toBe(1);
 
-    createOperatorRuntimePort(runtime).operator.session.workerResults.clear(sessionId);
+    runtime.operator.session.workerResults.clear(sessionId);
     expect(runtime.inspect.session.workerResults.list(sessionId)).toHaveLength(0);
     runtime.authority.session.workerResults.record(sessionId, {
       workerId: "w1",
@@ -122,12 +119,12 @@ describe("worker results patchset lifecycle", () => {
     const artifactPath = join(artifactDir, "value.ts");
     writeFileSync(artifactPath, afterText, "utf8");
 
-    const runtime = new BrewvaRuntime({
+    const runtime = createBrewvaRuntime({
       cwd: applyWorkspace,
       configPath: RUNTIME_CONTRACT_CONFIG_PATH,
-    });
+    }).hosted;
     const sessionId = "parallel-apply-1";
-    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+    runtime.operator.context.lifecycle.onTurnStart(sessionId, 1);
 
     runtime.authority.session.workerResults.record(sessionId, {
       workerId: "w1",
@@ -184,12 +181,12 @@ describe("worker results patchset lifecycle", () => {
     const filePath = join(missingArtifactWorkspace, "src/value.ts");
     writeFileSync(filePath, beforeText, "utf8");
 
-    const runtime = new BrewvaRuntime({
+    const runtime = createBrewvaRuntime({
       cwd: missingArtifactWorkspace,
       configPath: RUNTIME_CONTRACT_CONFIG_PATH,
-    });
+    }).hosted;
     const sessionId = "parallel-apply-missing-artifact-1";
-    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+    runtime.operator.context.lifecycle.onTurnStart(sessionId, 1);
 
     runtime.authority.session.workerResults.record(sessionId, {
       workerId: "w1",
@@ -275,11 +272,11 @@ describe("worker results patchset lifecycle", () => {
       "utf8",
     );
 
-    const writer = new BrewvaRuntime({
+    const writer = createBrewvaRuntime({
       cwd: rehydrateWorkspace,
       configPath: RUNTIME_CONTRACT_CONFIG_PATH,
-    });
-    createHostedRuntimePort(writer).extensions.hosted.events.record({
+    }).hosted;
+    writer.extensions.hosted.events.record({
       sessionId,
       type: "subagent_completed",
       payload: {
@@ -301,11 +298,11 @@ describe("worker results patchset lifecycle", () => {
       },
     });
 
-    const restarted = new BrewvaRuntime({
+    const restarted = createBrewvaRuntime({
       cwd: rehydrateWorkspace,
       configPath: RUNTIME_CONTRACT_CONFIG_PATH,
-    });
-    createOperatorRuntimePort(restarted).operator.context.lifecycle.onTurnStart(sessionId, 1);
+    }).hosted;
+    restarted.operator.context.lifecycle.onTurnStart(sessionId, 1);
 
     const workerResults = restarted.inspect.session.workerResults.list(sessionId);
     expect(workerResults).toHaveLength(1);

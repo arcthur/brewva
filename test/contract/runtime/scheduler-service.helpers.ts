@@ -1,11 +1,8 @@
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  DEFAULT_BREWVA_CONFIG,
-  BrewvaRuntime,
-  createHostedRuntimePort,
-} from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
+import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
 import type { BrewvaConfig } from "@brewva/brewva-runtime";
 import { type SchedulerRuntimePort } from "@brewva/brewva-runtime/recovery";
 import {
@@ -40,14 +37,14 @@ export function createSchedulerConfig(mutate?: (config: BrewvaConfig) => void): 
   return config;
 }
 
-export function schedulerRuntimePort(runtime: BrewvaRuntime): SchedulerRuntimePort {
+export function schedulerRuntimePort(runtime: BrewvaHostedRuntimePort): SchedulerRuntimePort {
   return {
     workspaceRoot: runtime.identity.workspaceRoot,
     scheduleConfig: runtime.config.schedule,
     listSessionIds: () => runtime.inspect.events.log.listSessionIds(),
     listEvents: (targetSessionId, query) =>
       runtime.inspect.events.records.list(targetSessionId, query),
-    recordEvent: (input) => createHostedRuntimePort(runtime).extensions.hosted.events.record(input),
+    recordEvent: (input) => runtime.extensions.hosted.events.record(input),
     subscribeEvents: (listener) => runtime.inspect.events.records.subscribe(listener),
     getClaimState: (targetSessionId) => runtime.inspect.claim.state.get(targetSessionId),
     getTaskState: (targetSessionId) => runtime.inspect.task.state.get(targetSessionId),

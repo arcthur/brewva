@@ -1,32 +1,23 @@
 import { BrewvaEffect, type BrewvaRunOptions } from "@brewva/brewva-effect";
 import type { RuntimeEffectServices } from "./runtime/effect-runtime-layer.js";
 import {
-  BREWVA_RUNTIME_INTERNAL_STATE_SYMBOL,
   getRuntimeEffectLayer as getRuntimeFacadeEffectLayer,
   getRuntimeEffectSpine as getRuntimeFacadeEffectSpine,
-  type RuntimeFacadeState,
+  type RuntimeFacadeControllerHandle,
 } from "./runtime/runtime-facade-state.js";
-import type { BrewvaRuntime } from "./runtime/runtime.js";
 
-type RuntimeEffectHost = BrewvaRuntime | RuntimeFacadeState;
-
-function asRuntimeFacadeState(runtime: RuntimeEffectHost): RuntimeFacadeState {
-  if (!(BREWVA_RUNTIME_INTERNAL_STATE_SYMBOL in runtime)) {
-    throw new Error("runtime does not expose Brewva internal Effect state");
-  }
-  return runtime;
-}
+export type RuntimeEffectHost = RuntimeFacadeControllerHandle;
 
 export function getRuntimeEffectLayer(
   runtime: RuntimeEffectHost,
 ): ReturnType<typeof getRuntimeFacadeEffectLayer> {
-  return getRuntimeFacadeEffectLayer(asRuntimeFacadeState(runtime));
+  return getRuntimeFacadeEffectLayer(runtime);
 }
 
 export function getRuntimeEffectSpine(
   runtime: RuntimeEffectHost,
 ): ReturnType<typeof getRuntimeFacadeEffectSpine> {
-  return getRuntimeFacadeEffectSpine(asRuntimeFacadeState(runtime));
+  return getRuntimeFacadeEffectSpine(runtime);
 }
 
 export function runRuntimeEffect<A, E>(

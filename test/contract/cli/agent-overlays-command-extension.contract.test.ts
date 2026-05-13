@@ -3,7 +3,8 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createAgentOverlaysCommandExtension } from "@brewva/brewva-cli";
 import type { HostedExtensionApi } from "@brewva/brewva-gateway/extensions";
-import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
+import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
 import { requireDefined } from "../../helpers/assertions.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
@@ -43,10 +44,10 @@ Keep findings short and concrete.
 `,
       "utf8",
     );
-    const runtime = new BrewvaRuntime({
+    const runtime = createBrewvaRuntime({
       cwd: workspace,
       config: structuredClone(DEFAULT_BREWVA_CONFIG),
-    });
+    }).hosted;
 
     const { api, commands } = createCommandApiMock();
     await createAgentOverlaysCommandExtension(runtime).register(api);

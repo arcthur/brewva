@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { BrewvaRuntime, createHostedRuntimePort } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import { asBrewvaIntentId } from "@brewva/brewva-runtime/core";
 import { SCHEDULE_EVENT_TYPE } from "@brewva/brewva-runtime/events";
 import { createSchedulerService } from "@brewva/brewva-runtime/recovery";
@@ -18,13 +18,13 @@ import {
 describe("scheduler service limit contract", () => {
   test("enforces active intent limits", async () => {
     const workspace = createWorkspace("limits");
-    const runtime = new BrewvaRuntime({
+    const runtime = createBrewvaRuntime({
       cwd: workspace,
       config: createSchedulerConfig((config) => {
         config.schedule.maxActiveIntentsPerSession = 1;
         config.schedule.maxActiveIntentsGlobal = 2;
       }),
-    });
+    }).hosted;
 
     const scheduler = createSchedulerService({ runtime: schedulerRuntimePort(runtime) });
     await scheduler.recover();
@@ -73,12 +73,12 @@ describe("scheduler service limit contract", () => {
 
   test("creates cron intents with computed nextRunAt", async () => {
     const workspace = createWorkspace("cron-create");
-    const runtime = new BrewvaRuntime({
+    const runtime = createBrewvaRuntime({
       cwd: workspace,
       config: createSchedulerConfig((config) => {
         config.schedule.minIntervalMs = 60_000;
       }),
-    });
+    }).hosted;
 
     const nowMs = Date.UTC(2026, 0, 1, 0, 1, 30, 0);
     const scheduler = createSchedulerService({
@@ -120,12 +120,12 @@ describe("scheduler service limit contract", () => {
 
   test("creates cron intents with explicit timeZone", async () => {
     const workspace = createWorkspace("cron-timezone");
-    const runtime = new BrewvaRuntime({
+    const runtime = createBrewvaRuntime({
       cwd: workspace,
       config: createSchedulerConfig((config) => {
         config.schedule.minIntervalMs = 60_000;
       }),
-    });
+    }).hosted;
 
     const nowMs = Date.UTC(2026, 0, 1, 0, 30, 0, 0);
     const scheduler = createSchedulerService({
@@ -163,12 +163,12 @@ describe("scheduler service limit contract", () => {
 
   test("jitter distributes same-cron intents away from the shared exact boundary", async () => {
     const workspace = createWorkspace("cron-anti-herd");
-    const runtime = new BrewvaRuntime({
+    const runtime = createBrewvaRuntime({
       cwd: workspace,
       config: createSchedulerConfig((config) => {
         config.schedule.minIntervalMs = 60_000;
       }),
-    });
+    }).hosted;
 
     const nowMs = Date.UTC(2026, 0, 1, 0, 1, 30, 0);
     const scheduler = createSchedulerService({
@@ -234,7 +234,7 @@ describe("scheduler service limit contract", () => {
 
   test("rejects invalid cron expressions on create", async () => {
     const workspace = createWorkspace("cron-invalid");
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const scheduler = createSchedulerService({
       runtime: schedulerRuntimePort(runtime),
       enableExecution: false,
@@ -257,7 +257,7 @@ describe("scheduler service limit contract", () => {
 
   test("rejects invalid timeZone values on create", async () => {
     const workspace = createWorkspace("cron-invalid-timezone");
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const scheduler = createSchedulerService({
       runtime: schedulerRuntimePort(runtime),
       enableExecution: false,
@@ -281,7 +281,7 @@ describe("scheduler service limit contract", () => {
 
   test("rejects timeZone when cron is not provided", async () => {
     const workspace = createWorkspace("timezone-requires-cron");
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const scheduler = createSchedulerService({
       runtime: schedulerRuntimePort(runtime),
       enableExecution: false,
@@ -305,7 +305,7 @@ describe("scheduler service limit contract", () => {
 
   test("defaults maxRuns to 10000 for cron intents", async () => {
     const workspace = createWorkspace("cron-default-max-runs");
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const scheduler = createSchedulerService({
       runtime: schedulerRuntimePort(runtime),
       enableExecution: false,
@@ -327,18 +327,18 @@ describe("scheduler service limit contract", () => {
 
   test("revives a converged intent when maxRuns is increased via update", async () => {
     const workspace = createWorkspace("revive-converged");
-    const runtime = new BrewvaRuntime({
+    const runtime = createBrewvaRuntime({
       cwd: workspace,
       config: createSchedulerConfig((config) => {
         config.schedule.minIntervalMs = 60_000;
       }),
-    });
+    }).hosted;
 
     const nowMs = Date.UTC(2026, 0, 1, 0, 30, 0, 0);
     const sessionId = "session-revive";
     const dueRunAt = nowMs - 1_000;
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: SCHEDULE_EVENT_TYPE,
       payload: buildScheduleIntentCreatedEvent({
@@ -389,7 +389,7 @@ describe("scheduler service limit contract", () => {
 
   test("does not reactivate a cancelled intent through the public update path", async () => {
     const workspace = createWorkspace("cancelled-reactivation-guard");
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const scheduler = createSchedulerService({
       runtime: schedulerRuntimePort(runtime),
       enableExecution: false,

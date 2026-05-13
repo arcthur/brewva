@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { BrewvaRuntime, createOperatorRuntimePort } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import { VERIFICATION_STATE_RESET_EVENT_TYPE } from "@brewva/brewva-runtime/events";
 import {
   RUNTIME_CONTRACT_CONFIG_PATH,
@@ -21,8 +21,11 @@ describe("tool patchset rollback", () => {
     const filePath = join(workspace, "src/main.ts");
     writeFileSync(filePath, "export const value = 1;\n", "utf8");
 
-    const runtime = new BrewvaRuntime({ cwd: workspace, configPath: RUNTIME_CONTRACT_CONFIG_PATH });
-    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+    const runtime = createBrewvaRuntime({
+      cwd: workspace,
+      configPath: RUNTIME_CONTRACT_CONFIG_PATH,
+    }).hosted;
+    runtime.operator.context.lifecycle.onTurnStart(sessionId, 1);
     runtime.authority.tools.tracking.markCall(sessionId, "edit");
     runtime.authority.tools.invocation.recordResult({
       sessionId,
@@ -71,8 +74,11 @@ describe("tool patchset rollback", () => {
     writeFileSync(firstPath, "export const first = 1;\n", "utf8");
     writeFileSync(secondPath, "export const second = 1;\n", "utf8");
 
-    const runtime = new BrewvaRuntime({ cwd: workspace, configPath: RUNTIME_CONTRACT_CONFIG_PATH });
-    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+    const runtime = createBrewvaRuntime({
+      cwd: workspace,
+      configPath: RUNTIME_CONTRACT_CONFIG_PATH,
+    }).hosted;
+    runtime.operator.context.lifecycle.onTurnStart(sessionId, 1);
 
     runtime.authority.tools.tracking.trackCallStart({
       sessionId,
@@ -116,8 +122,11 @@ describe("tool patchset rollback", () => {
     writeFileSync(firstPath, "export const first = 1;\n", "utf8");
     writeFileSync(secondPath, "export const second = 1;\n", "utf8");
 
-    const runtime = new BrewvaRuntime({ cwd: workspace, configPath: RUNTIME_CONTRACT_CONFIG_PATH });
-    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+    const runtime = createBrewvaRuntime({
+      cwd: workspace,
+      configPath: RUNTIME_CONTRACT_CONFIG_PATH,
+    }).hosted;
+    runtime.operator.context.lifecycle.onTurnStart(sessionId, 1);
 
     runtime.authority.tools.tracking.trackCallStart({
       sessionId,
@@ -162,8 +171,11 @@ describe("tool patchset rollback", () => {
 
     const sessionId = "rollback-add-1";
     const createdPath = join(workspace, "src/new-file.ts");
-    const runtime = new BrewvaRuntime({ cwd: workspace, configPath: RUNTIME_CONTRACT_CONFIG_PATH });
-    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+    const runtime = createBrewvaRuntime({
+      cwd: workspace,
+      configPath: RUNTIME_CONTRACT_CONFIG_PATH,
+    }).hosted;
+    runtime.operator.context.lifecycle.onTurnStart(sessionId, 1);
 
     runtime.authority.tools.tracking.trackCallStart({
       sessionId,
@@ -193,8 +205,11 @@ describe("tool patchset rollback", () => {
     const filePath = join(workspace, "src/main.ts");
     writeFileSync(filePath, "export const value = 1;\n", "utf8");
 
-    const runtime = new BrewvaRuntime({ cwd: workspace, configPath: RUNTIME_CONTRACT_CONFIG_PATH });
-    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+    const runtime = createBrewvaRuntime({
+      cwd: workspace,
+      configPath: RUNTIME_CONTRACT_CONFIG_PATH,
+    }).hosted;
+    runtime.operator.context.lifecycle.onTurnStart(sessionId, 1);
 
     runtime.authority.tools.tracking.trackCallStart({
       sessionId,
@@ -230,7 +245,10 @@ describe("tool patchset rollback", () => {
     const workspace = createWorkspace("rollback-path-traversal");
     writeConfig(workspace, createConfig({}));
 
-    const runtime = new BrewvaRuntime({ cwd: workspace, configPath: RUNTIME_CONTRACT_CONFIG_PATH });
+    const runtime = createBrewvaRuntime({
+      cwd: workspace,
+      configPath: RUNTIME_CONTRACT_CONFIG_PATH,
+    }).hosted;
     const sessionId = "rollback-path-traversal-1";
 
     runtime.authority.tools.tracking.trackCallStart({
@@ -272,11 +290,11 @@ describe("tool patchset rollback", () => {
     const filePath = join(workspace, "src/persisted.ts");
     writeFileSync(filePath, "export const persisted = 1;\n", "utf8");
 
-    const runtimeA = new BrewvaRuntime({
+    const runtimeA = createBrewvaRuntime({
       cwd: workspace,
       configPath: RUNTIME_CONTRACT_CONFIG_PATH,
-    });
-    createOperatorRuntimePort(runtimeA).operator.context.lifecycle.onTurnStart(sessionId, 1);
+    }).hosted;
+    runtimeA.operator.context.lifecycle.onTurnStart(sessionId, 1);
     runtimeA.authority.tools.tracking.trackCallStart({
       sessionId,
       toolCallId: "persist-1",
@@ -291,10 +309,10 @@ describe("tool patchset rollback", () => {
       channelSuccess: true,
     });
 
-    const runtimeB = new BrewvaRuntime({
+    const runtimeB = createBrewvaRuntime({
       cwd: workspace,
       configPath: RUNTIME_CONTRACT_CONFIG_PATH,
-    });
+    }).hosted;
     const resolved = runtimeB.inspect.tools.undo.resolveSessionId();
     expect(resolved).toBe(sessionId);
 

@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BrewvaRuntime, createOperatorRuntimePort } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort, BrewvaRuntimeOptions } from "@brewva/brewva-runtime";
 import { asBrewvaToolCallId, asBrewvaToolName } from "@brewva/brewva-runtime/core";
 import { createTrustedLocalGovernancePort } from "@brewva/brewva-runtime/governance";
 import type { EffectAuthorityManifestBasis } from "@brewva/brewva-runtime/governance";
@@ -20,14 +21,12 @@ beforeEach(() => {
   workspace = createTestWorkspace("runtime-proposals-contract");
 });
 
-function createCleanRuntime(
-  options: ConstructorParameters<typeof BrewvaRuntime>[0] = {},
-): BrewvaRuntime {
-  return new BrewvaRuntime({
+function createCleanRuntime(options: BrewvaRuntimeOptions = {}): BrewvaHostedRuntimePort {
+  return createBrewvaRuntime({
     cwd: workspace,
     config: createRuntimeConfig(),
     ...options,
-  });
+  }).hosted;
 }
 
 function readManifestBasis(payload: unknown): EffectAuthorityManifestBasis | undefined {
@@ -162,7 +161,7 @@ describe("runtime proposals API", () => {
   test("operator approval requests rehydrate across runtime restart before and after approval", () => {
     const rehydrateWorkspace = createWorkspace();
     const sessionId = `runtime-proposals-commitment-rehydrate-${crypto.randomUUID()}`;
-    const runtime = new BrewvaRuntime({ cwd: rehydrateWorkspace });
+    const runtime = createBrewvaRuntime({ cwd: rehydrateWorkspace }).hosted;
 
     const deferred = runtime.authority.tools.invocation.start({
       sessionId,
@@ -174,7 +173,7 @@ describe("runtime proposals API", () => {
     expect(deferred.allowed).toBe(false);
     expect(typeof deferred.effectCommitmentRequestId).toBe("string");
 
-    const restarted = new BrewvaRuntime({ cwd: rehydrateWorkspace });
+    const restarted = createBrewvaRuntime({ cwd: rehydrateWorkspace }).hosted;
     const pendingAfterRestart = restarted.inspect.proposals.requests.listPending(sessionId);
     expect(pendingAfterRestart).toHaveLength(1);
     expect(pendingAfterRestart[0]?.requestId).toBe(deferred.effectCommitmentRequestId);
@@ -191,7 +190,7 @@ describe("runtime proposals API", () => {
     );
     expect(accepted.ok).toBe(true);
 
-    const restartedAgain = new BrewvaRuntime({ cwd: rehydrateWorkspace });
+    const restartedAgain = createBrewvaRuntime({ cwd: rehydrateWorkspace }).hosted;
     expect(restartedAgain.inspect.proposals.requests.listPending(sessionId)).toHaveLength(0);
     expect(
       restartedAgain.inspect.proposals.requests.list(sessionId, {
@@ -257,7 +256,7 @@ describe("runtime proposals API", () => {
 
   test("durable linked tool outcomes consume approved requests and persist replay linkage", () => {
     const durableWorkspace = createWorkspace();
-    const runtime = new BrewvaRuntime({ cwd: durableWorkspace });
+    const runtime = createBrewvaRuntime({ cwd: durableWorkspace }).hosted;
     const sessionId = `runtime-proposals-commitment-consume-${crypto.randomUUID()}`;
 
     const deferred = runtime.authority.tools.invocation.start({
@@ -320,7 +319,7 @@ describe("runtime proposals API", () => {
       },
     ]);
 
-    const restarted = new BrewvaRuntime({ cwd: durableWorkspace });
+    const restarted = createBrewvaRuntime({ cwd: durableWorkspace }).hosted;
     expect(
       restarted.inspect.proposals.requests.list(sessionId, {
         state: "consumed",
@@ -346,7 +345,7 @@ describe("runtime proposals API", () => {
 
   test("linked runtime.authority.tools.recordResult outcomes also consume approved requests", () => {
     const recordResultWorkspace = createWorkspace();
-    const runtime = new BrewvaRuntime({ cwd: recordResultWorkspace });
+    const runtime = createBrewvaRuntime({ cwd: recordResultWorkspace }).hosted;
     const sessionId = `runtime-proposals-commitment-record-result-${crypto.randomUUID()}`;
 
     const deferred = runtime.authority.tools.invocation.start({
@@ -377,7 +376,7 @@ describe("runtime proposals API", () => {
       effectCommitmentRequestId: pending[0]!.requestId,
     });
 
-    const restarted = new BrewvaRuntime({ cwd: recordResultWorkspace });
+    const restarted = createBrewvaRuntime({ cwd: recordResultWorkspace }).hosted;
     const replayed = restarted.authority.tools.invocation.start({
       sessionId,
       toolCallId: "tc-exec-record-result",
@@ -392,7 +391,7 @@ describe("runtime proposals API", () => {
 
   test("pending requests are not consumed by linked tool results before operator approval", () => {
     const pendingLinkageWorkspace = createWorkspace();
-    const runtime = new BrewvaRuntime({ cwd: pendingLinkageWorkspace });
+    const runtime = createBrewvaRuntime({ cwd: pendingLinkageWorkspace }).hosted;
     const sessionId = `runtime-proposals-commitment-pending-linkage-${crypto.randomUUID()}`;
 
     const deferred = runtime.authority.tools.invocation.start({
@@ -416,7 +415,7 @@ describe("runtime proposals API", () => {
       effectCommitmentRequestId: pending[0]!.requestId,
     });
 
-    const restarted = new BrewvaRuntime({ cwd: pendingLinkageWorkspace });
+    const restarted = createBrewvaRuntime({ cwd: pendingLinkageWorkspace }).hosted;
     expect(restarted.inspect.proposals.requests.listPending(sessionId)).toHaveLength(1);
 
     const resumed = restarted.authority.tools.invocation.start({
@@ -554,7 +553,7 @@ describe("runtime proposals API", () => {
   test("custom approval-bound action policies also fail closed without a governance port", () => {
     const toolName = "custom_commitment_probe";
     const runtime = createCleanRuntime();
-    createOperatorRuntimePort(runtime).operator.tools.actionPolicies.register(toolName, {
+    runtime.operator.tools.actionPolicies.register(toolName, {
       actionClass: "local_exec_effectful",
       riskLevel: "high",
       defaultAdmission: "ask",
@@ -579,7 +578,7 @@ describe("runtime proposals API", () => {
       expect(started.reason).toContain("effect_commitment_pending_operator_approval:");
       expect(runtime.inspect.proposals.requests.listPending(sessionId)).toHaveLength(1);
     } finally {
-      createOperatorRuntimePort(runtime).operator.tools.actionPolicies.unregister(toolName);
+      runtime.operator.tools.actionPolicies.unregister(toolName);
     }
   });
 

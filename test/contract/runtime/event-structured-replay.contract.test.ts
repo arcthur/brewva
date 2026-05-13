@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { BrewvaRuntime, createHostedRuntimePort } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import { asBrewvaSessionId } from "@brewva/brewva-runtime/core";
 import {
   RUNTIME_CONTRACT_CONFIG_PATH,
@@ -13,19 +13,22 @@ describe("structured event replay", () => {
     const workspace = createWorkspace("replay");
     writeConfig(workspace, createConfig({}));
 
-    const runtime = new BrewvaRuntime({ cwd: workspace, configPath: RUNTIME_CONTRACT_CONFIG_PATH });
+    const runtime = createBrewvaRuntime({
+      cwd: workspace,
+      configPath: RUNTIME_CONTRACT_CONFIG_PATH,
+    }).hosted;
     const sessionId = asBrewvaSessionId("replay-1");
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "session_start",
       payload: { cwd: workspace },
     });
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "channel_session_bound",
       payload: { channel: "telegram", conversationId: "12345" },
     });
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "tool_call",
       turn: 1,
@@ -51,24 +54,27 @@ describe("structured event replay", () => {
     const workspace = createWorkspace("replay-order");
     writeConfig(workspace, createConfig({}));
 
-    const runtime = new BrewvaRuntime({ cwd: workspace, configPath: RUNTIME_CONTRACT_CONFIG_PATH });
+    const runtime = createBrewvaRuntime({
+      cwd: workspace,
+      configPath: RUNTIME_CONTRACT_CONFIG_PATH,
+    }).hosted;
     const olderSession = asBrewvaSessionId("session-older");
     const newerSession = asBrewvaSessionId("session-newer");
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId: newerSession,
       type: "session_start",
       payload: { cwd: workspace },
       timestamp: 3000,
     });
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId: olderSession,
       type: "session_start",
       payload: { cwd: workspace },
       timestamp: 1000,
     });
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId: olderSession,
       type: "channel_session_bound",
       payload: { channel: "cli", conversationId: "x" },

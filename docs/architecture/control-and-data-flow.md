@@ -27,6 +27,21 @@ sequenceDiagram
   RT->>STORE: tool outcome + receipts
 ```
 
+## Runtime Port Selection
+
+```mermaid
+flowchart LR
+  CR["createBrewvaRuntime(...)"] --> INST["BrewvaRuntimeInstance"]
+  INST --> ROOT["root: identity + config + authority + inspect"]
+  INST --> HOSTED["hosted: root + operator + hosted extensions"]
+  INST --> TOOL["tool: root + tool extensions"]
+  INST --> OP["operator: identity + config + inspect + operator"]
+  ROOT --> LEAF["root-only helpers"]
+  HOSTED --> GW["gateway hosted assembly"]
+  TOOL --> MT["managed tools"]
+  OP --> CLI["operator products"]
+```
+
 ## Persistence Roles
 
 ```mermaid

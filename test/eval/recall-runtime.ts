@@ -3,11 +3,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { performance } from "node:perf_hooks";
 import { getOrCreateRecallBroker } from "@brewva/brewva-recall/broker";
-import {
-  BrewvaRuntime,
-  createOperatorRuntimePort,
-  createHostedRuntimePort,
-} from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import { tokenizeSearchContent } from "@brewva/brewva-search";
 import { parse } from "yaml";
 import type { EvalTelemetry, RecallEvalDataset, RecallEvalMetrics } from "./types.js";
@@ -133,11 +129,11 @@ export async function executeRecallRuntimeScenario(input: {
     writeFileSync(absolutePath, file.content, "utf8");
   }
 
-  const runtime = new BrewvaRuntime({ cwd: workspace });
+  const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
   const eventAliasMap = new Map<string, string>();
 
   for (const session of dataset.sessions) {
-    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(session.id, 1);
+    runtime.operator.context.lifecycle.onTurnStart(session.id, 1);
     runtime.authority.task.spec.set(session.id, {
       schema: "brewva.task.v1",
       goal: session.goal,
@@ -146,7 +142,7 @@ export async function executeRecallRuntimeScenario(input: {
 
     for (const event of session.events ?? []) {
       const payload = resolveAliasRefs(cloneValue(event.payload ?? {}), eventAliasMap, session.id);
-      const recorded = createHostedRuntimePort(runtime).extensions.hosted.events.record({
+      const recorded = runtime.extensions.hosted.events.record({
         sessionId: session.id,
         type: event.type,
         turn: event.turn,

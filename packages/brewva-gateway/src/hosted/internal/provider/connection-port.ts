@@ -1,4 +1,4 @@
-import type { BrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaRuntimeRoot } from "@brewva/brewva-runtime";
 import {
   createCredentialVaultServiceFromSecurityConfig,
   type CredentialVaultService,
@@ -32,7 +32,7 @@ const pendingOAuthCompletions = new Map<
   }
 >();
 
-function createVault(runtime: BrewvaRuntime): CredentialVaultService {
+function createVault(runtime: BrewvaRuntimeRoot): CredentialVaultService {
   return createCredentialVaultServiceFromSecurityConfig(
     runtime.identity.workspaceRoot,
     runtime.config.security as Parameters<typeof createCredentialVaultServiceFromSecurityConfig>[1],
@@ -40,7 +40,7 @@ function createVault(runtime: BrewvaRuntime): CredentialVaultService {
 }
 
 export function configureCredentialVaultModelAuth(input: {
-  runtime: BrewvaRuntime;
+  runtime: BrewvaRuntimeRoot;
   authStore: { setFallbackResolver?: (resolver: (provider: string) => string | undefined) => void };
 }): void {
   const vault = createVault(input.runtime);
@@ -54,7 +54,7 @@ export function configureCredentialVaultModelAuth(input: {
 }
 
 export function createProviderConnectionPort(input: {
-  runtime: BrewvaRuntime;
+  runtime: BrewvaRuntimeRoot;
   modelRegistry: ProviderConnectionModelCatalog;
   authStore?: ProviderConnectionAuthStore;
   authHandlers?: readonly ProviderAuthHandler[];

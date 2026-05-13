@@ -4,14 +4,14 @@ import {
   type HostedExtensionPlugin,
   type HostedExtensionApi,
 } from "@brewva/brewva-gateway/extensions";
-import type { BrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaRuntimeRoot } from "@brewva/brewva-runtime";
 
 function normalizeCommandArgs(args: string): string | undefined {
   const trimmed = args.trim();
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
-export function createUpdateCommandExtension(runtime: BrewvaRuntime): HostedExtensionPlugin {
+export function createUpdateCommandExtension(runtime: BrewvaRuntimeRoot): HostedExtensionPlugin {
   return defineHostedExtensionPlugin({
     name: "cli.update_command",
     capabilities: ["tool_registration.write", "user_message.enqueue"],

@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import type { BrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaRuntimeRoot } from "@brewva/brewva-runtime";
 import { type BrewvaEventRecord } from "@brewva/brewva-runtime/events";
 import {
   OPERATOR_QUESTION_ANSWERED_EVENT_TYPE,
@@ -313,7 +313,7 @@ function extractStructuredQuestionRequests(input: {
 
 async function extractDelegationQuestions(
   event: BrewvaEventRecord,
-  runtime: BrewvaRuntime,
+  runtime: BrewvaRuntimeRoot,
 ): Promise<{ questions: SessionOpenQuestion[]; warning?: string }> {
   const payload = readDelegationLifecycleEventPayload(event);
   const runId = payload?.runId;
@@ -637,7 +637,7 @@ export function coerceOperatorQuestionAnsweredPayload(
 }
 
 export async function collectOpenSessionQuestions(
-  runtime: BrewvaRuntime,
+  runtime: BrewvaRuntimeRoot,
   sessionId: string,
 ): Promise<SessionQuestionCollection> {
   const events = runtime.inspect.events.records.query(sessionId);
@@ -670,7 +670,7 @@ export async function collectOpenSessionQuestions(
 }
 
 export async function collectOpenQuestionsForSessions(
-  runtime: BrewvaRuntime,
+  runtime: BrewvaRuntimeRoot,
   sessionIds: readonly string[],
 ): Promise<SessionQuestionCollection> {
   const normalizedSessionIds = Array.from(
@@ -708,7 +708,7 @@ export async function collectOpenQuestionsForSessions(
 }
 
 export async function resolveOpenSessionQuestion(
-  runtime: BrewvaRuntime,
+  runtime: BrewvaRuntimeRoot,
   sessionId: string,
   questionId: string,
 ): Promise<SessionOpenQuestion | null> {
@@ -723,7 +723,7 @@ export async function resolveOpenSessionQuestion(
 }
 
 export async function resolveOpenQuestionInSessions(
-  runtime: BrewvaRuntime,
+  runtime: BrewvaRuntimeRoot,
   sessionIds: readonly string[],
   questionId: string,
 ): Promise<SessionOpenQuestion | null> {
@@ -738,7 +738,7 @@ export async function resolveOpenQuestionInSessions(
 }
 
 export async function resolveOpenSessionQuestionRequest(
-  runtime: BrewvaRuntime,
+  runtime: BrewvaRuntimeRoot,
   sessionId: string,
   requestId: string,
 ): Promise<SessionQuestionRequest | null> {
@@ -755,7 +755,7 @@ export async function resolveOpenSessionQuestionRequest(
 }
 
 export async function resolveOpenQuestionRequestInSessions(
-  runtime: BrewvaRuntime,
+  runtime: BrewvaRuntimeRoot,
   sessionIds: readonly string[],
   requestId: string,
 ): Promise<SessionQuestionRequest | null> {

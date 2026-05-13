@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import { requireDefined } from "../../helpers/assertions.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 describe("Claim extraction from lsp_diagnostics", () => {
   test("records diagnostic operational claims and resolves on clean output", () => {
     const workspace = createTestWorkspace("claim-from-lsp-diagnostics");
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const sessionId = "claim-from-lsp-diagnostics-1";
 
     const diagnosticsOutput = [
@@ -57,7 +57,7 @@ describe("Claim extraction from lsp_diagnostics", () => {
 
   test("clean output resolves only diagnostic claims for that file", () => {
     const workspace = createTestWorkspace("claim-from-lsp-diagnostics-scoped");
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const sessionId = "claim-from-lsp-diagnostics-2";
 
     runtime.authority.tools.invocation.recordResult({
@@ -105,7 +105,7 @@ describe("Claim extraction from lsp_diagnostics", () => {
 
   test("stale diagnostic codes resolve when unfiltered output changes", () => {
     const workspace = createTestWorkspace("claim-from-lsp-diagnostics-stale");
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const sessionId = "claim-from-lsp-diagnostics-3";
 
     runtime.authority.tools.invocation.recordResult({
@@ -149,7 +149,7 @@ describe("Claim extraction from lsp_diagnostics", () => {
 
   test("scope-mismatch unavailable output does not resolve active facts", () => {
     const workspace = createTestWorkspace("claim-from-lsp-diagnostics-scope-mismatch");
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const sessionId = "claim-from-lsp-diagnostics-4";
 
     runtime.authority.tools.invocation.recordResult({

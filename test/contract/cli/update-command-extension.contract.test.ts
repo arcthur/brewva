@@ -3,7 +3,8 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createUpdateCommandExtension } from "@brewva/brewva-cli";
 import type { HostedExtensionApi } from "@brewva/brewva-gateway/extensions";
-import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
+import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
 import {
   buildBrewvaPromptText,
   type BrewvaPromptContentPart,
@@ -50,10 +51,10 @@ describe("update interactive command extension", () => {
   test("queues the changelog-driven update workflow as a user message", async () => {
     const workspace = createTestWorkspace("update-command-extension");
     writeFileSync(join(workspace, "package.json"), JSON.stringify({ name: "demo-app" }), "utf8");
-    const runtime = new BrewvaRuntime({
+    const runtime = createBrewvaRuntime({
       cwd: workspace,
       config: structuredClone(DEFAULT_BREWVA_CONFIG),
-    });
+    }).hosted;
 
     const { api, commands, sentMessages } = createCommandApiMock();
     await createUpdateCommandExtension(runtime).register(api);
@@ -87,10 +88,10 @@ describe("update interactive command extension", () => {
 
   test("queues the update workflow as a follow-up when the agent is busy", async () => {
     const workspace = createTestWorkspace("update-command-extension-follow-up");
-    const runtime = new BrewvaRuntime({
+    const runtime = createBrewvaRuntime({
       cwd: workspace,
       config: structuredClone(DEFAULT_BREWVA_CONFIG),
-    });
+    }).hosted;
 
     const { api, commands, sentMessages } = createCommandApiMock();
     await createUpdateCommandExtension(runtime).register(api);

@@ -1,4 +1,4 @@
-// Curated skills contract subpath. Keep root imports focused on BrewvaRuntime.
+// Curated skills contract subpath. Keep root imports focused on createBrewvaRuntime and explicit port types.
 export type {
   LoadableSkillCategory,
   OverlaySkillDocument,

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BrewvaRuntime, createHostedRuntimePort } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import {
   asBrewvaSessionId,
   asBrewvaToolCallId,
@@ -100,10 +100,10 @@ function createFakeBundle(
       lastEventAt: Date.now(),
     },
   ];
-  const rawRuntime = new BrewvaRuntime({
+  const rawRuntime = createBrewvaRuntime({
     cwd: mkdtempSync(join(tmpdir(), "brewva-shell-runtime-")),
-  });
-  const runtime = createHostedRuntimePort(rawRuntime);
+  }).hosted;
+  const runtime = rawRuntime;
   Object.assign(runtime.authority.proposals.requests, {
     decide(_sessionId: string, requestId: string, input: unknown) {
       approvalDecisions.push({ requestId, input });

@@ -1,11 +1,12 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { HostedDelegationStore } from "@brewva/brewva-gateway";
-import { BrewvaRuntime, createHostedRuntimePort } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort, BrewvaRuntimeOptions } from "@brewva/brewva-runtime";
 import { CURRENT_DELEGATION_CONTRACT_VERSION } from "@brewva/brewva-runtime/delegation";
 import { cleanupWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
 
-function createHostedTestRuntime(options: ConstructorParameters<typeof BrewvaRuntime>[0]) {
-  return createHostedRuntimePort(new BrewvaRuntime(options));
+function createHostedTestRuntime(options: BrewvaRuntimeOptions) {
+  return createBrewvaRuntime(options).hosted;
 }
 
 let workspace = "";
@@ -21,7 +22,7 @@ afterEach(() => {
 });
 
 function recordCompletedRun(input: {
-  runtime: BrewvaRuntime;
+  runtime: BrewvaHostedRuntimePort;
   sessionId: string;
   runId: string;
   updatedAt: number;
@@ -30,7 +31,7 @@ function recordCompletedRun(input: {
   consultKind?: "review" | "design";
   delegate?: string;
 }): void {
-  createHostedRuntimePort(input.runtime).extensions.hosted.events.record({
+  input.runtime.extensions.hosted.events.record({
     sessionId: input.sessionId,
     type: "subagent_completed",
     timestamp: input.updatedAt,
@@ -100,7 +101,7 @@ describe("HostedDelegationStore", () => {
     const store = new HostedDelegationStore(runtime);
     const sessionId = "delegation-store-running";
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "subagent_spawned",
       timestamp: 100,
@@ -111,7 +112,7 @@ describe("HostedDelegationStore", () => {
         status: "pending",
       },
     });
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "subagent_running",
       timestamp: 110,
@@ -136,7 +137,7 @@ describe("HostedDelegationStore", () => {
     const store = new HostedDelegationStore(runtime);
     const sessionId = "delegation-store-no-legacy-verification";
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "subagent_completed",
       timestamp: 100,
@@ -162,7 +163,7 @@ describe("HostedDelegationStore", () => {
     const store = new HostedDelegationStore(runtime);
     const sessionId = "delegation-store-missing-contract-version";
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "subagent_spawned",
       timestamp: 100,
@@ -183,7 +184,7 @@ describe("HostedDelegationStore", () => {
     const store = new HostedDelegationStore(runtime);
     const sessionId = "delegation-store-missing-adoption";
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "subagent_spawned",
       timestamp: 100,
@@ -208,7 +209,7 @@ describe("HostedDelegationStore", () => {
     const store = new HostedDelegationStore(runtime);
     const sessionId = "delegation-store-malformed-adoption";
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "subagent_spawned",
       timestamp: 100,

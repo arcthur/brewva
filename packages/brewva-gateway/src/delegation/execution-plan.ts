@@ -1,4 +1,4 @@
-import type { BrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaRuntimeRoot } from "@brewva/brewva-runtime";
 import type {
   DelegationModelRouteRecord,
   DelegationIsolationStrategy,
@@ -56,7 +56,7 @@ function boundaryWithinCeiling(
 }
 
 function resolveRuntimeToolBoundary(
-  runtime: BrewvaRuntime,
+  runtime: BrewvaRuntimeRoot,
   toolName: string,
 ): ToolExecutionBoundary | undefined {
   const policy = runtime.inspect.tools.access.getActionPolicy(toolName);
@@ -70,7 +70,10 @@ function hintedToolNames(packet: DelegationPacket | undefined): string[] {
   ]);
 }
 
-function resolveSkillToolHints(runtime: BrewvaRuntime, skillName: string | undefined): string[] {
+function resolveSkillToolHints(
+  runtime: BrewvaRuntimeRoot,
+  skillName: string | undefined,
+): string[] {
   if (!skillName) {
     return [];
   }
@@ -205,7 +208,7 @@ export function resolveRequestedBoundary(input: {
 }
 
 export function resolveBuiltinToolNamesForRun(
-  runtime: BrewvaRuntime,
+  runtime: BrewvaRuntimeRoot,
   target: HostedDelegationTarget,
   boundary: SubagentExecutionBoundary,
   packet?: DelegationPacket,
@@ -222,7 +225,7 @@ export function resolveBuiltinToolNamesForRun(
 }
 
 export function resolveManagedToolNamesForRun(
-  runtime: BrewvaRuntime,
+  runtime: BrewvaRuntimeRoot,
   target: HostedDelegationTarget,
   boundary: SubagentExecutionBoundary,
   packet?: DelegationPacket,
@@ -248,7 +251,7 @@ export function resolveManagedToolNamesForRun(
 }
 
 export function resolveDelegationExecutionPlan(input: {
-  runtime: BrewvaRuntime;
+  runtime: BrewvaRuntimeRoot;
   target: HostedDelegationTarget;
   delegate?: string;
   packet: DelegationPacket;

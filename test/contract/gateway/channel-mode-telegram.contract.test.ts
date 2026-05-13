@@ -13,8 +13,8 @@ import {
   type RunChannelModeDependencies,
 } from "@brewva/brewva-gateway";
 import { createHostedSession } from "@brewva/brewva-gateway/hosted";
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
-import type { BrewvaRuntime } from "@brewva/brewva-runtime";
 import { type ChannelTurnBridge, type TurnEnvelope } from "@brewva/brewva-runtime/channels";
 import { OPERATOR_QUESTION_ANSWERED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
 import { createRecoveryWalStore } from "@brewva/brewva-runtime/recovery";
@@ -56,7 +56,7 @@ function writeChannelConfig(
 }
 
 function recordDelegatedOpenQuestion(input: {
-  runtime: BrewvaRuntime;
+  runtime: BrewvaHostedRuntimePort;
   sessionId: string;
   runId: string;
   question: string;

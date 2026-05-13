@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { BrewvaRuntime, createOperatorRuntimePort } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import { patchDateNow } from "../../helpers/global-state.js";
 import { createOpsRuntimeConfig } from "../../helpers/runtime.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
@@ -9,10 +9,10 @@ describe("task watchdog cleanup", () => {
     let now = 1_730_000_000_000;
     const restoreNow = patchDateNow(() => now);
     try {
-      const runtime = new BrewvaRuntime({
+      const runtime = createBrewvaRuntime({
         cwd: createTestWorkspace("watchdog-cleanup"),
         config: createOpsRuntimeConfig(),
-      });
+      }).hosted;
       const sessionId = "watchdog-cleanup-1";
 
       now = 1_730_000_000_100;
@@ -22,7 +22,7 @@ describe("task watchdog cleanup", () => {
       });
 
       now = 1_730_000_000_200;
-      createOperatorRuntimePort(runtime).operator.session.stall.poll(sessionId, {
+      runtime.operator.session.stall.poll(sessionId, {
         now,
         thresholdMs: 1_000,
       });
@@ -31,7 +31,7 @@ describe("task watchdog cleanup", () => {
       ).toHaveLength(0);
 
       now = 1_730_000_001_300;
-      createOperatorRuntimePort(runtime).operator.session.stall.poll(sessionId, {
+      runtime.operator.session.stall.poll(sessionId, {
         now,
         thresholdMs: 1_000,
       });
@@ -45,7 +45,7 @@ describe("task watchdog cleanup", () => {
       });
 
       now = 1_730_000_001_500;
-      createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+      runtime.operator.context.lifecycle.onTurnStart(sessionId, 1);
 
       const clearEvent = runtime.inspect.events.records.query(sessionId, {
         type: "task_stuck_cleared",

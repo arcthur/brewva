@@ -2,11 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  BrewvaRuntime,
-  createOperatorRuntimePort,
-  createHostedRuntimePort,
-} from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaRuntimeOptions } from "@brewva/brewva-runtime";
 import {
   buildContextEvidenceReport,
   recordPromptStabilityEvidence,
@@ -21,8 +18,8 @@ import {
 } from "../../../helpers/prompt-session-events.js";
 import { createOpsRuntimeConfig } from "../../../helpers/runtime.js";
 
-function createHostedTestRuntime(options: ConstructorParameters<typeof BrewvaRuntime>[0]) {
-  return createHostedRuntimePort(new BrewvaRuntime(options));
+function createHostedTestRuntime(options: BrewvaRuntimeOptions) {
+  return createBrewvaRuntime(options).hosted;
 }
 
 describe("Hosted behavior integration: observability guardrails", () => {
@@ -243,16 +240,13 @@ describe("Hosted behavior integration: observability guardrails", () => {
     const runtime = createHostedTestRuntime({ cwd: workspace, config: createOpsRuntimeConfig() });
     const sessionId = "ext-context-evidence-1";
 
-    const prompt = createOperatorRuntimePort(runtime).operator.context.prompt.observeStability(
-      sessionId,
-      {
-        stablePrefixHash: "prefix-live",
-        dynamicTailHash: "tail-live",
-        contextScopeId: "leaf-live",
-        turn: 1,
-        timestamp: 1_740_000_003_100,
-      },
-    );
+    const prompt = runtime.operator.context.prompt.observeStability(sessionId, {
+      stablePrefixHash: "prefix-live",
+      dynamicTailHash: "tail-live",
+      contextScopeId: "leaf-live",
+      turn: 1,
+      timestamp: 1_740_000_003_100,
+    });
     recordPromptStabilityEvidence({
       workspaceRoot: runtime.identity.workspaceRoot,
       sessionId,
@@ -264,9 +258,7 @@ describe("Hosted behavior integration: observability guardrails", () => {
       gateRequired: false,
     });
 
-    const reduction = createOperatorRuntimePort(
-      runtime,
-    ).operator.context.prompt.observeTransientReduction(sessionId, {
+    const reduction = runtime.operator.context.prompt.observeTransientReduction(sessionId, {
       status: "completed",
       reason: null,
       eligibleToolResults: 4,

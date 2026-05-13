@@ -1,4 +1,4 @@
-// Curated delegation contract subpath. Keep root imports focused on BrewvaRuntime.
+// Curated delegation contract subpath. Keep root imports focused on createBrewvaRuntime and explicit port types.
 export {
   CURRENT_DELEGATION_CONTRACT_VERSION,
   isDelegationRunTerminalStatus,

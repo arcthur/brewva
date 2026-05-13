@@ -3,11 +3,9 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createQuestionsCommandExtension } from "@brewva/brewva-cli";
 import type { HostedExtensionApi } from "@brewva/brewva-gateway/extensions";
-import {
-  BrewvaRuntime,
-  DEFAULT_BREWVA_CONFIG,
-  createHostedRuntimePort,
-} from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaRuntimeOptions } from "@brewva/brewva-runtime";
+import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
 import { OPERATOR_QUESTION_ANSWERED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
 import {
   buildBrewvaPromptText,
@@ -17,8 +15,8 @@ import { requireDefined } from "../../helpers/assertions.js";
 import { recordHostedDelegationOutcome } from "../../helpers/events.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
-function createHostedTestRuntime(options: ConstructorParameters<typeof BrewvaRuntime>[0]) {
-  return createHostedRuntimePort(new BrewvaRuntime(options));
+function createHostedTestRuntime(options: BrewvaRuntimeOptions) {
+  return createBrewvaRuntime(options).hosted;
 }
 
 type RegisteredCommand = {

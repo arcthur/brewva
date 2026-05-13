@@ -1,4 +1,4 @@
-// Curated security contract subpath. Keep root imports focused on BrewvaRuntime.
+// Curated security contract subpath. Keep root imports focused on createBrewvaRuntime and explicit port types.
 export {
   getSourceTrustTier,
   sanitizeByTrust,

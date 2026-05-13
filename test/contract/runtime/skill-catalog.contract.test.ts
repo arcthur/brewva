@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import { getSemanticArtifactOutputContract } from "@brewva/brewva-runtime/semantic-artifacts";
 import {
   REVIEW_REPORT_OUTPUT_CONTRACT,
@@ -25,11 +26,11 @@ afterEach(() => {
   if (workspace) cleanupWorkspace(workspace);
 });
 
-function createCleanRuntime(): BrewvaRuntime {
-  return new BrewvaRuntime({
+function createCleanRuntime(): BrewvaHostedRuntimePort {
+  return createBrewvaRuntime({
     cwd: workspace,
     config: createRuntimeConfig(),
-  });
+  }).hosted;
 }
 
 describe("repository catalog contracts", () => {

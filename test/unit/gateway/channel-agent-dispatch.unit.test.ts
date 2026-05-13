@@ -2,11 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  BrewvaRuntime,
-  createOperatorRuntimePort,
-  createHostedRuntimePort,
-} from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaRuntimeOptions } from "@brewva/brewva-runtime";
 import type { TurnEnvelope } from "@brewva/brewva-runtime/channels";
 import {
   buildBrewvaPromptText,
@@ -22,8 +19,8 @@ import { resolveTelegramChannelPolicyState } from "../../../packages/brewva-gate
 import type { ChannelSessionHandle } from "../../../packages/brewva-gateway/src/channels/session/coordinator.js";
 import { createRuntimeFixture } from "../../helpers/runtime.js";
 
-function createHostedTestRuntime(options: ConstructorParameters<typeof BrewvaRuntime>[0]) {
-  return createHostedRuntimePort(new BrewvaRuntime(options));
+function createHostedTestRuntime(options: BrewvaRuntimeOptions) {
+  return createBrewvaRuntime(options).hosted;
 }
 
 function createInboundTurn(): TurnEnvelope {
@@ -235,7 +232,7 @@ describe("channel agent dispatch", () => {
       cwd: mkdtempSync(join(tmpdir(), "brewva-channel-reasoning-resume-")),
     });
     const sessionId = "agent-session:channel-reasoning";
-    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+    runtime.operator.context.lifecycle.onTurnStart(sessionId, 1);
     const checkpointA = runtime.authority.reasoning.checkpoints.record(sessionId, {
       boundary: "operator_marker",
       leafEntryId: "leaf-channel-a",

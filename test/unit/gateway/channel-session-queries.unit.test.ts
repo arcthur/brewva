@@ -1,13 +1,14 @@
 import { describe, expect, test } from "bun:test";
-import { BrewvaRuntime, createHostedRuntimePort } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaRuntimeOptions } from "@brewva/brewva-runtime";
 import { createTrustedLocalGovernancePort } from "@brewva/brewva-runtime/governance";
 import { AgentRegistry } from "../../../packages/brewva-gateway/src/channels/agent-registry.js";
 import { AgentRuntimeManager } from "../../../packages/brewva-gateway/src/channels/agent-runtime-manager.js";
 import { createChannelSessionQueries } from "../../../packages/brewva-gateway/src/channels/session/queries.js";
 import { cleanupTestWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
 
-function createHostedTestRuntime(options: ConstructorParameters<typeof BrewvaRuntime>[0]) {
-  return createHostedRuntimePort(new BrewvaRuntime(options));
+function createHostedTestRuntime(options: BrewvaRuntimeOptions) {
+  return createBrewvaRuntime(options).hosted;
 }
 
 describe("channel session queries", () => {
@@ -37,7 +38,7 @@ describe("channel session queries", () => {
     });
 
     try {
-      createHostedRuntimePort(runtime).extensions.hosted.events.record({
+      runtime.extensions.hosted.events.record({
         sessionId: "agent-session:archived",
         type: "channel_session_bound",
         payload: {
@@ -45,7 +46,7 @@ describe("channel session queries", () => {
           agentId: "worker",
         },
       });
-      createHostedRuntimePort(runtime).extensions.hosted.events.record({
+      runtime.extensions.hosted.events.record({
         sessionId: "agent-session:other",
         type: "channel_session_bound",
         payload: {
@@ -90,7 +91,7 @@ describe("channel session queries", () => {
     });
 
     try {
-      createHostedRuntimePort(runtime).extensions.hosted.events.record({
+      runtime.extensions.hosted.events.record({
         sessionId: "agent-session:archived",
         type: "channel_session_bound",
         payload: {
@@ -174,7 +175,7 @@ describe("channel session queries", () => {
     });
 
     try {
-      createHostedRuntimePort(runtime).extensions.hosted.events.record({
+      runtime.extensions.hosted.events.record({
         sessionId: "agent-session:archived",
         type: "channel_session_bound",
         payload: {

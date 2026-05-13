@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { BrewvaRuntime, createOperatorRuntimePort } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import { createTestConfig } from "../../fixtures/config.js";
 import { requireDefined } from "../../helpers/assertions.js";
 import { createTestWorkspace, writeTestConfig } from "../../helpers/workspace.js";
@@ -13,7 +14,7 @@ function writeConfig(
   writeTestConfig(workspace, config);
 }
 
-function latestOutcomePayload(runtime: BrewvaRuntime, sessionId: string) {
+function latestOutcomePayload(runtime: BrewvaHostedRuntimePort, sessionId: string) {
   return runtime.inspect.events.records.query(sessionId, {
     type: "verification_outcome_recorded",
     last: 1,
@@ -33,7 +34,7 @@ function latestOutcomePayload(runtime: BrewvaRuntime, sessionId: string) {
     | undefined;
 }
 
-function blockerIds(runtime: BrewvaRuntime, sessionId: string): string[] {
+function blockerIds(runtime: BrewvaHostedRuntimePort, sessionId: string): string[] {
   return runtime.inspect.task.state.get(sessionId).blockers.map((blocker) => blocker.id);
 }
 
@@ -61,7 +62,10 @@ describe("Verification blockers", () => {
       ),
     );
 
-    const runtime = new BrewvaRuntime({ cwd: workspace, configPath: ".brewva/brewva.json" });
+    const runtime = createBrewvaRuntime({
+      cwd: workspace,
+      configPath: ".brewva/brewva.json",
+    }).hosted;
     const sessionId = "verify-blockers-1";
 
     runtime.authority.tools.tracking.markCall(sessionId, "edit");
@@ -104,7 +108,10 @@ describe("Verification blockers", () => {
       ),
     );
 
-    const reloaded = new BrewvaRuntime({ cwd: workspace, configPath: ".brewva/brewva.json" });
+    const reloaded = createBrewvaRuntime({
+      cwd: workspace,
+      configPath: ".brewva/brewva.json",
+    }).hosted;
     reloaded.authority.tools.tracking.markCall(sessionId, "edit");
     const report2 = await reloaded.authority.verification.checks.verify(sessionId, "standard", {
       executeCommands: true,
@@ -141,13 +148,13 @@ describe("Verification blockers", () => {
       ),
     );
 
-    const runtime = new BrewvaRuntime({
+    const runtime = createBrewvaRuntime({
       cwd: workspace,
       configPath: ".brewva/brewva.json",
       governancePort: {
         verifySpec: () => ({ ok: false, reason: "spec_mismatch" }),
       },
-    });
+    }).hosted;
 
     const sessionId = "verify-governance-1";
     runtime.authority.tools.tracking.markCall(sessionId, "edit");
@@ -192,13 +199,13 @@ describe("Verification blockers", () => {
     );
 
     let mode: "fail" | "pass" = "fail";
-    const runtime = new BrewvaRuntime({
+    const runtime = createBrewvaRuntime({
       cwd: workspace,
       configPath: ".brewva/brewva.json",
       governancePort: {
         verifySpec: () => (mode === "fail" ? { ok: false, reason: "spec_mismatch" } : { ok: true }),
       },
-    });
+    }).hosted;
 
     const sessionId = "verify-governance-recover-1";
     runtime.authority.tools.tracking.markCall(sessionId, "edit");
@@ -251,7 +258,7 @@ describe("Verification blockers", () => {
       ),
     );
 
-    const runtime = new BrewvaRuntime({
+    const runtime = createBrewvaRuntime({
       cwd: workspace,
       configPath: ".brewva/brewva.json",
       governancePort: {
@@ -259,7 +266,7 @@ describe("Verification blockers", () => {
           throw new Error("governance-port-failed");
         },
       },
-    });
+    }).hosted;
 
     const sessionId = "verify-governance-error-1";
     runtime.authority.tools.tracking.markCall(sessionId, "edit");
@@ -298,7 +305,10 @@ describe("Verification blockers", () => {
       ),
     );
 
-    const runtime = new BrewvaRuntime({ cwd: workspace, configPath: ".brewva/brewva.json" });
+    const runtime = createBrewvaRuntime({
+      cwd: workspace,
+      configPath: ".brewva/brewva.json",
+    }).hosted;
     const sessionId = "verify-outcome-no-write";
     const report = await runtime.authority.verification.checks.verify(sessionId, "quick", {
       executeCommands: false,
@@ -334,7 +344,10 @@ describe("Verification blockers", () => {
       ),
     );
 
-    const runtime = new BrewvaRuntime({ cwd: workspace, configPath: ".brewva/brewva.json" });
+    const runtime = createBrewvaRuntime({
+      cwd: workspace,
+      configPath: ".brewva/brewva.json",
+    }).hosted;
     const sessionId = "verification-missing-blocker-1";
     runtime.authority.tools.tracking.markCall(sessionId, "edit");
 
@@ -415,7 +428,10 @@ describe("Verification blockers", () => {
       ),
     );
 
-    const runtime = new BrewvaRuntime({ cwd: workspace, configPath: ".brewva/brewva.json" });
+    const runtime = createBrewvaRuntime({
+      cwd: workspace,
+      configPath: ".brewva/brewva.json",
+    }).hosted;
     const sessionId = "verification-timeout-folding-1";
     runtime.authority.tools.tracking.markCall(sessionId, "edit");
 
@@ -486,7 +502,10 @@ describe("Verification blockers", () => {
       ),
     );
 
-    const runtime = new BrewvaRuntime({ cwd: workspace, configPath: ".brewva/brewva.json" });
+    const runtime = createBrewvaRuntime({
+      cwd: workspace,
+      configPath: ".brewva/brewva.json",
+    }).hosted;
     const sessionId = "verification-signal-kill-1";
     runtime.authority.tools.tracking.markCall(sessionId, "edit");
 
@@ -544,7 +563,10 @@ describe("Verification blockers", () => {
       ),
     );
 
-    const runtime = new BrewvaRuntime({ cwd: workspace, configPath: ".brewva/brewva.json" });
+    const runtime = createBrewvaRuntime({
+      cwd: workspace,
+      configPath: ".brewva/brewva.json",
+    }).hosted;
     const sessionId = "verification-clear-state-1";
     runtime.authority.tools.tracking.markCall(sessionId, "edit");
 
@@ -557,7 +579,7 @@ describe("Verification blockers", () => {
       .listRows(sessionId)
       .filter((row) => row.tool === "brewva_verify").length;
 
-    createOperatorRuntimePort(runtime).operator.session.state.clear(sessionId);
+    runtime.operator.session.state.clear(sessionId);
 
     const second = await runtime.authority.verification.checks.verify(sessionId, "standard", {
       executeCommands: true,
@@ -624,7 +646,10 @@ describe("Verification blockers", () => {
         ),
       );
 
-      const runtime = new BrewvaRuntime({ cwd: workspace, configPath: ".brewva/brewva.json" });
+      const runtime = createBrewvaRuntime({
+        cwd: workspace,
+        configPath: ".brewva/brewva.json",
+      }).hosted;
       const sessionId = "verification-package-script-runner-1";
       runtime.authority.tools.tracking.markCall(sessionId, "edit");
 
@@ -672,7 +697,10 @@ describe("Verification blockers", () => {
       ),
     );
 
-    const runtime = new BrewvaRuntime({ cwd: workspace, configPath: ".brewva/brewva.json" });
+    const runtime = createBrewvaRuntime({
+      cwd: workspace,
+      configPath: ".brewva/brewva.json",
+    }).hosted;
     const sessionId = "verification-multi-root-1";
     runtime.authority.task.spec.set(sessionId, {
       schema: "brewva.task.v1",

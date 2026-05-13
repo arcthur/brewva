@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { createOperatorRuntimePort } from "@brewva/brewva-runtime";
 import type { OverlayPriority } from "@brewva/brewva-tui";
 import { buildSessionInspectReport, resolveInspectDirectory } from "../../inspect.js";
 import { buildCommandPalettePayload, buildHelpHubPayload } from "../commands/command-palette.js";
@@ -610,7 +609,13 @@ export class ShellOverlayLifecycleFlow {
   }
 
   async openInspectOverlay(): Promise<void> {
-    const operatorRuntime = createOperatorRuntimePort(this.context.getBundle().runtime);
+    const hostedRuntime = this.context.getBundle().runtime;
+    const operatorRuntime = {
+      identity: hostedRuntime.identity,
+      config: hostedRuntime.config,
+      inspect: hostedRuntime.inspect,
+      operator: hostedRuntime.operator,
+    };
     const report = buildSessionInspectReport({
       runtime: operatorRuntime,
       sessionId: this.context.getSessionPort().getSessionId(),

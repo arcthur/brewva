@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BrewvaRuntime, createOperatorRuntimePort } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import type { TaskSpec } from "@brewva/brewva-runtime/task";
 import { requireDefined, requireNonEmptyString, requireRecord } from "../../helpers/assertions.js";
 
@@ -13,9 +13,9 @@ function createWorkspace(): string {
 describe("reversible mutation receipts", () => {
   test("task mutations stay non-rollbackable and do not emit rollback receipts", () => {
     const workspace = createWorkspace();
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const sessionId = `reversible-task-${crypto.randomUUID()}`;
-    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+    runtime.operator.context.lifecycle.onTurnStart(sessionId, 1);
 
     const started = runtime.authority.tools.invocation.start({
       sessionId,
@@ -60,9 +60,9 @@ describe("reversible mutation receipts", () => {
     mkdirSync(join(workspace, "src"), { recursive: true });
     writeFileSync(join(workspace, "src", "example.ts"), "export const value = 1;\n", "utf8");
 
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const sessionId = `reversible-workspace-${crypto.randomUUID()}`;
-    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+    runtime.operator.context.lifecycle.onTurnStart(sessionId, 1);
 
     const started = runtime.authority.tools.invocation.start({
       sessionId,
@@ -120,9 +120,9 @@ describe("reversible mutation receipts", () => {
 
   test("task mutations do not enter runtime.authority.tools.rollbackLastMutation", () => {
     const workspace = createWorkspace();
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const sessionId = `reversible-task-rollback-${crypto.randomUUID()}`;
-    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+    runtime.operator.context.lifecycle.onTurnStart(sessionId, 1);
 
     runtime.authority.tools.invocation.start({
       sessionId,
@@ -171,9 +171,9 @@ describe("reversible mutation receipts", () => {
     const filePath = join(workspace, "src", "rollback.ts");
     writeFileSync(filePath, "export const value = 1;\n", "utf8");
 
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const sessionId = `reversible-workspace-rollback-${crypto.randomUUID()}`;
-    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+    runtime.operator.context.lifecycle.onTurnStart(sessionId, 1);
 
     runtime.authority.tools.invocation.start({
       sessionId,
@@ -214,8 +214,8 @@ describe("reversible mutation receipts", () => {
     writeFileSync(filePath, "export const value = 1;\n", "utf8");
 
     const sessionId = `reversible-workspace-restart-${crypto.randomUUID()}`;
-    const firstRuntime = new BrewvaRuntime({ cwd: workspace });
-    createOperatorRuntimePort(firstRuntime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+    const firstRuntime = createBrewvaRuntime({ cwd: workspace }).hosted;
+    firstRuntime.operator.context.lifecycle.onTurnStart(sessionId, 1);
 
     const started = firstRuntime.authority.tools.invocation.start({
       sessionId,
@@ -245,11 +245,8 @@ describe("reversible mutation receipts", () => {
       verdict: "pass",
     });
 
-    const restartedRuntime = new BrewvaRuntime({ cwd: workspace });
-    createOperatorRuntimePort(restartedRuntime).operator.context.lifecycle.onTurnStart(
-      sessionId,
-      2,
-    );
+    const restartedRuntime = createBrewvaRuntime({ cwd: workspace }).hosted;
+    restartedRuntime.operator.context.lifecycle.onTurnStart(sessionId, 2);
 
     const rollback = restartedRuntime.authority.tools.patches.rollbackLastMutation(sessionId);
     expect(rollback.ok).toBe(true);
@@ -259,9 +256,9 @@ describe("reversible mutation receipts", () => {
 
   test("acceptance closure writes do not create rollback receipts", () => {
     const workspace = createWorkspace();
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const sessionId = `reversible-acceptance-${crypto.randomUUID()}`;
-    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+    runtime.operator.context.lifecycle.onTurnStart(sessionId, 1);
 
     runtime.authority.task.spec.set(sessionId, {
       schema: "brewva.task.v1",
@@ -315,9 +312,9 @@ describe("reversible mutation receipts", () => {
     const filePath = join(workspace, "src", "direct-rollback.ts");
     writeFileSync(filePath, "export const value = 1;\n", "utf8");
 
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const sessionId = `reversible-workspace-direct-${crypto.randomUUID()}`;
-    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+    runtime.operator.context.lifecycle.onTurnStart(sessionId, 1);
 
     runtime.authority.tools.invocation.start({
       sessionId,

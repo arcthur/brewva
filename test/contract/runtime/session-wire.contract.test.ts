@@ -2,12 +2,13 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BrewvaRuntime, createHostedRuntimePort } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 
-function createRuntime(): BrewvaRuntime {
-  return new BrewvaRuntime({
+function createRuntime(): BrewvaHostedRuntimePort {
+  return createBrewvaRuntime({
     cwd: mkdtempSync(join(tmpdir(), "brewva-session-wire-")),
-  });
+  }).hosted;
 }
 
 describe("runtime session wire compiler", () => {
@@ -15,7 +16,7 @@ describe("runtime session wire compiler", () => {
     const runtime = createRuntime();
     const sessionId = "session-wire-simple";
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "turn_input_recorded",
       turn: 0,
@@ -25,7 +26,7 @@ describe("runtime session wire compiler", () => {
         promptText: "hello world",
       },
     });
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "turn_render_committed",
       turn: 0,
@@ -85,7 +86,7 @@ describe("runtime session wire compiler", () => {
     const runtime = createRuntime();
     const sessionId = "session-wire-subagent-trigger";
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "turn_input_recorded",
       turn: 0,
@@ -110,7 +111,7 @@ describe("runtime session wire compiler", () => {
     const runtime = createRuntime();
     const sessionId = "session-wire-attempts";
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "turn_input_recorded",
       turn: 0,
@@ -120,7 +121,7 @@ describe("runtime session wire compiler", () => {
         promptText: "retry this",
       },
     });
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "session_turn_transition",
       turn: 0,
@@ -137,7 +138,7 @@ describe("runtime session wire compiler", () => {
         model: "openai/gpt-5.4",
       },
     });
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "session_turn_transition",
       turn: 0,
@@ -154,7 +155,7 @@ describe("runtime session wire compiler", () => {
         model: "anthropic/claude",
       },
     });
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "turn_render_committed",
       turn: 0,
@@ -210,7 +211,7 @@ describe("runtime session wire compiler", () => {
     const runtime = createRuntime();
     const sessionId = "session-wire-governance";
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "turn_input_recorded",
       turn: 0,
@@ -220,7 +221,7 @@ describe("runtime session wire compiler", () => {
         promptText: "delegate and approve",
       },
     });
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "effect_commitment_approval_requested",
       turn: 0,
@@ -232,7 +233,7 @@ describe("runtime session wire compiler", () => {
         argsSummary: "echo hello",
       },
     });
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "effect_commitment_approval_decided",
       turn: 0,
@@ -243,7 +244,7 @@ describe("runtime session wire compiler", () => {
         reason: "approved",
       },
     });
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "subagent_spawned",
       turn: 0,
@@ -254,7 +255,7 @@ describe("runtime session wire compiler", () => {
         label: "Patch worker",
       },
     });
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "subagent_completed",
       turn: 0,
@@ -265,7 +266,7 @@ describe("runtime session wire compiler", () => {
         summary: "updated files",
       },
     });
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "session_shutdown",
       payload: {
@@ -313,7 +314,7 @@ describe("runtime session wire compiler", () => {
     const runtime = createRuntime();
     const sessionId = "session-wire-missing-turn";
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "session_turn_transition",
       turn: 7,
@@ -330,7 +331,7 @@ describe("runtime session wire compiler", () => {
         model: "openai/gpt-5.4",
       },
     });
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "effect_commitment_approval_requested",
       turn: 7,
@@ -341,7 +342,7 @@ describe("runtime session wire compiler", () => {
         subject: "unmapped",
       },
     });
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "turn_input_recorded",
       turn: 0,
@@ -360,7 +361,7 @@ describe("runtime session wire compiler", () => {
     const runtime = createRuntime();
     const sessionId = "session-wire-subscribe";
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "turn_input_recorded",
       turn: 0,
@@ -375,7 +376,7 @@ describe("runtime session wire compiler", () => {
     const unsubscribe = runtime.inspect.sessionWire.subscribe(sessionId, (frame) => {
       observed.push(frame);
     });
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "turn_render_committed",
       turn: 0,

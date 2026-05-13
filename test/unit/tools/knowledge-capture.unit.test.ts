@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import { createKnowledgeCaptureTool } from "@brewva/brewva-tools/memory";
 import { cleanupWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
 
@@ -40,7 +40,7 @@ describe("knowledge capture tool", () => {
       "This repository keeps precedents in docs/solutions for explicit retrieval.\n",
     );
 
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const tool = createKnowledgeCaptureTool({ runtime });
 
     const result = await tool.execute(
@@ -51,7 +51,7 @@ describe("knowledge capture tool", () => {
           problem_kind: "bugfix",
           module: "brewva-runtime",
           boundaries: [
-            "createOperatorRuntimePort(runtime).operator.recovery",
+            "selectOperatorRuntimePort(instance).operator.recovery",
             "runtime.authority.tools",
           ],
           source_artifacts: ["investigation_record", "review_findings", "retro_findings"],
@@ -124,7 +124,7 @@ describe("knowledge capture tool", () => {
   test("skips a no-op update when only updated_at would change implicitly", async () => {
     workspace = createTestWorkspace("knowledge-capture-skip");
 
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const tool = createKnowledgeCaptureTool({ runtime });
     const solutionDocPath = "docs/solutions/runtime/wal-cursor-pinning.md";
 
@@ -187,7 +187,7 @@ describe("knowledge capture tool", () => {
   test("rejects bugfix capture without investigation-grade authority", async () => {
     workspace = createTestWorkspace("knowledge-capture-invalid");
 
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const tool = createKnowledgeCaptureTool({ runtime });
 
     const result = await tool.execute(
@@ -226,7 +226,7 @@ describe("knowledge capture tool", () => {
   test("rejects stale capture that does not route to a stable doc or successor precedent", async () => {
     workspace = createTestWorkspace("knowledge-capture-stale-routing");
 
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const tool = createKnowledgeCaptureTool({ runtime });
 
     const result = await tool.execute(

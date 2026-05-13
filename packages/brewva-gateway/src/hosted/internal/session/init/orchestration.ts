@@ -1,4 +1,3 @@
-import { createToolRuntimePort } from "@brewva/brewva-runtime";
 import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import type { ManagedToolMode } from "@brewva/brewva-runtime/session";
 import type { BrewvaModelCatalog } from "@brewva/brewva-substrate/provider";
@@ -13,6 +12,7 @@ import {
 } from "../../../../delegation/api.js";
 import type { HostedExtensionPlugin } from "../../../../extensions/api.js";
 import { createHostedBehaviorHostAdapter } from "../host-api-installation.js";
+import { toToolRuntimePort } from "../runtime-ports.js";
 import type { HostedSessionCustomTool } from "../session-factory.js";
 import type { HostedToolExecutionCoordinator } from "../tools/execution-traits.js";
 import type { CreateHostedSessionOptions, HostedSessionResult } from "./session-assembly.js";
@@ -136,7 +136,7 @@ export function createDirectManagedTools(input: {
   }
   return buildBrewvaTools({
     runtime: {
-      ...createToolRuntimePort(input.runtime),
+      ...toToolRuntimePort(input.runtime),
     },
     orchestration: input.orchestration,
     delegation: createDelegationQuery(input.delegationStore),

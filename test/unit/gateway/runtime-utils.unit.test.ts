@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { createHostedRuntimePort } from "@brewva/brewva-runtime";
 import {
   ensureSessionShutdownRecorded,
   recordAbnormalSessionShutdown,
@@ -67,8 +66,7 @@ describe("gateway runtime utils", () => {
   test("records shutdown receipt directly to an event log path once", () => {
     const runtime = createRuntimeFixture();
     const sessionId = "runtime-utils-event-log";
-    const eventLogPath =
-      createHostedRuntimePort(runtime).extensions.hosted.events.resolveLogPath(sessionId);
+    const eventLogPath = runtime.extensions.hosted.events.resolveLogPath(sessionId);
 
     expect(
       recordSessionShutdownReceiptToEventLogIfMissing({

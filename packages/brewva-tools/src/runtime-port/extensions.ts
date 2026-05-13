@@ -43,8 +43,8 @@ type ToolRuntimeAuthorityToolsPort = {
 };
 
 // Tool-side runtime extensions stay explicit. Callers that need these behaviors
-// must inject `runtime.extensions.tools`; tools do not rediscover raw BrewvaRuntime
-// instances behind the type system.
+// must inject `runtime.extensions.tools`; tools do not rediscover hosted or
+// operator runtime ports behind the type system.
 export function recordToolRuntimeEvent(
   runtime: BrewvaToolRuntime | undefined,
   input: ToolRuntimeEventInput,

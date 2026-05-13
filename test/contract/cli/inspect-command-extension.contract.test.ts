@@ -3,17 +3,14 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createInspectCommandExtension } from "@brewva/brewva-cli";
 import type { HostedExtensionApi } from "@brewva/brewva-gateway/extensions";
-import {
-  BrewvaRuntime,
-  DEFAULT_BREWVA_CONFIG,
-  createOperatorRuntimePort,
-  createHostedRuntimePort,
-} from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaRuntimeOptions } from "@brewva/brewva-runtime";
+import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
 import { requireDefined } from "../../helpers/assertions.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
-function createHostedTestRuntime(options: ConstructorParameters<typeof BrewvaRuntime>[0]) {
-  return createHostedRuntimePort(new BrewvaRuntime(options));
+function createHostedTestRuntime(options: BrewvaRuntimeOptions) {
+  return createBrewvaRuntime(options).hosted;
 }
 
 type RegisteredCommand = {
@@ -74,14 +71,14 @@ describe("inspect interactive command extension", () => {
       config: structuredClone(DEFAULT_BREWVA_CONFIG),
     });
     const sessionId = "inspect-command-session-1";
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "session_bootstrap",
       payload: {
         managedToolMode: "hosted",
       },
     });
-    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+    runtime.operator.context.lifecycle.onTurnStart(sessionId, 1);
     runtime.authority.tools.tracking.markCall(sessionId, "edit");
     runtime.authority.tools.tracking.trackCallStart({
       sessionId,

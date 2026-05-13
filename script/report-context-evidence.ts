@@ -3,7 +3,7 @@ import {
   buildContextEvidenceReport,
   persistContextEvidenceReport,
 } from "@brewva/brewva-gateway/hosted";
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 
 interface CliOptions {
   workspaceRoot: string;
@@ -144,9 +144,9 @@ function main(): void {
     process.exit(1);
   }
 
-  const runtime = new BrewvaRuntime({
+  const runtime = createBrewvaRuntime({
     cwd: options.workspaceRoot,
-  });
+  }).hosted;
   const report = buildContextEvidenceReport(runtime, {
     sessionIds: options.sessionIds.length > 0 ? options.sessionIds : undefined,
     longSessionUsefulTurnThreshold: options.longSessionUsefulTurnThreshold,

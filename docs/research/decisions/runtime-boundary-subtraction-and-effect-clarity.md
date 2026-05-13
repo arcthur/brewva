@@ -29,11 +29,11 @@
 ## Decision Summary
 
 - Runtime authority is commit-bearing, runtime inspection is read-only, and hosted/operator mechanisms are repo-owned ports rather than public root fields.
-- `BrewvaRuntime` exposes only `identity`, readonly `config`, `authority`, and `inspect`; `maintain`, root extension access, and identity scalar root fields are removed.
+- `BrewvaRuntimeRoot` exposes only `identity`, readonly `config`, `authority`, and `inspect`; `maintain`, root extension access, hidden state, and identity scalar root fields are removed.
 - Runtime domains must own replay-bearing commitments or externally consumed runtime surface vocabulary; empty or mechanism-only domains are deleted or rehomed under their real owner.
 - Runtime surface assembly is explicit. Surviving domains expose direct surface constructors and `runtime-surfaces.ts` assembles ordered `authority`, `inspect`, and `operator` objects without descriptor glue.
 - Runtime composition is a flat wiring root organized by identity, durability, eager commitment services, lazy mechanisms, ports, and operator/internal services.
-- Hosted context materialization plans side effects before committing them, and the plan order is a tested invariant.
+- Hosted context materialization plans ordered effect commands before committing them, and the plan order is a tested invariant.
 - Tool protocol vocabulary is owned by `@brewva/brewva-substrate/tools`; managed tool runtime capabilities are single-sourced from the registry.
 - Runtime reference inventory enforces the public surface budget, including the separate inspection-method budget.
 
@@ -45,4 +45,5 @@
 
 ## Superseded by
 
-- None.
+- `docs/research/decisions/runtime-factory-ports.md`
+- `docs/research/decisions/hosted-materialization-plan.md`

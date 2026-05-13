@@ -691,15 +691,14 @@ describe("runtime promoted architecture guard", () => {
     "repo consumers import non-root runtime contracts through owner subpaths",
     () => {
       const allowedRuntimeRootSymbols = new Set([
-        "BrewvaRuntime",
-        "createHostedRuntimePort",
-        "createOperatorRuntimePort",
-        "createToolRuntimePort",
+        "createBrewvaRuntime",
+        "selectOperatorRuntimePort",
         "BrewvaAuthorityPort",
         "BrewvaHostedRuntimePort",
         "BrewvaInspectionPort",
         "BrewvaOperatorRuntimePort",
         "BrewvaRuntimeIdentity",
+        "BrewvaRuntimeInstance",
         "BrewvaRuntimeOptions",
         "BrewvaRuntimeRoot",
         "BrewvaToolRuntimePort",

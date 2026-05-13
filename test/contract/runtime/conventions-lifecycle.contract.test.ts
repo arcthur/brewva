@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import type { ConventionChangeRequest } from "@brewva/brewva-runtime/conventions";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
@@ -24,7 +24,7 @@ function evidence(id: string) {
 describe("convention lifecycle governance", () => {
   test("observations auto-accept and rebuild convention state from tape", () => {
     const workspace = createTestWorkspace("convention-observation");
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const sessionId = `convention-observation-${crypto.randomUUID()}`;
 
     const receipt = runtime.authority.conventions.requests.submit(sessionId, {
@@ -72,7 +72,7 @@ describe("convention lifecycle governance", () => {
       "utf8",
     );
 
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const sessionId = `convention-apply-${crypto.randomUUID()}`;
     const request: ConventionChangeRequest = {
       id: "convention-apply-1",
@@ -147,7 +147,7 @@ describe("convention lifecycle governance", () => {
 
   test("pinned convention mutations require explicit operator decision before apply", () => {
     const workspace = createTestWorkspace("convention-pinned");
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const sessionId = `convention-pinned-${crypto.randomUUID()}`;
 
     const request: ConventionChangeRequest = {
@@ -195,7 +195,7 @@ describe("convention lifecycle governance", () => {
 
   test("terminal rejected and expired requests are routed to audit", () => {
     const workspace = createTestWorkspace("convention-terminal-audit");
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const sessionId = `convention-terminal-audit-${crypto.randomUUID()}`;
 
     const expired = runtime.authority.conventions.requests.submit(sessionId, {
@@ -220,7 +220,7 @@ describe("convention lifecycle governance", () => {
 
   test("rejected observations and contests do not emit accepted-only side events", () => {
     const workspace = createTestWorkspace("convention-rejected-side-events");
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const sessionId = `convention-rejected-side-events-${crypto.randomUUID()}`;
     const target = {
       kind: "project_guidance" as const,
@@ -286,7 +286,7 @@ describe("convention lifecycle governance", () => {
       "utf8",
     );
 
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const sessionId = `convention-retire-state-${crypto.randomUUID()}`;
     const target = {
       kind: "project_guidance" as const,
@@ -370,7 +370,7 @@ describe("convention lifecycle governance", () => {
     const workspace = createTestWorkspace("convention-runtime-target");
     mkdirSync(join(workspace, ".brewva/artifacts"), { recursive: true });
     writeFileSync(join(workspace, ".brewva/artifacts/readme.md"), "# Invalid\n", "utf8");
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const sessionId = `convention-runtime-target-${crypto.randomUUID()}`;
     const request: ConventionChangeRequest = {
       id: "convention-runtime-target-1",
@@ -435,7 +435,7 @@ describe("convention lifecycle governance", () => {
       ].join("\n"),
       "utf8",
     );
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const sessionId = `convention-target-path-match-${crypto.randomUUID()}`;
 
     const projectGuidanceRequest: ConventionChangeRequest = {

@@ -9,7 +9,7 @@ only collects caveats and intentionally narrow behavior.
 
 ## Runtime Surface
 
-- `runtime.inspect.events.subscribe(...)` is in-process and ephemeral.
+- `root.inspect.events.records.subscribe(...)` is in-process and ephemeral.
 
 ## Event Pipeline
 

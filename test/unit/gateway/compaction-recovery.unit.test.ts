@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BrewvaRuntime, createHostedRuntimePort } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import {
   buildBrewvaPromptText,
   type BrewvaPromptContentPart,
@@ -30,10 +30,10 @@ function promptText(parts: readonly BrewvaPromptContentPart[]): string {
 }
 
 function createRuntimeEventBridge() {
-  const rawRuntime = new BrewvaRuntime({
+  const rawRuntime = createBrewvaRuntime({
     cwd: mkdtempSync(join(tmpdir(), "brewva-compaction-recovery-")),
-  });
-  const runtime = createHostedRuntimePort(rawRuntime);
+  }).hosted;
+  const runtime = rawRuntime;
   const events: Array<{
     id: string;
     sessionId: string;
@@ -140,7 +140,7 @@ describe("compaction recovery controller", () => {
         const content = promptText(parts);
         promptedMessages.push(content);
         if (promptedMessages.length === 1) {
-          createHostedRuntimePort(eventBridge.runtime).extensions.hosted.events.record({
+          eventBridge.runtime.extensions.hosted.events.record({
             sessionId: "agent-session-1",
             type: "session_compact",
             turn: 7,
@@ -186,7 +186,7 @@ describe("compaction recovery controller", () => {
         const content = promptText(parts);
         promptedMessages.push(content);
         if (promptedMessages.length === 1) {
-          createHostedRuntimePort(eventBridge.runtime).extensions.hosted.events.record({
+          eventBridge.runtime.extensions.hosted.events.record({
             sessionId: "agent-session-2",
             type: "session_compact",
             turn: 3,
@@ -230,7 +230,7 @@ describe("compaction recovery controller", () => {
         const content = promptText(parts);
         promptedMessages.push(content);
         if (promptedMessages.length === 1) {
-          createHostedRuntimePort(eventBridge.runtime).extensions.hosted.events.record({
+          eventBridge.runtime.extensions.hosted.events.record({
             sessionId: "agent-session-deterministic-recovery",
             type: "session_compact",
             turn: 5,
@@ -476,7 +476,7 @@ describe("compaction recovery controller", () => {
     expect(session.prompt).toBe(prompt);
 
     wrapped.dispose?.();
-    createHostedRuntimePort(eventBridge.runtime).extensions.hosted.events.record({
+    eventBridge.runtime.extensions.hosted.events.record({
       sessionId: "agent-session-4",
       type: "session_compact",
       turn: 1,
@@ -517,7 +517,7 @@ describe("compaction recovery controller", () => {
     });
 
     for (let attempt = 0; attempt < 3; attempt += 1) {
-      createHostedRuntimePort(eventBridge.runtime).extensions.hosted.events.record({
+      eventBridge.runtime.extensions.hosted.events.record({
         sessionId: "agent-session-breaker",
         type: "session_compact",
         turn: attempt + 1,
@@ -526,7 +526,7 @@ describe("compaction recovery controller", () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     }
 
-    createHostedRuntimePort(eventBridge.runtime).extensions.hosted.events.record({
+    eventBridge.runtime.extensions.hosted.events.record({
       sessionId: "agent-session-breaker",
       type: "session_compact",
       turn: 4,
@@ -545,7 +545,7 @@ describe("compaction recovery controller", () => {
         getSessionId: () => "agent-session-withheld",
       },
       async prompt(_parts: readonly BrewvaPromptContentPart[]): Promise<void> {
-        createHostedRuntimePort(eventBridge.runtime).extensions.hosted.events.record({
+        eventBridge.runtime.extensions.hosted.events.record({
           sessionId: "agent-session-withheld",
           type: "tool_call_blocked",
           payload: buildToolCallBlockedPayload(),

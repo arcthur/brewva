@@ -12,7 +12,7 @@ artifacts and reference comparison.
 
 ## Runtime-Owned Lifecycle Contract
 
-`runtime.inspect.lifecycle.getSnapshot(sessionId)` is the canonical
+`root.inspect.lifecycle.getSnapshot(sessionId)` is the canonical
 session-posture read model.
 
 It exists to answer a runtime-wide question that domain reducers do not answer
@@ -343,7 +343,7 @@ permanent degradation.
   - the recovery working set, which carries operational continuation state such
     as pending recovery family, open tool calls, and resume contract hints
 - Gateway and frontend session replay do not consume raw `inspect.events`.
-  Runtime-scoped replay uses `runtime.inspect.sessionWire`; gateway public
+  Runtime-scoped replay uses `root.inspect.sessionWire`; gateway public
   replay uses the same runtime-owned compiler semantics against archived
   agent-session event logs. In both cases replay is compiled from durable
   receipts including `turn_input_recorded`, `turn_render_committed`, approval
@@ -427,6 +427,6 @@ permanent degradation.
   integrity failures now fail closed for recovery until the corrupted rows are
   repaired; Recovery WAL compaction preserves the latest ingress watermark through a
   metadata-only marker needed for polling recovery.
-- `runtime.inspect.session.getIntegrity(sessionId)` is the canonical operator-facing
+- `root.inspect.session.getIntegrity(sessionId)` is the canonical operator-facing
   health read model. It aggregates `event_tape`, `recovery_wal`, and `artifact`
   durability issues into one status surface.

@@ -21,7 +21,10 @@ import {
 } from "./hosted-context-blocks.js";
 import { prepareHostedContextSupport } from "./hosted-context-support.js";
 import type { HostedContextTelemetry } from "./hosted-context-telemetry.js";
-import { commitHostedContextSideEffects } from "./materialization.js";
+import {
+  commitHostedContextMaterialization,
+  planHostedContextMaterialization,
+} from "./materialization.js";
 import { buildReadPathRecoveryBlocks } from "./read-path-recovery.js";
 
 export const HOSTED_WORKBENCH_CONTEXT_MESSAGE_TYPE = "brewva-workbench-context";
@@ -494,10 +497,7 @@ export function createHostedWorkbenchContextController(
         capabilityView,
         delegationStore: options.delegationStore,
       });
-      commitHostedContextSideEffects({
-        runtime,
-        telemetry,
-        delegationStore: options.delegationStore,
+      const materializationPlan = planHostedContextMaterialization({
         sessionId: input.sessionId,
         turn,
         contextScopeId,
@@ -512,6 +512,11 @@ export function createHostedWorkbenchContextController(
           capabilityView.details.length > 0 ||
           capabilityView.missing.length > 0,
         surfacedDelegationRunIds: rendered.surfacedDelegationRunIds,
+      });
+      commitHostedContextMaterialization(materializationPlan, {
+        runtime,
+        telemetry,
+        delegationStore: options.delegationStore,
       });
 
       return buildHiddenContextResult({

@@ -2,11 +2,8 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  BrewvaRuntime,
-  createOperatorRuntimePort,
-  createHostedRuntimePort,
-} from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import {
   ITERATION_METRIC_OBSERVED_EVENT_TYPE,
   VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
@@ -32,18 +29,18 @@ afterEach(() => {
   if (workspace) cleanupWorkspace(workspace);
 });
 
-function createCleanRuntime(cwd = workspace): BrewvaRuntime {
-  return new BrewvaRuntime({
+function createCleanRuntime(cwd = workspace): BrewvaHostedRuntimePort {
+  return createBrewvaRuntime({
     cwd,
     config: createRuntimeConfig(),
-  });
+  }).hosted;
 }
 
 describe("observability tool contracts", () => {
   test("cost_view returns session, skill, and tool breakdowns", async () => {
     const runtime = createCleanRuntime();
     const sessionId = "s10";
-    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+    runtime.operator.context.lifecycle.onTurnStart(sessionId, 1);
     runtime.authority.tools.tracking.markCall(sessionId, "read");
     runtime.authority.cost.usage.recordAssistant({
       sessionId,
@@ -72,10 +69,10 @@ describe("observability tool contracts", () => {
 
   test("obs_query persists a raw artifact and returns a compact summary", async () => {
     const obsQueryWorkspace = mkdtempSync(join(tmpdir(), "brewva-tools-obs-query-"));
-    const runtime = new BrewvaRuntime({ cwd: obsQueryWorkspace });
+    const runtime = createBrewvaRuntime({ cwd: obsQueryWorkspace }).hosted;
     const sessionId = "s10-obs-query";
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "latency_sample",
       payload: {
@@ -83,7 +80,7 @@ describe("observability tool contracts", () => {
         latencyMs: 810,
       },
     });
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "latency_sample",
       payload: {
@@ -121,10 +118,10 @@ describe("observability tool contracts", () => {
 
   test("obs_slo_assert returns a fail verdict and obs_snapshot exposes runtime health", async () => {
     const obsSnapshotWorkspace = mkdtempSync(join(tmpdir(), "brewva-tools-obs-snapshot-"));
-    const runtime = new BrewvaRuntime({ cwd: obsSnapshotWorkspace });
+    const runtime = createBrewvaRuntime({ cwd: obsSnapshotWorkspace }).hosted;
     const sessionId = "s10-obs-snapshot";
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "startup_sample",
       payload: {
@@ -132,7 +129,7 @@ describe("observability tool contracts", () => {
         startupMs: 920,
       },
     });
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
       payload: buildVerificationOutcomeRecordedPayload({
@@ -140,28 +137,25 @@ describe("observability tool contracts", () => {
         outcome: "fail",
       }),
     });
-    createOperatorRuntimePort(runtime).operator.context.prompt.observeStability(sessionId, {
+    runtime.operator.context.prompt.observeStability(sessionId, {
       stablePrefixHash: "prefix-1",
       dynamicTailHash: "tail-1",
       contextScopeId: "leaf-1",
       turn: 1,
       timestamp: 1_740_000_000_100,
     });
-    createOperatorRuntimePort(runtime).operator.context.prompt.observeTransientReduction(
-      sessionId,
-      {
-        status: "completed",
-        reason: null,
-        eligibleToolResults: 6,
-        clearedToolResults: 2,
-        clearedChars: 2048,
-        estimatedTokenSavings: 580,
-        compactionAdvised: true,
-        forcedCompaction: false,
-        turn: 1,
-        timestamp: 1_740_000_000_101,
-      },
-    );
+    runtime.operator.context.prompt.observeTransientReduction(sessionId, {
+      status: "completed",
+      reason: null,
+      eligibleToolResults: 6,
+      clearedToolResults: 2,
+      clearedChars: 2048,
+      estimatedTokenSavings: 580,
+      compactionAdvised: true,
+      forcedCompaction: false,
+      turn: 1,
+      timestamp: 1_740_000_000_101,
+    });
     runtime.authority.cost.usage.recordAssistant({
       sessionId,
       model: "test/model",

@@ -111,7 +111,7 @@ Current flow:
   approval request
 - operator approval is recorded through the effect-commitment desk
 - the caller must then resume the exact request with
-  `runtime.authority.tools.invocation.start({ ..., effectCommitmentRequestId })`
+  `root.authority.tools.invocation.start({ ..., effectCommitmentRequestId })`
 - exact resume binds to the approved `requestId`, original `toolCallId`, and
   canonical `argsDigest`
 - exact resume reuses the original manifest authority basis; it does not
@@ -175,24 +175,24 @@ Approval state is layered on top through:
 - `effect_commitment_approval_decided`
 - `effect_commitment_approval_consumed`
 
-`runtime.inspect.proposals.proposals.list(sessionId, query?)` returns newest-first
+`root.inspect.proposals.proposals.list(sessionId, query?)` returns newest-first
 `EffectCommitmentRecord` values by receipt timestamp. The read model rebuilds
 those records from `decision_receipt_recorded.payload = { proposal, receipt }`
 rather than rejoining `proposal_received` and `proposal_decided`.
 
 Request-state views are intentionally separate:
 
-- `runtime.inspect.proposals.requests.list(sessionId, query?)` is the
+- `root.inspect.proposals.requests.list(sessionId, query?)` is the
   normalized request-lifecycle view ordered by `updatedAt` descending
-- `runtime.inspect.proposals.requests.listPending(sessionId)` is the
+- `root.inspect.proposals.requests.listPending(sessionId)` is the
   pending-only queue ordered by request `createdAt` descending
 
 The operator desk surface lives in the same domain:
 
-- `runtime.inspect.proposals.requests.list(sessionId, query?)`
-- `runtime.inspect.proposals.requests.listPending(sessionId)`
-- `runtime.authority.proposals.requests.decide(sessionId, requestId, input)`
-- `runtime.authority.tools.invocation.start({ ..., effectCommitmentRequestId })`
+- `root.inspect.proposals.requests.list(sessionId, query?)`
+- `root.inspect.proposals.requests.listPending(sessionId)`
+- `root.authority.proposals.requests.decide(sessionId, requestId, input)`
+- `root.authority.tools.invocation.start({ ..., effectCommitmentRequestId })`
 
 This keeps approval state and proposal history in one replay-first namespace.
 

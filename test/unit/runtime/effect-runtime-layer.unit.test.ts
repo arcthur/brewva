@@ -3,7 +3,6 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BrewvaEffect, BrewvaRuntimeScope, runSyncAtBoundary } from "@brewva/brewva-effect";
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
 import {
   RuntimeConfigService,
   RuntimeCoreDependenciesService,
@@ -18,6 +17,7 @@ import {
   getRuntimeEffectLayer,
   runRuntimeEffectSync,
 } from "@brewva/brewva-runtime/runtime-effect";
+import { createBrewvaRuntimeAssemblyForInternalUse } from "../../../packages/brewva-runtime/src/runtime/runtime.js";
 import { createOpsRuntimeConfig } from "../../helpers/runtime.js";
 
 describe("runtime Effect layer", () => {
@@ -29,11 +29,12 @@ describe("runtime Effect layer", () => {
       draft.security.mode = "strict";
       draft.infrastructure.events.level = "debug";
     });
-    const runtime = new BrewvaRuntime({
+    const assembly = createBrewvaRuntimeAssemblyForInternalUse({
       cwd: workspace,
       agentId: "Runtime Layer Agent",
       config,
     });
+    const runtime = assembly.instance;
 
     const snapshot = runSyncAtBoundary(
       BrewvaEffect.gen(function* () {
@@ -60,7 +61,7 @@ describe("runtime Effect layer", () => {
           serviceKeys: Object.keys(services).toSorted(),
           hasCredentialFactory: typeof factories.createCredentialVaultService === "function",
         };
-      }).pipe(BrewvaEffect.provide(getRuntimeEffectLayer(runtime))),
+      }).pipe(BrewvaEffect.provide(getRuntimeEffectLayer(assembly.controller))),
     );
 
     expect(snapshot.identity.cwd).toBe(workspace);
@@ -69,7 +70,7 @@ describe("runtime Effect layer", () => {
     expect(snapshot.runtimeScope.runtimeId).toBe(`runtime-layer-agent@${workspace}`);
     expect(snapshot.runtimeScope.agentId).toBe("runtime-layer-agent");
     expect(snapshot.runtimeScope.workspaceRoot).toBe(workspace);
-    expect(snapshot.runtimeConfig.config).toBe(runtime.config);
+    expect(snapshot.runtimeConfig.config).toBe(runtime.root.config);
     expect(snapshot.runtimeConfig.config.schedule.minIntervalMs).toBe(1_234);
     expect(snapshot.securityConfig.mode).toBe("strict");
     expect(snapshot.infrastructureConfig.events.level).toBe("debug");
@@ -85,15 +86,15 @@ describe("runtime Effect layer", () => {
 
   test("exposes a memoized runtime spine for internal Effect programs", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-runtime-effect-spine-"));
-    const runtime = new BrewvaRuntime({
+    const assembly = createBrewvaRuntimeAssemblyForInternalUse({
       cwd: workspace,
       agentId: "Runtime Spine Agent",
       config: createOpsRuntimeConfig(),
     });
 
-    const spine = getRuntimeEffectSpine(runtime);
-    expect(getRuntimeEffectSpine(runtime)).toBe(spine);
-    expect(spine.layer).toBe(getRuntimeEffectLayer(runtime));
+    const spine = getRuntimeEffectSpine(assembly.controller);
+    expect(getRuntimeEffectSpine(assembly.controller)).toBe(spine);
+    expect(spine.layer).toBe(getRuntimeEffectLayer(assembly.controller));
 
     const first = spine.runSync(
       BrewvaEffect.gen(function* () {
@@ -103,7 +104,7 @@ describe("runtime Effect layer", () => {
       }),
     );
     const second = runRuntimeEffectSync(
-      runtime,
+      assembly.controller,
       BrewvaEffect.gen(function* () {
         const core = yield* RuntimeCoreDependenciesService;
         const services = yield* RuntimeServiceDependenciesService;

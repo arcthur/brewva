@@ -1,4 +1,4 @@
-// Curated reasoning contract subpath. Keep root imports focused on BrewvaRuntime.
+// Curated reasoning contract subpath. Keep root imports focused on createBrewvaRuntime and explicit port types.
 export {
   MAX_REASONING_CONTINUITY_BYTES,
   REASONING_CONTINUITY_SCHEMA,

@@ -9,19 +9,19 @@ method-level contract and caller-specific ports, use:
 
 ## Runtime Shape
 
-`BrewvaRuntime` (`packages/brewva-runtime/src/runtime/runtime.ts`) is the stable runtime
-instance contract.
+`createBrewvaRuntime(...)` (`packages/brewva-runtime/src/runtime/runtime.ts`) is
+the stable runtime construction boundary. It returns a frozen explicit runtime
+instance with `root`, `hosted`, `tool`, and `operator` ports.
 
-Its public root shape is semantic, not implementation-organized:
+The `root` port shape is semantic, not implementation-organized:
 
-- `runtime.authority`
-- `runtime.inspect`
+- `root.authority`
+- `root.inspect`
 
 This is the default semantic runtime vocabulary that product surfaces read
-against. Caller-specific ports narrow it by role: hosted sessions get
-`authority + inspect + operator + extensions`, tools get
-`authority + inspect + tool extensions`, and operator products get
-`inspect + operator`.
+against. Caller-specific ports narrow it by role: hosted sessions receive the
+`hosted` port, tools receive the `tool` port, and operator products use
+`selectOperatorRuntimePort(instance)`.
 
 The point is not to hide internal machinery. The point is to make the default
 public surface line up with authority boundaries instead of exposing a wide bag
@@ -122,7 +122,8 @@ Config contract entry points:
 - normalize: `packages/brewva-runtime/src/config/normalize.ts`
 
 `BrewvaConfig` remains runtime-owned configuration state. Products consume the
-normalized readonly snapshot exposed on the runtime instance.
+normalized readonly snapshot exposed on the runtime root and caller-specific
+ports.
 
 ## Related Docs
 

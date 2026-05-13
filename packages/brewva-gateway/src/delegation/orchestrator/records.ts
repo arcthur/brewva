@@ -1,4 +1,4 @@
-import type { BrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaRuntimeRoot } from "@brewva/brewva-runtime";
 import type { DelegationRunQuery, DelegationRunRecord } from "@brewva/brewva-runtime/delegation";
 import type {
   AdvisorConsultKind,
@@ -162,7 +162,7 @@ export function mergeDeliveryRecord(
 }
 
 export function deliverDelegationOutcome(input: {
-  runtime: BrewvaRuntime;
+  runtime: BrewvaRuntimeRoot;
   sessionId: string;
   delegate: string;
   outcome: SubagentOutcome;

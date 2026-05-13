@@ -95,17 +95,42 @@ describe("runtime entrypoint surface", () => {
       level: "debug",
       dir: ".brewva/events",
     };
-    const runtime = new runtimeModule.BrewvaRuntime({
+    const runtime = runtimeModule.createBrewvaRuntime({
       cwd,
       config,
     });
 
     expect(() =>
-      runtimeModule.createHostedRuntimePort(runtime).extensions.hosted.events.record({
+      runtime.hosted.extensions.hosted.events.record({
         sessionId: "review",
         type: events.VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
         payload: { bad: true },
       }),
     ).toThrow("invalid_recorded_event_payload:verification_outcome_recorded");
+  });
+
+  test("runtime factory returns frozen explicit ports without legacy root reflection", async () => {
+    const runtimeModule = await import("@brewva/brewva-runtime");
+    const runtime = runtimeModule.createBrewvaRuntime({
+      cwd: mkdtempSync(join(tmpdir(), "brewva-runtime-factory-")),
+    });
+
+    expect("BrewvaRuntime" in runtimeModule).toBe(false);
+    expect("createHostedRuntimePort" in runtimeModule).toBe(false);
+    expect("createToolRuntimePort" in runtimeModule).toBe(false);
+    expect("createOperatorRuntimePort" in runtimeModule).toBe(false);
+    expect(Object.keys(runtime)).toEqual(["root", "hosted", "tool", "operator"]);
+    expect(Object.keys(runtime.root)).toEqual(["identity", "config", "authority", "inspect"]);
+    expect(Object.getOwnPropertySymbols(runtime.root)).toEqual([]);
+    expect("operator" in runtime.root).toBe(false);
+    expect("extensions" in runtime.root).toBe(false);
+    expect(Object.isFrozen(runtime)).toBe(true);
+    expect(Object.isFrozen(runtime.root)).toBe(true);
+    expect(Object.isFrozen(runtime.hosted)).toBe(true);
+    expect(Object.isFrozen(runtime.tool)).toBe(true);
+    expect(Object.isFrozen(runtime.operator)).toBe(true);
+    expect(Object.isFrozen(runtime.hosted.extensions)).toBe(true);
+    expect(Object.isFrozen(runtime.tool.extensions)).toBe(true);
+    expect(runtimeModule.selectOperatorRuntimePort(runtime)).toBe(runtime.operator);
   });
 });

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { BrewvaRuntime, createHostedRuntimePort } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import {
   CONTEXT_ENTRY_RECORDED_EVENT_TYPE,
   SESSION_LINEAGE_NODE_CREATED_EVENT_TYPE,
@@ -13,15 +14,19 @@ import type { ContextAdmission } from "@brewva/brewva-runtime/session";
 import { createOpsRuntimeConfig } from "../../helpers/runtime.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
-function createRuntime(name: string): BrewvaRuntime {
-  return new BrewvaRuntime({
+function createRuntime(name: string): BrewvaHostedRuntimePort {
+  return createBrewvaRuntime({
     cwd: createTestWorkspace(`session-lineage-${name}`),
     config: createOpsRuntimeConfig(),
-  });
+  }).hosted;
 }
 
-function recordMessageSource(runtime: BrewvaRuntime, sessionId: string, content: string): string {
-  const event = createHostedRuntimePort(runtime).extensions.hosted.events.record({
+function recordMessageSource(
+  runtime: BrewvaHostedRuntimePort,
+  sessionId: string,
+  content: string,
+): string {
+  const event = runtime.extensions.hosted.events.record({
     sessionId,
     type: "message_end",
     payload: {
@@ -325,10 +330,7 @@ describe("session lineage runtime surface", () => {
 
     const ownerIds = listRuntimeExtensionOwnerIds();
     expect(ownerIds.length).toBeGreaterThan(0);
-    expect(
-      "capabilities" in
-        (createHostedRuntimePort(runtime).extensions.hosted.events as unknown as object),
-    ).toBe(false);
+    expect("capabilities" in (runtime.extensions.hosted.events as unknown as object)).toBe(false);
     for (const [index, ownerCapability] of ownerIds.entries()) {
       expect(() =>
         runtime.authority.session.lineage.recordCapabilityState(sessionId, {
@@ -346,7 +348,7 @@ describe("session lineage runtime surface", () => {
     const runtime = createRuntime("missing-root");
     const sessionId = "lineage-missing-root";
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "message_end",
       payload: {
@@ -423,7 +425,7 @@ describe("session lineage runtime surface", () => {
         presentTo: "both",
       }),
     ).toThrow("session_context_entry_source_missing");
-    const source = createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    const source = runtime.extensions.hosted.events.record({
       sessionId,
       type: "message_end",
       payload: {

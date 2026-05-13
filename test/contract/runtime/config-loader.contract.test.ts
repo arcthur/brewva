@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
+import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
 import {
   loadBrewvaConfig,
   loadBrewvaConfigResolution,
@@ -69,10 +70,10 @@ describe("Brewva config loader normalization", () => {
 
       expect(
         () =>
-          new BrewvaRuntime({
+          createBrewvaRuntime({
             cwd: workspace,
             config: config as unknown as typeof DEFAULT_BREWVA_CONFIG,
-          }),
+          }).hosted,
       ).toThrow(
         new RegExp(
           `infrastructure\\.contextBudget\\.${legacyCase.key} ${
@@ -95,10 +96,10 @@ describe("Brewva config loader normalization", () => {
 
     expect(
       () =>
-        new BrewvaRuntime({
+        createBrewvaRuntime({
           cwd: workspace,
           config: config as unknown as typeof DEFAULT_BREWVA_CONFIG,
-        }),
+        }).hosted,
     ).toThrow(/unknown property "toolOutputDistillationInjection"/);
   });
 
@@ -185,10 +186,10 @@ describe("Brewva config loader normalization", () => {
 
     expect(
       () =>
-        new BrewvaRuntime({
+        createBrewvaRuntime({
           cwd: workspace,
           config: config as unknown as typeof DEFAULT_BREWVA_CONFIG,
-        }),
+        }).hosted,
     ).toThrow(/unknown property "unexpectedInfrastructureField"/);
   });
 
@@ -421,7 +422,7 @@ describe("Brewva config loader normalization", () => {
       },
     ];
 
-    expect(() => new BrewvaRuntime({ cwd: workspace, config })).toThrow(
+    expect(() => createBrewvaRuntime({ cwd: workspace, config }).hosted).toThrow(
       /duplicate server id "repo"/,
     );
   });
@@ -472,11 +473,11 @@ describe("Brewva config loader normalization", () => {
       "utf8",
     );
 
-    const runtime = new BrewvaRuntime({
+    const runtime = createBrewvaRuntime({
       cwd: workspace,
       configPath: ".brewva/brewva.json",
       routingDefaultScopes: ["core", "domain"],
-    });
+    }).hosted;
     expect(runtime.config.skills.routing.enabled).toBe(true);
     expect(runtime.config.skills.routing.scopes).toEqual(["operator"]);
   });
@@ -500,11 +501,11 @@ describe("Brewva config loader normalization", () => {
       "utf8",
     );
 
-    const runtime = new BrewvaRuntime({
+    const runtime = createBrewvaRuntime({
       cwd: workspace,
       configPath: ".brewva/brewva.json",
       routingDefaultScopes: ["core", "domain"],
-    });
+    }).hosted;
     expect(runtime.config.skills.routing.enabled).toBe(false);
     expect(runtime.config.skills.routing.scopes).toEqual(["operator"]);
   });
@@ -528,12 +529,12 @@ describe("Brewva config loader normalization", () => {
       "utf8",
     );
 
-    const runtime = new BrewvaRuntime({
+    const runtime = createBrewvaRuntime({
       cwd: workspace,
       configPath: ".brewva/brewva.json",
       routingScopes: ["meta"],
       routingDefaultScopes: ["core", "domain"],
-    });
+    }).hosted;
     expect(runtime.config.skills.routing.enabled).toBe(true);
     expect(runtime.config.skills.routing.scopes).toEqual(["meta"]);
   });
@@ -589,7 +590,7 @@ describe("Brewva config loader normalization", () => {
       credential_access: "allow",
     };
 
-    expect(() => new BrewvaRuntime({ cwd: workspace, config })).toThrow(
+    expect(() => createBrewvaRuntime({ cwd: workspace, config }).hosted).toThrow(
       /security\.actionAdmissionOverrides\.credential_access cannot relax beyond max admission 'ask'/,
     );
   });
@@ -819,10 +820,10 @@ describe("Brewva config loader normalization", () => {
 
     expect(
       () =>
-        new BrewvaRuntime({
+        createBrewvaRuntime({
           cwd: workspace,
           config: config as unknown as typeof DEFAULT_BREWVA_CONFIG,
-        }),
+        }).hosted,
     ).toThrow(/security\.execution\.commandDenyList must not appear in active config/);
   });
 
@@ -839,10 +840,10 @@ describe("Brewva config loader normalization", () => {
 
     expect(
       () =>
-        new BrewvaRuntime({
+        createBrewvaRuntime({
           cwd: workspace,
           config: config as unknown as typeof DEFAULT_BREWVA_CONFIG,
-        }),
+        }).hosted,
     ).toThrow(/security\.execution\.sandbox has been removed/);
   });
 
@@ -858,10 +859,10 @@ describe("Brewva config loader normalization", () => {
 
     expect(
       () =>
-        new BrewvaRuntime({
+        createBrewvaRuntime({
           cwd: workspace,
           config: config as unknown as typeof DEFAULT_BREWVA_CONFIG,
-        }),
+        }).hosted,
     ).toThrow(/skills\.selector has been removed/);
   });
 
@@ -878,10 +879,10 @@ describe("Brewva config loader normalization", () => {
 
     expect(
       () =>
-        new BrewvaRuntime({
+        createBrewvaRuntime({
           cwd: workspace,
           config: config as unknown as typeof DEFAULT_BREWVA_CONFIG,
-        }),
+        }).hosted,
     ).toThrow(/skills\.routing\.continuityPhrases has been removed/);
   });
 
@@ -897,10 +898,10 @@ describe("Brewva config loader normalization", () => {
 
     expect(
       () =>
-        new BrewvaRuntime({
+        createBrewvaRuntime({
           cwd: workspace,
           config: config as unknown as typeof DEFAULT_BREWVA_CONFIG,
-        }),
+        }).hosted,
     ).toThrow(/skills\.cascade has been removed/);
   });
 });

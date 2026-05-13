@@ -629,8 +629,16 @@ describe("Effect runtime foundation boundary", () => {
       join(repoRoot, "packages/brewva-runtime/src/runtime/effect-runtime-layer.ts"),
       "utf8",
     );
+    const runtimeEffectSource = readFileSync(
+      join(repoRoot, "packages/brewva-runtime/src/runtime-effect.ts"),
+      "utf8",
+    );
     const facadeSource = readFileSync(
       join(repoRoot, "packages/brewva-runtime/src/runtime/runtime-facade-state.ts"),
+      "utf8",
+    );
+    const runtimeFactorySource = readFileSync(
+      join(repoRoot, "packages/brewva-runtime/src/runtime/runtime.ts"),
       "utf8",
     );
 
@@ -671,6 +679,10 @@ describe("Effect runtime foundation boundary", () => {
     expect(facadeSource).not.toContain("composeRuntimeDependencies");
     expect(facadeSource).toContain("export function getRuntimeEffectLayer");
     expect(facadeSource).toContain("export function getRuntimeEffectSpine");
+    expect(runtimeEffectSource).not.toContain("BrewvaRuntimeInstance");
+    expect(runtimeEffectSource).not.toContain("resolveRuntimeInstanceControllerForInternalUse");
+    expect(runtimeFactorySource).not.toContain("WeakMap");
+    expect(runtimeFactorySource).not.toContain("resolveRuntimeInstanceControllerForInternalUse");
   });
 
   test("recovery WAL maintenance has an Effect-native recovery entrypoint", () => {

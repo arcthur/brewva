@@ -25,7 +25,7 @@
 
 - Context governance uses three non-interchangeable objects. Primary registry sources are source-typed runtime providers. Guarded supplemental families are post-primary, headroom-governed exception-lane blocks. Composer policy blocks are provenance-tagged render artifacts.
 - Primary provider descriptors are the metadata truth. Source selection, inspect tooling, and contract tests should derive from the provider descriptor surface rather than from duplicated static tables or hand-maintained source lists.
-- Historical note: the named hosted profile field described in the original decision was removed. Current hosted context materialization has no passive `minimal` / `standard` / `full` `contextProfile` knob; the gateway-owned materialization module derives the context and side-effect ledger directly from hosted session state.
+- Historical note: the named hosted profile field described in the original decision was removed. Current hosted context materialization has no passive `minimal` / `standard` / `full` `contextProfile` knob; the gateway-owned materialization module derives the model context and validated effect command plan directly from hosted session state.
 - Repo-owned built-ins consume named runtime views or read-model helpers. The kernel remains the upstream integration boundary, but broad kernel access is no longer the default dependency shape for primary context providers.
 - Exception lanes stay explicit. Continuity-bearing source material does not silently migrate into `guarded_supplemental`, and composer policy blocks do not widen into a second pseudo-source taxonomy.
 

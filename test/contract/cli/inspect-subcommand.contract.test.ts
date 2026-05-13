@@ -2,12 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { spawnSync, type SpawnSyncReturns } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import {
-  BrewvaRuntime,
-  DEFAULT_BREWVA_CONFIG,
-  createOperatorRuntimePort,
-  createHostedRuntimePort,
-} from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
+import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
 import { createRecoveryWalStore } from "@brewva/brewva-runtime/recovery";
 import { buildToolCallBlockedPayload } from "../../helpers/events.js";
 import { patchProcessEnv } from "../../helpers/global-state.js";
@@ -51,20 +47,20 @@ describe("inspect subcommand", () => {
       });
 
       try {
-        const runtime = new BrewvaRuntime({
+        const runtime = createBrewvaRuntime({
           cwd: workspace,
           config: structuredClone(DEFAULT_BREWVA_CONFIG),
-        });
+        }).hosted;
         const sessionId = "inspect-session-1";
 
-        createHostedRuntimePort(runtime).extensions.hosted.events.record({
+        runtime.extensions.hosted.events.record({
           sessionId,
           type: "session_bootstrap",
           payload: {
             managedToolMode: "direct",
           },
         });
-        createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+        runtime.operator.context.lifecycle.onTurnStart(sessionId, 1);
         runtime.authority.task.spec.set(sessionId, {
           schema: "brewva.task.v1",
           goal: "Inspect persisted runtime state",
@@ -79,7 +75,7 @@ describe("inspect subcommand", () => {
           severity: "warn",
           summary: "inspect claim fact",
         });
-        createHostedRuntimePort(runtime).extensions.hosted.events.record({
+        runtime.extensions.hosted.events.record({
           sessionId,
           type: "verification_outcome_recorded",
           payload: {
@@ -98,12 +94,12 @@ describe("inspect subcommand", () => {
           outputText: "Error: test failure",
           channelSuccess: false,
         });
-        createHostedRuntimePort(runtime).extensions.hosted.events.record({
+        runtime.extensions.hosted.events.record({
           sessionId,
           type: "tool_call_blocked",
           payload: buildToolCallBlockedPayload(),
         });
-        createHostedRuntimePort(runtime).extensions.hosted.events.record({
+        runtime.extensions.hosted.events.record({
           sessionId,
           type: "session_turn_transition",
           payload: {
@@ -197,27 +193,27 @@ describe("inspect subcommand", () => {
       });
 
       try {
-        const runtime = new BrewvaRuntime({
+        const runtime = createBrewvaRuntime({
           cwd: workspace,
           config: structuredClone(DEFAULT_BREWVA_CONFIG),
-        });
+        }).hosted;
         const interactiveSessionId = "inspect-default-real-1";
 
-        createHostedRuntimePort(runtime).extensions.hosted.events.record({
+        runtime.extensions.hosted.events.record({
           sessionId: interactiveSessionId,
           type: "session_bootstrap",
           payload: {
             managedToolMode: "direct",
           },
         });
-        createHostedRuntimePort(runtime).extensions.hosted.events.record({
+        runtime.extensions.hosted.events.record({
           sessionId: interactiveSessionId,
           type: "session_start",
           payload: {
             cwd: workspace,
           },
         });
-        createHostedRuntimePort(runtime).extensions.hosted.events.record({
+        runtime.extensions.hosted.events.record({
           sessionId: interactiveSessionId,
           type: "message_end",
           payload: {
@@ -265,20 +261,20 @@ describe("inspect subcommand", () => {
       });
 
       try {
-        const runtime = new BrewvaRuntime({
+        const runtime = createBrewvaRuntime({
           cwd: workspace,
           config: structuredClone(DEFAULT_BREWVA_CONFIG),
-        });
+        }).hosted;
         const sessionId = "inspect-analysis-session-1";
 
-        createHostedRuntimePort(runtime).extensions.hosted.events.record({
+        runtime.extensions.hosted.events.record({
           sessionId,
           type: "session_bootstrap",
           payload: {
             managedToolMode: "direct",
           },
         });
-        createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+        runtime.operator.context.lifecycle.onTurnStart(sessionId, 1);
         runtime.authority.task.spec.set(sessionId, {
           schema: "brewva.task.v1",
           goal: "Inspect session behavior in src",
@@ -312,7 +308,7 @@ describe("inspect subcommand", () => {
           outputText: "bash: -c: line 1: syntax error near unexpected token `then'",
           channelSuccess: false,
         });
-        createHostedRuntimePort(runtime).extensions.hosted.events.record({
+        runtime.extensions.hosted.events.record({
           sessionId,
           type: "tool_contract_warning",
           payload: {
@@ -416,19 +412,19 @@ describe("inspect subcommand", () => {
     });
 
     try {
-      const runtime = new BrewvaRuntime({
+      const runtime = createBrewvaRuntime({
         cwd: workspace,
         config: structuredClone(DEFAULT_BREWVA_CONFIG),
-      });
+      }).hosted;
       const sessionId = "inspect-forensic-default-config-1";
-      createHostedRuntimePort(runtime).extensions.hosted.events.record({
+      runtime.extensions.hosted.events.record({
         sessionId,
         type: "session_bootstrap",
         payload: {
           managedToolMode: "direct",
         },
       });
-      createHostedRuntimePort(runtime).extensions.hosted.events.record({
+      runtime.extensions.hosted.events.record({
         sessionId,
         type: "session_start",
         payload: {
@@ -510,12 +506,12 @@ describe("inspect subcommand", () => {
     });
 
     try {
-      const runtime = new BrewvaRuntime({
+      const runtime = createBrewvaRuntime({
         cwd: workspace,
         config: structuredClone(DEFAULT_BREWVA_CONFIG),
-      });
+      }).hosted;
       const sessionId = "inspect-forensic-config-strip-1";
-      createHostedRuntimePort(runtime).extensions.hosted.events.record({
+      runtime.extensions.hosted.events.record({
         sessionId,
         type: "session_bootstrap",
         payload: {
@@ -570,12 +566,12 @@ describe("inspect subcommand", () => {
     });
 
     try {
-      const runtime = new BrewvaRuntime({
+      const runtime = createBrewvaRuntime({
         cwd: workspace,
         config: structuredClone(DEFAULT_BREWVA_CONFIG),
-      });
+      }).hosted;
       const sessionId = "inspect-bootstrap-recovery-wal-1";
-      createHostedRuntimePort(runtime).extensions.hosted.events.record({
+      runtime.extensions.hosted.events.record({
         sessionId,
         type: "session_bootstrap",
         payload: {
@@ -588,7 +584,7 @@ describe("inspect subcommand", () => {
           },
         },
       });
-      createHostedRuntimePort(runtime).extensions.hosted.events.record({
+      runtime.extensions.hosted.events.record({
         sessionId,
         type: "session_start",
         payload: {

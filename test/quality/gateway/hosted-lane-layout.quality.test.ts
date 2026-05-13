@@ -228,9 +228,9 @@ describe("hosted lane layout", () => {
     const materializationPath =
       "packages/brewva-gateway/src/hosted/internal/context/materialization.ts";
     const materialization = readRepoFile(materializationPath);
-    expect(materialization).toContain("planHostedContextEffects");
-    expect(materialization).toContain("commitHostedContextEffects");
-    expect(materialization).toContain("HOSTED_CONTEXT_SIDE_EFFECT_ORDER");
+    expect(materialization).toContain("planHostedContextMaterialization");
+    expect(materialization).toContain("commitHostedContextMaterialization");
+    expect(materialization).toContain("HOSTED_CONTEXT_MATERIALIZATION_EFFECT_ORDER");
     expect(materialization).not.toMatch(/effects\.push\("[a-z_]+"/u);
     for (const expectedEffect of [
       "usage_observed",

@@ -2,11 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  BrewvaRuntime,
-  DEFAULT_BREWVA_CONFIG,
-  createHostedRuntimePort,
-} from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
+import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
 import type { BrewvaConfig } from "@brewva/brewva-runtime";
 
 function createAuditConfig(): BrewvaConfig {
@@ -38,13 +35,13 @@ function replayCriticalPayload(type: string): Record<string, unknown> {
 
 describe("event pipeline level classification", () => {
   test("keeps explicit inspection and recovery receipts visible at audit level while dropping adaptive telemetry", () => {
-    const runtime = new BrewvaRuntime({
+    const runtime = createBrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-events-audit-")),
       config: createAuditConfig(),
-    });
+    }).hosted;
     const sessionId = "audit-level-session";
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "tool_output_observed",
       payload: {
@@ -52,7 +49,7 @@ describe("event pipeline level classification", () => {
         rawTokens: 3,
       },
     });
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "tool_execution_end",
       payload: {
@@ -60,7 +57,7 @@ describe("event pipeline level classification", () => {
         toolName: "exec",
       },
     });
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "tool_output_distilled",
       payload: {
@@ -79,7 +76,7 @@ describe("event pipeline level classification", () => {
         isError: false,
       },
     });
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "tool_output_artifact_persisted",
       payload: {
@@ -87,7 +84,7 @@ describe("event pipeline level classification", () => {
         artifactRef: ".orchestrator/tool-output-artifacts/sample.txt",
       },
     });
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "observability_query_executed",
       payload: {
@@ -96,7 +93,7 @@ describe("event pipeline level classification", () => {
         matchCount: 3,
       },
     });
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "observability_assertion_recorded",
       payload: {
@@ -104,7 +101,7 @@ describe("event pipeline level classification", () => {
         metric: "latencyMs",
       },
     });
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "tool_output_search",
       payload: {
@@ -138,10 +135,10 @@ describe("event pipeline level classification", () => {
   });
 
   test("keeps governance events visible at ops level with governance category", () => {
-    const runtime = new BrewvaRuntime({
+    const runtime = createBrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-events-ops-")),
       config: createOpsConfig(),
-    });
+    }).hosted;
     const sessionId = "ops-level-governance-session";
 
     const governanceTypes = [
@@ -156,7 +153,7 @@ describe("event pipeline level classification", () => {
     ] as const;
 
     for (const type of governanceTypes) {
-      createHostedRuntimePort(runtime).extensions.hosted.events.record({
+      runtime.extensions.hosted.events.record({
         sessionId,
         type,
         payload: {
@@ -174,13 +171,13 @@ describe("event pipeline level classification", () => {
   });
 
   test("keeps observability query telemetry visible at ops level", () => {
-    const runtime = new BrewvaRuntime({
+    const runtime = createBrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-events-ops-observability-")),
       config: createOpsConfig(),
-    });
+    }).hosted;
     const sessionId = "ops-level-observability-session";
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "observability_query_executed",
       payload: {
@@ -196,13 +193,13 @@ describe("event pipeline level classification", () => {
   });
 
   test("keeps verification governance verdicts at audit level", () => {
-    const runtime = new BrewvaRuntime({
+    const runtime = createBrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-events-audit-governance-")),
       config: createAuditConfig(),
-    });
+    }).hosted;
     const sessionId = "audit-level-governance-session";
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "governance_verify_spec_failed",
       payload: {
@@ -221,10 +218,10 @@ describe("event pipeline level classification", () => {
   });
 
   test("keeps hosted compaction warning events visible at audit level", () => {
-    const runtime = new BrewvaRuntime({
+    const runtime = createBrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-events-audit-compaction-")),
       config: createAuditConfig(),
-    });
+    }).hosted;
     const sessionId = "audit-level-compaction-session";
 
     const compactionTypes = [
@@ -235,7 +232,7 @@ describe("event pipeline level classification", () => {
     ] as const;
 
     for (const type of compactionTypes) {
-      createHostedRuntimePort(runtime).extensions.hosted.events.record({
+      runtime.extensions.hosted.events.record({
         sessionId,
         type,
         payload: {
@@ -251,17 +248,17 @@ describe("event pipeline level classification", () => {
   });
 
   test("keeps read-path protocol receipts at audit level", () => {
-    const runtime = new BrewvaRuntime({
+    const runtime = createBrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-events-audit-hosted-protocol-")),
       config: createAuditConfig(),
-    });
+    }).hosted;
     const sessionId = "audit-level-hosted-protocol-session";
 
     for (const type of [
       "tool_read_path_gate_armed",
       "tool_read_path_discovery_observed",
     ] as const) {
-      createHostedRuntimePort(runtime).extensions.hosted.events.record({
+      runtime.extensions.hosted.events.record({
         sessionId,
         type,
         payload: {
@@ -281,23 +278,23 @@ describe("event pipeline level classification", () => {
   });
 
   test("keeps skill refresh receipts at ops level while excluding them from audit retention", () => {
-    const auditRuntime = new BrewvaRuntime({
+    const auditRuntime = createBrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-events-audit-skill-refresh-")),
       config: createAuditConfig(),
-    });
-    const opsRuntime = new BrewvaRuntime({
+    }).hosted;
+    const opsRuntime = createBrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-events-ops-skill-refresh-")),
       config: createOpsConfig(),
-    });
+    }).hosted;
 
-    createHostedRuntimePort(auditRuntime).extensions.hosted.events.record({
+    auditRuntime.extensions.hosted.events.record({
       sessionId: "audit-skill-refresh-session",
       type: "skill_refresh_recorded",
       payload: {
         reason: "audit",
       },
     });
-    createHostedRuntimePort(opsRuntime).extensions.hosted.events.record({
+    opsRuntime.extensions.hosted.events.record({
       sessionId: "ops-skill-refresh-session",
       type: "skill_refresh_recorded",
       payload: {
@@ -323,10 +320,10 @@ describe("event pipeline level classification", () => {
   });
 
   test("classifies recall receipts as control events", () => {
-    const runtime = new BrewvaRuntime({
+    const runtime = createBrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-events-audit-recall-control-")),
       config: createAuditConfig(),
-    });
+    }).hosted;
     const sessionId = "audit-level-recall-control-session";
 
     const receiptTypes = [
@@ -336,7 +333,7 @@ describe("event pipeline level classification", () => {
     ] as const;
 
     for (const type of receiptTypes) {
-      createHostedRuntimePort(runtime).extensions.hosted.events.record({
+      runtime.extensions.hosted.events.record({
         sessionId,
         type,
         payload: {
@@ -354,10 +351,10 @@ describe("event pipeline level classification", () => {
   });
 
   test("isolates listener failures and records durable telemetry at audit level", () => {
-    const runtime = new BrewvaRuntime({
+    const runtime = createBrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-events-audit-listener-")),
       config: createAuditConfig(),
-    });
+    }).hosted;
     const sessionId = "audit-listener-error-session";
     const deliveredTypes: string[] = [];
 
@@ -370,7 +367,7 @@ describe("event pipeline level classification", () => {
       deliveredTypes.push(event.type);
     });
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "governance_verify_spec_failed",
       payload: {
@@ -391,13 +388,13 @@ describe("event pipeline level classification", () => {
   });
 
   test("keeps governance anomaly and integrity telemetry at audit level", () => {
-    const runtime = new BrewvaRuntime({
+    const runtime = createBrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-events-audit-governance-telemetry-")),
       config: createAuditConfig(),
-    });
+    }).hosted;
     const sessionId = "audit-level-governance-telemetry-session";
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "governance_cost_anomaly_detected",
       payload: {
@@ -411,10 +408,10 @@ describe("event pipeline level classification", () => {
   });
 
   test("keeps approval and delegation lifecycle events at audit level because replay depends on them", () => {
-    const runtime = new BrewvaRuntime({
+    const runtime = createBrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-events-audit-replay-critical-")),
       config: createAuditConfig(),
-    });
+    }).hosted;
     const sessionId = "audit-level-replay-critical-session";
     const replayCriticalTypes = [
       "effect_commitment_approval_requested",
@@ -430,7 +427,7 @@ describe("event pipeline level classification", () => {
     ] as const;
 
     for (const type of replayCriticalTypes) {
-      createHostedRuntimePort(runtime).extensions.hosted.events.record({
+      runtime.extensions.hosted.events.record({
         sessionId,
         type,
         payload: replayCriticalPayload(type),
@@ -448,13 +445,13 @@ describe("event pipeline level classification", () => {
   });
 
   test("classifies operator inbox receipts as governance at audit level", () => {
-    const runtime = new BrewvaRuntime({
+    const runtime = createBrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-events-audit-operator-question-")),
       config: createAuditConfig(),
-    });
+    }).hosted;
     const sessionId = "audit-level-operator-question-session";
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "operator_question_answered",
       payload: {
@@ -474,38 +471,38 @@ describe("event pipeline level classification", () => {
   });
 
   test("keeps custom domain events at audit level while reserved runtime prefixes stay fail-closed", () => {
-    const auditRuntime = new BrewvaRuntime({
+    const auditRuntime = createBrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-events-audit-unknown-")),
       config: createAuditConfig(),
-    });
-    const opsRuntime = new BrewvaRuntime({
+    }).hosted;
+    const opsRuntime = createBrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-events-ops-unknown-")),
       config: createOpsConfig(),
-    });
+    }).hosted;
     const sessionId = "unknown-level-session";
 
-    createHostedRuntimePort(auditRuntime).extensions.hosted.events.record({
+    auditRuntime.extensions.hosted.events.record({
       sessionId,
       type: "custom_probe_event",
       payload: {
         source: "contract-test",
       },
     });
-    createHostedRuntimePort(auditRuntime).extensions.hosted.events.record({
+    auditRuntime.extensions.hosted.events.record({
       sessionId,
       type: "context_future_probe",
       payload: {
         source: "contract-test",
       },
     });
-    createHostedRuntimePort(opsRuntime).extensions.hosted.events.record({
+    opsRuntime.extensions.hosted.events.record({
       sessionId,
       type: "custom_probe_event",
       payload: {
         source: "contract-test",
       },
     });
-    createHostedRuntimePort(opsRuntime).extensions.hosted.events.record({
+    opsRuntime.extensions.hosted.events.record({
       sessionId,
       type: "context_future_probe",
       payload: {
@@ -528,17 +525,17 @@ describe("event pipeline level classification", () => {
   });
 
   test("keeps task watchdog events at ops level and drops them at audit level", () => {
-    const auditRuntime = new BrewvaRuntime({
+    const auditRuntime = createBrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-events-audit-watchdog-")),
       config: createAuditConfig(),
-    });
-    const opsRuntime = new BrewvaRuntime({
+    }).hosted;
+    const opsRuntime = createBrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-events-ops-watchdog-")),
       config: createOpsConfig(),
-    });
+    }).hosted;
     const sessionId = "watchdog-events-session";
 
-    createHostedRuntimePort(auditRuntime).extensions.hosted.events.record({
+    auditRuntime.extensions.hosted.events.record({
       sessionId,
       type: "task_stuck_detected",
       payload: {
@@ -550,7 +547,7 @@ describe("event pipeline level classification", () => {
         openItemCount: 0,
       },
     });
-    createHostedRuntimePort(opsRuntime).extensions.hosted.events.record({
+    opsRuntime.extensions.hosted.events.record({
       sessionId,
       type: "task_stuck_detected",
       payload: {
@@ -572,18 +569,18 @@ describe("event pipeline level classification", () => {
   });
 
   test("keeps task stall adjudication at audit level because inspection surfaces depend on it", () => {
-    const auditRuntime = new BrewvaRuntime({
+    const auditRuntime = createBrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-events-audit-stall-adjudication-")),
       config: createAuditConfig(),
-    });
-    const opsRuntime = new BrewvaRuntime({
+    }).hosted;
+    const opsRuntime = createBrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-events-ops-stall-adjudication-")),
       config: createOpsConfig(),
-    });
+    }).hosted;
     const sessionId = "stall-adjudication-level-session";
 
     for (const runtime of [auditRuntime, opsRuntime]) {
-      createHostedRuntimePort(runtime).extensions.hosted.events.record({
+      runtime.extensions.hosted.events.record({
         sessionId,
         type: "task_stall_adjudicated",
         payload: {

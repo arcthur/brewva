@@ -1,6 +1,6 @@
 import { writeFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
-import type { BrewvaHostedRuntimePort, BrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort, BrewvaRuntimeRoot } from "@brewva/brewva-runtime";
 import type { ProviderCacheObservationState } from "@brewva/brewva-runtime/context";
 import {
   ensureParentDirectory,
@@ -378,7 +378,7 @@ function resolveLatestProviderCacheEvidence(
 }
 
 export function buildContextEvidenceReport(
-  runtime: Pick<BrewvaRuntime | BrewvaHostedRuntimePort, "identity" | "inspect">,
+  runtime: Pick<BrewvaRuntimeRoot | BrewvaHostedRuntimePort, "identity" | "inspect">,
   options: ContextEvidenceReportOptions = {},
 ): ContextEvidenceReport {
   const longSessionUsefulTurnThreshold = normalizePositiveInteger(

@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { SessionBackendStateError } from "@brewva/brewva-gateway";
-import { BrewvaRuntime, createHostedRuntimePort } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaRuntimeOptions } from "@brewva/brewva-runtime";
 import type { TurnEnvelope } from "@brewva/brewva-runtime/channels";
 import {
   createInMemoryModelCatalog,
@@ -38,8 +39,8 @@ import { createTurnEventStream, createTurnStreamFromPromise } from "../../helper
 import { createRuntimeFixture } from "../../helpers/runtime.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
-function createHostedTestRuntime(options: ConstructorParameters<typeof BrewvaRuntime>[0]) {
-  return createHostedRuntimePort(new BrewvaRuntime(options));
+function createHostedTestRuntime(options: BrewvaRuntimeOptions) {
+  return createBrewvaRuntime(options).hosted;
 }
 
 const TEST_MODEL: BrewvaRegisteredModel = {

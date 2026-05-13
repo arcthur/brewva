@@ -7,15 +7,13 @@ import {
   HostedDelegationStore,
   type HostedDelegationTarget,
 } from "@brewva/brewva-gateway";
-import {
-  BrewvaRuntime,
-  DEFAULT_BREWVA_CONFIG,
-  createHostedRuntimePort,
-} from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaRuntimeOptions } from "@brewva/brewva-runtime";
+import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
 import type { DelegationPacket } from "@brewva/brewva-tools/contracts";
 
-function createHostedTestRuntime(options: ConstructorParameters<typeof BrewvaRuntime>[0]) {
-  return createHostedRuntimePort(new BrewvaRuntime(options));
+function createHostedTestRuntime(options: BrewvaRuntimeOptions) {
+  return createBrewvaRuntime(options).hosted;
 }
 
 function createTempWorkspace(prefix: string): string {
@@ -173,7 +171,7 @@ describe("detached subagent background controller", () => {
       },
     });
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId: "parent-bg-predicate-event",
       type: "worker_results_applied",
       payload: {
@@ -250,7 +248,7 @@ describe("detached subagent background controller", () => {
         changes: [{ path: "src/background.ts", action: "modify" }],
       },
     });
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId: "parent-bg-predicate-worker",
       type: "worker_results_applied",
       payload: {
@@ -499,7 +497,7 @@ describe("detached subagent background controller", () => {
       },
     });
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId: "parent-bg-predicate-preflight",
       type: "worker_results_applied",
       payload: {
@@ -583,7 +581,7 @@ describe("detached subagent background controller", () => {
       },
     });
 
-    createHostedRuntimePort(restartedRuntime).extensions.hosted.events.record({
+    restartedRuntime.extensions.hosted.events.record({
       sessionId: "parent-bg-predicate-restart",
       type: "worker_results_applied",
       payload: {

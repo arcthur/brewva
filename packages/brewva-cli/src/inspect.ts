@@ -10,7 +10,7 @@ import {
   buildContextEvidenceReport,
   type ContextEvidenceAggregateReport,
 } from "@brewva/brewva-gateway/hosted";
-import { BrewvaRuntime, createOperatorRuntimePort } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime, selectOperatorRuntimePort } from "@brewva/brewva-runtime";
 import type { BrewvaOperatorRuntimePort } from "@brewva/brewva-runtime";
 import { foldClaimLedgerEvents } from "@brewva/brewva-runtime/claim";
 import { loadBrewvaInspectConfigResolution } from "@brewva/brewva-runtime/config";
@@ -1045,12 +1045,12 @@ export async function runInspectCli(argv: string[]): Promise<number> {
     cwd: typeof parsed.values.cwd === "string" ? parsed.values.cwd : undefined,
     configPath,
   });
-  const runtime = new BrewvaRuntime({
+  const runtime = createBrewvaRuntime({
     cwd: typeof parsed.values.cwd === "string" ? parsed.values.cwd : undefined,
     config: configLoad.config,
     governancePort: createTrustedLocalGovernancePort({ profile: "personal" }),
   });
-  const operatorRuntime = createOperatorRuntimePort(runtime);
+  const operatorRuntime = selectOperatorRuntimePort(runtime);
   const targetSessionId = resolveTargetSession(
     operatorRuntime,
     typeof parsed.values.session === "string" ? parsed.values.session : undefined,

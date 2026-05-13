@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import { createTaskLedgerTools } from "@brewva/brewva-tools/workflow";
 import { requireDefined } from "../../helpers/assertions.js";
 import { cleanupTestWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
@@ -7,7 +7,7 @@ import { extractTextContent, fakeContext } from "./tools-flow.helpers.js";
 
 function createTaskLedgerToolHarness(prefix: string) {
   const workspace = createTestWorkspace(prefix);
-  const runtime = new BrewvaRuntime({ cwd: workspace });
+  const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
   const tools = createTaskLedgerTools({ runtime });
 
   const findTool = (name: string) =>

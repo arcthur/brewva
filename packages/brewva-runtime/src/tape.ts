@@ -1,4 +1,4 @@
-// Curated tape contract subpath. Keep root imports focused on BrewvaRuntime.
+// Curated tape contract subpath. Keep root imports focused on createBrewvaRuntime and explicit port types.
 export { TAPE_ANCHOR_EVENT_TYPE, TAPE_CHECKPOINT_EVENT_TYPE } from "./domain/tape/events.js";
 export {
   TAPE_ANCHOR_SCHEMA,

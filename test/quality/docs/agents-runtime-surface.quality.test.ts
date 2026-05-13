@@ -7,9 +7,9 @@ describe("AGENTS runtime surface coverage", () => {
     const repoRoot = resolve(import.meta.dirname, "../../..");
     const agentsDoc = readFileSync(resolve(repoRoot, "AGENTS.md"), "utf-8");
 
-    expect(agentsDoc).toContain("`runtime.authority`");
-    expect(agentsDoc).toContain("`runtime.inspect`");
-    expect(agentsDoc).toContain("`createOperatorRuntimePort(runtime).operator`");
+    expect(agentsDoc).toContain("`root.authority`");
+    expect(agentsDoc).toContain("`root.inspect`");
+    expect(agentsDoc).toContain("`selectOperatorRuntimePort(instance).operator`");
     expect(agentsDoc).toContain("mixed top-level implementation surface");
   });
 });

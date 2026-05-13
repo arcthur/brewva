@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { createHostedRuntimePort, createOperatorRuntimePort } from "@brewva/brewva-runtime";
 import { ROLLBACK_EVENT_TYPE } from "@brewva/brewva-runtime/events";
 import {
   buildContextEvidenceReport,
@@ -97,7 +96,7 @@ function createRuntimeFixture(
     },
   });
 
-  Object.assign(createOperatorRuntimePort(runtime).operator.context.usage, {
+  Object.assign(runtime.operator.context.usage, {
     observe(sessionId: string, usage: unknown) {
       calls.observedContext.push({ sessionId, usage });
     },
@@ -190,7 +189,7 @@ function createRuntimeFixture(
     },
   });
 
-  Object.assign(createOperatorRuntimePort(runtime).operator.session.state, {
+  Object.assign(runtime.operator.session.state, {
     clear(sessionId: string) {
       calls.cleared.push(sessionId);
     },
@@ -274,7 +273,7 @@ describe("hosted behavior host-api installation", () => {
         runtime,
         routingDefaultScopes: ["core", "domain"],
       }).register(api),
-    ).toThrow(/routingDefaultScopes must be applied when constructing BrewvaRuntime/);
+    ).toThrow(/routingDefaultScopes must be applied when calling createBrewvaRuntime/);
   });
 
   test("composes context through before_agent_start on the canonical hosted behavior", async () => {
@@ -619,7 +618,7 @@ describe("hosted behavior host-api installation", () => {
       localHooks: [localHook],
     }).register(api);
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId: "hosted-local-hook-rollback",
       type: ROLLBACK_EVENT_TYPE,
       payload: {
@@ -670,7 +669,7 @@ describe("hosted behavior host-api installation", () => {
       },
       createSessionContext("hosted-local-hook-dispose"),
     );
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId: "hosted-local-hook-dispose",
       type: ROLLBACK_EVENT_TYPE,
       payload: {
@@ -686,7 +685,7 @@ describe("hosted behavior host-api installation", () => {
       { type: "session_shutdown" },
       createSessionContext("hosted-local-hook-dispose"),
     );
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId: "hosted-local-hook-dispose",
       type: ROLLBACK_EVENT_TYPE,
       payload: {
@@ -715,7 +714,7 @@ describe("hosted behavior host-api installation", () => {
       localHooks: [localHook],
     }).register(api);
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId: "hosted-local-hook-rollback-failure",
       type: ROLLBACK_EVENT_TYPE,
       payload: {
@@ -767,7 +766,7 @@ describe("hosted behavior host-api installation", () => {
       localHooks: [localHook],
     }).register(api);
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId: "hosted-local-hook-rollback-block-attempt",
       type: ROLLBACK_EVENT_TYPE,
       payload: {
@@ -924,7 +923,7 @@ describe("hosted behavior host-api installation", () => {
       contextWindow: 100_000,
       percent: 0.88,
     };
-    createOperatorRuntimePort(runtime).operator.context.usage.observe(sessionId, sessionUsage);
+    runtime.operator.context.usage.observe(sessionId, sessionUsage);
     const reducedPayload = invokeBeforeProviderRequestChain(
       handlers,
       {

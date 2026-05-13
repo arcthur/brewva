@@ -1,10 +1,11 @@
 import { resolve } from "node:path";
-import { BrewvaRuntime, createHostedRuntimePort } from "@brewva/brewva-runtime";
-import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaConfig, BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import { resolveBrewvaAgentDir } from "@brewva/brewva-runtime/config";
 import { createTrustedLocalGovernancePort } from "@brewva/brewva-runtime/governance";
 import type { ManagedToolMode } from "@brewva/brewva-runtime/session";
 import { resolveBrewvaModelSelection } from "../../../../policy/model-routing/api.js";
+import { toHostedRuntimePort } from "../runtime-ports.js";
 import { DEFAULT_HOSTED_ROUTING_SCOPES } from "../session-factory.js";
 import type { HostedSessionSettingsView } from "../session-factory.js";
 import { createHostedSessionFactory, type HostedSessionFactory } from "../session-factory.js";
@@ -26,7 +27,7 @@ function sameRoutingScopes(actual: readonly string[], expected: readonly string[
 
 export function applyRuntimeUiSettings(
   settingsManager: HostedSessionSettingsView,
-  uiConfig: BrewvaRuntime["config"]["ui"],
+  uiConfig: BrewvaConfig["ui"],
 ): void {
   settingsManager.applyOverrides({
     quietStartup: uiConfig.quietStartup,
@@ -57,9 +58,9 @@ export function createKernelRuntime(
   options: CreateHostedSessionOptions,
   cwd: string,
 ): BrewvaHostedRuntimePort {
-  return createHostedRuntimePort(
+  return toHostedRuntimePort(
     options.runtime ??
-      new BrewvaRuntime({
+      createBrewvaRuntime({
         cwd,
         configPath: options.configPath,
         config: options.config,
@@ -88,13 +89,13 @@ export function assertRoutingScopeCompatibility(
       !sameRoutingScopes(runtimeRoutingScopes, requestedRoutingScopes)
     ) {
       throw new Error(
-        "routingScopes must be applied when constructing BrewvaRuntime; createHostedSession no longer mutates runtime.config",
+        "routingScopes must be applied when calling createBrewvaRuntime; createHostedSession no longer mutates runtime.config",
       );
     }
   }
   if (options.runtime && options.routingDefaultScopes && options.routingDefaultScopes.length > 0) {
     throw new Error(
-      "routingDefaultScopes must be applied when constructing BrewvaRuntime; createHostedSession does not infer runtime config intent from an existing runtime",
+      "routingDefaultScopes must be applied when calling createBrewvaRuntime; createHostedSession does not infer runtime config intent from an existing runtime",
     );
   }
 }

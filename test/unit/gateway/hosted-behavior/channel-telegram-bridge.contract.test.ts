@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import { createRuntimeTelegramChannelBridge } from "@brewva/brewva-gateway/channels";
-import { createHostedRuntimePort } from "@brewva/brewva-runtime";
 import type { TurnEnvelope } from "@brewva/brewva-runtime/channels";
 import { resolveRequestUrl } from "../../../helpers.js";
 import { createRuntimeFixture } from "../../../helpers/runtime.js";
@@ -102,7 +101,7 @@ describe("runtime telegram channel bridge helper", () => {
     };
 
     const { bridge } = createRuntimeTelegramChannelBridge({
-      runtime: createHostedRuntimePort(runtime),
+      runtime: runtime,
       token: "bot-token",
       transport: {
         fetchImpl,
@@ -153,7 +152,7 @@ describe("runtime telegram channel bridge helper", () => {
     };
 
     const { bridge } = createRuntimeTelegramChannelBridge({
-      runtime: createHostedRuntimePort(runtime),
+      runtime: runtime,
       token: "bot-token",
       transport: { fetchImpl },
       onInboundTurn: async () => undefined,

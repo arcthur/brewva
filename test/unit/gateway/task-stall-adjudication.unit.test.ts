@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { BrewvaRuntime, createHostedRuntimePort } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaRuntimeOptions } from "@brewva/brewva-runtime";
 import { buildTaskStuckDetectedPayload } from "@brewva/brewva-runtime/task";
 import {
   adjudicateTaskStallPacket,
@@ -9,8 +10,8 @@ import {
 import { createOpsRuntimeConfig } from "../../helpers/runtime.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
-function createHostedTestRuntime(options: ConstructorParameters<typeof BrewvaRuntime>[0]) {
-  return createHostedRuntimePort(new BrewvaRuntime(options));
+function createHostedTestRuntime(options: BrewvaRuntimeOptions) {
+  return createBrewvaRuntime(options).hosted;
 }
 
 describe("task stall adjudication", () => {
@@ -39,7 +40,7 @@ describe("task stall adjudication", () => {
         changes: [{ path: "src/task-stall.ts", action: "modify" }],
       },
     });
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "tool_result_recorded",
       timestamp: 150,
@@ -51,7 +52,7 @@ describe("task stall adjudication", () => {
         failureClass: "execution",
       },
     });
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "verification_outcome_recorded",
       timestamp: 160,
@@ -103,7 +104,7 @@ describe("task stall adjudication", () => {
       goal: "Exercise high-pressure stall adjudication",
     });
     for (let index = 0; index <= highThreshold; index += 1) {
-      createHostedRuntimePort(runtime).extensions.hosted.events.record({
+      runtime.extensions.hosted.events.record({
         sessionId,
         type: "custom_probe_event",
         payload: { index },
@@ -144,7 +145,7 @@ describe("task stall adjudication", () => {
       message: "Need user confirmation before retrying the fix",
       source: "unit_test",
     });
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "task_stuck_detected",
       timestamp: 400_100,
@@ -197,7 +198,7 @@ describe("task stall adjudication", () => {
       goal: "Recover missing verification evidence",
     });
     runtime.authority.tools.tracking.markCall(sessionId, "edit");
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "verification_outcome_recorded",
       timestamp: 160,
@@ -239,7 +240,7 @@ describe("task stall adjudication", () => {
       schema: "brewva.task.v1",
       goal: "Prefer canonical missing checks over display-only missing evidence",
     });
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "verification_outcome_recorded",
       timestamp: 160,

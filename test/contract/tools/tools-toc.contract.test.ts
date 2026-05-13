@@ -1,11 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { chmodSync, mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import {
-  BrewvaRuntime,
-  DEFAULT_BREWVA_CONFIG,
-  createOperatorRuntimePort,
-} from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
+import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
 import type { BrewvaConfig } from "@brewva/brewva-runtime";
 import { PATCH_RECORDED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
 import { createReadSpansTool, createTocTools } from "@brewva/brewva-tools/navigation";
@@ -19,10 +17,10 @@ function createTocWorkspace(prefix: string): string {
   return workspace;
 }
 
-function createRuntime(workspace: string, config?: BrewvaConfig): BrewvaRuntime {
+function createRuntime(workspace: string, config?: BrewvaConfig): BrewvaHostedRuntimePort {
   const runtimeConfig = structuredClone(config ?? DEFAULT_BREWVA_CONFIG);
   runtimeConfig.infrastructure.events.level = "debug";
-  return new BrewvaRuntime({ cwd: workspace, config: runtimeConfig });
+  return createBrewvaRuntime({ cwd: workspace, config: runtimeConfig }).hosted;
 }
 
 function fakeContext(sessionId: string, cwd: string): any {
@@ -249,7 +247,7 @@ describe("TOC tools", () => {
       undefined,
       fakeContext(sessionId, workspace),
     );
-    createOperatorRuntimePort(runtime).operator.session.state.clear(sessionId);
+    runtime.operator.session.state.clear(sessionId);
     await tool.execute(
       "tc-toc-cache-clear-2",
       { file_path: filePath },
@@ -759,7 +757,7 @@ describe("TOC tools", () => {
       undefined,
       fakeContext(sessionId, workspace),
     );
-    createOperatorRuntimePort(runtime).operator.session.state.clear(sessionId);
+    runtime.operator.session.state.clear(sessionId);
 
     const result = await readTool.execute(
       "tc-read-spans-cache-clear",

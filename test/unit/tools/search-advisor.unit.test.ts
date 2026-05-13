@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createOperatorRuntimePort } from "@brewva/brewva-runtime";
 import {
   PATCH_RECORDED_EVENT_TYPE,
   TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE,
@@ -287,7 +286,7 @@ describe("SearchAdvisor", () => {
       }).pathScore,
     ).toBeGreaterThan(0);
 
-    createOperatorRuntimePort(runtime).operator.session.state.clear(sessionId);
+    runtime.operator.session.state.clear(sessionId);
 
     const afterClear = buildSearchAdvisorSnapshot({
       runtime: bundledRuntime,

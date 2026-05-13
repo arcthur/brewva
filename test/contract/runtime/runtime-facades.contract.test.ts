@@ -2,16 +2,12 @@ import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import {
-  BrewvaRuntime,
-  DEFAULT_BREWVA_CONFIG,
-  createHostedRuntimePort,
-  createOperatorRuntimePort,
-} from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
+import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
 import { buildScheduleIntentFiredEvent } from "@brewva/brewva-runtime/schedule";
 import { setStaticContextStatusThresholds } from "../../fixtures/config.js";
 import { patchDateNow } from "../../helpers/global-state.js";
-import { getRuntimeInternals } from "../../helpers/runtime-internals.js";
+import { createRuntimeWithInternals } from "../../helpers/runtime-internals.js";
 import { createOpsRuntimeConfig } from "../../helpers/runtime.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
@@ -25,10 +21,10 @@ describe("runtime facade coverage", () => {
     const restoreNow = patchDateNow(() => now);
 
     try {
-      const runtime = new BrewvaRuntime({
+      const runtime = createBrewvaRuntime({
         cwd: createTestWorkspace("runtime-facade-poll-stall"),
         config: createOpsRuntimeConfig(),
-      });
+      }).hosted;
       const sessionId = "runtime-facade-poll-stall-1";
 
       now = 1_740_000_000_100;
@@ -37,7 +33,7 @@ describe("runtime facade coverage", () => {
         goal: "Detect stalled execution through the public runtime facade",
       });
 
-      createOperatorRuntimePort(runtime).operator.session.stall.poll(sessionId, {
+      runtime.operator.session.stall.poll(sessionId, {
         now: now + 1_001,
         thresholdMs: 1_000,
       });
@@ -55,7 +51,7 @@ describe("runtime facade coverage", () => {
         idleMs: 1_001,
       });
 
-      createOperatorRuntimePort(runtime).operator.session.stall.poll(sessionId, {
+      runtime.operator.session.stall.poll(sessionId, {
         now: now + 1_500,
         thresholdMs: 1_000,
       });
@@ -69,16 +65,16 @@ describe("runtime facade coverage", () => {
   });
 
   test("session.onClearState listeners can unsubscribe and listener failures do not block teardown", () => {
-    const runtime = new BrewvaRuntime({ cwd: createTestWorkspace("runtime-facade-clear-state") });
+    const runtime = createBrewvaRuntime({
+      cwd: createTestWorkspace("runtime-facade-clear-state"),
+    }).hosted;
     const sessionId = "runtime-facade-clear-state-1";
     const observed: string[] = [];
 
-    const unsubscribeObserved = createOperatorRuntimePort(runtime).operator.session.state.onClear(
-      (id) => {
-        observed.push(id);
-      },
-    );
-    createOperatorRuntimePort(runtime).operator.session.state.onClear(() => {
+    const unsubscribeObserved = runtime.operator.session.state.onClear((id) => {
+      observed.push(id);
+    });
+    runtime.operator.session.state.onClear(() => {
       throw new Error("listener exploded");
     });
 
@@ -93,7 +89,7 @@ describe("runtime facade coverage", () => {
       },
     });
 
-    createOperatorRuntimePort(runtime).operator.session.state.clear(sessionId);
+    runtime.operator.session.state.clear(sessionId);
 
     expect(observed).toEqual([sessionId]);
     expect(runtime.inspect.session.workerResults.list(sessionId)).toHaveLength(0);
@@ -112,7 +108,7 @@ describe("runtime facade coverage", () => {
       },
     });
 
-    createOperatorRuntimePort(runtime).operator.session.state.clear(sessionId);
+    runtime.operator.session.state.clear(sessionId);
 
     expect(observed).toEqual([sessionId]);
     expect(runtime.inspect.session.workerResults.list(sessionId)).toHaveLength(0);
@@ -120,13 +116,13 @@ describe("runtime facade coverage", () => {
 
   test("session.getIntegrity aggregates session and WAL durability issues", () => {
     const workspace = createTestWorkspace("runtime-facade-session-integrity");
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const sessionId = "runtime-facade-session-integrity-1";
     const walDir = join(workspace, DEFAULT_BREWVA_CONFIG.infrastructure.recoveryWal.dir);
     mkdirSync(walDir, { recursive: true });
     writeFileSync(join(walDir, "runtime.jsonl"), '{"broken":\n', "utf8");
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "tool_output_artifact_persist_failed",
       payload: {
@@ -161,10 +157,10 @@ describe("runtime facade coverage", () => {
       const workspace = createTestWorkspace("runtime-facade-unclean-shutdown");
       const config = createOpsRuntimeConfig();
       const sessionId = "runtime-facade-unclean-shutdown-1";
-      const runtime = new BrewvaRuntime({ cwd: workspace, config });
+      const runtime = createBrewvaRuntime({ cwd: workspace, config }).hosted;
 
-      createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
-      createHostedRuntimePort(runtime).extensions.hosted.events.record({
+      runtime.operator.context.lifecycle.onTurnStart(sessionId, 1);
+      runtime.extensions.hosted.events.record({
         sessionId,
         type: "tool_execution_start",
         turn: 1,
@@ -179,7 +175,7 @@ describe("runtime facade coverage", () => {
       });
 
       now += 10_000;
-      const reloaded = new BrewvaRuntime({ cwd: workspace, config });
+      const reloaded = createBrewvaRuntime({ cwd: workspace, config }).hosted;
 
       expect(reloaded.inspect.recovery.listPending()).toEqual(
         expect.arrayContaining([
@@ -235,13 +231,13 @@ describe("runtime facade coverage", () => {
   });
 
   test("hosted event recording rejects non-canonical tool_output_distilled payloads", () => {
-    const runtime = new BrewvaRuntime({
+    const runtime = createBrewvaRuntime({
       cwd: createTestWorkspace("runtime-facade-tool-output-distilled"),
-    });
+    }).hosted;
     const sessionId = "runtime-facade-tool-output-distilled-1";
 
     expect(() =>
-      createHostedRuntimePort(runtime).extensions.hosted.events.record({
+      runtime.extensions.hosted.events.record({
         sessionId,
         timestamp: 1_740_000_200_000,
         type: "tool_output_distilled",
@@ -267,13 +263,13 @@ describe("runtime facade coverage", () => {
   });
 
   test("inspect.lifecycle exposes blocked approval posture from durable approval state", () => {
-    const runtime = new BrewvaRuntime({
+    const runtime = createBrewvaRuntime({
       cwd: createTestWorkspace("runtime-facade-lifecycle-approval"),
       config: createOpsRuntimeConfig(),
-    });
+    }).hosted;
     const sessionId = "runtime-facade-lifecycle-approval-1";
 
-    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+    runtime.operator.context.lifecycle.onTurnStart(sessionId, 1);
     const started = runtime.authority.tools.invocation.start({
       sessionId,
       toolCallId: "tool-lifecycle-1",
@@ -307,14 +303,14 @@ describe("runtime facade coverage", () => {
   });
 
   test("inspect.lifecycle exposes recovery transition source facts for reasoning resume adapters", () => {
-    const runtime = new BrewvaRuntime({
+    const runtime = createBrewvaRuntime({
       cwd: createTestWorkspace("runtime-facade-lifecycle-recovery"),
       config: createOpsRuntimeConfig(),
-    });
+    }).hosted;
     const sessionId = "runtime-facade-lifecycle-recovery-1";
 
-    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 8);
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.operator.context.lifecycle.onTurnStart(sessionId, 8);
+    runtime.extensions.hosted.events.record({
       sessionId,
       turn: 8,
       type: "turn_input_recorded",
@@ -324,7 +320,7 @@ describe("runtime facade coverage", () => {
         promptText: "Resume the interrupted attempt",
       },
     });
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       turn: 8,
       type: "session_turn_transition",
@@ -365,10 +361,10 @@ describe("runtime facade coverage", () => {
   });
 
   test("inspect.lifecycle invalidates cached snapshots on new events and returns defensive copies", () => {
-    const runtime = new BrewvaRuntime({
+    const runtime = createBrewvaRuntime({
       cwd: createTestWorkspace("runtime-facade-lifecycle-cache"),
       config: createOpsRuntimeConfig(),
-    });
+    }).hosted;
     const sessionId = "runtime-facade-lifecycle-cache-1";
 
     const initialSnapshot = runtime.inspect.lifecycle.getSnapshot(sessionId);
@@ -380,7 +376,7 @@ describe("runtime facade coverage", () => {
     expect(cachedSnapshot.summary.kind).toBe("idle");
     expect(cachedSnapshot.execution.kind).toBe("idle");
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       turn: 1,
       type: "tool_execution_start",
@@ -405,10 +401,10 @@ describe("runtime facade coverage", () => {
   });
 
   test("inspect.lifecycle invalidates cached snapshots on prompt stability changes", () => {
-    const runtime = new BrewvaRuntime({
+    const runtime = createBrewvaRuntime({
       cwd: createTestWorkspace("runtime-facade-lifecycle-prompt-stability-cache"),
       config: createOpsRuntimeConfig(),
-    });
+    }).hosted;
     const sessionId = "runtime-facade-lifecycle-prompt-stability-cache-1";
 
     runtime.authority.session.compaction.commit(sessionId, {
@@ -435,7 +431,7 @@ describe("runtime facade coverage", () => {
       }),
     );
 
-    createOperatorRuntimePort(runtime).operator.context.prompt.observeStability(sessionId, {
+    runtime.operator.context.prompt.observeStability(sessionId, {
       stablePrefixHash: "prefix-new",
       dynamicTailHash: "tail-new",
       turn: 1,
@@ -457,14 +453,14 @@ describe("runtime facade coverage", () => {
   });
 
   test("inspect.lifecycle retains more than a dozen recent transitions for recovery adapters", () => {
-    const runtime = new BrewvaRuntime({
+    const runtime = createBrewvaRuntime({
       cwd: createTestWorkspace("runtime-facade-lifecycle-transition-window"),
       config: createOpsRuntimeConfig(),
-    });
+    }).hosted;
     const sessionId = "runtime-facade-lifecycle-transition-window-1";
 
     for (let index = 0; index < 16; index += 1) {
-      createHostedRuntimePort(runtime).extensions.hosted.events.record({
+      runtime.extensions.hosted.events.record({
         sessionId,
         turn: 3,
         type: "session_turn_transition",
@@ -502,9 +498,9 @@ describe("runtime facade coverage", () => {
     const workspace = createTestWorkspace("runtime-facade-tool-recovery-wal");
     const config = createOpsRuntimeConfig();
     const sessionId = "runtime-facade-tool-recovery-wal-1";
-    const runtime = new BrewvaRuntime({ cwd: workspace, config });
+    const runtime = createBrewvaRuntime({ cwd: workspace, config }).hosted;
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "tool_execution_start",
       turn: 1,
@@ -524,7 +520,7 @@ describe("runtime facade coverage", () => {
       ]),
     );
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "tool_execution_end",
       turn: 1,
@@ -541,12 +537,12 @@ describe("runtime facade coverage", () => {
   });
 
   test("reasoning facade records durable branch state and rehydrates after clearState", () => {
-    const runtime = new BrewvaRuntime({
+    const runtime = createBrewvaRuntime({
       cwd: createTestWorkspace("runtime-facade-reasoning"),
       config: createOpsRuntimeConfig(),
-    });
+    }).hosted;
     const sessionId = "runtime-facade-reasoning-1";
-    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+    runtime.operator.context.lifecycle.onTurnStart(sessionId, 1);
 
     const checkpointA = runtime.authority.reasoning.checkpoints.record(sessionId, {
       boundary: "operator_marker",
@@ -585,7 +581,7 @@ describe("runtime facade coverage", () => {
       false,
     );
 
-    createOperatorRuntimePort(runtime).operator.session.state.clear(sessionId);
+    runtime.operator.session.state.clear(sessionId);
 
     const afterClear = runtime.inspect.reasoning.state.getActive(sessionId);
     expect(afterClear.activeBranchId).toBe(revert.newBranchId);
@@ -610,10 +606,10 @@ describe("runtime facade coverage", () => {
       const workspace = createTestWorkspace("runtime-facade-unclean-open-turn");
       const config = createOpsRuntimeConfig();
       const sessionId = "runtime-facade-unclean-open-turn-1";
-      const runtime = new BrewvaRuntime({ cwd: workspace, config });
+      const runtime = createBrewvaRuntime({ cwd: workspace, config }).hosted;
 
-      createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 2);
-      createHostedRuntimePort(runtime).extensions.hosted.events.record({
+      runtime.operator.context.lifecycle.onTurnStart(sessionId, 2);
+      runtime.extensions.hosted.events.record({
         sessionId,
         type: "turn_start",
         turn: 2,
@@ -623,7 +619,7 @@ describe("runtime facade coverage", () => {
         },
       });
       now += 10_000;
-      const reloaded = new BrewvaRuntime({ cwd: workspace, config });
+      const reloaded = createBrewvaRuntime({ cwd: workspace, config }).hosted;
 
       expect(reloaded.inspect.session.lifecycle.getOpenToolCalls(sessionId)).toEqual([]);
       expect(
@@ -649,13 +645,13 @@ describe("runtime facade coverage", () => {
   test("events.toStructured mirrors structured queries through the public events facade", () => {
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
     config.infrastructure.events.level = "debug";
-    const runtime = new BrewvaRuntime({
+    const runtime = createBrewvaRuntime({
       cwd: createTestWorkspace("runtime-facade-structured-events"),
       config,
-    });
+    }).hosted;
     const sessionId = "runtime-facade-structured-events-1";
 
-    const recorded = createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    const recorded = runtime.extensions.hosted.events.record({
       sessionId,
       type: "governance_cost_anomaly_detected",
       turn: 3,
@@ -693,9 +689,9 @@ describe("runtime facade coverage", () => {
   });
 
   test("events facade records typed metric and guard facts and exposes them as state events", () => {
-    const runtime = new BrewvaRuntime({
+    const runtime = createBrewvaRuntime({
       cwd: createTestWorkspace("runtime-facade-iteration-facts"),
-    });
+    }).hosted;
     const sessionId = "runtime-facade-iteration-facts-1";
 
     const metricEvent = runtime.authority.events.recordMetricObservation(sessionId, {
@@ -761,13 +757,13 @@ describe("runtime facade coverage", () => {
 
   test("skills.refresh returns structured rebuild details and records an ops receipt when session-bound", () => {
     const workspace = createTestWorkspace("runtime-facade-skill-refresh");
-    const runtime = new BrewvaRuntime({
+    const runtime = createBrewvaRuntime({
       cwd: workspace,
       config: createOpsRuntimeConfig(),
-    });
+    }).hosted;
     const sessionId = "runtime-facade-skill-refresh-1";
 
-    const refreshed = createOperatorRuntimePort(runtime).operator.skills.catalog.refresh({
+    const refreshed = runtime.operator.skills.catalog.refresh({
       sessionId,
       reason: "unit_test_refresh",
     });
@@ -802,16 +798,16 @@ describe("runtime facade coverage", () => {
   });
 
   test("tools.start exact-call guard resets when tool name or args change", () => {
-    const runtime = new BrewvaRuntime({
+    const runtime = createBrewvaRuntime({
       cwd: createTestWorkspace("runtime-facade-exact-call-guard"),
       config: createOpsRuntimeConfig((config) => {
         config.security.loopDetection.exactCall.enabled = true;
         config.security.loopDetection.exactCall.threshold = 3;
         config.security.loopDetection.exactCall.mode = "block";
       }),
-    });
+    }).hosted;
     const sessionId = "runtime-facade-exact-call-guard-1";
-    createOperatorRuntimePort(runtime).operator.tools.actionPolicies.register("browser_snapshot", {
+    runtime.operator.tools.actionPolicies.register("browser_snapshot", {
       actionClass: "runtime_observe",
       riskLevel: "low",
       defaultAdmission: "allow",
@@ -820,7 +816,7 @@ describe("runtime facade coverage", () => {
       recoveryPolicy: { kind: "none" },
       effectClasses: ["runtime_observe"],
     });
-    createOperatorRuntimePort(runtime).operator.tools.actionPolicies.register("browser_get", {
+    runtime.operator.tools.actionPolicies.register("browser_get", {
       actionClass: "runtime_observe",
       riskLevel: "low",
       defaultAdmission: "allow",
@@ -869,21 +865,21 @@ describe("runtime facade coverage", () => {
       }),
     ]);
 
-    createOperatorRuntimePort(runtime).operator.tools.actionPolicies.unregister("browser_snapshot");
-    createOperatorRuntimePort(runtime).operator.tools.actionPolicies.unregister("browser_get");
+    runtime.operator.tools.actionPolicies.unregister("browser_snapshot");
+    runtime.operator.tools.actionPolicies.unregister("browser_get");
   });
 
   test("iteration fact helpers stay scoped to the current session", () => {
-    const runtime = new BrewvaRuntime({
+    const runtime = createBrewvaRuntime({
       cwd: createTestWorkspace("runtime-facade-iteration-lineage"),
-    });
+    }).hosted;
     const parentSessionId = "runtime-facade-iteration-lineage-parent";
     const childSessionId = "runtime-facade-iteration-lineage-child-a";
     const siblingSessionId = "runtime-facade-iteration-lineage-child-b";
     const freshChildSessionId = "runtime-facade-iteration-lineage-fresh";
     const loopSource = "goal-loop:coverage-raise-2026-03-22";
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId: parentSessionId,
       type: "schedule_intent",
       timestamp: 10,
@@ -902,7 +898,7 @@ describe("runtime facade coverage", () => {
         }),
       },
     });
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId: parentSessionId,
       type: "schedule_intent",
       timestamp: 11,
@@ -921,7 +917,7 @@ describe("runtime facade coverage", () => {
         }),
       },
     });
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId: parentSessionId,
       type: "schedule_intent",
       timestamp: 12,
@@ -1047,10 +1043,10 @@ describe("runtime facade coverage", () => {
       compactionThresholdPercent: 0.7,
     });
     config.infrastructure.contextBudget.compaction.minTurnsBetween = 5;
-    const runtime = new BrewvaRuntime({
+    const runtime = createBrewvaRuntime({
       cwd: createTestWorkspace("runtime-facade-context"),
       config,
-    });
+    }).hosted;
     const sessionId = "runtime-facade-context-1";
 
     expect(runtime.inspect.context.usage.getRatio(undefined)).toBeNull();
@@ -1062,7 +1058,7 @@ describe("runtime facade coverage", () => {
       }),
     ).toBe(0.95);
 
-    createOperatorRuntimePort(runtime).operator.context.usage.observe(sessionId, {
+    runtime.operator.context.usage.observe(sessionId, {
       tokens: 950,
       contextWindow: 1_000,
       percent: 95,
@@ -1079,24 +1075,21 @@ describe("runtime facade coverage", () => {
   });
 
   test("context facade exposes live prompt stability state without a durable event dependency", () => {
-    const runtime = new BrewvaRuntime({
+    const runtime = createBrewvaRuntime({
       cwd: createTestWorkspace("runtime-facade-prompt-stability"),
       config: createOpsRuntimeConfig(),
-    });
+    }).hosted;
     const sessionId = "runtime-facade-prompt-stability-1";
 
     expect(runtime.inspect.context.prompt.getStability(sessionId)).toBeUndefined();
 
-    const observed = createOperatorRuntimePort(runtime).operator.context.prompt.observeStability(
-      sessionId,
-      {
-        stablePrefixHash: sha256("system-prefix"),
-        dynamicTailHash: sha256("dynamic-tail"),
-        contextScopeId: "leaf-one",
-        turn: 4,
-        timestamp: 1_740_000_000_400,
-      },
-    );
+    const observed = runtime.operator.context.prompt.observeStability(sessionId, {
+      stablePrefixHash: sha256("system-prefix"),
+      dynamicTailHash: sha256("dynamic-tail"),
+      contextScopeId: "leaf-one",
+      turn: 4,
+      timestamp: 1_740_000_000_400,
+    });
 
     expect(observed).toEqual({
       turn: 4,
@@ -1109,23 +1102,21 @@ describe("runtime facade coverage", () => {
     });
     expect(runtime.inspect.context.prompt.getStability(sessionId)).toEqual(observed);
 
-    createOperatorRuntimePort(runtime).operator.session.state.clear(sessionId);
+    runtime.operator.session.state.clear(sessionId);
 
     expect(runtime.inspect.context.prompt.getStability(sessionId)).toBeUndefined();
   });
 
   test("context facade exposes transient outbound reduction state without a durable event dependency", () => {
-    const runtime = new BrewvaRuntime({
+    const runtime = createBrewvaRuntime({
       cwd: createTestWorkspace("runtime-facade-transient-reduction"),
       config: createOpsRuntimeConfig(),
-    });
+    }).hosted;
     const sessionId = "runtime-facade-transient-reduction-1";
 
     expect(runtime.inspect.context.prompt.getTransientReduction(sessionId)).toBeUndefined();
 
-    const observed = createOperatorRuntimePort(
-      runtime,
-    ).operator.context.prompt.observeTransientReduction(sessionId, {
+    const observed = runtime.operator.context.prompt.observeTransientReduction(sessionId, {
       status: "completed",
       reason: null,
       eligibleToolResults: 5,
@@ -1154,18 +1145,19 @@ describe("runtime facade coverage", () => {
     });
     expect(runtime.inspect.context.prompt.getTransientReduction(sessionId)).toEqual(observed);
 
-    createOperatorRuntimePort(runtime).operator.session.state.clear(sessionId);
+    runtime.operator.session.state.clear(sessionId);
 
     expect(runtime.inspect.context.prompt.getTransientReduction(sessionId)).toBeUndefined();
   });
 
   test("context lifecycle hooks hydrate cold sessions without owning dynamic prompt state", () => {
-    const runtime = new BrewvaRuntime({
+    const { runtimeInstance, internals } = createRuntimeWithInternals({
       cwd: createTestWorkspace("runtime-facade-context-lifecycle"),
     });
+    const runtime = runtimeInstance.hosted;
     const sessionId = "runtime-facade-context-lifecycle-1";
     const sessionState = (
-      getRuntimeInternals(runtime) as {
+      internals as {
         sessionState: {
           getExistingCell(sessionId: string):
             | {
@@ -1178,18 +1170,20 @@ describe("runtime facade coverage", () => {
 
     expect(sessionState.getExistingCell(sessionId)).toBeUndefined();
 
-    createOperatorRuntimePort(runtime).operator.context.lifecycle.onUserInput(sessionId);
+    runtime.operator.context.lifecycle.onUserInput(sessionId);
 
     expect(sessionState.getExistingCell(sessionId)?.hydration.status).toBe("ready");
 
-    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
-    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnEnd(sessionId);
+    runtime.operator.context.lifecycle.onTurnStart(sessionId, 1);
+    runtime.operator.context.lifecycle.onTurnEnd(sessionId);
 
     expect(sessionState.getExistingCell(sessionId)?.hydration.status).toBe("ready");
   });
 
   test("cost.getSummary returns zeroed state for untouched sessions and keeps per-session totals isolated", () => {
-    const runtime = new BrewvaRuntime({ cwd: createTestWorkspace("runtime-facade-cost-summary") });
+    const runtime = createBrewvaRuntime({
+      cwd: createTestWorkspace("runtime-facade-cost-summary"),
+    }).hosted;
     const sessionA = "runtime-facade-cost-a";
     const sessionB = "runtime-facade-cost-b";
 
@@ -1211,7 +1205,7 @@ describe("runtime facade coverage", () => {
       },
     });
 
-    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionA, 1);
+    runtime.operator.context.lifecycle.onTurnStart(sessionA, 1);
     runtime.authority.tools.tracking.markCall(sessionA, "read");
     runtime.authority.cost.usage.recordAssistant({
       sessionId: sessionA,
@@ -1270,9 +1264,9 @@ describe("runtime facade coverage", () => {
     });
     writeFileSync(artifactPath, afterText, "utf8");
 
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const sessionId = "runtime-facade-worker-apply-1";
-    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+    runtime.operator.context.lifecycle.onTurnStart(sessionId, 1);
     runtime.authority.session.workerResults.record(sessionId, {
       workerId: "worker-a",
       status: "ok",

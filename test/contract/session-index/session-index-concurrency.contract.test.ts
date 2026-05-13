@@ -2,12 +2,9 @@ import { describe, expect, test } from "bun:test";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import {
-  BrewvaRuntime,
-  DEFAULT_BREWVA_CONFIG,
-  createOperatorRuntimePort,
-  createHostedRuntimePort,
-} from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
+import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
 import { type BrewvaEventRecord } from "@brewva/brewva-runtime/events";
 import { createSessionIndex } from "@brewva/brewva-session-index";
 import { buildVerificationOutcomeRecordedPayload } from "../../helpers/events.js";
@@ -79,21 +76,24 @@ async function waitForChildExit(child: ChildProcessWithoutNullStreams): Promise<
   });
 }
 
-function createIndexedRuntime(name: string): { workspace: string; runtime: BrewvaRuntime } {
+function createIndexedRuntime(name: string): {
+  workspace: string;
+  runtime: BrewvaHostedRuntimePort;
+} {
   const workspace = createTestWorkspace(name);
   mkdirSync(join(workspace, "packages", "gateway"), { recursive: true });
   mkdirSync(join(workspace, "packages", "gateway", ".brewva"), { recursive: true });
   writeFileSync(join(workspace, ".brewva", "brewva.json"), "{}\n", "utf8");
   writeFileSync(join(workspace, "packages", "gateway", ".brewva", "brewva.json"), "{}\n", "utf8");
-  const runtime = new BrewvaRuntime({
+  const runtime = createBrewvaRuntime({
     cwd: workspace,
     config: structuredClone(DEFAULT_BREWVA_CONFIG),
-  });
+  }).hosted;
   return { workspace, runtime };
 }
 
 function recordTaskSession(
-  runtime: BrewvaRuntime,
+  runtime: BrewvaHostedRuntimePort,
   input: {
     sessionId: string;
     timestamp: number;
@@ -102,7 +102,7 @@ function recordTaskSession(
     evidenceText: string;
   },
 ): BrewvaEventRecord {
-  createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(input.sessionId, 1);
+  runtime.operator.context.lifecycle.onTurnStart(input.sessionId, 1);
   runtime.authority.task.spec.set(input.sessionId, {
     schema: "brewva.task.v1",
     goal: input.goal,
@@ -110,7 +110,7 @@ function recordTaskSession(
       files: [input.targetFile],
     },
   });
-  return createHostedRuntimePort(runtime).extensions.hosted.events.record({
+  return runtime.extensions.hosted.events.record({
     sessionId: input.sessionId,
     type: "verification_outcome_recorded",
     timestamp: input.timestamp,
@@ -122,8 +122,8 @@ describe("session index concurrency contract", () => {
   test("projects session box ownership from box lifecycle events", async () => {
     const { workspace, runtime } = createIndexedRuntime("session-index-box-projection");
     const sessionId = "indexed-box-session";
-    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.operator.context.lifecycle.onTurnStart(sessionId, 1);
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "box.acquired",
       timestamp: 1_700_000_000_000,
@@ -133,7 +133,7 @@ describe("session index concurrency contract", () => {
         fingerprint: "fingerprint-01",
       },
     });
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "box.exec.completed",
       timestamp: 1_700_000_000_500,
@@ -142,7 +142,7 @@ describe("session index concurrency contract", () => {
         exitCode: 0,
       },
     });
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "box.snapshot.created",
       timestamp: 1_700_000_001_000,

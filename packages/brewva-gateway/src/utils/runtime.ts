@@ -1,5 +1,4 @@
-import { createHostedRuntimePort } from "@brewva/brewva-runtime";
-import type { BrewvaHostedRuntimePort, BrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import { appendBrewvaEventRecordToLogIfMissing } from "@brewva/brewva-runtime/event-log";
 
 export function clampText(value: string, maxChars: number): string;
@@ -26,7 +25,7 @@ function renderUnknownError(value: unknown): string | undefined {
 }
 
 export function ensureSessionShutdownRecorded(
-  runtime: BrewvaRuntime | BrewvaHostedRuntimePort,
+  runtime: BrewvaHostedRuntimePort,
   sessionId: string,
   payload?: Record<string, unknown>,
 ): void {
@@ -35,7 +34,7 @@ export function ensureSessionShutdownRecorded(
     0
   )
     return;
-  createHostedRuntimePort(runtime).extensions.hosted.events.record({
+  runtime.extensions.hosted.events.record({
     sessionId,
     type: "session_shutdown",
     payload,
@@ -64,7 +63,7 @@ function buildSessionShutdownPayload(input: {
 }
 
 export function recordSessionShutdownIfMissing(
-  runtime: BrewvaRuntime | BrewvaHostedRuntimePort,
+  runtime: BrewvaHostedRuntimePort,
   input: {
     sessionId: string;
     reason: string;
@@ -80,7 +79,7 @@ export function recordSessionShutdownIfMissing(
 }
 
 export function recordAbnormalSessionShutdown(
-  runtime: BrewvaRuntime | BrewvaHostedRuntimePort,
+  runtime: BrewvaHostedRuntimePort,
   input: {
     sessionId: string;
     source: string;

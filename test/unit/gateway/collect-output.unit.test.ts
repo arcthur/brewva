@@ -2,11 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  BrewvaRuntime,
-  createOperatorRuntimePort,
-  createHostedRuntimePort,
-} from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import { asBrewvaToolCallId, asBrewvaToolName } from "@brewva/brewva-runtime/core";
 import type { SessionWireFrame } from "@brewva/brewva-runtime/session";
 import {
@@ -49,10 +45,10 @@ function createSessionMock(eventsToEmit: BrewvaPromptSessionEvent[]): SessionLik
 }
 
 function createRuntimeEventBridge() {
-  const rawRuntime = new BrewvaRuntime({
+  const rawRuntime = createBrewvaRuntime({
     cwd: mkdtempSync(join(tmpdir(), "brewva-collect-output-")),
-  });
-  const runtime = createHostedRuntimePort(rawRuntime);
+  }).hosted;
+  const runtime = rawRuntime;
   const events: Array<{
     id: string;
     sessionId: string;
@@ -84,7 +80,7 @@ function recordTurnInput(
   sessionId: string,
   turnId: string,
 ): void {
-  createHostedRuntimePort(eventBridge.runtime).extensions.hosted.events.record({
+  eventBridge.runtime.extensions.hosted.events.record({
     sessionId,
     turn: 1,
     type: "turn_input_recorded",
@@ -263,7 +259,7 @@ describe("gateway collect output", () => {
             result: "requested",
             isError: false,
           } as BrewvaPromptSessionEvent);
-          createHostedRuntimePort(eventBridge.runtime).extensions.hosted.events.record({
+          eventBridge.runtime.extensions.hosted.events.record({
             sessionId: "agent-session-1",
             type: "session_compact",
             payload: {
@@ -388,7 +384,7 @@ describe("gateway collect output", () => {
             result: "requested",
             isError: false,
           } as BrewvaPromptSessionEvent);
-          createHostedRuntimePort(eventBridge.runtime).extensions.hosted.events.record({
+          eventBridge.runtime.extensions.hosted.events.record({
             sessionId,
             type: "session_compact",
             payload: {
@@ -398,7 +394,7 @@ describe("gateway collect output", () => {
           return;
         }
 
-        createHostedRuntimePort(eventBridge.runtime).extensions.hosted.events.record({
+        eventBridge.runtime.extensions.hosted.events.record({
           sessionId,
           type: "session_turn_transition",
           payload: {
@@ -441,10 +437,7 @@ describe("gateway collect output", () => {
     const eventBridge = createRuntimeEventBridge();
     const sessionId = "agent-session-reasoning-resume";
     recordTurnInput(eventBridge, sessionId, "turn-reasoning-resume");
-    createOperatorRuntimePort(eventBridge.runtime).operator.context.lifecycle.onTurnStart(
-      sessionId,
-      1,
-    );
+    eventBridge.runtime.operator.context.lifecycle.onTurnStart(sessionId, 1);
     const checkpointA = eventBridge.runtime.authority.reasoning.checkpoints.record(sessionId, {
       boundary: "operator_marker",
       leafEntryId: "leaf-restore-a",
@@ -607,7 +600,7 @@ describe("gateway collect output", () => {
           toolName: "read",
           args: { path: "a.txt" },
         } as BrewvaPromptSessionEvent);
-        createHostedRuntimePort(eventBridge.runtime).extensions.hosted.events.record({
+        eventBridge.runtime.extensions.hosted.events.record({
           sessionId: "agent-session-stale-tool",
           type: "session_turn_transition",
           payload: {

@@ -26,9 +26,12 @@ owner: runtime-maintainers
 ## Invariants
 
 - tool and budget enforcement are correctness rules, not advisory metadata
-- runtime root exports stay narrow: `BrewvaRuntime`, runtime port factories and
-  port types, `DEFAULT_BREWVA_CONFIG`, and the minimal config/deep-readonly
-  types. Domain contracts are imported through explicit owner subpaths such as
+- runtime root exports stay narrow: `createBrewvaRuntime`,
+  `selectOperatorRuntimePort`, explicit runtime port types,
+  `DEFAULT_BREWVA_CONFIG`, and the minimal config/deep-readonly types. Do not
+  reintroduce the `BrewvaRuntime` class or root-reflective runtime port
+  factories. Domain contracts are imported through explicit owner subpaths such
+  as
   `@brewva/brewva-runtime/core`, `/config`, `/events`, `/session`,
   `/governance`, `/task`, `/skills`, `/context`, `/projection`, and
   `/security`
@@ -87,7 +90,14 @@ owner: runtime-maintainers
   files and broad factory barrels are not compatibility surfaces
 - tools managed capability policy is centralized in
   `@brewva/brewva-tools/registry`; family adapters receive scoped runtime
-  facades and must fail closed when an undeclared capability is accessed
+  facades and must fail closed when an undeclared capability is accessed. The
+  static capability inventory is generated from the runtime capability type
+  union by `bun run tools:capability-inventory`
+- runtime projection admission is explicit: new files under
+  `packages/brewva-runtime/src/domain/projection/` require updating the
+  admission quality test, and their relative TypeScript dependency closure must
+  not import gateway hosted internals, provider packages, tool families, or
+  runtime root/operator port contracts
 - gateway public/domain entrypoints stay explicit by domain (`/admin`, `/ingress`,
   `/host`, `/session`, `/channels`, `/daemon`, `/delegation`,
   `/extensions`, `/protocol`); control-plane CLI routing lives under

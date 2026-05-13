@@ -24,9 +24,9 @@
 
 - Hosted context construction is gateway policy, not runtime policy and not delegation envelope metadata.
 - Passive `contextProfile` is removed. The hosted lane no longer has a `minimal/standard/full` knob.
-- `hosted/internal/context/materialization.ts` owns model-context materialization side effects: usage observations, compaction nudges, visible-read state, prompt stability, provider cache observations, capability disclosure, delegation surfacing, workbench rendering hooks, and telemetry.
+- `hosted/internal/context/materialization.ts` owns model-context materialization commands: usage observations, compaction nudges, visible-read state, prompt stability, provider cache observations, capability disclosure, delegation surfacing, workbench rendering hooks, and telemetry.
 - `hosted/internal/compaction/model-downshift-policy.ts` owns smaller-context-window compaction decisions, recent suppression, gate interpretation, request-and-wait behavior, and recovery fallback.
-- Runtime mutations from hosted code use `runtime.operator.*` for hosted operations or `runtime.authority.*` for replay-visible commitments.
+- Runtime mutations from hosted code use the explicit hosted/operator ports for hosted operations or the root authority port for replay-visible commitments.
 - Compatibility with `contextProfile` fields and tests is intentionally not preserved.
 
 ## Supersedes
@@ -35,4 +35,4 @@
 
 ## Superseded by
 
-- None.
+- `docs/research/decisions/hosted-materialization-plan.md`

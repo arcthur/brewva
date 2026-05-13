@@ -1,4 +1,4 @@
-import type { BrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaRuntimeRoot } from "@brewva/brewva-runtime";
 import type { DelegationRunRecord } from "@brewva/brewva-runtime/delegation";
 import type { ContextAdmission } from "@brewva/brewva-runtime/session";
 
@@ -19,7 +19,7 @@ function delegationAdoptionId(runId: string): string {
 }
 
 function resolveCurrentLineageNodeId(
-  runtime: BrewvaRuntime,
+  runtime: BrewvaRuntimeRoot,
   sessionId: string,
 ): string | undefined {
   try {
@@ -50,7 +50,7 @@ function resolveOutcomeRef(record: DelegationRunRecord): string {
 }
 
 function hasDelegationLineageOutcome(input: {
-  runtime: BrewvaRuntime;
+  runtime: BrewvaRuntimeRoot;
   sessionId: string;
   lineageNodeId: string;
   outcomeId: string;
@@ -60,7 +60,7 @@ function hasDelegationLineageOutcome(input: {
 }
 
 function hasDelegationLineageAdoption(input: {
-  runtime: BrewvaRuntime;
+  runtime: BrewvaRuntimeRoot;
   sessionId: string;
   adoptionId: string;
 }): boolean {
@@ -71,7 +71,7 @@ function hasDelegationLineageAdoption(input: {
 }
 
 export function ensureDelegationLineageNode(input: {
-  runtime: BrewvaRuntime;
+  runtime: BrewvaRuntimeRoot;
   sessionId: string;
   record: DelegationRunRecord;
 }): string | undefined {
@@ -117,7 +117,7 @@ export function ensureDelegationLineageNode(input: {
 }
 
 export function recordDelegationLineageOutcome(input: {
-  runtime: BrewvaRuntime;
+  runtime: BrewvaRuntimeRoot;
   sessionId: string;
   record: DelegationRunRecord;
 }): string | undefined {
@@ -148,7 +148,7 @@ export function recordDelegationLineageOutcome(input: {
 }
 
 export function adoptDelegationLineageOutcome(input: {
-  runtime: BrewvaRuntime;
+  runtime: BrewvaRuntimeRoot;
   sessionId: string;
   record: DelegationRunRecord;
   admission?: ContextAdmission;

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { appendFileSync, readFileSync } from "node:fs";
-import { BrewvaRuntime, createHostedRuntimePort } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import { requireArray, requireRecord } from "../../helpers/assertions.js";
 import {
   RUNTIME_CONTRACT_CONFIG_PATH,
@@ -24,10 +24,13 @@ describe("event store persistence safety", () => {
       }),
     );
 
-    const runtime = new BrewvaRuntime({ cwd: workspace, configPath: RUNTIME_CONTRACT_CONFIG_PATH });
+    const runtime = createBrewvaRuntime({
+      cwd: workspace,
+      configPath: RUNTIME_CONTRACT_CONFIG_PATH,
+    }).hosted;
     const sessionId = "events-payload-1";
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "payload_test",
       payload: {
@@ -86,9 +89,12 @@ describe("event store persistence safety", () => {
       }),
     );
 
-    const runtime = new BrewvaRuntime({ cwd: workspace, configPath: RUNTIME_CONTRACT_CONFIG_PATH });
+    const runtime = createBrewvaRuntime({
+      cwd: workspace,
+      configPath: RUNTIME_CONTRACT_CONFIG_PATH,
+    }).hosted;
     const sessionId = "events-bad-lines-1";
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "session_start",
       payload: { cwd: workspace },
@@ -119,9 +125,12 @@ describe("event store persistence safety", () => {
       }),
     );
 
-    const runtime = new BrewvaRuntime({ cwd: workspace, configPath: RUNTIME_CONTRACT_CONFIG_PATH });
+    const runtime = createBrewvaRuntime({
+      cwd: workspace,
+      configPath: RUNTIME_CONTRACT_CONFIG_PATH,
+    }).hosted;
     const sessionId = "events-redact-1";
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "custom_event",
       payload: {

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { BrewvaRuntime, createOperatorRuntimePort } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import {
   RUNTIME_CONTRACT_CONFIG_PATH,
   createRuntimeContractConfig as createConfig,
@@ -22,8 +22,11 @@ describe("session rewind compensation", () => {
     writeFileSync(firstPath, "export const first = 1;\n", "utf8");
     writeFileSync(secondPath, "export const second = 1;\n", "utf8");
 
-    const runtime = new BrewvaRuntime({ cwd: workspace, configPath: RUNTIME_CONTRACT_CONFIG_PATH });
-    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+    const runtime = createBrewvaRuntime({
+      cwd: workspace,
+      configPath: RUNTIME_CONTRACT_CONFIG_PATH,
+    }).hosted;
+    runtime.operator.context.lifecycle.onTurnStart(sessionId, 1);
     runtime.authority.session.rewind.recordCheckpoint(sessionId, {
       prompt: {
         text: "Change two files",
@@ -97,8 +100,11 @@ describe("session rewind compensation", () => {
     writeFileSync(firstPath, "export const first = 1;\n", "utf8");
     writeFileSync(secondPath, "export const second = 1;\n", "utf8");
 
-    const runtime = new BrewvaRuntime({ cwd: workspace, configPath: RUNTIME_CONTRACT_CONFIG_PATH });
-    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+    const runtime = createBrewvaRuntime({
+      cwd: workspace,
+      configPath: RUNTIME_CONTRACT_CONFIG_PATH,
+    }).hosted;
+    runtime.operator.context.lifecycle.onTurnStart(sessionId, 1);
     runtime.authority.session.rewind.recordCheckpoint(sessionId, {
       prompt: {
         text: "Change two files",

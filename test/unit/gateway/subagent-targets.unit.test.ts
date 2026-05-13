@@ -7,11 +7,12 @@ import {
   buildHostedDelegationTargetFromAgentSpec,
   loadHostedDelegationCatalog,
 } from "@brewva/brewva-gateway";
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 
-function createIsolatedRuntime(name: string): BrewvaRuntime {
+function createIsolatedRuntime(name: string): BrewvaHostedRuntimePort {
   const workspace = mkdtempSync(join(tmpdir(), `brewva-subagent-runtime-${name}-`));
-  return new BrewvaRuntime({ cwd: workspace });
+  return createBrewvaRuntime({ cwd: workspace }).hosted;
 }
 
 describe("delegation prompt and catalog composition", () => {

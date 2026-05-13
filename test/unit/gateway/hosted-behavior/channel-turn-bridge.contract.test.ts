@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import { createRuntimeChannelTurnBridge } from "@brewva/brewva-gateway/channels";
-import { createHostedRuntimePort } from "@brewva/brewva-runtime";
 import {
   DEFAULT_CHANNEL_CAPABILITIES,
   type ChannelAdapter,
@@ -71,7 +70,7 @@ describe("channel turn bridge hosted behavior helper", () => {
     });
     const { adapter, emitInbound } = createAdapter();
     const bridge = createRuntimeChannelTurnBridge({
-      runtime: createHostedRuntimePort(runtime),
+      runtime: runtime,
       adapter,
       onInboundTurn: async () => undefined,
     });
@@ -107,7 +106,7 @@ describe("channel turn bridge hosted behavior helper", () => {
     });
     const { adapter, emitInbound } = createAdapter();
     const bridge = createRuntimeChannelTurnBridge({
-      runtime: createHostedRuntimePort(runtime),
+      runtime: runtime,
       adapter,
       onInboundTurn: async () => {
         events.push({ marker: "inbound-complete" });
@@ -142,7 +141,7 @@ describe("channel turn bridge hosted behavior helper", () => {
     });
     const { adapter } = createAdapter({ sendError: new Error("send failed") });
     const bridge = createRuntimeChannelTurnBridge({
-      runtime: createHostedRuntimePort(runtime),
+      runtime: runtime,
       adapter,
       onInboundTurn: async () => undefined,
     });
@@ -166,7 +165,7 @@ describe("channel turn bridge hosted behavior helper", () => {
     const inboundTurns: TurnEnvelope[] = [];
     const { adapter, emitInbound } = createAdapter();
     const bridge = createRuntimeChannelTurnBridge({
-      runtime: createHostedRuntimePort(runtime),
+      runtime: runtime,
       adapter,
       onInboundTurn: async (turn) => {
         inboundTurns.push(turn);

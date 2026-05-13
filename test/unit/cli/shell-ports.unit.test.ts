@@ -2,7 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
-import { BrewvaRuntime, createHostedRuntimePort } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaRuntimeOptions } from "@brewva/brewva-runtime";
 import { OPERATOR_QUESTION_ANSWERED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
 import {
   buildBrewvaPromptText,
@@ -25,8 +26,8 @@ import {
   resolveOpenSessionQuestionRequest,
 } from "../../../packages/brewva-gateway/src/ingress/internal/operator-questions.js";
 
-function createHostedTestRuntime(options: ConstructorParameters<typeof BrewvaRuntime>[0]) {
-  return createHostedRuntimePort(new BrewvaRuntime(options));
+function createHostedTestRuntime(options: BrewvaRuntimeOptions) {
+  return createBrewvaRuntime(options).hosted;
 }
 
 function writeDelegationOutcomeArtifact(
@@ -342,7 +343,7 @@ describe("cli shell session port", () => {
         const prompt = buildBrewvaPromptText(parts);
         sentMessages.push(prompt);
         if (sentMessages.length === 1) {
-          createHostedRuntimePort(runtime).extensions.hosted.events.record({
+          runtime.extensions.hosted.events.record({
             sessionId: "shell-port-session",
             type: "session_compact",
             payload: {
@@ -448,7 +449,7 @@ describe("cli shell session port", () => {
       },
       evidenceRefs: [],
     });
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "subagent_completed",
       payload: {
@@ -494,7 +495,7 @@ describe("cli shell session port", () => {
         if (!firstQuestion) {
           return;
         }
-        createHostedRuntimePort(runtime).extensions.hosted.events.record({
+        runtime.extensions.hosted.events.record({
           sessionId,
           type: OPERATOR_QUESTION_ANSWERED_EVENT_TYPE,
           payload: buildOperatorQuestionAnsweredPayload({

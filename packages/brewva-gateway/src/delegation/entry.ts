@@ -1,4 +1,4 @@
-import type { BrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaRuntimeRoot } from "@brewva/brewva-runtime";
 import type { DelegationPacket } from "@brewva/brewva-tools/contracts";
 import { buildDelegationPrompt } from "./prompt.js";
 import type { HostedDelegationTarget } from "./targets.js";
@@ -10,8 +10,8 @@ export interface PreparedSubagentEntry {
 }
 
 export function prepareSubagentEntry(input: {
-  readonly parentRuntime: BrewvaRuntime;
-  readonly childRuntime: BrewvaRuntime;
+  readonly parentRuntime: BrewvaRuntimeRoot;
+  readonly childRuntime: BrewvaRuntimeRoot;
   readonly childSessionId: string;
   readonly target: HostedDelegationTarget;
   readonly packet: DelegationPacket;

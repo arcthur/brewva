@@ -28,7 +28,7 @@
 - Carrier choice follows answer shape. Single facts should stay short, comparable evidence should use tables, and flows, dependencies, state transitions, timing, or replay analysis should prefer Mermaid when a graph is clearer than prose.
 - Diagrams and tables need one conclusion sentence, not prose duplication. The sentence names the decision or caveat; the table or diagram carries the structure.
 - Transcript rendering is deterministic and fail-closed. Stable assistant table blocks use OpenTUI Markdown rendering. Standalone Mermaid fences use the CLI-owned text renderer. Unsupported Mermaid syntax remains readable source instead of crashing transcript rendering.
-- Runtime truth remains untouched. Presentation policy does not persist transformed answers, alter event tape, create inspect surfaces, or redefine `runtime.authority`, `runtime.inspect`, or `runtime.operator`.
+- Runtime truth remains untouched. Presentation policy does not persist transformed answers, alter event tape, create inspect surfaces, or redefine root authority, root inspection, or operator ports.
 
 ## Non-goals
 

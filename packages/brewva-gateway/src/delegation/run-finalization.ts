@@ -1,4 +1,4 @@
-import type { BrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaRuntimeRoot } from "@brewva/brewva-runtime";
 import type { SessionCostSummary } from "@brewva/brewva-runtime/cost";
 import type { PatchSet, WorkerResult } from "@brewva/brewva-runtime/patch-history";
 import type { SubagentOutcomeArtifactRef } from "@brewva/brewva-tools/contracts";
@@ -19,7 +19,7 @@ export function resolveRunSummary(text: string, fallback: string): string {
 }
 
 export function aggregateChildCost(
-  runtime: BrewvaRuntime,
+  runtime: BrewvaRuntimeRoot,
   parentSessionId: string,
   childSummary: SessionCostSummary,
 ): void {

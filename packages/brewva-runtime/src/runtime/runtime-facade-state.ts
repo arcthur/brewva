@@ -62,8 +62,6 @@ import {
 import type { RuntimeKernelContext } from "./runtime-kernel.js";
 import { createRuntimeSemanticSurfaces } from "./runtime-surfaces.js";
 
-export const BREWVA_RUNTIME_INTERNAL_STATE_SYMBOL = Symbol.for("brewva.runtime.internal-state");
-
 type RuntimeCoreDependencyMap = RuntimeCoreDependencies;
 type RuntimeServiceDependencyMap = RuntimeServiceDependencies;
 type RuntimeLazyFactories = RuntimeLazyServiceFactories;
@@ -619,40 +617,22 @@ class RuntimeFacadeStateController implements BrewvaHostedRuntimePort {
   }
 }
 
-export type RuntimeFacadeState = Pick<
-  RuntimeFacadeStateController,
-  "identity" | "config" | "authority" | "inspect" | "operator" | "extensions"
-> & {
-  readonly [BREWVA_RUNTIME_INTERNAL_STATE_SYMBOL]: RuntimeFacadeStateController;
-};
+export type RuntimeFacadeControllerHandle = RuntimeFacadeStateController;
 
-export function createRuntimeFacadeState(options: BrewvaRuntimeOptions = {}): RuntimeFacadeState {
-  const runtime = new RuntimeFacadeStateController(options);
-  const facadeState = {
-    identity: runtime.identity,
-    config: runtime.config,
-    authority: runtime.authority,
-    inspect: runtime.inspect,
-    operator: runtime.operator,
-    extensions: runtime.extensions,
-  } as RuntimeFacadeState;
-  Object.defineProperty(facadeState, BREWVA_RUNTIME_INTERNAL_STATE_SYMBOL, {
-    value: runtime,
-    enumerable: false,
-    configurable: false,
-    writable: false,
-  });
-  return facadeState;
+export function createRuntimeFacadeController(
+  options: BrewvaRuntimeOptions = {},
+): RuntimeFacadeControllerHandle {
+  return new RuntimeFacadeStateController(options);
 }
 
 export function getRuntimeEffectLayer(
-  state: RuntimeFacadeState,
+  state: RuntimeFacadeControllerHandle,
 ): ReturnType<typeof createRuntimeEffectLayer> {
-  return state[BREWVA_RUNTIME_INTERNAL_STATE_SYMBOL].getEffectRuntimeLayer();
+  return state.getEffectRuntimeLayer();
 }
 
 export function getRuntimeEffectSpine(
-  state: RuntimeFacadeState,
+  state: RuntimeFacadeControllerHandle,
 ): ReturnType<typeof createRuntimeEffectSpine> {
-  return state[BREWVA_RUNTIME_INTERNAL_STATE_SYMBOL].getEffectRuntimeSpine();
+  return state.getEffectRuntimeSpine();
 }

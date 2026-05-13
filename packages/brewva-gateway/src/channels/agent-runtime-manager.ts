@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { BrewvaRuntime, createHostedRuntimePort } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import type { BrewvaHostedRuntimePort, BrewvaConfig } from "@brewva/brewva-runtime";
 import { parseJsonc } from "@brewva/brewva-runtime/config";
 import { normalizeAgentId } from "@brewva/brewva-runtime/context";
@@ -237,16 +237,14 @@ export class AgentRuntimeManager {
     const overlay = await loadAgentConfigOverlay(this.workspaceRoot, agentId);
     const merged = deepMerge(baseConfig, overlay) as BrewvaConfig;
     const config = forceNamespaceConfig(merged, agentId);
-    return createHostedRuntimePort(
-      new BrewvaRuntime({
-        cwd: this.controllerRuntime.identity.cwd,
-        agentId,
-        config,
-        governancePort: createTrustedLocalGovernancePort({ profile: "team" }),
-        routingScopes: this.routingScopes,
-        routingDefaultScopes: this.routingDefaultScopes,
-      }),
-    );
+    return createBrewvaRuntime({
+      cwd: this.controllerRuntime.identity.cwd,
+      agentId,
+      config,
+      governancePort: createTrustedLocalGovernancePort({ profile: "team" }),
+      routingScopes: this.routingScopes,
+      routingDefaultScopes: this.routingDefaultScopes,
+    }).hosted;
   }
 
   private enforceCapacity(): void {

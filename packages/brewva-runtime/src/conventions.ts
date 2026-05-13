@@ -1,4 +1,4 @@
-// Curated conventions contract subpath. Keep root imports focused on BrewvaRuntime.
+// Curated conventions contract subpath. Keep root imports focused on createBrewvaRuntime and explicit port types.
 export type {
   ApplyApprovedConventionChangeResult,
   BlastRadius,

@@ -1,6 +1,5 @@
 import { resolve } from "node:path";
 import { createInMemoryBoxPlane, type BoxPlane } from "@brewva/brewva-box";
-import { createToolRuntimePort } from "@brewva/brewva-runtime";
 import type { BrewvaToolContext } from "@brewva/brewva-substrate/tools";
 import type { BrewvaBundledToolRuntime } from "@brewva/brewva-tools/contracts";
 import { createRuntimeConfig, createRuntimeFixture } from "../../helpers/runtime.js";
@@ -121,7 +120,10 @@ export function createRuntimeForExecTests(input?: {
   });
 
   const runtime: BrewvaBundledToolRuntime = {
-    ...createToolRuntimePort(runtimeFixture),
+    identity: runtimeFixture.identity,
+    config: runtimeFixture.config,
+    authority: runtimeFixture.authority,
+    inspect: runtimeFixture.inspect,
     boxPlane: input?.boxPlane ?? createInMemoryBoxPlane(),
     extensions: {
       tools: {

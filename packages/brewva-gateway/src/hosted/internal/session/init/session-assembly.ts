@@ -1,8 +1,7 @@
 import { readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
-import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort, BrewvaRuntimeInstance } from "@brewva/brewva-runtime";
 import { asBrewvaSessionId } from "@brewva/brewva-runtime/core";
 import { TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
 import type { CreateBrewvaSessionOptions as RuntimeCreateBrewvaSessionOptions } from "@brewva/brewva-runtime/session";
@@ -85,7 +84,7 @@ export interface HostedSessionResult {
 }
 
 export interface CreateHostedSessionOptions extends RuntimeCreateBrewvaSessionOptions {
-  runtime?: BrewvaRuntime | BrewvaHostedRuntimePort;
+  runtime?: BrewvaRuntimeInstance | BrewvaHostedRuntimePort;
   extensions?: HostedExtensionPlugin[];
   localHooks?: readonly LocalHookPort[];
   orchestration?: BrewvaToolOrchestration;

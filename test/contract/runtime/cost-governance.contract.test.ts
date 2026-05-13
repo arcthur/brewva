@@ -1,9 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import {
-  BrewvaRuntime,
-  DEFAULT_BREWVA_CONFIG,
-  createOperatorRuntimePort,
-} from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
+import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
 import { cleanupTestWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
 
 async function flushAsyncEvents(): Promise<void> {
@@ -24,7 +21,7 @@ describe("cost governance events", () => {
         }
       | undefined;
     try {
-      const runtime = new BrewvaRuntime({
+      const runtime = createBrewvaRuntime({
         cwd: workspace,
         config,
         governancePort: {
@@ -40,9 +37,9 @@ describe("cost governance events", () => {
             };
           },
         },
-      });
+      }).hosted;
       const sessionId = "cost-governance-none-1";
-      createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+      runtime.operator.context.lifecycle.onTurnStart(sessionId, 1);
 
       runtime.authority.cost.usage.recordAssistant({
         sessionId,
@@ -83,7 +80,7 @@ describe("cost governance events", () => {
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
     config.infrastructure.events.level = "debug";
     try {
-      const runtime = new BrewvaRuntime({
+      const runtime = createBrewvaRuntime({
         cwd: workspace,
         config,
         governancePort: {
@@ -92,9 +89,9 @@ describe("cost governance events", () => {
             reason: "looping_token_burn",
           }),
         },
-      });
+      }).hosted;
       const sessionId = "cost-governance-detected-1";
-      createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+      runtime.operator.context.lifecycle.onTurnStart(sessionId, 1);
 
       runtime.authority.cost.usage.recordAssistant({
         sessionId,
@@ -126,7 +123,7 @@ describe("cost governance events", () => {
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
     config.infrastructure.events.level = "debug";
     try {
-      const runtime = new BrewvaRuntime({
+      const runtime = createBrewvaRuntime({
         cwd: workspace,
         config,
         governancePort: {
@@ -134,9 +131,9 @@ describe("cost governance events", () => {
             throw new Error("cost-anomaly-check-failed");
           },
         },
-      });
+      }).hosted;
       const sessionId = "cost-governance-error-1";
-      createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+      runtime.operator.context.lifecycle.onTurnStart(sessionId, 1);
 
       runtime.authority.cost.usage.recordAssistant({
         sessionId,

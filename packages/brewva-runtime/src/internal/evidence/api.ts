@@ -1,6 +1,6 @@
-// Internal evidence vocabulary is not a runtime domain; callers must import it
-// through the concrete proposal, ledger, claim, or verification owner that owns
-// the receipt being described.
+// Curated evidence owner only. This directory centralizes shared evidence
+// vocabulary and parsers for proposal, ledger, claim, and verification receipts;
+// it must not become a generic runtime-internal drawer for unrelated helpers.
 export type {
   CommandFailureClass,
   EvidenceDiversityCluster,

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { HostedDelegationStore } from "@brewva/brewva-gateway";
-import { BrewvaRuntime, createHostedRuntimePort } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort, BrewvaRuntimeOptions } from "@brewva/brewva-runtime";
 import { CURRENT_DELEGATION_CONTRACT_VERSION } from "@brewva/brewva-runtime/delegation";
 import type { SubagentRunRequest } from "@brewva/brewva-tools/contracts";
 import {
@@ -9,8 +10,8 @@ import {
 } from "@brewva/brewva-tools/delegation";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
-function createHostedTestRuntime(options: ConstructorParameters<typeof BrewvaRuntime>[0]) {
-  return createHostedRuntimePort(new BrewvaRuntime(options));
+function createHostedTestRuntime(options: BrewvaRuntimeOptions) {
+  return createBrewvaRuntime(options).hosted;
 }
 
 function fakeContext(sessionId: string): any {
@@ -30,8 +31,8 @@ function extractText(result: { content?: Array<{ type: string; text?: string }> 
   );
 }
 
-function buildStatusRuntime(runtime: BrewvaRuntime, store: HostedDelegationStore) {
-  const runtimeWithDelegation = Object.create(runtime) as BrewvaRuntime & {
+function buildStatusRuntime(runtime: BrewvaHostedRuntimePort, store: HostedDelegationStore) {
+  const runtimeWithDelegation = Object.create(runtime) as BrewvaHostedRuntimePort & {
     delegation: {
       listRuns: typeof store.listRuns;
       listPendingOutcomes: typeof store.listPendingOutcomes;
@@ -50,7 +51,7 @@ describe("subagent control tools", () => {
       cwd: createTestWorkspace("subagent-status-runtime"),
     });
     const store = new HostedDelegationStore(runtime);
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId: "session-status",
       type: "subagent_spawned",
       payload: {
@@ -124,7 +125,7 @@ describe("subagent control tools", () => {
       cwd: createTestWorkspace("subagent-status-handoff-runtime"),
     });
     const store = new HostedDelegationStore(runtime);
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId: "session-status-handoff",
       type: "subagent_completed",
       payload: {
@@ -168,7 +169,7 @@ describe("subagent control tools", () => {
       cwd: createTestWorkspace("subagent-status-detail-mode-runtime"),
     });
     const store = new HostedDelegationStore(runtime);
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId: "session-status-detail-mode",
       type: "subagent_completed",
       payload: {
@@ -189,7 +190,7 @@ describe("subagent control tools", () => {
         summary: "Public review summary.",
       },
     });
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId: "session-status-detail-mode",
       type: "subagent_completed",
       payload: {

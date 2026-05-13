@@ -2,7 +2,9 @@ import { expect } from "bun:test";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DEFAULT_BREWVA_CONFIG, BrewvaRuntime } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
+import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
 import type { BrewvaConfig } from "@brewva/brewva-runtime";
 import type { BrewvaBundledToolRuntime } from "@brewva/brewva-tools/contracts";
 import { createBundledToolRuntime as createBundledToolRuntimeFromRuntime } from "../../helpers/runtime.js";
@@ -44,18 +46,20 @@ export function workspaceWithSampleFiles(prefix: string): string {
   return workspace;
 }
 
-export function createRuntime(workspace: string, config?: BrewvaConfig): BrewvaRuntime {
+export function createRuntime(workspace: string, config?: BrewvaConfig): BrewvaHostedRuntimePort {
   const runtimeConfig = structuredClone(config ?? DEFAULT_BREWVA_CONFIG);
   runtimeConfig.infrastructure.events.level = "debug";
-  return new BrewvaRuntime({ cwd: workspace, config: runtimeConfig });
+  return createBrewvaRuntime({ cwd: workspace, config: runtimeConfig }).hosted;
 }
 
-export function createBundledToolRuntime(runtime: BrewvaRuntime): BrewvaBundledToolRuntime {
+export function createBundledToolRuntime(
+  runtime: BrewvaHostedRuntimePort,
+): BrewvaBundledToolRuntime {
   return createBundledToolRuntimeFromRuntime(runtime);
 }
 
 export function getParallelReadPayloads(
-  runtime: BrewvaRuntime,
+  runtime: BrewvaHostedRuntimePort,
   sessionId: string,
 ): Array<Record<string, unknown>> {
   const payloads: Array<Record<string, unknown>> = [];

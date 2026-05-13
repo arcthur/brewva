@@ -1,4 +1,4 @@
-// Curated schedule contract subpath. Keep root imports focused on BrewvaRuntime.
+// Curated schedule contract subpath. Keep root imports focused on createBrewvaRuntime and explicit port types.
 export type {
   ConvergencePredicate,
   RecoveryWalIngressWatermarkRecord,

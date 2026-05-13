@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { BrewvaRuntime, createOperatorRuntimePort } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import { assertCliSuccess, runCliSync } from "../../helpers/cli.js";
 import { patchDateNow } from "../../helpers/global-state.js";
 import { cleanupTestWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
@@ -15,9 +15,9 @@ describe("cli contract: undo", () => {
     writeFileSync(filePath, baseline, "utf8");
 
     try {
-      const runtime = new BrewvaRuntime({ cwd: workspace });
+      const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
       const sessionId = "system-undo-session";
-      createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+      runtime.operator.context.lifecycle.onTurnStart(sessionId, 1);
       runtime.authority.session.rewind.recordCheckpoint(sessionId, {
         turnId: "turn-1",
         prompt: {
@@ -62,12 +62,9 @@ describe("cli contract: undo", () => {
     writeFileSync(redoFilePath, "REDO_BASELINE\n", "utf8");
 
     try {
-      const runtime = new BrewvaRuntime({ cwd: workspace });
+      const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
       const undoOnlySessionId = "system-undo-only-session";
-      createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(
-        undoOnlySessionId,
-        1,
-      );
+      runtime.operator.context.lifecycle.onTurnStart(undoOnlySessionId, 1);
       runtime.authority.session.rewind.recordCheckpoint(undoOnlySessionId, {
         turnId: "turn-undo-only",
         prompt: {
@@ -90,7 +87,7 @@ describe("cli contract: undo", () => {
       });
 
       const redoSessionId = "system-redo-session";
-      createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(redoSessionId, 1);
+      runtime.operator.context.lifecycle.onTurnStart(redoSessionId, 1);
       runtime.authority.session.rewind.recordCheckpoint(redoSessionId, {
         turnId: "turn-redo",
         prompt: {
@@ -138,13 +135,10 @@ describe("cli contract: undo", () => {
     let now = 1_710_000_000_000;
     const restoreDateNow = patchDateNow(() => now);
     try {
-      const runtime = new BrewvaRuntime({ cwd: workspace });
+      const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
       const olderCheckpointSessionId = "system-older-checkpoint-session";
       now = 1_710_000_000_100;
-      createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(
-        olderCheckpointSessionId,
-        1,
-      );
+      runtime.operator.context.lifecycle.onTurnStart(olderCheckpointSessionId, 1);
       runtime.authority.session.rewind.recordCheckpoint(olderCheckpointSessionId, {
         turnId: "turn-older-checkpoint",
         prompt: {
@@ -168,10 +162,7 @@ describe("cli contract: undo", () => {
 
       const newerCheckpointSessionId = "system-newer-checkpoint-session";
       now = 1_710_000_000_200;
-      createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(
-        newerCheckpointSessionId,
-        1,
-      );
+      runtime.operator.context.lifecycle.onTurnStart(newerCheckpointSessionId, 1);
       runtime.authority.session.rewind.recordCheckpoint(newerCheckpointSessionId, {
         turnId: "turn-newer-checkpoint",
         prompt: {

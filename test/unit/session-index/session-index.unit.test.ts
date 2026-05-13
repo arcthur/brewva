@@ -1,12 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import {
-  BrewvaRuntime,
-  DEFAULT_BREWVA_CONFIG,
-  createOperatorRuntimePort,
-  createHostedRuntimePort,
-} from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
+import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
 import { type BrewvaEventRecord } from "@brewva/brewva-runtime/events";
 import { tokenizeSearchContent } from "@brewva/brewva-search";
 import { SESSION_INDEX_SCHEMA_VERSION, createSessionIndex } from "@brewva/brewva-session-index";
@@ -36,7 +33,10 @@ async function readRows<T extends Record<string, unknown>>(
   }
 }
 
-function createIndexedRuntime(name: string): { workspace: string; runtime: BrewvaRuntime } {
+function createIndexedRuntime(name: string): {
+  workspace: string;
+  runtime: BrewvaHostedRuntimePort;
+} {
   const workspace = createTestWorkspace(name);
   mkdirSync(join(workspace, "packages", "gateway"), { recursive: true });
   mkdirSync(join(workspace, "packages", "cli"), { recursive: true });
@@ -45,15 +45,15 @@ function createIndexedRuntime(name: string): { workspace: string; runtime: Brewv
   writeFileSync(join(workspace, ".brewva", "brewva.json"), "{}\n", "utf8");
   writeFileSync(join(workspace, "packages", "gateway", ".brewva", "brewva.json"), "{}\n", "utf8");
   writeFileSync(join(workspace, "packages", "cli", ".brewva", "brewva.json"), "{}\n", "utf8");
-  const runtime = new BrewvaRuntime({
+  const runtime = createBrewvaRuntime({
     cwd: workspace,
     config: structuredClone(DEFAULT_BREWVA_CONFIG),
-  });
+  }).hosted;
   return { workspace, runtime };
 }
 
 function recordTaskSession(
-  runtime: BrewvaRuntime,
+  runtime: BrewvaHostedRuntimePort,
   input: {
     sessionId: string;
     timestamp: number;
@@ -62,7 +62,7 @@ function recordTaskSession(
     evidenceText: string;
   },
 ): BrewvaEventRecord {
-  createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(input.sessionId, 1);
+  runtime.operator.context.lifecycle.onTurnStart(input.sessionId, 1);
   runtime.authority.task.spec.set(input.sessionId, {
     schema: "brewva.task.v1",
     goal: input.goal,
@@ -70,7 +70,7 @@ function recordTaskSession(
       files: [input.targetFile],
     },
   });
-  return createHostedRuntimePort(runtime).extensions.hosted.events.record({
+  return runtime.extensions.hosted.events.record({
     sessionId: input.sessionId,
     type: "verification_outcome_recorded",
     timestamp: input.timestamp,
@@ -168,7 +168,7 @@ describe("session index", () => {
       kind: "main",
       forkPoint: { kind: "session_root" },
     });
-    const mainSource = createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    const mainSource = runtime.extensions.hosted.events.record({
       sessionId,
       type: "message_end",
       payload: {
@@ -216,7 +216,7 @@ describe("session index", () => {
       admission: "context_required",
       summary: "Adopt review outcome",
     });
-    const reviewSource = createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    const reviewSource = runtime.extensions.hosted.events.record({
       sessionId,
       type: "message_end",
       payload: {
@@ -328,7 +328,7 @@ describe("session index", () => {
     );
     expect(firstState[0]?.indexed_event_count).toBe(3);
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId: "indexed-catch-up",
       type: "tool_result_recorded",
       timestamp: 1_700_000_002_000,
@@ -526,7 +526,7 @@ describe("session index", () => {
 
     let lateEvent: BrewvaEventRecord | undefined;
     for (let index = 0; index < 25; index += 1) {
-      const event = createHostedRuntimePort(runtime).extensions.hosted.events.record({
+      const event = runtime.extensions.hosted.events.record({
         sessionId: "indexed-long-session",
         type: "tool_result_recorded",
         timestamp: 1_700_000_001_000 + index,
@@ -795,7 +795,7 @@ describe("session index", () => {
     writeFileSync(filePath, "export const value = 1;\n", "utf8");
 
     const sessionId = "indexed-rewind-session";
-    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+    runtime.operator.context.lifecycle.onTurnStart(sessionId, 1);
     const checkpointA = runtime.authority.session.rewind.recordCheckpoint(sessionId, {
       leafEntryId: "leaf-a",
       prompt: { text: "Set value to 2", parts: [] },
@@ -814,7 +814,7 @@ describe("session index", () => {
       channelSuccess: true,
     });
 
-    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 2);
+    runtime.operator.context.lifecycle.onTurnStart(sessionId, 2);
     const checkpointB = runtime.authority.session.rewind.recordCheckpoint(sessionId, {
       leafEntryId: "leaf-b",
       prompt: { text: "Set value to 3", parts: [] },

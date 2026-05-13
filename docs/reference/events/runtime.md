@@ -36,7 +36,7 @@ changes, cache observations, and request-shaping decisions. They are used to
 inspect why the runtime advised or forced compaction, not to reconstruct hidden
 prompt state.
 
-Context compaction events should be read with `runtime.inspect.context.*`:
+Context compaction events should be read with `root.inspect.context.*`:
 
 - compaction advisory and request events explain numeric status transitions
 - gate events explain why a tool was blocked or allowed

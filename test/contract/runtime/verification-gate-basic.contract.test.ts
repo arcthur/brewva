@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import { createRuntimeConfig } from "../../helpers/runtime.js";
 import { cleanupWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
 
@@ -13,8 +14,8 @@ afterEach(() => {
   if (workspace) cleanupWorkspace(workspace);
 });
 
-function createCleanRuntime(): BrewvaRuntime {
-  return new BrewvaRuntime({
+function createCleanRuntime(): BrewvaHostedRuntimePort {
+  return createBrewvaRuntime({
     cwd: workspace,
     config: createRuntimeConfig((config) => {
       config.verification.defaultLevel = "quick";
@@ -23,7 +24,7 @@ function createCleanRuntime(): BrewvaRuntime {
       config.verification.checks.strict = ["tests"];
       config.verification.commands.tests = "true";
     }),
-  });
+  }).hosted;
 }
 
 describe("verification gate", () => {
@@ -124,7 +125,7 @@ describe("verification gate", () => {
   });
 
   test("standard level executes configured commands and records ledger evidence", async () => {
-    const runtime = new BrewvaRuntime({
+    const runtime = createBrewvaRuntime({
       cwd: workspace,
       config: createRuntimeConfig((config) => {
         config.verification.defaultLevel = "standard";
@@ -135,7 +136,7 @@ describe("verification gate", () => {
         config.verification.commands.tests = "false";
         config.verification.commands["diff-review"] = "true";
       }),
-    });
+    }).hosted;
     const sessionId = "verify-standard-command-execution";
     runtime.authority.tools.tracking.markCall(sessionId, "edit");
 

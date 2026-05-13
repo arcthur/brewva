@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { BrewvaRuntime, createHostedRuntimePort } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import { asBrewvaIntentId } from "@brewva/brewva-runtime/core";
 import { SCHEDULE_EVENT_TYPE } from "@brewva/brewva-runtime/events";
 import { createSchedulerService } from "@brewva/brewva-runtime/recovery";
@@ -20,7 +20,7 @@ import {
 describe("scheduler service projection contract", () => {
   test("keeps append order for same-timestamp events during replay", async () => {
     const workspace = createWorkspace("same-timestamp-order");
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const sessionId = "session-same-timestamp-order";
     const intentId = "intent-same-timestamp-order";
     const timestamp = Date.UTC(2026, 0, 1, 0, 0, 0, 0);
@@ -78,12 +78,12 @@ describe("scheduler service projection contract", () => {
 
   test("updates active intent schedule targets and emits intent_updated", async () => {
     const workspace = createWorkspace("update-intent");
-    const runtime = new BrewvaRuntime({
+    const runtime = createBrewvaRuntime({
       cwd: workspace,
       config: createSchedulerConfig((config) => {
         config.schedule.minIntervalMs = 60_000;
       }),
-    });
+    }).hosted;
     const scheduler = createSchedulerService({
       runtime: schedulerRuntimePort(runtime),
       enableExecution: false,
@@ -142,12 +142,12 @@ describe("scheduler service projection contract", () => {
 
   test("updates cron intent timeZone without changing the cron expression", async () => {
     const workspace = createWorkspace("update-timezone-only");
-    const runtime = new BrewvaRuntime({
+    const runtime = createBrewvaRuntime({
       cwd: workspace,
       config: createSchedulerConfig((config) => {
         config.schedule.minIntervalMs = 60_000;
       }),
-    });
+    }).hosted;
 
     const nowMs = Date.UTC(2026, 0, 1, 0, 30, 0, 0);
     const scheduler = createSchedulerService({
@@ -196,16 +196,16 @@ describe("scheduler service projection contract", () => {
 
   test("replay prefers event-carried nextRunAt for cron intents", async () => {
     const workspace = createWorkspace("replay-authoritative-next-run");
-    const runtime = new BrewvaRuntime({
+    const runtime = createBrewvaRuntime({
       cwd: workspace,
       config: createSchedulerConfig((config) => {
         config.schedule.minIntervalMs = 60_000;
       }),
-    });
+    }).hosted;
     const sessionId = "session-replay-authoritative-next-run";
     const forcedNextRunAt = Date.UTC(2026, 0, 1, 12, 34, 56, 789);
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: SCHEDULE_EVENT_TYPE,
       payload: buildScheduleIntentCreatedEvent({
@@ -237,11 +237,11 @@ describe("scheduler service projection contract", () => {
 
   test("rejects created replay payloads that omit nextRunAt", async () => {
     const workspace = createWorkspace("replay-missing-next-run");
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const sessionId = "session-replay-missing-next-run";
     const runAt = Date.UTC(2026, 0, 1, 0, 5, 0, 0);
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: SCHEDULE_EVENT_TYPE,
       payload: {
@@ -273,7 +273,7 @@ describe("scheduler service projection contract", () => {
 
   test("rejects updates when the target intent is not active", async () => {
     const workspace = createWorkspace("update-not-active");
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const scheduler = createSchedulerService({
       runtime: schedulerRuntimePort(runtime),
       enableExecution: false,
@@ -314,7 +314,7 @@ describe("scheduler service projection contract", () => {
 
   test("rejects timeZone-only updates for runAt intents", async () => {
     const workspace = createWorkspace("update-timezone-runat-guard");
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const scheduler = createSchedulerService({
       runtime: schedulerRuntimePort(runtime),
       enableExecution: false,

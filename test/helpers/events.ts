@@ -1,7 +1,6 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
-import { createHostedRuntimePort } from "@brewva/brewva-runtime";
-import type { BrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import type { BrewvaEventRecord } from "@brewva/brewva-runtime/events";
 
 export type RuntimeEventLike = {
@@ -217,7 +216,7 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 export function recordHostedDelegationOutcome(input: {
-  runtime: BrewvaRuntime;
+  runtime: BrewvaHostedRuntimePort;
   sessionId: string;
   runId: string;
   outcome: Record<string, unknown>;
@@ -236,7 +235,7 @@ export function recordHostedDelegationOutcome(input: {
   const payload = input.payload ?? {};
   return {
     artifactPath: relativeArtifactPath,
-    event: createHostedRuntimePort(input.runtime).extensions.hosted.events.record({
+    event: input.runtime.extensions.hosted.events.record({
       sessionId: input.sessionId,
       type: "subagent_completed",
       ...(input.timestamp !== undefined ? { timestamp: input.timestamp } : {}),

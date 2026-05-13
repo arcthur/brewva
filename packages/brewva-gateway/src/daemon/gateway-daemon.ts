@@ -12,7 +12,7 @@ import {
   type BrewvaObservationFields,
   type ScopedScheduleHandle,
 } from "@brewva/brewva-effect";
-import { BrewvaRuntime, createHostedRuntimePort } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import type { BrewvaScheduleSelfImproveConfig } from "@brewva/brewva-runtime/config";
 import { loadBrewvaConfig, resolveWorkspaceRootDir } from "@brewva/brewva-runtime/config";
@@ -498,13 +498,11 @@ export class GatewayDaemon {
       );
     }
     this.schedulerRuntime = !this.schedulerUnavailableReason
-      ? createHostedRuntimePort(
-          new BrewvaRuntime({
-            cwd: resolvedCwd,
-            config: runtimeConfig,
-            governancePort: createTrustedLocalGovernancePort({ profile: "team" }),
-          }),
-        )
+      ? createBrewvaRuntime({
+          cwd: resolvedCwd,
+          config: runtimeConfig,
+          governancePort: createTrustedLocalGovernancePort({ profile: "team" }),
+        }).hosted
       : null;
     if (this.schedulerRuntime && !this.schedulerUnavailableReason) {
       const schedulerRuntime = this.schedulerRuntime;

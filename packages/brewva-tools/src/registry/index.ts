@@ -32,6 +32,10 @@ export {
 } from "./tool.js";
 export { createCapabilityScopedToolRuntime } from "./capability-scope.js";
 export {
+  BREWVA_TOOL_RUNTIME_CAPABILITY_PATHS,
+  isBrewvaToolRuntimeCapabilityPath,
+} from "./runtime-capability-inventory.js";
+export {
   createManagedBrewvaToolFactory,
   createRuntimeBoundBrewvaToolFactory,
   type ManagedBrewvaToolFactory,

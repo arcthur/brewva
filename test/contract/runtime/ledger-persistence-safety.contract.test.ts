@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { appendFileSync, readFileSync } from "node:fs";
-import { BrewvaRuntime, createOperatorRuntimePort } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import {
   RUNTIME_CONTRACT_CONFIG_PATH,
   createRuntimeContractConfig as createConfig,
@@ -21,10 +21,13 @@ describe("ledger persistence safety", () => {
       }),
     );
 
-    const runtime = new BrewvaRuntime({ cwd: workspace, configPath: RUNTIME_CONTRACT_CONFIG_PATH });
+    const runtime = createBrewvaRuntime({
+      cwd: workspace,
+      configPath: RUNTIME_CONTRACT_CONFIG_PATH,
+    }).hosted;
     const sessionId = "ledger-1";
     for (let i = 0; i < 5; i += 1) {
-      createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, i + 1);
+      runtime.operator.context.lifecycle.onTurnStart(sessionId, i + 1);
       runtime.authority.tools.invocation.recordResult({
         sessionId,
         toolName: "exec",
@@ -46,7 +49,10 @@ describe("ledger persistence safety", () => {
     const workspace = createWorkspace("redact");
     writeConfig(workspace, createConfig({}));
 
-    const runtime = new BrewvaRuntime({ cwd: workspace, configPath: RUNTIME_CONTRACT_CONFIG_PATH });
+    const runtime = createBrewvaRuntime({
+      cwd: workspace,
+      configPath: RUNTIME_CONTRACT_CONFIG_PATH,
+    }).hosted;
     const sessionId = "redact-1";
     runtime.authority.tools.invocation.recordResult({
       sessionId,
@@ -71,7 +77,10 @@ describe("ledger persistence safety", () => {
     const workspace = createWorkspace("ledger-bad-lines");
     writeConfig(workspace, createConfig({}));
 
-    const runtime = new BrewvaRuntime({ cwd: workspace, configPath: RUNTIME_CONTRACT_CONFIG_PATH });
+    const runtime = createBrewvaRuntime({
+      cwd: workspace,
+      configPath: RUNTIME_CONTRACT_CONFIG_PATH,
+    }).hosted;
     const sessionId = "ledger-bad-lines-1";
     runtime.authority.tools.invocation.recordResult({
       sessionId,
@@ -97,10 +106,13 @@ describe("ledger persistence safety", () => {
   test("keeps row turns aligned with turn_start instead of tool-result sequence", async () => {
     const workspace = createWorkspace("turn-alignment");
     writeConfig(workspace, createConfig({}));
-    const runtime = new BrewvaRuntime({ cwd: workspace, configPath: RUNTIME_CONTRACT_CONFIG_PATH });
+    const runtime = createBrewvaRuntime({
+      cwd: workspace,
+      configPath: RUNTIME_CONTRACT_CONFIG_PATH,
+    }).hosted;
     const sessionId = "turn-alignment-1";
 
-    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 7);
+    runtime.operator.context.lifecycle.onTurnStart(sessionId, 7);
     runtime.authority.tools.invocation.recordResult({
       sessionId,
       toolName: "exec",
@@ -136,10 +148,13 @@ describe("ledger persistence safety", () => {
   test("writes session_compact evidence into ledger", async () => {
     const workspace = createWorkspace("context-compaction-ledger");
     writeConfig(workspace, createConfig({}));
-    const runtime = new BrewvaRuntime({ cwd: workspace, configPath: RUNTIME_CONTRACT_CONFIG_PATH });
+    const runtime = createBrewvaRuntime({
+      cwd: workspace,
+      configPath: RUNTIME_CONTRACT_CONFIG_PATH,
+    }).hosted;
     const sessionId = "context-compaction-ledger-1";
 
-    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 3);
+    runtime.operator.context.lifecycle.onTurnStart(sessionId, 3);
     runtime.authority.session.compaction.commit(sessionId, {
       compactId: "cmp-ledger",
       sanitizedSummary: "Persist the durable compaction receipt in the ledger.",

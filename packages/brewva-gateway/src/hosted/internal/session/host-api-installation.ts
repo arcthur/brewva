@@ -1,9 +1,9 @@
-import {
-  BrewvaRuntime,
-  createHostedRuntimePort,
-  createToolRuntimePort,
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
+import type {
+  BrewvaHostedRuntimePort,
+  BrewvaRuntimeInstance,
+  BrewvaRuntimeOptions,
 } from "@brewva/brewva-runtime";
-import type { BrewvaHostedRuntimePort, BrewvaRuntimeOptions } from "@brewva/brewva-runtime";
 import { createTrustedLocalGovernancePort } from "@brewva/brewva-runtime/governance";
 import type { InternalHostPlugin, InternalHostPluginApi } from "@brewva/brewva-substrate/host-api";
 import { defineInternalHostPlugin } from "@brewva/brewva-substrate/host-api";
@@ -27,6 +27,7 @@ import {
   registerTurnLifecyclePorts,
   type TurnLifecyclePort,
 } from "../thread-loop/lifecycle/turn-lifecycle-port.js";
+import { toHostedRuntimePort, toToolRuntimePort } from "./runtime-ports.js";
 import { DEFAULT_HOSTED_ROUTING_SCOPES } from "./session-factory.js";
 import {
   createHostedToolExecutionCoordinator,
@@ -164,7 +165,7 @@ export {
 } from "./tools/tool-output-display.js";
 
 export interface CreateHostedBehaviorHostAdapterOptions extends BrewvaRuntimeOptions {
-  runtime?: BrewvaRuntime | BrewvaHostedRuntimePort;
+  runtime?: BrewvaRuntimeInstance | BrewvaHostedRuntimePort;
   registerTools?: boolean;
   orchestration?: BrewvaToolOrchestration;
   delegationStore?: HostedDelegationStore;
@@ -180,12 +181,12 @@ function assertHostedBehaviorHostAdapterRuntimeCompatibility(
 ): void {
   if (options.runtime && options.routingScopes && options.routingScopes.length > 0) {
     throw new Error(
-      "routingScopes must be applied when constructing BrewvaRuntime; createHostedBehaviorHostAdapter does not mutate runtime.config",
+      "routingScopes must be applied when calling createBrewvaRuntime; createHostedBehaviorHostAdapter does not mutate runtime.config",
     );
   }
   if (options.runtime && options.routingDefaultScopes && options.routingDefaultScopes.length > 0) {
     throw new Error(
-      "routingDefaultScopes must be applied when constructing BrewvaRuntime; createHostedBehaviorHostAdapter does not infer runtime config intent from an existing runtime",
+      "routingDefaultScopes must be applied when calling createBrewvaRuntime; createHostedBehaviorHostAdapter does not infer runtime config intent from an existing runtime",
     );
   }
 }
@@ -210,7 +211,7 @@ function buildManagedTools(
     : undefined;
   return buildBrewvaTools({
     runtime: {
-      ...createToolRuntimePort(runtime),
+      ...toToolRuntimePort(runtime),
     },
     orchestration: options.orchestration,
     delegation,
@@ -312,9 +313,9 @@ export function createHostedBehaviorHostAdapter(
     ],
     register(hostApi) {
       assertHostedBehaviorHostAdapterRuntimeCompatibility(options);
-      const runtime = createHostedRuntimePort(
+      const runtime = toHostedRuntimePort(
         options.runtime ??
-          new BrewvaRuntime({
+          createBrewvaRuntime({
             ...options,
             routingDefaultScopes:
               options.routingScopes && options.routingScopes.length > 0

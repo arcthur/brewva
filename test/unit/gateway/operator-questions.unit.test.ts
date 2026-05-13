@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
-import { BrewvaRuntime, createHostedRuntimePort } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import {
   classifyOpenQuestion,
   classifyQuestionRequest,
@@ -74,7 +74,7 @@ describe("operator question collection", () => {
 
   test("prefers delegated structured questionRequests over follow-up fallback text", async () => {
     const workspaceRoot = createTempWorkspace("brewva-operator-questions-");
-    const runtime = new BrewvaRuntime({ cwd: workspaceRoot });
+    const runtime = createBrewvaRuntime({ cwd: workspaceRoot }).hosted;
     const sessionId = "session-structured-questions";
     const runId = "run-structured";
 
@@ -114,7 +114,7 @@ describe("operator question collection", () => {
       evidenceRefs: [],
     });
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "subagent_completed",
       payload: {
@@ -144,7 +144,7 @@ describe("operator question collection", () => {
 
   test("falls back to delegated followUpQuestions when no structured request exists", async () => {
     const workspaceRoot = createTempWorkspace("brewva-operator-follow-up-");
-    const runtime = new BrewvaRuntime({ cwd: workspaceRoot });
+    const runtime = createBrewvaRuntime({ cwd: workspaceRoot }).hosted;
     const sessionId = "session-follow-up-questions";
     const runId = "run-follow-up";
 
@@ -171,7 +171,7 @@ describe("operator question collection", () => {
       evidenceRefs: [],
     });
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "subagent_completed",
       payload: {
@@ -202,7 +202,7 @@ describe("operator question collection", () => {
 
   test("falls back to legacy delegated openQuestions when canonical follow-up questions are absent", async () => {
     const workspaceRoot = createTempWorkspace("brewva-operator-legacy-open-questions-");
-    const runtime = new BrewvaRuntime({ cwd: workspaceRoot });
+    const runtime = createBrewvaRuntime({ cwd: workspaceRoot }).hosted;
     const sessionId = "session-legacy-follow-up";
     const runId = "run-legacy-follow-up";
 
@@ -227,7 +227,7 @@ describe("operator question collection", () => {
       evidenceRefs: [],
     });
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "subagent_completed",
       payload: {
@@ -254,7 +254,7 @@ describe("operator question collection", () => {
 
   test("keeps single custom structured requests classified as input requests", async () => {
     const workspaceRoot = createTempWorkspace("brewva-operator-structured-custom-");
-    const runtime = new BrewvaRuntime({ cwd: workspaceRoot });
+    const runtime = createBrewvaRuntime({ cwd: workspaceRoot }).hosted;
     const sessionId = "session-structured-custom-request";
     const runId = "run-structured-custom-request";
 
@@ -290,7 +290,7 @@ describe("operator question collection", () => {
       evidenceRefs: [],
     });
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "subagent_completed",
       payload: {
@@ -318,7 +318,7 @@ describe("operator question collection", () => {
 
   test("drops structured requests that cannot be answered", async () => {
     const workspaceRoot = createTempWorkspace("brewva-operator-invalid-request-");
-    const runtime = new BrewvaRuntime({ cwd: workspaceRoot });
+    const runtime = createBrewvaRuntime({ cwd: workspaceRoot }).hosted;
     const sessionId = "session-invalid-request";
     const runId = "run-invalid-request";
 
@@ -357,7 +357,7 @@ describe("operator question collection", () => {
       evidenceRefs: [],
     });
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "subagent_completed",
       payload: {

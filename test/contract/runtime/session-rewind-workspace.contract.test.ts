@@ -1,11 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import {
-  BrewvaRuntime,
-  createOperatorRuntimePort,
-  createHostedRuntimePort,
-} from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import {
   RUNTIME_CONTRACT_CONFIG_PATH,
   createRuntimeContractConfig as createConfig,
@@ -23,8 +19,11 @@ describe("session rewind workspace", () => {
     const filePath = join(workspace, "src/session-rewind.ts");
     writeFileSync(filePath, "export const value = 1;\n", "utf8");
 
-    const runtime = new BrewvaRuntime({ cwd: workspace, configPath: RUNTIME_CONTRACT_CONFIG_PATH });
-    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+    const runtime = createBrewvaRuntime({
+      cwd: workspace,
+      configPath: RUNTIME_CONTRACT_CONFIG_PATH,
+    }).hosted;
+    runtime.operator.context.lifecycle.onTurnStart(sessionId, 1);
 
     const checkpoint = runtime.authority.session.rewind.recordCheckpoint(sessionId, {
       leafEntryId: "leaf-before-turn",
@@ -112,8 +111,11 @@ describe("session rewind workspace", () => {
     const filePath = join(workspace, "src/streaming.ts");
     writeFileSync(filePath, "export const value = 1;\n", "utf8");
 
-    const runtime = new BrewvaRuntime({ cwd: workspace, configPath: RUNTIME_CONTRACT_CONFIG_PATH });
-    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+    const runtime = createBrewvaRuntime({
+      cwd: workspace,
+      configPath: RUNTIME_CONTRACT_CONFIG_PATH,
+    }).hosted;
+    runtime.operator.context.lifecycle.onTurnStart(sessionId, 1);
     runtime.authority.session.rewind.recordCheckpoint(sessionId, {
       prompt: { text: "Change value while streaming", parts: [] },
     });
@@ -131,7 +133,7 @@ describe("session rewind workspace", () => {
       channelSuccess: true,
     });
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       turn: 1,
       type: "tool_execution_start",
@@ -171,12 +173,15 @@ describe("session rewind workspace", () => {
     );
     mkdirSync(join(workspace, "src"), { recursive: true });
 
-    const runtime = new BrewvaRuntime({ cwd: workspace, configPath: RUNTIME_CONTRACT_CONFIG_PATH });
+    const runtime = createBrewvaRuntime({
+      cwd: workspace,
+      configPath: RUNTIME_CONTRACT_CONFIG_PATH,
+    }).hosted;
 
     const bothSessionId = "rewind-governance-both";
     const bothFilePath = join(workspace, "src/governance-both.ts");
     writeFileSync(bothFilePath, "export const value = 1;\n", "utf8");
-    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(bothSessionId, 1);
+    runtime.operator.context.lifecycle.onTurnStart(bothSessionId, 1);
     runtime.authority.session.rewind.recordCheckpoint(bothSessionId, {
       prompt: { text: "Change value with workspace gate", parts: [] },
     });
@@ -208,10 +213,7 @@ describe("session rewind workspace", () => {
     const conversationSessionId = "rewind-governance-conversation";
     const conversationFilePath = join(workspace, "src/governance-conversation.ts");
     writeFileSync(conversationFilePath, "export const value = 1;\n", "utf8");
-    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(
-      conversationSessionId,
-      1,
-    );
+    runtime.operator.context.lifecycle.onTurnStart(conversationSessionId, 1);
     runtime.authority.session.rewind.recordCheckpoint(conversationSessionId, {
       prompt: { text: "Change value with conversation gate", parts: [] },
     });
@@ -249,8 +251,11 @@ describe("session rewind workspace", () => {
     const filePath = join(workspace, "src/lineage.ts");
     writeFileSync(filePath, "export const value = 1;\n", "utf8");
 
-    const runtime = new BrewvaRuntime({ cwd: workspace, configPath: RUNTIME_CONTRACT_CONFIG_PATH });
-    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+    const runtime = createBrewvaRuntime({
+      cwd: workspace,
+      configPath: RUNTIME_CONTRACT_CONFIG_PATH,
+    }).hosted;
+    runtime.operator.context.lifecycle.onTurnStart(sessionId, 1);
     const firstCheckpoint = runtime.authority.session.rewind.recordCheckpoint(sessionId, {
       leafEntryId: "leaf-before-first",
       prompt: { text: "Set value to 2", parts: [] },
@@ -269,7 +274,7 @@ describe("session rewind workspace", () => {
       channelSuccess: true,
     });
 
-    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 2);
+    runtime.operator.context.lifecycle.onTurnStart(sessionId, 2);
     runtime.authority.session.rewind.recordCheckpoint(sessionId, {
       leafEntryId: "leaf-before-second",
       prompt: { text: "Set value to 3", parts: [] },
@@ -301,7 +306,7 @@ describe("session rewind workspace", () => {
     expect(firstRewind.patchSetIds).toHaveLength(2);
     expect(readFileSync(filePath, "utf8")).toBe("export const value = 1;\n");
 
-    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 3);
+    runtime.operator.context.lifecycle.onTurnStart(sessionId, 3);
     runtime.authority.session.rewind.recordCheckpoint(sessionId, {
       leafEntryId: "leaf-before-third",
       prompt: { text: "Set value to 4", parts: [] },
@@ -349,8 +354,11 @@ describe("session rewind workspace", () => {
     const filePath = join(workspace, "src/code-mode.ts");
     writeFileSync(filePath, "export const value = 1;\n", "utf8");
 
-    const runtime = new BrewvaRuntime({ cwd: workspace, configPath: RUNTIME_CONTRACT_CONFIG_PATH });
-    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+    const runtime = createBrewvaRuntime({
+      cwd: workspace,
+      configPath: RUNTIME_CONTRACT_CONFIG_PATH,
+    }).hosted;
+    runtime.operator.context.lifecycle.onTurnStart(sessionId, 1);
 
     const checkpoint = runtime.authority.session.rewind.recordCheckpoint(sessionId, {
       leafEntryId: "leaf-code-before",
@@ -424,8 +432,11 @@ describe("session rewind workspace", () => {
     const filePath = join(workspace, "src/skip.ts");
     writeFileSync(filePath, "export const value = 1;\n", "utf8");
 
-    const runtime = new BrewvaRuntime({ cwd: workspace, configPath: RUNTIME_CONTRACT_CONFIG_PATH });
-    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+    const runtime = createBrewvaRuntime({
+      cwd: workspace,
+      configPath: RUNTIME_CONTRACT_CONFIG_PATH,
+    }).hosted;
+    runtime.operator.context.lifecycle.onTurnStart(sessionId, 1);
     const firstCheckpoint = runtime.authority.session.rewind.recordCheckpoint(sessionId, {
       leafEntryId: "leaf-1",
       prompt: { text: "Set value to 2", parts: [] },
@@ -444,7 +455,7 @@ describe("session rewind workspace", () => {
       channelSuccess: true,
     });
 
-    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 2);
+    runtime.operator.context.lifecycle.onTurnStart(sessionId, 2);
     const secondCheckpoint = runtime.authority.session.rewind.recordCheckpoint(sessionId, {
       leafEntryId: "leaf-2",
       prompt: { text: "Set value to 3", parts: [] },
@@ -502,8 +513,11 @@ describe("session rewind workspace", () => {
     writeConfig(workspace, createConfig({}));
 
     const sessionId = "rewind-active-supersede-metadata-1";
-    const runtime = new BrewvaRuntime({ cwd: workspace, configPath: RUNTIME_CONTRACT_CONFIG_PATH });
-    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+    const runtime = createBrewvaRuntime({
+      cwd: workspace,
+      configPath: RUNTIME_CONTRACT_CONFIG_PATH,
+    }).hosted;
+    runtime.operator.context.lifecycle.onTurnStart(sessionId, 1);
     const checkpoint = runtime.authority.session.rewind.recordCheckpoint(sessionId, {
       leafEntryId: "leaf-before",
       prompt: { text: "Prepare a branch", parts: [] },
@@ -520,7 +534,7 @@ describe("session rewind workspace", () => {
       throw new Error(`Rewind failed: ${rewind.reason}`);
     }
 
-    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 2);
+    runtime.operator.context.lifecycle.onTurnStart(sessionId, 2);
     runtime.authority.session.rewind.recordCheckpoint(sessionId, {
       leafEntryId: "leaf-next",
       prompt: { text: "Continue from the rewound branch", parts: [] },

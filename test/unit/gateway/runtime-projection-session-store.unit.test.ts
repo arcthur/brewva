@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { BrewvaRuntime, createHostedRuntimePort } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaRuntimeOptions } from "@brewva/brewva-runtime";
 import {
   CONTEXT_ENTRY_RECORDED_EVENT_TYPE,
   SESSION_LINEAGE_NODE_CREATED_EVENT_TYPE,
@@ -17,8 +18,8 @@ import type { StoredSessionMessage } from "../../../packages/brewva-gateway/src/
 import { patchDateNow } from "../../helpers/global-state.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
-function createHostedTestRuntime(options: ConstructorParameters<typeof BrewvaRuntime>[0]) {
-  return createHostedRuntimePort(new BrewvaRuntime(options));
+function createHostedTestRuntime(options: BrewvaRuntimeOptions) {
+  return createBrewvaRuntime(options).hosted;
 }
 
 function createUsage() {
@@ -347,7 +348,7 @@ describe("hosted runtime tape session store", () => {
       timestamp: Date.now() + 1,
     } as StoredSessionMessage);
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "session_compact",
       payload: {
@@ -399,7 +400,7 @@ describe("hosted runtime tape session store", () => {
     } as StoredSessionMessage);
     const sanitizedSummary = "[CompactSummary]\nStored summary from the original compact event.";
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "session_compact",
       payload: {
@@ -481,7 +482,7 @@ describe("hosted runtime tape session store", () => {
     const runtime = createHostedTestRuntime({ cwd: workspace });
     const sessionId = "agent-session:legacy";
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "hosted_session_projection_model_change",
       payload: {
@@ -489,14 +490,14 @@ describe("hosted runtime tape session store", () => {
         modelId: "gpt-5.4",
       },
     });
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "hosted_session_projection_thinking_level_change",
       payload: {
         thinkingLevel: "high",
       },
     });
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "hosted_session_projection_message",
       payload: {
@@ -507,7 +508,7 @@ describe("hosted runtime tape session store", () => {
         },
       },
     });
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "hosted_session_projection_custom_message",
       payload: {

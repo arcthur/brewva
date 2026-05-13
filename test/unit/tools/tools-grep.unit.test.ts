@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { chmodSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import { PATCH_RECORDED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
 import { createGrepTool, runRipgrep } from "@brewva/brewva-tools/navigation";
 import { createBundledToolRuntime } from "../../helpers/runtime.js";
@@ -230,7 +230,7 @@ describe("grep tool", () => {
   test("rejects workdir values outside the task target roots", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-grep-workdir-"));
     const outside = mkdtempSync(join(tmpdir(), "brewva-grep-workdir-outside-"));
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const tool = createGrepTool({ runtime });
 
     const result = await tool.execute(
@@ -255,7 +255,7 @@ describe("grep tool", () => {
     const outside = mkdtempSync(join(tmpdir(), "brewva-grep-path-outside-"));
     const outsideFile = join(outside, "outside.ts");
     writeFileSync(outsideFile, "export const outside = true;\n", "utf8");
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const tool = createGrepTool({ runtime });
 
     const result = await tool.execute(
@@ -281,7 +281,7 @@ describe("grep tool", () => {
     const externalFile = join(externalRepo, "outside.ts");
     writeFileSync(externalFile, "export const outside = true;\n", "utf8");
     const fakeRipgrep = writeMatchingRipgrep(workspace);
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const sessionId = "grep-cross-root-1";
     runtime.authority.task.spec.set(sessionId, {
       schema: "brewva.task.v1",
@@ -310,7 +310,7 @@ describe("grep tool", () => {
   test("reranks grouped matches using recent patched-file signals", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-grep-rerank-"));
     const fakeRipgrep = writeStaticMatchRipgrep(workspace);
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const bundledRuntime = createBundledToolRuntime(runtime);
     const sessionId = "grep-rerank-1";
     const now = Date.now();
@@ -352,7 +352,7 @@ describe("grep tool", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-grep-broaden-"));
     writeFileSync(join(workspace, "src-nested-marker"), "outside\n", "utf8");
     const fakeRipgrep = writeAutoBroadenRipgrep(workspace);
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const bundledRuntime = createBundledToolRuntime(runtime);
     const tool = createGrepTool({ runtime: bundledRuntime, ripgrepCommand: fakeRipgrep });
 
@@ -378,7 +378,7 @@ describe("grep tool", () => {
   test("retries once with a delimiter-insensitive pattern after exact search failure", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-grep-fallback-"));
     const fakeRipgrep = writeDelimiterFallbackRipgrep(workspace);
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const bundledRuntime = createBundledToolRuntime(runtime);
     const tool = createGrepTool({ runtime: bundledRuntime, ripgrepCommand: fakeRipgrep });
 
@@ -404,7 +404,7 @@ describe("grep tool", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-grep-broaden-fallback-"));
     writeFileSync(join(workspace, "src-nested-marker"), "outside\n", "utf8");
     const fakeRipgrep = writeAutoBroadenDelimiterFallbackRipgrep(workspace);
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const bundledRuntime = createBundledToolRuntime(runtime);
     const tool = createGrepTool({ runtime: bundledRuntime, ripgrepCommand: fakeRipgrep });
 
@@ -430,7 +430,7 @@ describe("grep tool", () => {
   test("returns suggestion-only output instead of a dead-end no-match when advisor has a hot path", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-grep-suggest-"));
     const fakeRipgrep = writeAlwaysEmptyRipgrep(workspace);
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const bundledRuntime = createBundledToolRuntime(runtime);
     const sessionId = "grep-suggest-1";
     const now = Date.now();
@@ -474,7 +474,7 @@ describe("grep tool", () => {
       "utf8",
     );
     const fakeRipgrep = writeAlwaysEmptyRipgrep(workspace);
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const bundledRuntime = createBundledToolRuntime(runtime);
     const tool = createGrepTool({ runtime: bundledRuntime, ripgrepCommand: fakeRipgrep });
 

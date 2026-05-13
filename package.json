@@ -20,7 +20,7 @@
     "analyze:projection": "bun run script/analyze-projection.ts",
     "build": "bun run typecheck && bun run build:binaries",
     "build:binaries": "bun run script/build-binaries.ts",
-    "check": "bun run format:check && bun run docs:inventory:check && bun run lint && bun run typecheck && bun run typecheck:test && bun run test:import-boundaries && bun run check:security-patterns",
+    "check": "bun run format:check && bun run docs:inventory:check && bun run tools:capability-inventory:check && bun run lint && bun run typecheck && bun run typecheck:test && bun run test:import-boundaries && bun run check:security-patterns",
     "check:security-patterns": "bun run script/check-security-patterns.ts",
     "docs:inventory": "bun run script/generate-doc-inventory.ts --write",
     "docs:inventory:check": "bun run script/generate-doc-inventory.ts --check",
@@ -59,6 +59,8 @@
     "test:unit": "bun test test/unit --timeout 600000",
     "test:webhook-smoke": "bun run script/smoke-telegram-webhook-edge.ts",
     "test:webhook-smoke:live": "bun run script/smoke-telegram-webhook-live.ts",
+    "tools:capability-inventory": "bun run script/generate-tool-runtime-capability-inventory.ts --write",
+    "tools:capability-inventory:check": "bun run script/generate-tool-runtime-capability-inventory.ts --check",
     "typecheck": "tsc -b && bun run script/clean-package-dist.ts",
     "typecheck:test": "tsc -b test/tsconfig.json",
     "uninstall:local": "bash script/install-local.sh --uninstall"

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import { createPrecedentSweepTool } from "@brewva/brewva-tools/memory";
 import { cleanupWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
 
@@ -31,7 +31,7 @@ describe("precedent sweep tool", () => {
         "title: WAL recovery race during replay",
         "module: brewva-runtime",
         "boundaries:",
-        "  - createOperatorRuntimePort(runtime).operator.recovery",
+        "  - selectOperatorRuntimePort(instance).operator.recovery",
         "tags:",
         "  - wal",
         "  - recovery",
@@ -55,7 +55,7 @@ describe("precedent sweep tool", () => {
         "problem_kind: knowledge",
         "module: brewva-runtime",
         "boundaries:",
-        "  - createOperatorRuntimePort(runtime).operator.recovery",
+        "  - selectOperatorRuntimePort(instance).operator.recovery",
         "source_artifacts:",
         "  - retro_findings",
         "tags:",
@@ -116,7 +116,7 @@ describe("precedent sweep tool", () => {
       ].join("\n"),
     );
 
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const tool = createPrecedentSweepTool({ runtime });
     const result = await tool.execute(
       "tc-precedent-sweep-actionable",
@@ -171,7 +171,7 @@ describe("precedent sweep tool", () => {
   test("returns inconclusive when the repository has no solution docs yet", async () => {
     workspace = createTestWorkspace("precedent-sweep-empty");
 
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const tool = createPrecedentSweepTool({ runtime });
     const result = await tool.execute(
       "tc-precedent-sweep-empty",

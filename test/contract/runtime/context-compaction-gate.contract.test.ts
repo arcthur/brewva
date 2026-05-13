@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { BrewvaRuntime, createOperatorRuntimePort } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import { createTrustedLocalGovernancePort } from "@brewva/brewva-runtime/governance";
 import {
   RUNTIME_CONTRACT_CONFIG_PATH,
@@ -30,20 +30,20 @@ describe("context compaction gate", () => {
       }),
     );
 
-    const runtime = new BrewvaRuntime({
+    const runtime = createBrewvaRuntime({
       cwd: workspace,
       configPath: RUNTIME_CONTRACT_CONFIG_PATH,
       governancePort: createTrustedLocalGovernancePort(),
-    });
+    }).hosted;
     const sessionId = "core-compaction-gate-1";
-    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 3);
+    runtime.operator.context.lifecycle.onTurnStart(sessionId, 3);
 
     const usage = {
       tokens: 95,
       contextWindow: 100,
       percent: 0.95,
     };
-    createOperatorRuntimePort(runtime).operator.context.usage.observe(sessionId, usage);
+    runtime.operator.context.usage.observe(sessionId, usage);
 
     const blocked = runtime.authority.tools.invocation.start({
       sessionId,

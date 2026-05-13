@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import { asBrewvaToolCallId, asBrewvaToolName } from "@brewva/brewva-runtime/core";
 import {
   computeEvidenceDiversity,
@@ -104,7 +104,7 @@ describe("evidence references", () => {
 
   test("proposal admission preserves evidence metadata through read model normalization", () => {
     const workspace = createTestWorkspace("proposal-evidence-metadata");
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const sessionId = `proposal-evidence-${crypto.randomUUID()}`;
 
     runtime.authority.proposals.proposals.submit(sessionId, {

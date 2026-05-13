@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { createHostedRuntimePort } from "@brewva/brewva-runtime";
 import type { SkillRoutingScope } from "@brewva/brewva-runtime/skills";
 import type { BrewvaToolDefinition } from "@brewva/brewva-substrate/tools";
 import { Type } from "@sinclair/typebox";
@@ -50,9 +49,7 @@ function createToolSurfaceRuntime(
   });
   return {
     config: runtime.config,
-    recordEvent:
-      options.recordEvent ??
-      ((input) => createHostedRuntimePort(runtime).extensions.hosted.events.record(input)),
+    recordEvent: options.recordEvent ?? ((input) => runtime.extensions.hosted.events.record(input)),
   };
 }
 

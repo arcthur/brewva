@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
-import { BrewvaRuntime, createHostedRuntimePort } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import { buildTurnEnvelope } from "@brewva/brewva-runtime/channels";
 import { asBrewvaIntentId } from "@brewva/brewva-runtime/core";
 import { SCHEDULE_EVENT_TYPE } from "@brewva/brewva-runtime/events";
@@ -20,11 +20,11 @@ import {
 describe("scheduler service recovery contract", () => {
   test("recovers a missed runAt intent and converges a one-shot intent", async () => {
     const workspace = createWorkspace("recover");
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const sessionId = "scheduler-recover-session";
     const now = Date.now();
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: SCHEDULE_EVENT_TYPE,
       payload: buildScheduleIntentCreatedEvent({
@@ -72,19 +72,19 @@ describe("scheduler service recovery contract", () => {
 
   test("defers overflow missed intents beyond the catch-up limit", async () => {
     const workspace = createWorkspace("recover-overflow");
-    const runtime = new BrewvaRuntime({
+    const runtime = createBrewvaRuntime({
       cwd: workspace,
       config: createSchedulerConfig((config) => {
         config.schedule.maxRecoveryCatchUps = 1;
         config.schedule.minIntervalMs = 60_000;
       }),
-    });
+    }).hosted;
 
     const nowMs = Date.UTC(2026, 0, 1, 0, 30, 0, 0);
     const sessionId = "scheduler-recover-overflow-session";
     const dueRunAt = nowMs - 10_000;
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: SCHEDULE_EVENT_TYPE,
       payload: buildScheduleIntentCreatedEvent({
@@ -98,7 +98,7 @@ describe("scheduler service recovery contract", () => {
       }) as unknown as Record<string, unknown>,
       skipTapeCheckpoint: true,
     });
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: SCHEDULE_EVENT_TYPE,
       payload: buildScheduleIntentCreatedEvent({
@@ -148,18 +148,18 @@ describe("scheduler service recovery contract", () => {
 
   test("round-robins catch-up across sessions and emits recovery summaries", async () => {
     const workspace = createWorkspace("recover-fairness");
-    const runtime = new BrewvaRuntime({
+    const runtime = createBrewvaRuntime({
       cwd: workspace,
       config: createSchedulerConfig((config) => {
         config.schedule.maxRecoveryCatchUps = 2;
         config.schedule.minIntervalMs = 60_000;
       }),
-    });
+    }).hosted;
 
     const nowMs = Date.UTC(2026, 0, 1, 1, 0, 0, 0);
     const dueRunAt = nowMs - 10_000;
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId: "session-fair-a",
       type: SCHEDULE_EVENT_TYPE,
       payload: buildScheduleIntentCreatedEvent({
@@ -173,7 +173,7 @@ describe("scheduler service recovery contract", () => {
       }) as unknown as Record<string, unknown>,
       skipTapeCheckpoint: true,
     });
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId: "session-fair-a",
       type: SCHEDULE_EVENT_TYPE,
       payload: buildScheduleIntentCreatedEvent({
@@ -187,7 +187,7 @@ describe("scheduler service recovery contract", () => {
       }) as unknown as Record<string, unknown>,
       skipTapeCheckpoint: true,
     });
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId: "session-fair-b",
       type: SCHEDULE_EVENT_TYPE,
       payload: buildScheduleIntentCreatedEvent({
@@ -260,18 +260,18 @@ describe("scheduler service recovery contract", () => {
 
   test("opens the circuit and cancels the intent after repeated executeIntent failures", async () => {
     const workspace = createWorkspace("circuit");
-    const runtime = new BrewvaRuntime({
+    const runtime = createBrewvaRuntime({
       cwd: workspace,
       config: createSchedulerConfig((config) => {
         config.schedule.maxConsecutiveErrors = 2;
         config.schedule.minIntervalMs = 10;
       }),
-    });
+    }).hosted;
 
     let nowMs = Date.now();
     const sessionId = "scheduler-circuit-session";
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: SCHEDULE_EVENT_TYPE,
       payload: buildScheduleIntentCreatedEvent({
@@ -314,17 +314,17 @@ describe("scheduler service recovery contract", () => {
 
   test("records the error and schedules a retry when executeIntent fails below the threshold", async () => {
     const workspace = createWorkspace("execution-error-retry");
-    const runtime = new BrewvaRuntime({
+    const runtime = createBrewvaRuntime({
       cwd: workspace,
       config: createSchedulerConfig((config) => {
         config.schedule.maxConsecutiveErrors = 3;
         config.schedule.minIntervalMs = 10;
       }),
-    });
+    }).hosted;
 
     const nowMs = Date.now();
     const sessionId = "scheduler-error-retry-session";
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: SCHEDULE_EVENT_TYPE,
       payload: buildScheduleIntentCreatedEvent({
@@ -371,19 +371,19 @@ describe("scheduler service recovery contract", () => {
 
   test("defers stale one-shot recovery instead of firing immediately", async () => {
     const workspace = createWorkspace("stale-one-shot-recovery");
-    const runtime = new BrewvaRuntime({
+    const runtime = createBrewvaRuntime({
       cwd: workspace,
       config: createSchedulerConfig((config) => {
         config.schedule.minIntervalMs = 60_000;
         config.schedule.staleOneShotRecoveryThresholdMs = 60 * 60 * 1000;
       }),
-    });
+    }).hosted;
 
     const nowMs = Date.UTC(2026, 0, 1, 3, 0, 0, 0);
     const sessionId = "scheduler-stale-one-shot-session";
     const overdueRunAt = nowMs - 3 * 60 * 60 * 1000;
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: SCHEDULE_EVENT_TYPE,
       payload: buildScheduleIntentCreatedEvent({
@@ -430,18 +430,18 @@ describe("scheduler service recovery contract", () => {
 
   test("uses one monotonic defer queue across wal, stale, and overflow recovery buckets", async () => {
     const workspace = createWorkspace("recovery-defer-order");
-    const runtime = new BrewvaRuntime({
+    const runtime = createBrewvaRuntime({
       cwd: workspace,
       config: createSchedulerConfig((config) => {
         config.schedule.minIntervalMs = 60_000;
         config.schedule.maxRecoveryCatchUps = 1;
         config.schedule.staleOneShotRecoveryThresholdMs = 60 * 60 * 1000;
       }),
-    });
+    }).hosted;
 
     const nowMs = Date.UTC(2026, 0, 1, 4, 0, 0, 0);
     const sessionId = "scheduler-recovery-defer-order-session";
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: SCHEDULE_EVENT_TYPE,
       payload: buildScheduleIntentCreatedEvent({
@@ -455,7 +455,7 @@ describe("scheduler service recovery contract", () => {
       }) as unknown as Record<string, unknown>,
       skipTapeCheckpoint: true,
     });
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: SCHEDULE_EVENT_TYPE,
       payload: buildScheduleIntentCreatedEvent({
@@ -469,7 +469,7 @@ describe("scheduler service recovery contract", () => {
       }) as unknown as Record<string, unknown>,
       skipTapeCheckpoint: true,
     });
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: SCHEDULE_EVENT_TYPE,
       payload: buildScheduleIntentCreatedEvent({
@@ -483,7 +483,7 @@ describe("scheduler service recovery contract", () => {
       }) as unknown as Record<string, unknown>,
       skipTapeCheckpoint: true,
     });
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: SCHEDULE_EVENT_TYPE,
       payload: buildScheduleIntentCreatedEvent({
@@ -498,7 +498,7 @@ describe("scheduler service recovery contract", () => {
       skipTapeCheckpoint: true,
     });
 
-    const schedulerIngress = createHostedRuntimePort(runtime).extensions.recovery.scheduler;
+    const schedulerIngress = runtime.extensions.recovery.scheduler;
     const walRecord = schedulerIngress.appendPending(
       buildTurnEnvelope({
         kind: "user",
@@ -587,12 +587,12 @@ describe("scheduler service recovery contract", () => {
 
   test("catches up a missed cron run and schedules the next slot", async () => {
     const workspace = createWorkspace("cron-recover");
-    const runtime = new BrewvaRuntime({
+    const runtime = createBrewvaRuntime({
       cwd: workspace,
       config: createSchedulerConfig((config) => {
         config.schedule.minIntervalMs = 60_000;
       }),
-    });
+    }).hosted;
 
     let nowMs = Date.UTC(2026, 0, 1, 0, 1, 30, 0);
     const executed: number[] = [];
@@ -655,12 +655,12 @@ describe("scheduler service recovery contract", () => {
 
   test("subscribes to runtime events from external intent creation", async () => {
     const workspace = createWorkspace("subscribe-events");
-    const runtime = new BrewvaRuntime({
+    const runtime = createBrewvaRuntime({
       cwd: workspace,
       config: createSchedulerConfig((config) => {
         config.schedule.minIntervalMs = 60_000;
       }),
-    });
+    }).hosted;
 
     const nowMs = Date.UTC(2026, 0, 1, 0, 30, 0, 0);
     const daemonScheduler = createSchedulerService({

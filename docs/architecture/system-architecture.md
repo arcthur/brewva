@@ -112,17 +112,20 @@ different summary with a newer model.
 
 ## Runtime Surface
 
-`BrewvaRuntime` has two public semantic roots:
+Runtime construction uses `createBrewvaRuntime(...)`, which returns a frozen
+explicit-port instance. Its `root` port has two semantic surfaces:
 
-- `runtime.authority`: commits replay-visible changes or explicit decisions.
-- `runtime.inspect`: reads runtime state without mutating it.
+- `root.authority`: commits replay-visible changes or explicit decisions.
+- `root.inspect`: reads runtime state without mutating it.
 
-Repo-owned hosted and operator ports additionally expose `runtime.operator` for
+Repo-owned hosted and operator ports additionally expose `operator` for
 bounded refresh, rebuild, registration, recovery, credential-binding, and
-host-observation operations. Managed tools do not receive the operator port.
+host-observation operations. Managed tools receive the separate tool port and
+never receive the operator port. Holding `BrewvaRuntimeRoot` is not sufficient
+to recover hosted, tool, operator, or Effect-spine access.
 
-The root runtime object is not a mixed implementation bag. Hosted sessions,
-tools, and operators receive narrowed ports.
+The root runtime object is not a mixed implementation bag. Composition roots may
+hold the full instance; leaf modules receive narrowed ports.
 
 Runtime implementation ownership is sliced under
 `packages/brewva-runtime/src/domain/<name>/`. Each domain owns its public seam,

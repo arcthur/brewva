@@ -1,4 +1,4 @@
-import type { BrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaRuntimeRoot } from "@brewva/brewva-runtime";
 
 interface PendingOutputBudgetEscalation {
   targetMaxTokens: number;
@@ -6,12 +6,12 @@ interface PendingOutputBudgetEscalation {
 }
 
 const pendingOutputBudgetEscalationsByRuntime = new WeakMap<
-  BrewvaRuntime,
+  BrewvaRuntimeRoot,
   Map<string, PendingOutputBudgetEscalation>
 >();
-const providerRequestRecoveryInstalled = new WeakSet<BrewvaRuntime>();
+const providerRequestRecoveryInstalled = new WeakSet<BrewvaRuntimeRoot>();
 
-function getStore(runtime: BrewvaRuntime): Map<string, PendingOutputBudgetEscalation> {
+function getStore(runtime: BrewvaRuntimeRoot): Map<string, PendingOutputBudgetEscalation> {
   const existing = pendingOutputBudgetEscalationsByRuntime.get(runtime);
   if (existing) {
     return existing;
@@ -22,7 +22,7 @@ function getStore(runtime: BrewvaRuntime): Map<string, PendingOutputBudgetEscala
 }
 
 export function armNextPromptOutputBudgetEscalation(
-  runtime: BrewvaRuntime,
+  runtime: BrewvaRuntimeRoot,
   input: {
     sessionId: string;
     targetMaxTokens: number;
@@ -36,7 +36,7 @@ export function armNextPromptOutputBudgetEscalation(
 }
 
 export function consumeNextPromptOutputBudgetEscalation(
-  runtime: BrewvaRuntime,
+  runtime: BrewvaRuntimeRoot,
   sessionId: string,
 ): PendingOutputBudgetEscalation | undefined {
   const store = pendingOutputBudgetEscalationsByRuntime.get(runtime);
@@ -55,7 +55,7 @@ export function consumeNextPromptOutputBudgetEscalation(
 }
 
 export function clearNextPromptOutputBudgetEscalation(
-  runtime: BrewvaRuntime,
+  runtime: BrewvaRuntimeRoot,
   sessionId: string,
 ): boolean {
   const store = pendingOutputBudgetEscalationsByRuntime.get(runtime);
@@ -69,10 +69,10 @@ export function clearNextPromptOutputBudgetEscalation(
   return deleted;
 }
 
-export function markProviderRequestRecoveryInstalled(runtime: BrewvaRuntime): void {
+export function markProviderRequestRecoveryInstalled(runtime: BrewvaRuntimeRoot): void {
   providerRequestRecoveryInstalled.add(runtime);
 }
 
-export function hasProviderRequestRecoveryInstalled(runtime: BrewvaRuntime): boolean {
+export function hasProviderRequestRecoveryInstalled(runtime: BrewvaRuntimeRoot): boolean {
   return providerRequestRecoveryInstalled.has(runtime);
 }

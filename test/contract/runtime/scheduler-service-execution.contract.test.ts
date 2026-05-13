@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { BrewvaRuntime, createHostedRuntimePort } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import { asBrewvaIntentId, asBrewvaSessionId } from "@brewva/brewva-runtime/core";
 import { SCHEDULE_EVENT_TYPE } from "@brewva/brewva-runtime/events";
 import { createSchedulerService, type SchedulerRuntimePort } from "@brewva/brewva-runtime/recovery";
@@ -12,7 +12,7 @@ import { createWorkspace, schedulerRuntimePort } from "./scheduler-service.helpe
 describe("scheduler service execution contract", () => {
   test("operates through SchedulerRuntimePort without direct BrewvaRuntime coupling", async () => {
     const workspace = createWorkspace("runtime-port");
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const sessionId = asBrewvaSessionId("scheduler-runtime-port-session");
     const now = Date.now();
 
@@ -22,8 +22,7 @@ describe("scheduler service execution contract", () => {
       listSessionIds: () => runtime.inspect.events.log.listSessionIds(),
       listEvents: (targetSessionId, query) =>
         runtime.inspect.events.records.list(targetSessionId, query),
-      recordEvent: (input) =>
-        createHostedRuntimePort(runtime).extensions.hosted.events.record(input),
+      recordEvent: (input) => runtime.extensions.hosted.events.record(input),
       subscribeEvents: (listener) => runtime.inspect.events.records.subscribe(listener),
       getClaimState: (targetSessionId) => runtime.inspect.claim.state.get(targetSessionId),
       getTaskState: (targetSessionId) => runtime.inspect.task.state.get(targetSessionId),
@@ -59,11 +58,11 @@ describe("scheduler service execution contract", () => {
 
   test("keeps execution disabled when no executor callback is provided", async () => {
     const workspace = createWorkspace("no-executor");
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const now = Date.now();
     const sessionId = asBrewvaSessionId("scheduler-no-executor-session");
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: SCHEDULE_EVENT_TYPE,
       payload: buildScheduleIntentCreatedEvent({
@@ -93,7 +92,7 @@ describe("scheduler service execution contract", () => {
 
   test("rejects duplicate intentId on create", async () => {
     const workspace = createWorkspace("duplicate-id");
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const scheduler = createSchedulerService({
       runtime: schedulerRuntimePort(runtime),
       enableExecution: false,
@@ -127,11 +126,11 @@ describe("scheduler service execution contract", () => {
 
   test("converges by structured predicate for claim_resolved", async () => {
     const workspace = createWorkspace("predicate-claim");
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const sessionId = "scheduler-predicate-session";
     const now = Date.now();
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: SCHEDULE_EVENT_TYPE,
       payload: buildScheduleIntentCreatedEvent({
@@ -189,11 +188,11 @@ describe("scheduler service execution contract", () => {
 
   test("skips catch-up while execution is paused and resumes via syncExecutionState", async () => {
     const workspace = createWorkspace("pause-resume-sync");
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const sessionId = "scheduler-pause-resume-session";
     let nowMs = Date.UTC(2026, 0, 1, 0, 0, 0, 0);
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: SCHEDULE_EVENT_TYPE,
       payload: buildScheduleIntentCreatedEvent({
@@ -249,7 +248,7 @@ describe("scheduler service execution contract", () => {
 
   test("syncExecutionState clears armed timers when paused", async () => {
     const workspace = createWorkspace("sync-execution-state");
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const nowMs = Date.UTC(2026, 0, 1, 0, 0, 0, 0);
     let paused = false;
     const scheduledCallbacks: Array<() => void> = [];

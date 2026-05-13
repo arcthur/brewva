@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BrewvaRuntime, createHostedRuntimePort } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import { buildScheduleIntentFiredEvent } from "@brewva/brewva-runtime/schedule";
 import { createIterationFactTool } from "@brewva/brewva-tools/workflow";
 import { requireNonEmptyString } from "../../helpers/assertions.js";
@@ -11,7 +11,7 @@ import { extractTextContent, mergeContext } from "./tools-flow.helpers.js";
 describe("iteration_fact contract", () => {
   test("records evidence-backed metric and guard facts through the managed tool surface", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-tools-iteration-fact-"));
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const sessionId = "iteration-fact-contract-1";
     const tool = createIterationFactTool({ runtime });
 
@@ -89,7 +89,7 @@ describe("iteration_fact contract", () => {
 
   test("rejects metric and guard writes without evidence refs", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-tools-iteration-fact-evidence-"));
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const sessionId = "iteration-fact-contract-evidence";
     const tool = createIterationFactTool({ runtime });
 
@@ -124,14 +124,14 @@ describe("iteration_fact contract", () => {
 
   test("lists lineage-scoped facts through the managed tool surface", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-tools-iteration-lineage-"));
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const parentSessionId = "iteration-lineage-parent";
     const childSessionId = "iteration-lineage-child-a";
     const siblingSessionId = "iteration-lineage-child-b";
     const loopSource = "goal-loop:coverage-raise-2026-03-22";
     const tool = createIterationFactTool({ runtime });
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId: parentSessionId,
       type: "schedule_intent",
       timestamp: 10,
@@ -150,7 +150,7 @@ describe("iteration_fact contract", () => {
         }),
       },
     });
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId: parentSessionId,
       type: "schedule_intent",
       timestamp: 11,

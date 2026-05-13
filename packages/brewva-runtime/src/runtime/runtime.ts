@@ -1,14 +1,14 @@
 import type {
   BrewvaHostedRuntimePort,
   BrewvaOperatorRuntimePort,
-  BrewvaRuntimeRoot,
+  BrewvaRuntimeInstance,
   BrewvaRuntimeOptions,
+  BrewvaRuntimeRoot,
   BrewvaToolRuntimePort,
 } from "./runtime-api.js";
 import {
-  BREWVA_RUNTIME_INTERNAL_STATE_SYMBOL,
-  createRuntimeFacadeState,
-  type RuntimeFacadeState,
+  createRuntimeFacadeController,
+  type RuntimeFacadeControllerHandle,
 } from "./runtime-facade-state.js";
 
 export type {
@@ -17,6 +17,7 @@ export type {
   BrewvaInspectionPort,
   BrewvaOperatorRuntimePort,
   BrewvaRuntimeIdentity,
+  BrewvaRuntimeInstance,
   BrewvaRuntimeOptions,
   BrewvaRuntimeRoot,
   BrewvaToolRuntimePort,
@@ -24,103 +25,78 @@ export type {
   VerifyCompletionOptions,
 } from "./runtime-api.js";
 
-export class BrewvaRuntime implements BrewvaRuntimeRoot {
-  readonly identity: RuntimeFacadeState["identity"];
-  readonly config: RuntimeFacadeState["config"];
-  readonly authority: RuntimeFacadeState["authority"];
-  readonly inspect: RuntimeFacadeState["inspect"];
-
-  constructor(options: BrewvaRuntimeOptions = {}) {
-    const state = createRuntimeFacadeState(options);
-    this.identity = state.identity;
-    this.config = state.config;
-    this.authority = state.authority;
-    this.inspect = state.inspect;
-    Object.defineProperty(this, BREWVA_RUNTIME_INTERNAL_STATE_SYMBOL, {
-      value: state[BREWVA_RUNTIME_INTERNAL_STATE_SYMBOL],
-      enumerable: false,
-      configurable: false,
-      writable: false,
-    });
-  }
+export interface InternalBrewvaRuntimeAssembly {
+  readonly instance: BrewvaRuntimeInstance;
+  readonly controller: RuntimeFacadeControllerHandle;
 }
 
-function getRuntimeFacadeState(
-  runtime: BrewvaRuntime,
-): Pick<RuntimeFacadeState, "operator" | "extensions"> {
-  const state = (
-    runtime as BrewvaRuntime & {
-      readonly [BREWVA_RUNTIME_INTERNAL_STATE_SYMBOL]?: Pick<
-        RuntimeFacadeState,
-        "operator" | "extensions"
-      >;
-    }
-  )[BREWVA_RUNTIME_INTERNAL_STATE_SYMBOL];
-  if (!state) {
-    throw new Error("invalid_brewva_runtime");
-  }
-  return state;
+function freezePort<TPort extends object>(port: TPort): Readonly<TPort> {
+  return Object.freeze(port);
 }
 
-function isHostedRuntimePort(
-  runtime: BrewvaRuntime | BrewvaHostedRuntimePort,
-): runtime is BrewvaHostedRuntimePort {
-  return "extensions" in runtime && "operator" in runtime;
-}
+function createBrewvaRuntimeInstanceFromController(
+  controller: RuntimeFacadeControllerHandle,
+): BrewvaRuntimeInstance {
+  const root = freezePort<BrewvaRuntimeRoot>({
+    identity: controller.identity,
+    config: controller.config,
+    authority: controller.authority,
+    inspect: controller.inspect,
+  }) as BrewvaRuntimeRoot;
 
-export function createHostedRuntimePort(
-  runtime: BrewvaRuntime | BrewvaHostedRuntimePort,
-): BrewvaHostedRuntimePort {
-  if (isHostedRuntimePort(runtime)) {
-    return runtime;
-  }
-  const state = getRuntimeFacadeState(runtime);
-  return {
-    identity: runtime.identity,
-    config: runtime.config,
-    authority: runtime.authority,
-    inspect: runtime.inspect,
-    operator: state.operator,
-    extensions: state.extensions,
-  };
-}
+  const hosted = freezePort<BrewvaHostedRuntimePort>({
+    identity: root.identity,
+    config: root.config,
+    authority: root.authority,
+    inspect: root.inspect,
+    operator: controller.operator,
+    extensions: controller.extensions,
+  }) as BrewvaHostedRuntimePort;
 
-export function createToolRuntimePort(
-  runtime: BrewvaRuntime | BrewvaHostedRuntimePort,
-): BrewvaToolRuntimePort {
-  if (isHostedRuntimePort(runtime)) {
-    return {
-      identity: runtime.identity,
-      config: runtime.config,
-      authority: runtime.authority,
-      inspect: runtime.inspect,
-      extensions: {
-        tools: runtime.extensions.tools,
-      },
-    };
-  }
-  const state = getRuntimeFacadeState(runtime);
-  return {
-    identity: runtime.identity,
-    config: runtime.config,
-    authority: runtime.authority,
-    inspect: runtime.inspect,
-    extensions: {
-      tools: state.extensions.tools,
-    },
-  };
-}
+  const toolExtensions = freezePort<BrewvaToolRuntimePort["extensions"]>({
+    tools: controller.extensions.tools,
+  }) as BrewvaToolRuntimePort["extensions"];
 
-export function createOperatorRuntimePort(
-  runtime: BrewvaRuntime | BrewvaHostedRuntimePort,
-): BrewvaOperatorRuntimePort {
-  const operator = isHostedRuntimePort(runtime)
-    ? runtime.operator
-    : getRuntimeFacadeState(runtime).operator;
-  return {
-    identity: runtime.identity,
-    config: runtime.config,
-    inspect: runtime.inspect,
+  const tool = freezePort<BrewvaToolRuntimePort>({
+    identity: root.identity,
+    config: root.config,
+    authority: root.authority,
+    inspect: root.inspect,
+    extensions: toolExtensions,
+  }) as BrewvaToolRuntimePort;
+
+  const operator = freezePort<BrewvaOperatorRuntimePort>({
+    identity: root.identity,
+    config: root.config,
+    inspect: root.inspect,
+    operator: controller.operator,
+  }) as BrewvaOperatorRuntimePort;
+
+  const instance = Object.freeze({
+    root,
+    hosted,
+    tool,
     operator,
-  };
+  }) satisfies BrewvaRuntimeInstance;
+  return instance;
+}
+
+export function createBrewvaRuntimeAssemblyForInternalUse(
+  options: BrewvaRuntimeOptions = {},
+): InternalBrewvaRuntimeAssembly {
+  const controller = createRuntimeFacadeController(options);
+  return Object.freeze({
+    controller,
+    instance: createBrewvaRuntimeInstanceFromController(controller),
+  });
+}
+
+export function createBrewvaRuntime(options: BrewvaRuntimeOptions = {}): BrewvaRuntimeInstance {
+  return createBrewvaRuntimeAssemblyForInternalUse(options).instance;
+}
+
+export function selectOperatorRuntimePort(
+  instance: BrewvaRuntimeInstance,
+): BrewvaOperatorRuntimePort {
+  return instance.operator;
 }

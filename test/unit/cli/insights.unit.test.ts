@@ -1,12 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import {
-  BrewvaRuntime,
-  DEFAULT_BREWVA_CONFIG,
-  createOperatorRuntimePort,
-  createHostedRuntimePort,
-} from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaRuntimeOptions } from "@brewva/brewva-runtime";
+import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
 import { buildProjectInsightsReport } from "../../../packages/brewva-cli/src/insights.js";
 import { resolveInspectDirectory } from "../../../packages/brewva-cli/src/inspect-analysis.js";
 import {
@@ -16,8 +13,8 @@ import {
 } from "../../../packages/brewva-cli/src/inspect.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
-function createHostedTestRuntime(options: ConstructorParameters<typeof BrewvaRuntime>[0]) {
-  return createHostedRuntimePort(new BrewvaRuntime(options));
+function createHostedTestRuntime(options: BrewvaRuntimeOptions) {
+  return createBrewvaRuntime(options).hosted;
 }
 
 describe("project insights aggregation", () => {
@@ -30,7 +27,7 @@ describe("project insights aggregation", () => {
     });
     const sessionId = "inspect-model-preset-session";
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "model_preset_select",
       payload: {
@@ -66,7 +63,7 @@ describe("project insights aggregation", () => {
     });
     const sessionId = "inspect-model-preset-unmatched-subagents-session";
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "model_preset_select",
       payload: {
@@ -96,7 +93,7 @@ describe("project insights aggregation", () => {
     });
     const sessionId = "inspect-compaction-generation-economics-session";
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "session_compact",
       turn: 4,
@@ -153,14 +150,14 @@ describe("project insights aggregation", () => {
     });
 
     for (const sessionId of ["insights-ok-session", "insights-broken-session"]) {
-      createHostedRuntimePort(runtime).extensions.hosted.events.record({
+      runtime.extensions.hosted.events.record({
         sessionId,
         type: "session_bootstrap",
         payload: {
           managedToolMode: "direct",
         },
       });
-      createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+      runtime.operator.context.lifecycle.onTurnStart(sessionId, 1);
     }
 
     const directory = resolveInspectDirectory(runtime, ".", undefined);
@@ -197,14 +194,14 @@ describe("project insights aggregation", () => {
     });
 
     const sessionId = "insights-refactor-session";
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "session_bootstrap",
       payload: {
         managedToolMode: "direct",
       },
     });
-    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+    runtime.operator.context.lifecycle.onTurnStart(sessionId, 1);
     runtime.authority.task.spec.set(sessionId, {
       schema: "brewva.task.v1",
       goal: "Refactor the src module layout",
@@ -248,7 +245,7 @@ describe("project insights aggregation", () => {
       cwd: workspace,
       config: structuredClone(DEFAULT_BREWVA_CONFIG),
     });
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId: "insights-corrupt-index-session",
       type: "session_bootstrap",
       payload: {

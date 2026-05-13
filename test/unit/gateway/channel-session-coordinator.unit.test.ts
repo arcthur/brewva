@@ -1,10 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import type { HostedSessionResult } from "@brewva/brewva-gateway/hosted";
-import {
-  BrewvaRuntime,
-  DEFAULT_BREWVA_CONFIG,
-  createHostedRuntimePort,
-} from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort, BrewvaRuntimeOptions } from "@brewva/brewva-runtime";
+import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
 import type { TurnEnvelope } from "@brewva/brewva-runtime/channels";
 import { createTrustedLocalGovernancePort } from "@brewva/brewva-runtime/governance";
 import { createDeferred } from "@brewva/brewva-std/async";
@@ -13,8 +11,8 @@ import { AgentRuntimeManager } from "../../../packages/brewva-gateway/src/channe
 import { createChannelSessionCoordinator } from "../../../packages/brewva-gateway/src/channels/session/coordinator.js";
 import { cleanupTestWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
 
-function createHostedTestRuntime(options: ConstructorParameters<typeof BrewvaRuntime>[0]) {
-  return createHostedRuntimePort(new BrewvaRuntime(options));
+function createHostedTestRuntime(options: BrewvaRuntimeOptions) {
+  return createBrewvaRuntime(options).hosted;
 }
 
 function createUserTurn(scopeKey: string): TurnEnvelope {
@@ -31,7 +29,7 @@ function createUserTurn(scopeKey: string): TurnEnvelope {
 }
 
 function createHostedSessionResult(
-  runtime: BrewvaRuntime,
+  runtime: BrewvaHostedRuntimePort,
   sessionId: string,
   hooks: {
     abort?: () => Promise<void>;

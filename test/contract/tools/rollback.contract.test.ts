@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BrewvaRuntime, createOperatorRuntimePort } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import { createRollbackLastPatchTool } from "@brewva/brewva-tools/workflow";
 import { extractTextContent, fakeContext } from "./tools-flow.helpers.js";
 
@@ -12,9 +12,9 @@ describe("rollback_last_patch contract", () => {
     mkdirSync(join(workspace, "src"), { recursive: true });
     writeFileSync(join(workspace, "src/example.ts"), "export const n = 1;\n", "utf8");
 
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const sessionId = "s9";
-    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+    runtime.operator.context.lifecycle.onTurnStart(sessionId, 1);
 
     runtime.authority.tools.tracking.trackCallStart({
       sessionId,
@@ -46,7 +46,7 @@ describe("rollback_last_patch contract", () => {
 
   test("reports when no tracked patch set is available for the session", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-rollback-tool-empty-"));
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const sessionId = "s9-empty";
 
     const rollbackTool = createRollbackLastPatchTool({ runtime });

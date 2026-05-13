@@ -1,4 +1,4 @@
-// Curated verification contract subpath. Keep root imports focused on BrewvaRuntime.
+// Curated verification contract subpath. Keep root imports focused on createBrewvaRuntime and explicit port types.
 export {
   VERIFICATION_OUTCOME_SCHEMA,
   VERIFICATION_WRITE_MARKED_SCHEMA,

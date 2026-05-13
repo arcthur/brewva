@@ -18,11 +18,8 @@ import {
 import { runGatewayCliOperation } from "@brewva/brewva-gateway/admin";
 import { runChannelMode } from "@brewva/brewva-gateway/channels";
 import { DEFAULT_HOSTED_ROUTING_SCOPES } from "@brewva/brewva-gateway/hosted";
-import {
-  BrewvaRuntime,
-  createHostedRuntimePort,
-  createOperatorRuntimePort,
-} from "@brewva/brewva-runtime";
+import { createBrewvaRuntime, selectOperatorRuntimePort } from "@brewva/brewva-runtime";
+import type { BrewvaRuntimeRoot } from "@brewva/brewva-runtime";
 import { BrewvaConfigLoadError } from "@brewva/brewva-runtime/config";
 import { normalizeAgentId } from "@brewva/brewva-runtime/context";
 import type { RuntimeResult } from "@brewva/brewva-runtime/core";
@@ -137,7 +134,7 @@ function cliValueError(error: string): CliValueResult<never> {
 }
 
 function resolveSessionRewindSession(
-  runtime: BrewvaRuntime,
+  runtime: BrewvaRuntimeRoot,
   operation: "undo" | "redo",
   preferredSessionId?: string,
 ): string | undefined {
@@ -684,7 +681,7 @@ function printReplayText(
   }
 }
 
-function printCostSummary(sessionId: string, runtime: BrewvaRuntime): void {
+function printCostSummary(sessionId: string, runtime: BrewvaRuntimeRoot): void {
   const summary = runtime.inspect.cost.summary.get(sessionId);
   if (summary.totalTokens <= 0 && summary.totalCostUsd <= 0) return;
 
@@ -719,16 +716,16 @@ function printGatewayCostSummary(input: {
     typeof input.agentSessionId === "string" && input.agentSessionId.trim()
       ? input.agentSessionId
       : input.requestedSessionId;
-  const runtime = new BrewvaRuntime({
+  const runtime = createBrewvaRuntime({
     cwd: resolveBackendWorkingCwd(input.cwd),
     configPath: input.configPath,
     governancePort: createTrustedLocalGovernancePort(CLI_TRUSTED_LOCAL_GOVERNANCE),
   });
-  createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(replaySessionId, 0);
-  printCostSummary(replaySessionId, runtime);
+  selectOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(replaySessionId, 0);
+  printCostSummary(replaySessionId, runtime.root);
 }
 
-function resolveCliSessionCompleteReason(runtime: BrewvaRuntime, sessionId: string): string {
+function resolveCliSessionCompleteReason(runtime: BrewvaRuntimeRoot, sessionId: string): string {
   const events = runtime.inspect.events.records.queryStructured(sessionId);
   const hasInput = events.some((event) => event.type === "input");
   const hasAgentStart = events.some((event) => event.type === "agent_start");
@@ -880,13 +877,13 @@ async function runCliRootOperation(): Promise<void> {
 
   if (parsed.replay) {
     const replayMode: CliMode = parsed.mode === "print-json" ? "print-json" : "print-text";
-    const runtime = new BrewvaRuntime({
+    const runtime = createBrewvaRuntime({
       cwd: parsed.cwd,
       configPath: parsed.configPath,
       governancePort: createTrustedLocalGovernancePort(CLI_TRUSTED_LOCAL_GOVERNANCE),
     });
     const targetSessionId = resolveTargetSession(
-      createOperatorRuntimePort(runtime),
+      selectOperatorRuntimePort(runtime),
       parsed.sessionId,
     );
     if (!targetSessionId) {
@@ -894,7 +891,7 @@ async function runCliRootOperation(): Promise<void> {
       process.exitCode = 1;
       return;
     }
-    const events = runtime.inspect.events.records.queryStructured(targetSessionId);
+    const events = runtime.root.inspect.events.records.queryStructured(targetSessionId);
     if (replayMode === "print-json") {
       for (const event of events) {
         await writeJsonLine(event);
@@ -906,13 +903,13 @@ async function runCliRootOperation(): Promise<void> {
   }
 
   if (parsed.undo || parsed.redo) {
-    const runtime = new BrewvaRuntime({
+    const runtime = createBrewvaRuntime({
       cwd: parsed.cwd,
       configPath: parsed.configPath,
       governancePort: createTrustedLocalGovernancePort(CLI_TRUSTED_LOCAL_GOVERNANCE),
     });
     const targetSessionId = resolveSessionRewindSession(
-      runtime,
+      runtime.root,
       parsed.redo ? "redo" : "undo",
       parsed.sessionId,
     );
@@ -921,8 +918,8 @@ async function runCliRootOperation(): Promise<void> {
       return;
     }
     const result = parsed.redo
-      ? runtime.authority.session.rewind.redo(targetSessionId)
-      : runtime.authority.session.rewind.rewind(targetSessionId, {
+      ? runtime.root.authority.session.rewind.redo(targetSessionId)
+      : runtime.root.authority.session.rewind.rewind(targetSessionId, {
           mode: "both",
           summary: "carry",
         });
@@ -1059,16 +1056,15 @@ async function runCliRootOperation(): Promise<void> {
     }
   }
 
-  const runtime = createHostedRuntimePort(
-    new BrewvaRuntime({
-      cwd: parsed.cwd,
-      configPath: parsed.configPath,
-      agentId: parsed.agentId,
-      governancePort: createTrustedLocalGovernancePort({ profile: "team" }),
-      routingDefaultScopes: [...DEFAULT_HOSTED_ROUTING_SCOPES],
-    }),
-  );
-  const operatorRuntime = createOperatorRuntimePort(runtime);
+  const runtimeInstance = createBrewvaRuntime({
+    cwd: parsed.cwd,
+    configPath: parsed.configPath,
+    agentId: parsed.agentId,
+    governancePort: createTrustedLocalGovernancePort({ profile: "team" }),
+    routingDefaultScopes: [...DEFAULT_HOSTED_ROUTING_SCOPES],
+  });
+  const runtime = runtimeInstance.hosted;
+  const operatorRuntime = selectOperatorRuntimePort(runtimeInstance);
   const createExtensions = () => [
     createInspectCommandExtension(operatorRuntime),
     createInsightsCommandExtension(operatorRuntime),

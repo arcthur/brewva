@@ -1,13 +1,8 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  DEFAULT_BREWVA_CONFIG,
-  BrewvaRuntime,
-  createHostedRuntimePort,
-  createToolRuntimePort,
-  createOperatorRuntimePort,
-} from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
+import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
 import type {
   BrewvaAuthorityPort,
   BrewvaConfig,
@@ -80,10 +75,10 @@ export function createRuntimeFixture(options: RuntimeFixtureOptions = {}): Brewv
   if (runtimeConfig && typeof options.events?.record === "function") {
     runtimeConfig.infrastructure.events.level = "debug";
   }
-  const runtime = new BrewvaRuntime({
+  const runtime = createBrewvaRuntime({
     cwd: mkdtempSync(join(tmpdir(), "brewva-ext-runtime-fixture-")),
     config: runtimeConfig,
-  });
+  }).hosted;
 
   if (options.authority) {
     assignDeep(
@@ -99,17 +94,14 @@ export function createRuntimeFixture(options: RuntimeFixtureOptions = {}): Brewv
   }
   if (options.operator) {
     assignDeep(
-      createOperatorRuntimePort(runtime).operator as unknown as Record<string, unknown>,
+      runtime.operator as unknown as Record<string, unknown>,
       options.operator as Record<string, unknown>,
     );
   }
 
   if (options.context) {
     const inspectContext = runtime.inspect.context as Record<string, unknown>;
-    const operatorContext = createOperatorRuntimePort(runtime).operator.context as Record<
-      string,
-      unknown
-    >;
+    const operatorContext = runtime.operator.context as Record<string, unknown>;
     const operatorLifecycle = operatorContext.lifecycle as Record<string, unknown>;
     const inspectUsage = inspectContext.usage as Record<string, unknown>;
     const inspectCompaction = inspectContext.compaction as Record<string, unknown>;
@@ -163,10 +155,7 @@ export function createRuntimeFixture(options: RuntimeFixtureOptions = {}): Brewv
   if (options.tools) {
     const inspectTools = runtime.inspect.tools as Record<string, unknown>;
     const authorityTools = runtime.authority.tools as Record<string, unknown>;
-    const operatorTools = createOperatorRuntimePort(runtime).operator.tools as Record<
-      string,
-      unknown
-    >;
+    const operatorTools = runtime.operator.tools as Record<string, unknown>;
     const authorityInvocation = authorityTools.invocation as Record<string, unknown>;
     const authorityParallel = authorityTools.parallel as Record<string, unknown>;
     const authorityResourceLeases = authorityTools.resourceLeases as Record<string, unknown>;
@@ -202,10 +191,7 @@ export function createRuntimeFixture(options: RuntimeFixtureOptions = {}): Brewv
   if (options.session) {
     const inspectSession = runtime.inspect.session as Record<string, unknown>;
     const authoritySession = runtime.authority.session as Record<string, unknown>;
-    const operatorSession = createOperatorRuntimePort(runtime).operator.session as Record<
-      string,
-      unknown
-    >;
+    const operatorSession = runtime.operator.session as Record<string, unknown>;
     for (const [key, value] of Object.entries(options.session)) {
       if (key in inspectSession) {
         inspectSession[key] = value;
@@ -219,15 +205,21 @@ export function createRuntimeFixture(options: RuntimeFixtureOptions = {}): Brewv
     }
   }
 
-  return createHostedRuntimePort(runtime);
+  return runtime;
 }
 
 export function createBundledToolRuntime(
-  runtime: BrewvaRuntime | BrewvaHostedRuntimePort,
+  runtime: BrewvaHostedRuntimePort,
   extras?: Pick<BrewvaBundledToolRuntime, "delegation" | "orchestration">,
 ): BrewvaBundledToolRuntime {
   return {
-    ...createToolRuntimePort(runtime),
+    identity: runtime.identity,
+    config: runtime.config,
+    authority: runtime.authority,
+    inspect: runtime.inspect,
+    extensions: {
+      tools: runtime.extensions.tools,
+    },
     ...extras,
   };
 }

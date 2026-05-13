@@ -1,4 +1,4 @@
-import { BrewvaRuntime, createHostedRuntimePort } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import { createTrustedLocalGovernancePort } from "@brewva/brewva-runtime/governance";
 import { createRecoveryWalStore } from "@brewva/brewva-runtime/recovery";
 import { createHostedSession } from "../hosted/api.js";
@@ -47,14 +47,12 @@ export async function runChannelModeOperation(options: RunChannelModeOptions): P
     return;
   }
 
-  const runtime = createHostedRuntimePort(
-    new BrewvaRuntime({
-      cwd: options.cwd,
-      configPath: options.configPath,
-      agentId: options.agentId,
-      governancePort: createTrustedLocalGovernancePort({ profile: "team" }),
-    }),
-  );
+  const runtime = createBrewvaRuntime({
+    cwd: options.cwd,
+    configPath: options.configPath,
+    agentId: options.agentId,
+    governancePort: createTrustedLocalGovernancePort({ profile: "team" }),
+  }).hosted;
   options.onRuntimeReady?.(runtime);
 
   const telegramChannelPolicyState = resolveTelegramChannelPolicyState();

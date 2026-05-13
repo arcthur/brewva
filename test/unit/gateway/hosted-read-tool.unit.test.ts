@@ -1,11 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { mkdirSync, readFileSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import {
-  BrewvaRuntime,
-  createOperatorRuntimePort,
-  createHostedRuntimePort,
-} from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaRuntimeOptions } from "@brewva/brewva-runtime";
 import {
   TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE,
   TOOL_READ_PATH_GATE_ARMED_EVENT_TYPE,
@@ -18,8 +15,8 @@ import { createCompactReadTool } from "../../../packages/brewva-gateway/src/host
 import { createOpsRuntimeConfig } from "../../helpers/runtime.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
-function createHostedTestRuntime(options: ConstructorParameters<typeof BrewvaRuntime>[0]) {
-  return createHostedRuntimePort(new BrewvaRuntime(options));
+function createHostedTestRuntime(options: BrewvaRuntimeOptions) {
+  return createBrewvaRuntime(options).hosted;
 }
 
 function extractText(result: { content: Array<{ type: string; text?: string }> }): string {
@@ -90,7 +87,7 @@ describe("hosted compact read tool", () => {
         channelSuccess: false,
       });
     }
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: TOOL_READ_PATH_GATE_ARMED_EVENT_TYPE,
       payload: {
@@ -147,7 +144,7 @@ describe("hosted compact read tool", () => {
     const templateTool = createBrewvaReadToolDefinition(workspace);
     let delegateCalls = 0;
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: TOOL_READ_PATH_GATE_ARMED_EVENT_TYPE,
       payload: {
@@ -199,7 +196,7 @@ describe("hosted compact read tool", () => {
     const templateTool = createBrewvaReadToolDefinition(workspace);
     let delegateCalls = 0;
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: TOOL_READ_PATH_GATE_ARMED_EVENT_TYPE,
       payload: {
@@ -207,7 +204,7 @@ describe("hosted compact read tool", () => {
         failedPaths: ["src/missing-a.ts", "src/missing-b.ts"],
       },
     });
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE,
       payload: {
@@ -291,10 +288,7 @@ describe("hosted compact read tool", () => {
     expect(delegateCalls).toBe(1);
     expect(extractText(unchanged)).toContain("File unchanged since previous visible read");
 
-    createOperatorRuntimePort(runtime).operator.context.visibleRead.advanceEpoch(
-      sessionId,
-      "history_pruned",
-    );
+    runtime.operator.context.visibleRead.advanceEpoch(sessionId, "history_pruned");
 
     const afterCompact = await compactReadTool.execute(
       "read-call-3",

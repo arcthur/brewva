@@ -8,17 +8,14 @@ import {
   HostedDelegationStore,
   type HostedSubagentSessionOptions,
 } from "@brewva/brewva-gateway";
-import {
-  BrewvaRuntime,
-  DEFAULT_BREWVA_CONFIG,
-  createHostedRuntimePort,
-  createOperatorRuntimePort,
-} from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaRuntimeOptions } from "@brewva/brewva-runtime";
+import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
 import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import type { BrewvaPromptSessionEvent } from "@brewva/brewva-substrate/session";
 
-function createHostedTestRuntime(options: ConstructorParameters<typeof BrewvaRuntime>[0]) {
-  return createHostedRuntimePort(new BrewvaRuntime(options));
+function createHostedTestRuntime(options: BrewvaRuntimeOptions) {
+  return createBrewvaRuntime(options).hosted;
 }
 
 function createTempWorkspace(prefix: string): string {
@@ -36,7 +33,7 @@ describe("hosted subagent orchestrator", () => {
       kind: "main",
       forkPoint: { kind: "session_root" },
     });
-    const source = createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    const source = runtime.extensions.hosted.events.record({
       sessionId: parentSessionId,
       type: "message_end",
       payload: {
@@ -483,7 +480,7 @@ describe("hosted subagent orchestrator", () => {
                 } as BrewvaPromptSessionEvent);
               }
 
-              createHostedRuntimePort(childRuntime).extensions.hosted.events.record({
+              childRuntime.extensions.hosted.events.record({
                 sessionId: childSessionId,
                 type: "session_turn_transition",
                 payload: {
@@ -1133,7 +1130,7 @@ describe("hosted subagent orchestrator", () => {
       },
     });
 
-    createOperatorRuntimePort(runtime).operator.session.state.clear("parent-session-clear");
+    runtime.operator.session.state.clear("parent-session-clear");
 
     expect(cancelled).toEqual([
       {

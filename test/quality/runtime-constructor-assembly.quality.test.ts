@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { BrewvaRuntime, createOperatorRuntimePort } from "@brewva/brewva-runtime";
-import { getRuntimeInternals } from "../helpers/runtime-internals.js";
+import { createRuntimeWithInternals } from "../helpers/runtime-internals.js";
 import { createTestWorkspace } from "../helpers/workspace.js";
 
 type RuntimeLazyFactories = {
@@ -51,21 +50,24 @@ function trackLazyFactoryCalls(
 
 describe("runtime constructor assembly guard", () => {
   test("does not instantiate cold-path services during construction or hot-path inspection", () => {
-    const runtime = new BrewvaRuntime({ cwd: createTestWorkspace("runtime-assembly-hot-path") });
-    const internals = getRuntimeInternals(runtime) as RuntimeInternals;
-    const counts = trackLazyFactoryCalls(internals);
+    const { runtimeInstance, internals } = createRuntimeWithInternals({
+      cwd: createTestWorkspace("runtime-assembly-hot-path"),
+    });
+    const runtime = runtimeInstance.hosted;
+    const runtimeInternals = internals as RuntimeInternals;
+    const counts = trackLazyFactoryCalls(runtimeInternals);
 
-    expect(internals.verificationService).toBeUndefined();
-    expect(internals.fileChangeService).toBeUndefined();
-    expect(internals.mutationRollbackService).toBeUndefined();
-    expect(internals.parallelService).toBeUndefined();
-    expect(internals.resourceLeaseService).toBeUndefined();
-    expect(internals.toolGateService).toBeUndefined();
-    expect(internals.toolInvocationSpine).toBeUndefined();
-    expect(internals.credentialVaultService).toBeUndefined();
-    expect(internals.scheduleIntentService).toBeUndefined();
-    expect(internals.sessionWireService).toBeUndefined();
-    expect(internals.reasoningService).toBeUndefined();
+    expect(runtimeInternals.verificationService).toBeUndefined();
+    expect(runtimeInternals.fileChangeService).toBeUndefined();
+    expect(runtimeInternals.mutationRollbackService).toBeUndefined();
+    expect(runtimeInternals.parallelService).toBeUndefined();
+    expect(runtimeInternals.resourceLeaseService).toBeUndefined();
+    expect(runtimeInternals.toolGateService).toBeUndefined();
+    expect(runtimeInternals.toolInvocationSpine).toBeUndefined();
+    expect(runtimeInternals.credentialVaultService).toBeUndefined();
+    expect(runtimeInternals.scheduleIntentService).toBeUndefined();
+    expect(runtimeInternals.sessionWireService).toBeUndefined();
+    expect(runtimeInternals.reasoningService).toBeUndefined();
 
     void runtime.inspect.cost.summary.get("assembly-s1");
     void runtime.inspect.lifecycle.getSnapshot("assembly-s1");
@@ -81,19 +83,22 @@ describe("runtime constructor assembly guard", () => {
   });
 
   test("instantiates cold-path services lazily when their surfaces are first used", async () => {
-    const runtime = new BrewvaRuntime({ cwd: createTestWorkspace("runtime-assembly-cold-path") });
-    const internals = getRuntimeInternals(runtime) as RuntimeInternals;
-    const counts = trackLazyFactoryCalls(internals);
+    const { runtimeInstance, internals } = createRuntimeWithInternals({
+      cwd: createTestWorkspace("runtime-assembly-cold-path"),
+    });
+    const runtime = runtimeInstance.hosted;
+    const runtimeInternals = internals as RuntimeInternals;
+    const counts = trackLazyFactoryCalls(runtimeInternals);
 
     runtime.inspect.tools.access.check("assembly-s2", "grep");
     expect(counts.get("createToolGateService")).toBe(1);
-    expect(internals.toolGateService).toBeDefined();
+    expect(runtimeInternals.toolGateService).toBeDefined();
 
     runtime.authority.tools.resourceLeases.request("assembly-s2", {
       reason: "verify lazy resource-lease construction",
     });
     expect(counts.get("createResourceLeaseService")).toBe(1);
-    expect(internals.resourceLeaseService).toBeDefined();
+    expect(runtimeInternals.resourceLeaseService).toBeDefined();
 
     runtime.authority.tools.invocation.recordResult({
       sessionId: "assembly-s2",
@@ -103,21 +108,18 @@ describe("runtime constructor assembly guard", () => {
       channelSuccess: true,
     });
     expect(counts.get("createToolInvocationSpine")).toBe(1);
-    expect(internals.toolInvocationSpine).toBeDefined();
+    expect(runtimeInternals.toolInvocationSpine).toBeDefined();
 
     await runtime.authority.verification.checks.verify("assembly-s2");
     expect(counts.get("createVerificationService")).toBe(1);
-    expect(internals.verificationService).toBeDefined();
+    expect(runtimeInternals.verificationService).toBeDefined();
 
-    createOperatorRuntimePort(runtime).operator.session.credentials.resolveBindings(
-      "assembly-s2",
-      "exec",
-    );
+    runtime.operator.session.credentials.resolveBindings("assembly-s2", "exec");
     expect(counts.get("createCredentialVaultService")).toBe(1);
-    expect(internals.credentialVaultService).toBeDefined();
+    expect(runtimeInternals.credentialVaultService).toBeDefined();
 
     void runtime.inspect.sessionWire.query("assembly-s2");
     expect(counts.get("createSessionWireService")).toBe(1);
-    expect(internals.sessionWireService).toBeDefined();
+    expect(runtimeInternals.sessionWireService).toBeDefined();
   });
 });

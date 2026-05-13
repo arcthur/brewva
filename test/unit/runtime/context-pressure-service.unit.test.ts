@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { cpSync } from "node:fs";
 import { resolve } from "node:path";
-import { DEFAULT_BREWVA_CONFIG, createOperatorRuntimePort } from "@brewva/brewva-runtime";
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
+import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
 import { ContextBudgetManager } from "../../../packages/brewva-runtime/src/domain/context/budget.js";
 import {
   evaluateContextCompactionGate,
@@ -506,12 +506,12 @@ describe("context status derivation", () => {
     config.infrastructure.events.enabled = true;
     config.infrastructure.events.dir = ".orchestrator/events";
     config.ledger.path = ".orchestrator/ledger/evidence.jsonl";
-    const runtime = new BrewvaRuntime({ cwd: workspace, config });
+    const runtime = createBrewvaRuntime({ cwd: workspace, config }).hosted;
 
     const sessionId = "pressure-runtime-wiring-1";
-    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+    runtime.operator.context.lifecycle.onTurnStart(sessionId, 1);
     const usage = createUsage(0.9);
-    createOperatorRuntimePort(runtime).operator.context.usage.observe(sessionId, usage);
+    runtime.operator.context.usage.observe(sessionId, usage);
 
     for (const toolName of ["tape_info", "tape_search", "recall_search", "cost_view", "exec"]) {
       expect(runtime.inspect.context.compaction.checkGate(sessionId, toolName, usage).allowed).toBe(

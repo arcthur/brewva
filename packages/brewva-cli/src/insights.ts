@@ -1,5 +1,5 @@
 import { parseArgs as parseNodeArgs } from "node:util";
-import { BrewvaRuntime, createOperatorRuntimePort } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime, selectOperatorRuntimePort } from "@brewva/brewva-runtime";
 import type { BrewvaOperatorRuntimePort } from "@brewva/brewva-runtime";
 import { createTrustedLocalGovernancePort } from "@brewva/brewva-runtime/governance";
 import {
@@ -800,12 +800,12 @@ async function runInsightsCli(argv: string[]): Promise<number> {
     return 1;
   }
 
-  const runtime = new BrewvaRuntime({
+  const runtime = createBrewvaRuntime({
     cwd: typeof parsed.values.cwd === "string" ? parsed.values.cwd : undefined,
     configPath: typeof parsed.values.config === "string" ? parsed.values.config : undefined,
     governancePort: createTrustedLocalGovernancePort({ profile: "personal" }),
   });
-  const operatorRuntime = createOperatorRuntimePort(runtime);
+  const operatorRuntime = selectOperatorRuntimePort(runtime);
 
   let directory: ReturnType<typeof resolveInspectDirectory>;
   try {

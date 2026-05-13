@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createHostedSession as createBrewvaSession } from "@brewva/brewva-gateway/hosted";
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import { createTrustedLocalGovernancePort } from "@brewva/brewva-runtime/governance";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
@@ -115,10 +115,10 @@ describe("brewva session ui settings wiring", () => {
 
   test("existing runtimes reject routingDefaultScopes inference", async () => {
     const workspace = createTestWorkspace("session-ui-routing-default-scopes-existing-runtime");
-    const runtime = new BrewvaRuntime({
+    const runtime = createBrewvaRuntime({
       cwd: workspace,
       governancePort: createTrustedLocalGovernancePort({ profile: "team" }),
-    });
+    }).hosted;
 
     return expect(
       createBrewvaSession({
@@ -126,7 +126,7 @@ describe("brewva session ui settings wiring", () => {
         cwd: workspace,
         routingDefaultScopes: ["core", "domain"],
       }),
-    ).rejects.toThrow(/routingDefaultScopes must be applied when constructing BrewvaRuntime/);
+    ).rejects.toThrow(/routingDefaultScopes must be applied when calling createBrewvaRuntime/);
   });
 
   test("session bootstrap no longer exposes removed skill-broker metadata", async () => {

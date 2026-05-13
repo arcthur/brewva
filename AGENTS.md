@@ -17,7 +17,7 @@
 ## Hard Invariants
 
 - Preserve the user-facing `brewva` command, help surface, launcher metadata, and distribution smoke checks.
-- Keep `BrewvaRuntime` root semantic-surface based: `runtime.authority` and `runtime.inspect`; repo-owned operators must use `createOperatorRuntimePort(runtime).operator`.
+- Keep `BrewvaRuntimeRoot` semantic-surface based: `root.authority` and `root.inspect`; repo-owned operators must use `selectOperatorRuntimePort(instance).operator`.
 - Do not reintroduce a mixed top-level implementation surface.
 - Keep workspace imports on package entrypoints; do not reintroduce local alias schemes or cross-package relative imports.
 - Keep public root exports narrow. Repo-owned implementation seams stay under documented internal entrypoints.

@@ -3,17 +3,14 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createInsightsCommandExtension } from "@brewva/brewva-cli";
 import type { HostedExtensionApi } from "@brewva/brewva-gateway/extensions";
-import {
-  BrewvaRuntime,
-  DEFAULT_BREWVA_CONFIG,
-  createOperatorRuntimePort,
-  createHostedRuntimePort,
-} from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort, BrewvaRuntimeOptions } from "@brewva/brewva-runtime";
+import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
 import { requireDefined } from "../../helpers/assertions.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
-function createHostedTestRuntime(options: ConstructorParameters<typeof BrewvaRuntime>[0]) {
-  return createHostedRuntimePort(new BrewvaRuntime(options));
+function createHostedTestRuntime(options: BrewvaRuntimeOptions) {
+  return createBrewvaRuntime(options).hosted;
 }
 
 type RegisteredCommand = {
@@ -53,7 +50,7 @@ function createCommandApiMock(): {
 }
 
 function recordWriteSession(
-  runtime: BrewvaRuntime,
+  runtime: BrewvaHostedRuntimePort,
   input: {
     workspace: string;
     sessionId: string;
@@ -61,14 +58,14 @@ function recordWriteSession(
     content: string;
   },
 ): void {
-  createHostedRuntimePort(runtime).extensions.hosted.events.record({
+  runtime.extensions.hosted.events.record({
     sessionId: input.sessionId,
     type: "session_bootstrap",
     payload: {
       managedToolMode: "hosted",
     },
   });
-  createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(input.sessionId, 1);
+  runtime.operator.context.lifecycle.onTurnStart(input.sessionId, 1);
   runtime.authority.tools.tracking.markCall(input.sessionId, "edit");
   runtime.authority.tools.tracking.trackCallStart({
     sessionId: input.sessionId,

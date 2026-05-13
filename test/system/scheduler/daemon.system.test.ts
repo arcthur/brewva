@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { spawn, type ChildProcess } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import { asBrewvaIntentId, asBrewvaSessionId } from "@brewva/brewva-runtime/core";
 import {
   SCHEDULE_EVENT_TYPE,
@@ -191,7 +191,10 @@ describe("system: scheduler daemon", () => {
       const parentTaskGoal = "Finish the release checklist";
       const claimSummary = "Release notes are waiting for final reviewer approval.";
 
-      const setupRuntime = new BrewvaRuntime({ cwd: workspace, configPath: ".brewva/brewva.json" });
+      const setupRuntime = createBrewvaRuntime({
+        cwd: workspace,
+        configPath: ".brewva/brewva.json",
+      }).hosted;
       setupRuntime.authority.task.spec.set(parentSessionId, {
         schema: "brewva.task.v1",
         goal: parentTaskGoal,
@@ -223,7 +226,10 @@ describe("system: scheduler daemon", () => {
       const daemon = startSchedulerDaemon(workspace);
 
       try {
-        const observer = new BrewvaRuntime({ cwd: workspace, configPath: ".brewva/brewva.json" });
+        const observer = createBrewvaRuntime({
+          cwd: workspace,
+          configPath: ".brewva/brewva.json",
+        }).hosted;
         const started = await waitForCondition(
           () =>
             observer.inspect.events.records.query(parentSessionId, {
@@ -268,7 +274,10 @@ describe("system: scheduler daemon", () => {
           },
         );
 
-        const persisted = new BrewvaRuntime({ cwd: workspace, configPath: ".brewva/brewva.json" });
+        const persisted = createBrewvaRuntime({
+          cwd: workspace,
+          configPath: ".brewva/brewva.json",
+        }).hosted;
         const wakeup = persisted.inspect.events.records.query(childSessionId, {
           type: SCHEDULE_WAKEUP_EVENT_TYPE,
           last: 1,
@@ -358,7 +367,10 @@ describe("system: scheduler daemon", () => {
 
       const firstDaemon = await startGatewayDaemonHarness({ workspace });
       try {
-        const observer = new BrewvaRuntime({ cwd: workspace, configPath: ".brewva/brewva.json" });
+        const observer = createBrewvaRuntime({
+          cwd: workspace,
+          configPath: ".brewva/brewva.json",
+        }).hosted;
         const seededIntent = await waitForCondition(
           async () => {
             const intents = await observer.inspect.schedule.intents.list({
@@ -385,7 +397,10 @@ describe("system: scheduler daemon", () => {
 
       const secondDaemon = await startGatewayDaemonHarness({ workspace });
       try {
-        const observer = new BrewvaRuntime({ cwd: workspace, configPath: ".brewva/brewva.json" });
+        const observer = createBrewvaRuntime({
+          cwd: workspace,
+          configPath: ".brewva/brewva.json",
+        }).hosted;
         const intent = await waitForCondition(
           async () => {
             const intents = await observer.inspect.schedule.intents.list({

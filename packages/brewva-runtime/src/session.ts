@@ -1,4 +1,4 @@
-// Curated session contract subpath. Keep root imports focused on BrewvaRuntime.
+// Curated session contract subpath. Keep root imports focused on createBrewvaRuntime and explicit port types.
 export {
   SESSION_REDO_SCHEMA,
   SESSION_REWIND_CHECKPOINT_SCHEMA,

@@ -2,7 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { chmodSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
+import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
 import { createBrowserTools } from "@brewva/brewva-tools/navigation";
 import { createBundledToolRuntime } from "../../helpers/runtime.js";
 
@@ -112,7 +113,7 @@ describe("browser tools", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-browser-tool-"));
     const logPath = join(workspace, "browser-args.log");
     const fakeBrowser = writeFakeAgentBrowser(workspace, logPath);
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const tools = createBrowserTools(
       { runtime: createBundledToolRuntime(runtime) },
       { command: fakeBrowser },
@@ -154,7 +155,7 @@ describe("browser tools", () => {
     const outside = mkdtempSync(join(tmpdir(), "brewva-browser-screenshot-outside-"));
     const logPath = join(workspace, "browser-args.log");
     const fakeBrowser = writeFakeAgentBrowser(workspace, logPath);
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const tools = createBrowserTools(
       { runtime: createBundledToolRuntime(runtime) },
       { command: fakeBrowser },
@@ -181,7 +182,7 @@ describe("browser tools", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-browser-state-load-"));
     const logPath = join(workspace, "browser-args.log");
     const fakeBrowser = writeFakeAgentBrowser(workspace, logPath);
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const tools = createBrowserTools(
       { runtime: createBundledToolRuntime(runtime) },
       { command: fakeBrowser },
@@ -209,7 +210,7 @@ describe("browser tools", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-browser-wait-"));
     const logPath = join(workspace, "browser-args.log");
     const fakeBrowser = writeFakeAgentBrowser(workspace, logPath);
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const tools = createBrowserTools(
       { runtime: createBundledToolRuntime(runtime) },
       { command: fakeBrowser },
@@ -238,7 +239,7 @@ describe("browser tools", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-browser-get-"));
     const logPath = join(workspace, "browser-args.log");
     const fakeBrowser = writeFakeAgentBrowser(workspace, logPath);
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const tools = createBrowserTools(
       { runtime: createBundledToolRuntime(runtime) },
       { command: fakeBrowser },
@@ -280,7 +281,7 @@ describe("browser tools", () => {
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
     config.security.boundaryPolicy.network.mode = "allowlist";
     config.security.boundaryPolicy.network.outbound = [{ host: "allowed.example", ports: [443] }];
-    const runtime = new BrewvaRuntime({ cwd: workspace, config });
+    const runtime = createBrewvaRuntime({ cwd: workspace, config }).hosted;
     const tools = createBrowserTools(
       { runtime: createBundledToolRuntime(runtime) },
       { command: fakeBrowser },

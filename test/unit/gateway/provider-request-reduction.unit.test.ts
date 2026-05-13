@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import { recordSessionTurnTransition } from "@brewva/brewva-gateway";
-import { createHostedRuntimePort, createOperatorRuntimePort } from "@brewva/brewva-runtime";
 import { readContextEvidenceRecords } from "../../../packages/brewva-gateway/src/hosted/internal/context/evidence/context-evidence.js";
 import {
   registerProviderRequestRecovery,
@@ -22,7 +21,7 @@ function observeProviderCache(input: {
   cacheReadTokens?: number;
   timestamp?: number;
 }): void {
-  createOperatorRuntimePort(input.runtime).operator.context.providerCache.observe(input.sessionId, {
+  input.runtime.operator.context.providerCache.observe(input.sessionId, {
     source: `provider=openai|api=openai-responses|model=gpt-5.4|session=${input.sessionId}`,
     timestamp: input.timestamp,
     fingerprint: {
@@ -126,8 +125,8 @@ describe("provider request reduction", () => {
     const { api, handlers } = createMockExtensionApi();
     const sessionId = "provider-request-reduction-openai";
 
-    registerProviderRequestReduction(api, createHostedRuntimePort(runtime));
-    createOperatorRuntimePort(runtime).operator.context.usage.observe(sessionId, {
+    registerProviderRequestReduction(api, runtime);
+    runtime.operator.context.usage.observe(sessionId, {
       tokens: 88_000,
       contextWindow: 100_000,
       percent: 88,
@@ -195,8 +194,8 @@ describe("provider request reduction", () => {
     const { api, handlers } = createMockExtensionApi();
     const sessionId = "provider-request-reduction-responses";
 
-    registerProviderRequestReduction(api, createHostedRuntimePort(runtime));
-    createOperatorRuntimePort(runtime).operator.context.usage.observe(sessionId, {
+    registerProviderRequestReduction(api, runtime);
+    runtime.operator.context.usage.observe(sessionId, {
       tokens: 88_000,
       contextWindow: 100_000,
       percent: 88,
@@ -248,8 +247,8 @@ describe("provider request reduction", () => {
     const { api, handlers } = createMockExtensionApi();
     const sessionId = "provider-request-reduction-responses-protected";
 
-    registerProviderRequestReduction(api, createHostedRuntimePort(runtime));
-    createOperatorRuntimePort(runtime).operator.context.usage.observe(sessionId, {
+    registerProviderRequestReduction(api, runtime);
+    runtime.operator.context.usage.observe(sessionId, {
       tokens: 88_000,
       contextWindow: 100_000,
       percent: 88,
@@ -308,8 +307,8 @@ describe("provider request reduction", () => {
     const { api, handlers } = createMockExtensionApi();
     const sessionId = "provider-request-reduction-chat-tool-call-protected";
 
-    registerProviderRequestReduction(api, createHostedRuntimePort(runtime));
-    createOperatorRuntimePort(runtime).operator.context.usage.observe(sessionId, {
+    registerProviderRequestReduction(api, runtime);
+    runtime.operator.context.usage.observe(sessionId, {
       tokens: 88_000,
       contextWindow: 100_000,
       percent: 88,
@@ -371,8 +370,8 @@ describe("provider request reduction", () => {
     const { api, handlers } = createMockExtensionApi();
     const sessionId = "provider-request-reduction-anthropic-tool-use-protected";
 
-    registerProviderRequestReduction(api, createHostedRuntimePort(runtime));
-    createOperatorRuntimePort(runtime).operator.context.usage.observe(sessionId, {
+    registerProviderRequestReduction(api, runtime);
+    runtime.operator.context.usage.observe(sessionId, {
       tokens: 88_000,
       contextWindow: 100_000,
       percent: 88,
@@ -447,8 +446,8 @@ describe("provider request reduction", () => {
     const { api, handlers } = createMockExtensionApi();
     const sessionId = "provider-request-reduction-google-function-response-protected";
 
-    registerProviderRequestReduction(api, createHostedRuntimePort(runtime));
-    createOperatorRuntimePort(runtime).operator.context.usage.observe(sessionId, {
+    registerProviderRequestReduction(api, runtime);
+    runtime.operator.context.usage.observe(sessionId, {
       tokens: 88_000,
       contextWindow: 100_000,
       percent: 88,
@@ -501,8 +500,8 @@ describe("provider request reduction", () => {
     const { api, handlers } = createMockExtensionApi();
     const sessionId = "provider-request-reduction-eligibility";
 
-    registerProviderRequestReduction(api, createHostedRuntimePort(runtime));
-    createOperatorRuntimePort(runtime).operator.context.usage.observe(sessionId, {
+    registerProviderRequestReduction(api, runtime);
+    runtime.operator.context.usage.observe(sessionId, {
       tokens: 88_000,
       contextWindow: 100_000,
       percent: 88,
@@ -526,7 +525,7 @@ describe("provider request reduction", () => {
       }),
     );
 
-    createOperatorRuntimePort(runtime).operator.context.usage.observe(sessionId, {
+    runtime.operator.context.usage.observe(sessionId, {
       tokens: 0,
       contextWindow: 1_000,
       percent: 0,
@@ -582,7 +581,7 @@ describe("provider request reduction", () => {
     const { api, handlers } = createMockExtensionApi();
     const sessionId = "provider-request-reduction-model-window";
 
-    registerProviderRequestReduction(api, createHostedRuntimePort(runtime));
+    registerProviderRequestReduction(api, runtime);
     const payload = invokeBeforeProviderRequestChain(
       handlers,
       {
@@ -609,8 +608,8 @@ describe("provider request reduction", () => {
     const { api, handlers } = createMockExtensionApi();
     const sessionId = "provider-request-reduction-runtime-usage-precedence";
 
-    registerProviderRequestReduction(api, createHostedRuntimePort(runtime));
-    createOperatorRuntimePort(runtime).operator.context.usage.observe(sessionId, {
+    registerProviderRequestReduction(api, runtime);
+    runtime.operator.context.usage.observe(sessionId, {
       tokens: 0,
       contextWindow: 1_000,
       percent: 0,
@@ -642,8 +641,8 @@ describe("provider request reduction", () => {
     const { api, handlers } = createMockExtensionApi();
     const sessionId = "provider-request-reduction-cache-cold";
 
-    registerProviderRequestReduction(api, createHostedRuntimePort(runtime));
-    createOperatorRuntimePort(runtime).operator.context.usage.observe(sessionId, {
+    registerProviderRequestReduction(api, runtime);
+    runtime.operator.context.usage.observe(sessionId, {
       tokens: 20_000,
       contextWindow: 100_000,
       percent: 0.2,
@@ -687,8 +686,8 @@ describe("provider request reduction", () => {
     const { api, handlers } = createMockExtensionApi();
     const sessionId = "provider-request-reduction-cache-expired";
 
-    registerProviderRequestReduction(api, createHostedRuntimePort(runtime));
-    createOperatorRuntimePort(runtime).operator.context.usage.observe(sessionId, {
+    registerProviderRequestReduction(api, runtime);
+    runtime.operator.context.usage.observe(sessionId, {
       tokens: 20_000,
       contextWindow: 100_000,
       percent: 0.2,
@@ -728,7 +727,7 @@ describe("provider request reduction", () => {
     const { api, handlers } = createMockExtensionApi();
     const sessionId = "provider-request-reduction-diagnostic-only";
 
-    registerProviderRequestReduction(api, createHostedRuntimePort(runtime));
+    registerProviderRequestReduction(api, runtime);
     Object.assign(runtime.inspect.lifecycle, {
       getSnapshot() {
         return {
@@ -800,8 +799,8 @@ describe("provider request reduction", () => {
     const { api, handlers } = createMockExtensionApi();
     const sessionId = "provider-request-reduction-open-tool-call";
 
-    registerProviderRequestReduction(api, createHostedRuntimePort(runtime));
-    createOperatorRuntimePort(runtime).operator.context.usage.observe(sessionId, {
+    registerProviderRequestReduction(api, runtime);
+    runtime.operator.context.usage.observe(sessionId, {
       tokens: 88_000,
       contextWindow: 100_000,
       percent: 88,
@@ -888,8 +887,8 @@ describe("provider request reduction", () => {
     const { api, handlers } = createMockExtensionApi();
     const sessionId = "provider-request-reduction-observation";
 
-    registerProviderRequestReduction(api, createHostedRuntimePort(runtime));
-    createOperatorRuntimePort(runtime).operator.context.usage.observe(sessionId, {
+    registerProviderRequestReduction(api, runtime);
+    runtime.operator.context.usage.observe(sessionId, {
       tokens: 88_000,
       contextWindow: 100_000,
       percent: 88,
@@ -950,13 +949,13 @@ describe("provider request reduction", () => {
     const { api, handlers } = createMockExtensionApi();
     const sessionId = "provider-request-reduction-cache-aware";
 
-    registerProviderRequestReduction(api, createHostedRuntimePort(runtime));
-    createOperatorRuntimePort(runtime).operator.context.usage.observe(sessionId, {
+    registerProviderRequestReduction(api, runtime);
+    runtime.operator.context.usage.observe(sessionId, {
       tokens: 88_000,
       contextWindow: 100_000,
       percent: 88,
     });
-    createOperatorRuntimePort(runtime).operator.context.providerCache.observe(sessionId, {
+    runtime.operator.context.providerCache.observe(sessionId, {
       source:
         "provider=openai|api=openai-responses|model=gpt-5.4|transport=sse|scope=session|retention=short|writeMode=readWrite|session=provider-request-reduction-cache-aware",
       fingerprint: {
@@ -1032,10 +1031,10 @@ describe("provider request reduction", () => {
     const { api, handlers } = createMockExtensionApi();
     const sessionId = "provider-request-reduction-output-budget";
 
-    registerProviderRequestReduction(api, createHostedRuntimePort(runtime));
+    registerProviderRequestReduction(api, runtime);
     registerProviderRequestRecovery(api, runtime);
 
-    createOperatorRuntimePort(runtime).operator.context.usage.observe(sessionId, {
+    runtime.operator.context.usage.observe(sessionId, {
       tokens: 88_000,
       contextWindow: 100_000,
       percent: 88,
@@ -1135,8 +1134,8 @@ describe("provider request reduction", () => {
     });
     const sessionId = "protected-tools-1";
     const { api, handlers } = createMockExtensionApi();
-    registerProviderRequestReduction(api, createHostedRuntimePort(runtime));
-    createOperatorRuntimePort(runtime).operator.context.usage.observe(sessionId, {
+    registerProviderRequestReduction(api, runtime);
+    runtime.operator.context.usage.observe(sessionId, {
       tokens: 9000,
       contextWindow: 10_000,
       percent: 90,
@@ -1175,8 +1174,8 @@ describe("provider request reduction", () => {
     });
     const sessionId = "tail-protect-large-1";
     const { api, handlers } = createMockExtensionApi();
-    registerProviderRequestReduction(api, createHostedRuntimePort(runtime));
-    createOperatorRuntimePort(runtime).operator.context.usage.observe(sessionId, {
+    registerProviderRequestReduction(api, runtime);
+    runtime.operator.context.usage.observe(sessionId, {
       tokens: 9000,
       contextWindow: 10_000,
       percent: 90,
@@ -1199,8 +1198,8 @@ describe("provider request reduction", () => {
     });
     const sessionId = "tail-protect-finite-1";
     const { api, handlers } = createMockExtensionApi();
-    registerProviderRequestReduction(api, createHostedRuntimePort(runtime));
-    createOperatorRuntimePort(runtime).operator.context.usage.observe(sessionId, {
+    registerProviderRequestReduction(api, runtime);
+    runtime.operator.context.usage.observe(sessionId, {
       tokens: 9000,
       contextWindow: 10_000,
       percent: 90,

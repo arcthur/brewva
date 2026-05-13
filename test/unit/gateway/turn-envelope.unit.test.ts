@@ -2,7 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BrewvaRuntime, createHostedRuntimePort } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaRuntimeOptions } from "@brewva/brewva-runtime";
 import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import { asBrewvaToolCallId, asBrewvaToolName } from "@brewva/brewva-runtime/core";
 import {
@@ -21,8 +22,8 @@ import {
   type HostedTurnEnvelopeLoopResult,
 } from "../../../packages/brewva-gateway/src/hosted/internal/thread-loop/turn-envelope.js";
 
-function createHostedTestRuntime(options: ConstructorParameters<typeof BrewvaRuntime>[0]) {
-  return createHostedRuntimePort(new BrewvaRuntime(options));
+function createHostedTestRuntime(options: BrewvaRuntimeOptions) {
+  return createBrewvaRuntime(options).hosted;
 }
 
 function createRuntime(prefix: string): BrewvaHostedRuntimePort {
@@ -157,7 +158,7 @@ describe("hosted turn envelope", () => {
       turnId: "turn-effect-spine-1",
       turnLifecycleSpine,
       runLoop: async () => {
-        createHostedRuntimePort(runtime).extensions.hosted.events.record({
+        runtime.extensions.hosted.events.record({
           sessionId,
           turn: 0,
           type: EFFECT_AUTHORITY_DECIDED_EVENT_TYPE,
@@ -199,7 +200,7 @@ describe("hosted turn envelope", () => {
             },
           },
         });
-        createHostedRuntimePort(runtime).extensions.hosted.events.record({
+        runtime.extensions.hosted.events.record({
           sessionId,
           turn: 0,
           type: TOOL_RESULT_RECORDED_EVENT_TYPE,
@@ -287,7 +288,7 @@ describe("hosted turn envelope", () => {
       turnId: "turn-cross-recovery-1",
       turnLifecycleSpine,
       runLoop: async () => {
-        createHostedRuntimePort(runtime).extensions.hosted.events.record({
+        runtime.extensions.hosted.events.record({
           sessionId,
           turn: 42,
           type: "session_turn_transition",

@@ -1,6 +1,22 @@
 import { attachRuntimeSourceIdentity } from "@brewva/brewva-std/runtime-identity";
 import type { BrewvaToolRuntime } from "../contracts/index.js";
 import { getBrewvaToolRequiredCapabilities } from "./required-capabilities.js";
+import { isBrewvaToolRuntimeCapabilityPath } from "./runtime-capability-inventory.js";
+
+function assertRequiredCapabilitiesInInventory(
+  toolName: string,
+  capabilities: readonly string[],
+): void {
+  const invalid = capabilities.filter(
+    (capability) => !isBrewvaToolRuntimeCapabilityPath(capability),
+  );
+  if (invalid.length === 0) {
+    return;
+  }
+  throw new Error(
+    `managed Brewva tool '${toolName}' declared unknown runtime capability '${invalid.join(", ")}'.`,
+  );
+}
 
 function bindScopedMethod(
   toolName: string,
@@ -57,6 +73,7 @@ export function createCapabilityScopedToolRuntime<T extends BrewvaToolRuntime>(
   toolName: string,
 ): T {
   const allowedCapabilities = new Set<string>(getBrewvaToolRequiredCapabilities(toolName));
+  assertRequiredCapabilitiesInInventory(toolName, [...allowedCapabilities]);
   let changed = false;
   let authority = runtime.authority;
   let inspect = runtime.inspect;

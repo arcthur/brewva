@@ -2,12 +2,9 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { runInsightsCli } from "@brewva/brewva-cli";
-import {
-  BrewvaRuntime,
-  DEFAULT_BREWVA_CONFIG,
-  createOperatorRuntimePort,
-  createHostedRuntimePort,
-} from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
+import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 async function runInsights(
@@ -45,7 +42,7 @@ async function runInsights(
 }
 
 function recordWriteSession(
-  runtime: BrewvaRuntime,
+  runtime: BrewvaHostedRuntimePort,
   input: {
     workspace: string;
     sessionId: string;
@@ -54,14 +51,14 @@ function recordWriteSession(
     content: string;
   },
 ): void {
-  createHostedRuntimePort(runtime).extensions.hosted.events.record({
+  runtime.extensions.hosted.events.record({
     sessionId: input.sessionId,
     type: "session_bootstrap",
     payload: {
       managedToolMode: "direct",
     },
   });
-  createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(input.sessionId, 1);
+  runtime.operator.context.lifecycle.onTurnStart(input.sessionId, 1);
   runtime.authority.task.spec.set(input.sessionId, {
     schema: "brewva.task.v1",
     goal: input.goal,
@@ -106,10 +103,10 @@ describe("insights subcommand", () => {
         "utf8",
       );
 
-      const runtime = new BrewvaRuntime({
+      const runtime = createBrewvaRuntime({
         cwd: workspace,
         config: structuredClone(DEFAULT_BREWVA_CONFIG),
-      });
+      }).hosted;
 
       recordWriteSession(runtime, {
         workspace,

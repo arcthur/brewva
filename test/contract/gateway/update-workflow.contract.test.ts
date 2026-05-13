@@ -2,7 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { buildBrewvaUpdatePrompt } from "@brewva/brewva-gateway";
-import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
+import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
 import { resolveProjectBrewvaConfigPath } from "@brewva/brewva-runtime/config";
 import { cleanupTestWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
 
@@ -28,10 +29,10 @@ describe("gateway update workflow prompt", () => {
     writeFileSync(join(workspace, "CHANGELOG.md"), "# Changelog\n\n## 0.2.0\n", "utf8");
 
     try {
-      const runtime = new BrewvaRuntime({
+      const runtime = createBrewvaRuntime({
         cwd: workspace,
         config: structuredClone(DEFAULT_BREWVA_CONFIG),
-      });
+      }).hosted;
       const prompt = buildBrewvaUpdatePrompt({
         runtime,
         rawArgs: "target=latest\nmode=safe",

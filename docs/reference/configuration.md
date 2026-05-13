@@ -39,10 +39,10 @@ Top-level config key count: 12.
 Construction-time runtime options are intentionally separate from persisted
 config:
 
-- `new BrewvaRuntime({ routingScopes })` is a hard override for runtime routing
-  scopes.
-- `new BrewvaRuntime({ routingDefaultScopes })` is a front-door default policy
-  used only when config omitted explicit routing choices.
+- `createBrewvaRuntime({ routingScopes })` is a hard override for runtime
+  routing scopes.
+- `createBrewvaRuntime({ routingDefaultScopes })` is a front-door default
+  policy used only when config omitted explicit routing choices.
 - `runtime.config` is deep-readonly after construction.
 - governance posture is selected by constructing a governance port, not by
   mutating config at runtime.

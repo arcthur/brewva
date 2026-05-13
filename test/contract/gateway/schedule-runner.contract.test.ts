@@ -5,7 +5,8 @@ import {
   type SessionBackend,
   type SendPromptOptions,
 } from "@brewva/brewva-gateway";
-import { BrewvaRuntime, createHostedRuntimePort } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaRuntimeOptions } from "@brewva/brewva-runtime";
 import { asBrewvaIntentId, asBrewvaSessionId } from "@brewva/brewva-runtime/core";
 import {
   SCHEDULE_CHILD_SESSION_FAILED_EVENT_TYPE,
@@ -16,8 +17,8 @@ import {
 import type { ScheduleIntentProjectionRecord } from "@brewva/brewva-runtime/schedule";
 import { cleanupTestWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
 
-function createHostedTestRuntime(options: ConstructorParameters<typeof BrewvaRuntime>[0]) {
-  return createHostedRuntimePort(new BrewvaRuntime(options));
+function createHostedTestRuntime(options: BrewvaRuntimeOptions) {
+  return createBrewvaRuntime(options).hosted;
 }
 
 function createScheduleIntent(

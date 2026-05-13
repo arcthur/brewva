@@ -10,7 +10,7 @@ import {
   removePidRecord,
   writePidRecord,
 } from "@brewva/brewva-gateway";
-import { BrewvaRuntime, createHostedRuntimePort } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import {
   SCHEDULE_EVENT_TYPE,
@@ -72,14 +72,12 @@ function createDaemonLogger(verbose: boolean): DaemonLogger {
 }
 
 export async function runDaemon(parsed: RunDaemonOptions): Promise<void> {
-  const runtime = createHostedRuntimePort(
-    new BrewvaRuntime({
-      cwd: parsed.cwd,
-      configPath: parsed.configPath,
-      agentId: parsed.agentId,
-      governancePort: createTrustedLocalGovernancePort({ profile: "personal" }),
-    }),
-  );
+  const runtime = createBrewvaRuntime({
+    cwd: parsed.cwd,
+    configPath: parsed.configPath,
+    agentId: parsed.agentId,
+    governancePort: createTrustedLocalGovernancePort({ profile: "personal" }),
+  }).hosted;
   parsed.onRuntimeReady?.(runtime);
 
   if (!runtime.config.schedule.enabled) {

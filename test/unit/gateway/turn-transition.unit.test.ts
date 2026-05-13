@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { createHostedRuntimePort } from "@brewva/brewva-runtime";
 import {
   HostedTransitionGateError,
   TURN_TRANSITION_TEST_ONLY,
@@ -16,7 +15,7 @@ describe("hosted turn transition coordinator", () => {
     const sessionId = "turn-transition-mapping";
     getHostedTurnTransitionCoordinator(runtime);
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       turn: 4,
       type: "context_compaction_gate_blocked_tool",
@@ -24,7 +23,7 @@ describe("hosted turn transition coordinator", () => {
         toolName: "exec",
       },
     });
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       turn: 4,
       type: "effect_commitment_approval_requested",
@@ -58,7 +57,7 @@ describe("hosted turn transition coordinator", () => {
     const sessionId = "turn-transition-dedup";
     getHostedTurnTransitionCoordinator(runtime);
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       turn: 2,
       type: "context_compaction_gate_blocked_tool",
@@ -66,7 +65,7 @@ describe("hosted turn transition coordinator", () => {
         toolName: "exec",
       },
     });
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       turn: 2,
       type: "context_compaction_gate_blocked_tool",
@@ -74,7 +73,7 @@ describe("hosted turn transition coordinator", () => {
         toolName: "grep",
       },
     });
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       turn: 2,
       type: "context_compaction_gate_cleared",
@@ -82,7 +81,7 @@ describe("hosted turn transition coordinator", () => {
         reason: "session_compact_performed",
       },
     });
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       turn: 2,
       type: "context_compaction_gate_cleared",
@@ -91,7 +90,7 @@ describe("hosted turn transition coordinator", () => {
       },
     });
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       turn: 3,
       type: "effect_commitment_approval_requested",
@@ -99,7 +98,7 @@ describe("hosted turn transition coordinator", () => {
         requestId: "approval-1",
       },
     });
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       turn: 3,
       type: "effect_commitment_approval_decided",
@@ -108,7 +107,7 @@ describe("hosted turn transition coordinator", () => {
         decision: "accept",
       },
     });
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       turn: 3,
       type: "effect_commitment_approval_consumed",
@@ -228,7 +227,7 @@ describe("hosted turn transition coordinator", () => {
     const checkpoint = coordinator.captureOperatorVisibleCheckpoint(sessionId);
     expect(coordinator.hasOperatorVisibleFactSince(sessionId, checkpoint)).toBe(false);
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "tool_call_blocked",
       payload: buildToolCallBlockedPayload(),
@@ -242,12 +241,12 @@ describe("hosted turn transition coordinator", () => {
     const runtime = createRuntimeFixture();
     const sessionId = "turn-transition-projection";
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "tool_call_blocked",
       payload: buildToolCallBlockedPayload(),
     });
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "session_turn_transition",
       payload: {
@@ -309,7 +308,7 @@ describe("hosted turn transition coordinator", () => {
     const runtime = createRuntimeFixture();
     const sessionId = "turn-transition-active-turn";
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       turn: 7,
       type: "turn_input_recorded",
@@ -334,7 +333,7 @@ describe("hosted turn transition coordinator", () => {
       error: "resume failed",
     });
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       turn: 7,
       type: "turn_render_committed",
@@ -436,7 +435,7 @@ describe("hosted turn transition coordinator", () => {
     const runtime = createRuntimeFixture();
     const sessionId = "turn-transition-after-close";
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "session_shutdown",
       payload: {
@@ -542,7 +541,7 @@ describe("hosted turn transition coordinator", () => {
     const runtime = createRuntimeFixture();
     const sessionId = "turn-transition-shutdown-query";
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "session_shutdown",
       payload: {
@@ -632,7 +631,7 @@ describe("hosted turn transition coordinator", () => {
       const sessionId = `turn-transition-pending-delegation-${testCase.status}`;
       const coordinator = getHostedTurnTransitionCoordinator(runtime);
 
-      createHostedRuntimePort(runtime).extensions.hosted.events.record({
+      runtime.extensions.hosted.events.record({
         sessionId,
         turn: 9,
         type: testCase.eventType,

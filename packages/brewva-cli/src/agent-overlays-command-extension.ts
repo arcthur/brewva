@@ -8,7 +8,7 @@ import {
   type HostedExtensionPlugin,
   type HostedExtensionApi,
 } from "@brewva/brewva-gateway/extensions";
-import type { BrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaRuntimeRoot } from "@brewva/brewva-runtime";
 import { clampText } from "./inspect-analysis.js";
 
 const MAX_NOTIFICATION_LINES = 28;
@@ -95,7 +95,9 @@ function formatOverlayDetail(
   return lines.join("\n");
 }
 
-export function createAgentOverlaysCommandExtension(runtime: BrewvaRuntime): HostedExtensionPlugin {
+export function createAgentOverlaysCommandExtension(
+  runtime: BrewvaRuntimeRoot,
+): HostedExtensionPlugin {
   return defineHostedExtensionPlugin({
     name: "cli.agent_overlays_command",
     capabilities: ["tool_registration.write"],

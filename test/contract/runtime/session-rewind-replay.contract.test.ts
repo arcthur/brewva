@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { BrewvaRuntime, createOperatorRuntimePort } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import {
   SESSION_REWIND_COMPLETED_EVENT_TYPE,
   SESSION_REWIND_REDO_COMPLETED_EVENT_TYPE,
@@ -30,8 +30,11 @@ describe("session rewind replay", () => {
     const filePath = join(workspace, "src/replay.ts");
     writeFileSync(filePath, "export const value = 1;\n", "utf8");
 
-    const runtime = new BrewvaRuntime({ cwd: workspace, configPath: RUNTIME_CONTRACT_CONFIG_PATH });
-    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+    const runtime = createBrewvaRuntime({
+      cwd: workspace,
+      configPath: RUNTIME_CONTRACT_CONFIG_PATH,
+    }).hosted;
+    runtime.operator.context.lifecycle.onTurnStart(sessionId, 1);
     const checkpoint = runtime.authority.session.rewind.recordCheckpoint(sessionId, {
       leafEntryId: "leaf-before-replay",
       prompt: { text: "Change value for replay", parts: [] },
@@ -69,10 +72,10 @@ describe("session rewind replay", () => {
     expect(rewindPayload.reasoningRevertId).toBe(rewind.reasoningRevert.revertId);
     expect(rewindPayload.reasoningRevertEventId).toBe(rewind.reasoningRevert.eventId);
 
-    const reloadedAfterRewind = new BrewvaRuntime({
+    const reloadedAfterRewind = createBrewvaRuntime({
       cwd: workspace,
       configPath: RUNTIME_CONTRACT_CONFIG_PATH,
-    });
+    }).hosted;
     expect(
       reloadedAfterRewind.inspect.session.rewind.getState(sessionId).latestRewind?.reasoningRevert
         ?.revertId,
@@ -94,10 +97,10 @@ describe("session rewind replay", () => {
     expect(redoPayload.reasoningCheckpointId).toBe(redo.reasoningCheckpoint.checkpointId);
     expect(redoPayload.reasoningCheckpointEventId).toBe(redo.reasoningCheckpoint.eventId);
 
-    const reloadedAfterRedo = new BrewvaRuntime({
+    const reloadedAfterRedo = createBrewvaRuntime({
       cwd: workspace,
       configPath: RUNTIME_CONTRACT_CONFIG_PATH,
-    });
+    }).hosted;
     const replayedCheckpoint = reloadedAfterRedo.inspect.session.rewind
       .getState(sessionId)
       .checkpoints.find((entry) => entry.checkpointId === checkpoint.checkpointId);

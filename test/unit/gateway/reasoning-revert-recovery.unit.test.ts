@@ -2,11 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  BrewvaRuntime,
-  createOperatorRuntimePort,
-  createHostedRuntimePort,
-} from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort, BrewvaRuntimeOptions } from "@brewva/brewva-runtime";
 import { REASONING_REVERT_EVENT_TYPE } from "@brewva/brewva-runtime/events";
 import {
   REASONING_REVERT_RECOVERY_TEST_ONLY,
@@ -14,8 +11,8 @@ import {
 } from "../../../packages/brewva-gateway/src/hosted/internal/thread-loop/reasoning-revert-recovery.js";
 import { recordSessionTurnTransition } from "../../../packages/brewva-gateway/src/hosted/internal/thread-loop/turn-transition.js";
 
-function createHostedTestRuntime(options: ConstructorParameters<typeof BrewvaRuntime>[0]) {
-  return createHostedRuntimePort(new BrewvaRuntime(options));
+function createHostedTestRuntime(options: BrewvaRuntimeOptions) {
+  return createBrewvaRuntime(options).hosted;
 }
 
 function createRuntimeEventBridge() {
@@ -51,14 +48,14 @@ function readTransitionPayloads(eventBridge: ReturnType<typeof createRuntimeEven
 }
 
 function seedReasoningRevert(
-  runtime: BrewvaRuntime,
+  runtime: BrewvaHostedRuntimePort,
   sessionId: string,
 ): {
   checkpointId: string;
   targetLeafEntryId: string;
   revertEventId: string;
 } {
-  createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 8);
+  runtime.operator.context.lifecycle.onTurnStart(sessionId, 8);
   const checkpointA = runtime.authority.reasoning.checkpoints.record(sessionId, {
     boundary: "operator_marker",
     leafEntryId: "leaf-restore-1",
@@ -248,10 +245,7 @@ describe("reasoning revert recovery controller", () => {
       },
     ];
 
-    createOperatorRuntimePort(eventBridge.runtime).operator.context.lifecycle.onTurnStart(
-      "agent-session-clean-rewind",
-      3,
-    );
+    eventBridge.runtime.operator.context.lifecycle.onTurnStart("agent-session-clean-rewind", 3);
     const checkpointA = eventBridge.runtime.authority.session.rewind.recordCheckpoint(
       "agent-session-clean-rewind",
       {

@@ -2,11 +2,8 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  BrewvaRuntime,
-  createOperatorRuntimePort,
-  createHostedRuntimePort,
-} from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import { sha256Hex } from "@brewva/brewva-std/hash";
 import { buildBrewvaTools } from "@brewva/brewva-tools";
 import {
@@ -30,11 +27,11 @@ afterEach(() => {
   if (workspace) cleanupWorkspace(workspace);
 });
 
-function createCleanRuntime(cwd = workspace): BrewvaRuntime {
-  return new BrewvaRuntime({
+function createCleanRuntime(cwd = workspace): BrewvaHostedRuntimePort {
+  return createBrewvaRuntime({
     cwd,
     config: createRuntimeConfig(),
-  });
+  }).hosted;
 }
 
 function requireTool<T extends { name: string }>(tools: T[], name: string): T {
@@ -191,7 +188,7 @@ describe("session coordination tool contracts", () => {
     const sessionId = "s11-commit";
     const sanitizedSummary = "[CompactSummary]\nKeep only the latest verification failures.";
 
-    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+    runtime.operator.context.lifecycle.onTurnStart(sessionId, 1);
 
     runtime.authority.session.compaction.commit(sessionId, {
       compactId: "cmp-42",
@@ -241,9 +238,9 @@ describe("session coordination tool contracts", () => {
 
   test("tape_handoff writes an anchor and tape_info reports tape and context status", async () => {
     const tapeInfoWorkspace = mkdtempSync(join(tmpdir(), "brewva-tools-tape-info-"));
-    const runtime = new BrewvaRuntime({ cwd: tapeInfoWorkspace });
+    const runtime = createBrewvaRuntime({ cwd: tapeInfoWorkspace }).hosted;
     const sessionId = "s12";
-    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+    runtime.operator.context.lifecycle.onTurnStart(sessionId, 1);
 
     runtime.authority.task.spec.set(sessionId, {
       schema: "brewva.task.v1",
@@ -270,7 +267,7 @@ describe("session coordination tool contracts", () => {
     expect(handoffText).toContain("Tape handoff recorded");
     expect(runtime.inspect.events.records.query(sessionId, { type: "anchor" }).length).toBe(1);
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "tool_output_search",
       payload: {
@@ -283,7 +280,7 @@ describe("session coordination tool contracts", () => {
         matchLayers: { q1: "exact" },
       } as Record<string, unknown>,
     });
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "tool_output_search",
       payload: {
@@ -319,16 +316,16 @@ describe("session coordination tool contracts", () => {
 
   test("tape_search returns matching entries in the current phase", async () => {
     const tapeSearchWorkspace = mkdtempSync(join(tmpdir(), "brewva-tools-tape-search-"));
-    const runtime = new BrewvaRuntime({ cwd: tapeSearchWorkspace });
+    const runtime = createBrewvaRuntime({ cwd: tapeSearchWorkspace }).hosted;
     const sessionId = "s12-search";
-    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+    runtime.operator.context.lifecycle.onTurnStart(sessionId, 1);
 
     runtime.authority.tape.handoff.record(sessionId, {
       name: "investigation",
       summary: "Collected flaky test evidence.",
       nextSteps: "Implement fix.",
     });
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "task_event",
       payload: {
@@ -357,16 +354,16 @@ describe("session coordination tool contracts", () => {
 
   test("recall_search returns source-typed recall across prior sessions", async () => {
     const recallWorkspace = mkdtempSync(join(tmpdir(), "brewva-tools-recall-search-"));
-    const runtime = new BrewvaRuntime({ cwd: recallWorkspace });
+    const runtime = createBrewvaRuntime({ cwd: recallWorkspace }).hosted;
     const priorSessionId = "s12-recall-prior";
     const currentSessionId = "s12-recall-current";
 
-    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(priorSessionId, 1);
+    runtime.operator.context.lifecycle.onTurnStart(priorSessionId, 1);
     runtime.authority.task.spec.set(priorSessionId, {
       schema: "brewva.task.v1",
       goal: "Fix flaky worker bootstrap in the gateway runtime",
     });
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId: priorSessionId,
       type: "task_event",
       payload: {
@@ -376,7 +373,7 @@ describe("session coordination tool contracts", () => {
       } as Record<string, unknown>,
     });
 
-    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(currentSessionId, 1);
+    runtime.operator.context.lifecycle.onTurnStart(currentSessionId, 1);
     runtime.authority.task.spec.set(currentSessionId, {
       schema: "brewva.task.v1",
       goal: "Investigate whether the flaky worker bootstrap issue already has precedent",
@@ -430,16 +427,16 @@ describe("session coordination tool contracts", () => {
 
   test("recall_search returns Chinese tape evidence across prior sessions", async () => {
     const recallWorkspace = mkdtempSync(join(tmpdir(), "brewva-tools-recall-search-cjk-"));
-    const runtime = new BrewvaRuntime({ cwd: recallWorkspace });
+    const runtime = createBrewvaRuntime({ cwd: recallWorkspace }).hosted;
     const priorSessionId = "s12-recall-prior-cjk";
     const currentSessionId = "s12-recall-current-cjk";
 
-    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(priorSessionId, 1);
+    runtime.operator.context.lifecycle.onTurnStart(priorSessionId, 1);
     runtime.authority.task.spec.set(priorSessionId, {
       schema: "brewva.task.v1",
       goal: "修复网关数据库连接失败导致启动重试",
     });
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId: priorSessionId,
       type: "task_event",
       payload: {
@@ -449,7 +446,7 @@ describe("session coordination tool contracts", () => {
       } as Record<string, unknown>,
     });
 
-    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(currentSessionId, 1);
+    runtime.operator.context.lifecycle.onTurnStart(currentSessionId, 1);
     runtime.authority.task.spec.set(currentSessionId, {
       schema: "brewva.task.v1",
       goal: "排查数据库启动失败是否已有处理记录",
@@ -477,16 +474,16 @@ describe("session coordination tool contracts", () => {
 
   test("recall_search can inspect stable ids and surface curation metadata", async () => {
     const recallWorkspace = mkdtempSync(join(tmpdir(), "brewva-tools-recall-inspect-"));
-    const runtime = new BrewvaRuntime({ cwd: recallWorkspace });
+    const runtime = createBrewvaRuntime({ cwd: recallWorkspace }).hosted;
     const priorSessionId = "s12-recall-inspect-prior";
     const currentSessionId = "s12-recall-inspect-current";
 
-    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(priorSessionId, 1);
+    runtime.operator.context.lifecycle.onTurnStart(priorSessionId, 1);
     runtime.authority.task.spec.set(priorSessionId, {
       schema: "brewva.task.v1",
       goal: "Fix flaky gateway bootstrap recall",
     });
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId: priorSessionId,
       type: "task_event",
       payload: {
@@ -500,7 +497,7 @@ describe("session coordination tool contracts", () => {
       } as Record<string, unknown>,
     });
 
-    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(currentSessionId, 1);
+    runtime.operator.context.lifecycle.onTurnStart(currentSessionId, 1);
     runtime.authority.task.spec.set(currentSessionId, {
       schema: "brewva.task.v1",
       goal: "Inspect prior recall state for the gateway bootstrap flake",
@@ -531,7 +528,7 @@ describe("session coordination tool contracts", () => {
       .find((value): value is string => typeof value === "string" && value.startsWith("tape:"));
     expect(stableId).toBeDefined();
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId: currentSessionId,
       type: "recall_curation_recorded",
       payload: {
@@ -585,12 +582,12 @@ describe("session coordination tool contracts", () => {
     const recallWorkspace = mkdtempSync(join(tmpdir(), "brewva-tools-recall-scope-"));
     mkdirSync(join(recallWorkspace, "packages", "gateway"), { recursive: true });
     mkdirSync(join(recallWorkspace, "packages", "cli"), { recursive: true });
-    const runtime = new BrewvaRuntime({ cwd: recallWorkspace });
+    const runtime = createBrewvaRuntime({ cwd: recallWorkspace }).hosted;
     const gatewaySessionId = "s12-recall-scope-gateway";
     const cliSessionId = "s12-recall-scope-cli";
     const currentSessionId = "s12-recall-scope-current";
 
-    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(gatewaySessionId, 1);
+    runtime.operator.context.lifecycle.onTurnStart(gatewaySessionId, 1);
     runtime.authority.task.spec.set(gatewaySessionId, {
       schema: "brewva.task.v1",
       goal: "Fix bootstrap ordering in the gateway runtime",
@@ -598,7 +595,7 @@ describe("session coordination tool contracts", () => {
         files: ["packages/gateway"],
       },
     });
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId: gatewaySessionId,
       type: "task_event",
       payload: {
@@ -608,7 +605,7 @@ describe("session coordination tool contracts", () => {
       } as Record<string, unknown>,
     });
 
-    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(cliSessionId, 1);
+    runtime.operator.context.lifecycle.onTurnStart(cliSessionId, 1);
     runtime.authority.task.spec.set(cliSessionId, {
       schema: "brewva.task.v1",
       goal: "Fix bootstrap ordering in the cli runtime",
@@ -616,7 +613,7 @@ describe("session coordination tool contracts", () => {
         files: ["packages/cli"],
       },
     });
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId: cliSessionId,
       type: "task_event",
       payload: {
@@ -626,7 +623,7 @@ describe("session coordination tool contracts", () => {
       } as Record<string, unknown>,
     });
 
-    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(currentSessionId, 1);
+    runtime.operator.context.lifecycle.onTurnStart(currentSessionId, 1);
     runtime.authority.task.spec.set(currentSessionId, {
       schema: "brewva.task.v1",
       goal: "Check whether gateway bootstrap ordering already has prior work",
@@ -685,7 +682,7 @@ describe("session coordination tool contracts", () => {
   test("reasoning_checkpoint records a durable checkpoint and tape_info reports the active branch", async () => {
     const runtime = createCleanRuntime();
     const sessionId = "s13-reasoning-checkpoint";
-    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+    runtime.operator.context.lifecycle.onTurnStart(sessionId, 1);
 
     const checkpointTool = createReasoningCheckpointTool({
       runtime: createBundledToolRuntime(runtime),
@@ -729,7 +726,7 @@ describe("session coordination tool contracts", () => {
   test("reasoning_revert records a branch reset, aborts the active turn, and retires superseded checkpoints", async () => {
     const runtime = createCleanRuntime();
     const sessionId = "s14-reasoning-revert";
-    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+    runtime.operator.context.lifecycle.onTurnStart(sessionId, 1);
 
     const checkpointTool = createReasoningCheckpointTool({
       runtime: createBundledToolRuntime(runtime),
@@ -824,7 +821,7 @@ describe("session coordination tool contracts", () => {
   test("reasoning_revert rejects continuity text that exceeds the byte cap without aborting the turn", async () => {
     const runtime = createCleanRuntime();
     const sessionId = "s15-reasoning-revert-cap";
-    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+    runtime.operator.context.lifecycle.onTurnStart(sessionId, 1);
 
     const checkpointTool = createReasoningCheckpointTool({
       runtime: createBundledToolRuntime(runtime),
@@ -879,7 +876,7 @@ describe("session coordination tool contracts", () => {
   test("reasoning_revert rejects unknown checkpoints when the session has no reasoning checkpoints", async () => {
     const runtime = createCleanRuntime();
     const sessionId = "s16-reasoning-revert-missing-checkpoint";
-    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+    runtime.operator.context.lifecycle.onTurnStart(sessionId, 1);
 
     let aborted = 0;
     const revertTool = createReasoningRevertTool({

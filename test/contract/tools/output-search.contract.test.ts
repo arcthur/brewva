@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BrewvaRuntime, createHostedRuntimePort } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import { createOutputSearchTool } from "@brewva/brewva-tools/navigation";
 import { createBundledToolRuntime } from "../../helpers/runtime.js";
 import { extractTextContent, mergeContext } from "./tools-flow.helpers.js";
@@ -10,7 +10,7 @@ import { extractTextContent, mergeContext } from "./tools-flow.helpers.js";
 describe("output_search contract", () => {
   test("finds Chinese snippets from persisted artifacts", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-tools-output-search-cjk-"));
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const sessionId = "s12-output-search-cjk";
 
     const artifactRef = ".orchestrator/tool-output-artifacts/session-cjk/100-exec-call.txt";
@@ -23,7 +23,7 @@ describe("output_search contract", () => {
     ].join("\n");
     writeFileSync(join(workspace, artifactRef), artifactText, "utf8");
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "tool_output_artifact_persisted",
       payload: {
@@ -54,7 +54,7 @@ describe("output_search contract", () => {
 
   test("finds snippets from persisted artifacts", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-tools-output-search-"));
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const sessionId = "s12-output-search";
 
     const artifactRef = ".orchestrator/tool-output-artifacts/session-a/100-exec-call.txt";
@@ -68,7 +68,7 @@ describe("output_search contract", () => {
     ].join("\n");
     writeFileSync(join(workspace, artifactRef), artifactText, "utf8");
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "tool_output_artifact_persisted",
       payload: {
@@ -100,7 +100,7 @@ describe("output_search contract", () => {
 
   test("falls back to fuzzy matching for typo queries", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-tools-output-search-fuzzy-"));
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const sessionId = "s12-output-search-fuzzy";
 
     const artifactRef = ".orchestrator/tool-output-artifacts/session-b/101-exec-call.txt";
@@ -113,7 +113,7 @@ describe("output_search contract", () => {
     ].join("\n");
     writeFileSync(join(workspace, artifactRef), artifactText, "utf8");
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "tool_output_artifact_persisted",
       payload: {
@@ -143,7 +143,7 @@ describe("output_search contract", () => {
 
   test("uses partial layer for prefix-heavy queries", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-tools-output-search-partial-"));
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const sessionId = "s12-output-search-partial";
 
     const artifactRef = ".orchestrator/tool-output-artifacts/session-p/101-exec-call.txt";
@@ -156,7 +156,7 @@ describe("output_search contract", () => {
     ].join("\n");
     writeFileSync(join(workspace, artifactRef), artifactText, "utf8");
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "tool_output_artifact_persisted",
       payload: {
@@ -186,7 +186,7 @@ describe("output_search contract", () => {
 
   test("suppresses low-confidence fuzzy matches", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-tools-output-search-fuzzy-gate-"));
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const sessionId = "s12-output-search-fuzzy-gate";
 
     const artifactRef = ".orchestrator/tool-output-artifacts/session-g/101-exec-call.txt";
@@ -199,7 +199,7 @@ describe("output_search contract", () => {
     ].join("\n");
     writeFileSync(join(workspace, artifactRef), artifactText, "utf8");
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "tool_output_artifact_persisted",
       payload: {
@@ -228,7 +228,7 @@ describe("output_search contract", () => {
 
   test("throttles repeated single-query calls", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-tools-output-search-throttle-"));
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const sessionId = "s12-output-search-throttle";
     const artifactDir = join(workspace, ".orchestrator/tool-output-artifacts/session-c");
     mkdirSync(artifactDir, { recursive: true });
@@ -246,7 +246,7 @@ describe("output_search contract", () => {
 
     for (const artifact of artifacts) {
       writeFileSync(join(workspace, artifact.ref), artifact.text, "utf8");
-      createHostedRuntimePort(runtime).extensions.hosted.events.record({
+      runtime.extensions.hosted.events.record({
         sessionId,
         type: "tool_output_artifact_persisted",
         payload: {
@@ -305,7 +305,7 @@ describe("output_search contract", () => {
 
   test("reuses cache and invalidates on artifact change", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-tools-output-search-cache-"));
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const sessionId = "s12-output-search-cache";
 
     const artifactRef = ".orchestrator/tool-output-artifacts/session-d/301-exec-call.txt";
@@ -314,7 +314,7 @@ describe("output_search contract", () => {
 
     let artifactText = "cache marker alpha";
     writeFileSync(join(workspace, artifactRef), artifactText, "utf8");
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "tool_output_artifact_persisted",
       payload: {
@@ -348,7 +348,7 @@ describe("output_search contract", () => {
 
     artifactText = "cache marker beta with updated payload";
     writeFileSync(join(workspace, artifactRef), artifactText, "utf8");
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "tool_output_artifact_persisted",
       payload: {

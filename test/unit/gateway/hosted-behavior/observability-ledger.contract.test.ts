@@ -2,7 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BrewvaRuntime, createHostedRuntimePort } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaRuntimeOptions } from "@brewva/brewva-runtime";
 import { VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
 import { createOutputSearchTool } from "@brewva/brewva-tools/navigation";
 import { defineBrewvaTool } from "@brewva/brewva-tools/registry";
@@ -14,8 +15,8 @@ import {
 import { createMockExtensionApi, invokeHandlers } from "../../../helpers/extension.js";
 import { createBundledToolRuntime } from "../../../helpers/runtime.js";
 
-function createHostedTestRuntime(options: ConstructorParameters<typeof BrewvaRuntime>[0]) {
-  return createHostedRuntimePort(new BrewvaRuntime(options));
+function createHostedTestRuntime(options: BrewvaRuntimeOptions) {
+  return createBrewvaRuntime(options).hosted;
 }
 
 describe("Hosted behavior integration: observability ledger", () => {
@@ -54,7 +55,7 @@ describe("Hosted behavior integration: observability ledger", () => {
       },
     };
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       turn: 1,
       type: "turn_input_recorded",
@@ -145,7 +146,7 @@ describe("Hosted behavior integration: observability ledger", () => {
       },
     };
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       turn: 1,
       type: "turn_input_recorded",
@@ -155,7 +156,7 @@ describe("Hosted behavior integration: observability ledger", () => {
         promptText: "test prompt",
       },
     });
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       turn: 1,
       type: "session_turn_transition",
@@ -246,7 +247,7 @@ describe("Hosted behavior integration: observability ledger", () => {
       },
     );
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       turn: 1,
       type: VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
@@ -626,7 +627,7 @@ describe("Hosted behavior integration: observability ledger", () => {
       },
       ctx,
     );
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "session_turn_transition",
       payload: {
@@ -683,7 +684,7 @@ describe("Hosted behavior integration: observability ledger", () => {
     const runtime = createHostedTestRuntime({ cwd: workspace });
     const sessionId = "ext-obs-query-1";
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "startup_sample",
       payload: {
@@ -691,7 +692,7 @@ describe("Hosted behavior integration: observability ledger", () => {
         startupMs: 780,
       },
     });
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "startup_sample",
       payload: {
@@ -786,7 +787,7 @@ describe("Hosted behavior integration: observability ledger", () => {
     const runtime = createHostedTestRuntime({ cwd: workspace });
     const sessionId = "ext-obs-assert-1";
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "startup_sample",
       payload: {
@@ -794,7 +795,7 @@ describe("Hosted behavior integration: observability ledger", () => {
         startupMs: 910,
       },
     });
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "startup_sample",
       payload: {

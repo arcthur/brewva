@@ -2,14 +2,14 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BrewvaRuntime, createOperatorRuntimePort } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import { buildInspectReport, formatInspectText } from "../../../packages/brewva-cli/src/inspect.js";
 
 describe("cli inspect lineage reporting", () => {
   test("prints lineage topology and selected channels", () => {
-    const runtime = new BrewvaRuntime({
+    const runtime = createBrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-cli-inspect-lineage-")),
-    });
+    }).hosted;
     const sessionId = "inspect-lineage-session";
     runtime.authority.session.lineage.createNode(sessionId, {
       lineageNodeId: "lineage:main",
@@ -30,7 +30,7 @@ describe("cli inspect lineage reporting", () => {
       lineageNodeId: "lineage:review",
     });
 
-    const report = buildInspectReport(createOperatorRuntimePort(runtime), sessionId);
+    const report = buildInspectReport(runtime, sessionId);
     const text = formatInspectText(report);
 
     expect(text).toContain("Lineage: root=lineage:main current=lineage:review nodes=2 edges=1");

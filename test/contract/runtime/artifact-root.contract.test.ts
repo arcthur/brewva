@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { BrewvaRuntime, createHostedRuntimePort } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 describe("runtime artifact root resolution", () => {
@@ -11,10 +11,10 @@ describe("runtime artifact root resolution", () => {
     mkdirSync(join(workspace, ".git"), { recursive: true });
     const nestedCwd = join(workspace, "packages", "demo");
 
-    const runtime = new BrewvaRuntime({ cwd: nestedCwd });
+    const runtime = createBrewvaRuntime({ cwd: nestedCwd }).hosted;
     const sessionId = "artifact-root-1";
 
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "session_start",
     });
@@ -41,7 +41,7 @@ describe("runtime artifact root resolution", () => {
     mkdirSync(join(workspace, "packages", "demo"), { recursive: true });
     const nestedCwd = join(workspace, "packages", "demo");
 
-    const runtime = new BrewvaRuntime({ cwd: nestedCwd });
+    const runtime = createBrewvaRuntime({ cwd: nestedCwd }).hosted;
     expect(runtime.identity.workspaceRoot).toBe(nestedCwd);
   });
 });

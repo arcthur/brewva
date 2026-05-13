@@ -36,6 +36,8 @@ Every accepted decision inherits these rules:
 - [runtime-domain-admission-and-deletion](./runtime-domain-admission-and-deletion.md)
 - [runtime-boundary-subtraction-and-effect-clarity](./runtime-boundary-subtraction-and-effect-clarity.md)
 - [runtime-domain-slicing-and-controlled-extension-ports](./runtime-domain-slicing-and-controlled-extension-ports.md)
+- [rfc-narrow-and-provable-runtime-boundaries](./rfc-narrow-and-provable-runtime-boundaries.md)
+- [runtime-factory-ports](./runtime-factory-ports.md)
 - [runtime-public-root-compression](./runtime-public-root-compression.md)
 - [skill-first-plugin-and-promotion-governance](./skill-first-plugin-and-promotion-governance.md)
 - [stateful-box-plane-and-boxlite-execution-runtime](./stateful-box-plane-and-boxlite-execution-runtime.md)
@@ -83,6 +85,7 @@ Every accepted decision inherits these rules:
 - [gateway-hosted-lane-consolidation](./gateway-hosted-lane-consolidation.md)
 - [hosted-thread-loop-and-unified-recovery-decisions](./hosted-thread-loop-and-unified-recovery-decisions.md)
 - [hosted-context-materialization-ownership](./hosted-context-materialization-ownership.md)
+- [hosted-materialization-plan](./hosted-materialization-plan.md)
 - [hosted-turn-transitions-and-bounded-recovery](./hosted-turn-transitions-and-bounded-recovery.md)
 - [in-flight-steer-control-primitive](./in-flight-steer-control-primitive.md)
 - [interactive-prompt-queue-and-pending-strip](./interactive-prompt-queue-and-pending-strip.md)
@@ -96,6 +99,11 @@ Every accepted decision inherits these rules:
 - [token-cache-fidelity-and-provider-prefix-stability](./token-cache-fidelity-and-provider-prefix-stability.md)
 - [typebox-derived-provider-streaming-parse-boundary](./typebox-derived-provider-streaming-parse-boundary.md)
 - [turn-lifecycle-spine](./turn-lifecycle-spine.md)
+
+### Projection And Tool Proofs
+
+- [managed-tool-capability-proof](./managed-tool-capability-proof.md)
+- [projection-admission](./projection-admission.md)
 
 ## Maintenance Rule
 

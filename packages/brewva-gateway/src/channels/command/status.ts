@@ -1,4 +1,3 @@
-import { createOperatorRuntimePort } from "@brewva/brewva-runtime";
 import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import type { TurnEnvelope } from "@brewva/brewva-runtime/channels";
 import { formatCostViewText } from "@brewva/brewva-tools/workflow";
@@ -142,7 +141,12 @@ export async function handleChannelStatusCommand(input: {
   const targetSessionPort = targetSession
     ? {
         agentId: targetSession.agentId,
-        runtime: createOperatorRuntimePort(targetSession.runtime),
+        runtime: {
+          identity: targetSession.runtime.identity,
+          config: targetSession.runtime.config,
+          inspect: targetSession.runtime.inspect,
+          operator: targetSession.runtime.operator,
+        },
         sessionId: targetSession.agentSessionId,
       }
     : undefined;

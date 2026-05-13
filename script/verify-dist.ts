@@ -365,13 +365,31 @@ function main(): void {
       throw new Error("session-index evidence subpath missing event search-text export");
     }
     const runtimeRootModule = await import("@brewva/brewva-runtime");
-    const { BrewvaRuntime, createToolRuntimePort } = runtimeRootModule;
+    const { createBrewvaRuntime } = runtimeRootModule;
     const runtimeConfigModule = await import("@brewva/brewva-runtime/config");
     const runtimeSessionModule = await import("@brewva/brewva-runtime/session");
     const runtimeTapeModule = await import("@brewva/brewva-runtime/tape");
     const semanticArtifactsModule = await import("@brewva/brewva-runtime/semantic-artifacts");
     const { createOutputSearchTool } = await import("@brewva/brewva-tools/navigation");
-    const runtime = new BrewvaRuntime({ cwd: isolatedWorkspace });
+    const runtime = createBrewvaRuntime({ cwd: isolatedWorkspace });
+    if (typeof createBrewvaRuntime !== "function") {
+      throw new Error("runtime root dist entry missing createBrewvaRuntime export");
+    }
+    if (
+      "BrewvaRuntime" in runtimeRootModule ||
+      "createHostedRuntimePort" in runtimeRootModule ||
+      "createToolRuntimePort" in runtimeRootModule ||
+      "createOperatorRuntimePort" in runtimeRootModule
+    ) {
+      throw new Error("runtime root dist entry unexpectedly exported legacy runtime constructors");
+    }
+    if (
+      !Object.isFrozen(runtime.root) ||
+      !Object.isFrozen(runtime.hosted) ||
+      !Object.isFrozen(runtime.tool)
+    ) {
+      throw new Error("runtime factory smoke failed: runtime ports are not frozen");
+    }
     if ("getSemanticArtifactOutputContract" in runtimeRootModule || "buildTapeCheckpointPayload" in runtimeRootModule) {
       throw new Error("runtime root dist entry unexpectedly re-exported semantic artifact catalog helpers");
     }
@@ -402,7 +420,7 @@ function main(): void {
     const artifactText = "服务启动中\n数据库连接被拒绝，连接失败需要重试\n";
     mkdirSync(dirname(artifactPath), { recursive: true });
     writeFileSync(artifactPath, artifactText, "utf8");
-    const toolRuntime = createToolRuntimePort(runtime);
+    const toolRuntime = runtime.tool;
     toolRuntime.extensions.tools.recordEvent({
       sessionId,
       type: "tool_output_artifact_persisted",
@@ -436,8 +454,8 @@ function main(): void {
     const { createSessionIndex } = await import("@brewva/brewva-session-index");
     const sessionIndex = await createSessionIndex({
       workspaceRoot: isolatedWorkspace,
-      events: runtime.inspect.events,
-      task: runtime.inspect.task,
+      events: runtime.root.inspect.events,
+      task: runtime.root.inspect.task,
       dbPath: join(isolatedWorkspace, ".brewva", "session-index", "dist-smoke.duckdb"),
     });
     const sessionIndexStatus = await sessionIndex.catchUp();

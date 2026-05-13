@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { relative } from "node:path";
-import { BrewvaRuntime, createHostedRuntimePort } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import { asBrewvaSessionId } from "@brewva/brewva-runtime/core";
 import {
@@ -175,14 +175,12 @@ async function main(): Promise<void> {
 
   const spec = await loadSpec(specPath);
   const specParentSessionId = asBrewvaSessionId(spec.parentSessionId);
-  const parentRuntime = createHostedRuntimePort(
-    new BrewvaRuntime({
-      cwd: spec.workspaceRoot,
-      config: spec.config,
-      configPath: spec.configPath,
-      routingScopes: normalizeRoutingScopes(spec.routingScopes),
-    }),
-  );
+  const parentRuntime = createBrewvaRuntime({
+    cwd: spec.workspaceRoot,
+    config: spec.config,
+    configPath: spec.configPath,
+    routingScopes: normalizeRoutingScopes(spec.routingScopes),
+  }).hosted;
   const delegationStore = new HostedDelegationStore(parentRuntime);
   const existing = delegationStore.getRun(spec.parentSessionId, spec.runId);
   const target = spec.target;

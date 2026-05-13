@@ -1,8 +1,11 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
-import type { BrewvaConfig, BrewvaHostedRuntimePort, BrewvaRuntime } from "@brewva/brewva-runtime";
-import { createHostedRuntimePort } from "@brewva/brewva-runtime";
+import type {
+  BrewvaConfig,
+  BrewvaHostedRuntimePort,
+  BrewvaRuntimeInstance,
+} from "@brewva/brewva-runtime";
 import { asBrewvaSessionId } from "@brewva/brewva-runtime/core";
 import type { DelegationRunQuery, DelegationRunRecord } from "@brewva/brewva-runtime/delegation";
 import { isDelegationRunTerminalStatus } from "@brewva/brewva-runtime/delegation";
@@ -67,7 +70,7 @@ export interface HostedSubagentBackgroundController {
 }
 
 interface DetachedBackgroundControllerOptions {
-  runtime: BrewvaRuntime | BrewvaHostedRuntimePort;
+  runtime: BrewvaRuntimeInstance | BrewvaHostedRuntimePort;
   delegationStore?: HostedDelegationStore;
   configPath?: string;
   routingScopes?: SkillRoutingScope[];
@@ -79,6 +82,12 @@ interface DetachedBackgroundControllerOptions {
   }) => ChildProcess;
   isPidAlive?: (pid: number) => boolean;
   sendSignal?: (pid: number, signal: NodeJS.Signals) => void;
+}
+
+function toHostedRuntimePort(
+  runtime: BrewvaRuntimeInstance | BrewvaHostedRuntimePort,
+): BrewvaHostedRuntimePort {
+  return "hosted" in runtime ? runtime.hosted : runtime;
 }
 
 function buildDeliveryRecord(
@@ -202,7 +211,7 @@ function evaluateCompletionPredicate(input: {
 export function createDetachedSubagentBackgroundController(
   options: DetachedBackgroundControllerOptions,
 ): HostedSubagentBackgroundController {
-  const runtime = createHostedRuntimePort(options.runtime);
+  const runtime = toHostedRuntimePort(options.runtime);
   const delegationStore = options.delegationStore ?? new HostedDelegationStore(runtime);
   const modulePath = fileURLToPath(new URL("./runner-main.js", import.meta.url));
   const spawnProcess = options.spawnProcess ?? defaultSpawnProcess;

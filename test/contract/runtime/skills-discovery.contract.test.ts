@@ -2,7 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { DEFAULT_BREWVA_CONFIG, BrewvaRuntime } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
+import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
 import { discoverSkillRegistryRoots } from "@brewva/brewva-runtime/skills";
 import { requireDefined } from "../../helpers/assertions.js";
 
@@ -84,7 +85,7 @@ describe("skill discovery and loading", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-skill-system-root-"));
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
     config.skills.routing.enabled = true;
-    const runtime = new BrewvaRuntime({ cwd: workspace, config });
+    const runtime = createBrewvaRuntime({ cwd: workspace, config }).hosted;
 
     const report = runtime.inspect.skills.catalog.getLoadReport();
     expect(report.roots.some((entry) => entry.source === "system_root")).toBe(true);
@@ -114,7 +115,7 @@ describe("skill discovery and loading", () => {
 
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
     config.skills.routing.enabled = true;
-    const runtime = new BrewvaRuntime({ cwd: workspace, config });
+    const runtime = createBrewvaRuntime({ cwd: workspace, config }).hosted;
     requireDefined(
       runtime.inspect.skills.catalog.get("commitcraft"),
       "expected commitcraft skill to load",
@@ -146,7 +147,7 @@ describe("skill discovery and loading", () => {
     const nested = join(workspace, "apps/api");
     mkdirSync(nested, { recursive: true });
 
-    const runtime = new BrewvaRuntime({ cwd: nested });
+    const runtime = createBrewvaRuntime({ cwd: nested }).hosted;
     expect(runtime.inspect.skills.catalog.get("commitcraft")).toBeUndefined();
 
     const roots = discoverSkillRegistryRoots({
@@ -167,7 +168,7 @@ describe("skill discovery and loading", () => {
     const nested = join(workspace, "apps/api");
     mkdirSync(nested, { recursive: true });
 
-    const runtime = new BrewvaRuntime({ cwd: nested });
+    const runtime = createBrewvaRuntime({ cwd: nested }).hosted;
     requireDefined(
       runtime.inspect.skills.catalog.get("commitcraft"),
       "expected workspace-root project skill",
@@ -199,7 +200,7 @@ describe("skill discovery and loading", () => {
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
     config.skills.roots = [external];
 
-    const runtime = new BrewvaRuntime({ cwd: workspace, config });
+    const runtime = createBrewvaRuntime({ cwd: workspace, config }).hosted;
     requireDefined(
       runtime.inspect.skills.catalog.get("externalcraft"),
       "expected externalcraft skill to load",
@@ -215,7 +216,9 @@ describe("skill discovery and loading", () => {
       name: "git",
     });
 
-    expect(() => new BrewvaRuntime({ cwd: workspace })).toThrow("duplicate skill name 'git'");
+    expect(() => createBrewvaRuntime({ cwd: workspace }).hosted).toThrow(
+      "duplicate skill name 'git'",
+    );
   });
 
   test("fails fast when a project base skill duplicates a bundled system skill name", () => {
@@ -224,7 +227,9 @@ describe("skill discovery and loading", () => {
       name: "review",
     });
 
-    expect(() => new BrewvaRuntime({ cwd: workspace })).toThrow("duplicate skill name 'review'");
+    expect(() => createBrewvaRuntime({ cwd: workspace }).hosted).toThrow(
+      "duplicate skill name 'review'",
+    );
   });
 
   test("standard routing hides operator skills from routable index but still loads them", () => {
@@ -235,7 +240,7 @@ describe("skill discovery and loading", () => {
 
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
     config.skills.routing.enabled = true;
-    const runtime = new BrewvaRuntime({ cwd: workspace, config });
+    const runtime = createBrewvaRuntime({ cwd: workspace, config }).hosted;
     requireDefined(
       runtime.inspect.skills.catalog.get("ops-helper"),
       "expected ops-helper skill to load",
@@ -283,7 +288,7 @@ describe("skill discovery and loading", () => {
     config.skills.routing.enabled = true;
     config.skills.routing.scopes = ["core", "domain", "operator"];
 
-    const runtime = new BrewvaRuntime({ cwd: workspace, config });
+    const runtime = createBrewvaRuntime({ cwd: workspace, config }).hosted;
     const report = runtime.inspect.skills.catalog.getLoadReport();
     expect(report.routableSkills).toContain("ops-helper");
   });
@@ -298,7 +303,7 @@ describe("skill discovery and loading", () => {
 
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
     config.skills.routing.enabled = true;
-    const runtime = new BrewvaRuntime({ cwd: workspace, config });
+    const runtime = createBrewvaRuntime({ cwd: workspace, config }).hosted;
     const report = runtime.inspect.skills.catalog.getLoadReport();
     expect(report.hiddenSkills).toContain("hidden-helper");
     expect(report.routableSkills).not.toContain("hidden-helper");
@@ -325,7 +330,7 @@ describe("skill discovery and loading", () => {
 
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
     config.skills.routing.enabled = true;
-    const runtime = new BrewvaRuntime({ cwd: workspace, config });
+    const runtime = createBrewvaRuntime({ cwd: workspace, config }).hosted;
     const report = runtime.inspect.skills.catalog.getLoadReport();
     expect(report.routableSkills).toContain("trigger-only");
   });
@@ -339,7 +344,7 @@ describe("skill discovery and loading", () => {
 
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
     config.skills.routing.enabled = true;
-    expect(() => new BrewvaRuntime({ cwd: workspace, config })).toThrow(
+    expect(() => createBrewvaRuntime({ cwd: workspace, config }).hosted).toThrow(
       "selection contains unsupported field(s): examples",
     );
   });
@@ -414,7 +419,7 @@ describe("skill discovery and loading", () => {
       "utf8",
     );
 
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const skill = requireDefined(
       runtime.inspect.skills.catalog.get("foo"),
       "expected foo skill to load",
@@ -458,7 +463,7 @@ describe("skill discovery and loading", () => {
       "utf8",
     );
 
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const skill = requireDefined(
       runtime.inspect.skills.catalog.get("foo"),
       "expected foo skill to load",
@@ -534,7 +539,7 @@ describe("skill discovery and loading", () => {
       "utf8",
     );
 
-    expect(() => new BrewvaRuntime({ cwd: workspace })).toThrow(
+    expect(() => createBrewvaRuntime({ cwd: workspace }).hosted).toThrow(
       "frontmatter contains unsupported field(s): tools",
     );
   });
@@ -560,7 +565,7 @@ describe("skill discovery and loading", () => {
       "utf8",
     );
 
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const skill = requireDefined(
       runtime.inspect.skills.catalog.get("review"),
       "expected bundled review skill",
@@ -648,7 +653,7 @@ describe("skill discovery and loading", () => {
       "utf8",
     );
 
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const skill = runtime.inspect.skills.catalog.get("foo");
 
     expect(skill?.contract.executionHints?.preferredTools).toEqual(
@@ -746,7 +751,7 @@ describe("skill discovery and loading", () => {
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
     config.skills.roots = [external];
 
-    const runtime = new BrewvaRuntime({ cwd: workspace, config });
+    const runtime = createBrewvaRuntime({ cwd: workspace, config }).hosted;
     const skill = runtime.inspect.skills.catalog.get("foo");
 
     expect(skill?.overlayFiles).toEqual([
@@ -847,7 +852,7 @@ describe("skill discovery and loading", () => {
       "utf8",
     );
 
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const skill = requireDefined(
       runtime.inspect.skills.catalog.get("foo"),
       "expected foo skill to load",
@@ -952,7 +957,7 @@ describe("skill discovery and loading", () => {
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
     config.skills.roots = [external];
 
-    const runtime = new BrewvaRuntime({ cwd: workspace, config });
+    const runtime = createBrewvaRuntime({ cwd: workspace, config }).hosted;
     const skill = requireDefined(
       runtime.inspect.skills.catalog.get("foo"),
       "expected foo skill to load",

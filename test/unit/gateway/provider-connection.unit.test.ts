@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { hostname, tmpdir, userInfo } from "node:os";
 import { join } from "node:path";
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import {
   configureCredentialVaultModelAuth,
   createProviderConnectionPort,
@@ -160,7 +160,7 @@ describe("provider connection port", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-provider-connection-"));
     const restoreEnv = patchProcessEnv({ BREWVA_VAULT_KEY: "provider-connection-test-key" });
     try {
-      const runtime = new BrewvaRuntime({ cwd: workspace });
+      const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
       const authStore = HostedAuthStore.inMemory();
       configureCredentialVaultModelAuth({ runtime, authStore });
       const registry = HostedModelRegistry.inMemory(authStore);
@@ -203,7 +203,7 @@ describe("provider connection port", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-provider-connection-"));
     const restoreEnv = patchProcessEnv({ BREWVA_VAULT_KEY: "provider-connection-test-key" });
     try {
-      const runtime = new BrewvaRuntime({ cwd: workspace });
+      const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
       const authStore = HostedAuthStore.inMemory();
       configureCredentialVaultModelAuth({ runtime, authStore });
       const registry = HostedModelRegistry.inMemory(authStore);
@@ -232,7 +232,7 @@ describe("provider connection port", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-provider-connection-"));
     const restoreEnv = patchProcessEnv({ BREWVA_VAULT_KEY: "provider-connection-test-key" });
     try {
-      const runtime = new BrewvaRuntime({ cwd: workspace });
+      const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
       const authStore = HostedAuthStore.inMemory();
       configureCredentialVaultModelAuth({ runtime, authStore });
       const registry = HostedModelRegistry.inMemory(authStore);
@@ -298,7 +298,7 @@ describe("provider connection port", () => {
       DEEPSEEK_API_KEY: undefined,
     });
     try {
-      const runtime = new BrewvaRuntime({ cwd: workspace });
+      const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
       const authStore = HostedAuthStore.inMemory();
       configureCredentialVaultModelAuth({ runtime, authStore });
       const registry = HostedModelRegistry.inMemory(authStore);
@@ -354,7 +354,7 @@ describe("provider connection port", () => {
       DEEPSEEK_API_KEY: "ambient-deepseek-key",
     });
     try {
-      const runtime = new BrewvaRuntime({ cwd: workspace });
+      const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
       const authStore = HostedAuthStore.inMemory();
       configureCredentialVaultModelAuth({ runtime, authStore });
       const registry = HostedModelRegistry.inMemory(authStore);
@@ -379,7 +379,7 @@ describe("provider connection port", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-provider-connection-"));
     const restoreEnv = patchProcessEnv({ BREWVA_VAULT_KEY: "provider-connection-test-key" });
     try {
-      const runtime = new BrewvaRuntime({ cwd: workspace });
+      const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
       const authStore = HostedAuthStore.inMemory();
       configureCredentialVaultModelAuth({ runtime, authStore });
       const registry = HostedModelRegistry.inMemory(authStore);
@@ -414,7 +414,7 @@ describe("provider connection port", () => {
   test("exposes Google browser OAuth only when client credentials are configured", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-provider-connection-"));
     try {
-      const runtime = new BrewvaRuntime({ cwd: workspace });
+      const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
       const authStore = HostedAuthStore.inMemory();
       const registry = HostedModelRegistry.inMemory(authStore);
       registerSingleModelProvider(registry, "google", "gemini-2.5-pro");
@@ -460,7 +460,7 @@ describe("provider connection port", () => {
         "utf8",
       );
 
-      const runtime = new BrewvaRuntime({ cwd: workspace });
+      const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
       const authStore = HostedAuthStore.inMemory();
       configureCredentialVaultModelAuth({ runtime, authStore });
       const registry = HostedModelRegistry.inMemory(authStore);
@@ -529,7 +529,7 @@ describe("provider connection port", () => {
         "utf8",
       );
 
-      const runtime = new BrewvaRuntime({ cwd: workspace });
+      const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
       const authStore = HostedAuthStore.inMemory();
       configureCredentialVaultModelAuth({ runtime, authStore });
       const registry = HostedModelRegistry.inMemory(authStore);
@@ -575,7 +575,7 @@ describe("provider connection port", () => {
       return jsonResponse({}, 404);
     }) as typeof fetch;
     try {
-      const runtime = new BrewvaRuntime({ cwd: workspace });
+      const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
       const authStore = HostedAuthStore.inMemory();
       configureCredentialVaultModelAuth({ runtime, authStore });
       const registry = HostedModelRegistry.inMemory(authStore);
@@ -624,7 +624,7 @@ describe("provider connection port", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-provider-connection-"));
     const restoreEnv = patchProcessEnv({ BREWVA_VAULT_KEY: "provider-connection-test-key" });
     try {
-      const runtime = new BrewvaRuntime({ cwd: workspace });
+      const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
       const authStore = HostedAuthStore.inMemory();
       const registry = HostedModelRegistry.inMemory(authStore);
       registerSingleModelProvider(registry, "openai", "gpt-5.4");
@@ -712,7 +712,7 @@ describe("provider connection port", () => {
         { preconnect: INTRINSIC_FETCH.preconnect },
       );
 
-      const runtime = new BrewvaRuntime({ cwd: workspace });
+      const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
       const authStore = HostedAuthStore.inMemory();
       const registry = HostedModelRegistry.inMemory(authStore);
       registerSingleModelProvider(registry, "openai", "gpt-5.4");
@@ -793,7 +793,7 @@ describe("provider connection port", () => {
         { preconnect: INTRINSIC_FETCH.preconnect },
       );
 
-      const runtime = new BrewvaRuntime({ cwd: workspace });
+      const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
       const authStore = HostedAuthStore.inMemory();
       const registry = HostedModelRegistry.inMemory(authStore);
       registerSingleModelProvider(registry, "openai", "gpt-5.4");
@@ -838,7 +838,7 @@ describe("provider connection port", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-provider-connection-"));
     const restoreEnv = patchProcessEnv({ BREWVA_VAULT_KEY: "provider-connection-test-key" });
     try {
-      const runtime = new BrewvaRuntime({ cwd: workspace });
+      const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
       const authStore = HostedAuthStore.inMemory();
       const registry = HostedModelRegistry.inMemory(authStore);
       registerSingleModelProvider(registry, "openai", "gpt-5.4");
@@ -916,7 +916,7 @@ describe("provider connection port", () => {
       if (!bound) {
         return;
       }
-      const runtime = new BrewvaRuntime({ cwd: workspace });
+      const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
       const authStore = HostedAuthStore.inMemory();
       const registry = HostedModelRegistry.inMemory(authStore);
       registerSingleModelProvider(registry, "openai", "gpt-5.4");
@@ -965,7 +965,7 @@ describe("provider connection port", () => {
     }) as typeof fetch;
 
     try {
-      const runtime = new BrewvaRuntime({ cwd: workspace });
+      const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
       const authStore = HostedAuthStore.inMemory();
       const registry = HostedModelRegistry.inMemory(authStore);
       registerSingleModelProvider(registry, "github-copilot", "gpt-4o");
@@ -1050,7 +1050,7 @@ describe("provider connection port", () => {
     }) as typeof fetch;
 
     try {
-      const runtime = new BrewvaRuntime({ cwd: workspace });
+      const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
       const authStore = HostedAuthStore.inMemory();
       const registry = HostedModelRegistry.inMemory(authStore);
       registerSingleModelProvider(registry, "github-copilot", "gpt-4o");
@@ -1105,7 +1105,7 @@ describe("provider connection port", () => {
     }) as typeof fetch;
 
     try {
-      const runtime = new BrewvaRuntime({ cwd: workspace });
+      const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
       const authStore = HostedAuthStore.inMemory();
       const registry = HostedModelRegistry.inMemory(authStore);
       registerSingleModelProvider(registry, "github-copilot", "gpt-4o");
@@ -1151,7 +1151,7 @@ describe("provider connection port", () => {
     }) as typeof fetch;
 
     try {
-      const runtime = new BrewvaRuntime({ cwd: workspace });
+      const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
       const authStore = HostedAuthStore.inMemory();
       const registry = HostedModelRegistry.inMemory(authStore);
       registerSingleModelProvider(registry, "github-copilot", "gpt-4o");
@@ -1190,7 +1190,7 @@ describe("provider connection port", () => {
     }) as typeof fetch;
 
     try {
-      const runtime = new BrewvaRuntime({ cwd: workspace });
+      const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
       const authStore = HostedAuthStore.inMemory();
       const registry = HostedModelRegistry.inMemory(authStore);
       registerSingleModelProvider(registry, "github-copilot", "gpt-4o");
@@ -1238,7 +1238,7 @@ describe("provider connection port", () => {
     }) as typeof fetch;
 
     try {
-      const runtime = new BrewvaRuntime({ cwd: workspace });
+      const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
       const authStore = HostedAuthStore.inMemory();
       const registry = HostedModelRegistry.inMemory(authStore);
       registerSingleModelProvider(registry, "github-copilot", "gpt-4o");
@@ -1270,7 +1270,7 @@ describe("provider connection port", () => {
     const restoreEnv = patchProcessEnv({ BREWVA_VAULT_KEY: "provider-connection-test-key" });
     const authorizeCalls: Array<{ methodId: string; inputs?: Record<string, string> }> = [];
     try {
-      const runtime = new BrewvaRuntime({ cwd: workspace });
+      const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
       const authStore = HostedAuthStore.inMemory();
       const registry = HostedModelRegistry.inMemory(authStore);
       registerDemoProvider(registry);
@@ -1372,7 +1372,7 @@ describe("provider connection port", () => {
     }) as typeof fetch;
 
     try {
-      const runtime = new BrewvaRuntime({ cwd: workspace });
+      const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
       const authStore = HostedAuthStore.inMemory();
       const registry = HostedModelRegistry.inMemory(authStore);
       registerSingleModelProvider(registry, "openai-codex", "gpt-5.4");

@@ -1,4 +1,4 @@
-// Curated projection contract subpath. Keep root imports focused on BrewvaRuntime.
+// Curated projection contract subpath. Keep root imports focused on createBrewvaRuntime and explicit port types.
 export { WORKFLOW_ARTIFACT_KINDS } from "./domain/projection/workflow/types.js";
 export type {
   WorkflowAcceptanceStatus,

@@ -2,7 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BrewvaRuntime, createOperatorRuntimePort } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort, BrewvaRuntimeOptions } from "@brewva/brewva-runtime";
 import { type BrewvaEventRecord } from "@brewva/brewva-runtime/events";
 import { createTrustedLocalGovernancePort } from "@brewva/brewva-runtime/governance";
 import { createOpsRuntimeConfig } from "../../helpers/runtime.js";
@@ -11,14 +12,12 @@ function createWorkspace(prefix: string): string {
   return mkdtempSync(join(tmpdir(), prefix));
 }
 
-function createRuntime(
-  options: ConstructorParameters<typeof BrewvaRuntime>[0] = {},
-): BrewvaRuntime {
-  return new BrewvaRuntime({
+function createRuntime(options: BrewvaRuntimeOptions = {}): BrewvaHostedRuntimePort {
+  return createBrewvaRuntime({
     cwd: createWorkspace("brewva-tool-char-"),
     config: createOpsRuntimeConfig(),
     ...options,
-  });
+  }).hosted;
 }
 
 type EventSummary = {
@@ -491,7 +490,7 @@ describe("Tool invocation characterization", () => {
 
   test("compaction gate blocks before commitment flow and preserves unblock path", () => {
     const workspace = createWorkspace("brewva-tool-char-compact-");
-    const runtime = new BrewvaRuntime({
+    const runtime = createBrewvaRuntime({
       cwd: workspace,
       config: createOpsRuntimeConfig((config) => {
         config.infrastructure.contextBudget.enabled = true;
@@ -503,11 +502,11 @@ describe("Tool invocation characterization", () => {
         config.infrastructure.contextBudget.thresholds.hardLimitHeadroomTokens = 8_000;
       }),
       governancePort: createTrustedLocalGovernancePort(),
-    });
+    }).hosted;
     const sessionId = "tool-char-compact";
-    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 3);
+    runtime.operator.context.lifecycle.onTurnStart(sessionId, 3);
     const usage = { tokens: 95, contextWindow: 100, percent: 0.95 };
-    createOperatorRuntimePort(runtime).operator.context.usage.observe(sessionId, usage);
+    runtime.operator.context.usage.observe(sessionId, usage);
 
     const blocked = runtime.authority.tools.invocation.start({
       sessionId,
@@ -568,12 +567,12 @@ describe("Tool invocation characterization", () => {
     mkdirSync(join(workspace, "src"), { recursive: true });
     const filePath = join(workspace, "src", "example.ts");
     writeFileSync(filePath, "export const value = 1;\n", "utf8");
-    const runtime = new BrewvaRuntime({
+    const runtime = createBrewvaRuntime({
       cwd: workspace,
       config: createOpsRuntimeConfig(),
-    });
+    }).hosted;
     const sessionId = "tool-char-finish";
-    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+    runtime.operator.context.lifecycle.onTurnStart(sessionId, 1);
 
     const started = runtime.authority.tools.invocation.start({
       sessionId,

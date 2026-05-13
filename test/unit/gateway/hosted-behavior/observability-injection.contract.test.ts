@@ -2,11 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  BrewvaRuntime,
-  createOperatorRuntimePort,
-  createHostedRuntimePort,
-} from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaRuntimeOptions } from "@brewva/brewva-runtime";
 import {
   createBrewvaHostPluginRunner,
   type BrewvaHostContext,
@@ -22,8 +19,8 @@ import { requireNonEmptyString } from "../../../helpers/assertions.js";
 import { createMockExtensionApi, invokeHandlers } from "../../../helpers/extension.js";
 import { createOpsRuntimeConfig } from "../../../helpers/runtime.js";
 
-function createHostedTestRuntime(options: ConstructorParameters<typeof BrewvaRuntime>[0]) {
-  return createHostedRuntimePort(new BrewvaRuntime(options));
+function createHostedTestRuntime(options: BrewvaRuntimeOptions) {
+  return createBrewvaRuntime(options).hosted;
 }
 
 function createHostContext(workspace: string, sessionId: string): BrewvaHostContext {
@@ -292,9 +289,9 @@ describe("Hosted behavior integration: observability injection", () => {
     const runtime = createHostedTestRuntime({ cwd: workspace, config: createOpsRuntimeConfig() });
     const sessionId = "ext-shutdown-clean-1";
 
-    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+    runtime.operator.context.lifecycle.onTurnStart(sessionId, 1);
     runtime.authority.tools.tracking.markCall(sessionId, "edit");
-    createOperatorRuntimePort(runtime).operator.context.usage.observe(sessionId, {
+    runtime.operator.context.usage.observe(sessionId, {
       tokens: 128,
       contextWindow: 4096,
       percent: 0.03125,
@@ -310,10 +307,8 @@ describe("Hosted behavior integration: observability injection", () => {
     const { api, handlers } = createMockExtensionApi();
     registerEventStream(api, runtime);
     const clearStateCalls: string[] = [];
-    const originalClearState = createOperatorRuntimePort(runtime).operator.session.state.clear.bind(
-      createOperatorRuntimePort(runtime).operator.session,
-    );
-    createOperatorRuntimePort(runtime).operator.session.state.clear = (nextSessionId: string) => {
+    const originalClearState = runtime.operator.session.state.clear.bind(runtime.operator.session);
+    runtime.operator.session.state.clear = (nextSessionId: string) => {
       clearStateCalls.push(nextSessionId);
       originalClearState(nextSessionId);
     };
@@ -330,7 +325,7 @@ describe("Hosted behavior integration: observability injection", () => {
         },
       );
     } finally {
-      createOperatorRuntimePort(runtime).operator.session.state.clear = originalClearState;
+      runtime.operator.session.state.clear = originalClearState;
     }
 
     expect(clearStateCalls).toEqual([sessionId]);

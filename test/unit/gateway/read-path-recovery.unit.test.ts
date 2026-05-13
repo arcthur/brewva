@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { BrewvaRuntime, createHostedRuntimePort } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaRuntimeOptions } from "@brewva/brewva-runtime";
 import {
   TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE,
   TOOL_READ_PATH_GATE_ARMED_EVENT_TYPE,
@@ -14,8 +15,8 @@ import {
 import { createOpsRuntimeConfig } from "../../helpers/runtime.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
-function createHostedTestRuntime(options: ConstructorParameters<typeof BrewvaRuntime>[0]) {
-  return createHostedRuntimePort(new BrewvaRuntime(options));
+function createHostedTestRuntime(options: BrewvaRuntimeOptions) {
+  return createBrewvaRuntime(options).hosted;
 }
 
 describe("read path recovery lifecycle", () => {
@@ -27,7 +28,7 @@ describe("read path recovery lifecycle", () => {
       const sessionId = "read-path-gate-arm";
 
       for (const path of ["src/missing-a.ts", "src/missing-b.ts"]) {
-        createHostedRuntimePort(runtime).extensions.hosted.events.record({
+        runtime.extensions.hosted.events.record({
           sessionId,
           type: "tool_result_recorded",
           payload: {
@@ -81,7 +82,7 @@ describe("read path recovery lifecycle", () => {
       const sessionId = "read-path-no-arm";
 
       for (const path of ["src/missing-a.ts", "src/missing-b.ts"]) {
-        createHostedRuntimePort(runtime).extensions.hosted.events.record({
+        runtime.extensions.hosted.events.record({
           sessionId,
           type: "tool_result_recorded",
           payload: {
@@ -117,7 +118,7 @@ describe("read path recovery lifecycle", () => {
       const runtime = createHostedTestRuntime({ cwd: workspace, config: createOpsRuntimeConfig() });
       const sessionId = "read-path-evidence";
 
-      createHostedRuntimePort(runtime).extensions.hosted.events.record({
+      runtime.extensions.hosted.events.record({
         sessionId,
         type: TOOL_READ_PATH_GATE_ARMED_EVENT_TYPE,
         payload: {
@@ -133,7 +134,7 @@ describe("read path recovery lifecycle", () => {
         observedPaths: ["src/index.ts"],
       });
       expect(discoveryPayload).not.toBeNull();
-      createHostedRuntimePort(runtime).extensions.hosted.events.record({
+      runtime.extensions.hosted.events.record({
         sessionId,
         type: TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE,
         payload: discoveryPayload ?? undefined,
@@ -167,7 +168,7 @@ describe("read path recovery lifecycle", () => {
       const sessionId = "read-path-arm-receipt-source";
 
       for (const path of ["src/missing-a.ts", "src/missing-b.ts"]) {
-        createHostedRuntimePort(runtime).extensions.hosted.events.record({
+        runtime.extensions.hosted.events.record({
           sessionId,
           type: "tool_result_recorded",
           payload: {
@@ -185,7 +186,7 @@ describe("read path recovery lifecycle", () => {
         });
       }
 
-      createHostedRuntimePort(runtime).extensions.hosted.events.record({
+      runtime.extensions.hosted.events.record({
         sessionId,
         type: TOOL_READ_PATH_GATE_ARMED_EVENT_TYPE,
         payload: {

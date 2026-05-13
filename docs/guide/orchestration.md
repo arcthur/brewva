@@ -150,12 +150,12 @@ Execution posture is intentionally split:
   evidence, missing probes, rollback posture, and operator-visible recovery
   burden
 
-`runtime.authority.verification.*` remains kernel authority over evidence sufficiency and
+`root.authority.verification.*` remains kernel authority over evidence sufficiency and
 freshness. It is not a delegated specialist.
 
 ## Inspectable Stall Adjudication
 
-Stall detection still starts with `runtime.operator.session.pollStall(...)`, but the
+Stall detection still starts with the hosted/operator port `operator.session.pollStall(...)`, but the
 gateway worker now adds a second, inspectable adjudication step.
 
 - `task_stuck_detected` remains the idle-threshold detection signal

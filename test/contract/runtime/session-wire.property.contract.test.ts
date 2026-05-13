@@ -1,5 +1,6 @@
 import { describe, expect } from "bun:test";
-import { BrewvaRuntime, createHostedRuntimePort } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import type { SessionWireFrame } from "@brewva/brewva-runtime/session";
 import fc from "fast-check";
 import { propertyTest } from "../../helpers/property.js";
@@ -59,24 +60,24 @@ const generatedTurnArbitrary: fc.Arbitrary<GeneratedTurn> = fc.record({
 });
 
 function createRuntimeFixture(): {
-  runtime: BrewvaRuntime;
+  runtime: BrewvaHostedRuntimePort;
   dispose: () => void;
 } {
   const workspace = createTestWorkspace("session-wire-property");
   return {
-    runtime: new BrewvaRuntime({ cwd: workspace }),
+    runtime: createBrewvaRuntime({ cwd: workspace }).hosted,
     dispose: () => cleanupWorkspace(workspace),
   };
 }
 
 function recordGeneratedTurns(
-  runtime: BrewvaRuntime,
+  runtime: BrewvaHostedRuntimePort,
   sessionId: string,
   turns: GeneratedTurn[],
 ): void {
   turns.forEach((turn, index) => {
     const timestamp = 1_700_000_000_000 + index * 100;
-    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+    runtime.extensions.hosted.events.record({
       sessionId,
       type: "turn_input_recorded",
       turn: index,
@@ -89,7 +90,7 @@ function recordGeneratedTurns(
     });
 
     turn.transitionReasons.forEach((reason, transitionIndex) => {
-      createHostedRuntimePort(runtime).extensions.hosted.events.record({
+      runtime.extensions.hosted.events.record({
         sessionId,
         type: "session_turn_transition",
         turn: index,
@@ -110,7 +111,7 @@ function recordGeneratedTurns(
     });
 
     if (turn.commit) {
-      createHostedRuntimePort(runtime).extensions.hosted.events.record({
+      runtime.extensions.hosted.events.record({
         sessionId,
         type: "turn_render_committed",
         turn: index,

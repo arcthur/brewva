@@ -64,7 +64,7 @@ create authority.
 
 The kernel product is intentionally boring: effect gates, receipts, replay,
 verification, rollback, Recovery WAL, and durable event families. If a feature
-needs durable authority, it should enter through `runtime.authority` rather
+needs durable authority, it should enter through `root.authority` rather
 than through model-facing prompt shape.
 
 ## Explicit Non-Goals

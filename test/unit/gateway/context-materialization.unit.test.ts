@@ -1,10 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import type { ContextCompactionGateStatus, ContextStatus } from "@brewva/brewva-runtime/context";
 import {
-  commitHostedContextEffects,
-  HOSTED_CONTEXT_SIDE_EFFECT_ORDER,
-  planHostedContextEffects,
+  commitHostedContextMaterialization,
+  HOSTED_CONTEXT_MATERIALIZATION_EFFECT_ORDER,
+  planHostedContextMaterialization,
 } from "../../../packages/brewva-gateway/src/hosted/internal/context/materialization.js";
+
+type MaterializationInput = Parameters<typeof planHostedContextMaterialization>[0];
 
 const baseContextStatus: ContextStatus = {
   tokensUsed: null,
@@ -41,17 +43,42 @@ function gateStatus(input: Partial<ContextCompactionGateStatus>): ContextCompact
   };
 }
 
-describe("hosted context materialization", () => {
-  test("plans hard-gate side effects in the committed order", () => {
-    const plan = planHostedContextEffects({
-      gateStatus: gateStatus({ required: true, reason: "hard_limit" }),
-      pendingCompactionReason: "hard_limit",
-      capabilityDisclosureRendered: true,
-      workbenchContextRendered: true,
-      surfacedDelegationRunIds: ["run-1"],
-    }).map((entry) => entry.effect);
+function materializationInput(input: Partial<MaterializationInput> = {}): MaterializationInput {
+  return {
+    sessionId: "session-1",
+    turn: 3,
+    contextScopeId: "scope-1",
+    systemPrompt: "System prompt",
+    rendered: {
+      blocks: [{ id: "active-workbench", content: "Workbench", estimatedTokens: 1 }],
+      content: "Workbench",
+      totalTokens: 1,
+      surfacedDelegationRunIds: [],
+    },
+    usage: undefined,
+    gateStatus: gateStatus({}),
+    pendingCompactionReason: null,
+    workbenchContextRendered: false,
+    capabilityDisclosureRendered: false,
+    surfacedDelegationRunIds: [],
+    ...input,
+  };
+}
 
-    expect(plan).toEqual([
+describe("hosted context materialization", () => {
+  test("plans hard-gate materialization commands in the committed order", () => {
+    const plan = planHostedContextMaterialization(
+      materializationInput({
+        gateStatus: gateStatus({ required: true, reason: "hard_limit" }),
+        pendingCompactionReason: "hard_limit",
+        capabilityDisclosureRendered: true,
+        workbenchContextRendered: true,
+        surfacedDelegationRunIds: ["run-1"],
+      }),
+    );
+    const effects = plan.effects.map((entry) => entry.effect);
+
+    expect(effects).toEqual([
       "usage_observed",
       "hard_gate_telemetry_emitted",
       "compaction_nudge_rendered",
@@ -62,25 +89,34 @@ describe("hosted context materialization", () => {
       "prompt_stability_observed",
       "delegation_outcome_surfaced",
     ]);
-    expect(plan).toEqual(
-      plan.toSorted(
+    expect(effects).toEqual(
+      effects.toSorted(
         (left, right) =>
-          HOSTED_CONTEXT_SIDE_EFFECT_ORDER.indexOf(left) -
-          HOSTED_CONTEXT_SIDE_EFFECT_ORDER.indexOf(right),
+          HOSTED_CONTEXT_MATERIALIZATION_EFFECT_ORDER.indexOf(left) -
+          HOSTED_CONTEXT_MATERIALIZATION_EFFECT_ORDER.indexOf(right),
       ),
     );
+    expect(plan.modelContext.systemPrompt).toBe("System prompt");
+    expect(plan.audit).toEqual({
+      sessionId: "session-1",
+      turn: 3,
+      effectCount: effects.length,
+      renderedBlockIds: ["active-workbench"],
+    });
   });
 
-  test("plans advisory side effects without hard-gate telemetry", () => {
-    const plan = planHostedContextEffects({
-      gateStatus: gateStatus({ required: false, reason: "usage_threshold" }),
-      pendingCompactionReason: "usage_threshold",
-      capabilityDisclosureRendered: false,
-      workbenchContextRendered: false,
-      surfacedDelegationRunIds: [],
-    }).map((entry) => entry.effect);
+  test("plans advisory materialization commands without hard-gate telemetry", () => {
+    const effects = planHostedContextMaterialization(
+      materializationInput({
+        gateStatus: gateStatus({ required: false, reason: "usage_threshold" }),
+        pendingCompactionReason: "usage_threshold",
+        capabilityDisclosureRendered: false,
+        workbenchContextRendered: false,
+        surfacedDelegationRunIds: [],
+      }),
+    ).effects.map((entry) => entry.effect);
 
-    expect(plan).toEqual([
+    expect(effects).toEqual([
       "usage_observed",
       "compaction_advisory_telemetry_emitted",
       "compaction_nudge_rendered",
@@ -90,21 +126,87 @@ describe("hosted context materialization", () => {
     ]);
   });
 
-  test("rejects manually supplied side-effect plans that violate committed order", () => {
+  test("rejects manually supplied materialization plans that violate committed order", () => {
+    const plan = planHostedContextMaterialization(materializationInput());
+    const prompt = plan.effects.find((entry) => entry.effect === "prompt_stability_observed");
+    const context = plan.effects.find((entry) => entry.effect === "context_composed_emitted");
+
     expect(() =>
-      commitHostedContextEffects(
-        [{ effect: "prompt_stability_observed" }, { effect: "context_composed_emitted" }],
-        {} as never,
+      commitHostedContextMaterialization(
+        { ...plan, effects: [prompt, context] as never },
+        { runtime: {} as never },
       ),
-    ).toThrow("Hosted context side-effect plan is out of order");
+    ).toThrow("Hosted context materialization plan is out of order");
   });
 
-  test("rejects manually supplied side-effect plans that repeat an effect", () => {
+  test("rejects manually supplied materialization plans that repeat an effect", () => {
+    const plan = planHostedContextMaterialization(materializationInput());
+    const usage = plan.effects[0];
+
     expect(() =>
-      commitHostedContextEffects(
-        [{ effect: "usage_observed" }, { effect: "usage_observed" }],
-        {} as never,
+      commitHostedContextMaterialization(
+        { ...plan, effects: [usage, usage] as never },
+        { runtime: {} as never },
       ),
-    ).toThrow("Hosted context side-effect plan has duplicate effect");
+    ).toThrow("Hosted context materialization plan has duplicate effect");
+  });
+
+  test("rejects unsupported command pairs before side effects run", () => {
+    const plan = planHostedContextMaterialization(materializationInput());
+    const usage = plan.effects[0];
+    const runtime = {
+      operator: {
+        context: {
+          usage: {
+            observe() {
+              throw new Error("side effect ran");
+            },
+          },
+        },
+      },
+    };
+
+    expect(() =>
+      commitHostedContextMaterialization(
+        {
+          ...plan,
+          effects: [{ ...usage, command: "unsupported_command" }] as never,
+        },
+        { runtime: runtime as never },
+      ),
+    ).toThrow("Hosted context materialization plan has unsupported command");
+  });
+
+  test("rejects unsupported effects before side effects run", () => {
+    const plan = planHostedContextMaterialization(materializationInput());
+    const runtime = {
+      operator: {
+        context: {
+          usage: {
+            observe() {
+              throw new Error("side effect ran");
+            },
+          },
+        },
+      },
+    };
+
+    expect(() =>
+      commitHostedContextMaterialization(
+        {
+          ...plan,
+          effects: [
+            {
+              effect: "unknown_effect",
+              command: "observe_usage",
+              payload: {
+                sessionId: "session-1",
+              },
+            },
+          ] as never,
+        },
+        { runtime: runtime as never },
+      ),
+    ).toThrow("Hosted context materialization plan has unsupported effect");
   });
 });

@@ -1,4 +1,4 @@
-// Curated task contract subpath. Keep root imports focused on BrewvaRuntime.
+// Curated task contract subpath. Keep root imports focused on createBrewvaRuntime and explicit port types.
 export { isHydratedTaskState } from "./domain/task/types.js";
 export type {
   HydratedTaskState,

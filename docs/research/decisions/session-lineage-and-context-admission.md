@@ -29,7 +29,7 @@
 
 ## Decision Summary
 
-- Event tape remains the replay authority. Session lineage is a rebuildable session-domain read model under `runtime.authority.session` and `runtime.inspect.session`, not a new runtime root.
+- Event tape remains the replay authority. Session lineage is a rebuildable session-domain read model under root authority and root inspection session surfaces, not a new runtime root.
 - Hosted sessions must start with an explicit `session_root` lineage node. Hosted lineage paths do not synthesize compatibility roots for old tapes without that root.
 - Model-facing ancestry and visibility live on `brewva.context.entry.recorded.v1` linker events. Existing source message, compaction, summary, and tool-result events keep their own shapes.
 - Child outcomes default to state-only. Parent-visible model context requires explicit `brewva.session.lineage.outcome_adopted.v1` adoption, and sibling raw transcript is never injected through the lineage provider.

@@ -3,7 +3,8 @@ import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BrewvaRuntime, createOperatorRuntimePort } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import {
   createWorkerResultsApplyTool,
   createWorkerResultsMergeTool,
@@ -26,11 +27,11 @@ afterEach(() => {
   if (workspace) cleanupWorkspace(workspace);
 });
 
-function createCleanRuntime(cwd = workspace): BrewvaRuntime {
-  return new BrewvaRuntime({
+function createCleanRuntime(cwd = workspace): BrewvaHostedRuntimePort {
+  return createBrewvaRuntime({
     cwd,
     config: createRuntimeConfig(),
-  });
+  }).hosted;
 }
 
 describe("worker results tools contract", () => {
@@ -91,9 +92,9 @@ describe("worker results tools contract", () => {
     mkdirSync(artifactDir, { recursive: true });
     writeFileSync(artifactPath, afterText, "utf8");
 
-    const runtime = new BrewvaRuntime({ cwd: applyWorkspace });
+    const runtime = createBrewvaRuntime({ cwd: applyWorkspace }).hosted;
     const sessionId = "worker-results-apply";
-    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+    runtime.operator.context.lifecycle.onTurnStart(sessionId, 1);
     runtime.authority.session.workerResults.record(sessionId, {
       workerId: "worker-a",
       status: "ok",

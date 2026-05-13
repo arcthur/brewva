@@ -22,7 +22,7 @@
 ## Decision Summary
 
 - runtime package implementation ownership follows domain slices under `domain/<name>/`, with explicit `api.ts`, `types.ts`, `registrar.ts`, and `runtime-surface.ts` seams
-- `BrewvaRuntime` keeps the semantic public root contract: `authority` and `inspect`; bounded operations move through repo-owned operator ports.
+- `BrewvaRuntimeRoot` keeps the semantic public root contract: `authority` and `inspect`; bounded operations move through repo-owned operator ports.
 - method groups, broad assembler layers, the root `internal` entrypoint, and production implementation barrels are removed as integration surfaces
 - runtime assembly is owned by a typed composition root, domain registrars, and domain-owned runtime surface descriptors
 - repo-owned code that needs implementation-adjacent machinery uses typed controlled extension ports or dedicated explicit subpaths, not a catch-all internal barrel
@@ -34,3 +34,4 @@
 
 - `docs/research/decisions/runtime-public-root-compression.md`
 - `docs/research/decisions/runtime-domain-admission-and-deletion.md`
+- `docs/research/decisions/runtime-factory-ports.md`

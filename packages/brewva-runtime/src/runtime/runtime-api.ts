@@ -37,6 +37,13 @@ export interface BrewvaRuntimeRoot {
   readonly inspect: BrewvaInspectionPort;
 }
 
+export interface BrewvaRuntimeInstance {
+  readonly root: BrewvaRuntimeRoot;
+  readonly hosted: BrewvaHostedRuntimePort;
+  readonly tool: BrewvaToolRuntimePort;
+  readonly operator: BrewvaOperatorRuntimePort;
+}
+
 export interface BrewvaHostedRuntimePort extends BrewvaRuntimeRoot {
   readonly operator: RuntimeOperatorPort;
   readonly extensions: BrewvaRuntimeExtensions;
