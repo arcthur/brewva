@@ -851,8 +851,13 @@ describe("runtime facade coverage", () => {
     });
     expect(blockedEvents).toHaveLength(1);
     expect(blockedEvents[0]?.payload?.manifestBasis).toMatchObject({
-      schema: "brewva.effect_authority_basis.v1",
+      schema: "brewva.effect_authority_basis.v2",
       toolName: "browser_snapshot",
+      recoveryPreparation: "none",
+      commitmentPosture: {
+        recoverability: "observe_only",
+        visibility: "local_only",
+      },
       runtimeBasis: expect.arrayContaining(["exact_call_loop"]),
     });
 

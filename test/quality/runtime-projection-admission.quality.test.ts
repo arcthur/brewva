@@ -6,6 +6,10 @@ const repoRoot = resolve(import.meta.dir, "../..");
 
 const allowedProjectionFiles = [
   "packages/brewva-runtime/src/domain/projection/api.ts",
+  "packages/brewva-runtime/src/domain/projection/effects/api.ts",
+  "packages/brewva-runtime/src/domain/projection/effects/derivation.ts",
+  "packages/brewva-runtime/src/domain/projection/effects/digest.ts",
+  "packages/brewva-runtime/src/domain/projection/effects/types.ts",
   "packages/brewva-runtime/src/domain/projection/engine.ts",
   "packages/brewva-runtime/src/domain/projection/event-descriptors.ts",
   "packages/brewva-runtime/src/domain/projection/events.ts",

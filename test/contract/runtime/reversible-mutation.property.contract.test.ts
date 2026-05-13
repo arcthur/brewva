@@ -101,7 +101,7 @@ describe("reversible mutation properties", () => {
     },
   });
 
-  propertyTest("workspace edit mutation receipt is stable-shaped and rollbackable", {
+  propertyTest("workspace edit mutation receipt is stable-shaped and reversible after receipt", {
     propertyId: "runtime.reversible-mutation.workspace-edit-stable-shape-rollback",
     layer: "contract",
     arbitraries: [editCaseArbitrary],

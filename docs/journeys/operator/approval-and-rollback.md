@@ -17,16 +17,16 @@
 
 ## Objective
 
-Describe how an effectful tool invocation is classified as `safe`,
-`rollbackable`, or `approval-bound`, and how an operator moves through effect
-commitment, explicit approval, exact resume, and rollback surfaces.
+Describe how an effectful tool invocation is classified by boundary,
+commitment posture, and recovery preparation, and how an operator moves through
+effect commitment, explicit approval, exact resume, and rollback surfaces.
 
 ## In Scope
 
 - tool access and effect-boundary classification
 - effect-commitment admission
 - operator approval and exact resume
-- rollbackable mutation and `PatchSet` rollback
+- `workspace_patchset` preparation and `PatchSet` rollback
 
 ## Out Of Scope
 
@@ -42,7 +42,7 @@ flowchart TD
   A["Tool invocation"] --> B["ToolGateService classifies boundary"]
   B --> C{"Boundary result"}
   C -->|Safe| D["Execute directly"]
-  C -->|Effectful rollbackable| E["Execute directly and record rollback receipt"]
+  C -->|Effectful with workspace_patchset preparation| E["Execute directly and record mutation receipt"]
   C -->|Effectful approval-bound| F["Create effect_commitment request"]
   F --> G["Operator desk / channel approval"]
   G --> H{"Decision"}
@@ -61,7 +61,7 @@ flowchart TD
    governance descriptor.
 2. The runtime classifies the call as:
    - `safe`
-   - `effectful` and rollbackable
+   - `effectful` with local recovery preparation
    - `effectful` and approval-bound
 3. Approval-bound calls do not execute immediately; they create a replayable
    `effect_commitment` request.
@@ -71,15 +71,15 @@ flowchart TD
    `effectCommitmentRequestId`, original `toolCallId`, and canonical argument
    identity.
 6. Approval is consumed only after a durable linked tool result is recorded.
-7. For rollbackable mutations, the runtime preserves a rollback anchor and the
-   operator can later use `PatchSet` rollback or receipt-aware mutation
-   rollback.
+7. For workspace patchset mutations, the runtime prepares a patch anchor before
+   execution and only treats the result as reversible after the recorded
+   mutation receipt contains a rollback handle.
 
 ## Execution Semantics
 
 - `effectful` does not mean "always requires approval"
-- rollbackable and approval-bound are different effectful realities; governance
-  does not permit a tool to be both
+- recovery preparation and approval-bound commitment are different effectful
+  realities; a tool can need approval without having an automatic undo path
 - approval never auto-applies to a later similar-looking call; only the exact
   request may be resumed, including the original `toolCallId` and `argsDigest`
 - `resource_lease` expands budget only; it does not widen effect authority

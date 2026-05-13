@@ -5,8 +5,8 @@ import {
   getExactToolActionPolicy,
   getToolActionPolicy,
   resolveEffectiveToolActionPolicy,
+  resolveToolRecoveryPreparation,
   sameToolActionPolicy,
-  toolActionPolicyCreatesRollbackAnchor,
   validateToolActionPolicy,
 } from "@brewva/brewva-runtime/governance";
 import type { ToolActionPolicy } from "@brewva/brewva-runtime/governance";
@@ -28,7 +28,7 @@ describe("tool action policy", () => {
       defaultRisk: "high",
       boundary: "effectful",
     });
-    expect(toolActionPolicyCreatesRollbackAnchor(policy)).toBe(true);
+    expect(resolveToolRecoveryPreparation(policy)).toBe("workspace_patchset");
   });
 
   test("budget mutation uses compensation instead of rollback", () => {
@@ -46,9 +46,8 @@ describe("tool action policy", () => {
       effects: ["budget_mutation"],
       defaultRisk: "medium",
       boundary: "effectful",
-      rollbackable: false,
     });
-    expect(toolActionPolicyCreatesRollbackAnchor(policy)).toBe(false);
+    expect(resolveToolRecoveryPreparation(policy)).not.toBe("workspace_patchset");
   });
 
   test("delegation recovery applies only to parent delegation action", () => {
@@ -62,7 +61,7 @@ describe("tool action policy", () => {
       receiptPolicy: { kind: "delegation", required: true },
       recoveryPolicy: { kind: "none", scope: "parent_delegation" },
     });
-    expect(toolActionPolicyCreatesRollbackAnchor(policy)).toBe(false);
+    expect(resolveToolRecoveryPreparation(policy)).not.toBe("workspace_patchset");
   });
 
   test("session compact memory writes and delegation derive effectful execution descriptors", () => {
@@ -79,13 +78,11 @@ describe("tool action policy", () => {
       effects: ["memory_write"],
       defaultRisk: "medium",
       boundary: "effectful",
-      rollbackable: false,
     });
     expect(deriveToolGovernanceDescriptor(delegationPolicy)).toEqual({
       effects: ["delegation"],
       defaultRisk: "medium",
       boundary: "effectful",
-      rollbackable: false,
     });
   });
 
@@ -106,7 +103,6 @@ describe("tool action policy", () => {
       effects: ["control_state_mutation"],
       defaultRisk: "medium",
       boundary: "effectful",
-      rollbackable: false,
     });
   });
 
@@ -134,7 +130,6 @@ describe("tool action policy", () => {
       effects: ["control_state_mutation"],
       defaultRisk: "medium",
       boundary: "effectful",
-      rollbackable: false,
     });
 
     for (const policy of [codePolicy, defaultPolicy]) {

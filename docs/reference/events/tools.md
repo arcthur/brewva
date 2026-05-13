@@ -25,12 +25,23 @@ surface promotes them.
 ## Mutation And Rollback
 
 Patch, reversible mutation, rollback, and redo events connect an effectful tool
-call to its receipt and recovery posture.
+call to its receipt, recovery preparation, and commitment posture.
+
+Commitment posture has two orthogonal axes:
+
+- recoverability: `observe_only`, `reversible`, `compensatable`,
+  `manual_recovery`, or `irreversible`
+- visibility: `local_only`, `workspace_visible`, `externally_observable`, or
+  `credential_sensitive`
+
+`externally_observable` is visibility, not recoverability. A send-like tool can
+therefore be `manual_recovery` and `externally_observable` at the same time.
 
 Read these events with the tool authority decision:
 
-- rollbackable effects must produce a receipt or explicit non-rollbackable
-  reason
+- `workspace_patchset` preparation means the runtime captured a patchset anchor
+  before execution; exact reversibility is only proven by the later mutation
+  receipt and rollback handle
 - rollback events apply only to recorded patch or mutation sets
 - redo events restore a previously rolled-back mutation branch
 

@@ -11,7 +11,7 @@ function createWorkspace(): string {
 }
 
 describe("reversible mutation receipts", () => {
-  test("task mutations stay non-rollbackable and do not emit rollback receipts", () => {
+  test("task mutations do not prepare workspace recovery and do not emit rollback receipts", () => {
     const workspace = createWorkspace();
     const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
     const sessionId = `reversible-task-${crypto.randomUUID()}`;
@@ -207,7 +207,7 @@ describe("reversible mutation receipts", () => {
     expect(readFileSync(filePath, "utf8")).toBe("export const value = 1;\n");
   });
 
-  test("workspace mutation receipts rehydrate from tape and remain rollbackable after restart", () => {
+  test("workspace mutation receipts rehydrate from tape and remain reversible after restart", () => {
     const workspace = createWorkspace();
     mkdirSync(join(workspace, "src"), { recursive: true });
     const filePath = join(workspace, "src", "restart-rollback.ts");

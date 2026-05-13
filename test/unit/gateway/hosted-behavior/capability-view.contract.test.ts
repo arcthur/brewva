@@ -312,7 +312,7 @@ describe("capability view", () => {
     ).toBe(true);
   });
 
-  test("marks operator acceptance closure as non-rollbackable", () => {
+  test("marks operator acceptance closure as having no automatic recovery", () => {
     const runtime = createRuntimeFixture();
     const acceptanceTool = requireDefined(
       createTaskLedgerTools({ runtime }).find((tool) => tool.name === "task_record_acceptance"),
@@ -355,7 +355,7 @@ describe("capability view", () => {
     expect(result.inventory.hints).toContain("load_or_accept_skill");
   });
 
-  test("captures effect boundaries for mutable task tools without rollback hints", () => {
+  test("captures effect boundaries for mutable task tools without recovery hints", () => {
     const result = buildCapabilityView({
       prompt: "inspect $task_set_spec",
       allTools: [
@@ -397,7 +397,7 @@ describe("capability view", () => {
     expect(rendered[2]?.content).toContain("action_class: budget_mutation");
     expect(rendered[2]?.content).toContain("receipt_policy: control_plane(required)");
     expect(rendered[2]?.content).toContain("recovery_policy: compensation(async_cancel)");
-    expect(rendered[2]?.content).not.toContain("rollbackable:");
+    expect(rendered[2]?.content).toContain("recovery_preparation: compensation");
   });
 
   test("renders compact memory and delegation actions as effectful semantic actions", () => {

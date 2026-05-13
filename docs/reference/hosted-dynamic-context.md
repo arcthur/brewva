@@ -20,6 +20,7 @@ efficiently through ordinary tools:
 - numeric context status and forced-compaction state
 - active model-authored workbench entries
 - pending or newly completed delegation handoffs
+- the previous completed turn's bounded consequence digest
 - explicitly requested capability details
 - bounded read-path recovery hints
 
@@ -54,11 +55,17 @@ The dynamic tail is a fixed ordered list. Empty blocks are omitted:
 - `[Workbench]`
 - `[PendingDelegations]`
 - `[CompletedDelegationOutcomes]`
+- `[TurnConsequenceDigest]` inside `turn-consequence-digest`
 - requested capability detail blocks
 - read-path recovery blocks
 
 Blocks carry only `id`, `content`, and `estimatedTokens`. They do not carry
 category, provenance, family id, lane reason, or retention policy.
+
+The consequence digest is rendered from runtime inspect
+`events.effects.renderTurnDigest` for the most recent completed runtime turn.
+It is descriptive, not imperative, and its character budget is
+`infrastructure.contextBudget.dynamicTail.consequenceDigestMaxChars`.
 
 Compaction gate/advisory blocks are nudge-throttled per session. The first
 appearance of a stable gate/advisory state is rendered in full; repeated

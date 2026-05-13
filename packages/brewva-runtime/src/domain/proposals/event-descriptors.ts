@@ -103,6 +103,83 @@ function isToolEffectClass(
   );
 }
 
+function isEffectRecoverability(value: unknown): boolean {
+  return (
+    value === "observe_only" ||
+    value === "reversible" ||
+    value === "compensatable" ||
+    value === "manual_recovery" ||
+    value === "irreversible"
+  );
+}
+
+function isEffectVisibility(value: unknown): boolean {
+  return (
+    value === "local_only" ||
+    value === "workspace_visible" ||
+    value === "externally_observable" ||
+    value === "credential_sensitive"
+  );
+}
+
+function isToolRecoveryPreparation(
+  value: unknown,
+): value is NonNullable<
+  EffectCommitmentDecisionReceiptRecordedPayload["receipt"]["manifestBasis"]
+>["recoveryPreparation"] {
+  return (
+    value === "none" ||
+    value === "workspace_patchset" ||
+    value === "compensation" ||
+    value === "manual"
+  );
+}
+
+function readCommitmentPostureValue(
+  value: unknown,
+):
+  | NonNullable<
+      EffectCommitmentDecisionReceiptRecordedPayload["receipt"]["manifestBasis"]
+    >["commitmentPosture"]
+  | null {
+  const record = asRecord(value);
+  if (
+    !record ||
+    !isEffectRecoverability(record.recoverability) ||
+    !isEffectVisibility(record.visibility)
+  ) {
+    return null;
+  }
+  const evidenceSources = Array.isArray(record.evidenceSources)
+    ? record.evidenceSources.filter((entry): entry is string => typeof entry === "string")
+    : [];
+  const warnings = Array.isArray(record.warnings)
+    ? record.warnings
+        .map((entry) => {
+          const warningRecord = asRecord(entry);
+          const code = readString(warningRecord?.code);
+          const message = readString(warningRecord?.message);
+          const evidenceSource = readString(warningRecord?.evidenceSource);
+          return code && message
+            ? {
+                code,
+                message,
+                ...(evidenceSource ? { evidenceSource } : {}),
+              }
+            : null;
+        })
+        .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
+    : [];
+  return {
+    recoverability: record.recoverability,
+    visibility: record.visibility,
+    evidenceSources,
+    warnings,
+  } as NonNullable<
+    EffectCommitmentDecisionReceiptRecordedPayload["receipt"]["manifestBasis"]
+  >["commitmentPosture"];
+}
+
 function isProposalDecision(value: unknown): value is ProposalDecision {
   return value === "accept" || value === "reject" || value === "defer";
 }
@@ -193,12 +270,17 @@ function readEffectAuthorityManifestBasisValue(
   const runtimeBasis = readStringArray(record.runtimeBasis);
   const receiptBasis = readStringArray(record.receiptBasis);
   if (
-    schema !== "brewva.effect_authority_basis.v1" ||
+    schema !== "brewva.effect_authority_basis.v2" ||
     !toolName ||
     !isToolExecutionBoundary(boundary) ||
     !authoritySource ||
-    effects.length === 0
+    effects.length === 0 ||
+    !isToolRecoveryPreparation(record.recoveryPreparation)
   ) {
+    return undefined;
+  }
+  const commitmentPosture = readCommitmentPostureValue(record.commitmentPosture);
+  if (!commitmentPosture) {
     return undefined;
   }
   return {
@@ -213,7 +295,8 @@ function readEffectAuthorityManifestBasisValue(
       : {}),
     effects,
     requiresApproval: record.requiresApproval === true,
-    rollbackable: record.rollbackable === true,
+    recoveryPreparation: record.recoveryPreparation,
+    commitmentPosture,
     receiptRequired: record.receiptRequired === true,
     invariantBasis,
     overlayBasis,

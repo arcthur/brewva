@@ -32,15 +32,26 @@ function summarizeEvents(events: BrewvaEventRecord[]): EventSummary[] {
 function summarizeEvent(event: BrewvaEventRecord): EventSummary {
   switch (event.type) {
     case "effect_authority_decided":
+      const commitmentPosture =
+        typeof event.payload?.commitmentPosture === "object" && event.payload.commitmentPosture
+          ? (event.payload.commitmentPosture as {
+              recoverability?: unknown;
+              visibility?: unknown;
+            })
+          : {};
       return {
         type: event.type,
-        payload: pick(event.payload, [
-          "toolCallId",
-          "toolName",
-          "boundary",
-          "requiresApproval",
-          "rollbackable",
-        ]),
+        payload: {
+          ...pick(event.payload, [
+            "toolCallId",
+            "toolName",
+            "boundary",
+            "requiresApproval",
+            "recoveryPreparation",
+          ]),
+          recoverability: commitmentPosture.recoverability ?? null,
+          visibility: commitmentPosture.visibility ?? null,
+        },
       };
     case "tool_call_blocked":
       return {
@@ -252,7 +263,9 @@ describe("Tool invocation characterization", () => {
           toolName: "shell",
           boundary: "effectful",
           requiresApproval: false,
-          rollbackable: false,
+          recoveryPreparation: "none",
+          recoverability: "irreversible",
+          visibility: "local_only",
         },
       },
       {
@@ -291,7 +304,9 @@ describe("Tool invocation characterization", () => {
           toolName: "exec",
           boundary: "effectful",
           requiresApproval: true,
-          rollbackable: false,
+          recoveryPreparation: "manual",
+          recoverability: "manual_recovery",
+          visibility: "local_only",
         },
       },
       {
@@ -379,7 +394,9 @@ describe("Tool invocation characterization", () => {
           toolName: "exec",
           boundary: "effectful",
           requiresApproval: true,
-          rollbackable: false,
+          recoveryPreparation: "manual",
+          recoverability: "manual_recovery",
+          visibility: "local_only",
         },
       },
       {
@@ -473,7 +490,9 @@ describe("Tool invocation characterization", () => {
           toolName: "exec",
           boundary: "effectful",
           requiresApproval: true,
-          rollbackable: false,
+          recoveryPreparation: "manual",
+          recoverability: "manual_recovery",
+          visibility: "local_only",
         },
       },
       {
@@ -623,7 +642,9 @@ describe("Tool invocation characterization", () => {
           toolName: "edit",
           boundary: "effectful",
           requiresApproval: false,
-          rollbackable: true,
+          recoveryPreparation: "workspace_patchset",
+          recoverability: "manual_recovery",
+          visibility: "workspace_visible",
         },
       },
       {

@@ -60,6 +60,11 @@ export {
 } from "./semantic-artifact-catalog.js";
 export { SEMANTIC_ARTIFACT_SCHEMA_IDS, isSemanticArtifactSchemaId } from "./semantic-artifacts.js";
 export { ensureBundledSystemSkills } from "./system-install.js";
+export {
+  SKILL_TIER_EFFECT_CEILINGS,
+  listEffectsExceedingSkillTierCeiling,
+  listSkillTierEffectCeiling,
+} from "./tier-policy.js";
 export type {
   SkillArtifactIssueTier,
   SkillNormalizedBlockingState,

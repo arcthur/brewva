@@ -5,6 +5,11 @@ import type {
   BrewvaReplaySession,
   BrewvaStructuredEvent,
 } from "../../events/types.js";
+import {
+  deriveTurnEffectCommitmentProjection,
+  renderTurnConsequenceDigest,
+  type TurnEffectCommitmentProjection,
+} from "../projection/api.js";
 import type { RuntimeRecordEvent } from "../sessions/api.js";
 import type {
   GuardResultInput,
@@ -57,11 +62,36 @@ export interface RuntimeEventsSurfaceMethods {
     ): MetricObservationRecord[];
     listGuardResults(sessionId: string, query?: GuardResultQuery): GuardResultRecord[];
   };
+  effects: {
+    getTurnProjection(
+      sessionId: string,
+      input?: { runtimeTurn?: number; turnId?: string },
+    ): TurnEffectCommitmentProjection;
+    renderTurnDigest(
+      sessionId: string,
+      input?: { runtimeTurn?: number; turnId?: string; maxChars?: number },
+    ): string;
+  };
   recordMetricObservation(
     sessionId: string,
     input: MetricObservationInput,
   ): BrewvaEventRecord | undefined;
   recordGuardResult(sessionId: string, input: GuardResultInput): BrewvaEventRecord | undefined;
+}
+
+function resolveRuntimeTurn(
+  events: readonly BrewvaEventRecord[],
+  explicit: number | undefined,
+): number {
+  if (typeof explicit === "number" && Number.isFinite(explicit)) {
+    return Math.max(0, Math.floor(explicit));
+  }
+  return Math.max(
+    0,
+    ...events
+      .map((event) => event.turn)
+      .filter((turn): turn is number => typeof turn === "number" && Number.isFinite(turn)),
+  );
 }
 
 export function createEventsSurfaceMethods(
@@ -88,6 +118,32 @@ export function createEventsSurfaceMethods(
         deps.listMetricObservations(sessionId, query),
       listGuardResults: (sessionId: string, query?: GuardResultQuery) =>
         deps.listGuardResults(sessionId, query),
+    },
+    effects: {
+      getTurnProjection: (sessionId: string, input?: { runtimeTurn?: number; turnId?: string }) => {
+        const events = deps.eventStore.list(sessionId);
+        const runtimeTurn = resolveRuntimeTurn(events, input?.runtimeTurn);
+        return deriveTurnEffectCommitmentProjection({
+          sessionId,
+          turnId: input?.turnId ?? `turn-${runtimeTurn}`,
+          runtimeTurn,
+          events,
+        });
+      },
+      renderTurnDigest: (
+        sessionId: string,
+        input?: { runtimeTurn?: number; turnId?: string; maxChars?: number },
+      ) => {
+        const events = deps.eventStore.list(sessionId);
+        const runtimeTurn = resolveRuntimeTurn(events, input?.runtimeTurn);
+        const projection = deriveTurnEffectCommitmentProjection({
+          sessionId,
+          turnId: input?.turnId ?? `turn-${runtimeTurn}`,
+          runtimeTurn,
+          events,
+        });
+        return renderTurnConsequenceDigest(projection, { maxChars: input?.maxChars });
+      },
     },
     recordMetricObservation: (sessionId: string, input: MetricObservationInput) =>
       deps.recordMetricObservation(sessionId, input),
@@ -116,5 +172,6 @@ export function createEventsInspectSurface(deps: EventsSurfaceDependencies) {
     records: methods.records,
     log: methods.log,
     iteration: methods.iteration,
+    effects: methods.effects,
   };
 }

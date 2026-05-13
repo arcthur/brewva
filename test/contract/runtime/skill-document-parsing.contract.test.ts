@@ -85,6 +85,38 @@ describe("skill document parsing", () => {
     expect(() => parseSkillDocument(filePath, "core")).toThrow("category");
   });
 
+  test("rejects allowed effects that exceed the directory-derived tier ceiling", () => {
+    const filePath = createTempSkillDocument(
+      "brewva-skill-tier-ceiling-",
+      "skills/core/review/SKILL.md",
+      [
+        "---",
+        "name: review",
+        "description: review skill",
+        ...MINIMAL_SELECTION_LINES,
+        "intent:",
+        "  outputs: []",
+        "effects:",
+        "  allowed_effects: [workspace_read, external_side_effect]",
+        "resources:",
+        "  default_lease:",
+        "    max_tool_calls: 10",
+        "    max_tokens: 10000",
+        "  hard_ceiling:",
+        "    max_tool_calls: 20",
+        "    max_tokens: 20000",
+        "execution_hints:",
+        "  preferred_tools: [read]",
+        "  fallback_tools: []",
+        "consumes: []",
+        "---",
+        "# review",
+      ],
+    );
+
+    expect(() => parseSkillDocument(filePath, "core")).toThrow("tier ceiling");
+  });
+
   test("parses CRLF-authored skill documents", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-skill-crlf-"));
     const filePath = join(workspace, "skills/core/review/SKILL.md");

@@ -4,6 +4,7 @@ import { parseMarkdownFrontmatter } from "@brewva/brewva-std/markdown";
 import { normalizeToolName } from "../../utils/tool-name.js";
 import type { ToolEffectClass } from "../governance/api.js";
 import { isSemanticArtifactSchemaId } from "./semantic-artifacts.js";
+import { listEffectsExceedingSkillTierCeiling } from "./tier-policy.js";
 import type {
   LoadableSkillCategory,
   OverlaySkillDocument,
@@ -566,6 +567,18 @@ function normalizeEffectsContract(
   );
   if (category !== "overlay" && allowedEffects === undefined) {
     failSkillContract(filePath, "effects.allowed_effects is required.");
+  }
+  if (category !== "overlay" && allowedEffects) {
+    const disallowed = listEffectsExceedingSkillTierCeiling({
+      category,
+      effects: allowedEffects,
+    });
+    if (disallowed.length > 0) {
+      failSkillContract(
+        filePath,
+        `effects.allowed_effects exceed ${category} tier ceiling: ${disallowed.join(", ")}.`,
+      );
+    }
   }
 
   return {

@@ -32,6 +32,50 @@ export type ToolActionClass =
   | "delegation"
   | "credential_access";
 export type ToolAdmissionBehavior = "allow" | "ask" | "deny";
+export type EffectRecoverability =
+  | "observe_only"
+  | "reversible"
+  | "compensatable"
+  | "manual_recovery"
+  | "irreversible";
+export type EffectVisibility =
+  | "local_only"
+  | "workspace_visible"
+  | "externally_observable"
+  | "credential_sensitive";
+export type EffectPostureEvidenceSource =
+  | "execution_receipt"
+  | "effect_authority_manifest"
+  | "action_policy"
+  | "managed_tool_metadata"
+  | "skill_metadata"
+  | "prose";
+export type EffectPostureWarningCode =
+  | "reversible_requires_undo_handle"
+  | "external_evidence_overrode_reversible"
+  | "credential_evidence_overrode_visibility"
+  | "classification_changed_after_receipt"
+  | "missing_effect_evidence";
+export type ToolRecoveryPreparation = "none" | "workspace_patchset" | "compensation" | "manual";
+
+export interface EffectPostureWarning {
+  code: EffectPostureWarningCode;
+  message: string;
+  evidenceSource?: EffectPostureEvidenceSource;
+}
+
+export interface EffectProjectionWarning extends EffectPostureWarning {
+  eventId?: string;
+  toolName?: string;
+  receiptId?: string;
+}
+
+export interface EffectCommitmentPosture {
+  recoverability: EffectRecoverability;
+  visibility: EffectVisibility;
+  evidenceSources: EffectPostureEvidenceSource[];
+  warnings: EffectPostureWarning[];
+}
 
 export type ToolReceiptPolicy =
   | { kind: "none"; required?: false }
@@ -98,12 +142,11 @@ export interface ToolGovernanceDescriptor {
   effects: ToolEffectClass[];
   defaultRisk?: ToolGovernanceRisk;
   boundary?: ToolExecutionBoundary;
-  rollbackable?: boolean;
   requiredRoutingScopes?: SkillRoutingScope[];
 }
 
 export interface EffectAuthorityManifestBasis {
-  schema: "brewva.effect_authority_basis.v1";
+  schema: "brewva.effect_authority_basis.v2";
   toolName: string;
   boundary: ToolExecutionBoundary;
   authoritySource: string;
@@ -112,7 +155,8 @@ export interface EffectAuthorityManifestBasis {
   effectiveAdmission?: ToolAdmissionBehavior;
   effects: ToolEffectClass[];
   requiresApproval: boolean;
-  rollbackable: boolean;
+  recoveryPreparation: ToolRecoveryPreparation;
+  commitmentPosture: EffectCommitmentPosture;
   receiptRequired: boolean;
   invariantBasis: string[];
   overlayBasis: string[];

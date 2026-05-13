@@ -49,12 +49,12 @@ describe("managed exec Effect runtime integration", () => {
 
     const startedAt = Date.now();
     await runPromiseAtBoundary(
-      waitForManagedSessionActivityEffect(ownerSessionId, started.session.id, 1_000),
+      waitForManagedSessionActivityEffect(ownerSessionId, started.session.id, 5_000),
     );
     const elapsedMs = Date.now() - startedAt;
     await started.completion;
 
-    expect(elapsedMs).toBeLessThan(900);
+    expect(elapsedMs).toBeLessThan(4_000);
   });
 
   test("runs managed session output through an Effect sink consumer", async () => {

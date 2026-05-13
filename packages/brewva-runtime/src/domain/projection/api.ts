@@ -39,6 +39,20 @@ export {
   extractWorkflowProjectionFromEvents,
   formatWorkflowProjectionStatement,
 } from "./extractor.js";
+export {
+  deriveTurnEffectCommitmentProjection,
+  renderTurnConsequenceDigest,
+} from "./effects/api.js";
+export type {
+  DeriveTurnEffectCommitmentProjectionInput,
+  EffectAuthorityDecisionSummary,
+  EffectCommitmentAttempt,
+  EffectCommitmentSummary,
+  EffectExecutionSummary,
+  EffectRecoverySummary,
+  RenderTurnConsequenceDigestOptions,
+  TurnEffectCommitmentProjection,
+} from "./effects/api.js";
 export { WORKFLOW_ARTIFACT_KINDS } from "./workflow/types.js";
 export type {
   WorkflowAcceptanceStatus,

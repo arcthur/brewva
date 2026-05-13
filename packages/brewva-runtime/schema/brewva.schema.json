@@ -115,6 +115,9 @@
                     "baseTokens": {
                       "type": "number"
                     },
+                    "consequenceDigestMaxChars": {
+                      "type": "number"
+                    },
                     "maxTokens": {
                       "type": "number"
                     },

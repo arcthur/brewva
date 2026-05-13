@@ -129,6 +129,10 @@ export function normalizeInfrastructureConfig(
           defaultContextBudgetDynamicTail.windowFraction,
         ),
         maxTokens: normalizedDynamicTailMaxTokens,
+        consequenceDigestMaxChars: normalizePositiveInteger(
+          contextBudgetDynamicTailInput.consequenceDigestMaxChars,
+          defaultContextBudgetDynamicTail.consequenceDigestMaxChars,
+        ),
       },
       thresholds: {
         compactionFloorPercent: normalizedCompactionFloorPercent,

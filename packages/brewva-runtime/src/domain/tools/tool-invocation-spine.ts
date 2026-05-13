@@ -136,13 +136,14 @@ export class ToolInvocationSpine {
         toolName: input.toolName,
         args: input.args,
       });
-      const mutationReceipt = decision.authority.rollbackable
-        ? this.prepareMutation({
-            sessionId: input.sessionId,
-            toolCallId: input.toolCallId,
-            toolName: input.toolName,
-          })
-        : undefined;
+      const mutationReceipt =
+        decision.authority.recoveryPreparation === "workspace_patchset"
+          ? this.prepareMutation({
+              sessionId: input.sessionId,
+              toolCallId: input.toolCallId,
+              toolName: input.toolName,
+            })
+          : undefined;
       return {
         allowed: true,
         advisory: decision.advisory,
@@ -164,7 +165,7 @@ export class ToolInvocationSpine {
   complete(input: FinishToolCallInput): string {
     const completion = this.resolveToolCompletion(input);
     const patchSet = this.finalizePatchTracking(input);
-    if (completion.authority.rollbackable) {
+    if (completion.authority.recoveryPreparation === "workspace_patchset") {
       this.recordRollbackableMutation(input, completion, patchSet);
     }
     const ledgerId = this.recordToolResult({
@@ -206,7 +207,7 @@ export class ToolInvocationSpine {
     completion: CompletionContext,
     patchSet: PatchSet | undefined,
   ): void {
-    if (!completion.authority.rollbackable) {
+    if (completion.authority.recoveryPreparation !== "workspace_patchset") {
       return;
     }
     this.recordMutation({

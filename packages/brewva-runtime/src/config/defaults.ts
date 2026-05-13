@@ -175,6 +175,7 @@ export const DEFAULT_BREWVA_CONFIG: BrewvaConfig = {
         baseTokens: 1200,
         windowFraction: 0.002,
         maxTokens: 4800,
+        consequenceDigestMaxChars: 1200,
       },
       thresholds: {
         compactionFloorPercent: 0.82,

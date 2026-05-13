@@ -212,6 +212,7 @@ export interface BrewvaConfig {
         baseTokens: number;
         windowFraction: number;
         maxTokens: number;
+        consequenceDigestMaxChars: number;
       };
       thresholds: {
         compactionFloorPercent: number;

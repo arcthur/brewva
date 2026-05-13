@@ -1,7 +1,12 @@
 import type { CommandPolicySummary } from "../../security/command-policy.js";
 import type { VirtualReadonlyPolicySummary } from "../../security/virtual-readonly-policy.js";
 import type { ToolActionPolicySource } from "./action-policy.js";
+import {
+  deriveEffectCommitmentPosture,
+  resolveRecoveryPreparationFromPolicy,
+} from "./commitment-posture.js";
 import type {
+  EffectCommitmentPosture,
   EffectAuthorityManifestBasis,
   ToolActionClass,
   ToolAdmissionBehavior,
@@ -10,6 +15,7 @@ import type {
   ToolReceiptPolicy,
   ToolRecoveryPolicy,
   ToolRiskLevel,
+  ToolRecoveryPreparation,
 } from "./types.js";
 
 export type EffectAuthorityDecisionKind = "allow" | "block" | "defer";
@@ -31,7 +37,8 @@ export interface EffectAuthorityManifestFacts {
   effectiveAdmission?: ToolAdmissionBehavior;
   effects: readonly ToolEffectClass[];
   requiresApproval: boolean;
-  rollbackable: boolean;
+  recoveryPreparation?: ToolRecoveryPreparation;
+  commitmentPosture?: EffectCommitmentPosture;
   receiptPolicy?: ToolReceiptPolicy;
   recoveryPolicy?: ToolRecoveryPolicy;
   policyBasis?: readonly string[];
@@ -80,6 +87,10 @@ function receiptPolicyBasis(policy: ToolReceiptPolicy | undefined): string | und
 
 function recoveryPolicyBasis(policy: ToolRecoveryPolicy | undefined): string | undefined {
   return policy ? `recovery:${policy.kind}` : undefined;
+}
+
+function resolveRecoveryPreparation(facts: EffectAuthorityManifestFacts): ToolRecoveryPreparation {
+  return facts.recoveryPreparation ?? resolveRecoveryPreparationFromPolicy(facts.recoveryPolicy);
 }
 
 function factBasis(fact: EffectAuthorityFactDecision | undefined): string | undefined {
@@ -169,8 +180,18 @@ function buildEffectAuthorityManifestBasisFromRuntimeFacts(
   runtimeFacts: EnrichedEffectAuthorityRuntimeFacts,
 ): EffectAuthorityManifestBasis {
   const toolName = normalizeToolName(facts.toolName);
+  const recoveryPreparation = resolveRecoveryPreparation(facts);
+  const commitmentPosture =
+    facts.commitmentPosture ??
+    deriveEffectCommitmentPosture({
+      effects: facts.effects,
+      receiptPolicy: facts.receiptPolicy,
+      recoveryPolicy: facts.recoveryPolicy,
+      recoveryPreparation,
+      evidenceSources: ["effect_authority_manifest"],
+    });
   return {
-    schema: "brewva.effect_authority_basis.v1",
+    schema: "brewva.effect_authority_basis.v2",
     toolName,
     boundary: facts.boundary,
     authoritySource: facts.authoritySource,
@@ -179,7 +200,8 @@ function buildEffectAuthorityManifestBasisFromRuntimeFacts(
     effectiveAdmission: facts.effectiveAdmission,
     effects: [...facts.effects],
     requiresApproval: facts.requiresApproval,
-    rollbackable: facts.rollbackable,
+    recoveryPreparation,
+    commitmentPosture,
     receiptRequired: receiptRequired(facts.receiptPolicy),
     invariantBasis: unique([
       "exact_action_policy_required",

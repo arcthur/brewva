@@ -627,9 +627,6 @@ export function deriveToolGovernanceDescriptor(policy: ToolActionPolicy): ToolGo
     defaultRisk: policy.riskLevel,
     boundary,
   };
-  if (policy.recoveryPolicy.kind !== "exact_patch") {
-    descriptor.rollbackable = false;
-  }
   if (policy.requiredRoutingScopes && policy.requiredRoutingScopes.length > 0) {
     descriptor.requiredRoutingScopes = [...new Set(policy.requiredRoutingScopes)];
   }
@@ -642,10 +639,6 @@ export function toolActionPolicyRequiresApproval(
   return "effectiveAdmission" in policy
     ? policy.effectiveAdmission === "ask"
     : policy.defaultAdmission === "ask";
-}
-
-export function toolActionPolicyCreatesRollbackAnchor(policy: ToolActionPolicy): boolean {
-  return policy.recoveryPolicy.kind === "exact_patch";
 }
 
 export class ActionPolicyRegistry {

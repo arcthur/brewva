@@ -1,15 +1,20 @@
 import {
+  deriveEffectCommitmentPosture,
   deriveToolGovernanceDescriptor,
   getToolActionPolicy,
+  resolveToolRecoveryPreparation,
   toolActionPolicyRequiresApproval,
 } from "@brewva/brewva-runtime/governance";
 import type {
+  EffectRecoverability,
+  EffectVisibility,
   ToolActionClass,
   ToolAdmissionBehavior,
   ToolEffectClass,
   ToolExecutionBoundary,
   ToolReceiptPolicy,
   ToolRecoveryPolicy,
+  ToolRecoveryPreparation,
   ToolRiskLevel,
 } from "@brewva/brewva-runtime/governance";
 import type { BrewvaToolRequiredCapability } from "@brewva/brewva-tools/contracts";
@@ -51,6 +56,9 @@ interface CapabilityEntry {
   admission?: ToolAdmissionBehavior;
   receiptPolicy?: ToolReceiptPolicy;
   recoveryPolicy?: ToolRecoveryPolicy;
+  recoveryPreparation: ToolRecoveryPreparation;
+  recoverability: EffectRecoverability;
+  visibility: EffectVisibility;
   boundary: ToolExecutionBoundary;
   effects: ToolEffectClass[];
   requiresApproval: boolean;
@@ -64,6 +72,9 @@ interface CapabilityManifestEntry {
   riskLevel?: ToolRiskLevel;
   admission?: ToolAdmissionBehavior;
   recoveryPolicy?: ToolRecoveryPolicy;
+  recoveryPreparation: ToolRecoveryPreparation;
+  recoverability: EffectRecoverability;
+  visibility: EffectVisibility;
   boundary: ToolExecutionBoundary;
   effects: ToolEffectClass[];
   requiresApproval: boolean;
@@ -92,6 +103,9 @@ export interface CapabilityActionGovernance {
   admission?: ToolAdmissionBehavior;
   receiptPolicy?: ToolReceiptPolicy;
   recoveryPolicy?: ToolRecoveryPolicy;
+  recoveryPreparation: ToolRecoveryPreparation;
+  recoverability: EffectRecoverability;
+  visibility: EffectVisibility;
   boundary: ToolExecutionBoundary;
   effects: ToolEffectClass[];
   requiresApproval: boolean;
@@ -134,6 +148,9 @@ export interface CapabilityDetail {
   admission?: ToolAdmissionBehavior;
   receiptPolicy?: ToolReceiptPolicy;
   recoveryPolicy?: ToolRecoveryPolicy;
+  recoveryPreparation: ToolRecoveryPreparation;
+  recoverability: EffectRecoverability;
+  visibility: EffectVisibility;
   boundary: ToolExecutionBoundary;
   effects: ToolEffectClass[];
   requiresApproval: boolean;
@@ -261,6 +278,9 @@ function resolveCapabilityPolicy(
   admission?: ToolAdmissionBehavior;
   receiptPolicy?: ToolReceiptPolicy;
   recoveryPolicy?: ToolRecoveryPolicy;
+  recoveryPreparation: ToolRecoveryPreparation;
+  recoverability: EffectRecoverability;
+  visibility: EffectVisibility;
   boundary: ToolExecutionBoundary;
   effects: ToolEffectClass[];
   requiresApproval: boolean;
@@ -268,12 +288,22 @@ function resolveCapabilityPolicy(
   const policy =
     input.resolveActionPolicy?.(name, args) ?? getToolActionPolicy(name, undefined, args);
   const descriptor = policy ? deriveToolGovernanceDescriptor(policy) : undefined;
+  const recoveryPreparation = policy ? resolveToolRecoveryPreparation(policy) : "none";
+  const posture = deriveEffectCommitmentPosture({
+    effects: descriptor?.effects ?? [],
+    receiptPolicy: policy?.receiptPolicy,
+    recoveryPolicy: policy?.recoveryPolicy,
+    recoveryPreparation,
+  });
   return {
     actionClass: policy?.actionClass,
     riskLevel: policy?.riskLevel,
     admission: policy?.defaultAdmission,
     receiptPolicy: policy?.receiptPolicy,
     recoveryPolicy: policy?.recoveryPolicy,
+    recoveryPreparation,
+    recoverability: posture.recoverability,
+    visibility: posture.visibility,
     boundary: descriptor?.boundary ?? "safe",
     effects: [...(descriptor?.effects ?? [])],
     requiresApproval: policy ? toolActionPolicyRequiresApproval(policy) : false,
@@ -293,11 +323,27 @@ function readActionParameterValues(parameterDetails: CapabilityParameterDetail[]
 function sameCapabilityGovernance(
   left: Pick<
     CapabilityActionGovernance,
-    "actionClass" | "riskLevel" | "admission" | "boundary" | "effects" | "requiresApproval"
+    | "actionClass"
+    | "riskLevel"
+    | "admission"
+    | "boundary"
+    | "effects"
+    | "requiresApproval"
+    | "recoveryPreparation"
+    | "recoverability"
+    | "visibility"
   >,
   right: Pick<
     CapabilityActionGovernance,
-    "actionClass" | "riskLevel" | "admission" | "boundary" | "effects" | "requiresApproval"
+    | "actionClass"
+    | "riskLevel"
+    | "admission"
+    | "boundary"
+    | "effects"
+    | "requiresApproval"
+    | "recoveryPreparation"
+    | "recoverability"
+    | "visibility"
   >,
 ): boolean {
   return (
@@ -306,6 +352,9 @@ function sameCapabilityGovernance(
     left.admission === right.admission &&
     left.boundary === right.boundary &&
     left.requiresApproval === right.requiresApproval &&
+    left.recoveryPreparation === right.recoveryPreparation &&
+    left.recoverability === right.recoverability &&
+    left.visibility === right.visibility &&
     left.effects.length === right.effects.length &&
     left.effects.every((effect, index) => effect === right.effects[index])
   );
@@ -324,6 +373,9 @@ function resolveActionGovernance(
     admission?: ToolAdmissionBehavior;
     receiptPolicy?: ToolReceiptPolicy;
     recoveryPolicy?: ToolRecoveryPolicy;
+    recoveryPreparation: ToolRecoveryPreparation;
+    recoverability: EffectRecoverability;
+    visibility: EffectVisibility;
   },
 ): CapabilityActionGovernance[] {
   const actionValues = readActionParameterValues(parameterDetails);
@@ -340,6 +392,9 @@ function resolveActionGovernance(
       admission: resolved.admission,
       receiptPolicy: resolved.receiptPolicy,
       recoveryPolicy: resolved.recoveryPolicy,
+      recoveryPreparation: resolved.recoveryPreparation,
+      recoverability: resolved.recoverability,
+      visibility: resolved.visibility,
       boundary: resolved.boundary,
       effects: resolved.effects,
       requiresApproval: resolved.requiresApproval,
@@ -469,6 +524,9 @@ function formatFullDetailBlock(detail: CapabilityDetail): string {
     `admission: ${detail.admission ?? "(unknown)"}`,
     `receipt_policy: ${formatReceiptPolicy(detail.receiptPolicy)}`,
     `recovery_policy: ${formatRecoveryPolicy(detail.recoveryPolicy)}`,
+    `recovery_preparation: ${detail.recoveryPreparation}`,
+    `recoverability: ${detail.recoverability}`,
+    `visibility: ${detail.visibility}`,
     `boundary: ${detail.boundary}`,
     `effects: ${detail.effects.length > 0 ? detail.effects.join(", ") : "(none)"}`,
     `approval_required: ${detail.requiresApproval ? "true" : "false"}`,
@@ -499,7 +557,11 @@ function formatFullDetailBlock(detail: CapabilityDetail): string {
         actionDetail.effects.length > 0 ? actionDetail.effects.join("|") : "(none)"
       } ; action_class=${actionDetail.actionClass ?? "(unknown)"} ; admission=${
         actionDetail.admission ?? "(unknown)"
-      } ; receipt=${formatReceiptPolicy(actionDetail.receiptPolicy)} ; recovery=${formatRecoveryPolicy(
+      } ; receipt=${formatReceiptPolicy(actionDetail.receiptPolicy)} ; recovery_preparation=${
+        actionDetail.recoveryPreparation
+      } ; recoverability=${actionDetail.recoverability} ; visibility=${
+        actionDetail.visibility
+      } ; recovery=${formatRecoveryPolicy(
         actionDetail.recoveryPolicy,
       )} ; approval=${actionDetail.requiresApproval ? "true" : "false"}`,
     );
@@ -529,6 +591,9 @@ function formatCompactDetailBlock(detail: CapabilityDetail): string {
     `action_class: ${detail.actionClass ?? "(unknown)"}`,
     `admission: ${detail.admission ?? "(unknown)"}`,
     `recovery_policy: ${formatRecoveryPolicy(detail.recoveryPolicy)}`,
+    `recovery_preparation: ${detail.recoveryPreparation}`,
+    `recoverability: ${detail.recoverability}`,
+    `visibility: ${detail.visibility}`,
     `boundary: ${detail.boundary}`,
     `effects: ${detail.effects.length > 0 ? detail.effects.join(", ") : "(none)"}`,
     `approval_required: ${detail.requiresApproval ? "true" : "false"}`,
@@ -546,7 +611,9 @@ function formatCompactDetailBlock(detail: CapabilityDetail): string {
     lines.push(
       `action.${actionDetail.action}: ${actionDetail.actionClass ?? "(unknown)"} ${
         actionDetail.effects.length > 0 ? actionDetail.effects.join("|") : "(none)"
-      } recovery=${formatRecoveryPolicy(actionDetail.recoveryPolicy)}`,
+      } recovery_preparation=${actionDetail.recoveryPreparation} recoverability=${
+        actionDetail.recoverability
+      } visibility=${actionDetail.visibility}`,
     );
   }
 
@@ -581,9 +648,11 @@ function renderSummaryBlock(
         const duty = compactText(entry.description || "(no description)", 72);
         return `- $${entry.name} | duty=${duty} | action_class=${
           entry.actionClass ?? "(unknown)"
-        } | risk=${risk} | admission=${entry.admission ?? "(unknown)"} | recovery=${formatRecoveryPolicy(
-          entry.recoveryPolicy,
-        )} | load_when=${entry.loadWhen}`;
+        } | risk=${risk} | admission=${
+          entry.admission ?? "(unknown)"
+        } | recovery_preparation=${entry.recoveryPreparation} | recoverability=${
+          entry.recoverability
+        } | visibility=${entry.visibility} | load_when=${entry.loadWhen}`;
       }),
     ].join("\n"),
     compactContent: [
@@ -702,6 +771,9 @@ export function buildCapabilityView(input: BuildCapabilityViewInput): BuildCapab
       admission: entry.admission,
       receiptPolicy: entry.receiptPolicy,
       recoveryPolicy: entry.recoveryPolicy,
+      recoveryPreparation: entry.recoveryPreparation,
+      recoverability: entry.recoverability,
+      visibility: entry.visibility,
       boundary: entry.boundary,
       effects: entry.effects,
       requiresApproval: entry.requiresApproval,
@@ -722,6 +794,9 @@ export function buildCapabilityView(input: BuildCapabilityViewInput): BuildCapab
       riskLevel: entry.riskLevel,
       admission: entry.admission,
       recoveryPolicy: entry.recoveryPolicy,
+      recoveryPreparation: entry.recoveryPreparation,
+      recoverability: entry.recoverability,
+      visibility: entry.visibility,
       boundary: entry.boundary,
       effects: entry.effects,
       requiresApproval: entry.requiresApproval,

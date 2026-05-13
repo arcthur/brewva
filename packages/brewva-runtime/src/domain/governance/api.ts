@@ -1,5 +1,12 @@
 export type {
   EffectAuthorityManifestBasis,
+  EffectCommitmentPosture,
+  EffectPostureEvidenceSource,
+  EffectPostureWarning,
+  EffectPostureWarningCode,
+  EffectProjectionWarning,
+  EffectRecoverability,
+  EffectVisibility,
   EffectiveToolActionPolicy,
   PatchSetRedoFailureReason,
   PatchSetRollbackFailureReason,
@@ -23,6 +30,7 @@ export type {
   ToolMutationStrategy,
   ToolReceiptPolicy,
   ToolRecoveryPolicy,
+  ToolRecoveryPreparation,
   ToolRiskLevel,
 } from "./types.js";
 export {
@@ -61,7 +69,6 @@ export {
   resolveEffectiveToolActionPolicy,
   resolveToolExecutionBoundaryFromEffects,
   sameToolActionPolicy,
-  toolActionPolicyCreatesRollbackAnchor,
   toolActionPolicyRequiresApproval,
   validateToolActionPolicy,
 } from "./action-policy.js";
@@ -70,6 +77,15 @@ export {
   buildEffectAuthorityManifestBasis,
   decideEffectAuthorityManifest,
 } from "./effect-authority-manifest.js";
+export {
+  deriveEffectCommitmentPosture,
+  resolveRecoveryPreparationFromPolicy,
+  resolveToolRecoveryPreparation,
+} from "./commitment-posture.js";
+export type {
+  DeriveEffectCommitmentPostureInput,
+  EffectCommitmentExecutionEvidence,
+} from "./commitment-posture.js";
 export type {
   EffectAuthorityDecisionKind,
   EffectAuthorityFactDecision,
@@ -92,9 +108,7 @@ export {
   getToolGovernanceResolution,
   resolveToolAuthority,
   resolveToolExecutionBoundary,
-  toolEffectsCreateRollbackAnchor,
   toolEffectsRequireEffectCommitment,
-  toolGovernanceCreatesRollbackAnchor,
   toolGovernanceRequiresEffectCommitment,
 } from "./tool-governance.js";
 export type {

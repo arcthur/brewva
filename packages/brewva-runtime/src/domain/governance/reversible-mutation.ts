@@ -65,7 +65,7 @@ function resolveMutationStrategy(authority: ResolvedToolAuthority): {
   strategy: ToolMutationStrategy;
   rollbackKind: ToolMutationRollbackKind;
 } | null {
-  if (!authority.rollbackable) {
+  if (authority.recoveryPreparation !== "workspace_patchset") {
     return null;
   }
   if (authority.descriptor?.effects.includes("workspace_write")) {

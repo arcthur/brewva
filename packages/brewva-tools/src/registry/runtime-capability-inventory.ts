@@ -83,6 +83,8 @@ export const BREWVA_TOOL_RUNTIME_CAPABILITY_PATHS = Object.freeze([
   "inspect.conventions.requests.listPending",
   "inspect.conventions.state.get",
   "inspect.cost.summary.get",
+  "inspect.events.effects.getTurnProjection",
+  "inspect.events.effects.renderTurnDigest",
   "inspect.events.iteration.listGuardResults",
   "inspect.events.iteration.listMetricObservations",
   "inspect.events.log.getPath",

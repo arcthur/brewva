@@ -60,6 +60,7 @@ function materializationInput(input: Partial<MaterializationInput> = {}): Materi
     pendingCompactionReason: null,
     workbenchContextRendered: false,
     capabilityDisclosureRendered: false,
+    consequenceDigestRendered: false,
     surfacedDelegationRunIds: [],
     ...input,
   };
@@ -74,6 +75,7 @@ describe("hosted context materialization", () => {
         capabilityDisclosureRendered: true,
         workbenchContextRendered: true,
         surfacedDelegationRunIds: ["run-1"],
+        consequenceDigestRendered: true,
       }),
     );
     const effects = plan.effects.map((entry) => entry.effect);
@@ -85,6 +87,7 @@ describe("hosted context materialization", () => {
       "context_composed_emitted",
       "telemetry_emitted",
       "capability_disclosure_rendered",
+      "consequence_digest_rendered",
       "workbench_context_rendered",
       "prompt_stability_observed",
       "delegation_outcome_surfaced",

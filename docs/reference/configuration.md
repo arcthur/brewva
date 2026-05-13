@@ -139,6 +139,17 @@ provider-safe tool-name syntax before they enter the hosted tool surface.
 
 ## Context Budget Compaction
 
+`infrastructure.contextBudget.dynamicTail` controls budget for hosted dynamic
+tail context blocks:
+
+- `baseTokens` (`number`, default `1200`), `windowFraction` (`number`, default
+  `0.002`), and `maxTokens` (`number`, default `4800`) define the general
+  dynamic-tail budget envelope.
+- `consequenceDigestMaxChars` (`number`, default `1200`) caps the model-facing
+  turn consequence digest before it enters hosted context. Smaller-provider
+  deployments can lower this value without changing runtime projection or
+  operator inspect output.
+
 `infrastructure.contextBudget.compaction` governs how the runtime triggers and
 shapes session compactions. In addition to cooldown and bypass thresholds, the
 following keys tune summary generation and outbound provider-request reduction:

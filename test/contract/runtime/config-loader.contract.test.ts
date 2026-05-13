@@ -279,6 +279,34 @@ describe("Brewva config loader normalization", () => {
     expect(loaded.infrastructure.contextBudget.modelPhysics.controllableBaselineTokens).toBe(0);
   });
 
+  test("normalizes consequence digest dynamic-tail budget", () => {
+    const workspace = createTestWorkspace("consequence-digest-budget");
+    writeFileSync(
+      join(workspace, ".brewva/brewva.json"),
+      JSON.stringify(
+        {
+          infrastructure: {
+            contextBudget: {
+              dynamicTail: {
+                baseTokens: 800,
+                maxTokens: 400,
+                consequenceDigestMaxChars: 320,
+              },
+            },
+          },
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const loaded = loadBrewvaConfig({ cwd: workspace, configPath: ".brewva/brewva.json" });
+    expect(loaded.infrastructure.contextBudget.dynamicTail.baseTokens).toBe(800);
+    expect(loaded.infrastructure.contextBudget.dynamicTail.maxTokens).toBe(800);
+    expect(loaded.infrastructure.contextBudget.dynamicTail.consequenceDigestMaxChars).toBe(320);
+  });
+
   test("normalizes skills.routing scopes", () => {
     const workspace = createTestWorkspace("routing-scopes");
     writeFileSync(

@@ -17,7 +17,6 @@ function baseFacts(
     effectiveAdmission: "allow",
     effects: ["workspace_write"],
     requiresApproval: false,
-    rollbackable: true,
     receiptPolicy: { kind: "mutation", required: true },
     recoveryPolicy: { kind: "exact_patch", strategy: "workspace_patchset" },
     controlPlaneTool: false,
@@ -45,6 +44,20 @@ describe("effect authority manifest", () => {
     expect(decision.reason).toBe("Tool 'write' requires an exact action policy.");
     expect(decision.manifestBasis.invariantBasis).toContain("exact_action_policy_required");
     expect(decision.manifestBasis.authoritySource).toBe("hint");
+  });
+
+  test("builds v2 basis with posture and recovery preparation", () => {
+    const basis = buildEffectAuthorityManifestBasis(baseFacts());
+
+    expect(basis.schema).toBe("brewva.effect_authority_basis.v2");
+    expect(basis.recoveryPreparation).toBe("workspace_patchset");
+    expect(basis.commitmentPosture).toMatchObject({
+      recoverability: "manual_recovery",
+      visibility: "workspace_visible",
+    });
+    expect(basis.commitmentPosture.warnings.map((warning) => warning.code)).toContain(
+      "reversible_requires_undo_handle",
+    );
   });
 
   test("control-plane status cannot override invariant authority requirements", () => {
@@ -99,7 +112,6 @@ describe("effect authority manifest", () => {
         riskLevel: "critical",
         effectiveAdmission: "deny",
         effects: ["local_exec"],
-        rollbackable: false,
         receiptPolicy: { kind: "security_audit", required: true },
         recoveryPolicy: { kind: "none" },
         policyBasis: ["removed_shell_tools_disabled"],
@@ -119,7 +131,6 @@ describe("effect authority manifest", () => {
         actionClass: "local_exec_readonly",
         riskLevel: "low",
         effects: ["local_exec"],
-        rollbackable: false,
         receiptPolicy: { kind: "audit", required: false },
         recoveryPolicy: { kind: "none" },
         commandPolicy: {
@@ -151,7 +162,6 @@ describe("effect authority manifest", () => {
         actionClass: "local_exec_readonly",
         riskLevel: "low",
         effects: ["local_exec"],
-        rollbackable: false,
         receiptPolicy: { kind: "audit", required: false },
         recoveryPolicy: { kind: "none" },
         commandPolicy: {
@@ -183,7 +193,6 @@ describe("effect authority manifest", () => {
         actionClass: "local_exec_readonly",
         riskLevel: "low",
         effects: ["local_exec"],
-        rollbackable: false,
         receiptPolicy: { kind: "audit", required: false },
         recoveryPolicy: { kind: "none" },
       }),

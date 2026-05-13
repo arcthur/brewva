@@ -49,6 +49,32 @@ capability against that static inventory before constructing a scoped runtime.
 Unknown paths fail closed and do not require walking or instantiating live
 runtime services.
 
+## Capability And Consequence Disclosure
+
+Managed-tool `requiredCapabilities` remain enforcement, not documentation.
+Capability-scoped runtime ports are constructed only from declared capability
+paths; undeclared paths are unavailable to the tool implementation.
+
+Disclosure is layered on top of that enforcement. Managed metadata and runtime
+governance expose the tool action class, expected recoverability, visibility,
+and recovery preparation so hosted context and operator inspection can describe
+what kind of commitment a tool is expected to make. These fields do not grant
+authority. The runtime still derives the final commitment posture from event
+receipts, mutation records, recovery records, and conservative warnings.
+
+Use the consequence vocabulary when explaining effect posture:
+
+- `recoverability`: `observe_only`, `reversible`, `compensatable`,
+  `manual_recovery`, or `irreversible`
+- `visibility`: `local_only`, `workspace_visible`, `externally_observable`, or
+  `credential_sensitive`
+- `recoveryPreparation`: `none`, `workspace_patchset`, `compensation`, or
+  `manual`
+
+Exact reversibility is evidence-backed. A tool may prepare a workspace patchset,
+but it is only treated as reversible after execution records an applicable undo
+handle or reversible mutation receipt.
+
 ## Family Map
 
 - Navigation, source inspection, browser artifacts, grep, output search, TOC,

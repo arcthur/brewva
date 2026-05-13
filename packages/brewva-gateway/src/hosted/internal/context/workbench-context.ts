@@ -408,6 +408,26 @@ function buildCapabilityBlocks(capabilityView: BuildCapabilityViewResult): Hoste
     });
 }
 
+function buildConsequenceDigestBlock(input: {
+  runtime: BrewvaHostedRuntimePort;
+  sessionId: string;
+  turn: number;
+}): HostedContextBlock | null {
+  if (input.turn <= 0) {
+    return null;
+  }
+  const digest = input.runtime.inspect.events.effects.renderTurnDigest(input.sessionId, {
+    runtimeTurn: input.turn - 1,
+    turnId: `turn-${input.turn - 1}`,
+    maxChars:
+      input.runtime.config.infrastructure.contextBudget.dynamicTail.consequenceDigestMaxChars,
+  });
+  if (digest.includes("effects=none_recorded")) {
+    return null;
+  }
+  return makeHostedContextBlock("turn-consequence-digest", digest);
+}
+
 function buildHostedDynamicTail(input: {
   runtime: BrewvaHostedRuntimePort;
   sessionId: string;
@@ -450,6 +470,11 @@ function buildHostedDynamicTail(input: {
       buildWorkbenchBlock(input.runtime, input.sessionId),
       buildPendingDelegationsBlock(input.delegationStore, input.sessionId),
       completed.block,
+      buildConsequenceDigestBlock({
+        runtime: input.runtime,
+        sessionId: input.sessionId,
+        turn: input.turn,
+      }),
       ...buildCapabilityBlocks(input.capabilityView),
       ...buildReadPathRecoveryBlocks(input.runtime, input.sessionId),
     ],
@@ -511,6 +536,9 @@ export function createHostedWorkbenchContextController(
           capabilityView.requested.length > 0 ||
           capabilityView.details.length > 0 ||
           capabilityView.missing.length > 0,
+        consequenceDigestRendered: rendered.blocks.some(
+          (block) => block.id === "turn-consequence-digest",
+        ),
         surfacedDelegationRunIds: rendered.surfacedDelegationRunIds,
       });
       commitHostedContextMaterialization(materializationPlan, {

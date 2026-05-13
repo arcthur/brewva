@@ -6,18 +6,23 @@ import {
   getToolActionPolicyResolution,
   resolveEffectiveToolActionPolicy,
   resolveToolExecutionBoundaryFromEffects,
-  toolActionPolicyCreatesRollbackAnchor,
   toolActionPolicyRequiresApproval,
   type ToolActionPolicyResolution,
   type ToolActionPolicySource,
 } from "./action-policy.js";
+import {
+  deriveEffectCommitmentPosture,
+  resolveToolRecoveryPreparation,
+} from "./commitment-posture.js";
 import type {
+  EffectCommitmentPosture,
   EffectiveToolActionPolicy,
   ToolActionAdmissionOverrides,
   ToolActionPolicy,
   ToolEffectClass,
   ToolExecutionBoundary,
   ToolGovernanceDescriptor,
+  ToolRecoveryPreparation,
 } from "./types.js";
 
 export type ToolGovernanceDescriptorSource = ToolActionPolicySource;
@@ -36,7 +41,8 @@ export interface ResolvedToolAuthority {
   source: ToolGovernanceDescriptorSource;
   boundary: ToolExecutionBoundary;
   requiresApproval: boolean;
-  rollbackable: boolean;
+  recoveryPreparation: ToolRecoveryPreparation;
+  commitmentPosture?: EffectCommitmentPosture;
   actionClass?: ToolActionPolicy["actionClass"];
   riskLevel?: ToolActionPolicy["riskLevel"];
   defaultAdmission?: ToolActionPolicy["defaultAdmission"];
@@ -58,6 +64,17 @@ function resolveAuthorityFromResolution(
     ? resolveEffectiveToolActionPolicy(policy, admissionOverrides?.[policy.actionClass])
     : undefined;
   const descriptor = effectivePolicy ? deriveToolGovernanceDescriptor(effectivePolicy) : undefined;
+  const recoveryPreparation = effectivePolicy
+    ? resolveToolRecoveryPreparation(effectivePolicy)
+    : "none";
+  const commitmentPosture = effectivePolicy
+    ? deriveEffectCommitmentPosture({
+        effects: effectivePolicy.effectClasses,
+        receiptPolicy: effectivePolicy.receiptPolicy,
+        recoveryPolicy: effectivePolicy.recoveryPolicy,
+        recoveryPreparation,
+      })
+    : undefined;
   return {
     normalizedToolName,
     descriptor,
@@ -65,7 +82,8 @@ function resolveAuthorityFromResolution(
     source: resolution.source,
     boundary: descriptor?.boundary ?? "effectful",
     requiresApproval: effectivePolicy ? toolActionPolicyRequiresApproval(effectivePolicy) : true,
-    rollbackable: effectivePolicy ? toolActionPolicyCreatesRollbackAnchor(effectivePolicy) : false,
+    recoveryPreparation,
+    commitmentPosture,
     actionClass: effectivePolicy?.actionClass,
     riskLevel: effectivePolicy?.riskLevel,
     defaultAdmission: effectivePolicy?.defaultAdmission,
@@ -135,23 +153,10 @@ export function toolEffectsRequireEffectCommitment(effects: readonly ToolEffectC
   );
 }
 
-export function toolEffectsCreateRollbackAnchor(effects: readonly ToolEffectClass[]): boolean {
-  return !toolEffectsRequireEffectCommitment(effects) && effects.includes("workspace_write");
-}
-
 export function toolGovernanceRequiresEffectCommitment(
   toolDescriptor: ToolGovernanceDescriptor | undefined,
 ): boolean {
   return toolEffectsRequireEffectCommitment(toolDescriptor?.effects ?? []);
-}
-
-export function toolGovernanceCreatesRollbackAnchor(
-  toolDescriptor: ToolGovernanceDescriptor | undefined,
-): boolean {
-  if (toolDescriptor?.rollbackable === false) {
-    return false;
-  }
-  return toolEffectsCreateRollbackAnchor(toolDescriptor?.effects ?? []);
 }
 
 export { resolveToolExecutionBoundaryFromEffects };

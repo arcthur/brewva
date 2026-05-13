@@ -100,6 +100,14 @@ export type HostedContextEffectCommand =
       };
     }
   | {
+      readonly effect: "consequence_digest_rendered";
+      readonly command: "mark_consequence_digest_rendered";
+      readonly payload: {
+        readonly sessionId: string;
+        readonly turn: number;
+      };
+    }
+  | {
       readonly effect: "workbench_context_rendered";
       readonly command: "mark_workbench_context_rendered";
       readonly payload: {
@@ -176,6 +184,7 @@ const HOSTED_CONTEXT_EFFECT_COMMAND_ENTRIES = [
   ["context_composed_emitted", "emit_context_composed"],
   ["telemetry_emitted", "mark_telemetry_emitted"],
   ["capability_disclosure_rendered", "mark_capability_disclosure_rendered"],
+  ["consequence_digest_rendered", "mark_consequence_digest_rendered"],
   ["workbench_context_rendered", "mark_workbench_context_rendered"],
   ["prompt_stability_observed", "observe_prompt_stability_and_record_evidence"],
   ["provider_cache_observed", "observe_provider_cache_and_record_evidence"],
@@ -271,6 +280,7 @@ export interface HostedContextMaterializationInput {
   pendingCompactionReason: string | null;
   workbenchContextRendered: boolean;
   capabilityDisclosureRendered: boolean;
+  consequenceDigestRendered: boolean;
   surfacedDelegationRunIds: readonly string[];
 }
 
@@ -351,6 +361,17 @@ export function planHostedContextMaterialization(
     effects.push({
       effect: "capability_disclosure_rendered",
       command: "mark_capability_disclosure_rendered",
+      payload: {
+        sessionId: input.sessionId,
+        turn: input.turn,
+      },
+    });
+  }
+
+  if (input.consequenceDigestRendered) {
+    effects.push({
+      effect: "consequence_digest_rendered",
+      command: "mark_consequence_digest_rendered",
       payload: {
         sessionId: input.sessionId,
         turn: input.turn,
@@ -455,6 +476,7 @@ export function commitHostedContextMaterialization(
         break;
       case "telemetry_emitted":
       case "capability_disclosure_rendered":
+      case "consequence_digest_rendered":
       case "workbench_context_rendered":
         break;
       case "prompt_stability_observed": {

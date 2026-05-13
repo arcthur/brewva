@@ -1,6 +1,13 @@
 // Curated governance contract subpath. Keep root imports focused on createBrewvaRuntime and explicit port types.
 export type {
   EffectAuthorityManifestBasis,
+  EffectCommitmentPosture,
+  EffectPostureEvidenceSource,
+  EffectPostureWarning,
+  EffectPostureWarningCode,
+  EffectProjectionWarning,
+  EffectRecoverability,
+  EffectVisibility,
   EffectiveToolActionPolicy,
   MutationReceipt,
   MutationSubject,
@@ -24,6 +31,7 @@ export type {
   ToolMutationStrategy,
   ToolReceiptPolicy,
   ToolRecoveryPolicy,
+  ToolRecoveryPreparation,
   ToolRiskLevel,
 } from "./domain/governance/types.js";
 export {
@@ -41,7 +49,6 @@ export {
   resolveEffectiveToolActionPolicy,
   resolveToolExecutionBoundaryFromEffects,
   sameToolActionPolicy,
-  toolActionPolicyCreatesRollbackAnchor,
   toolActionPolicyRequiresApproval,
   validateToolActionPolicy,
 } from "./domain/governance/action-policy.js";
@@ -70,3 +77,12 @@ export {
   decideEffectAuthorityManifest,
   type EffectAuthorityManifestFacts,
 } from "./domain/governance/effect-authority-manifest.js";
+export {
+  deriveEffectCommitmentPosture,
+  resolveRecoveryPreparationFromPolicy,
+  resolveToolRecoveryPreparation,
+} from "./domain/governance/commitment-posture.js";
+export type {
+  DeriveEffectCommitmentPostureInput,
+  EffectCommitmentExecutionEvidence,
+} from "./domain/governance/commitment-posture.js";

@@ -116,6 +116,29 @@ may read these files through ordinary file/search tools when relevant. Skill
 metadata can still support repository indexing, documentation, and migration
 checks, but it is not a per-turn control surface.
 
+## Tier Policy
+
+Skill tier is a mechanical runtime policy surface derived from directory
+layout. Authored frontmatter cannot override `tier` or `category`; attempts to
+do so are rejected at load time. `skills/project/shared/*` remains outside the
+loadable skill graph and is treated as repository guidance, not model-callable
+capability.
+
+`effects.allowed_effects` is advisory metadata bounded by the tier ceiling:
+
+- `core`: `workspace_read`, `workspace_write`, `local_exec`,
+  `runtime_observe`, and `delegation`
+- `domain`: the `core` ceiling plus `memory_write`, `schedule_mutation`, and
+  policy-bound external effects
+- `operator`: governance, control, and forensic effects except credential
+  access unless an explicit operator policy allows it
+- `meta`: `workspace_read`, `workspace_write`, `local_exec`,
+  `runtime_observe`, and `memory_write`
+- `internal`: implementation-owned and not model-callable by default
+
+Project overlays can narrow effects or add legal effects within the same tier
+ceiling. They cannot widen a skill beyond the directory-derived tier.
+
 ## Skills Versus Delegation
 
 Skills and delegated workers stay separate:
