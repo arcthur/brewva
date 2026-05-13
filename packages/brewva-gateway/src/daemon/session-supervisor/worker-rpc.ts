@@ -7,7 +7,7 @@ import {
   runPromiseAtBoundary,
   withBrewvaObservability,
 } from "@brewva/brewva-effect";
-import type { BrewvaWalId } from "@brewva/brewva-runtime";
+import type { BrewvaWalId } from "@brewva/brewva-runtime/core";
 import type {
   ParentToWorkerMessage,
   WorkerToParentMessage,

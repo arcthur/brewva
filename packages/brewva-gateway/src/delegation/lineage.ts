@@ -1,4 +1,6 @@
-import type { BrewvaRuntime, ContextAdmission, DelegationRunRecord } from "@brewva/brewva-runtime";
+import type { BrewvaRuntime } from "@brewva/brewva-runtime";
+import type { DelegationRunRecord } from "@brewva/brewva-runtime/delegation";
+import type { ContextAdmission } from "@brewva/brewva-runtime/session";
 
 function isLineageUnavailable(error: unknown): boolean {
   return error instanceof Error && error.message.startsWith("session_lineage_root_missing:");
@@ -21,14 +23,14 @@ function resolveCurrentLineageNodeId(
   sessionId: string,
 ): string | undefined {
   try {
-    const path = runtime.inspect.session.getContextEntryPath(sessionId, {
+    const path = runtime.inspect.session.lineage.getContextEntryPath(sessionId, {
       includeStateOnly: true,
     });
     const leaf = path.at(-1);
     if (leaf) {
       return leaf.lineageNodeId;
     }
-    return runtime.inspect.session.getLineageTree(sessionId).rootNodeId;
+    return runtime.inspect.session.lineage.getTree(sessionId).rootNodeId;
   } catch (error) {
     if (isLineageUnavailable(error)) {
       return undefined;
@@ -53,7 +55,7 @@ function hasDelegationLineageOutcome(input: {
   lineageNodeId: string;
   outcomeId: string;
 }): boolean {
-  const node = input.runtime.inspect.session.getLineageNode(input.sessionId, input.lineageNodeId);
+  const node = input.runtime.inspect.session.lineage.getNode(input.sessionId, input.lineageNodeId);
   return node?.outcomes.some((outcome) => outcome.outcomeId === input.outcomeId) ?? false;
 }
 
@@ -62,7 +64,7 @@ function hasDelegationLineageAdoption(input: {
   sessionId: string;
   adoptionId: string;
 }): boolean {
-  const tree = input.runtime.inspect.session.getLineageTree(input.sessionId);
+  const tree = input.runtime.inspect.session.lineage.getTree(input.sessionId);
   return tree.nodes.some((node) =>
     node.adoptedOutcomes.some((adoption) => adoption.adoptionId === input.adoptionId),
   );
@@ -75,7 +77,7 @@ export function ensureDelegationLineageNode(input: {
 }): string | undefined {
   const lineageNodeId = delegationLineageNodeId(input.record.runId);
   try {
-    if (input.runtime.inspect.session.getLineageNode(input.sessionId, lineageNodeId)) {
+    if (input.runtime.inspect.session.lineage.getNode(input.sessionId, lineageNodeId)) {
       return lineageNodeId;
     }
   } catch (error) {
@@ -91,7 +93,7 @@ export function ensureDelegationLineageNode(input: {
   }
 
   try {
-    input.runtime.authority.session.createLineageNode(input.sessionId, {
+    input.runtime.authority.session.lineage.createNode(input.sessionId, {
       lineageNodeId,
       parentLineageNodeId,
       kind: input.record.kind ? `subagent.${input.record.kind}` : "subagent",
@@ -134,7 +136,7 @@ export function recordDelegationLineageOutcome(input: {
   ) {
     return outcomeId;
   }
-  input.runtime.authority.session.recordLineageOutcome(input.sessionId, {
+  input.runtime.authority.session.lineage.recordOutcome(input.sessionId, {
     outcomeId,
     lineageNodeId,
     summary: input.record.summary ?? input.record.error ?? `Delegation ${input.record.status}.`,
@@ -180,7 +182,7 @@ export function adoptDelegationLineageOutcome(input: {
   ) {
     return;
   }
-  input.runtime.authority.session.adoptLineageOutcome(input.sessionId, {
+  input.runtime.authority.session.lineage.adoptOutcome(input.sessionId, {
     adoptionId,
     outcomeId,
     fromLineageNodeId: lineageNodeId,

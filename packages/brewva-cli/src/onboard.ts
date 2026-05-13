@@ -1,7 +1,8 @@
 import { parseArgs as parseNodeArgs } from "node:util";
 import { BrewvaEffect, runEdgeOperation } from "@brewva/brewva-effect";
 import { runGatewayCliOperation } from "@brewva/brewva-gateway/admin";
-import type { ManagedToolMode, RuntimeResult } from "@brewva/brewva-runtime";
+import type { RuntimeResult } from "@brewva/brewva-runtime/core";
+import type { ManagedToolMode } from "@brewva/brewva-runtime/session";
 
 type CliValueResult<T> = RuntimeResult<{ value: T }>;
 

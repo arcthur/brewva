@@ -13,7 +13,8 @@ import {
   type RunChannelModeDependencies,
 } from "@brewva/brewva-gateway";
 import { createHostedSession } from "@brewva/brewva-gateway/hosted";
-import { DEFAULT_BREWVA_CONFIG, type BrewvaRuntime } from "@brewva/brewva-runtime";
+import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
+import type { BrewvaRuntime } from "@brewva/brewva-runtime";
 import { type ChannelTurnBridge, type TurnEnvelope } from "@brewva/brewva-runtime/channels";
 import { OPERATOR_QUESTION_ANSWERED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
 import { createRecoveryWalStore } from "@brewva/brewva-runtime/recovery";
@@ -764,7 +765,7 @@ describe("gateway contract: telegram channel dispatch", () => {
           await waitUntil(
             () =>
               capturedPrompts.length >= 2 &&
-              (hostedSession?.runtime.inspect.events
+              (hostedSession?.runtime.inspect.events.records
                 .query(hostedSession.sessionId)
                 .filter((event) => event.type === OPERATOR_QUESTION_ANSWERED_EVENT_TYPE).length ??
                 0) >= 1,
@@ -772,7 +773,7 @@ describe("gateway contract: telegram channel dispatch", () => {
             "timed out waiting for answer routing prompt and event",
           );
           observedAnswerEventCount =
-            hostedSession?.runtime.inspect.events
+            hostedSession?.runtime.inspect.events.records
               .query(hostedSession.sessionId)
               .filter((event) => event.type === OPERATOR_QUESTION_ANSWERED_EVENT_TYPE).length ?? 0;
           abortController.abort();
@@ -931,7 +932,7 @@ describe("gateway contract: telegram channel dispatch", () => {
               capturedPrompts.some((prompt) =>
                 prompt.includes(`Question ID: ${defaultSession!.questionId}`),
               ) &&
-              (defaultSession?.runtime.inspect.events
+              (defaultSession?.runtime.inspect.events.records
                 .query(defaultSession.sessionId)
                 .filter((event) => event.type === OPERATOR_QUESTION_ANSWERED_EVENT_TYPE).length ??
                 0) >= 1,
@@ -939,7 +940,7 @@ describe("gateway contract: telegram channel dispatch", () => {
             "timed out waiting for durable answer routing after eviction",
           );
           observedAnswerEventCount =
-            defaultSession?.runtime.inspect.events
+            defaultSession?.runtime.inspect.events.records
               .query(defaultSession.sessionId)
               .filter((event) => event.type === OPERATOR_QUESTION_ANSWERED_EVENT_TYPE).length ?? 0;
           abortController.abort();
@@ -960,7 +961,7 @@ describe("gateway contract: telegram channel dispatch", () => {
     const dependencies: RunChannelModeDependencies = {
       createSession: async (options) => {
         const result = await createHostedSession(options);
-        if ((options?.runtime?.agentId ?? "default") === "default" && !defaultSession) {
+        if ((options?.runtime?.identity.agentId ?? "default") === "default" && !defaultSession) {
           defaultSession = {
             runtime: result.runtime,
             sessionId: result.session.sessionManager.getSessionId(),
@@ -1073,7 +1074,7 @@ describe("gateway contract: telegram channel dispatch", () => {
             "timed out waiting for routed answer failure",
           );
           observedAnswerEventCount =
-            defaultSession?.runtime.inspect.events
+            defaultSession?.runtime.inspect.events.records
               .query(defaultSession.sessionId)
               .filter((event) => event.type === OPERATOR_QUESTION_ANSWERED_EVENT_TYPE).length ?? 0;
           abortController.abort();
@@ -1094,7 +1095,7 @@ describe("gateway contract: telegram channel dispatch", () => {
     const dependencies: RunChannelModeDependencies = {
       createSession: async (options) => {
         const result = await createHostedSession(options);
-        if ((options?.runtime?.agentId ?? "default") === "default" && !defaultSession) {
+        if ((options?.runtime?.identity.agentId ?? "default") === "default" && !defaultSession) {
           defaultSession = {
             runtime: result.runtime,
             sessionId: result.session.sessionManager.getSessionId(),

@@ -16,7 +16,6 @@ const CREDENTIAL_VAULT_SERVICE_METHODS = [
 
 export type CredentialVaultService = ExtensionPort<
   "credentials.vault",
-  "credentials",
   Pick<
     InstanceType<typeof InternalCredentialVaultService>,
     (typeof CREDENTIAL_VAULT_SERVICE_METHODS)[number]
@@ -33,8 +32,6 @@ export function createCredentialVaultService(
 ): CredentialVaultService {
   return createBoundExtensionPort({
     name: "credentials.vault",
-    authority: "credentials",
-    capabilityPrefix: "subpath.credentials.vault",
     instance: new InternalCredentialVaultService(options),
     methods: CREDENTIAL_VAULT_SERVICE_METHODS,
   });
@@ -45,8 +42,6 @@ export function createCredentialVaultServiceFromSecurityConfig(
 ): CredentialVaultService {
   return createBoundExtensionPort({
     name: "credentials.vault",
-    authority: "credentials",
-    capabilityPrefix: "subpath.credentials.vault",
     instance: createInternalCredentialVaultServiceFromSecurityConfig(...args),
     methods: CREDENTIAL_VAULT_SERVICE_METHODS,
   });

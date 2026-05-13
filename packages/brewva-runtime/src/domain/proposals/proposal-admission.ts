@@ -5,9 +5,9 @@ import {
   PROPOSAL_RECEIVED_EVENT_TYPE,
 } from "../../events/registry.js";
 import type { BrewvaEventRecord } from "../../events/types.js";
+import { normalizeEvidenceRefs } from "../../internal/evidence/api.js";
+import type { EvidenceRef } from "../../internal/evidence/api.js";
 import type { RuntimeKernelContext } from "../../runtime/runtime-kernel.js";
-import { normalizeEvidenceRefs } from "../evidence/api.js";
-import type { EvidenceRef } from "../evidence/api.js";
 import type { ResolvedToolAuthority } from "../governance/api.js";
 import {
   commitEffectCommitmentProposal,

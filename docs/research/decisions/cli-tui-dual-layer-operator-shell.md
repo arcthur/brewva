@@ -28,7 +28,7 @@
 - Keyboard and completion are first-class shell contracts. Submit, multiline compose, queued-prompt controls, in-flight steer, completion dismissal, list navigation, and approval/question shortcuts are documented and reducer-driven.
 - The status bar is a stable control-plane disclosure surface. It carries mode, model or thinking posture, follow state, approval/question badges, task hints, and contextual action suggestions.
 - Overlay lifecycle is explicit. Draft state survives overlay entry and exit, priority overlays queue cleanly, and drill-down pagers return to the originating shell surface.
-- Task and inspect review stay replay-visible. Task browser summaries and pager drill-down consume the same delegation and workflow state as the rest of Brewva; they do not maintain a TUI-private task registry.
+- Task and inspect review stay replay-visible. Task browser summaries and pager drill-down consume the same delegation and workflow state as the rest of Brewva; they do not operator a TUI-private task registry.
 
 ## Superseded by
 

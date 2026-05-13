@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
-import { type BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import {
   TOOL_OUTPUT_ARTIFACT_PERSIST_FAILED_EVENT_TYPE,
   TOOL_OUTPUT_ARTIFACT_PERSISTED_EVENT_TYPE,
@@ -255,8 +255,8 @@ function buildOutputObservation(
   contextHardLimitPercent: number;
   contextCompactionThresholdPercent: number;
 } {
-  const usage = runtime.inspect.context.getUsage(sessionId);
-  const status = runtime.inspect.context.getStatus(sessionId, usage);
+  const usage = runtime.inspect.context.usage.get(sessionId);
+  const status = runtime.inspect.context.usage.getStatus(sessionId, usage);
   return {
     rawChars: outputText.length,
     rawBytes: Buffer.byteLength(outputText, "utf8"),
@@ -275,9 +275,9 @@ function buildOutputObservation(
 }
 
 function resolveWorkspaceRoot(runtime: BrewvaHostedRuntimePort, context: unknown): string {
-  if (!context || typeof context !== "object") return runtime.cwd;
+  if (!context || typeof context !== "object") return runtime.identity.cwd;
   const cwd = (context as { cwd?: unknown }).cwd;
-  return typeof cwd === "string" && cwd.trim().length > 0 ? cwd : runtime.cwd;
+  return typeof cwd === "string" && cwd.trim().length > 0 ? cwd : runtime.identity.cwd;
 }
 
 function recordArtifactFailure(
@@ -412,7 +412,7 @@ function recordToolOutcome(
     });
   }
 
-  runtime.authority.tools.finish({
+  runtime.authority.tools.invocation.finish({
     sessionId: input.sessionId,
     toolCallId: input.toolCallId,
     toolName: input.toolName,

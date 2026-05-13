@@ -20,7 +20,6 @@ const CONTEXT_BUDGET_MANAGER_METHODS = [
 ] as const satisfies readonly (keyof InstanceType<typeof InternalContextBudgetManager>)[];
 export type ContextBudgetManager = ExtensionPort<
   "context.budget-manager",
-  "context",
   Pick<
     InstanceType<typeof InternalContextBudgetManager>,
     (typeof CONTEXT_BUDGET_MANAGER_METHODS)[number]
@@ -32,9 +31,72 @@ export function createContextBudgetManager(
 ): ContextBudgetManager {
   return createBoundExtensionPort({
     name: "context.budget-manager",
-    authority: "context",
-    capabilityPrefix: "subpath.context.budget-manager",
     instance: new InternalContextBudgetManager(...args),
     methods: CONTEXT_BUDGET_MANAGER_METHODS,
   });
 }
+
+// BEGIN curated boundary exports
+export type {
+  ContextBudgetUsage,
+  ContextCompactionDecision,
+  ContextCompactionGateStatus,
+  ContextCompactionReason,
+  ContextStatus,
+  ExpectedProviderCacheBreak,
+  HistoryViewBaselineOrigin,
+  HistoryViewBaselineSnapshot,
+  OutputSearchTelemetryState,
+  ParallelAcquireResult,
+  PromptStabilityObservationInput,
+  PromptStabilityState,
+  ProviderCacheBreakClassification,
+  ProviderCacheBreakObservation,
+  ProviderCacheCapabilityState,
+  ProviderCacheCapabilityStrategy,
+  ProviderCacheFingerprintState,
+  ProviderCacheObservationInput,
+  ProviderCacheObservationState,
+  ProviderCacheRenderState,
+  ProviderSessionContinuationCapabilityState,
+  RecoveryPendingFamily,
+  RecoveryPostureMode,
+  RecoveryPostureSnapshot,
+  RecoveryWorkingSetSnapshot,
+  ResourceLeaseBudget,
+  ResourceLeaseCancelResult,
+  ResourceLeaseQuery,
+  ResourceLeaseRecord,
+  ResourceLeaseRequest,
+  ResourceLeaseResult,
+  SessionCompactionCommitInput,
+  SessionCompactionCacheImpact,
+  SessionCompactionCacheImpactSnapshot,
+  SessionCompactionGenerationMetadata,
+  SessionCompactionOrigin,
+  TapeAnchorState,
+  TapeHandoffResult,
+  TapePressureLevel,
+  TapeSearchMatch,
+  TapeSearchResult,
+  TapeSearchScope,
+  TapeStatusState,
+  ToolAccessResult,
+  TransientReductionObservationInput,
+  TransientReductionState,
+  VisibleReadState,
+} from "./domain/context/types.js";
+export {
+  normalizeAgentId,
+  readAgentConstitutionProfile,
+  readAgentMemoryProfile,
+  readPersonaProfile,
+} from "./domain/context/identity.js";
+export type {
+  AgentConstitutionProfile,
+  AgentMemoryProfile,
+  PersonaProfile,
+  ReadPersonaProfileInput,
+} from "./domain/context/identity.js";
+export { coerceContextBudgetUsage } from "./domain/context/usage.js";
+// END curated boundary exports

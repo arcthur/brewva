@@ -4,9 +4,11 @@ import { resolve } from "node:path";
 import {
   BrewvaRuntime,
   DEFAULT_BREWVA_CONFIG,
-  buildClaimUpsertedEvent,
-  type BrewvaConfig,
+  createOperatorRuntimePort,
+  createHostedRuntimePort,
 } from "@brewva/brewva-runtime";
+import type { BrewvaConfig } from "@brewva/brewva-runtime";
+import { buildClaimUpsertedEvent } from "@brewva/brewva-runtime/claim";
 import { getRuntimeInternals } from "../../helpers/runtime-internals.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
@@ -57,15 +59,15 @@ describe("session state cleanup", () => {
     const sessionId = "cleanup-state-1";
     const internals = getRuntimeInternals(runtime) as RuntimeInternals;
 
-    runtime.maintain.context.onTurnStart(sessionId, 1);
-    runtime.authority.tools.markCall(sessionId, "edit");
-    runtime.maintain.context.observeUsage(sessionId, {
+    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+    runtime.authority.tools.tracking.markCall(sessionId, "edit");
+    createOperatorRuntimePort(runtime).operator.context.usage.observe(sessionId, {
       tokens: 128,
       contextWindow: 4096,
       percent: 0.03125,
     });
-    runtime.authority.tools.acquireParallelSlot(sessionId, "run-1");
-    runtime.maintain.session.recordWorkerResult(sessionId, {
+    runtime.authority.tools.parallel.acquire(sessionId, "run-1");
+    runtime.authority.session.workerResults.record(sessionId, {
       workerId: "run-1",
       status: "ok",
       summary: "done",
@@ -77,16 +79,16 @@ describe("session state cleanup", () => {
         ],
       },
     });
-    runtime.authority.tools.recordResult({
+    runtime.authority.tools.invocation.recordResult({
       sessionId,
       toolName: "exec",
       args: { command: "echo ok" },
       outputText: "ok",
       channelSuccess: true,
     });
-    runtime.inspect.task.getState(sessionId);
-    runtime.inspect.claim.getState(sessionId);
-    runtime.authority.cost.recordAssistantUsage({
+    runtime.inspect.task.state.get(sessionId);
+    runtime.inspect.claim.state.get(sessionId);
+    runtime.authority.cost.usage.recordAssistant({
       sessionId,
       model: "test-model",
       inputTokens: 10,
@@ -103,10 +105,10 @@ describe("session state cleanup", () => {
     expect(internals.contextBudget.sessions.has(sessionId)).toBe(true);
     expect(internals.costTracker.sessions.has(sessionId)).toBe(true);
     expect(internals.verificationGate.stateStore.sessions.has(sessionId)).toBe(true);
-    expect(runtime.inspect.events.list(sessionId, { last: 1 })).toHaveLength(1);
+    expect(runtime.inspect.events.records.list(sessionId, { last: 1 })).toHaveLength(1);
     expect(internals.eventStore.eventCacheByFilePath.size).toBe(1);
 
-    runtime.maintain.session.clearState(sessionId);
+    createOperatorRuntimePort(runtime).operator.session.state.clear(sessionId);
 
     expect(internals.sessionState.getExistingCell(sessionId)).toBeUndefined();
     expect(internals.turnReplay.hasSession(sessionId)).toBe(false);
@@ -124,18 +126,18 @@ describe("session state cleanup", () => {
     const sessionId = "replay-view-1";
     const internals = getRuntimeInternals(runtime) as RuntimeInternals;
 
-    runtime.authority.task.setSpec(sessionId, {
+    runtime.authority.task.spec.set(sessionId, {
       schema: "brewva.task.v1",
       goal: "Replay view should rebuild after new events",
     });
-    runtime.inspect.task.getState(sessionId);
+    runtime.inspect.task.state.get(sessionId);
 
     expect(internals.turnReplay.hasSession(sessionId)).toBe(true);
 
-    runtime.authority.task.addItem(sessionId, { text: "item-1" });
+    runtime.authority.task.items.add(sessionId, { text: "item-1" });
     expect(internals.turnReplay.hasSession(sessionId)).toBe(true);
 
-    const updated = runtime.inspect.task.getState(sessionId);
+    const updated = runtime.inspect.task.state.get(sessionId);
     expect(updated.items).toHaveLength(1);
     expect(updated.items[0]?.text).toBe("item-1");
     expect(internals.turnReplay.hasSession(sessionId)).toBe(true);
@@ -147,15 +149,15 @@ describe("session state cleanup", () => {
     const sessionId = "replay-filter-1";
     const internals = getRuntimeInternals(runtime) as RuntimeInternals;
 
-    runtime.authority.task.setSpec(sessionId, {
+    runtime.authority.task.spec.set(sessionId, {
       schema: "brewva.task.v1",
       goal: "Replay cache should ignore non-folding events",
     });
-    runtime.inspect.task.getState(sessionId);
+    runtime.inspect.task.state.get(sessionId);
 
     expect(internals.turnReplay.hasSession(sessionId)).toBe(true);
 
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: "tool_call",
       payload: {
@@ -165,7 +167,7 @@ describe("session state cleanup", () => {
     });
     expect(internals.turnReplay.hasSession(sessionId)).toBe(true);
 
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: "claim_event",
       payload: buildClaimUpsertedEvent({
@@ -181,7 +183,7 @@ describe("session state cleanup", () => {
     });
     expect(internals.turnReplay.hasSession(sessionId)).toBe(true);
 
-    const claimState = runtime.inspect.claim.getState(sessionId);
+    const claimState = runtime.inspect.claim.state.get(sessionId);
     expect(claimState.claims).toHaveLength(1);
     expect(claimState.claims[0]?.id).toBe("claim-1");
     expect(internals.turnReplay.hasSession(sessionId)).toBe(true);
@@ -192,7 +194,7 @@ describe("session state cleanup", () => {
     const sessionId = "hydration-degraded-1";
 
     const writerRuntime = new BrewvaRuntime({ cwd: workspace });
-    writerRuntime.authority.cost.recordAssistantUsage({
+    writerRuntime.authority.cost.usage.recordAssistant({
       sessionId,
       model: "test-model",
       inputTokens: 10,
@@ -209,7 +211,7 @@ describe("session state cleanup", () => {
       throw new Error("hydration exploded");
     };
 
-    const hydration = readerRuntime.inspect.session.getHydration(sessionId);
+    const hydration = readerRuntime.inspect.session.lifecycle.getHydration(sessionId);
     expect(hydration.status).toBe("degraded");
     expect(hydration.issues).toHaveLength(1);
     expect(hydration.issues[0]?.domain).toBe("event_tape");
@@ -218,7 +220,7 @@ describe("session state cleanup", () => {
     expect(hydration.issues[0]?.reason).toContain("hydration exploded");
     expect(hydration.latestEventId).toBeDefined();
 
-    const integrity = readerRuntime.inspect.session.getIntegrity(sessionId);
+    const integrity = readerRuntime.inspect.session.lifecycle.getIntegrity(sessionId);
     expect(integrity.status).toBe("degraded");
     expect(integrity.issues).toHaveLength(1);
   });
@@ -228,7 +230,7 @@ describe("session state cleanup", () => {
     const sessionId = "hydration-corrupt-tape-1";
 
     const writerRuntime = new BrewvaRuntime({ cwd: workspace });
-    writerRuntime.extensions.hosted.events.record({
+    createHostedRuntimePort(writerRuntime).extensions.hosted.events.record({
       sessionId,
       type: "session_start",
       payload: { cwd: workspace },
@@ -242,13 +244,13 @@ describe("session state cleanup", () => {
     appendFileSync(eventFilePath, '\n{"broken":\n', "utf8");
 
     const readerRuntime = new BrewvaRuntime({ cwd: workspace });
-    const hydration = readerRuntime.inspect.session.getHydration(sessionId);
+    const hydration = readerRuntime.inspect.session.lifecycle.getHydration(sessionId);
     expect(hydration.status).toBe("degraded");
     expect(hydration.issues.some((issue) => issue.reason === "event_store_malformed_row")).toBe(
       true,
     );
 
-    const integrity = readerRuntime.inspect.session.getIntegrity(sessionId);
+    const integrity = readerRuntime.inspect.session.lifecycle.getIntegrity(sessionId);
     expect(integrity.status).toBe("degraded");
     expect(integrity.issues.some((issue) => issue.domain === "event_tape")).toBe(true);
   });
@@ -258,13 +260,13 @@ describe("session state cleanup", () => {
     const sessionId = "hydration-corrupt-after-ready-1";
 
     const runtime = new BrewvaRuntime({ cwd: workspace });
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: "session_start",
       payload: { cwd: workspace },
     });
 
-    const initialHydration = runtime.inspect.session.getHydration(sessionId);
+    const initialHydration = runtime.inspect.session.lifecycle.getHydration(sessionId);
     expect(initialHydration.status).toBe("ready");
 
     const encoded = Buffer.from(sessionId, "utf8").toString("base64url");
@@ -275,13 +277,13 @@ describe("session state cleanup", () => {
     );
     appendFileSync(eventFilePath, '\n{"broken":\n', "utf8");
 
-    const hydration = runtime.inspect.session.getHydration(sessionId);
+    const hydration = runtime.inspect.session.lifecycle.getHydration(sessionId);
     expect(hydration.status).toBe("degraded");
     expect(hydration.issues.some((issue) => issue.reason === "event_store_malformed_row")).toBe(
       true,
     );
 
-    const integrity = runtime.inspect.session.getIntegrity(sessionId);
+    const integrity = runtime.inspect.session.lifecycle.getIntegrity(sessionId);
     expect(integrity.status).toBe("degraded");
     expect(
       integrity.issues.some(

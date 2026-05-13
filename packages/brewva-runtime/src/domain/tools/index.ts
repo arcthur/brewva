@@ -24,7 +24,6 @@ export {
 } from "./event-descriptors.js";
 export {
   createToolsSurfaceMethods,
-  toolsSurfaceContribution,
   type RuntimeToolsSurfaceMethods,
   type ToolsSurfaceDependencies,
 } from "./runtime-surface.js";

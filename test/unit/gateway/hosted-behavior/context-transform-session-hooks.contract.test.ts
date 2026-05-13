@@ -74,10 +74,10 @@ describe("context transform session hook contract", () => {
       },
     });
     const capturedCompactions: Array<Record<string, unknown>> = [];
-    const originalCommitCompaction = runtime.authority.session.commitCompaction.bind(
+    const originalCommitCompaction = runtime.authority.session.compaction.commit.bind(
       runtime.authority.session,
     );
-    runtime.authority.session.commitCompaction = (sessionId, payload) => {
+    runtime.authority.session.compaction.commit = (sessionId, payload) => {
       capturedCompactions.push(payload as unknown as Record<string, unknown>);
       return originalCommitCompaction(sessionId, payload);
     };

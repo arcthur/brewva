@@ -1,4 +1,4 @@
-import type { ToolOutputDisplayView } from "@brewva/brewva-runtime";
+import type { ToolOutputDisplayView } from "@brewva/brewva-runtime/session";
 import { distillToolOutput } from "./tool-output-distiller.js";
 
 export type ToolDisplayVerdict = "pass" | "fail" | "inconclusive";

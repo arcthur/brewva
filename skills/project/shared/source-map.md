@@ -40,5 +40,6 @@ retirement_sensitivity: auto_decay_allowed
 
 - Control-plane/admin seam: `packages/brewva-gateway/src/admin/api.ts`, `packages/brewva-gateway/src/admin/internal/cli.ts`, `packages/brewva-gateway/src/ingress/api.ts`, `packages/brewva-gateway/src/ingress/wiring.ts`
 - Hosted provider seam: `packages/brewva-gateway/src/hosted/internal/provider/connection-types.ts`, `packages/brewva-gateway/src/hosted/internal/provider/types.ts`, `packages/brewva-gateway/src/hosted/internal/provider/connection-port.ts`
+- Hosted context and compaction policy: `packages/brewva-gateway/src/hosted/internal/context/materialization.ts`, `packages/brewva-gateway/src/hosted/internal/compaction/model-downshift-policy.ts`
 - Hosted extension seam: `packages/brewva-gateway/src/extensions/api.ts`, `packages/brewva-gateway/src/hosted/internal/session/host-api-installation.ts`
 - Shared gateway utilities: `packages/brewva-gateway/src/utils/async.ts`, `packages/brewva-gateway/src/utils/errors.ts`, `packages/brewva-gateway/src/utils/runtime.ts`, `packages/brewva-gateway/src/utils/ws.ts`

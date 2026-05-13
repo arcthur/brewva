@@ -2,18 +2,15 @@ import { describe, expect, test } from "bun:test";
 import { spawn, type ChildProcess } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import {
-  BrewvaRuntime,
-  asBrewvaIntentId,
-  asBrewvaSessionId,
-  parseScheduleIntentEvent,
-} from "@brewva/brewva-runtime";
+import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { asBrewvaIntentId, asBrewvaSessionId } from "@brewva/brewva-runtime/core";
 import {
   SCHEDULE_EVENT_TYPE,
   SCHEDULE_CHILD_SESSION_FINISHED_EVENT_TYPE,
   SCHEDULE_CHILD_SESSION_STARTED_EVENT_TYPE,
   SCHEDULE_WAKEUP_EVENT_TYPE,
 } from "@brewva/brewva-runtime/events";
+import { parseScheduleIntentEvent } from "@brewva/brewva-runtime/schedule";
 import { writeMinimalConfig } from "../../helpers/config.js";
 import { buildGatewayWorkerHarnessEnv, startGatewayDaemonHarness } from "../../helpers/gateway.js";
 import { cleanupWorkspace, createWorkspace, repoRoot } from "../../helpers/workspace.js";
@@ -195,22 +192,22 @@ describe("system: scheduler daemon", () => {
       const claimSummary = "Release notes are waiting for final reviewer approval.";
 
       const setupRuntime = new BrewvaRuntime({ cwd: workspace, configPath: ".brewva/brewva.json" });
-      setupRuntime.authority.task.setSpec(parentSessionId, {
+      setupRuntime.authority.task.spec.set(parentSessionId, {
         schema: "brewva.task.v1",
         goal: parentTaskGoal,
       });
-      setupRuntime.authority.claim.upsert(parentSessionId, {
+      setupRuntime.authority.claim.facts.upsert(parentSessionId, {
         id: "fact-release-review",
         kind: "status",
         severity: "warn",
         summary: claimSummary,
       });
-      setupRuntime.authority.tape.recordTapeHandoff(parentSessionId, {
+      setupRuntime.authority.tape.handoff.record(parentSessionId, {
         name: "release-checkpoint",
         summary: "Release prep is partially complete.",
         nextSteps: "Resolve the final reviewer comment.",
       });
-      const created = await setupRuntime.authority.schedule.createIntent(parentSessionId, {
+      const created = await setupRuntime.authority.schedule.intents.create(parentSessionId, {
         intentId: asBrewvaIntentId("intent-scheduler-daemon"),
         reason: "nightly release follow-up",
         continuityMode: "inherit",
@@ -229,7 +226,7 @@ describe("system: scheduler daemon", () => {
         const observer = new BrewvaRuntime({ cwd: workspace, configPath: ".brewva/brewva.json" });
         const started = await waitForCondition(
           () =>
-            observer.inspect.events.query(parentSessionId, {
+            observer.inspect.events.records.query(parentSessionId, {
               type: SCHEDULE_CHILD_SESSION_STARTED_EVENT_TYPE,
               last: 1,
             })[0],
@@ -247,7 +244,7 @@ describe("system: scheduler daemon", () => {
 
         await waitForCondition(
           () =>
-            observer.inspect.events.query(parentSessionId, {
+            observer.inspect.events.records.query(parentSessionId, {
               type: SCHEDULE_CHILD_SESSION_FINISHED_EVENT_TYPE,
               last: 1,
             })[0],
@@ -260,7 +257,7 @@ describe("system: scheduler daemon", () => {
 
         await waitForCondition(
           () =>
-            observer.inspect.events
+            observer.inspect.events.records
               .query(parentSessionId, { type: SCHEDULE_EVENT_TYPE })
               .map((event) => parseScheduleIntentEvent(event)?.kind)
               .find((kind) => kind === "intent_converged"),
@@ -272,7 +269,7 @@ describe("system: scheduler daemon", () => {
         );
 
         const persisted = new BrewvaRuntime({ cwd: workspace, configPath: ".brewva/brewva.json" });
-        const wakeup = persisted.inspect.events.query(childSessionId, {
+        const wakeup = persisted.inspect.events.records.query(childSessionId, {
           type: SCHEDULE_WAKEUP_EVENT_TYPE,
           last: 1,
         })[0];
@@ -283,9 +280,9 @@ describe("system: scheduler daemon", () => {
           inheritedOperationalClaims: 1,
         });
 
-        const childTask = persisted.inspect.task.getState(childSessionId);
+        const childTask = persisted.inspect.task.state.get(childSessionId);
         expect(childTask.spec?.goal).toBe(parentTaskGoal);
-        const childClaim = persisted.inspect.claim.getState(childSessionId);
+        const childClaim = persisted.inspect.claim.state.get(childSessionId);
         expect(childClaim.claims).toEqual(
           expect.arrayContaining([
             expect.objectContaining({
@@ -296,10 +293,10 @@ describe("system: scheduler daemon", () => {
           ]),
         );
 
-        const childTapeStatus = persisted.inspect.tape.getTapeStatus(childSessionId);
+        const childTapeStatus = persisted.inspect.tape.status.get(childSessionId);
         expect(childTapeStatus.lastAnchor?.name).toBe("schedule:inherit:release-checkpoint");
 
-        const scheduleKinds = persisted.inspect.events
+        const scheduleKinds = persisted.inspect.events.records
           .query(parentSessionId, { type: SCHEDULE_EVENT_TYPE })
           .map((event) => parseScheduleIntentEvent(event)?.kind)
           .filter((kind): kind is NonNullable<typeof kind> => Boolean(kind));
@@ -307,7 +304,7 @@ describe("system: scheduler daemon", () => {
         expect(scheduleKinds).toContain("intent_fired");
         expect(scheduleKinds).toContain("intent_converged");
 
-        const intents = await persisted.inspect.schedule.listIntents({ parentSessionId });
+        const intents = await persisted.inspect.schedule.intents.list({ parentSessionId });
         expect(intents).toEqual([
           expect.objectContaining({
             intentId: created.intent.intentId,
@@ -364,7 +361,7 @@ describe("system: scheduler daemon", () => {
         const observer = new BrewvaRuntime({ cwd: workspace, configPath: ".brewva/brewva.json" });
         const seededIntent = await waitForCondition(
           async () => {
-            const intents = await observer.inspect.schedule.listIntents({
+            const intents = await observer.inspect.schedule.intents.list({
               parentSessionId: asBrewvaSessionId("policy-self-improve-parent"),
             });
             return intents.find((intent) => intent.intentId === "policy-self-improve-intent");
@@ -374,7 +371,7 @@ describe("system: scheduler daemon", () => {
             timeoutMs: SCHEDULER_DAEMON_WAIT_TIMEOUT_MS,
           },
         );
-        const cancelled = await observer.authority.schedule.cancelIntent(
+        const cancelled = await observer.authority.schedule.intents.cancel(
           "policy-self-improve-parent",
           {
             intentId: seededIntent.intentId,
@@ -391,7 +388,7 @@ describe("system: scheduler daemon", () => {
         const observer = new BrewvaRuntime({ cwd: workspace, configPath: ".brewva/brewva.json" });
         const intent = await waitForCondition(
           async () => {
-            const intents = await observer.inspect.schedule.listIntents({
+            const intents = await observer.inspect.schedule.intents.list({
               parentSessionId: asBrewvaSessionId("policy-self-improve-parent"),
             });
             return intents.length === 1 ? intents[0] : null;

@@ -10,16 +10,11 @@ import {
   buildContextEvidenceReport,
   type ContextEvidenceAggregateReport,
 } from "@brewva/brewva-gateway/hosted";
-import {
-  BrewvaRuntime,
-  createOperatorRuntimePort,
-  loadBrewvaInspectConfigResolution,
-  createTrustedLocalGovernancePort,
-  foldTaskLedgerEvents,
-  foldClaimLedgerEvents,
-  type BrewvaForensicConfigWarning,
-  type BrewvaOperatorRuntimePort,
-} from "@brewva/brewva-runtime";
+import { BrewvaRuntime, createOperatorRuntimePort } from "@brewva/brewva-runtime";
+import type { BrewvaOperatorRuntimePort } from "@brewva/brewva-runtime";
+import { foldClaimLedgerEvents } from "@brewva/brewva-runtime/claim";
+import { loadBrewvaInspectConfigResolution } from "@brewva/brewva-runtime/config";
+import type { BrewvaForensicConfigWarning } from "@brewva/brewva-runtime/config";
 import { type BrewvaEventRecord } from "@brewva/brewva-runtime/events";
 import {
   MODEL_PRESET_SELECT_EVENT_TYPE,
@@ -32,8 +27,10 @@ import {
   CLAIM_EVENT_TYPE,
   VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
 } from "@brewva/brewva-runtime/events";
+import { createTrustedLocalGovernancePort } from "@brewva/brewva-runtime/governance";
 import { PATCH_HISTORY_FILE } from "@brewva/brewva-runtime/patch-history";
 import { createRecoveryWalStore } from "@brewva/brewva-runtime/recovery";
+import { foldTaskLedgerEvents } from "@brewva/brewva-runtime/task";
 import { formatISO } from "date-fns";
 import {
   buildInspectAnalysis,
@@ -349,7 +346,7 @@ function readLatestEventPayload<T extends object>(
   type: string,
   coerce: (payload: Record<string, unknown>) => T = (payload) => payload as T,
 ): { payload: T; timestamp: number } | null {
-  const event = runtime.inspect.events.query(sessionId, { type, last: 1 })[0];
+  const event = runtime.inspect.events.records.query(sessionId, { type, last: 1 })[0];
   if (!event?.payload) return null;
   return {
     payload: coerce(event.payload as Record<string, unknown>),
@@ -362,7 +359,7 @@ function buildLineageInspection(
   sessionId: string,
 ): InspectReport["lineage"] {
   try {
-    const tree = runtime.inspect.session.getLineageTree(sessionId);
+    const tree = runtime.inspect.session.lineage.getTree(sessionId);
     const currentNodeId =
       tree.selectedByChannel["cli"] ?? tree.selectedByChannel["tui"] ?? tree.rootNodeId;
     const currentNode = tree.nodes.find((node) => node.lineageNodeId === currentNodeId) ?? null;
@@ -403,7 +400,7 @@ function buildVerificationInspection(
   runtime: BrewvaOperatorRuntimePort,
   sessionId: string,
 ): InspectVerification {
-  const latestEvent = runtime.inspect.events
+  const latestEvent = runtime.inspect.events.records
     .list(sessionId, {
       type: VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
       last: 1,
@@ -451,7 +448,7 @@ function listSessionPendingRecoveryWal(
     recoveryWalDir.trim().length > 0 &&
     recoveryWalDir !== runtime.config.infrastructure.recoveryWal.dir
       ? createRecoveryWalStore({
-          workspaceRoot: runtime.workspaceRoot,
+          workspaceRoot: runtime.identity.workspaceRoot,
           config: {
             ...runtime.config.infrastructure.recoveryWal,
             dir: recoveryWalDir,
@@ -500,7 +497,7 @@ function hasReplayEvent(
   sessionId: string,
   type: string,
 ): boolean {
-  return runtime.inspect.events.query(sessionId, { type, last: 1 }).length > 0;
+  return runtime.inspect.events.records.query(sessionId, { type, last: 1 }).length > 0;
 }
 
 function scoreDefaultReplaySession(runtime: BrewvaOperatorRuntimePort, sessionId: string): number {
@@ -519,7 +516,7 @@ function scoreDefaultReplaySession(runtime: BrewvaOperatorRuntimePort, sessionId
 }
 
 function listAllReplaySessions(runtime: BrewvaOperatorRuntimePort) {
-  return runtime.inspect.events.listReplaySessions();
+  return runtime.inspect.events.log.listReplaySessions();
 }
 
 function resolveTargetSession(
@@ -557,17 +554,17 @@ function buildInspectReport(
 ): InspectReport {
   const replaySession =
     listAllReplaySessions(runtime).find((entry) => entry.sessionId === sessionId) ?? null;
-  const events = runtime.inspect.events.query(sessionId);
-  const structuredEvents = runtime.inspect.events.queryStructured(sessionId);
-  const taskEvents = runtime.inspect.events.query(sessionId, { type: TASK_EVENT_TYPE });
-  const claimEvents = runtime.inspect.events.query(sessionId, { type: CLAIM_EVENT_TYPE });
+  const events = runtime.inspect.events.records.query(sessionId);
+  const structuredEvents = runtime.inspect.events.records.queryStructured(sessionId);
+  const taskEvents = runtime.inspect.events.records.query(sessionId, { type: TASK_EVENT_TYPE });
+  const claimEvents = runtime.inspect.events.records.query(sessionId, { type: CLAIM_EVENT_TYPE });
   const taskState = foldTaskLedgerEvents(taskEvents);
   const claimState = foldClaimLedgerEvents(claimEvents);
-  const tapeStatus = runtime.inspect.tape.getTapeStatus(sessionId);
-  const hydration = runtime.inspect.session.getHydration(sessionId);
-  const integrity = runtime.inspect.session.getIntegrity(sessionId);
-  const rewindState = runtime.inspect.session.getRewindState(sessionId);
-  const rewindTargets = runtime.inspect.session.listRewindTargets(sessionId);
+  const tapeStatus = runtime.inspect.tape.status.get(sessionId);
+  const hydration = runtime.inspect.session.lifecycle.getHydration(sessionId);
+  const integrity = runtime.inspect.session.lifecycle.getIntegrity(sessionId);
+  const rewindState = runtime.inspect.session.rewind.getState(sessionId);
+  const rewindTargets = runtime.inspect.session.rewind.listTargets(sessionId);
   const bootstrap = readLatestEventPayload<InspectBootstrapPayload>(
     runtime,
     sessionId,
@@ -593,8 +590,8 @@ function buildInspectReport(
   const contextEvidenceReport = buildContextEvidenceReport(runtime, {
     sessionIds: [sessionId],
   });
-  const ledgerIntegrity = runtime.inspect.ledger.verifyIntegrity(sessionId);
-  const ledgerRows = runtime.inspect.ledger.listRows(sessionId);
+  const ledgerIntegrity = runtime.inspect.ledger.store.verifyIntegrity(sessionId);
+  const ledgerRows = runtime.inspect.ledger.store.listRows(sessionId);
   const latestModelPresetEvent = events
     .toReversed()
     .find((event) => event.type === MODEL_PRESET_SELECT_EVENT_TYPE);
@@ -603,17 +600,21 @@ function buildInspectReport(
     "subagentModels",
   );
 
-  const projectionRoot = resolve(runtime.workspaceRoot, effectiveProjectionDir);
+  const projectionRoot = resolve(runtime.identity.workspaceRoot, effectiveProjectionDir);
   const projectionWorkingPath = join(
     projectionRoot,
     "sessions",
     `sess_${encodeSessionIdForPath(sessionId)}`,
     runtime.config.projection.workingFile,
   );
-  const walFilePath = resolve(runtime.workspaceRoot, effectiveRecoveryWalDir, "runtime.jsonl");
+  const walFilePath = resolve(
+    runtime.identity.workspaceRoot,
+    effectiveRecoveryWalDir,
+    "runtime.jsonl",
+  );
 
   const snapshotSessionDir = resolve(
-    runtime.workspaceRoot,
+    runtime.identity.workspaceRoot,
     ".orchestrator/snapshots",
     sanitizeSessionIdForPath(sessionId),
   );
@@ -627,7 +628,7 @@ function buildInspectReport(
     typeof effectiveRecoveryWalDir === "string" &&
     effectiveRecoveryWalDir !== runtime.config.infrastructure.recoveryWal.dir
       ? createRecoveryWalStore({
-          workspaceRoot: runtime.workspaceRoot,
+          workspaceRoot: runtime.identity.workspaceRoot,
           config: {
             ...runtime.config.infrastructure.recoveryWal,
             dir: effectiveRecoveryWalDir,
@@ -638,7 +639,7 @@ function buildInspectReport(
 
   const report: InspectReport = {
     sessionId,
-    workspaceRoot: runtime.workspaceRoot,
+    workspaceRoot: runtime.identity.workspaceRoot,
     configLoad: options.configLoad ?? {
       mode: "forensic_default",
       paths: [],
@@ -674,9 +675,11 @@ function buildInspectReport(
       eventCount: replaySession?.eventCount ?? events.length,
       firstEventAt: toIso(events[0]?.timestamp),
       lastEventAt: toIso(replaySession?.lastEventAt ?? events[events.length - 1]?.timestamp),
-      anchorCount: runtime.inspect.events.query(sessionId, { type: TAPE_ANCHOR_EVENT_TYPE }).length,
-      checkpointCount: runtime.inspect.events.query(sessionId, { type: TAPE_CHECKPOINT_EVENT_TYPE })
+      anchorCount: runtime.inspect.events.records.query(sessionId, { type: TAPE_ANCHOR_EVENT_TYPE })
         .length,
+      checkpointCount: runtime.inspect.events.records.query(sessionId, {
+        type: TAPE_CHECKPOINT_EVENT_TYPE,
+      }).length,
       tapePressure: tapeStatus.tapePressure,
       entriesSinceAnchor: tapeStatus.entriesSinceAnchor,
     },
@@ -800,7 +803,7 @@ function buildInspectReport(
       promotionGaps: contextEvidenceReport.promotionReadiness.gaps,
     },
     ledger: {
-      path: runtime.inspect.ledger.getPath(),
+      path: runtime.inspect.ledger.store.getPath(),
       rows: ledgerRows.length,
       integrityValid: ledgerIntegrity.valid,
       integrityReason: ledgerIntegrity.reason ?? null,

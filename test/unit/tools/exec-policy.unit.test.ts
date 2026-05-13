@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { DEFAULT_BREWVA_CONFIG, type ToolBoxPolicy } from "@brewva/brewva-runtime";
+import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
+import type { ToolBoxPolicy } from "@brewva/brewva-runtime/governance";
 import { applyToolBoxPolicy } from "../../../packages/brewva-tools/src/families/execution/exec/policy.js";
 import type { BoxConfig } from "../../../packages/brewva-tools/src/families/execution/exec/shared.js";
 

@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
+import { createHostedRuntimePort } from "@brewva/brewva-runtime";
 import type { BrewvaRuntime } from "@brewva/brewva-runtime";
 import type { BrewvaEventRecord } from "@brewva/brewva-runtime/events";
 
@@ -224,18 +225,18 @@ export function recordHostedDelegationOutcome(input: {
   timestamp?: number;
   artifactName?: string;
 }): { event: BrewvaEventRecord | undefined; artifactPath: string } {
-  const artifactsDir = join(input.runtime.workspaceRoot, ".artifacts");
+  const artifactsDir = join(input.runtime.identity.workspaceRoot, ".artifacts");
   mkdirSync(artifactsDir, { recursive: true });
   const artifactPath = join(artifactsDir, `${input.artifactName ?? input.runId}.json`);
   writeFileSync(artifactPath, JSON.stringify(input.outcome, null, 2), "utf8");
-  const relativeArtifactPath = relative(input.runtime.workspaceRoot, artifactPath).replaceAll(
-    "\\",
-    "/",
-  );
+  const relativeArtifactPath = relative(
+    input.runtime.identity.workspaceRoot,
+    artifactPath,
+  ).replaceAll("\\", "/");
   const payload = input.payload ?? {};
   return {
     artifactPath: relativeArtifactPath,
-    event: input.runtime.extensions.hosted.events.record({
+    event: createHostedRuntimePort(input.runtime).extensions.hosted.events.record({
       sessionId: input.sessionId,
       type: "subagent_completed",
       ...(input.timestamp !== undefined ? { timestamp: input.timestamp } : {}),

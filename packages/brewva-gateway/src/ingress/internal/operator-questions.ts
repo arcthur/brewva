@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { type BrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaRuntime } from "@brewva/brewva-runtime";
 import { type BrewvaEventRecord } from "@brewva/brewva-runtime/events";
 import {
   OPERATOR_QUESTION_ANSWERED_EVENT_TYPE,
@@ -321,7 +321,7 @@ async function extractDelegationQuestions(
   if (!runId || !artifactPath) {
     return { questions: [] };
   }
-  const outcome = await readDelegationOutcome(runtime.workspaceRoot, artifactPath);
+  const outcome = await readDelegationOutcome(runtime.identity.workspaceRoot, artifactPath);
   if (!outcome) {
     return {
       questions: [],
@@ -640,7 +640,7 @@ export async function collectOpenSessionQuestions(
   runtime: BrewvaRuntime,
   sessionId: string,
 ): Promise<SessionQuestionCollection> {
-  const events = runtime.inspect.events.query(sessionId);
+  const events = runtime.inspect.events.records.query(sessionId);
   const questions: SessionOpenQuestion[] = [];
   const answeredQuestionIds = new Set<string>();
   const warnings: string[] = [];

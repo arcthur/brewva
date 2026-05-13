@@ -1,6 +1,6 @@
 import { existsSync, statSync } from "node:fs";
 import { posix as pathPosix, resolve } from "node:path";
-import { type BrewvaOperatorRuntimePort, type EvidenceLedgerRow } from "@brewva/brewva-runtime";
+import type { BrewvaOperatorRuntimePort } from "@brewva/brewva-runtime";
 import { type BrewvaEventRecord } from "@brewva/brewva-runtime/events";
 import {
   BOX_BOOTSTRAP_FAILED_EVENT_TYPE,
@@ -14,6 +14,7 @@ import {
   VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
   VERIFICATION_WRITE_MARKED_EVENT_TYPE,
 } from "@brewva/brewva-runtime/events";
+import type { EvidenceLedgerRow } from "@brewva/brewva-runtime/ledger";
 import {
   collectPathCandidates,
   collectPersistedPatchPaths,
@@ -687,7 +688,7 @@ export function clampText(value: string, maxChars: number): string {
 }
 
 export function resolveInspectDirectory(
-  runtime: Pick<BrewvaOperatorRuntimePort, "cwd" | "workspaceRoot">,
+  runtime: Pick<BrewvaOperatorRuntimePort, "identity">,
   positionalDir: string | undefined,
   optionDir: string | undefined,
 ): InspectDirectory {
@@ -696,7 +697,9 @@ export function resolveInspectDirectory(
   }
 
   const requested = positionalDir ?? optionDir;
-  const absolutePath = requested ? resolve(runtime.cwd, requested) : resolve(runtime.cwd);
+  const absolutePath = requested
+    ? resolve(runtime.identity.cwd, requested)
+    : resolve(runtime.identity.cwd);
   if (!pathExists(absolutePath)) {
     throw new Error(`directory does not exist: ${absolutePath}`);
   }
@@ -716,9 +719,14 @@ export function resolveInspectDirectory(
     throw new Error(`inspect target must be a directory: ${absolutePath}`);
   }
 
-  const workspaceRelativePath = toWorkspaceRelativePath(runtime.workspaceRoot, absolutePath);
+  const workspaceRelativePath = toWorkspaceRelativePath(
+    runtime.identity.workspaceRoot,
+    absolutePath,
+  );
   if (workspaceRelativePath === null) {
-    throw new Error(`inspect directory must stay inside workspace root: ${runtime.workspaceRoot}`);
+    throw new Error(
+      `inspect directory must stay inside workspace root: ${runtime.identity.workspaceRoot}`,
+    );
   }
 
   return {
@@ -733,10 +741,10 @@ export function buildInspectAnalysis(input: {
   directory: InspectDirectory;
   base: InspectBaseReportForAnalysis;
 }): InspectAnalysisReport {
-  const snapshotEvents = input.runtime.inspect.events.query(input.sessionId);
+  const snapshotEvents = input.runtime.inspect.events.records.query(input.sessionId);
   const cutoffEvent = snapshotEvents[snapshotEvents.length - 1] ?? null;
   const cutoffTimestamp = cutoffEvent?.timestamp ?? null;
-  const ledgerRows = input.runtime.inspect.ledger
+  const ledgerRows = input.runtime.inspect.ledger.store
     .listRows(input.sessionId)
     .filter((row) => cutoffTimestamp === null || row.timestamp <= cutoffTimestamp);
   const patchSets = listPersistedPatchSets({
@@ -748,8 +756,8 @@ export function buildInspectAnalysis(input: {
   const writePaths = collectWritePaths(patchSets);
   const heuristicReadPaths = collectHeuristicReadPaths({
     rows: ledgerRows,
-    cwd: input.runtime.cwd,
-    workspaceRoot: input.runtime.workspaceRoot,
+    cwd: input.runtime.identity.cwd,
+    workspaceRoot: input.runtime.identity.workspaceRoot,
   });
   const touchedPaths = new Set<string>([
     ...strongTouchedPaths,

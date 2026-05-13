@@ -6,18 +6,12 @@ import type { GovernancePort } from "../domain/governance/api.js";
 import type { ResolvedToolAuthority } from "../domain/governance/api.js";
 import type { SessionLifecycleSnapshot } from "../domain/sessions/api.js";
 import type { VerificationReport } from "../domain/verification/api.js";
-import type { RuntimeCoreDependencies } from "./core-registrar.js";
 import type { RuntimeKernelContext } from "./runtime-kernel.js";
-import type {
-  RuntimeLazyServiceFactories,
-  RuntimeServiceDependencies,
-} from "./services-registrar.js";
+import type { RuntimeCoreDependencies } from "./wiring.js";
+import type { RuntimeLazyServiceFactories, RuntimeServiceDependencies } from "./wiring.js";
 
-export type { RuntimeCoreDependencies } from "./core-registrar.js";
-export type {
-  RuntimeLazyServiceFactories,
-  RuntimeServiceDependencies,
-} from "./services-registrar.js";
+export type { RuntimeCoreDependencies } from "./wiring.js";
+export type { RuntimeLazyServiceFactories, RuntimeServiceDependencies } from "./wiring.js";
 
 export interface RuntimeCompositionInput {
   cwd: string;

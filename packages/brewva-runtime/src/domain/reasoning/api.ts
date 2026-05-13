@@ -27,9 +27,9 @@ export {
   readReasoningRevertEventPayload,
 } from "./event-descriptors.js";
 export {
+  createReasoningAuthoritySurface,
+  createReasoningInspectSurface,
   createReasoningSurfaceMethods,
-  reasoningRuntimeSurface,
-  reasoningSurfaceContribution,
 } from "./runtime-surface.js";
 export type {
   ReasoningSurfaceDependencies,

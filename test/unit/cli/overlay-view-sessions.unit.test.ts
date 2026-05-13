@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { asBrewvaSessionId } from "@brewva/brewva-runtime";
-import type { SessionLineageTree } from "@brewva/brewva-runtime";
+import { asBrewvaSessionId } from "@brewva/brewva-runtime/core";
+import type { SessionLineageTree } from "@brewva/brewva-runtime/session";
 import {
   buildLineageOverlayPayload,
   buildOverlayView,

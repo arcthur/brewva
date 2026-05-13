@@ -1,9 +1,18 @@
 import { describe, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
+import {
+  BrewvaRuntime,
+  DEFAULT_BREWVA_CONFIG,
+  createOperatorRuntimePort,
+  createHostedRuntimePort,
+} from "@brewva/brewva-runtime";
 import { handleInspectChannelCommand } from "../../../packages/brewva-cli/src/inspect-channel-command.js";
 import { cleanupTestWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
+
+function createHostedTestRuntime(options: ConstructorParameters<typeof BrewvaRuntime>[0]) {
+  return createHostedRuntimePort(new BrewvaRuntime(options));
+}
 
 describe("inspect channel command", () => {
   test("surfaces accepted effect commitment requests in the inline inspect output", async () => {
@@ -11,23 +20,23 @@ describe("inspect channel command", () => {
     mkdirSync(join(workspace, "src"), { recursive: true });
     writeFileSync(join(workspace, "src", "index.ts"), "export const ok = true;\n", "utf8");
 
-    const runtime = new BrewvaRuntime({
+    const runtime = createHostedTestRuntime({
       cwd: workspace,
       config: structuredClone(DEFAULT_BREWVA_CONFIG),
     });
     const sessionId = "inspect-channel-approval-session";
 
     try {
-      runtime.extensions.hosted.events.record({
+      createHostedRuntimePort(runtime).extensions.hosted.events.record({
         sessionId,
         type: "session_bootstrap",
         payload: {
           managedToolMode: "direct",
         },
       });
-      runtime.maintain.context.onTurnStart(sessionId, 1);
+      createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
 
-      const deferred = runtime.authority.tools.start({
+      const deferred = runtime.authority.tools.invocation.start({
         sessionId,
         toolCallId: "tc-inspect-channel-approval",
         toolName: "exec",
@@ -35,10 +44,10 @@ describe("inspect channel command", () => {
       });
       expect(deferred.allowed).toBe(false);
 
-      const pending = runtime.inspect.proposals.listPendingEffectCommitments(sessionId);
+      const pending = runtime.inspect.proposals.requests.listPending(sessionId);
       expect(pending).toHaveLength(1);
 
-      runtime.authority.proposals.decideEffectCommitment(sessionId, pending[0]!.requestId, {
+      runtime.authority.proposals.requests.decide(sessionId, pending[0]!.requestId, {
         decision: "accept",
         actor: "operator:test",
         reason: "safe local command",

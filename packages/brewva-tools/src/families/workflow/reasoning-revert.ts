@@ -1,4 +1,4 @@
-import type { ReasoningRevertTrigger } from "@brewva/brewva-runtime";
+import type { ReasoningRevertTrigger } from "@brewva/brewva-runtime/reasoning";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import { Type } from "@sinclair/typebox";
 import type { BrewvaBundledToolOptions } from "../../contracts/index.js";
@@ -61,7 +61,7 @@ export function createReasoningRevertTool(options: BrewvaBundledToolOptions): To
       }),
       async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
         const sessionId = getSessionId(ctx);
-        const reasoningPort = runtime.authority.reasoning;
+        const reasoningPort = runtime.authority.reasoning?.reverts;
         if (!reasoningPort) {
           return failTextResult("Reasoning revert surface is unavailable in this runtime.", {
             ok: false,
@@ -96,8 +96,6 @@ export function createReasoningRevertTool(options: BrewvaBundledToolOptions): To
         }
       },
     },
-    {
-      requiredCapabilities: ["authority.reasoning.revert"],
-    },
+    {},
   );
 }

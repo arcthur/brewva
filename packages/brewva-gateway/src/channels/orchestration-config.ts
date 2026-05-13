@@ -1,4 +1,4 @@
-import type { BrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 
 export interface ChannelOrchestrationConfig {
   enabled: boolean;
@@ -18,7 +18,7 @@ export interface ChannelOrchestrationConfig {
 }
 
 export function resolveChannelOrchestrationConfig(
-  runtime: BrewvaRuntime,
+  runtime: BrewvaHostedRuntimePort,
 ): ChannelOrchestrationConfig {
   const configured = runtime.config.channels.orchestration;
   return {

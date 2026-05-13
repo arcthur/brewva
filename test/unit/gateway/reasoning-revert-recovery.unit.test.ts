@@ -2,7 +2,11 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import {
+  BrewvaRuntime,
+  createOperatorRuntimePort,
+  createHostedRuntimePort,
+} from "@brewva/brewva-runtime";
 import { REASONING_REVERT_EVENT_TYPE } from "@brewva/brewva-runtime/events";
 import {
   REASONING_REVERT_RECOVERY_TEST_ONLY,
@@ -10,8 +14,12 @@ import {
 } from "../../../packages/brewva-gateway/src/hosted/internal/thread-loop/reasoning-revert-recovery.js";
 import { recordSessionTurnTransition } from "../../../packages/brewva-gateway/src/hosted/internal/thread-loop/turn-transition.js";
 
+function createHostedTestRuntime(options: ConstructorParameters<typeof BrewvaRuntime>[0]) {
+  return createHostedRuntimePort(new BrewvaRuntime(options));
+}
+
 function createRuntimeEventBridge() {
-  const runtime = new BrewvaRuntime({
+  const runtime = createHostedTestRuntime({
     cwd: mkdtempSync(join(tmpdir(), "brewva-reasoning-revert-recovery-")),
   });
   const events: Array<{
@@ -22,7 +30,7 @@ function createRuntimeEventBridge() {
     turn?: number;
     payload?: Record<string, unknown>;
   }> = [];
-  runtime.inspect.events.subscribe((event) => {
+  runtime.inspect.events.records.subscribe((event) => {
     events.push({
       id: event.id,
       sessionId: event.sessionId,
@@ -50,16 +58,16 @@ function seedReasoningRevert(
   targetLeafEntryId: string;
   revertEventId: string;
 } {
-  runtime.maintain.context.onTurnStart(sessionId, 8);
-  const checkpointA = runtime.authority.reasoning.recordCheckpoint(sessionId, {
+  createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 8);
+  const checkpointA = runtime.authority.reasoning.checkpoints.record(sessionId, {
     boundary: "operator_marker",
     leafEntryId: "leaf-restore-1",
   });
-  runtime.authority.reasoning.recordCheckpoint(sessionId, {
+  runtime.authority.reasoning.checkpoints.record(sessionId, {
     boundary: "verification_boundary",
     leafEntryId: "leaf-restore-2",
   });
-  const revert = runtime.authority.reasoning.revert(sessionId, {
+  const revert = runtime.authority.reasoning.reverts.revert(sessionId, {
     toCheckpointId: checkpointA.checkpointId,
     trigger: "operator_request",
     continuity: "Continue from the restored verified branch.",
@@ -148,7 +156,9 @@ describe("reasoning revert recovery controller", () => {
     ]);
     expect(replacedMessages).toEqual([rebuiltMessages]);
     expect(
-      eventBridge.runtime.inspect.context.getHistoryViewBaseline("agent-session-reasoning-revert"),
+      eventBridge.runtime.inspect.context.prompt.getHistoryViewBaseline(
+        "agent-session-reasoning-revert",
+      ),
     ).toEqual(
       expect.objectContaining({
         origin: "reasoning_revert",
@@ -238,24 +248,30 @@ describe("reasoning revert recovery controller", () => {
       },
     ];
 
-    eventBridge.runtime.maintain.context.onTurnStart("agent-session-clean-rewind", 3);
-    const checkpointA = eventBridge.runtime.authority.session.recordRewindCheckpoint(
+    createOperatorRuntimePort(eventBridge.runtime).operator.context.lifecycle.onTurnStart(
+      "agent-session-clean-rewind",
+      3,
+    );
+    const checkpointA = eventBridge.runtime.authority.session.rewind.recordCheckpoint(
       "agent-session-clean-rewind",
       {
         leafEntryId: "leaf-clean-1",
         prompt: { text: "first prompt", parts: [] },
       },
     );
-    eventBridge.runtime.authority.session.recordRewindCheckpoint("agent-session-clean-rewind", {
+    eventBridge.runtime.authority.session.rewind.recordCheckpoint("agent-session-clean-rewind", {
       leafEntryId: "leaf-clean-2",
       prompt: { text: "second prompt", parts: [] },
     });
-    const rewind = eventBridge.runtime.authority.session.rewind("agent-session-clean-rewind", {
-      checkpointId: checkpointA.checkpointId,
-      mode: "conversation",
-      summary: "none",
-      returnLeafEntryId: "leaf-clean-2",
-    });
+    const rewind = eventBridge.runtime.authority.session.rewind.rewind(
+      "agent-session-clean-rewind",
+      {
+        checkpointId: checkpointA.checkpointId,
+        mode: "conversation",
+        summary: "none",
+        returnLeafEntryId: "leaf-clean-2",
+      },
+    );
     if (!rewind.ok || !rewind.reasoningRevert) {
       throw new Error("expected clean conversation rewind to produce a reasoning revert");
     }

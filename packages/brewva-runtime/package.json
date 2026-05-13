@@ -96,7 +96,121 @@
       "import": "./dist/runtime-effect.js",
       "default": "./dist/runtime-effect.js"
     },
-    "./schema/brewva.schema.json": "./schema/brewva.schema.json"
+    "./schema/brewva.schema.json": "./schema/brewva.schema.json",
+    "./claim": {
+      "types": "./dist/claim.d.ts",
+      "bun": "./src/claim.ts",
+      "import": "./dist/claim.js",
+      "default": "./dist/claim.js"
+    },
+    "./config": {
+      "types": "./dist/config.d.ts",
+      "bun": "./src/config.ts",
+      "import": "./dist/config.js",
+      "default": "./dist/config.js"
+    },
+    "./conventions": {
+      "types": "./dist/conventions.d.ts",
+      "bun": "./src/conventions.ts",
+      "import": "./dist/conventions.js",
+      "default": "./dist/conventions.js"
+    },
+    "./cost": {
+      "types": "./dist/cost.d.ts",
+      "bun": "./src/cost.ts",
+      "import": "./dist/cost.js",
+      "default": "./dist/cost.js"
+    },
+    "./delegation": {
+      "types": "./dist/delegation.d.ts",
+      "bun": "./src/delegation.ts",
+      "import": "./dist/delegation.js",
+      "default": "./dist/delegation.js"
+    },
+    "./governance": {
+      "types": "./dist/governance.d.ts",
+      "bun": "./src/governance.ts",
+      "import": "./dist/governance.js",
+      "default": "./dist/governance.js"
+    },
+    "./ledger": {
+      "types": "./dist/ledger.d.ts",
+      "bun": "./src/ledger.ts",
+      "import": "./dist/ledger.js",
+      "default": "./dist/ledger.js"
+    },
+    "./projection": {
+      "types": "./dist/projection.d.ts",
+      "bun": "./src/projection.ts",
+      "import": "./dist/projection.js",
+      "default": "./dist/projection.js"
+    },
+    "./proposals": {
+      "types": "./dist/proposals.d.ts",
+      "bun": "./src/proposals.ts",
+      "import": "./dist/proposals.js",
+      "default": "./dist/proposals.js"
+    },
+    "./reasoning": {
+      "types": "./dist/reasoning.d.ts",
+      "bun": "./src/reasoning.ts",
+      "import": "./dist/reasoning.js",
+      "default": "./dist/reasoning.js"
+    },
+    "./schedule": {
+      "types": "./dist/schedule.d.ts",
+      "bun": "./src/schedule.ts",
+      "import": "./dist/schedule.js",
+      "default": "./dist/schedule.js"
+    },
+    "./security": {
+      "types": "./dist/security.d.ts",
+      "bun": "./src/security.ts",
+      "import": "./dist/security.js",
+      "default": "./dist/security.js"
+    },
+    "./session": {
+      "types": "./dist/session.d.ts",
+      "bun": "./src/session.ts",
+      "import": "./dist/session.js",
+      "default": "./dist/session.js"
+    },
+    "./skills": {
+      "types": "./dist/skills.d.ts",
+      "bun": "./src/skills.ts",
+      "import": "./dist/skills.js",
+      "default": "./dist/skills.js"
+    },
+    "./tape": {
+      "types": "./dist/tape.d.ts",
+      "bun": "./src/tape.ts",
+      "import": "./dist/tape.js",
+      "default": "./dist/tape.js"
+    },
+    "./task": {
+      "types": "./dist/task.d.ts",
+      "bun": "./src/task.ts",
+      "import": "./dist/task.js",
+      "default": "./dist/task.js"
+    },
+    "./tools": {
+      "types": "./dist/tools.d.ts",
+      "bun": "./src/tools.ts",
+      "import": "./dist/tools.js",
+      "default": "./dist/tools.js"
+    },
+    "./verification": {
+      "types": "./dist/verification.d.ts",
+      "bun": "./src/verification.ts",
+      "import": "./dist/verification.js",
+      "default": "./dist/verification.js"
+    },
+    "./workbench": {
+      "types": "./dist/workbench.d.ts",
+      "bun": "./src/workbench.ts",
+      "import": "./dist/workbench.js",
+      "default": "./dist/workbench.js"
+    }
   },
   "dependencies": {
     "@brewva/brewva-effect": "workspace:*",

@@ -1,7 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import {
+  BrewvaRuntime,
+  createOperatorRuntimePort,
+  createHostedRuntimePort,
+} from "@brewva/brewva-runtime";
 import {
   buildContextEvidenceReport,
   persistContextEvidenceReport,
@@ -39,15 +43,18 @@ describe("context evidence", () => {
     const runtime = createRuntimeFixture();
     const sessionId = "context-evidence-session";
 
-    const promptTurn1 = runtime.maintain.context.observePromptStability(sessionId, {
-      stablePrefixHash: "prefix-1",
-      dynamicTailHash: "tail-1",
-      contextScopeId: "leaf-a",
-      turn: 1,
-      timestamp: 1_740_000_000_100,
-    });
+    const promptTurn1 = createOperatorRuntimePort(runtime).operator.context.prompt.observeStability(
+      sessionId,
+      {
+        stablePrefixHash: "prefix-1",
+        dynamicTailHash: "tail-1",
+        contextScopeId: "leaf-a",
+        turn: 1,
+        timestamp: 1_740_000_000_100,
+      },
+    );
     recordPromptStabilityEvidence({
-      workspaceRoot: runtime.workspaceRoot,
+      workspaceRoot: runtime.identity.workspaceRoot,
       sessionId,
       observed: promptTurn1,
       compactionAdvised: true,
@@ -57,15 +64,18 @@ describe("context evidence", () => {
       gateRequired: false,
     });
 
-    const promptTurn2 = runtime.maintain.context.observePromptStability(sessionId, {
-      stablePrefixHash: "prefix-1",
-      dynamicTailHash: "tail-1",
-      contextScopeId: "leaf-a",
-      turn: 2,
-      timestamp: 1_740_000_000_200,
-    });
+    const promptTurn2 = createOperatorRuntimePort(runtime).operator.context.prompt.observeStability(
+      sessionId,
+      {
+        stablePrefixHash: "prefix-1",
+        dynamicTailHash: "tail-1",
+        contextScopeId: "leaf-a",
+        turn: 2,
+        timestamp: 1_740_000_000_200,
+      },
+    );
     recordPromptStabilityEvidence({
-      workspaceRoot: runtime.workspaceRoot,
+      workspaceRoot: runtime.identity.workspaceRoot,
       sessionId,
       observed: promptTurn2,
       compactionAdvised: true,
@@ -75,7 +85,9 @@ describe("context evidence", () => {
       gateRequired: false,
     });
 
-    const reduction = runtime.maintain.context.observeTransientReduction(sessionId, {
+    const reduction = createOperatorRuntimePort(
+      runtime,
+    ).operator.context.prompt.observeTransientReduction(sessionId, {
       status: "completed",
       reason: null,
       eligibleToolResults: 6,
@@ -88,12 +100,12 @@ describe("context evidence", () => {
       timestamp: 1_740_000_000_210,
     });
     recordTransientReductionEvidence({
-      workspaceRoot: runtime.workspaceRoot,
+      workspaceRoot: runtime.identity.workspaceRoot,
       sessionId,
       observed: reduction,
     });
 
-    runtime.authority.cost.recordAssistantUsage({
+    runtime.authority.cost.usage.recordAssistant({
       sessionId,
       model: "test/model",
       inputTokens: 20,
@@ -103,7 +115,7 @@ describe("context evidence", () => {
       totalTokens: 55,
       costUsd: 0.001,
     });
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: "message_end",
       turn: 2,
@@ -121,7 +133,7 @@ describe("context evidence", () => {
         },
       },
     });
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: "session_compact",
       turn: 3,
@@ -132,7 +144,7 @@ describe("context evidence", () => {
     });
 
     const samples = readContextEvidenceRecords({
-      workspaceRoot: runtime.workspaceRoot,
+      workspaceRoot: runtime.identity.workspaceRoot,
       sessionIds: [sessionId],
     });
     expect(samples).toHaveLength(3);
@@ -199,7 +211,7 @@ describe("context evidence", () => {
     ]);
 
     const artifact = persistContextEvidenceReport({
-      workspaceRoot: runtime.workspaceRoot,
+      workspaceRoot: runtime.identity.workspaceRoot,
       report,
     });
     expect(artifact.artifactRef).toBe(".orchestrator/context-evidence/report-latest.json");
@@ -207,13 +219,18 @@ describe("context evidence", () => {
     expect(readFileSync(artifact.absolutePath, "utf8")).toContain(
       '"schema": "brewva.context_evidence.report.v1"',
     );
-    expect(existsSync(join(runtime.workspaceRoot, ".orchestrator/context-evidence"))).toBe(true);
+    expect(existsSync(join(runtime.identity.workspaceRoot, ".orchestrator/context-evidence"))).toBe(
+      true,
+    );
   });
 
   test("treats the first prompt sample in a new scope as a fresh stable-prefix baseline", () => {
     const runtime = createRuntimeFixture();
     const sessionId = "context-evidence-scope-reset";
-    const evidenceDirectory = join(runtime.workspaceRoot, ".orchestrator/context-evidence");
+    const evidenceDirectory = join(
+      runtime.identity.workspaceRoot,
+      ".orchestrator/context-evidence",
+    );
     const evidencePath = join(
       evidenceDirectory,
       `sess_${Buffer.from(sessionId, "utf8").toString("base64url")}.jsonl`,
@@ -284,15 +301,18 @@ describe("context evidence", () => {
     const runtime = createRuntimeFixture();
     const sessionId = "context-evidence-cache-accounting-missing";
 
-    const prompt = runtime.maintain.context.observePromptStability(sessionId, {
-      stablePrefixHash: "prefix-zero-cache",
-      dynamicTailHash: "tail-zero-cache",
-      contextScopeId: "leaf-zero-cache",
-      turn: 1,
-      timestamp: 1_740_000_002_100,
-    });
+    const prompt = createOperatorRuntimePort(runtime).operator.context.prompt.observeStability(
+      sessionId,
+      {
+        stablePrefixHash: "prefix-zero-cache",
+        dynamicTailHash: "tail-zero-cache",
+        contextScopeId: "leaf-zero-cache",
+        turn: 1,
+        timestamp: 1_740_000_002_100,
+      },
+    );
     recordPromptStabilityEvidence({
-      workspaceRoot: runtime.workspaceRoot,
+      workspaceRoot: runtime.identity.workspaceRoot,
       sessionId,
       observed: prompt,
       compactionAdvised: false,
@@ -302,7 +322,7 @@ describe("context evidence", () => {
       gateRequired: false,
     });
 
-    runtime.authority.cost.recordAssistantUsage({
+    runtime.authority.cost.usage.recordAssistant({
       sessionId,
       model: "test/model",
       inputTokens: 20,
@@ -344,7 +364,7 @@ describe("context evidence", () => {
     const sessionId = "context-evidence-phase-b-stop-loss";
 
     for (let turn = 1; turn <= 10; turn += 1) {
-      runtime.extensions.hosted.events.record({
+      createHostedRuntimePort(runtime).extensions.hosted.events.record({
         sessionId,
         type: "message_end",
         turn,
@@ -411,70 +431,73 @@ describe("context evidence", () => {
     const runtime = createRuntimeFixture();
     const sessionId = "context-evidence-cache-break-reasons";
 
-    const observed = runtime.maintain.context.observeProviderCache(sessionId, {
-      source:
-        "provider=openai|api=openai-responses|model=gpt-5.4|session=context-evidence-cache-break-reasons",
-      fingerprint: {
-        bucketKey:
+    const observed = createOperatorRuntimePort(runtime).operator.context.providerCache.observe(
+      sessionId,
+      {
+        source:
           "provider=openai|api=openai-responses|model=gpt-5.4|session=context-evidence-cache-break-reasons",
-        provider: "openai",
-        api: "openai-responses",
-        model: "gpt-5.4",
-        transport: "sse",
-        sessionId,
-        cachePolicyHash: "policy",
-        toolSchemaSnapshotHash: "tools",
-        toolSchemaOverlayHash: "overlay",
-        perToolHashes: {},
-        stablePrefixHash: "stable",
-        dynamicTailHash: "tail",
-        requestHash: "request",
-        channelContextHash: "channel",
-        renderedCacheHash: "render",
-        cacheCapabilityHash: "capability",
-        stickyLatchHash: "latch",
-        reasoningHash: "reasoning",
-        thinkingBudgetHash: "budget",
-        cacheRelevantHeadersHash: "headers",
-        extraBodyHash: "extra",
-        visibleHistoryReductionHash: "visible",
-        workbenchContextHash: "workbench",
-        providerFallbackHash: "fallback",
+        fingerprint: {
+          bucketKey:
+            "provider=openai|api=openai-responses|model=gpt-5.4|session=context-evidence-cache-break-reasons",
+          provider: "openai",
+          api: "openai-responses",
+          model: "gpt-5.4",
+          transport: "sse",
+          sessionId,
+          cachePolicyHash: "policy",
+          toolSchemaSnapshotHash: "tools",
+          toolSchemaOverlayHash: "overlay",
+          perToolHashes: {},
+          stablePrefixHash: "stable",
+          dynamicTailHash: "tail",
+          requestHash: "request",
+          channelContextHash: "channel",
+          renderedCacheHash: "render",
+          cacheCapabilityHash: "capability",
+          stickyLatchHash: "latch",
+          reasoningHash: "reasoning",
+          thinkingBudgetHash: "budget",
+          cacheRelevantHeadersHash: "headers",
+          extraBodyHash: "extra",
+          visibleHistoryReductionHash: "visible",
+          workbenchContextHash: "workbench",
+          providerFallbackHash: "fallback",
+        },
+        render: {
+          status: "rendered",
+          reason: "rendered_openai_prompt_cache",
+          renderedRetention: "short",
+          bucketKey:
+            "openai-responses|session=context-evidence-cache-break-reasons|retention=short|writeMode=readWrite",
+        },
+        breakObservation: {
+          status: "break",
+          classification: "prefixPreserving",
+          expected: false,
+          reason: "cache_read_drop_exceeded_threshold",
+          previousCacheReadTokens: 12_000,
+          cacheReadTokens: 2_000,
+          cacheWriteTokens: 500,
+          cacheMissTokens: 10_000,
+          thresholdTokens: 2_000,
+          relativeDropThreshold: 0.05,
+          changedFields: ["dynamicTailHash", "tool:exec"],
+        },
       },
-      render: {
-        status: "rendered",
-        reason: "rendered_openai_prompt_cache",
-        renderedRetention: "short",
-        bucketKey:
-          "openai-responses|session=context-evidence-cache-break-reasons|retention=short|writeMode=readWrite",
-      },
-      breakObservation: {
-        status: "break",
-        classification: "prefixPreserving",
-        expected: false,
-        reason: "cache_read_drop_exceeded_threshold",
-        previousCacheReadTokens: 12_000,
-        cacheReadTokens: 2_000,
-        cacheWriteTokens: 500,
-        cacheMissTokens: 10_000,
-        thresholdTokens: 2_000,
-        relativeDropThreshold: 0.05,
-        changedFields: ["dynamicTailHash", "tool:exec"],
-      },
-    });
+    );
     recordProviderCacheObservationEvidence({
-      workspaceRoot: runtime.workspaceRoot,
+      workspaceRoot: runtime.identity.workspaceRoot,
       sessionId,
       observed,
     });
     await waitForEvidenceFile({
-      workspaceRoot: runtime.workspaceRoot,
+      workspaceRoot: runtime.identity.workspaceRoot,
       sessionId,
       expectedKind: "provider_cache_observation",
     });
 
     const offlineRuntime = new BrewvaRuntime({
-      cwd: runtime.workspaceRoot,
+      cwd: runtime.identity.workspaceRoot,
     });
     const report = buildContextEvidenceReport(offlineRuntime, {
       sessionIds: [sessionId],
@@ -507,7 +530,7 @@ describe("context evidence", () => {
     const runtime = createRuntimeFixture();
     const sessionId = "context-evidence-compaction-generation";
 
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: "session_compact",
       turn: 3,
@@ -542,7 +565,7 @@ describe("context evidence", () => {
         },
       },
     });
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: "session_compact",
       turn: 5,

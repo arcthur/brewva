@@ -1,12 +1,10 @@
-import type { RuntimeServiceRegistrarOptions } from "../../runtime/service-registrar-types.js";
-import { tapeSurfaceContribution } from "./runtime-surface.js";
+import type { RuntimeServiceRegistrarOptions } from "../../runtime/wiring.js";
 import { TapeService } from "./service.js";
 
 export interface RuntimeTapeDomainRegistration {
   services: {
     getTapeService(): TapeService;
   };
-  surfaceContribution: typeof tapeSurfaceContribution;
 }
 
 export function registerTapeDomain(
@@ -36,6 +34,5 @@ export function registerTapeDomain(
         return tapeService;
       },
     },
-    surfaceContribution: tapeSurfaceContribution,
   };
 }

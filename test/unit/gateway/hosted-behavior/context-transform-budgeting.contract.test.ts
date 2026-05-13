@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { createOperatorRuntimePort } from "@brewva/brewva-runtime";
 import {
   createMockExtensionApi,
   createRuntimeFixture,
@@ -30,12 +31,15 @@ describe("context transform budgeting contract", () => {
     registerContextTransform(api, runtime);
 
     const sessionId = "s-pending-compaction-advisory";
-    runtime.maintain.context.observeUsage(sessionId, {
+    createOperatorRuntimePort(runtime).operator.context.usage.observe(sessionId, {
       tokens: 850,
       contextWindow: 1000,
       percent: 0.85,
     });
-    runtime.maintain.context.requestCompaction(sessionId, "usage_threshold");
+    createOperatorRuntimePort(runtime).operator.context.compaction.request(
+      sessionId,
+      "usage_threshold",
+    );
 
     const result = await invokeHandlerAsync<{
       systemPrompt?: string;

@@ -2,7 +2,7 @@
 
 ## Metadata
 
-- Decision: `authority.skills.complete(...)` remains the authoritative skill commit boundary, and `inspect.skills.validateOutputs(...)` remains the preview surface for the same runtime-owned validator composition.
+- Decision: Historical skill lifecycle authority was removed from the runtime public root. Current runtime skills ownership is catalog inspection and operator refresh; execution evidence is committed through the owning task, verification, and tool surfaces.
 - Date: `2026-04-10`
 - Status: accepted
 - Stable docs:
@@ -16,12 +16,13 @@
 
 ## Decision Summary
 
-- `authority.skills.complete(...)` remains the authoritative skill commit boundary, and `inspect.skills.validateOutputs(...)` remains the preview surface for the same runtime-owned validator composition.
-- Runtime owns evidence freshness. Callers pass raw outputs only; commit rebuilds validation context from the latest event tape / read-model state after verification.
+- Historical note: `authority.skills.complete(...)` and `inspect.skills.validateOutputs(...)` no longer exist. Runtime skill APIs now own catalog reads and refresh only.
+- Runtime-owned evidence freshness remains enforced by task, verification, tool, event, and ledger boundaries. Callers do not get a standalone skill lifecycle authority path.
 - Semantic-bound validation is mandatory runtime behavior for semantic-bound skills. It is not a hosted plugin and not a config-injected extension point.
-- `SkillLifecycleService` owns lifecycle state, receipts, task-spec promotion, repair posture, and budget gating; validator implementations and evidence derivation live outside that service.
+- Skill execution lifecycle state no longer owns a public runtime domain authority surface. Validator implementations and evidence derivation live behind the owning workflow surfaces.
 - `skills/project/shared/*.md` and project overlays remain the project convention plane. They can supplement context or tighten skill contracts, but they do not grant new tool authority or introduce a second authored rules catalog.
 
 ## Superseded by
 
 - `docs/research/decisions/model-operated-working-memory-and-context-governance-reset.md`
+- `docs/research/decisions/runtime-public-root-compression.md`

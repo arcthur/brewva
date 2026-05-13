@@ -15,7 +15,7 @@ import type {
   StreamOptions,
 } from "@brewva/brewva-provider-core/contracts";
 import { complete } from "@brewva/brewva-provider-core/stream";
-import { resolveBrewvaAgentDir } from "@brewva/brewva-runtime";
+import { resolveBrewvaAgentDir } from "@brewva/brewva-runtime/config";
 import { hasProviderRateLimitText } from "../../helpers/cli.js";
 import { runLive } from "../../helpers/live.js";
 import { repoRoot } from "../../helpers/workspace.js";

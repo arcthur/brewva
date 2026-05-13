@@ -13,7 +13,7 @@ import {
   type JsonSchema,
   type ToolCatalog,
   type ToolDescriptor,
-} from "@brewva/brewva-tool-protocol";
+} from "@brewva/brewva-substrate/tools";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";

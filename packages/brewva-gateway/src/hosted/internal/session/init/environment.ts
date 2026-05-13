@@ -1,10 +1,9 @@
 import { resolve } from "node:path";
-import {
-  BrewvaRuntime,
-  createTrustedLocalGovernancePort,
-  resolveBrewvaAgentDir,
-  type ManagedToolMode,
-} from "@brewva/brewva-runtime";
+import { BrewvaRuntime, createHostedRuntimePort } from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
+import { resolveBrewvaAgentDir } from "@brewva/brewva-runtime/config";
+import { createTrustedLocalGovernancePort } from "@brewva/brewva-runtime/governance";
+import type { ManagedToolMode } from "@brewva/brewva-runtime/session";
 import { resolveBrewvaModelSelection } from "../../../../policy/model-routing/api.js";
 import { DEFAULT_HOSTED_ROUTING_SCOPES } from "../session-factory.js";
 import type { HostedSessionSettingsView } from "../session-factory.js";
@@ -57,26 +56,26 @@ export function resolveHostedEnvironment(options: CreateHostedSessionOptions): H
 export function createKernelRuntime(
   options: CreateHostedSessionOptions,
   cwd: string,
-): BrewvaRuntime {
-  return (
+): BrewvaHostedRuntimePort {
+  return createHostedRuntimePort(
     options.runtime ??
-    new BrewvaRuntime({
-      cwd,
-      configPath: options.configPath,
-      config: options.config,
-      agentId: options.agentId,
-      governancePort: createTrustedLocalGovernancePort({ profile: "team" }),
-      routingScopes: options.routingScopes,
-      routingDefaultScopes:
-        options.routingScopes && options.routingScopes.length > 0
-          ? options.routingDefaultScopes
-          : (options.routingDefaultScopes ?? [...DEFAULT_HOSTED_ROUTING_SCOPES]),
-    })
+      new BrewvaRuntime({
+        cwd,
+        configPath: options.configPath,
+        config: options.config,
+        agentId: options.agentId,
+        governancePort: createTrustedLocalGovernancePort({ profile: "team" }),
+        routingScopes: options.routingScopes,
+        routingDefaultScopes:
+          options.routingScopes && options.routingScopes.length > 0
+            ? options.routingDefaultScopes
+            : (options.routingDefaultScopes ?? [...DEFAULT_HOSTED_ROUTING_SCOPES]),
+      }),
   );
 }
 
 export function assertRoutingScopeCompatibility(
-  runtime: BrewvaRuntime,
+  runtime: BrewvaHostedRuntimePort,
   options: CreateHostedSessionOptions,
 ): void {
   const hasRoutingOverride = Boolean(options.routingScopes && options.routingScopes.length > 0);

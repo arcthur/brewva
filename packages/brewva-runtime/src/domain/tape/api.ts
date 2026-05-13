@@ -23,9 +23,9 @@ export {
   coerceTapeCheckpointPayload,
 } from "./payloads.js";
 export {
+  createTapeAuthoritySurface,
+  createTapeInspectSurface,
   createTapeSurfaceMethods,
-  tapeRuntimeSurface,
-  tapeSurfaceContribution,
 } from "./runtime-surface.js";
 export type { RuntimeTapeSurfaceMethods, TapeSurfaceDependencies } from "./runtime-surface.js";
 export { registerTapeDomain } from "./registrar.js";

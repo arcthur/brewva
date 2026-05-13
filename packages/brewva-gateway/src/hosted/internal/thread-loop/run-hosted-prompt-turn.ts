@@ -1,4 +1,5 @@
-import type { BrewvaRuntime, ToolOutputView } from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
+import type { ToolOutputView } from "@brewva/brewva-runtime/session";
 import type { BrewvaPromptContentPart } from "@brewva/brewva-substrate/prompt";
 import type { CollectSessionPromptOutputSession } from "./collect-output.js";
 import { runHostedTurnEnvelope } from "./turn-envelope.js";
@@ -37,7 +38,7 @@ export async function runHostedPromptTurn(input: {
   readonly session: CollectSessionPromptOutputSession;
   readonly parts: readonly BrewvaPromptContentPart[];
   readonly source: HostedPromptTurnSource;
-  readonly runtime: BrewvaRuntime;
+  readonly runtime: BrewvaHostedRuntimePort;
   readonly sessionId: string;
   readonly turnId?: string;
 }): Promise<HostedPromptTurnResult> {

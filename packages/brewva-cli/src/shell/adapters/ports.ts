@@ -11,12 +11,10 @@ import {
   validateSingleQuestionAnswer,
 } from "@brewva/brewva-gateway";
 import { runHostedPromptTurn, selectNextModelPresetName } from "@brewva/brewva-gateway/hosted";
-import {
-  SESSION_REWIND_DIVERGENCE_SCHEMA,
-  buildReasoningRevertSummaryDetails,
-  type SessionRewindDivergenceNote,
-} from "@brewva/brewva-runtime";
 import { OPERATOR_QUESTION_ANSWERED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
+import { buildReasoningRevertSummaryDetails } from "@brewva/brewva-runtime/reasoning";
+import { SESSION_REWIND_DIVERGENCE_SCHEMA } from "@brewva/brewva-runtime/session";
+import type { SessionRewindDivergenceNote } from "@brewva/brewva-runtime/session";
 import type {
   BrewvaModelPresetState,
   BrewvaPromptThinkingLevel,
@@ -74,7 +72,7 @@ function readSessionManagerResolveLineageLeafEntryId(
 function readLineageStatus(bundle: CliShellSessionBundle): SessionLineageStatusView {
   const sessionId = bundle.session.sessionManager.getSessionId();
   try {
-    const tree = bundle.runtime.inspect.session.getLineageTree(sessionId);
+    const tree = bundle.runtime.inspect.session.lineage.getTree(sessionId);
     const lineageNodeId =
       readSessionManagerLineageNodeId(bundle.session.sessionManager) ??
       tree.selectedByChannel["cli"] ??
@@ -160,7 +158,7 @@ export function createSessionViewPort(bundle: CliShellSessionBundle): SessionVie
       return readLineageStatus(bundle);
     },
     getLineageTree() {
-      return bundle.runtime.inspect.session.getLineageTree(
+      return bundle.runtime.inspect.session.lineage.getTree(
         bundle.session.sessionManager.getSessionId(),
       );
     },
@@ -198,7 +196,7 @@ export function createSessionViewPort(bundle: CliShellSessionBundle): SessionVie
         }
         throw error;
       }
-      bundle.runtime.authority.session.recordLineageSelection(sessionId, {
+      bundle.runtime.authority.session.lineage.recordSelection(sessionId, {
         selectionId: `cli:${randomUUID()}`,
         channelId: input.channelId ?? "cli",
         lineageNodeId: input.lineageNodeId,
@@ -345,7 +343,7 @@ export function createSessionViewPort(bundle: CliShellSessionBundle): SessionVie
       return Array.isArray(messages) ? messages : [];
     },
     recordRewindCheckpoint(input) {
-      bundle.runtime.authority.session.recordRewindCheckpoint(
+      bundle.runtime.authority.session.rewind.recordCheckpoint(
         bundle.session.sessionManager.getSessionId(),
         {
           ...input,
@@ -360,7 +358,7 @@ export function createSessionViewPort(bundle: CliShellSessionBundle): SessionVie
       if (typeof bundle.session.replaceMessages !== "function") {
         throw new Error("Session rewind requires session.replaceMessages().");
       }
-      const result = bundle.runtime.authority.session.rewind(sessionId, {
+      const result = bundle.runtime.authority.session.rewind.rewind(sessionId, {
         ...input,
         returnLeafEntryId,
       });
@@ -404,7 +402,7 @@ export function createSessionViewPort(bundle: CliShellSessionBundle): SessionVie
       if (typeof bundle.session.replaceMessages !== "function") {
         throw new Error("Session redo requires session.replaceMessages().");
       }
-      const result = bundle.runtime.authority.session.redo(sessionId, input);
+      const result = bundle.runtime.authority.session.rewind.redo(sessionId, input);
       if (!result.ok) {
         return result;
       }
@@ -426,12 +424,12 @@ export function createSessionViewPort(bundle: CliShellSessionBundle): SessionVie
       return result;
     },
     getRewindState() {
-      return bundle.runtime.inspect.session.getRewindState(
+      return bundle.runtime.inspect.session.rewind.getState(
         bundle.session.sessionManager.getSessionId(),
       );
     },
     listRewindTargets() {
-      return bundle.runtime.inspect.session.listRewindTargets(
+      return bundle.runtime.inspect.session.rewind.listTargets(
         bundle.session.sessionManager.getSessionId(),
       );
     },
@@ -471,7 +469,7 @@ export function createOperatorSurfacePort(input: {
     async getSnapshot() {
       const bundle = input.getSessionBundle();
       const sessionId = bundle.session.sessionManager.getSessionId();
-      const approvals = bundle.runtime.inspect.proposals.listPendingEffectCommitments(sessionId);
+      const approvals = bundle.runtime.inspect.proposals.requests.listPending(sessionId);
       const questions = (await collectOpenSessionQuestions(bundle.runtime, sessionId)).questions;
       const taskStatus = await bundle.orchestration?.subagents?.status?.({
         fromSessionId: sessionId,
@@ -481,17 +479,13 @@ export function createOperatorSurfacePort(input: {
         },
       });
       const taskRuns = taskStatus?.ok ? taskStatus.runs : [];
-      const sessions = bundle.runtime.inspect.events.listReplaySessions(20);
+      const sessions = bundle.runtime.inspect.events.log.listReplaySessions(20);
       return { approvals, questions, taskRuns, sessions };
     },
     async decideApproval(requestId, inputDecision) {
       const bundle = input.getSessionBundle();
       const sessionId = bundle.session.sessionManager.getSessionId();
-      bundle.runtime.authority.proposals.decideEffectCommitment(
-        sessionId,
-        requestId,
-        inputDecision,
-      );
+      bundle.runtime.authority.proposals.requests.decide(sessionId, requestId, inputDecision);
     },
     async answerQuestion(questionId, answerText) {
       const bundle = input.getSessionBundle();

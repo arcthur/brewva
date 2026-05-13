@@ -10,12 +10,8 @@ import {
   removePidRecord,
   writePidRecord,
 } from "@brewva/brewva-gateway";
-import {
-  BrewvaRuntime,
-  createTrustedLocalGovernancePort,
-  parseScheduleIntentEvent,
-  type ManagedToolMode,
-} from "@brewva/brewva-runtime";
+import { BrewvaRuntime, createHostedRuntimePort } from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import {
   SCHEDULE_EVENT_TYPE,
   SCHEDULE_CHILD_SESSION_FAILED_EVENT_TYPE,
@@ -23,11 +19,14 @@ import {
   SCHEDULE_CHILD_SESSION_STARTED_EVENT_TYPE,
   SCHEDULE_RECOVERY_DEFERRED_EVENT_TYPE,
 } from "@brewva/brewva-runtime/events";
+import { createTrustedLocalGovernancePort } from "@brewva/brewva-runtime/governance";
 import {
   createRecoveryWalStore,
   createSchedulerService,
   type SchedulerService,
 } from "@brewva/brewva-runtime/recovery";
+import { parseScheduleIntentEvent } from "@brewva/brewva-runtime/schedule";
+import type { ManagedToolMode } from "@brewva/brewva-runtime/session";
 import { differenceInSeconds, formatISO } from "date-fns";
 
 export interface RunDaemonOptions {
@@ -37,7 +36,7 @@ export interface RunDaemonOptions {
   agentId?: string;
   managedToolMode: ManagedToolMode;
   verbose: boolean;
-  onRuntimeReady?: (runtime: BrewvaRuntime) => void;
+  onRuntimeReady?: (runtime: BrewvaHostedRuntimePort) => void;
 }
 
 interface DaemonLogger {
@@ -73,12 +72,14 @@ function createDaemonLogger(verbose: boolean): DaemonLogger {
 }
 
 export async function runDaemon(parsed: RunDaemonOptions): Promise<void> {
-  const runtime = new BrewvaRuntime({
-    cwd: parsed.cwd,
-    configPath: parsed.configPath,
-    agentId: parsed.agentId,
-    governancePort: createTrustedLocalGovernancePort({ profile: "personal" }),
-  });
+  const runtime = createHostedRuntimePort(
+    new BrewvaRuntime({
+      cwd: parsed.cwd,
+      configPath: parsed.configPath,
+      agentId: parsed.agentId,
+      governancePort: createTrustedLocalGovernancePort({ profile: "personal" }),
+    }),
+  );
   parsed.onRuntimeReady?.(runtime);
 
   if (!runtime.config.schedule.enabled) {
@@ -94,14 +95,14 @@ export async function runDaemon(parsed: RunDaemonOptions): Promise<void> {
     return;
   }
 
-  const pidFilePath = join(runtime.workspaceRoot, ".brewva", "scheduler.pid");
+  const pidFilePath = join(runtime.identity.workspaceRoot, ".brewva", "scheduler.pid");
   try {
     writePidRecord(pidFilePath, {
       pid: process.pid,
       host: "127.0.0.1",
       port: 0,
       startedAt: Date.now(),
-      cwd: runtime.workspaceRoot,
+      cwd: runtime.identity.workspaceRoot,
     });
   } catch (error) {
     console.error(
@@ -112,20 +113,20 @@ export async function runDaemon(parsed: RunDaemonOptions): Promise<void> {
   }
 
   const recoveryWalStore = createRecoveryWalStore({
-    workspaceRoot: runtime.workspaceRoot,
+    workspaceRoot: runtime.identity.workspaceRoot,
     config: runtime.config.infrastructure.recoveryWal,
     scope: "scheduler",
   });
   const supervisor = new SessionSupervisor({
-    stateDir: join(runtime.workspaceRoot, ".brewva", "scheduler-state"),
+    stateDir: join(runtime.identity.workspaceRoot, ".brewva", "scheduler-state"),
     logger: createDaemonLogger(parsed.verbose),
-    defaultCwd: runtime.cwd,
+    defaultCwd: runtime.identity.cwd,
     defaultConfigPath: parsed.configPath,
     defaultModel: parsed.model,
     defaultManagedToolMode: parsed.managedToolMode,
     recoveryWalStore,
     recoveryWalContext: {
-      workspaceRoot: runtime.workspaceRoot,
+      workspaceRoot: runtime.identity.workspaceRoot,
       config: runtime.config.infrastructure.recoveryWal,
     },
     recoveryWalCompactIntervalMs: Math.max(
@@ -159,7 +160,7 @@ export async function runDaemon(parsed: RunDaemonOptions): Promise<void> {
     summaryWindow.childFinished = 0;
     summaryWindow.childFailed = 0;
   };
-  const unsubscribeEvents = runtime.inspect.events.subscribe((event) => {
+  const unsubscribeEvents = runtime.inspect.events.records.subscribe((event) => {
     if (event.type === SCHEDULE_RECOVERY_DEFERRED_EVENT_TYPE) {
       summaryWindow.deferredIntents += 1;
       return;
@@ -215,14 +216,14 @@ export async function runDaemon(parsed: RunDaemonOptions): Promise<void> {
     const schedulerIngress = runtime.extensions.recovery.scheduler;
     scheduler = createSchedulerService({
       runtime: {
-        workspaceRoot: runtime.workspaceRoot,
+        workspaceRoot: runtime.identity.workspaceRoot,
         scheduleConfig: runtime.config.schedule,
-        listSessionIds: () => runtime.inspect.events.listSessionIds(),
-        listEvents: (sessionId, query) => runtime.inspect.events.list(sessionId, query),
+        listSessionIds: () => runtime.inspect.events.log.listSessionIds(),
+        listEvents: (sessionId, query) => runtime.inspect.events.records.list(sessionId, query),
         recordEvent: (input) => runtime.extensions.hosted.events.record(input),
-        subscribeEvents: (listener) => runtime.inspect.events.subscribe(listener),
-        getClaimState: (sessionId) => runtime.inspect.claim.getState(sessionId),
-        getTaskState: (sessionId) => runtime.inspect.task.getState(sessionId),
+        subscribeEvents: (listener) => runtime.inspect.events.records.subscribe(listener),
+        getClaimState: (sessionId) => runtime.inspect.claim.state.get(sessionId),
+        getTaskState: (sessionId) => runtime.inspect.task.state.get(sessionId),
         recoveryWal: {
           appendPending: (envelope, source, options) =>
             schedulerIngress.appendPending(envelope, source, options),

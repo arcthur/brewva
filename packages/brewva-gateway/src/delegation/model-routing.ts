@@ -1,5 +1,5 @@
-import type { DelegationModelRouteRecord } from "@brewva/brewva-runtime";
-import { resolveBrewvaAgentDir } from "@brewva/brewva-runtime";
+import { resolveBrewvaAgentDir } from "@brewva/brewva-runtime/config";
+import type { DelegationModelRouteRecord } from "@brewva/brewva-runtime/delegation";
 import type { BrewvaModelCatalog } from "@brewva/brewva-substrate/provider";
 import type { BrewvaModelPreset } from "@brewva/brewva-substrate/session";
 import type { DelegationPacket, SubagentExecutionShape } from "@brewva/brewva-tools/contracts";

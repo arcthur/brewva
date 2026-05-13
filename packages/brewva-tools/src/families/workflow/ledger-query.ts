@@ -48,7 +48,7 @@ export function createLedgerQueryTool(options: BrewvaToolOptions): ToolDefinitio
         tool: params.tool,
         last: params.last,
       };
-      const text = ledgerQueryTool.runtime.inspect.ledger.query(sessionId, query);
+      const text = ledgerQueryTool.runtime.inspect.ledger.store.query(sessionId, query);
       return textResult(text, { sessionId, query });
     },
   });

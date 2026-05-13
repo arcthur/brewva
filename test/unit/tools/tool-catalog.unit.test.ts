@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { McpToolCatalogAdapter, type McpClientLike } from "@brewva/brewva-mcp-adapter";
-import { createToolCatalog, resolveToolExecutionTraits } from "@brewva/brewva-tool-protocol";
+import { createToolCatalog, resolveToolExecutionTraits } from "@brewva/brewva-substrate/tools";
 import {
   createBrewvaToolCatalog,
   defineBrewvaTool,
@@ -29,7 +29,6 @@ describe("tool catalog", () => {
       {
         surface: "base",
         actionClass: "workspace_read",
-        requiredCapabilities: ["authority.events.recordMetricObservation"],
         executionTraits: {
           concurrencySafe: true,
           interruptBehavior: "block",
@@ -49,6 +48,31 @@ describe("tool catalog", () => {
       concurrencySafe: true,
       interruptBehavior: "block",
     });
+  });
+
+  test("managed tool capabilities must come from the registry", () => {
+    expect(() =>
+      defineBrewvaTool(
+        {
+          name: "search",
+          label: "Search",
+          description: "Search the repository",
+          parameters: Type.Object({ query: Type.String() }),
+          async execute() {
+            return {
+              content: [{ type: "text", text: "ok" }],
+              details: null,
+              isError: false,
+            };
+          },
+        },
+        {
+          surface: "base",
+          actionClass: "workspace_read",
+          requiredCapabilities: ["authority.events.recordMetricObservation"],
+        },
+      ),
+    ).toThrow("Required capabilities must live in MANAGED_BREWVA_TOOL_METADATA_BY_NAME.");
   });
 
   test("catalog keeps the latest definition per tool name", () => {

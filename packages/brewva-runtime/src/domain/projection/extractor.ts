@@ -1,13 +1,16 @@
 import type { BrewvaEventRecord } from "../../events/types.js";
 import { CLAIM_EVENT_TYPE, coerceClaimLedgerPayload } from "../claim/api.js";
 import { TASK_EVENT_TYPE, coerceTaskLedgerPayload } from "../task/api.js";
-import { deriveWorkflowArtifacts, deriveWorkflowArtifactsFromEvent } from "../workflow/api.js";
 import type {
   ProjectionExtractionResult,
   ProjectionSourceRef,
   ProjectionUnitCandidate,
 } from "./types.js";
 import { normalizeText } from "./utils.js";
+import {
+  deriveWorkflowArtifacts,
+  deriveWorkflowArtifactsFromEvent,
+} from "./workflow/artifact-derivation.js";
 
 function emptyResult(): ProjectionExtractionResult {
   return {

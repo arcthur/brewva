@@ -1,6 +1,6 @@
-import { asBrewvaSessionId } from "@brewva/brewva-runtime";
-import type { ForkPoint, SessionLineageTree } from "@brewva/brewva-runtime";
+import { asBrewvaSessionId } from "@brewva/brewva-runtime/core";
 import type { BrewvaReplaySession } from "@brewva/brewva-runtime/events";
+import type { ForkPoint, SessionLineageTree } from "@brewva/brewva-runtime/session";
 import type { BrewvaQueuedPromptView } from "@brewva/brewva-substrate/session";
 import { truncateToWidth, visibleWidth } from "@brewva/brewva-tui";
 import { formatInspectAnalysisText } from "../inspect-analysis.js";

@@ -27,7 +27,6 @@ describe("delegation prompt and catalog composition", () => {
         agentSpecName: "advisor",
         envelopeName: "readonly-advisor",
         producesPatches: false,
-        contextProfile: "minimal",
         isolationStrategy: "shared",
       },
       packet: {
@@ -66,7 +65,6 @@ describe("delegation prompt and catalog composition", () => {
         agentSpecName: "advisor",
         envelopeName: "readonly-advisor",
         producesPatches: false,
-        contextProfile: "minimal",
         isolationStrategy: "shared",
       },
       packet: {
@@ -87,7 +85,7 @@ describe("delegation prompt and catalog composition", () => {
 
   test("injects semantic skill markdown for consult runs without requiring skillOutputs", () => {
     const runtime = createIsolatedRuntime("review");
-    const skill = runtime.inspect.skills.get("review");
+    const skill = runtime.inspect.skills.catalog.get("review");
     expect(skill).toBeDefined();
 
     const prompt = buildDelegationPrompt({
@@ -101,7 +99,6 @@ describe("delegation prompt and catalog composition", () => {
         agentSpecName: "advisor",
         envelopeName: "readonly-advisor",
         producesPatches: false,
-        contextProfile: "minimal",
         isolationStrategy: "shared",
       },
       packet: {
@@ -135,7 +132,7 @@ describe("delegation prompt and catalog composition", () => {
 
   test("injects QA anti-rationalization guidance into delegated prompts", () => {
     const runtime = createIsolatedRuntime("qa");
-    const skill = runtime.inspect.skills.get("qa");
+    const skill = runtime.inspect.skills.catalog.get("qa");
     expect(skill).toBeDefined();
 
     const prompt = buildDelegationPrompt({
@@ -149,7 +146,6 @@ describe("delegation prompt and catalog composition", () => {
         agentSpecName: "qa",
         envelopeName: "qa-runner",
         producesPatches: false,
-        contextProfile: "minimal",
         isolationStrategy: "ephemeral",
       },
       packet: {

@@ -334,7 +334,7 @@ permanent degradation.
 - durable session teardown is separate from replay truth: on hosted
   `session_shutdown`, runtime records or reconciles the terminal receipt first,
   then clears session-local hydrated state, caches, turn clocks, and other
-  rebuildable helpers through `maintain.session.clearState(sessionId)`. Later
+  rebuildable helpers through `operator.session.clearState(sessionId)`. Later
   inspection or replay rehydrates from tape again instead of depending on
   process-local leftovers.
 - Recovery posture is derived from two bounded read models:

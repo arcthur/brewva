@@ -2,9 +2,9 @@ import {
   BrewvaRuntime,
   createHostedRuntimePort,
   createToolRuntimePort,
-  createTrustedLocalGovernancePort,
-  type BrewvaRuntimeOptions,
 } from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort, BrewvaRuntimeOptions } from "@brewva/brewva-runtime";
+import { createTrustedLocalGovernancePort } from "@brewva/brewva-runtime/governance";
 import type { InternalHostPlugin, InternalHostPluginApi } from "@brewva/brewva-substrate/host-api";
 import { defineInternalHostPlugin } from "@brewva/brewva-substrate/host-api";
 import type { BrewvaToolDefinition } from "@brewva/brewva-substrate/tools";
@@ -164,12 +164,11 @@ export {
 } from "./tools/tool-output-display.js";
 
 export interface CreateHostedBehaviorHostAdapterOptions extends BrewvaRuntimeOptions {
-  runtime?: BrewvaRuntime;
+  runtime?: BrewvaRuntime | BrewvaHostedRuntimePort;
   registerTools?: boolean;
   orchestration?: BrewvaToolOrchestration;
   delegationStore?: HostedDelegationStore;
   managedToolNames?: readonly string[];
-  contextProfile?: "minimal" | "standard" | "full";
   ports?: readonly TurnLifecyclePort[];
   localHooks?: readonly LocalHookPort[];
   toolExecutionCoordinator?: HostedToolExecutionCoordinator;
@@ -192,7 +191,7 @@ function assertHostedBehaviorHostAdapterRuntimeCompatibility(
 }
 
 function buildManagedTools(
-  runtime: BrewvaRuntime,
+  runtime: BrewvaHostedRuntimePort,
   options: Pick<
     CreateHostedBehaviorHostAdapterOptions,
     "managedToolNames" | "orchestration" | "delegationStore"
@@ -220,13 +219,12 @@ function buildManagedTools(
 }
 
 function installHostedBehavior(
-  runtime: BrewvaRuntime,
+  runtime: BrewvaHostedRuntimePort,
   hostApi: InternalHostPluginApi,
   tools: ReturnType<typeof buildBrewvaTools>,
   extraToolDefinitionsByName: ReadonlyMap<string, BrewvaToolDefinition>,
   registerTools: boolean,
   delegationStore: HostedDelegationStore | undefined,
-  contextProfile: "minimal" | "standard" | "full" | undefined,
   userPorts: readonly TurnLifecyclePort[],
   localHooks: readonly LocalHookPort[],
 ): void {
@@ -241,39 +239,37 @@ function installHostedBehavior(
     }
   }
   const turnClock = createRuntimeTurnClockStore();
-  const hostedRuntime = createHostedRuntimePort(runtime);
   const toolSurfaceRuntime: ToolSurfaceRuntime = {
-    config: hostedRuntime.config,
+    config: runtime.config,
     recordEvent: (input: { sessionId: string; type: string; payload?: object }) =>
-      hostedRuntime.extensions.hosted.events.record(input),
+      runtime.extensions.hosted.events.record(input),
   };
   const localHookManager = createLocalHookManager({
     extensionApi: hostApi,
-    runtime: hostedRuntime,
+    runtime,
     hooks: localHooks,
   });
-  const contextTransform = createContextTransformLifecycle(hostApi, hostedRuntime, {
+  const contextTransform = createContextTransformLifecycle(hostApi, runtime, {
     delegationStore,
     turnClock,
-    contextProfile,
   });
-  const qualityGate = createQualityGateLifecycle(hostedRuntime, {
+  const qualityGate = createQualityGateLifecycle(runtime, {
     toolDefinitionsByName,
   });
   const toolSurface = createToolSurfaceLifecycle(hostApi, toolSurfaceRuntime, {
     dynamicToolDefinitions: registerTools ? toolDefinitionsByName : undefined,
   });
-  const readPathRecovery = createReadPathRecoveryLifecycle(hostedRuntime);
+  const readPathRecovery = createReadPathRecoveryLifecycle(runtime);
 
   hostApi.on("tool_call", qualityGate.toolCall);
   hostApi.on("context", contextTransform.context);
-  registerProviderRequestReduction(hostApi, hostedRuntime);
+  registerProviderRequestReduction(hostApi, runtime);
   registerProviderRequestRecovery(hostApi, runtime);
-  registerEventStream(hostApi, hostedRuntime, turnClock, {
+  registerEventStream(hostApi, runtime, turnClock, {
     toolDefinitionsByName,
   });
-  registerLedgerWriter(hostApi, hostedRuntime);
-  registerToolResultDistiller(hostApi, hostedRuntime);
+  registerLedgerWriter(hostApi, runtime);
+  registerToolResultDistiller(hostApi, runtime);
   registerTurnLifecyclePorts(hostApi, [
     localHookManager.lifecycle,
     {
@@ -316,17 +312,18 @@ export function createHostedBehaviorHostAdapter(
     ],
     register(hostApi) {
       assertHostedBehaviorHostAdapterRuntimeCompatibility(options);
-      const runtime =
+      const runtime = createHostedRuntimePort(
         options.runtime ??
-        new BrewvaRuntime({
-          ...options,
-          routingDefaultScopes:
-            options.routingScopes && options.routingScopes.length > 0
-              ? options.routingDefaultScopes
-              : (options.routingDefaultScopes ?? [...DEFAULT_HOSTED_ROUTING_SCOPES]),
-          governancePort:
-            options.governancePort ?? createTrustedLocalGovernancePort({ profile: "team" }),
-        });
+          new BrewvaRuntime({
+            ...options,
+            routingDefaultScopes:
+              options.routingScopes && options.routingScopes.length > 0
+                ? options.routingDefaultScopes
+                : (options.routingDefaultScopes ?? [...DEFAULT_HOSTED_ROUTING_SCOPES]),
+            governancePort:
+              options.governancePort ?? createTrustedLocalGovernancePort({ profile: "team" }),
+          }),
+      );
       const executionCoordinator =
         options.toolExecutionCoordinator ?? createHostedToolExecutionCoordinator();
       const allTools =
@@ -352,7 +349,6 @@ export function createHostedBehaviorHostAdapter(
         options.hostedToolDefinitionsByName ?? new Map<string, BrewvaToolDefinition>(),
         registerTools,
         options.delegationStore,
-        options.contextProfile,
         options.ports ?? [],
         options.localHooks ?? [],
       );

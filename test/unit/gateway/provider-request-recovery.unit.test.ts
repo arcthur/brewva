@@ -51,7 +51,7 @@ describe("provider request recovery", () => {
       },
     });
     expect(
-      runtime.inspect.events
+      runtime.inspect.events.records
         .queryStructured(sessionId, {
           type: "session_turn_transition",
         })
@@ -108,7 +108,7 @@ describe("provider request recovery", () => {
 
     expect(patched).toBeUndefined();
     expect(
-      runtime.inspect.events
+      runtime.inspect.events.records
         .queryStructured(sessionId, {
           type: "session_turn_transition",
         })

@@ -3,9 +3,10 @@ import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { TASK_LEDGER_SCHEMA, asBrewvaSessionId } from "@brewva/brewva-runtime";
+import { asBrewvaSessionId } from "@brewva/brewva-runtime/core";
 import { type BrewvaEventRecord } from "@brewva/brewva-runtime/events";
 import { TASK_EVENT_TYPE } from "@brewva/brewva-runtime/events";
+import { TASK_LEDGER_SCHEMA } from "@brewva/brewva-runtime/task";
 import { ProjectionEngine } from "../../../packages/brewva-runtime/src/domain/projection/engine.js";
 
 function taskSpecEvent(input: {

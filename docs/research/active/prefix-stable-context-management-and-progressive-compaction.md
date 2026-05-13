@@ -619,7 +619,7 @@ stay separate:
 1. **Durable iteration facts**
 
 - `packages/brewva-runtime/src/runtime/runtime.ts`
-- payload schema in `packages/brewva-runtime/src/domain/iteration/facts.ts`
+- payload schema in `packages/brewva-runtime/src/domain/events/iteration-facts.ts`
 - appropriate only for selected normalized numeric facts worth retaining as
   replayable evidence
 
@@ -655,7 +655,7 @@ Recommended placement:
 
 - runtime session-local state under
   `packages/brewva-runtime/src/domain/sessions/session-state.ts`
-- exposed through `runtime.maintain.context.observePromptStability(...)` and
+- exposed through `runtime.operator.context.observePromptStability(...)` and
   `runtime.inspect.context.getPromptStability(...)`
 - written from the same hosted `before_agent_start` path that already owns
   context composition
@@ -707,7 +707,7 @@ interface PromptStabilityState {
   stableTail: boolean;
 }
 
-runtime.maintain.context.observePromptStability(sessionId, input);
+runtime.operator.context.observePromptStability(sessionId, input);
 runtime.inspect.context.getPromptStability(sessionId);
 ```
 
@@ -795,7 +795,7 @@ This remains a hosted prompt-shaping concern.
 `packages/brewva-gateway/src/hosted/internal/context/workbench-context.ts`
 already owns:
 
-- usage observation through `runtime.maintain.context.observeUsage(...)`
+- usage observation through `runtime.operator.context.observeUsage(...)`
 - scope identity resolution through `resolveInjectionScopeId(...)`
 - workbench notebook rendering through `runtime.inspect.workbench.list(...)`
 - system-prompt suffix application through `applyContextContract(...)`
@@ -895,7 +895,7 @@ Recommended placement by artifact type:
   - hosted session-local tracker only
 - transient outbound reduction outcomes:
   - hosted session-local tracker only
-  - exposed through `runtime.maintain.context.observeTransientReduction(...)`
+  - exposed through `runtime.operator.context.observeTransientReduction(...)`
     and `runtime.inspect.context.getTransientReduction(...)`
 - coarse context composition facts:
   - `context_composed`
@@ -937,7 +937,8 @@ These changes are intentionally narrower than the previous draft:
 
 Effects on compatibility:
 
-- public runtime API surface expands `inspect.context` and `maintain.context`
+- public runtime API surface expands `inspect.context`; hosted/operator context
+  operations use `operator.context`
 - no config-schema migration required in the first phase
 - no WAL or replay migration required
 - no change to `session_compact` authority semantics

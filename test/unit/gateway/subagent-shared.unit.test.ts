@@ -25,7 +25,6 @@ function makeTarget(overrides: Partial<HostedDelegationTarget> = {}): HostedDele
     managedToolNames: ["grep"],
     managedToolMode: "direct",
     producesPatches: false,
-    contextProfile: "minimal",
     isolationStrategy: "shared",
     ...overrides,
   };

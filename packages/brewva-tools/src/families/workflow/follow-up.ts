@@ -1,4 +1,4 @@
-import { asBrewvaIntentId, asBrewvaSessionId } from "@brewva/brewva-runtime";
+import { asBrewvaIntentId, asBrewvaSessionId } from "@brewva/brewva-runtime/core";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import { Type } from "@sinclair/typebox";
 import { formatISO } from "date-fns";
@@ -162,7 +162,7 @@ export function createFollowUpTool(options: BrewvaToolOptions): ToolDefinition {
               });
             }
 
-            const created = await runtime.authority.schedule.createIntent(sessionId, {
+            const created = await runtime.authority.schedule.intents.create(sessionId, {
               reason,
               intentId: brandedFollowUpIntentId,
               continuityMode: "inherit",
@@ -214,7 +214,7 @@ export function createFollowUpTool(options: BrewvaToolOptions): ToolDefinition {
             });
           }
 
-          const created = await runtime.authority.schedule.createIntent(sessionId, {
+          const created = await runtime.authority.schedule.intents.create(sessionId, {
             reason,
             intentId: brandedFollowUpIntentId,
             continuityMode: "inherit",
@@ -254,7 +254,7 @@ export function createFollowUpTool(options: BrewvaToolOptions): ToolDefinition {
             });
           }
 
-          const cancelled = await runtime.authority.schedule.cancelIntent(sessionId, {
+          const cancelled = await runtime.authority.schedule.intents.cancel(sessionId, {
             intentId: asBrewvaIntentId(intentId),
             reason: normalizeOptionalString(params.reason),
           });
@@ -270,10 +270,10 @@ export function createFollowUpTool(options: BrewvaToolOptions): ToolDefinition {
           });
         }
 
-        const intents = await runtime.inspect.schedule.listIntents({
+        const intents = await runtime.inspect.schedule.intents.list({
           parentSessionId: asBrewvaSessionId(sessionId),
         });
-        const snapshot = await runtime.inspect.schedule.getProjectionSnapshot();
+        const snapshot = await runtime.inspect.schedule.intents.getProjectionSnapshot();
         const header = [
           "[FollowUps]",
           `count: ${intents.length}`,
@@ -289,13 +289,6 @@ export function createFollowUpTool(options: BrewvaToolOptions): ToolDefinition {
         });
       },
     },
-    {
-      requiredCapabilities: [
-        "authority.schedule.createIntent",
-        "authority.schedule.cancelIntent",
-        "inspect.schedule.getProjectionSnapshot",
-        "inspect.schedule.listIntents",
-      ],
-    },
+    {},
   );
 }

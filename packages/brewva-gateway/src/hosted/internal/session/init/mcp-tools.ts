@@ -5,15 +5,15 @@ import {
   type McpToolCallResult,
   type McpTransportConfig,
 } from "@brewva/brewva-mcp-adapter";
+import type { DeepReadonly } from "@brewva/brewva-runtime";
 import type {
   BrewvaMcpIntegrationConfig,
   BrewvaMcpServerConfig,
-  DeepReadonly,
-  ToolActionClass,
-} from "@brewva/brewva-runtime";
+} from "@brewva/brewva-runtime/config";
+import type { ToolActionClass } from "@brewva/brewva-runtime/governance";
 import { shortSha256Hex } from "@brewva/brewva-std/hash";
 import type { BrewvaToolContentPart } from "@brewva/brewva-substrate/tools";
-import type { ToolCatalog, ToolDescriptor } from "@brewva/brewva-tool-protocol";
+import type { ToolCatalog, ToolDescriptor } from "@brewva/brewva-substrate/tools";
 import type { BrewvaToolRequiredCapability } from "@brewva/brewva-tools/contracts";
 import { defineBrewvaTool, type BrewvaToolSurface } from "@brewva/brewva-tools/registry";
 import type { HostedSessionCustomTool } from "../session-factory.js";

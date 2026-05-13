@@ -1,17 +1,4 @@
-import {
-  type BrewvaRuntime,
-  type SessionWireFrame,
-  type ToolOutputView,
-  type TurnInputRecordedPayload,
-  type TurnRenderCommittedPayload,
-} from "@brewva/brewva-runtime";
-import {
-  TurnLifecycleSpine,
-  compareTurnLifecycleGates,
-  getTurnLifecycleRecoveryPlacement,
-  type TurnLifecycleGate,
-  type TurnLifecycleRecoveryReason,
-} from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import { type BrewvaStructuredEvent } from "@brewva/brewva-runtime/events";
 import {
   EFFECT_AUTHORITY_DECIDED_EVENT_TYPE,
@@ -21,6 +8,21 @@ import {
   TURN_INPUT_RECORDED_EVENT_TYPE,
   TURN_RENDER_COMMITTED_EVENT_TYPE,
 } from "@brewva/brewva-runtime/events";
+import type {
+  SessionWireFrame,
+  ToolOutputView,
+  TurnInputRecordedPayload,
+  TurnRenderCommittedPayload,
+} from "@brewva/brewva-runtime/session";
+import {
+  TurnLifecycleSpine,
+  compareTurnLifecycleGates,
+  getTurnLifecycleRecoveryPlacement,
+} from "@brewva/brewva-runtime/session";
+import type {
+  TurnLifecycleGate,
+  TurnLifecycleRecoveryReason,
+} from "@brewva/brewva-runtime/session";
 import { buildBrewvaPromptText } from "@brewva/brewva-substrate/prompt";
 import type { SchedulePromptTrigger } from "../../../daemon/api.js";
 import type { CollectSessionPromptOutputSession, SessionPromptInput } from "./collect-output.js";
@@ -75,7 +77,7 @@ export type HostedTurnEnvelopeResult = ThreadLoopResult & {
 
 export interface RunHostedTurnEnvelopeInput {
   readonly session: CollectSessionPromptOutputSession;
-  readonly runtime: BrewvaRuntime;
+  readonly runtime: BrewvaHostedRuntimePort;
   readonly sessionId: string;
   readonly prompt: SessionPromptInput;
   readonly source: HostedTurnEnvelopeSource;
@@ -103,9 +105,11 @@ function normalizePromptText(prompt: SessionPromptInput): string {
   return buildBrewvaPromptText(prompt);
 }
 
-function resolveRuntimeTurn(runtime: BrewvaRuntime, sessionId: string): number {
-  const runtimeTurnStarts = runtime.inspect.events.query(sessionId, { type: "turn_start" }).length;
-  const hostedTurnInputs = runtime.inspect.events.query(sessionId, {
+function resolveRuntimeTurn(runtime: BrewvaHostedRuntimePort, sessionId: string): number {
+  const runtimeTurnStarts = runtime.inspect.events.records.query(sessionId, {
+    type: "turn_start",
+  }).length;
+  const hostedTurnInputs = runtime.inspect.events.records.query(sessionId, {
     type: TURN_INPUT_RECORDED_EVENT_TYPE,
   }).length;
   return Math.max(runtimeTurnStarts, hostedTurnInputs);
@@ -204,7 +208,7 @@ function formatUnknownError(error: unknown): string {
 }
 
 function recordTurnInputReceipt(input: {
-  runtime: BrewvaRuntime;
+  runtime: BrewvaHostedRuntimePort;
   sessionId: string;
   turnId: string;
   runtimeTurn: number;
@@ -224,7 +228,7 @@ function recordTurnInputReceipt(input: {
 }
 
 function recordTurnCommittedReceipt(input: {
-  runtime: BrewvaRuntime;
+  runtime: BrewvaHostedRuntimePort;
   sessionId: string;
   turnId: string;
   runtimeTurn: number;
@@ -248,7 +252,7 @@ function recordTurnCommittedReceipt(input: {
 }
 
 function recordWalRecoveryTransition(input: {
-  runtime: BrewvaRuntime;
+  runtime: BrewvaHostedRuntimePort;
   sessionId: string;
   runtimeTurn: number;
   walReplayId?: string;
@@ -334,12 +338,12 @@ function supersedeTurnSpineForRecovery(input: {
 
 function createTurnSpineEventBridge(input: {
   spine: TurnLifecycleSpine;
-  runtime: BrewvaRuntime;
+  runtime: BrewvaHostedRuntimePort;
   sessionId: string;
   turnId: string;
   runtimeTurn: number;
 }): () => void {
-  return input.runtime.inspect.events.subscribe((event: BrewvaStructuredEvent) => {
+  return input.runtime.inspect.events.records.subscribe((event: BrewvaStructuredEvent) => {
     if (event.sessionId !== input.sessionId) {
       return;
     }
@@ -387,7 +391,7 @@ function createTurnSpineEventBridge(input: {
 }
 
 function applyEnvelopeSchedulePrelude(input: {
-  runtime: BrewvaRuntime;
+  runtime: BrewvaHostedRuntimePort;
   sessionId: string;
   trigger?: SchedulePromptTrigger;
   profile: ThreadLoopProfile;

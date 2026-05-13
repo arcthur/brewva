@@ -1,6 +1,12 @@
 import { relative, resolve } from "node:path";
 import { sha256Hex } from "@brewva/brewva-std/hash";
 import type { JsonValue } from "@brewva/brewva-std/json";
+import {
+  extractEvidenceArtifacts,
+  type CommandFailureClass,
+  type EvidenceArtifact,
+} from "../../internal/evidence/api.js";
+import { parseTscDiagnostics } from "../../internal/evidence/api.js";
 import { redactSecrets } from "../../security/redact.js";
 import { normalizeToolName } from "../../utils/tool-name.js";
 import {
@@ -9,12 +15,6 @@ import {
   isToolResultPass,
   type ToolResultVerdict,
 } from "../../utils/tool-result.js";
-import {
-  extractEvidenceArtifacts,
-  type CommandFailureClass,
-  type EvidenceArtifact,
-} from "../evidence/api.js";
-import { parseTscDiagnostics } from "../evidence/api.js";
 import { readToolFailureContextMetadata } from "../ledger/api.js";
 import type { TaskBlockerRecordResult, TaskBlockerResolveResult, TaskState } from "../task/api.js";
 import type { ClaimResolveResult, ClaimSeverity, ClaimUpsertResult, ClaimState } from "./types.js";

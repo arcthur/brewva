@@ -1,4 +1,5 @@
-import type { BrewvaHostedRuntimePort, ContextCompactionGateStatus } from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
+import type { ContextCompactionGateStatus } from "@brewva/brewva-runtime/context";
 import {
   CONTEXT_COMPACTION_ADVISORY_EVENT_TYPE,
   CONTEXT_COMPACTION_AUTO_COMPLETED_EVENT_TYPE,

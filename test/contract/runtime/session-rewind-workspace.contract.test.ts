@@ -1,7 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import {
+  BrewvaRuntime,
+  createOperatorRuntimePort,
+  createHostedRuntimePort,
+} from "@brewva/brewva-runtime";
 import {
   RUNTIME_CONTRACT_CONFIG_PATH,
   createRuntimeContractConfig as createConfig,
@@ -20,9 +24,9 @@ describe("session rewind workspace", () => {
     writeFileSync(filePath, "export const value = 1;\n", "utf8");
 
     const runtime = new BrewvaRuntime({ cwd: workspace, configPath: RUNTIME_CONTRACT_CONFIG_PATH });
-    runtime.maintain.context.onTurnStart(sessionId, 1);
+    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
 
-    const checkpoint = runtime.authority.session.recordRewindCheckpoint(sessionId, {
+    const checkpoint = runtime.authority.session.rewind.recordCheckpoint(sessionId, {
       leafEntryId: "leaf-before-turn",
       prompt: {
         text: "Change value to 2",
@@ -31,7 +35,7 @@ describe("session rewind workspace", () => {
     });
     expect(checkpoint.status).toBe("active");
 
-    const started = runtime.authority.tools.start({
+    const started = runtime.authority.tools.invocation.start({
       sessionId,
       toolCallId: "tool-session-rewind",
       toolName: "edit",
@@ -44,7 +48,7 @@ describe("session rewind workspace", () => {
     expect(started.allowed).toBe(true);
     expect(started.mutationReceipt?.strategy).toBe("workspace_patchset");
     writeFileSync(filePath, "export const value = 2;\n", "utf8");
-    runtime.authority.tools.finish({
+    runtime.authority.tools.invocation.finish({
       sessionId,
       toolCallId: "tool-session-rewind",
       toolName: "edit",
@@ -58,7 +62,7 @@ describe("session rewind workspace", () => {
       verdict: "pass",
     });
 
-    const undo = runtime.authority.session.rewind(sessionId, {
+    const undo = runtime.authority.session.rewind.rewind(sessionId, {
       mode: "both",
       summary: "carry",
       returnLeafEntryId: "leaf-after-turn",
@@ -80,12 +84,12 @@ describe("session rewind workspace", () => {
     expect(undo.reasoningRevert.linkedRollbackReceiptIds).not.toEqual(undo.patchSetIds);
     expect(readFileSync(filePath, "utf8")).toBe("export const value = 1;\n");
 
-    const undoneState = runtime.inspect.session.getRewindState(sessionId);
+    const undoneState = runtime.inspect.session.rewind.getState(sessionId);
     expect(undoneState.redoAvailable).toBe(true);
     expect(undoneState.nextRedoable?.checkpointId).toBe(checkpoint.checkpointId);
     expect(undoneState.nextRedoable?.returnLeafEntryId).toBe("leaf-after-turn");
 
-    const redo = runtime.authority.session.redo(sessionId);
+    const redo = runtime.authority.session.rewind.redo(sessionId);
     expect(redo.ok).toBe(true);
     if (!redo.ok) {
       throw new Error(`Session redo failed: ${redo.reason}`);
@@ -93,7 +97,7 @@ describe("session rewind workspace", () => {
     expect(redo.patchSetIds).toEqual(undo.patchSetIds);
     expect(readFileSync(filePath, "utf8")).toBe("export const value = 2;\n");
 
-    const redoneState = runtime.inspect.session.getRewindState(sessionId);
+    const redoneState = runtime.inspect.session.rewind.getState(sessionId);
     expect(redoneState.rewindAvailable).toBe(true);
     expect(redoneState.redoAvailable).toBe(false);
     expect(redoneState.latestRewindable?.checkpointId).toBe(checkpoint.checkpointId);
@@ -109,25 +113,25 @@ describe("session rewind workspace", () => {
     writeFileSync(filePath, "export const value = 1;\n", "utf8");
 
     const runtime = new BrewvaRuntime({ cwd: workspace, configPath: RUNTIME_CONTRACT_CONFIG_PATH });
-    runtime.maintain.context.onTurnStart(sessionId, 1);
-    runtime.authority.session.recordRewindCheckpoint(sessionId, {
+    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+    runtime.authority.session.rewind.recordCheckpoint(sessionId, {
       prompt: { text: "Change value while streaming", parts: [] },
     });
-    runtime.authority.tools.trackCallStart({
+    runtime.authority.tools.tracking.trackCallStart({
       sessionId,
       toolCallId: "tool-streaming-edit",
       toolName: "edit",
       args: { file_path: "src/streaming.ts" },
     });
     writeFileSync(filePath, "export const value = 2;\n", "utf8");
-    runtime.authority.tools.trackCallEnd({
+    runtime.authority.tools.tracking.trackCallEnd({
       sessionId,
       toolCallId: "tool-streaming-edit",
       toolName: "edit",
       channelSuccess: true,
     });
 
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       turn: 1,
       type: "tool_execution_start",
@@ -139,7 +143,7 @@ describe("session rewind workspace", () => {
 
     expect(runtime.inspect.lifecycle.getSnapshot(sessionId).execution.kind).toBe("tool_executing");
 
-    const rewind = runtime.authority.session.rewind(sessionId, {
+    const rewind = runtime.authority.session.rewind.rewind(sessionId, {
       mode: "both",
       summary: "carry",
     });
@@ -150,7 +154,7 @@ describe("session rewind workspace", () => {
     }
     expect(rewind.reason).toBe("streaming");
     expect(readFileSync(filePath, "utf8")).toBe("export const value = 2;\n");
-    expect(runtime.inspect.session.getRewindState(sessionId).redoAvailable).toBe(false);
+    expect(runtime.inspect.session.rewind.getState(sessionId).redoAvailable).toBe(false);
   });
 
   test("rewind enforces mode-specific governance before mutating workspace", async () => {
@@ -172,25 +176,25 @@ describe("session rewind workspace", () => {
     const bothSessionId = "rewind-governance-both";
     const bothFilePath = join(workspace, "src/governance-both.ts");
     writeFileSync(bothFilePath, "export const value = 1;\n", "utf8");
-    runtime.maintain.context.onTurnStart(bothSessionId, 1);
-    runtime.authority.session.recordRewindCheckpoint(bothSessionId, {
+    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(bothSessionId, 1);
+    runtime.authority.session.rewind.recordCheckpoint(bothSessionId, {
       prompt: { text: "Change value with workspace gate", parts: [] },
     });
-    runtime.authority.tools.trackCallStart({
+    runtime.authority.tools.tracking.trackCallStart({
       sessionId: bothSessionId,
       toolCallId: "tool-governance-both",
       toolName: "edit",
       args: { file_path: "src/governance-both.ts" },
     });
     writeFileSync(bothFilePath, "export const value = 2;\n", "utf8");
-    runtime.authority.tools.trackCallEnd({
+    runtime.authority.tools.tracking.trackCallEnd({
       sessionId: bothSessionId,
       toolCallId: "tool-governance-both",
       toolName: "edit",
       channelSuccess: true,
     });
 
-    const blocked = runtime.authority.session.rewind(bothSessionId, {
+    const blocked = runtime.authority.session.rewind.rewind(bothSessionId, {
       mode: "both",
       summary: "carry",
     });
@@ -204,25 +208,28 @@ describe("session rewind workspace", () => {
     const conversationSessionId = "rewind-governance-conversation";
     const conversationFilePath = join(workspace, "src/governance-conversation.ts");
     writeFileSync(conversationFilePath, "export const value = 1;\n", "utf8");
-    runtime.maintain.context.onTurnStart(conversationSessionId, 1);
-    runtime.authority.session.recordRewindCheckpoint(conversationSessionId, {
+    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(
+      conversationSessionId,
+      1,
+    );
+    runtime.authority.session.rewind.recordCheckpoint(conversationSessionId, {
       prompt: { text: "Change value with conversation gate", parts: [] },
     });
-    runtime.authority.tools.trackCallStart({
+    runtime.authority.tools.tracking.trackCallStart({
       sessionId: conversationSessionId,
       toolCallId: "tool-governance-conversation",
       toolName: "edit",
       args: { file_path: "src/governance-conversation.ts" },
     });
     writeFileSync(conversationFilePath, "export const value = 2;\n", "utf8");
-    runtime.authority.tools.trackCallEnd({
+    runtime.authority.tools.tracking.trackCallEnd({
       sessionId: conversationSessionId,
       toolCallId: "tool-governance-conversation",
       toolName: "edit",
       channelSuccess: true,
     });
 
-    const allowed = runtime.authority.session.rewind(conversationSessionId, {
+    const allowed = runtime.authority.session.rewind.rewind(conversationSessionId, {
       mode: "conversation",
       summary: "carry",
     });
@@ -243,45 +250,45 @@ describe("session rewind workspace", () => {
     writeFileSync(filePath, "export const value = 1;\n", "utf8");
 
     const runtime = new BrewvaRuntime({ cwd: workspace, configPath: RUNTIME_CONTRACT_CONFIG_PATH });
-    runtime.maintain.context.onTurnStart(sessionId, 1);
-    const firstCheckpoint = runtime.authority.session.recordRewindCheckpoint(sessionId, {
+    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+    const firstCheckpoint = runtime.authority.session.rewind.recordCheckpoint(sessionId, {
       leafEntryId: "leaf-before-first",
       prompt: { text: "Set value to 2", parts: [] },
     });
-    runtime.authority.tools.trackCallStart({
+    runtime.authority.tools.tracking.trackCallStart({
       sessionId,
       toolCallId: "tool-lineage-first",
       toolName: "edit",
       args: { file_path: "src/lineage.ts" },
     });
     writeFileSync(filePath, "export const value = 2;\n", "utf8");
-    runtime.authority.tools.trackCallEnd({
+    runtime.authority.tools.tracking.trackCallEnd({
       sessionId,
       toolCallId: "tool-lineage-first",
       toolName: "edit",
       channelSuccess: true,
     });
 
-    runtime.maintain.context.onTurnStart(sessionId, 2);
-    runtime.authority.session.recordRewindCheckpoint(sessionId, {
+    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 2);
+    runtime.authority.session.rewind.recordCheckpoint(sessionId, {
       leafEntryId: "leaf-before-second",
       prompt: { text: "Set value to 3", parts: [] },
     });
-    runtime.authority.tools.trackCallStart({
+    runtime.authority.tools.tracking.trackCallStart({
       sessionId,
       toolCallId: "tool-lineage-second",
       toolName: "edit",
       args: { file_path: "src/lineage.ts" },
     });
     writeFileSync(filePath, "export const value = 3;\n", "utf8");
-    runtime.authority.tools.trackCallEnd({
+    runtime.authority.tools.tracking.trackCallEnd({
       sessionId,
       toolCallId: "tool-lineage-second",
       toolName: "edit",
       channelSuccess: true,
     });
 
-    const firstRewind = runtime.authority.session.rewind(sessionId, {
+    const firstRewind = runtime.authority.session.rewind.rewind(sessionId, {
       checkpointId: firstCheckpoint.checkpointId,
       mode: "both",
       summary: "none",
@@ -294,26 +301,26 @@ describe("session rewind workspace", () => {
     expect(firstRewind.patchSetIds).toHaveLength(2);
     expect(readFileSync(filePath, "utf8")).toBe("export const value = 1;\n");
 
-    runtime.maintain.context.onTurnStart(sessionId, 3);
-    runtime.authority.session.recordRewindCheckpoint(sessionId, {
+    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 3);
+    runtime.authority.session.rewind.recordCheckpoint(sessionId, {
       leafEntryId: "leaf-before-third",
       prompt: { text: "Set value to 4", parts: [] },
     });
-    runtime.authority.tools.trackCallStart({
+    runtime.authority.tools.tracking.trackCallStart({
       sessionId,
       toolCallId: "tool-lineage-third",
       toolName: "edit",
       args: { file_path: "src/lineage.ts" },
     });
     writeFileSync(filePath, "export const value = 4;\n", "utf8");
-    runtime.authority.tools.trackCallEnd({
+    runtime.authority.tools.tracking.trackCallEnd({
       sessionId,
       toolCallId: "tool-lineage-third",
       toolName: "edit",
       channelSuccess: true,
     });
 
-    const secondRewind = runtime.authority.session.rewind(sessionId, {
+    const secondRewind = runtime.authority.session.rewind.rewind(sessionId, {
       checkpointId: firstCheckpoint.checkpointId,
       mode: "both",
       summary: "none",
@@ -343,32 +350,32 @@ describe("session rewind workspace", () => {
     writeFileSync(filePath, "export const value = 1;\n", "utf8");
 
     const runtime = new BrewvaRuntime({ cwd: workspace, configPath: RUNTIME_CONTRACT_CONFIG_PATH });
-    runtime.maintain.context.onTurnStart(sessionId, 1);
+    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
 
-    const checkpoint = runtime.authority.session.recordRewindCheckpoint(sessionId, {
+    const checkpoint = runtime.authority.session.rewind.recordCheckpoint(sessionId, {
       leafEntryId: "leaf-code-before",
       prompt: {
         text: "Change value to 2",
         parts: [],
       },
     });
-    const reasoningBefore = runtime.inspect.reasoning.getActiveState(sessionId);
+    const reasoningBefore = runtime.inspect.reasoning.state.getActive(sessionId);
 
-    runtime.authority.tools.trackCallStart({
+    runtime.authority.tools.tracking.trackCallStart({
       sessionId,
       toolCallId: "tool-code-mode",
       toolName: "edit",
       args: { file_path: "src/code-mode.ts" },
     });
     writeFileSync(filePath, "export const value = 2;\n", "utf8");
-    runtime.authority.tools.trackCallEnd({
+    runtime.authority.tools.tracking.trackCallEnd({
       sessionId,
       toolCallId: "tool-code-mode",
       toolName: "edit",
       channelSuccess: true,
     });
 
-    const rewind = runtime.authority.session.rewind(sessionId, {
+    const rewind = runtime.authority.session.rewind.rewind(sessionId, {
       checkpointId: checkpoint.checkpointId,
       mode: "code",
       summary: "none",
@@ -385,11 +392,11 @@ describe("session rewind workspace", () => {
     });
     expect(readFileSync(filePath, "utf8")).toBe("export const value = 1;\n");
 
-    const reasoningAfter = runtime.inspect.reasoning.getActiveState(sessionId);
+    const reasoningAfter = runtime.inspect.reasoning.state.getActive(sessionId);
     expect(reasoningAfter.activeCheckpointId).toBe(reasoningBefore.activeCheckpointId);
     expect(reasoningAfter.latestRevert?.eventId).toBe(reasoningBefore.latestRevert?.eventId);
 
-    const rewindState = runtime.inspect.session.getRewindState(sessionId);
+    const rewindState = runtime.inspect.session.rewind.getState(sessionId);
     expect(rewindState.latestRewind).toMatchObject({
       checkpointId: checkpoint.checkpointId,
       mode: "code",
@@ -399,7 +406,7 @@ describe("session rewind workspace", () => {
       },
     });
 
-    const redo = runtime.authority.session.redo(sessionId);
+    const redo = runtime.authority.session.rewind.redo(sessionId);
     expect(redo.ok).toBe(true);
     if (!redo.ok) {
       throw new Error(`Code-mode redo failed: ${redo.reason}`);
@@ -418,45 +425,45 @@ describe("session rewind workspace", () => {
     writeFileSync(filePath, "export const value = 1;\n", "utf8");
 
     const runtime = new BrewvaRuntime({ cwd: workspace, configPath: RUNTIME_CONTRACT_CONFIG_PATH });
-    runtime.maintain.context.onTurnStart(sessionId, 1);
-    const firstCheckpoint = runtime.authority.session.recordRewindCheckpoint(sessionId, {
+    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+    const firstCheckpoint = runtime.authority.session.rewind.recordCheckpoint(sessionId, {
       leafEntryId: "leaf-1",
       prompt: { text: "Set value to 2", parts: [] },
     });
-    runtime.authority.tools.trackCallStart({
+    runtime.authority.tools.tracking.trackCallStart({
       sessionId,
       toolCallId: "tool-skip-1",
       toolName: "edit",
       args: { file_path: "src/skip.ts" },
     });
     writeFileSync(filePath, "export const value = 2;\n", "utf8");
-    runtime.authority.tools.trackCallEnd({
+    runtime.authority.tools.tracking.trackCallEnd({
       sessionId,
       toolCallId: "tool-skip-1",
       toolName: "edit",
       channelSuccess: true,
     });
 
-    runtime.maintain.context.onTurnStart(sessionId, 2);
-    const secondCheckpoint = runtime.authority.session.recordRewindCheckpoint(sessionId, {
+    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 2);
+    const secondCheckpoint = runtime.authority.session.rewind.recordCheckpoint(sessionId, {
       leafEntryId: "leaf-2",
       prompt: { text: "Set value to 3", parts: [] },
     });
-    runtime.authority.tools.trackCallStart({
+    runtime.authority.tools.tracking.trackCallStart({
       sessionId,
       toolCallId: "tool-skip-2",
       toolName: "edit",
       args: { file_path: "src/skip.ts" },
     });
     writeFileSync(filePath, "export const value = 3;\n", "utf8");
-    runtime.authority.tools.trackCallEnd({
+    runtime.authority.tools.tracking.trackCallEnd({
       sessionId,
       toolCallId: "tool-skip-2",
       toolName: "edit",
       channelSuccess: true,
     });
 
-    const firstUndo = runtime.authority.session.rewind(sessionId, {
+    const firstUndo = runtime.authority.session.rewind.rewind(sessionId, {
       mode: "both",
       summary: "carry",
     });
@@ -467,11 +474,11 @@ describe("session rewind workspace", () => {
     expect(firstUndo.checkpoint.checkpointId).toBe(secondCheckpoint.checkpointId);
     expect(readFileSync(filePath, "utf8")).toBe("export const value = 2;\n");
 
-    const undoneState = runtime.inspect.session.getRewindState(sessionId);
+    const undoneState = runtime.inspect.session.rewind.getState(sessionId);
     expect(undoneState.latestRewindable?.checkpointId).toBe(firstCheckpoint.checkpointId);
     expect(undoneState.nextRedoable?.checkpointId).toBe(secondCheckpoint.checkpointId);
 
-    const secondUndo = runtime.authority.session.rewind(sessionId, {
+    const secondUndo = runtime.authority.session.rewind.rewind(sessionId, {
       mode: "both",
       summary: "carry",
     });
@@ -482,7 +489,7 @@ describe("session rewind workspace", () => {
     expect(secondUndo.checkpoint.checkpointId).toBe(firstCheckpoint.checkpointId);
     expect(readFileSync(filePath, "utf8")).toBe("export const value = 1;\n");
 
-    const stackedState = runtime.inspect.session.getRewindState(sessionId);
+    const stackedState = runtime.inspect.session.rewind.getState(sessionId);
     expect(stackedState.redoStack.map((entry) => entry.checkpointId)).toEqual([
       secondCheckpoint.checkpointId,
       firstCheckpoint.checkpointId,
@@ -496,13 +503,13 @@ describe("session rewind workspace", () => {
 
     const sessionId = "rewind-active-supersede-metadata-1";
     const runtime = new BrewvaRuntime({ cwd: workspace, configPath: RUNTIME_CONTRACT_CONFIG_PATH });
-    runtime.maintain.context.onTurnStart(sessionId, 1);
-    const checkpoint = runtime.authority.session.recordRewindCheckpoint(sessionId, {
+    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+    const checkpoint = runtime.authority.session.rewind.recordCheckpoint(sessionId, {
       leafEntryId: "leaf-before",
       prompt: { text: "Prepare a branch", parts: [] },
     });
 
-    const rewind = runtime.authority.session.rewind(sessionId, {
+    const rewind = runtime.authority.session.rewind.rewind(sessionId, {
       checkpointId: checkpoint.checkpointId,
       mode: "both",
       summary: "carry",
@@ -513,14 +520,14 @@ describe("session rewind workspace", () => {
       throw new Error(`Rewind failed: ${rewind.reason}`);
     }
 
-    runtime.maintain.context.onTurnStart(sessionId, 2);
-    runtime.authority.session.recordRewindCheckpoint(sessionId, {
+    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 2);
+    runtime.authority.session.rewind.recordCheckpoint(sessionId, {
       leafEntryId: "leaf-next",
       prompt: { text: "Continue from the rewound branch", parts: [] },
     });
 
-    const rewoundCheckpoint = runtime.inspect.session
-      .getRewindState(sessionId)
+    const rewoundCheckpoint = runtime.inspect.session.rewind
+      .getState(sessionId)
       .checkpoints.find((entry) => entry.checkpointId === checkpoint.checkpointId);
     expect(rewoundCheckpoint).toMatchObject({
       checkpointId: checkpoint.checkpointId,

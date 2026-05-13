@@ -1,56 +1,37 @@
-import {
-  defineRuntimeSurfaceModule,
-  type SurfaceContribution,
-} from "../../runtime/surface-descriptor.js";
 import type { ClaimService } from "./claim.js";
-import type {
-  ClaimResolveResult,
-  ClaimSeverity,
-  ClaimStatus,
-  ClaimUpsertResult,
-  ClaimState,
-} from "./types.js";
+import type { ClaimState } from "./types.js";
 
 export interface ClaimSurfaceDependencies {
   getClaimService(): ClaimService;
   getClaimState(sessionId: string): ClaimState;
 }
 
-export interface RuntimeClaimSurfaceMethods {
-  getState(sessionId: string): ClaimState;
-  upsert(
-    sessionId: string,
-    input: {
-      id: string;
-      kind: string;
-      severity: ClaimSeverity;
-      summary: string;
-      details?: Record<string, unknown>;
-      evidenceIds?: string[];
-      status?: ClaimStatus;
-    },
-  ): ClaimUpsertResult;
-  resolve(sessionId: string, claimId: string): ClaimResolveResult;
-}
-
-export const claimSurfaceContribution = {
-  authority: ["upsert", "resolve"],
-  inspect: ["getState"],
-} as const satisfies SurfaceContribution<RuntimeClaimSurfaceMethods>;
-
-export function createClaimSurfaceMethods(
-  deps: ClaimSurfaceDependencies,
-): RuntimeClaimSurfaceMethods {
+export function createClaimSurfaceMethods(deps: ClaimSurfaceDependencies) {
   return {
-    getState: (sessionId: string) => deps.getClaimState(sessionId),
-    upsert: (sessionId: string, input) => deps.getClaimService().upsert(sessionId, input),
-    resolve: (sessionId: string, claimId: string) =>
-      deps.getClaimService().resolve(sessionId, claimId),
+    facts: {
+      upsert: (sessionId: string, input: Parameters<ClaimService["upsert"]>[1]) =>
+        deps.getClaimService().upsert(sessionId, input),
+      resolve: (sessionId: string, claimId: string) =>
+        deps.getClaimService().resolve(sessionId, claimId),
+    },
+    state: {
+      get: (sessionId: string) => deps.getClaimState(sessionId),
+    },
   };
 }
 
-export const claimRuntimeSurface = defineRuntimeSurfaceModule({
-  name: "claim",
-  createMethods: createClaimSurfaceMethods,
-  contribution: claimSurfaceContribution,
-});
+export type RuntimeClaimSurfaceMethods = ReturnType<typeof createClaimSurfaceMethods>;
+
+export function createClaimAuthoritySurface(deps: ClaimSurfaceDependencies) {
+  const methods = createClaimSurfaceMethods(deps);
+  return {
+    facts: methods.facts,
+  };
+}
+
+export function createClaimInspectSurface(deps: ClaimSurfaceDependencies) {
+  const methods = createClaimSurfaceMethods(deps);
+  return {
+    state: methods.state,
+  };
+}

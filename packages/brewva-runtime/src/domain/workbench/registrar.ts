@@ -1,12 +1,10 @@
-import type { RuntimeServiceRegistrarOptions } from "../../runtime/service-registrar-types.js";
-import { workbenchSurfaceContribution } from "./runtime-surface.js";
+import type { RuntimeServiceRegistrarOptions } from "../../runtime/wiring.js";
 import { WorkbenchService } from "./service.js";
 
 export interface RuntimeWorkbenchDomainRegistration {
   services: {
     workbenchService: WorkbenchService;
   };
-  surfaceContribution: typeof workbenchSurfaceContribution;
 }
 
 export function registerWorkbenchDomain(
@@ -19,6 +17,5 @@ export function registerWorkbenchDomain(
         recordEvent: (input) => options.kernel.recordEvent(input),
       }),
     },
-    surfaceContribution: workbenchSurfaceContribution,
   };
 }

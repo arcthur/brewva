@@ -5,6 +5,7 @@ import {
   TOOL_RESULT_RECORDED_EVENT_TYPE,
 } from "../../events/registry.js";
 import type { BrewvaEventRecord } from "../../events/types.js";
+import { classifyToolFailure } from "../../internal/evidence/api.js";
 import {
   CLAIM_EVENT_TYPE,
   coerceClaimLedgerPayload,
@@ -26,7 +27,6 @@ import {
   type CostFoldState,
 } from "../cost/api.js";
 import type { SessionCostSummary } from "../cost/api.js";
-import { classifyToolFailure } from "../evidence/api.js";
 import {
   TASK_EVENT_TYPE,
   coerceTaskLedgerPayload,

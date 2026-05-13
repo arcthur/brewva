@@ -10,26 +10,36 @@ export interface ToolRuntimeEventInput {
 }
 
 type ToolRuntimeEventPort = {
-  list?(sessionId: string, query?: unknown): unknown[];
-  query?(sessionId: string, query?: unknown): unknown[];
+  records?: {
+    list?(sessionId: string, query?: unknown): unknown[];
+    query?(sessionId: string, query?: unknown): unknown[];
+  };
 };
 
 type ToolRuntimeContextPort = {
-  getUsageRatio?(usage: unknown): number | null;
-  getCompactionInstructions?(): string;
+  usage?: {
+    getRatio?(usage: unknown): number | null;
+  };
+  compaction?: {
+    getInstructions?(): string;
+  };
 };
 
 type ToolRuntimeTaskPort = {
-  getTargetDescriptor?(sessionId: string): unknown;
+  target?: {
+    getDescriptor?(sessionId: string): unknown;
+  };
 };
 
 type ToolRuntimeAuthorityToolsPort = {
-  acquireParallelSlotAsync?(
-    sessionId: string,
-    runId: string,
-    options?: { timeoutMs?: number },
-  ): Promise<{ accepted: boolean }>;
-  releaseParallelSlot?(sessionId: string, runId: string): void;
+  parallel?: {
+    acquireAsync?(
+      sessionId: string,
+      runId: string,
+      options?: { timeoutMs?: number },
+    ): Promise<{ accepted: boolean }>;
+    release?(sessionId: string, runId: string): void;
+  };
 };
 
 // Tool-side runtime extensions stay explicit. Callers that need these behaviors

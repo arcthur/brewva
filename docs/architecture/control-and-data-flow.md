@@ -18,12 +18,12 @@ sequenceDiagram
 
   U->>CLI: submit turn
   CLI->>GW: hosted prompt
-  GW->>RT: inspect + maintain context
-  GW->>RT: authority.tools.start
+  GW->>RT: inspect + operator context
+  GW->>RT: authority.tools.invocation.start
   RT->>STORE: decision + lifecycle evidence
   GW->>TOOL: execute admitted call
   TOOL-->>GW: result
-  GW->>RT: authority.tools.finish + recordResult
+  GW->>RT: authority.tools.invocation.finish + recordResult
   RT->>STORE: tool outcome + receipts
 ```
 

@@ -1,13 +1,11 @@
-import type { RuntimeServiceRegistrarOptions } from "../../runtime/service-registrar-types.js";
+import type { RuntimeServiceRegistrarOptions } from "../../runtime/wiring.js";
 import type { EffectCommitmentDeskService } from "../proposals/api.js";
 import { LedgerService } from "./ledger.js";
-import { ledgerSurfaceContribution } from "./runtime-surface.js";
 
 export interface RuntimeLedgerDomainRegistration {
   services: {
     ledgerService: LedgerService;
   };
-  surfaceContribution: typeof ledgerSurfaceContribution;
 }
 
 export function registerLedgerDomain(
@@ -30,6 +28,5 @@ export function registerLedgerDomain(
         },
       }),
     },
-    surfaceContribution: ledgerSurfaceContribution,
   };
 }

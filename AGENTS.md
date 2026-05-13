@@ -17,7 +17,7 @@
 ## Hard Invariants
 
 - Preserve the user-facing `brewva` command, help surface, launcher metadata, and distribution smoke checks.
-- Keep `BrewvaRuntime` semantic-surface based: `runtime.authority`, `runtime.inspect`, and `runtime.maintain`.
+- Keep `BrewvaRuntime` root semantic-surface based: `runtime.authority` and `runtime.inspect`; repo-owned operators must use `createOperatorRuntimePort(runtime).operator`.
 - Do not reintroduce a mixed top-level implementation surface.
 - Keep workspace imports on package entrypoints; do not reintroduce local alias schemes or cross-package relative imports.
 - Keep public root exports narrow. Repo-owned implementation seams stay under documented internal entrypoints.
@@ -52,6 +52,6 @@
 - Runtime API and public entry surface: `packages/brewva-runtime/src/runtime/runtime.ts`, `packages/brewva-runtime/src/public/index.ts`.
 - Runtime skills: `packages/brewva-runtime/src/domain/skills/contract.ts`, `packages/brewva-runtime/src/domain/skills/registry.ts`.
 - Session query plane: `packages/brewva-session-index/src/index.ts`, consumed by `packages/brewva-recall/src/broker.ts` and `packages/brewva-cli/src/insights.ts`.
-- Gateway skill routing and plugins: `packages/brewva-gateway/src/runtime-plugins/skill-first.ts`, `packages/brewva-gateway/src/runtime-plugins/local-hook-port.ts`.
+- Gateway hosted context and plugins: `packages/brewva-gateway/src/hosted/internal/context/materialization.ts`, `packages/brewva-gateway/src/hosted/internal/compaction/model-downshift-policy.ts`, `packages/brewva-gateway/src/extensions/api.ts`, `packages/brewva-gateway/src/hosted/internal/thread-loop/lifecycle/local-hook-port.ts`.
 - Managed tool capabilities: `packages/brewva-tools/src/registry/managed-metadata.ts`, `packages/brewva-tools/src/registry/runtime-bound-tool.ts`.
 - Expanded lookup map: `skills/project/shared/source-map.md`.

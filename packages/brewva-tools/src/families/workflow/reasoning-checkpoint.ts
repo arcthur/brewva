@@ -1,4 +1,4 @@
-import type { ReasoningCheckpointBoundary } from "@brewva/brewva-runtime";
+import type { ReasoningCheckpointBoundary } from "@brewva/brewva-runtime/reasoning";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import { Type } from "@sinclair/typebox";
 import type { BrewvaBundledToolOptions } from "../../contracts/index.js";
@@ -36,14 +36,14 @@ export function createReasoningCheckpointTool(options: BrewvaBundledToolOptions)
       }),
       async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
         const sessionId = getSessionId(ctx);
-        const checkpointPort = runtime.authority.reasoning;
+        const checkpointPort = runtime.authority.reasoning?.checkpoints;
         if (!checkpointPort) {
           return failTextResult("Reasoning checkpoint surface is unavailable in this runtime.", {
             ok: false,
             error: "reasoning_checkpoint_unavailable",
           });
         }
-        const checkpoint = checkpointPort.recordCheckpoint(sessionId, {
+        const checkpoint = checkpointPort.record(sessionId, {
           boundary: normalizeBoundary(params.boundary),
           leafEntryId: ctx.sessionManager.getLeafId(),
         });
@@ -58,8 +58,6 @@ export function createReasoningCheckpointTool(options: BrewvaBundledToolOptions)
         );
       },
     },
-    {
-      requiredCapabilities: ["authority.reasoning.recordCheckpoint"],
-    },
+    {},
   );
 }

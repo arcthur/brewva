@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { BrewvaRuntime, type ConventionChangeRequest } from "@brewva/brewva-runtime";
+import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import type { ConventionChangeRequest } from "@brewva/brewva-runtime/conventions";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 function evidence(id: string) {
@@ -26,7 +27,7 @@ describe("convention lifecycle governance", () => {
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionId = `convention-observation-${crypto.randomUUID()}`;
 
-    const receipt = runtime.authority.conventions.submitChangeRequest(sessionId, {
+    const receipt = runtime.authority.conventions.requests.submit(sessionId, {
       id: "convention-observe-1",
       issuer: "unit-test",
       subject: "Prefer explicit verification commands",
@@ -43,9 +44,9 @@ describe("convention lifecycle governance", () => {
 
     expect(receipt.decision).toBe("accept");
     expect(receipt.reviewSurface).toBe("digest");
-    expect(runtime.inspect.conventions.getState(sessionId).activeConventions).toHaveLength(1);
+    expect(runtime.inspect.conventions.state.get(sessionId).activeConventions).toHaveLength(1);
     expect(
-      runtime.inspect.events.query(sessionId, {
+      runtime.inspect.events.records.query(sessionId, {
         type: "convention_candidate_observed",
       }),
     ).toHaveLength(1);
@@ -100,12 +101,12 @@ describe("convention lifecycle governance", () => {
       createdAt: 1,
     };
 
-    const submitted = runtime.authority.conventions.submitChangeRequest(sessionId, request);
+    const submitted = runtime.authority.conventions.requests.submit(sessionId, request);
     expect(submitted.decision).toBe("defer");
     expect(submitted.reviewSurface).toBe("digest");
-    expect(runtime.inspect.conventions.listPending(sessionId)).toHaveLength(1);
+    expect(runtime.inspect.conventions.requests.listPending(sessionId)).toHaveLength(1);
 
-    const decided = runtime.authority.conventions.decideChangeRequest(sessionId, request.id, {
+    const decided = runtime.authority.conventions.requests.decide(sessionId, request.id, {
       decision: "accept",
       actor: "operator",
       reason: "explicit_operator_decision",
@@ -113,19 +114,22 @@ describe("convention lifecycle governance", () => {
     expect(decided.ok).toBe(true);
     if (!decided.ok) throw new Error("expected convention decision to pass");
     expect(decided.receipt.reviewSurface).toBe("audit");
-    expect(runtime.inspect.conventions.getState(sessionId).activeConventions).toHaveLength(0);
+    expect(runtime.inspect.conventions.state.get(sessionId).activeConventions).toHaveLength(0);
 
-    const applied = runtime.authority.conventions.applyApprovedChange(sessionId, request.id);
+    const applied = runtime.authority.conventions.requests.applyApprovedChange(
+      sessionId,
+      request.id,
+    );
     expect(applied.ok).toBe(true);
     if (!applied.ok) throw new Error("expected convention apply to pass");
-    const activeConventions = runtime.inspect.conventions.getState(sessionId).activeConventions;
+    const activeConventions = runtime.inspect.conventions.state.get(sessionId).activeConventions;
     expect(activeConventions).toHaveLength(1);
     expect(activeConventions[0]?.transition).toBe("promote");
 
     const targetPath = join(workspace, "skills/project/shared/new-guidance.md");
     expect(readFileSync(targetPath, "utf8")).toContain("Convention Test");
 
-    const mutationEvent = runtime.inspect.events.query(sessionId, {
+    const mutationEvent = runtime.inspect.events.records.query(sessionId, {
       type: "reversible_mutation_recorded",
       last: 1,
     })[0];
@@ -134,7 +138,7 @@ describe("convention lifecycle governance", () => {
       | undefined;
     expect(mutationPayload?.receipt?.subject?.kind).toBe("convention");
 
-    const rollback = runtime.authority.tools.rollbackLastMutation(sessionId);
+    const rollback = runtime.authority.tools.patches.rollbackLastMutation(sessionId);
     expect(rollback.ok).toBe(true);
     if (!rollback.ok) throw new Error("expected convention rollback to pass");
     expect(rollback.subject?.kind).toBe("convention");
@@ -174,12 +178,15 @@ describe("convention lifecycle governance", () => {
       createdAt: 1,
     };
 
-    const receipt = runtime.authority.conventions.submitChangeRequest(sessionId, request);
+    const receipt = runtime.authority.conventions.requests.submit(sessionId, request);
     expect(receipt.decision).toBe("defer");
     expect(receipt.lane).toBe("pinned");
     expect(receipt.reviewSurface).toBe("interrupt");
 
-    const applied = runtime.authority.conventions.applyApprovedChange(sessionId, request.id);
+    const applied = runtime.authority.conventions.requests.applyApprovedChange(
+      sessionId,
+      request.id,
+    );
     expect(applied.ok).toBe(false);
     if (!applied.ok) {
       expect(applied.reason).toBe("request_not_accepted");
@@ -191,7 +198,7 @@ describe("convention lifecycle governance", () => {
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionId = `convention-terminal-audit-${crypto.randomUUID()}`;
 
-    const expired = runtime.authority.conventions.submitChangeRequest(sessionId, {
+    const expired = runtime.authority.conventions.requests.submit(sessionId, {
       id: "convention-expired-1",
       issuer: "unit-test",
       subject: "Expired workflow rule",
@@ -220,7 +227,7 @@ describe("convention lifecycle governance", () => {
       path: "skills/project/shared/rejected.md",
     };
 
-    const observation = runtime.authority.conventions.submitChangeRequest(sessionId, {
+    const observation = runtime.authority.conventions.requests.submit(sessionId, {
       id: "convention-rejected-observe-1",
       issuer: "unit-test",
       subject: "Rejected observation",
@@ -231,7 +238,7 @@ describe("convention lifecycle governance", () => {
       rationale: "Missing evidence should reject before observation side effects.",
       createdAt: 1,
     });
-    const contest = runtime.authority.conventions.submitChangeRequest(sessionId, {
+    const contest = runtime.authority.conventions.requests.submit(sessionId, {
       id: "convention-rejected-contest-1",
       issuer: "unit-test",
       subject: "Rejected contest",
@@ -246,16 +253,16 @@ describe("convention lifecycle governance", () => {
     expect(observation.decision).toBe("reject");
     expect(contest.decision).toBe("reject");
     expect(
-      runtime.inspect.events.query(sessionId, {
+      runtime.inspect.events.records.query(sessionId, {
         type: "convention_candidate_observed",
       }),
     ).toHaveLength(0);
     expect(
-      runtime.inspect.events.query(sessionId, {
+      runtime.inspect.events.records.query(sessionId, {
         type: "convention_contested",
       }),
     ).toHaveLength(0);
-    const state = runtime.inspect.conventions.getState(sessionId);
+    const state = runtime.inspect.conventions.state.get(sessionId);
     expect(state.activeConventions).toHaveLength(0);
     expect(state.contestedRequestIds).toEqual([]);
   });
@@ -286,7 +293,7 @@ describe("convention lifecycle governance", () => {
       path: "skills/project/shared/retire-me.md",
     };
 
-    runtime.authority.conventions.submitChangeRequest(sessionId, {
+    runtime.authority.conventions.requests.submit(sessionId, {
       id: "convention-observe-retire-1",
       issuer: "unit-test",
       subject: "Temporary convention",
@@ -298,7 +305,7 @@ describe("convention lifecycle governance", () => {
       createdAt: 1,
     });
 
-    const contest = runtime.authority.conventions.submitChangeRequest(sessionId, {
+    const contest = runtime.authority.conventions.requests.submit(sessionId, {
       id: "convention-contest-retire-1",
       issuer: "unit-test",
       subject: "Contest temporary convention",
@@ -312,8 +319,8 @@ describe("convention lifecycle governance", () => {
 
     expect(contest.decision).toBe("accept");
     expect(contest.reviewSurface).toBe("audit");
-    expect(runtime.inspect.conventions.getState(sessionId).activeConventions).toHaveLength(1);
-    expect(runtime.inspect.conventions.getState(sessionId).contestedRequestIds).toEqual([
+    expect(runtime.inspect.conventions.state.get(sessionId).activeConventions).toHaveLength(1);
+    expect(runtime.inspect.conventions.state.get(sessionId).contestedRequestIds).toEqual([
       "convention-contest-retire-1",
     ]);
 
@@ -339,21 +346,24 @@ describe("convention lifecycle governance", () => {
       createdAt: 3,
     };
 
-    const submitted = runtime.authority.conventions.submitChangeRequest(sessionId, retireRequest);
+    const submitted = runtime.authority.conventions.requests.submit(sessionId, retireRequest);
     expect(submitted.decision).toBe("defer");
-    expect(runtime.inspect.conventions.getState(sessionId).activeConventions).toHaveLength(1);
+    expect(runtime.inspect.conventions.state.get(sessionId).activeConventions).toHaveLength(1);
 
-    const decided = runtime.authority.conventions.decideChangeRequest(sessionId, retireRequest.id, {
+    const decided = runtime.authority.conventions.requests.decide(sessionId, retireRequest.id, {
       decision: "accept",
       actor: "operator",
       reason: "explicit_operator_decision",
     });
     expect(decided.ok).toBe(true);
-    expect(runtime.inspect.conventions.getState(sessionId).activeConventions).toHaveLength(1);
+    expect(runtime.inspect.conventions.state.get(sessionId).activeConventions).toHaveLength(1);
 
-    const applied = runtime.authority.conventions.applyApprovedChange(sessionId, retireRequest.id);
+    const applied = runtime.authority.conventions.requests.applyApprovedChange(
+      sessionId,
+      retireRequest.id,
+    );
     expect(applied.ok).toBe(true);
-    expect(runtime.inspect.conventions.getState(sessionId).activeConventions).toHaveLength(0);
+    expect(runtime.inspect.conventions.state.get(sessionId).activeConventions).toHaveLength(0);
   });
 
   test("runtime_config target writer rejects non-config files even for allowed config paths", () => {
@@ -389,16 +399,19 @@ describe("convention lifecycle governance", () => {
       createdAt: 1,
     };
 
-    const submitted = runtime.authority.conventions.submitChangeRequest(sessionId, request);
+    const submitted = runtime.authority.conventions.requests.submit(sessionId, request);
     expect(submitted.decision).toBe("defer");
-    const decided = runtime.authority.conventions.decideChangeRequest(sessionId, request.id, {
+    const decided = runtime.authority.conventions.requests.decide(sessionId, request.id, {
       decision: "accept",
       actor: "operator",
       reason: "explicit_operator_decision",
     });
     expect(decided.ok).toBe(true);
 
-    const applied = runtime.authority.conventions.applyApprovedChange(sessionId, request.id);
+    const applied = runtime.authority.conventions.requests.applyApprovedChange(
+      sessionId,
+      request.id,
+    );
     expect(applied.ok).toBe(false);
     if (!applied.ok) {
       expect(applied.reason).toBe("invalid_target");
@@ -450,13 +463,13 @@ describe("convention lifecycle governance", () => {
       },
       createdAt: 1,
     };
-    runtime.authority.conventions.submitChangeRequest(sessionId, projectGuidanceRequest);
-    runtime.authority.conventions.decideChangeRequest(sessionId, projectGuidanceRequest.id, {
+    runtime.authority.conventions.requests.submit(sessionId, projectGuidanceRequest);
+    runtime.authority.conventions.requests.decide(sessionId, projectGuidanceRequest.id, {
       decision: "accept",
       actor: "operator",
       reason: "explicit_operator_decision",
     });
-    const projectApply = runtime.authority.conventions.applyApprovedChange(
+    const projectApply = runtime.authority.conventions.requests.applyApprovedChange(
       sessionId,
       projectGuidanceRequest.id,
     );
@@ -491,13 +504,13 @@ describe("convention lifecycle governance", () => {
       },
       createdAt: 2,
     };
-    runtime.authority.conventions.submitChangeRequest(sessionId, skillContractRequest);
-    runtime.authority.conventions.decideChangeRequest(sessionId, skillContractRequest.id, {
+    runtime.authority.conventions.requests.submit(sessionId, skillContractRequest);
+    runtime.authority.conventions.requests.decide(sessionId, skillContractRequest.id, {
       decision: "accept",
       actor: "operator",
       reason: "explicit_operator_decision",
     });
-    const skillApply = runtime.authority.conventions.applyApprovedChange(
+    const skillApply = runtime.authority.conventions.requests.applyApprovedChange(
       sessionId,
       skillContractRequest.id,
     );

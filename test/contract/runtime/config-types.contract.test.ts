@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { BrewvaConfigFile } from "@brewva/brewva-runtime";
+import type { BrewvaConfigFile } from "@brewva/brewva-runtime/config";
 
 describe("BrewvaConfigFile typing", () => {
   test("supports minimal projection overlay shape", () => {

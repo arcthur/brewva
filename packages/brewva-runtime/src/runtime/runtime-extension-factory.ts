@@ -1,5 +1,5 @@
 import type { RuntimeRecordEvent } from "../domain/sessions/api.js";
-import type { BrewvaMaintenancePort } from "./runtime-api.js";
+import type { RuntimeOperatorPort } from "./runtime-api.js";
 import {
   createHostedEventExtensionPort,
   createRecoverySchedulerExtensionPort,
@@ -20,7 +20,7 @@ export interface RuntimeExtensionFactoryInput {
     markExpired: Parameters<typeof createRecoverySchedulerExtensionPort>[0]["markExpired"];
     listPending: Parameters<typeof createRecoverySchedulerExtensionPort>[0]["listPending"];
   };
-  maintain: BrewvaMaintenancePort;
+  operator: RuntimeOperatorPort;
 }
 
 export function createRuntimeExtensions(
@@ -40,8 +40,8 @@ export function createRuntimeExtensions(
   });
   const tools = createToolRuntimeExtensionPort({
     recordEvent: hostedEvents.record,
-    onClearState: input.maintain.session.onClearState,
-    resolveCredentialBindings: input.maintain.session.resolveCredentialBindings,
+    onClearState: input.operator.session.state.onClear,
+    resolveCredentialBindings: input.operator.session.credentials.resolveBindings,
   });
   return Object.freeze({
     hosted: Object.freeze({

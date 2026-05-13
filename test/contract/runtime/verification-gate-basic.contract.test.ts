@@ -31,8 +31,8 @@ describe("verification gate", () => {
     const runtime = createCleanRuntime();
     const sessionId = "s4";
 
-    runtime.authority.tools.markCall(sessionId, "edit");
-    const blocked = runtime.authority.verification.evaluate(sessionId, "quick");
+    runtime.authority.tools.tracking.markCall(sessionId, "edit");
+    const blocked = runtime.authority.verification.checks.evaluate(sessionId, "quick");
     expect(blocked.passed).toBe(false);
     expect(blocked.failedChecks).toEqual([]);
     expect(blocked.missingChecks).toEqual(["tests"]);
@@ -44,13 +44,13 @@ describe("verification gate", () => {
       }),
     ]);
 
-    const verified = await runtime.authority.verification.verify(sessionId, "quick", {
+    const verified = await runtime.authority.verification.checks.verify(sessionId, "quick", {
       executeCommands: true,
       timeoutMs: 5_000,
     });
     expect(verified.passed).toBe(true);
 
-    const passed = runtime.authority.verification.evaluate(sessionId, "quick");
+    const passed = runtime.authority.verification.checks.evaluate(sessionId, "quick");
     expect(passed.passed).toBe(true);
   });
 
@@ -58,7 +58,7 @@ describe("verification gate", () => {
     const runtime = createCleanRuntime();
     const sessionId = "s4-readonly";
 
-    const report = runtime.authority.verification.evaluate(sessionId, "quick");
+    const report = runtime.authority.verification.checks.evaluate(sessionId, "quick");
     expect(report.passed).toBe(true);
     expect(report.readOnly).toBe(true);
     expect(report.skipped).toBe(true);
@@ -72,8 +72,8 @@ describe("verification gate", () => {
     const runtime = createCleanRuntime();
     const sessionId = "s4-multi-edit";
 
-    runtime.authority.tools.markCall(sessionId, "multi_edit");
-    const blocked = runtime.authority.verification.evaluate(sessionId, "quick");
+    runtime.authority.tools.tracking.markCall(sessionId, "multi_edit");
+    const blocked = runtime.authority.verification.checks.evaluate(sessionId, "quick");
     expect(blocked.passed).toBe(false);
     expect(blocked.failedChecks).toEqual([]);
     expect(blocked.missingChecks).toEqual(["tests"]);
@@ -84,8 +84,8 @@ describe("verification gate", () => {
     const runtime = createCleanRuntime();
     const sessionId = "s4-explicit-verdicts";
 
-    runtime.authority.tools.markCall(sessionId, "edit");
-    runtime.authority.tools.recordResult({
+    runtime.authority.tools.tracking.markCall(sessionId, "edit");
+    runtime.authority.tools.invocation.recordResult({
       sessionId,
       toolName: "exec",
       args: { command: "true" },
@@ -93,7 +93,7 @@ describe("verification gate", () => {
       channelSuccess: true,
       verdict: "pass",
     });
-    runtime.authority.tools.recordResult({
+    runtime.authority.tools.invocation.recordResult({
       sessionId,
       toolName: "brewva_verify",
       args: { check: "tests", command: "true" },
@@ -107,19 +107,19 @@ describe("verification gate", () => {
       },
     });
 
-    const inconclusive = runtime.authority.verification.evaluate(sessionId, "quick");
+    const inconclusive = runtime.authority.verification.checks.evaluate(sessionId, "quick");
     expect(inconclusive.passed).toBe(false);
     expect(inconclusive.failedChecks).toEqual([]);
     expect(inconclusive.missingChecks).toEqual(["tests"]);
     expect(inconclusive.missingEvidence).toContain("tests");
 
-    const verified = await runtime.authority.verification.verify(sessionId, "quick", {
+    const verified = await runtime.authority.verification.checks.verify(sessionId, "quick", {
       executeCommands: true,
       timeoutMs: 5_000,
     });
     expect(verified.passed).toBe(true);
 
-    const passed = runtime.authority.verification.evaluate(sessionId, "quick");
+    const passed = runtime.authority.verification.checks.evaluate(sessionId, "quick");
     expect(passed.passed).toBe(true);
   });
 
@@ -137,9 +137,9 @@ describe("verification gate", () => {
       }),
     });
     const sessionId = "verify-standard-command-execution";
-    runtime.authority.tools.markCall(sessionId, "edit");
+    runtime.authority.tools.tracking.markCall(sessionId, "edit");
 
-    const report = await runtime.authority.verification.verify(sessionId, "standard", {
+    const report = await runtime.authority.verification.checks.verify(sessionId, "standard", {
       executeCommands: true,
       timeoutMs: 5_000,
     });
@@ -148,7 +148,7 @@ describe("verification gate", () => {
     expect(report.missingChecks).toEqual([]);
     expect(report.missingEvidence).toEqual([]);
 
-    const ledgerText = runtime.inspect.ledger.query(sessionId, { tool: "brewva_verify" });
+    const ledgerText = runtime.inspect.ledger.store.query(sessionId, { tool: "brewva_verify" });
     expect(ledgerText).toContain("type-check");
     expect(ledgerText).toContain("tests");
   });

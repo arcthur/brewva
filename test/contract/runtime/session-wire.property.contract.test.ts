@@ -1,5 +1,6 @@
 import { describe, expect } from "bun:test";
-import { BrewvaRuntime, type SessionWireFrame } from "@brewva/brewva-runtime";
+import { BrewvaRuntime, createHostedRuntimePort } from "@brewva/brewva-runtime";
+import type { SessionWireFrame } from "@brewva/brewva-runtime/session";
 import fc from "fast-check";
 import { propertyTest } from "../../helpers/property.js";
 import { cleanupWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
@@ -75,7 +76,7 @@ function recordGeneratedTurns(
 ): void {
   turns.forEach((turn, index) => {
     const timestamp = 1_700_000_000_000 + index * 100;
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: "turn_input_recorded",
       turn: index,
@@ -88,7 +89,7 @@ function recordGeneratedTurns(
     });
 
     turn.transitionReasons.forEach((reason, transitionIndex) => {
-      runtime.extensions.hosted.events.record({
+      createHostedRuntimePort(runtime).extensions.hosted.events.record({
         sessionId,
         type: "session_turn_transition",
         turn: index,
@@ -109,7 +110,7 @@ function recordGeneratedTurns(
     });
 
     if (turn.commit) {
-      runtime.extensions.hosted.events.record({
+      createHostedRuntimePort(runtime).extensions.hosted.events.record({
         sessionId,
         type: "turn_render_committed",
         turn: index,

@@ -96,7 +96,6 @@
     "@brewva/brewva-provider-core": "workspace:*",
     "@brewva/brewva-std": "workspace:*",
     "@brewva/brewva-token-estimation": "workspace:*",
-    "@brewva/brewva-tool-protocol": "workspace:*",
     "@sinclair/typebox": "^0.34.49",
     "ajv": "^8.18.0",
     "ajv-formats": "^3.0.1",

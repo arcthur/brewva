@@ -110,10 +110,12 @@ export function createRuntimeForExecTests(input?: {
     config,
     inspect: {
       task: {
-        getTargetDescriptor: () => ({
-          primaryRoot: targetRoots[0] ?? cwd,
-          roots: targetRoots,
-        }),
+        target: {
+          getDescriptor: () => ({
+            primaryRoot: targetRoots[0] ?? cwd,
+            roots: targetRoots,
+          }),
+        },
       },
     },
   });

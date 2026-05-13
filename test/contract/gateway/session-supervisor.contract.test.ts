@@ -7,7 +7,7 @@ import {
   SessionBackendStateError,
   SessionSupervisor,
 } from "@brewva/brewva-gateway";
-import { asBrewvaSessionId } from "@brewva/brewva-runtime";
+import { asBrewvaSessionId } from "@brewva/brewva-runtime/core";
 import { requireDefined } from "../../helpers/assertions.js";
 
 interface SentPromptMessage {

@@ -12,7 +12,7 @@ import {
   type SessionBackend,
   type SessionWorkerInfo,
 } from "@brewva/brewva-gateway";
-import type { ContextStatusView } from "@brewva/brewva-runtime";
+import type { ContextStatusView } from "@brewva/brewva-runtime/session";
 
 export interface PolicyRule {
   id: string;

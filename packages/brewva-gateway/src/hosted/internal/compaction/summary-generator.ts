@@ -1,4 +1,4 @@
-import { sanitizeCompactionSummary } from "@brewva/brewva-runtime";
+import { sanitizeCompactionSummary } from "@brewva/brewva-runtime/security";
 import { redactedStableJsonSha256Hex } from "@brewva/brewva-std/hash";
 import {
   BREWVA_COMPACTION_SUMMARY_HEADER,

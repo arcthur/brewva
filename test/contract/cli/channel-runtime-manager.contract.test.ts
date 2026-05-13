@@ -2,13 +2,17 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { AgentRuntimeManager } from "@brewva/brewva-gateway/channels";
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { BrewvaRuntime, createHostedRuntimePort } from "@brewva/brewva-runtime";
 import { createTestWorkspace } from "../../helpers/workspace.js";
+
+function createHostedTestRuntime(options: ConstructorParameters<typeof BrewvaRuntime>[0]) {
+  return createHostedRuntimePort(new BrewvaRuntime(options));
+}
 
 describe("channel runtime manager", () => {
   test("forces per-agent state namespace and disables scheduler", async () => {
     const workspace = createTestWorkspace("channel-runtime-namespace");
-    const controller = new BrewvaRuntime({ cwd: workspace });
+    const controller = createHostedTestRuntime({ cwd: workspace });
     const manager = new AgentRuntimeManager({
       controllerRuntime: controller,
       maxLiveRuntimes: 4,
@@ -30,7 +34,7 @@ describe("channel runtime manager", () => {
 
   test("evicts least recently used idle runtime when pool is full", async () => {
     const workspace = createTestWorkspace("channel-runtime-lru");
-    const controller = new BrewvaRuntime({ cwd: workspace });
+    const controller = createHostedTestRuntime({ cwd: workspace });
     const manager = new AgentRuntimeManager({
       controllerRuntime: controller,
       maxLiveRuntimes: 1,
@@ -45,7 +49,7 @@ describe("channel runtime manager", () => {
 
   test("evicts idle runtimes by ttl", async () => {
     const workspace = createTestWorkspace("channel-runtime-idle");
-    const controller = new BrewvaRuntime({ cwd: workspace });
+    const controller = createHostedTestRuntime({ cwd: workspace });
     const manager = new AgentRuntimeManager({
       controllerRuntime: controller,
       maxLiveRuntimes: 4,
@@ -63,7 +67,7 @@ describe("channel runtime manager", () => {
 
   test("throws when agent config overlay JSON is invalid", async () => {
     const workspace = createTestWorkspace("channel-runtime-invalid-config");
-    const controller = new BrewvaRuntime({ cwd: workspace });
+    const controller = createHostedTestRuntime({ cwd: workspace });
     const manager = new AgentRuntimeManager({
       controllerRuntime: controller,
       maxLiveRuntimes: 4,
@@ -85,7 +89,7 @@ describe("channel runtime manager", () => {
 
   test("loads agent config overlay from JSONC", async () => {
     const workspace = createTestWorkspace("channel-runtime-jsonc-config");
-    const controller = new BrewvaRuntime({ cwd: workspace });
+    const controller = createHostedTestRuntime({ cwd: workspace });
     const manager = new AgentRuntimeManager({
       controllerRuntime: controller,
       maxLiveRuntimes: 4,
@@ -113,7 +117,7 @@ describe("channel runtime manager", () => {
 
   test("applies explicit routing scopes to created agent runtimes", async () => {
     const workspace = createTestWorkspace("channel-runtime-routing-scopes");
-    const controller = new BrewvaRuntime({ cwd: workspace });
+    const controller = createHostedTestRuntime({ cwd: workspace });
     const manager = new AgentRuntimeManager({
       controllerRuntime: controller,
       maxLiveRuntimes: 4,
@@ -128,7 +132,7 @@ describe("channel runtime manager", () => {
 
   test("throws when agent config overlay root is not an object", async () => {
     const workspace = createTestWorkspace("channel-runtime-non-object-config");
-    const controller = new BrewvaRuntime({ cwd: workspace });
+    const controller = createHostedTestRuntime({ cwd: workspace });
     const manager = new AgentRuntimeManager({
       controllerRuntime: controller,
       maxLiveRuntimes: 4,

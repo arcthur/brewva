@@ -1,11 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import {
-  asBrewvaToolCallId,
-  asBrewvaToolName,
-  createTrustedLocalGovernancePort,
-  type GovernanceAuthorizeEffectCommitmentInput,
-  type ToolEffectClass,
-} from "@brewva/brewva-runtime";
+import { asBrewvaToolCallId, asBrewvaToolName } from "@brewva/brewva-runtime/core";
+import { createTrustedLocalGovernancePort } from "@brewva/brewva-runtime/governance";
+import type {
+  GovernanceAuthorizeEffectCommitmentInput,
+  ToolEffectClass,
+} from "@brewva/brewva-runtime/governance";
 
 function createAuthorizationInput(
   effects: ToolEffectClass[],

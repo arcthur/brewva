@@ -35,9 +35,9 @@ export {
   readTaskStuckDetectedEventPayload,
 } from "./event-descriptors.js";
 export {
+  createTaskAuthoritySurface,
+  createTaskInspectSurface,
   createTaskSurfaceMethods,
-  taskRuntimeSurface,
-  taskSurfaceContribution,
 } from "./runtime-surface.js";
 export type { RuntimeTaskSurfaceMethods, TaskSurfaceDependencies } from "./runtime-surface.js";
 export {

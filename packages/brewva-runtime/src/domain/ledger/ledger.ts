@@ -1,6 +1,11 @@
 import type { JsonValue } from "@brewva/brewva-std/json";
 import type { BrewvaConfig } from "../../config/types.js";
 import { TOOL_RESULT_RECORDED_EVENT_TYPE } from "../../events/registry.js";
+import {
+  classifyToolFailure,
+  extractEvidenceArtifacts,
+  type CommandFailureClass,
+} from "../../internal/evidence/api.js";
 import type { RuntimeKernelContext } from "../../runtime/runtime-kernel.js";
 import { normalizeToolName } from "../../utils/tool-name.js";
 import {
@@ -8,11 +13,6 @@ import {
   resolveToolResultVerdict,
   type ToolResultVerdict,
 } from "../../utils/tool-result.js";
-import {
-  classifyToolFailure,
-  extractEvidenceArtifacts,
-  type CommandFailureClass,
-} from "../evidence/api.js";
 import type { EffectCommitmentDeskService } from "../proposals/api.js";
 import { RuntimeSessionStateStore } from "../sessions/api.js";
 import { buildVerificationToolResultProjectionPayload } from "../verification/api.js";

@@ -1,5 +1,5 @@
-import { formatTaskVerificationLevelForSurface } from "@brewva/brewva-runtime";
 import { VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
+import { formatTaskVerificationLevelForSurface } from "@brewva/brewva-runtime/task";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "../../../contracts/index.js";
@@ -21,15 +21,19 @@ export function createObsSnapshotTool(options: BrewvaToolOptions): ToolDefinitio
     parameters: Type.Object({}),
     async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
       const sessionId = getSessionId(ctx);
-      const tape = obsSnapshotTool.runtime.inspect.tape.getTapeStatus(sessionId);
-      const usage = obsSnapshotTool.runtime.inspect.context.getUsage(sessionId);
-      const promptStability = obsSnapshotTool.runtime.inspect.context.getPromptStability(sessionId);
+      const tape = obsSnapshotTool.runtime.inspect.tape.status.get(sessionId);
+      const usage = obsSnapshotTool.runtime.inspect.context.usage.get(sessionId);
+      const promptStability =
+        obsSnapshotTool.runtime.inspect.context.prompt.getStability(sessionId);
       const transientReduction =
-        obsSnapshotTool.runtime.inspect.context.getTransientReduction(sessionId);
-      const contextStatus = obsSnapshotTool.runtime.inspect.context.getStatus(sessionId, usage);
-      const cost = obsSnapshotTool.runtime.inspect.cost.getSummary(sessionId);
-      const task = obsSnapshotTool.runtime.inspect.task.getState(sessionId);
-      const verificationEvent = obsSnapshotTool.runtime.inspect.events.list(sessionId, {
+        obsSnapshotTool.runtime.inspect.context.prompt.getTransientReduction(sessionId);
+      const contextStatus = obsSnapshotTool.runtime.inspect.context.usage.getStatus(
+        sessionId,
+        usage,
+      );
+      const cost = obsSnapshotTool.runtime.inspect.cost.summary.get(sessionId);
+      const task = obsSnapshotTool.runtime.inspect.task.state.get(sessionId);
+      const verificationEvent = obsSnapshotTool.runtime.inspect.events.records.list(sessionId, {
         type: VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
         last: 1,
       })[0];

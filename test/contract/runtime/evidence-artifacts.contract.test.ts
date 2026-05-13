@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { classifyToolFailure, extractEvidenceArtifacts } from "@brewva/brewva-runtime";
+import { classifyToolFailure, extractEvidenceArtifacts } from "@brewva/brewva-runtime/evidence";
 import { requireArray, requireRecord } from "../../helpers/assertions.js";
 
 describe("Evidence artifact extraction", () => {

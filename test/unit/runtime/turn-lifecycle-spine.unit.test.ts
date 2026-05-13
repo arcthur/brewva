@@ -5,7 +5,7 @@ import {
   getTurnLifecycleRecoveryPlacement,
   getTurnLifecycleRecoveryPlacements,
   TurnLifecycleSpine,
-} from "@brewva/brewva-runtime";
+} from "@brewva/brewva-runtime/session";
 
 describe("turn lifecycle spine", () => {
   test("advances monotonically through the internal turn gates", () => {

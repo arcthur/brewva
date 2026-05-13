@@ -2,14 +2,16 @@ import {
   deriveToolGovernanceDescriptor,
   getToolActionPolicy,
   toolActionPolicyRequiresApproval,
-  type ToolActionClass,
-  type ToolAdmissionBehavior,
-  type ToolEffectClass,
-  type ToolExecutionBoundary,
-  type ToolReceiptPolicy,
-  type ToolRecoveryPolicy,
-  type ToolRiskLevel,
-} from "@brewva/brewva-runtime";
+} from "@brewva/brewva-runtime/governance";
+import type {
+  ToolActionClass,
+  ToolAdmissionBehavior,
+  ToolEffectClass,
+  ToolExecutionBoundary,
+  ToolReceiptPolicy,
+  ToolRecoveryPolicy,
+  ToolRiskLevel,
+} from "@brewva/brewva-runtime/governance";
 import type { BrewvaToolRequiredCapability } from "@brewva/brewva-tools/contracts";
 import {
   collectStringEnumContracts,
@@ -26,7 +28,7 @@ interface ToolLike {
 }
 
 export type CapabilitySurface = BrewvaToolSurface | "external";
-export type CapabilityHintId = "load_or_accept_skill" | "operator_profile_available";
+export type CapabilityHintId = "load_or_accept_skill" | "operator_host_lane_available";
 export type CapabilityPolicyId =
   | "surface_visibility"
   | "effect_boundaries"
@@ -601,9 +603,9 @@ function renderInventoryBlock(inventory: CapabilityVisibilityInventory): string 
   if (inventory.hints.includes("load_or_accept_skill")) {
     lines.push("skill_hint: load or accept a skill to expose task-specific tools.");
   }
-  if (inventory.hints.includes("operator_profile_available")) {
+  if (inventory.hints.includes("operator_host_lane_available")) {
     lines.push(
-      "operator_hint: operator/full profile keeps these tools visible by default; only requestable operator tools can be surfaced via `$name` for the current turn.",
+      "operator_hint: hosted operator turns keep operator tools visible by default; only requestable operator tools can be surfaced via `$name` for the current turn.",
     );
   }
   return lines.join("\n");
@@ -618,7 +620,7 @@ function renderPolicyBlock(
   for (const policy of policies) {
     if (policy.id === "surface_visibility") {
       lines.push(
-        "surface_policy: base tools stay visible; skill tools follow current skill commitments; requestable managed tools can be surfaced for one turn with an explicit $name request; operator/full profile keeps operator tools visible by default, while operator-gated tools remain profile-only.",
+        "surface_policy: base tools stay visible; skill tools follow current skill commitments; requestable managed tools can be surfaced for one turn with an explicit $name request; hosted operator turns keep operator tools visible by default, while operator-gated tools remain hosted-only.",
       );
       continue;
     }
@@ -745,7 +747,7 @@ export function buildCapabilityView(input: BuildCapabilityViewInput): BuildCapab
     inventory.hints.push("load_or_accept_skill");
   }
   if (inventory.hiddenBySurface.operator > 0) {
-    inventory.hints.push("operator_profile_available");
+    inventory.hints.push("operator_host_lane_available");
   }
 
   return {

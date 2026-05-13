@@ -48,11 +48,3 @@ export {
   readDelegationLifecycleEventPayload,
   readWorkerResultsAppliedEventPayload,
 } from "./event-descriptors.js";
-export {
-  createDelegationSurfaceMethods,
-  delegationRuntimeSurface,
-  delegationSurfaceContribution,
-} from "./runtime-surface.js";
-export type { RuntimeDelegationSurfaceMethods } from "./runtime-surface.js";
-export { registerDelegationDomain } from "./registrar.js";
-export type { RuntimeDelegationDomainRegistration } from "./registrar.js";

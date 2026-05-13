@@ -1,17 +1,17 @@
+import type { BrewvaRuntime } from "@brewva/brewva-runtime";
 import type {
-  BrewvaRuntime,
   DelegationModelRouteRecord,
   DelegationIsolationStrategy,
   DelegationVisibility,
-  ManagedToolMode,
-  ToolExecutionBoundary,
-} from "@brewva/brewva-runtime";
+} from "@brewva/brewva-runtime/delegation";
+import type { ToolExecutionBoundary } from "@brewva/brewva-runtime/governance";
+import { deriveToolGovernanceDescriptor } from "@brewva/brewva-runtime/governance";
+import type { ManagedToolMode } from "@brewva/brewva-runtime/session";
 import {
-  deriveToolGovernanceDescriptor,
   listSkillFallbackTools,
   listSkillPreferredTools,
   resolveSkillEffectLevel,
-} from "@brewva/brewva-runtime";
+} from "@brewva/brewva-runtime/skills";
 import { uniqueNonEmptyStrings as uniqueStrings } from "@brewva/brewva-std/collections";
 import type {
   DelegationPacket,
@@ -59,7 +59,7 @@ function resolveRuntimeToolBoundary(
   runtime: BrewvaRuntime,
   toolName: string,
 ): ToolExecutionBoundary | undefined {
-  const policy = runtime.inspect.tools.getActionPolicy(toolName);
+  const policy = runtime.inspect.tools.access.getActionPolicy(toolName);
   return policy ? deriveToolGovernanceDescriptor(policy).boundary : undefined;
 }
 
@@ -74,7 +74,7 @@ function resolveSkillToolHints(runtime: BrewvaRuntime, skillName: string | undef
   if (!skillName) {
     return [];
   }
-  const skill = runtime.inspect.skills.get(skillName);
+  const skill = runtime.inspect.skills.catalog.get(skillName);
   if (!skill) {
     return [];
   }
@@ -151,7 +151,6 @@ export interface ResolvedDelegationExecutionPlan {
   builtinToolNames: HostedDelegationBuiltinToolName[];
   managedToolNames: string[];
   producesPatches: boolean;
-  contextProfile: HostedDelegationTarget["contextProfile"];
   visibility: DelegationVisibility;
   isolationStrategy: DelegationIsolationStrategy;
   prompt: string;
@@ -260,7 +259,7 @@ export function resolveDelegationExecutionPlan(input: {
   assertConsultPacketContract(input.target, input.packet);
   const delegatedSkillName = input.target.skillName;
   const skill = delegatedSkillName
-    ? input.runtime.inspect.skills.get(delegatedSkillName)
+    ? input.runtime.inspect.skills.catalog.get(delegatedSkillName)
     : undefined;
   const skillBoundaryCeiling =
     skill && resolveSkillEffectLevel(skill.contract) === "read_only" ? "safe" : undefined;
@@ -307,7 +306,6 @@ export function resolveDelegationExecutionPlan(input: {
       input.packet,
     ),
     producesPatches: input.target.producesPatches,
-    contextProfile: input.target.contextProfile,
     visibility: input.target.visibility,
     isolationStrategy: input.target.isolationStrategy,
     prompt,

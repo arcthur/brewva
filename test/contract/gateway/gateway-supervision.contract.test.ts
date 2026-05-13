@@ -1,9 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import {
-  asBrewvaSessionId,
-  type ContextStatusView,
-  type SessionWireFrame,
-} from "@brewva/brewva-runtime";
+import { asBrewvaSessionId } from "@brewva/brewva-runtime/core";
+import type { ContextStatusView, SessionWireFrame } from "@brewva/brewva-runtime/session";
 import type WebSocket from "ws";
 import {
   createDaemonHarness,

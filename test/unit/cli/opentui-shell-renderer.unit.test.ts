@@ -3,13 +3,13 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  CURRENT_DELEGATION_CONTRACT_VERSION,
   asBrewvaSessionId,
   asBrewvaToolCallId,
   asBrewvaToolName,
-  type SessionWireFrame,
-} from "@brewva/brewva-runtime";
+} from "@brewva/brewva-runtime/core";
+import { CURRENT_DELEGATION_CONTRACT_VERSION } from "@brewva/brewva-runtime/delegation";
 import { type BrewvaReplaySession } from "@brewva/brewva-runtime/events";
+import type { SessionWireFrame } from "@brewva/brewva-runtime/session";
 import type { BrewvaToolUiPort } from "@brewva/brewva-substrate/host-api";
 import type {
   BrewvaQueuedPromptView,
@@ -367,45 +367,62 @@ function createFakeBundle(
     session,
     toolDefinitions: options.toolDefinitions ?? new Map(),
     runtime: {
+      identity: {
+        cwd: process.cwd(),
+        workspaceRoot: process.cwd(),
+        agentId: "test-agent",
+      },
       authority: {
         session: {
-          recordRewindCheckpoint() {},
-          rewind() {
-            return { ok: false, reason: "no_checkpoint" };
-          },
-          redo() {
-            return { ok: false, reason: "no_redo" };
+          rewind: {
+            recordCheckpoint() {},
+            rewind() {
+              return { ok: false, reason: "no_checkpoint" };
+            },
+            redo() {
+              return { ok: false, reason: "no_redo" };
+            },
           },
         },
         proposals: {
-          decideEffectCommitment() {},
+          requests: {
+            decide() {},
+          },
         },
       },
       inspect: {
         session: {
-          getRewindState() {
-            return {
-              checkpoints: [],
-              rewindAvailable: false,
-              redoAvailable: false,
-              redoStack: [],
-            };
-          },
-          listRewindTargets() {
-            return [];
+          rewind: {
+            getState() {
+              return {
+                checkpoints: [],
+                rewindAvailable: false,
+                redoAvailable: false,
+                redoStack: [],
+              };
+            },
+            listTargets() {
+              return [];
+            },
           },
         },
         proposals: {
-          listPendingEffectCommitments() {
-            return approvals;
+          requests: {
+            listPending() {
+              return approvals;
+            },
           },
         },
         events: {
-          query() {
-            return [];
+          records: {
+            query() {
+              return [];
+            },
           },
-          listReplaySessions() {
-            return replaySessions;
+          log: {
+            listReplaySessions() {
+              return replaySessions;
+            },
           },
         },
         sessionWire: {
@@ -1059,7 +1076,7 @@ describe("opentui solid shell runtime", () => {
         {
           role: "assistant",
           content:
-            "Runtime surfaces:\n\n| Surface | Role |\n| --- | --- |\n| authority | capability decisions |\n| inspect | read-only observation |\n| maintain | state maintenance |",
+            "Runtime surfaces:\n\n| Surface | Role |\n| --- | --- |\n| authority | capability decisions |\n| inspect | read-only observation |\n| operator | state maintenance |",
         },
       ],
     });

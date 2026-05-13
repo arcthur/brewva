@@ -25,7 +25,6 @@ export { querySessionWireFramesFromEventLog } from "./domain/sessions/api.js";
 
 export type BrewvaEventStore = ExtensionPort<
   "event-log.store",
-  "event-log",
   Pick<InstanceType<typeof InternalBrewvaEventStore>, (typeof BREWVA_EVENT_STORE_METHODS)[number]>
 >;
 
@@ -34,8 +33,6 @@ export function createBrewvaEventStore(
 ): BrewvaEventStore {
   return createBoundExtensionPort({
     name: "event-log.store",
-    authority: "event-log",
-    capabilityPrefix: "subpath.event-log.store",
     instance: new InternalBrewvaEventStore(...args),
     methods: BREWVA_EVENT_STORE_METHODS,
   });

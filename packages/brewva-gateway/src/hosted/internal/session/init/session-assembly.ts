@@ -1,12 +1,11 @@
 import { readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
-import {
-  BrewvaRuntime,
-  asBrewvaSessionId,
-  type CreateBrewvaSessionOptions as RuntimeCreateBrewvaSessionOptions,
-} from "@brewva/brewva-runtime";
+import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
+import { asBrewvaSessionId } from "@brewva/brewva-runtime/core";
 import { TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
+import type { CreateBrewvaSessionOptions as RuntimeCreateBrewvaSessionOptions } from "@brewva/brewva-runtime/session";
 import { sha256Hex, stableJsonSha256Hex } from "@brewva/brewva-std/hash";
 import type { BrewvaToolUiPort } from "@brewva/brewva-substrate/host-api";
 import type { BrewvaManagedPromptSession } from "@brewva/brewva-substrate/session";
@@ -19,6 +18,7 @@ import { attachBrewvaToolExecutionTraits } from "@brewva/brewva-tools/registry";
 import { type HostedDelegationBuiltinToolName } from "../../../../delegation/api.js";
 import { type HostedExtensionPlugin, type LocalHookPort } from "../../../../extensions/api.js";
 import { installSessionCompactionRecovery } from "../../compaction/recovery.js";
+import { rememberHostedVisibleReadState } from "../../context/materialization.js";
 import {
   analyzeReadPathRecoveryState,
   isReadPathVerified,
@@ -76,7 +76,7 @@ const READ_SIGNATURE_CONTENT_HASH_MAX_BYTES = 1024 * 1024;
 
 export interface HostedSessionResult {
   session: HostedSession;
-  runtime: BrewvaRuntime;
+  runtime: BrewvaHostedRuntimePort;
   providerConnections?: ProviderConnectionSeams;
   initPhases: readonly HostedSessionPhase[];
   phase: HostedSessionPhase;
@@ -85,7 +85,7 @@ export interface HostedSessionResult {
 }
 
 export interface CreateHostedSessionOptions extends RuntimeCreateBrewvaSessionOptions {
-  runtime?: BrewvaRuntime;
+  runtime?: BrewvaRuntime | BrewvaHostedRuntimePort;
   extensions?: HostedExtensionPlugin[];
   localHooks?: readonly LocalHookPort[];
   orchestration?: BrewvaToolOrchestration;
@@ -93,7 +93,6 @@ export interface CreateHostedSessionOptions extends RuntimeCreateBrewvaSessionOp
   mcpToolSources?: readonly HostedSessionMcpToolSource[];
   managedToolNames?: readonly string[];
   builtinToolNames?: readonly HostedDelegationBuiltinToolName[];
-  contextProfile?: "minimal" | "standard" | "full";
   enableSubagents?: boolean;
   scopeId?: string;
   sessionId?: string;
@@ -147,7 +146,7 @@ interface CompactReadTextOutput {
 
 interface CompactReadToolInput {
   cwd: string;
-  runtime?: BrewvaRuntime;
+  runtime?: BrewvaHostedRuntimePort;
   getReadToolOptions?: () => HostedSessionReadToolOptions | undefined;
   createReadDelegate?: typeof createHostedReadTool;
 }
@@ -271,10 +270,10 @@ function readFileSignature(path: string) {
 }
 
 function resolveVisibleReadHistoryEpoch(
-  runtime: BrewvaRuntime | undefined,
+  runtime: BrewvaHostedRuntimePort | undefined,
   sessionId: string,
 ): number {
-  return runtime?.inspect.context.getVisibleReadEpoch(sessionId) ?? 0;
+  return runtime?.inspect.context.visibleRead.getEpoch(sessionId) ?? 0;
 }
 
 function buildReadSignatureHash(input: {
@@ -296,7 +295,7 @@ export function createCompactReadTool(input: CompactReadToolInput): HostedSessio
   const createReadDelegate = input.createReadDelegate ?? createHostedReadTool;
   const originalRead = createReadDelegate(input.cwd);
   const readUnchangedState = createReadUnchangedState();
-  input.runtime?.maintain.session.onClearState((sessionId) => readUnchangedState.clear(sessionId));
+  input.runtime?.operator.session.state.onClear((sessionId) => readUnchangedState.clear(sessionId));
   const tool: typeof originalRead = {
     name: originalRead.name,
     label: originalRead.label,
@@ -334,7 +333,7 @@ export function createCompactReadTool(input: CompactReadToolInput): HostedSessio
         const priorContentStillVisible =
           !visibleReadState ||
           !input.runtime ||
-          input.runtime.inspect.context.isVisibleReadStateCurrent(sessionId, visibleReadState);
+          input.runtime.inspect.context.visibleRead.isCurrent(sessionId, visibleReadState);
         if (unchanged && priorContentStillVisible) {
           return {
             content: [
@@ -386,15 +385,24 @@ export function createCompactReadTool(input: CompactReadToolInput): HostedSessio
             visibleHistoryEpoch,
             readId: toolCallId,
           });
-          input.runtime?.maintain.context.rememberVisibleReadState(sessionId, {
-            path: readKey.path,
-            offset: readKey.offset,
-            limit: readKey.limit,
-            encoding: readKey.encoding,
-            signatureHash: buildReadSignatureHash({ key: readKey, signature: recordedSignature }),
-            visibleHistoryEpoch,
-            previousReadId: toolCallId,
-          });
+          if (input.runtime) {
+            rememberHostedVisibleReadState({
+              runtime: input.runtime,
+              sessionId,
+              state: {
+                path: readKey.path,
+                offset: readKey.offset,
+                limit: readKey.limit,
+                encoding: readKey.encoding,
+                signatureHash: buildReadSignatureHash({
+                  key: readKey,
+                  signature: recordedSignature,
+                }),
+                visibleHistoryEpoch,
+                previousReadId: toolCallId,
+              },
+            });
+          }
         }
       }
       if (input.runtime && requestedPath && sessionId && didReadToolSucceed(result)) {
@@ -532,7 +540,7 @@ const MUTATING_FILE_EXECUTION_TRAITS: BrewvaToolExecutionTraits = {
 
 function createHostedCustomTools(input: {
   cwd: string;
-  runtime: BrewvaRuntime;
+  runtime: BrewvaHostedRuntimePort;
   settingsManager: HostedSessionSettingsView;
   builtinToolNames: readonly HostedDelegationBuiltinToolName[] | undefined;
   directManagedTools: ReturnType<typeof createDirectManagedTools>;

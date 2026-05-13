@@ -2,7 +2,8 @@ import { expect } from "bun:test";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DEFAULT_BREWVA_CONFIG, BrewvaRuntime, type BrewvaConfig } from "@brewva/brewva-runtime";
+import { DEFAULT_BREWVA_CONFIG, BrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaConfig } from "@brewva/brewva-runtime";
 import type { BrewvaBundledToolRuntime } from "@brewva/brewva-tools/contracts";
 import { createBundledToolRuntime as createBundledToolRuntimeFromRuntime } from "../../helpers/runtime.js";
 
@@ -58,7 +59,9 @@ export function getParallelReadPayloads(
   sessionId: string,
 ): Array<Record<string, unknown>> {
   const payloads: Array<Record<string, unknown>> = [];
-  for (const event of runtime.inspect.events.query(sessionId, { type: "tool_parallel_read" })) {
+  for (const event of runtime.inspect.events.records.query(sessionId, {
+    type: "tool_parallel_read",
+  })) {
     if (!event.payload) continue;
     payloads.push(event.payload as unknown as Record<string, unknown>);
   }

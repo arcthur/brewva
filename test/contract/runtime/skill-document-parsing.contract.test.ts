@@ -10,7 +10,7 @@ import {
   listSkillPreferredTools,
   mergeOverlayContract,
   parseSkillDocument,
-} from "@brewva/brewva-runtime";
+} from "@brewva/brewva-runtime/skills";
 import { createContract, createTempSkillDocument, repoRoot } from "./skill-contract.helpers.js";
 
 const MINIMAL_SELECTION_LINES = [

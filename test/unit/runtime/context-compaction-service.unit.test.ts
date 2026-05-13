@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { asBrewvaSessionId } from "@brewva/brewva-runtime";
+import { asBrewvaSessionId } from "@brewva/brewva-runtime/core";
 import { asBrewvaEventType } from "@brewva/brewva-runtime/events";
 import {
   commitSessionCompaction,

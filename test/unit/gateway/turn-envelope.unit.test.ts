@@ -2,40 +2,45 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  BrewvaRuntime,
-  asBrewvaToolCallId,
-  asBrewvaToolName,
-  type SessionWireFrame,
-  type ToolOutputView,
-} from "@brewva/brewva-runtime";
-import {
-  TurnLifecycleSpine,
-  type TurnLifecycleAdvanceInput,
-  type TurnLifecycleSnapshot,
-} from "@brewva/brewva-runtime";
+import { BrewvaRuntime, createHostedRuntimePort } from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
+import { asBrewvaToolCallId, asBrewvaToolName } from "@brewva/brewva-runtime/core";
 import {
   EFFECT_AUTHORITY_DECIDED_EVENT_TYPE,
   TOOL_RESULT_RECORDED_EVENT_TYPE,
 } from "@brewva/brewva-runtime/events";
+import type { SessionWireFrame, ToolOutputView } from "@brewva/brewva-runtime/session";
+import { TurnLifecycleSpine } from "@brewva/brewva-runtime/session";
+import type {
+  TurnLifecycleAdvanceInput,
+  TurnLifecycleSnapshot,
+} from "@brewva/brewva-runtime/session";
 import type { BrewvaPromptContentPart } from "@brewva/brewva-substrate/prompt";
 import {
   runHostedTurnEnvelope,
   type HostedTurnEnvelopeLoopResult,
 } from "../../../packages/brewva-gateway/src/hosted/internal/thread-loop/turn-envelope.js";
 
-function createRuntime(prefix: string): BrewvaRuntime {
-  return new BrewvaRuntime({
+function createHostedTestRuntime(options: ConstructorParameters<typeof BrewvaRuntime>[0]) {
+  return createHostedRuntimePort(new BrewvaRuntime(options));
+}
+
+function createRuntime(prefix: string): BrewvaHostedRuntimePort {
+  return createHostedTestRuntime({
     cwd: mkdtempSync(join(tmpdir(), prefix)),
   });
 }
 
-function eventTypes(runtime: BrewvaRuntime, sessionId: string): string[] {
-  return runtime.inspect.events.list(sessionId).map((event) => event.type);
+function eventTypes(runtime: BrewvaHostedRuntimePort, sessionId: string): string[] {
+  return runtime.inspect.events.records.list(sessionId).map((event) => event.type);
 }
 
-function eventPayloads(runtime: BrewvaRuntime, sessionId: string, type: string): unknown[] {
-  return runtime.inspect.events.list(sessionId, { type }).map((event) => event.payload);
+function eventPayloads(
+  runtime: BrewvaHostedRuntimePort,
+  sessionId: string,
+  type: string,
+): unknown[] {
+  return runtime.inspect.events.records.list(sessionId, { type }).map((event) => event.payload);
 }
 
 function createLoopResult(
@@ -152,7 +157,7 @@ describe("hosted turn envelope", () => {
       turnId: "turn-effect-spine-1",
       turnLifecycleSpine,
       runLoop: async () => {
-        runtime.extensions.hosted.events.record({
+        createHostedRuntimePort(runtime).extensions.hosted.events.record({
           sessionId,
           turn: 0,
           type: EFFECT_AUTHORITY_DECIDED_EVENT_TYPE,
@@ -194,7 +199,7 @@ describe("hosted turn envelope", () => {
             },
           },
         });
-        runtime.extensions.hosted.events.record({
+        createHostedRuntimePort(runtime).extensions.hosted.events.record({
           sessionId,
           turn: 0,
           type: TOOL_RESULT_RECORDED_EVENT_TYPE,
@@ -282,7 +287,7 @@ describe("hosted turn envelope", () => {
       turnId: "turn-cross-recovery-1",
       turnLifecycleSpine,
       runLoop: async () => {
-        runtime.extensions.hosted.events.record({
+        createHostedRuntimePort(runtime).extensions.hosted.events.record({
           sessionId,
           turn: 42,
           type: "session_turn_transition",
@@ -343,13 +348,13 @@ describe("hosted turn envelope", () => {
         ],
       },
       runLoop: async () => {
-        observedGoal.push(runtime.inspect.task.getState(sessionId).spec?.goal ?? "");
+        observedGoal.push(runtime.inspect.task.state.get(sessionId).spec?.goal ?? "");
         return createLoopResult();
       },
     });
 
     expect(observedGoal).toEqual(["Inherited schedule goal"]);
-    expect(runtime.inspect.claim.getState(sessionId).claims.map((fact) => fact.id)).toContain(
+    expect(runtime.inspect.claim.state.get(sessionId).claims.map((fact) => fact.id)).toContain(
       "fact-1",
     );
     expect(eventPayloads(runtime, sessionId, "turn_input_recorded")[0]).toMatchObject({

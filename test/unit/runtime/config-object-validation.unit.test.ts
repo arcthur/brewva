@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { BrewvaConfigLoadError } from "@brewva/brewva-runtime";
+import { BrewvaConfigLoadError } from "@brewva/brewva-runtime/config";
 import { DEFAULT_BREWVA_CONFIG } from "../../../packages/brewva-runtime/src/config/defaults.js";
 import {
   forensicallyValidateLoadedBrewvaConfigObject,

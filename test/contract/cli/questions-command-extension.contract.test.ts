@@ -3,7 +3,11 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createQuestionsCommandExtension } from "@brewva/brewva-cli";
 import type { HostedExtensionApi } from "@brewva/brewva-gateway/extensions";
-import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
+import {
+  BrewvaRuntime,
+  DEFAULT_BREWVA_CONFIG,
+  createHostedRuntimePort,
+} from "@brewva/brewva-runtime";
 import { OPERATOR_QUESTION_ANSWERED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
 import {
   buildBrewvaPromptText,
@@ -12,6 +16,10 @@ import {
 import { requireDefined } from "../../helpers/assertions.js";
 import { recordHostedDelegationOutcome } from "../../helpers/events.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
+
+function createHostedTestRuntime(options: ConstructorParameters<typeof BrewvaRuntime>[0]) {
+  return createHostedRuntimePort(new BrewvaRuntime(options));
+}
 
 type RegisteredCommand = {
   description: string;
@@ -65,7 +73,7 @@ describe("questions interactive command extension", () => {
   test("publishes open questions into a notification without mutating event history", async () => {
     const workspace = createTestWorkspace("questions-command-extension");
     writeFileSync(join(workspace, ".brewva", "brewva.json"), "{}\n", "utf8");
-    const runtime = new BrewvaRuntime({
+    const runtime = createHostedTestRuntime({
       cwd: workspace,
       config: structuredClone(DEFAULT_BREWVA_CONFIG),
     });
@@ -101,7 +109,7 @@ describe("questions interactive command extension", () => {
     });
     const questionId = `delegation:${runId}:1`;
 
-    const beforeEventCount = runtime.inspect.events.query(sessionId).length;
+    const beforeEventCount = runtime.inspect.events.records.query(sessionId).length;
     const { api, commands } = createCommandApiMock();
     await createQuestionsCommandExtension(runtime).register(api);
 
@@ -122,7 +130,7 @@ describe("questions interactive command extension", () => {
 
     await questionsCommand.handler("", ctx);
 
-    expect(runtime.inspect.events.query(sessionId)).toHaveLength(beforeEventCount);
+    expect(runtime.inspect.events.records.query(sessionId)).toHaveLength(beforeEventCount);
     const rendered = notifications.at(-1)?.message ?? "";
     expect(rendered).toContain("Operator inbox updated (1 pending).");
     expect(rendered).toContain("Operator inbox: 1");
@@ -136,7 +144,7 @@ describe("questions interactive command extension", () => {
   test("routes /answer back into the session and records a durable answer event", async () => {
     const workspace = createTestWorkspace("questions-command-answer");
     writeFileSync(join(workspace, ".brewva", "brewva.json"), "{}\n", "utf8");
-    const runtime = new BrewvaRuntime({
+    const runtime = createHostedTestRuntime({
       cwd: workspace,
       config: structuredClone(DEFAULT_BREWVA_CONFIG),
     });
@@ -201,7 +209,7 @@ describe("questions interactive command extension", () => {
     expect(buildBrewvaPromptText(sentMessages[0]?.content ?? [])).toContain(
       "Answer: Use the gateway daemon path.",
     );
-    const answerEvents = runtime.inspect.events
+    const answerEvents = runtime.inspect.events.records
       .query(sessionId)
       .filter((event) => event.type === OPERATOR_QUESTION_ANSWERED_EVENT_TYPE);
     expect(answerEvents).toHaveLength(1);

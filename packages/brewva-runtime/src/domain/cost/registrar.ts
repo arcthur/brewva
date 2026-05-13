@@ -1,13 +1,11 @@
-import type { RuntimeServiceRegistrarOptions } from "../../runtime/service-registrar-types.js";
+import type { RuntimeServiceRegistrarOptions } from "../../runtime/wiring.js";
 import type { LedgerService } from "../ledger/api.js";
 import { CostService } from "./cost.js";
-import { costSurfaceContribution } from "./runtime-surface.js";
 
 export interface RuntimeCostDomainRegistration {
   services: {
     costService: CostService;
   };
-  surfaceContribution: typeof costSurfaceContribution;
 }
 
 export function registerCostDomain(
@@ -26,6 +24,5 @@ export function registerCostDomain(
         governancePort: options.governancePort,
       }),
     },
-    surfaceContribution: costSurfaceContribution,
   };
 }

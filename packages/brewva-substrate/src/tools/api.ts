@@ -1,4 +1,17 @@
 export {
+  createToolCatalog,
+  DEFAULT_TOOL_EXECUTION_TRAITS,
+  resolveToolExecutionTraits,
+  ToolCatalog,
+  type JsonSchema,
+  type ToolCatalogEntry,
+  type ToolDescriptor,
+  type ToolExecutionTraitResolverInput,
+  type ToolExecutionTraits,
+  type ToolExecutionTraitsDefinition,
+  type ToolExecutionTraitsResolver,
+} from "./protocol.js";
+export {
   type BrewvaCompactionRequest,
   type BrewvaImageContentPart,
   type BrewvaRenderableComponent,

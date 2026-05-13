@@ -1,13 +1,11 @@
-import type { RuntimeLazyServiceRegistrarOptions } from "../../runtime/service-registrar-types.js";
+import type { RuntimeLazyServiceRegistrarOptions } from "../../runtime/wiring.js";
 import { REASONING_EVENT_DESCRIPTORS } from "./event-descriptors.js";
 import { ReasoningService } from "./reasoning.js";
-import { reasoningSurfaceContribution } from "./runtime-surface.js";
 
 export interface RuntimeReasoningDomainRegistration {
   lazyFactories: {
     createReasoningService(): ReasoningService;
   };
-  surfaceContribution: typeof reasoningSurfaceContribution;
   eventDescriptors: typeof REASONING_EVENT_DESCRIPTORS;
 }
 
@@ -26,7 +24,6 @@ export function registerReasoningDomain(
         return reasoningService;
       },
     },
-    surfaceContribution: reasoningSurfaceContribution,
     eventDescriptors: REASONING_EVENT_DESCRIPTORS,
   };
 }

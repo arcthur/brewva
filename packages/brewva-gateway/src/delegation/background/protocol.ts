@@ -11,12 +11,12 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, resolve } from "node:path";
+import type { BrewvaConfig } from "@brewva/brewva-runtime";
 import type {
-  BrewvaConfig,
   DelegationModelRouteRecord,
   DelegationRunRecord,
-  SkillRoutingScope,
-} from "@brewva/brewva-runtime";
+} from "@brewva/brewva-runtime/delegation";
+import type { SkillRoutingScope } from "@brewva/brewva-runtime/skills";
 import type {
   AdvisorConsultKind,
   DelegationPacket,

@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { BrewvaRuntime, createOperatorRuntimePort } from "@brewva/brewva-runtime";
 import fc from "fast-check";
 import { propertyTest } from "../../helpers/property.js";
 import { cleanupWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
@@ -54,7 +54,7 @@ function prepareWorkspace(input: EditCase): {
 
   const runtime = new BrewvaRuntime({ cwd: workspace });
   const sessionId = `reversible-property-${input.toolCallId}`;
-  runtime.maintain.context.onTurnStart(sessionId, 1);
+  createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
   return {
     runtime,
     sessionId,
@@ -73,7 +73,7 @@ describe("reversible mutation properties", () => {
       const { runtime, sessionId, relativePath, dispose } = prepareWorkspace(input);
 
       try {
-        runtime.authority.tools.finish({
+        runtime.authority.tools.invocation.finish({
           sessionId,
           toolCallId: input.toolCallId,
           toolName: "edit",
@@ -88,12 +88,12 @@ describe("reversible mutation properties", () => {
         });
 
         expect(
-          runtime.inspect.events.query(sessionId, {
+          runtime.inspect.events.records.query(sessionId, {
             type: "reversible_mutation_recorded",
             last: 1,
           }),
         ).toEqual([]);
-        expect(runtime.authority.tools.rollbackLastMutation(sessionId).ok).toBe(false);
+        expect(runtime.authority.tools.patches.rollbackLastMutation(sessionId).ok).toBe(false);
       } finally {
         dispose();
       }
@@ -108,7 +108,7 @@ describe("reversible mutation properties", () => {
       const { runtime, sessionId, relativePath, absolutePath, dispose } = prepareWorkspace(input);
 
       try {
-        const started = runtime.authority.tools.start({
+        const started = runtime.authority.tools.invocation.start({
           sessionId,
           toolCallId: input.toolCallId,
           toolName: "edit",
@@ -126,7 +126,7 @@ describe("reversible mutation properties", () => {
         expect(Number.isFinite(Number(started.mutationReceipt?.id.split(":").at(-1)))).toBe(true);
 
         writeValue(absolutePath, input.nextValue);
-        runtime.authority.tools.finish({
+        runtime.authority.tools.invocation.finish({
           sessionId,
           toolCallId: input.toolCallId,
           toolName: "edit",
@@ -140,20 +140,20 @@ describe("reversible mutation properties", () => {
           verdict: "pass",
         });
 
-        const recorded = runtime.inspect.events.query(sessionId, {
+        const recorded = runtime.inspect.events.records.query(sessionId, {
           type: "reversible_mutation_recorded",
           last: 1,
         })[0];
         expect(recorded?.payload?.changed).toBe(true);
         expect(typeof recorded?.payload?.patchSetId).toBe("string");
 
-        const rollback = runtime.authority.tools.rollbackLastMutation(sessionId);
+        const rollback = runtime.authority.tools.patches.rollbackLastMutation(sessionId);
         expect(rollback.ok).toBe(true);
         expect(readFileSync(absolutePath, "utf8")).toBe(
           `export const value = ${input.initialValue};\n`,
         );
 
-        const redo = runtime.authority.tools.redoLastPatchSet(sessionId);
+        const redo = runtime.authority.tools.patches.redoLastPatchSet(sessionId);
         expect(redo.ok).toBe(true);
         expect(readFileSync(absolutePath, "utf8")).toBe(
           `export const value = ${input.nextValue};\n`,
@@ -172,7 +172,7 @@ describe("reversible mutation properties", () => {
       const { runtime, sessionId, relativePath, dispose } = prepareWorkspace(input);
 
       try {
-        runtime.authority.tools.start({
+        runtime.authority.tools.invocation.start({
           sessionId,
           toolCallId: input.toolCallId,
           toolName: "edit",
@@ -182,7 +182,7 @@ describe("reversible mutation properties", () => {
             new_string: `value = ${input.nextValue}`,
           },
         });
-        runtime.authority.tools.finish({
+        runtime.authority.tools.invocation.finish({
           sessionId,
           toolCallId: input.toolCallId,
           toolName: "edit",
@@ -196,12 +196,12 @@ describe("reversible mutation properties", () => {
           verdict: "pass",
         });
 
-        const recorded = runtime.inspect.events.query(sessionId, {
+        const recorded = runtime.inspect.events.records.query(sessionId, {
           type: "reversible_mutation_recorded",
           last: 1,
         })[0];
         expect(recorded?.payload?.changed).toBe(false);
-        expect(runtime.authority.tools.rollbackLastMutation(sessionId).ok).toBe(false);
+        expect(runtime.authority.tools.patches.rollbackLastMutation(sessionId).ok).toBe(false);
       } finally {
         dispose();
       }

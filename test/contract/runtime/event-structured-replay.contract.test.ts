@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { BrewvaRuntime, asBrewvaSessionId } from "@brewva/brewva-runtime";
+import { BrewvaRuntime, createHostedRuntimePort } from "@brewva/brewva-runtime";
+import { asBrewvaSessionId } from "@brewva/brewva-runtime/core";
 import {
   RUNTIME_CONTRACT_CONFIG_PATH,
   createRuntimeContractConfig as createConfig,
@@ -14,24 +15,24 @@ describe("structured event replay", () => {
 
     const runtime = new BrewvaRuntime({ cwd: workspace, configPath: RUNTIME_CONTRACT_CONFIG_PATH });
     const sessionId = asBrewvaSessionId("replay-1");
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: "session_start",
       payload: { cwd: workspace },
     });
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: "channel_session_bound",
       payload: { channel: "telegram", conversationId: "12345" },
     });
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: "tool_call",
       turn: 1,
       payload: { toolCallId: "tc-read-1", toolName: "read" },
     });
 
-    const structured = runtime.inspect.events.queryStructured(sessionId);
+    const structured = runtime.inspect.events.records.queryStructured(sessionId);
     expect(structured.length).toBe(3);
     expect(structured[0]?.schema).toBe("brewva.event.v1");
     expect(structured.map((event) => `${event.type}:${event.category}`)).toEqual(
@@ -42,7 +43,7 @@ describe("structured event replay", () => {
       ]),
     );
 
-    const sessions = runtime.inspect.events.listReplaySessions();
+    const sessions = runtime.inspect.events.log.listReplaySessions();
     expect(sessions.map((entry) => entry.sessionId)).toContain(sessionId);
   });
 
@@ -54,27 +55,27 @@ describe("structured event replay", () => {
     const olderSession = asBrewvaSessionId("session-older");
     const newerSession = asBrewvaSessionId("session-newer");
 
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId: newerSession,
       type: "session_start",
       payload: { cwd: workspace },
       timestamp: 3000,
     });
 
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId: olderSession,
       type: "session_start",
       payload: { cwd: workspace },
       timestamp: 1000,
     });
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId: olderSession,
       type: "channel_session_bound",
       payload: { channel: "cli", conversationId: "x" },
       timestamp: 2000,
     });
 
-    expect(runtime.inspect.events.listReplaySessions()).toEqual([
+    expect(runtime.inspect.events.log.listReplaySessions()).toEqual([
       expect.objectContaining({ sessionId: newerSession, lastEventAt: 3000 }),
       expect.objectContaining({ sessionId: olderSession, lastEventAt: 2000 }),
     ]);

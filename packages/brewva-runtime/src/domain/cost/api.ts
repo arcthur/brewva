@@ -1,8 +1,8 @@
 export type { SessionCostSummary, SessionCostTotals } from "./types.js";
 export { BUDGET_ALERT_EVENT_TYPE, COST_UPDATE_EVENT_TYPE } from "./events.js";
 export {
-  costRuntimeSurface,
-  costSurfaceContribution,
+  createCostAuthoritySurface,
+  createCostInspectSurface,
   createCostSurfaceMethods,
 } from "./runtime-surface.js";
 export type { CostSurfaceDependencies, RuntimeCostSurfaceMethods } from "./runtime-surface.js";

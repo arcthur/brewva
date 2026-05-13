@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { getNextCronRunAt, parseCronExpression } from "@brewva/brewva-runtime";
+import { getNextCronRunAt, parseCronExpression } from "@brewva/brewva-runtime/schedule";
 
 describe("schedule cron timezone boundary", () => {
   test("spring-forward skips nonexistent local hour", () => {

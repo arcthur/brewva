@@ -1,4 +1,5 @@
-import { listInvalidWorkbenchEvictionSpanRefs, type WorkbenchEntry } from "@brewva/brewva-runtime";
+import { listInvalidWorkbenchEvictionSpanRefs } from "@brewva/brewva-runtime/workbench";
+import type { WorkbenchEntry } from "@brewva/brewva-runtime/workbench";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "../../contracts/index.js";
@@ -76,7 +77,7 @@ export function createWorkbenchNoteTool(options: BrewvaToolOptions): ToolDefinit
       }
 
       const retentionHint = readNonEmptyString(params.retention_hint);
-      const entry = runtime.maintain?.workbench.note(getSessionId(ctx), {
+      const entry = runtime.authority?.workbench.note(getSessionId(ctx), {
         content,
         sourceRefs,
         reason,
@@ -156,7 +157,7 @@ export function createWorkbenchEvictTool(options: BrewvaToolOptions): ToolDefini
 
       const replacementNote = readNonEmptyString(params.replacement_note);
       const preservedQuotes = readStringList(params.preserved_quotes);
-      const entry = runtime.maintain?.workbench.evict(getSessionId(ctx), {
+      const entry = runtime.authority?.workbench.evict(getSessionId(ctx), {
         spanRefs,
         ...(replacementNote ? { replacementNote } : {}),
         reason,
@@ -223,7 +224,7 @@ export function createWorkbenchUndoEvictTool(options: BrewvaToolOptions): ToolDe
         });
       }
 
-      const result = runtime.maintain?.workbench.undoEviction(getSessionId(ctx), entryId, reason);
+      const result = runtime.authority?.workbench.undoEviction(getSessionId(ctx), entryId, reason);
       if (!result) {
         return failTextResult("workbench_undo_evict unavailable (missing_runtime_workbench).", {
           ok: false,

@@ -195,7 +195,7 @@ describe("channel mode prompt output collector", () => {
     };
 
     const runtime = createRuntimeFixture();
-    Object.assign(runtime.inspect.events, {
+    Object.assign(runtime.inspect.events.records, {
       subscribe(
         listener: (event: {
           id: string;

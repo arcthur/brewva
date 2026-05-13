@@ -2,12 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import {
-  DEFAULT_BREWVA_CONFIG,
-  getToolActionPolicy,
-  loadBrewvaConfig,
-  type ToolActionPolicy,
-} from "@brewva/brewva-runtime";
+import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
+import { loadBrewvaConfig } from "@brewva/brewva-runtime/config";
 import {
   BREWVA_REGISTERED_EVENT_TYPES,
   BOX_ACQUIRED_EVENT_TYPE,
@@ -26,6 +22,8 @@ import {
   EXEC_STARTED_EVENT_TYPE,
   isBrewvaRegisteredEventType,
 } from "@brewva/brewva-runtime/events";
+import { getToolActionPolicy } from "@brewva/brewva-runtime/governance";
+import type { ToolActionPolicy } from "@brewva/brewva-runtime/governance";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 describe("box runtime contract", () => {

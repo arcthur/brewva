@@ -5,7 +5,7 @@ import {
   startScopedSchedule,
   type ScopedScheduleHandle,
 } from "@brewva/brewva-effect";
-import { parseJsonc } from "@brewva/brewva-runtime";
+import { parseJsonc } from "@brewva/brewva-runtime/config";
 import { toErrorMessage } from "../utils/errors.js";
 import type { StructuredLogger } from "./logger.js";
 

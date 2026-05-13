@@ -50,6 +50,11 @@ import {
   WORKER_RESULTS_APPLIED_EVENT_TYPE,
   WORKER_RESULTS_APPLY_FAILED_EVENT_TYPE,
 } from "../domain/delegation/events.js";
+import { ITERATION_EVENT_DEFINITIONS } from "../domain/events/iteration-event-descriptors.js";
+import {
+  ITERATION_GUARD_RECORDED_EVENT_TYPE,
+  ITERATION_METRIC_OBSERVED_EVENT_TYPE,
+} from "../domain/events/iteration-events.js";
 import { GOVERNANCE_EVENT_DEFINITIONS } from "../domain/governance/event-descriptors.js";
 import {
   EFFECT_AUTHORITY_DECIDED_EVENT_TYPE,
@@ -68,11 +73,6 @@ import {
   STEER_QUEUED_EVENT_TYPE,
   TOOL_EFFECT_GATE_SELECTED_EVENT_TYPE,
 } from "../domain/governance/events.js";
-import { ITERATION_EVENT_DEFINITIONS } from "../domain/iteration/event-descriptors.js";
-import {
-  ITERATION_GUARD_RECORDED_EVENT_TYPE,
-  ITERATION_METRIC_OBSERVED_EVENT_TYPE,
-} from "../domain/iteration/events.js";
 import { LEDGER_EVENT_DEFINITIONS } from "../domain/ledger/event-descriptors.js";
 import { LEDGER_COMPACTED_EVENT_TYPE } from "../domain/ledger/events.js";
 import { LIFECYCLE_EVENT_DEFINITIONS } from "../domain/lifecycle/event-descriptors.js";

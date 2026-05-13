@@ -1,12 +1,12 @@
 import type { ProviderRequestFingerprint } from "@brewva/brewva-provider-core/contracts";
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import type {
-  BrewvaRuntime,
   ExpectedProviderCacheBreak,
   ProviderCacheBreakObservation,
   ProviderCacheRenderState,
-} from "@brewva/brewva-runtime";
+} from "@brewva/brewva-runtime/context";
 import type { BrewvaTurnLoopAssistantMessage } from "@brewva/brewva-substrate/turn";
-import { recordProviderCacheObservationEvidence } from "../../context/evidence/context-evidence.js";
+import { observeHostedProviderCache } from "../../context/materialization.js";
 import {
   isCachedContentUnsupportedStreamError,
   providerCacheCountersAvailable,
@@ -19,7 +19,7 @@ export interface ManagedSessionProviderAssistantObserverState {
 }
 
 export interface ManagedSessionProviderAssistantObserverOptions {
-  runtime: BrewvaRuntime | undefined;
+  runtime: BrewvaHostedRuntimePort | undefined;
   workspaceRoot: string;
   sessionId: string;
   googleCachedContentManager: {
@@ -51,7 +51,7 @@ export interface ManagedSessionProviderAssistantObserverOptions {
 }
 
 export class ManagedSessionProviderAssistantObserver {
-  readonly #runtime: BrewvaRuntime | undefined;
+  readonly #runtime: BrewvaHostedRuntimePort | undefined;
   readonly #workspaceRoot: string;
   readonly #sessionId: string;
   readonly #googleCachedContentManager: ManagedSessionProviderAssistantObserverOptions["googleCachedContentManager"];
@@ -111,19 +111,15 @@ export class ManagedSessionProviderAssistantObserver {
       },
       observedAt: Date.now(),
     });
-    const providerCacheObservation = this.#runtime.maintain.context.observeProviderCache(
-      this.#sessionId,
-      {
+    observeHostedProviderCache({
+      runtime: this.#runtime,
+      sessionId: this.#sessionId,
+      observation: {
         source: state.lastProviderFingerprint.bucketKey,
         fingerprint: state.lastProviderFingerprint,
         render: state.lastCacheRender,
         breakObservation,
       },
-    );
-    recordProviderCacheObservationEvidence({
-      workspaceRoot: this.#runtime.workspaceRoot,
-      sessionId: this.#sessionId,
-      observed: providerCacheObservation,
     });
   }
 }

@@ -1,4 +1,5 @@
-import type { BrewvaRuntime, SkillRoutingScope } from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
+import type { SkillRoutingScope } from "@brewva/brewva-runtime/skills";
 import type { InternalHostPlugin, BrewvaToolUiPort } from "@brewva/brewva-substrate/host-api";
 import type {
   BrewvaModelCatalog,
@@ -71,7 +72,7 @@ export interface HostedSessionServices {
 export interface CreateHostedSessionRuntimeOptions {
   cwd: string;
   settings: HostedSessionSettings;
-  runtime?: BrewvaRuntime;
+  runtime?: BrewvaHostedRuntimePort;
   extensions?: readonly InternalHostPlugin[];
   requestedModel?: BrewvaRegisteredModel;
   requestedThinkingLevel?: string;

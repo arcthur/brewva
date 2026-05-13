@@ -1,5 +1,6 @@
-import { parseWorkbenchEvictionSpanRef, type WorkbenchEntry } from "@brewva/brewva-runtime";
 import type { BrewvaEventRecord } from "@brewva/brewva-runtime/events";
+import { parseWorkbenchEvictionSpanRef } from "@brewva/brewva-runtime/workbench";
+import type { WorkbenchEntry } from "@brewva/brewva-runtime/workbench";
 import { isRecord } from "@brewva/brewva-std/unknown";
 import type { BrewvaSessionEntry } from "@brewva/brewva-substrate/session";
 import type { BrewvaTurnLoopMessage } from "@brewva/brewva-substrate/turn";

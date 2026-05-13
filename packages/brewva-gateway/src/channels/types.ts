@@ -1,5 +1,5 @@
-import type { ManagedToolMode } from "@brewva/brewva-runtime";
-import type { BrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
+import type { ManagedToolMode } from "@brewva/brewva-runtime/session";
 import type { ChannelModeConfig } from "./launcher.js";
 import type { RunChannelModeDependencies } from "./ports.js";
 
@@ -12,7 +12,7 @@ export interface RunChannelModeOptions {
   verbose: boolean;
   channel: string;
   channelConfig?: ChannelModeConfig;
-  onRuntimeReady?: (runtime: BrewvaRuntime) => void;
+  onRuntimeReady?: (runtime: BrewvaHostedRuntimePort) => void;
   shutdownSignal?: AbortSignal;
   dependencies?: RunChannelModeDependencies;
 }

@@ -2,8 +2,9 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BrewvaRuntime, createTrustedLocalGovernancePort } from "@brewva/brewva-runtime";
+import { BrewvaRuntime, createOperatorRuntimePort } from "@brewva/brewva-runtime";
 import { type BrewvaEventRecord } from "@brewva/brewva-runtime/events";
+import { createTrustedLocalGovernancePort } from "@brewva/brewva-runtime/governance";
 import { createOpsRuntimeConfig } from "../../helpers/runtime.js";
 
 function createWorkspace(prefix: string): string {
@@ -232,7 +233,7 @@ describe("Tool invocation characterization", () => {
     const runtime = createRuntime();
     const sessionId = "tool-char-shell";
 
-    const started = runtime.authority.tools.start({
+    const started = runtime.authority.tools.invocation.start({
       sessionId,
       toolCallId: "tc-shell",
       toolName: "shell",
@@ -244,7 +245,7 @@ describe("Tool invocation characterization", () => {
       boundary: "effectful",
       reason: "Tool 'shell' is denied by action admission policy.",
     });
-    expect(summarizeEvents(runtime.inspect.events.query(sessionId))).toEqual([
+    expect(summarizeEvents(runtime.inspect.events.records.query(sessionId))).toEqual([
       {
         type: "effect_authority_decided",
         payload: {
@@ -273,7 +274,7 @@ describe("Tool invocation characterization", () => {
     });
     const sessionId = "tool-char-accept";
 
-    const started = runtime.authority.tools.start({
+    const started = runtime.authority.tools.invocation.start({
       sessionId,
       toolCallId: "tc-exec-accept",
       toolName: "exec",
@@ -283,7 +284,7 @@ describe("Tool invocation characterization", () => {
     expect(started.allowed).toBe(true);
     expect(started.boundary).toBe("effectful");
     expect(started.commitmentReceipt?.decision).toBe("accept");
-    expect(summarizeEvents(runtime.inspect.events.query(sessionId))).toEqual([
+    expect(summarizeEvents(runtime.inspect.events.records.query(sessionId))).toEqual([
       {
         type: "effect_authority_decided",
         payload: {
@@ -334,7 +335,7 @@ describe("Tool invocation characterization", () => {
     });
     const sessionId = "tool-char-action-policy-evidence";
 
-    const started = runtime.authority.tools.start({
+    const started = runtime.authority.tools.invocation.start({
       sessionId,
       toolCallId: "tc-exec-policy",
       toolName: "exec",
@@ -342,7 +343,7 @@ describe("Tool invocation characterization", () => {
     });
 
     expect(started.allowed).toBe(true);
-    const effectGateEvent = runtime.inspect.events
+    const effectGateEvent = runtime.inspect.events.records
       .query(sessionId)
       .find((event) => event.type === "effect_authority_decided");
     expect(effectGateEvent?.payload).toMatchObject({
@@ -360,7 +361,7 @@ describe("Tool invocation characterization", () => {
     const runtime = createRuntime();
     const sessionId = "tool-char-defer";
 
-    const started = runtime.authority.tools.start({
+    const started = runtime.authority.tools.invocation.start({
       sessionId,
       toolCallId: "tc-exec-defer",
       toolName: "exec",
@@ -371,7 +372,7 @@ describe("Tool invocation characterization", () => {
     expect(started.boundary).toBe("effectful");
     expect(started.commitmentReceipt?.decision).toBe("defer");
     expect(typeof started.effectCommitmentRequestId).toBe("string");
-    expect(summarizeEvents(runtime.inspect.events.query(sessionId))).toEqual([
+    expect(summarizeEvents(runtime.inspect.events.records.query(sessionId))).toEqual([
       {
         type: "effect_authority_decided",
         payload: {
@@ -431,28 +432,24 @@ describe("Tool invocation characterization", () => {
     const sessionId = "tool-char-args-mismatch";
     const sharedPrefix = "x".repeat(320);
 
-    const deferred = runtime.authority.tools.start({
+    const deferred = runtime.authority.tools.invocation.start({
       sessionId,
       toolCallId: "tc-exec-mismatch",
       toolName: "exec",
       args: { command: `${sharedPrefix}A` },
     });
-    const pending = runtime.inspect.proposals.listPendingEffectCommitments(sessionId);
+    const pending = runtime.inspect.proposals.requests.listPending(sessionId);
     expect(deferred.allowed).toBe(false);
     expect(pending).toHaveLength(1);
 
-    const decision = runtime.authority.proposals.decideEffectCommitment(
-      sessionId,
-      pending[0]!.requestId,
-      {
-        decision: "accept",
-        actor: "operator:test",
-        reason: "exact payload reviewed",
-      },
-    );
+    const decision = runtime.authority.proposals.requests.decide(sessionId, pending[0]!.requestId, {
+      decision: "accept",
+      actor: "operator:test",
+      reason: "exact payload reviewed",
+    });
     expect(decision.ok).toBe(true);
 
-    const mismatched = runtime.authority.tools.start({
+    const mismatched = runtime.authority.tools.invocation.start({
       sessionId,
       toolCallId: "tc-exec-mismatch",
       toolName: "exec",
@@ -466,7 +463,7 @@ describe("Tool invocation characterization", () => {
       reason: expect.stringContaining("effect_commitment_request_args_mismatch:"),
       effectCommitmentRequestId: pending[0]!.requestId,
     });
-    expect(summarizeEvents(runtime.inspect.events.query(sessionId, { last: 3 }))).toEqual([
+    expect(summarizeEvents(runtime.inspect.events.records.query(sessionId, { last: 3 }))).toEqual([
       {
         type: "effect_commitment_approval_decided",
       },
@@ -508,11 +505,11 @@ describe("Tool invocation characterization", () => {
       governancePort: createTrustedLocalGovernancePort(),
     });
     const sessionId = "tool-char-compact";
-    runtime.maintain.context.onTurnStart(sessionId, 3);
+    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 3);
     const usage = { tokens: 95, contextWindow: 100, percent: 0.95 };
-    runtime.maintain.context.observeUsage(sessionId, usage);
+    createOperatorRuntimePort(runtime).operator.context.usage.observe(sessionId, usage);
 
-    const blocked = runtime.authority.tools.start({
+    const blocked = runtime.authority.tools.invocation.start({
       sessionId,
       toolCallId: "tc-exec-compact",
       toolName: "exec",
@@ -524,7 +521,7 @@ describe("Tool invocation characterization", () => {
       allowed: false,
       reason: expect.stringContaining("workbench_compact"),
     });
-    expect(summarizeEvents(runtime.inspect.events.query(sessionId))).toEqual([
+    expect(summarizeEvents(runtime.inspect.events.records.query(sessionId))).toEqual([
       { type: "context_usage" },
       { type: "context_usage" },
       {
@@ -536,7 +533,7 @@ describe("Tool invocation characterization", () => {
       },
     ]);
 
-    const compactAllowed = runtime.authority.tools.start({
+    const compactAllowed = runtime.authority.tools.invocation.start({
       sessionId,
       toolCallId: "tc-compact",
       toolName: "workbench_compact",
@@ -545,7 +542,7 @@ describe("Tool invocation characterization", () => {
     });
     expect(compactAllowed.allowed).toBe(true);
 
-    runtime.authority.session.commitCompaction(sessionId, {
+    runtime.authority.session.compaction.commit(sessionId, {
       compactId: "cmp-tool-gate",
       sanitizedSummary: "Retain only the active working summary after compaction.",
       summaryDigest: "unused",
@@ -556,7 +553,7 @@ describe("Tool invocation characterization", () => {
       toTokens: 40,
       origin: "auto_compaction",
     });
-    const unblocked = runtime.authority.tools.start({
+    const unblocked = runtime.authority.tools.invocation.start({
       sessionId,
       toolCallId: "tc-exec-after-compact",
       toolName: "exec",
@@ -576,9 +573,9 @@ describe("Tool invocation characterization", () => {
       config: createOpsRuntimeConfig(),
     });
     const sessionId = "tool-char-finish";
-    runtime.maintain.context.onTurnStart(sessionId, 1);
+    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
 
-    const started = runtime.authority.tools.start({
+    const started = runtime.authority.tools.invocation.start({
       sessionId,
       toolCallId: "tc-edit",
       toolName: "edit",
@@ -598,7 +595,7 @@ describe("Tool invocation characterization", () => {
     });
 
     writeFileSync(filePath, "export const value = 2;\n", "utf8");
-    runtime.authority.tools.finish({
+    runtime.authority.tools.invocation.finish({
       sessionId,
       toolCallId: "tc-edit",
       toolName: "edit",
@@ -612,14 +609,14 @@ describe("Tool invocation characterization", () => {
       verdict: "pass",
     });
 
-    const directRollback = runtime.authority.tools.rollbackLastPatchSet(sessionId);
-    const mutationRollback = runtime.authority.tools.rollbackLastMutation(sessionId);
+    const directRollback = runtime.authority.tools.patches.rollbackLastPatchSet(sessionId);
+    const mutationRollback = runtime.authority.tools.patches.rollbackLastMutation(sessionId);
     expect(directRollback.ok).toBe(true);
     expect(mutationRollback).toMatchObject({
       ok: false,
       reason: "no_mutation_receipt",
     });
-    expect(summarizeEvents(runtime.inspect.events.query(sessionId))).toEqual([
+    expect(summarizeEvents(runtime.inspect.events.records.query(sessionId))).toEqual([
       {
         type: "effect_authority_decided",
         payload: {
@@ -709,7 +706,7 @@ describe("Tool invocation characterization", () => {
     const runtime = createRuntime();
     const sessionId = "tool-char-record-result";
 
-    const ledgerId = runtime.authority.tools.recordResult({
+    const ledgerId = runtime.authority.tools.invocation.recordResult({
       sessionId,
       toolCallId: "tc-fallback",
       toolName: "grep",
@@ -725,7 +722,7 @@ describe("Tool invocation characterization", () => {
     });
 
     expect(typeof ledgerId).toBe("string");
-    expect(summarizeEvents(runtime.inspect.events.query(sessionId))).toEqual([
+    expect(summarizeEvents(runtime.inspect.events.records.query(sessionId))).toEqual([
       {
         type: "tool_result_recorded",
         payload: {

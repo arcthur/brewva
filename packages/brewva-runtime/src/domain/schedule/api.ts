@@ -41,9 +41,9 @@ export {
 } from "./intent.js";
 export type { BuildScheduleIntentCreatedEventInput } from "./intent.js";
 export {
+  createScheduleAuthoritySurface,
+  createScheduleInspectSurface,
   createScheduleSurfaceMethods,
-  scheduleRuntimeSurface,
-  scheduleSurfaceContribution,
 } from "./runtime-surface.js";
 export type {
   RuntimeScheduleSurfaceMethods,

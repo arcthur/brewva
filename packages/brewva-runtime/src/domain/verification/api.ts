@@ -22,9 +22,8 @@ export {
   readVerificationWriteMarkedEventPayload,
 } from "./event-descriptors.js";
 export {
+  createVerificationAuthoritySurface,
   createVerificationSurfaceMethods,
-  verificationRuntimeSurface,
-  verificationSurfaceContribution,
 } from "./runtime-surface.js";
 export type {
   RuntimeVerificationSurfaceMethods,

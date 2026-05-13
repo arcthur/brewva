@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type { ContextBudgetUsage } from "@brewva/brewva-runtime";
+import { createHostedRuntimePort } from "@brewva/brewva-runtime";
+import type { ContextBudgetUsage } from "@brewva/brewva-runtime/context";
 import {
   HOSTED_COMPACTION_LADDER_TEST_ONLY,
   createHostedCompactionController,
@@ -154,10 +155,10 @@ describe("hosted compaction controller", () => {
       },
     });
     const commitCompactionCalls: Array<Record<string, unknown>> = [];
-    const originalCommitCompaction = runtime.authority.session.commitCompaction.bind(
+    const originalCommitCompaction = runtime.authority.session.compaction.commit.bind(
       runtime.authority.session,
     );
-    runtime.authority.session.commitCompaction = (sessionId, payload) => {
+    runtime.authority.session.compaction.commit = (sessionId, payload) => {
       commitCompactionCalls.push(payload as unknown as Record<string, unknown>);
       return originalCommitCompaction(sessionId, payload);
     };
@@ -256,7 +257,7 @@ describe("hosted compaction controller", () => {
       },
     });
 
-    const skippedBeforeReset = runtime.inspect.events
+    const skippedBeforeReset = runtime.inspect.events.records
       .queryStructured(sessionId, { type: "context_compaction_skipped" })
       .map((event) => event.payload?.reason);
     expect(compactCalls).toBe(3);
@@ -296,7 +297,7 @@ describe("hosted compaction controller", () => {
     });
     const sessionId = "s-auto-breaker-hydrated";
     for (let attempt = 0; attempt < 3; attempt += 1) {
-      runtime.extensions.hosted.events.record({
+      createHostedRuntimePort(runtime).extensions.hosted.events.record({
         sessionId,
         type: "context_compaction_auto_failed",
         payload: {
@@ -326,7 +327,7 @@ describe("hosted compaction controller", () => {
 
     expect(compactCalls).toBe(0);
     expect(
-      runtime.inspect.events
+      runtime.inspect.events.records
         .queryStructured(sessionId, { type: "context_compaction_skipped" })
         .some((event) => event.payload?.reason === "auto_compaction_breaker_open"),
     ).toBe(true);

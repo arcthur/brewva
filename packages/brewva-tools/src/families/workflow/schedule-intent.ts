@@ -1,11 +1,11 @@
+import { asBrewvaIntentId, asBrewvaSessionId } from "@brewva/brewva-runtime/core";
 import type {
   ConvergencePredicate,
   ScheduleContinuityMode,
   ScheduleIntentStatus,
   ScheduleIntentUpdateInput,
-  TaskPhase,
-} from "@brewva/brewva-runtime";
-import { asBrewvaIntentId, asBrewvaSessionId } from "@brewva/brewva-runtime";
+} from "@brewva/brewva-runtime/schedule";
+import type { TaskPhase } from "@brewva/brewva-runtime/task";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import { Type } from "@sinclair/typebox";
 import { formatISO } from "date-fns";
@@ -229,7 +229,7 @@ export function createScheduleIntentTool(options: BrewvaToolOptions): ToolDefini
           }
 
           const rawIntentId = normalizeOptionalString(params.intentId);
-          const created = await runtime.authority.schedule.createIntent(sessionId, {
+          const created = await runtime.authority.schedule.intents.create(sessionId, {
             reason,
             intentId: rawIntentId !== undefined ? asBrewvaIntentId(rawIntentId) : undefined,
             goalRef: normalizeOptionalString(params.goalRef),
@@ -329,7 +329,7 @@ export function createScheduleIntentTool(options: BrewvaToolOptions): ToolDefini
             if (schedulePatch.timeZone !== undefined) updateInput.timeZone = schedulePatch.timeZone;
           }
 
-          const updated = await runtime.authority.schedule.updateIntent(sessionId, updateInput);
+          const updated = await runtime.authority.schedule.intents.update(sessionId, updateInput);
           if (!updated.ok) {
             return failTextResult(`Schedule intent update rejected (${updated.reason}).`, {
               ok: false,
@@ -363,7 +363,7 @@ export function createScheduleIntentTool(options: BrewvaToolOptions): ToolDefini
             });
           }
 
-          const cancelled = await runtime.authority.schedule.cancelIntent(sessionId, {
+          const cancelled = await runtime.authority.schedule.intents.cancel(sessionId, {
             intentId: asBrewvaIntentId(intentId),
             reason: normalizeOptionalString(params.reason),
           });
@@ -388,8 +388,8 @@ export function createScheduleIntentTool(options: BrewvaToolOptions): ToolDefini
           parentSessionId: params.includeAllSessions ? undefined : asBrewvaSessionId(sessionId),
           status: statusFilter,
         };
-        const intents = await runtime.inspect.schedule.listIntents(listQuery);
-        const snapshot = await runtime.inspect.schedule.getProjectionSnapshot();
+        const intents = await runtime.inspect.schedule.intents.list(listQuery);
+        const snapshot = await runtime.inspect.schedule.intents.getProjectionSnapshot();
 
         const header = [
           "[ScheduleIntents]",
@@ -407,14 +407,6 @@ export function createScheduleIntentTool(options: BrewvaToolOptions): ToolDefini
         });
       },
     },
-    {
-      requiredCapabilities: [
-        "authority.schedule.createIntent",
-        "authority.schedule.updateIntent",
-        "authority.schedule.cancelIntent",
-        "inspect.schedule.getProjectionSnapshot",
-        "inspect.schedule.listIntents",
-      ],
-    },
+    {},
   );
 }

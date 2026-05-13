@@ -1,5 +1,4 @@
-import type { BrewvaRuntime, SessionCompactionGenerationMetadata } from "@brewva/brewva-runtime";
-import type { BrewvaSessionModelDescriptor } from "@brewva/brewva-substrate/session";
+import type { SessionCompactionGenerationMetadata } from "@brewva/brewva-runtime/context";
 import type { BrewvaCompactionRequest } from "@brewva/brewva-substrate/tools";
 import type { BrewvaTurnLoopToolResultMessage } from "@brewva/brewva-substrate/turn";
 import type {
@@ -66,62 +65,6 @@ export function compactionFallbackReason(error: unknown): string {
   }
   const text = String(error).trim();
   return text.length > 0 ? text : "llm_compaction_failed";
-}
-
-export function shouldCompactForModelDownshift(input: {
-  runtime: BrewvaRuntime;
-  sessionId: string;
-  currentModel: BrewvaSessionModelDescriptor;
-  targetModel: BrewvaSessionModelDescriptor;
-}): boolean {
-  if (
-    input.currentModel.contextWindow <= 0 ||
-    input.targetModel.contextWindow <= 0 ||
-    input.targetModel.contextWindow >= input.currentModel.contextWindow
-  ) {
-    return false;
-  }
-
-  const usage = input.runtime.inspect.context.getUsage(input.sessionId);
-  if (typeof usage?.tokens !== "number" || !Number.isFinite(usage.tokens)) {
-    return false;
-  }
-
-  const targetUsage = {
-    ...usage,
-    contextWindow: input.targetModel.contextWindow,
-    maxOutputTokens: input.targetModel.maxTokens,
-  };
-  const gateStatus = input.runtime.inspect.context.getCompactionGateStatus(
-    input.sessionId,
-    targetUsage,
-  );
-  if (gateStatus.recentCompaction) {
-    return false;
-  }
-  const targetStatus = gateStatus.status;
-  return (
-    targetStatus.forcedCompaction ||
-    targetStatus.compactionAdvised ||
-    targetStatus.predictedOverflow
-  );
-}
-
-export async function requestCompactionAndWait(
-  requestCompaction: (request?: BrewvaCompactionRequest) => void,
-  request?: Omit<BrewvaCompactionRequest, "onComplete" | "onError">,
-): Promise<unknown> {
-  return new Promise((resolve, reject) => {
-    try {
-      requestCompaction({
-        ...request,
-        onComplete: (event) => resolve(event),
-        onError: (error) => reject(error),
-      });
-    } catch (error) {
-      reject(error);
-    }
-  });
 }
 
 export class ManagedSessionCompactionFlowState {

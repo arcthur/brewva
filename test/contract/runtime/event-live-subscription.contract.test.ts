@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import {
+  BrewvaRuntime,
+  createOperatorRuntimePort,
+  createHostedRuntimePort,
+} from "@brewva/brewva-runtime";
 import { type BrewvaStructuredEvent } from "@brewva/brewva-runtime/events";
 import { requireDefined } from "../../helpers/assertions.js";
 import {
@@ -18,17 +22,17 @@ describe("event live subscription", () => {
     const sessionId = "event-subscribe-1";
 
     const received: BrewvaStructuredEvent[] = [];
-    const unsubscribe = runtime.inspect.events.subscribe((event) => {
+    const unsubscribe = runtime.inspect.events.records.subscribe((event) => {
       received.push(event);
     });
 
-    runtime.maintain.context.onTurnStart(sessionId, 1);
-    runtime.extensions.hosted.events.record({
+    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: "session_start",
       payload: { cwd: workspace },
     });
-    runtime.authority.tools.recordResult({
+    runtime.authority.tools.invocation.recordResult({
       sessionId,
       toolName: "exec",
       args: { command: "echo ok" },
@@ -51,7 +55,11 @@ describe("event live subscription", () => {
 
     unsubscribe();
     const before = received.length;
-    runtime.extensions.hosted.events.record({ sessionId, type: "turn_end", turn: 1 });
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+      sessionId,
+      type: "turn_end",
+      turn: 1,
+    });
     expect(received).toHaveLength(before);
   });
 });

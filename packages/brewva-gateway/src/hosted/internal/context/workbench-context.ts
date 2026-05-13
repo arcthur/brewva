@@ -1,9 +1,9 @@
-import {
-  type BrewvaHostedRuntimePort,
-  type ContextBudgetUsage,
-  type ContextCompactionGateStatus,
-  type DelegationRunRecord,
-} from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
+import type {
+  ContextBudgetUsage,
+  ContextCompactionGateStatus,
+} from "@brewva/brewva-runtime/context";
+import type { DelegationRunRecord } from "@brewva/brewva-runtime/delegation";
 import { redactedStableJsonSha256Hex } from "@brewva/brewva-std/hash";
 import type { InternalHostPluginApi } from "@brewva/brewva-substrate/host-api";
 import type { BrewvaTurnLoopMessage } from "@brewva/brewva-substrate/turn";
@@ -12,7 +12,6 @@ import { applyWorkbenchEvictionsToMessages } from "../session/projection/workben
 import { renderCapabilityView, type BuildCapabilityViewResult } from "./capability-view.js";
 import { applyContextContract } from "./context-contract.js";
 import { resolveContextScopeId } from "./context-shared.js";
-import { recordPromptStabilityEvidence } from "./evidence/context-evidence.js";
 import type { HostedContextGateStatePort } from "./hosted-compaction-controller.js";
 import {
   makeHostedContextBlock,
@@ -22,7 +21,7 @@ import {
 } from "./hosted-context-blocks.js";
 import { prepareHostedContextSupport } from "./hosted-context-support.js";
 import type { HostedContextTelemetry } from "./hosted-context-telemetry.js";
-import { buildPromptStabilityObservation } from "./prompt-stability.js";
+import { commitHostedContextSideEffects } from "./materialization.js";
 import { buildReadPathRecoveryBlocks } from "./read-path-recovery.js";
 
 export const HOSTED_WORKBENCH_CONTEXT_MESSAGE_TYPE = "brewva-workbench-context";
@@ -94,7 +93,6 @@ export interface HostedWorkbenchContextController {
 
 export interface HostedWorkbenchContextOptions {
   delegationStore?: HostedDelegationStore;
-  contextProfile?: "minimal" | "standard" | "full";
 }
 
 function sortDelegationRuns(runs: readonly DelegationRunRecord[]): DelegationRunRecord[] {
@@ -187,17 +185,6 @@ function buildCompletedDelegationOutcomes(input: {
   };
 }
 
-function markSurfacedDelegationOutcomes(
-  delegationStore: HostedDelegationStore | undefined,
-  input: {
-    sessionId: string;
-    turn: number;
-    runIds: readonly string[];
-  },
-): void {
-  delegationStore?.markSurfaced(input);
-}
-
 function buildMessageDetails(input: {
   originalTokens: number;
   finalTokens: number;
@@ -253,39 +240,6 @@ function buildHiddenContextResult(input: {
       details: input.details,
     },
   };
-}
-
-function observePromptStability(
-  runtime: BrewvaHostedRuntimePort,
-  input: {
-    sessionId: string;
-    turn: number;
-    contextScopeId?: string;
-    systemPrompt: string;
-    rendered: HostedContextRenderResult;
-    usage?: ContextBudgetUsage;
-    pendingCompactionReason?: string | null;
-    gateRequired: boolean;
-  },
-): void {
-  const observation = buildPromptStabilityObservation({
-    systemPrompt: input.systemPrompt,
-    composedContent: input.rendered.content,
-    contextScopeId: input.contextScopeId,
-    turn: input.turn,
-  });
-  const observed = runtime.maintain.context.observePromptStability(input.sessionId, observation);
-  const contextStatus = runtime.inspect.context.getStatus(input.sessionId, input.usage);
-  recordPromptStabilityEvidence({
-    workspaceRoot: runtime.workspaceRoot,
-    sessionId: input.sessionId,
-    observed,
-    compactionAdvised: contextStatus.compactionAdvised,
-    forcedCompaction: contextStatus.forcedCompaction,
-    usageRatio: contextStatus.usageRatio,
-    pendingCompactionReason: input.pendingCompactionReason,
-    gateRequired: input.gateRequired,
-  });
 }
 
 function resolveCompactionNudgeMode(input: {
@@ -412,7 +366,7 @@ function buildContextStatusBlock(
     usage?: ContextBudgetUsage;
   },
 ): HostedContextBlock {
-  const status = runtime.inspect.context.getStatus(input.sessionId, input.usage);
+  const status = runtime.inspect.context.usage.getStatus(input.sessionId, input.usage);
   const lines = [
     "[Context Status]",
     `tokens_used: ${status.tokensUsed ?? "unknown"}`,
@@ -518,7 +472,6 @@ export function createHostedWorkbenchContextController(
     async beforeAgentStart(input) {
       const turn = statePort.getTurnIndex(input.sessionId);
       const contextScopeId = resolveContextScopeId(input.sessionManager);
-      runtime.maintain.context.observeUsage(input.sessionId, input.usage);
 
       const { gateStatus, pendingCompactionReason, capabilityView } = prepareHostedContextSupport({
         runtime,
@@ -528,25 +481,8 @@ export function createHostedWorkbenchContextController(
         usage: input.usage,
       });
 
-      if (gateStatus.required) {
-        telemetry.emitHardGateRequired({
-          sessionId: input.sessionId,
-          turn,
-          reason: "hard_limit",
-          gateStatus,
-        });
-      }
       const systemPromptWithContract = applyContextContract(input.systemPrompt);
       statePort.setLastRuntimeGateRequired(input.sessionId, gateStatus.required);
-
-      if (pendingCompactionReason && !gateStatus.required) {
-        telemetry.emitCompactionAdvisory({
-          sessionId: input.sessionId,
-          turn,
-          reason: pendingCompactionReason,
-          gateStatus,
-        });
-      }
 
       const rendered = buildHostedDynamicTail({
         runtime,
@@ -558,26 +494,24 @@ export function createHostedWorkbenchContextController(
         capabilityView,
         delegationStore: options.delegationStore,
       });
-      telemetry.emitContextComposed({
-        sessionId: input.sessionId,
-        turn,
-        rendered,
-        workbenchContextRendered: rendered.blocks.some((block) => block.id === "active-workbench"),
-      });
-      observePromptStability(runtime, {
+      commitHostedContextSideEffects({
+        runtime,
+        telemetry,
+        delegationStore: options.delegationStore,
         sessionId: input.sessionId,
         turn,
         contextScopeId,
         systemPrompt: systemPromptWithContract,
         rendered,
         usage: input.usage,
+        gateStatus,
         pendingCompactionReason,
-        gateRequired: gateStatus.required,
-      });
-      markSurfacedDelegationOutcomes(options.delegationStore, {
-        sessionId: input.sessionId,
-        turn,
-        runIds: rendered.surfacedDelegationRunIds,
+        workbenchContextRendered: rendered.blocks.some((block) => block.id === "active-workbench"),
+        capabilityDisclosureRendered:
+          capabilityView.requested.length > 0 ||
+          capabilityView.details.length > 0 ||
+          capabilityView.missing.length > 0,
+        surfacedDelegationRunIds: rendered.surfacedDelegationRunIds,
       });
 
       return buildHiddenContextResult({

@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { asBrewvaSessionId, buildTapeCheckpointPayload } from "@brewva/brewva-runtime";
+import { asBrewvaSessionId } from "@brewva/brewva-runtime/core";
 import { type BrewvaEventRecord } from "@brewva/brewva-runtime/events";
 import { TAPE_CHECKPOINT_EVENT_TYPE } from "@brewva/brewva-runtime/events";
 import { createTurnReplayEngine } from "@brewva/brewva-runtime/replay";
+import { buildTapeCheckpointPayload } from "@brewva/brewva-runtime/tape";
 import { checkpointEvent, taskEvent } from "./turn-replay-engine.helpers.js";
 
 describe("TurnReplayEngine checkpoint replay", () => {

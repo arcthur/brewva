@@ -2,8 +2,8 @@ import {
   formatTaskStateBlock,
   TASK_AGENT_ITEM_STATUS_RUNTIME_MAP,
   TASK_AGENT_ITEM_STATUS_VALUES,
-  type TaskItemStatus,
-} from "@brewva/brewva-runtime";
+} from "@brewva/brewva-runtime/task";
+import type { TaskItemStatus } from "@brewva/brewva-runtime/task";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "../../contracts/index.js";
@@ -125,7 +125,7 @@ export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinitio
               }
             : undefined;
 
-        taskSetSpecTool.runtime.authority.task.setSpec(sessionId, {
+        taskSetSpecTool.runtime.authority.task.spec.set(sessionId, {
           schema: "brewva.task.v1",
           goal: params.goal,
           targets: params.targets,
@@ -137,9 +137,7 @@ export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinitio
         return textResult("TaskSpec recorded.", { ok: true });
       },
     },
-    {
-      requiredCapabilities: ["authority.task.setSpec"],
-    },
+    {},
   );
 
   const taskAddItem = taskAddItemTool.define(
@@ -161,7 +159,7 @@ export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinitio
         if (params.status !== undefined && status === undefined) {
           return invalidTaskStatusResult("add", params.status);
         }
-        const result = taskAddItemTool.runtime.authority.task.addItem(sessionId, {
+        const result = taskAddItemTool.runtime.authority.task.items.add(sessionId, {
           id: params.id,
           text: params.text,
           status,
@@ -175,9 +173,7 @@ export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinitio
         return textResult(`Task item added (${result.itemId}).`, result);
       },
     },
-    {
-      requiredCapabilities: ["authority.task.addItem"],
-    },
+    {},
   );
 
   const taskUpdateItem = taskUpdateItemTool.define(
@@ -198,7 +194,7 @@ export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinitio
         if (params.status !== undefined && status === undefined) {
           return invalidTaskStatusResult("update", params.status);
         }
-        const result = taskUpdateItemTool.runtime.authority.task.updateItem(sessionId, {
+        const result = taskUpdateItemTool.runtime.authority.task.items.update(sessionId, {
           id: params.id,
           text: params.text,
           status,
@@ -212,9 +208,7 @@ export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinitio
         return textResult("Task item updated.", result);
       },
     },
-    {
-      requiredCapabilities: ["authority.task.updateItem"],
-    },
+    {},
   );
 
   const taskRecordBlocker = taskRecordBlockerTool.define(
@@ -231,7 +225,7 @@ export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinitio
       }),
       async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
         const sessionId = getSessionId(ctx);
-        const result = taskRecordBlockerTool.runtime.authority.task.recordBlocker(sessionId, {
+        const result = taskRecordBlockerTool.runtime.authority.task.blockers.record(sessionId, {
           id: params.id,
           message: params.message,
           source: params.source,
@@ -243,9 +237,7 @@ export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinitio
         return textResult(`Blocker recorded (${result.blockerId}).`, result);
       },
     },
-    {
-      requiredCapabilities: ["authority.task.recordBlocker"],
-    },
+    {},
   );
 
   const taskResolveBlocker = taskResolveBlockerTool.define(
@@ -259,7 +251,7 @@ export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinitio
       }),
       async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
         const sessionId = getSessionId(ctx);
-        const result = taskResolveBlockerTool.runtime.authority.task.resolveBlocker(
+        const result = taskResolveBlockerTool.runtime.authority.task.blockers.resolve(
           sessionId,
           params.id,
         );
@@ -272,9 +264,7 @@ export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinitio
         return textResult("Blocker resolved.", result);
       },
     },
-    {
-      requiredCapabilities: ["authority.task.resolveBlocker"],
-    },
+    {},
   );
 
   const taskRecordAcceptance = taskRecordAcceptanceTool.define(
@@ -302,11 +292,14 @@ export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinitio
             error: "invalid_status",
           });
         }
-        const result = taskRecordAcceptanceTool.runtime.authority.task.recordAcceptance(sessionId, {
-          status,
-          decidedBy: params.decidedBy,
-          notes: params.notes,
-        });
+        const result = taskRecordAcceptanceTool.runtime.authority.task.acceptance.record(
+          sessionId,
+          {
+            status,
+            decidedBy: params.decidedBy,
+            notes: params.notes,
+          },
+        );
         if (!result.ok) {
           return failTextResult(
             `Acceptance update rejected (${result.reason ?? "unknown_error"}).`,
@@ -316,9 +309,7 @@ export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinitio
         return textResult(`Acceptance state recorded (${status}).`, result);
       },
     },
-    {
-      requiredCapabilities: ["authority.task.recordAcceptance"],
-    },
+    {},
   );
 
   const taskViewState = taskViewStateTool.define({
@@ -332,7 +323,7 @@ export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinitio
     parameters: Type.Object({}),
     async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
       const sessionId = getSessionId(ctx);
-      const state = taskViewStateTool.runtime.inspect.task.getState(sessionId);
+      const state = taskViewStateTool.runtime.inspect.task.state.get(sessionId);
       const block = formatTaskStateBlock(state);
       return textResult(block || "[TaskLedger]\n(empty)", { ok: true });
     },

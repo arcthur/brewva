@@ -1,11 +1,9 @@
 import { accessSync, constants, readFileSync } from "node:fs";
 import { isAbsolute, relative, resolve } from "node:path";
-import {
-  classifyToolFailure,
-  coerceContextBudgetUsage,
-  type EffectCommitmentDiffPreview,
-  type BrewvaHostedRuntimePort,
-} from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
+import { coerceContextBudgetUsage } from "@brewva/brewva-runtime/context";
+import { classifyToolFailure } from "@brewva/brewva-runtime/evidence";
+import type { EffectCommitmentDiffPreview } from "@brewva/brewva-runtime/proposals";
 import { truncateText } from "@brewva/brewva-std/text";
 import {
   BrewvaHostInputEventResult as InputEventResult,
@@ -304,7 +302,7 @@ export function createQualityGateLifecycle(
           ? (ctx as { getContextUsage: () => unknown }).getContextUsage()
           : undefined,
       );
-      const started = runtime.authority.tools.start({
+      const started = runtime.authority.tools.invocation.start({
         sessionId,
         toolCallId,
         toolName,
@@ -378,7 +376,7 @@ export function createQualityGateLifecycle(
       const rawEvent = event as { text?: unknown; parts?: unknown };
       const sessionId = getSessionId(ctx);
       if (sessionId.length > 0) {
-        runtime.maintain.context.onUserInput(sessionId);
+        runtime.operator.context.lifecycle.onUserInput(sessionId);
       }
       const parts = Array.isArray(rawEvent.parts)
         ? (rawEvent.parts as BrewvaPromptContentPart[])

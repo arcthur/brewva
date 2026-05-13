@@ -45,9 +45,9 @@ export type {
 export { SKILL_REFRESH_RECORDED_EVENT_TYPE } from "./events.js";
 export { SKILLS_EVENT_DESCRIPTORS } from "./event-descriptors.js";
 export {
+  createSkillsInspectSurface,
+  createSkillsOperatorSurface,
   createSkillsSurfaceMethods,
-  skillsRuntimeSurface,
-  skillsSurfaceContribution,
 } from "./runtime-surface.js";
 export type { RuntimeSkillsSurfaceMethods, SkillsSurfaceDependencies } from "./runtime-surface.js";
 export { registerSkillsDomain } from "./registrar.js";

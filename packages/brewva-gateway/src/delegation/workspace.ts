@@ -4,7 +4,7 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { cp, copyFile, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, relative, resolve } from "node:path";
-import { type PatchFileAction, type PatchSet } from "@brewva/brewva-runtime";
+import type { PatchFileAction, PatchSet } from "@brewva/brewva-runtime/patch-history";
 import {
   PATCH_HISTORY_FILE,
   collectPersistedPatchPaths,

@@ -1,0 +1,118 @@
+// Curated skills contract subpath. Keep root imports focused on BrewvaRuntime.
+export type {
+  LoadableSkillCategory,
+  OverlaySkillDocument,
+  ParsedSkillDocument,
+  ProjectGuidanceEntry,
+  ProjectGuidanceStrength,
+  ResourceBudgetLimits,
+  SemanticArtifactSchemaId,
+  SkillCategory,
+  SkillCompletionDefinition,
+  SkillContract,
+  SkillContractLike,
+  SkillContractOverride,
+  SkillCostHint,
+  SkillDocument,
+  SkillEffectLevel,
+  SkillEffectsContract,
+  SkillEffectsOverride,
+  SkillEffectsPolicy,
+  SkillExecutionHints,
+  SkillIndexOrigin,
+  SkillIntentContract,
+  SkillOutputContract,
+  SkillOutputEnumContract,
+  SkillOutputJsonContract,
+  SkillOutputTextContract,
+  SkillOverlayCategory,
+  SkillOverlayContract,
+  SkillRefreshInput,
+  SkillRefreshResult,
+  SkillRegistryLoadReport,
+  SkillRegistryRoot,
+  SkillResourceBudget,
+  SkillResourcePolicy,
+  SkillResourceSet,
+  SkillRootSource,
+  SkillRoutingPolicy,
+  SkillRoutingScope,
+  SkillSelectionPolicy,
+  SkillSemanticBindings,
+  SkillsIndexEntry,
+  SkillsIndexFile,
+  SkillSystemInstallResult,
+} from "./domain/skills/types.js";
+export type {
+  SkillArtifactIssueTier,
+  SkillNormalizedBlockingState,
+  SkillNormalizedOutputIssue,
+  SkillNormalizedOutputsView,
+} from "./domain/skills/normalization.js";
+export {
+  isPlanningOwnerLane,
+  isReviewChangeCategory,
+  isReviewLaneName,
+  normalizeReviewLaneName,
+  PLANNING_OWNER_LANES,
+  REVIEW_CHANGE_CATEGORIES,
+  REVIEW_LANE_NAMES,
+  REVIEW_REPORT_OUTPUT_CONTRACT,
+  REVIEW_REPORT_REQUIRED_FIELDS,
+} from "./domain/skills/review.js";
+export type {
+  PlanningOwnerLane,
+  ReviewChangeCategory,
+  ReviewLaneName,
+  ReviewPrecedentConsultDisposition,
+  ReviewPrecedentConsultStatus,
+  ReviewReportArtifact,
+  ReviewReportRequiredField,
+} from "./domain/skills/review.js";
+export { DESIGN_EXECUTION_MODE_HINTS, PLANNING_EVIDENCE_KEYS } from "./domain/skills/planning.js";
+export type {
+  DesignExecutionModeHint,
+  DesignExecutionStep,
+  DesignImplementationTarget,
+  DesignRiskItem,
+  DesignRiskSeverity,
+  PlanningArtifactSet,
+  PlanningEvidenceKey,
+  PlanningEvidenceState,
+} from "./domain/skills/planning.js";
+export {
+  createEmptySkillResources,
+  mergeOverlayContract,
+  mergeSkillResources,
+  parseSkillDocument,
+  tightenContract,
+} from "./domain/skills/contract.js";
+export {
+  deriveSkillEffectLevel,
+  getSkillCostHint,
+  getSkillOutputContracts,
+  getSkillSemanticBindings,
+  listSkillAllowedEffects,
+  listSkillDeniedEffects,
+  listSkillFallbackTools,
+  listSkillOutputs,
+  listSkillPreferredTools,
+  resolveSkillDefaultLease,
+  resolveSkillEffectLevel,
+  resolveSkillExecutionHints,
+  resolveSkillHardCeiling,
+  resolveSkillIntent,
+} from "./domain/skills/facets.js";
+export {
+  FIELD_TO_PLANE,
+  SELECTION_PROFILE_SOURCE_FIELDS,
+  buildSkillSelectionProfile,
+  hasSelectionProfileSignals,
+  type SkillFieldPath,
+} from "./domain/skills/profiles.js";
+export { discoverSkillRegistryRoots } from "./domain/skills/registry.js";
+export {
+  collectPlanningRiskCategories,
+  coercePlanningArtifactSet,
+} from "./domain/skills/planning-normalization.js";
+export { coerceReviewReportArtifact } from "./domain/skills/review-normalization.js";

@@ -75,7 +75,7 @@ describe("tool parallel read lsp integration", () => {
     ).toBeGreaterThan(0);
 
     const telemetry = requireRecord(
-      runtime.inspect.events
+      runtime.inspect.events.records
         .query(sessionId, { type: "tool_parallel_read" })
         .find((event) => event.payload?.toolName === "lsp_symbols")?.payload,
       "Expected lsp_symbols parallel-read telemetry.",
@@ -114,7 +114,7 @@ describe("tool parallel read lsp integration", () => {
     );
 
     const telemetry = requireRecord(
-      runtime.inspect.events
+      runtime.inspect.events.records
         .query(sessionId, { type: "tool_parallel_read" })
         .find((event) => event.payload?.toolName === "lsp_symbols")?.payload,
       "Expected sequential lsp_symbols telemetry.",
@@ -141,12 +141,14 @@ describe("tool parallel read lsp integration", () => {
       },
       authority: {
         tools: {
-          async acquireParallelSlotAsync(sessionId: string, runId: string) {
-            calls.push(`acquire:${sessionId}:${runId}`);
-            return { accepted: true };
-          },
-          releaseParallelSlot(sessionId: string, runId: string) {
-            calls.push(`release:${sessionId}:${runId}`);
+          parallel: {
+            async acquireAsync(sessionId: string, runId: string) {
+              calls.push(`acquire:${sessionId}:${runId}`);
+              return { accepted: true };
+            },
+            release(sessionId: string, runId: string) {
+              calls.push(`release:${sessionId}:${runId}`);
+            },
           },
         },
       },
@@ -211,7 +213,7 @@ describe("tool parallel read lsp integration", () => {
     ).toContain("valueA");
 
     const telemetry = requireRecord(
-      runtime.inspect.events
+      runtime.inspect.events.records
         .query(sessionId, { type: "tool_parallel_read" })
         .find((event) => event.payload?.toolName === "lsp_symbols")?.payload,
       "Expected low-limit lsp_symbols telemetry.",
@@ -417,7 +419,9 @@ describe("tool parallel read lsp integration", () => {
     );
 
     expect(
-      runtime.inspect.events.query("parallel-read-no-session", { type: "tool_parallel_read" }),
+      runtime.inspect.events.records.query("parallel-read-no-session", {
+        type: "tool_parallel_read",
+      }),
     ).toHaveLength(0);
   });
 

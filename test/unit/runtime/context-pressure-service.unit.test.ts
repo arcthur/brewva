@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { cpSync } from "node:fs";
 import { resolve } from "node:path";
-import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
+import { DEFAULT_BREWVA_CONFIG, createOperatorRuntimePort } from "@brewva/brewva-runtime";
 import { BrewvaRuntime } from "@brewva/brewva-runtime";
 import { ContextBudgetManager } from "../../../packages/brewva-runtime/src/domain/context/budget.js";
 import {
@@ -509,17 +509,17 @@ describe("context status derivation", () => {
     const runtime = new BrewvaRuntime({ cwd: workspace, config });
 
     const sessionId = "pressure-runtime-wiring-1";
-    runtime.maintain.context.onTurnStart(sessionId, 1);
+    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
     const usage = createUsage(0.9);
-    runtime.maintain.context.observeUsage(sessionId, usage);
+    createOperatorRuntimePort(runtime).operator.context.usage.observe(sessionId, usage);
 
     for (const toolName of ["tape_info", "tape_search", "recall_search", "cost_view", "exec"]) {
-      expect(runtime.inspect.context.checkCompactionGate(sessionId, toolName, usage).allowed).toBe(
+      expect(runtime.inspect.context.compaction.checkGate(sessionId, toolName, usage).allowed).toBe(
         false,
       );
     }
     expect(
-      runtime.inspect.context.checkCompactionGate(sessionId, "workbench_compact", usage).allowed,
+      runtime.inspect.context.compaction.checkGate(sessionId, "workbench_compact", usage).allowed,
     ).toBe(true);
   });
 });

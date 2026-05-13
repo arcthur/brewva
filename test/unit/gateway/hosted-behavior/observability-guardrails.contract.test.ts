@@ -2,7 +2,11 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import {
+  BrewvaRuntime,
+  createOperatorRuntimePort,
+  createHostedRuntimePort,
+} from "@brewva/brewva-runtime";
 import {
   buildContextEvidenceReport,
   recordPromptStabilityEvidence,
@@ -17,10 +21,14 @@ import {
 } from "../../../helpers/prompt-session-events.js";
 import { createOpsRuntimeConfig } from "../../../helpers/runtime.js";
 
+function createHostedTestRuntime(options: ConstructorParameters<typeof BrewvaRuntime>[0]) {
+  return createHostedRuntimePort(new BrewvaRuntime(options));
+}
+
 describe("Hosted behavior integration: observability guardrails", () => {
   test("given assistant delta events, when the message completes, then only the durable message_end summary is persisted", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-ext-throttle-"));
-    const runtime = new BrewvaRuntime({ cwd: workspace, config: createOpsRuntimeConfig() });
+    const runtime = createHostedTestRuntime({ cwd: workspace, config: createOpsRuntimeConfig() });
     const sessionId = "ext-throttle-1";
 
     const { api, handlers } = createMockExtensionApi();
@@ -79,8 +87,10 @@ describe("Hosted behavior integration: observability guardrails", () => {
       ctx,
     );
 
-    expect(runtime.inspect.events.query(sessionId, { type: "message_update" })).toHaveLength(0);
-    const ends = runtime.inspect.events.query(sessionId, { type: "message_end" });
+    expect(
+      runtime.inspect.events.records.query(sessionId, { type: "message_update" }),
+    ).toHaveLength(0);
+    const ends = runtime.inspect.events.records.query(sessionId, { type: "message_end" });
     expect(ends).toHaveLength(1);
     const payload = ends[0]?.payload as {
       health?: { score?: number; windowChars?: number };
@@ -97,7 +107,7 @@ describe("Hosted behavior integration: observability guardrails", () => {
 
   test("given assistant partial-only update events, when the message completes, then health tracking still uses the partial payload", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-ext-throttle-partial-only-"));
-    const runtime = new BrewvaRuntime({ cwd: workspace, config: createOpsRuntimeConfig() });
+    const runtime = createHostedTestRuntime({ cwd: workspace, config: createOpsRuntimeConfig() });
     const sessionId = "ext-throttle-partial-only-1";
 
     const { api, handlers } = createMockExtensionApi();
@@ -153,7 +163,7 @@ describe("Hosted behavior integration: observability guardrails", () => {
       ctx,
     );
 
-    const ends = runtime.inspect.events.query(sessionId, { type: "message_end" });
+    const ends = runtime.inspect.events.records.query(sessionId, { type: "message_end" });
     expect(ends).toHaveLength(1);
     const payload = ends[0]?.payload as {
       health?: { score?: number; windowChars?: number };
@@ -166,7 +176,7 @@ describe("Hosted behavior integration: observability guardrails", () => {
 
   test("given the ledger directory disappears before message_end, when assistant usage is recorded, then event stream recreates the ledger path", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-ext-message-ledger-recovery-"));
-    const runtime = new BrewvaRuntime({ cwd: workspace, config: createOpsRuntimeConfig() });
+    const runtime = createHostedTestRuntime({ cwd: workspace, config: createOpsRuntimeConfig() });
     const sessionId = "ext-message-ledger-recovery-1";
 
     const { api, handlers } = createMockExtensionApi();
@@ -210,7 +220,7 @@ describe("Hosted behavior integration: observability guardrails", () => {
     );
 
     expect(existsSync(join(workspace, ".orchestrator", "ledger", "evidence.jsonl"))).toBe(true);
-    const messageEnds = runtime.inspect.events.query(sessionId, { type: "message_end" });
+    const messageEnds = runtime.inspect.events.records.query(sessionId, { type: "message_end" });
     expect(messageEnds).toHaveLength(1);
     expect(messageEnds[0]?.payload).toMatchObject({
       usage: {
@@ -220,26 +230,31 @@ describe("Hosted behavior integration: observability guardrails", () => {
         cacheWriteReported: true,
       },
     });
-    expect(runtime.inspect.events.query(sessionId, { type: "cost_update" })).toHaveLength(1);
-    const ledgerRows = runtime.inspect.ledger.listRows(sessionId);
+    expect(runtime.inspect.events.records.query(sessionId, { type: "cost_update" })).toHaveLength(
+      1,
+    );
+    const ledgerRows = runtime.inspect.ledger.store.listRows(sessionId);
     expect(ledgerRows).toHaveLength(1);
     expect(ledgerRows[0]?.tool).toBe("brewva_cost");
   });
 
   test("given event-stream message_end usage and sidecar evidence, when building the context evidence report, then readiness reflects explicit provider cache accounting", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-ext-context-evidence-"));
-    const runtime = new BrewvaRuntime({ cwd: workspace, config: createOpsRuntimeConfig() });
+    const runtime = createHostedTestRuntime({ cwd: workspace, config: createOpsRuntimeConfig() });
     const sessionId = "ext-context-evidence-1";
 
-    const prompt = runtime.maintain.context.observePromptStability(sessionId, {
-      stablePrefixHash: "prefix-live",
-      dynamicTailHash: "tail-live",
-      contextScopeId: "leaf-live",
-      turn: 1,
-      timestamp: 1_740_000_003_100,
-    });
+    const prompt = createOperatorRuntimePort(runtime).operator.context.prompt.observeStability(
+      sessionId,
+      {
+        stablePrefixHash: "prefix-live",
+        dynamicTailHash: "tail-live",
+        contextScopeId: "leaf-live",
+        turn: 1,
+        timestamp: 1_740_000_003_100,
+      },
+    );
     recordPromptStabilityEvidence({
-      workspaceRoot: runtime.workspaceRoot,
+      workspaceRoot: runtime.identity.workspaceRoot,
       sessionId,
       observed: prompt,
       compactionAdvised: true,
@@ -249,7 +264,9 @@ describe("Hosted behavior integration: observability guardrails", () => {
       gateRequired: false,
     });
 
-    const reduction = runtime.maintain.context.observeTransientReduction(sessionId, {
+    const reduction = createOperatorRuntimePort(
+      runtime,
+    ).operator.context.prompt.observeTransientReduction(sessionId, {
       status: "completed",
       reason: null,
       eligibleToolResults: 4,
@@ -262,7 +279,7 @@ describe("Hosted behavior integration: observability guardrails", () => {
       timestamp: 1_740_000_003_110,
     });
     recordTransientReductionEvidence({
-      workspaceRoot: runtime.workspaceRoot,
+      workspaceRoot: runtime.identity.workspaceRoot,
       sessionId,
       observed: reduction,
     });
@@ -300,7 +317,7 @@ describe("Hosted behavior integration: observability guardrails", () => {
       },
     );
 
-    const messageEnds = runtime.inspect.events.query(sessionId, { type: "message_end" });
+    const messageEnds = runtime.inspect.events.records.query(sessionId, { type: "message_end" });
     expect(messageEnds).toHaveLength(1);
     expect(messageEnds[0]?.payload).toMatchObject({
       usage: {

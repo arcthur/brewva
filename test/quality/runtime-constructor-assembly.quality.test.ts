@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { BrewvaRuntime, createOperatorRuntimePort } from "@brewva/brewva-runtime";
 import { getRuntimeInternals } from "../helpers/runtime-internals.js";
 import { createTestWorkspace } from "../helpers/workspace.js";
 
@@ -67,7 +67,7 @@ describe("runtime constructor assembly guard", () => {
     expect(internals.sessionWireService).toBeUndefined();
     expect(internals.reasoningService).toBeUndefined();
 
-    void runtime.inspect.cost.getSummary("assembly-s1");
+    void runtime.inspect.cost.summary.get("assembly-s1");
     void runtime.inspect.lifecycle.getSnapshot("assembly-s1");
 
     expect(counts.get("createSessionWireService")).toBe(1);
@@ -85,17 +85,17 @@ describe("runtime constructor assembly guard", () => {
     const internals = getRuntimeInternals(runtime) as RuntimeInternals;
     const counts = trackLazyFactoryCalls(internals);
 
-    runtime.inspect.tools.checkAccess("assembly-s2", "grep");
+    runtime.inspect.tools.access.check("assembly-s2", "grep");
     expect(counts.get("createToolGateService")).toBe(1);
     expect(internals.toolGateService).toBeDefined();
 
-    runtime.authority.tools.requestResourceLease("assembly-s2", {
+    runtime.authority.tools.resourceLeases.request("assembly-s2", {
       reason: "verify lazy resource-lease construction",
     });
     expect(counts.get("createResourceLeaseService")).toBe(1);
     expect(internals.resourceLeaseService).toBeDefined();
 
-    runtime.authority.tools.recordResult({
+    runtime.authority.tools.invocation.recordResult({
       sessionId: "assembly-s2",
       toolName: "grep",
       args: {},
@@ -105,11 +105,14 @@ describe("runtime constructor assembly guard", () => {
     expect(counts.get("createToolInvocationSpine")).toBe(1);
     expect(internals.toolInvocationSpine).toBeDefined();
 
-    await runtime.authority.verification.verify("assembly-s2");
+    await runtime.authority.verification.checks.verify("assembly-s2");
     expect(counts.get("createVerificationService")).toBe(1);
     expect(internals.verificationService).toBeDefined();
 
-    runtime.maintain.session.resolveCredentialBindings("assembly-s2", "exec");
+    createOperatorRuntimePort(runtime).operator.session.credentials.resolveBindings(
+      "assembly-s2",
+      "exec",
+    );
     expect(counts.get("createCredentialVaultService")).toBe(1);
     expect(internals.credentialVaultService).toBeDefined();
 

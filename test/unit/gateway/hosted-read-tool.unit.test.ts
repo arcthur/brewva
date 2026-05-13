@@ -1,7 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { mkdirSync, readFileSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import {
+  BrewvaRuntime,
+  createOperatorRuntimePort,
+  createHostedRuntimePort,
+} from "@brewva/brewva-runtime";
 import {
   TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE,
   TOOL_READ_PATH_GATE_ARMED_EVENT_TYPE,
@@ -13,6 +17,10 @@ import {
 import { createCompactReadTool } from "../../../packages/brewva-gateway/src/hosted/internal/session/init/session-assembly.js";
 import { createOpsRuntimeConfig } from "../../helpers/runtime.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
+
+function createHostedTestRuntime(options: ConstructorParameters<typeof BrewvaRuntime>[0]) {
+  return createHostedRuntimePort(new BrewvaRuntime(options));
+}
 
 function extractText(result: { content: Array<{ type: string; text?: string }> }): string {
   return result.content.find((item) => item.type === "text")?.text ?? "";
@@ -68,13 +76,13 @@ describe("hosted compact read tool", () => {
 
   test("blocks another missing-path read after repeated ENOENT failures", async () => {
     const workspace = createTestWorkspace("hosted-read-path-guard");
-    const runtime = new BrewvaRuntime({ cwd: workspace, config: createOpsRuntimeConfig() });
+    const runtime = createHostedTestRuntime({ cwd: workspace, config: createOpsRuntimeConfig() });
     const sessionId = "hosted-read-path-guard";
     const templateTool = createBrewvaReadToolDefinition(workspace);
     let delegateCalls = 0;
 
     for (const path of ["src/missing-a.ts", "src/missing-b.ts"]) {
-      runtime.authority.tools.recordResult({
+      runtime.authority.tools.invocation.recordResult({
         sessionId,
         toolName: "read",
         args: { path },
@@ -82,7 +90,7 @@ describe("hosted compact read tool", () => {
         channelSuccess: false,
       });
     }
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: TOOL_READ_PATH_GATE_ARMED_EVENT_TYPE,
       payload: {
@@ -122,7 +130,7 @@ describe("hosted compact read tool", () => {
     expect(delegateCalls).toBe(0);
     expect(extractText(result)).toContain("[ReadPathGuard]");
     expect((result.details as { verdict?: string } | undefined)?.verdict).toBe("fail");
-    const warning = runtime.inspect.events.query(sessionId, {
+    const warning = runtime.inspect.events.records.query(sessionId, {
       type: "tool_contract_warning",
       last: 1,
     })[0];
@@ -131,7 +139,7 @@ describe("hosted compact read tool", () => {
 
   test("blocks an existing but unverified path when the read recovery guard is active", async () => {
     const workspace = createTestWorkspace("hosted-read-unverified-path");
-    const runtime = new BrewvaRuntime({ cwd: workspace, config: createOpsRuntimeConfig() });
+    const runtime = createHostedTestRuntime({ cwd: workspace, config: createOpsRuntimeConfig() });
     const sessionId = "hosted-read-unverified-path";
     mkdirSync(join(workspace, "src"), { recursive: true });
     const filePath = join(workspace, "src/existing.ts");
@@ -139,7 +147,7 @@ describe("hosted compact read tool", () => {
     const templateTool = createBrewvaReadToolDefinition(workspace);
     let delegateCalls = 0;
 
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: TOOL_READ_PATH_GATE_ARMED_EVENT_TYPE,
       payload: {
@@ -183,7 +191,7 @@ describe("hosted compact read tool", () => {
 
   test("allows a read under an observed directory after discovery evidence is recorded", async () => {
     const workspace = createTestWorkspace("hosted-read-verified-path");
-    const runtime = new BrewvaRuntime({ cwd: workspace, config: createOpsRuntimeConfig() });
+    const runtime = createHostedTestRuntime({ cwd: workspace, config: createOpsRuntimeConfig() });
     const sessionId = "hosted-read-verified-path";
     mkdirSync(join(workspace, "src"), { recursive: true });
     writeFileSync(join(workspace, "src/index.ts"), "export const index = true;\n", "utf8");
@@ -191,7 +199,7 @@ describe("hosted compact read tool", () => {
     const templateTool = createBrewvaReadToolDefinition(workspace);
     let delegateCalls = 0;
 
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: TOOL_READ_PATH_GATE_ARMED_EVENT_TYPE,
       payload: {
@@ -199,7 +207,7 @@ describe("hosted compact read tool", () => {
         failedPaths: ["src/missing-a.ts", "src/missing-b.ts"],
       },
     });
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE,
       payload: {
@@ -243,7 +251,7 @@ describe("hosted compact read tool", () => {
 
   test("invalidates unchanged reads when runtime visible-read epoch advances", async () => {
     const workspace = createTestWorkspace("hosted-read-unchanged-compaction");
-    const runtime = new BrewvaRuntime({ cwd: workspace, config: createOpsRuntimeConfig() });
+    const runtime = createHostedTestRuntime({ cwd: workspace, config: createOpsRuntimeConfig() });
     const sessionId = "hosted-read-unchanged-compaction";
     mkdirSync(join(workspace, "src"), { recursive: true });
     writeFileSync(join(workspace, "src/app.ts"), "export const app = true;\n", "utf8");
@@ -283,7 +291,10 @@ describe("hosted compact read tool", () => {
     expect(delegateCalls).toBe(1);
     expect(extractText(unchanged)).toContain("File unchanged since previous visible read");
 
-    runtime.maintain.context.advanceVisibleReadEpoch(sessionId, "history_pruned");
+    createOperatorRuntimePort(runtime).operator.context.visibleRead.advanceEpoch(
+      sessionId,
+      "history_pruned",
+    );
 
     const afterCompact = await compactReadTool.execute(
       "read-call-3",
@@ -299,7 +310,7 @@ describe("hosted compact read tool", () => {
 
   test("invalidates unchanged reads when content changes without mtime or size changes", async () => {
     const workspace = createTestWorkspace("hosted-read-unchanged-content-hash");
-    const runtime = new BrewvaRuntime({ cwd: workspace, config: createOpsRuntimeConfig() });
+    const runtime = createHostedTestRuntime({ cwd: workspace, config: createOpsRuntimeConfig() });
     const sessionId = "hosted-read-unchanged-content-hash";
     mkdirSync(join(workspace, "src"), { recursive: true });
     const filePath = join(workspace, "src/app.ts");

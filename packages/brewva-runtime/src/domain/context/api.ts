@@ -63,8 +63,8 @@ export {
   IDENTITY_PARSE_WARNING_EVENT_TYPE,
 } from "./events.js";
 export {
-  contextRuntimeSurface,
-  contextSurfaceContribution,
+  createContextInspectSurface,
+  createContextOperatorSurface,
   createContextSurfaceMethods,
 } from "./runtime-surface.js";
 export type {

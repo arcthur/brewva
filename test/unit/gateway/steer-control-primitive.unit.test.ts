@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { SessionBackendStateError } from "@brewva/brewva-gateway";
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { BrewvaRuntime, createHostedRuntimePort } from "@brewva/brewva-runtime";
 import type { TurnEnvelope } from "@brewva/brewva-runtime/channels";
 import {
   createInMemoryModelCatalog,
@@ -37,6 +37,10 @@ import {
 import { createTurnEventStream, createTurnStreamFromPromise } from "../../helpers/effect-stream.js";
 import { createRuntimeFixture } from "../../helpers/runtime.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
+
+function createHostedTestRuntime(options: ConstructorParameters<typeof BrewvaRuntime>[0]) {
+  return createHostedRuntimePort(new BrewvaRuntime(options));
+}
 
 const TEST_MODEL: BrewvaRegisteredModel = {
   provider: "openai",
@@ -234,7 +238,7 @@ async function createManagedSessionFixture(
   options?: { customTools?: BrewvaToolDefinition[] },
 ) {
   const workspace = createTestWorkspace(testName);
-  const runtime = new BrewvaRuntime({ cwd: workspace });
+  const runtime = createHostedTestRuntime({ cwd: workspace });
   const sessionStore = new HostedRuntimeTapeSessionStore(runtime, `${testName}-session`);
   const fauxProvider = registerFauxProvider({
     api: `${testName}-faux`,
@@ -506,7 +510,7 @@ describe("in-flight steer control primitive", () => {
     try {
       expect(await fixture.session.steer("   ")).toEqual({ status: "rejected_empty" });
       expect(
-        fixture.runtime.inspect.events
+        fixture.runtime.inspect.events.records
           .list(fixture.sessionStore.getSessionId())
           .filter((event) => event.type.startsWith("steer_")),
       ).toHaveLength(0);
@@ -637,7 +641,7 @@ describe("in-flight steer control primitive", () => {
     try {
       expect(await fixture.session.steer("still there?")).toEqual({ status: "no_active_run" });
       expect(
-        fixture.runtime.inspect.events
+        fixture.runtime.inspect.events.records
           .list(fixture.sessionStore.getSessionId())
           .filter((event) => event.type.startsWith("steer_")),
       ).toHaveLength(0);
@@ -830,7 +834,7 @@ describe("in-flight steer control primitive", () => {
         message: toolResultMessage,
       });
 
-      const eventTypes = fixture.runtime.inspect.events
+      const eventTypes = fixture.runtime.inspect.events.records
         .list(fixture.sessionStore.getSessionId())
         .map((event) => event.type);
       const originalContext = fixture.sessionStore.buildSessionContext();

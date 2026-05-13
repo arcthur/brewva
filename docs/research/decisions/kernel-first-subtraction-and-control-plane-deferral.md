@@ -2,7 +2,7 @@
 
 ## Metadata
 
-- Decision: Keep the kernel boundary hard. `authority / inspect / maintain`, effect governance, exact resume, rollback receipts, and replay-first recovery remain the core contract.
+- Decision: Keep the kernel boundary hard. `authority / inspect`, repo-owned operator ports, effect governance, exact resume, rollback receipts, and replay-first recovery remain the core contract.
 - Date: `2026-04-18`
 - Status: accepted
 - Stable docs:
@@ -19,7 +19,7 @@
 
 ## Decision Summary
 
-- Keep the kernel boundary hard. `authority / inspect / maintain`, effect governance, exact resume, rollback receipts, and replay-first recovery remain the core contract.
+- Keep the kernel boundary hard. `authority / inspect`, repo-owned operator ports, effect governance, exact resume, rollback receipts, and replay-first recovery remain the core contract.
 - Treat `single tool call` as the stable transaction boundary. Turn-level bounded recovery may evolve later, but cross-agent saga semantics and generalized compensation are explicitly deferred.
 - Keep control-plane growth opt-in. New orchestration breadth must not widen the default hosted or runtime-plugin path without an explicit exception and compatibility story.
 - Preserve advisory/control-plane replaceability. Routing, delegation, heartbeat behavior, and operator UX remain subordinate to kernel truth instead of becoming hidden authority.
@@ -27,4 +27,4 @@
 
 ## Superseded by
 
-- None.
+- `docs/research/decisions/runtime-public-root-compression.md`

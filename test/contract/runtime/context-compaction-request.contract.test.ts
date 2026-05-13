@@ -2,7 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BrewvaRuntime, type BrewvaConfig } from "@brewva/brewva-runtime";
+import { BrewvaRuntime, createOperatorRuntimePort } from "@brewva/brewva-runtime";
+import type { BrewvaConfig } from "@brewva/brewva-runtime";
 import { createOpsRuntimeConfig } from "../../helpers/runtime.js";
 
 function createConfig(): BrewvaConfig {
@@ -17,11 +18,17 @@ describe("context compaction request dedupe", () => {
     });
     const sessionId = "context-compaction-request-dedupe";
 
-    runtime.maintain.context.requestCompaction(sessionId, "usage_threshold");
-    runtime.maintain.context.requestCompaction(sessionId, "usage_threshold");
-    runtime.maintain.context.requestCompaction(sessionId, "hard_limit");
+    createOperatorRuntimePort(runtime).operator.context.compaction.request(
+      sessionId,
+      "usage_threshold",
+    );
+    createOperatorRuntimePort(runtime).operator.context.compaction.request(
+      sessionId,
+      "usage_threshold",
+    );
+    createOperatorRuntimePort(runtime).operator.context.compaction.request(sessionId, "hard_limit");
 
-    const events = runtime.inspect.events.query(sessionId, {
+    const events = runtime.inspect.events.records.query(sessionId, {
       type: "context_compaction_requested",
     });
     const reasons = events.map(
@@ -37,15 +44,15 @@ describe("context compaction request dedupe", () => {
     });
     const sessionId = "context-compaction-interval";
 
-    runtime.maintain.context.onTurnStart(sessionId, 1);
+    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
     expect(
-      runtime.maintain.context.checkAndRequestCompaction(sessionId, {
+      createOperatorRuntimePort(runtime).operator.context.compaction.checkAndRequest(sessionId, {
         tokens: 820,
         contextWindow: 1000,
         percent: 0.9,
       }),
     ).toBe(true);
-    runtime.authority.session.commitCompaction(sessionId, {
+    runtime.authority.session.compaction.commit(sessionId, {
       compactId: "cmp-interval",
       sanitizedSummary: "Reset compaction interval state.",
       summaryDigest: "unused",
@@ -57,18 +64,18 @@ describe("context compaction request dedupe", () => {
       origin: "auto_compaction",
     });
 
-    runtime.maintain.context.onTurnStart(sessionId, 2);
+    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 2);
     expect(
-      runtime.maintain.context.checkAndRequestCompaction(sessionId, {
+      createOperatorRuntimePort(runtime).operator.context.compaction.checkAndRequest(sessionId, {
         tokens: 820,
         contextWindow: 1000,
         percent: 0.9,
       }),
     ).toBe(false);
 
-    runtime.maintain.context.onTurnStart(sessionId, 3);
+    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 3);
     expect(
-      runtime.maintain.context.checkAndRequestCompaction(sessionId, {
+      createOperatorRuntimePort(runtime).operator.context.compaction.checkAndRequest(sessionId, {
         tokens: 820,
         contextWindow: 1000,
         percent: 0.9,

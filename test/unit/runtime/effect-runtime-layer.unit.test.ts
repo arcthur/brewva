@@ -80,7 +80,7 @@ describe("runtime Effect layer", () => {
     expect(snapshot.serviceKeys).toContain("eventPipeline");
     expect(snapshot.serviceKeys).not.toContain("authority");
     expect(snapshot.serviceKeys).not.toContain("inspect");
-    expect(snapshot.serviceKeys).not.toContain("maintain");
+    expect(snapshot.serviceKeys).not.toContain("operator");
   });
 
   test("exposes a memoized runtime spine for internal Effect programs", () => {
@@ -115,6 +115,6 @@ describe("runtime Effect layer", () => {
     expect(second.services).toBe(first.services);
     expect(Object.keys(second.services)).not.toContain("authority");
     expect(Object.keys(second.services)).not.toContain("inspect");
-    expect(Object.keys(second.services)).not.toContain("maintain");
+    expect(Object.keys(second.services)).not.toContain("operator");
   });
 });

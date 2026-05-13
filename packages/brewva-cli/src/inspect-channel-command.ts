@@ -2,7 +2,7 @@ import type {
   ChannelInspectCommandInput,
   ChannelInspectCommandResult,
 } from "@brewva/brewva-gateway";
-import type { EffectCommitmentRequestRecord } from "@brewva/brewva-runtime";
+import type { EffectCommitmentRequestRecord } from "@brewva/brewva-runtime/proposals";
 import { clampText, resolveInspectDirectory } from "./inspect-analysis.js";
 import { buildSessionInspectReport } from "./inspect.js";
 
@@ -166,10 +166,9 @@ export async function handleInspectChannelCommand(
     sessionId: input.targetSession.sessionId,
     directory,
   });
-  const approvalRequests =
-    input.targetSession.runtime.inspect.proposals.listEffectCommitmentRequests(
-      input.targetSession.sessionId,
-    );
+  const approvalRequests = input.targetSession.runtime.inspect.proposals.requests.list(
+    input.targetSession.sessionId,
+  );
 
   return {
     text: formatInspectChannelText({

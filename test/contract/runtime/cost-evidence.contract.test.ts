@@ -25,7 +25,7 @@ describe("cost evidence separation in digest", () => {
     const runtime = createCleanRuntime();
     const sessionId = `cost-sep-${Date.now()}`;
 
-    runtime.authority.tools.recordResult({
+    runtime.authority.tools.invocation.recordResult({
       sessionId,
       toolName: "exec",
       args: { command: "echo hello" },
@@ -33,7 +33,7 @@ describe("cost evidence separation in digest", () => {
       channelSuccess: true,
     });
 
-    runtime.authority.cost.recordAssistantUsage({
+    runtime.authority.cost.usage.recordAssistant({
       sessionId,
       model: "test-model",
       inputTokens: 100,
@@ -44,7 +44,7 @@ describe("cost evidence separation in digest", () => {
       costUsd: 0.001,
     });
 
-    const digest = runtime.inspect.ledger.getDigest(sessionId);
+    const digest = runtime.inspect.ledger.store.getDigest(sessionId);
     expect(digest).toContain("count=1");
     expect(digest).not.toContain("brewva_cost");
   });

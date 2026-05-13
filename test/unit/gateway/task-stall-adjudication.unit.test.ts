@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { BrewvaRuntime, buildTaskStuckDetectedPayload } from "@brewva/brewva-runtime";
+import { BrewvaRuntime, createHostedRuntimePort } from "@brewva/brewva-runtime";
+import { buildTaskStuckDetectedPayload } from "@brewva/brewva-runtime/task";
 import {
   adjudicateTaskStallPacket,
   buildTaskStallInspectionPacket,
@@ -8,23 +9,27 @@ import {
 import { createOpsRuntimeConfig } from "../../helpers/runtime.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
+function createHostedTestRuntime(options: ConstructorParameters<typeof BrewvaRuntime>[0]) {
+  return createHostedRuntimePort(new BrewvaRuntime(options));
+}
+
 describe("task stall adjudication", () => {
   test("builds an inspection packet from task, verification, and recent failure signals", () => {
-    const runtime = new BrewvaRuntime({
+    const runtime = createHostedTestRuntime({
       cwd: createTestWorkspace("stall-inspection-packet"),
       config: createOpsRuntimeConfig(),
     });
     const sessionId = "stall-inspection-packet-1";
 
-    runtime.authority.task.setSpec(sessionId, {
+    runtime.authority.task.spec.set(sessionId, {
       schema: "brewva.task.v1",
       goal: "Repair the failing verification path",
     });
-    runtime.authority.task.recordBlocker(sessionId, {
+    runtime.authority.task.blockers.record(sessionId, {
       message: "Awaiting targeted retry strategy",
       source: "unit_test",
     });
-    runtime.maintain.session.recordWorkerResult(sessionId, {
+    runtime.authority.session.workerResults.record(sessionId, {
       workerId: "patch-worker-1",
       status: "ok",
       summary: "Patch result is ready for parent review.",
@@ -34,7 +39,7 @@ describe("task stall adjudication", () => {
         changes: [{ path: "src/task-stall.ts", action: "modify" }],
       },
     });
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: "tool_result_recorded",
       timestamp: 150,
@@ -46,7 +51,7 @@ describe("task stall adjudication", () => {
         failureClass: "execution",
       },
     });
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: "verification_outcome_recorded",
       timestamp: 160,
@@ -86,19 +91,19 @@ describe("task stall adjudication", () => {
   });
 
   test("prefers compact_recommended when tape pressure is already high", () => {
-    const runtime = new BrewvaRuntime({
+    const runtime = createHostedTestRuntime({
       cwd: createTestWorkspace("stall-compact-recommended"),
       config: createOpsRuntimeConfig(),
     });
     const sessionId = "stall-compact-recommended-1";
-    const highThreshold = runtime.inspect.tape.getTapePressureThresholds().high;
+    const highThreshold = runtime.inspect.tape.status.getPressureThresholds().high;
 
-    runtime.authority.task.setSpec(sessionId, {
+    runtime.authority.task.spec.set(sessionId, {
       schema: "brewva.task.v1",
       goal: "Exercise high-pressure stall adjudication",
     });
     for (let index = 0; index <= highThreshold; index += 1) {
-      runtime.extensions.hosted.events.record({
+      createHostedRuntimePort(runtime).extensions.hosted.events.record({
         sessionId,
         type: "custom_probe_event",
         payload: { index },
@@ -125,21 +130,21 @@ describe("task stall adjudication", () => {
   });
 
   test("records a single adjudication event for the latest detected stall", () => {
-    const runtime = new BrewvaRuntime({
+    const runtime = createHostedTestRuntime({
       cwd: createTestWorkspace("stall-adjudication-record"),
       config: createOpsRuntimeConfig(),
     });
     const sessionId = "stall-adjudication-record-1";
 
-    runtime.authority.task.setSpec(sessionId, {
+    runtime.authority.task.spec.set(sessionId, {
       schema: "brewva.task.v1",
       goal: "Exercise durable stall adjudication",
     });
-    runtime.authority.task.recordBlocker(sessionId, {
+    runtime.authority.task.blockers.record(sessionId, {
       message: "Need user confirmation before retrying the fix",
       source: "unit_test",
     });
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: "task_stuck_detected",
       timestamp: 400_100,
@@ -170,12 +175,12 @@ describe("task stall adjudication", () => {
     });
     expect(second).toBeNull();
     expect(
-      runtime.inspect.events.query(sessionId, { type: "task_stall_adjudicated" }),
+      runtime.inspect.events.records.query(sessionId, { type: "task_stall_adjudicated" }),
     ).toHaveLength(1);
   });
 
   test("summarizes missing verification evidence separately from failed checks", () => {
-    const runtime = new BrewvaRuntime({
+    const runtime = createHostedTestRuntime({
       cwd: createTestWorkspace("stall-missing-verification"),
       config: createOpsRuntimeConfig((config) => {
         config.verification.defaultLevel = "standard";
@@ -187,12 +192,12 @@ describe("task stall adjudication", () => {
     });
     const sessionId = "stall-missing-verification-1";
 
-    runtime.authority.task.setSpec(sessionId, {
+    runtime.authority.task.spec.set(sessionId, {
       schema: "brewva.task.v1",
       goal: "Recover missing verification evidence",
     });
-    runtime.authority.tools.markCall(sessionId, "edit");
-    runtime.extensions.hosted.events.record({
+    runtime.authority.tools.tracking.markCall(sessionId, "edit");
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: "verification_outcome_recorded",
       timestamp: 160,
@@ -224,17 +229,17 @@ describe("task stall adjudication", () => {
   });
 
   test("prefers canonical missing checks from durable verification outcomes", () => {
-    const runtime = new BrewvaRuntime({
+    const runtime = createHostedTestRuntime({
       cwd: createTestWorkspace("stall-current-verification-debt"),
       config: createOpsRuntimeConfig(),
     });
     const sessionId = "stall-current-verification-debt-1";
 
-    runtime.authority.task.setSpec(sessionId, {
+    runtime.authority.task.spec.set(sessionId, {
       schema: "brewva.task.v1",
       goal: "Prefer canonical missing checks over display-only missing evidence",
     });
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: "verification_outcome_recorded",
       timestamp: 160,

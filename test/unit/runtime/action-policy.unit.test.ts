@@ -8,8 +8,8 @@ import {
   sameToolActionPolicy,
   toolActionPolicyCreatesRollbackAnchor,
   validateToolActionPolicy,
-  type ToolActionPolicy,
-} from "@brewva/brewva-runtime";
+} from "@brewva/brewva-runtime/governance";
+import type { ToolActionPolicy } from "@brewva/brewva-runtime/governance";
 import { requireDefined } from "../../helpers/assertions.js";
 
 describe("tool action policy", () => {

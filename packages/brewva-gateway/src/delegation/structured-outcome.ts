@@ -1,4 +1,4 @@
-import { normalizeReviewLaneName } from "@brewva/brewva-runtime";
+import { normalizeReviewLaneName } from "@brewva/brewva-runtime/skills";
 import { normalizeStringList, readNonEmptyString } from "@brewva/brewva-std/text";
 import { isRecord, readFiniteNumberValue } from "@brewva/brewva-std/unknown";
 import type { BrewvaQuestionOption, BrewvaQuestionPrompt } from "@brewva/brewva-substrate/host-api";

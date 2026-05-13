@@ -16,8 +16,8 @@ import {
   type BrewvaEventLike,
   type BrewvaTypedEventRecord,
 } from "../../events/descriptor-core.js";
-import { normalizeEvidenceRef } from "../evidence/api.js";
-import type { EvidenceRef } from "../evidence/api.js";
+import { normalizeEvidenceRef } from "../../internal/evidence/api.js";
+import type { EvidenceRef } from "../../internal/evidence/api.js";
 import {
   DECISION_RECEIPT_RECORDED_EVENT_TYPE,
   EFFECT_COMMITMENT_APPROVAL_CONSUMED_EVENT_TYPE,

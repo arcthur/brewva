@@ -1,8 +1,4 @@
-import {
-  type BrewvaHostedRuntimePort,
-  type SessionWireTransitionFamily as HostedTransitionFamily,
-  type SessionWireTransitionStatus as HostedTransitionStatus,
-} from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import {
   type SessionTurnTransitionPayload,
   type SessionTurnTransitionReason as TurnTransitionReason,
@@ -24,6 +20,10 @@ import {
   TURN_INPUT_RECORDED_EVENT_TYPE,
   TURN_RENDER_COMMITTED_EVENT_TYPE,
 } from "@brewva/brewva-runtime/events";
+import type {
+  SessionWireTransitionFamily as HostedTransitionFamily,
+  SessionWireTransitionStatus as HostedTransitionStatus,
+} from "@brewva/brewva-runtime/session";
 
 type ObservedHostedTransitionEvent = Pick<BrewvaStructuredEvent, "type" | "payload" | "turn"> &
   Partial<Pick<BrewvaStructuredEvent, "id">>;
@@ -261,7 +261,7 @@ function releaseReasonLevelActiveTransition(
 
 function hasSessionShutdownReceipt(runtime: BrewvaHostedRuntimePort, sessionId: string): boolean {
   return (
-    runtime.inspect.events.query(sessionId, {
+    runtime.inspect.events.records.query(sessionId, {
       type: SESSION_SHUTDOWN_EVENT_TYPE,
       last: 1,
     }).length > 0
@@ -471,7 +471,7 @@ class HostedTurnTransitionCoordinator {
   private readonly unsubscribe: () => void;
 
   constructor(private readonly runtime: BrewvaHostedRuntimePort) {
-    this.unsubscribe = runtime.inspect.events.subscribe((event) => {
+    this.unsubscribe = runtime.inspect.events.records.subscribe((event) => {
       this.handleEvent(event);
     });
   }
@@ -495,7 +495,7 @@ class HostedTurnTransitionCoordinator {
   ): void {
     if (!state.hydrated) {
       state.hydrated = true;
-      const persisted = this.runtime.inspect.events.queryStructured(sessionId);
+      const persisted = this.runtime.inspect.events.records.queryStructured(sessionId);
       for (const event of persisted) {
         if (options.excludeEventId && event.id === options.excludeEventId) {
           continue;
@@ -660,7 +660,7 @@ class HostedTurnTransitionCoordinator {
     }
     foldObservedHostedTransitionEvent(
       state,
-      this.runtime.inspect.events.toStructured(recordedEvent),
+      this.runtime.inspect.events.records.toStructured(recordedEvent),
     );
   }
 

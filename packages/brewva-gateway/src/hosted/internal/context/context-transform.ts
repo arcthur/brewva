@@ -1,5 +1,5 @@
 import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
-import { coerceContextBudgetUsage } from "@brewva/brewva-runtime";
+import { coerceContextBudgetUsage } from "@brewva/brewva-runtime/context";
 import type { InternalHostPluginApi } from "@brewva/brewva-substrate/host-api";
 import type { BrewvaTurnLoopMessage } from "@brewva/brewva-substrate/turn";
 import type { HostedDelegationStore } from "../../../delegation/api.js";
@@ -22,7 +22,6 @@ export interface ContextTransformOptions {
   autoCompactionWatchdogMs?: number;
   delegationStore?: HostedDelegationStore;
   turnClock?: RuntimeTurnClockStore;
-  contextProfile?: "minimal" | "standard" | "full";
 }
 
 export interface ContextTransformLifecycle {
@@ -99,7 +98,6 @@ export function createContextTransformLifecycle(
     compactionController,
     {
       delegationStore: options.delegationStore,
-      contextProfile: options.contextProfile,
     },
   );
 

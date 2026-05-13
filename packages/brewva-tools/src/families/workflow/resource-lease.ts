@@ -1,4 +1,4 @@
-import type { ResourceLeaseRecord } from "@brewva/brewva-runtime";
+import type { ResourceLeaseRecord } from "@brewva/brewva-runtime/context";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "../../contracts/index.js";
@@ -66,7 +66,7 @@ export function createResourceLeaseTool(options: BrewvaToolOptions): ToolDefinit
           if (typeof params.reason !== "string" || params.reason.trim().length === 0) {
             return failTextResult("Error: reason is required for action=request.", { ok: false });
           }
-          const result = runtime.authority.tools.requestResourceLease(sessionId, {
+          const result = runtime.authority.tools.resourceLeases.request(sessionId, {
             reason: params.reason,
             budget: {
               maxToolCalls: params.maxToolCalls,
@@ -87,7 +87,7 @@ export function createResourceLeaseTool(options: BrewvaToolOptions): ToolDefinit
         }
 
         if (params.action === "list") {
-          const leases = runtime.inspect.tools.listResourceLeases(sessionId, {
+          const leases = runtime.inspect.tools.resourceLeases.list(sessionId, {
             includeInactive: params.includeInactive,
             skillName: params.skillName,
           });
@@ -107,7 +107,7 @@ export function createResourceLeaseTool(options: BrewvaToolOptions): ToolDefinit
         if (typeof params.leaseId !== "string" || params.leaseId.trim().length === 0) {
           return failTextResult("Error: leaseId is required for action=cancel.", { ok: false });
         }
-        const result = runtime.authority.tools.cancelResourceLease(
+        const result = runtime.authority.tools.resourceLeases.cancel(
           sessionId,
           params.leaseId,
           params.reason,
@@ -122,12 +122,6 @@ export function createResourceLeaseTool(options: BrewvaToolOptions): ToolDefinit
         });
       },
     },
-    {
-      requiredCapabilities: [
-        "authority.tools.requestResourceLease",
-        "authority.tools.cancelResourceLease",
-        "inspect.tools.listResourceLeases",
-      ],
-    },
+    {},
   );
 }

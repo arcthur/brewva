@@ -2,7 +2,12 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { runInsightsCli } from "@brewva/brewva-cli";
-import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
+import {
+  BrewvaRuntime,
+  DEFAULT_BREWVA_CONFIG,
+  createOperatorRuntimePort,
+  createHostedRuntimePort,
+} from "@brewva/brewva-runtime";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 async function runInsights(
@@ -49,27 +54,27 @@ function recordWriteSession(
     content: string;
   },
 ): void {
-  runtime.extensions.hosted.events.record({
+  createHostedRuntimePort(runtime).extensions.hosted.events.record({
     sessionId: input.sessionId,
     type: "session_bootstrap",
     payload: {
       managedToolMode: "direct",
     },
   });
-  runtime.maintain.context.onTurnStart(input.sessionId, 1);
-  runtime.authority.task.setSpec(input.sessionId, {
+  createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(input.sessionId, 1);
+  runtime.authority.task.spec.set(input.sessionId, {
     schema: "brewva.task.v1",
     goal: input.goal,
   });
-  runtime.authority.tools.markCall(input.sessionId, "edit");
-  runtime.authority.tools.trackCallStart({
+  runtime.authority.tools.tracking.markCall(input.sessionId, "edit");
+  runtime.authority.tools.tracking.trackCallStart({
     sessionId: input.sessionId,
     toolCallId: `${input.sessionId}-edit-1`,
     toolName: "edit",
     args: { path: input.path },
   });
   writeFileSync(join(input.workspace, input.path), input.content, "utf8");
-  runtime.authority.tools.trackCallEnd({
+  runtime.authority.tools.tracking.trackCallEnd({
     sessionId: input.sessionId,
     toolCallId: `${input.sessionId}-edit-1`,
     toolName: "edit",

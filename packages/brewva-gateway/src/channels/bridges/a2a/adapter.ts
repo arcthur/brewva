@@ -1,9 +1,9 @@
-import type { BrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import type { ChannelCoordinator } from "../../coordinator.js";
 import type { ChannelA2AAdapter } from "./extension.js";
 
 export function createInstrumentedChannelA2AAdapter(input: {
-  runtime: BrewvaRuntime;
+  runtime: BrewvaHostedRuntimePort;
   coordinator: Pick<ChannelCoordinator, "a2aSend" | "a2aBroadcast" | "listAgents">;
 }): ChannelA2AAdapter {
   return {

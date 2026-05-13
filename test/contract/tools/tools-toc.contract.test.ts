@@ -1,7 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { chmodSync, mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG, type BrewvaConfig } from "@brewva/brewva-runtime";
+import {
+  BrewvaRuntime,
+  DEFAULT_BREWVA_CONFIG,
+  createOperatorRuntimePort,
+} from "@brewva/brewva-runtime";
+import type { BrewvaConfig } from "@brewva/brewva-runtime";
 import { PATCH_RECORDED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
 import { createReadSpansTool, createTocTools } from "@brewva/brewva-tools/navigation";
 import { requireDefined } from "../../helpers/assertions.js";
@@ -169,7 +174,7 @@ describe("TOC tools", () => {
       fakeContext(sessionId, workspace),
     );
 
-    const events = runtime.inspect.events.query(sessionId, { type: "tool_toc_query" });
+    const events = runtime.inspect.events.records.query(sessionId, { type: "tool_toc_query" });
     expect(events).toHaveLength(2);
     expect(events[0]?.payload?.cacheHit).toBe(false);
     expect(events[1]?.payload?.cacheHit).toBe(true);
@@ -244,7 +249,7 @@ describe("TOC tools", () => {
       undefined,
       fakeContext(sessionId, workspace),
     );
-    runtime.maintain.session.clearState(sessionId);
+    createOperatorRuntimePort(runtime).operator.session.state.clear(sessionId);
     await tool.execute(
       "tc-toc-cache-clear-2",
       { file_path: filePath },
@@ -253,7 +258,7 @@ describe("TOC tools", () => {
       fakeContext(sessionId, workspace),
     );
 
-    const events = runtime.inspect.events.query(sessionId, { type: "tool_toc_query" });
+    const events = runtime.inspect.events.records.query(sessionId, { type: "tool_toc_query" });
     expect(events).toHaveLength(2);
     expect(events[0]?.payload?.cacheHit).toBe(false);
     expect(events[1]?.payload?.cacheHit).toBe(false);
@@ -339,7 +344,7 @@ describe("TOC tools", () => {
     expect(details?.status).toBe("ok");
     expect(details?.candidateFiles).toBe(1);
 
-    const events = runtime.inspect.events.query(sessionId, { type: "tool_toc_query" });
+    const events = runtime.inspect.events.records.query(sessionId, { type: "tool_toc_query" });
     expect(events).toHaveLength(1);
     expect(events[0]?.payload?.broadQuery).toBe(false);
     expect(events[0]?.payload?.candidateFiles).toBe(1);
@@ -422,7 +427,7 @@ describe("TOC tools", () => {
     expect(details?.advisor?.scoringMode).toBe("multiplicative");
     expect(typeof details?.advisor?.status).toBe("string");
 
-    const events = runtime.inspect.events.query(sessionId, { type: "tool_toc_query" });
+    const events = runtime.inspect.events.records.query(sessionId, { type: "tool_toc_query" });
     expect(events).toHaveLength(1);
     expect(events[0]?.payload?.advisorStatus).toBeDefined();
     expect(events[0]?.payload?.advisorReorderedMatches).toBeDefined();
@@ -550,7 +555,7 @@ describe("TOC tools", () => {
     expect(secondDetails?.advisor?.status).toBe("suggestion_only");
     expect(secondDetails?.advisor?.comboMatches).toBeGreaterThan(0);
 
-    const events = runtime.inspect.events.query(sessionId, { type: "tool_toc_query" });
+    const events = runtime.inspect.events.records.query(sessionId, { type: "tool_toc_query" });
     expect(events).toHaveLength(2);
     expect(events[0]?.payload?.advisorStatus).toBe("suggestion_only");
     expect(events[1]?.payload?.advisorStatus).toBe("suggestion_only");
@@ -754,7 +759,7 @@ describe("TOC tools", () => {
       undefined,
       fakeContext(sessionId, workspace),
     );
-    runtime.maintain.session.clearState(sessionId);
+    createOperatorRuntimePort(runtime).operator.session.state.clear(sessionId);
 
     const result = await readTool.execute(
       "tc-read-spans-cache-clear",

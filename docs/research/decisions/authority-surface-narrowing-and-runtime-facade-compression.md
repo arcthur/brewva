@@ -2,7 +2,7 @@
 
 ## Metadata
 
-- Decision: Brewva's public runtime contract is organized around semantic root surfaces: `authority`, `inspect`, and `maintain`
+- Decision: Historical runtime facade compression established semantic root surfaces. Current public root keeps `authority` and `inspect`; operations move through repo-owned operator ports.
 - Date: `2026-04-04`
 - Status: accepted
 - Stable docs:
@@ -14,7 +14,7 @@
 
 ## Decision Summary
 
-- Brewva's public runtime contract is organized around semantic root surfaces: `authority`, `inspect`, and `maintain`
+- Historical note: this decision originally included a third public operational root. Current runtime root compression removes that root and exposes bounded operations through hosted/operator ports.
 - the default coupling surface follows authority boundaries rather than implementation breadth
 - `public width is not authority width` is the interpretation rule for runtime APIs and docs
 - repo-owned implementation helpers stay under dedicated runtime subpaths and controlled extension ports, not the root public entrypoint
@@ -22,4 +22,4 @@
 
 ## Superseded by
 
-- None.
+- `docs/research/decisions/runtime-public-root-compression.md`

@@ -1,12 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import {
-  DEFAULT_BREWVA_CONFIG,
-  buildTapeAnchorPayload,
-  buildTapeCheckpointPayload,
-} from "@brewva/brewva-runtime";
+import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
 import { createBrewvaEventStore } from "@brewva/brewva-runtime/event-log";
+import { buildTapeAnchorPayload, buildTapeCheckpointPayload } from "@brewva/brewva-runtime/tape";
 import { requireDefined } from "../../helpers/assertions.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 

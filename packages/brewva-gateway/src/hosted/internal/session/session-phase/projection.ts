@@ -1,4 +1,4 @@
-import { type SessionLifecycleSnapshot } from "@brewva/brewva-runtime";
+import type { SessionLifecycleSnapshot } from "@brewva/brewva-runtime/session";
 import type { SessionPhase, SessionPhaseEvent } from "@brewva/brewva-substrate/session";
 import type { BrewvaTurnLoopMessage } from "@brewva/brewva-substrate/turn";
 import type { RuntimeFactSessionPhaseProjection } from "./runtime-facts.js";

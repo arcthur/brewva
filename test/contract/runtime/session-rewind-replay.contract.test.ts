@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { BrewvaRuntime, createOperatorRuntimePort } from "@brewva/brewva-runtime";
 import {
   SESSION_REWIND_COMPLETED_EVENT_TYPE,
   SESSION_REWIND_REDO_COMPLETED_EVENT_TYPE,
@@ -31,26 +31,26 @@ describe("session rewind replay", () => {
     writeFileSync(filePath, "export const value = 1;\n", "utf8");
 
     const runtime = new BrewvaRuntime({ cwd: workspace, configPath: RUNTIME_CONTRACT_CONFIG_PATH });
-    runtime.maintain.context.onTurnStart(sessionId, 1);
-    const checkpoint = runtime.authority.session.recordRewindCheckpoint(sessionId, {
+    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+    const checkpoint = runtime.authority.session.rewind.recordCheckpoint(sessionId, {
       leafEntryId: "leaf-before-replay",
       prompt: { text: "Change value for replay", parts: [] },
     });
-    runtime.authority.tools.trackCallStart({
+    runtime.authority.tools.tracking.trackCallStart({
       sessionId,
       toolCallId: "tool-replay",
       toolName: "edit",
       args: { file_path: "src/replay.ts" },
     });
     writeFileSync(filePath, "export const value = 2;\n", "utf8");
-    runtime.authority.tools.trackCallEnd({
+    runtime.authority.tools.tracking.trackCallEnd({
       sessionId,
       toolCallId: "tool-replay",
       toolName: "edit",
       channelSuccess: true,
     });
 
-    const rewind = runtime.authority.session.rewind(sessionId, {
+    const rewind = runtime.authority.session.rewind.rewind(sessionId, {
       checkpointId: checkpoint.checkpointId,
       mode: "both",
       summary: "carry",
@@ -60,7 +60,7 @@ describe("session rewind replay", () => {
     if (!rewind.ok || !rewind.reasoningRevert) {
       throw new Error("Expected rewind to record a reasoning revert");
     }
-    const rewindEvent = runtime.inspect.events.query(sessionId, {
+    const rewindEvent = runtime.inspect.events.records.query(sessionId, {
       type: SESSION_REWIND_COMPLETED_EVENT_TYPE,
       last: 1,
     })[0];
@@ -74,18 +74,18 @@ describe("session rewind replay", () => {
       configPath: RUNTIME_CONTRACT_CONFIG_PATH,
     });
     expect(
-      reloadedAfterRewind.inspect.session.getRewindState(sessionId).latestRewind?.reasoningRevert
+      reloadedAfterRewind.inspect.session.rewind.getState(sessionId).latestRewind?.reasoningRevert
         ?.revertId,
     ).toBe(rewind.reasoningRevert.revertId);
 
-    const redo = runtime.authority.session.redo(sessionId, {
+    const redo = runtime.authority.session.rewind.redo(sessionId, {
       returnLeafEntryId: "leaf-after-redo",
     });
     expect(redo.ok).toBe(true);
     if (!redo.ok || !redo.reasoningCheckpoint) {
       throw new Error("Expected redo to record a reasoning checkpoint");
     }
-    const redoEvent = runtime.inspect.events.query(sessionId, {
+    const redoEvent = runtime.inspect.events.records.query(sessionId, {
       type: SESSION_REWIND_REDO_COMPLETED_EVENT_TYPE,
       last: 1,
     })[0];
@@ -98,8 +98,8 @@ describe("session rewind replay", () => {
       cwd: workspace,
       configPath: RUNTIME_CONTRACT_CONFIG_PATH,
     });
-    const replayedCheckpoint = reloadedAfterRedo.inspect.session
-      .getRewindState(sessionId)
+    const replayedCheckpoint = reloadedAfterRedo.inspect.session.rewind
+      .getState(sessionId)
       .checkpoints.find((entry) => entry.checkpointId === checkpoint.checkpointId);
     expect(replayedCheckpoint?.patchSetIds).toEqual(rewind.patchSetIds);
     expect(replayedCheckpoint?.status).toBe("redone");

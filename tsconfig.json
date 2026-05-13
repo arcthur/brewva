@@ -3,7 +3,6 @@
   "references": [
     { "path": "./packages/brewva-search" },
     { "path": "./packages/brewva-token-estimation" },
-    { "path": "./packages/brewva-tool-protocol" },
     { "path": "./packages/brewva-mcp-adapter" },
     { "path": "./packages/brewva-std" },
     { "path": "./packages/brewva-box" },

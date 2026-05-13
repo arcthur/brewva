@@ -1,16 +1,14 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
-import type {
-  BrewvaConfig,
-  BrewvaRuntime,
-  DelegationRunQuery,
-  DelegationRunRecord,
-  SkillRoutingScope,
-} from "@brewva/brewva-runtime";
-import { asBrewvaSessionId, isDelegationRunTerminalStatus } from "@brewva/brewva-runtime";
+import type { BrewvaConfig, BrewvaHostedRuntimePort, BrewvaRuntime } from "@brewva/brewva-runtime";
+import { createHostedRuntimePort } from "@brewva/brewva-runtime";
+import { asBrewvaSessionId } from "@brewva/brewva-runtime/core";
+import type { DelegationRunQuery, DelegationRunRecord } from "@brewva/brewva-runtime/delegation";
+import { isDelegationRunTerminalStatus } from "@brewva/brewva-runtime/delegation";
 import type { BrewvaStructuredEvent } from "@brewva/brewva-runtime/events";
 import { readWorkerResultsAppliedEventPayload } from "@brewva/brewva-runtime/events";
+import type { SkillRoutingScope } from "@brewva/brewva-runtime/skills";
 import type {
   DelegationPacket,
   SubagentCancelResult,
@@ -69,7 +67,7 @@ export interface HostedSubagentBackgroundController {
 }
 
 interface DetachedBackgroundControllerOptions {
-  runtime: BrewvaRuntime;
+  runtime: BrewvaRuntime | BrewvaHostedRuntimePort;
   delegationStore?: HostedDelegationStore;
   configPath?: string;
   routingScopes?: SkillRoutingScope[];
@@ -96,7 +94,7 @@ function buildDeliveryRecord(
   };
 }
 
-function cloneRuntimeConfig(runtime: BrewvaRuntime): BrewvaConfig {
+function cloneRuntimeConfig(runtime: BrewvaHostedRuntimePort): BrewvaConfig {
   return structuredClone(runtime.config) as BrewvaConfig;
 }
 
@@ -143,14 +141,14 @@ function matchesEventPredicate(
 }
 
 function matchesWorkerResultPredicate(
-  runtime: BrewvaRuntime,
+  runtime: BrewvaHostedRuntimePort,
   parentSessionId: string,
   predicate: Extract<
     NonNullable<DelegationPacket["completionPredicate"]>,
     { source: "worker_results" }
   >,
 ): boolean {
-  return runtime.inspect.session.listWorkerResults(parentSessionId).some((result) => {
+  return runtime.inspect.session.workerResults.list(parentSessionId).some((result) => {
     if (predicate.workerId && result.workerId !== predicate.workerId) {
       return false;
     }
@@ -166,7 +164,7 @@ function readEventWorkerIds(event: BrewvaStructuredEvent): string[] {
 }
 
 function evaluateCompletionPredicate(input: {
-  runtime: BrewvaRuntime;
+  runtime: BrewvaHostedRuntimePort;
   parentSessionId: string;
   predicate: NonNullable<DelegationPacket["completionPredicate"]>;
   currentEvent?: BrewvaStructuredEvent;
@@ -176,11 +174,11 @@ function evaluateCompletionPredicate(input: {
     if (input.currentEvent) {
       return matchesEventPredicate(input.currentEvent, input.parentSessionId, predicate);
     }
-    return input.runtime.inspect.events
+    return input.runtime.inspect.events.records
       .query(input.parentSessionId, { type: predicate.type })
       .some((event) =>
         matchesEventPredicate(
-          input.runtime.inspect.events.toStructured(event),
+          input.runtime.inspect.events.records.toStructured(event),
           input.parentSessionId,
           predicate,
         ),
@@ -204,7 +202,8 @@ function evaluateCompletionPredicate(input: {
 export function createDetachedSubagentBackgroundController(
   options: DetachedBackgroundControllerOptions,
 ): HostedSubagentBackgroundController {
-  const delegationStore = options.delegationStore ?? new HostedDelegationStore(options.runtime);
+  const runtime = createHostedRuntimePort(options.runtime);
+  const delegationStore = options.delegationStore ?? new HostedDelegationStore(runtime);
   const modulePath = fileURLToPath(new URL("./runner-main.js", import.meta.url));
   const spawnProcess = options.spawnProcess ?? defaultSpawnProcess;
   const isPidAlive = options.isPidAlive ?? isProcessAlive;
@@ -241,8 +240,8 @@ export function createDetachedSubagentBackgroundController(
         : undefined,
     };
     trackedPredicates.delete(record.runId);
-    options.runtime.authority.tools.releaseParallelSlot(record.parentSessionId, record.runId);
-    options.runtime.extensions.hosted.events.record({
+    runtime.authority.tools.parallel.release(record.parentSessionId, record.runId);
+    runtime.extensions.hosted.events.record({
       sessionId: record.parentSessionId,
       type: terminalStatus === "cancelled" ? "subagent_cancelled" : "subagent_failed",
       payload: {
@@ -251,7 +250,7 @@ export function createDetachedSubagentBackgroundController(
       },
     });
     recordDelegationLineageOutcome({
-      runtime: options.runtime,
+      runtime: runtime,
       sessionId: record.parentSessionId,
       record: updated,
     });
@@ -261,7 +260,7 @@ export function createDetachedSubagentBackgroundController(
   const reconcileLiveState = async (
     record: DelegationRunRecord,
   ): Promise<{ live: boolean; cancelable: boolean; record: DelegationRunRecord }> => {
-    const liveState = listDetachedSubagentLiveStates(options.runtime.workspaceRoot).find(
+    const liveState = listDetachedSubagentLiveStates(runtime.identity.workspaceRoot).find(
       (entry) => entry.runId === record.runId && entry.parentSessionId === record.parentSessionId,
     );
     if (!liveState) {
@@ -289,11 +288,11 @@ export function createDetachedSubagentBackgroundController(
     }
 
     const cancelRequest = readDetachedSubagentCancelRequest(
-      options.runtime.workspaceRoot,
+      runtime.identity.workspaceRoot,
       record.runId,
     );
-    removeDetachedSubagentLiveState(options.runtime.workspaceRoot, record.runId);
-    removeDetachedSubagentCancelRequest(options.runtime.workspaceRoot, record.runId);
+    removeDetachedSubagentLiveState(runtime.identity.workspaceRoot, record.runId);
+    removeDetachedSubagentCancelRequest(runtime.identity.workspaceRoot, record.runId);
     trackedPredicates.delete(record.runId);
     if (isDelegationRunTerminalStatus(record.status)) {
       return {
@@ -327,7 +326,7 @@ export function createDetachedSubagentBackgroundController(
       let executionPlan: ResolvedDelegationExecutionPlan;
       try {
         executionPlan = resolveDelegationExecutionPlan({
-          runtime: options.runtime,
+          runtime: runtime,
           target: input.target,
           delegate,
           packet: input.packet,
@@ -365,7 +364,7 @@ export function createDetachedSubagentBackgroundController(
       if (
         input.packet.completionPredicate &&
         evaluateCompletionPredicate({
-          runtime: options.runtime,
+          runtime: runtime,
           parentSessionId: input.parentSessionId,
           predicate: input.packet.completionPredicate,
         })
@@ -376,7 +375,7 @@ export function createDetachedSubagentBackgroundController(
           updatedAt: createdAt,
           summary: "completion_predicate_satisfied",
         };
-        options.runtime.extensions.hosted.events.record({
+        runtime.extensions.hosted.events.record({
           sessionId: input.parentSessionId,
           type: "subagent_cancelled",
           payload: {
@@ -385,17 +384,14 @@ export function createDetachedSubagentBackgroundController(
           },
         });
         recordDelegationLineageOutcome({
-          runtime: options.runtime,
+          runtime: runtime,
           sessionId: input.parentSessionId,
           record: cancelledRecord,
         });
         return cloneDelegationRunRecord(cancelledRecord);
       }
 
-      const parallel = options.runtime.authority.tools.acquireParallelSlot(
-        input.parentSessionId,
-        runId,
-      );
+      const parallel = runtime.authority.tools.parallel.acquire(input.parentSessionId, runId);
       if (!parallel.accepted) {
         return writeTerminalFailure(
           initialRecord,
@@ -404,13 +400,13 @@ export function createDetachedSubagentBackgroundController(
         );
       }
 
-      options.runtime.extensions.hosted.events.record({
+      runtime.extensions.hosted.events.record({
         sessionId: input.parentSessionId,
         type: "subagent_spawned",
         payload: buildDelegationLifecyclePayload(initialRecord),
       });
       ensureDelegationLineageNode({
-        runtime: options.runtime,
+        runtime: runtime,
         sessionId: input.parentSessionId,
         record: initialRecord,
       });
@@ -419,8 +415,8 @@ export function createDetachedSubagentBackgroundController(
         schema: "brewva.subagent-run-spec.v7",
         runId,
         parentSessionId: input.parentSessionId,
-        workspaceRoot: options.runtime.workspaceRoot,
-        config: cloneRuntimeConfig(options.runtime),
+        workspaceRoot: runtime.identity.workspaceRoot,
+        config: cloneRuntimeConfig(runtime),
         configPath: options.configPath,
         routingScopes: options.routingScopes,
         delegate,
@@ -438,8 +434,8 @@ export function createDetachedSubagentBackgroundController(
         delivery: input.delivery,
         createdAt,
       };
-      writeDetachedSubagentSpec(options.runtime.workspaceRoot, runId, spec);
-      writeDetachedSubagentContextManifest(options.runtime.workspaceRoot, runId, {
+      writeDetachedSubagentSpec(runtime.identity.workspaceRoot, runId, spec);
+      writeDetachedSubagentContextManifest(runtime.identity.workspaceRoot, runId, {
         schema: "brewva.delegation-context-manifest.v1",
         runId,
         delegate,
@@ -453,8 +449,8 @@ export function createDetachedSubagentBackgroundController(
       try {
         child = spawnProcess({
           modulePath,
-          specPath: resolveDetachedSubagentSpecPath(options.runtime.workspaceRoot, runId),
-          workspaceRoot: options.runtime.workspaceRoot,
+          specPath: resolveDetachedSubagentSpecPath(runtime.identity.workspaceRoot, runId),
+          workspaceRoot: runtime.identity.workspaceRoot,
         });
       } catch (error) {
         return writeTerminalFailure(
@@ -468,7 +464,7 @@ export function createDetachedSubagentBackgroundController(
       if (pid <= 0) {
         return writeTerminalFailure(initialRecord, "failed", "background_runner_missing_pid");
       }
-      writeDetachedSubagentLiveState(options.runtime.workspaceRoot, runId, {
+      writeDetachedSubagentLiveState(runtime.identity.workspaceRoot, runId, {
         schema: "brewva.subagent-run-live.v1",
         runId,
         parentSessionId: input.parentSessionId,
@@ -488,14 +484,14 @@ export function createDetachedSubagentBackgroundController(
       return cloneDelegationRunRecord(initialRecord);
     },
     async inspectLiveRuns({ parentSessionId, query }) {
-      for (const liveState of listDetachedSubagentLiveStates(options.runtime.workspaceRoot)) {
+      for (const liveState of listDetachedSubagentLiveStates(runtime.identity.workspaceRoot)) {
         if (
           liveState.parentSessionId !== parentSessionId ||
           trackedPredicates.has(liveState.runId)
         ) {
           continue;
         }
-        const spec = readDetachedSubagentSpec(options.runtime.workspaceRoot, liveState.runId);
+        const spec = readDetachedSubagentSpec(runtime.identity.workspaceRoot, liveState.runId);
         if (spec?.packet.completionPredicate) {
           trackedPredicates.set(liveState.runId, {
             parentSessionId,
@@ -509,7 +505,7 @@ export function createDetachedSubagentBackgroundController(
         }
         if (
           evaluateCompletionPredicate({
-            runtime: options.runtime,
+            runtime: runtime,
             parentSessionId,
             predicate: tracked.predicate,
           })
@@ -553,7 +549,7 @@ export function createDetachedSubagentBackgroundController(
         };
       }
 
-      const liveState = listDetachedSubagentLiveStates(options.runtime.workspaceRoot).find(
+      const liveState = listDetachedSubagentLiveStates(runtime.identity.workspaceRoot).find(
         (entry) => entry.runId === runId && entry.parentSessionId === parentSessionId,
       );
       if (!liveState) {
@@ -577,7 +573,7 @@ export function createDetachedSubagentBackgroundController(
       }
 
       trackedPredicates.delete(runId);
-      writeDetachedSubagentCancelRequest(options.runtime.workspaceRoot, runId, {
+      writeDetachedSubagentCancelRequest(runtime.identity.workspaceRoot, runId, {
         schema: "brewva.subagent-cancel-request.v1",
         runId,
         requestedAt: Date.now(),
@@ -655,12 +651,12 @@ export function createDetachedSubagentBackgroundController(
       };
     },
     async cancelSessionRuns(parentSessionId, reason = "parent_session_cleared") {
-      const liveStates = listDetachedSubagentLiveStates(options.runtime.workspaceRoot).filter(
+      const liveStates = listDetachedSubagentLiveStates(runtime.identity.workspaceRoot).filter(
         (entry) => entry.parentSessionId === parentSessionId,
       );
       for (const liveState of liveStates) {
         trackedPredicates.delete(liveState.runId);
-        writeDetachedSubagentCancelRequest(options.runtime.workspaceRoot, liveState.runId, {
+        writeDetachedSubagentCancelRequest(runtime.identity.workspaceRoot, liveState.runId, {
           schema: "brewva.subagent-cancel-request.v1",
           runId: liveState.runId,
           requestedAt: Date.now(),
@@ -672,13 +668,13 @@ export function createDetachedSubagentBackgroundController(
       }
     },
   };
-  options.runtime.inspect.events.subscribe((event) => {
+  runtime.inspect.events.records.subscribe((event) => {
     for (const [runId, tracked] of trackedPredicates.entries()) {
       if (tracked.parentSessionId !== event.sessionId) {
         continue;
       }
       const matched = evaluateCompletionPredicate({
-        runtime: options.runtime,
+        runtime: runtime,
         parentSessionId: tracked.parentSessionId,
         predicate: tracked.predicate,
         currentEvent: event,

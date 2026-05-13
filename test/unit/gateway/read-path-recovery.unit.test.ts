@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { BrewvaRuntime, createHostedRuntimePort } from "@brewva/brewva-runtime";
 import {
   TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE,
   TOOL_READ_PATH_GATE_ARMED_EVENT_TYPE,
@@ -14,16 +14,20 @@ import {
 import { createOpsRuntimeConfig } from "../../helpers/runtime.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
+function createHostedTestRuntime(options: ConstructorParameters<typeof BrewvaRuntime>[0]) {
+  return createHostedRuntimePort(new BrewvaRuntime(options));
+}
+
 describe("read path recovery lifecycle", () => {
   test("records a gate arm event after repeated missing-path read failures", async () => {
     const workspace = createTestWorkspace("read-path-gate-arm");
     try {
-      const runtime = new BrewvaRuntime({ cwd: workspace, config: createOpsRuntimeConfig() });
+      const runtime = createHostedTestRuntime({ cwd: workspace, config: createOpsRuntimeConfig() });
       const lifecycle = createReadPathRecoveryLifecycle(runtime);
       const sessionId = "read-path-gate-arm";
 
       for (const path of ["src/missing-a.ts", "src/missing-b.ts"]) {
-        runtime.extensions.hosted.events.record({
+        createHostedRuntimePort(runtime).extensions.hosted.events.record({
           sessionId,
           type: "tool_result_recorded",
           payload: {
@@ -57,7 +61,7 @@ describe("read path recovery lifecycle", () => {
         } as never,
       );
 
-      const armEvents = runtime.inspect.events.query(sessionId, {
+      const armEvents = runtime.inspect.events.records.query(sessionId, {
         type: TOOL_READ_PATH_GATE_ARMED_EVENT_TYPE,
       });
       expect(armEvents).toHaveLength(1);
@@ -73,11 +77,11 @@ describe("read path recovery lifecycle", () => {
   test("does not activate the read gate without an explicit arm event", async () => {
     const workspace = createTestWorkspace("read-path-no-arm");
     try {
-      const runtime = new BrewvaRuntime({ cwd: workspace, config: createOpsRuntimeConfig() });
+      const runtime = createHostedTestRuntime({ cwd: workspace, config: createOpsRuntimeConfig() });
       const sessionId = "read-path-no-arm";
 
       for (const path of ["src/missing-a.ts", "src/missing-b.ts"]) {
-        runtime.extensions.hosted.events.record({
+        createHostedRuntimePort(runtime).extensions.hosted.events.record({
           sessionId,
           type: "tool_result_recorded",
           payload: {
@@ -110,10 +114,10 @@ describe("read path recovery lifecycle", () => {
     try {
       mkdirSync(join(workspace, "src"), { recursive: true });
       writeFileSync(join(workspace, "src/index.ts"), "export const index = true;\n", "utf8");
-      const runtime = new BrewvaRuntime({ cwd: workspace, config: createOpsRuntimeConfig() });
+      const runtime = createHostedTestRuntime({ cwd: workspace, config: createOpsRuntimeConfig() });
       const sessionId = "read-path-evidence";
 
-      runtime.extensions.hosted.events.record({
+      createHostedRuntimePort(runtime).extensions.hosted.events.record({
         sessionId,
         type: TOOL_READ_PATH_GATE_ARMED_EVENT_TYPE,
         payload: {
@@ -129,13 +133,13 @@ describe("read path recovery lifecycle", () => {
         observedPaths: ["src/index.ts"],
       });
       expect(discoveryPayload).not.toBeNull();
-      runtime.extensions.hosted.events.record({
+      createHostedRuntimePort(runtime).extensions.hosted.events.record({
         sessionId,
         type: TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE,
         payload: discoveryPayload ?? undefined,
       });
 
-      const evidenceEvents = runtime.inspect.events.query(sessionId, {
+      const evidenceEvents = runtime.inspect.events.records.query(sessionId, {
         type: TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE,
       });
       expect(evidenceEvents).toHaveLength(1);
@@ -159,11 +163,11 @@ describe("read path recovery lifecycle", () => {
   test("uses the explicit arm receipt as the single source of active gate failure state", async () => {
     const workspace = createTestWorkspace("read-path-arm-receipt-source");
     try {
-      const runtime = new BrewvaRuntime({ cwd: workspace, config: createOpsRuntimeConfig() });
+      const runtime = createHostedTestRuntime({ cwd: workspace, config: createOpsRuntimeConfig() });
       const sessionId = "read-path-arm-receipt-source";
 
       for (const path of ["src/missing-a.ts", "src/missing-b.ts"]) {
-        runtime.extensions.hosted.events.record({
+        createHostedRuntimePort(runtime).extensions.hosted.events.record({
           sessionId,
           type: "tool_result_recorded",
           payload: {
@@ -181,7 +185,7 @@ describe("read path recovery lifecycle", () => {
         });
       }
 
-      runtime.extensions.hosted.events.record({
+      createHostedRuntimePort(runtime).extensions.hosted.events.record({
         sessionId,
         type: TOOL_READ_PATH_GATE_ARMED_EVENT_TYPE,
         payload: {

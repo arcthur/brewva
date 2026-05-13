@@ -1,5 +1,4 @@
-import type { RuntimeLazyServiceRegistrarOptions } from "../../runtime/service-registrar-types.js";
-import { scheduleSurfaceContribution } from "./runtime-surface.js";
+import type { RuntimeLazyServiceRegistrarOptions } from "../../runtime/wiring.js";
 import { ScheduleIntentService } from "./schedule-intent.js";
 import { SchedulerService } from "./service.js";
 
@@ -7,7 +6,6 @@ export interface RuntimeScheduleDomainRegistration {
   lazyFactories: {
     createScheduleIntentService(): ScheduleIntentService;
   };
-  surfaceContribution: typeof scheduleSurfaceContribution;
 }
 
 export function registerScheduleDomain(
@@ -50,6 +48,5 @@ export function registerScheduleDomain(
             }),
         }),
     },
-    surfaceContribution: scheduleSurfaceContribution,
   };
 }

@@ -1,14 +1,19 @@
 import { describe, expect, test } from "bun:test";
-import { BrewvaRuntime, createTrustedLocalGovernancePort } from "@brewva/brewva-runtime";
+import { BrewvaRuntime, createHostedRuntimePort } from "@brewva/brewva-runtime";
+import { createTrustedLocalGovernancePort } from "@brewva/brewva-runtime/governance";
 import { AgentRegistry } from "../../../packages/brewva-gateway/src/channels/agent-registry.js";
 import { AgentRuntimeManager } from "../../../packages/brewva-gateway/src/channels/agent-runtime-manager.js";
 import { createChannelSessionQueries } from "../../../packages/brewva-gateway/src/channels/session/queries.js";
 import { cleanupTestWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
 
+function createHostedTestRuntime(options: ConstructorParameters<typeof BrewvaRuntime>[0]) {
+  return createHostedRuntimePort(new BrewvaRuntime(options));
+}
+
 describe("channel session queries", () => {
   test("given durable channel bindings without a live session, when resolveQuestionSurface runs, then it returns the archived session ids for the target scope", async () => {
     const workspace = createTestWorkspace("channel-session-queries");
-    const runtime = new BrewvaRuntime({
+    const runtime = createHostedTestRuntime({
       cwd: workspace,
       governancePort: createTrustedLocalGovernancePort({ profile: "team" }),
     });
@@ -27,12 +32,12 @@ describe("channel session queries", () => {
       listLiveSessions: () => [],
       openLiveSession: () => undefined,
       loadInspectionRuntime: async () => runtime,
-      getSessionCostSummary: () => runtime.inspect.cost.getSummary("agent-session:archived"),
+      getSessionCostSummary: () => runtime.inspect.cost.summary.get("agent-session:archived"),
       hasReplayableEffectCommitmentRequest: () => false,
     });
 
     try {
-      runtime.extensions.hosted.events.record({
+      createHostedRuntimePort(runtime).extensions.hosted.events.record({
         sessionId: "agent-session:archived",
         type: "channel_session_bound",
         payload: {
@@ -40,7 +45,7 @@ describe("channel session queries", () => {
           agentId: "worker",
         },
       });
-      runtime.extensions.hosted.events.record({
+      createHostedRuntimePort(runtime).extensions.hosted.events.record({
         sessionId: "agent-session:other",
         type: "channel_session_bound",
         payload: {
@@ -61,7 +66,7 @@ describe("channel session queries", () => {
 
   test("given archived bindings without a live runtime, when resolveQuestionSurface runs, then it loads an inspection runtime without consuming the live session map", async () => {
     const workspace = createTestWorkspace("channel-session-queries-no-runtime");
-    const runtime = new BrewvaRuntime({
+    const runtime = createHostedTestRuntime({
       cwd: workspace,
       governancePort: createTrustedLocalGovernancePort({ profile: "team" }),
     });
@@ -80,12 +85,12 @@ describe("channel session queries", () => {
       listLiveSessions: () => [],
       openLiveSession: () => undefined,
       loadInspectionRuntime: async () => runtime,
-      getSessionCostSummary: () => runtime.inspect.cost.getSummary("agent-session:archived"),
+      getSessionCostSummary: () => runtime.inspect.cost.summary.get("agent-session:archived"),
       hasReplayableEffectCommitmentRequest: () => false,
     });
 
     try {
-      runtime.extensions.hosted.events.record({
+      createHostedRuntimePort(runtime).extensions.hosted.events.record({
         sessionId: "agent-session:archived",
         type: "channel_session_bound",
         payload: {
@@ -105,7 +110,7 @@ describe("channel session queries", () => {
 
   test("given a replayable effect commitment request on a live session, when resolveApprovalTargetAgentId runs, then it routes the approval turn to that agent", async () => {
     const workspace = createTestWorkspace("channel-session-queries-approval");
-    const runtime = new BrewvaRuntime({
+    const runtime = createHostedTestRuntime({
       cwd: workspace,
       governancePort: createTrustedLocalGovernancePort({ profile: "team" }),
     });
@@ -130,7 +135,7 @@ describe("channel session queries", () => {
       ],
       openLiveSession: () => undefined,
       loadInspectionRuntime: async () => runtime,
-      getSessionCostSummary: () => runtime.inspect.cost.getSummary("agent-session:worker"),
+      getSessionCostSummary: () => runtime.inspect.cost.summary.get("agent-session:worker"),
       hasReplayableEffectCommitmentRequest: (sessionId, requestId) =>
         sessionId === "agent-session:worker" && requestId === "req-accepted-1",
     });
@@ -145,7 +150,7 @@ describe("channel session queries", () => {
 
   test("given a replayable effect commitment request on an archived bound session, when resolveApprovalTargetAgentIdDurably runs, then it recovers the original agent", async () => {
     const workspace = createTestWorkspace("channel-session-queries-approval-archived");
-    const runtime = new BrewvaRuntime({
+    const runtime = createHostedTestRuntime({
       cwd: workspace,
       governancePort: createTrustedLocalGovernancePort({ profile: "team" }),
     });
@@ -164,12 +169,12 @@ describe("channel session queries", () => {
       listLiveSessions: () => [],
       openLiveSession: () => undefined,
       loadInspectionRuntime: async () => runtime,
-      getSessionCostSummary: () => runtime.inspect.cost.getSummary("agent-session:archived"),
+      getSessionCostSummary: () => runtime.inspect.cost.summary.get("agent-session:archived"),
       hasReplayableEffectCommitmentRequest: () => false,
     });
 
     try {
-      runtime.extensions.hosted.events.record({
+      createHostedRuntimePort(runtime).extensions.hosted.events.record({
         sessionId: "agent-session:archived",
         type: "channel_session_bound",
         payload: {
@@ -177,8 +182,8 @@ describe("channel session queries", () => {
           agentId: "worker",
         },
       });
-      Object.assign(runtime.inspect.proposals, {
-        listEffectCommitmentRequests: (sessionId: string, query?: { state?: string }) =>
+      Object.assign(runtime.inspect.proposals.requests, {
+        list: (sessionId: string, query?: { state?: string }) =>
           sessionId === "agent-session:archived" && query?.state === "accepted"
             ? [
                 {

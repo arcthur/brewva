@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type { WorkbenchEntry } from "@brewva/brewva-runtime";
 import type { BrewvaEventRecord } from "@brewva/brewva-runtime/events";
+import type { WorkbenchEntry } from "@brewva/brewva-runtime/workbench";
 import type { BrewvaSessionMessageEntry } from "@brewva/brewva-substrate/session";
 import type { BrewvaTurnLoopMessage } from "@brewva/brewva-substrate/turn";
 import {

@@ -330,7 +330,7 @@ const SEMANTIC_ARTIFACT_SCHEMAS: Readonly<
     outputContract: IMPLEMENTATION_TARGETS_OUTPUT_CONTRACT,
     example: [
       {
-        target: "packages/brewva-runtime/src/domain/workflow/status-derivation.ts",
+        target: "packages/brewva-runtime/src/domain/projection/workflow/status-derivation.ts",
         kind: "source",
         owner_boundary: "runtime-workflow-status",
         reason: "Task blockers and verification transitions are derived from evidence receipts.",

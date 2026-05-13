@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { BrewvaRuntime, createOperatorRuntimePort } from "@brewva/brewva-runtime";
 import { assertCliSuccess, runCliSync } from "../../helpers/cli.js";
 import { patchDateNow } from "../../helpers/global-state.js";
 import { cleanupTestWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
@@ -17,22 +17,22 @@ describe("cli contract: undo", () => {
     try {
       const runtime = new BrewvaRuntime({ cwd: workspace });
       const sessionId = "system-undo-session";
-      runtime.maintain.context.onTurnStart(sessionId, 1);
-      runtime.authority.session.recordRewindCheckpoint(sessionId, {
+      createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+      runtime.authority.session.rewind.recordCheckpoint(sessionId, {
         turnId: "turn-1",
         prompt: {
           text: "Change undo_fixture.txt",
           parts: [{ type: "text", text: "Change undo_fixture.txt" }],
         },
       });
-      runtime.authority.tools.trackCallStart({
+      runtime.authority.tools.tracking.trackCallStart({
         sessionId,
         toolCallId: "tc-edit",
         toolName: "edit",
         args: { file_path: "undo_fixture.txt" },
       });
       writeFileSync(filePath, changed, "utf8");
-      runtime.authority.tools.trackCallEnd({
+      runtime.authority.tools.tracking.trackCallEnd({
         sessionId,
         toolCallId: "tc-edit",
         toolName: "edit",
@@ -64,22 +64,25 @@ describe("cli contract: undo", () => {
     try {
       const runtime = new BrewvaRuntime({ cwd: workspace });
       const undoOnlySessionId = "system-undo-only-session";
-      runtime.maintain.context.onTurnStart(undoOnlySessionId, 1);
-      runtime.authority.session.recordRewindCheckpoint(undoOnlySessionId, {
+      createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(
+        undoOnlySessionId,
+        1,
+      );
+      runtime.authority.session.rewind.recordCheckpoint(undoOnlySessionId, {
         turnId: "turn-undo-only",
         prompt: {
           text: "Change undo_only.txt",
           parts: [{ type: "text", text: "Change undo_only.txt" }],
         },
       });
-      runtime.authority.tools.trackCallStart({
+      runtime.authority.tools.tracking.trackCallStart({
         sessionId: undoOnlySessionId,
         toolCallId: "tc-undo-only-edit",
         toolName: "edit",
         args: { file_path: "undo_only.txt" },
       });
       writeFileSync(undoOnlyFilePath, "UNDO_CHANGED\n", "utf8");
-      runtime.authority.tools.trackCallEnd({
+      runtime.authority.tools.tracking.trackCallEnd({
         sessionId: undoOnlySessionId,
         toolCallId: "tc-undo-only-edit",
         toolName: "edit",
@@ -87,28 +90,28 @@ describe("cli contract: undo", () => {
       });
 
       const redoSessionId = "system-redo-session";
-      runtime.maintain.context.onTurnStart(redoSessionId, 1);
-      runtime.authority.session.recordRewindCheckpoint(redoSessionId, {
+      createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(redoSessionId, 1);
+      runtime.authority.session.rewind.recordCheckpoint(redoSessionId, {
         turnId: "turn-redo",
         prompt: {
           text: "Change redo_fixture.txt",
           parts: [{ type: "text", text: "Change redo_fixture.txt" }],
         },
       });
-      runtime.authority.tools.trackCallStart({
+      runtime.authority.tools.tracking.trackCallStart({
         sessionId: redoSessionId,
         toolCallId: "tc-redo-edit",
         toolName: "edit",
         args: { file_path: "redo_fixture.txt" },
       });
       writeFileSync(redoFilePath, "REDO_CHANGED\n", "utf8");
-      runtime.authority.tools.trackCallEnd({
+      runtime.authority.tools.tracking.trackCallEnd({
         sessionId: redoSessionId,
         toolCallId: "tc-redo-edit",
         toolName: "edit",
         channelSuccess: true,
       });
-      const undo = runtime.authority.session.rewind(redoSessionId, {
+      const undo = runtime.authority.session.rewind.rewind(redoSessionId, {
         mode: "both",
         summary: "carry",
       });
@@ -138,22 +141,25 @@ describe("cli contract: undo", () => {
       const runtime = new BrewvaRuntime({ cwd: workspace });
       const olderCheckpointSessionId = "system-older-checkpoint-session";
       now = 1_710_000_000_100;
-      runtime.maintain.context.onTurnStart(olderCheckpointSessionId, 1);
-      runtime.authority.session.recordRewindCheckpoint(olderCheckpointSessionId, {
+      createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(
+        olderCheckpointSessionId,
+        1,
+      );
+      runtime.authority.session.rewind.recordCheckpoint(olderCheckpointSessionId, {
         turnId: "turn-older-checkpoint",
         prompt: {
           text: "Change older_checkpoint.txt",
           parts: [{ type: "text", text: "Change older_checkpoint.txt" }],
         },
       });
-      runtime.authority.tools.trackCallStart({
+      runtime.authority.tools.tracking.trackCallStart({
         sessionId: olderCheckpointSessionId,
         toolCallId: "tc-older-edit",
         toolName: "edit",
         args: { file_path: "older_checkpoint.txt" },
       });
       writeFileSync(olderCheckpointFilePath, "OLDER_CHANGED\n", "utf8");
-      runtime.authority.tools.trackCallEnd({
+      runtime.authority.tools.tracking.trackCallEnd({
         sessionId: olderCheckpointSessionId,
         toolCallId: "tc-older-edit",
         toolName: "edit",
@@ -162,22 +168,25 @@ describe("cli contract: undo", () => {
 
       const newerCheckpointSessionId = "system-newer-checkpoint-session";
       now = 1_710_000_000_200;
-      runtime.maintain.context.onTurnStart(newerCheckpointSessionId, 1);
-      runtime.authority.session.recordRewindCheckpoint(newerCheckpointSessionId, {
+      createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(
+        newerCheckpointSessionId,
+        1,
+      );
+      runtime.authority.session.rewind.recordCheckpoint(newerCheckpointSessionId, {
         turnId: "turn-newer-checkpoint",
         prompt: {
           text: "Change newer_checkpoint.txt",
           parts: [{ type: "text", text: "Change newer_checkpoint.txt" }],
         },
       });
-      runtime.authority.tools.trackCallStart({
+      runtime.authority.tools.tracking.trackCallStart({
         sessionId: newerCheckpointSessionId,
         toolCallId: "tc-newer-edit",
         toolName: "edit",
         args: { file_path: "newer_checkpoint.txt" },
       });
       writeFileSync(newerCheckpointFilePath, "NEWER_CHANGED\n", "utf8");
-      runtime.authority.tools.trackCallEnd({
+      runtime.authority.tools.tracking.trackCallEnd({
         sessionId: newerCheckpointSessionId,
         toolCallId: "tc-newer-edit",
         toolName: "edit",
@@ -185,13 +194,13 @@ describe("cli contract: undo", () => {
       });
 
       now = 1_710_000_000_300;
-      const newerUndo = runtime.authority.session.rewind(newerCheckpointSessionId, {
+      const newerUndo = runtime.authority.session.rewind.rewind(newerCheckpointSessionId, {
         mode: "both",
         summary: "carry",
       });
       expect(newerUndo.ok).toBe(true);
       now = 1_710_000_000_400;
-      const olderUndo = runtime.authority.session.rewind(olderCheckpointSessionId, {
+      const olderUndo = runtime.authority.session.rewind.rewind(olderCheckpointSessionId, {
         mode: "both",
         summary: "carry",
       });

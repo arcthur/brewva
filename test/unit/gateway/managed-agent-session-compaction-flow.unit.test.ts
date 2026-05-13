@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import type { BrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import type { BrewvaSessionModelDescriptor } from "@brewva/brewva-substrate/session";
+import { ManagedSessionCompactionFlowState } from "../../../packages/brewva-gateway/src/hosted/internal/compaction/flow.js";
 import {
-  ManagedSessionCompactionFlowState,
   requestCompactionAndWait,
   shouldCompactForModelDownshift,
-} from "../../../packages/brewva-gateway/src/hosted/internal/compaction/flow.js";
+} from "../../../packages/brewva-gateway/src/hosted/internal/compaction/model-downshift-policy.js";
 
 const LARGE_MODEL: BrewvaSessionModelDescriptor = {
   provider: "openai",
@@ -34,26 +34,30 @@ function createRuntimeStub(input: {
   forcedCompaction?: boolean;
   compactionAdvised?: boolean;
   predictedOverflow?: boolean;
-}): BrewvaRuntime {
+}): BrewvaHostedRuntimePort {
   return {
     inspect: {
       context: {
-        getUsage() {
-          return typeof input.tokens === "number" ? { tokens: input.tokens } : undefined;
+        usage: {
+          get() {
+            return typeof input.tokens === "number" ? { tokens: input.tokens } : undefined;
+          },
         },
-        getCompactionGateStatus() {
-          return {
-            recentCompaction: input.recentCompaction ?? false,
-            status: {
-              forcedCompaction: input.forcedCompaction ?? false,
-              compactionAdvised: input.compactionAdvised ?? false,
-              predictedOverflow: input.predictedOverflow ?? false,
-            },
-          };
+        compaction: {
+          getGateStatus() {
+            return {
+              recentCompaction: input.recentCompaction ?? false,
+              status: {
+                forcedCompaction: input.forcedCompaction ?? false,
+                compactionAdvised: input.compactionAdvised ?? false,
+                predictedOverflow: input.predictedOverflow ?? false,
+              },
+            };
+          },
         },
       },
     },
-  } as unknown as BrewvaRuntime;
+  } as unknown as BrewvaHostedRuntimePort;
 }
 
 describe("managed-agent-session compaction flow", () => {

@@ -1,11 +1,8 @@
-import {
-  DEFAULT_BREWVA_CONFIG,
-  resolveBoundaryPolicy,
-  type BrewvaConfig,
-  type ResolvedBoundaryPolicy,
-  type ShellCommandAnalysis,
-  type ToolBoxPolicy,
-} from "@brewva/brewva-runtime";
+import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
+import type { BrewvaConfig } from "@brewva/brewva-runtime";
+import type { ToolBoxPolicy } from "@brewva/brewva-runtime/governance";
+import { resolveBoundaryPolicy } from "@brewva/brewva-runtime/security";
+import type { ResolvedBoundaryPolicy, ShellCommandAnalysis } from "@brewva/brewva-runtime/security";
 import type { BrewvaBundledToolRuntime } from "../../../contracts/index.js";
 import { cloneBoxConfig } from "../box-plane-runtime.js";
 import type { BoxConfig, ExecutionBackend, SecurityMode } from "./shared.js";

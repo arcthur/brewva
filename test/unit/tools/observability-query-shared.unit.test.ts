@@ -7,17 +7,19 @@ describe("observability shared query", () => {
     const runtime = {
       inspect: {
         events: {
-          list(sessionId: string, query?: { type?: string }) {
-            listCalls.push({ sessionId, query });
-            return [
-              {
-                id: "evt-1",
-                sessionId,
-                type: "tool_result_recorded",
-                timestamp: 10,
-                payload: { rawTokens: 5 },
-              },
-            ];
+          records: {
+            list(sessionId: string, query?: { type?: string }) {
+              listCalls.push({ sessionId, query });
+              return [
+                {
+                  id: "evt-1",
+                  sessionId,
+                  type: "tool_result_recorded",
+                  timestamp: 10,
+                  payload: { rawTokens: 5 },
+                },
+              ];
+            },
           },
         },
       },

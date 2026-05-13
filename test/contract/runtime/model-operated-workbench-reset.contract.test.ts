@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { BrewvaRuntime, createOperatorRuntimePort } from "@brewva/brewva-runtime";
 import {
   RUNTIME_CONTRACT_CONFIG_PATH,
   createRuntimeContractConfig as createConfig,
@@ -16,18 +16,20 @@ describe("model-operated workbench reset", () => {
     expect("defineContextSourceProvider" in runtimeModule).toBe(false);
     expect("ContextSourceProviderRegistry" in runtimeModule).toBe(false);
     expect("ContextInjectionCollector" in contextModule).toBe(false);
-    expect("registerProvider" in runtime.maintain.context).toBe(false);
-    expect("unregisterProvider" in runtime.maintain.context).toBe(false);
+    expect("registerProvider" in createOperatorRuntimePort(runtime).operator.context).toBe(false);
+    expect("unregisterProvider" in createOperatorRuntimePort(runtime).operator.context).toBe(false);
     expect("listProviders" in runtime.inspect.context).toBe(false);
-    expect("buildInjection" in runtime.maintain.context).toBe(false);
-    expect("appendGuardedSupplementalBlocks" in runtime.maintain.context).toBe(false);
+    expect("buildInjection" in createOperatorRuntimePort(runtime).operator.context).toBe(false);
+    expect(
+      "appendGuardedSupplementalBlocks" in createOperatorRuntimePort(runtime).operator.context,
+    ).toBe(false);
   });
 
   test("records free-text workbench notes and reversible evictions", () => {
     const runtime = new BrewvaRuntime({ cwd: createWorkspace("workbench-reset-memory") });
     const sessionId = "workbench-reset-1";
 
-    const note = runtime.maintain.workbench.note(sessionId, {
+    const note = runtime.authority.workbench.note(sessionId, {
       content: "## Current Work\nRefactor context into a model-authored workbench.",
       sourceRefs: [
         "turn:1",
@@ -36,7 +38,7 @@ describe("model-operated workbench reset", () => {
       reason: "The model needs this state after compaction.",
     });
 
-    const eviction = runtime.maintain.workbench.evict(sessionId, {
+    const eviction = runtime.authority.workbench.evict(sessionId, {
       spanRefs: ["tool:read-large-output"],
       replacementNote: "Large output was inspected; relevant result is the failing import path.",
       reason: "Tool output body is no longer useful in default rendering.",
@@ -67,7 +69,7 @@ describe("model-operated workbench reset", () => {
       baselineCommitted: false,
     });
 
-    expect(runtime.maintain.workbench.undoEviction(sessionId, eviction.id).undone).toBe(true);
+    expect(runtime.authority.workbench.undoEviction(sessionId, eviction.id).undone).toBe(true);
     expect(runtime.inspect.workbench.list(sessionId).map((entry) => entry.id)).toEqual([note.id]);
   });
 
@@ -75,19 +77,19 @@ describe("model-operated workbench reset", () => {
     const runtime = new BrewvaRuntime({ cwd: createWorkspace("workbench-reset-baseline") });
     const sessionId = "workbench-reset-baseline";
 
-    runtime.maintain.context.onTurnStart(sessionId, 1);
-    const note = runtime.maintain.workbench.note(sessionId, {
+    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+    const note = runtime.authority.workbench.note(sessionId, {
       content: "Current objective: finish Phase A cleanup.",
       sourceRefs: ["turn:1"],
       reason: "Active objective should survive compaction.",
     });
-    const eviction = runtime.maintain.workbench.evict(sessionId, {
+    const eviction = runtime.authority.workbench.evict(sessionId, {
       spanRefs: ["tool:large-output"],
       replacementNote: "Large output was inspected; only the import path mattered.",
       reason: "Raw output should not stay in active attention.",
     });
 
-    runtime.authority.session.commitCompaction(sessionId, {
+    runtime.authority.session.compaction.commit(sessionId, {
       compactId: "cmp-workbench-baseline",
       sanitizedSummary: "[CompactSummary]\nKeep the active Phase A cleanup objective.",
       summaryDigest: "summary-digest",
@@ -111,9 +113,9 @@ describe("model-operated workbench reset", () => {
         reversible: false,
       }),
     ]);
-    expect(runtime.maintain.workbench.undoEviction(sessionId, eviction.id).undone).toBe(false);
+    expect(runtime.authority.workbench.undoEviction(sessionId, eviction.id).undone).toBe(false);
     expect(
-      runtime.inspect.events.query(sessionId, { type: "workbench_baseline_committed" }),
+      runtime.inspect.events.records.query(sessionId, { type: "workbench_baseline_committed" }),
     ).toEqual([
       expect.objectContaining({
         payload: {
@@ -127,13 +129,13 @@ describe("model-operated workbench reset", () => {
     const runtime = new BrewvaRuntime({ cwd: createWorkspace("workbench-reset-dedupe") });
     const sessionId = "workbench-reset-dedupe";
 
-    runtime.maintain.context.onTurnStart(sessionId, 4);
-    const first = runtime.maintain.workbench.note(sessionId, {
+    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 4);
+    const first = runtime.authority.workbench.note(sessionId, {
       content: "Current objective: keep the workbench notebook minimal.",
       sourceRefs: ["turn:4"],
       reason: "Same-turn duplicate should collapse by deterministic id.",
     });
-    const second = runtime.maintain.workbench.note(sessionId, {
+    const second = runtime.authority.workbench.note(sessionId, {
       content: "Current objective: keep the workbench notebook minimal.",
       sourceRefs: ["turn:4"],
       reason: "Same-turn duplicate should collapse by deterministic id.",
@@ -147,7 +149,7 @@ describe("model-operated workbench reset", () => {
     const runtime = new BrewvaRuntime({ cwd: createWorkspace("workbench-reset-ref-schema") });
 
     expect(() =>
-      runtime.maintain.workbench.evict("workbench-reset-ref-schema", {
+      runtime.authority.workbench.evict("workbench-reset-ref-schema", {
         spanRefs: ["topic:provider-registry"],
         reason: "Eviction refs must target renderable context spans.",
       }),
@@ -182,13 +184,13 @@ describe("model-operated workbench reset", () => {
     const runtime = new BrewvaRuntime({ cwd: workspace, configPath: RUNTIME_CONTRACT_CONFIG_PATH });
     const sessionId = "workbench-context-status-1";
 
-    runtime.maintain.context.observeUsage(sessionId, {
+    createOperatorRuntimePort(runtime).operator.context.usage.observe(sessionId, {
       tokens: 850,
       contextWindow: 1000,
       percent: 0.85,
     });
 
-    const status = runtime.inspect.context.getStatus(sessionId);
+    const status = runtime.inspect.context.usage.getStatus(sessionId);
     expect(status).toEqual({
       tokensUsed: 850,
       tokensTotal: 1000,

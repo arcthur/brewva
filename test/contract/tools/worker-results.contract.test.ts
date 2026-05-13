@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { BrewvaRuntime, createOperatorRuntimePort } from "@brewva/brewva-runtime";
 import {
   createWorkerResultsApplyTool,
   createWorkerResultsMergeTool,
@@ -38,7 +38,7 @@ describe("worker results tools contract", () => {
     const runtime = createCleanRuntime();
     const sessionId = "worker-results-merge-conflict";
 
-    runtime.maintain.session.recordWorkerResult(sessionId, {
+    runtime.authority.session.workerResults.record(sessionId, {
       workerId: "worker-a",
       status: "ok",
       summary: "first patch",
@@ -48,7 +48,7 @@ describe("worker results tools contract", () => {
         changes: [{ path: "src/conflict.ts", action: "modify", diffText: "a" }],
       },
     });
-    runtime.maintain.session.recordWorkerResult(sessionId, {
+    runtime.authority.session.workerResults.record(sessionId, {
       workerId: "worker-b",
       status: "ok",
       summary: "second patch",
@@ -70,7 +70,7 @@ describe("worker results tools contract", () => {
 
     expect(extractTextContent(result)).toContain("Merge status: conflicts");
     expect((result.details as { verdict?: string } | undefined)?.verdict).toBe("fail");
-    expect(runtime.inspect.session.listWorkerResults(sessionId)).toHaveLength(2);
+    expect(runtime.inspect.session.workerResults.list(sessionId)).toHaveLength(2);
   });
 
   test("worker_results_apply adopts a clean merged patch set into the parent workspace", async () => {
@@ -93,8 +93,8 @@ describe("worker results tools contract", () => {
 
     const runtime = new BrewvaRuntime({ cwd: applyWorkspace });
     const sessionId = "worker-results-apply";
-    runtime.maintain.context.onTurnStart(sessionId, 1);
-    runtime.maintain.session.recordWorkerResult(sessionId, {
+    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+    runtime.authority.session.workerResults.record(sessionId, {
       workerId: "worker-a",
       status: "ok",
       summary: "clean patch",
@@ -130,9 +130,9 @@ describe("worker results tools contract", () => {
       ).startsWith("merged_"),
     ).toBe(true);
     expect(readFileSync(filePath, "utf8")).toBe(afterText);
-    expect(runtime.inspect.session.listWorkerResults(sessionId)).toHaveLength(0);
+    expect(runtime.inspect.session.workerResults.list(sessionId)).toHaveLength(0);
 
-    const rollback = runtime.authority.tools.rollbackLastPatchSet(sessionId);
+    const rollback = runtime.authority.tools.patches.rollbackLastPatchSet(sessionId);
     expect(rollback.ok).toBe(true);
     expect(readFileSync(filePath, "utf8")).toBe(beforeText);
   });

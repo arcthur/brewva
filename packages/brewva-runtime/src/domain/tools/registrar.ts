@@ -1,12 +1,11 @@
 import type {
   RuntimeLazyServiceFactories,
   RuntimeLazyServiceRegistrarOptions,
-} from "../../runtime/service-registrar-types.js";
+} from "../../runtime/wiring.js";
 import { CONTROL_PLANE_TOOLS } from "../../security/control-plane-tools.js";
 import type { ResourceLeaseService } from "../parallel/api.js";
 import type { FileChangeService } from "../patching/api.js";
 import { TOOLS_EVENT_DESCRIPTORS } from "./event-descriptors.js";
-import { toolsSurfaceContribution } from "./runtime-surface.js";
 import { ToolAccessPolicyService } from "./tool-access-policy.js";
 import { ToolGateService } from "./tool-gate.js";
 import { ToolInvocationSpine } from "./tool-invocation-spine.js";
@@ -22,7 +21,6 @@ export interface RuntimeToolsDomainRegistration {
     RuntimeLazyServiceFactories,
     "createToolGateService" | "createToolInvocationSpine"
   >;
-  surfaceContribution: typeof toolsSurfaceContribution;
   eventDescriptors: typeof TOOLS_EVENT_DESCRIPTORS;
 }
 
@@ -92,7 +90,6 @@ export function registerToolsDomain(
       createToolGateService: () => getToolGateService(),
       createToolInvocationSpine: () => getToolInvocationSpine(),
     },
-    surfaceContribution: toolsSurfaceContribution,
     eventDescriptors: TOOLS_EVENT_DESCRIPTORS,
   };
 }

@@ -15,7 +15,7 @@
 - Code anchors:
   - `test/contract/tools/tools-skill-complete.contract.test.ts`
   - `test/unit/runtime/skill-validation-pipeline.unit.test.ts`
-  - `packages/brewva-runtime/src/domain/workflow/artifact-derivation.ts`
+  - `packages/brewva-runtime/src/domain/projection/workflow/artifact-derivation.ts`
   - `packages/brewva-gateway/src/hosted/internal/session/completion-guard.ts`
 
 ## Decision Summary

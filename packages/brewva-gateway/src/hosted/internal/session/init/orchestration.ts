@@ -1,5 +1,6 @@
-import { createToolRuntimePort, type BrewvaRuntime } from "@brewva/brewva-runtime";
-import type { ManagedToolMode } from "@brewva/brewva-runtime";
+import { createToolRuntimePort } from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
+import type { ManagedToolMode } from "@brewva/brewva-runtime/session";
 import type { BrewvaModelCatalog } from "@brewva/brewva-substrate/provider";
 import type { BrewvaModelPreset } from "@brewva/brewva-substrate/session";
 import { buildBrewvaTools } from "@brewva/brewva-tools";
@@ -17,14 +18,14 @@ import type { HostedToolExecutionCoordinator } from "../tools/execution-traits.j
 import type { CreateHostedSessionOptions, HostedSessionResult } from "./session-assembly.js";
 
 export function createDelegationStore(
-  runtime: BrewvaRuntime,
+  runtime: BrewvaHostedRuntimePort,
   enabled: boolean,
 ): HostedDelegationStore | undefined {
   if (!enabled) {
     return undefined;
   }
   const delegationStore = new HostedDelegationStore(runtime);
-  runtime.maintain.session.onClearState((sessionId) => {
+  runtime.operator.session.state.onClear((sessionId) => {
     delegationStore.clearSession(sessionId);
   });
   return delegationStore;
@@ -45,7 +46,7 @@ function createDelegationQuery(delegationStore: HostedDelegationStore | undefine
 
 export function createHostedOrchestration(input: {
   options: CreateHostedSessionOptions;
-  runtime: BrewvaRuntime;
+  runtime: BrewvaHostedRuntimePort;
   delegationStore: HostedDelegationStore | undefined;
   cwd: string;
   modelCatalog: Pick<BrewvaModelCatalog, "getAll">;
@@ -84,7 +85,6 @@ export function createHostedOrchestration(input: {
         orchestration: childOptions.orchestration,
         managedToolNames: childOptions.managedToolNames,
         builtinToolNames: childOptions.builtinToolNames,
-        contextProfile: childOptions.contextProfile,
         routingScopes: options.routingScopes,
         scopeId: options.scopeId,
         logger: options.logger,
@@ -98,7 +98,7 @@ export function createHostedOrchestration(input: {
 
 export function createExtensions(input: {
   options: CreateHostedSessionOptions;
-  runtime: BrewvaRuntime;
+  runtime: BrewvaHostedRuntimePort;
   orchestration: BrewvaToolOrchestration | undefined;
   delegationStore: HostedDelegationStore | undefined;
   toolExecutionCoordinator: HostedToolExecutionCoordinator;
@@ -113,7 +113,6 @@ export function createExtensions(input: {
       orchestration: input.orchestration,
       delegationStore: input.delegationStore,
       managedToolNames: input.options.managedToolNames,
-      contextProfile: input.options.contextProfile,
       toolExecutionCoordinator: input.toolExecutionCoordinator,
       hostedToolDefinitionsByName: input.hostedToolDefinitionsByName,
       localHooks: input.options.localHooks,
@@ -127,7 +126,7 @@ export function createExtensions(input: {
 
 export function createDirectManagedTools(input: {
   options: CreateHostedSessionOptions;
-  runtime: BrewvaRuntime;
+  runtime: BrewvaHostedRuntimePort;
   orchestration: BrewvaToolOrchestration | undefined;
   delegationStore: HostedDelegationStore | undefined;
   managedToolMode: ManagedToolMode;

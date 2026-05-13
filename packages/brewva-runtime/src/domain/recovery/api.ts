@@ -19,9 +19,9 @@ export {
   RECOVERY_WAL_STATUS_CHANGED_EVENT_TYPE,
 } from "./events.js";
 export {
+  createRecoveryInspectSurface,
+  createRecoveryOperatorSurface,
   createRecoverySurfaceMethods,
-  recoveryRuntimeSurface,
-  recoverySurfaceContribution,
 } from "./runtime-surface.js";
 export type {
   RecoverySurfaceDependencies,

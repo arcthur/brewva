@@ -7,8 +7,16 @@ import {
   HostedDelegationStore,
   type HostedDelegationTarget,
 } from "@brewva/brewva-gateway";
-import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
+import {
+  BrewvaRuntime,
+  DEFAULT_BREWVA_CONFIG,
+  createHostedRuntimePort,
+} from "@brewva/brewva-runtime";
 import type { DelegationPacket } from "@brewva/brewva-tools/contracts";
+
+function createHostedTestRuntime(options: ConstructorParameters<typeof BrewvaRuntime>[0]) {
+  return createHostedRuntimePort(new BrewvaRuntime(options));
+}
 
 function createTempWorkspace(prefix: string): string {
   return mkdtempSync(join(tmpdir(), prefix));
@@ -26,7 +34,6 @@ const ADVISOR_TARGET: HostedDelegationTarget = {
   boundary: "safe",
   builtinToolNames: ["read"],
   producesPatches: false,
-  contextProfile: "minimal",
   isolationStrategy: "shared",
 };
 
@@ -47,7 +54,7 @@ function buildAdvisorPacket(
 describe("detached subagent background controller", () => {
   test("startRun persists durable live state and reports a live run", async () => {
     const workspaceRoot = createTempWorkspace("brewva-subagent-bg-controller-");
-    const runtime = new BrewvaRuntime({ cwd: workspaceRoot });
+    const runtime = createHostedTestRuntime({ cwd: workspaceRoot });
     const delegationStore = new HostedDelegationStore(runtime);
     let pidAlive = true;
 
@@ -124,7 +131,7 @@ describe("detached subagent background controller", () => {
 
   test("event completion predicates cancel live runs once the parent evidence is satisfied", async () => {
     const workspaceRoot = createTempWorkspace("brewva-subagent-bg-predicate-event-");
-    const runtime = new BrewvaRuntime({ cwd: workspaceRoot });
+    const runtime = createHostedTestRuntime({ cwd: workspaceRoot });
     const delegationStore = new HostedDelegationStore(runtime);
     let pidAlive = true;
     const signals: Array<{ pid: number; signal: NodeJS.Signals }> = [];
@@ -166,7 +173,7 @@ describe("detached subagent background controller", () => {
       },
     });
 
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId: "parent-bg-predicate-event",
       type: "worker_results_applied",
       payload: {
@@ -193,7 +200,7 @@ describe("detached subagent background controller", () => {
 
   test("worker-result completion predicates observe session state on later parent events", async () => {
     const workspaceRoot = createTempWorkspace("brewva-subagent-bg-predicate-worker-");
-    const runtime = new BrewvaRuntime({ cwd: workspaceRoot });
+    const runtime = createHostedTestRuntime({ cwd: workspaceRoot });
     const delegationStore = new HostedDelegationStore(runtime);
     let pidAlive = true;
     const signals: Array<{ pid: number; signal: NodeJS.Signals }> = [];
@@ -233,7 +240,7 @@ describe("detached subagent background controller", () => {
       },
     });
 
-    runtime.maintain.session.recordWorkerResult("parent-bg-predicate-worker", {
+    runtime.authority.session.workerResults.record("parent-bg-predicate-worker", {
       workerId: "worker-apply-1",
       status: "ok",
       summary: "Patch merged.",
@@ -243,7 +250,7 @@ describe("detached subagent background controller", () => {
         changes: [{ path: "src/background.ts", action: "modify" }],
       },
     });
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId: "parent-bg-predicate-worker",
       type: "worker_results_applied",
       payload: {
@@ -270,7 +277,7 @@ describe("detached subagent background controller", () => {
 
   test("cancelRun reconciles a dead detached pid into cancelled instead of not_live_in_this_process", async () => {
     const workspaceRoot = createTempWorkspace("brewva-subagent-bg-cancel-");
-    const runtime = new BrewvaRuntime({ cwd: workspaceRoot });
+    const runtime = createHostedTestRuntime({ cwd: workspaceRoot });
     let pidAlive = true;
     const signals: Array<{ pid: number; signal: NodeJS.Signals }> = [];
 
@@ -315,7 +322,7 @@ describe("detached subagent background controller", () => {
 
   test("cancelSessionRuns issues cancellation requests for every live run in the parent session", async () => {
     const workspaceRoot = createTempWorkspace("brewva-subagent-bg-session-cancel-");
-    const runtime = new BrewvaRuntime({ cwd: workspaceRoot });
+    const runtime = createHostedTestRuntime({ cwd: workspaceRoot });
     const signals: Array<{ pid: number; signal: NodeJS.Signals }> = [];
     let nextPid = 45000;
 
@@ -364,7 +371,7 @@ describe("detached subagent background controller", () => {
 
   test("startRun rejects new detached work when the session parallel budget is already saturated", async () => {
     const workspaceRoot = createTempWorkspace("brewva-subagent-bg-slot-budget-");
-    const runtime = new BrewvaRuntime({
+    const runtime = createHostedTestRuntime({
       cwd: workspaceRoot,
       config: {
         ...structuredClone(DEFAULT_BREWVA_CONFIG),
@@ -420,7 +427,7 @@ describe("detached subagent background controller", () => {
         maxTotalPerSession: 4,
       },
     };
-    const runtime = new BrewvaRuntime({
+    const runtime = createHostedTestRuntime({
       cwd: workspaceRoot,
       config,
     });
@@ -443,7 +450,7 @@ describe("detached subagent background controller", () => {
       packet: buildAdvisorPacket("Inspect runtime package."),
     });
 
-    const restartedRuntime = new BrewvaRuntime({
+    const restartedRuntime = createHostedTestRuntime({
       cwd: workspaceRoot,
       config,
     });
@@ -476,7 +483,7 @@ describe("detached subagent background controller", () => {
 
   test("pre-satisfied completion predicates record a terminal cancellation without spawning", async () => {
     const workspaceRoot = createTempWorkspace("brewva-subagent-bg-predicate-preflight-");
-    const runtime = new BrewvaRuntime({ cwd: workspaceRoot });
+    const runtime = createHostedTestRuntime({ cwd: workspaceRoot });
     let spawnCalls = 0;
     const controller = createDetachedSubagentBackgroundController({
       runtime,
@@ -492,7 +499,7 @@ describe("detached subagent background controller", () => {
       },
     });
 
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId: "parent-bg-predicate-preflight",
       type: "worker_results_applied",
       payload: {
@@ -525,7 +532,7 @@ describe("detached subagent background controller", () => {
 
   test("inspectLiveRuns replays completion predicates after restart and cancels already-satisfied runs", async () => {
     const workspaceRoot = createTempWorkspace("brewva-subagent-bg-predicate-restart-");
-    const runtime = new BrewvaRuntime({ cwd: workspaceRoot });
+    const runtime = createHostedTestRuntime({ cwd: workspaceRoot });
     const controller = createDetachedSubagentBackgroundController({
       runtime,
       spawnProcess() {
@@ -554,7 +561,7 @@ describe("detached subagent background controller", () => {
       }),
     });
 
-    const restartedRuntime = new BrewvaRuntime({ cwd: workspaceRoot });
+    const restartedRuntime = createHostedTestRuntime({ cwd: workspaceRoot });
     const restartedStore = new HostedDelegationStore(restartedRuntime);
     let pidAlive = true;
     const signals: Array<{ pid: number; signal: NodeJS.Signals }> = [];
@@ -576,7 +583,7 @@ describe("detached subagent background controller", () => {
       },
     });
 
-    restartedRuntime.extensions.hosted.events.record({
+    createHostedRuntimePort(restartedRuntime).extensions.hosted.events.record({
       sessionId: "parent-bg-predicate-restart",
       type: "worker_results_applied",
       payload: {

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { CURRENT_DELEGATION_CONTRACT_VERSION, asBrewvaSessionId } from "@brewva/brewva-runtime";
+import { asBrewvaSessionId } from "@brewva/brewva-runtime/core";
+import { CURRENT_DELEGATION_CONTRACT_VERSION } from "@brewva/brewva-runtime/delegation";
 import type { ReviewLaneName, SubagentOutcome } from "@brewva/brewva-tools/contracts";
 import {
   ALL_REVIEW_LANES,

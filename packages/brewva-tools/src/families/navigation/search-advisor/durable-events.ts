@@ -43,15 +43,15 @@ function queryRelevantEvents(
   after?: number,
 ): NormalizedEventRecord[] {
   return [
-    ...(eventPort.query?.(sessionId, {
+    ...(eventPort.records?.query?.(sessionId, {
       type: TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE,
       ...(typeof after === "number" ? { after } : {}),
     }) ?? []),
-    ...(eventPort.query?.(sessionId, {
+    ...(eventPort.records?.query?.(sessionId, {
       type: PATCH_RECORDED_EVENT_TYPE,
       ...(typeof after === "number" ? { after } : {}),
     }) ?? []),
-    ...(eventPort.query?.(sessionId, {
+    ...(eventPort.records?.query?.(sessionId, {
       type: TOOL_READ_PATH_GATE_ARMED_EVENT_TYPE,
       ...(typeof after === "number" ? { after } : {}),
     }) ?? []),
@@ -79,7 +79,7 @@ export function attachRuntime(runtime: BrewvaToolRuntime | undefined): void {
     }
     const resetState = createSessionState();
     const eventPort = resolveToolRuntimeEventPort(runtime);
-    const historicalEvents = eventPort?.query
+    const historicalEvents = eventPort?.records?.query
       ? queryRelevantEvents(eventPort, normalizedSessionId)
       : [];
     let maxObservedTimestamp = 0;
@@ -167,7 +167,7 @@ export function syncDurableState(
   const eventPort = resolveToolRuntimeEventPort(runtime);
   const state = getSessionState(normalizedSessionId);
   attachRuntime(runtime);
-  if (!eventPort?.query) {
+  if (!eventPort?.records?.query) {
     trimSessionState(state, now);
     return state;
   }

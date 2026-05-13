@@ -1,8 +1,8 @@
 import type {
   DelegationRunQuery,
   DelegationRunRecord as RuntimeDelegationRunRecord,
-  ToolExecutionBoundary,
-} from "@brewva/brewva-runtime";
+} from "@brewva/brewva-runtime/delegation";
+import type { ToolExecutionBoundary } from "@brewva/brewva-runtime/governance";
 import type { A2ABroadcastResult, A2ASendResult } from "./a2a.js";
 import type { AdvisorConsultBrief } from "./advisor.js";
 import type {

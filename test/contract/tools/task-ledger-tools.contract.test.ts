@@ -77,7 +77,7 @@ describe("task ledger tool contracts", () => {
         undefined,
         fakeContext(sessionId),
       );
-      expect(runtime.inspect.task.getState(sessionId).spec?.verification).toEqual({
+      expect(runtime.inspect.task.state.get(sessionId).spec?.verification).toEqual({
         commands: ["bun test test/quality/docs"],
       });
     } finally {
@@ -117,7 +117,7 @@ describe("task ledger tool contracts", () => {
       );
 
       expect(extractTextContent(result)).toContain("Task item added");
-      expect(runtime.inspect.task.getState(sessionId).items[0]?.status).toBe("doing");
+      expect(runtime.inspect.task.state.get(sessionId).items[0]?.status).toBe("doing");
     } finally {
       cleanupTestWorkspace(workspace);
     }
@@ -130,7 +130,7 @@ describe("task ledger tool contracts", () => {
 
     try {
       const sessionId = "task-ledger-tool-update-item";
-      runtime.authority.task.addItem(sessionId, {
+      runtime.authority.task.items.add(sessionId, {
         id: "item-1",
         text: "Publish doc fixes",
         status: "todo",
@@ -159,7 +159,7 @@ describe("task ledger tool contracts", () => {
       );
 
       expect(extractTextContent(result)).toBe("Task item updated.");
-      expect(runtime.inspect.task.getState(sessionId).items[0]?.status).toBe("doing");
+      expect(runtime.inspect.task.state.get(sessionId).items[0]?.status).toBe("doing");
     } finally {
       cleanupTestWorkspace(workspace);
     }
@@ -172,7 +172,7 @@ describe("task ledger tool contracts", () => {
 
     try {
       const sessionId = "task-ledger-tool-update-item-completed-rejected";
-      runtime.authority.task.addItem(sessionId, {
+      runtime.authority.task.items.add(sessionId, {
         id: "item-1",
         text: "Publish doc fixes",
         status: "doing",
@@ -199,7 +199,7 @@ describe("task ledger tool contracts", () => {
       );
 
       expect(extractTextContent(result)).toContain("status must be one of");
-      expect(runtime.inspect.task.getState(sessionId).items[0]?.status).toBe("doing");
+      expect(runtime.inspect.task.state.get(sessionId).items[0]?.status).toBe("doing");
     } finally {
       cleanupTestWorkspace(workspace);
     }
@@ -239,7 +239,7 @@ describe("task ledger tool contracts", () => {
       );
 
       expect(extractTextContent(result)).toBe("Acceptance state recorded (accepted).");
-      expect(runtime.inspect.task.getState(sessionId).acceptance).toEqual({
+      expect(runtime.inspect.task.state.get(sessionId).acceptance).toEqual({
         status: "accepted",
         decidedBy: "operator",
         notes: "Closure accepted after inspection.",
@@ -281,7 +281,7 @@ describe("task ledger tool contracts", () => {
       expect(extractTextContent(result)).toBe(
         "Acceptance update rejected (acceptance_not_enabled).",
       );
-      expect(runtime.inspect.task.getState(sessionId).acceptance).toBeUndefined();
+      expect(runtime.inspect.task.state.get(sessionId).acceptance).toBeUndefined();
     } finally {
       cleanupTestWorkspace(workspace);
     }

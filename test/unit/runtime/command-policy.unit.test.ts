@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test";
+import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
 import {
-  DEFAULT_BREWVA_CONFIG,
   analyzeShellCommand,
   analyzeVirtualReadonlyEligibility,
   classifyToolBoundaryRequest,
   evaluateBoundaryClassification,
   resolveBoundaryPolicy,
-} from "@brewva/brewva-runtime";
+} from "@brewva/brewva-runtime/security";
 
 function reasonCodes(command: string): string[] {
   return analyzeShellCommand(command).unsupportedReasons.map((reason) => reason.code);

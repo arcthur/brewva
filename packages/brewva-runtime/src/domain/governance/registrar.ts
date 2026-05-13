@@ -1,11 +1,10 @@
-import type {
-  RuntimeGovernanceServices,
-  RuntimeServiceRegistrarOptions,
-} from "../../runtime/service-registrar-types.js";
+import type { RuntimeServiceRegistrarOptions } from "../../runtime/wiring.js";
 import { ReversibleMutationService } from "./reversible-mutation.js";
 
 export interface RuntimeGovernanceDomainRegistration {
-  services: Pick<RuntimeGovernanceServices, "reversibleMutationService">;
+  services: {
+    reversibleMutationService: ReversibleMutationService;
+  };
 }
 
 export function registerGovernanceDomain(

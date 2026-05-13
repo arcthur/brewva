@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { BrewvaRuntime, createHostedRuntimePort } from "@brewva/brewva-runtime";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 describe("runtime artifact root resolution", () => {
@@ -14,8 +14,11 @@ describe("runtime artifact root resolution", () => {
     const runtime = new BrewvaRuntime({ cwd: nestedCwd });
     const sessionId = "artifact-root-1";
 
-    runtime.extensions.hosted.events.record({ sessionId, type: "session_start" });
-    runtime.authority.tools.recordResult({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
+      sessionId,
+      type: "session_start",
+    });
+    runtime.authority.tools.invocation.recordResult({
       sessionId,
       toolName: "read",
       args: { file_path: "README.md" },
@@ -23,8 +26,8 @@ describe("runtime artifact root resolution", () => {
       channelSuccess: true,
     });
 
-    expect(runtime.workspaceRoot).toBe(workspace);
-    expect(runtime.inspect.ledger.getPath()).toBe(
+    expect(runtime.identity.workspaceRoot).toBe(workspace);
+    expect(runtime.inspect.ledger.store.getPath()).toBe(
       join(workspace, ".orchestrator", "ledger", "evidence.jsonl"),
     );
     const eventsRoot = join(workspace, ".orchestrator", "events");
@@ -39,6 +42,6 @@ describe("runtime artifact root resolution", () => {
     const nestedCwd = join(workspace, "packages", "demo");
 
     const runtime = new BrewvaRuntime({ cwd: nestedCwd });
-    expect(runtime.workspaceRoot).toBe(nestedCwd);
+    expect(runtime.identity.workspaceRoot).toBe(nestedCwd);
   });
 });

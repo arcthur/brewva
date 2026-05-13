@@ -1,10 +1,7 @@
 import { writeFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
-import type {
-  BrewvaHostedRuntimePort,
-  BrewvaRuntime,
-  ProviderCacheObservationState,
-} from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort, BrewvaRuntime } from "@brewva/brewva-runtime";
+import type { ProviderCacheObservationState } from "@brewva/brewva-runtime/context";
 import {
   ensureParentDirectory,
   normalizeRelativePath,
@@ -381,7 +378,7 @@ function resolveLatestProviderCacheEvidence(
 }
 
 export function buildContextEvidenceReport(
-  runtime: Pick<BrewvaRuntime | BrewvaHostedRuntimePort, "workspaceRoot" | "inspect">,
+  runtime: Pick<BrewvaRuntime | BrewvaHostedRuntimePort, "identity" | "inspect">,
   options: ContextEvidenceReportOptions = {},
 ): ContextEvidenceReport {
   const longSessionUsefulTurnThreshold = normalizePositiveInteger(
@@ -404,12 +401,12 @@ export function buildContextEvidenceReport(
     DEFAULT_INPUT_COST_REGRESSION_LIMIT,
   );
   const samples = readContextEvidenceSamples({
-    workspaceRoot: runtime.workspaceRoot,
+    workspaceRoot: runtime.identity.workspaceRoot,
     sessionIds: options.sessionIds,
   });
   const sessionIdSet = new Set<string>(options.sessionIds ?? []);
   if (!options.sessionIds || options.sessionIds.length === 0) {
-    for (const sessionId of runtime.inspect.events.listSessionIds()) {
+    for (const sessionId of runtime.inspect.events.log.listSessionIds()) {
       sessionIdSet.add(sessionId);
     }
     for (const sample of samples) {
@@ -434,16 +431,20 @@ export function buildContextEvidenceReport(
       );
       const latestPrompt = promptSamples.at(-1) ?? null;
       const latestReduction = reductionSamples.at(-1) ?? null;
-      const compactionEvents = runtime.inspect.events.query(sessionId, { type: "session_compact" });
+      const compactionEvents = runtime.inspect.events.records.query(sessionId, {
+        type: "session_compact",
+      });
       const compactionGeneration = sumCompactionGenerationMetrics(compactionEvents);
-      const messageEndEvents = runtime.inspect.events.query(sessionId, { type: "message_end" });
+      const messageEndEvents = runtime.inspect.events.records.query(sessionId, {
+        type: "message_end",
+      });
       const messageUsage = sumMessageUsageMetrics(messageEndEvents);
       const firstCompactionTurn =
         compactionEvents
           .map((event) => (typeof event.turn === "number" ? event.turn : null))
           .filter((turn): turn is number => turn !== null)
           .toSorted((left, right) => left - right)[0] ?? null;
-      const cost = runtime.inspect.cost.getSummary(sessionId);
+      const cost = runtime.inspect.cost.summary.get(sessionId);
       const cacheReadReported = messageEndEvents.some(
         (event) => extractReportedCacheFieldFlags(event.payload).cacheReadReported,
       );
@@ -497,7 +498,7 @@ export function buildContextEvidenceReport(
       ).length;
       const latestProviderCacheEvidence = resolveLatestProviderCacheEvidence(
         providerCacheSamples,
-        runtime.inspect.context.getProviderCacheObservation(sessionId),
+        runtime.inspect.context.providerCache.getObservation(sessionId),
       );
 
       return {
@@ -779,7 +780,7 @@ export function buildContextEvidenceReport(
   return {
     schema: CONTEXT_EVIDENCE_REPORT_SCHEMA,
     generatedAt: new Date().toISOString(),
-    workspaceRoot: runtime.workspaceRoot,
+    workspaceRoot: runtime.identity.workspaceRoot,
     sessionIds: sessions.map((session) => session.sessionId),
     aggregate,
     promotionReadiness,

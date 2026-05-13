@@ -23,7 +23,6 @@ const PARALLEL_RESULT_STORE_METHODS = [
 
 export type ParallelBudgetManager = ExtensionPort<
   "parallel.budget-manager",
-  "parallel",
   Pick<
     InstanceType<typeof InternalParallelBudgetManager>,
     (typeof PARALLEL_BUDGET_MANAGER_METHODS)[number]
@@ -31,7 +30,6 @@ export type ParallelBudgetManager = ExtensionPort<
 >;
 export type ParallelResultStore = ExtensionPort<
   "parallel.result-store",
-  "parallel",
   Pick<
     InstanceType<typeof InternalParallelResultStore>,
     (typeof PARALLEL_RESULT_STORE_METHODS)[number]
@@ -43,8 +41,6 @@ export function createParallelBudgetManager(
 ): ParallelBudgetManager {
   return createBoundExtensionPort({
     name: "parallel.budget-manager",
-    authority: "parallel",
-    capabilityPrefix: "subpath.parallel.budget-manager",
     instance: new InternalParallelBudgetManager(...args),
     methods: PARALLEL_BUDGET_MANAGER_METHODS,
   });
@@ -55,8 +51,6 @@ export function createParallelResultStore(
 ): ParallelResultStore {
   return createBoundExtensionPort({
     name: "parallel.result-store",
-    authority: "parallel",
-    capabilityPrefix: "subpath.parallel.result-store",
     instance: new InternalParallelResultStore(...args),
     methods: PARALLEL_RESULT_STORE_METHODS,
   });

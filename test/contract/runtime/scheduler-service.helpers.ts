@@ -4,12 +4,15 @@ import { join } from "node:path";
 import {
   DEFAULT_BREWVA_CONFIG,
   BrewvaRuntime,
+  createHostedRuntimePort,
+} from "@brewva/brewva-runtime";
+import type { BrewvaConfig } from "@brewva/brewva-runtime";
+import { type SchedulerRuntimePort } from "@brewva/brewva-runtime/recovery";
+import {
   getNextCronRunAt,
   normalizeTimeZone,
   parseCronExpression,
-  type BrewvaConfig,
-} from "@brewva/brewva-runtime";
-import { type SchedulerRuntimePort } from "@brewva/brewva-runtime/recovery";
+} from "@brewva/brewva-runtime/schedule";
 
 export function createWorkspace(name: string): string {
   const workspace = mkdtempSync(join(tmpdir(), `brewva-scheduler-${name}-`));
@@ -39,14 +42,15 @@ export function createSchedulerConfig(mutate?: (config: BrewvaConfig) => void): 
 
 export function schedulerRuntimePort(runtime: BrewvaRuntime): SchedulerRuntimePort {
   return {
-    workspaceRoot: runtime.workspaceRoot,
+    workspaceRoot: runtime.identity.workspaceRoot,
     scheduleConfig: runtime.config.schedule,
-    listSessionIds: () => runtime.inspect.events.listSessionIds(),
-    listEvents: (targetSessionId, query) => runtime.inspect.events.list(targetSessionId, query),
-    recordEvent: (input) => runtime.extensions.hosted.events.record(input),
-    subscribeEvents: (listener) => runtime.inspect.events.subscribe(listener),
-    getClaimState: (targetSessionId) => runtime.inspect.claim.getState(targetSessionId),
-    getTaskState: (targetSessionId) => runtime.inspect.task.getState(targetSessionId),
+    listSessionIds: () => runtime.inspect.events.log.listSessionIds(),
+    listEvents: (targetSessionId, query) =>
+      runtime.inspect.events.records.list(targetSessionId, query),
+    recordEvent: (input) => createHostedRuntimePort(runtime).extensions.hosted.events.record(input),
+    subscribeEvents: (listener) => runtime.inspect.events.records.subscribe(listener),
+    getClaimState: (targetSessionId) => runtime.inspect.claim.state.get(targetSessionId),
+    getTaskState: (targetSessionId) => runtime.inspect.task.state.get(targetSessionId),
   };
 }
 

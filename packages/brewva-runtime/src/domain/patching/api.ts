@@ -22,12 +22,6 @@ export {
   REVERSIBLE_MUTATION_ROLLED_BACK_EVENT_TYPE,
   ROLLBACK_EVENT_TYPE,
 } from "./events.js";
-export {
-  createPatchingSurfaceMethods,
-  patchingRuntimeSurface,
-  patchingSurfaceContribution,
-} from "./runtime-surface.js";
-export type { RuntimePatchingSurfaceMethods } from "./runtime-surface.js";
 export { registerPatchingDomain } from "./registrar.js";
 export type { RuntimePatchingDomainRegistration } from "./registrar.js";
 export type { FileChangeService } from "./file-change.js";

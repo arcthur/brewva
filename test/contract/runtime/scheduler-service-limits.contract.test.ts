@@ -1,13 +1,13 @@
 import { describe, expect, test } from "bun:test";
+import { BrewvaRuntime, createHostedRuntimePort } from "@brewva/brewva-runtime";
+import { asBrewvaIntentId } from "@brewva/brewva-runtime/core";
+import { SCHEDULE_EVENT_TYPE } from "@brewva/brewva-runtime/events";
+import { createSchedulerService } from "@brewva/brewva-runtime/recovery";
 import {
-  BrewvaRuntime,
-  asBrewvaIntentId,
   buildScheduleIntentCreatedEvent,
   getNextCronRunAt,
   parseCronExpression,
-} from "@brewva/brewva-runtime";
-import { SCHEDULE_EVENT_TYPE } from "@brewva/brewva-runtime/events";
-import { createSchedulerService } from "@brewva/brewva-runtime/recovery";
+} from "@brewva/brewva-runtime/schedule";
 import {
   createSchedulerConfig,
   computeExpectedRecurringJitteredNextRunAt,
@@ -338,7 +338,7 @@ describe("scheduler service limit contract", () => {
     const sessionId = "session-revive";
     const dueRunAt = nowMs - 1_000;
 
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: SCHEDULE_EVENT_TYPE,
       payload: buildScheduleIntentCreatedEvent({

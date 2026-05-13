@@ -32,9 +32,9 @@ export type {
   WorkbenchEvictionSpanRefPrefix,
 } from "./span-refs.js";
 export {
+  createWorkbenchAuthoritySurface,
+  createWorkbenchInspectSurface,
   createWorkbenchSurfaceMethods,
-  workbenchRuntimeSurface,
-  workbenchSurfaceContribution,
 } from "./runtime-surface.js";
 export type {
   RuntimeWorkbenchSurfaceMethods,

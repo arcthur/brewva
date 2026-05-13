@@ -10,7 +10,7 @@ export function enforceRuntimeToolAccess(input: {
   args?: Record<string, unknown>;
   cwd: string;
 }): { allowed: true } | { allowed: false; result: ReturnType<typeof failTextResult> } {
-  const decision = input.options.runtime.inspect.tools.explainAccess({
+  const decision = input.options.runtime.inspect.tools.access.explain({
     sessionId: input.sessionId,
     toolName: input.toolName,
     args: input.args,

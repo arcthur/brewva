@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { asBrewvaSessionId } from "@brewva/brewva-runtime";
+import { asBrewvaSessionId } from "@brewva/brewva-runtime/core";
 import { asBrewvaEventType } from "@brewva/brewva-runtime/events";
 import type { JsonValue } from "@brewva/brewva-std/json";
 import { createCostHydrationFold } from "../../../packages/brewva-runtime/src/domain/sessions/hydration/fold-cost.js";

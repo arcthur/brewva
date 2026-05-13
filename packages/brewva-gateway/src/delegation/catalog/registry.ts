@@ -1,9 +1,9 @@
-import {
-  normalizeReviewLaneName,
-  type DelegationIsolationStrategy,
-  type DelegationVisibility,
-  type ManagedToolMode,
-} from "@brewva/brewva-runtime";
+import type {
+  DelegationIsolationStrategy,
+  DelegationVisibility,
+} from "@brewva/brewva-runtime/delegation";
+import type { ManagedToolMode } from "@brewva/brewva-runtime/session";
+import { normalizeReviewLaneName } from "@brewva/brewva-runtime/skills";
 import type {
   AdvisorConsultKind,
   ReviewLaneName,
@@ -14,7 +14,6 @@ import type {
 import {
   asString,
   asStringArray,
-  type HostedContextProfile,
   readHostedWorkspaceSubagentConfigFiles,
 } from "../config-files.js";
 import { getDefaultAgentSpecNameForResultMode } from "../protocol.js";
@@ -36,7 +35,6 @@ export interface HostedExecutionEnvelope {
   defaultContextBudget?: SubagentContextBudget;
   managedToolMode?: ManagedToolMode;
   producesPatches: boolean;
-  contextProfile: HostedContextProfile;
 }
 
 export interface HostedAgentSpec {
@@ -87,12 +85,6 @@ const MAX_AGENT_INSTRUCTIONS_MARKDOWN_LENGTH = 4_000;
 const BOUNDARY_RANK: Record<SubagentExecutionBoundary, number> = {
   safe: 0,
   effectful: 1,
-};
-
-const CONTEXT_PROFILE_RANK: Record<HostedContextProfile, number> = {
-  minimal: 0,
-  standard: 1,
-  full: 2,
 };
 
 const ISOLATION_STRATEGY_RANK: Record<DelegationIsolationStrategy, number> = {
@@ -176,9 +168,6 @@ export function assertHostedExecutionEnvelopeTightening(
   }
   if (candidate.producesPatches && !base.producesPatches) {
     throw new Error(`${context}:producesPatches cannot widen beyond the base envelope`);
-  }
-  if (CONTEXT_PROFILE_RANK[candidate.contextProfile] > CONTEXT_PROFILE_RANK[base.contextProfile]) {
-    throw new Error(`${context}:contextProfile cannot widen beyond the base envelope`);
   }
   if (
     ISOLATION_STRATEGY_RANK[candidate.isolationStrategy] <
@@ -354,7 +343,6 @@ export const BUILTIN_EXECUTION_ENVELOPES: Readonly<Record<string, HostedExecutio
     },
     managedToolMode: "direct",
     producesPatches: false,
-    contextProfile: "minimal",
   },
   "qa-runner": {
     name: "qa-runner",
@@ -370,7 +358,6 @@ export const BUILTIN_EXECUTION_ENVELOPES: Readonly<Record<string, HostedExecutio
     },
     managedToolMode: "direct",
     producesPatches: false,
-    contextProfile: "minimal",
   },
   "patch-worker": {
     name: "patch-worker",
@@ -385,7 +372,6 @@ export const BUILTIN_EXECUTION_ENVELOPES: Readonly<Record<string, HostedExecutio
     },
     managedToolMode: "direct",
     producesPatches: true,
-    contextProfile: "standard",
   },
 } as const;
 
@@ -662,7 +648,6 @@ export function buildHostedDelegationTargetFromAgentSpec(input: {
     defaultContextBudget: input.envelope.defaultContextBudget,
     managedToolMode: input.envelope.managedToolMode,
     producesPatches: input.envelope.producesPatches,
-    contextProfile: input.envelope.contextProfile,
     isolationStrategy: input.envelope.isolationStrategy,
   };
 }

@@ -1,13 +1,10 @@
 import { describe, expect } from "bun:test";
 import { appendFileSync } from "node:fs";
 import { resolve } from "node:path";
-import {
-  DEFAULT_BREWVA_CONFIG,
-  type RecoveryWalRecord,
-  type RecoveryWalSource,
-} from "@brewva/brewva-runtime";
+import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
 import type { TurnEnvelope } from "@brewva/brewva-runtime/channels";
 import { createRecoveryWalRecovery, createRecoveryWalStore } from "@brewva/brewva-runtime/recovery";
+import type { RecoveryWalRecord, RecoveryWalSource } from "@brewva/brewva-runtime/schedule";
 import fc from "fast-check";
 import { propertyTest } from "../../helpers/property.js";
 import { cleanupWorkspace, createTestWorkspace } from "../../helpers/workspace.js";

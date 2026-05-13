@@ -1,4 +1,4 @@
-import type { BrewvaSessionId } from "@brewva/brewva-runtime";
+import type { BrewvaSessionId } from "@brewva/brewva-runtime/core";
 import type { SessionPhase } from "@brewva/brewva-substrate/session";
 import type { HostedSessionPhase } from "../session-phase/api.js";
 

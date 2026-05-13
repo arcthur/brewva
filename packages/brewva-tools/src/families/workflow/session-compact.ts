@@ -39,13 +39,13 @@ export function createWorkbenchCompactTool(options: BrewvaBundledToolOptions): T
       const usage = ctx.getContextUsage();
       const contextPort = resolveToolRuntimeContextPort(workbenchCompactTool.runtime);
       const usagePercent =
-        contextPort?.getUsageRatio?.(usage) ??
+        contextPort?.usage?.getRatio?.(usage) ??
         (typeof usage?.percent === "number"
           ? usage.percent > 1
             ? usage.percent / 100
             : usage.percent
           : null);
-      const customInstructions = contextPort?.getCompactionInstructions?.() ?? "";
+      const customInstructions = contextPort?.compaction?.getInstructions?.() ?? "";
       let compactError: string | undefined;
 
       try {

@@ -12,27 +12,26 @@ import {
   type BrewvaObservationFields,
   type ScopedScheduleHandle,
 } from "@brewva/brewva-effect";
-import {
-  BrewvaRuntime,
-  type BrewvaScheduleSelfImproveConfig,
-  type ContextStatusView,
-  type SessionWireFrame,
-  type SessionWireStatusState,
-  type TaskSpec,
-  asBrewvaIntentId,
-  asBrewvaSessionId,
-  createTrustedLocalGovernancePort,
-  loadBrewvaConfig,
-  normalizeTaskSpec,
-  resolveWorkspaceRootDir,
-  type ManagedToolMode,
-} from "@brewva/brewva-runtime";
+import { BrewvaRuntime, createHostedRuntimePort } from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
+import type { BrewvaScheduleSelfImproveConfig } from "@brewva/brewva-runtime/config";
+import { loadBrewvaConfig, resolveWorkspaceRootDir } from "@brewva/brewva-runtime/config";
+import { asBrewvaIntentId, asBrewvaSessionId } from "@brewva/brewva-runtime/core";
+import { createTrustedLocalGovernancePort } from "@brewva/brewva-runtime/governance";
 import {
   createRecoveryWalStore,
   createSchedulerService,
   type RecoveryWalStore,
   type SchedulerService,
 } from "@brewva/brewva-runtime/recovery";
+import type {
+  ContextStatusView,
+  SessionWireFrame,
+  SessionWireStatusState,
+  ManagedToolMode,
+} from "@brewva/brewva-runtime/session";
+import type { TaskSpec } from "@brewva/brewva-runtime/task";
+import { normalizeTaskSpec } from "@brewva/brewva-runtime/task";
 import { createDeferred } from "@brewva/brewva-std/async";
 import { safeParseJson } from "@brewva/brewva-std/json";
 import { WebSocketServer, type RawData, type WebSocket } from "ws";
@@ -333,7 +332,7 @@ export class GatewayDaemon {
   private readonly supervisor: SessionBackend;
   private readonly schedulerConfigEnabled: boolean;
   private readonly schedulerEventsEnabled: boolean;
-  private readonly schedulerRuntime: BrewvaRuntime | null;
+  private readonly schedulerRuntime: BrewvaHostedRuntimePort | null;
   private readonly scheduler: SchedulerService | null;
   private readonly schedulerUnavailableReason?: "schedule_disabled" | "events_disabled";
   private readonly recoveryWalStore?: RecoveryWalStore;
@@ -499,25 +498,29 @@ export class GatewayDaemon {
       );
     }
     this.schedulerRuntime = !this.schedulerUnavailableReason
-      ? new BrewvaRuntime({
-          cwd: resolvedCwd,
-          config: runtimeConfig,
-          governancePort: createTrustedLocalGovernancePort({ profile: "team" }),
-        })
+      ? createHostedRuntimePort(
+          new BrewvaRuntime({
+            cwd: resolvedCwd,
+            config: runtimeConfig,
+            governancePort: createTrustedLocalGovernancePort({ profile: "team" }),
+          }),
+        )
       : null;
     if (this.schedulerRuntime && !this.schedulerUnavailableReason) {
       const schedulerRuntime = this.schedulerRuntime;
       const schedulerIngress = schedulerRuntime.extensions.recovery.scheduler;
       this.scheduler = createSchedulerService({
         runtime: {
-          workspaceRoot: schedulerRuntime.workspaceRoot,
+          workspaceRoot: schedulerRuntime.identity.workspaceRoot,
           scheduleConfig: schedulerRuntime.config.schedule,
-          listSessionIds: () => schedulerRuntime.inspect.events.listSessionIds(),
-          listEvents: (sessionId, query) => schedulerRuntime.inspect.events.list(sessionId, query),
+          listSessionIds: () => schedulerRuntime.inspect.events.log.listSessionIds(),
+          listEvents: (sessionId, query) =>
+            schedulerRuntime.inspect.events.records.list(sessionId, query),
           recordEvent: (input) => schedulerRuntime.extensions.hosted.events.record(input),
-          subscribeEvents: (listener) => schedulerRuntime.inspect.events.subscribe(listener),
-          getClaimState: (sessionId) => schedulerRuntime.inspect.claim.getState(sessionId),
-          getTaskState: (sessionId) => schedulerRuntime.inspect.task.getState(sessionId),
+          subscribeEvents: (listener) =>
+            schedulerRuntime.inspect.events.records.subscribe(listener),
+          getClaimState: (sessionId) => schedulerRuntime.inspect.claim.state.get(sessionId),
+          getTaskState: (sessionId) => schedulerRuntime.inspect.task.state.get(sessionId),
           recoveryWal: {
             appendPending: (envelope, source, walOptions) =>
               schedulerIngress.appendPending(envelope, source, walOptions),
@@ -692,14 +695,14 @@ export class GatewayDaemon {
   }
 
   private seedAutonomousSelfImproveParentSession(
-    runtime: BrewvaRuntime,
+    runtime: BrewvaHostedRuntimePort,
     policy: BrewvaScheduleSelfImproveConfig,
   ): void {
     const expectedTaskSpec = normalizeTaskSpec(this.buildAutonomousSelfImproveTaskSpec(policy));
-    const currentTaskSpecRaw = runtime.inspect.task.getState(policy.parentSessionId).spec;
+    const currentTaskSpecRaw = runtime.inspect.task.state.get(policy.parentSessionId).spec;
     const currentTaskSpec = currentTaskSpecRaw ? normalizeTaskSpec(currentTaskSpecRaw) : null;
     if (JSON.stringify(currentTaskSpec) !== JSON.stringify(expectedTaskSpec)) {
-      runtime.authority.task.setSpec(policy.parentSessionId, expectedTaskSpec);
+      runtime.authority.task.spec.set(policy.parentSessionId, expectedTaskSpec);
     }
   }
 
@@ -2318,7 +2321,6 @@ export class GatewayDaemon {
     };
   }
 }
-
 export async function runGatewayDaemon(options: GatewayDaemonOptions): Promise<void> {
   const daemon = new GatewayDaemon(options);
   const stateDir = resolve(options.stateDir);

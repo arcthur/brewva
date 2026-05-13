@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { BrewvaRuntime, createHostedRuntimePort } from "@brewva/brewva-runtime";
 import { createHostedBehaviorHostAdapter } from "../../../packages/brewva-gateway/src/hosted/internal/session/host-api-installation.js";
 import { HostedRuntimeTapeSessionStore } from "../../../packages/brewva-gateway/src/hosted/internal/session/projection/runtime-projection-session-store.js";
 import {
@@ -15,6 +15,10 @@ import { readHostedSettingsHandle } from "../../../packages/brewva-gateway/src/h
 import type { StoredSessionMessage } from "../../../packages/brewva-gateway/src/hosted/internal/thread-loop/runtime-session-transcript.js";
 import { patchProcessEnv } from "../../helpers/global-state.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
+
+function createHostedTestRuntime(options: ConstructorParameters<typeof BrewvaRuntime>[0]) {
+  return createHostedRuntimePort(new BrewvaRuntime(options));
+}
 
 function writeHostedSettings(agentDir: string, settings: Record<string, unknown>): void {
   mkdirSync(agentDir, { recursive: true });
@@ -51,7 +55,7 @@ function createTestHostedRuntime(
   factory: ReturnType<typeof createHostedSessionFactory>,
   options: CreateHostedSessionRuntimeOptions,
 ): Promise<HostedManagedSessionRuntimeResult> {
-  const runtime = options.runtime ?? new BrewvaRuntime({ cwd: options.cwd });
+  const runtime = options.runtime ?? createHostedTestRuntime({ cwd: options.cwd });
   return factory.createRuntime({
     ...options,
     runtime,
@@ -205,7 +209,7 @@ describe("hosted session factory", () => {
     const workspace = createTestWorkspace("session-factory-historical-default");
     const agentDir = join(workspace, ".brewva-agent");
     const sessionId = "agent-session:historical-default";
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createHostedTestRuntime({ cwd: workspace });
     const store = new HostedRuntimeTapeSessionStore(runtime, sessionId);
     const historicalMessage = {
       role: "user",
@@ -249,7 +253,7 @@ describe("hosted session factory", () => {
     const workspace = createTestWorkspace("session-factory-preset-replay-snapshot");
     const agentDir = join(workspace, ".brewva-agent");
     const sessionId = "agent-session:preset-replay-snapshot";
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createHostedTestRuntime({ cwd: workspace });
     const store = new HostedRuntimeTapeSessionStore(runtime, sessionId);
     const replayedMessage = {
       role: "user",

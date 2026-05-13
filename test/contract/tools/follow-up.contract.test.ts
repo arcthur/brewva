@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { asBrewvaSessionId } from "@brewva/brewva-runtime";
+import { asBrewvaSessionId } from "@brewva/brewva-runtime/core";
 import { createFollowUpTool } from "@brewva/brewva-tools/workflow";
 import {
   createScheduleToolRuntime,
@@ -26,7 +26,7 @@ describe("follow_up contract", () => {
     );
     expect(extractTextContent(createResult)).toContain("Follow-up created.");
 
-    const intents = await runtime.inspect.schedule.listIntents({ parentSessionId: sessionId });
+    const intents = await runtime.inspect.schedule.intents.list({ parentSessionId: sessionId });
     expect(intents).toHaveLength(1);
     expect(intents[0]?.cron).toBeUndefined();
     expect(typeof intents[0]?.runAt).toBe("number");
@@ -75,7 +75,7 @@ describe("follow_up contract", () => {
     );
     expect(extractTextContent(createResult)).toContain("Follow-up created.");
 
-    const intents = await runtime.inspect.schedule.listIntents({ parentSessionId: sessionId });
+    const intents = await runtime.inspect.schedule.intents.list({ parentSessionId: sessionId });
     expect(intents).toHaveLength(1);
     expect(intents[0]?.cron).toBe("*/5 * * * *");
     expect(intents[0]?.maxRuns).toBe(12);

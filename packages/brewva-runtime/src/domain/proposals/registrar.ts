@@ -1,8 +1,5 @@
 import type { BrewvaEventDescriptor } from "../../events/descriptor-core.js";
-import type {
-  RuntimeGovernanceServices,
-  RuntimeServiceRegistrarOptions,
-} from "../../runtime/service-registrar-types.js";
+import type { RuntimeServiceRegistrarOptions } from "../../runtime/wiring.js";
 import type { ToolGovernanceDescriptor } from "../governance/api.js";
 import { EffectCommitmentDeskService } from "./effect-commitment-desk.js";
 import {
@@ -11,7 +8,6 @@ import {
 } from "./event-descriptors.js";
 import type { EffectCommitmentAuthorizationDecision } from "./proposal-admission-effect-commitment.js";
 import { ProposalAdmissionService } from "./proposal-admission.js";
-import { proposalsSurfaceContribution } from "./runtime-surface.js";
 
 function normalizeReasonList(
   input: { reason?: string; reasons?: string[] } | undefined,
@@ -62,13 +58,11 @@ function buildKernelEffectCommitmentDecision(input: {
 }
 
 export interface RuntimeProposalsDomainRegistration {
-  services: Pick<
-    RuntimeGovernanceServices,
-    | "getEffectCommitmentDeskService"
-    | "getProposalAdmissionService"
-    | "clearEffectCommitmentDeskState"
-  >;
-  surfaceContribution: typeof proposalsSurfaceContribution;
+  services: {
+    getEffectCommitmentDeskService(): EffectCommitmentDeskService;
+    getProposalAdmissionService(): ProposalAdmissionService;
+    clearEffectCommitmentDeskState(sessionId: string): void;
+  };
   eventDescriptors: readonly BrewvaEventDescriptor<string, unknown>[];
 }
 
@@ -174,7 +168,6 @@ export function registerProposalsDomain(
         effectCommitmentDeskService?.clear(sessionId);
       },
     },
-    surfaceContribution: proposalsSurfaceContribution,
     eventDescriptors: PROPOSALS_EVENT_DESCRIPTORS,
   };
 }

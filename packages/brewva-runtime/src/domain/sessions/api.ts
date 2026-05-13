@@ -118,12 +118,12 @@ export type {
   SessionLineageTree,
 } from "./lineage.js";
 export {
+  createSessionAuthoritySurface,
+  createSessionInspectSurface,
+  createSessionOperatorSurface,
   createSessionSurfaceMethods,
+  createSessionWireInspectSurface,
   createSessionWireSurfaceMethods,
-  sessionRuntimeSurface,
-  sessionSurfaceContribution,
-  sessionWireRuntimeSurface,
-  sessionWireSurfaceContribution,
 } from "./runtime-surface.js";
 export type {
   RuntimeSessionSurfaceMethods,

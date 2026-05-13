@@ -13,6 +13,8 @@ type InventoryBlock = {
 };
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const RUNTIME_SURFACE_MEMBER_BUDGET = 90;
+const RUNTIME_INSPECT_SURFACE_MEMBER_BUDGET = 55;
 
 function readRepoFile(relativePath: string): string {
   return readFileSync(resolve(repoRoot, relativePath), "utf-8");
@@ -136,18 +138,7 @@ function extractRootSubcommands(source: string): string[] {
   return [...names].toSorted((left, right) => left.localeCompare(right));
 }
 
-function extractConstObjectBody(source: string, constName: string): string {
-  const markers = [`export const ${constName} = {`, `const ${constName} = {`];
-  const start =
-    markers.map((marker) => source.indexOf(marker)).find((candidate) => candidate >= 0) ?? -1;
-  if (start < 0) {
-    throw new Error(`Unable to find const object ${constName}`);
-  }
-  const bodyStart = source.indexOf("{", start);
-  if (bodyStart < 0) {
-    throw new Error(`Unable to find const object ${constName} body`);
-  }
-
+function extractObjectBodyAt(source: string, bodyStart: number): string {
   let depth = 0;
   for (let index = bodyStart; index < source.length; index += 1) {
     const char = source[index];
@@ -157,76 +148,134 @@ function extractConstObjectBody(source: string, constName: string): string {
       return source.slice(bodyStart + 1, index);
     }
   }
-
-  throw new Error(`Unable to close const object ${constName}`);
+  throw new Error("Unable to close object body");
 }
 
-function collectSurfaceContributionDefinitions(): Map<string, Map<string, string[]>> {
-  const runtimeRoot = resolve(repoRoot, "packages/brewva-runtime/src");
-  const contributions = new Map<string, Map<string, string[]>>();
+function collectTopLevelObjectKeys(body: string): string[] {
+  const keys = new Set<string>();
+  let braceDepth = 0;
+  let bracketDepth = 0;
+  let parenDepth = 0;
 
-  for (const filePath of walkFiles(runtimeRoot, ".ts")) {
-    const text = readFileSync(filePath, "utf-8");
-    for (const match of text.matchAll(
-      /export const ([A-Za-z][A-Za-z0-9]*SurfaceContribution) = \{/g,
-    )) {
-      const contributionName = match[1];
-      if (!contributionName || contributions.has(contributionName)) {
-        continue;
+  for (const line of body.split("\n")) {
+    if (braceDepth === 0 && bracketDepth === 0 && parenDepth === 0) {
+      const match = /^\s*([a-zA-Z][a-zA-Z0-9]*):/.exec(line);
+      if (match?.[1]) {
+        keys.add(match[1]);
       }
-      const body = extractConstObjectBody(text, contributionName);
-      const surfaces = new Map<string, string[]>();
-      const lines = body.split("\n");
-      for (let index = 0; index < lines.length; index += 1) {
-        const line = lines[index] ?? "";
-        const headerMatch = /^\s{2}(authority|inspect|maintain): \[(.*)$/.exec(line);
-        const surfaceName = headerMatch?.[1];
-        if (!surfaceName) {
-          continue;
-        }
-        let surfaceBody = headerMatch[2] ?? "";
-        let bracketDepth = (surfaceBody.match(/\[/g) ?? []).length + 1;
-        bracketDepth -= (surfaceBody.match(/\]/g) ?? []).length;
-        while (bracketDepth > 0 && index + 1 < lines.length) {
-          index += 1;
-          const nextLine = lines[index] ?? "";
-          surfaceBody += `\n${nextLine}`;
-          bracketDepth += (nextLine.match(/\[/g) ?? []).length;
-          bracketDepth -= (nextLine.match(/\]/g) ?? []).length;
-        }
-        const methods = [...surfaceBody.matchAll(/"([a-zA-Z][a-zA-Z0-9]*)"/g)]
-          .map((entry) => entry[1])
-          .filter((value): value is string => Boolean(value))
-          .toSorted((left, right) => left.localeCompare(right));
-        surfaces.set(surfaceName, methods);
-      }
-      contributions.set(contributionName, surfaces);
     }
+    braceDepth += (line.match(/{/g) ?? []).length;
+    braceDepth -= (line.match(/}/g) ?? []).length;
+    bracketDepth += (line.match(/\[/g) ?? []).length;
+    bracketDepth -= (line.match(/\]/g) ?? []).length;
+    parenDepth += (line.match(/\(/g) ?? []).length;
+    parenDepth -= (line.match(/\)/g) ?? []).length;
   }
 
-  return contributions;
+  return [...keys].toSorted((left, right) => left.localeCompare(right));
+}
+
+function extractFunctionBody(source: string, functionName: string): string | undefined {
+  const marker = `export function ${functionName}`;
+  const start = source.indexOf(marker);
+  if (start < 0) {
+    return undefined;
+  }
+  const bodyStart = source.indexOf("{", start);
+  return bodyStart >= 0 ? extractObjectBodyAt(source, bodyStart) : undefined;
+}
+
+function extractReturnedObjectBody(functionBody: string): string | undefined {
+  const returnStart = functionBody.indexOf("return {");
+  if (returnStart < 0) {
+    return undefined;
+  }
+  const bodyStart = functionBody.indexOf("{", returnStart);
+  return bodyStart >= 0 ? extractObjectBodyAt(functionBody, bodyStart) : undefined;
+}
+
+function extractObjectPropertyBody(body: string, propertyName: string): string | undefined {
+  const match = new RegExp(`\\b${propertyName}:\\s*\\{`).exec(body);
+  if (!match) {
+    return undefined;
+  }
+  const bodyStart = body.indexOf("{", match.index);
+  return bodyStart >= 0 ? extractObjectBodyAt(body, bodyStart) : undefined;
+}
+
+function collectDirectRuntimeSurfaceDefinitions(source: string): Array<{
+  domainName: string;
+  surfaceName: "authority" | "inspect" | "operator";
+  methods: string[];
+}> {
+  const definitions: Array<{
+    domainName: string;
+    surfaceName: "authority" | "inspect" | "operator";
+    methods: string[];
+  }> = [];
+
+  for (const match of source.matchAll(
+    /export function create([A-Za-z][A-Za-z0-9]*)(Authority|Inspect|Operator)Surface\(/g,
+  )) {
+    const domainToken = match[1];
+    const surfaceToken = match[2];
+    if (!domainToken || !surfaceToken) {
+      continue;
+    }
+
+    const functionName = `create${domainToken}${surfaceToken}Surface`;
+    const functionBody = extractFunctionBody(source, functionName);
+    if (!functionBody) {
+      continue;
+    }
+
+    let objectBody = extractReturnedObjectBody(functionBody);
+    const delegatedSurface =
+      /return create[A-Za-z][A-Za-z0-9]*SurfaceMethods\(deps\)\.(authority|inspect|operator);/.exec(
+        functionBody,
+      )?.[1];
+    if (delegatedSurface) {
+      const surfaceMethodsName = `create${domainToken}SurfaceMethods`;
+      const methodsBody = surfaceMethodsName
+        ? extractFunctionBody(source, surfaceMethodsName)
+        : undefined;
+      const methodsObjectBody = methodsBody ? extractReturnedObjectBody(methodsBody) : undefined;
+      objectBody = methodsObjectBody
+        ? extractObjectPropertyBody(methodsObjectBody, delegatedSurface)
+        : undefined;
+    } else if (/return create[A-Za-z][A-Za-z0-9]*SurfaceMethods\(deps\);/.test(functionBody)) {
+      const surfaceMethodsName = /create[A-Za-z][A-Za-z0-9]*SurfaceMethods/.exec(functionBody)?.[0];
+      const methodsBody = surfaceMethodsName
+        ? extractFunctionBody(source, surfaceMethodsName)
+        : undefined;
+      objectBody = methodsBody ? extractReturnedObjectBody(methodsBody) : undefined;
+    }
+
+    if (!objectBody) {
+      continue;
+    }
+
+    const domainName = domainToken.charAt(0).toLowerCase() + domainToken.slice(1);
+    definitions.push({
+      domainName,
+      surfaceName: surfaceToken.toLowerCase() as "authority" | "inspect" | "operator",
+      methods: collectTopLevelObjectKeys(objectBody),
+    });
+  }
+
+  return definitions;
 }
 
 function collectRuntimePortPaths(): string[] {
   const runtimeSource = readRepoFile("packages/brewva-runtime/src/runtime/runtime.ts");
-  const contributions = collectSurfaceContributionDefinitions();
   const paths = new Set<string>();
   const runtimeRoot = resolve(repoRoot, "packages/brewva-runtime/src/domain");
 
   for (const filePath of walkFiles(runtimeRoot, ".ts")) {
     const source = readFileSync(filePath, "utf-8");
-    for (const moduleMatch of source.matchAll(
-      /export const [A-Za-z][A-Za-z0-9]*RuntimeSurface = defineRuntimeSurfaceModule\(\{\s*name: "([a-zA-Z][a-zA-Z0-9]*)",[\s\S]*?contribution: ([A-Za-z][A-Za-z0-9]*SurfaceContribution),/g,
-    )) {
-      const domainName = moduleMatch[1];
-      const contributionName = moduleMatch[2];
-      if (!domainName || !contributionName) continue;
-      const surfaceDefinitions = contributions.get(contributionName);
-      if (!surfaceDefinitions) continue;
-      for (const surfaceName of ["authority", "inspect", "maintain"] as const) {
-        for (const method of surfaceDefinitions.get(surfaceName) ?? []) {
-          paths.add(`${surfaceName}.${domainName}.${method}`);
-        }
+    for (const definition of collectDirectRuntimeSurfaceDefinitions(source)) {
+      for (const method of definition.methods) {
+        paths.add(`${definition.surfaceName}.${definition.domainName}.${method}`);
       }
     }
   }
@@ -239,6 +288,44 @@ function collectRuntimePortPaths(): string[] {
   }
 
   return [...paths].toSorted((left, right) => left.localeCompare(right));
+}
+
+function countRuntimeSurfaceMembers(paths: readonly string[]): {
+  authority: number;
+  inspect: number;
+  operator: number;
+  total: number;
+} {
+  return {
+    authority: paths.filter((path) => path.startsWith("authority.")).length,
+    inspect: paths.filter((path) => path.startsWith("inspect.")).length,
+    operator: paths.filter((path) => path.startsWith("operator.")).length,
+    total: paths.length,
+  };
+}
+
+function assertRuntimeSurfaceBudget(paths: readonly string[]): {
+  authority: number;
+  inspect: number;
+  operator: number;
+  total: number;
+} {
+  const counts = countRuntimeSurfaceMembers(paths);
+  const violations: string[] = [];
+  if (counts.total > RUNTIME_SURFACE_MEMBER_BUDGET) {
+    violations.push(
+      `runtime surface member count ${counts.total} exceeds budget ${RUNTIME_SURFACE_MEMBER_BUDGET}`,
+    );
+  }
+  if (counts.inspect > RUNTIME_INSPECT_SURFACE_MEMBER_BUDGET) {
+    violations.push(
+      `runtime inspect surface member count ${counts.inspect} exceeds budget ${RUNTIME_INSPECT_SURFACE_MEMBER_BUDGET}`,
+    );
+  }
+  if (violations.length > 0) {
+    throw new Error(violations.join("; "));
+  }
+  return counts;
 }
 
 function collectPublicRuntimeMethods(source: string): string[] {
@@ -320,10 +407,12 @@ function renderSkillsInventory(): string {
 
 function renderRuntimeSurface(): string {
   const paths = collectRuntimePortPaths();
+  const counts = assertRuntimeSurfaceBudget(paths);
   return [
     "> Generated by `bun run docs:inventory`. Do not edit this block by hand.",
     "",
-    `Runtime surface member count: ${paths.length}.`,
+    `Runtime surface member count: ${counts.total}. Authority: ${counts.authority}. Inspect: ${counts.inspect}. Operator: ${counts.operator}.`,
+    `Budget: total <= ${RUNTIME_SURFACE_MEMBER_BUDGET}; inspect <= ${RUNTIME_INSPECT_SURFACE_MEMBER_BUDGET}.`,
     "",
     markdownList(paths),
   ].join("\n");

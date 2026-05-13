@@ -11,20 +11,20 @@ describe("cli inspect lineage reporting", () => {
       cwd: mkdtempSync(join(tmpdir(), "brewva-cli-inspect-lineage-")),
     });
     const sessionId = "inspect-lineage-session";
-    runtime.authority.session.createLineageNode(sessionId, {
+    runtime.authority.session.lineage.createNode(sessionId, {
       lineageNodeId: "lineage:main",
       kind: "main",
       forkPoint: { kind: "session_root" },
       title: "Main task",
     });
-    runtime.authority.session.createLineageNode(sessionId, {
+    runtime.authority.session.lineage.createNode(sessionId, {
       lineageNodeId: "lineage:review",
       parentLineageNodeId: "lineage:main",
       kind: "review",
       forkPoint: { kind: "turn", turnId: "turn-review" },
       title: "Review branch",
     });
-    runtime.authority.session.recordLineageSelection(sessionId, {
+    runtime.authority.session.lineage.recordSelection(sessionId, {
       selectionId: "selection-cli",
       channelId: "cli",
       lineageNodeId: "lineage:review",

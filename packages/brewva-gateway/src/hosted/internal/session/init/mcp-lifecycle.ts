@@ -1,10 +1,10 @@
-import type { BrewvaRuntime } from "@brewva/brewva-runtime";
-import type { ManagedToolMode } from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
+import type { ManagedToolMode } from "@brewva/brewva-runtime/session";
 import type { HostedMcpOperationalEvent, HostedMcpToolBundle } from "./mcp-tools.js";
 import type { HostedSession } from "./session-assembly.js";
 
 export function recordHostedBootstrap(input: {
-  runtime: BrewvaRuntime;
+  runtime: BrewvaHostedRuntimePort;
   sessionId: string;
   cwd: string;
   configPath?: string;
@@ -15,10 +15,10 @@ export function recordHostedBootstrap(input: {
     type: "session_bootstrap",
     payload: {
       cwd: input.cwd,
-      agentId: input.runtime.agentId,
+      agentId: input.runtime.identity.agentId,
       managedToolMode: input.managedToolMode,
       runtimeConfig: {
-        workspaceRoot: input.runtime.workspaceRoot,
+        workspaceRoot: input.runtime.identity.workspaceRoot,
         configPath: input.configPath ?? null,
         artifactRoots: {
           eventsDir: input.runtime.config.infrastructure.events.dir,
@@ -31,7 +31,7 @@ export function recordHostedBootstrap(input: {
   });
 }
 
-export function createHostedMcpEventRecorder(runtime: BrewvaRuntime): {
+export function createHostedMcpEventRecorder(runtime: BrewvaHostedRuntimePort): {
   setSessionId(sessionId: string): void;
   record(event: HostedMcpOperationalEvent): void;
 } {
@@ -65,7 +65,7 @@ const MCP_BUNDLE_DISPOSE_TIMEOUT_MS = 5_000;
 
 export function installHostedMcpBundleDisposal(
   session: HostedSession,
-  runtime: BrewvaRuntime,
+  runtime: BrewvaHostedRuntimePort,
   sessionId: string,
   bundle: HostedMcpToolBundle | undefined,
 ): HostedSession {

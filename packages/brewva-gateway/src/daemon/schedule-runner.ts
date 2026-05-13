@@ -1,17 +1,17 @@
-import {
-  BrewvaRuntime,
-  type ManagedToolMode,
-  type ScheduleContinuityMode,
-  type ScheduleIntentProjectionRecord,
-  type TaskSpec,
-  type OperationalClaim,
-} from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
+import type { OperationalClaim } from "@brewva/brewva-runtime/claim";
 import {
   SCHEDULE_CHILD_SESSION_FAILED_EVENT_TYPE,
   SCHEDULE_CHILD_SESSION_FINISHED_EVENT_TYPE,
   SCHEDULE_CHILD_SESSION_STARTED_EVENT_TYPE,
   SCHEDULE_WAKEUP_EVENT_TYPE,
 } from "@brewva/brewva-runtime/events";
+import type {
+  ScheduleContinuityMode,
+  ScheduleIntentProjectionRecord,
+} from "@brewva/brewva-runtime/schedule";
+import type { ManagedToolMode } from "@brewva/brewva-runtime/session";
+import type { TaskSpec } from "@brewva/brewva-runtime/task";
 import type {
   SchedulePromptAnchor,
   SchedulePromptTrigger,
@@ -40,7 +40,7 @@ export function buildScheduleWorkerSessionId(input: {
 }
 
 export function collectScheduleContinuationSnapshot(
-  runtime: BrewvaRuntime,
+  runtime: BrewvaHostedRuntimePort,
   input: { parentSessionId: string; continuityMode: ScheduleContinuityMode },
 ): ScheduleContinuationSnapshot {
   if (input.continuityMode !== "inherit") {
@@ -51,9 +51,9 @@ export function collectScheduleContinuationSnapshot(
     };
   }
 
-  const parentAnchor = runtime.inspect.tape.getTapeStatus(input.parentSessionId).lastAnchor;
-  const parentTask = runtime.inspect.task.getState(input.parentSessionId);
-  const parentClaim = runtime.inspect.claim.getState(input.parentSessionId);
+  const parentAnchor = runtime.inspect.tape.status.get(input.parentSessionId).lastAnchor;
+  const parentTask = runtime.inspect.task.state.get(input.parentSessionId);
+  const parentClaim = runtime.inspect.claim.state.get(input.parentSessionId);
   return {
     taskSpec: parentTask.spec ?? null,
     claims: parentClaim.claims.map((fact) => structuredClone(fact)),
@@ -107,7 +107,7 @@ export function buildScheduleWakeupMessage(input: {
 }
 
 export async function executeScheduleIntentRun(input: {
-  runtime: BrewvaRuntime;
+  runtime: BrewvaHostedRuntimePort;
   backend: SessionBackend;
   intent: ScheduleIntentProjectionRecord;
   cwd?: string;

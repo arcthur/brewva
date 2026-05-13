@@ -1,4 +1,4 @@
-import type { RuntimeLazyServiceRegistrarOptions } from "../../runtime/service-registrar-types.js";
+import type { RuntimeLazyServiceRegistrarOptions } from "../../runtime/wiring.js";
 import type { FileChangeService } from "../patching/api.js";
 import { ParallelService } from "./parallel.js";
 import { ResourceLeaseService } from "./resource-lease.js";

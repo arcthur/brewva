@@ -21,9 +21,9 @@ export { validateConventionTargetPatchSet } from "./target-writers.js";
 export { ConventionAdmissionService } from "./service.js";
 export type { ConventionAdmissionServiceOptions } from "./service.js";
 export {
+  createConventionsAuthoritySurface,
+  createConventionsInspectSurface,
   createConventionsSurfaceMethods,
-  conventionsRuntimeSurface,
-  conventionsSurfaceContribution,
 } from "./runtime-surface.js";
 export type {
   ConventionsSurfaceDependencies,

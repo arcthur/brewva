@@ -1,11 +1,12 @@
-import { getExactToolActionPolicy, normalizeToolName } from "@brewva/brewva-runtime";
+import { getExactToolActionPolicy } from "@brewva/brewva-runtime/governance";
+import { normalizeToolName } from "@brewva/brewva-runtime/tools";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import {
   ToolCatalog,
   createToolCatalog,
   resolveToolExecutionTraits,
   type ToolCatalogEntry,
-} from "@brewva/brewva-tool-protocol";
+} from "@brewva/brewva-substrate/tools";
 import type { TSchema } from "@sinclair/typebox";
 import type {
   BrewvaToolDescriptor,
@@ -153,6 +154,11 @@ export function defineBrewvaTool<TParams extends TSchema, TDetails = unknown>(
   metadata: Partial<BrewvaToolMetadata> = {},
 ): BrewvaManagedToolDefinition {
   const normalizedName = normalizeToolName(tool.name);
+  if (metadata.requiredCapabilities && metadata.requiredCapabilities.length > 0) {
+    throw new Error(
+      `managed Brewva tool '${normalizedName}' declares runtime capabilities outside the registry. Required capabilities must live in MANAGED_BREWVA_TOOL_METADATA_BY_NAME.`,
+    );
+  }
   const canonicalMetadata = resolveCanonicalBrewvaToolMetadata(normalizedName, metadata);
   if (!canonicalMetadata?.surface) {
     throw new Error(`managed Brewva tool '${normalizedName}' is missing surface metadata`);

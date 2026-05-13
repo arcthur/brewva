@@ -3,9 +3,18 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createInspectCommandExtension } from "@brewva/brewva-cli";
 import type { HostedExtensionApi } from "@brewva/brewva-gateway/extensions";
-import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
+import {
+  BrewvaRuntime,
+  DEFAULT_BREWVA_CONFIG,
+  createOperatorRuntimePort,
+  createHostedRuntimePort,
+} from "@brewva/brewva-runtime";
 import { requireDefined } from "../../helpers/assertions.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
+
+function createHostedTestRuntime(options: ConstructorParameters<typeof BrewvaRuntime>[0]) {
+  return createHostedRuntimePort(new BrewvaRuntime(options));
+}
 
 type RegisteredCommand = {
   description: string;
@@ -60,21 +69,21 @@ describe("inspect interactive command extension", () => {
       "utf8",
     );
 
-    const runtime = new BrewvaRuntime({
+    const runtime = createHostedTestRuntime({
       cwd: workspace,
       config: structuredClone(DEFAULT_BREWVA_CONFIG),
     });
     const sessionId = "inspect-command-session-1";
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: "session_bootstrap",
       payload: {
         managedToolMode: "hosted",
       },
     });
-    runtime.maintain.context.onTurnStart(sessionId, 1);
-    runtime.authority.tools.markCall(sessionId, "edit");
-    runtime.authority.tools.trackCallStart({
+    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+    runtime.authority.tools.tracking.markCall(sessionId, "edit");
+    runtime.authority.tools.tracking.trackCallStart({
       sessionId,
       toolCallId: "edit-1",
       toolName: "edit",
@@ -85,13 +94,13 @@ describe("inspect interactive command extension", () => {
       "export const outOfScope = 2;\n",
       "utf8",
     );
-    runtime.authority.tools.trackCallEnd({
+    runtime.authority.tools.tracking.trackCallEnd({
       sessionId,
       toolCallId: "edit-1",
       toolName: "edit",
       channelSuccess: true,
     });
-    runtime.authority.tools.recordResult({
+    runtime.authority.tools.invocation.recordResult({
       sessionId,
       toolName: "exec",
       args: { command: "bash -lc 'if then'" },
@@ -99,7 +108,7 @@ describe("inspect interactive command extension", () => {
       channelSuccess: false,
     });
 
-    const beforeEventCount = runtime.inspect.events.query(sessionId).length;
+    const beforeEventCount = runtime.inspect.events.records.query(sessionId).length;
     const { api, commands } = createCommandApiMock();
     await createInspectCommandExtension(runtime, {
       maxNotificationLines: 64,
@@ -122,7 +131,7 @@ describe("inspect interactive command extension", () => {
 
     await inspectCommand.handler("src", ctx);
 
-    expect(runtime.inspect.events.query(sessionId)).toHaveLength(beforeEventCount);
+    expect(runtime.inspect.events.records.query(sessionId)).toHaveLength(beforeEventCount);
     const rendered = notifications.at(-1)?.message ?? "";
     expect(rendered).toContain("Inspect report for src");
     expect(rendered).toContain("Analysis: directory=src");

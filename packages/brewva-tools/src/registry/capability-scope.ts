@@ -22,7 +22,7 @@ function bindScopedMethod(
   };
 }
 
-function createScopedMethodPort<TPort extends object>(
+function createScopedRuntimePort<TPort extends object>(
   toolName: string,
   port: TPort,
   capabilityPrefix: string,
@@ -35,39 +35,21 @@ function createScopedMethodPort<TPort extends object>(
         return typeof value === "function" ? value.bind(target) : value;
       }
       const capability = `${capabilityPrefix}.${property}`;
+      if (value && typeof value === "object") {
+        return createScopedRuntimePort(toolName, value, capability, allowedCapabilities);
+      }
       return bindScopedMethod(toolName, capability, allowedCapabilities, target, value);
     },
   });
 }
 
-function createScopedNestedGroup<TGroup extends object>(
+function createScopedRoot<TGroup extends object>(
   toolName: string,
   group: TGroup,
-  capabilityPrefix: "authority" | "inspect" | "maintain",
+  capabilityPrefix: "authority" | "inspect",
   allowedCapabilities: ReadonlySet<string>,
 ): TGroup {
-  let changed = false;
-  const nextGroup = { ...group };
-
-  for (const portName of Object.keys(group)) {
-    const port = Reflect.get(group, portName);
-    if (!port || typeof port !== "object") {
-      continue;
-    }
-    Reflect.set(
-      nextGroup,
-      portName,
-      createScopedMethodPort(
-        toolName,
-        port,
-        `${capabilityPrefix}.${portName}`,
-        allowedCapabilities,
-      ),
-    );
-    changed = true;
-  }
-
-  return changed ? nextGroup : group;
+  return createScopedRuntimePort(toolName, group, capabilityPrefix, allowedCapabilities);
 }
 
 export function createCapabilityScopedToolRuntime<T extends BrewvaToolRuntime>(
@@ -78,11 +60,10 @@ export function createCapabilityScopedToolRuntime<T extends BrewvaToolRuntime>(
   let changed = false;
   let authority = runtime.authority;
   let inspect = runtime.inspect;
-  let maintain = runtime.maintain;
   let extensions = runtime.extensions;
 
   if (runtime.authority && typeof runtime.authority === "object") {
-    const scopedAuthority = createScopedNestedGroup(
+    const scopedAuthority = createScopedRoot(
       toolName,
       runtime.authority,
       "authority",
@@ -95,7 +76,7 @@ export function createCapabilityScopedToolRuntime<T extends BrewvaToolRuntime>(
   }
 
   if (runtime.inspect && typeof runtime.inspect === "object") {
-    const scopedInspect = createScopedNestedGroup(
+    const scopedInspect = createScopedRoot(
       toolName,
       runtime.inspect,
       "inspect",
@@ -107,21 +88,8 @@ export function createCapabilityScopedToolRuntime<T extends BrewvaToolRuntime>(
     }
   }
 
-  if (runtime.maintain && typeof runtime.maintain === "object") {
-    const scopedMaintain = createScopedNestedGroup(
-      toolName,
-      runtime.maintain,
-      "maintain",
-      allowedCapabilities,
-    );
-    if (scopedMaintain !== runtime.maintain) {
-      maintain = scopedMaintain;
-      changed = true;
-    }
-  }
-
   if (runtime.extensions?.tools && typeof runtime.extensions.tools === "object") {
-    const scopedToolsExtension = createScopedMethodPort(
+    const scopedToolsExtension = createScopedRuntimePort(
       toolName,
       runtime.extensions.tools,
       "extensions.tools",
@@ -144,7 +112,6 @@ export function createCapabilityScopedToolRuntime<T extends BrewvaToolRuntime>(
       ...runtime,
       authority,
       inspect,
-      ...(maintain ? { maintain } : {}),
       ...(extensions ? { extensions } : {}),
     },
     runtime,

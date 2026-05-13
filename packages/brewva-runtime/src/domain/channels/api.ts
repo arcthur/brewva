@@ -34,11 +34,3 @@ export { ChannelAdapterRegistry } from "./registry.js";
 export type { AdapterRegistration } from "./registry.js";
 export { ChannelTurnBridge } from "./turn-bridge.js";
 export type { TurnBridgeHandlers } from "./turn-bridge.js";
-export {
-  createChannelsSurfaceMethods,
-  channelsRuntimeSurface,
-  channelsSurfaceContribution,
-} from "./runtime-surface.js";
-export type { RuntimeChannelsSurfaceMethods } from "./runtime-surface.js";
-export { registerChannelsDomain } from "./registrar.js";
-export type { RuntimeChannelsDomainRegistration } from "./registrar.js";

@@ -3,26 +3,37 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { HostedDelegationStore } from "@brewva/brewva-gateway";
-import { BrewvaRuntime, CURRENT_DELEGATION_CONTRACT_VERSION } from "@brewva/brewva-runtime";
+import {
+  BrewvaRuntime,
+  createHostedRuntimePort,
+  createToolRuntimePort,
+} from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort, BrewvaToolRuntimePort } from "@brewva/brewva-runtime";
+import { CURRENT_DELEGATION_CONTRACT_VERSION } from "@brewva/brewva-runtime/delegation";
 import { createWorkflowStatusTool } from "@brewva/brewva-tools/workflow";
 import { extractTextContent, mergeContext } from "./tools-flow.helpers.js";
 
-function withDelegationStatus(runtime: BrewvaRuntime, store: HostedDelegationStore) {
-  const runtimeWithDelegation = Object.create(runtime) as BrewvaRuntime & {
+function createHostedTestRuntime(options: ConstructorParameters<typeof BrewvaRuntime>[0]) {
+  return createHostedRuntimePort(new BrewvaRuntime(options));
+}
+
+function withDelegationStatus(runtime: BrewvaHostedRuntimePort, store: HostedDelegationStore) {
+  return {
+    ...createToolRuntimePort(runtime),
+    delegation: {
+      listRuns: (sessionId, query) => store.listRuns(sessionId, query),
+      listPendingOutcomes: (sessionId, query) => store.listPendingOutcomes(sessionId, query),
+    },
+  } satisfies BrewvaToolRuntimePort & {
     delegation: {
       listRuns: typeof store.listRuns;
       listPendingOutcomes: typeof store.listPendingOutcomes;
     };
   };
-  runtimeWithDelegation.delegation = {
-    listRuns: (sessionId, query) => store.listRuns(sessionId, query),
-    listPendingOutcomes: (sessionId, query) => store.listPendingOutcomes(sessionId, query),
-  };
-  return runtimeWithDelegation;
 }
 
 function recordVerificationOutcome(input: {
-  runtime: BrewvaRuntime;
+  runtime: BrewvaHostedRuntimePort;
   sessionId: string;
   timestamp: number;
   outcome: "pass" | "fail";
@@ -31,7 +42,7 @@ function recordVerificationOutcome(input: {
   missingEvidence?: string[];
   evidenceFreshness?: "fresh" | "stale" | "mixed" | "none";
 }) {
-  input.runtime.extensions.hosted.events.record({
+  createHostedRuntimePort(input.runtime).extensions.hosted.events.record({
     sessionId: input.sessionId,
     type: "verification_outcome_recorded",
     timestamp: input.timestamp,
@@ -47,12 +58,12 @@ function recordVerificationOutcome(input: {
 }
 
 function recordDelegatedQa(input: {
-  runtime: BrewvaRuntime;
+  runtime: BrewvaHostedRuntimePort;
   sessionId: string;
   timestamp: number;
   verdict: "pass" | "fail" | "inconclusive";
 }) {
-  input.runtime.extensions.hosted.events.record({
+  createHostedRuntimePort(input.runtime).extensions.hosted.events.record({
     sessionId: input.sessionId,
     type: "subagent_completed",
     timestamp: input.timestamp,
@@ -87,7 +98,7 @@ function recordDelegatedQa(input: {
 describe("workflow_status contract", () => {
   test("reports stale verification after a later write", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-tools-workflow-status-stale-"));
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createHostedTestRuntime({ cwd: workspace });
     const sessionId = "workflow-status-stale";
 
     recordVerificationOutcome({
@@ -96,7 +107,7 @@ describe("workflow_status contract", () => {
       timestamp: 100,
       outcome: "pass",
     });
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: "verification_write_marked",
       timestamp: 120,
@@ -132,7 +143,7 @@ describe("workflow_status contract", () => {
 
   test("blocks ship posture while worker results are still pending", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-tools-workflow-status-pending-"));
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createHostedTestRuntime({ cwd: workspace });
     const sessionId = "workflow-status-pending";
 
     recordVerificationOutcome({
@@ -141,7 +152,7 @@ describe("workflow_status contract", () => {
       timestamp: 100,
       outcome: "pass",
     });
-    runtime.maintain.session.recordWorkerResult(sessionId, {
+    runtime.authority.session.workerResults.record(sessionId, {
       workerId: "worker-1",
       status: "ok",
       summary: "Patch result ready for merge/apply.",
@@ -173,7 +184,7 @@ describe("workflow_status contract", () => {
 
   test("surfaces missing verification checks as explicit ship blockers", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-tools-workflow-status-missing-"));
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createHostedTestRuntime({ cwd: workspace });
     const sessionId = "workflow-status-missing";
 
     recordDelegatedQa({
@@ -217,7 +228,7 @@ describe("workflow_status contract", () => {
 
   test("reports delegated QA as an advisory artifact without a skill output contract", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-tools-workflow-status-qa-"));
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createHostedTestRuntime({ cwd: workspace });
     const sessionId = "workflow-status-qa";
 
     recordDelegatedQa({
@@ -253,11 +264,11 @@ describe("workflow_status contract", () => {
 
   test("reports pending delegation outcome handoffs alongside workflow posture", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-tools-workflow-status-handoff-"));
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createHostedTestRuntime({ cwd: workspace });
     const sessionId = "workflow-status-handoff";
     const delegationStore = new HostedDelegationStore(runtime);
 
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: "subagent_completed",
       payload: {
@@ -285,7 +296,7 @@ describe("workflow_status contract", () => {
     });
 
     const tool = createWorkflowStatusTool({
-      runtime: withDelegationStatus(runtime, delegationStore) as any,
+      runtime: withDelegationStatus(runtime, delegationStore),
     });
     const result = await tool.execute(
       "tc-workflow-status-handoff",
@@ -330,10 +341,10 @@ describe("workflow_status contract", () => {
 
   test("surfaces the latest stall adjudication as advisory workflow state", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-tools-workflow-status-stall-"));
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createHostedTestRuntime({ cwd: workspace });
     const sessionId = "workflow-status-stall";
 
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: "task_stall_adjudicated",
       timestamp: 200,
@@ -392,10 +403,10 @@ describe("workflow_status contract", () => {
 
   test("surfaces acceptance as a separate closure posture", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-tools-workflow-status-acceptance-"));
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createHostedTestRuntime({ cwd: workspace });
     const sessionId = "workflow-status-acceptance";
 
-    runtime.authority.task.setSpec(sessionId, {
+    runtime.authority.task.spec.set(sessionId, {
       schema: "brewva.task.v1",
       goal: "Land the closure UX",
       acceptance: {
@@ -403,7 +414,7 @@ describe("workflow_status contract", () => {
         criteria: ["Operator accepts the result before done."],
       },
     });
-    runtime.authority.task.addItem(sessionId, {
+    runtime.authority.task.items.add(sessionId, {
       id: "item-1",
       text: "Finish the task",
       status: "done",

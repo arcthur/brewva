@@ -25,7 +25,7 @@ describe("S-003 ledger write/query", () => {
     const runtime = createCleanRuntime();
     const sessionId = "s3";
 
-    runtime.authority.tools.recordResult({
+    runtime.authority.tools.invocation.recordResult({
       sessionId,
       toolName: "exec",
       args: { command: "bun test" },
@@ -33,7 +33,7 @@ describe("S-003 ledger write/query", () => {
       channelSuccess: true,
     });
 
-    const text = runtime.inspect.ledger.query(sessionId, { last: 5 });
+    const text = runtime.inspect.ledger.store.query(sessionId, { last: 5 });
     expect(text).toContain("exec");
     expect(text).toContain("PASS");
   });

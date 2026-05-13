@@ -6,8 +6,8 @@ import {
   mergeOverlayContract,
   resolveSkillEffectLevel,
   tightenContract,
-  type SkillContractOverride,
-} from "@brewva/brewva-runtime";
+} from "@brewva/brewva-runtime/skills";
+import type { SkillContractOverride } from "@brewva/brewva-runtime/skills";
 import { createContract } from "./skill-contract.helpers.js";
 
 describe("skill contract tightening", () => {

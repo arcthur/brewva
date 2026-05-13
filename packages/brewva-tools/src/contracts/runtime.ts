@@ -5,10 +5,8 @@ import type { BrewvaToolRuntimeExtensions, BrewvaToolRuntimeToolsExtension } fro
 
 type BrewvaToolRuntimeBase = Pick<
   RuntimeToolRuntimePort,
-  "cwd" | "workspaceRoot" | "agentId" | "config" | "authority" | "inspect"
-> & {
-  readonly maintain?: RuntimeToolRuntimePort["maintain"];
-};
+  "identity" | "config" | "authority" | "inspect"
+>;
 
 export type BrewvaToolRuntime = BrewvaToolRuntimeBase & {
   extensions?: BrewvaToolRuntimeExtensions;
@@ -28,30 +26,22 @@ type CapabilityScopedMethod<
 
 type CapabilityScopedRuntimePort<
   TPort extends object,
-  TPrefix extends "authority" | "inspect" | "maintain",
-  TGroupName extends string,
+  TPrefix extends string,
   TCapabilities extends string,
 > = {
-  [TMethodName in keyof TPort]: CapabilityScopedMethod<
-    TPort[TMethodName],
-    `${TPrefix}.${TGroupName}.${Extract<TMethodName, string>}`,
-    TCapabilities
-  >;
-};
-
-type CapabilityScopedRuntimeGroup<
-  TGroupMap extends object,
-  TPrefix extends "authority" | "inspect" | "maintain",
-  TCapabilities extends string,
-> = {
-  [TGroupName in keyof TGroupMap]: TGroupMap[TGroupName] extends object
-    ? CapabilityScopedRuntimePort<
-        TGroupMap[TGroupName],
-        TPrefix,
-        Extract<TGroupName, string>,
+  [TMemberName in keyof TPort]: TPort[TMemberName] extends (...args: never[]) => unknown
+    ? CapabilityScopedMethod<
+        TPort[TMemberName],
+        `${TPrefix}.${Extract<TMemberName, string>}`,
         TCapabilities
       >
-    : TGroupMap[TGroupName];
+    : TPort[TMemberName] extends object
+      ? CapabilityScopedRuntimePort<
+          TPort[TMemberName],
+          `${TPrefix}.${Extract<TMemberName, string>}`,
+          TCapabilities
+        >
+      : TPort[TMemberName];
 };
 
 type CapabilityScopedToolRuntimeExtensions<TCapabilities extends string> = {
@@ -67,20 +57,15 @@ export type CapabilityScopedBrewvaToolRuntime<
   TCapabilities extends string,
 > = TRuntime extends undefined
   ? undefined
-  : Omit<TRuntime, "authority" | "inspect" | "maintain" | "extensions"> & {
-      authority: CapabilityScopedRuntimeGroup<
+  : Omit<TRuntime, "authority" | "inspect" | "extensions"> & {
+      authority: CapabilityScopedRuntimePort<
         RuntimeToolRuntimePort["authority"],
         "authority",
         TCapabilities
       >;
-      inspect: CapabilityScopedRuntimeGroup<
+      inspect: CapabilityScopedRuntimePort<
         RuntimeToolRuntimePort["inspect"],
         "inspect",
-        TCapabilities
-      >;
-      maintain?: CapabilityScopedRuntimeGroup<
-        RuntimeToolRuntimePort["maintain"],
-        "maintain",
         TCapabilities
       >;
       extensions?: {

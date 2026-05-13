@@ -23,8 +23,8 @@
 - Delegated executable QA and `runtime.verification.*` are separate concepts: QA tries to break the change; the runtime decides whether evidence is sufficient and fresh.
 - Only `patch-worker` is patch-producing. `qa-runner` is effectful for execution and evidence capture, but it does not enter `WorkerResult` merge/apply semantics.
 - Delegated QA evidence is first-class outcome data, not merely mirrored skill output.
-- Envelope-declared tool surfaces are hard ceilings, and context narrowing is explicit through `contextProfile`.
+- Envelope-declared tool surfaces are hard ceilings. Passive `contextProfile` narrowing is no longer part of the envelope contract; hosted context narrowing is owned by the gateway materialization module.
 
 ## Superseded by
 
-- None.
+- `docs/research/decisions/hosted-context-materialization-ownership.md`

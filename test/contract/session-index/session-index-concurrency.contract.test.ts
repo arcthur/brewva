@@ -2,7 +2,12 @@ import { describe, expect, test } from "bun:test";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
+import {
+  BrewvaRuntime,
+  DEFAULT_BREWVA_CONFIG,
+  createOperatorRuntimePort,
+  createHostedRuntimePort,
+} from "@brewva/brewva-runtime";
 import { type BrewvaEventRecord } from "@brewva/brewva-runtime/events";
 import { createSessionIndex } from "@brewva/brewva-session-index";
 import { buildVerificationOutcomeRecordedPayload } from "../../helpers/events.js";
@@ -97,15 +102,15 @@ function recordTaskSession(
     evidenceText: string;
   },
 ): BrewvaEventRecord {
-  runtime.maintain.context.onTurnStart(input.sessionId, 1);
-  runtime.authority.task.setSpec(input.sessionId, {
+  createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(input.sessionId, 1);
+  runtime.authority.task.spec.set(input.sessionId, {
     schema: "brewva.task.v1",
     goal: input.goal,
     targets: {
       files: [input.targetFile],
     },
   });
-  return runtime.extensions.hosted.events.record({
+  return createHostedRuntimePort(runtime).extensions.hosted.events.record({
     sessionId: input.sessionId,
     type: "verification_outcome_recorded",
     timestamp: input.timestamp,
@@ -117,8 +122,8 @@ describe("session index concurrency contract", () => {
   test("projects session box ownership from box lifecycle events", async () => {
     const { workspace, runtime } = createIndexedRuntime("session-index-box-projection");
     const sessionId = "indexed-box-session";
-    runtime.maintain.context.onTurnStart(sessionId, 1);
-    runtime.extensions.hosted.events.record({
+    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: "box.acquired",
       timestamp: 1_700_000_000_000,
@@ -128,7 +133,7 @@ describe("session index concurrency contract", () => {
         fingerprint: "fingerprint-01",
       },
     });
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: "box.exec.completed",
       timestamp: 1_700_000_000_500,
@@ -137,7 +142,7 @@ describe("session index concurrency contract", () => {
         exitCode: 0,
       },
     });
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: "box.snapshot.created",
       timestamp: 1_700_000_001_000,

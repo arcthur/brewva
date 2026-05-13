@@ -104,7 +104,7 @@ describe("skill-authoring fork script", () => {
         description: "workspace chaincraft",
       });
       const runtime = new BrewvaRuntime({ cwd: workspace });
-      expect(runtime.inspect.skills.get("chaincraft")?.overlayFiles).toContain(
+      expect(runtime.inspect.skills.catalog.get("chaincraft")?.overlayFiles).toContain(
         resolve(destination),
       );
     } finally {
@@ -148,7 +148,7 @@ describe("skill-authoring fork script", () => {
         description: "workspace nestedcraft",
       });
       const runtime = new BrewvaRuntime({ cwd: nested });
-      expect(runtime.inspect.skills.get("nestedcraft")?.overlayFiles).toContain(
+      expect(runtime.inspect.skills.catalog.get("nestedcraft")?.overlayFiles).toContain(
         resolve(destination),
       );
     } finally {

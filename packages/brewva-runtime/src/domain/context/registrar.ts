@@ -1,15 +1,13 @@
-import type { RuntimeServiceRegistrarOptions } from "../../runtime/service-registrar-types.js";
+import type { RuntimeServiceRegistrarOptions } from "../../runtime/wiring.js";
 import type { LedgerService } from "../ledger/api.js";
 import type { TaskService } from "../task/api.js";
 import type { WorkbenchService } from "../workbench/api.js";
 import { createContextService, type ContextService } from "./context.js";
-import { contextSurfaceContribution } from "./runtime-surface.js";
 
 export interface RuntimeContextDomainRegistration {
   services: {
     contextService: ContextService;
   };
-  surfaceContribution: typeof contextSurfaceContribution;
 }
 
 export function registerContextDomain(
@@ -34,6 +32,5 @@ export function registerContextDomain(
         governancePort: options.governancePort,
       }),
     },
-    surfaceContribution: contextSurfaceContribution,
   };
 }

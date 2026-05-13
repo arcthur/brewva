@@ -84,7 +84,7 @@ status: active
 problem_kind: bugfix
 module: brewva-runtime
 boundaries:
-  - runtime.maintain.recovery
+  - runtime.operator.recovery
   - runtime.authority.tools
 source_artifacts:
   - investigation_record

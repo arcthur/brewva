@@ -1,9 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import {
-  asBrewvaToolCallId,
-  asBrewvaToolName,
-  CURRENT_DELEGATION_CONTRACT_VERSION,
-} from "@brewva/brewva-runtime";
+import { asBrewvaToolCallId, asBrewvaToolName } from "@brewva/brewva-runtime/core";
+import { CURRENT_DELEGATION_CONTRACT_VERSION } from "@brewva/brewva-runtime/delegation";
 import {
   DECISION_RECEIPT_RECORDED_EVENT_TYPE,
   EFFECT_COMMITMENT_APPROVAL_CONSUMED_EVENT_TYPE,

@@ -249,7 +249,7 @@ class DuckDBSessionIndex implements SessionIndex {
     this.task = input.task;
     this.writerLease = input.writerLease;
     this.instanceHandle = input.instanceHandle;
-    this.unsubscribeFromEvents = input.events.subscribe(() => {
+    this.unsubscribeFromEvents = input.events.records.subscribe(() => {
       this.catchUpDirty = true;
     });
   }
@@ -351,7 +351,7 @@ class DuckDBSessionIndex implements SessionIndex {
         schemaVersion: SESSION_INDEX_SCHEMA_VERSION,
       });
       const sessionIds = uniqueNonEmptyStrings([
-        ...this.events.listSessionIds(),
+        ...this.events.log.listSessionIds(),
         ...(await listIndexedSessionIds(this.connection)),
       ]);
       for (const sessionId of sessionIds) {
@@ -476,7 +476,7 @@ class DuckDBSessionIndex implements SessionIndex {
   }
 
   private async indexSession(sessionId: string): Promise<boolean> {
-    const logPath = this.events.getLogPath(sessionId);
+    const logPath = this.events.log.getPath(sessionId);
     const previous = await readIndexedSessionState(this.connection, sessionId);
     let stat: Stats;
     try {

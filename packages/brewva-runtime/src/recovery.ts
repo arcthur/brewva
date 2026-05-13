@@ -36,12 +36,10 @@ const SCHEDULER_SERVICE_METHODS = [
 
 export type RecoveryWalStore = ExtensionPort<
   "recovery.wal-store",
-  "recovery",
   Pick<InstanceType<typeof InternalRecoveryWalStore>, (typeof RECOVERY_WAL_STORE_METHODS)[number]>
 >;
 export type RecoveryWalRecovery = ExtensionPort<
   "recovery.wal-recovery",
-  "recovery",
   Pick<
     InstanceType<typeof InternalRecoveryWalRecovery>,
     (typeof RECOVERY_WAL_RECOVERY_METHODS)[number]
@@ -49,7 +47,6 @@ export type RecoveryWalRecovery = ExtensionPort<
 >;
 export type SchedulerService = ExtensionPort<
   "recovery.scheduler-service",
-  "recovery",
   Pick<InstanceType<typeof InternalSchedulerService>, (typeof SCHEDULER_SERVICE_METHODS)[number]>
 >;
 export type {
@@ -78,8 +75,6 @@ export function createRecoveryWalStore(
 ): RecoveryWalStore {
   return createBoundExtensionPort({
     name: "recovery.wal-store",
-    authority: "recovery",
-    capabilityPrefix: "subpath.recovery.wal-store",
     instance: new InternalRecoveryWalStore(options),
     methods: RECOVERY_WAL_STORE_METHODS,
   });
@@ -90,8 +85,6 @@ export function createRecoveryWalRecovery(
 ): RecoveryWalRecovery {
   return createBoundExtensionPort({
     name: "recovery.wal-recovery",
-    authority: "recovery",
-    capabilityPrefix: "subpath.recovery.wal-recovery",
     instance: new InternalRecoveryWalRecovery(options),
     methods: RECOVERY_WAL_RECOVERY_METHODS,
   });
@@ -102,8 +95,6 @@ export function createSchedulerService(
 ): SchedulerService {
   return createBoundExtensionPort({
     name: "recovery.scheduler-service",
-    authority: "recovery",
-    capabilityPrefix: "subpath.recovery.scheduler-service",
     instance: new InternalSchedulerService(options),
     methods: SCHEDULER_SERVICE_METHODS,
   });

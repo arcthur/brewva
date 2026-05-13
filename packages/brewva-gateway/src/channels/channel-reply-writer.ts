@@ -1,4 +1,4 @@
-import type { BrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import { buildTurnEnvelope, type TurnEnvelope } from "@brewva/brewva-runtime/channels";
 import { toErrorMessage } from "../utils/errors.js";
 
@@ -18,7 +18,7 @@ export interface ChannelReplyWriter {
     meta?: Record<string, unknown>,
   ): Promise<void>;
   sendAgentOutputs(input: {
-    runtime: BrewvaRuntime;
+    runtime: BrewvaHostedRuntimePort;
     inbound: TurnEnvelope;
     agentSessionId: string;
     agentId: string;
@@ -29,7 +29,7 @@ export interface ChannelReplyWriter {
 }
 
 function buildControllerReplyTurn(input: {
-  runtime: BrewvaRuntime;
+  runtime: BrewvaHostedRuntimePort;
   inbound: TurnEnvelope;
   text: string;
   sequence: number;
@@ -47,7 +47,7 @@ function buildControllerReplyTurn(input: {
     parts: [{ type: "text", text: input.text }],
     meta: {
       inReplyToTurnId: input.inbound.turnId,
-      agentSessionId: `controller:${input.runtime.agentId}`,
+      agentSessionId: `controller:${input.runtime.identity.agentId}`,
       generatedAt: now,
       ...input.meta,
     },
@@ -82,7 +82,7 @@ function buildAgentReplyTurn(input: {
 }
 
 export function createChannelReplyWriter(input: {
-  runtime: BrewvaRuntime;
+  runtime: BrewvaHostedRuntimePort;
   sendTurn(turn: TurnEnvelope): Promise<unknown>;
 }): ChannelReplyWriter {
   const nextControllerSequenceByScope = new Map<string, number>();
@@ -118,8 +118,8 @@ export function createChannelReplyWriter(input: {
           payload: {
             turnId: turn.turnId,
             outboundKind: "assistant",
-            agentSessionId: `controller:${input.runtime.agentId}`,
-            agentId: input.runtime.agentId,
+            agentSessionId: `controller:${input.runtime.identity.agentId}`,
+            agentId: input.runtime.identity.agentId,
             scopeKey,
             error: toErrorMessage(error),
             isControllerReply: true,

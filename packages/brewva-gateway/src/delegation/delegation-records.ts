@@ -5,12 +5,12 @@ import type {
   DelegationModelRouteRecord,
   DelegationRunRecord,
   DelegationVisibility,
-  ToolExecutionBoundary,
-} from "@brewva/brewva-runtime";
+} from "@brewva/brewva-runtime/delegation";
 import {
   CURRENT_DELEGATION_CONTRACT_VERSION,
   evaluateDelegationAdoption,
-} from "@brewva/brewva-runtime";
+} from "@brewva/brewva-runtime/delegation";
+import type { ToolExecutionBoundary } from "@brewva/brewva-runtime/governance";
 import type { HostedDelegationTarget } from "./targets.js";
 
 export function buildInitialDelegationAdoption(

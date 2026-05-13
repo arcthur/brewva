@@ -8,8 +8,18 @@ import {
   HostedDelegationStore,
   type HostedSubagentSessionOptions,
 } from "@brewva/brewva-gateway";
-import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
+import {
+  BrewvaRuntime,
+  DEFAULT_BREWVA_CONFIG,
+  createHostedRuntimePort,
+  createOperatorRuntimePort,
+} from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import type { BrewvaPromptSessionEvent } from "@brewva/brewva-substrate/session";
+
+function createHostedTestRuntime(options: ConstructorParameters<typeof BrewvaRuntime>[0]) {
+  return createHostedRuntimePort(new BrewvaRuntime(options));
+}
 
 function createTempWorkspace(prefix: string): string {
   return mkdtempSync(join(tmpdir(), prefix));
@@ -18,15 +28,15 @@ function createTempWorkspace(prefix: string): string {
 describe("hosted subagent orchestrator", () => {
   test("projects completed subagent runs into session lineage as state-only outcomes", async () => {
     const workspaceRoot = createTempWorkspace("brewva-subagent-lineage-");
-    const runtime = new BrewvaRuntime({ cwd: workspaceRoot });
+    const runtime = createHostedTestRuntime({ cwd: workspaceRoot });
     const parentSessionId = "parent-session-lineage";
 
-    runtime.authority.session.createLineageNode(parentSessionId, {
+    runtime.authority.session.lineage.createNode(parentSessionId, {
       lineageNodeId: "lineage:main",
       kind: "main",
       forkPoint: { kind: "session_root" },
     });
-    const source = runtime.extensions.hosted.events.record({
+    const source = createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId: parentSessionId,
       type: "message_end",
       payload: {
@@ -34,7 +44,7 @@ describe("hosted subagent orchestrator", () => {
         content: "Delegate a discovery check.",
       },
     });
-    runtime.authority.session.recordContextEntry(parentSessionId, {
+    runtime.authority.session.lineage.recordContextEntry(parentSessionId, {
       entryId: "ctx-parent-1",
       lineageNodeId: "lineage:main",
       parentEntryId: null,
@@ -48,7 +58,7 @@ describe("hosted subagent orchestrator", () => {
     const adapter = createHostedSubagentAdapter({
       runtime,
       async createChildSession() {
-        const childRuntime = new BrewvaRuntime({ cwd: workspaceRoot });
+        const childRuntime = createHostedTestRuntime({ cwd: workspaceRoot });
         const childSessionId = "child-lineage";
         const listeners = new Set<(event: BrewvaPromptSessionEvent) => void>();
 
@@ -109,7 +119,7 @@ describe("hosted subagent orchestrator", () => {
       throw new Error("expected a successful delegation outcome");
     }
 
-    const tree = runtime.inspect.session.getLineageTree(parentSessionId);
+    const tree = runtime.inspect.session.lineage.getTree(parentSessionId);
     const subagentNode = tree.nodes.find(
       (node) =>
         node.forkPoint.kind === "worker_run" && node.forkPoint.workerRunId === outcome.runId,
@@ -126,7 +136,7 @@ describe("hosted subagent orchestrator", () => {
         summary: "Discovery check completed.",
       }),
     ]);
-    expect(runtime.inspect.session.getLineageNode(parentSessionId, "lineage:main")).toEqual(
+    expect(runtime.inspect.session.lineage.getNode(parentSessionId, "lineage:main")).toEqual(
       expect.objectContaining({
         adoptedOutcomes: [],
       }),
@@ -140,7 +150,7 @@ describe("hosted subagent orchestrator", () => {
     mkdirSync(join(workspaceRoot, "src"), { recursive: true });
     writeFileSync(join(workspaceRoot, "src", "message.ts"), "export const message = 'before';\n");
 
-    const runtime = new BrewvaRuntime({ cwd: workspaceRoot });
+    const runtime = createHostedTestRuntime({ cwd: workspaceRoot });
     const parentSessionId = "parent-session";
     let childWorkspaceRoot = "";
 
@@ -148,7 +158,7 @@ describe("hosted subagent orchestrator", () => {
       runtime,
       async createChildSession(input: HostedSubagentSessionOptions) {
         childWorkspaceRoot = input.cwd ?? "";
-        const childRuntime = new BrewvaRuntime({ cwd: input.cwd });
+        const childRuntime = createHostedTestRuntime({ cwd: input.cwd });
         const childSessionId = "child-session";
         const listeners = new Set<(event: BrewvaPromptSessionEvent) => void>();
 
@@ -162,7 +172,7 @@ describe("hosted subagent orchestrator", () => {
                 "export const message = 'after';\n",
                 "utf8",
               );
-              childRuntime.authority.cost.recordAssistantUsage({
+              childRuntime.authority.cost.usage.recordAssistant({
                 sessionId: childSessionId,
                 model: "test-child-model",
                 inputTokens: 12,
@@ -242,7 +252,7 @@ describe("hosted subagent orchestrator", () => {
       ]),
     );
 
-    const workerResults = runtime.inspect.session.listWorkerResults(parentSessionId);
+    const workerResults = runtime.inspect.session.workerResults.list(parentSessionId);
     expect(workerResults).toHaveLength(1);
     expect(workerResults[0]).toMatchObject({
       workerId: outcome.runId,
@@ -258,11 +268,11 @@ describe("hosted subagent orchestrator", () => {
     expect(childWorkspaceRoot).not.toBe(workspaceRoot);
     expect(existsSync(childWorkspaceRoot)).toBe(false);
 
-    const costSummary = runtime.inspect.cost.getSummary(parentSessionId);
+    const costSummary = runtime.inspect.cost.summary.get(parentSessionId);
     expect(costSummary.totalTokens).toBe(20);
     expect(costSummary.totalCostUsd).toBe(0.004);
 
-    const completedEvents = runtime.inspect.events.list(parentSessionId, {
+    const completedEvents = runtime.inspect.events.records.list(parentSessionId, {
       type: "subagent_completed",
     });
     expect(completedEvents).toHaveLength(1);
@@ -277,7 +287,7 @@ describe("hosted subagent orchestrator", () => {
 
   test("carries consult briefs through parallel task packet merging", async () => {
     const workspaceRoot = createTempWorkspace("brewva-subagent-fanout-brief-");
-    const runtime = new BrewvaRuntime({ cwd: workspaceRoot });
+    const runtime = createHostedTestRuntime({ cwd: workspaceRoot });
     const parentSessionId = "parent-session-fanout-brief";
     let childIndex = 0;
 
@@ -285,7 +295,7 @@ describe("hosted subagent orchestrator", () => {
       runtime,
       async createChildSession() {
         childIndex += 1;
-        const childRuntime = new BrewvaRuntime({ cwd: workspaceRoot });
+        const childRuntime = createHostedTestRuntime({ cwd: workspaceRoot });
         const childSessionId = `child-fanout-brief-${childIndex}`;
         const listeners = new Set<(event: BrewvaPromptSessionEvent) => void>();
 
@@ -358,7 +368,7 @@ describe("hosted subagent orchestrator", () => {
     const workspaceRoot = createTempWorkspace("brewva-subagent-narrow-");
     const runtimeConfig = structuredClone(DEFAULT_BREWVA_CONFIG);
     runtimeConfig.infrastructure.events.level = "ops";
-    const runtime = new BrewvaRuntime({
+    const runtime = createHostedTestRuntime({
       cwd: workspaceRoot,
       config: runtimeConfig,
     });
@@ -371,7 +381,7 @@ describe("hosted subagent orchestrator", () => {
       async createChildSession(input: HostedSubagentSessionOptions) {
         capturedBuiltinTools = input.builtinToolNames ?? [];
         capturedEventsLevel = input.config?.infrastructure.events.level ?? "";
-        const childRuntime = new BrewvaRuntime({ cwd: input.cwd ?? workspaceRoot });
+        const childRuntime = createHostedTestRuntime({ cwd: input.cwd ?? workspaceRoot });
         const childSessionId = "child-observe";
         const listeners = new Set<(event: BrewvaPromptSessionEvent) => void>();
 
@@ -424,7 +434,7 @@ describe("hosted subagent orchestrator", () => {
     expect(result.ok).toBe(true);
     expect(capturedBuiltinTools).toEqual(["read"]);
     expect(capturedEventsLevel).toBe("ops");
-    expect(runtime.inspect.session.listWorkerResults(parentSessionId)).toEqual([
+    expect(runtime.inspect.session.workerResults.list(parentSessionId)).toEqual([
       expect.objectContaining({
         status: "skipped",
         summary: "Observation only.",
@@ -443,13 +453,13 @@ describe("hosted subagent orchestrator", () => {
 
   test("resets child collected outputs when the child turn is superseded by recovery", async () => {
     const workspaceRoot = createTempWorkspace("brewva-subagent-recovery-attempt-");
-    const runtime = new BrewvaRuntime({ cwd: workspaceRoot });
+    const runtime = createHostedTestRuntime({ cwd: workspaceRoot });
     const parentSessionId = "parent-session-recovery-attempt";
 
     const adapter = createHostedSubagentAdapter({
       runtime,
       async createChildSession(input: HostedSubagentSessionOptions) {
-        const childRuntime = new BrewvaRuntime({ cwd: input.cwd ?? workspaceRoot });
+        const childRuntime = createHostedTestRuntime({ cwd: input.cwd ?? workspaceRoot });
         const childSessionId = "child-recovery-attempt";
         const listeners = new Set<(event: BrewvaPromptSessionEvent) => void>();
 
@@ -473,7 +483,7 @@ describe("hosted subagent orchestrator", () => {
                 } as BrewvaPromptSessionEvent);
               }
 
-              childRuntime.extensions.hosted.events.record({
+              createHostedRuntimePort(childRuntime).extensions.hosted.events.record({
                 sessionId: childSessionId,
                 type: "session_turn_transition",
                 payload: {
@@ -569,13 +579,13 @@ describe("hosted subagent orchestrator", () => {
 
   test("captures structured QA outcomes from the child assistant response", async () => {
     const workspaceRoot = createTempWorkspace("brewva-subagent-structured-success-");
-    const runtime = new BrewvaRuntime({ cwd: workspaceRoot });
+    const runtime = createHostedTestRuntime({ cwd: workspaceRoot });
     const parentSessionId = "parent-session-structured-success";
 
     const adapter = createHostedSubagentAdapter({
       runtime,
       async createChildSession(input: HostedSubagentSessionOptions) {
-        const childRuntime = new BrewvaRuntime({ cwd: input.cwd ?? workspaceRoot });
+        const childRuntime = createHostedTestRuntime({ cwd: input.cwd ?? workspaceRoot });
         const childSessionId = "child-structured-success";
         const listeners = new Set<(event: BrewvaPromptSessionEvent) => void>();
 
@@ -700,7 +710,9 @@ describe("hosted subagent orchestrator", () => {
       ]),
     );
     expect(
-      runtime.inspect.events.list(parentSessionId, { type: "subagent_outcome_parse_failed" }),
+      runtime.inspect.events.records.list(parentSessionId, {
+        type: "subagent_outcome_parse_failed",
+      }),
     ).toHaveLength(0);
 
     await rm(workspaceRoot, { recursive: true, force: true });
@@ -708,13 +720,13 @@ describe("hosted subagent orchestrator", () => {
 
   test("captures structured review outcomes without requiring findings", async () => {
     const workspaceRoot = createTempWorkspace("brewva-subagent-review-structured-");
-    const runtime = new BrewvaRuntime({ cwd: workspaceRoot });
+    const runtime = createHostedTestRuntime({ cwd: workspaceRoot });
     const parentSessionId = "parent-session-review-structured";
 
     const adapter = createHostedSubagentAdapter({
       runtime,
       async createChildSession(input: HostedSubagentSessionOptions) {
-        const childRuntime = new BrewvaRuntime({ cwd: input.cwd ?? workspaceRoot });
+        const childRuntime = createHostedTestRuntime({ cwd: input.cwd ?? workspaceRoot });
         const childSessionId = "child-review-structured";
         const listeners = new Set<(event: BrewvaPromptSessionEvent) => void>();
 
@@ -861,10 +873,13 @@ describe("hosted subagent orchestrator", () => {
     });
     expect(outcome.summary).toBe("Boundary review completed without a blocking issue.");
     expect(
-      runtime.inspect.events.list(parentSessionId, { type: "subagent_outcome_parse_failed" }),
+      runtime.inspect.events.records.list(parentSessionId, {
+        type: "subagent_outcome_parse_failed",
+      }),
     ).toHaveLength(0);
     expect(
-      runtime.inspect.events.list(parentSessionId, { type: "subagent_completed" })[0]?.payload,
+      runtime.inspect.events.records.list(parentSessionId, { type: "subagent_completed" })[0]
+        ?.payload,
     ).toMatchObject({
       consultKind: "review",
       resultData: {
@@ -893,13 +908,13 @@ describe("hosted subagent orchestrator", () => {
 
   test("records a parse warning for prose-only QA output without failing the handoff", async () => {
     const workspaceRoot = createTempWorkspace("brewva-subagent-structured-fallback-");
-    const runtime = new BrewvaRuntime({ cwd: workspaceRoot });
+    const runtime = createHostedTestRuntime({ cwd: workspaceRoot });
     const parentSessionId = "parent-session-structured-fallback";
 
     const adapter = createHostedSubagentAdapter({
       runtime,
       async createChildSession(input: HostedSubagentSessionOptions) {
-        const childRuntime = new BrewvaRuntime({ cwd: input.cwd ?? workspaceRoot });
+        const childRuntime = createHostedTestRuntime({ cwd: input.cwd ?? workspaceRoot });
         const childSessionId = "child-structured-fallback";
         const listeners = new Set<(event: BrewvaPromptSessionEvent) => void>();
 
@@ -963,26 +978,28 @@ describe("hosted subagent orchestrator", () => {
 
     expect(outcome.summary).toContain("QA completed, but only a prose summary is available.");
     expect(
-      runtime.inspect.events.list(parentSessionId, { type: "subagent_outcome_parse_failed" }),
+      runtime.inspect.events.records.list(parentSessionId, {
+        type: "subagent_outcome_parse_failed",
+      }),
     ).toHaveLength(1);
-    expect(runtime.inspect.events.list(parentSessionId, { type: "subagent_failed" })).toHaveLength(
-      0,
-    );
+    expect(
+      runtime.inspect.events.records.list(parentSessionId, { type: "subagent_failed" }),
+    ).toHaveLength(0);
 
     await rm(workspaceRoot, { recursive: true, force: true });
   });
 
   test("tracks background runs and supports cancellation", async () => {
     const workspaceRoot = createTempWorkspace("brewva-subagent-background-");
-    const runtime = new BrewvaRuntime({ cwd: workspaceRoot });
+    const runtime = createHostedTestRuntime({ cwd: workspaceRoot });
     const parentSessionId = "parent-session-background";
     let rejectPendingPrompt: ((error: Error) => void) | undefined;
-    let childRuntime: BrewvaRuntime | undefined;
+    let childRuntime: BrewvaHostedRuntimePort | undefined;
 
     const adapter = createHostedSubagentAdapter({
       runtime,
       async createChildSession(input: HostedSubagentSessionOptions) {
-        childRuntime = new BrewvaRuntime({ cwd: input.cwd ?? workspaceRoot });
+        childRuntime = createHostedTestRuntime({ cwd: input.cwd ?? workspaceRoot });
         const childSessionId = "child-background";
         const listeners = new Set<(event: BrewvaPromptSessionEvent) => void>();
 
@@ -1068,11 +1085,13 @@ describe("hosted subagent orchestrator", () => {
       status: "cancelled",
     });
 
-    const events = runtime.inspect.events.list(parentSessionId, { type: "subagent_cancelled" });
+    const events = runtime.inspect.events.records.list(parentSessionId, {
+      type: "subagent_cancelled",
+    });
     expect(events).toHaveLength(1);
     expect(childRuntime).toBeDefined();
     const shutdownEvents =
-      childRuntime?.inspect.events.query("child-background", {
+      childRuntime?.inspect.events.records.query("child-background", {
         type: "session_shutdown",
         last: 1,
       }) ?? [];
@@ -1087,7 +1106,7 @@ describe("hosted subagent orchestrator", () => {
 
   test("clearing parent session state asks the background controller to cancel detached runs", () => {
     const workspaceRoot = createTempWorkspace("brewva-subagent-clear-state-");
-    const runtime = new BrewvaRuntime({ cwd: workspaceRoot });
+    const runtime = createHostedTestRuntime({ cwd: workspaceRoot });
     const cancelled: Array<{ sessionId: string; reason?: string }> = [];
 
     createHostedSubagentAdapter({
@@ -1114,7 +1133,7 @@ describe("hosted subagent orchestrator", () => {
       },
     });
 
-    runtime.maintain.session.clearState("parent-session-clear");
+    createOperatorRuntimePort(runtime).operator.session.state.clear("parent-session-clear");
 
     expect(cancelled).toEqual([
       {
@@ -1126,14 +1145,14 @@ describe("hosted subagent orchestrator", () => {
 
   test("persists durable delivery metadata for background completion handoff", async () => {
     const workspaceRoot = createTempWorkspace("brewva-subagent-delivery-");
-    const runtime = new BrewvaRuntime({ cwd: workspaceRoot });
+    const runtime = createHostedTestRuntime({ cwd: workspaceRoot });
     const delegationStore = new HostedDelegationStore(runtime);
     const parentSessionId = "parent-session-delivery";
 
     const adapter = createHostedSubagentAdapter({
       runtime,
       async createChildSession(input: HostedSubagentSessionOptions) {
-        const childRuntime = new BrewvaRuntime({ cwd: input.cwd ?? workspaceRoot });
+        const childRuntime = createHostedTestRuntime({ cwd: input.cwd ?? workspaceRoot });
         const childSessionId = "child-delivery";
         const listeners = new Set<(event: BrewvaPromptSessionEvent) => void>();
 
@@ -1142,7 +1161,7 @@ describe("hosted subagent orchestrator", () => {
           session: {
             dispose() {},
             async prompt() {
-              childRuntime.authority.cost.recordAssistantUsage({
+              childRuntime.authority.cost.usage.recordAssistant({
                 sessionId: childSessionId,
                 model: "test-child-model",
                 inputTokens: 6,

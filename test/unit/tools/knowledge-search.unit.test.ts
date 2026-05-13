@@ -30,7 +30,7 @@ status: active
 problem_kind: bugfix
 module: brewva-runtime
 boundaries:
-  - runtime.maintain.recovery
+  - createOperatorRuntimePort(runtime).operator.recovery
 source_artifacts:
   - investigation_record
 metadata:
@@ -122,7 +122,7 @@ status: active
 problem_kind: bugfix
 module: brewva-runtime
 boundaries:
-  - runtime.maintain.recovery
+  - createOperatorRuntimePort(runtime).operator.recovery
   - runtime.authority.tools
 source_artifacts:
   - investigation_record
@@ -175,7 +175,7 @@ This note mentions replay experiments but is not the canonical precedent.
       {
         query: "wal recovery replay",
         module: "brewva-runtime",
-        boundary: "runtime.maintain.recovery",
+        boundary: "createOperatorRuntimePort(runtime).operator.recovery",
         tags: ["wal"],
       } as never,
       undefined,
@@ -383,7 +383,7 @@ status: active
 problem_kind: bugfix
 module: brewva-runtime
 boundaries:
-  - runtime.maintain.recovery
+  - createOperatorRuntimePort(runtime).operator.recovery
 tags:
   - replay
   - cursor
@@ -420,7 +420,7 @@ The runtime contract covers broader system behavior but not this specific replay
       {
         query: "replai curser pining",
         module: "brewva-runtime",
-        boundary: "runtime.maintain.recovery",
+        boundary: "createOperatorRuntimePort(runtime).operator.recovery",
         tags: ["cursor"],
       } as never,
       undefined,

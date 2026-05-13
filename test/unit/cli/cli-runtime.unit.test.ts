@@ -3,7 +3,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import process from "node:process";
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { BrewvaRuntime, createHostedRuntimePort } from "@brewva/brewva-runtime";
 import type { BrewvaPromptContentPart } from "@brewva/brewva-substrate/prompt";
 import { buildBrewvaPromptText } from "@brewva/brewva-substrate/prompt";
 import type {
@@ -22,6 +22,10 @@ import {
   createTextDeltaAssistantEvent,
 } from "../../helpers/prompt-session-events.js";
 
+function createHostedTestRuntime(options: ConstructorParameters<typeof BrewvaRuntime>[0]) {
+  return createHostedRuntimePort(new BrewvaRuntime(options));
+}
+
 describe("cli runtime print mode", () => {
   const stdoutWrites: string[] = [];
   const originalWrite = process.stdout.write.bind(process.stdout);
@@ -37,7 +41,7 @@ describe("cli runtime print mode", () => {
       return true;
     }) as typeof process.stdout.write;
 
-    const runtime = new BrewvaRuntime({
+    const runtime = createHostedTestRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-cli-runtime-error-")),
     });
     const listeners = new Set<(event: BrewvaPromptSessionEvent) => void>();
@@ -95,7 +99,7 @@ describe("cli runtime print mode", () => {
       return true;
     }) as typeof process.stdout.write;
 
-    const runtime = new BrewvaRuntime({
+    const runtime = createHostedTestRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-cli-runtime-")),
     });
     const sentMessages: string[] = [];
@@ -118,7 +122,7 @@ describe("cli runtime print mode", () => {
         const prompt = buildBrewvaPromptText(parts);
         sentMessages.push(prompt);
         if (sentMessages.length === 1) {
-          runtime.extensions.hosted.events.record({
+          createHostedRuntimePort(runtime).extensions.hosted.events.record({
             sessionId: "cli-print-session",
             type: "session_compact",
             payload: {
@@ -166,7 +170,7 @@ describe("cli runtime print mode", () => {
 
 describe("cli runtime interactive mode", () => {
   test("preserves hosted provider connection services for the initial shell bundle", async () => {
-    const runtime = new BrewvaRuntime({
+    const runtime = createHostedTestRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-cli-interactive-")),
     });
     const session = {
@@ -249,7 +253,7 @@ describe("cli runtime interactive mode", () => {
     await runCliInteractiveSession(
       session as BrewvaManagedPromptSession,
       {
-        cwd: runtime.cwd,
+        cwd: runtime.identity.cwd,
         runtime,
         providerConnections,
         async openSession() {

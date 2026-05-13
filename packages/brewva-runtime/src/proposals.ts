@@ -1,0 +1,22 @@
+// Curated proposals contract subpath. Keep root imports focused on BrewvaRuntime.
+export type {
+  DecideEffectCommitmentInput,
+  DecideEffectCommitmentResult,
+  DecisionEffect,
+  DecisionReceipt,
+  EffectCommitmentApprovalConsumedEventPayload,
+  EffectCommitmentApprovalRequestedEventPayload,
+  EffectCommitmentApprovalResolutionEventPayload,
+  EffectCommitmentDecisionReceiptRecordedPayload,
+  EffectCommitmentDiffPreview,
+  EffectCommitmentDiffPreviewFile,
+  EffectCommitmentListQuery,
+  EffectCommitmentProposal,
+  EffectCommitmentProposalPayload,
+  EffectCommitmentRecord,
+  EffectCommitmentRequestListQuery,
+  EffectCommitmentRequestRecord,
+  EffectCommitmentRequestState,
+  PendingEffectCommitmentRequest,
+  ProposalDecision,
+} from "./domain/proposals/types.js";

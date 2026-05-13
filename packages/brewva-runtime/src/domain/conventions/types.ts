@@ -1,5 +1,5 @@
 import type { RuntimeResult } from "../../core/runtime-result.js";
-import type { EvidenceRef } from "../evidence/api.js";
+import type { EvidenceRef } from "../../internal/evidence/api.js";
 import type { ToolRiskLevel } from "../governance/api.js";
 import type { PatchSet } from "../patching/api.js";
 

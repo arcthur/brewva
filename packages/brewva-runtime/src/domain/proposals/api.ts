@@ -19,7 +19,7 @@ export type {
   PendingEffectCommitmentRequest,
   ProposalDecision,
 } from "./types.js";
-export type { EvidenceRef, EvidenceSourceType } from "../evidence/api.js";
+export type { EvidenceRef, EvidenceSourceType } from "../../internal/evidence/api.js";
 export {
   PROPOSAL_DECIDED_EVENT_TYPE,
   PROPOSAL_RECEIVED_EVENT_TYPE,
@@ -46,9 +46,9 @@ export type {
   asTypedBrewvaEventRecord,
 } from "./event-descriptors.js";
 export {
+  createProposalsAuthoritySurface,
+  createProposalsInspectSurface,
   createProposalsSurfaceMethods,
-  proposalsRuntimeSurface,
-  proposalsSurfaceContribution,
 } from "./runtime-surface.js";
 export type {
   ProposalsSurfaceDependencies,

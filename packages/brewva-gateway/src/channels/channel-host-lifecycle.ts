@@ -8,7 +8,7 @@ import {
   type BrewvaScope,
   type ScopedScheduleHandle,
 } from "@brewva/brewva-effect";
-import type { BrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import { createRecoveryWalRecovery, type RecoveryWalStore } from "@brewva/brewva-runtime/recovery";
 import { createNonOverlappingTaskRunner } from "@brewva/brewva-std/async";
 import { waitForAllSettledWithTimeout } from "../utils/async.js";
@@ -19,7 +19,7 @@ import type { ChannelModeLaunchBundle } from "./launcher.js";
 import type { ChannelSessionCoordinator } from "./session/coordinator.js";
 
 export interface RunChannelHostLifecycleInput {
-  runtime: BrewvaRuntime;
+  runtime: BrewvaHostedRuntimePort;
   channel: string;
   verbose: boolean;
   bundle: ChannelModeLaunchBundle;
@@ -130,7 +130,7 @@ export function runChannelHostLifecycleEffect(
   };
 
   const recovery = createRecoveryWalRecovery({
-    workspaceRoot: input.runtime.workspaceRoot,
+    workspaceRoot: input.runtime.identity.workspaceRoot,
     config: input.runtime.config.infrastructure.recoveryWal,
     scopeFilter: (scope) => scope === recoveryWalScope,
     recordEvent: (event) => {
@@ -198,7 +198,7 @@ export async function runChannelHostLifecycle(input: RunChannelHostLifecycleInpu
   return runEdgeOperation("brewva.channel.host.lifecycle", runChannelHostLifecycleEffect(input), {
     fields: {
       channel: input.channel,
-      workspaceRoot: input.runtime.workspaceRoot,
+      workspaceRoot: input.runtime.identity.workspaceRoot,
     },
   });
 }

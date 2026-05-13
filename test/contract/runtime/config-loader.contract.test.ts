@@ -1,13 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
 import {
-  BrewvaRuntime,
-  DEFAULT_BREWVA_CONFIG,
   loadBrewvaConfig,
   loadBrewvaConfigResolution,
   resolveGlobalBrewvaConfigPath,
-} from "@brewva/brewva-runtime";
+} from "@brewva/brewva-runtime/config";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 describe("Brewva config loader normalization", () => {

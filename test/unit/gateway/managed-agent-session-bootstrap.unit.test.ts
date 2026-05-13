@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { SessionWireFrame } from "@brewva/brewva-runtime";
+import type { SessionWireFrame } from "@brewva/brewva-runtime/session";
 import { resolveManagedSessionBootstrapPhase } from "../../../packages/brewva-gateway/src/hosted/internal/session/session-phase/api.js";
 
 describe("managed-agent-session bootstrap", () => {

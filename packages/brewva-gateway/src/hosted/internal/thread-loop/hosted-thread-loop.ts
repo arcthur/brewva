@@ -1,9 +1,7 @@
-import {
-  SESSION_WIRE_SCHEMA,
-  asBrewvaSessionId,
-  type BrewvaRuntime,
-  type SessionWireFrame,
-} from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
+import { asBrewvaSessionId } from "@brewva/brewva-runtime/core";
+import { SESSION_WIRE_SCHEMA } from "@brewva/brewva-runtime/session";
+import type { SessionWireFrame } from "@brewva/brewva-runtime/session";
 import type { BrewvaPromptContentPart } from "@brewva/brewva-substrate/prompt";
 import { applyPromptRecoveryPolicy, getCompactionGenerationState } from "../compaction/recovery.js";
 import { formatAttemptId } from "./attempts/tool-attempt-binding.js";
@@ -43,7 +41,7 @@ export interface RunHostedThreadLoopInput {
   readonly prompt: SessionPromptInput;
   readonly profile: ThreadLoopProfile;
   readonly continuationCause?: ThreadLoopContinuationCause;
-  readonly runtime?: BrewvaRuntime;
+  readonly runtime?: BrewvaHostedRuntimePort;
   readonly sessionId?: string;
   readonly turnId?: string;
   readonly runtimeTurn?: number;
@@ -158,7 +156,7 @@ function formatUnknownError(error: unknown): string {
 }
 
 function recordCompactionRetryTransition(input: {
-  readonly runtime?: BrewvaRuntime;
+  readonly runtime?: BrewvaHostedRuntimePort;
   readonly sessionId: string;
   readonly turn?: number;
   readonly status: "entered" | "completed" | "failed";

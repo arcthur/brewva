@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { evaluateDelegationAdoption, type QaSubagentOutcomeData } from "@brewva/brewva-runtime";
+import { evaluateDelegationAdoption } from "@brewva/brewva-runtime/delegation";
+import type { QaSubagentOutcomeData } from "@brewva/brewva-runtime/delegation";
 
 describe("delegation adoption contracts", () => {
   test("allows QA adoption only when pass verdict includes check evidence", () => {

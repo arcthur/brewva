@@ -9,7 +9,7 @@ describe("AGENTS runtime surface coverage", () => {
 
     expect(agentsDoc).toContain("`runtime.authority`");
     expect(agentsDoc).toContain("`runtime.inspect`");
-    expect(agentsDoc).toContain("`runtime.maintain`");
+    expect(agentsDoc).toContain("`createOperatorRuntimePort(runtime).operator`");
     expect(agentsDoc).toContain("mixed top-level implementation surface");
   });
 });

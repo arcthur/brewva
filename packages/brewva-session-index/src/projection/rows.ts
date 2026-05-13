@@ -1,5 +1,8 @@
-import { buildSessionRewindProjection, listSessionRewindTargets } from "@brewva/brewva-runtime";
 import type { BrewvaEventRecord } from "@brewva/brewva-runtime/events";
+import {
+  buildSessionRewindProjection,
+  listSessionRewindTargets,
+} from "@brewva/brewva-runtime/session";
 import { uniqueNonEmptyStrings } from "@brewva/brewva-std/collections";
 import type {
   SessionIndexBox,

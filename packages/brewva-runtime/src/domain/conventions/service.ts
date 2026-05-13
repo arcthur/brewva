@@ -1,6 +1,6 @@
 import type { BrewvaEventRecord } from "../../events/types.js";
+import { normalizeEvidenceRefs } from "../../internal/evidence/api.js";
 import type { RuntimeKernelContext } from "../../runtime/runtime-kernel.js";
-import { normalizeEvidenceRefs } from "../evidence/api.js";
 import type { ReversibleMutationService, ToolRiskLevel } from "../governance/api.js";
 import type { FileChangeService } from "../patching/api.js";
 import {

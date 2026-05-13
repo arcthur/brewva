@@ -1,7 +1,3 @@
-import {
-  defineRuntimeSurfaceModule,
-  type SurfaceContribution,
-} from "../../runtime/surface-descriptor.js";
 import type {
   TapeHandoffResult,
   TapeSearchResult,
@@ -24,36 +20,37 @@ export interface TapeSurfaceDependencies {
   };
 }
 
-export interface RuntimeTapeSurfaceMethods {
-  getTapeStatus(sessionId: string): TapeStatusState;
-  getTapePressureThresholds(): TapeStatusState["thresholds"];
-  recordTapeHandoff(
-    sessionId: string,
-    input: { name: string; summary?: string; nextSteps?: string },
-  ): TapeHandoffResult;
-  searchTape(
-    sessionId: string,
-    input: { query: string; scope?: TapeSearchScope; limit?: number },
-  ): TapeSearchResult;
-}
-
-export const tapeSurfaceContribution = {
-  authority: ["recordTapeHandoff"],
-  inspect: ["getTapeStatus", "getTapePressureThresholds", "searchTape"],
-} as const satisfies SurfaceContribution<RuntimeTapeSurfaceMethods>;
-
-export function createTapeSurfaceMethods(deps: TapeSurfaceDependencies): RuntimeTapeSurfaceMethods {
+export function createTapeSurfaceMethods(deps: TapeSurfaceDependencies) {
   return {
-    getTapeStatus: (sessionId: string) => deps.getTapeService().getTapeStatus(sessionId),
-    getTapePressureThresholds: () => deps.getTapeService().getPressureThresholds(),
-    recordTapeHandoff: (sessionId: string, input) =>
-      deps.getTapeService().recordTapeHandoff(sessionId, input),
-    searchTape: (sessionId: string, input) => deps.getTapeService().searchTape(sessionId, input),
+    authority: {
+      handoff: {
+        record: (
+          sessionId: string,
+          input: { name: string; summary?: string; nextSteps?: string },
+        ) => deps.getTapeService().recordTapeHandoff(sessionId, input),
+      },
+    },
+    inspect: {
+      status: {
+        get: (sessionId: string) => deps.getTapeService().getTapeStatus(sessionId),
+        getPressureThresholds: () => deps.getTapeService().getPressureThresholds(),
+      },
+      search: {
+        search: (
+          sessionId: string,
+          input: { query: string; scope?: TapeSearchScope; limit?: number },
+        ) => deps.getTapeService().searchTape(sessionId, input),
+      },
+    },
   };
 }
 
-export const tapeRuntimeSurface = defineRuntimeSurfaceModule({
-  name: "tape",
-  createMethods: createTapeSurfaceMethods,
-  contribution: tapeSurfaceContribution,
-});
+export type RuntimeTapeSurfaceMethods = ReturnType<typeof createTapeSurfaceMethods>;
+
+export function createTapeAuthoritySurface(deps: TapeSurfaceDependencies) {
+  return createTapeSurfaceMethods(deps).authority;
+}
+
+export function createTapeInspectSurface(deps: TapeSurfaceDependencies) {
+  return createTapeSurfaceMethods(deps).inspect;
+}

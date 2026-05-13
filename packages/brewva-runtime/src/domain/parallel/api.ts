@@ -5,12 +5,6 @@ export {
   RESOURCE_LEASE_GRANTED_EVENT_TYPE,
 } from "./events.js";
 export type { ParallelService, ResourceLeaseService } from "./types.js";
-export {
-  createParallelSurfaceMethods,
-  parallelRuntimeSurface,
-  parallelSurfaceContribution,
-} from "./runtime-surface.js";
-export type { RuntimeParallelSurfaceMethods } from "./runtime-surface.js";
 export { registerParallelDomain } from "./registrar.js";
 export type { RuntimeParallelDomainRegistration } from "./registrar.js";
 export { ParallelBudgetManager } from "./budget.js";

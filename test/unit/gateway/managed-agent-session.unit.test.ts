@@ -5,7 +5,11 @@ import {
   registerExternalApiProvider,
   unregisterApiProviders,
 } from "@brewva/brewva-provider-core/registry";
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import {
+  BrewvaRuntime,
+  createOperatorRuntimePort,
+  createHostedRuntimePort,
+} from "@brewva/brewva-runtime";
 import { redactedStableJsonSha256Hex, sha256Hex } from "@brewva/brewva-std/hash";
 import type { ContextState } from "@brewva/brewva-substrate/contracts";
 import {
@@ -47,6 +51,10 @@ import {
 import { createProviderEventStream } from "../../helpers/effect-stream.js";
 import { createToolcallDeltaAssistantEvent } from "../../helpers/prompt-session-events.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
+
+function createHostedTestRuntime(options: ConstructorParameters<typeof BrewvaRuntime>[0]) {
+  return createHostedRuntimePort(new BrewvaRuntime(options));
+}
 
 type TestHostPlugin = NonNullable<CreateBrewvaHostPluginRunnerOptions["plugins"]>[number];
 type TestHostPluginCapability = TestHostPlugin["capabilities"][number];
@@ -222,7 +230,7 @@ async function createManagedSessionFixture(
   },
 ) {
   const workspace = createTestWorkspace(testName);
-  const runtime = new BrewvaRuntime({ cwd: workspace });
+  const runtime = createHostedTestRuntime({ cwd: workspace });
   const sessionStore = new HostedRuntimeTapeSessionStore(runtime, `${testName}-session`);
   sessionStore.appendModelChange(TEST_MODEL.provider, TEST_MODEL.id);
   sessionStore.appendThinkingLevelChange("high");
@@ -935,7 +943,7 @@ describe("managed agent session compaction", () => {
     const branch = sessionStore.getBranch();
     expect(branch.map((entry) => entry.type)).toContain("compaction");
     expect(
-      runtime.inspect.events
+      runtime.inspect.events.records
         .list(sessionStore.getSessionId())
         .some((event) => event.type.startsWith("hosted_session_projection_")),
     ).toBe(false);
@@ -1157,7 +1165,7 @@ describe("managed agent session compaction", () => {
 
   test("default LLM compaction generator uses the active provider model", async () => {
     const workspace = createTestWorkspace("managed-agent-session-default-llm-compaction");
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createHostedTestRuntime({ cwd: workspace });
     const sessionStore = new HostedRuntimeTapeSessionStore(
       runtime,
       "managed-agent-session-default-llm-compaction-session",
@@ -1320,7 +1328,7 @@ describe("managed agent session compaction", () => {
         });
       });
 
-      const compactionEvent = runtime.inspect.events
+      const compactionEvent = runtime.inspect.events.records
         .query(sessionStore.getSessionId(), { type: "session_compact" })
         .at(-1);
       expect(compactionEvent?.payload).toEqual(
@@ -1344,7 +1352,7 @@ describe("managed agent session compaction", () => {
           }),
         }),
       );
-      expect(runtime.inspect.cost.getSummary(sessionStore.getSessionId())).toMatchObject({
+      expect(runtime.inspect.cost.summary.get(sessionStore.getSessionId())).toMatchObject({
         inputTokens: 123,
         outputTokens: 45,
         cacheReadTokens: 67,
@@ -1568,7 +1576,7 @@ describe("managed agent session compaction", () => {
     });
     observedPhases.length = 0;
 
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       turn: 1,
       type: "turn_input_recorded",
@@ -1580,7 +1588,7 @@ describe("managed agent session compaction", () => {
     });
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       turn: 1,
       type: "effect_commitment_approval_requested",
@@ -1593,7 +1601,7 @@ describe("managed agent session compaction", () => {
     });
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       turn: 1,
       type: "effect_commitment_approval_decided",
@@ -1604,7 +1612,7 @@ describe("managed agent session compaction", () => {
     });
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       turn: 1,
       type: "session_turn_transition",
@@ -1623,7 +1631,7 @@ describe("managed agent session compaction", () => {
     });
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       turn: 1,
       type: "session_turn_transition",
@@ -1683,7 +1691,7 @@ describe("managed agent session compaction", () => {
 
   test("clears provider cache detector state on runtime session clear", async () => {
     const workspace = createTestWorkspace("managed-agent-session-provider-cache-clear");
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createHostedTestRuntime({ cwd: workspace });
     const sessionStore = new HostedRuntimeTapeSessionStore(
       runtime,
       "managed-agent-session-provider-cache-clear-session",
@@ -1737,7 +1745,7 @@ describe("managed agent session compaction", () => {
         });
         await session.waitForIdle();
         expect(
-          runtime.inspect.context.getProviderCacheObservation(sessionStore.getSessionId())
+          runtime.inspect.context.providerCache.getObservation(sessionStore.getSessionId())
             ?.breakObservation.status,
         ).toBe("cold");
 
@@ -1746,7 +1754,7 @@ describe("managed agent session compaction", () => {
           source: "channel:telegram",
         });
         await session.waitForIdle();
-        const warmObservation = runtime.inspect.context.getProviderCacheObservation(
+        const warmObservation = runtime.inspect.context.providerCache.getObservation(
           sessionStore.getSessionId(),
         );
         expect(warmObservation?.breakObservation.status).toBe("warm");
@@ -1754,7 +1762,9 @@ describe("managed agent session compaction", () => {
           redactedStableJsonSha256Hex({ source: "channel:telegram" }),
         );
 
-        runtime.maintain.session.clearState(sessionStore.getSessionId());
+        createOperatorRuntimePort(runtime).operator.session.state.clear(
+          sessionStore.getSessionId(),
+        );
 
         await session.prompt(textPrompt("Repeat cacheable prompt."), {
           expandPromptTemplates: false,
@@ -1762,7 +1772,7 @@ describe("managed agent session compaction", () => {
         });
         await session.waitForIdle();
         expect(
-          runtime.inspect.context.getProviderCacheObservation(sessionStore.getSessionId())
+          runtime.inspect.context.providerCache.getObservation(sessionStore.getSessionId())
             ?.breakObservation.status,
         ).toBe("cold");
       } finally {
@@ -1775,7 +1785,7 @@ describe("managed agent session compaction", () => {
 
   test("awaits async provider session clear before model switch resolves", async () => {
     const workspace = createTestWorkspace("managed-agent-session-model-switch-awaits-clear");
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createHostedTestRuntime({ cwd: workspace });
     const sessionStore = new HostedRuntimeTapeSessionStore(
       runtime,
       "managed-agent-session-model-switch-awaits-clear-session",
@@ -1906,7 +1916,7 @@ describe("managed agent session compaction", () => {
 
   test("replays persisted session context into the first hosted context request", async () => {
     const workspace = createTestWorkspace("managed-agent-session-replay");
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createHostedTestRuntime({ cwd: workspace });
     const sessionStore = new HostedRuntimeTapeSessionStore(
       runtime,
       "managed-agent-session-replay-session",
@@ -2077,7 +2087,7 @@ describe("managed agent session compaction", () => {
 
   test("preserves structured file prompt parts in the hosted user message context", async () => {
     const workspace = createTestWorkspace("managed-agent-session-file-parts");
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createHostedTestRuntime({ cwd: workspace });
     const sessionStore = new HostedRuntimeTapeSessionStore(
       runtime,
       "managed-agent-session-file-parts-session",
@@ -2209,7 +2219,7 @@ describe("managed agent session compaction", () => {
 
   test("hydrates the initial session phase from lifecycle snapshot on resume", async () => {
     const workspace = createTestWorkspace("managed-agent-session-history-phase");
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createHostedTestRuntime({ cwd: workspace });
     const sessionStore = new HostedRuntimeTapeSessionStore(
       runtime,
       "managed-agent-session-history-phase-session",
@@ -2218,7 +2228,7 @@ describe("managed agent session compaction", () => {
     sessionStore.appendThinkingLevelChange("high");
 
     const sessionId = sessionStore.getSessionId();
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       turn: 1,
       type: "turn_input_recorded",
@@ -2228,7 +2238,7 @@ describe("managed agent session compaction", () => {
         promptText: "resume while waiting for approval",
       },
     });
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       turn: 1,
       type: "effect_commitment_approval_requested",
@@ -2319,7 +2329,7 @@ describe("managed agent session compaction", () => {
     };
 
     const workspace = createTestWorkspace("managed-agent-session-history-phase-warning");
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createHostedTestRuntime({ cwd: workspace });
     const sessionStore = new HostedRuntimeTapeSessionStore(
       runtime,
       "managed-agent-session-history-phase-warning-session",
@@ -2328,7 +2338,7 @@ describe("managed agent session compaction", () => {
     sessionStore.appendThinkingLevelChange("high");
 
     const sessionId = sessionStore.getSessionId();
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       turn: 1,
       type: "turn_input_recorded",
@@ -2338,7 +2348,7 @@ describe("managed agent session compaction", () => {
         promptText: "resume while waiting for approval",
       },
     });
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       turn: 1,
       type: "effect_commitment_approval_requested",
@@ -2398,7 +2408,7 @@ describe("managed agent session compaction", () => {
 
   test("hydrates tool execution phase from lifecycle snapshot on resume", async () => {
     const workspace = createTestWorkspace("managed-agent-session-history-tool-phase");
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createHostedTestRuntime({ cwd: workspace });
     const sessionStore = new HostedRuntimeTapeSessionStore(
       runtime,
       "managed-agent-session-history-tool-phase-session",
@@ -2407,7 +2417,7 @@ describe("managed agent session compaction", () => {
     sessionStore.appendThinkingLevelChange("high");
 
     const sessionId = sessionStore.getSessionId();
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       turn: 2,
       type: "turn_input_recorded",
@@ -2417,7 +2427,7 @@ describe("managed agent session compaction", () => {
         promptText: "resume while tool execution is still active",
       },
     });
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       turn: 2,
       type: "tool_execution_start",
@@ -2492,7 +2502,7 @@ describe("managed agent session compaction", () => {
 
   test("hydrates recovering phase from lifecycle snapshot on resume", async () => {
     const workspace = createTestWorkspace("managed-agent-session-history-recovery-phase");
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createHostedTestRuntime({ cwd: workspace });
     const sessionStore = new HostedRuntimeTapeSessionStore(
       runtime,
       "managed-agent-session-history-recovery-phase-session",
@@ -2501,7 +2511,7 @@ describe("managed agent session compaction", () => {
     sessionStore.appendThinkingLevelChange("high");
 
     const sessionId = sessionStore.getSessionId();
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       turn: 1,
       type: "turn_input_recorded",
@@ -2511,7 +2521,7 @@ describe("managed agent session compaction", () => {
         promptText: "resume after worker crash",
       },
     });
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       turn: 1,
       type: "session_turn_transition",
@@ -2592,7 +2602,7 @@ describe("managed agent session compaction", () => {
     };
 
     const workspace = createTestWorkspace("managed-agent-session-history-recovery-warning");
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createHostedTestRuntime({ cwd: workspace });
     const sessionStore = new HostedRuntimeTapeSessionStore(
       runtime,
       "managed-agent-session-history-recovery-warning-session",
@@ -2601,7 +2611,7 @@ describe("managed agent session compaction", () => {
     sessionStore.appendThinkingLevelChange("high");
 
     const sessionId = sessionStore.getSessionId();
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       turn: 1,
       type: "turn_input_recorded",
@@ -2611,7 +2621,7 @@ describe("managed agent session compaction", () => {
         promptText: "resume after worker crash",
       },
     });
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       turn: 1,
       type: "session_turn_transition",
@@ -2734,7 +2744,7 @@ describe("managed agent session compaction", () => {
 
   test("routes non-turn custom messages through plugin hooks and durable message_end persistence", async () => {
     const workspace = createTestWorkspace("managed-agent-session-custom-message-hooks");
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createHostedTestRuntime({ cwd: workspace });
     const sessionStore = new HostedRuntimeTapeSessionStore(
       runtime,
       "managed-agent-session-custom-message-hooks-session",
@@ -2804,7 +2814,7 @@ describe("managed agent session compaction", () => {
       );
 
       expect(observedEvents).toEqual(["message_start", "message_end"]);
-      const messageEnds = runtime.inspect.events.query(sessionStore.getSessionId(), {
+      const messageEnds = runtime.inspect.events.records.query(sessionStore.getSessionId(), {
         type: "message_end",
       });
       expect(messageEnds).toHaveLength(1);
@@ -2821,7 +2831,7 @@ describe("managed agent session compaction", () => {
 
   test("fails fast when a runtime-backed session is created without hosted persistence plugins", async () => {
     const workspace = createTestWorkspace("managed-agent-session-missing-persistence-plugins");
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createHostedTestRuntime({ cwd: workspace });
     const sessionStore = new HostedRuntimeTapeSessionStore(
       runtime,
       "managed-agent-session-missing-persistence-plugins-session",
@@ -2927,7 +2937,7 @@ describe("managed agent session compaction", () => {
           previousThinkingLevel: "high",
         },
       ]);
-      const thinkingLevelEvents = runtime.inspect.events.list(sessionStore.getSessionId(), {
+      const thinkingLevelEvents = runtime.inspect.events.records.list(sessionStore.getSessionId(), {
         type: "thinking_level_select",
       });
       expect(
@@ -2945,7 +2955,7 @@ describe("managed agent session compaction", () => {
 
   test("keeps the live session compacted when a post-commit session_compact plugin throws", async () => {
     const workspace = createTestWorkspace("managed-agent-session-compaction-post-commit-failure");
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createHostedTestRuntime({ cwd: workspace });
     const sessionStore = new HostedRuntimeTapeSessionStore(
       runtime,
       "managed-agent-session-compaction-post-commit-failure-session",
@@ -3104,7 +3114,7 @@ describe("managed agent session compaction", () => {
 
   test("hydrates ContextState from hosted runtime inspection and emits changes on refresh", async () => {
     const workspace = createTestWorkspace("managed-agent-session-context-state");
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createHostedTestRuntime({ cwd: workspace });
     const sessionStore = new HostedRuntimeTapeSessionStore(
       runtime,
       "managed-agent-session-context-state-session",
@@ -3114,35 +3124,38 @@ describe("managed agent session compaction", () => {
     sessionStore.appendThinkingLevelChange("high");
 
     const sessionId = sessionStore.getSessionId();
-    runtime.maintain.context.onTurnStart(sessionId, 1);
-    runtime.maintain.workbench.note(sessionId, {
+    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+    runtime.authority.workbench.note(sessionId, {
       content: "[ContextStateTest]\nstatus: active workbench",
       sourceRefs: ["test.contextState"],
       reason: "Seed active workbench for hosted context state.",
     });
-    runtime.maintain.context.observePromptStability(sessionId, {
+    createOperatorRuntimePort(runtime).operator.context.prompt.observeStability(sessionId, {
       stablePrefixHash: "stable-prefix-hash",
       dynamicTailHash: "dynamic-tail-hash",
       contextScopeId: "leaf-one",
       turn: 1,
     });
-    runtime.maintain.context.observeTransientReduction(sessionId, {
-      status: "completed",
-      reason: null,
-      eligibleToolResults: 5,
-      clearedToolResults: 2,
-      clearedChars: 1200,
-      estimatedTokenSavings: 300,
-      compactionAdvised: true,
-      forcedCompaction: false,
-      turn: 1,
-    });
-    runtime.maintain.context.observeUsage(sessionId, {
+    createOperatorRuntimePort(runtime).operator.context.prompt.observeTransientReduction(
+      sessionId,
+      {
+        status: "completed",
+        reason: null,
+        eligibleToolResults: 5,
+        clearedToolResults: 2,
+        clearedChars: 1200,
+        estimatedTokenSavings: 300,
+        compactionAdvised: true,
+        forcedCompaction: false,
+        turn: 1,
+      },
+    );
+    createOperatorRuntimePort(runtime).operator.context.usage.observe(sessionId, {
       tokens: 6_800,
       contextWindow: 8_192,
       percent: 0.83,
     });
-    runtime.authority.session.commitCompaction(sessionId, {
+    runtime.authority.session.compaction.commit(sessionId, {
       compactId: "compact-1",
       sanitizedSummary: "Recovered baseline",
       summaryDigest: "digest-1",
@@ -3202,18 +3215,21 @@ describe("managed agent session compaction", () => {
         }),
       );
 
-      runtime.maintain.context.observeTransientReduction(sessionId, {
-        status: "skipped",
-        reason: "pressure dropped",
-        eligibleToolResults: 1,
-        clearedToolResults: 0,
-        clearedChars: 0,
-        estimatedTokenSavings: 0,
-        compactionAdvised: false,
-        forcedCompaction: false,
-        turn: 2,
-      });
-      runtime.maintain.context.observeUsage(sessionId, {
+      createOperatorRuntimePort(runtime).operator.context.prompt.observeTransientReduction(
+        sessionId,
+        {
+          status: "skipped",
+          reason: "pressure dropped",
+          eligibleToolResults: 1,
+          clearedToolResults: 0,
+          clearedChars: 0,
+          estimatedTokenSavings: 0,
+          compactionAdvised: false,
+          forcedCompaction: false,
+          turn: 2,
+        },
+      );
+      createOperatorRuntimePort(runtime).operator.context.usage.observe(sessionId, {
         tokens: 1_024,
         contextWindow: 8_192,
         percent: 0.125,
@@ -3239,7 +3255,7 @@ describe("managed agent session compaction", () => {
 
   test("forwards tool and session state changes through host extensions", async () => {
     const workspace = createTestWorkspace("managed-agent-session-plugin-state-events");
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createHostedTestRuntime({ cwd: workspace });
     const sessionStore = new HostedRuntimeTapeSessionStore(
       runtime,
       "managed-agent-session-plugin-state-events-session",
@@ -3300,18 +3316,24 @@ describe("managed agent session compaction", () => {
         }
       ).handleAgentEvent.bind(session);
 
-      runtime.maintain.context.onTurnStart(sessionStore.getSessionId(), 1);
-      runtime.maintain.workbench.note(sessionStore.getSessionId(), {
+      createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(
+        sessionStore.getSessionId(),
+        1,
+      );
+      runtime.authority.workbench.note(sessionStore.getSessionId(), {
         content: "[PluginState]\nstatus: active workbench",
         sourceRefs: ["test.pluginState"],
         reason: "Seed active workbench for plugin context state.",
       });
-      runtime.maintain.context.observePromptStability(sessionStore.getSessionId(), {
-        stablePrefixHash: "plugin-state-fingerprint",
-        dynamicTailHash: "plugin-state-tail",
-        contextScopeId: "plugin-scope",
-        turn: 1,
-      });
+      createOperatorRuntimePort(runtime).operator.context.prompt.observeStability(
+        sessionStore.getSessionId(),
+        {
+          stablePrefixHash: "plugin-state-fingerprint",
+          dynamicTailHash: "plugin-state-tail",
+          contextScopeId: "plugin-scope",
+          turn: 1,
+        },
+      );
       await (
         session as unknown as {
           syncContextState(): Promise<void>;
@@ -3405,7 +3427,7 @@ describe("managed agent session compaction", () => {
   test("host extension tool registration after session initialization reaches the provider turn", async () => {
     const workspace = createTestWorkspace("managed-agent-session-dynamic-tool-registration");
     writeRoutableSkill(workspace);
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createHostedTestRuntime({ cwd: workspace });
     const sessionStore = new HostedRuntimeTapeSessionStore(
       runtime,
       "managed-agent-session-dynamic-tool-registration-session",
@@ -3508,7 +3530,7 @@ describe("managed agent session compaction", () => {
 
     try {
       const workspace = createTestWorkspace("managed-session-queue");
-      const runtime = new BrewvaRuntime({ cwd: workspace });
+      const runtime = createHostedTestRuntime({ cwd: workspace });
       const sessionStore = new HostedRuntimeTapeSessionStore(runtime, "managed-session-queue");
       const modelCatalog = createInMemoryModelCatalog();
       const model: BrewvaRegisteredModel = {
@@ -3595,7 +3617,7 @@ describe("managed agent session compaction", () => {
 
     try {
       const workspace = createTestWorkspace("managed-session-queued-preset-dispatch");
-      const runtime = new BrewvaRuntime({ cwd: workspace });
+      const runtime = createHostedTestRuntime({ cwd: workspace });
       const sessionStore = new HostedRuntimeTapeSessionStore(
         runtime,
         "managed-session-queued-preset-dispatch",
@@ -3656,7 +3678,7 @@ describe("managed agent session compaction", () => {
           pendingName: undefined,
         });
         expect(
-          runtime.inspect.events
+          runtime.inspect.events.records
             .query(sessionStore.getSessionId(), { type: "model_preset_select" })
             .at(-1)?.payload,
         ).toMatchObject({

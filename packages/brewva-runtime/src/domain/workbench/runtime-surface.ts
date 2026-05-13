@@ -1,7 +1,3 @@
-import {
-  defineRuntimeSurfaceModule,
-  type SurfaceContribution,
-} from "../../runtime/surface-descriptor.js";
 import type { WorkbenchService } from "./service.js";
 
 export interface WorkbenchSurfaceDependencies {
@@ -23,13 +19,19 @@ export function createWorkbenchSurfaceMethods(deps: WorkbenchSurfaceDependencies
 
 export type RuntimeWorkbenchSurfaceMethods = ReturnType<typeof createWorkbenchSurfaceMethods>;
 
-export const workbenchSurfaceContribution = {
-  inspect: ["list"],
-  maintain: ["note", "evict", "undoEviction", "commitBaseline"],
-} as const satisfies SurfaceContribution<RuntimeWorkbenchSurfaceMethods>;
+export function createWorkbenchAuthoritySurface(deps: WorkbenchSurfaceDependencies) {
+  const methods = createWorkbenchSurfaceMethods(deps);
+  return {
+    note: methods.note,
+    evict: methods.evict,
+    undoEviction: methods.undoEviction,
+    commitBaseline: methods.commitBaseline,
+  };
+}
 
-export const workbenchRuntimeSurface = defineRuntimeSurfaceModule({
-  name: "workbench",
-  createMethods: createWorkbenchSurfaceMethods,
-  contribution: workbenchSurfaceContribution,
-});
+export function createWorkbenchInspectSurface(deps: WorkbenchSurfaceDependencies) {
+  const methods = createWorkbenchSurfaceMethods(deps);
+  return {
+    list: methods.list,
+  };
+}

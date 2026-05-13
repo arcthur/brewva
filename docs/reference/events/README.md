@@ -40,8 +40,9 @@ semantics are uniform across the event store.
 
 ## Query Contract
 
-`runtime.inspect.events.query(...)`, `queryStructured(...)`, and `list(...)`
-share the same query fields:
+`runtime.inspect.events.records.query(...)`,
+`runtime.inspect.events.records.queryStructured(...)`, and
+`runtime.inspect.events.records.list(...)` share the same query fields:
 
 - `type`
 - `after`

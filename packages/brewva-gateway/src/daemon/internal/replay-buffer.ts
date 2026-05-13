@@ -1,11 +1,11 @@
 import { randomUUID } from "node:crypto";
-import {
-  SESSION_WIRE_SCHEMA,
-  asBrewvaSessionId,
-  type ContextStatusView,
-  type SessionWireFrame,
-  type SessionWireStatusState,
-} from "@brewva/brewva-runtime";
+import { asBrewvaSessionId } from "@brewva/brewva-runtime/core";
+import { SESSION_WIRE_SCHEMA } from "@brewva/brewva-runtime/session";
+import type {
+  ContextStatusView,
+  SessionWireFrame,
+  SessionWireStatusState,
+} from "@brewva/brewva-runtime/session";
 import { type GatewayEvent, validateSessionWireFramePayload } from "../../protocol/api.js";
 
 export interface ReplayBufferedEvent {

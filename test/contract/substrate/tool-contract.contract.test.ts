@@ -1,13 +1,41 @@
 import { describe, expect, test } from "bun:test";
 import {
+  createToolCatalog,
   defineBrewvaTool,
+  resolveToolExecutionTraits,
   type BrewvaToolContext,
   type BrewvaToolDefinition,
+  type ToolDescriptor,
   wrapBrewvaTool,
 } from "@brewva/brewva-substrate/tools";
 import { Type } from "@sinclair/typebox";
 
 describe("substrate tool contract", () => {
+  test("exports tool protocol catalog vocabulary from the tools subpath", () => {
+    const descriptor: ToolDescriptor = {
+      name: "lookup_status",
+      label: "Lookup Status",
+      description: "Return a simple status payload.",
+      parameters: { type: "object" },
+    };
+
+    const catalog = createToolCatalog([{ descriptor, origin: "dynamic" }]);
+
+    expect(catalog.get("lookup_status")?.descriptor).toBe(descriptor);
+    expect(catalog.descriptors()).toEqual([descriptor]);
+    expect(
+      resolveToolExecutionTraits(undefined, {
+        toolName: "lookup_status",
+        args: {},
+      }),
+    ).toEqual({
+      concurrencySafe: false,
+      interruptBehavior: "terminate",
+      streamingEligible: false,
+      contextModifying: false,
+    });
+  });
+
   test("supports substrate-native tool definitions without Pi types", async () => {
     const parameters = Type.Object({
       query: Type.String({ minLength: 1 }),

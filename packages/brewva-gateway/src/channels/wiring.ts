@@ -1,4 +1,5 @@
-import { BrewvaRuntime, createTrustedLocalGovernancePort } from "@brewva/brewva-runtime";
+import { BrewvaRuntime, createHostedRuntimePort } from "@brewva/brewva-runtime";
+import { createTrustedLocalGovernancePort } from "@brewva/brewva-runtime/governance";
 import { createRecoveryWalStore } from "@brewva/brewva-runtime/recovery";
 import { createHostedSession } from "../hosted/api.js";
 import { resolveBrewvaUpdateExecutionScope } from "../ingress/api.js";
@@ -46,12 +47,14 @@ export async function runChannelModeOperation(options: RunChannelModeOptions): P
     return;
   }
 
-  const runtime = new BrewvaRuntime({
-    cwd: options.cwd,
-    configPath: options.configPath,
-    agentId: options.agentId,
-    governancePort: createTrustedLocalGovernancePort({ profile: "team" }),
-  });
+  const runtime = createHostedRuntimePort(
+    new BrewvaRuntime({
+      cwd: options.cwd,
+      configPath: options.configPath,
+      agentId: options.agentId,
+      governancePort: createTrustedLocalGovernancePort({ profile: "team" }),
+    }),
+  );
   options.onRuntimeReady?.(runtime);
 
   const telegramChannelPolicyState = resolveTelegramChannelPolicyState();
@@ -67,7 +70,7 @@ export async function runChannelModeOperation(options: RunChannelModeOptions): P
   const scopeStrategy = orchestrationConfig.enabled ? orchestrationConfig.scopeStrategy : "chat";
 
   const registry = await AgentRegistry.create({
-    workspaceRoot: runtime.workspaceRoot,
+    workspaceRoot: runtime.identity.workspaceRoot,
   });
   const runtimeManager = new AgentRuntimeManager({
     controllerRuntime: runtime,
@@ -81,7 +84,7 @@ export async function runChannelModeOperation(options: RunChannelModeOptions): P
   const commandRouter = new CommandRouter();
 
   const recoveryWalStore = createRecoveryWalStore({
-    workspaceRoot: runtime.workspaceRoot,
+    workspaceRoot: runtime.identity.workspaceRoot,
     config: runtime.config.infrastructure.recoveryWal,
     scope: `channel-${channel}`,
     recordEvent: (input) => {
@@ -234,7 +237,7 @@ export async function runChannelModeOperation(options: RunChannelModeOptions): P
     runtime,
     recoveryWalStore,
     orchestrationEnabled: orchestrationConfig.enabled,
-    defaultAgentId: runtime.agentId,
+    defaultAgentId: runtime.identity.agentId,
     commandRouter,
     replyWriter,
     resolveScopeKey: (turn) => sessionCoordinator.resolveScopeKey(turn),

@@ -88,8 +88,8 @@ function readCurationSignal(payload: Record<string, unknown>): RecallCurationAgg
 
 export function buildCurationAggregates(runtime: RecallBrokerRuntime): RecallCurationAggregate[] {
   const byStableId = new Map<string, RecallCurationAggregate>();
-  for (const sessionId of runtime.inspect.events.listSessionIds()) {
-    for (const event of runtime.inspect.events.list(sessionId)) {
+  for (const sessionId of runtime.inspect.events.log.listSessionIds()) {
+    for (const event of runtime.inspect.events.records.list(sessionId)) {
       if (!RECALL_STATE_INVALIDATING_EVENT_TYPES.has(event.type)) {
         continue;
       }

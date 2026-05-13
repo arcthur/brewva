@@ -1,12 +1,11 @@
 import { describe, expect, test } from "bun:test";
+import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { asBrewvaToolCallId, asBrewvaToolName } from "@brewva/brewva-runtime/core";
 import {
-  BrewvaRuntime,
-  asBrewvaToolCallId,
-  asBrewvaToolName,
   computeEvidenceDiversity,
   normalizeEvidenceRef,
   normalizeEvidenceRefs,
-} from "@brewva/brewva-runtime";
+} from "@brewva/brewva-runtime/evidence";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 describe("evidence references", () => {
@@ -108,7 +107,7 @@ describe("evidence references", () => {
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionId = `proposal-evidence-${crypto.randomUUID()}`;
 
-    runtime.authority.proposals.submit(sessionId, {
+    runtime.authority.proposals.proposals.submit(sessionId, {
       id: "proposal-evidence-1",
       kind: "effect_commitment",
       issuer: "unit-test",
@@ -142,7 +141,7 @@ describe("evidence references", () => {
       createdAt: 1,
     });
 
-    const record = runtime.inspect.proposals.list(sessionId)[0];
+    const record = runtime.inspect.proposals.proposals.list(sessionId)[0];
 
     expect(record?.proposal.kind).toBe("effect_commitment");
     expect(record?.proposal.evidenceRefs[0]).toMatchObject({

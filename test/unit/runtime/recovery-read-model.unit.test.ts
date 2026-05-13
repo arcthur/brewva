@@ -2,13 +2,14 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { asBrewvaSessionId, type TaskState } from "@brewva/brewva-runtime";
+import { asBrewvaSessionId } from "@brewva/brewva-runtime/core";
 import {
   type BrewvaEventRecord,
   type SessionTurnTransitionPayload,
   type ToolCallBlockedEventPayload,
   type ToolLifecycleEventPayload,
 } from "@brewva/brewva-runtime/events";
+import type { TaskState } from "@brewva/brewva-runtime/task";
 import { sha256Hex } from "@brewva/brewva-std/hash";
 import { getHistoryViewBaselineArtifactPath } from "../../../packages/brewva-runtime/src/domain/context/history-view-baseline-artifact.js";
 import { runRecoveryContextPipeline } from "../../../packages/brewva-runtime/src/domain/context/read-models.js";

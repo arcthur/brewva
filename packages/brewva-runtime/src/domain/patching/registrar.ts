@@ -1,4 +1,4 @@
-import type { RuntimeLazyServiceRegistrarOptions } from "../../runtime/service-registrar-types.js";
+import type { RuntimeLazyServiceRegistrarOptions } from "../../runtime/wiring.js";
 import { MutationRollbackService } from "../governance/api.js";
 import type { ReversibleMutationService } from "../governance/api.js";
 import type { LedgerService } from "../ledger/api.js";

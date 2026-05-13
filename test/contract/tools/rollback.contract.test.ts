@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { BrewvaRuntime, createOperatorRuntimePort } from "@brewva/brewva-runtime";
 import { createRollbackLastPatchTool } from "@brewva/brewva-tools/workflow";
 import { extractTextContent, fakeContext } from "./tools-flow.helpers.js";
 
@@ -14,16 +14,16 @@ describe("rollback_last_patch contract", () => {
 
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionId = "s9";
-    runtime.maintain.context.onTurnStart(sessionId, 1);
+    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
 
-    runtime.authority.tools.trackCallStart({
+    runtime.authority.tools.tracking.trackCallStart({
       sessionId,
       toolCallId: "tc-write",
       toolName: "edit",
       args: { file_path: "src/example.ts" },
     });
     writeFileSync(join(workspace, "src/example.ts"), "export const n = 2;\n", "utf8");
-    runtime.authority.tools.trackCallEnd({
+    runtime.authority.tools.tracking.trackCallEnd({
       sessionId,
       toolCallId: "tc-write",
       toolName: "edit",

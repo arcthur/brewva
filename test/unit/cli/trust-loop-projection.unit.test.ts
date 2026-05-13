@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { asBrewvaToolCallId, asBrewvaToolName } from "@brewva/brewva-runtime";
+import { asBrewvaToolCallId, asBrewvaToolName } from "@brewva/brewva-runtime/core";
 import {
   TRUST_LOOP_COPY,
   buildTrustLoopApprovalEmptyProjection,

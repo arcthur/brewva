@@ -1,14 +1,16 @@
 import type {
   DelegationConsultKind as RuntimeDelegationConsultKind,
+  QaCheck as RuntimeQaCheck,
+  QaSubagentOutcomeData as RuntimeQaSubagentOutcomeData,
+} from "@brewva/brewva-runtime/delegation";
+import type {
   DesignExecutionStep as RuntimeDesignExecutionStep,
   DesignImplementationTarget as RuntimeDesignImplementationTarget,
   DesignRiskItem as RuntimeDesignRiskItem,
-  QaCheck as RuntimeQaCheck,
-  QaSubagentOutcomeData as RuntimeQaSubagentOutcomeData,
   ReviewLaneName as RuntimeReviewLaneName,
   ReviewPrecedentConsultStatus as RuntimeReviewPrecedentConsultStatus,
   ReviewReportArtifact as RuntimeReviewReportArtifact,
-} from "@brewva/brewva-runtime";
+} from "@brewva/brewva-runtime/skills";
 import type { BrewvaQuestionPrompt } from "@brewva/brewva-substrate/host-api";
 import type { DelegationOutcomeFinding } from "./delegation.js";
 

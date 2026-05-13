@@ -1,4 +1,6 @@
-import type { ManagedToolMode, PatchSet, ToolExecutionBoundary } from "@brewva/brewva-runtime";
+import type { ToolExecutionBoundary } from "@brewva/brewva-runtime/governance";
+import type { PatchSet } from "@brewva/brewva-runtime/patch-history";
+import type { ManagedToolMode } from "@brewva/brewva-runtime/session";
 import type {
   AdvisorConsultKind,
   AdvisorSubagentOutcomeData,

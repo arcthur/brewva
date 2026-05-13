@@ -14,18 +14,18 @@ import {
   startScopedSchedule,
   type ScopedScheduleHandle,
 } from "@brewva/brewva-effect";
-import {
-  asBrewvaWalId,
-  type BrewvaConfig,
-  type BrewvaWalId,
-  type ContextStatusView,
-  type ManagedToolMode,
-  type RecoveryWalRecord,
-  type SessionLifecycleSnapshot,
-  type SessionWireFrame,
-} from "@brewva/brewva-runtime";
+import type { BrewvaConfig } from "@brewva/brewva-runtime";
+import { asBrewvaWalId } from "@brewva/brewva-runtime/core";
+import type { BrewvaWalId } from "@brewva/brewva-runtime/core";
 import { querySessionWireFramesFromEventLog } from "@brewva/brewva-runtime/event-log";
 import { createRecoveryWalRecovery, type RecoveryWalStore } from "@brewva/brewva-runtime/recovery";
+import type { RecoveryWalRecord } from "@brewva/brewva-runtime/schedule";
+import type {
+  ContextStatusView,
+  ManagedToolMode,
+  SessionLifecycleSnapshot,
+  SessionWireFrame,
+} from "@brewva/brewva-runtime/session";
 import type { BrewvaSteerOutcome } from "@brewva/brewva-substrate/session";
 import type { WorkerToParentMessage } from "../../hosted/internal/thread-loop/worker/api.js";
 import {

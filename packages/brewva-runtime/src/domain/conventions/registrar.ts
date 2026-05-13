@@ -1,18 +1,18 @@
-import type {
-  RuntimeGovernanceServices,
-  RuntimeServiceRegistrarOptions,
-} from "../../runtime/service-registrar-types.js";
-import { conventionsSurfaceContribution } from "./runtime-surface.js";
+import type { RuntimeServiceRegistrarOptions } from "../../runtime/wiring.js";
+import type { ReversibleMutationService } from "../governance/api.js";
 import { ConventionAdmissionService } from "./service.js";
 
 export interface RuntimeConventionsDomainRegistration {
-  services: Pick<RuntimeGovernanceServices, "getConventionAdmissionService">;
-  surfaceContribution: typeof conventionsSurfaceContribution;
+  services: {
+    getConventionAdmissionService(): ConventionAdmissionService;
+  };
 }
 
 export function registerConventionsDomain(
   options: RuntimeServiceRegistrarOptions,
-  governanceServices: Pick<RuntimeGovernanceServices, "reversibleMutationService">,
+  support: {
+    reversibleMutationService: ReversibleMutationService;
+  },
 ): RuntimeConventionsDomainRegistration {
   let conventionAdmissionService: ConventionAdmissionService | undefined;
   const getConventionAdmissionService = (): ConventionAdmissionService => {
@@ -20,7 +20,7 @@ export function registerConventionsDomain(
       getCurrentTurn: (sessionId) => options.kernel.getCurrentTurn(sessionId),
       listEvents: (sessionId) => options.coreDependencies.eventStore.list(sessionId),
       recordEvent: (input) => options.kernel.recordEvent(input),
-      reversibleMutationService: governanceServices.reversibleMutationService,
+      reversibleMutationService: support.reversibleMutationService,
     });
     return conventionAdmissionService;
   };
@@ -28,6 +28,5 @@ export function registerConventionsDomain(
     services: {
       getConventionAdmissionService,
     },
-    surfaceContribution: conventionsSurfaceContribution,
   };
 }

@@ -1,15 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { BrewvaRuntime, createHostedRuntimePort } from "@brewva/brewva-runtime";
+import { asBrewvaIntentId } from "@brewva/brewva-runtime/core";
+import { SCHEDULE_EVENT_TYPE } from "@brewva/brewva-runtime/events";
+import { createSchedulerService } from "@brewva/brewva-runtime/recovery";
 import {
-  BrewvaRuntime,
-  asBrewvaIntentId,
   buildScheduleIntentCancelledEvent,
   buildScheduleIntentCreatedEvent,
   parseScheduleIntentEvent,
-} from "@brewva/brewva-runtime";
-import { SCHEDULE_EVENT_TYPE } from "@brewva/brewva-runtime/events";
-import { createSchedulerService } from "@brewva/brewva-runtime/recovery";
+} from "@brewva/brewva-runtime/schedule";
 import {
   computeExpectedRecurringJitteredNextRunAt,
   createSchedulerConfig,
@@ -131,7 +131,9 @@ describe("scheduler service projection contract", () => {
     if (typeof expectedNextRunAt !== "number") return;
     expect(updated.intent.nextRunAt).toBe(expectedNextRunAt);
 
-    const events = runtime.inspect.events.query("session-update", { type: SCHEDULE_EVENT_TYPE });
+    const events = runtime.inspect.events.records.query("session-update", {
+      type: SCHEDULE_EVENT_TYPE,
+    });
     const kinds = events
       .map((event) => parseScheduleIntentEvent(event)?.kind)
       .filter((kind): kind is NonNullable<typeof kind> => Boolean(kind));
@@ -203,7 +205,7 @@ describe("scheduler service projection contract", () => {
     const sessionId = "session-replay-authoritative-next-run";
     const forcedNextRunAt = Date.UTC(2026, 0, 1, 12, 34, 56, 789);
 
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: SCHEDULE_EVENT_TYPE,
       payload: buildScheduleIntentCreatedEvent({
@@ -239,7 +241,7 @@ describe("scheduler service projection contract", () => {
     const sessionId = "session-replay-missing-next-run";
     const runAt = Date.UTC(2026, 0, 1, 0, 5, 0, 0);
 
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: SCHEDULE_EVENT_TYPE,
       payload: {

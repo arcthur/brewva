@@ -1,4 +1,5 @@
-import { DEFAULT_BREWVA_CONFIG, type BrewvaConfig } from "@brewva/brewva-runtime";
+import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
+import type { BrewvaConfig } from "@brewva/brewva-runtime";
 
 export type DeepPartial<T> = T extends (...args: any[]) => unknown
   ? T

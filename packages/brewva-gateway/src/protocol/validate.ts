@@ -1,4 +1,5 @@
-import { SESSION_WIRE_SCHEMA, type SessionWireFrame } from "@brewva/brewva-runtime";
+import { SESSION_WIRE_SCHEMA } from "@brewva/brewva-runtime/session";
+import type { SessionWireFrame } from "@brewva/brewva-runtime/session";
 import { isRecord, readFiniteNumberValue } from "@brewva/brewva-std/unknown";
 import { Ajv, type ErrorObject } from "ajv";
 import {

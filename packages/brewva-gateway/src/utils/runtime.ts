@@ -1,4 +1,5 @@
-import { type BrewvaHostedRuntimePort, type BrewvaRuntime } from "@brewva/brewva-runtime";
+import { createHostedRuntimePort } from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort, BrewvaRuntime } from "@brewva/brewva-runtime";
 import { appendBrewvaEventRecordToLogIfMissing } from "@brewva/brewva-runtime/event-log";
 
 export function clampText(value: string, maxChars: number): string;
@@ -29,9 +30,12 @@ export function ensureSessionShutdownRecorded(
   sessionId: string,
   payload?: Record<string, unknown>,
 ): void {
-  if (runtime.inspect.events.query(sessionId, { type: "session_shutdown", last: 1 }).length > 0)
+  if (
+    runtime.inspect.events.records.query(sessionId, { type: "session_shutdown", last: 1 }).length >
+    0
+  )
     return;
-  runtime.extensions.hosted.events.record({
+  createHostedRuntimePort(runtime).extensions.hosted.events.record({
     sessionId,
     type: "session_shutdown",
     payload,

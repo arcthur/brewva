@@ -43,6 +43,23 @@ function read(path: string): string {
 }
 
 describe("substrate domain slicing quality guard", () => {
+  test("owns tool protocol vocabulary without a standalone tool-protocol package", () => {
+    expect(existsSync(join(repoRoot, "packages", "brewva-tool-protocol"))).toBe(false);
+
+    const packageFiles = listTsFiles(join(repoRoot, "packages"));
+    const violations: string[] = [];
+    const toolProtocolImportPattern = /@brewva\/brewva-tool-protocol/u;
+
+    for (const file of packageFiles) {
+      const source = read(file);
+      if (toolProtocolImportPattern.test(source)) {
+        violations.push(relative(repoRoot, file));
+      }
+    }
+
+    expect(violations).toEqual([]);
+  });
+
   test("keeps the substrate root source entrypoint as a thin public stub", () => {
     const source = read(join(substrateSrc, "index.ts")).trim();
 

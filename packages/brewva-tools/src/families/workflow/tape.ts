@@ -1,9 +1,9 @@
 import type {
-  ActiveReasoningBranchState,
   ContextBudgetUsage,
   ContextStatus,
   TapeSearchScope,
-} from "@brewva/brewva-runtime";
+} from "@brewva/brewva-runtime/context";
+import type { ActiveReasoningBranchState } from "@brewva/brewva-runtime/reasoning";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import { Type } from "@sinclair/typebox";
 import { formatISO } from "date-fns";
@@ -52,7 +52,7 @@ function resolveContextAction(status: ContextStatus): string {
 }
 
 function formatTapeInfoBlock(input: {
-  tape: ReturnType<BrewvaToolOptions["runtime"]["inspect"]["tape"]["getTapeStatus"]>;
+  tape: ReturnType<BrewvaToolOptions["runtime"]["inspect"]["tape"]["status"]["get"]>;
   contextStatus: ContextStatus;
   reasoning: ActiveReasoningBranchState;
 }): string {
@@ -159,7 +159,7 @@ export function createTapeTools(options: BrewvaToolOptions): ToolDefinition[] {
       }),
       async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
         const sessionId = getSessionId(ctx);
-        const handoff = tapeHandoffTool.runtime.authority.tape.recordTapeHandoff(sessionId, {
+        const handoff = tapeHandoffTool.runtime.authority.tape.handoff.record(sessionId, {
           name: params.name,
           summary: params.summary,
           nextSteps: params.next_steps,
@@ -172,7 +172,7 @@ export function createTapeTools(options: BrewvaToolOptions): ToolDefinition[] {
         }
 
         const status =
-          handoff.tapeStatus ?? tapeHandoffTool.runtime.inspect.tape.getTapeStatus(sessionId);
+          handoff.tapeStatus ?? tapeHandoffTool.runtime.inspect.tape.status.get(sessionId);
         const text = [
           "Tape handoff recorded.",
           `name: ${params.name}`,
@@ -191,9 +191,7 @@ export function createTapeTools(options: BrewvaToolOptions): ToolDefinition[] {
         });
       },
     },
-    {
-      requiredCapabilities: ["authority.tape.recordTapeHandoff", "inspect.tape.getTapeStatus"],
-    },
+    {},
   );
 
   const tapeInfo = tapeInfoTool.define({
@@ -203,11 +201,11 @@ export function createTapeTools(options: BrewvaToolOptions): ToolDefinition[] {
     parameters: Type.Object({}),
     async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
       const sessionId = getSessionId(ctx);
-      const tape = tapeInfoTool.runtime.inspect.tape.getTapeStatus(sessionId);
+      const tape = tapeInfoTool.runtime.inspect.tape.status.get(sessionId);
       const usage =
-        resolveToolContextUsage(ctx) ?? tapeInfoTool.runtime.inspect.context.getUsage(sessionId);
-      const contextStatus = tapeInfoTool.runtime.inspect.context.getStatus(sessionId, usage);
-      const reasoning = tapeInfoTool.runtime.inspect.reasoning.getActiveState(sessionId);
+        resolveToolContextUsage(ctx) ?? tapeInfoTool.runtime.inspect.context.usage.get(sessionId);
+      const contextStatus = tapeInfoTool.runtime.inspect.context.usage.getStatus(sessionId, usage);
+      const reasoning = tapeInfoTool.runtime.inspect.reasoning.state.getActive(sessionId);
 
       return textResult(
         formatTapeInfoBlock({
@@ -254,7 +252,7 @@ export function createTapeTools(options: BrewvaToolOptions): ToolDefinition[] {
       }
 
       const scope = toSafeScope(params.scope);
-      const result = tapeSearchTool.runtime.inspect.tape.searchTape(sessionId, {
+      const result = tapeSearchTool.runtime.inspect.tape.search.search(sessionId, {
         query,
         scope,
         limit: params.limit,

@@ -1,32 +1,24 @@
-import type {
-  BrewvaToolRuntimeExtensionMethods,
-  BrewvaToolRuntimePort as RuntimeToolRuntimePort,
-  ToolActionClass,
-} from "@brewva/brewva-runtime";
+import type { BrewvaToolRuntimePort as RuntimeToolRuntimePort } from "@brewva/brewva-runtime";
+import type { ToolActionClass } from "@brewva/brewva-runtime/governance";
+import type { BrewvaToolRuntimeExtensionMethods } from "@brewva/brewva-runtime/runtime-extensions";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import type {
   ToolDescriptor as CanonicalToolDescriptor,
   ToolExecutionTraitResolverInput as CanonicalToolExecutionTraitResolverInput,
   ToolExecutionTraits as CanonicalToolExecutionTraits,
-} from "@brewva/brewva-tool-protocol";
+} from "@brewva/brewva-substrate/tools";
 import type { TSchema } from "@sinclair/typebox";
 import type { BrewvaToolSurface } from "./surface.js";
 
 export type BrewvaToolInterruptBehavior = "cancel" | "block" | "allow_completion";
 
-type RuntimeMethodCapabilityPath<
-  TGroupMap extends object,
-  TPrefix extends "authority" | "inspect" | "maintain",
-> = {
-  [TGroupName in keyof TGroupMap & string]: TGroupMap[TGroupName] extends object
-    ? {
-        [TMethodName in keyof TGroupMap[TGroupName] &
-          string]: TGroupMap[TGroupName][TMethodName] extends (...args: never[]) => unknown
-          ? `${TPrefix}.${TGroupName}.${TMethodName}`
-          : never;
-      }[keyof TGroupMap[TGroupName] & string]
-    : never;
-}[keyof TGroupMap & string];
+type RuntimeMethodCapabilityPath<TPort extends object, TPrefix extends string> = {
+  [TMemberName in keyof TPort & string]: TPort[TMemberName] extends (...args: never[]) => unknown
+    ? `${TPrefix}.${TMemberName}`
+    : TPort[TMemberName] extends object
+      ? RuntimeMethodCapabilityPath<TPort[TMemberName], `${TPrefix}.${TMemberName}`>
+      : never;
+}[keyof TPort & string];
 
 type StringKeyOf<T> = Extract<keyof T, string>;
 
@@ -41,7 +33,6 @@ type ToolExtensionCapabilityPath = {
 export type BrewvaToolRequiredCapability =
   | RuntimeMethodCapabilityPath<RuntimeToolRuntimePort["authority"], "authority">
   | RuntimeMethodCapabilityPath<RuntimeToolRuntimePort["inspect"], "inspect">
-  | RuntimeMethodCapabilityPath<RuntimeToolRuntimePort["maintain"], "maintain">
   | ToolExtensionCapabilityPath;
 
 export interface BrewvaToolExecutionTraits extends CanonicalToolExecutionTraits {

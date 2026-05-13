@@ -27,6 +27,10 @@ owns controlled runtime helper ports, and family subpaths expose curated
 factories plus family-specific semantic helpers. Model routing policy belongs
 to `@brewva/brewva-gateway/model-routing`.
 
+Tool descriptor/catalog protocol types are imported from
+`@brewva/brewva-substrate/tools`. There is no standalone
+`@brewva/brewva-tool-protocol` package or compatibility import path.
+
 ## Family Map
 
 - Navigation, source inspection, browser artifacts, grep, output search, TOC,
@@ -141,6 +145,8 @@ Boundary rules:
   runtime internals
 - managed-tool metadata and required capabilities are owned by
   `@brewva/brewva-tools/registry`
+- family adapters must not redeclare required runtime capabilities; capability
+  truth is single-sourced in the managed-tool registry
 - bundled tools that need repo-owned hooks receive them explicitly
 - capability declarations are fail-closed; a missing runtime capability blocks
   the tool instead of falling back to hidden authority

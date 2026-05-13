@@ -113,7 +113,7 @@ describe("Hosted behavior gaps: quality gate", () => {
     expect(userInputs).toEqual(["quality-input-3"]);
   });
 
-  test("given tool_call and context usage, when quality gate runs, then runtime.authority.tools.start receives normalized usage", () => {
+  test("given tool_call and context usage, when quality gate runs, then runtime.authority.tools.invocation.start receives normalized usage", () => {
     const { api, handlers } = createMockExtensionApi();
     const calls: any[] = [];
     const runtime = createRuntimeFixture({
@@ -192,7 +192,9 @@ describe("Hosted behavior gaps: quality gate", () => {
       allowed: true,
       basis: "runtime_capability_scope",
     });
-    expect(calls[0].runtimeCapabilityAccess.advisory).toContain("authority.schedule.createIntent");
+    expect(calls[0].runtimeCapabilityAccess.advisory).toContain(
+      "authority.schedule.intents.create",
+    );
   });
 
   test("given malformed tool capability metadata, when quality gate starts a tool, then manifest receives a denial fact", () => {
@@ -249,7 +251,7 @@ describe("Hosted behavior gaps: quality gate", () => {
     });
   });
 
-  test("given runtime.authority.tools.start denial, when tool_call hook runs, then hosted behavior blocks call with reason", () => {
+  test("given runtime.authority.tools.invocation.start denial, when tool_call hook runs, then hosted behavior blocks call with reason", () => {
     const { api, handlers } = createMockExtensionApi();
     const runtime = createRuntimeFixture({
       tools: {

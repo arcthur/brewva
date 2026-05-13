@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { BrewvaRuntime, createOperatorRuntimePort } from "@brewva/brewva-runtime";
 import { VERIFICATION_STATE_RESET_EVENT_TYPE } from "@brewva/brewva-runtime/events";
 import {
   RUNTIME_CONTRACT_CONFIG_PATH,
@@ -22,9 +22,9 @@ describe("tool patchset rollback", () => {
     writeFileSync(filePath, "export const value = 1;\n", "utf8");
 
     const runtime = new BrewvaRuntime({ cwd: workspace, configPath: RUNTIME_CONTRACT_CONFIG_PATH });
-    runtime.maintain.context.onTurnStart(sessionId, 1);
-    runtime.authority.tools.markCall(sessionId, "edit");
-    runtime.authority.tools.recordResult({
+    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+    runtime.authority.tools.tracking.markCall(sessionId, "edit");
+    runtime.authority.tools.invocation.recordResult({
       sessionId,
       toolName: "lsp_diagnostics",
       args: { severity: "all" },
@@ -32,25 +32,25 @@ describe("tool patchset rollback", () => {
       channelSuccess: true,
     });
 
-    runtime.authority.tools.trackCallStart({
+    runtime.authority.tools.tracking.trackCallStart({
       sessionId,
       toolCallId: "tool-1",
       toolName: "edit",
       args: { file_path: "src/main.ts" },
     });
     writeFileSync(filePath, "export const value = 2;\n", "utf8");
-    runtime.authority.tools.trackCallEnd({
+    runtime.authority.tools.tracking.trackCallEnd({
       sessionId,
       toolCallId: "tool-1",
       toolName: "edit",
       channelSuccess: true,
     });
 
-    const rollback = runtime.authority.tools.rollbackLastPatchSet(sessionId);
+    const rollback = runtime.authority.tools.patches.rollbackLastPatchSet(sessionId);
     expect(rollback.ok).toBe(true);
     expect(readFileSync(filePath, "utf8")).toBe("export const value = 1;\n");
 
-    const verificationResets = runtime.inspect.events.query(sessionId, {
+    const verificationResets = runtime.inspect.events.records.query(sessionId, {
       type: VERIFICATION_STATE_RESET_EVENT_TYPE,
       last: 1,
     });
@@ -72,9 +72,9 @@ describe("tool patchset rollback", () => {
     writeFileSync(secondPath, "export const second = 1;\n", "utf8");
 
     const runtime = new BrewvaRuntime({ cwd: workspace, configPath: RUNTIME_CONTRACT_CONFIG_PATH });
-    runtime.maintain.context.onTurnStart(sessionId, 1);
+    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
 
-    runtime.authority.tools.trackCallStart({
+    runtime.authority.tools.tracking.trackCallStart({
       sessionId,
       toolCallId: "tool-multifile",
       toolName: "edit",
@@ -82,7 +82,7 @@ describe("tool patchset rollback", () => {
     });
     writeFileSync(firstPath, "export const first = 2;\n", "utf8");
     writeFileSync(secondPath, "export const second = 2;\n", "utf8");
-    runtime.authority.tools.trackCallEnd({
+    runtime.authority.tools.tracking.trackCallEnd({
       sessionId,
       toolCallId: "tool-multifile",
       toolName: "edit",
@@ -96,7 +96,7 @@ describe("tool patchset rollback", () => {
       snapshotKey: "beforeSnapshotFile",
     });
 
-    const rollback = runtime.authority.tools.rollbackLastPatchSet(sessionId);
+    const rollback = runtime.authority.tools.patches.rollbackLastPatchSet(sessionId);
     expect(rollback.ok).toBe(false);
     if (!rollback.ok) {
       expect(rollback.reason).toBe("restore_failed");
@@ -117,9 +117,9 @@ describe("tool patchset rollback", () => {
     writeFileSync(secondPath, "export const second = 1;\n", "utf8");
 
     const runtime = new BrewvaRuntime({ cwd: workspace, configPath: RUNTIME_CONTRACT_CONFIG_PATH });
-    runtime.maintain.context.onTurnStart(sessionId, 1);
+    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
 
-    runtime.authority.tools.trackCallStart({
+    runtime.authority.tools.tracking.trackCallStart({
       sessionId,
       toolCallId: "tool-multifile",
       toolName: "edit",
@@ -127,14 +127,14 @@ describe("tool patchset rollback", () => {
     });
     writeFileSync(firstPath, "export const first = 2;\n", "utf8");
     writeFileSync(secondPath, "export const second = 2;\n", "utf8");
-    runtime.authority.tools.trackCallEnd({
+    runtime.authority.tools.tracking.trackCallEnd({
       sessionId,
       toolCallId: "tool-multifile",
       toolName: "edit",
       channelSuccess: true,
     });
 
-    const rollback = runtime.authority.tools.rollbackLastPatchSet(sessionId);
+    const rollback = runtime.authority.tools.patches.rollbackLastPatchSet(sessionId);
     expect(rollback.ok).toBe(true);
     expect(readFileSync(firstPath, "utf8")).toBe("export const first = 1;\n");
     expect(readFileSync(secondPath, "utf8")).toBe("export const second = 1;\n");
@@ -146,7 +146,7 @@ describe("tool patchset rollback", () => {
       snapshotKey: "afterSnapshotFile",
     });
 
-    const redo = runtime.authority.tools.redoLastPatchSet(sessionId);
+    const redo = runtime.authority.tools.patches.redoLastPatchSet(sessionId);
     expect(redo.ok).toBe(false);
     if (!redo.ok) {
       expect(redo.reason).toBe("missing_redo_snapshot");
@@ -163,23 +163,23 @@ describe("tool patchset rollback", () => {
     const sessionId = "rollback-add-1";
     const createdPath = join(workspace, "src/new-file.ts");
     const runtime = new BrewvaRuntime({ cwd: workspace, configPath: RUNTIME_CONTRACT_CONFIG_PATH });
-    runtime.maintain.context.onTurnStart(sessionId, 1);
+    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
 
-    runtime.authority.tools.trackCallStart({
+    runtime.authority.tools.tracking.trackCallStart({
       sessionId,
       toolCallId: "tool-add",
       toolName: "write",
       args: { file_path: "src/new-file.ts" },
     });
     writeFileSync(createdPath, "export const created = true;\n", "utf8");
-    runtime.authority.tools.trackCallEnd({
+    runtime.authority.tools.tracking.trackCallEnd({
       sessionId,
       toolCallId: "tool-add",
       toolName: "write",
       channelSuccess: true,
     });
 
-    const rollback = runtime.authority.tools.rollbackLastPatchSet(sessionId);
+    const rollback = runtime.authority.tools.patches.rollbackLastPatchSet(sessionId);
     expect(rollback.ok).toBe(true);
     expect(existsSync(createdPath)).toBe(false);
   });
@@ -194,16 +194,16 @@ describe("tool patchset rollback", () => {
     writeFileSync(filePath, "export const value = 1;\n", "utf8");
 
     const runtime = new BrewvaRuntime({ cwd: workspace, configPath: RUNTIME_CONTRACT_CONFIG_PATH });
-    runtime.maintain.context.onTurnStart(sessionId, 1);
+    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
 
-    runtime.authority.tools.trackCallStart({
+    runtime.authority.tools.tracking.trackCallStart({
       sessionId,
       toolCallId: "tool-1",
       toolName: "edit",
       args: { file_path: "src/main.ts" },
     });
     writeFileSync(filePath, "export const value = 2;\n", "utf8");
-    runtime.authority.tools.trackCallEnd({
+    runtime.authority.tools.tracking.trackCallEnd({
       sessionId,
       toolCallId: "tool-1",
       toolName: "edit",
@@ -216,14 +216,14 @@ describe("tool patchset rollback", () => {
       rmSync(join(snapshotDir, entry), { force: true });
     }
 
-    const rollback = runtime.authority.tools.rollbackLastPatchSet(sessionId);
+    const rollback = runtime.authority.tools.patches.rollbackLastPatchSet(sessionId);
     expect(rollback.ok).toBe(false);
     if (!rollback.ok) {
       expect(rollback.reason).toBe("restore_failed");
     }
     expect(rollback.failedPaths).toContain("src/main.ts");
     expect(readFileSync(filePath, "utf8")).toBe("export const value = 2;\n");
-    expect(runtime.inspect.tools.resolveUndoSessionId(sessionId)).toBe(sessionId);
+    expect(runtime.inspect.tools.undo.resolveSessionId(sessionId)).toBe(sessionId);
   });
 
   test("does not track file paths outside workspace during snapshot capture", async () => {
@@ -233,14 +233,14 @@ describe("tool patchset rollback", () => {
     const runtime = new BrewvaRuntime({ cwd: workspace, configPath: RUNTIME_CONTRACT_CONFIG_PATH });
     const sessionId = "rollback-path-traversal-1";
 
-    runtime.authority.tools.trackCallStart({
+    runtime.authority.tools.tracking.trackCallStart({
       sessionId,
       toolCallId: "tc-outside",
       toolName: "edit",
       args: { file_path: "../outside.ts" },
     });
 
-    runtime.authority.tools.trackCallStart({
+    runtime.authority.tools.tracking.trackCallStart({
       sessionId,
       toolCallId: "tc-abs",
       toolName: "edit",
@@ -248,14 +248,16 @@ describe("tool patchset rollback", () => {
     });
 
     mkdirSync(join(workspace, "src"), { recursive: true });
-    runtime.authority.tools.trackCallStart({
+    runtime.authority.tools.tracking.trackCallStart({
       sessionId,
       toolCallId: "tc-inside",
       toolName: "edit",
       args: { file_path: "src/inside.ts" },
     });
 
-    const snapshots = runtime.inspect.events.query(sessionId, { type: "file_snapshot_captured" });
+    const snapshots = runtime.inspect.events.records.query(sessionId, {
+      type: "file_snapshot_captured",
+    });
     expect(snapshots).toHaveLength(1);
     const payload = snapshots[0]?.payload as { files?: string[] } | undefined;
     expect(payload?.files).toEqual(["src/inside.ts"]);
@@ -274,15 +276,15 @@ describe("tool patchset rollback", () => {
       cwd: workspace,
       configPath: RUNTIME_CONTRACT_CONFIG_PATH,
     });
-    runtimeA.maintain.context.onTurnStart(sessionId, 1);
-    runtimeA.authority.tools.trackCallStart({
+    createOperatorRuntimePort(runtimeA).operator.context.lifecycle.onTurnStart(sessionId, 1);
+    runtimeA.authority.tools.tracking.trackCallStart({
       sessionId,
       toolCallId: "persist-1",
       toolName: "edit",
       args: { file_path: "src/persisted.ts" },
     });
     writeFileSync(filePath, "export const persisted = 2;\n", "utf8");
-    runtimeA.authority.tools.trackCallEnd({
+    runtimeA.authority.tools.tracking.trackCallEnd({
       sessionId,
       toolCallId: "persist-1",
       toolName: "edit",
@@ -293,10 +295,10 @@ describe("tool patchset rollback", () => {
       cwd: workspace,
       configPath: RUNTIME_CONTRACT_CONFIG_PATH,
     });
-    const resolved = runtimeB.inspect.tools.resolveUndoSessionId();
+    const resolved = runtimeB.inspect.tools.undo.resolveSessionId();
     expect(resolved).toBe(sessionId);
 
-    const rollback = runtimeB.authority.tools.rollbackLastPatchSet(sessionId);
+    const rollback = runtimeB.authority.tools.patches.rollbackLastPatchSet(sessionId);
     expect(rollback.ok).toBe(true);
     expect(readFileSync(filePath, "utf8")).toBe("export const persisted = 1;\n");
   });

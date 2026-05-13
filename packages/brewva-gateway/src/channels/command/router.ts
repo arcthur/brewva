@@ -1,4 +1,4 @@
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import type { TurnEnvelope } from "@brewva/brewva-runtime/channels";
 import { CHANNEL_COMMAND_RECEIVED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
 import { AgentRegistry } from "../agent-registry.js";
@@ -36,7 +36,7 @@ import { handleChannelSteerCommand } from "./steer.js";
 import { handleChannelUpdateCommand, prepareChannelUpdateCommand } from "./update.js";
 
 export function createChannelControlRouter(input: {
-  runtime: BrewvaRuntime;
+  runtime: BrewvaHostedRuntimePort;
   registry: AgentRegistry;
   orchestrationConfig: ChannelOrchestrationConfig;
   replyWriter: ChannelReplyWriter;

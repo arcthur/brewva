@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { buildTapeCheckpointPayload, coerceTapeCheckpointPayload } from "@brewva/brewva-runtime";
+import {
+  buildTapeCheckpointPayload,
+  coerceTapeCheckpointPayload,
+} from "@brewva/brewva-runtime/tape";
 
 function buildValidCheckpointPayload() {
   return buildTapeCheckpointPayload({

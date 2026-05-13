@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { appendFileSync, readFileSync } from "node:fs";
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { BrewvaRuntime, createHostedRuntimePort } from "@brewva/brewva-runtime";
 import { requireArray, requireRecord } from "../../helpers/assertions.js";
 import {
   RUNTIME_CONTRACT_CONFIG_PATH,
@@ -27,7 +27,7 @@ describe("event store persistence safety", () => {
     const runtime = new BrewvaRuntime({ cwd: workspace, configPath: RUNTIME_CONTRACT_CONFIG_PATH });
     const sessionId = "events-payload-1";
 
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: "payload_test",
       payload: {
@@ -43,7 +43,7 @@ describe("event store persistence safety", () => {
       },
     });
 
-    const events = runtime.inspect.events.query(sessionId);
+    const events = runtime.inspect.events.records.query(sessionId);
     expect(events).toHaveLength(1);
     const payload = (events[0]?.payload ?? {}) as {
       ok?: boolean;
@@ -88,7 +88,7 @@ describe("event store persistence safety", () => {
 
     const runtime = new BrewvaRuntime({ cwd: workspace, configPath: RUNTIME_CONTRACT_CONFIG_PATH });
     const sessionId = "events-bad-lines-1";
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: "session_start",
       payload: { cwd: workspace },
@@ -101,7 +101,7 @@ describe("event store persistence safety", () => {
     );
     appendFileSync(eventsPath, "\n{ this is not json", "utf8");
 
-    const events = runtime.inspect.events.query(sessionId);
+    const events = runtime.inspect.events.records.query(sessionId);
     expect(events).toHaveLength(1);
     expect(events[0]?.type).toBe("session_start");
   });
@@ -121,7 +121,7 @@ describe("event store persistence safety", () => {
 
     const runtime = new BrewvaRuntime({ cwd: workspace, configPath: RUNTIME_CONTRACT_CONFIG_PATH });
     const sessionId = "events-redact-1";
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: "custom_event",
       payload: {

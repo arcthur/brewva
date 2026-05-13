@@ -1,9 +1,6 @@
-import type {
-  BrewvaRuntime,
-  PatchSet,
-  SessionCostSummary,
-  WorkerResult,
-} from "@brewva/brewva-runtime";
+import type { BrewvaRuntime } from "@brewva/brewva-runtime";
+import type { SessionCostSummary } from "@brewva/brewva-runtime/cost";
+import type { PatchSet, WorkerResult } from "@brewva/brewva-runtime/patch-history";
 import type { SubagentOutcomeArtifactRef } from "@brewva/brewva-tools/contracts";
 
 const PATCH_MANIFEST_FILE_NAME = "patchset.json";
@@ -30,7 +27,7 @@ export function aggregateChildCost(
     if (totals.totalTokens <= 0 && totals.totalCostUsd <= 0) {
       continue;
     }
-    runtime.authority.cost.recordAssistantUsage({
+    runtime.authority.cost.usage.recordAssistant({
       sessionId: parentSessionId,
       model,
       inputTokens: totals.inputTokens,

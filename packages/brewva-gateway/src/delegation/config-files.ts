@@ -2,7 +2,8 @@ import { existsSync, readdirSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, resolve } from "node:path";
-import type { DelegationIsolationStrategy, ManagedToolMode } from "@brewva/brewva-runtime";
+import type { DelegationIsolationStrategy } from "@brewva/brewva-runtime/delegation";
+import type { ManagedToolMode } from "@brewva/brewva-runtime/session";
 import { parseMarkdownFrontmatter } from "@brewva/brewva-std/markdown";
 import { normalizeStringList, readNonEmptyString } from "@brewva/brewva-std/text";
 import { isRecord as isUnknownRecord, readFiniteNumberValue } from "@brewva/brewva-std/unknown";
@@ -16,7 +17,6 @@ import type {
 export type HostedDelegationBuiltinToolName = "read" | "edit" | "write";
 export type HostedWorkspaceSubagentConfigKind = "envelope" | "agentSpec";
 export type HostedWorkspaceSubagentConfigSource = "json" | "markdown";
-export type HostedContextProfile = "minimal" | "standard" | "full";
 
 export interface HostedWorkspaceSubagentConfigFile {
   fileName: string;
@@ -71,10 +71,6 @@ export function asConsultKind(value: unknown): AdvisorConsultKind | undefined {
 
 export function asBoolean(value: unknown): boolean | undefined {
   return typeof value === "boolean" ? value : undefined;
-}
-
-export function asContextProfile(value: unknown): HostedContextProfile | undefined {
-  return value === "minimal" || value === "standard" || value === "full" ? value : undefined;
 }
 
 export function asIsolationStrategy(value: unknown): DelegationIsolationStrategy | undefined {

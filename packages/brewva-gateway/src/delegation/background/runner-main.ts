@@ -1,14 +1,15 @@
 import { readFile } from "node:fs/promises";
 import { relative } from "node:path";
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { BrewvaRuntime, createHostedRuntimePort } from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
+import { asBrewvaSessionId } from "@brewva/brewva-runtime/core";
 import {
   CURRENT_DELEGATION_CONTRACT_VERSION,
-  asBrewvaSessionId,
   evaluateDelegationAdoption,
-  type DelegationRunRecord,
-  type SkillRoutingScope,
-} from "@brewva/brewva-runtime";
+} from "@brewva/brewva-runtime/delegation";
+import type { DelegationRunRecord } from "@brewva/brewva-runtime/delegation";
 import { SUBAGENT_RUNNING_EVENT_TYPE } from "@brewva/brewva-runtime/events";
+import type { SkillRoutingScope } from "@brewva/brewva-runtime/skills";
 import type {
   AdvisorConsultKind,
   SubagentOutcome,
@@ -124,7 +125,7 @@ function buildFailureOutcome(input: {
 }
 
 function applyDurableDelivery(input: {
-  runtime: BrewvaRuntime;
+  runtime: BrewvaHostedRuntimePort;
   sessionId: string;
   delegate: string;
   outcome: SubagentOutcome;
@@ -174,12 +175,14 @@ async function main(): Promise<void> {
 
   const spec = await loadSpec(specPath);
   const specParentSessionId = asBrewvaSessionId(spec.parentSessionId);
-  const parentRuntime = new BrewvaRuntime({
-    cwd: spec.workspaceRoot,
-    config: spec.config,
-    configPath: spec.configPath,
-    routingScopes: normalizeRoutingScopes(spec.routingScopes),
-  });
+  const parentRuntime = createHostedRuntimePort(
+    new BrewvaRuntime({
+      cwd: spec.workspaceRoot,
+      config: spec.config,
+      configPath: spec.configPath,
+      routingScopes: normalizeRoutingScopes(spec.routingScopes),
+    }),
+  );
   const delegationStore = new HostedDelegationStore(parentRuntime);
   const existing = delegationStore.getRun(spec.parentSessionId, spec.runId);
   const target = spec.target;
@@ -260,7 +263,7 @@ async function main(): Promise<void> {
   let isolatedWorkspace: IsolatedWorkspaceHandle | undefined;
   let cancellationReason: string | undefined;
   let timeoutTriggered = false;
-  let childSessionId: import("@brewva/brewva-runtime").BrewvaSessionId | undefined;
+  let childSessionId: import("@brewva/brewva-runtime/core").BrewvaSessionId | undefined;
   let targetRecord: HostedDelegationTarget = delegationTarget;
   const modelRouting = createDelegationModelRoutingContextFromAgentDir();
   const executionPlan = resolveDelegationExecutionPlan({
@@ -304,7 +307,6 @@ async function main(): Promise<void> {
       enableSubagents: false,
       managedToolNames: executionPlan.managedToolNames,
       builtinToolNames: executionPlan.builtinToolNames,
-      contextProfile: executionPlan.contextProfile,
       routingScopes: normalizeRoutingScopes(spec.routingScopes),
       logger: hostedSessionLogger,
     });
@@ -385,7 +387,7 @@ async function main(): Promise<void> {
     if (output.status !== "completed") {
       throw new Error(`subagent_thread_loop_${output.status}`);
     }
-    const childCostSummary = childSession.runtime.inspect.cost.getSummary(childSessionId);
+    const childCostSummary = childSession.runtime.inspect.cost.summary.get(childSessionId);
     aggregateChildCost(parentRuntime, spec.parentSessionId, childCostSummary);
     const structuredOutcome = extractStructuredOutcomeData({
       resultMode: targetRecord.resultMode,
@@ -433,7 +435,7 @@ async function main(): Promise<void> {
       : undefined;
 
     if (executionPlan.producesPatches) {
-      parentRuntime.maintain.session.recordWorkerResult(
+      parentRuntime.authority.session.workerResults.record(
         spec.parentSessionId,
         buildWorkerResult({
           workerId: spec.runId,
@@ -560,7 +562,7 @@ async function main(): Promise<void> {
         ? "cancelled"
         : "failed";
     if (executionPlan.producesPatches) {
-      parentRuntime.maintain.session.recordWorkerResult(
+      parentRuntime.authority.session.workerResults.record(
         spec.parentSessionId,
         buildWorkerResult({
           workerId: spec.runId,

@@ -1,13 +1,11 @@
-import {
-  buildReasoningRevertSummaryDetails,
-  type BrewvaRuntime,
-  type ReasoningRevertRecord,
-} from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import {
   REASONING_REVERT_EVENT_TYPE,
   SESSION_REWIND_COMPLETED_EVENT_TYPE,
   readSessionRewindCompletedEventPayload,
 } from "@brewva/brewva-runtime/events";
+import { buildReasoningRevertSummaryDetails } from "@brewva/brewva-runtime/reasoning";
+import type { ReasoningRevertRecord } from "@brewva/brewva-runtime/reasoning";
 import { normalizeRuntimeError } from "./error-classification.js";
 import { recordSessionTurnTransition } from "./turn-transition.js";
 
@@ -114,11 +112,11 @@ async function applyHostedReasoningBranchReset(
 }
 
 function resolveHostedRewindSummaryMode(
-  runtime: BrewvaRuntime,
+  runtime: BrewvaHostedRuntimePort,
   sessionId: string,
   revert: ReasoningRevertRecord,
 ): "carry" | "none" {
-  const matchingRewind = runtime.inspect.events
+  const matchingRewind = runtime.inspect.events.records
     .list(sessionId, { type: SESSION_REWIND_COMPLETED_EVENT_TYPE })
     .map((event) => readSessionRewindCompletedEventPayload(event))
     .find((payload) => payload?.ok === true && payload.reasoningRevertEventId === revert.eventId);
@@ -126,7 +124,7 @@ function resolveHostedRewindSummaryMode(
 }
 
 function readReasoningRevertResumeStatus(
-  runtime: BrewvaRuntime,
+  runtime: BrewvaHostedRuntimePort,
   sessionId: string,
   revertEventId: string,
 ): ReasoningRevertResumeStatus | null {
@@ -148,10 +146,10 @@ function readReasoningRevertResumeStatus(
 }
 
 function resolvePendingReasoningRevert(
-  runtime: BrewvaRuntime,
+  runtime: BrewvaHostedRuntimePort,
   sessionId: string,
 ): ReasoningRevertRecord | null {
-  const latestRevert = runtime.inspect.reasoning.getActiveState(sessionId).latestRevert;
+  const latestRevert = runtime.inspect.reasoning.state.getActive(sessionId).latestRevert;
   if (!latestRevert) {
     return null;
   }
@@ -161,7 +159,7 @@ function resolvePendingReasoningRevert(
 }
 
 export function probePendingSessionReasoningRevertResume(
-  runtime: BrewvaRuntime,
+  runtime: BrewvaHostedRuntimePort,
   sessionId: string,
 ): ReasoningRevertRecord | null {
   return resolvePendingReasoningRevert(runtime, sessionId);
@@ -174,7 +172,7 @@ async function waitForSessionIdle(session: ReasoningRevertRecoverySessionLike): 
 }
 
 function recordReasoningRevertResumeTransition(
-  runtime: BrewvaRuntime,
+  runtime: BrewvaHostedRuntimePort,
   sessionId: string,
   revert: ReasoningRevertRecord,
   input: {
@@ -198,7 +196,7 @@ function recordReasoningRevertResumeTransition(
 export async function applySessionReasoningRevertResume(
   session: ReasoningRevertRecoverySessionLike,
   input: {
-    runtime: BrewvaRuntime;
+    runtime: BrewvaHostedRuntimePort;
     sessionId?: string;
     turn?: number;
     revert: ReasoningRevertRecord;
@@ -224,7 +222,7 @@ export async function applySessionReasoningRevertResume(
       summaryDetails: buildReasoningRevertSummaryDetails(revert),
       summaryMode,
     });
-    input.runtime.inspect.context.getHistoryViewBaseline(sessionId);
+    input.runtime.inspect.context.prompt.getHistoryViewBaseline(sessionId);
   } catch (error) {
     recordReasoningRevertResumeTransition(input.runtime, sessionId, revert, {
       turn: input.turn,
@@ -256,7 +254,7 @@ export async function applySessionReasoningRevertResume(
 export async function preparePendingSessionReasoningRevertResume(
   session: ReasoningRevertRecoverySessionLike,
   input: {
-    runtime: BrewvaRuntime;
+    runtime: BrewvaHostedRuntimePort;
     sessionId?: string;
     turn?: number;
   },

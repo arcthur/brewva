@@ -1,11 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { TASK_LEDGER_SCHEMA, CLAIM_LEDGER_SCHEMA, asBrewvaSessionId } from "@brewva/brewva-runtime";
+import { CLAIM_LEDGER_SCHEMA } from "@brewva/brewva-runtime/claim";
+import { asBrewvaSessionId } from "@brewva/brewva-runtime/core";
 import { type BrewvaEventRecord } from "@brewva/brewva-runtime/events";
 import {
   TASK_EVENT_TYPE,
   CLAIM_EVENT_TYPE,
   asBrewvaEventType,
 } from "@brewva/brewva-runtime/events";
+import { TASK_LEDGER_SCHEMA } from "@brewva/brewva-runtime/task";
 import { extractProjectionFromEvent } from "../../../packages/brewva-runtime/src/domain/projection/extractor.js";
 
 function event(input: {

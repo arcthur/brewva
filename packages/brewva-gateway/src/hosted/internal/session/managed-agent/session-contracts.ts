@@ -2,13 +2,12 @@ import type {
   ProviderCachePolicy,
   ProviderRequestFingerprint,
 } from "@brewva/brewva-provider-core/contracts";
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import type {
-  BrewvaRuntime,
   ProviderCacheRenderState,
   SessionCompactionGenerationMetadata,
-  SessionLifecycleSnapshot,
-  SessionWireFrame,
-} from "@brewva/brewva-runtime";
+} from "@brewva/brewva-runtime/context";
+import type { SessionLifecycleSnapshot, SessionWireFrame } from "@brewva/brewva-runtime/session";
 import type { ContextState } from "@brewva/brewva-substrate/contracts";
 import type {
   CreateBrewvaHostPluginRunnerOptions,
@@ -83,7 +82,7 @@ export interface CreateBrewvaManagedAgentSessionOptions {
   agentDir: string;
   sessionStore: ManagedAgentSessionStore;
   settings: BrewvaManagedAgentSessionSettingsPort;
-  runtime?: BrewvaRuntime;
+  runtime?: BrewvaHostedRuntimePort;
   modelCatalog: BrewvaMutableModelCatalog;
   resourceLoader: BrewvaHostedResourceLoader;
   extensions?: CreateBrewvaHostPluginRunnerOptions["plugins"];

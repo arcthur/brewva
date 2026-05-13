@@ -1,16 +1,14 @@
-import type {
-  RuntimeServiceRegistrarOptions,
-  RuntimeWorkServices,
-} from "../../runtime/service-registrar-types.js";
+import type { RuntimeServiceRegistrarOptions } from "../../runtime/wiring.js";
 import { TASK_EVENT_DESCRIPTORS } from "./event-descriptors.js";
-import { taskSurfaceContribution } from "./runtime-surface.js";
 import { resolveTaskTargetRoots } from "./targeting.js";
 import { TaskWatchdogService } from "./task-watchdog.js";
 import { TaskService } from "./task.js";
 
 export interface RuntimeTaskDomainRegistration {
-  services: Pick<RuntimeWorkServices, "taskService" | "taskWatchdogService">;
-  surfaceContribution: typeof taskSurfaceContribution;
+  services: {
+    taskService: TaskService;
+    taskWatchdogService: TaskWatchdogService;
+  };
   eventDescriptors: typeof TASK_EVENT_DESCRIPTORS;
 }
 
@@ -54,7 +52,6 @@ export function registerTaskDomain(
       taskService,
       taskWatchdogService,
     },
-    surfaceContribution: taskSurfaceContribution,
     eventDescriptors: TASK_EVENT_DESCRIPTORS,
   };
 }

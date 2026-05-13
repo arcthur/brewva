@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { BrewvaRuntime, createHostedRuntimePort } from "@brewva/brewva-runtime";
 import {
   classifyOpenQuestion,
   classifyQuestionRequest,
@@ -114,7 +114,7 @@ describe("operator question collection", () => {
       evidenceRefs: [],
     });
 
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: "subagent_completed",
       payload: {
@@ -171,7 +171,7 @@ describe("operator question collection", () => {
       evidenceRefs: [],
     });
 
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: "subagent_completed",
       payload: {
@@ -227,7 +227,7 @@ describe("operator question collection", () => {
       evidenceRefs: [],
     });
 
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: "subagent_completed",
       payload: {
@@ -290,7 +290,7 @@ describe("operator question collection", () => {
       evidenceRefs: [],
     });
 
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: "subagent_completed",
       payload: {
@@ -357,7 +357,7 @@ describe("operator question collection", () => {
       evidenceRefs: [],
     });
 
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: "subagent_completed",
       payload: {

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { appendFileSync, readFileSync } from "node:fs";
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { BrewvaRuntime, createOperatorRuntimePort } from "@brewva/brewva-runtime";
 import {
   RUNTIME_CONTRACT_CONFIG_PATH,
   createRuntimeContractConfig as createConfig,
@@ -24,8 +24,8 @@ describe("ledger persistence safety", () => {
     const runtime = new BrewvaRuntime({ cwd: workspace, configPath: RUNTIME_CONTRACT_CONFIG_PATH });
     const sessionId = "ledger-1";
     for (let i = 0; i < 5; i += 1) {
-      runtime.maintain.context.onTurnStart(sessionId, i + 1);
-      runtime.authority.tools.recordResult({
+      createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, i + 1);
+      runtime.authority.tools.invocation.recordResult({
         sessionId,
         toolName: "exec",
         args: { command: `echo ${i}` },
@@ -34,11 +34,11 @@ describe("ledger persistence safety", () => {
       });
     }
 
-    const rows = runtime.inspect.ledger.listRows(sessionId);
+    const rows = runtime.inspect.ledger.store.listRows(sessionId);
     expect(rows.map((row) => row.tool)).toContain("ledger_checkpoint");
     expect(rows.length).toBeLessThan(6);
 
-    const integrity = runtime.inspect.ledger.verifyIntegrity(sessionId);
+    const integrity = runtime.inspect.ledger.store.verifyIntegrity(sessionId);
     expect(integrity.valid).toBe(true);
   });
 
@@ -48,7 +48,7 @@ describe("ledger persistence safety", () => {
 
     const runtime = new BrewvaRuntime({ cwd: workspace, configPath: RUNTIME_CONTRACT_CONFIG_PATH });
     const sessionId = "redact-1";
-    runtime.authority.tools.recordResult({
+    runtime.authority.tools.invocation.recordResult({
       sessionId,
       toolName: "read",
       args: { token: "sk-proj-abcdefghijklmnopqrstuvwxyz0123456789" },
@@ -61,7 +61,7 @@ describe("ledger persistence safety", () => {
       },
     });
 
-    const ledgerText = readFileSync(runtime.inspect.ledger.getPath(), "utf8");
+    const ledgerText = readFileSync(runtime.inspect.ledger.store.getPath(), "utf8");
     expect(ledgerText.includes("sk-proj-abcdefghijklmnopqrstuvwxyz0123456789")).toBe(false);
     expect(ledgerText.includes("ghp_abcdefghijklmnopqrstuvwxyz0123456789")).toBe(false);
     expect(ledgerText.includes("AKIA1234567890ABCDEF")).toBe(false);
@@ -73,7 +73,7 @@ describe("ledger persistence safety", () => {
 
     const runtime = new BrewvaRuntime({ cwd: workspace, configPath: RUNTIME_CONTRACT_CONFIG_PATH });
     const sessionId = "ledger-bad-lines-1";
-    runtime.authority.tools.recordResult({
+    runtime.authority.tools.invocation.recordResult({
       sessionId,
       toolName: "read",
       args: { path: "src/a.ts" },
@@ -81,13 +81,13 @@ describe("ledger persistence safety", () => {
       channelSuccess: true,
     });
 
-    appendFileSync(runtime.inspect.ledger.getPath(), "\nnot-json", "utf8");
+    appendFileSync(runtime.inspect.ledger.store.getPath(), "\nnot-json", "utf8");
 
-    const rows = runtime.inspect.ledger.listRows(sessionId);
+    const rows = runtime.inspect.ledger.store.listRows(sessionId);
     expect(rows.length).toBe(1);
     expect(rows[0]?.tool).toBe("read");
 
-    const integrity = runtime.inspect.ledger.verifyIntegrity(sessionId);
+    const integrity = runtime.inspect.ledger.store.verifyIntegrity(sessionId);
     expect(integrity).toEqual({
       valid: false,
       reason: "ledger_row_malformed_json:2",
@@ -100,22 +100,22 @@ describe("ledger persistence safety", () => {
     const runtime = new BrewvaRuntime({ cwd: workspace, configPath: RUNTIME_CONTRACT_CONFIG_PATH });
     const sessionId = "turn-alignment-1";
 
-    runtime.maintain.context.onTurnStart(sessionId, 7);
-    runtime.authority.tools.recordResult({
+    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 7);
+    runtime.authority.tools.invocation.recordResult({
       sessionId,
       toolName: "exec",
       args: { command: "echo one" },
       outputText: "one",
       channelSuccess: true,
     });
-    runtime.authority.tools.recordResult({
+    runtime.authority.tools.invocation.recordResult({
       sessionId,
       toolName: "exec",
       args: { command: "echo two" },
       outputText: "two",
       channelSuccess: true,
     });
-    runtime.authority.cost.recordAssistantUsage({
+    runtime.authority.cost.usage.recordAssistant({
       sessionId,
       model: "test/model",
       inputTokens: 10,
@@ -126,7 +126,7 @@ describe("ledger persistence safety", () => {
       costUsd: 0.001,
     });
 
-    const rows = runtime.inspect.ledger
+    const rows = runtime.inspect.ledger.store
       .listRows(sessionId)
       .filter((row) => row.tool !== "ledger_checkpoint");
     expect(rows.length).toBe(3);
@@ -139,8 +139,8 @@ describe("ledger persistence safety", () => {
     const runtime = new BrewvaRuntime({ cwd: workspace, configPath: RUNTIME_CONTRACT_CONFIG_PATH });
     const sessionId = "context-compaction-ledger-1";
 
-    runtime.maintain.context.onTurnStart(sessionId, 3);
-    runtime.authority.session.commitCompaction(sessionId, {
+    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 3);
+    runtime.authority.session.compaction.commit(sessionId, {
       compactId: "cmp-ledger",
       sanitizedSummary: "Persist the durable compaction receipt in the ledger.",
       summaryDigest: "unused",
@@ -152,7 +152,7 @@ describe("ledger persistence safety", () => {
       origin: "auto_compaction",
     });
 
-    const rows = runtime.inspect.ledger.listRows(sessionId);
+    const rows = runtime.inspect.ledger.store.listRows(sessionId);
     expect(rows.map((row) => row.tool)).toContain("brewva_session_compaction");
   });
 });

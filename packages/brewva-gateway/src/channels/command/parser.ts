@@ -1,4 +1,4 @@
-import { normalizeAgentId } from "@brewva/brewva-runtime";
+import { normalizeAgentId } from "@brewva/brewva-runtime/context";
 
 export type ChannelCommandMatch =
   | { kind: "none" }

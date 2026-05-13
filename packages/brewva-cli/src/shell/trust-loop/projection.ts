@@ -1,14 +1,14 @@
-import {
-  getToolActionPolicy,
-  type PendingEffectCommitmentRequest,
-  type ToolActionClass,
-  type ToolActionPolicy,
-  type ToolAdmissionBehavior,
-  type ToolEffectClass,
-  type ToolReceiptPolicy,
-  type ToolRecoveryPolicy,
-  type ToolRiskLevel,
-} from "@brewva/brewva-runtime";
+import { getToolActionPolicy } from "@brewva/brewva-runtime/governance";
+import type {
+  ToolActionClass,
+  ToolActionPolicy,
+  ToolAdmissionBehavior,
+  ToolEffectClass,
+  ToolReceiptPolicy,
+  ToolRecoveryPolicy,
+  ToolRiskLevel,
+} from "@brewva/brewva-runtime/governance";
+import type { PendingEffectCommitmentRequest } from "@brewva/brewva-runtime/proposals";
 import type { SessionPhase } from "@brewva/brewva-substrate/session";
 import { TOOL_EXECUTION_PHASES, type ToolExecutionPhase } from "@brewva/brewva-substrate/tools";
 

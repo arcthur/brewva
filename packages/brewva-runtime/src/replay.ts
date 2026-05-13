@@ -30,7 +30,6 @@ const TURN_REPLAY_ENGINE_METHODS = [
 
 export type ReasoningReplayEngine = ExtensionPort<
   "replay.reasoning",
-  "replay",
   Pick<
     InstanceType<typeof InternalReasoningReplayEngine>,
     (typeof REASONING_REPLAY_ENGINE_METHODS)[number]
@@ -38,7 +37,6 @@ export type ReasoningReplayEngine = ExtensionPort<
 >;
 export type TurnReplayEngine = ExtensionPort<
   "replay.turn",
-  "replay",
   Pick<InstanceType<typeof InternalTurnReplayEngine>, (typeof TURN_REPLAY_ENGINE_METHODS)[number]>
 >;
 
@@ -47,8 +45,6 @@ export function createReasoningReplayEngine(
 ): ReasoningReplayEngine {
   return createBoundExtensionPort({
     name: "replay.reasoning",
-    authority: "replay",
-    capabilityPrefix: "subpath.replay.reasoning",
     instance: new InternalReasoningReplayEngine(...args),
     methods: REASONING_REPLAY_ENGINE_METHODS,
   });
@@ -59,8 +55,6 @@ export function createTurnReplayEngine(
 ): TurnReplayEngine {
   return createBoundExtensionPort({
     name: "replay.turn",
-    authority: "replay",
-    capabilityPrefix: "subpath.replay.turn",
     instance: new InternalTurnReplayEngine(...args),
     methods: TURN_REPLAY_ENGINE_METHODS,
   });

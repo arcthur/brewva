@@ -6,10 +6,14 @@ import type {
   ProviderConnectionSeams,
   ProviderOAuthAuthorization,
 } from "@brewva/brewva-gateway/hosted";
-import type { BrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
+import type { DelegationRunRecord } from "@brewva/brewva-runtime/delegation";
+import type { BrewvaReplaySession } from "@brewva/brewva-runtime/events";
 import type {
   DecideEffectCommitmentInput,
   PendingEffectCommitmentRequest,
+} from "@brewva/brewva-runtime/proposals";
+import type {
   RecordSessionRewindCheckpointInput,
   SessionRedoInput,
   SessionRedoResult,
@@ -18,9 +22,7 @@ import type {
   SessionRewindState,
   SessionRewindTargetView,
   SessionLineageTree,
-} from "@brewva/brewva-runtime";
-import type { DelegationRunRecord } from "@brewva/brewva-runtime";
-import type { BrewvaReplaySession } from "@brewva/brewva-runtime/events";
+} from "@brewva/brewva-runtime/session";
 import type { BrewvaInteractiveQuestionRequest } from "@brewva/brewva-substrate/host-api";
 import type { BrewvaToolUiPort } from "@brewva/brewva-substrate/host-api";
 import type { BrewvaPromptContentPart } from "@brewva/brewva-substrate/prompt";
@@ -43,7 +45,7 @@ import type { ShellCompletionUsageEntry } from "./completion-provider.js";
 
 export interface CliShellSessionBundle {
   session: BrewvaManagedPromptSession;
-  runtime: BrewvaRuntime;
+  runtime: BrewvaHostedRuntimePort;
   toolDefinitions: ReadonlyMap<string, BrewvaToolDefinition>;
   providerConnections?: ProviderConnectionSeams;
   initPhases: BrewvaSessionResult["initPhases"];

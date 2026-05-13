@@ -28,6 +28,7 @@ import {
 import { normalizeToolName } from "../../utils/tool-name.js";
 import { resolveToolResultVerdict } from "../../utils/tool-result.js";
 import type { ContextBudgetUsage } from "../context/api.js";
+import { buildGuardResultPayload, coerceGuardResultPayload } from "../events/api.js";
 import type { EffectAuthorityManifestBasis } from "../governance/api.js";
 import {
   decideEffectAuthorityManifest,
@@ -36,7 +37,6 @@ import {
   type EffectAuthorityManifestFacts,
 } from "../governance/api.js";
 import { type ResolvedToolAuthority } from "../governance/api.js";
-import { buildGuardResultPayload, coerceGuardResultPayload } from "../iteration/api.js";
 import type { EffectCommitmentDeskService } from "../proposals/api.js";
 import type { ProposalAdmissionService } from "../proposals/api.js";
 import type {

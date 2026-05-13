@@ -16,9 +16,11 @@ describe("quality gate diff preview", () => {
     const runtime = {
       authority: {
         tools: {
-          start(input: Record<string, unknown>) {
-            capturedStartInput = input;
-            return { allowed: true };
+          invocation: {
+            start(input: Record<string, unknown>) {
+              capturedStartInput = input;
+              return { allowed: true };
+            },
           },
         },
       },

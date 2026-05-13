@@ -100,10 +100,10 @@ describe("context composition parity", () => {
         typeof (value as { message?: { content?: unknown } }).message?.content === "string",
     );
 
-    expect(fullRuntime.inspect.context.getCompactionGateStatus("parity-clear").required).toBe(
+    expect(fullRuntime.inspect.context.compaction.getGateStatus("parity-clear").required).toBe(
       false,
     );
-    expect(hostedRuntime.inspect.context.getCompactionGateStatus("parity-clear").required).toBe(
+    expect(hostedRuntime.inspect.context.compaction.getGateStatus("parity-clear").required).toBe(
       false,
     );
     expect(fullAfter.message?.content?.includes("[ContextCompactionGate]")).toBe(false);

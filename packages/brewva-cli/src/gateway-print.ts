@@ -5,7 +5,7 @@ import process from "node:process";
 import { BrewvaEffect, startScopedTimeout, type ScopedTimeoutHandle } from "@brewva/brewva-effect";
 import { connectGatewayClient, readGatewayToken } from "@brewva/brewva-gateway";
 import { queryGatewayStatus, resolveGatewayPaths } from "@brewva/brewva-gateway/admin";
-import type { ManagedToolMode } from "@brewva/brewva-runtime";
+import type { ManagedToolMode } from "@brewva/brewva-runtime/session";
 
 export type CliBackendKind = "auto" | "embedded" | "gateway";
 

@@ -28,6 +28,10 @@ function collectSourceFiles(relativePath: string): string[] {
   return out;
 }
 
+function collectAuthoredSourceFiles(relativePath: string): string[] {
+  return collectSourceFiles(relativePath).filter((file) => !file.split("/").includes("dist"));
+}
+
 function resolveDomainTarget(sourceFile: string, specifier: string): string | undefined {
   const candidate = resolve(sourceFile, "..", specifier.replace(/\.js$/u, ".ts"));
   return candidate.startsWith(`${runtimeDomainRoot}/`) ? candidate : undefined;
@@ -79,9 +83,16 @@ describe("runtime promoted architecture guard", () => {
     const publicIndexSource = readRepoFile("packages/brewva-runtime/src/public/index.ts");
     const channelsSource = readRepoFile("packages/brewva-runtime/src/channels.ts");
     const eventsSource = readRepoFile("packages/brewva-runtime/src/events.ts");
+    const delegationSource = readRepoFile("packages/brewva-runtime/src/delegation.ts");
+    const reasoningSource = readRepoFile("packages/brewva-runtime/src/reasoning.ts");
+    const semanticArtifactsSource = readRepoFile(
+      "packages/brewva-runtime/src/semantic-artifacts.ts",
+    );
 
     expect(indexSource.trim()).toBe('export * from "./public/index.js";');
     expect(coreSource).not.toMatch(/export \* from /u);
+    expect(publicIndexSource.split("\n").length).toBeLessThanOrEqual(250);
+    expect((publicIndexSource.match(/^export\s/gmu) ?? []).length).toBeLessThanOrEqual(35);
     expect(publicIndexSource).not.toContain("../contracts/index.js");
     expect(publicIndexSource).not.toContain("../contracts/shared.js");
     expect(publicIndexSource).not.toContain("../contracts/identifiers.js");
@@ -94,9 +105,12 @@ describe("runtime promoted architecture guard", () => {
     expect(publicIndexSource).not.toContain("../events/descriptors.js");
     expect(publicIndexSource).not.toContain("../contracts/events.js");
     expect(publicIndexSource).not.toContain("../evidence/tsc.js");
-    expect(publicIndexSource).toContain("../domain/delegation/adoption.js");
-    expect(publicIndexSource).toContain("../domain/reasoning/revert-summary.js");
-    expect(publicIndexSource).toContain("../domain/skills/semantic-artifacts.js");
+    expect(publicIndexSource).not.toContain("../domain/delegation/adoption.js");
+    expect(publicIndexSource).not.toContain("../domain/reasoning/revert-summary.js");
+    expect(publicIndexSource).not.toContain("../domain/skills/semantic-artifacts.js");
+    expect(delegationSource).toContain("./domain/delegation/adoption.js");
+    expect(reasoningSource).toContain("./domain/reasoning/revert-summary.js");
+    expect(semanticArtifactsSource).toContain("./domain/skills/api.js");
     expect(publicIndexSource).not.toContain("../domain/skills/repair-policy.js");
     expect(channelsSource).not.toMatch(/export \* from /u);
     expect(existsSync(resolve(repoRoot, "packages/brewva-runtime/src/markdown.ts"))).toBe(false);
@@ -114,21 +128,7 @@ describe("runtime promoted architecture guard", () => {
     const runtimeEffectLayerSource = readRepoFile(
       "packages/brewva-runtime/src/runtime/effect-runtime-layer.ts",
     );
-    const servicesRegistrarSource = readRepoFile(
-      "packages/brewva-runtime/src/runtime/services-registrar.ts",
-    );
-    const governanceRegistrarSource = readRepoFile(
-      "packages/brewva-runtime/src/runtime/governance-service-registrar.ts",
-    );
-    const workRegistrarSource = readRepoFile(
-      "packages/brewva-runtime/src/runtime/work-service-registrar.ts",
-    );
-    const contextRegistrarSource = readRepoFile(
-      "packages/brewva-runtime/src/runtime/context-service-registrar.ts",
-    );
-    const sessionRegistrarSource = readRepoFile(
-      "packages/brewva-runtime/src/runtime/session-service-registrar.ts",
-    );
+    const wiringSource = readRepoFile("packages/brewva-runtime/src/runtime/wiring.ts");
     const surfacesSource = readRepoFile("packages/brewva-runtime/src/runtime/runtime-surfaces.ts");
     const runtimeFacadeStateSource = readRepoFile(
       "packages/brewva-runtime/src/runtime/runtime-facade-state.ts",
@@ -151,18 +151,15 @@ describe("runtime promoted architecture guard", () => {
     const toolsEventDescriptorsSource = readRepoFile(
       "packages/brewva-runtime/src/domain/tools/event-descriptors.ts",
     );
-    const lazyRegistrarSource = readRepoFile(
-      "packages/brewva-runtime/src/runtime/lazy-service-registrar.ts",
-    );
-    const registrarTypesSource = readRepoFile(
-      "packages/brewva-runtime/src/runtime/service-registrar-types.ts",
-    );
 
     expect(runtimeSource).not.toContain("./runtime-assembler.js");
     expect(runtimeSource).not.toContain("./runtime-method-groups.js");
     expect(runtimeSource).not.toContain("bindMethods(");
     expect(runtimeSource).not.toMatch(/from "\.\.\/services\/(?!event-pipeline|session-state)/u);
-    expect(runtimeSource.split("\n").length).toBeLessThan(120);
+    expect(runtimeSource.split("\n").length).toBeLessThan(130);
+    expect(
+      existsSync(resolve(repoRoot, "packages/brewva-runtime/src/runtime/surface-descriptor.ts")),
+    ).toBe(false);
     expect(runtimeFacadeStateSource).toContain("./runtime-composition.js");
     expect(runtimeFacadeStateSource).toContain("./effect-runtime-layer.js");
     expect(runtimeFacadeStateSource).toContain("./runtime-surfaces.js");
@@ -177,42 +174,45 @@ describe("runtime promoted architecture guard", () => {
     expect(runtimeCompositionSource).not.toContain("registerRuntimeLazyServiceFactories(");
     expect(runtimeCompositionSource).not.toMatch(/from "\.\.\/services\//u);
     expect(runtimeCompositionSource.split("\n").length).toBeLessThan(150);
-    expect(runtimeEffectLayerSource).toContain("./core-registrar.js");
-    expect(runtimeEffectLayerSource).toContain("./kernel-registrar.js");
-    expect(runtimeEffectLayerSource).toContain("./services-registrar.js");
+    expect(runtimeEffectLayerSource).toContain("./wiring.js");
+    expect(runtimeEffectLayerSource).not.toContain("./core-registrar.js");
+    expect(runtimeEffectLayerSource).not.toContain("./kernel-registrar.js");
+    expect(runtimeEffectLayerSource).not.toContain("./services-registrar.js");
     expect(runtimeEffectLayerSource).toContain("registerRuntimeCoreDependencies(");
     expect(runtimeEffectLayerSource).toContain("registerRuntimeKernelContext(");
     expect(runtimeEffectLayerSource).toContain("registerRuntimeServiceDependencies(");
     expect(runtimeEffectLayerSource).toContain("registerRuntimeLazyServiceFactories(");
     expect(runtimeEffectLayerSource).not.toMatch(/from "\.\.\/services\//u);
-    expect(servicesRegistrarSource).toContain("./governance-service-registrar.js");
-    expect(servicesRegistrarSource).toContain("./work-service-registrar.js");
-    expect(servicesRegistrarSource).toContain("./context-service-registrar.js");
-    expect(servicesRegistrarSource).toContain("./session-service-registrar.js");
-    expect(servicesRegistrarSource).toContain("./lazy-service-registrar.js");
-    expect(servicesRegistrarSource).not.toMatch(/from "\.\.\/services\//u);
-    expect(servicesRegistrarSource.split("\n").length).toBeLessThan(90);
-    expect(governanceRegistrarSource).toContain("../domain/proposals/api.js");
-    expect(governanceRegistrarSource).not.toContain("../services/effect-commitment-desk.js");
-    expect(governanceRegistrarSource).not.toContain("../services/proposal-admission.js");
-    expect(workRegistrarSource).toContain("../domain/task/api.js");
-    expect(workRegistrarSource).toContain("../domain/skills/api.js");
-    expect(workRegistrarSource).toContain("../domain/claim/api.js");
-    expect(workRegistrarSource).toContain("../domain/ledger/api.js");
-    expect(workRegistrarSource).toContain("../domain/cost/api.js");
-    expect(workRegistrarSource).not.toContain("../domain/task/task.js");
-    expect(workRegistrarSource).not.toContain("../domain/skills/skill-lifecycle.js");
-    expect(workRegistrarSource).not.toContain("../domain/claim/claim.js");
-    expect(workRegistrarSource).not.toContain("../domain/ledger/ledger.js");
-    expect(workRegistrarSource).not.toContain("../domain/cost/cost.js");
-    expect(contextRegistrarSource).toContain("../domain/context/api.js");
-    expect(contextRegistrarSource).not.toContain("../domain/context/context.js");
-    expect(contextRegistrarSource).not.toContain("../domain/task/task-watchdog.js");
-    expect(sessionRegistrarSource).toContain("../domain/sessions/api.js");
-    expect(sessionRegistrarSource).not.toContain("../services/event-pipeline.js");
-    expect(sessionRegistrarSource).not.toContain("../services/session-lifecycle.js");
-    expect(sessionRegistrarSource).not.toContain("../services/tape.js");
-    expect(sessionRegistrarSource).not.toContain("../services/tool-lifecycle-recovery-wal.js");
+    expect(wiringSource).toContain("../domain/governance/api.js");
+    expect(wiringSource).toContain("../domain/proposals/api.js");
+    expect(wiringSource).toContain("../domain/context/api.js");
+    expect(wiringSource).toContain("../domain/sessions/api.js");
+    expect(wiringSource).toContain("../domain/tools/api.js");
+    expect(wiringSource).toContain("registerRuntimeCoreDependencies(");
+    expect(wiringSource).toContain("registerRuntimeKernelContext(");
+    expect(wiringSource).toContain("registerRuntimeServiceDependencies(");
+    expect(wiringSource).toContain("registerRuntimeLazyServiceFactories(");
+    expect(wiringSource).not.toMatch(/from "\.\.\/services\//u);
+    expect(wiringSource).not.toContain("./governance-service-registrar.js");
+    expect(wiringSource).not.toContain("./work-service-registrar.js");
+    expect(wiringSource).not.toContain("./context-service-registrar.js");
+    expect(wiringSource).not.toContain("./session-service-registrar.js");
+    expect(wiringSource).not.toContain("./lazy-service-registrar.js");
+    for (const removedRegistrar of [
+      "core-registrar.ts",
+      "kernel-registrar.ts",
+      "services-registrar.ts",
+      "governance-service-registrar.ts",
+      "work-service-registrar.ts",
+      "context-service-registrar.ts",
+      "session-service-registrar.ts",
+      "lazy-service-registrar.ts",
+      "service-registrar-types.ts",
+    ]) {
+      expect(
+        existsSync(resolve(repoRoot, `packages/brewva-runtime/src/runtime/${removedRegistrar}`)),
+      ).toBe(false);
+    }
     expect(surfacesSource).toContain("../domain/context/api.js");
     expect(surfacesSource).toContain("../domain/tools/api.js");
     expect(surfacesSource).not.toContain("../tools/runtime-surface.js");
@@ -231,13 +231,18 @@ describe("runtime promoted architecture guard", () => {
     expect(surfacesSource).toContain("../domain/cost/api.js");
     expect(surfacesSource).toContain("../domain/sessions/api.js");
     expect(surfacesSource).not.toContain("../session/runtime-surface.js");
-    expect(surfacesSource).toContain("bindSurfaceContribution(");
+    expect(surfacesSource).not.toContain("bindSurfaceContribution(");
     expect(surfacesSource).not.toMatch(/from "\.\.\/services\//u);
-    expect(surfacesSource).toContain("const runtimeSurfaceModules = [");
-    expect(surfacesSource).toContain("bindRuntimeSurface(");
-    expect(surfacesSource).toContain('collectSurfaceBindings(boundSurfaces, "authority")');
-    expect(surfacesSource).toContain('collectSurfaceBindings(boundSurfaces, "inspect")');
-    expect(surfacesSource).toContain('collectSurfaceBindings(boundSurfaces, "maintain")');
+    expect(surfacesSource).not.toContain("const runtimeSurfaceModules = [");
+    expect(surfacesSource).not.toContain("createSurfaceBucket(");
+    expect(surfacesSource).toContain("authority: {");
+    expect(surfacesSource).toContain("inspect: {");
+    expect(surfacesSource).toContain("operator: {");
+    expect(surfacesSource).toContain("createProposalsAuthoritySurface(deps)");
+    expect(surfacesSource).toContain("createContextInspectSurface(deps)");
+    expect(surfacesSource).toContain("createRecoveryOperatorSurface(deps)");
+    expect(surfacesSource).not.toContain("defineRuntimeSurfaceModule(");
+    expect(surfacesSource).not.toContain("pickSurfaceMethods(");
     expect(surfacesSource.split("\n").length).toBeLessThan(220);
     expect(surfacesSource).not.toContain("bindMethods(");
     expect(surfacesSource).not.toContain("bindMethods(methodGroups.skills, [");
@@ -246,6 +251,16 @@ describe("runtime promoted architecture guard", () => {
     expect(surfacesSource).not.toContain("bindMethods(methodGroups.task, [");
     expect(surfacesSource).not.toContain("bindMethods(methodGroups.claim, [");
     expect(surfacesSource).not.toContain("bindMethods(methodGroups.events, [");
+    expect(wiringSource).not.toContain("function registerRuntimeGovernanceServices(");
+    expect(wiringSource).not.toContain("function registerRuntimeWorkServices(");
+    expect(wiringSource).not.toContain("function registerRuntimeContextServices(");
+    expect(wiringSource).not.toContain("function registerRuntimeSessionServices(");
+    expect(wiringSource).not.toContain("RuntimeGovernanceServices");
+    expect(wiringSource).not.toContain("RuntimeWorkServices");
+    expect(wiringSource).not.toContain("RuntimeContextServices");
+    expect(wiringSource).not.toContain("const governanceServices");
+    expect(wiringSource).not.toContain("const workServices");
+    expect(wiringSource).not.toContain("const contextServices");
     expect(eventsSurfaceSource).not.toContain("getTapeService()");
     expect(eventsSurfaceSource).not.toContain("recordTapeHandoff");
     expect(eventsSurfaceSource).not.toContain("getTapeStatus");
@@ -280,29 +295,24 @@ describe("runtime promoted architecture guard", () => {
     expect(toolsEventDescriptorsSource).toContain("defineBrewvaEventDescriptor(");
     expect(toolsEventDescriptorsSource).toContain("TOOLS_EVENT_DESCRIPTORS");
     expect(toolsEventDescriptorsSource).not.toContain("../../events/descriptors.js");
-    expect(lazyRegistrarSource).toContain("../domain/credentials/api.js");
-    expect(lazyRegistrarSource).toContain("../domain/patching/api.js");
-    expect(lazyRegistrarSource).toContain("../domain/parallel/api.js");
-    expect(lazyRegistrarSource).toContain("../domain/reasoning/api.js");
-    expect(lazyRegistrarSource).toContain("../domain/schedule/api.js");
-    expect(lazyRegistrarSource).toContain("../domain/sessions/api.js");
-    expect(lazyRegistrarSource).toContain("../domain/tools/api.js");
-    expect(lazyRegistrarSource).toContain("../domain/verification/api.js");
-    expect(lazyRegistrarSource).not.toContain("../domain/parallel/parallel.js");
-    expect(lazyRegistrarSource).not.toContain("../domain/parallel/resource-lease.js");
-    expect(lazyRegistrarSource).not.toContain("../domain/patching/file-change.js");
-    expect(lazyRegistrarSource).not.toContain("../domain/reasoning/reasoning.js");
-    expect(lazyRegistrarSource).not.toContain("../domain/schedule/schedule-intent.js");
-    expect(lazyRegistrarSource).not.toContain("../domain/schedule/service.js");
-    expect(lazyRegistrarSource).not.toContain("../domain/sessions/session-rewind.js");
-    expect(lazyRegistrarSource).not.toContain("../domain/sessions/session-wire.js");
-    expect(lazyRegistrarSource).not.toContain("../services/tool-access-policy.js");
-    expect(lazyRegistrarSource).not.toContain("../services/tool-gate.js");
-    expect(lazyRegistrarSource).not.toContain("../services/tool-invocation-spine.js");
-    expect(lazyRegistrarSource).not.toContain("../services/tool-start-readiness.js");
-    expect(registrarTypesSource).toContain("../domain/tools/api.js");
-    expect(registrarTypesSource).not.toContain("../services/tool-gate.js");
-    expect(registrarTypesSource).not.toContain("../services/tool-invocation-spine.js");
+    expect(wiringSource).toContain("../domain/credentials/api.js");
+    expect(wiringSource).toContain("../domain/patching/api.js");
+    expect(wiringSource).toContain("../domain/parallel/api.js");
+    expect(wiringSource).toContain("../domain/reasoning/api.js");
+    expect(wiringSource).toContain("../domain/schedule/api.js");
+    expect(wiringSource).toContain("../domain/verification/api.js");
+    expect(wiringSource).not.toContain("../domain/parallel/parallel.js");
+    expect(wiringSource).not.toContain("../domain/parallel/resource-lease.js");
+    expect(wiringSource).not.toContain("../domain/patching/file-change.js");
+    expect(wiringSource).not.toContain("../domain/reasoning/reasoning.js");
+    expect(wiringSource).not.toContain("../domain/schedule/schedule-intent.js");
+    expect(wiringSource).not.toContain("../domain/schedule/service.js");
+    expect(wiringSource).not.toContain("../domain/sessions/session-rewind.js");
+    expect(wiringSource).not.toContain("../domain/sessions/session-wire.js");
+    expect(wiringSource).not.toContain("../services/tool-access-policy.js");
+    expect(wiringSource).not.toContain("../services/tool-gate.js");
+    expect(wiringSource).not.toContain("../services/tool-invocation-spine.js");
+    expect(wiringSource).not.toContain("../services/tool-start-readiness.js");
     expect(existsSync(resolve(repoRoot, "packages/brewva-runtime/src/domain/tools"))).toBe(true);
     expect(existsSync(resolve(repoRoot, "packages/brewva-runtime/src/domain/sessions"))).toBe(true);
     expect(existsSync(resolve(repoRoot, "packages/brewva-runtime/src/session"))).toBe(false);
@@ -376,6 +386,9 @@ describe("runtime promoted architecture guard", () => {
     const recoverySource = readRepoFile("packages/brewva-runtime/src/recovery.ts");
     const replaySource = readRepoFile("packages/brewva-runtime/src/replay.ts");
     const patchHistorySource = readRepoFile("packages/brewva-runtime/src/patch-history.ts");
+    const runtimeExtensionsSource = readRepoFile(
+      "packages/brewva-runtime/src/runtime/runtime-extensions.ts",
+    );
 
     expect(credentialsSource).not.toMatch(/export \* from /u);
     expect(contextSource).not.toMatch(/export \* from /u);
@@ -412,6 +425,11 @@ describe("runtime promoted architecture guard", () => {
     expect(replaySource).toContain("createTurnReplayEngine");
     expect(replaySource).toContain("createReasoningReplayEngine");
     expect(patchHistorySource).toContain("PATCH_HISTORY_FILE");
+    expect(runtimeExtensionsSource).not.toContain("RuntimeCapabilityToken");
+    expect(runtimeExtensionsSource).not.toContain("runtimeExtensionPortBrand");
+    expect(runtimeExtensionsSource).not.toContain("capabilityPrefix");
+    expect(runtimeExtensionsSource).not.toContain("readonly capabilities");
+    expect(runtimeExtensionsSource).toContain("RUNTIME_EXTENSION_OWNER_IDS");
   });
 
   test("runtime lookup map stays aligned with sliced domain ownership", () => {
@@ -555,7 +573,7 @@ describe("runtime promoted architecture guard", () => {
     expect(offenderFiles).toEqual([]);
   });
 
-  test("domain sources do not depend on removed internal index barrels and self-register runtime surfaces", () => {
+  test("domain sources do not depend on removed internal index barrels and keep explicit runtime surfaces", () => {
     const domainFiles = collectSourceFiles("packages/brewva-runtime/src/domain");
     const barrelOffenders: string[] = [];
     for (const sourceFile of domainFiles) {
@@ -570,7 +588,9 @@ describe("runtime promoted architecture guard", () => {
     const runtimeSurfaceFiles = domainFiles.filter((file) => file.endsWith("/runtime-surface.ts"));
     for (const file of runtimeSurfaceFiles) {
       const source = readFileSync(file, "utf-8");
-      expect(source).toContain("defineRuntimeSurfaceModule(");
+      expect(source).toContain("SurfaceMethods");
+      expect(source).not.toContain("defineRuntimeSurfaceModule(");
+      expect(source).not.toContain("pickSurfaceMethods(");
     }
 
     const domainDirs = readdirSync(resolve(repoRoot, "packages/brewva-runtime/src/domain"), {
@@ -583,17 +603,27 @@ describe("runtime promoted architecture guard", () => {
       const runtimeSurfacePath = resolve(domainRoot, "runtime-surface.ts");
       const typesPath = resolve(domainRoot, "types.ts");
       expect(existsSync(apiPath)).toBe(true);
-      expect(existsSync(registrarPath)).toBe(true);
-      expect(existsSync(runtimeSurfacePath)).toBe(true);
       expect(existsSync(typesPath)).toBe(true);
       expect(readFileSync(apiPath, "utf-8")).not.toMatch(/export \* from /u);
+      if (existsSync(registrarPath)) {
+        expect(readFileSync(registrarPath, "utf-8")).not.toMatch(/return\s+\{\};/u);
+      }
+      if (existsSync(runtimeSurfacePath)) {
+        const surfaceSource = readFileSync(runtimeSurfacePath, "utf-8");
+        expect(surfaceSource).not.toContain("defineRuntimeSurfaceModule(");
+        expect(surfaceSource).not.toContain("pickSurfaceMethods(");
+        expect(surfaceSource).not.toMatch(/interface\s+\w*SurfaceMethods\s*\{\}/u);
+      }
     }
 
     const runtimeSurfacesSource = readRepoFile(
       "packages/brewva-runtime/src/runtime/runtime-surfaces.ts",
     );
-    expect(runtimeSurfacesSource).toContain("const runtimeSurfaceModules = [");
+    expect(runtimeSurfacesSource).not.toContain("const runtimeSurfaceModules = [");
     expect(runtimeSurfacesSource).not.toContain("const boundSurfaces = {");
+    expect(runtimeSurfacesSource).toContain("authority: {");
+    expect(runtimeSurfacesSource).toContain("inspect: {");
+    expect(runtimeSurfacesSource).toContain("operator: {");
   });
 
   test("domain and runtime layers only cross domain boundaries through stable api/type seams", () => {
@@ -605,17 +635,9 @@ describe("runtime promoted architecture guard", () => {
       collectSourceFiles("packages/brewva-runtime/src/runtime"),
       ["api.ts", "types.ts"],
     );
-    const rootOffenders = collectCrossDomainSpecifierOffenders(
-      collectSourceFiles("packages/brewva-runtime/src").filter((file) => {
-        const relative = file.replace(`${runtimeSrcRoot}/`, "");
-        return !relative.includes("/") && relative !== "index.ts";
-      }),
-      ["api.ts", "types.ts"],
-    );
 
     expect(domainOffenders).toEqual([]);
     expect(runtimeOffenders).toEqual([]);
-    expect(rootOffenders).toEqual([]);
   });
 
   test(
@@ -636,13 +658,13 @@ describe("runtime promoted architecture guard", () => {
         "BrewvaStructuredEvent",
       ]);
       const importPattern =
-        /import\s+(?:type\s+)?\{([\s\S]*?)\}\s+from\s+"@brewva\/brewva-runtime"/gu;
+        /import\s+(?:type\s+)?\{([^{}]*)\}\s+from\s+"@brewva\/brewva-runtime";/gu;
 
       const offenderFiles: string[] = [];
       for (const sourceFile of [
-        ...collectSourceFiles("packages"),
-        ...collectSourceFiles("test"),
-        ...collectSourceFiles("script"),
+        ...collectAuthoredSourceFiles("packages"),
+        ...collectAuthoredSourceFiles("test"),
+        ...collectAuthoredSourceFiles("script"),
       ]) {
         const source = readFileSync(sourceFile, "utf-8");
         const matches = source.matchAll(importPattern);
@@ -661,6 +683,57 @@ describe("runtime promoted architecture guard", () => {
       }
 
       expect(offenderFiles).toEqual([]);
+    },
+    { timeout: 15_000 },
+  );
+
+  test(
+    "repo consumers import non-root runtime contracts through owner subpaths",
+    () => {
+      const allowedRuntimeRootSymbols = new Set([
+        "BrewvaRuntime",
+        "createHostedRuntimePort",
+        "createOperatorRuntimePort",
+        "createToolRuntimePort",
+        "BrewvaAuthorityPort",
+        "BrewvaHostedRuntimePort",
+        "BrewvaInspectionPort",
+        "BrewvaOperatorRuntimePort",
+        "BrewvaRuntimeIdentity",
+        "BrewvaRuntimeOptions",
+        "BrewvaRuntimeRoot",
+        "BrewvaToolRuntimePort",
+        "RuntimeOperatorPort",
+        "VerifyCompletionOptions",
+        "DEFAULT_BREWVA_CONFIG",
+        "BrewvaConfig",
+        "DeepReadonly",
+      ]);
+      const importPattern =
+        /import\s+(?:type\s+)?\{([^{}]*)\}\s+from\s+"@brewva\/brewva-runtime";/gu;
+
+      const offenders: string[] = [];
+      for (const sourceFile of [
+        ...collectAuthoredSourceFiles("packages"),
+        ...collectAuthoredSourceFiles("test"),
+        ...collectAuthoredSourceFiles("script"),
+      ]) {
+        const source = readFileSync(sourceFile, "utf-8");
+        for (const match of source.matchAll(importPattern)) {
+          const importClause = match[1] ?? "";
+          const importedNames = importClause
+            .split(",")
+            .map((entry) => entry.replace(/^type\s+/u, "").trim())
+            .map((entry) => entry.split(/\s+as\s+/u)[0]?.trim() ?? "")
+            .filter(Boolean);
+          const disallowed = importedNames.filter((entry) => !allowedRuntimeRootSymbols.has(entry));
+          if (disallowed.length > 0) {
+            offenders.push(`${sourceFile}: ${disallowed.join(", ")}`);
+          }
+        }
+      }
+
+      expect(offenders).toEqual([]);
     },
     { timeout: 15_000 },
   );

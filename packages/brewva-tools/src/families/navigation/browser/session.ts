@@ -19,21 +19,27 @@ export function resolveBaseCwd(options: BrewvaBundledToolOptions, ctx: unknown):
   if (typeof ctxCwd === "string" && ctxCwd.trim().length > 0) {
     return resolve(ctxCwd);
   }
-  if (typeof options.runtime.cwd === "string" && options.runtime.cwd.trim().length > 0) {
-    return resolve(options.runtime.cwd);
+  if (
+    typeof options.runtime.identity.cwd === "string" &&
+    options.runtime.identity.cwd.trim().length > 0
+  ) {
+    return resolve(options.runtime.identity.cwd);
   }
   return process.cwd();
 }
 
 export function resolveWorkspaceRoot(options: BrewvaBundledToolOptions): string {
   if (
-    typeof options.runtime.workspaceRoot === "string" &&
-    options.runtime.workspaceRoot.trim().length > 0
+    typeof options.runtime.identity.workspaceRoot === "string" &&
+    options.runtime.identity.workspaceRoot.trim().length > 0
   ) {
-    return resolve(options.runtime.workspaceRoot);
+    return resolve(options.runtime.identity.workspaceRoot);
   }
-  if (typeof options.runtime.cwd === "string" && options.runtime.cwd.trim().length > 0) {
-    return resolve(options.runtime.cwd);
+  if (
+    typeof options.runtime.identity.cwd === "string" &&
+    options.runtime.identity.cwd.trim().length > 0
+  ) {
+    return resolve(options.runtime.identity.cwd);
   }
   return process.cwd();
 }

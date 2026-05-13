@@ -1,4 +1,5 @@
-import { createOperatorRuntimePort, type BrewvaRuntime } from "@brewva/brewva-runtime";
+import { createOperatorRuntimePort } from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import type { TurnEnvelope } from "@brewva/brewva-runtime/channels";
 import { formatCostViewText } from "@brewva/brewva-tools/workflow";
 import { toErrorMessage } from "../../utils/errors.js";
@@ -67,7 +68,7 @@ function buildStatusSectionFailure(
 export async function handleChannelStatusCommand(input: {
   command: Extract<ChannelControlCommand, { kind: "status" }>;
   turn: TurnEnvelope;
-  runtime: BrewvaRuntime;
+  runtime: BrewvaHostedRuntimePort;
   replyWriter: ChannelReplyWriter;
   focusedAgentId: string;
   targetAgentId: string;
@@ -189,7 +190,7 @@ export async function handleChannelStatusCommand(input: {
     : undefined;
   const costText = targetSession
     ? formatCostViewText(
-        targetSession.runtime.inspect.cost.getSummary(targetSession.agentSessionId),
+        targetSession.runtime.inspect.cost.summary.get(targetSession.agentSessionId),
         top,
       )
     : `Cost view unavailable: agent @${input.targetAgentId} does not have a live session.`;

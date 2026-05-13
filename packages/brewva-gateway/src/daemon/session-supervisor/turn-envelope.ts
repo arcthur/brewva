@@ -1,5 +1,5 @@
-import type { OperationalClaim } from "@brewva/brewva-runtime";
 import { buildTurnEnvelope, type TurnEnvelope } from "@brewva/brewva-runtime/channels";
+import type { OperationalClaim } from "@brewva/brewva-runtime/claim";
 import { readNonEmptyString } from "@brewva/brewva-std/text";
 import { isRecord } from "@brewva/brewva-std/unknown";
 import type {

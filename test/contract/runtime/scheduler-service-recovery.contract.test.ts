@@ -1,14 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
-import {
-  BrewvaRuntime,
-  asBrewvaIntentId,
-  buildScheduleIntentCreatedEvent,
-  parseScheduleIntentEvent,
-} from "@brewva/brewva-runtime";
+import { BrewvaRuntime, createHostedRuntimePort } from "@brewva/brewva-runtime";
 import { buildTurnEnvelope } from "@brewva/brewva-runtime/channels";
+import { asBrewvaIntentId } from "@brewva/brewva-runtime/core";
 import { SCHEDULE_EVENT_TYPE } from "@brewva/brewva-runtime/events";
 import { createSchedulerService } from "@brewva/brewva-runtime/recovery";
+import {
+  buildScheduleIntentCreatedEvent,
+  parseScheduleIntentEvent,
+} from "@brewva/brewva-runtime/schedule";
 import { requireDefined } from "../../helpers/assertions.js";
 import {
   computeExpectedRecurringJitteredNextRunAt,
@@ -24,7 +24,7 @@ describe("scheduler service recovery contract", () => {
     const sessionId = "scheduler-recover-session";
     const now = Date.now();
 
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: SCHEDULE_EVENT_TYPE,
       payload: buildScheduleIntentCreatedEvent({
@@ -56,7 +56,7 @@ describe("scheduler service recovery contract", () => {
     expect(recovered.catchUp.deferredIntents).toBe(0);
     expect(fired).toEqual(["intent-recover-1"]);
 
-    const events = runtime.inspect.events.query(sessionId, { type: SCHEDULE_EVENT_TYPE });
+    const events = runtime.inspect.events.records.query(sessionId, { type: SCHEDULE_EVENT_TYPE });
     const kinds = events
       .map((event) => parseScheduleIntentEvent(event)?.kind)
       .filter((kind): kind is NonNullable<typeof kind> => Boolean(kind));
@@ -84,7 +84,7 @@ describe("scheduler service recovery contract", () => {
     const sessionId = "scheduler-recover-overflow-session";
     const dueRunAt = nowMs - 10_000;
 
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: SCHEDULE_EVENT_TYPE,
       payload: buildScheduleIntentCreatedEvent({
@@ -98,7 +98,7 @@ describe("scheduler service recovery contract", () => {
       }) as unknown as Record<string, unknown>,
       skipTapeCheckpoint: true,
     });
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: SCHEDULE_EVENT_TYPE,
       payload: buildScheduleIntentCreatedEvent({
@@ -137,7 +137,7 @@ describe("scheduler service recovery contract", () => {
     expect(state?.runCount).toBe(0);
     expect(state?.nextRunAt).toBe(nowMs + runtime.config.schedule.minIntervalMs);
 
-    const deferredEvents = runtime.inspect.events.query(sessionId, {
+    const deferredEvents = runtime.inspect.events.records.query(sessionId, {
       type: "schedule_recovery_deferred",
     });
     expect(deferredEvents.length).toBe(1);
@@ -159,7 +159,7 @@ describe("scheduler service recovery contract", () => {
     const nowMs = Date.UTC(2026, 0, 1, 1, 0, 0, 0);
     const dueRunAt = nowMs - 10_000;
 
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId: "session-fair-a",
       type: SCHEDULE_EVENT_TYPE,
       payload: buildScheduleIntentCreatedEvent({
@@ -173,7 +173,7 @@ describe("scheduler service recovery contract", () => {
       }) as unknown as Record<string, unknown>,
       skipTapeCheckpoint: true,
     });
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId: "session-fair-a",
       type: SCHEDULE_EVENT_TYPE,
       payload: buildScheduleIntentCreatedEvent({
@@ -187,7 +187,7 @@ describe("scheduler service recovery contract", () => {
       }) as unknown as Record<string, unknown>,
       skipTapeCheckpoint: true,
     });
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId: "session-fair-b",
       type: SCHEDULE_EVENT_TYPE,
       payload: buildScheduleIntentCreatedEvent({
@@ -238,10 +238,10 @@ describe("scheduler service recovery contract", () => {
       deferredIntents: 0,
     });
 
-    const summaryA = runtime.inspect.events.query("session-fair-a", {
+    const summaryA = runtime.inspect.events.records.query("session-fair-a", {
       type: "schedule_recovery_summary",
     });
-    const summaryB = runtime.inspect.events.query("session-fair-b", {
+    const summaryB = runtime.inspect.events.records.query("session-fair-b", {
       type: "schedule_recovery_summary",
     });
     expect(summaryA.length).toBe(1);
@@ -251,7 +251,7 @@ describe("scheduler service recovery contract", () => {
     expect(summaryB[0]?.payload?.firedIntents).toBe(1);
     expect(summaryB[0]?.payload?.deferredIntents).toBe(0);
 
-    const deferredA = runtime.inspect.events.query("session-fair-a", {
+    const deferredA = runtime.inspect.events.records.query("session-fair-a", {
       type: "schedule_recovery_deferred",
     });
     expect(deferredA.length).toBe(1);
@@ -271,7 +271,7 @@ describe("scheduler service recovery contract", () => {
     let nowMs = Date.now();
     const sessionId = "scheduler-circuit-session";
 
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: SCHEDULE_EVENT_TYPE,
       payload: buildScheduleIntentCreatedEvent({
@@ -299,7 +299,7 @@ describe("scheduler service recovery contract", () => {
     await scheduler.recover();
     scheduler.stop();
 
-    const events = runtime.inspect.events.query(sessionId, { type: SCHEDULE_EVENT_TYPE });
+    const events = runtime.inspect.events.records.query(sessionId, { type: SCHEDULE_EVENT_TYPE });
     const parsed = events.map((event) => parseScheduleIntentEvent(event)).filter(Boolean);
     const cancelled = requireDefined(
       parsed.find((event) => event?.kind === "intent_cancelled"),
@@ -324,7 +324,7 @@ describe("scheduler service recovery contract", () => {
 
     const nowMs = Date.now();
     const sessionId = "scheduler-error-retry-session";
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: SCHEDULE_EVENT_TYPE,
       payload: buildScheduleIntentCreatedEvent({
@@ -350,7 +350,7 @@ describe("scheduler service recovery contract", () => {
     await scheduler.recover();
     scheduler.stop();
 
-    const events = runtime.inspect.events.query(sessionId, { type: SCHEDULE_EVENT_TYPE });
+    const events = runtime.inspect.events.records.query(sessionId, { type: SCHEDULE_EVENT_TYPE });
     const parsed = events.map((event) => parseScheduleIntentEvent(event)).filter(Boolean);
     const fired = requireDefined(
       parsed.find((event) => event?.kind === "intent_fired"),
@@ -383,7 +383,7 @@ describe("scheduler service recovery contract", () => {
     const sessionId = "scheduler-stale-one-shot-session";
     const overdueRunAt = nowMs - 3 * 60 * 60 * 1000;
 
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: SCHEDULE_EVENT_TYPE,
       payload: buildScheduleIntentCreatedEvent({
@@ -421,7 +421,7 @@ describe("scheduler service recovery contract", () => {
     expect(state?.status).toBe("active");
     expect(state?.nextRunAt).toBe(nowMs + runtime.config.schedule.minIntervalMs);
 
-    const deferredEvents = runtime.inspect.events.query(sessionId, {
+    const deferredEvents = runtime.inspect.events.records.query(sessionId, {
       type: "schedule_recovery_deferred",
     });
     expect(deferredEvents).toHaveLength(1);
@@ -441,7 +441,7 @@ describe("scheduler service recovery contract", () => {
 
     const nowMs = Date.UTC(2026, 0, 1, 4, 0, 0, 0);
     const sessionId = "scheduler-recovery-defer-order-session";
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: SCHEDULE_EVENT_TYPE,
       payload: buildScheduleIntentCreatedEvent({
@@ -455,7 +455,7 @@ describe("scheduler service recovery contract", () => {
       }) as unknown as Record<string, unknown>,
       skipTapeCheckpoint: true,
     });
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: SCHEDULE_EVENT_TYPE,
       payload: buildScheduleIntentCreatedEvent({
@@ -469,7 +469,7 @@ describe("scheduler service recovery contract", () => {
       }) as unknown as Record<string, unknown>,
       skipTapeCheckpoint: true,
     });
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: SCHEDULE_EVENT_TYPE,
       payload: buildScheduleIntentCreatedEvent({
@@ -483,7 +483,7 @@ describe("scheduler service recovery contract", () => {
       }) as unknown as Record<string, unknown>,
       skipTapeCheckpoint: true,
     });
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: SCHEDULE_EVENT_TYPE,
       payload: buildScheduleIntentCreatedEvent({
@@ -498,7 +498,7 @@ describe("scheduler service recovery contract", () => {
       skipTapeCheckpoint: true,
     });
 
-    const schedulerIngress = runtime.extensions.recovery.scheduler;
+    const schedulerIngress = createHostedRuntimePort(runtime).extensions.recovery.scheduler;
     const walRecord = schedulerIngress.appendPending(
       buildTurnEnvelope({
         kind: "user",
@@ -548,7 +548,7 @@ describe("scheduler service recovery contract", () => {
     expect(recovered.catchUp.firedIntents).toBe(1);
     expect(recovered.catchUp.deferredIntents).toBe(3);
 
-    const deferredEvents = runtime.inspect.events.query(sessionId, {
+    const deferredEvents = runtime.inspect.events.records.query(sessionId, {
       type: "schedule_recovery_deferred",
     });
     expect(deferredEvents).toHaveLength(3);
@@ -644,7 +644,7 @@ describe("scheduler service recovery contract", () => {
     if (typeof expectedNextRunAt !== "number") return;
     expect(state?.nextRunAt).toBe(expectedNextRunAt);
 
-    const events = runtime.inspect.events.query("session-cron-recover", {
+    const events = runtime.inspect.events.records.query("session-cron-recover", {
       type: SCHEDULE_EVENT_TYPE,
     });
     const firedCount = events

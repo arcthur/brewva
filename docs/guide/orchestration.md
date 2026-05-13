@@ -138,14 +138,14 @@ Execution posture is intentionally split:
 - `patch-worker` is the isolated patch-producing specialist
 - `subagent_fork` is an execution primitive rather than a specialist; it
   records parent lineage, context policy, and `executionPrimitive=fork`
-- hosted envelopes also pin `contextProfile`; `advisor` and `qa`
-  default to `minimal`, while `patch-worker` uses `standard`
+- hosted context shape is owned by gateway materialization policy, not by a
+  passive envelope profile field
 - hosted envelopes also pin `isolationStrategy`:
   `readonly-advisor=shared`, `qa-runner=ephemeral`, and
   `patch-worker=snapshot`
-- `minimal` still keeps the recovery-critical baseline pair
-  (`historyViewBaseline` + `recoveryWorkingSet`); it only drops the broader
-  runtime-status and working-projection narrative set
+- recovery-critical baseline materialization
+  (`historyViewBaseline` + `recoveryWorkingSet`) is preserved by the gateway
+  context materializer when the hosted lane needs it
 - the review ensemble keeps internal evidence-audit coverage for stale
   evidence, missing probes, rollback posture, and operator-visible recovery
   burden
@@ -155,7 +155,7 @@ freshness. It is not a delegated specialist.
 
 ## Inspectable Stall Adjudication
 
-Stall detection still starts with `runtime.maintain.session.pollStall(...)`, but the
+Stall detection still starts with `runtime.operator.session.pollStall(...)`, but the
 gateway worker now adds a second, inspectable adjudication step.
 
 - `task_stuck_detected` remains the idle-threshold detection signal

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { BrewvaRuntime, createHostedRuntimePort } from "@brewva/brewva-runtime";
 import {
   buildBrewvaPromptText,
   type BrewvaPromptContentPart,
@@ -30,9 +30,10 @@ function promptText(parts: readonly BrewvaPromptContentPart[]): string {
 }
 
 function createRuntimeEventBridge() {
-  const runtime = new BrewvaRuntime({
+  const rawRuntime = new BrewvaRuntime({
     cwd: mkdtempSync(join(tmpdir(), "brewva-compaction-recovery-")),
   });
+  const runtime = createHostedRuntimePort(rawRuntime);
   const events: Array<{
     id: string;
     sessionId: string;
@@ -41,7 +42,7 @@ function createRuntimeEventBridge() {
     turn?: number;
     payload?: Record<string, unknown>;
   }> = [];
-  runtime.inspect.events.subscribe((event) => {
+  rawRuntime.inspect.events.records.subscribe((event) => {
     events.push({
       id: event.id,
       sessionId: event.sessionId,
@@ -139,7 +140,7 @@ describe("compaction recovery controller", () => {
         const content = promptText(parts);
         promptedMessages.push(content);
         if (promptedMessages.length === 1) {
-          eventBridge.runtime.extensions.hosted.events.record({
+          createHostedRuntimePort(eventBridge.runtime).extensions.hosted.events.record({
             sessionId: "agent-session-1",
             type: "session_compact",
             turn: 7,
@@ -185,7 +186,7 @@ describe("compaction recovery controller", () => {
         const content = promptText(parts);
         promptedMessages.push(content);
         if (promptedMessages.length === 1) {
-          eventBridge.runtime.extensions.hosted.events.record({
+          createHostedRuntimePort(eventBridge.runtime).extensions.hosted.events.record({
             sessionId: "agent-session-2",
             type: "session_compact",
             turn: 3,
@@ -229,7 +230,7 @@ describe("compaction recovery controller", () => {
         const content = promptText(parts);
         promptedMessages.push(content);
         if (promptedMessages.length === 1) {
-          eventBridge.runtime.extensions.hosted.events.record({
+          createHostedRuntimePort(eventBridge.runtime).extensions.hosted.events.record({
             sessionId: "agent-session-deterministic-recovery",
             type: "session_compact",
             turn: 5,
@@ -475,7 +476,7 @@ describe("compaction recovery controller", () => {
     expect(session.prompt).toBe(prompt);
 
     wrapped.dispose?.();
-    eventBridge.runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(eventBridge.runtime).extensions.hosted.events.record({
       sessionId: "agent-session-4",
       type: "session_compact",
       turn: 1,
@@ -516,7 +517,7 @@ describe("compaction recovery controller", () => {
     });
 
     for (let attempt = 0; attempt < 3; attempt += 1) {
-      eventBridge.runtime.extensions.hosted.events.record({
+      createHostedRuntimePort(eventBridge.runtime).extensions.hosted.events.record({
         sessionId: "agent-session-breaker",
         type: "session_compact",
         turn: attempt + 1,
@@ -525,7 +526,7 @@ describe("compaction recovery controller", () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     }
 
-    eventBridge.runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(eventBridge.runtime).extensions.hosted.events.record({
       sessionId: "agent-session-breaker",
       type: "session_compact",
       turn: 4,
@@ -544,7 +545,7 @@ describe("compaction recovery controller", () => {
         getSessionId: () => "agent-session-withheld",
       },
       async prompt(_parts: readonly BrewvaPromptContentPart[]): Promise<void> {
-        eventBridge.runtime.extensions.hosted.events.record({
+        createHostedRuntimePort(eventBridge.runtime).extensions.hosted.events.record({
           sessionId: "agent-session-withheld",
           type: "tool_call_blocked",
           payload: buildToolCallBlockedPayload(),

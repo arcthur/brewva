@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { asBrewvaSessionId } from "@brewva/brewva-runtime";
+import { asBrewvaSessionId } from "@brewva/brewva-runtime/core";
 import { type BrewvaEventRecord } from "@brewva/brewva-runtime/events";
 import { createTurnReplayEngine } from "@brewva/brewva-runtime/replay";
 import { anchorEvent, toolResultFailureEvent } from "./turn-replay-engine.helpers.js";

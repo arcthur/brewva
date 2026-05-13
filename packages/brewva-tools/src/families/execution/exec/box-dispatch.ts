@@ -1,10 +1,4 @@
 import {
-  summarizeShellCommandAnalysis,
-  summarizeVirtualReadonlyEligibility,
-  type ShellCommandAnalysis,
-  type VirtualReadonlyEligibility,
-} from "@brewva/brewva-runtime";
-import {
   BOX_ACQUIRED_EVENT_TYPE,
   BOX_BOOTSTRAP_COMPLETED_EVENT_TYPE,
   BOX_BOOTSTRAP_FAILED_EVENT_TYPE,
@@ -16,6 +10,14 @@ import {
   BOX_RELEASED_EVENT_TYPE,
   BOX_SNAPSHOT_CREATED_EVENT_TYPE,
 } from "@brewva/brewva-runtime/events";
+import {
+  summarizeShellCommandAnalysis,
+  summarizeVirtualReadonlyEligibility,
+} from "@brewva/brewva-runtime/security";
+import type {
+  ShellCommandAnalysis,
+  VirtualReadonlyEligibility,
+} from "@brewva/brewva-runtime/security";
 import type { BrewvaBundledToolRuntime } from "../../../contracts/index.js";
 import {
   buildCommandPolicyAuditPayload,

@@ -58,5 +58,6 @@ describe("docs/reference runtime coverage", () => {
       missing,
       `Missing runtime methods in generated runtime inventory: ${missing.join(", ")}`,
     ).toEqual([]);
+    expect(segment).toContain("Budget: total <= 90; inspect <= 55.");
   });
 });

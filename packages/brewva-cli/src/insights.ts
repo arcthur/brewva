@@ -1,10 +1,7 @@
 import { parseArgs as parseNodeArgs } from "node:util";
-import {
-  BrewvaRuntime,
-  createOperatorRuntimePort,
-  createTrustedLocalGovernancePort,
-  type BrewvaOperatorRuntimePort,
-} from "@brewva/brewva-runtime";
+import { BrewvaRuntime, createOperatorRuntimePort } from "@brewva/brewva-runtime";
+import type { BrewvaOperatorRuntimePort } from "@brewva/brewva-runtime";
+import { createTrustedLocalGovernancePort } from "@brewva/brewva-runtime/governance";
 import {
   createSessionIndex,
   type SessionIndexRecentSession,
@@ -226,7 +223,7 @@ async function listAvailableSessions(
   limit: number,
 ): Promise<{ sessions: SessionIndexRecentSession[]; status: SessionIndexStatus }> {
   const index = await createSessionIndex({
-    workspaceRoot: runtime.workspaceRoot,
+    workspaceRoot: runtime.identity.workspaceRoot,
     events: runtime.inspect.events,
     task: runtime.inspect.task,
   });
@@ -615,7 +612,7 @@ async function buildProjectInsightsReport(input: {
   const topFrictionCodes = aggregateTopFrictionCodes(facets);
 
   return {
-    workspaceRoot: input.runtime.workspaceRoot,
+    workspaceRoot: input.runtime.identity.workspaceRoot,
     directory: input.directory.workspaceRelativePath,
     generatedAt: formatISO(Date.now()),
     window: {

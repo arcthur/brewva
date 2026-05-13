@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { parseSkillDocument, type SkillCategory } from "@brewva/brewva-runtime";
+import { parseSkillDocument } from "@brewva/brewva-runtime/skills";
+import type { SkillCategory } from "@brewva/brewva-runtime/skills";
 
 function repoRoot(): string {
   return resolve(import.meta.dirname, "../../..");

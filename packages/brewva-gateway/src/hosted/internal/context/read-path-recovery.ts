@@ -22,14 +22,16 @@ const MISSING_PATH_PATTERN =
 interface RuntimeEventQueryPort {
   inspect: {
     events: {
-      query(
-        sessionId: string,
-        query?: {
-          type?: string;
-          last?: number;
-          after?: number;
-        },
-      ): Array<{ payload?: unknown; timestamp: number }>;
+      records: {
+        query(
+          sessionId: string,
+          query?: {
+            type?: string;
+            last?: number;
+            after?: number;
+          },
+        ): Array<{ payload?: unknown; timestamp: number }>;
+      };
     };
   };
 }
@@ -97,7 +99,7 @@ function analyzeRecentMissingPathFailures(
   runtime: RuntimeEventQueryPort,
   sessionId: string,
 ): ReadPathFailureState {
-  const events = runtime.inspect.events.query(sessionId, {
+  const events = runtime.inspect.events.records.query(sessionId, {
     type: TOOL_RESULT_RECORDED_EVENT_TYPE,
     last: RECENT_TOOL_RESULT_WINDOW,
   });
@@ -144,7 +146,7 @@ function collectObservedDiscoveryEvidence(
   observedPaths: string[];
   observedDirectories: string[];
 } {
-  const evidenceEvents = runtime.inspect.events.query(sessionId, {
+  const evidenceEvents = runtime.inspect.events.records.query(sessionId, {
     type: TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE,
     after: armedAt - 1,
   });
@@ -181,7 +183,7 @@ export function analyzeReadPathRecoveryState(
   runtime: RuntimeEventQueryPort,
   sessionId: string,
 ): ReadPathRecoveryState {
-  const latestArm = runtime.inspect.events.query(sessionId, {
+  const latestArm = runtime.inspect.events.records.query(sessionId, {
     type: TOOL_READ_PATH_GATE_ARMED_EVENT_TYPE,
     last: 1,
   })[0];
@@ -200,14 +202,15 @@ export function analyzeReadPathRecoveryState(
 
   const payload = isRecord(latestArm.payload) ? latestArm.payload : {};
   const observed = collectObservedDiscoveryEvidence(runtime, sessionId, latestArm.timestamp);
-  const failedPaths = Array.isArray(payload.failedPaths)
-    ? clampStringList(
-        payload.failedPaths
-          .map((value) => readNonEmptyString(value))
-          .filter((value): value is string => Boolean(value)),
-        MAX_OBSERVED_PATHS,
-      )
+  const payloadFailedPaths: readonly unknown[] = Array.isArray(payload.failedPaths)
+    ? payload.failedPaths
     : [];
+  const failedPaths = clampStringList(
+    payloadFailedPaths
+      .map((value) => readNonEmptyString(value))
+      .filter((value): value is string => Boolean(value)),
+    MAX_OBSERVED_PATHS,
+  );
 
   return {
     active: true,

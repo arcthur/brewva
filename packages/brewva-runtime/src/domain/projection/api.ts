@@ -39,11 +39,33 @@ export {
   extractWorkflowProjectionFromEvents,
   formatWorkflowProjectionStatement,
 } from "./extractor.js";
+export { WORKFLOW_ARTIFACT_KINDS } from "./workflow/types.js";
+export type {
+  WorkflowAcceptanceStatus,
+  WorkflowArtifact,
+  WorkflowArtifactFreshness,
+  WorkflowArtifactKind,
+  WorkflowArtifactState,
+  WorkflowFinishState,
+  WorkflowFinishView,
+  WorkflowImplementationStatus,
+  WorkflowLaneStatus,
+  WorkflowPlanningStatus,
+  WorkflowPosture,
+  WorkflowPresenceStatus,
+  WorkflowStatusSnapshot,
+} from "./workflow/types.js";
 export {
-  createProjectionSurfaceMethods,
-  projectionRuntimeSurface,
-  projectionSurfaceContribution,
-} from "./runtime-surface.js";
-export type { RuntimeProjectionSurfaceMethods } from "./runtime-surface.js";
-export { registerProjectionDomain } from "./registrar.js";
-export type { RuntimeProjectionDomainRegistration } from "./registrar.js";
+  deriveWorkflowArtifacts,
+  deriveWorkflowArtifactsFromEvent,
+  latestArtifactByKind,
+} from "./workflow/artifact-derivation.js";
+export {
+  collectCoveredRequiredEvidence,
+  collectQaCoverageTexts,
+  collectVerificationCoverageTexts,
+  isRequiredEvidenceCovered,
+  normalizeComparableText,
+} from "./workflow/coverage-utils.js";
+export { deriveWorkflowStatus } from "./workflow/status-derivation.js";
+export { resolveWorkspaceRevision } from "./workflow/workspace-revision.js";

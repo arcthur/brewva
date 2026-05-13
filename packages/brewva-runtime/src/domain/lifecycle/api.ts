@@ -18,15 +18,9 @@ export {
   TURN_END_EVENT_TYPE,
   TURN_START_EVENT_TYPE,
 } from "./events.js";
-export {
-  createLifecycleSurfaceMethods,
-  lifecycleRuntimeSurface,
-  lifecycleSurfaceContribution,
-} from "./runtime-surface.js";
+export { createLifecycleInspectSurface, createLifecycleSurfaceMethods } from "./runtime-surface.js";
 export type {
   LifecycleSurfaceDependencies,
   RuntimeLifecycleSurfaceMethods,
 } from "./runtime-surface.js";
-export { registerLifecycleDomain } from "./registrar.js";
-export type { RuntimeLifecycleDomainRegistration } from "./registrar.js";
 export { buildSessionLifecycleSnapshot } from "./session-lifecycle-snapshot.js";

@@ -1,4 +1,4 @@
-import type { BrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import {
   buildBrewvaPromptText,
   type BrewvaPromptContentPart,
@@ -32,9 +32,14 @@ import {
   getHostedTurnTransitionCoordinator,
   recordSessionTurnTransition,
 } from "../thread-loop/turn-transition.js";
+import {
+  FALLBACK_MODEL_DOWNSHIFT_COMPACTION_INSTRUCTIONS,
+  requestCompactionAndWait,
+  shouldCompactForModelDownshift,
+} from "./model-downshift-policy.js";
 
 const controllerStoreByRuntime = new WeakMap<
-  BrewvaRuntime,
+  BrewvaHostedRuntimePort,
   Map<string, InstalledCompactionRecoveryController>
 >();
 
@@ -62,7 +67,7 @@ interface ModelAwarePromptDispatchSession extends BrewvaPromptDispatchSession {
 interface InstalledCompactionRecoveryController {
   readonly sessionId: string;
   readonly rawSession: CompactionRecoverySessionLike;
-  readonly runtime: BrewvaRuntime;
+  readonly runtime: BrewvaHostedRuntimePort;
   getRequestedGeneration(): number;
   getCompletedGeneration(): number;
   waitForSettled(afterGeneration?: number): Promise<void>;
@@ -75,13 +80,13 @@ interface InstalledCompactionRecoveryController {
 }
 
 export interface CompactionRecoveryOptions {
-  runtime?: BrewvaRuntime;
+  runtime?: BrewvaHostedRuntimePort;
   sessionId?: string;
   promptOptions?: BrewvaPromptOptions;
 }
 
 interface PromptRecoveryContext {
-  runtime: BrewvaRuntime;
+  runtime: BrewvaHostedRuntimePort;
   session: CompactionRecoverySessionLike;
   sessionId: string;
   parts: readonly BrewvaPromptContentPart[];
@@ -126,7 +131,7 @@ async function waitForCompactionToFinish(session: CompactionRecoverySessionLike)
 }
 
 function getControllerStore(
-  runtime: BrewvaRuntime,
+  runtime: BrewvaHostedRuntimePort,
 ): Map<string, InstalledCompactionRecoveryController> {
   const existing = controllerStoreByRuntime.get(runtime);
   if (existing) {
@@ -201,54 +206,15 @@ function resolveFallbackThinkingLevel(
   return available[available.length - 1] ?? "off";
 }
 
-function shouldCompactBeforeModelDownshift(input: {
-  runtime: BrewvaRuntime;
-  sessionId: string;
-  currentModel: BrewvaSessionModelDescriptor;
-  targetModel: BrewvaSessionModelDescriptor;
-}): boolean {
-  if (
-    input.currentModel.contextWindow <= 0 ||
-    input.targetModel.contextWindow <= 0 ||
-    input.targetModel.contextWindow >= input.currentModel.contextWindow
-  ) {
-    return false;
-  }
-
-  const usage = input.runtime.inspect.context.getUsage(input.sessionId);
-  if (typeof usage?.tokens !== "number" || !Number.isFinite(usage.tokens)) {
-    return false;
-  }
-
-  const targetUsage = {
-    ...usage,
-    contextWindow: input.targetModel.contextWindow,
-    maxOutputTokens: input.targetModel.maxTokens,
-  };
-  const gateStatus = input.runtime.inspect.context.getCompactionGateStatus(
-    input.sessionId,
-    targetUsage,
-  );
-  if (gateStatus.recentCompaction) {
-    return false;
-  }
-  const targetStatus = gateStatus.status;
-  return (
-    targetStatus.forcedCompaction ||
-    targetStatus.compactionAdvised ||
-    targetStatus.predictedOverflow
-  );
-}
-
 async function compactBeforeModelDownshift(input: {
-  runtime: BrewvaRuntime;
+  runtime: BrewvaHostedRuntimePort;
   session: CompactionRecoverySessionLike;
   controller: InstalledCompactionRecoveryController;
   sessionId: string;
   currentModel: BrewvaSessionModelDescriptor;
   targetModel: BrewvaSessionModelDescriptor;
 }): Promise<void> {
-  if (!shouldCompactBeforeModelDownshift(input)) {
+  if (!shouldCompactForModelDownshift(input)) {
     return;
   }
 
@@ -258,17 +224,8 @@ async function compactBeforeModelDownshift(input: {
   }
 
   const afterGeneration = input.controller.getRequestedGeneration();
-  await new Promise<void>((resolve, reject) => {
-    try {
-      requestCompaction.call(input.session, {
-        customInstructions:
-          "Compact before switching to a fallback model with a smaller context window. Preserve the current objective, latest user correction, failed attempt, and next step.",
-        onComplete: () => resolve(),
-        onError: (error) => reject(error),
-      });
-    } catch (error) {
-      reject(error);
-    }
+  await requestCompactionAndWait(requestCompaction.bind(input.session), {
+    customInstructions: FALLBACK_MODEL_DOWNSHIFT_COMPACTION_INSTRUCTIONS,
   });
   await input.controller.waitForSettled(afterGeneration);
 }
@@ -620,7 +577,7 @@ const PROMPT_RECOVERY_POLICIES: readonly PromptRecoveryPolicy[] = [
 function createCompactionRecoveryController(
   session: CompactionRecoverySessionLike,
   options: {
-    runtime: BrewvaRuntime;
+    runtime: BrewvaHostedRuntimePort;
     sessionId?: string;
   },
 ): InstalledCompactionRecoveryController {
@@ -727,7 +684,7 @@ function createCompactionRecoveryController(
     },
   };
 
-  const unsubscribe = options.runtime.inspect.events.subscribe((event) => {
+  const unsubscribe = options.runtime.inspect.events.records.subscribe((event) => {
     if (disposed || event.sessionId !== sessionId) {
       return;
     }
@@ -790,7 +747,7 @@ export type PromptRecoveryPolicyApplicationResult =
     };
 
 export async function applyPromptRecoveryPolicy(input: {
-  readonly runtime: BrewvaRuntime;
+  readonly runtime: BrewvaHostedRuntimePort;
   readonly session: CompactionRecoverySessionLike;
   readonly sessionId: string;
   readonly policy: ThreadLoopRecoveryPolicyName;
@@ -868,7 +825,7 @@ export async function applyPromptRecoveryPolicy(input: {
 export function installSessionCompactionRecovery<T extends CompactionRecoverySessionLike>(
   session: T,
   options: {
-    runtime: BrewvaRuntime;
+    runtime: BrewvaHostedRuntimePort;
     sessionId?: string;
   },
 ): T {

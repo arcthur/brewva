@@ -22,13 +22,13 @@ export function applySchedulePromptTrigger(
 
   let taskSpecApplied = false;
   if (trigger.taskSpec) {
-    runtime.authority.task.setSpec(sessionId, trigger.taskSpec);
+    runtime.authority.task.spec.set(sessionId, trigger.taskSpec);
     taskSpecApplied = true;
   }
 
   let claimsApplied = 0;
   for (const fact of trigger.claims ?? []) {
-    const result = runtime.authority.claim.upsert(sessionId, {
+    const result = runtime.authority.claim.facts.upsert(sessionId, {
       id: fact.id,
       kind: fact.kind,
       severity: fact.severity,
@@ -44,7 +44,7 @@ export function applySchedulePromptTrigger(
 
   let anchorApplied = false;
   if (trigger.parentAnchor) {
-    runtime.authority.tape.recordTapeHandoff(sessionId, {
+    runtime.authority.tape.handoff.record(sessionId, {
       name: `schedule:inherit:${trigger.parentAnchor.name ?? "parent"}`,
       summary: trigger.parentAnchor.summary,
       nextSteps: trigger.parentAnchor.nextSteps,

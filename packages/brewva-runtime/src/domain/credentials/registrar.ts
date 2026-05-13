@@ -1,4 +1,4 @@
-import type { RuntimeLazyServiceRegistrarOptions } from "../../runtime/service-registrar-types.js";
+import type { RuntimeLazyServiceRegistrarOptions } from "../../runtime/wiring.js";
 import { createCredentialVaultServiceFromSecurityConfig } from "./credential-vault.js";
 import type { CredentialVaultService } from "./credential-vault.js";
 

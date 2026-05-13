@@ -1,12 +1,5 @@
-import {
-  buildTaskStallAdjudicatedPayload,
-  toTaskWatchdogEventPayload,
-  type BrewvaRuntime,
-  type TapePressureLevel,
-  type TaskStallAdjudicatedPayload,
-  type TaskStallAdjudicationDecision,
-  type TaskStuckDetectedPayload,
-} from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
+import type { TapePressureLevel } from "@brewva/brewva-runtime/context";
 import { type BrewvaEventRecord } from "@brewva/brewva-runtime/events";
 import {
   readTaskStallAdjudicatedEventPayload,
@@ -20,6 +13,15 @@ import {
   TOOL_RESULT_RECORDED_EVENT_TYPE,
   VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
 } from "@brewva/brewva-runtime/events";
+import {
+  buildTaskStallAdjudicatedPayload,
+  toTaskWatchdogEventPayload,
+} from "@brewva/brewva-runtime/task";
+import type {
+  TaskStallAdjudicatedPayload,
+  TaskStallAdjudicationDecision,
+  TaskStuckDetectedPayload,
+} from "@brewva/brewva-runtime/task";
 
 const TASK_STALL_INSPECTION_SCHEMA = "brewva.task-stall-inspection.v1" as const;
 const RECENT_FAILURE_LIMIT = 6;
@@ -84,7 +86,7 @@ export interface TaskStallAdjudication {
 export type TaskStallAdjudicator = (packet: TaskStallInspectionPacket) => TaskStallAdjudication;
 
 export interface MaybeAdjudicateTaskStallInput {
-  runtime: BrewvaRuntime;
+  runtime: BrewvaHostedRuntimePort;
   sessionId: string;
   adjudicator?: TaskStallAdjudicator;
   now?: () => number;
@@ -99,11 +101,11 @@ function lastEvent(events: BrewvaEventRecord[]): BrewvaEventRecord | undefined {
 }
 
 function readVerificationSummary(
-  runtime: BrewvaRuntime,
+  runtime: BrewvaHostedRuntimePort,
   sessionId: string,
 ): TaskStallVerificationSummary {
   const lastOutcomeEvent = lastEvent(
-    runtime.inspect.events.query(sessionId, {
+    runtime.inspect.events.records.query(sessionId, {
       type: VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
       last: 1,
     }),
@@ -127,10 +129,10 @@ function readVerificationSummary(
 }
 
 function readRecentToolFailures(
-  runtime: BrewvaRuntime,
+  runtime: BrewvaHostedRuntimePort,
   sessionId: string,
 ): TaskStallRecentFailure[] {
-  return runtime.inspect.events
+  return runtime.inspect.events.records
     .query(sessionId, {
       type: TOOL_RESULT_RECORDED_EVENT_TYPE,
       last: RECENT_FAILURE_LIMIT,
@@ -151,8 +153,8 @@ function readRecentToolFailures(
     });
 }
 
-function readBlockedToolCount(runtime: BrewvaRuntime, sessionId: string): number {
-  return runtime.inspect.events.query(sessionId, {
+function readBlockedToolCount(runtime: BrewvaHostedRuntimePort, sessionId: string): number {
+  return runtime.inspect.events.records.query(sessionId, {
     type: TOOL_CALL_BLOCKED_EVENT_TYPE,
     last: RECENT_BLOCKED_TOOL_LIMIT,
   }).length;
@@ -193,14 +195,14 @@ function summarizeSignals(packet: TaskStallInspectionPacket): string[] {
 }
 
 export function buildTaskStallInspectionPacket(input: {
-  runtime: BrewvaRuntime;
+  runtime: BrewvaHostedRuntimePort;
   sessionId: string;
   detected: TaskStuckDetectedPayload;
 }): TaskStallInspectionPacket {
-  const taskState = input.runtime.inspect.task.getState(input.sessionId);
+  const taskState = input.runtime.inspect.task.state.get(input.sessionId);
   const verification = readVerificationSummary(input.runtime, input.sessionId);
-  const tape = input.runtime.inspect.tape.getTapeStatus(input.sessionId);
-  const pendingWorkerResults = input.runtime.inspect.session.listWorkerResults(
+  const tape = input.runtime.inspect.tape.status.get(input.sessionId);
+  const pendingWorkerResults = input.runtime.inspect.session.workerResults.list(
     input.sessionId,
   ).length;
   return {
@@ -295,11 +297,11 @@ export function adjudicateTaskStallPacket(
 }
 
 function hasAdjudicationForDetection(
-  runtime: BrewvaRuntime,
+  runtime: BrewvaHostedRuntimePort,
   sessionId: string,
   detectedAt: number,
 ): boolean {
-  return runtime.inspect.events
+  return runtime.inspect.events.records
     .query(sessionId, {
       type: TASK_STALL_ADJUDICATED_EVENT_TYPE,
       last: 6,
@@ -308,11 +310,11 @@ function hasAdjudicationForDetection(
 }
 
 function hasAdjudicationErrorForDetection(
-  runtime: BrewvaRuntime,
+  runtime: BrewvaHostedRuntimePort,
   sessionId: string,
   detectedAt: number,
 ): boolean {
-  return runtime.inspect.events
+  return runtime.inspect.events.records
     .query(sessionId, {
       type: TASK_STALL_ADJUDICATION_ERROR_EVENT_TYPE,
       last: 6,
@@ -327,7 +329,7 @@ export function maybeAdjudicateLatestTaskStall(
   input: MaybeAdjudicateTaskStallInput,
 ): TaskStallAdjudicatedPayload | null {
   const latestDetected = lastEvent(
-    input.runtime.inspect.events.query(input.sessionId, {
+    input.runtime.inspect.events.records.query(input.sessionId, {
       type: TASK_STUCK_DETECTED_EVENT_TYPE,
       last: 1,
     }),

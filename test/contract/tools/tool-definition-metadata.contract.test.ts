@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { createRequire } from "node:module";
-import { TOOL_ACTION_POLICY_BY_NAME, getExactToolActionPolicy } from "@brewva/brewva-runtime";
+import {
+  TOOL_ACTION_POLICY_BY_NAME,
+  getExactToolActionPolicy,
+} from "@brewva/brewva-runtime/governance";
 import { buildBrewvaTools } from "@brewva/brewva-tools";
 import { createA2ATools } from "@brewva/brewva-tools/delegation";
 import {
@@ -263,12 +266,12 @@ describe("managed Brewva tool definition metadata", () => {
     );
 
     expect(getBrewvaToolMetadata(resourceLease)?.requiredCapabilities).toEqual([
-      "authority.tools.cancelResourceLease",
-      "authority.tools.requestResourceLease",
-      "inspect.tools.listResourceLeases",
+      "authority.tools.resourceLeases.cancel",
+      "authority.tools.resourceLeases.request",
+      "inspect.tools.resourceLeases.list",
     ]);
     expect(getBrewvaToolMetadata(rollbackLastPatch)?.requiredCapabilities).toEqual([
-      "authority.tools.rollbackLastPatchSet",
+      "authority.tools.patches.rollbackLastPatchSet",
     ]);
   });
 });

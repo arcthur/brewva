@@ -8,9 +8,9 @@ export type {
   ClaimState,
 } from "./types.js";
 export {
+  createClaimAuthoritySurface,
+  createClaimInspectSurface,
   createClaimSurfaceMethods,
-  claimRuntimeSurface,
-  claimSurfaceContribution,
 } from "./runtime-surface.js";
 export type { RuntimeClaimSurfaceMethods, ClaimSurfaceDependencies } from "./runtime-surface.js";
 export { registerClaimDomain } from "./registrar.js";

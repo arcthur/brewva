@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { clearApiProviderSessions } from "@brewva/brewva-provider-core/registry";
-import type { BrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import {
   STEER_APPLIED_EVENT_TYPE,
   STEER_DROPPED_EVENT_TYPE,
@@ -74,11 +74,14 @@ import {
   compactionFallbackReason,
   ManagedSessionCompactionFlowState,
   nonNegativeUsageNumber,
-  requestCompactionAndWait,
   sameSessionMessages,
-  shouldCompactForModelDownshift,
   type ResolvedCompactionSummary,
 } from "../../compaction/flow.js";
+import {
+  MODEL_DOWNSHIFT_COMPACTION_INSTRUCTIONS,
+  requestCompactionAndWait,
+  shouldCompactForModelDownshift,
+} from "../../compaction/model-downshift-policy.js";
 import {
   createHostedLlmCompactionSummaryGenerator,
   DETERMINISTIC_EMERGENCY_COMPACTION_STRATEGY,
@@ -180,7 +183,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
   readonly modelRegistry: BrewvaSessionModelCatalogView;
 
   readonly #cwd: string;
-  readonly #runtime: BrewvaRuntime | undefined;
+  readonly #runtime: BrewvaHostedRuntimePort | undefined;
   readonly #settings: BrewvaManagedAgentSessionSettingsPort;
   readonly #catalog: BrewvaMutableModelCatalog;
   readonly #modelSelection: ManagedSessionModelSelectionController;
@@ -222,7 +225,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
 
   constructor(input: {
     cwd: string;
-    runtime?: BrewvaRuntime;
+    runtime?: BrewvaHostedRuntimePort;
     settings: BrewvaManagedAgentSessionSettingsPort;
     catalog: BrewvaMutableModelCatalog;
     resourceLoader: BrewvaHostedResourceLoader;
@@ -418,7 +421,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
         .releaseSession(options.cwd, sessionId, providerCacheRuntime.lastGoogleCredential)
         .catch(() => undefined);
     };
-    const clearCacheState = options.runtime?.maintain.session.onClearState((clearedSessionId) => {
+    const clearCacheState = options.runtime?.operator.session.state.onClear((clearedSessionId) => {
       if (clearedSessionId === sessionId) {
         cacheBreakDetector.clear();
         providerCacheRuntime.lastProviderFingerprint = undefined;
@@ -548,9 +551,9 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
             channelContext,
           });
           const transientReduction =
-            options.runtime.inspect.context.getTransientReduction(sessionId);
+            options.runtime.inspect.context.prompt.getTransientReduction(sessionId);
           const visibleHistoryReduction = {
-            epoch: options.runtime.inspect.context.getVisibleReadEpoch(sessionId),
+            epoch: options.runtime.inspect.context.visibleRead.getEpoch(sessionId),
             transientReductionStatus: transientReduction?.status ?? "none",
             transientReductionClassification: transientReduction?.classification ?? null,
             expectedCacheBreak: transientReduction?.expectedCacheBreak ?? false,
@@ -914,8 +917,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     }
 
     await requestCompactionAndWait((request) => this.requestCompaction(request), {
-      customInstructions:
-        "Compact before switching to a model with a smaller context window. Preserve the current objective, latest user correction, failed attempt, and next step.",
+      customInstructions: MODEL_DOWNSHIFT_COMPACTION_INSTRUCTIONS,
     });
   }
 
@@ -1317,7 +1319,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     if (!this.#runtime || !resolution.model || !resolution.usage) {
       return;
     }
-    this.#runtime.authority.cost.recordAssistantUsage({
+    this.#runtime.authority.cost.usage.recordAssistant({
       sessionId,
       model: `${resolution.model.provider}/${resolution.model.id}`,
       inputTokens: nonNegativeUsageNumber(resolution.usage.input),

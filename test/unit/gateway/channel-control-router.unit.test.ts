@@ -712,7 +712,7 @@ describe("channel control router ownership", () => {
     expect(result.routeTask).toContain("Use the daemon path.");
     expect(result.afterRouteSuccess).toBeFunction();
     expect(
-      runtime.inspect.events.query(sessionId, {
+      runtime.inspect.events.records.query(sessionId, {
         type: OPERATOR_QUESTION_ANSWERED_EVENT_TYPE,
       }),
     ).toHaveLength(0);
@@ -720,7 +720,7 @@ describe("channel control router ownership", () => {
     await result.afterRouteSuccess?.();
 
     expect(
-      runtime.inspect.events.query(sessionId, {
+      runtime.inspect.events.records.query(sessionId, {
         type: OPERATOR_QUESTION_ANSWERED_EVENT_TYPE,
       }),
     ).toHaveLength(1);

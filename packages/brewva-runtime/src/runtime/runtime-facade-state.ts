@@ -17,6 +17,7 @@ import type {
 } from "../domain/context/api.js";
 import { SessionCostTracker } from "../domain/cost/api.js";
 import type { SessionCostSummary } from "../domain/cost/api.js";
+import { RuntimeIterationFactController } from "../domain/events/api.js";
 import { createActionPolicyRegistry } from "../domain/governance/api.js";
 import { resolveToolAuthority } from "../domain/governance/api.js";
 import { buildSessionLifecycleSnapshot } from "../domain/lifecycle/api.js";
@@ -44,8 +45,8 @@ import type {
   BrewvaAuthorityPort,
   BrewvaHostedRuntimePort,
   BrewvaInspectionPort,
-  BrewvaMaintenancePort,
   BrewvaRuntimeOptions,
+  RuntimeOperatorPort,
 } from "./runtime-api.js";
 import type {
   RuntimeCoreDependencies,
@@ -55,10 +56,9 @@ import type {
 import { resolveRuntimeConfigState } from "./runtime-config-state.js";
 import { createRuntimeExtensions } from "./runtime-extension-factory.js";
 import {
-  listExtensionPortCapabilities,
+  listRuntimeExtensionOwnerIds,
   type BrewvaRuntimeExtensions,
 } from "./runtime-extensions.js";
-import { RuntimeIterationFactController } from "./runtime-iteration-facts.js";
 import type { RuntimeKernelContext } from "./runtime-kernel.js";
 import { createRuntimeSemanticSurfaces } from "./runtime-surfaces.js";
 
@@ -69,13 +69,11 @@ type RuntimeServiceDependencyMap = RuntimeServiceDependencies;
 type RuntimeLazyFactories = RuntimeLazyServiceFactories;
 
 class RuntimeFacadeStateController implements BrewvaHostedRuntimePort {
-  declare readonly cwd: string;
-  declare readonly workspaceRoot: string;
-  declare readonly agentId: string;
+  declare readonly identity: BrewvaHostedRuntimePort["identity"];
   declare readonly config: DeepReadonly<BrewvaConfig>;
   declare readonly authority: BrewvaAuthorityPort;
   declare readonly inspect: BrewvaInspectionPort;
-  declare readonly maintain: BrewvaMaintenancePort;
+  declare readonly operator: RuntimeOperatorPort;
   declare readonly extensions: BrewvaRuntimeExtensions;
 
   declare private readonly evidenceLedger: RuntimeCoreDependencyMap["evidenceLedger"];
@@ -153,12 +151,10 @@ class RuntimeFacadeStateController implements BrewvaHostedRuntimePort {
     const cwd = resolve(options.cwd ?? process.cwd());
     const workspaceRoot = resolveWorkspaceRootDir(cwd);
     const agentId = normalizeAgentId(options.agentId ?? process.env["BREWVA_AGENT_ID"]);
-    this.cwd = cwd;
-    this.workspaceRoot = workspaceRoot;
-    this.agentId = agentId;
+    this.identity = { cwd, workspaceRoot, agentId };
 
     const configState = resolveRuntimeConfigState({
-      cwd: this.cwd,
+      cwd: this.identity.cwd,
       options,
     });
     this.runtimeConfig = configState.config;
@@ -166,9 +162,9 @@ class RuntimeFacadeStateController implements BrewvaHostedRuntimePort {
 
     this.effectRuntimeSpine = createRuntimeEffectSpine({
       identity: {
-        cwd: this.cwd,
-        workspaceRoot: this.workspaceRoot,
-        agentId: this.agentId,
+        cwd: this.identity.cwd,
+        workspaceRoot: this.identity.workspaceRoot,
+        agentId: this.identity.agentId,
       },
       config: {
         mutableConfig: this.runtimeConfig,
@@ -299,7 +295,7 @@ class RuntimeFacadeStateController implements BrewvaHostedRuntimePort {
         this.invalidateSessionLifecycleSnapshot(sessionId),
       recoverRecoveryWal: async () =>
         recoverRecoveryWal({
-          workspaceRoot: this.workspaceRoot,
+          workspaceRoot: this.identity.workspaceRoot,
           config: this.runtimeConfig.infrastructure.recoveryWal,
           recordEvent: (input: { sessionId: string; type: string; payload?: object }) => {
             this.recordEvent({
@@ -313,16 +309,14 @@ class RuntimeFacadeStateController implements BrewvaHostedRuntimePort {
     });
     this.authority = surfaces.authority;
     this.inspect = surfaces.inspect;
-    this.maintain = surfaces.maintain;
+    this.operator = surfaces.operator;
     this.extensions = createRuntimeExtensions({
       recordEvent: (input) => this.recordEvent(input),
       eventStore: this.eventStore,
       recoveryWalStore: this.recoveryWalStore,
-      maintain: this.maintain,
+      operator: this.operator,
     });
-    this.sessionLineageService.registerRuntimeCapabilityStateOwners(
-      listExtensionPortCapabilities(this.extensions),
-    );
+    this.sessionLineageService.registerRuntimeCapabilityStateOwners(listRuntimeExtensionOwnerIds());
   }
 
   getEffectRuntimeLayer(): ReturnType<typeof createRuntimeEffectLayer> {
@@ -503,8 +497,8 @@ class RuntimeFacadeStateController implements BrewvaHostedRuntimePort {
   private getTaskTargetDescriptor(sessionId: string): TaskTargetDescriptor {
     this.sessionLifecycleService.ensureHydrated(sessionId);
     return resolveTaskTargetDescriptor({
-      cwd: this.cwd,
-      workspaceRoot: this.workspaceRoot,
+      cwd: this.identity.cwd,
+      workspaceRoot: this.identity.workspaceRoot,
       spec: this.getTaskState(sessionId).spec,
     });
   }
@@ -538,7 +532,7 @@ class RuntimeFacadeStateController implements BrewvaHostedRuntimePort {
         sessionId: input.sessionId,
         type: SKILL_REFRESH_RECORDED_EVENT_TYPE,
         payload: {
-          reason: input.reason?.trim() || "runtime.maintain.skills.refresh",
+          reason: input.reason?.trim() || "runtime.operator.skills.refresh",
           generatedAt,
           indexPath,
           systemInstall,
@@ -627,14 +621,7 @@ class RuntimeFacadeStateController implements BrewvaHostedRuntimePort {
 
 export type RuntimeFacadeState = Pick<
   RuntimeFacadeStateController,
-  | "cwd"
-  | "workspaceRoot"
-  | "agentId"
-  | "config"
-  | "authority"
-  | "inspect"
-  | "maintain"
-  | "extensions"
+  "identity" | "config" | "authority" | "inspect" | "operator" | "extensions"
 > & {
   readonly [BREWVA_RUNTIME_INTERNAL_STATE_SYMBOL]: RuntimeFacadeStateController;
 };
@@ -642,13 +629,11 @@ export type RuntimeFacadeState = Pick<
 export function createRuntimeFacadeState(options: BrewvaRuntimeOptions = {}): RuntimeFacadeState {
   const runtime = new RuntimeFacadeStateController(options);
   const facadeState = {
-    cwd: runtime.cwd,
-    workspaceRoot: runtime.workspaceRoot,
-    agentId: runtime.agentId,
+    identity: runtime.identity,
     config: runtime.config,
     authority: runtime.authority,
     inspect: runtime.inspect,
-    maintain: runtime.maintain,
+    operator: runtime.operator,
     extensions: runtime.extensions,
   } as RuntimeFacadeState;
   Object.defineProperty(facadeState, BREWVA_RUNTIME_INTERNAL_STATE_SYMBOL, {

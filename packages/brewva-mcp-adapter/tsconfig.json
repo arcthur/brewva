@@ -1,6 +1,6 @@
 {
   "extends": "../../tsconfig.base.json",
-  "references": [{ "path": "../brewva-std" }, { "path": "../brewva-tool-protocol" }],
+  "references": [{ "path": "../brewva-std" }, { "path": "../brewva-substrate" }],
   "compilerOptions": {
     "rootDir": "src",
     "outDir": "dist"

@@ -1,8 +1,8 @@
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import type {
-  BrewvaHostedRuntimePort,
   ContextBudgetUsage,
   SessionCompactionGenerationMetadata,
-} from "@brewva/brewva-runtime";
+} from "@brewva/brewva-runtime/context";
 import { sha256Hex } from "@brewva/brewva-std/hash";
 import {
   createRuntimeTurnClockStore,
@@ -205,7 +205,7 @@ function resolveCompactionLadderDecision(input: {
   idle: boolean;
   state: CompactionGateState;
 }): CompactionLadderDecision {
-  if (!input.runtime.maintain.context.checkAndRequestCompaction(input.sessionId, input.usage)) {
+  if (!input.runtime.operator.context.compaction.checkAndRequest(input.sessionId, input.usage)) {
     return {
       step: "no_request",
       compactionReason: null,
@@ -213,7 +213,7 @@ function resolveCompactionLadderDecision(input: {
   }
 
   const compactionReason =
-    input.runtime.inspect.context.getPendingCompactionReason(input.sessionId) ?? "usage_threshold";
+    input.runtime.inspect.context.compaction.getPendingReason(input.sessionId) ?? "usage_threshold";
 
   if (!input.hasUI) {
     return {
@@ -260,7 +260,9 @@ export function createHostedCompactionController(
     1,
     Math.trunc(options.autoCompactionWatchdogMs ?? DEFAULT_AUTO_COMPACTION_WATCHDOG_MS),
   );
-  const queryStructured = runtime.inspect.events.queryStructured.bind(runtime.inspect.events);
+  const queryStructured = runtime.inspect.events.records.queryStructured.bind(
+    runtime.inspect.events.records,
+  );
 
   const ensureHydrated = (sessionId: string, state: CompactionGateState): void => {
     if (state.hydrated) {
@@ -303,12 +305,12 @@ export function createHostedCompactionController(
         input.timestamp,
       );
       state.turnIndex = runtimeTurn;
-      runtime.maintain.context.onTurnStart(input.sessionId, runtimeTurn);
+      runtime.operator.context.lifecycle.onTurnStart(input.sessionId, runtimeTurn);
     },
     context(input) {
       const state = getSessionState(input.sessionId);
       state.lastObservedUsageTokens = normalizeUsageTokens(input.usage);
-      runtime.maintain.context.observeUsage(input.sessionId, input.usage);
+      runtime.operator.context.usage.observe(input.sessionId, input.usage);
       const decision = resolveCompactionLadderDecision({
         runtime,
         sessionId: input.sessionId,
@@ -395,7 +397,7 @@ export function createHostedCompactionController(
         sessionId: input.sessionId,
         turn: state.turnIndex,
         reason: compactionReason,
-        usagePercent: runtime.inspect.context.getUsageRatio(input.usage),
+        usagePercent: runtime.inspect.context.usage.getRatio(input.usage),
         tokens: input.usage?.tokens ?? null,
       });
 
@@ -419,7 +421,7 @@ export function createHostedCompactionController(
       try {
         const compact = input.compact as NonNullable<HostedManualCompact>;
         compact({
-          customInstructions: runtime.inspect.context.getCompactionInstructions(),
+          customInstructions: runtime.inspect.context.compaction.getInstructions(),
           onComplete: () => {
             if (state.activeAutoCompactionAttemptId !== attemptId) {
               return;
@@ -457,7 +459,7 @@ export function createHostedCompactionController(
       const toTokens = normalizeUsageTokens(input.usage);
       const summaryGeneration = extractSummaryGeneration(input.compactionEntry);
 
-      runtime.authority.session.commitCompaction(input.sessionId, {
+      runtime.authority.session.compaction.commit(input.sessionId, {
         compactId,
         sanitizedSummary,
         summaryDigest: sha256Hex(sanitizedSummary),
@@ -472,7 +474,7 @@ export function createHostedCompactionController(
           compactionEntry: input.compactionEntry,
         }),
         referenceContextDigest:
-          runtime.inspect.context.getPromptStability(input.sessionId)?.stablePrefixHash ?? null,
+          runtime.inspect.context.prompt.getStability(input.sessionId)?.stablePrefixHash ?? null,
         fromTokens: state.lastObservedUsageTokens,
         toTokens,
         origin: input.fromExtension === true ? "extension_api" : "auto_compaction",

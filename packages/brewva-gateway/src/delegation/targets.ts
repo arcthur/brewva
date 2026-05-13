@@ -1,8 +1,8 @@
 import type {
   DelegationIsolationStrategy,
   DelegationVisibility,
-  ManagedToolMode,
-} from "@brewva/brewva-runtime";
+} from "@brewva/brewva-runtime/delegation";
+import type { ManagedToolMode } from "@brewva/brewva-runtime/session";
 import type {
   AdvisorConsultKind,
   DelegationPacket,
@@ -11,7 +11,7 @@ import type {
   SubagentExecutionBoundary,
   SubagentResultMode,
 } from "@brewva/brewva-tools/contracts";
-import type { HostedContextProfile, HostedDelegationBuiltinToolName } from "./config-files.js";
+import type { HostedDelegationBuiltinToolName } from "./config-files.js";
 
 export type { HostedDelegationBuiltinToolName } from "./config-files.js";
 
@@ -34,7 +34,6 @@ export interface HostedDelegationTarget {
   defaultContextBudget?: SubagentContextBudget;
   managedToolMode?: ManagedToolMode;
   producesPatches: boolean;
-  contextProfile: HostedContextProfile;
   isolationStrategy: DelegationIsolationStrategy;
 }
 

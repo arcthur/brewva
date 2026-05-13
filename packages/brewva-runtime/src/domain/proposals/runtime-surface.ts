@@ -1,7 +1,3 @@
-import {
-  defineRuntimeSurfaceModule,
-  type SurfaceContribution,
-} from "../../runtime/surface-descriptor.js";
 import type {
   DecideEffectCommitmentInput,
   DecideEffectCommitmentResult,
@@ -36,52 +32,46 @@ export interface ProposalsSurfaceDependencies {
   };
 }
 
-export interface RuntimeProposalsSurfaceMethods {
-  submit(sessionId: string, proposal: EffectCommitmentProposal): DecisionReceipt;
-  list(sessionId: string, query?: EffectCommitmentListQuery): EffectCommitmentRecord[];
-  listEffectCommitmentRequests(
-    sessionId: string,
-    query?: EffectCommitmentRequestListQuery,
-  ): EffectCommitmentRequestRecord[];
-  listPendingEffectCommitments(sessionId: string): PendingEffectCommitmentRequest[];
-  decideEffectCommitment(
-    sessionId: string,
-    requestId: string,
-    input: DecideEffectCommitmentInput,
-  ): DecideEffectCommitmentResult;
-}
-
-export const proposalsSurfaceContribution = {
-  authority: ["submit", "decideEffectCommitment"],
-  inspect: ["list", "listEffectCommitmentRequests", "listPendingEffectCommitments"],
-} as const satisfies SurfaceContribution<RuntimeProposalsSurfaceMethods>;
-
-export function createProposalsSurfaceMethods(
-  deps: ProposalsSurfaceDependencies,
-): RuntimeProposalsSurfaceMethods {
+export function createProposalsSurfaceMethods(deps: ProposalsSurfaceDependencies) {
   return {
-    submit: (sessionId: string, proposal: EffectCommitmentProposal): DecisionReceipt =>
-      deps.getProposalAdmissionService().submitProposal(sessionId, proposal),
-    list: (sessionId: string, query?: EffectCommitmentListQuery): EffectCommitmentRecord[] =>
-      deps.getProposalAdmissionService().listProposalRecords(sessionId, query),
-    listEffectCommitmentRequests: (
-      sessionId: string,
-      query?: EffectCommitmentRequestListQuery,
-    ): EffectCommitmentRequestRecord[] =>
-      deps.getEffectCommitmentDeskService().listRequests(sessionId, query),
-    listPendingEffectCommitments: (sessionId: string): PendingEffectCommitmentRequest[] =>
-      deps.getEffectCommitmentDeskService().listPending(sessionId),
-    decideEffectCommitment: (
-      sessionId: string,
-      requestId: string,
-      input: DecideEffectCommitmentInput,
-    ): DecideEffectCommitmentResult =>
-      deps.getEffectCommitmentDeskService().decide(sessionId, requestId, input),
+    authority: {
+      proposals: {
+        submit: (sessionId: string, proposal: EffectCommitmentProposal): DecisionReceipt =>
+          deps.getProposalAdmissionService().submitProposal(sessionId, proposal),
+      },
+      requests: {
+        decide: (
+          sessionId: string,
+          requestId: string,
+          input: DecideEffectCommitmentInput,
+        ): DecideEffectCommitmentResult =>
+          deps.getEffectCommitmentDeskService().decide(sessionId, requestId, input),
+      },
+    },
+    inspect: {
+      proposals: {
+        list: (sessionId: string, query?: EffectCommitmentListQuery): EffectCommitmentRecord[] =>
+          deps.getProposalAdmissionService().listProposalRecords(sessionId, query),
+      },
+      requests: {
+        list: (
+          sessionId: string,
+          query?: EffectCommitmentRequestListQuery,
+        ): EffectCommitmentRequestRecord[] =>
+          deps.getEffectCommitmentDeskService().listRequests(sessionId, query),
+        listPending: (sessionId: string): PendingEffectCommitmentRequest[] =>
+          deps.getEffectCommitmentDeskService().listPending(sessionId),
+      },
+    },
   };
 }
 
-export const proposalsRuntimeSurface = defineRuntimeSurfaceModule({
-  name: "proposals",
-  createMethods: createProposalsSurfaceMethods,
-  contribution: proposalsSurfaceContribution,
-});
+export type RuntimeProposalsSurfaceMethods = ReturnType<typeof createProposalsSurfaceMethods>;
+
+export function createProposalsAuthoritySurface(deps: ProposalsSurfaceDependencies) {
+  return createProposalsSurfaceMethods(deps).authority;
+}
+
+export function createProposalsInspectSurface(deps: ProposalsSurfaceDependencies) {
+  return createProposalsSurfaceMethods(deps).inspect;
+}

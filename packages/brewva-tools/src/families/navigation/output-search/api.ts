@@ -92,7 +92,7 @@ export function createOutputSearchTool(options: BrewvaBundledToolOptions): ToolD
 
       const roots = [
         normalizeText((ctx as { cwd?: unknown }).cwd),
-        normalizeText(runtime.cwd),
+        normalizeText(runtime.identity.cwd),
       ].filter((value): value is string => Boolean(value));
       const uniqueRoots = [...new Set(roots.map((root) => resolve(root)))];
       const recordSearchEvent = (payload: Record<string, unknown>) => {
@@ -102,14 +102,14 @@ export function createOutputSearchTool(options: BrewvaBundledToolOptions): ToolD
           payload,
         });
       };
-      if (!eventPort?.list) {
+      if (!eventPort?.records?.list) {
         return inconclusiveTextResult(
           "[OutputSearch]\nstatus: unavailable\nreason: runtime event inspection unavailable",
         );
       }
       const recentSearchEvents =
         queryList.length > 0
-          ? (eventPort.list(sessionId, {
+          ? (eventPort.records.list(sessionId, {
               type: "tool_output_search",
               last: SEARCH_THROTTLE_EVENT_LOOKBACK,
             }) as BrewvaEventRecord[])
@@ -128,7 +128,7 @@ export function createOutputSearchTool(options: BrewvaBundledToolOptions): ToolD
             };
       const effectiveLimit = Math.max(1, throttleState.effectiveLimit);
 
-      const events = eventPort.list(sessionId, {
+      const events = eventPort.records.list(sessionId, {
         type: "tool_output_artifact_persisted",
         last: Math.min(MAX_ARTIFACT_EVENTS * 4, Math.max(artifactsLast * 4, 60)),
       }) as BrewvaEventRecord[];
@@ -206,7 +206,7 @@ export function createOutputSearchTool(options: BrewvaBundledToolOptions): ToolD
       }
 
       const contentCache = new Map<string, PreparedArtifact>();
-      const cacheScope = resolve(runtime.workspaceRoot ?? runtime.cwd ?? ".");
+      const cacheScope = resolve(runtime.identity.workspaceRoot ?? runtime.identity.cwd ?? ".");
       const skippedLargePaths = new Set<string>();
       const readFailurePaths = new Set<string>();
       const loadStats: ArtifactLoadStats = {

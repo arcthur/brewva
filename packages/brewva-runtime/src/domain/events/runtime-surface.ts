@@ -5,10 +5,7 @@ import type {
   BrewvaReplaySession,
   BrewvaStructuredEvent,
 } from "../../events/types.js";
-import {
-  defineRuntimeSurfaceModule,
-  type SurfaceContribution,
-} from "../../runtime/surface-descriptor.js";
+import type { RuntimeRecordEvent } from "../sessions/api.js";
 import type {
   GuardResultInput,
   GuardResultQuery,
@@ -16,8 +13,7 @@ import type {
   MetricObservationInput,
   MetricObservationQuery,
   MetricObservationRecord,
-} from "../iteration/api.js";
-import type { RuntimeRecordEvent } from "../sessions/api.js";
+} from "./iteration-facts.js";
 
 export interface EventsSurfaceDependencies {
   recordEvent: RuntimeRecordEvent;
@@ -42,74 +38,83 @@ export interface EventsSurfaceDependencies {
 }
 
 export interface RuntimeEventsSurfaceMethods {
-  record: RuntimeRecordEvent;
-  resolveLogPath(sessionId: string): string;
-  getLogPath(sessionId: string): string;
-  query(sessionId: string, query?: BrewvaEventQuery): BrewvaEventRecord[];
-  queryStructured(sessionId: string, query?: BrewvaEventQuery): BrewvaStructuredEvent[];
+  records: {
+    query(sessionId: string, query?: BrewvaEventQuery): BrewvaEventRecord[];
+    queryStructured(sessionId: string, query?: BrewvaEventQuery): BrewvaStructuredEvent[];
+    subscribe(listener: (event: BrewvaStructuredEvent) => void): () => void;
+    toStructured(event: BrewvaEventRecord): BrewvaStructuredEvent;
+    list(sessionId: string, query?: BrewvaEventQuery): BrewvaEventRecord[];
+  };
+  log: {
+    getPath(sessionId: string): string;
+    listReplaySessions(limit?: number): BrewvaReplaySession[];
+    listSessionIds(): string[];
+  };
+  iteration: {
+    listMetricObservations(
+      sessionId: string,
+      query?: MetricObservationQuery,
+    ): MetricObservationRecord[];
+    listGuardResults(sessionId: string, query?: GuardResultQuery): GuardResultRecord[];
+  };
   recordMetricObservation(
     sessionId: string,
     input: MetricObservationInput,
   ): BrewvaEventRecord | undefined;
-  listMetricObservations(
-    sessionId: string,
-    query?: MetricObservationQuery,
-  ): MetricObservationRecord[];
   recordGuardResult(sessionId: string, input: GuardResultInput): BrewvaEventRecord | undefined;
-  listGuardResults(sessionId: string, query?: GuardResultQuery): GuardResultRecord[];
-  listReplaySessions(limit?: number): BrewvaReplaySession[];
-  subscribe(listener: (event: BrewvaStructuredEvent) => void): () => void;
-  toStructured(event: BrewvaEventRecord): BrewvaStructuredEvent;
-  list(sessionId: string, query?: BrewvaEventQuery): BrewvaEventRecord[];
-  listSessionIds(): string[];
 }
-
-export const eventsSurfaceContribution = {
-  authority: ["recordMetricObservation", "recordGuardResult"],
-  inspect: [
-    "query",
-    "queryStructured",
-    "listMetricObservations",
-    "listGuardResults",
-    "getLogPath",
-    "listReplaySessions",
-    "subscribe",
-    "toStructured",
-    "list",
-    "listSessionIds",
-  ],
-} as const satisfies SurfaceContribution<RuntimeEventsSurfaceMethods>;
 
 export function createEventsSurfaceMethods(
   deps: EventsSurfaceDependencies,
 ): RuntimeEventsSurfaceMethods {
   return {
-    record: (input) => deps.recordEvent(input),
-    resolveLogPath: (sessionId: string) => deps.eventStore.getLogPath(sessionId),
-    getLogPath: (sessionId: string) => deps.eventStore.getLogPath(sessionId),
-    query: (sessionId: string, query?: BrewvaEventQuery) =>
-      deps.eventPipeline.queryEvents(sessionId, query),
-    queryStructured: (sessionId: string, query?: BrewvaEventQuery) =>
-      deps.eventPipeline.queryStructuredEvents(sessionId, query),
+    records: {
+      query: (sessionId: string, query?: BrewvaEventQuery) =>
+        deps.eventPipeline.queryEvents(sessionId, query),
+      queryStructured: (sessionId: string, query?: BrewvaEventQuery) =>
+        deps.eventPipeline.queryStructuredEvents(sessionId, query),
+      subscribe: (listener: (event: BrewvaStructuredEvent) => void) =>
+        deps.eventPipeline.subscribeEvents(listener),
+      toStructured: (event: BrewvaEventRecord) => deps.eventPipeline.toStructuredEvent(event),
+      list: (sessionId: string, query?: BrewvaEventQuery) => deps.eventStore.list(sessionId, query),
+    },
+    log: {
+      getPath: (sessionId: string) => deps.eventStore.getLogPath(sessionId),
+      listReplaySessions: (limit?: number) => deps.eventPipeline.listReplaySessions(limit),
+      listSessionIds: () => deps.eventStore.listSessionIds(),
+    },
+    iteration: {
+      listMetricObservations: (sessionId: string, query?: MetricObservationQuery) =>
+        deps.listMetricObservations(sessionId, query),
+      listGuardResults: (sessionId: string, query?: GuardResultQuery) =>
+        deps.listGuardResults(sessionId, query),
+    },
     recordMetricObservation: (sessionId: string, input: MetricObservationInput) =>
       deps.recordMetricObservation(sessionId, input),
-    listMetricObservations: (sessionId: string, query?: MetricObservationQuery) =>
-      deps.listMetricObservations(sessionId, query),
     recordGuardResult: (sessionId: string, input: GuardResultInput) =>
       deps.recordGuardResult(sessionId, input),
-    listGuardResults: (sessionId: string, query?: GuardResultQuery) =>
-      deps.listGuardResults(sessionId, query),
-    listReplaySessions: (limit?: number) => deps.eventPipeline.listReplaySessions(limit),
-    subscribe: (listener: (event: BrewvaStructuredEvent) => void) =>
-      deps.eventPipeline.subscribeEvents(listener),
-    toStructured: (event: BrewvaEventRecord) => deps.eventPipeline.toStructuredEvent(event),
-    list: (sessionId: string, query?: BrewvaEventQuery) => deps.eventStore.list(sessionId, query),
-    listSessionIds: () => deps.eventStore.listSessionIds(),
   };
 }
 
-export const eventsRuntimeSurface = defineRuntimeSurfaceModule({
-  name: "events",
-  createMethods: createEventsSurfaceMethods,
-  contribution: eventsSurfaceContribution,
-});
+export function createEventsAuthoritySurface(deps: EventsSurfaceDependencies) {
+  const methods = createEventsSurfaceMethods(deps);
+  return {
+    recordMetricObservation: (
+      sessionId: string,
+      input: Parameters<EventsSurfaceDependencies["recordMetricObservation"]>[1],
+    ) => methods.recordMetricObservation(sessionId, input),
+    recordGuardResult: (
+      sessionId: string,
+      input: Parameters<EventsSurfaceDependencies["recordGuardResult"]>[1],
+    ) => methods.recordGuardResult(sessionId, input),
+  };
+}
+
+export function createEventsInspectSurface(deps: EventsSurfaceDependencies) {
+  const methods = createEventsSurfaceMethods(deps);
+  return {
+    records: methods.records,
+    log: methods.log,
+    iteration: methods.iteration,
+  };
+}

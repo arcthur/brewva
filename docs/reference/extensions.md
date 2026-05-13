@@ -31,6 +31,15 @@ Hosted behavior installation is private to hosted session assembly. Extension
 callers should treat the hosted lane as a closed default path and use only the
 facade symbols listed above for opt-in behavior.
 
+Runtime extension handles are exposed only through narrowed repo-owned ports:
+`createHostedRuntimePort(...)` for hosted control-plane code and
+`createToolRuntimePort(...)` for bundled tools. The raw `BrewvaRuntime` root
+does not expose `extensions`.
+
+Runtime extension ports are typed method ports only. They do not carry branded
+runtime capability tokens or reflective `capabilities` arrays; capability
+declaration remains a gateway/plugin concern, not a runtime-port guardrail.
+
 ## Boundary
 
 Default hosted behavior belongs to `@brewva/brewva-gateway/hosted`. External

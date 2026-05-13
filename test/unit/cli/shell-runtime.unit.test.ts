@@ -2,15 +2,15 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { BrewvaRuntime, createHostedRuntimePort } from "@brewva/brewva-runtime";
 import {
-  BrewvaRuntime,
-  CURRENT_DELEGATION_CONTRACT_VERSION,
   asBrewvaSessionId,
   asBrewvaToolCallId,
   asBrewvaToolName,
-  type SessionWireFrame,
-} from "@brewva/brewva-runtime";
+} from "@brewva/brewva-runtime/core";
+import { CURRENT_DELEGATION_CONTRACT_VERSION } from "@brewva/brewva-runtime/delegation";
 import { type BrewvaReplaySession } from "@brewva/brewva-runtime/events";
+import type { SessionWireFrame } from "@brewva/brewva-runtime/session";
 import type { BrewvaToolUiPort } from "@brewva/brewva-substrate/host-api";
 import {
   buildBrewvaPromptText,
@@ -100,20 +100,21 @@ function createFakeBundle(
       lastEventAt: Date.now(),
     },
   ];
-  const runtime = new BrewvaRuntime({
+  const rawRuntime = new BrewvaRuntime({
     cwd: mkdtempSync(join(tmpdir(), "brewva-shell-runtime-")),
   });
-  Object.assign(runtime.authority.proposals, {
-    decideEffectCommitment(_sessionId: string, requestId: string, input: unknown) {
+  const runtime = createHostedRuntimePort(rawRuntime);
+  Object.assign(runtime.authority.proposals.requests, {
+    decide(_sessionId: string, requestId: string, input: unknown) {
       approvalDecisions.push({ requestId, input });
     },
   });
-  Object.assign(runtime.inspect.proposals, {
-    listPendingEffectCommitments() {
+  Object.assign(runtime.inspect.proposals.requests, {
+    listPending() {
       return [];
     },
   });
-  Object.assign(runtime.inspect.events, {
+  Object.assign(runtime.inspect.events.log, {
     listReplaySessions() {
       return replaySessions;
     },
@@ -586,7 +587,7 @@ describe("shell runtime", () => {
 
   test("lineage slash command opens the lineage overlay", async () => {
     const { bundle } = createFakeBundle({ sessionId: "lineage-overlay-session" });
-    bundle.runtime.authority.session.createLineageNode("lineage-overlay-session", {
+    bundle.runtime.authority.session.lineage.createNode("lineage-overlay-session", {
       lineageNodeId: "lineage:main",
       kind: "main",
       forkPoint: { kind: "session_root" },
@@ -686,7 +687,7 @@ describe("shell runtime", () => {
       selectedIndex: 0,
     });
     expect(
-      bundle.runtime.inspect.session.getLineageTree("lineage-checkout-session").selectedByChannel
+      bundle.runtime.inspect.session.lineage.getTree("lineage-checkout-session").selectedByChannel
         .cli,
     ).toBe("lineage:main");
     expect(JSON.stringify(replacedMessages.at(-1))).toContain("main checkpoint");
@@ -3295,13 +3296,13 @@ describe("shell runtime", () => {
   test("records interactive rewind checkpoints with monotonic turn ids", async () => {
     const turnIds: string[] = [];
     const { bundle } = createFakeBundle();
-    Object.assign(bundle.runtime.authority.session, {
-      recordRewindCheckpoint(
+    Object.assign(bundle.runtime.authority.session.rewind, {
+      recordCheckpoint(
         _sessionId: string,
         input: { turnId?: string },
-      ): ReturnType<typeof bundle.runtime.authority.session.recordRewindCheckpoint> {
+      ): ReturnType<typeof bundle.runtime.authority.session.rewind.recordCheckpoint> {
         turnIds.push(input.turnId ?? "");
-        return {} as ReturnType<typeof bundle.runtime.authority.session.recordRewindCheckpoint>;
+        return {} as ReturnType<typeof bundle.runtime.authority.session.rewind.recordCheckpoint>;
       },
     });
     const restoreDateNow = patchDateNow(() => 1_710_000_000_000);
@@ -3339,8 +3340,8 @@ describe("shell runtime", () => {
   test("blocks redo while the current session is streaming", async () => {
     const { bundle } = createFakeBundle();
     let redoCalls = 0;
-    Object.assign(bundle.runtime.authority.session, {
-      redo(): ReturnType<typeof bundle.runtime.authority.session.redo> {
+    Object.assign(bundle.runtime.authority.session.rewind, {
+      redo(): ReturnType<typeof bundle.runtime.authority.session.rewind.redo> {
         redoCalls += 1;
         return { ok: false, reason: "no_redo" };
       },
@@ -3398,8 +3399,8 @@ describe("shell runtime", () => {
 
     let undoAvailable = true;
     let redoAvailable = false;
-    Object.assign(bundle.runtime.inspect.session, {
-      getRewindState(): ReturnType<typeof bundle.runtime.inspect.session.getRewindState> {
+    Object.assign(bundle.runtime.inspect.session.rewind, {
+      getState(): ReturnType<typeof bundle.runtime.inspect.session.rewind.getState> {
         return {
           checkpoints: [],
           rewindAvailable: undoAvailable,
@@ -3408,21 +3409,23 @@ describe("shell runtime", () => {
             ? ({
                 checkpointId: "checkpoint-1",
               } as ReturnType<
-                typeof bundle.runtime.inspect.session.getRewindState
+                typeof bundle.runtime.inspect.session.rewind.getState
               >["latestRewindable"])
             : undefined,
           nextRedoable: redoAvailable
             ? ({
                 checkpointId: "checkpoint-1",
                 returnLeafEntryId: "leaf-redo",
-              } as ReturnType<typeof bundle.runtime.inspect.session.getRewindState>["nextRedoable"])
+              } as ReturnType<
+                typeof bundle.runtime.inspect.session.rewind.getState
+              >["nextRedoable"])
             : undefined,
           redoStack: [],
         };
       },
     });
-    Object.assign(bundle.runtime.authority.session, {
-      rewind(): ReturnType<typeof bundle.runtime.authority.session.rewind> {
+    Object.assign(bundle.runtime.authority.session.rewind, {
+      rewind(): ReturnType<typeof bundle.runtime.authority.session.rewind.rewind> {
         undoAvailable = false;
         redoAvailable = true;
         return {
@@ -3430,7 +3433,7 @@ describe("shell runtime", () => {
           checkpoint: {
             checkpointId: "checkpoint-1",
             turn: 1,
-          } as ReturnType<typeof bundle.runtime.authority.session.rewind> extends infer T
+          } as ReturnType<typeof bundle.runtime.authority.session.rewind.rewind> extends infer T
             ? T extends { ok: true; checkpoint: infer C }
               ? C
               : never
@@ -3461,7 +3464,7 @@ describe("shell runtime", () => {
           summary: "carry",
         };
       },
-      redo(): ReturnType<typeof bundle.runtime.authority.session.redo> {
+      redo(): ReturnType<typeof bundle.runtime.authority.session.rewind.redo> {
         undoAvailable = true;
         redoAvailable = false;
         return {
@@ -3469,7 +3472,7 @@ describe("shell runtime", () => {
           checkpoint: {
             checkpointId: "checkpoint-1",
             turn: 1,
-          } as ReturnType<typeof bundle.runtime.authority.session.redo> extends infer T
+          } as ReturnType<typeof bundle.runtime.authority.session.rewind.redo> extends infer T
             ? T extends { ok: true; checkpoint: infer C }
               ? C
               : never
@@ -3579,8 +3582,8 @@ describe("shell runtime", () => {
       branchSummaries.push({ entryId, text, details, replace });
     };
 
-    Object.assign(bundle.runtime.inspect.session, {
-      listRewindTargets(): ReturnType<typeof bundle.runtime.inspect.session.listRewindTargets> {
+    Object.assign(bundle.runtime.inspect.session.rewind, {
+      listTargets(): ReturnType<typeof bundle.runtime.inspect.session.rewind.listTargets> {
         return [
           {
             checkpointId: "checkpoint-newer",
@@ -3603,11 +3606,11 @@ describe("shell runtime", () => {
         ];
       },
     });
-    Object.assign(bundle.runtime.authority.session, {
+    Object.assign(bundle.runtime.authority.session.rewind, {
       rewind(
         _sessionId: string,
-        input: Parameters<typeof bundle.runtime.authority.session.rewind>[1],
-      ): ReturnType<typeof bundle.runtime.authority.session.rewind> {
+        input: Parameters<typeof bundle.runtime.authority.session.rewind.rewind>[1],
+      ): ReturnType<typeof bundle.runtime.authority.session.rewind.rewind> {
         rewinds.push({
           checkpointId: input?.checkpointId,
           mode: input?.mode,
@@ -3618,7 +3621,7 @@ describe("shell runtime", () => {
           checkpoint: {
             checkpointId: input?.checkpointId ?? "checkpoint-newer",
             turn: input?.checkpointId === "checkpoint-older" ? 1 : 2,
-          } as ReturnType<typeof bundle.runtime.authority.session.rewind> extends infer T
+          } as ReturnType<typeof bundle.runtime.authority.session.rewind.rewind> extends infer T
             ? T extends { ok: true; checkpoint: infer C }
               ? C
               : never

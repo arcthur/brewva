@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { BrewvaRuntime, createHostedRuntimePort } from "@brewva/brewva-runtime";
 import { OPERATOR_QUESTION_ANSWERED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
 import {
   buildBrewvaPromptText,
@@ -25,6 +25,10 @@ import {
   resolveOpenSessionQuestionRequest,
 } from "../../../packages/brewva-gateway/src/ingress/internal/operator-questions.js";
 
+function createHostedTestRuntime(options: ConstructorParameters<typeof BrewvaRuntime>[0]) {
+  return createHostedRuntimePort(new BrewvaRuntime(options));
+}
+
 function writeDelegationOutcomeArtifact(
   workspaceRoot: string,
   runId: string,
@@ -39,17 +43,17 @@ function writeDelegationOutcomeArtifact(
 
 describe("cli shell session port", () => {
   test("exposes the current session lineage status", () => {
-    const runtime = new BrewvaRuntime({
+    const runtime = createHostedTestRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-shell-port-lineage-")),
     });
     const sessionId = "shell-port-lineage-session";
-    runtime.authority.session.createLineageNode(sessionId, {
+    runtime.authority.session.lineage.createNode(sessionId, {
       lineageNodeId: "lineage:main",
       kind: "main",
       forkPoint: { kind: "session_root" },
       title: "Main task",
     });
-    runtime.authority.session.createLineageNode(sessionId, {
+    runtime.authority.session.lineage.createNode(sessionId, {
       lineageNodeId: "lineage:review",
       parentLineageNodeId: "lineage:main",
       kind: "review",
@@ -111,7 +115,7 @@ describe("cli shell session port", () => {
 
   test("checks out lineage through the session port and records channel selection", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-shell-port-lineage-checkout-"));
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createHostedTestRuntime({ cwd: workspace });
     const sessionId = "shell-port-lineage-checkout-session";
     const store = new HostedRuntimeTapeSessionStore(runtime, sessionId);
     const mainEntryId = store.appendMessage({
@@ -194,7 +198,7 @@ describe("cli shell session port", () => {
     });
 
     expect(store.getLineageNodeId()).toBe("lineage:main");
-    expect(runtime.inspect.session.getLineageTree(sessionId).selectedByChannel.cli).toBe(
+    expect(runtime.inspect.session.lineage.getTree(sessionId).selectedByChannel.cli).toBe(
       "lineage:main",
     );
     expect(JSON.stringify(replacedMessages.at(-1))).toContain("main checkpoint");
@@ -203,7 +207,7 @@ describe("cli shell session port", () => {
 
   test("records lineage selection only after transcript replacement succeeds", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-shell-port-lineage-checkout-failure-"));
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createHostedTestRuntime({ cwd: workspace });
     const sessionId = "shell-port-lineage-checkout-failure-session";
     const store = new HostedRuntimeTapeSessionStore(runtime, sessionId);
     const mainEntryId = store.appendMessage({
@@ -290,13 +294,15 @@ describe("cli shell session port", () => {
     }
 
     expect(caughtError).toEqual(expect.objectContaining({ message: "replace failed" }));
-    expect(runtime.inspect.session.getLineageTree(sessionId).selectedByChannel.cli).toBeUndefined();
+    expect(
+      runtime.inspect.session.lineage.getTree(sessionId).selectedByChannel.cli,
+    ).toBeUndefined();
     expect(store.getLineageNodeId()).toBe(previousLineageNodeId);
     expect(store.getLeafId()).toBe(previousLeafEntryId);
   });
 
   test("routes non-streaming interactive prompts through the hosted thread loop", async () => {
-    const runtime = new BrewvaRuntime({
+    const runtime = createHostedTestRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-shell-port-")),
     });
     const sentMessages: string[] = [];
@@ -336,7 +342,7 @@ describe("cli shell session port", () => {
         const prompt = buildBrewvaPromptText(parts);
         sentMessages.push(prompt);
         if (sentMessages.length === 1) {
-          runtime.extensions.hosted.events.record({
+          createHostedRuntimePort(runtime).extensions.hosted.events.record({
             sessionId: "shell-port-session",
             type: "session_compact",
             payload: {
@@ -401,7 +407,7 @@ describe("cli shell session port", () => {
 
   test("operator question request answers record receipts from the resolved request without recollecting", async () => {
     const workspaceRoot = mkdtempSync(join(tmpdir(), "brewva-shell-port-question-request-"));
-    const runtime = new BrewvaRuntime({ cwd: workspaceRoot });
+    const runtime = createHostedTestRuntime({ cwd: workspaceRoot });
     const sessionId = "shell-port-question-session";
     const runId = "question-request-run";
     const artifactPath = writeDelegationOutcomeArtifact(workspaceRoot, runId, {
@@ -442,7 +448,7 @@ describe("cli shell session port", () => {
       },
       evidenceRefs: [],
     });
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: "subagent_completed",
       payload: {
@@ -488,7 +494,7 @@ describe("cli shell session port", () => {
         if (!firstQuestion) {
           return;
         }
-        runtime.extensions.hosted.events.record({
+        createHostedRuntimePort(runtime).extensions.hosted.events.record({
           sessionId,
           type: OPERATOR_QUESTION_ANSWERED_EVENT_TYPE,
           payload: buildOperatorQuestionAnsweredPayload({
@@ -520,7 +526,7 @@ describe("cli shell session port", () => {
     await port.answerQuestionRequest(requestId, [["Yes"], ["No"]]);
 
     expect(sentMessages).toHaveLength(1);
-    const answeredEvents = runtime.inspect.events
+    const answeredEvents = runtime.inspect.events.records
       .query(sessionId)
       .filter((event) => event.type === OPERATOR_QUESTION_ANSWERED_EVENT_TYPE);
     expect(answeredEvents).toHaveLength(3);

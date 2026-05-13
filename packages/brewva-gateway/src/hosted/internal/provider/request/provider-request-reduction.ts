@@ -1,8 +1,8 @@
-import {
-  type BrewvaHostedRuntimePort,
-  type ContextBudgetUsage,
-  type ProviderCacheObservationState,
-} from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
+import type {
+  ContextBudgetUsage,
+  ProviderCacheObservationState,
+} from "@brewva/brewva-runtime/context";
 import type { InternalHostPluginApi } from "@brewva/brewva-substrate/host-api";
 import {
   estimateProviderPayloadTextTokens,
@@ -52,7 +52,7 @@ interface ReductionEligibility {
 }
 
 type TransientReductionObservationInput = Parameters<
-  BrewvaHostedRuntimePort["maintain"]["context"]["observeTransientReduction"]
+  BrewvaHostedRuntimePort["operator"]["context"]["prompt"]["observeTransientReduction"]
 >[1];
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -530,7 +530,7 @@ export function resolveTransientOutboundReductionEligibility(
 
   const usage = buildEffectiveReductionUsage(
     payload,
-    runtime.inspect.context.getUsage(sessionId),
+    runtime.inspect.context.usage.get(sessionId),
     metadata,
   );
   if (!usage) {
@@ -543,9 +543,9 @@ export function resolveTransientOutboundReductionEligibility(
     };
   }
 
-  const gateStatus = runtime.inspect.context.getCompactionGateStatus(sessionId, usage);
+  const gateStatus = runtime.inspect.context.compaction.getGateStatus(sessionId, usage);
   const cacheCold = isProviderCacheLikelyCold(
-    runtime.inspect.context.getProviderCacheObservation(sessionId),
+    runtime.inspect.context.providerCache.getObservation(sessionId),
   );
   if (
     gateStatus.required ||
@@ -561,7 +561,7 @@ export function resolveTransientOutboundReductionEligibility(
     };
   }
 
-  if (runtime.inspect.context.getPendingCompactionReason(sessionId) === "hard_limit") {
+  if (runtime.inspect.context.compaction.getPendingReason(sessionId) === "hard_limit") {
     return {
       allowed: false,
       detail: "hard-limit compaction is already pending",
@@ -697,7 +697,7 @@ function resolveWarmProviderCachePreservationReason(
   if (result.status !== "completed" || result.clearedToolResults <= 0) {
     return null;
   }
-  const observation = runtime.inspect.context.getProviderCacheObservation(sessionId);
+  const observation = runtime.inspect.context.providerCache.getObservation(sessionId);
   if (!observation) {
     return null;
   }
@@ -718,9 +718,9 @@ function observeAndRecordTransientReduction(
   sessionId: string,
   input: TransientReductionObservationInput,
 ): void {
-  const observed = runtime.maintain.context.observeTransientReduction(sessionId, input);
+  const observed = runtime.operator.context.prompt.observeTransientReduction(sessionId, input);
   recordTransientReductionEvidence({
-    workspaceRoot: runtime.workspaceRoot,
+    workspaceRoot: runtime.identity.workspaceRoot,
     sessionId,
     observed,
   });

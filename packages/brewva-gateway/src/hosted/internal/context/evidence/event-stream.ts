@@ -1,8 +1,6 @@
-import {
-  recordAssistantUsageFromMessage,
-  type BrewvaHostedRuntimePort,
-  type JsonValue,
-} from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
+import type { JsonValue } from "@brewva/brewva-runtime/core";
+import { recordAssistantUsageFromMessage } from "@brewva/brewva-runtime/cost";
 import { type ToolLifecycleEventPayload } from "@brewva/brewva-runtime/events";
 import {
   readSessionTurnTransitionEventPayload,
@@ -78,7 +76,7 @@ function recordReasoningCheckpoint(
   },
 ): void {
   try {
-    runtime.authority.reasoning.recordCheckpoint(input.sessionId, {
+    runtime.authority.reasoning.checkpoints.record(input.sessionId, {
       boundary: input.boundary,
       leafEntryId: input.leafEntryId,
     });
@@ -447,7 +445,7 @@ export function registerEventStream(
     return latestLeafEntryIdBySession.get(sessionId) ?? null;
   };
 
-  runtime.inspect.events.subscribe((event) => {
+  runtime.inspect.events.records.subscribe((event) => {
     if (event.type === TURN_INPUT_RECORDED_EVENT_TYPE) {
       getToolAttemptBindings(event.sessionId).beginTurn(1);
       return;
@@ -517,7 +515,7 @@ export function registerEventStream(
     toolAttemptBindingsBySession.delete(sessionId);
     latestLeafEntryIdBySession.delete(sessionId);
     turnClock.clearSession(sessionId);
-    runtime.maintain.session.clearState(sessionId);
+    runtime.operator.session.state.clear(sessionId);
     return undefined;
   });
 
@@ -537,7 +535,7 @@ export function registerEventStream(
       type: "agent_end",
       payload: {
         messageCount: event.messages.length,
-        costSummary: runtime.inspect.cost.getSummary(sessionId),
+        costSummary: runtime.inspect.cost.summary.get(sessionId),
       },
     });
     return undefined;
@@ -569,7 +567,7 @@ export function registerEventStream(
     const sessionId = ctx.sessionManager.getSessionId();
     const runtimeTurn = turnClock.getCurrentTurn(sessionId);
     flushPendingToolResults(sessionId);
-    runtime.maintain.context.onTurnEnd(sessionId);
+    runtime.operator.context.lifecycle.onTurnEnd(sessionId);
     runtime.extensions.hosted.events.record({
       sessionId,
       type: "turn_end",

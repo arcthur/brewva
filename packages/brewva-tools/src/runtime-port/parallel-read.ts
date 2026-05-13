@@ -196,13 +196,13 @@ export async function withParallelReadSlot<T>(
   options: ParallelReadSlotOptions = {},
 ): Promise<T> {
   const tools = resolveToolRuntimeAuthorityTools(runtime);
-  if (!sessionId || !tools?.acquireParallelSlotAsync || !tools.releaseParallelSlot) {
+  if (!sessionId || !tools?.parallel?.acquireAsync || !tools.parallel.release) {
     return work();
   }
 
   const runId =
     options.runId?.trim() || `tool_parallel_read:${operation}:${randomUUID().slice(0, 8)}`;
-  const acquired = await tools.acquireParallelSlotAsync(sessionId, runId, {
+  const acquired = await tools.parallel.acquireAsync(sessionId, runId, {
     timeoutMs: normalizeTimeoutMs(options.timeoutMs, DEFAULT_PARALLEL_READ_SLOT_TIMEOUT_MS),
   });
   if (!acquired.accepted) {
@@ -212,7 +212,7 @@ export async function withParallelReadSlot<T>(
   try {
     return await work();
   } finally {
-    tools.releaseParallelSlot(sessionId, runId);
+    tools.parallel.release(sessionId, runId);
   }
 }
 

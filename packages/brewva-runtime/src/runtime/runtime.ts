@@ -1,6 +1,7 @@
 import type {
   BrewvaHostedRuntimePort,
   BrewvaOperatorRuntimePort,
+  BrewvaRuntimeRoot,
   BrewvaRuntimeOptions,
   BrewvaToolRuntimePort,
 } from "./runtime-api.js";
@@ -14,34 +15,27 @@ export type {
   BrewvaAuthorityPort,
   BrewvaHostedRuntimePort,
   BrewvaInspectionPort,
-  BrewvaMaintenancePort,
   BrewvaOperatorRuntimePort,
   BrewvaRuntimeIdentity,
   BrewvaRuntimeOptions,
+  BrewvaRuntimeRoot,
   BrewvaToolRuntimePort,
+  RuntimeOperatorPort,
   VerifyCompletionOptions,
 } from "./runtime-api.js";
 
-export class BrewvaRuntime implements BrewvaHostedRuntimePort {
-  readonly cwd: RuntimeFacadeState["cwd"];
-  readonly workspaceRoot: RuntimeFacadeState["workspaceRoot"];
-  readonly agentId: RuntimeFacadeState["agentId"];
+export class BrewvaRuntime implements BrewvaRuntimeRoot {
+  readonly identity: RuntimeFacadeState["identity"];
   readonly config: RuntimeFacadeState["config"];
   readonly authority: RuntimeFacadeState["authority"];
   readonly inspect: RuntimeFacadeState["inspect"];
-  readonly maintain: RuntimeFacadeState["maintain"];
-  readonly extensions: RuntimeFacadeState["extensions"];
 
   constructor(options: BrewvaRuntimeOptions = {}) {
     const state = createRuntimeFacadeState(options);
-    this.cwd = state.cwd;
-    this.workspaceRoot = state.workspaceRoot;
-    this.agentId = state.agentId;
+    this.identity = state.identity;
     this.config = state.config;
     this.authority = state.authority;
     this.inspect = state.inspect;
-    this.maintain = state.maintain;
-    this.extensions = state.extensions;
     Object.defineProperty(this, BREWVA_RUNTIME_INTERNAL_STATE_SYMBOL, {
       value: state[BREWVA_RUNTIME_INTERNAL_STATE_SYMBOL],
       enumerable: false,
@@ -51,46 +45,82 @@ export class BrewvaRuntime implements BrewvaHostedRuntimePort {
   }
 }
 
-export function createHostedRuntimePort(runtime: BrewvaRuntime): BrewvaHostedRuntimePort {
+function getRuntimeFacadeState(
+  runtime: BrewvaRuntime,
+): Pick<RuntimeFacadeState, "operator" | "extensions"> {
+  const state = (
+    runtime as BrewvaRuntime & {
+      readonly [BREWVA_RUNTIME_INTERNAL_STATE_SYMBOL]?: Pick<
+        RuntimeFacadeState,
+        "operator" | "extensions"
+      >;
+    }
+  )[BREWVA_RUNTIME_INTERNAL_STATE_SYMBOL];
+  if (!state) {
+    throw new Error("invalid_brewva_runtime");
+  }
+  return state;
+}
+
+function isHostedRuntimePort(
+  runtime: BrewvaRuntime | BrewvaHostedRuntimePort,
+): runtime is BrewvaHostedRuntimePort {
+  return "extensions" in runtime && "operator" in runtime;
+}
+
+export function createHostedRuntimePort(
+  runtime: BrewvaRuntime | BrewvaHostedRuntimePort,
+): BrewvaHostedRuntimePort {
+  if (isHostedRuntimePort(runtime)) {
+    return runtime;
+  }
+  const state = getRuntimeFacadeState(runtime);
   return {
-    cwd: runtime.cwd,
-    workspaceRoot: runtime.workspaceRoot,
-    agentId: runtime.agentId,
+    identity: runtime.identity,
     config: runtime.config,
     authority: runtime.authority,
     inspect: runtime.inspect,
-    maintain: runtime.maintain,
-    extensions: runtime.extensions,
+    operator: state.operator,
+    extensions: state.extensions,
   };
 }
 
-export function createToolRuntimePort(runtime: BrewvaRuntime): BrewvaToolRuntimePort {
+export function createToolRuntimePort(
+  runtime: BrewvaRuntime | BrewvaHostedRuntimePort,
+): BrewvaToolRuntimePort {
+  if (isHostedRuntimePort(runtime)) {
+    return {
+      identity: runtime.identity,
+      config: runtime.config,
+      authority: runtime.authority,
+      inspect: runtime.inspect,
+      extensions: {
+        tools: runtime.extensions.tools,
+      },
+    };
+  }
+  const state = getRuntimeFacadeState(runtime);
   return {
-    cwd: runtime.cwd,
-    workspaceRoot: runtime.workspaceRoot,
-    agentId: runtime.agentId,
+    identity: runtime.identity,
     config: runtime.config,
     authority: runtime.authority,
     inspect: runtime.inspect,
-    maintain: {
-      workbench: runtime.maintain.workbench,
-    },
     extensions: {
-      tools: runtime.extensions.tools,
+      tools: state.extensions.tools,
     },
   };
 }
 
-export function createOperatorRuntimePort(runtime: BrewvaRuntime): BrewvaOperatorRuntimePort {
+export function createOperatorRuntimePort(
+  runtime: BrewvaRuntime | BrewvaHostedRuntimePort,
+): BrewvaOperatorRuntimePort {
+  const operator = isHostedRuntimePort(runtime)
+    ? runtime.operator
+    : getRuntimeFacadeState(runtime).operator;
   return {
-    cwd: runtime.cwd,
-    workspaceRoot: runtime.workspaceRoot,
-    agentId: runtime.agentId,
+    identity: runtime.identity,
     config: runtime.config,
     inspect: runtime.inspect,
-    maintain: {
-      session: runtime.maintain.session,
-      recovery: runtime.maintain.recovery,
-    },
+    operator,
   };
 }

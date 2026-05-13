@@ -1,4 +1,4 @@
-import type { WorkerApplyReport, WorkerMergeReport } from "@brewva/brewva-runtime";
+import type { WorkerApplyReport, WorkerMergeReport } from "@brewva/brewva-runtime/patch-history";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "../../contracts/index.js";
@@ -94,7 +94,7 @@ export function createWorkerResultsMergeTool(options: BrewvaToolOptions): ToolDe
     parameters: Type.Object({}, { additionalProperties: false }),
     async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
       const sessionId = getSessionId(ctx);
-      const report = runtime.inspect.session.mergeWorkerResults(sessionId);
+      const report = runtime.inspect.session.workerResults.merge(sessionId);
       if (report.status === "conflicts") {
         return failTextResult(formatMergeReport(report), {
           ok: false,
@@ -143,7 +143,7 @@ export function createWorkerResultsApplyTool(options: BrewvaToolOptions): ToolDe
       parameters: Type.Object({}, { additionalProperties: false }),
       async execute(toolCallId, _params, _signal, _onUpdate, ctx) {
         const sessionId = getSessionId(ctx);
-        const report = runtime.authority.session.applyMergedWorkerResults(sessionId, {
+        const report = runtime.authority.session.workerResults.applyMerged(sessionId, {
           toolName: "worker_results_apply",
           toolCallId,
         });
@@ -177,8 +177,6 @@ export function createWorkerResultsApplyTool(options: BrewvaToolOptions): ToolDe
         });
       },
     },
-    {
-      requiredCapabilities: ["authority.session.applyMergedWorkerResults"],
-    },
+    {},
   );
 }

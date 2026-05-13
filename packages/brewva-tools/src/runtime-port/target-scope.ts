@@ -34,10 +34,10 @@ export function resolveToolTargetScope(
   const fallbackCwd =
     ctx && typeof ctx === "object" && typeof (ctx as { cwd?: unknown }).cwd === "string"
       ? resolve((ctx as { cwd: string }).cwd)
-      : resolve(runtime?.cwd ?? process.cwd());
+      : resolve(runtime?.identity.cwd ?? process.cwd());
   const descriptor =
-    sessionId && taskPort?.getTargetDescriptor
-      ? (taskPort.getTargetDescriptor(sessionId) as ToolTargetDescriptor)
+    sessionId && taskPort?.target?.getDescriptor
+      ? (taskPort.target.getDescriptor(sessionId) as ToolTargetDescriptor)
       : undefined;
   const primaryRoot = resolve(descriptor?.primaryRoot ?? fallbackCwd);
   const allowedRoots =

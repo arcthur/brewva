@@ -16,12 +16,12 @@ Its public root shape is semantic, not implementation-organized:
 
 - `runtime.authority`
 - `runtime.inspect`
-- `runtime.maintain`
 
 This is the default semantic runtime vocabulary that product surfaces read
-against. Caller-specific ports still narrow it by role: hosted sessions get all
-three roots, tools get `authority + inspect`, and operator products get
-`inspect + limited maintain`.
+against. Caller-specific ports narrow it by role: hosted sessions get
+`authority + inspect + operator + extensions`, tools get
+`authority + inspect + tool extensions`, and operator products get
+`inspect + operator`.
 
 The point is not to hide internal machinery. The point is to make the default
 public surface line up with authority boundaries instead of exposing a wide bag
@@ -29,14 +29,14 @@ of mixed runtime mechanisms.
 
 ## Surface Semantics
 
-The three root surfaces have different jobs:
+The root surfaces and repo-owned operator port have different jobs:
 
 - `authority` changes commitments, replay truth, admission state, verification
   sufficiency, or rollback identity
 - `inspect` is read-only and exists for explanation, inspection, and operator
   products
-- `maintain` owns explicit rebuild, hydration, registration, and bounded
-  recovery machinery
+- `operator` owns explicit rebuild, hydration, registration, credential binding
+  resolution, hosted observations, and bounded recovery machinery
 
 This is a semantic split, not a namespace taxonomy. A concern such as context
 or scheduling may contribute methods to more than one surface.
@@ -49,21 +49,21 @@ Some machinery is still real, but it is not the public runtime contract:
 - raw turn-WAL mutation outside recovery scheduler ports
 - service classes, stores, trackers, and replay engines
 
-Repo-owned code may still use those capabilities through
-dedicated runtime subpaths such as `@brewva/brewva-runtime/recovery`,
-`@brewva/brewva-runtime/event-log`, and controlled runtime extension ports, but
+Repo-owned code may still use those mechanisms through dedicated runtime
+subpaths such as `@brewva/brewva-runtime/recovery`,
+`@brewva/brewva-runtime/event-log`, and controlled typed extension ports, but
 they are not the default integration surface for products or external
 consumers.
 
-Those subpaths and extension ports are controlled ports: branded, sealed
-objects with explicit capability tokens and allowlisted methods. They do not
-preserve the removed `@brewva/brewva-runtime/internal` barrel, and they do not
-expose arbitrary service instance state.
+Those subpaths and extension ports are controlled, allowlisted TypeScript ports.
+They do not preserve the removed `@brewva/brewva-runtime/internal` barrel, do
+not expose runtime capability tokens, and do not expose arbitrary service
+instance state.
 
 Inside `packages/brewva-runtime`, implementation ownership follows
 `domain/<name>/` slices. Domains own their `api.ts`, `types.ts`, registrar,
-events, and runtime surface contribution; cross-domain implementation imports
-go through the API or type seam.
+events, and direct runtime surface factories; cross-domain implementation
+imports go through the API or type seam.
 
 ## Replay And Durability
 

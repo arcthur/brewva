@@ -2,7 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BrewvaRuntime, type TaskSpec } from "@brewva/brewva-runtime";
+import { BrewvaRuntime, createOperatorRuntimePort } from "@brewva/brewva-runtime";
+import type { TaskSpec } from "@brewva/brewva-runtime/task";
 import { requireDefined, requireNonEmptyString, requireRecord } from "../../helpers/assertions.js";
 
 function createWorkspace(): string {
@@ -14,9 +15,9 @@ describe("reversible mutation receipts", () => {
     const workspace = createWorkspace();
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionId = `reversible-task-${crypto.randomUUID()}`;
-    runtime.maintain.context.onTurnStart(sessionId, 1);
+    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
 
-    const started = runtime.authority.tools.start({
+    const started = runtime.authority.tools.invocation.start({
       sessionId,
       toolCallId: "tc-task-set-spec",
       toolName: "task_set_spec",
@@ -33,8 +34,8 @@ describe("reversible mutation receipts", () => {
       schema: "brewva.task.v1",
       goal: "Implement the new runtime effect gate model",
     };
-    runtime.authority.task.setSpec(sessionId, nextSpec);
-    runtime.authority.tools.finish({
+    runtime.authority.task.spec.set(sessionId, nextSpec);
+    runtime.authority.tools.invocation.finish({
       sessionId,
       toolCallId: "tc-task-set-spec",
       toolName: "task_set_spec",
@@ -46,12 +47,12 @@ describe("reversible mutation receipts", () => {
       verdict: "pass",
     });
 
-    const receiptEvent = runtime.inspect.events.query(sessionId, {
+    const receiptEvent = runtime.inspect.events.records.query(sessionId, {
       type: "reversible_mutation_recorded",
       last: 1,
     })[0];
     expect(receiptEvent).toBeUndefined();
-    expect(runtime.inspect.task.getState(sessionId).spec?.goal).toBe(nextSpec.goal);
+    expect(runtime.inspect.task.state.get(sessionId).spec?.goal).toBe(nextSpec.goal);
   });
 
   test("workspace mutations emit patchset-backed reversible receipts", () => {
@@ -61,9 +62,9 @@ describe("reversible mutation receipts", () => {
 
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionId = `reversible-workspace-${crypto.randomUUID()}`;
-    runtime.maintain.context.onTurnStart(sessionId, 1);
+    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
 
-    const started = runtime.authority.tools.start({
+    const started = runtime.authority.tools.invocation.start({
       sessionId,
       toolCallId: "tc-edit-example",
       toolName: "edit",
@@ -80,7 +81,7 @@ describe("reversible mutation receipts", () => {
     expect(started.mutationReceipt?.rollbackKind).toBe("patchset");
 
     writeFileSync(join(workspace, "src", "example.ts"), "export const value = 2;\n", "utf8");
-    runtime.authority.tools.finish({
+    runtime.authority.tools.invocation.finish({
       sessionId,
       toolCallId: "tc-edit-example",
       toolName: "edit",
@@ -95,7 +96,7 @@ describe("reversible mutation receipts", () => {
     });
 
     const receiptEvent = requireDefined(
-      runtime.inspect.events.query(sessionId, {
+      runtime.inspect.events.records.query(sessionId, {
         type: "reversible_mutation_recorded",
         last: 1,
       })[0],
@@ -121,9 +122,9 @@ describe("reversible mutation receipts", () => {
     const workspace = createWorkspace();
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionId = `reversible-task-rollback-${crypto.randomUUID()}`;
-    runtime.maintain.context.onTurnStart(sessionId, 1);
+    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
 
-    runtime.authority.tools.start({
+    runtime.authority.tools.invocation.start({
       sessionId,
       toolCallId: "tc-task-set-spec-rollback",
       toolName: "task_set_spec",
@@ -132,11 +133,11 @@ describe("reversible mutation receipts", () => {
       },
     });
 
-    runtime.authority.task.setSpec(sessionId, {
+    runtime.authority.task.spec.set(sessionId, {
       schema: "brewva.task.v1",
       goal: "Apply and rollback task state",
     });
-    runtime.authority.tools.finish({
+    runtime.authority.tools.invocation.finish({
       sessionId,
       toolCallId: "tc-task-set-spec-rollback",
       toolName: "task_set_spec",
@@ -148,16 +149,16 @@ describe("reversible mutation receipts", () => {
       verdict: "pass",
     });
 
-    const rollback = runtime.authority.tools.rollbackLastMutation(sessionId);
+    const rollback = runtime.authority.tools.patches.rollbackLastMutation(sessionId);
     expect(rollback.ok).toBe(false);
     if (!rollback.ok) {
       expect(rollback.reason).toBe("no_mutation_receipt");
     }
-    expect(runtime.inspect.task.getState(sessionId).spec?.goal).toBe(
+    expect(runtime.inspect.task.state.get(sessionId).spec?.goal).toBe(
       "Apply and rollback task state",
     );
 
-    const rollbackEvent = runtime.inspect.events.query(sessionId, {
+    const rollbackEvent = runtime.inspect.events.records.query(sessionId, {
       type: "reversible_mutation_rolled_back",
       last: 1,
     })[0];
@@ -172,9 +173,9 @@ describe("reversible mutation receipts", () => {
 
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionId = `reversible-workspace-rollback-${crypto.randomUUID()}`;
-    runtime.maintain.context.onTurnStart(sessionId, 1);
+    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
 
-    runtime.authority.tools.start({
+    runtime.authority.tools.invocation.start({
       sessionId,
       toolCallId: "tc-edit-rollback",
       toolName: "edit",
@@ -186,7 +187,7 @@ describe("reversible mutation receipts", () => {
     });
 
     writeFileSync(filePath, "export const value = 2;\n", "utf8");
-    runtime.authority.tools.finish({
+    runtime.authority.tools.invocation.finish({
       sessionId,
       toolCallId: "tc-edit-rollback",
       toolName: "edit",
@@ -200,7 +201,7 @@ describe("reversible mutation receipts", () => {
       verdict: "pass",
     });
 
-    const rollback = runtime.authority.tools.rollbackLastMutation(sessionId);
+    const rollback = runtime.authority.tools.patches.rollbackLastMutation(sessionId);
     expect(rollback.ok).toBe(true);
     expect(rollback.strategy).toBe("workspace_patchset");
     expect(readFileSync(filePath, "utf8")).toBe("export const value = 1;\n");
@@ -214,9 +215,9 @@ describe("reversible mutation receipts", () => {
 
     const sessionId = `reversible-workspace-restart-${crypto.randomUUID()}`;
     const firstRuntime = new BrewvaRuntime({ cwd: workspace });
-    firstRuntime.maintain.context.onTurnStart(sessionId, 1);
+    createOperatorRuntimePort(firstRuntime).operator.context.lifecycle.onTurnStart(sessionId, 1);
 
-    const started = firstRuntime.authority.tools.start({
+    const started = firstRuntime.authority.tools.invocation.start({
       sessionId,
       toolCallId: "tc-edit-restart-rollback",
       toolName: "edit",
@@ -230,7 +231,7 @@ describe("reversible mutation receipts", () => {
     expect(started.mutationReceipt?.strategy).toBe("workspace_patchset");
 
     writeFileSync(filePath, "export const value = 2;\n", "utf8");
-    firstRuntime.authority.tools.finish({
+    firstRuntime.authority.tools.invocation.finish({
       sessionId,
       toolCallId: "tc-edit-restart-rollback",
       toolName: "edit",
@@ -245,9 +246,12 @@ describe("reversible mutation receipts", () => {
     });
 
     const restartedRuntime = new BrewvaRuntime({ cwd: workspace });
-    restartedRuntime.maintain.context.onTurnStart(sessionId, 2);
+    createOperatorRuntimePort(restartedRuntime).operator.context.lifecycle.onTurnStart(
+      sessionId,
+      2,
+    );
 
-    const rollback = restartedRuntime.authority.tools.rollbackLastMutation(sessionId);
+    const rollback = restartedRuntime.authority.tools.patches.rollbackLastMutation(sessionId);
     expect(rollback.ok).toBe(true);
     expect(rollback.strategy).toBe("workspace_patchset");
     expect(readFileSync(filePath, "utf8")).toBe("export const value = 1;\n");
@@ -257,9 +261,9 @@ describe("reversible mutation receipts", () => {
     const workspace = createWorkspace();
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionId = `reversible-acceptance-${crypto.randomUUID()}`;
-    runtime.maintain.context.onTurnStart(sessionId, 1);
+    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
 
-    runtime.authority.task.setSpec(sessionId, {
+    runtime.authority.task.spec.set(sessionId, {
       schema: "brewva.task.v1",
       goal: "Close with operator acceptance",
       acceptance: {
@@ -267,7 +271,7 @@ describe("reversible mutation receipts", () => {
       },
     });
 
-    const started = runtime.authority.tools.start({
+    const started = runtime.authority.tools.invocation.start({
       sessionId,
       toolCallId: "tc-task-record-acceptance",
       toolName: "task_record_acceptance",
@@ -280,11 +284,11 @@ describe("reversible mutation receipts", () => {
     expect(started.allowed).toBe(true);
     expect(started.mutationReceipt).toBeUndefined();
 
-    runtime.authority.task.recordAcceptance(sessionId, {
+    runtime.authority.task.acceptance.record(sessionId, {
       status: "accepted",
       decidedBy: "operator",
     });
-    runtime.authority.tools.finish({
+    runtime.authority.tools.invocation.finish({
       sessionId,
       toolCallId: "tc-task-record-acceptance",
       toolName: "task_record_acceptance",
@@ -298,11 +302,11 @@ describe("reversible mutation receipts", () => {
     });
 
     expect(
-      runtime.inspect.events.query(sessionId, {
+      runtime.inspect.events.records.query(sessionId, {
         type: "reversible_mutation_recorded",
       }),
     ).toHaveLength(0);
-    expect(runtime.inspect.task.getState(sessionId).acceptance?.status).toBe("accepted");
+    expect(runtime.inspect.task.state.get(sessionId).acceptance?.status).toBe("accepted");
   });
 
   test("direct patchset rollback also retires the matching reversible mutation receipt", () => {
@@ -313,9 +317,9 @@ describe("reversible mutation receipts", () => {
 
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionId = `reversible-workspace-direct-${crypto.randomUUID()}`;
-    runtime.maintain.context.onTurnStart(sessionId, 1);
+    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
 
-    runtime.authority.tools.start({
+    runtime.authority.tools.invocation.start({
       sessionId,
       toolCallId: "tc-edit-direct-rollback",
       toolName: "edit",
@@ -327,7 +331,7 @@ describe("reversible mutation receipts", () => {
     });
 
     writeFileSync(filePath, "export const value = 2;\n", "utf8");
-    runtime.authority.tools.finish({
+    runtime.authority.tools.invocation.finish({
       sessionId,
       toolCallId: "tc-edit-direct-rollback",
       toolName: "edit",
@@ -341,11 +345,11 @@ describe("reversible mutation receipts", () => {
       verdict: "pass",
     });
 
-    const directRollback = runtime.authority.tools.rollbackLastPatchSet(sessionId);
+    const directRollback = runtime.authority.tools.patches.rollbackLastPatchSet(sessionId);
     expect(directRollback.ok).toBe(true);
     expect(readFileSync(filePath, "utf8")).toBe("export const value = 1;\n");
 
-    const mutationRollback = runtime.authority.tools.rollbackLastMutation(sessionId);
+    const mutationRollback = runtime.authority.tools.patches.rollbackLastMutation(sessionId);
     expect(mutationRollback.ok).toBe(false);
     if (!mutationRollback.ok) {
       expect(mutationRollback.reason).toBe("no_mutation_receipt");

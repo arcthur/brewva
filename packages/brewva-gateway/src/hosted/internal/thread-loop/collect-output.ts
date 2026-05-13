@@ -1,15 +1,14 @@
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import {
-  SESSION_WIRE_SCHEMA,
   asBrewvaSessionId,
   asBrewvaToolCallId,
   asBrewvaToolName,
-  type BrewvaRuntime,
-  type BrewvaSessionId,
-  type BrewvaToolCallId,
-  type BrewvaToolName,
-  type SessionWireFrame,
-  type ToolOutputView,
-} from "@brewva/brewva-runtime";
+} from "@brewva/brewva-runtime/core";
+import type {
+  BrewvaSessionId,
+  BrewvaToolCallId,
+  BrewvaToolName,
+} from "@brewva/brewva-runtime/core";
 import {
   readSessionTurnTransitionEventPayload,
   readToolLifecycleEventPayload,
@@ -19,6 +18,8 @@ import {
   TOOL_EXECUTION_END_EVENT_TYPE,
   TOOL_EXECUTION_START_EVENT_TYPE,
 } from "@brewva/brewva-runtime/events";
+import { SESSION_WIRE_SCHEMA } from "@brewva/brewva-runtime/session";
+import type { SessionWireFrame, ToolOutputView } from "@brewva/brewva-runtime/session";
 import type { BrewvaPromptContentPart } from "@brewva/brewva-substrate/prompt";
 import type {
   BrewvaPromptAssistantMessageEvent,
@@ -67,7 +68,7 @@ export class SessionPromptCollectionError extends Error {
 
 export interface CollectSessionPromptOutputOptions {
   onFrame?: (frame: SessionWireFrame) => void;
-  runtime?: BrewvaRuntime;
+  runtime?: BrewvaHostedRuntimePort;
   sessionId?: string;
   turnId?: string;
   attemptReason?: LiveAttemptReason;
@@ -640,7 +641,7 @@ export async function streamAndCollectAttempt(
   const sessionId = options?.sessionId?.trim();
   const unsubscribeRuntimeEvents =
     options?.runtime && sessionId
-      ? options.runtime.inspect.events.subscribe((event) => {
+      ? options.runtime.inspect.events.records.subscribe((event) => {
           if (event.sessionId !== sessionId) {
             return;
           }

@@ -4,7 +4,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { RECALL_CURATION_HALFLIFE_DAYS } from "@brewva/brewva-recall";
 import { getOrCreateRecallBroker, type RecallBrokerRuntime } from "@brewva/brewva-recall/broker";
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import {
+  BrewvaRuntime,
+  createOperatorRuntimePort,
+  createHostedRuntimePort,
+} from "@brewva/brewva-runtime";
 import { type BrewvaEventRecord } from "@brewva/brewva-runtime/events";
 import {
   CONTEXT_COMPOSED_EVENT_TYPE,
@@ -23,7 +27,7 @@ describe("recall broker", () => {
     const priorSessionId = "recall-broker-noise-prior";
     const currentSessionId = "recall-broker-noise-current";
 
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId: priorSessionId,
       type: RECALL_RESULTS_SURFACED_EVENT_TYPE,
       payload: {
@@ -31,7 +35,7 @@ describe("recall broker", () => {
         stableIds: ["poisoned gateway recall marker"],
       } as Record<string, unknown>,
     });
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId: priorSessionId,
       type: CONTEXT_COMPOSED_EVENT_TYPE,
       payload: {
@@ -39,7 +43,7 @@ describe("recall broker", () => {
         text: "poisoned gateway context marker",
       } as Record<string, unknown>,
     });
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId: priorSessionId,
       type: PROJECTION_REFRESHED_EVENT_TYPE,
       payload: {
@@ -83,15 +87,15 @@ describe("recall broker", () => {
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const priorSessionId = "recall-broker-ranking-prior";
     const currentSessionId = "recall-broker-ranking-current";
-    runtime.maintain.context.onTurnStart(priorSessionId, 1);
-    runtime.authority.task.setSpec(priorSessionId, {
+    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(priorSessionId, 1);
+    runtime.authority.task.spec.set(priorSessionId, {
       schema: "brewva.task.v1",
       goal: "Gamma authority ranking runtime evidence",
       targets: {
         files: ["packages/gateway"],
       },
     });
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId: priorSessionId,
       type: "task_event",
       payload: {
@@ -104,7 +108,7 @@ describe("recall broker", () => {
         },
       } as Record<string, unknown>,
     });
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId: priorSessionId,
       type: "verification_outcome_recorded",
       payload: buildVerificationOutcomeRecordedPayload({
@@ -112,8 +116,8 @@ describe("recall broker", () => {
       }),
     });
 
-    runtime.maintain.context.onTurnStart(currentSessionId, 1);
-    runtime.authority.task.setSpec(currentSessionId, {
+    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(currentSessionId, 1);
+    runtime.authority.task.spec.set(currentSessionId, {
       schema: "brewva.task.v1",
       goal: "Gamma authority ranking lookup",
       targets: {
@@ -163,15 +167,15 @@ describe("recall broker", () => {
     const priorSessionId = "recall-broker-strong-receipts-prior";
     const currentSessionId = "recall-broker-strong-receipts-current";
 
-    runtime.maintain.context.onTurnStart(priorSessionId, 1);
-    runtime.authority.task.setSpec(priorSessionId, {
+    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(priorSessionId, 1);
+    runtime.authority.task.spec.set(priorSessionId, {
       schema: "brewva.task.v1",
       goal: "Epsilon durable receipt marker",
       targets: {
         files: ["packages/gateway"],
       },
     });
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId: priorSessionId,
       type: "claim_event",
       payload: {
@@ -179,7 +183,7 @@ describe("recall broker", () => {
         summary: "Epsilon durable receipt marker entered kernel claim.",
       } as Record<string, unknown>,
     });
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId: priorSessionId,
       type: "patch_recorded",
       payload: {
@@ -188,8 +192,8 @@ describe("recall broker", () => {
       } as Record<string, unknown>,
     });
 
-    runtime.maintain.context.onTurnStart(currentSessionId, 1);
-    runtime.authority.task.setSpec(currentSessionId, {
+    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(currentSessionId, 1);
+    runtime.authority.task.spec.set(currentSessionId, {
       schema: "brewva.task.v1",
       goal: "Epsilon durable receipt marker lookup",
       targets: {
@@ -254,15 +258,15 @@ describe("recall broker", () => {
     const priorSessionId = "recall-broker-current-intent-prior";
     const currentSessionId = "recall-broker-current-intent-current";
 
-    runtime.maintain.context.onTurnStart(priorSessionId, 1);
-    runtime.authority.task.setSpec(priorSessionId, {
+    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(priorSessionId, 1);
+    runtime.authority.task.spec.set(priorSessionId, {
       schema: "brewva.task.v1",
       goal: "Delta current session ranking marker",
       targets: {
         files: ["packages/gateway"],
       },
     });
-    const priorEvent = runtime.extensions.hosted.events.record({
+    const priorEvent = createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId: priorSessionId,
       type: "task_event",
       payload: {
@@ -276,15 +280,15 @@ describe("recall broker", () => {
       } as Record<string, unknown>,
     });
 
-    runtime.maintain.context.onTurnStart(currentSessionId, 1);
-    runtime.authority.task.setSpec(currentSessionId, {
+    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(currentSessionId, 1);
+    runtime.authority.task.spec.set(currentSessionId, {
       schema: "brewva.task.v1",
       goal: "Delta current session ranking marker",
       targets: {
         files: ["packages/gateway"],
       },
     });
-    const currentEvent = runtime.extensions.hosted.events.record({
+    const currentEvent = createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId: currentSessionId,
       type: "task_event",
       payload: {
@@ -336,15 +340,15 @@ describe("recall broker", () => {
     const priorSessionId = "recall-broker-decay-prior";
     const currentSessionId = "recall-broker-decay-current";
 
-    runtime.maintain.context.onTurnStart(priorSessionId, 1);
-    runtime.authority.task.setSpec(priorSessionId, {
+    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(priorSessionId, 1);
+    runtime.authority.task.spec.set(priorSessionId, {
       schema: "brewva.task.v1",
       goal: "Fix gateway recall regression",
       targets: {
         files: ["packages/gateway"],
       },
     });
-    const sourceEvent = runtime.extensions.hosted.events.record({
+    const sourceEvent = createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId: priorSessionId,
       type: "task_event",
       payload: {
@@ -359,8 +363,8 @@ describe("recall broker", () => {
     });
     expect(sourceEvent).toBeDefined();
 
-    runtime.maintain.context.onTurnStart(currentSessionId, 1);
-    runtime.authority.task.setSpec(currentSessionId, {
+    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(currentSessionId, 1);
+    runtime.authority.task.spec.set(currentSessionId, {
       schema: "brewva.task.v1",
       goal: "Inspect recall curation for the gateway regression",
       targets: {
@@ -369,7 +373,7 @@ describe("recall broker", () => {
     });
 
     const stableId = `tape:${priorSessionId}:${sourceEvent!.id}`;
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId: currentSessionId,
       type: "recall_curation_recorded",
       timestamp: Date.now() - RECALL_CURATION_HALFLIFE_DAYS * 24 * 60 * 60 * 1000 * 2,
@@ -414,15 +418,15 @@ describe("recall broker", () => {
     const priorSessionId = "recall-broker-scope-prior";
     const currentSessionId = "recall-broker-scope-current";
 
-    runtime.maintain.context.onTurnStart(priorSessionId, 1);
-    runtime.authority.task.setSpec(priorSessionId, {
+    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(priorSessionId, 1);
+    runtime.authority.task.spec.set(priorSessionId, {
       schema: "brewva.task.v1",
       goal: "Fix the hosted bootstrap regression",
       targets: {
         files: ["packages/gateway/bootstrap.ts"],
       },
     });
-    const priorEvent = runtime.extensions.hosted.events.record({
+    const priorEvent = createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId: priorSessionId,
       type: "task_event",
       payload: {
@@ -437,8 +441,8 @@ describe("recall broker", () => {
     });
     expect(priorEvent).toBeDefined();
 
-    runtime.maintain.context.onTurnStart(currentSessionId, 1);
-    runtime.authority.task.setSpec(currentSessionId, {
+    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(currentSessionId, 1);
+    runtime.authority.task.spec.set(currentSessionId, {
       schema: "brewva.task.v1",
       goal: "Trace the latest startup regression",
       targets: {
@@ -471,8 +475,8 @@ describe("recall broker", () => {
     const priorSessionId = "recall-broker-long-session-prior";
     const currentSessionId = "recall-broker-long-session-current";
 
-    runtime.maintain.context.onTurnStart(priorSessionId, 1);
-    runtime.authority.task.setSpec(priorSessionId, {
+    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(priorSessionId, 1);
+    runtime.authority.task.spec.set(priorSessionId, {
       schema: "brewva.task.v1",
       goal: "Run a long generic maintenance session",
       targets: {
@@ -482,7 +486,7 @@ describe("recall broker", () => {
 
     let lateEvent: BrewvaEventRecord | undefined;
     for (let index = 0; index < 25; index += 1) {
-      const event = runtime.extensions.hosted.events.record({
+      const event = createHostedRuntimePort(runtime).extensions.hosted.events.record({
         sessionId: priorSessionId,
         type: "tool_result_recorded",
         payload: buildToolResultRecordedPayload({
@@ -498,8 +502,8 @@ describe("recall broker", () => {
     }
     expect(lateEvent).toBeDefined();
 
-    runtime.maintain.context.onTurnStart(currentSessionId, 1);
-    runtime.authority.task.setSpec(currentSessionId, {
+    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(currentSessionId, 1);
+    runtime.authority.task.spec.set(currentSessionId, {
       schema: "brewva.task.v1",
       goal: "Find rare indexed receipt evidence",
       targets: {
@@ -530,15 +534,15 @@ describe("recall broker", () => {
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionId = "recall-broker-dirty-current";
 
-    runtime.maintain.context.onTurnStart(sessionId, 1);
-    runtime.authority.task.setSpec(sessionId, {
+    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+    runtime.authority.task.spec.set(sessionId, {
       schema: "brewva.task.v1",
       goal: "Track broker dirty invalidation",
       targets: {
         files: ["packages/gateway"],
       },
     });
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: "task_event",
       payload: {
@@ -554,14 +558,16 @@ describe("recall broker", () => {
 
     let listSessionIdsCalls = 0;
     const brokerRuntime: RecallBrokerRuntime = {
-      workspaceRoot: runtime.workspaceRoot,
-      agentId: runtime.agentId,
+      identity: runtime.identity,
       inspect: {
         events: {
           ...runtime.inspect.events,
-          listSessionIds() {
-            listSessionIdsCalls += 1;
-            return runtime.inspect.events.listSessionIds();
+          log: {
+            ...runtime.inspect.events.log,
+            listSessionIds() {
+              listSessionIdsCalls += 1;
+              return runtime.inspect.events.log.listSessionIds();
+            },
           },
         },
         task: runtime.inspect.task,
@@ -572,7 +578,7 @@ describe("recall broker", () => {
     await broker.sync();
     const afterInitialSync = listSessionIdsCalls;
 
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: RECALL_RESULTS_SURFACED_EVENT_TYPE,
       payload: {
@@ -583,7 +589,7 @@ describe("recall broker", () => {
     await broker.sync();
     expect(listSessionIdsCalls).toBe(afterInitialSync);
 
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: "recall_curation_recorded",
       payload: {
@@ -603,15 +609,15 @@ describe("recall broker", () => {
     const priorSessionId = "recall-broker-compound-prior";
     const currentSessionId = "recall-broker-compound-current";
 
-    runtime.maintain.context.onTurnStart(priorSessionId, 1);
-    runtime.authority.task.setSpec(priorSessionId, {
+    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(priorSessionId, 1);
+    runtime.authority.task.spec.set(priorSessionId, {
       schema: "brewva.task.v1",
       goal: "Investigate foo telemetry",
       targets: {
         files: ["packages/gateway"],
       },
     });
-    const priorEvent = runtime.extensions.hosted.events.record({
+    const priorEvent = createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId: priorSessionId,
       type: "task_event",
       payload: {
@@ -625,8 +631,8 @@ describe("recall broker", () => {
       } as Record<string, unknown>,
     });
 
-    runtime.maintain.context.onTurnStart(currentSessionId, 1);
-    runtime.authority.task.setSpec(currentSessionId, {
+    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(currentSessionId, 1);
+    runtime.authority.task.spec.set(currentSessionId, {
       schema: "brewva.task.v1",
       goal: "Search for foo-bar telemetry",
       targets: {

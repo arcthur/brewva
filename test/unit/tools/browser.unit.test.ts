@@ -300,7 +300,7 @@ describe("browser tools", () => {
     const text = extractText(result as { content: Array<{ type: string; text?: string }> });
     expect(text).toContain("outside security.boundaryPolicy.network.allowlist");
     expect(
-      runtime.inspect.events.query("browser-boundary-1", { type: "tool_call_blocked" }),
+      runtime.inspect.events.records.query("browser-boundary-1", { type: "tool_call_blocked" }),
     ).toHaveLength(1);
     expect(existsSync(logPath)).toBe(false);
   });

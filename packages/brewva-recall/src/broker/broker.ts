@@ -99,11 +99,11 @@ export class RecallBroker {
 
   constructor(private readonly runtime: RecallBrokerRuntime) {
     this.indexPromise = createSessionIndex({
-      workspaceRoot: runtime.workspaceRoot,
+      workspaceRoot: runtime.identity.workspaceRoot,
       events: runtime.inspect.events,
       task: runtime.inspect.task,
     });
-    runtime.inspect.events.subscribe((event) => {
+    runtime.inspect.events.records.subscribe((event) => {
       if (
         isSessionIndexTextIndexedEvent(event) ||
         RECALL_STATE_INVALIDATING_EVENT_TYPES.has(event.type)
@@ -159,7 +159,7 @@ export class RecallBroker {
     const state = await this.sync();
     const queryTokens = tokenizeSearchQuery(query);
     const curationById = new Map(state.curation.map((entry) => [entry.stableId, entry]));
-    const currentTarget = this.runtime.inspect.task.getTargetDescriptor(input.sessionId);
+    const currentTarget = this.runtime.inspect.task.target.getDescriptor(input.sessionId);
     const targetRoots =
       currentTarget.roots.length > 0 ? currentTarget.roots : [currentTarget.primaryRoot];
     const sessionIndex = await this.indexPromise;
@@ -185,15 +185,17 @@ export class RecallBroker {
       )),
     );
     results.push(
-      ...executeKnowledgeSearch([this.runtime.workspaceRoot], { query, limit }).results.map(
-        (entry) =>
-          mapKnowledgeDoc(
-            entry.doc,
-            entry.relevanceScore / 100,
-            entry.matchReasons,
-            scope,
-            rankingContext,
-          ),
+      ...executeKnowledgeSearch([this.runtime.identity.workspaceRoot], {
+        query,
+        limit,
+      }).results.map((entry) =>
+        mapKnowledgeDoc(
+          entry.doc,
+          entry.relevanceScore / 100,
+          entry.matchReasons,
+          scope,
+          rankingContext,
+        ),
       ),
     );
 
@@ -212,7 +214,7 @@ export class RecallBroker {
     const rankingContext = createRankingContext(input.sessionId, undefined);
     const state = await this.sync();
     const curationById = new Map(state.curation.map((entry) => [entry.stableId, entry]));
-    const currentTarget = this.runtime.inspect.task.getTargetDescriptor(input.sessionId);
+    const currentTarget = this.runtime.inspect.task.target.getDescriptor(input.sessionId);
     const targetRoots =
       currentTarget.roots.length > 0 ? currentTarget.roots : [currentTarget.primaryRoot];
     const sessionIndex = await this.indexPromise;
@@ -383,7 +385,7 @@ export class RecallBroker {
     }
     if (stableId.startsWith("precedent:")) {
       const doc = findKnowledgeDocByRelativePath(
-        [this.runtime.workspaceRoot],
+        [this.runtime.identity.workspaceRoot],
         stableId.slice("precedent:".length),
       );
       return doc ? mapKnowledgeDoc(doc, 0.4, ["stable_id"], scope, rankingContext) : undefined;

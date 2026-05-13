@@ -24,28 +24,31 @@ export interface BrewvaRuntimeIdentity {
   readonly cwd: string;
   readonly workspaceRoot: string;
   readonly agentId: string;
-  readonly config: DeepReadonly<BrewvaConfig>;
 }
 
 export type BrewvaAuthorityPort = RuntimeSemanticSurfaces["authority"];
 export type BrewvaInspectionPort = RuntimeSemanticSurfaces["inspect"];
-export type BrewvaMaintenancePort = RuntimeSemanticSurfaces["maintain"];
+export type RuntimeOperatorPort = RuntimeSemanticSurfaces["operator"];
 
-export interface BrewvaHostedRuntimePort extends BrewvaRuntimeIdentity {
+export interface BrewvaRuntimeRoot {
+  readonly identity: BrewvaRuntimeIdentity;
+  readonly config: DeepReadonly<BrewvaConfig>;
   readonly authority: BrewvaAuthorityPort;
   readonly inspect: BrewvaInspectionPort;
-  readonly maintain: BrewvaMaintenancePort;
+}
+
+export interface BrewvaHostedRuntimePort extends BrewvaRuntimeRoot {
+  readonly operator: RuntimeOperatorPort;
   readonly extensions: BrewvaRuntimeExtensions;
 }
 
-export interface BrewvaToolRuntimePort extends BrewvaRuntimeIdentity {
-  readonly authority: BrewvaAuthorityPort;
-  readonly inspect: BrewvaInspectionPort;
-  readonly maintain: Pick<BrewvaMaintenancePort, "workbench">;
+export interface BrewvaToolRuntimePort extends BrewvaRuntimeRoot {
   readonly extensions: BrewvaToolRuntimeExtensions;
 }
 
-export interface BrewvaOperatorRuntimePort extends BrewvaRuntimeIdentity {
-  readonly inspect: BrewvaInspectionPort;
-  readonly maintain: Pick<BrewvaMaintenancePort, "session" | "recovery">;
+export interface BrewvaOperatorRuntimePort extends Pick<
+  BrewvaRuntimeRoot,
+  "identity" | "config" | "inspect"
+> {
+  readonly operator: RuntimeOperatorPort;
 }

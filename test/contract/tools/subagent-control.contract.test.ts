@@ -1,12 +1,17 @@
 import { describe, expect, test } from "bun:test";
 import { HostedDelegationStore } from "@brewva/brewva-gateway";
-import { BrewvaRuntime, CURRENT_DELEGATION_CONTRACT_VERSION } from "@brewva/brewva-runtime";
+import { BrewvaRuntime, createHostedRuntimePort } from "@brewva/brewva-runtime";
+import { CURRENT_DELEGATION_CONTRACT_VERSION } from "@brewva/brewva-runtime/delegation";
 import type { SubagentRunRequest } from "@brewva/brewva-tools/contracts";
 import {
   createSubagentCancelTool,
   createSubagentStatusTool,
 } from "@brewva/brewva-tools/delegation";
 import { createTestWorkspace } from "../../helpers/workspace.js";
+
+function createHostedTestRuntime(options: ConstructorParameters<typeof BrewvaRuntime>[0]) {
+  return createHostedRuntimePort(new BrewvaRuntime(options));
+}
 
 function fakeContext(sessionId: string): any {
   return {
@@ -41,11 +46,11 @@ function buildStatusRuntime(runtime: BrewvaRuntime, store: HostedDelegationStore
 
 describe("subagent control tools", () => {
   test("subagent_status lists persisted delegation runs through the delegation read model", async () => {
-    const runtime = new BrewvaRuntime({
+    const runtime = createHostedTestRuntime({
       cwd: createTestWorkspace("subagent-status-runtime"),
     });
     const store = new HostedDelegationStore(runtime);
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId: "session-status",
       type: "subagent_spawned",
       payload: {
@@ -115,11 +120,11 @@ describe("subagent control tools", () => {
   });
 
   test("subagent_status includes replayable handoff metadata for completed runs", async () => {
-    const runtime = new BrewvaRuntime({
+    const runtime = createHostedTestRuntime({
       cwd: createTestWorkspace("subagent-status-handoff-runtime"),
     });
     const store = new HostedDelegationStore(runtime);
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId: "session-status-handoff",
       type: "subagent_completed",
       payload: {
@@ -159,11 +164,11 @@ describe("subagent control tools", () => {
   });
 
   test("subagent_status folds internal lanes by default and exposes them in internal detail mode", async () => {
-    const runtime = new BrewvaRuntime({
+    const runtime = createHostedTestRuntime({
       cwd: createTestWorkspace("subagent-status-detail-mode-runtime"),
     });
     const store = new HostedDelegationStore(runtime);
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId: "session-status-detail-mode",
       type: "subagent_completed",
       payload: {
@@ -184,7 +189,7 @@ describe("subagent control tools", () => {
         summary: "Public review summary.",
       },
     });
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId: "session-status-detail-mode",
       type: "subagent_completed",
       payload: {

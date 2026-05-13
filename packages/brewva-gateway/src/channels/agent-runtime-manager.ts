@@ -1,18 +1,16 @@
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import {
-  BrewvaRuntime,
-  createTrustedLocalGovernancePort,
-  normalizeAgentId,
-  parseJsonc,
-  type BrewvaConfig,
-  type SkillRoutingScope,
-} from "@brewva/brewva-runtime";
+import { BrewvaRuntime, createHostedRuntimePort } from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort, BrewvaConfig } from "@brewva/brewva-runtime";
+import { parseJsonc } from "@brewva/brewva-runtime/config";
+import { normalizeAgentId } from "@brewva/brewva-runtime/context";
+import { createTrustedLocalGovernancePort } from "@brewva/brewva-runtime/governance";
+import type { SkillRoutingScope } from "@brewva/brewva-runtime/skills";
 
 export interface AgentRuntimeHandle {
   agentId: string;
-  runtime: BrewvaRuntime;
+  runtime: BrewvaHostedRuntimePort;
   createdAt: number;
   lastUsedAt: number;
   sessionRefs: number;
@@ -26,7 +24,7 @@ export interface AgentRuntimeSummary {
 }
 
 export interface AgentRuntimeManagerOptions {
-  controllerRuntime: BrewvaRuntime;
+  controllerRuntime: BrewvaHostedRuntimePort;
   maxLiveRuntimes: number;
   idleRuntimeTtlMs: number;
   routingScopes?: SkillRoutingScope[];
@@ -108,7 +106,7 @@ export class AgentRuntimeManager {
   readonly maxLiveRuntimes: number;
   readonly idleRuntimeTtlMs: number;
 
-  private readonly controllerRuntime: BrewvaRuntime;
+  private readonly controllerRuntime: BrewvaHostedRuntimePort;
   private readonly routingScopes?: SkillRoutingScope[];
   private readonly routingDefaultScopes?: SkillRoutingScope[];
   private readonly handles = new Map<string, AgentRuntimeHandle>();
@@ -116,7 +114,7 @@ export class AgentRuntimeManager {
 
   constructor(options: AgentRuntimeManagerOptions) {
     this.controllerRuntime = options.controllerRuntime;
-    this.workspaceRoot = options.controllerRuntime.workspaceRoot;
+    this.workspaceRoot = options.controllerRuntime.identity.workspaceRoot;
     this.maxLiveRuntimes = Math.max(1, Math.floor(options.maxLiveRuntimes));
     this.idleRuntimeTtlMs = Math.max(1, Math.floor(options.idleRuntimeTtlMs));
     this.routingScopes = options.routingScopes ? [...new Set(options.routingScopes)] : undefined;
@@ -136,7 +134,7 @@ export class AgentRuntimeManager {
       .toSorted((a, b) => b.lastUsedAt - a.lastUsedAt || a.agentId.localeCompare(b.agentId));
   }
 
-  async createInspectionRuntime(requestedAgentId: string): Promise<BrewvaRuntime> {
+  async createInspectionRuntime(requestedAgentId: string): Promise<BrewvaHostedRuntimePort> {
     const agentId = normalizeAgentId(requestedAgentId);
     const existing = this.handles.get(agentId);
     if (existing) {
@@ -146,7 +144,7 @@ export class AgentRuntimeManager {
     return this.buildRuntime(agentId);
   }
 
-  async getOrCreateRuntime(requestedAgentId: string): Promise<BrewvaRuntime> {
+  async getOrCreateRuntime(requestedAgentId: string): Promise<BrewvaHostedRuntimePort> {
     const agentId = normalizeAgentId(requestedAgentId);
     const existing = this.handles.get(agentId);
     if (existing) {
@@ -234,19 +232,21 @@ export class AgentRuntimeManager {
     };
   }
 
-  private async buildRuntime(agentId: string): Promise<BrewvaRuntime> {
+  private async buildRuntime(agentId: string): Promise<BrewvaHostedRuntimePort> {
     const baseConfig = structuredClone(this.controllerRuntime.config);
     const overlay = await loadAgentConfigOverlay(this.workspaceRoot, agentId);
     const merged = deepMerge(baseConfig, overlay) as BrewvaConfig;
     const config = forceNamespaceConfig(merged, agentId);
-    return new BrewvaRuntime({
-      cwd: this.controllerRuntime.cwd,
-      agentId,
-      config,
-      governancePort: createTrustedLocalGovernancePort({ profile: "team" }),
-      routingScopes: this.routingScopes,
-      routingDefaultScopes: this.routingDefaultScopes,
-    });
+    return createHostedRuntimePort(
+      new BrewvaRuntime({
+        cwd: this.controllerRuntime.identity.cwd,
+        agentId,
+        config,
+        governancePort: createTrustedLocalGovernancePort({ profile: "team" }),
+        routingScopes: this.routingScopes,
+        routingDefaultScopes: this.routingDefaultScopes,
+      }),
+    );
   }
 
   private enforceCapacity(): void {

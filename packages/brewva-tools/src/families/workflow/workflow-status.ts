@@ -1,12 +1,12 @@
-import {
-  coerceTaskStallAdjudicatedPayload,
-  deriveWorkflowStatus,
-  type WorkflowArtifact,
-  type WorkflowFinishView,
-  type WorkflowLaneStatus,
-} from "@brewva/brewva-runtime";
 import { type BrewvaEventRecord } from "@brewva/brewva-runtime/events";
 import { TASK_STALL_ADJUDICATED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
+import { deriveWorkflowStatus } from "@brewva/brewva-runtime/projection";
+import type {
+  WorkflowArtifact,
+  WorkflowFinishView,
+  WorkflowLaneStatus,
+} from "@brewva/brewva-runtime/projection";
+import { coerceTaskStallAdjudicatedPayload } from "@brewva/brewva-runtime/task";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "../../contracts/index.js";
@@ -186,13 +186,16 @@ export function createWorkflowStatusTool(options: BrewvaToolOptions): ToolDefini
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const sessionId = getSessionId(ctx);
-      const events = workflowStatusTool.runtime.inspect.events.query(sessionId);
-      const taskState = workflowStatusTool.runtime.inspect.task.getState(sessionId);
-      const openToolCalls = workflowStatusTool.runtime.inspect.session.getOpenToolCalls(sessionId);
+      const events = workflowStatusTool.runtime.inspect.events.records.query(sessionId);
+      const taskState = workflowStatusTool.runtime.inspect.task.state.get(sessionId);
+      const openToolCalls =
+        workflowStatusTool.runtime.inspect.session.lifecycle.getOpenToolCalls(sessionId);
       const uncleanShutdownDiagnostic =
-        workflowStatusTool.runtime.inspect.session.getUncleanShutdownDiagnostic(sessionId);
+        workflowStatusTool.runtime.inspect.session.lifecycle.getUncleanShutdownDiagnostic(
+          sessionId,
+        );
       const pendingWorkerResults =
-        workflowStatusTool.runtime.inspect.session.listWorkerResults(sessionId);
+        workflowStatusTool.runtime.inspect.session.workerResults.list(sessionId);
       const pendingDelegationOutcomes = await listPendingDelegationOutcomes(
         workflowStatusTool.runtime,
         sessionId,
@@ -212,7 +215,7 @@ export function createWorkflowStatusTool(options: BrewvaToolOptions): ToolDefini
         },
         pendingWorkerResults: pendingWorkerResults.length,
         pendingDelegationOutcomes: pendingDelegationOutcomes.length,
-        workspaceRoot: workflowStatusTool.runtime.workspaceRoot,
+        workspaceRoot: workflowStatusTool.runtime.identity.workspaceRoot,
       });
 
       const posture = snapshot.posture;

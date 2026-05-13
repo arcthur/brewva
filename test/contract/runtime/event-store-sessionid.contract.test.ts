@@ -1,7 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG, asBrewvaSessionId } from "@brewva/brewva-runtime";
+import {
+  BrewvaRuntime,
+  DEFAULT_BREWVA_CONFIG,
+  createHostedRuntimePort,
+} from "@brewva/brewva-runtime";
+import { asBrewvaSessionId } from "@brewva/brewva-runtime/core";
 import { createBrewvaEventStore } from "@brewva/brewva-runtime/event-log";
 import { asBrewvaEventType } from "@brewva/brewva-runtime/events";
 import { createTestWorkspace } from "../../helpers/workspace.js";
@@ -75,13 +80,13 @@ describe("BrewvaEventStore session id file mapping", () => {
     });
     const sessionId = asBrewvaSessionId("heartbeat:rule-1");
 
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: "startup",
       timestamp: 100,
     });
 
-    const logPath = runtime.inspect.events.getLogPath(sessionId);
+    const logPath = runtime.inspect.events.log.getPath(sessionId);
     const store = createBrewvaEventStore(DEFAULT_BREWVA_CONFIG.infrastructure.events, workspace);
     expect(logPath).toBe(store.getLogPath(sessionId));
     expect(logPath.endsWith(".jsonl")).toBe(true);

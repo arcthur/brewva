@@ -1,15 +1,15 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import type { BrewvaRuntime } from "@brewva/brewva-runtime";
 import {
   resolveBrewvaAgentDir,
   resolveGlobalBrewvaConfigPath,
   resolveGlobalBrewvaRootDir,
   resolveProjectBrewvaConfigPath,
-  type BrewvaRuntime,
-} from "@brewva/brewva-runtime";
+} from "@brewva/brewva-runtime/config";
 
 export interface BrewvaUpdatePromptInput {
-  runtime: Pick<BrewvaRuntime, "cwd" | "workspaceRoot">;
+  runtime: Pick<BrewvaRuntime, "identity">;
   rawArgs?: string;
 }
 
@@ -105,15 +105,15 @@ function formatHintLines(rawArgs: string | undefined): string[] {
 }
 
 export function resolveBrewvaUpdateExecutionScope(
-  runtime: Pick<BrewvaRuntime, "cwd" | "workspaceRoot">,
+  runtime: Pick<BrewvaRuntime, "identity">,
 ): BrewvaUpdateExecutionScope {
   const globalRoot = resolveGlobalBrewvaRootDir();
   const globalConfigPath = resolveGlobalBrewvaConfigPath();
-  const projectConfigPath = resolveProjectBrewvaConfigPath(runtime.cwd);
+  const projectConfigPath = resolveProjectBrewvaConfigPath(runtime.identity.cwd);
   const globalAgentDir = resolveBrewvaAgentDir();
   return {
-    workspaceRoot: runtime.workspaceRoot,
-    workingDirectory: runtime.cwd,
+    workspaceRoot: runtime.identity.workspaceRoot,
+    workingDirectory: runtime.identity.cwd,
     globalRoot,
     globalConfigPath,
     globalAgentDir,
@@ -125,8 +125,8 @@ export function resolveBrewvaUpdateExecutionScope(
 
 export function buildBrewvaUpdatePrompt(input: BrewvaUpdatePromptInput): string {
   const updateScope = resolveBrewvaUpdateExecutionScope(input.runtime);
-  const changelogHints = resolveChangelogHints(input.runtime.workspaceRoot);
-  const validationHints = resolveValidationHints(input.runtime.workspaceRoot);
+  const changelogHints = resolveChangelogHints(input.runtime.identity.workspaceRoot);
+  const validationHints = resolveValidationHints(input.runtime.identity.workspaceRoot);
 
   return [
     "Run a Brewva update workflow for this environment.",

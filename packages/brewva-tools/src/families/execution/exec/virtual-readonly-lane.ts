@@ -16,9 +16,11 @@ import { dirname, join, resolve } from "node:path";
 import {
   summarizeShellCommandAnalysis,
   summarizeVirtualReadonlyEligibility,
-  type ShellCommandAnalysis,
-  type VirtualReadonlyEligibility,
-} from "@brewva/brewva-runtime";
+} from "@brewva/brewva-runtime/security";
+import type {
+  ShellCommandAnalysis,
+  VirtualReadonlyEligibility,
+} from "@brewva/brewva-runtime/security";
 import {
   ExecAbortedError,
   ExecCommandFailedError,

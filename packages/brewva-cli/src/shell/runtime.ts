@@ -492,7 +492,9 @@ export class CliShellRuntime {
         ? this.options.completionAgents()
         : (this.options.completionAgents ?? []);
     const currentAgentId =
-      typeof this.#bundle.runtime.agentId === "string" ? this.#bundle.runtime.agentId : "";
+      typeof this.#bundle.runtime.identity.agentId === "string"
+        ? this.#bundle.runtime.identity.agentId
+        : "";
     const agents: ShellCompletionAgent[] = [
       ...(currentAgentId
         ? [{ agentId: currentAgentId, description: "Current session agent" }]

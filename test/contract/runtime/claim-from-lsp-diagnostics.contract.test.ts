@@ -13,7 +13,7 @@ describe("Claim extraction from lsp_diagnostics", () => {
       "src/foo.ts(10,5): error TS2322: Type 'number' is not assignable to type 'string'.",
     ].join("\n");
 
-    runtime.authority.tools.recordResult({
+    runtime.authority.tools.invocation.recordResult({
       sessionId,
       toolName: "lsp_diagnostics",
       args: { filePath: "src/foo.ts" },
@@ -21,7 +21,7 @@ describe("Claim extraction from lsp_diagnostics", () => {
       channelSuccess: true,
     });
 
-    const claim1 = runtime.inspect.claim.getState(sessionId);
+    const claim1 = runtime.inspect.claim.state.get(sessionId);
     const fact1 = requireDefined(
       claim1.claims.find((fact) => fact.kind === "diagnostic"),
       "Expected active diagnostic claim.",
@@ -29,14 +29,14 @@ describe("Claim extraction from lsp_diagnostics", () => {
     expect(fact1.status).toBe("active");
     expect(fact1.summary).toContain("TS2322");
 
-    const task1 = runtime.inspect.task.getState(sessionId);
+    const task1 = runtime.inspect.task.state.get(sessionId);
     const blocker1 = requireDefined(
       task1.blockers.find((blocker) => blocker.id === fact1.id),
       "Expected blocker linked to diagnostic claim.",
     );
     expect(blocker1.claimId).toBe(fact1.id);
 
-    runtime.authority.tools.recordResult({
+    runtime.authority.tools.invocation.recordResult({
       sessionId,
       toolName: "lsp_diagnostics",
       args: { filePath: "src/foo.ts" },
@@ -44,14 +44,14 @@ describe("Claim extraction from lsp_diagnostics", () => {
       channelSuccess: true,
     });
 
-    const claim2 = runtime.inspect.claim.getState(sessionId);
+    const claim2 = runtime.inspect.claim.state.get(sessionId);
     const fact2 = requireDefined(
       claim2.claims.find((fact) => fact.id === fact1.id),
       "Expected diagnostic claim after clean rerun.",
     );
     expect(fact2.status).toBe("resolved");
 
-    const task2 = runtime.inspect.task.getState(sessionId);
+    const task2 = runtime.inspect.task.state.get(sessionId);
     expect(task2.blockers.map((blocker) => blocker.id)).not.toContain(fact1.id);
   });
 
@@ -60,7 +60,7 @@ describe("Claim extraction from lsp_diagnostics", () => {
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionId = "claim-from-lsp-diagnostics-2";
 
-    runtime.authority.tools.recordResult({
+    runtime.authority.tools.invocation.recordResult({
       sessionId,
       toolName: "lsp_diagnostics",
       args: { filePath: "src/foo.ts" },
@@ -69,7 +69,7 @@ describe("Claim extraction from lsp_diagnostics", () => {
       channelSuccess: true,
     });
 
-    runtime.authority.tools.recordResult({
+    runtime.authority.tools.invocation.recordResult({
       sessionId,
       toolName: "lsp_diagnostics",
       args: { filePath: "src/bar.ts" },
@@ -77,7 +77,7 @@ describe("Claim extraction from lsp_diagnostics", () => {
       channelSuccess: true,
     });
 
-    runtime.authority.tools.recordResult({
+    runtime.authority.tools.invocation.recordResult({
       sessionId,
       toolName: "lsp_diagnostics",
       args: { filePath: "src/foo.ts" },
@@ -85,7 +85,7 @@ describe("Claim extraction from lsp_diagnostics", () => {
       channelSuccess: true,
     });
 
-    const claim = runtime.inspect.claim.getState(sessionId);
+    const claim = runtime.inspect.claim.state.get(sessionId);
     const foo = claim.claims.find(
       (fact) => fact.summary.includes("src/foo.ts") && fact.summary.includes("TS2322"),
     );
@@ -97,7 +97,7 @@ describe("Claim extraction from lsp_diagnostics", () => {
     expect(fooFact.status).toBe("resolved");
     expect(barFact.status).toBe("active");
 
-    const task = runtime.inspect.task.getState(sessionId);
+    const task = runtime.inspect.task.state.get(sessionId);
     const blockerIds = task.blockers.map((blocker) => blocker.id);
     expect(blockerIds).toContain(barFact.id);
     expect(blockerIds).not.toContain(fooFact.id);
@@ -108,7 +108,7 @@ describe("Claim extraction from lsp_diagnostics", () => {
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionId = "claim-from-lsp-diagnostics-3";
 
-    runtime.authority.tools.recordResult({
+    runtime.authority.tools.invocation.recordResult({
       sessionId,
       toolName: "lsp_diagnostics",
       args: { filePath: "src/foo.ts" },
@@ -119,7 +119,7 @@ describe("Claim extraction from lsp_diagnostics", () => {
       channelSuccess: true,
     });
 
-    runtime.authority.tools.recordResult({
+    runtime.authority.tools.invocation.recordResult({
       sessionId,
       toolName: "lsp_diagnostics",
       args: { filePath: "src/foo.ts" },
@@ -128,7 +128,7 @@ describe("Claim extraction from lsp_diagnostics", () => {
       channelSuccess: true,
     });
 
-    const claim = runtime.inspect.claim.getState(sessionId);
+    const claim = runtime.inspect.claim.state.get(sessionId);
     const ts2322 = claim.claims.find(
       (fact) => fact.summary.includes("src/foo.ts") && fact.summary.includes("TS2322"),
     );
@@ -141,7 +141,7 @@ describe("Claim extraction from lsp_diagnostics", () => {
     expect(ts2322Fact.status).toBe("active");
     expect(ts2304Fact.status).toBe("resolved");
 
-    const task = runtime.inspect.task.getState(sessionId);
+    const task = runtime.inspect.task.state.get(sessionId);
     const blockerIds = task.blockers.map((blocker) => blocker.id);
     expect(blockerIds).toContain(ts2322Fact.id);
     expect(blockerIds).not.toContain(ts2304Fact.id);
@@ -152,7 +152,7 @@ describe("Claim extraction from lsp_diagnostics", () => {
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionId = "claim-from-lsp-diagnostics-4";
 
-    runtime.authority.tools.recordResult({
+    runtime.authority.tools.invocation.recordResult({
       sessionId,
       toolName: "lsp_diagnostics",
       args: { filePath: "src/foo.ts" },
@@ -161,7 +161,7 @@ describe("Claim extraction from lsp_diagnostics", () => {
       channelSuccess: true,
     });
 
-    runtime.authority.tools.recordResult({
+    runtime.authority.tools.invocation.recordResult({
       sessionId,
       toolName: "lsp_diagnostics",
       args: { filePath: "src/foo.ts" },
@@ -176,7 +176,7 @@ describe("Claim extraction from lsp_diagnostics", () => {
       },
     });
 
-    const claim = runtime.inspect.claim.getState(sessionId);
+    const claim = runtime.inspect.claim.state.get(sessionId);
     const fact = claim.claims.find(
       (entry) => entry.summary.includes("src/foo.ts") && entry.summary.includes("TS2322"),
     );

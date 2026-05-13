@@ -1,4 +1,4 @@
-import type { ToolOutputDisplayView } from "@brewva/brewva-runtime";
+import type { ToolOutputDisplayView } from "@brewva/brewva-runtime/session";
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value)) {

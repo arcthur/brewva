@@ -1,5 +1,6 @@
-import { BrewvaRuntime, type BrewvaWalId } from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import { type TurnEnvelope, type TurnPart } from "@brewva/brewva-runtime/channels";
+import type { BrewvaWalId } from "@brewva/brewva-runtime/core";
 import { type RecoveryWalStore } from "@brewva/brewva-runtime/recovery";
 import { LRUCache } from "lru-cache";
 import { toErrorMessage } from "../utils/errors.js";
@@ -48,7 +49,7 @@ export interface ChannelTurnDispatcher {
 }
 
 export function createChannelTurnDispatcher(input: {
-  runtime: BrewvaRuntime;
+  runtime: BrewvaHostedRuntimePort;
   recoveryWalStore: RecoveryWalStore;
   orchestrationEnabled: boolean;
   defaultAgentId: string;

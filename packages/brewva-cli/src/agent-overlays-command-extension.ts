@@ -105,7 +105,7 @@ export function createAgentOverlaysCommandExtension(runtime: BrewvaRuntime): Hos
           "Inspect or validate authored custom subagents (usage: /agent-overlays | /agent-overlays validate | /agent-overlays <name>)",
         handler: async (args, ctx) => {
           const normalizedArgs = normalizeArgs(args);
-          const inspection = await inspectHostedDelegationCatalog(runtime.workspaceRoot);
+          const inspection = await inspectHostedDelegationCatalog(runtime.identity.workspaceRoot);
           const text =
             normalizedArgs && normalizedArgs !== "validate"
               ? formatOverlayDetail(inspection, normalizedArgs)

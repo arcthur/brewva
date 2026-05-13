@@ -2,7 +2,12 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG, type BrewvaConfig } from "@brewva/brewva-runtime";
+import {
+  BrewvaRuntime,
+  DEFAULT_BREWVA_CONFIG,
+  createHostedRuntimePort,
+} from "@brewva/brewva-runtime";
+import type { BrewvaConfig } from "@brewva/brewva-runtime";
 
 function createAuditConfig(): BrewvaConfig {
   const config = structuredClone(DEFAULT_BREWVA_CONFIG);
@@ -39,7 +44,7 @@ describe("event pipeline level classification", () => {
     });
     const sessionId = "audit-level-session";
 
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: "tool_output_observed",
       payload: {
@@ -47,7 +52,7 @@ describe("event pipeline level classification", () => {
         rawTokens: 3,
       },
     });
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: "tool_execution_end",
       payload: {
@@ -55,7 +60,7 @@ describe("event pipeline level classification", () => {
         toolName: "exec",
       },
     });
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: "tool_output_distilled",
       payload: {
@@ -74,7 +79,7 @@ describe("event pipeline level classification", () => {
         isError: false,
       },
     });
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: "tool_output_artifact_persisted",
       payload: {
@@ -82,7 +87,7 @@ describe("event pipeline level classification", () => {
         artifactRef: ".orchestrator/tool-output-artifacts/sample.txt",
       },
     });
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: "observability_query_executed",
       payload: {
@@ -91,7 +96,7 @@ describe("event pipeline level classification", () => {
         matchCount: 3,
       },
     });
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: "observability_assertion_recorded",
       payload: {
@@ -99,7 +104,7 @@ describe("event pipeline level classification", () => {
         metric: "latencyMs",
       },
     });
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: "tool_output_search",
       payload: {
@@ -109,23 +114,27 @@ describe("event pipeline level classification", () => {
       },
     });
 
-    expect(runtime.inspect.events.query(sessionId, { type: "tool_output_observed" })).toHaveLength(
-      1,
-    );
-    expect(runtime.inspect.events.query(sessionId, { type: "tool_output_distilled" })).toHaveLength(
-      1,
-    );
     expect(
-      runtime.inspect.events.query(sessionId, { type: "tool_output_artifact_persisted" }),
+      runtime.inspect.events.records.query(sessionId, { type: "tool_output_observed" }),
     ).toHaveLength(1);
     expect(
-      runtime.inspect.events.query(sessionId, { type: "observability_query_executed" }),
+      runtime.inspect.events.records.query(sessionId, { type: "tool_output_distilled" }),
     ).toHaveLength(1);
     expect(
-      runtime.inspect.events.query(sessionId, { type: "observability_assertion_recorded" }),
+      runtime.inspect.events.records.query(sessionId, { type: "tool_output_artifact_persisted" }),
     ).toHaveLength(1);
-    expect(runtime.inspect.events.query(sessionId, { type: "tool_output_search" })).toHaveLength(1);
-    expect(runtime.inspect.events.query(sessionId, { type: "tool_execution_end" })).toHaveLength(1);
+    expect(
+      runtime.inspect.events.records.query(sessionId, { type: "observability_query_executed" }),
+    ).toHaveLength(1);
+    expect(
+      runtime.inspect.events.records.query(sessionId, { type: "observability_assertion_recorded" }),
+    ).toHaveLength(1);
+    expect(
+      runtime.inspect.events.records.query(sessionId, { type: "tool_output_search" }),
+    ).toHaveLength(1);
+    expect(
+      runtime.inspect.events.records.query(sessionId, { type: "tool_execution_end" }),
+    ).toHaveLength(1);
   });
 
   test("keeps governance events visible at ops level with governance category", () => {
@@ -147,7 +156,7 @@ describe("event pipeline level classification", () => {
     ] as const;
 
     for (const type of governanceTypes) {
-      runtime.extensions.hosted.events.record({
+      createHostedRuntimePort(runtime).extensions.hosted.events.record({
         sessionId,
         type,
         payload: {
@@ -157,9 +166,9 @@ describe("event pipeline level classification", () => {
     }
 
     for (const type of governanceTypes) {
-      const events = runtime.inspect.events.query(sessionId, { type });
+      const events = runtime.inspect.events.records.query(sessionId, { type });
       expect(events).toHaveLength(1);
-      const structured = runtime.inspect.events.queryStructured(sessionId, { type });
+      const structured = runtime.inspect.events.records.queryStructured(sessionId, { type });
       expect(structured[0]?.category).toBe("governance");
     }
   });
@@ -171,7 +180,7 @@ describe("event pipeline level classification", () => {
     });
     const sessionId = "ops-level-observability-session";
 
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: "observability_query_executed",
       payload: {
@@ -182,7 +191,7 @@ describe("event pipeline level classification", () => {
     });
 
     expect(
-      runtime.inspect.events.query(sessionId, { type: "observability_query_executed" }),
+      runtime.inspect.events.records.query(sessionId, { type: "observability_query_executed" }),
     ).toHaveLength(1);
   });
 
@@ -193,7 +202,7 @@ describe("event pipeline level classification", () => {
     });
     const sessionId = "audit-level-governance-session";
 
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: "governance_verify_spec_failed",
       payload: {
@@ -202,10 +211,10 @@ describe("event pipeline level classification", () => {
     });
 
     expect(
-      runtime.inspect.events.query(sessionId, { type: "governance_verify_spec_failed" }),
+      runtime.inspect.events.records.query(sessionId, { type: "governance_verify_spec_failed" }),
     ).toHaveLength(1);
     expect(
-      runtime.inspect.events.queryStructured(sessionId, {
+      runtime.inspect.events.records.queryStructured(sessionId, {
         type: "governance_verify_spec_failed",
       })[0]?.category,
     ).toBe("governance");
@@ -226,7 +235,7 @@ describe("event pipeline level classification", () => {
     ] as const;
 
     for (const type of compactionTypes) {
-      runtime.extensions.hosted.events.record({
+      createHostedRuntimePort(runtime).extensions.hosted.events.record({
         sessionId,
         type,
         payload: {
@@ -237,7 +246,7 @@ describe("event pipeline level classification", () => {
     }
 
     for (const type of compactionTypes) {
-      expect(runtime.inspect.events.query(sessionId, { type })).toHaveLength(1);
+      expect(runtime.inspect.events.records.query(sessionId, { type })).toHaveLength(1);
     }
   });
 
@@ -252,7 +261,7 @@ describe("event pipeline level classification", () => {
       "tool_read_path_gate_armed",
       "tool_read_path_discovery_observed",
     ] as const) {
-      runtime.extensions.hosted.events.record({
+      createHostedRuntimePort(runtime).extensions.hosted.events.record({
         sessionId,
         type,
         payload: {
@@ -262,10 +271,12 @@ describe("event pipeline level classification", () => {
     }
 
     expect(
-      runtime.inspect.events.query(sessionId, { type: "tool_read_path_gate_armed" }),
+      runtime.inspect.events.records.query(sessionId, { type: "tool_read_path_gate_armed" }),
     ).toHaveLength(1);
     expect(
-      runtime.inspect.events.query(sessionId, { type: "tool_read_path_discovery_observed" }),
+      runtime.inspect.events.records.query(sessionId, {
+        type: "tool_read_path_discovery_observed",
+      }),
     ).toHaveLength(1);
   });
 
@@ -279,14 +290,14 @@ describe("event pipeline level classification", () => {
       config: createOpsConfig(),
     });
 
-    auditRuntime.extensions.hosted.events.record({
+    createHostedRuntimePort(auditRuntime).extensions.hosted.events.record({
       sessionId: "audit-skill-refresh-session",
       type: "skill_refresh_recorded",
       payload: {
         reason: "audit",
       },
     });
-    opsRuntime.extensions.hosted.events.record({
+    createHostedRuntimePort(opsRuntime).extensions.hosted.events.record({
       sessionId: "ops-skill-refresh-session",
       type: "skill_refresh_recorded",
       payload: {
@@ -295,17 +306,17 @@ describe("event pipeline level classification", () => {
     });
 
     expect(
-      auditRuntime.inspect.events.query("audit-skill-refresh-session", {
+      auditRuntime.inspect.events.records.query("audit-skill-refresh-session", {
         type: "skill_refresh_recorded",
       }),
     ).toHaveLength(0);
     expect(
-      opsRuntime.inspect.events.query("ops-skill-refresh-session", {
+      opsRuntime.inspect.events.records.query("ops-skill-refresh-session", {
         type: "skill_refresh_recorded",
       }),
     ).toHaveLength(1);
     expect(
-      opsRuntime.inspect.events.queryStructured("ops-skill-refresh-session", {
+      opsRuntime.inspect.events.records.queryStructured("ops-skill-refresh-session", {
         type: "skill_refresh_recorded",
       })[0]?.category,
     ).toBe("control");
@@ -325,7 +336,7 @@ describe("event pipeline level classification", () => {
     ] as const;
 
     for (const type of receiptTypes) {
-      runtime.extensions.hosted.events.record({
+      createHostedRuntimePort(runtime).extensions.hosted.events.record({
         sessionId,
         type,
         payload: {
@@ -335,8 +346,8 @@ describe("event pipeline level classification", () => {
     }
 
     for (const type of receiptTypes) {
-      expect(runtime.inspect.events.query(sessionId, { type })).toHaveLength(1);
-      expect(runtime.inspect.events.queryStructured(sessionId, { type })[0]?.category).toBe(
+      expect(runtime.inspect.events.records.query(sessionId, { type })).toHaveLength(1);
+      expect(runtime.inspect.events.records.queryStructured(sessionId, { type })[0]?.category).toBe(
         "control",
       );
     }
@@ -350,16 +361,16 @@ describe("event pipeline level classification", () => {
     const sessionId = "audit-listener-error-session";
     const deliveredTypes: string[] = [];
 
-    runtime.inspect.events.subscribe((event) => {
+    runtime.inspect.events.records.subscribe((event) => {
       if (event.type === "governance_verify_spec_failed") {
         throw new Error("listener exploded");
       }
     });
-    runtime.inspect.events.subscribe((event) => {
+    runtime.inspect.events.records.subscribe((event) => {
       deliveredTypes.push(event.type);
     });
 
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: "governance_verify_spec_failed",
       payload: {
@@ -371,7 +382,7 @@ describe("event pipeline level classification", () => {
     expect(deliveredTypes.filter((type) => type === "governance_verify_spec_failed")).toHaveLength(
       1,
     );
-    const listenerErrors = runtime.inspect.events.query(sessionId, {
+    const listenerErrors = runtime.inspect.events.records.query(sessionId, {
       type: "event_listener_error",
     });
     expect(listenerErrors).toHaveLength(1);
@@ -386,7 +397,7 @@ describe("event pipeline level classification", () => {
     });
     const sessionId = "audit-level-governance-telemetry-session";
 
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: "governance_cost_anomaly_detected",
       payload: {
@@ -395,7 +406,7 @@ describe("event pipeline level classification", () => {
     });
 
     expect(
-      runtime.inspect.events.query(sessionId, { type: "governance_cost_anomaly_detected" }),
+      runtime.inspect.events.records.query(sessionId, { type: "governance_cost_anomaly_detected" }),
     ).toHaveLength(1);
   });
 
@@ -419,7 +430,7 @@ describe("event pipeline level classification", () => {
     ] as const;
 
     for (const type of replayCriticalTypes) {
-      runtime.extensions.hosted.events.record({
+      createHostedRuntimePort(runtime).extensions.hosted.events.record({
         sessionId,
         type,
         payload: replayCriticalPayload(type),
@@ -427,10 +438,10 @@ describe("event pipeline level classification", () => {
     }
 
     for (const type of replayCriticalTypes) {
-      expect(runtime.inspect.events.query(sessionId, { type })).toHaveLength(1);
+      expect(runtime.inspect.events.records.query(sessionId, { type })).toHaveLength(1);
     }
     expect(
-      runtime.inspect.events.queryStructured(sessionId, {
+      runtime.inspect.events.records.queryStructured(sessionId, {
         type: "effect_commitment_approval_requested",
       })[0]?.category,
     ).toBe("governance");
@@ -443,7 +454,7 @@ describe("event pipeline level classification", () => {
     });
     const sessionId = "audit-level-operator-question-session";
 
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: "operator_question_answered",
       payload: {
@@ -453,11 +464,12 @@ describe("event pipeline level classification", () => {
     });
 
     expect(
-      runtime.inspect.events.query(sessionId, { type: "operator_question_answered" }),
+      runtime.inspect.events.records.query(sessionId, { type: "operator_question_answered" }),
     ).toHaveLength(1);
     expect(
-      runtime.inspect.events.queryStructured(sessionId, { type: "operator_question_answered" })[0]
-        ?.category,
+      runtime.inspect.events.records.queryStructured(sessionId, {
+        type: "operator_question_answered",
+      })[0]?.category,
     ).toBe("governance");
   });
 
@@ -472,28 +484,28 @@ describe("event pipeline level classification", () => {
     });
     const sessionId = "unknown-level-session";
 
-    auditRuntime.extensions.hosted.events.record({
+    createHostedRuntimePort(auditRuntime).extensions.hosted.events.record({
       sessionId,
       type: "custom_probe_event",
       payload: {
         source: "contract-test",
       },
     });
-    auditRuntime.extensions.hosted.events.record({
+    createHostedRuntimePort(auditRuntime).extensions.hosted.events.record({
       sessionId,
       type: "context_future_probe",
       payload: {
         source: "contract-test",
       },
     });
-    opsRuntime.extensions.hosted.events.record({
+    createHostedRuntimePort(opsRuntime).extensions.hosted.events.record({
       sessionId,
       type: "custom_probe_event",
       payload: {
         source: "contract-test",
       },
     });
-    opsRuntime.extensions.hosted.events.record({
+    createHostedRuntimePort(opsRuntime).extensions.hosted.events.record({
       sessionId,
       type: "context_future_probe",
       payload: {
@@ -502,16 +514,16 @@ describe("event pipeline level classification", () => {
     });
 
     expect(
-      auditRuntime.inspect.events.query(sessionId, { type: "custom_probe_event" }),
+      auditRuntime.inspect.events.records.query(sessionId, { type: "custom_probe_event" }),
     ).toHaveLength(1);
     expect(
-      auditRuntime.inspect.events.query(sessionId, { type: "context_future_probe" }),
+      auditRuntime.inspect.events.records.query(sessionId, { type: "context_future_probe" }),
     ).toHaveLength(0);
-    expect(opsRuntime.inspect.events.query(sessionId, { type: "custom_probe_event" })).toHaveLength(
-      1,
-    );
     expect(
-      opsRuntime.inspect.events.query(sessionId, { type: "context_future_probe" }),
+      opsRuntime.inspect.events.records.query(sessionId, { type: "custom_probe_event" }),
+    ).toHaveLength(1);
+    expect(
+      opsRuntime.inspect.events.records.query(sessionId, { type: "context_future_probe" }),
     ).toHaveLength(1);
   });
 
@@ -526,7 +538,7 @@ describe("event pipeline level classification", () => {
     });
     const sessionId = "watchdog-events-session";
 
-    auditRuntime.extensions.hosted.events.record({
+    createHostedRuntimePort(auditRuntime).extensions.hosted.events.record({
       sessionId,
       type: "task_stuck_detected",
       payload: {
@@ -538,7 +550,7 @@ describe("event pipeline level classification", () => {
         openItemCount: 0,
       },
     });
-    opsRuntime.extensions.hosted.events.record({
+    createHostedRuntimePort(opsRuntime).extensions.hosted.events.record({
       sessionId,
       type: "task_stuck_detected",
       payload: {
@@ -552,10 +564,10 @@ describe("event pipeline level classification", () => {
     });
 
     expect(
-      auditRuntime.inspect.events.query(sessionId, { type: "task_stuck_detected" }),
+      auditRuntime.inspect.events.records.query(sessionId, { type: "task_stuck_detected" }),
     ).toHaveLength(0);
     expect(
-      opsRuntime.inspect.events.query(sessionId, { type: "task_stuck_detected" }),
+      opsRuntime.inspect.events.records.query(sessionId, { type: "task_stuck_detected" }),
     ).toHaveLength(1);
   });
 
@@ -571,7 +583,7 @@ describe("event pipeline level classification", () => {
     const sessionId = "stall-adjudication-level-session";
 
     for (const runtime of [auditRuntime, opsRuntime]) {
-      runtime.extensions.hosted.events.record({
+      createHostedRuntimePort(runtime).extensions.hosted.events.record({
         sessionId,
         type: "task_stall_adjudicated",
         payload: {
@@ -596,14 +608,15 @@ describe("event pipeline level classification", () => {
     }
 
     expect(
-      auditRuntime.inspect.events.query(sessionId, { type: "task_stall_adjudicated" }),
+      auditRuntime.inspect.events.records.query(sessionId, { type: "task_stall_adjudicated" }),
     ).toHaveLength(1);
     expect(
-      opsRuntime.inspect.events.query(sessionId, { type: "task_stall_adjudicated" }),
+      opsRuntime.inspect.events.records.query(sessionId, { type: "task_stall_adjudicated" }),
     ).toHaveLength(1);
     expect(
-      auditRuntime.inspect.events.queryStructured(sessionId, { type: "task_stall_adjudicated" })[0]
-        ?.category,
+      auditRuntime.inspect.events.records.queryStructured(sessionId, {
+        type: "task_stall_adjudicated",
+      })[0]?.category,
     ).toBe("state");
   });
 });

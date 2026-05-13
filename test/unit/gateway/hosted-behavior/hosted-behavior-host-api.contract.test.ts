@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { createHostedRuntimePort, createOperatorRuntimePort } from "@brewva/brewva-runtime";
 import { ROLLBACK_EVENT_TYPE } from "@brewva/brewva-runtime/events";
 import {
   buildContextEvidenceReport,
@@ -71,12 +72,12 @@ function createRuntimeFixture(
       config.infrastructure.contextBudget.compaction.tailProtectTokens = 0;
     }),
   });
-  const rawEventQuery = runtime.inspect.events.query.bind(runtime.inspect.events);
-  const rawEventQueryStructured = runtime.inspect.events.queryStructured.bind(
-    runtime.inspect.events,
+  const rawEventQuery = runtime.inspect.events.records.query.bind(runtime.inspect.events.records);
+  const rawEventQueryStructured = runtime.inspect.events.records.queryStructured.bind(
+    runtime.inspect.events.records,
   );
 
-  Object.assign(runtime.authority.tools, {
+  Object.assign(runtime.authority.tools.invocation, {
     start(payload: Record<string, unknown>) {
       calls.started.push(payload);
       return {
@@ -90,26 +91,29 @@ function createRuntimeFixture(
     },
   });
 
-  Object.assign(runtime.inspect.tools, {
-    explainAccess() {
+  Object.assign(runtime.inspect.tools.access, {
+    explain() {
       return { allowed: true };
     },
   });
 
-  Object.assign(runtime.maintain.context, {
-    observeUsage(sessionId: string, usage: unknown) {
+  Object.assign(createOperatorRuntimePort(runtime).operator.context.usage, {
+    observe(sessionId: string, usage: unknown) {
       calls.observedContext.push({ sessionId, usage });
     },
   });
 
-  Object.assign(runtime.inspect.context, {
-    getUsage() {
+  Object.assign(runtime.inspect.context.usage, {
+    get() {
       return { tokens: 320, contextWindow: 4096, percent: 0.078 };
     },
     getStatus(_sessionId: string, usage?: { percent?: number }) {
       return makeContextStatus(typeof usage?.percent === "number" ? usage.percent : 0.078);
     },
-    getCompactionGateStatus() {
+  });
+
+  Object.assign(runtime.inspect.context.compaction, {
+    getGateStatus() {
       return {
         required: true,
         status: makeContextStatus(0.99),
@@ -119,32 +123,38 @@ function createRuntimeFixture(
         turnsSinceCompaction: null,
       };
     },
-    getCompactionThresholdRatio() {
+    getThresholdRatio() {
       return 0.8;
     },
-    getPendingCompactionReason() {
+    getPendingReason() {
       return "hard_limit";
     },
     getHardLimitRatio() {
       return 0.98;
     },
+  });
+
+  Object.assign(runtime.inspect.context, {
     sanitizeInput(text: string) {
       return text;
     },
   });
 
-  runtime.inspect.events.subscribe((event) => {
+  runtime.inspect.events.records.subscribe((event) => {
     calls.events.push(event as unknown as Record<string, unknown>);
   });
 
-  Object.assign(runtime.inspect.events, {
+  Object.assign(runtime.inspect.events.records, {
     query() {
       return [];
     },
     queryStructured() {
       return [];
     },
-    getTapeStatus() {
+  });
+
+  Object.assign(runtime.inspect.tape.status, {
+    get() {
       return {
         tapePressure: "medium",
         totalEntries: 42,
@@ -154,13 +164,13 @@ function createRuntimeFixture(
         thresholds: { low: 5, medium: 20, high: 50 },
       };
     },
-    getTapePressureThresholds() {
+    getPressureThresholds() {
       return { low: 5, medium: 20, high: 50 };
     },
   });
 
-  Object.assign(runtime.inspect.task, {
-    getState() {
+  Object.assign(runtime.inspect.task.state, {
+    get() {
       return {
         spec: {
           goal: "Stabilize hosted behavior behavior.",
@@ -174,17 +184,14 @@ function createRuntimeFixture(
     },
   });
 
-  Object.assign(runtime.inspect.skills, {
-    getActive() {
-      return null;
-    },
+  Object.assign(runtime.inspect.skills.catalog, {
     get() {
       return undefined;
     },
   });
 
-  Object.assign(runtime.maintain.session, {
-    clearState(sessionId: string) {
+  Object.assign(createOperatorRuntimePort(runtime).operator.session.state, {
+    clear(sessionId: string) {
       calls.cleared.push(sessionId);
     },
   });
@@ -612,7 +619,7 @@ describe("hosted behavior host-api installation", () => {
       localHooks: [localHook],
     }).register(api);
 
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId: "hosted-local-hook-rollback",
       type: ROLLBACK_EVENT_TYPE,
       payload: {
@@ -663,7 +670,7 @@ describe("hosted behavior host-api installation", () => {
       },
       createSessionContext("hosted-local-hook-dispose"),
     );
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId: "hosted-local-hook-dispose",
       type: ROLLBACK_EVENT_TYPE,
       payload: {
@@ -679,7 +686,7 @@ describe("hosted behavior host-api installation", () => {
       { type: "session_shutdown" },
       createSessionContext("hosted-local-hook-dispose"),
     );
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId: "hosted-local-hook-dispose",
       type: ROLLBACK_EVENT_TYPE,
       payload: {
@@ -708,7 +715,7 @@ describe("hosted behavior host-api installation", () => {
       localHooks: [localHook],
     }).register(api);
 
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId: "hosted-local-hook-rollback-failure",
       type: ROLLBACK_EVENT_TYPE,
       payload: {
@@ -760,7 +767,7 @@ describe("hosted behavior host-api installation", () => {
       localHooks: [localHook],
     }).register(api);
 
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId: "hosted-local-hook-rollback-block-attempt",
       type: ROLLBACK_EVENT_TYPE,
       payload: {
@@ -862,12 +869,12 @@ describe("hosted behavior host-api installation", () => {
     const { runtime, rawEventQuery, rawEventQueryStructured } = createRuntimeFixture();
     const sessionId = "hosted-context-evidence-ready";
     let sessionUsage = { tokens: 320, contextWindow: 4096, percent: 0.078 };
-    Object.assign(runtime.inspect.events, {
+    Object.assign(runtime.inspect.events.records, {
       query: rawEventQuery,
       queryStructured: rawEventQueryStructured,
     });
-    Object.assign(runtime.inspect.context, {
-      getUsage(requestedSessionId?: string) {
+    Object.assign(runtime.inspect.context.usage, {
+      get(requestedSessionId?: string) {
         if (requestedSessionId === sessionId) {
           return sessionUsage;
         }
@@ -877,7 +884,9 @@ describe("hosted behavior host-api installation", () => {
         const usageRatio = typeof usage?.percent === "number" ? usage.percent : 0;
         return makeContextStatus(usageRatio);
       },
-      getCompactionGateStatus(_sessionId: string, usage?: { percent?: number }) {
+    });
+    Object.assign(runtime.inspect.context.compaction, {
+      getGateStatus(_sessionId: string, usage?: { percent?: number }) {
         const status = makeContextStatus(typeof usage?.percent === "number" ? usage.percent : 0);
         return {
           required: status.forcedCompaction,
@@ -889,7 +898,7 @@ describe("hosted behavior host-api installation", () => {
           turnsSinceCompaction: null,
         };
       },
-      getPendingCompactionReason(_sessionId: string, usage?: { percent?: number }) {
+      getPendingReason(_sessionId: string, usage?: { percent?: number }) {
         const status = makeContextStatus(typeof usage?.percent === "number" ? usage.percent : 0);
         return status.forcedCompaction ? "hard_limit" : null;
       },
@@ -915,7 +924,7 @@ describe("hosted behavior host-api installation", () => {
       contextWindow: 100_000,
       percent: 0.88,
     };
-    runtime.maintain.context.observeUsage(sessionId, sessionUsage);
+    createOperatorRuntimePort(runtime).operator.context.usage.observe(sessionId, sessionUsage);
     const reducedPayload = invokeBeforeProviderRequestChain(
       handlers,
       {

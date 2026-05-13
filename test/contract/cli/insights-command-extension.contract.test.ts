@@ -3,9 +3,18 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createInsightsCommandExtension } from "@brewva/brewva-cli";
 import type { HostedExtensionApi } from "@brewva/brewva-gateway/extensions";
-import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
+import {
+  BrewvaRuntime,
+  DEFAULT_BREWVA_CONFIG,
+  createOperatorRuntimePort,
+  createHostedRuntimePort,
+} from "@brewva/brewva-runtime";
 import { requireDefined } from "../../helpers/assertions.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
+
+function createHostedTestRuntime(options: ConstructorParameters<typeof BrewvaRuntime>[0]) {
+  return createHostedRuntimePort(new BrewvaRuntime(options));
+}
 
 type RegisteredCommand = {
   description: string;
@@ -52,23 +61,23 @@ function recordWriteSession(
     content: string;
   },
 ): void {
-  runtime.extensions.hosted.events.record({
+  createHostedRuntimePort(runtime).extensions.hosted.events.record({
     sessionId: input.sessionId,
     type: "session_bootstrap",
     payload: {
       managedToolMode: "hosted",
     },
   });
-  runtime.maintain.context.onTurnStart(input.sessionId, 1);
-  runtime.authority.tools.markCall(input.sessionId, "edit");
-  runtime.authority.tools.trackCallStart({
+  createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(input.sessionId, 1);
+  runtime.authority.tools.tracking.markCall(input.sessionId, "edit");
+  runtime.authority.tools.tracking.trackCallStart({
     sessionId: input.sessionId,
     toolCallId: `${input.sessionId}-edit-1`,
     toolName: "edit",
     args: { path: input.path },
   });
   writeFileSync(join(input.workspace, input.path), input.content, "utf8");
-  runtime.authority.tools.trackCallEnd({
+  runtime.authority.tools.tracking.trackCallEnd({
     sessionId: input.sessionId,
     toolCallId: `${input.sessionId}-edit-1`,
     toolName: "edit",
@@ -89,7 +98,7 @@ describe("insights interactive command extension", () => {
       "utf8",
     );
 
-    const runtime = new BrewvaRuntime({
+    const runtime = createHostedTestRuntime({
       cwd: workspace,
       config: structuredClone(DEFAULT_BREWVA_CONFIG),
     });

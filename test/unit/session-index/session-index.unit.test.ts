@@ -1,7 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
+import {
+  BrewvaRuntime,
+  DEFAULT_BREWVA_CONFIG,
+  createOperatorRuntimePort,
+  createHostedRuntimePort,
+} from "@brewva/brewva-runtime";
 import { type BrewvaEventRecord } from "@brewva/brewva-runtime/events";
 import { tokenizeSearchContent } from "@brewva/brewva-search";
 import { SESSION_INDEX_SCHEMA_VERSION, createSessionIndex } from "@brewva/brewva-session-index";
@@ -57,15 +62,15 @@ function recordTaskSession(
     evidenceText: string;
   },
 ): BrewvaEventRecord {
-  runtime.maintain.context.onTurnStart(input.sessionId, 1);
-  runtime.authority.task.setSpec(input.sessionId, {
+  createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(input.sessionId, 1);
+  runtime.authority.task.spec.set(input.sessionId, {
     schema: "brewva.task.v1",
     goal: input.goal,
     targets: {
       files: [input.targetFile],
     },
   });
-  return runtime.extensions.hosted.events.record({
+  return createHostedRuntimePort(runtime).extensions.hosted.events.record({
     sessionId: input.sessionId,
     type: "verification_outcome_recorded",
     timestamp: input.timestamp,
@@ -158,12 +163,12 @@ describe("session index", () => {
     const { workspace, runtime } = createIndexedRuntime("session-index-lineage");
     const sessionId = "indexed-lineage";
 
-    runtime.authority.session.createLineageNode(sessionId, {
+    runtime.authority.session.lineage.createNode(sessionId, {
       lineageNodeId: "ln-main",
       kind: "main",
       forkPoint: { kind: "session_root" },
     });
-    const mainSource = runtime.extensions.hosted.events.record({
+    const mainSource = createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: "message_end",
       payload: {
@@ -171,7 +176,7 @@ describe("session index", () => {
         content: "main message",
       },
     });
-    runtime.authority.session.recordContextEntry(sessionId, {
+    runtime.authority.session.lineage.recordContextEntry(sessionId, {
       entryId: "ctx-main-1",
       lineageNodeId: "ln-main",
       parentEntryId: null,
@@ -181,7 +186,7 @@ describe("session index", () => {
       admission: "context_required",
       presentTo: "both",
     });
-    runtime.authority.session.createLineageNode(sessionId, {
+    runtime.authority.session.lineage.createNode(sessionId, {
       lineageNodeId: "ln-review",
       parentLineageNodeId: "ln-main",
       kind: "review",
@@ -191,19 +196,19 @@ describe("session index", () => {
         entryId: "ctx-main-1",
       },
     });
-    runtime.authority.session.recordLineageSummary(sessionId, {
+    runtime.authority.session.lineage.recordSummary(sessionId, {
       summaryId: "summary-review",
       lineageNodeId: "ln-review",
       attachToEntryId: "ctx-main-1",
       summary: "Review branch summary",
       admission: "context_eligible",
     });
-    runtime.authority.session.recordLineageOutcome(sessionId, {
+    runtime.authority.session.lineage.recordOutcome(sessionId, {
       outcomeId: "outcome-review",
       lineageNodeId: "ln-review",
       summary: "Review outcome is state-local until adoption.",
     });
-    runtime.authority.session.adoptLineageOutcome(sessionId, {
+    runtime.authority.session.lineage.adoptOutcome(sessionId, {
       adoptionId: "adopt-review",
       outcomeId: "outcome-review",
       fromLineageNodeId: "ln-review",
@@ -211,7 +216,7 @@ describe("session index", () => {
       admission: "context_required",
       summary: "Adopt review outcome",
     });
-    const reviewSource = runtime.extensions.hosted.events.record({
+    const reviewSource = createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: "message_end",
       payload: {
@@ -219,7 +224,7 @@ describe("session index", () => {
         content: "review message",
       },
     });
-    runtime.authority.session.recordContextEntry(sessionId, {
+    runtime.authority.session.lineage.recordContextEntry(sessionId, {
       entryId: "ctx-review-1",
       lineageNodeId: "ln-review",
       parentEntryId: "ctx-main-1",
@@ -323,7 +328,7 @@ describe("session index", () => {
     );
     expect(firstState[0]?.indexed_event_count).toBe(3);
 
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId: "indexed-catch-up",
       type: "tool_result_recorded",
       timestamp: 1_700_000_002_000,
@@ -360,7 +365,7 @@ describe("session index", () => {
       evidenceText: "initial indexed receipt",
     });
     const dbPath = join(workspace, ".brewva", "session-index", "session-index.duckdb");
-    const logPath = runtime.inspect.events.getLogPath("indexed-incomplete-jsonl-row");
+    const logPath = runtime.inspect.events.log.getPath("indexed-incomplete-jsonl-row");
 
     const first = await createSessionIndex({
       workspaceRoot: workspace,
@@ -433,9 +438,12 @@ describe("session index", () => {
       workspaceRoot: workspace,
       events: {
         ...runtime.inspect.events,
-        listSessionIds() {
-          listSessionIdsCalls += 1;
-          return runtime.inspect.events.listSessionIds();
+        log: {
+          ...runtime.inspect.events.log,
+          listSessionIds() {
+            listSessionIdsCalls += 1;
+            return runtime.inspect.events.log.listSessionIds();
+          },
         },
       },
       task: runtime.inspect.task,
@@ -518,7 +526,7 @@ describe("session index", () => {
 
     let lateEvent: BrewvaEventRecord | undefined;
     for (let index = 0; index < 25; index += 1) {
-      const event = runtime.extensions.hosted.events.record({
+      const event = createHostedRuntimePort(runtime).extensions.hosted.events.record({
         sessionId: "indexed-long-session",
         type: "tool_result_recorded",
         timestamp: 1_700_000_001_000 + index,
@@ -719,7 +727,7 @@ describe("session index", () => {
     await first.catchUp();
     await first.close();
 
-    const logPath = runtime.inspect.events.getLogPath("indexed-truncated-log");
+    const logPath = runtime.inspect.events.log.getPath("indexed-truncated-log");
     writeFileSync(logPath, "", "utf8");
 
     const second = await createSessionIndex({
@@ -787,45 +795,45 @@ describe("session index", () => {
     writeFileSync(filePath, "export const value = 1;\n", "utf8");
 
     const sessionId = "indexed-rewind-session";
-    runtime.maintain.context.onTurnStart(sessionId, 1);
-    const checkpointA = runtime.authority.session.recordRewindCheckpoint(sessionId, {
+    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+    const checkpointA = runtime.authority.session.rewind.recordCheckpoint(sessionId, {
       leafEntryId: "leaf-a",
       prompt: { text: "Set value to 2", parts: [] },
     });
-    runtime.authority.tools.trackCallStart({
+    runtime.authority.tools.tracking.trackCallStart({
       sessionId,
       toolCallId: "tool-rewind-a",
       toolName: "edit",
       args: { file_path: "src/rewind.ts" },
     });
     writeFileSync(filePath, "export const value = 2;\n", "utf8");
-    runtime.authority.tools.trackCallEnd({
+    runtime.authority.tools.tracking.trackCallEnd({
       sessionId,
       toolCallId: "tool-rewind-a",
       toolName: "edit",
       channelSuccess: true,
     });
 
-    runtime.maintain.context.onTurnStart(sessionId, 2);
-    const checkpointB = runtime.authority.session.recordRewindCheckpoint(sessionId, {
+    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 2);
+    const checkpointB = runtime.authority.session.rewind.recordCheckpoint(sessionId, {
       leafEntryId: "leaf-b",
       prompt: { text: "Set value to 3", parts: [] },
     });
-    runtime.authority.tools.trackCallStart({
+    runtime.authority.tools.tracking.trackCallStart({
       sessionId,
       toolCallId: "tool-rewind-b",
       toolName: "edit",
       args: { file_path: "src/rewind.ts" },
     });
     writeFileSync(filePath, "export const value = 3;\n", "utf8");
-    runtime.authority.tools.trackCallEnd({
+    runtime.authority.tools.tracking.trackCallEnd({
       sessionId,
       toolCallId: "tool-rewind-b",
       toolName: "edit",
       channelSuccess: true,
     });
 
-    const rewind = runtime.authority.session.rewind(sessionId, {
+    const rewind = runtime.authority.session.rewind.rewind(sessionId, {
       checkpointId: checkpointA.checkpointId,
       mode: "both",
       summary: "none",
@@ -844,7 +852,7 @@ describe("session index", () => {
     try {
       await index.catchUp();
       const targets = await index.listSessionRewindTargets({ sessionId });
-      const runtimeTargets = runtime.inspect.session.listRewindTargets(sessionId);
+      const runtimeTargets = runtime.inspect.session.rewind.listTargets(sessionId);
       expect(targets).toHaveLength(2);
       expect(targets[0]).toMatchObject({
         checkpointId: checkpointB.checkpointId,

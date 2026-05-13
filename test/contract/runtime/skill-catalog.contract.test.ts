@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { getSemanticArtifactOutputContract } from "@brewva/brewva-runtime/semantic-artifacts";
 import {
-  BrewvaRuntime,
   REVIEW_REPORT_OUTPUT_CONTRACT,
   buildSkillSelectionProfile,
   getSkillOutputContracts,
@@ -9,8 +10,7 @@ import {
   listSkillOutputs,
   parseSkillDocument,
   resolveSkillEffectLevel,
-} from "@brewva/brewva-runtime";
-import { getSemanticArtifactOutputContract } from "@brewva/brewva-runtime/semantic-artifacts";
+} from "@brewva/brewva-runtime/skills";
 import { createRuntimeConfig } from "../../helpers/runtime.js";
 import { cleanupWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
 import { repoRoot } from "./skill-contract.helpers.js";
@@ -35,7 +35,7 @@ function createCleanRuntime(): BrewvaRuntime {
 describe("repository catalog contracts", () => {
   test("runtime loads the new v2 catalog names", () => {
     const runtime = createCleanRuntime();
-    const loadedSkillNames = runtime.inspect.skills.list().map((skill) => skill.name);
+    const loadedSkillNames = runtime.inspect.skills.catalog.list().map((skill) => skill.name);
 
     expect(loadedSkillNames).toEqual(
       expect.arrayContaining([
@@ -64,7 +64,7 @@ describe("repository catalog contracts", () => {
     const runtime = createCleanRuntime();
 
     for (const name of ["plan", "strategy", "prep", "extract", "git"]) {
-      expect(runtime.inspect.skills.get(name)?.name).toBe(name);
+      expect(runtime.inspect.skills.catalog.get(name)?.name).toBe(name);
     }
   });
 
@@ -90,7 +90,7 @@ describe("repository catalog contracts", () => {
 
   test("built-in base skills cover declared outputs through authored contracts or semantic bindings", () => {
     const runtime = createCleanRuntime();
-    const missing = runtime.inspect.skills.list().flatMap((skill) => {
+    const missing = runtime.inspect.skills.catalog.list().flatMap((skill) => {
       const outputs = listSkillOutputs(skill.contract);
       if (outputs.length === 0) {
         return [];
@@ -127,8 +127,8 @@ describe("repository catalog contracts", () => {
 
   test("all routable built-in skills expose at least one selection profile signal", () => {
     const runtime = createCleanRuntime();
-    const missing = runtime.inspect.skills.list().flatMap((skill) => {
-      if (!runtime.inspect.skills.getLoadReport().routableSkills.includes(skill.name)) {
+    const missing = runtime.inspect.skills.catalog.list().flatMap((skill) => {
+      if (!runtime.inspect.skills.catalog.getLoadReport().routableSkills.includes(skill.name)) {
         return [];
       }
       if (!hasSelectionProfileSignals(buildSkillSelectionProfile(skill))) {
@@ -142,7 +142,7 @@ describe("repository catalog contracts", () => {
 
   test("runtime injects shared authored behavior as inherited skill guidance", () => {
     const runtime = createCleanRuntime();
-    const plan = runtime.inspect.skills.get("plan");
+    const plan = runtime.inspect.skills.catalog.get("plan");
     expect(plan).toBeDefined();
 
     const inheritedReferences = plan?.inheritedResources.references ?? [];

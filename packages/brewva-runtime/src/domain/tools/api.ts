@@ -57,9 +57,10 @@ export {
   readToolResultRecordedEventPayload,
 } from "./event-descriptors.js";
 export {
+  createToolsAuthoritySurface,
+  createToolsInspectSurface,
+  createToolsOperatorSurface,
   createToolsSurfaceMethods,
-  toolsRuntimeSurface,
-  toolsSurfaceContribution,
 } from "./runtime-surface.js";
 export type {
   ActionPolicyRegistryLike,

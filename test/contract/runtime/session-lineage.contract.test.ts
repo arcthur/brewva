@@ -1,14 +1,15 @@
 import { describe, expect, test } from "bun:test";
+import { BrewvaRuntime, createHostedRuntimePort } from "@brewva/brewva-runtime";
 import {
-  BrewvaRuntime,
-  CAPABILITY_STATE_INLINE_DATA_MAX_BYTES,
-  type ContextAdmission,
   CONTEXT_ENTRY_RECORDED_EVENT_TYPE,
   SESSION_LINEAGE_NODE_CREATED_EVENT_TYPE,
   SESSION_LINEAGE_OUTCOME_ADOPTED_EVENT_TYPE,
   SESSION_LINEAGE_OUTCOME_RECORDED_EVENT_TYPE,
   SESSION_LINEAGE_SUMMARY_RECORDED_EVENT_TYPE,
-} from "@brewva/brewva-runtime";
+} from "@brewva/brewva-runtime/events";
+import { listRuntimeExtensionOwnerIds } from "@brewva/brewva-runtime/runtime-extensions";
+import { CAPABILITY_STATE_INLINE_DATA_MAX_BYTES } from "@brewva/brewva-runtime/session";
+import type { ContextAdmission } from "@brewva/brewva-runtime/session";
 import { createOpsRuntimeConfig } from "../../helpers/runtime.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
@@ -20,7 +21,7 @@ function createRuntime(name: string): BrewvaRuntime {
 }
 
 function recordMessageSource(runtime: BrewvaRuntime, sessionId: string, content: string): string {
-  const event = runtime.extensions.hosted.events.record({
+  const event = createHostedRuntimePort(runtime).extensions.hosted.events.record({
     sessionId,
     type: "message_end",
     payload: {
@@ -34,45 +35,21 @@ function recordMessageSource(runtime: BrewvaRuntime, sessionId: string, content:
   return event.id;
 }
 
-function collectRuntimeExtensionCapabilities(value: unknown): string[] {
-  const capabilities = new Set<string>();
-  const seen = new WeakSet<object>();
-  const visit = (candidate: unknown): void => {
-    if (typeof candidate !== "object" || candidate === null || seen.has(candidate)) {
-      return;
-    }
-    seen.add(candidate);
-    const record = candidate as Record<string, unknown>;
-    if (Array.isArray(record["capabilities"])) {
-      for (const capability of record["capabilities"]) {
-        if (typeof capability === "string") {
-          capabilities.add(capability);
-        }
-      }
-    }
-    for (const nested of Object.values(record)) {
-      visit(nested);
-    }
-  };
-  visit(value);
-  return [...capabilities].toSorted();
-}
-
 describe("session lineage runtime surface", () => {
   test("exposes lineage authority and inspect methods under session only", () => {
     const runtime = createRuntime("surface");
 
-    expect(runtime.authority.session.createLineageNode).toBeTypeOf("function");
-    expect(runtime.authority.session.recordContextEntry).toBeTypeOf("function");
-    expect(runtime.authority.session.recordLineageSummary).toBeTypeOf("function");
-    expect(runtime.authority.session.recordLineageOutcome).toBeTypeOf("function");
-    expect(runtime.authority.session.recordLineageSelection).toBeTypeOf("function");
-    expect(runtime.authority.session.adoptLineageOutcome).toBeTypeOf("function");
-    expect(runtime.authority.session.recordCapabilityState).toBeTypeOf("function");
-    expect(runtime.inspect.session.getLineageTree).toBeTypeOf("function");
-    expect(runtime.inspect.session.getLineageNode).toBeTypeOf("function");
-    expect(runtime.inspect.session.listLineageChildren).toBeTypeOf("function");
-    expect(runtime.inspect.session.getContextEntryPath).toBeTypeOf("function");
+    expect(runtime.authority.session.lineage.createNode).toBeTypeOf("function");
+    expect(runtime.authority.session.lineage.recordContextEntry).toBeTypeOf("function");
+    expect(runtime.authority.session.lineage.recordSummary).toBeTypeOf("function");
+    expect(runtime.authority.session.lineage.recordOutcome).toBeTypeOf("function");
+    expect(runtime.authority.session.lineage.recordSelection).toBeTypeOf("function");
+    expect(runtime.authority.session.lineage.adoptOutcome).toBeTypeOf("function");
+    expect(runtime.authority.session.lineage.recordCapabilityState).toBeTypeOf("function");
+    expect(runtime.inspect.session.lineage.getTree).toBeTypeOf("function");
+    expect(runtime.inspect.session.lineage.getNode).toBeTypeOf("function");
+    expect(runtime.inspect.session.lineage.listChildren).toBeTypeOf("function");
+    expect(runtime.inspect.session.lineage.getContextEntryPath).toBeTypeOf("function");
     expect((runtime.authority as unknown as Record<string, unknown>)["lineage"]).toBeUndefined();
     expect((runtime.inspect as unknown as Record<string, unknown>)["lineage"]).toBeUndefined();
   });
@@ -81,7 +58,7 @@ describe("session lineage runtime surface", () => {
     const runtime = createRuntime("tree");
     const sessionId = "lineage-tree";
 
-    const main = runtime.authority.session.createLineageNode(sessionId, {
+    const main = runtime.authority.session.lineage.createNode(sessionId, {
       lineageNodeId: "ln-main",
       kind: "main",
       forkPoint: {
@@ -90,7 +67,7 @@ describe("session lineage runtime surface", () => {
       title: "Main task",
     });
     const mainSourceEventId = recordMessageSource(runtime, sessionId, "main message");
-    runtime.authority.session.recordContextEntry(sessionId, {
+    runtime.authority.session.lineage.recordContextEntry(sessionId, {
       entryId: "ctx-main-1",
       lineageNodeId: "ln-main",
       parentEntryId: null,
@@ -100,7 +77,7 @@ describe("session lineage runtime surface", () => {
       admission: "context_required",
       presentTo: "both",
     });
-    const review = runtime.authority.session.createLineageNode(sessionId, {
+    const review = runtime.authority.session.lineage.createNode(sessionId, {
       lineageNodeId: "ln-review",
       parentLineageNodeId: "ln-main",
       kind: "review",
@@ -111,7 +88,7 @@ describe("session lineage runtime surface", () => {
       },
     });
     const reviewSourceEventId = recordMessageSource(runtime, sessionId, "review message");
-    runtime.authority.session.recordContextEntry(sessionId, {
+    runtime.authority.session.lineage.recordContextEntry(sessionId, {
       entryId: "ctx-review-1",
       lineageNodeId: "ln-review",
       parentEntryId: "ctx-main-1",
@@ -124,14 +101,14 @@ describe("session lineage runtime surface", () => {
 
     expect(main.type).toBe(SESSION_LINEAGE_NODE_CREATED_EVENT_TYPE);
     expect(review.type).toBe(SESSION_LINEAGE_NODE_CREATED_EVENT_TYPE);
-    expect(runtime.inspect.session.listLineageChildren(sessionId, "ln-main")).toEqual([
+    expect(runtime.inspect.session.lineage.listChildren(sessionId, "ln-main")).toEqual([
       expect.objectContaining({
         lineageNodeId: "ln-review",
         parentLineageNodeId: "ln-main",
         kind: "review",
       }),
     ]);
-    expect(runtime.inspect.session.getLineageTree(sessionId)).toEqual(
+    expect(runtime.inspect.session.lineage.getTree(sessionId)).toEqual(
       expect.objectContaining({
         sessionId,
         rootNodeId: "ln-main",
@@ -148,7 +125,7 @@ describe("session lineage runtime surface", () => {
       }),
     );
     expect(
-      runtime.inspect.session
+      runtime.inspect.session.lineage
         .getContextEntryPath(sessionId, {
           lineageNodeId: "ln-review",
           entryId: "ctx-review-1",
@@ -156,7 +133,7 @@ describe("session lineage runtime surface", () => {
         .map((entry) => entry.entryId),
     ).toEqual(["ctx-main-1", "ctx-review-1"]);
     expect(
-      runtime.inspect.session
+      runtime.inspect.session.lineage
         .getContextEntryPath(sessionId, {
           lineageNodeId: "ln-main",
           entryId: "ctx-main-1",
@@ -169,18 +146,18 @@ describe("session lineage runtime surface", () => {
     const runtime = createRuntime("adoption");
     const sessionId = "lineage-adoption";
 
-    runtime.authority.session.createLineageNode(sessionId, {
+    runtime.authority.session.lineage.createNode(sessionId, {
       lineageNodeId: "ln-main",
       kind: "main",
       forkPoint: { kind: "session_root" },
     });
-    runtime.authority.session.createLineageNode(sessionId, {
+    runtime.authority.session.lineage.createNode(sessionId, {
       lineageNodeId: "ln-worker",
       parentLineageNodeId: "ln-main",
       kind: "subagent",
       forkPoint: { kind: "worker_run", workerRunId: "worker-1" },
     });
-    const outcome = runtime.authority.session.recordLineageOutcome(sessionId, {
+    const outcome = runtime.authority.session.lineage.recordOutcome(sessionId, {
       outcomeId: "outcome-worker-1",
       lineageNodeId: "ln-worker",
       summary: "Worker found the smaller patch.",
@@ -192,7 +169,7 @@ describe("session lineage runtime surface", () => {
       admission: "state_only" satisfies ContextAdmission,
     });
 
-    const adopted = runtime.authority.session.adoptLineageOutcome(sessionId, {
+    const adopted = runtime.authority.session.lineage.adoptOutcome(sessionId, {
       adoptionId: "adopt-worker-1",
       outcomeId: "outcome-worker-1",
       fromLineageNodeId: "ln-worker",
@@ -202,7 +179,7 @@ describe("session lineage runtime surface", () => {
     });
 
     expect(adopted.type).toBe(SESSION_LINEAGE_OUTCOME_ADOPTED_EVENT_TYPE);
-    expect(runtime.inspect.session.getLineageNode(sessionId, "ln-worker")).toEqual(
+    expect(runtime.inspect.session.lineage.getNode(sessionId, "ln-worker")).toEqual(
       expect.objectContaining({
         outcomes: [
           expect.objectContaining({
@@ -212,7 +189,7 @@ describe("session lineage runtime surface", () => {
         ],
       }),
     );
-    expect(runtime.inspect.session.getLineageNode(sessionId, "ln-main")).toEqual(
+    expect(runtime.inspect.session.lineage.getNode(sessionId, "ln-main")).toEqual(
       expect.objectContaining({
         adoptedOutcomes: [
           expect.objectContaining({
@@ -223,14 +200,14 @@ describe("session lineage runtime surface", () => {
       }),
     );
     expect(() =>
-      runtime.authority.session.recordLineageOutcome(sessionId, {
+      runtime.authority.session.lineage.recordOutcome(sessionId, {
         outcomeId: "outcome-worker-1",
         lineageNodeId: "ln-worker",
         summary: "Duplicate outcome should be rejected.",
       }),
     ).toThrow("session_lineage_outcome_exists");
     expect(() =>
-      runtime.authority.session.recordLineageOutcome(sessionId, {
+      runtime.authority.session.lineage.recordOutcome(sessionId, {
         outcomeId: "outcome-worker-required",
         lineageNodeId: "ln-worker",
         summary: "Direct context-required outcome should be rejected.",
@@ -238,7 +215,7 @@ describe("session lineage runtime surface", () => {
       }),
     ).toThrow("session_lineage_outcome_requires_adoption");
     expect(() =>
-      runtime.authority.session.adoptLineageOutcome(sessionId, {
+      runtime.authority.session.lineage.adoptOutcome(sessionId, {
         adoptionId: "adopt-worker-1",
         outcomeId: "outcome-worker-1",
         fromLineageNodeId: "ln-worker",
@@ -247,7 +224,7 @@ describe("session lineage runtime surface", () => {
       }),
     ).toThrow("session_lineage_outcome_adoption_exists");
     expect(() =>
-      runtime.authority.session.adoptLineageOutcome(sessionId, {
+      runtime.authority.session.lineage.adoptOutcome(sessionId, {
         adoptionId: "adopt-worker-2",
         outcomeId: "outcome-worker-1",
         fromLineageNodeId: "ln-main",
@@ -261,18 +238,18 @@ describe("session lineage runtime surface", () => {
     const runtime = createRuntime("selection");
     const sessionId = "lineage-selection";
 
-    runtime.authority.session.createLineageNode(sessionId, {
+    runtime.authority.session.lineage.createNode(sessionId, {
       lineageNodeId: "ln-main",
       kind: "main",
       forkPoint: { kind: "session_root" },
     });
-    runtime.authority.session.createLineageNode(sessionId, {
+    runtime.authority.session.lineage.createNode(sessionId, {
       lineageNodeId: "ln-review",
       parentLineageNodeId: "ln-main",
       kind: "review",
       forkPoint: { kind: "turn", turnId: "turn-review" },
     });
-    runtime.authority.session.recordLineageSelection(sessionId, {
+    runtime.authority.session.lineage.recordSelection(sessionId, {
       selectionId: "selection-tui-1",
       channelId: "tui",
       lineageNodeId: "ln-review",
@@ -280,11 +257,11 @@ describe("session lineage runtime surface", () => {
       reason: "operator-navigation",
     });
 
-    expect(runtime.inspect.session.getLineageTree(sessionId).selectedByChannel).toEqual({
+    expect(runtime.inspect.session.lineage.getTree(sessionId).selectedByChannel).toEqual({
       tui: "ln-review",
     });
     expect(() =>
-      runtime.authority.session.recordLineageSelection(sessionId, {
+      runtime.authority.session.lineage.recordSelection(sessionId, {
         selectionId: "selection-tui-2",
         channelId: "tui",
         lineageNodeId: "ln-missing",
@@ -296,13 +273,13 @@ describe("session lineage runtime surface", () => {
     const runtime = createRuntime("capability-state");
     const sessionId = "lineage-capability-state";
 
-    runtime.authority.session.createLineageNode(sessionId, {
+    runtime.authority.session.lineage.createNode(sessionId, {
       lineageNodeId: "ln-main",
       kind: "main",
       forkPoint: { kind: "session_root" },
     });
-    const ownerCapability = `brewva.skill.${runtime.inspect.skills.list()[0]?.name ?? "review"}`;
-    const state = runtime.authority.session.recordCapabilityState(sessionId, {
+    const ownerCapability = `brewva.skill.${runtime.inspect.skills.catalog.list()[0]?.name ?? "review"}`;
+    const state = runtime.authority.session.lineage.recordCapabilityState(sessionId, {
       stateId: "state-review-1",
       ownerCapability,
       customType: "review-cache",
@@ -318,7 +295,7 @@ describe("session lineage runtime surface", () => {
       artifactRef: "artifact://review/state.json",
     });
     expect(() =>
-      runtime.authority.session.recordCapabilityState(sessionId, {
+      runtime.authority.session.lineage.recordCapabilityState(sessionId, {
         stateId: "state-unknown",
         ownerCapability: "foo.bar.baz",
         customType: "unknown-cache",
@@ -326,7 +303,7 @@ describe("session lineage runtime surface", () => {
       }),
     ).toThrow("capability_state_owner_undeclared:foo.bar.baz");
     expect(() =>
-      runtime.authority.session.recordCapabilityState(sessionId, {
+      runtime.authority.session.lineage.recordCapabilityState(sessionId, {
         stateId: "state-too-large",
         ownerCapability,
         customType: "review-cache",
@@ -337,20 +314,24 @@ describe("session lineage runtime surface", () => {
     ).toThrow("capability_state_inline_payload_too_large:state-too-large");
   });
 
-  test("declares capability state owners from runtime extension ports", () => {
+  test("declares capability state owners without exposing runtime extension capability tokens", () => {
     const runtime = createRuntime("runtime-extension-capabilities");
     const sessionId = "lineage-runtime-extension-capabilities";
-    runtime.authority.session.createLineageNode(sessionId, {
+    runtime.authority.session.lineage.createNode(sessionId, {
       lineageNodeId: "ln-main",
       kind: "main",
       forkPoint: { kind: "session_root" },
     });
 
-    const capabilities = collectRuntimeExtensionCapabilities(runtime.extensions);
-    expect(capabilities.length).toBeGreaterThan(0);
-    for (const [index, ownerCapability] of capabilities.entries()) {
+    const ownerIds = listRuntimeExtensionOwnerIds();
+    expect(ownerIds.length).toBeGreaterThan(0);
+    expect(
+      "capabilities" in
+        (createHostedRuntimePort(runtime).extensions.hosted.events as unknown as object),
+    ).toBe(false);
+    for (const [index, ownerCapability] of ownerIds.entries()) {
       expect(() =>
-        runtime.authority.session.recordCapabilityState(sessionId, {
+        runtime.authority.session.lineage.recordCapabilityState(sessionId, {
           stateId: `state-extension-${index}`,
           ownerCapability,
           customType: "extension-cache",
@@ -365,7 +346,7 @@ describe("session lineage runtime surface", () => {
     const runtime = createRuntime("missing-root");
     const sessionId = "lineage-missing-root";
 
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: "message_end",
       payload: {
@@ -374,7 +355,7 @@ describe("session lineage runtime surface", () => {
       },
     });
 
-    expect(() => runtime.inspect.session.getLineageTree(sessionId)).toThrow(
+    expect(() => runtime.inspect.session.lineage.getTree(sessionId)).toThrow(
       "session_lineage_root_missing",
     );
   });
@@ -383,13 +364,13 @@ describe("session lineage runtime surface", () => {
     const runtime = createRuntime("summary");
     const sessionId = "lineage-summary";
 
-    runtime.authority.session.createLineageNode(sessionId, {
+    runtime.authority.session.lineage.createNode(sessionId, {
       lineageNodeId: "ln-main",
       kind: "main",
       forkPoint: { kind: "session_root" },
     });
     const sourceEventId = recordMessageSource(runtime, sessionId, "summary attachment");
-    runtime.authority.session.recordContextEntry(sessionId, {
+    runtime.authority.session.lineage.recordContextEntry(sessionId, {
       entryId: "ctx-main-1",
       lineageNodeId: "ln-main",
       parentEntryId: null,
@@ -399,7 +380,7 @@ describe("session lineage runtime surface", () => {
       admission: "context_required",
       presentTo: "both",
     });
-    const summary = runtime.authority.session.recordLineageSummary(sessionId, {
+    const summary = runtime.authority.session.lineage.recordSummary(sessionId, {
       summaryId: "summary-review",
       lineageNodeId: "ln-main",
       attachToEntryId: "ctx-main-1",
@@ -408,8 +389,8 @@ describe("session lineage runtime surface", () => {
     });
 
     expect(summary.type).toBe(SESSION_LINEAGE_SUMMARY_RECORDED_EVENT_TYPE);
-    expect(runtime.inspect.session.getLineageTree(sessionId).edges).toEqual([]);
-    expect(runtime.inspect.session.getLineageNode(sessionId, "ln-main")).toEqual(
+    expect(runtime.inspect.session.lineage.getTree(sessionId).edges).toEqual([]);
+    expect(runtime.inspect.session.lineage.getNode(sessionId, "ln-main")).toEqual(
       expect.objectContaining({
         summaries: [
           expect.objectContaining({
@@ -425,13 +406,13 @@ describe("session lineage runtime surface", () => {
     const runtime = createRuntime("linker");
     const sessionId = "lineage-linker";
 
-    runtime.authority.session.createLineageNode(sessionId, {
+    runtime.authority.session.lineage.createNode(sessionId, {
       lineageNodeId: "ln-main",
       kind: "main",
       forkPoint: { kind: "session_root" },
     });
     expect(() =>
-      runtime.authority.session.recordContextEntry(sessionId, {
+      runtime.authority.session.lineage.recordContextEntry(sessionId, {
         entryId: "ctx-missing-source",
         lineageNodeId: "ln-main",
         parentEntryId: null,
@@ -442,7 +423,7 @@ describe("session lineage runtime surface", () => {
         presentTo: "both",
       }),
     ).toThrow("session_context_entry_source_missing");
-    const source = runtime.extensions.hosted.events.record({
+    const source = createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: "message_end",
       payload: {
@@ -451,7 +432,7 @@ describe("session lineage runtime surface", () => {
       },
     });
     expect(() =>
-      runtime.authority.session.recordContextEntry(sessionId, {
+      runtime.authority.session.lineage.recordContextEntry(sessionId, {
         entryId: "ctx-source-type-mismatch",
         lineageNodeId: "ln-main",
         parentEntryId: null,
@@ -462,7 +443,7 @@ describe("session lineage runtime surface", () => {
         presentTo: "both",
       }),
     ).toThrow("session_context_entry_source_type_mismatch");
-    const linker = runtime.authority.session.recordContextEntry(sessionId, {
+    const linker = runtime.authority.session.lineage.recordContextEntry(sessionId, {
       entryId: "ctx-assistant-1",
       lineageNodeId: "ln-main",
       parentEntryId: null,
@@ -475,10 +456,10 @@ describe("session lineage runtime surface", () => {
 
     expect(linker.type).toBe(CONTEXT_ENTRY_RECORDED_EVENT_TYPE);
     expect(
-      runtime.inspect.events.query(sessionId, { type: "message_end" })[0]?.payload,
+      runtime.inspect.events.records.query(sessionId, { type: "message_end" })[0]?.payload,
     ).not.toHaveProperty("parentEntryId");
     expect(
-      runtime.inspect.events.query(sessionId, { type: CONTEXT_ENTRY_RECORDED_EVENT_TYPE }),
+      runtime.inspect.events.records.query(sessionId, { type: CONTEXT_ENTRY_RECORDED_EVENT_TYPE }),
     ).toHaveLength(1);
   });
 });

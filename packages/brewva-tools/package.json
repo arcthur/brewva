@@ -69,7 +69,6 @@
     "@brewva/brewva-search": "workspace:*",
     "@brewva/brewva-std": "workspace:*",
     "@brewva/brewva-substrate": "workspace:*",
-    "@brewva/brewva-tool-protocol": "workspace:*",
     "@sinclair/typebox": "^0.34.49",
     "date-fns": "^4.1.0",
     "eslint-scope": "^9.1.2",

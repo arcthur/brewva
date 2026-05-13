@@ -10,9 +10,9 @@
 
 - blocked or deferred tool calls
 - approval turns in channel mode
-- `runtime.inspect.tools.explainAccess(...)`
-- `runtime.inspect.proposals.listEffectCommitmentRequests(...)`
-- `runtime.inspect.proposals.listPendingEffectCommitments(...)`
+- `runtime.inspect.tools.access.explain(...)`
+- `runtime.inspect.proposals.requests.list(...)`
+- `runtime.inspect.proposals.requests.listPending(...)`
 - `rollback_last_patch`
 
 ## Objective
@@ -103,10 +103,10 @@ flowchart TD
 ## Observability
 
 - primary inspection and operator surfaces:
-  - `runtime.inspect.tools.explainAccess(...)`
-  - `runtime.inspect.proposals.listEffectCommitmentRequests(...)`
-  - `runtime.inspect.proposals.listPendingEffectCommitments(...)`
-  - `runtime.inspect.proposals.list(...)`
+  - `runtime.inspect.tools.access.explain(...)`
+  - `runtime.inspect.proposals.requests.list(...)`
+  - `runtime.inspect.proposals.requests.listPending(...)`
+  - `runtime.inspect.proposals.proposals.list(...)`
   - `brewva inspect`
 - core durable events:
   - `proposal_received`

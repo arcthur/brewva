@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { BrewvaRuntime, createHostedRuntimePort } from "@brewva/brewva-runtime";
 import { VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
 import { createOutputSearchTool } from "@brewva/brewva-tools/navigation";
 import { defineBrewvaTool } from "@brewva/brewva-tools/registry";
@@ -14,10 +14,14 @@ import {
 import { createMockExtensionApi, invokeHandlers } from "../../../helpers/extension.js";
 import { createBundledToolRuntime } from "../../../helpers/runtime.js";
 
+function createHostedTestRuntime(options: ConstructorParameters<typeof BrewvaRuntime>[0]) {
+  return createHostedRuntimePort(new BrewvaRuntime(options));
+}
+
 describe("Hosted behavior integration: observability ledger", () => {
   test("records invocation-resolved execution traits into hosted tool lifecycle events", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-ext-execution-traits-"));
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createHostedTestRuntime({ cwd: workspace });
     const sessionId = "ext-execution-traits-1";
     const { api, handlers } = createMockExtensionApi();
     const baseTool = createOutputSearchTool({ runtime: createBundledToolRuntime(runtime) });
@@ -50,7 +54,7 @@ describe("Hosted behavior integration: observability ledger", () => {
       },
     };
 
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       turn: 1,
       type: "turn_input_recorded",
@@ -82,7 +86,7 @@ describe("Hosted behavior integration: observability ledger", () => {
       ctx,
     );
 
-    const toolCallPayload = runtime.inspect.events.query(sessionId, {
+    const toolCallPayload = runtime.inspect.events.records.query(sessionId, {
       type: "tool_call",
       last: 1,
     })[0]?.payload as
@@ -104,7 +108,7 @@ describe("Hosted behavior integration: observability ledger", () => {
       contextModifying: false,
     });
 
-    const toolStartPayload = runtime.inspect.events.query(sessionId, {
+    const toolStartPayload = runtime.inspect.events.records.query(sessionId, {
       type: "tool_execution_start",
       last: 1,
     })[0]?.payload as
@@ -129,7 +133,7 @@ describe("Hosted behavior integration: observability ledger", () => {
 
   test("records authoritative attempt ids on tool lifecycle events after retry supersession", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-ext-tool-attempts-"));
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createHostedTestRuntime({ cwd: workspace });
     const sessionId = "ext-tool-attempts-1";
     const { api, handlers } = createMockExtensionApi();
     registerEventStream(api, runtime);
@@ -141,7 +145,7 @@ describe("Hosted behavior integration: observability ledger", () => {
       },
     };
 
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       turn: 1,
       type: "turn_input_recorded",
@@ -151,7 +155,7 @@ describe("Hosted behavior integration: observability ledger", () => {
         promptText: "test prompt",
       },
     });
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       turn: 1,
       type: "session_turn_transition",
@@ -201,15 +205,15 @@ describe("Hosted behavior integration: observability ledger", () => {
       ctx,
     );
 
-    const toolCallPayload = runtime.inspect.events.query(sessionId, {
+    const toolCallPayload = runtime.inspect.events.records.query(sessionId, {
       type: "tool_call",
       last: 1,
     })[0]?.payload as { attempt?: number | null } | undefined;
-    const toolStartPayload = runtime.inspect.events.query(sessionId, {
+    const toolStartPayload = runtime.inspect.events.records.query(sessionId, {
       type: "tool_execution_start",
       last: 1,
     })[0]?.payload as { attempt?: number | null } | undefined;
-    const toolEndPayload = runtime.inspect.events.query(sessionId, {
+    const toolEndPayload = runtime.inspect.events.records.query(sessionId, {
       type: "tool_execution_end",
       last: 1,
     })[0]?.payload as { attempt?: number | null } | undefined;
@@ -221,7 +225,7 @@ describe("Hosted behavior integration: observability ledger", () => {
 
   test("records a verification-boundary reasoning checkpoint from durable verification outcomes", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-ext-reasoning-verification-"));
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createHostedTestRuntime({ cwd: workspace });
     const sessionId = "ext-reasoning-verification-1";
     const { api, handlers } = createMockExtensionApi();
     registerEventStream(api, runtime);
@@ -242,7 +246,7 @@ describe("Hosted behavior integration: observability ledger", () => {
       },
     );
 
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       turn: 1,
       type: VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
@@ -253,7 +257,7 @@ describe("Hosted behavior integration: observability ledger", () => {
       },
     });
 
-    const state = runtime.inspect.reasoning.getActiveState(sessionId);
+    const state = runtime.inspect.reasoning.state.getActive(sessionId);
     expect(state.checkpoints).toEqual([
       expect.objectContaining({
         checkpointId: "reasoning-checkpoint-1",
@@ -275,7 +279,7 @@ describe("Hosted behavior integration: observability ledger", () => {
 
   test("does not auto-record tool-boundary reasoning checkpoints on every tool completion", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-ext-reasoning-tool-boundary-"));
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createHostedTestRuntime({ cwd: workspace });
     const sessionId = "ext-reasoning-tool-boundary-1";
     const { api, handlers } = createMockExtensionApi();
     registerEventStream(api, runtime);
@@ -308,7 +312,7 @@ describe("Hosted behavior integration: observability ledger", () => {
       ctx,
     );
 
-    const state = runtime.inspect.reasoning.getActiveState(sessionId);
+    const state = runtime.inspect.reasoning.state.getActive(sessionId);
     expect(state.checkpoints).toEqual([
       expect.objectContaining({
         checkpointId: "reasoning-checkpoint-1",
@@ -320,7 +324,7 @@ describe("Hosted behavior integration: observability ledger", () => {
 
   test("given high-volume exec tool output with explicit fail verdict, when ledger writer handles tool_result, then verdict propagates into observed and distilled telemetry", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-ext-distill-"));
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createHostedTestRuntime({ cwd: workspace });
     const sessionId = "ext-distill-1";
 
     const { api, handlers } = createMockExtensionApi();
@@ -354,7 +358,7 @@ describe("Hosted behavior integration: observability ledger", () => {
       ctx,
     );
 
-    const observed = runtime.inspect.events.query(sessionId, {
+    const observed = runtime.inspect.events.records.query(sessionId, {
       type: "tool_output_observed",
       last: 1,
     })[0];
@@ -365,7 +369,7 @@ describe("Hosted behavior integration: observability ledger", () => {
       (observed?.payload as { isError?: boolean; verdict?: string } | undefined)?.verdict,
     ).toBe("fail");
 
-    const distilled = runtime.inspect.events.query(sessionId, {
+    const distilled = runtime.inspect.events.records.query(sessionId, {
       type: "tool_output_distilled",
       last: 1,
     })[0];
@@ -390,7 +394,7 @@ describe("Hosted behavior integration: observability ledger", () => {
 
     const artifactRef =
       (
-        runtime.inspect.events.query(sessionId, {
+        runtime.inspect.events.records.query(sessionId, {
           type: "tool_output_artifact_persisted",
           last: 1,
         })[0]?.payload as { artifactRef?: string } | undefined
@@ -399,7 +403,7 @@ describe("Hosted behavior integration: observability ledger", () => {
     expect(existsSync(artifactPath)).toBe(true);
     expect(readFileSync(artifactPath, "utf8")).toContain("error at step");
 
-    const recordedPayload = runtime.inspect.events.query(sessionId, {
+    const recordedPayload = runtime.inspect.events.records.query(sessionId, {
       type: "tool_result_recorded",
       last: 1,
     })[0]?.payload as
@@ -426,7 +430,7 @@ describe("Hosted behavior integration: observability ledger", () => {
 
   test("given process explicit inconclusive verdict, when tool_result is recorded, then verdict is inconclusive", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-ext-running-inconclusive-"));
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createHostedTestRuntime({ cwd: workspace });
     const sessionId = "ext-running-inconclusive-1";
 
     const { api, handlers } = createMockExtensionApi();
@@ -452,7 +456,7 @@ describe("Hosted behavior integration: observability ledger", () => {
       },
     );
 
-    const recordedPayload = runtime.inspect.events.query(sessionId, {
+    const recordedPayload = runtime.inspect.events.records.query(sessionId, {
       type: "tool_result_recorded",
       last: 1,
     })[0]?.payload as
@@ -463,13 +467,13 @@ describe("Hosted behavior integration: observability ledger", () => {
       | undefined;
     expect(recordedPayload?.verdict).toBe("inconclusive");
     expect(recordedPayload?.channelSuccess).toBe(true);
-    expect(runtime.inspect.ledger.listRows(sessionId)).toHaveLength(1);
-    expect(runtime.inspect.ledger.listRows(sessionId)[0]?.verdict).toBe("inconclusive");
+    expect(runtime.inspect.ledger.store.listRows(sessionId)).toHaveLength(1);
+    expect(runtime.inspect.ledger.store.listRows(sessionId)[0]?.verdict).toBe("inconclusive");
   });
 
   test("given compaction interrupts live tool lifecycle after tool_result, when session_before_compact fires, then event stream closes tool_execution_end before compaction", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-ext-compact-lifecycle-"));
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createHostedTestRuntime({ cwd: workspace });
     const sessionId = "ext-compact-lifecycle-1";
 
     const { api, handlers } = createMockExtensionApi();
@@ -531,7 +535,7 @@ describe("Hosted behavior integration: observability ledger", () => {
       ctx,
     );
 
-    const events = runtime.inspect.events.query(sessionId);
+    const events = runtime.inspect.events.records.query(sessionId);
     const eventTypes = events.map((event) => event.type);
     expect(eventTypes.filter((type) => type === "tool_execution_end")).toHaveLength(1);
     expect(eventTypes.filter((type) => type === "session_before_compact")).toHaveLength(1);
@@ -546,7 +550,7 @@ describe("Hosted behavior integration: observability ledger", () => {
 
   test("records terminal reasons for direct, fallback, and interrupt-driven hosted tool endings", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-ext-terminal-reasons-"));
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createHostedTestRuntime({ cwd: workspace });
     const sessionId = "ext-terminal-reasons-1";
 
     const { api, handlers } = createMockExtensionApi();
@@ -622,7 +626,7 @@ describe("Hosted behavior integration: observability ledger", () => {
       },
       ctx,
     );
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: "session_turn_transition",
       payload: {
@@ -641,7 +645,7 @@ describe("Hosted behavior integration: observability ledger", () => {
 
     await new Promise((resolve) => setTimeout(resolve, 80));
 
-    const payloads = runtime.inspect.events
+    const payloads = runtime.inspect.events.records
       .query(sessionId, { type: "tool_execution_end" })
       .map((event) => {
         return event.payload as
@@ -676,10 +680,10 @@ describe("Hosted behavior integration: observability ledger", () => {
 
   test("given obs_query result override, when ledger writer records the tool result, then output_search can reuse the raw artifact", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-ext-obs-query-"));
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createHostedTestRuntime({ cwd: workspace });
     const sessionId = "ext-obs-query-1";
 
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: "startup_sample",
       payload: {
@@ -687,7 +691,7 @@ describe("Hosted behavior integration: observability ledger", () => {
         startupMs: 780,
       },
     });
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: "startup_sample",
       payload: {
@@ -741,7 +745,7 @@ describe("Hosted behavior integration: observability ledger", () => {
 
     const artifactRef =
       (
-        runtime.inspect.events.query(sessionId, {
+        runtime.inspect.events.records.query(sessionId, {
           type: "tool_output_artifact_persisted",
           last: 1,
         })[0]?.payload as { artifactRef?: string } | undefined
@@ -764,7 +768,7 @@ describe("Hosted behavior integration: observability ledger", () => {
       .join("\n");
     expect(outputSearchText).toContain(artifactRef);
 
-    const recordedPayload = runtime.inspect.events.query(sessionId, {
+    const recordedPayload = runtime.inspect.events.records.query(sessionId, {
       type: "tool_result_recorded",
       last: 1,
     })[0]?.payload as
@@ -779,10 +783,10 @@ describe("Hosted behavior integration: observability ledger", () => {
 
   test("given obs_slo_assert explicit verdicts, when ledger writer records the tool result, then ledger verdicts and claim sync follow the declared verdict", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-ext-obs-assert-"));
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createHostedTestRuntime({ cwd: workspace });
     const sessionId = "ext-obs-assert-1";
 
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: "startup_sample",
       payload: {
@@ -790,7 +794,7 @@ describe("Hosted behavior integration: observability ledger", () => {
         startupMs: 910,
       },
     });
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: "startup_sample",
       payload: {
@@ -847,10 +851,10 @@ describe("Hosted behavior integration: observability ledger", () => {
       ctx,
     );
 
-    expect(runtime.inspect.ledger.listRows(sessionId).at(-1)?.verdict).toBe("fail");
+    expect(runtime.inspect.ledger.store.listRows(sessionId).at(-1)?.verdict).toBe("fail");
     expect(
-      runtime.inspect.claim
-        .getState(sessionId)
+      runtime.inspect.claim.state
+        .get(sessionId)
         .claims.some(
           (fact) => fact.kind === "observability_slo_violation" && fact.status === "active",
         ),
@@ -893,12 +897,12 @@ describe("Hosted behavior integration: observability ledger", () => {
       ctx,
     );
 
-    expect(runtime.inspect.ledger.listRows(sessionId).at(-1)?.verdict).toBe("inconclusive");
+    expect(runtime.inspect.ledger.store.listRows(sessionId).at(-1)?.verdict).toBe("inconclusive");
   });
 
   test("given failed tool_execution_end without tool_result, when observability handlers run, then fallback output and ledger events are persisted", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-ext-fallback-"));
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createHostedTestRuntime({ cwd: workspace });
     const sessionId = "ext-fallback-1";
 
     const { api, handlers } = createMockExtensionApi();
@@ -933,7 +937,7 @@ describe("Hosted behavior integration: observability ledger", () => {
       ctx,
     );
 
-    const observedPayload = runtime.inspect.events.query(sessionId, {
+    const observedPayload = runtime.inspect.events.records.query(sessionId, {
       type: "tool_output_observed",
       last: 1,
     })[0]?.payload as
@@ -945,7 +949,7 @@ describe("Hosted behavior integration: observability ledger", () => {
     expect(observedPayload?.toolCallId).toBe("tc-fallback-lsp");
     expect(observedPayload?.toolName).toBe("lsp_symbols");
 
-    const recordedPayload = runtime.inspect.events.query(sessionId, {
+    const recordedPayload = runtime.inspect.events.records.query(sessionId, {
       type: "tool_result_recorded",
       last: 1,
     })[0]?.payload as
@@ -954,11 +958,11 @@ describe("Hosted behavior integration: observability ledger", () => {
         }
       | undefined;
     expect(recordedPayload?.verdict).toBe("fail");
-    expect(runtime.inspect.ledger.listRows(sessionId)).toHaveLength(1);
-    expect(runtime.inspect.ledger.listRows(sessionId)[0]?.tool).toBe("lsp_symbols");
+    expect(runtime.inspect.ledger.store.listRows(sessionId)).toHaveLength(1);
+    expect(runtime.inspect.ledger.store.listRows(sessionId)[0]?.tool).toBe("lsp_symbols");
     expect(
       (
-        runtime.inspect.ledger.listRows(sessionId)[0]?.metadata as
+        runtime.inspect.ledger.store.listRows(sessionId)[0]?.metadata as
           | {
               lifecycleFallbackReason?: string;
             }

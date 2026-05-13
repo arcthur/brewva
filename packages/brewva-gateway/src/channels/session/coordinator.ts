@@ -1,5 +1,6 @@
-import { BrewvaRuntime, type ManagedToolMode } from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import type { TurnEnvelope } from "@brewva/brewva-runtime/channels";
+import type { ManagedToolMode } from "@brewva/brewva-runtime/session";
 import type {
   BrewvaPromptSessionEvent,
   BrewvaSteerOutcome,
@@ -30,7 +31,9 @@ const DEFAULT_CLEANUP_GRACEFUL_TIMEOUT_MS = 2_000;
 const SESSION_CREATION_INVALIDATED_ERROR = "session_creation_invalidated";
 const REPLAYABLE_EFFECT_COMMITMENT_REQUEST_STATES = ["pending", "accepted"] as const;
 
-export type ChannelSessionCostSummary = ReturnType<BrewvaRuntime["inspect"]["cost"]["getSummary"]>;
+export type ChannelSessionCostSummary = ReturnType<
+  BrewvaHostedRuntimePort["inspect"]["cost"]["summary"]["get"]
+>;
 
 function buildEmptyCostSummary(): ChannelSessionCostSummary {
   return {
@@ -59,7 +62,7 @@ function isSessionCreationInvalidatedError(error: unknown, agentId: string): boo
 export interface ChannelRuntimeSessionPort {
   readonly scopeKey: string;
   readonly agentId: string;
-  readonly runtime: BrewvaRuntime;
+  readonly runtime: BrewvaHostedRuntimePort;
   readonly agentSessionId: string;
   subscribe(listener: (event: BrewvaPromptSessionEvent) => void): () => void;
   steer(text: string): Promise<BrewvaSteerOutcome>;
@@ -79,7 +82,7 @@ interface ChannelSessionState {
   key: string;
   scopeKey: string;
   agentId: string;
-  runtime: BrewvaRuntime;
+  runtime: BrewvaHostedRuntimePort;
   agentSessionId: string;
   result: HostedSessionResult;
   representativeTurn: TurnEnvelope;
@@ -96,7 +99,7 @@ export interface ChannelSessionCoordinator {
     agentId: string,
     turn: TurnEnvelope,
   ): Promise<ChannelSessionHandle>;
-  loadInspectionRuntime(agentId: string): Promise<BrewvaRuntime>;
+  loadInspectionRuntime(agentId: string): Promise<BrewvaHostedRuntimePort>;
   getLiveSession(scopeKey: string, agentId: string): ChannelLiveSessionView | undefined;
   openLiveSession(scopeKey: string, agentId: string): ChannelRuntimeSessionPort | undefined;
   getSessionByAgentSessionId(sessionId: string): ChannelLiveSessionView | undefined;
@@ -116,7 +119,7 @@ export interface ChannelSessionCoordinator {
 }
 
 export function createChannelSessionCoordinator(input: {
-  runtime: BrewvaRuntime;
+  runtime: BrewvaHostedRuntimePort;
   registry: AgentRegistry;
   runtimeManager: AgentRuntimeManager;
   createSession: (options?: ChannelCreateSessionOptions) => Promise<HostedSessionResult>;
@@ -133,7 +136,7 @@ export function createChannelSessionCoordinator(input: {
   cleanupGracefulTimeoutMs?: number;
 }): ChannelSessionCoordinator {
   const conversationBindings = ConversationBindingStore.create({
-    workspaceRoot: input.runtime.workspaceRoot,
+    workspaceRoot: input.runtime.identity.workspaceRoot,
   });
   const sessions = new Map<string, ChannelSessionState>();
   const sessionByAgentSessionId = new Map<string, ChannelSessionState>();
@@ -268,7 +271,7 @@ export function createChannelSessionCoordinator(input: {
   };
 
   const disposeHostedSession = async (inputState: {
-    runtime: BrewvaRuntime;
+    runtime: BrewvaHostedRuntimePort;
     agentSessionId: string;
     result: HostedSessionResult;
   }): Promise<void> => {
@@ -281,7 +284,7 @@ export function createChannelSessionCoordinator(input: {
       source: "channel_session_coordinator",
     });
     try {
-      inputState.runtime.maintain.session.clearState(inputState.agentSessionId);
+      inputState.runtime.operator.session.state.clear(inputState.agentSessionId);
     } catch {}
     try {
       inputState.result.session.dispose();
@@ -361,8 +364,8 @@ export function createChannelSessionCoordinator(input: {
     return candidate;
   };
 
-  const getOrCreateAgentRuntime = async (agentId: string): Promise<BrewvaRuntime> => {
-    let workerRuntime: BrewvaRuntime | undefined;
+  const getOrCreateAgentRuntime = async (agentId: string): Promise<BrewvaHostedRuntimePort> => {
+    let workerRuntime: BrewvaHostedRuntimePort | undefined;
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
         workerRuntime = await input.runtimeManager.getOrCreateRuntime(agentId);
@@ -506,7 +509,7 @@ export function createChannelSessionCoordinator(input: {
         }
       }
     },
-    async loadInspectionRuntime(agentId: string): Promise<BrewvaRuntime> {
+    async loadInspectionRuntime(agentId: string): Promise<BrewvaHostedRuntimePort> {
       return input.runtimeManager.createInspectionRuntime(agentId);
     },
 
@@ -538,7 +541,7 @@ export function createChannelSessionCoordinator(input: {
       if (!state) {
         return buildEmptyCostSummary();
       }
-      return state.runtime.inspect.cost.getSummary(sessionId);
+      return state.runtime.inspect.cost.summary.get(sessionId);
     },
 
     hasPendingEffectCommitment(sessionId: string, requestId: string): boolean {
@@ -546,8 +549,8 @@ export function createChannelSessionCoordinator(input: {
       if (!state) {
         return false;
       }
-      return state.runtime.inspect.proposals
-        .listPendingEffectCommitments(sessionId)
+      return state.runtime.inspect.proposals.requests
+        .listPending(sessionId)
         .some((pending) => pending.requestId === requestId);
     },
 
@@ -557,8 +560,8 @@ export function createChannelSessionCoordinator(input: {
         return false;
       }
       return REPLAYABLE_EFFECT_COMMITMENT_REQUEST_STATES.some((requestState) =>
-        state.runtime.inspect.proposals
-          .listEffectCommitmentRequests(sessionId, {
+        state.runtime.inspect.proposals.requests
+          .list(sessionId, {
             state: requestState,
           })
           .some((request) => request.requestId === requestId),

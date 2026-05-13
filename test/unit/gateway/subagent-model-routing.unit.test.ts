@@ -61,7 +61,6 @@ function makeTarget(overrides: Partial<HostedDelegationTarget> = {}): HostedDele
     consultKind: "investigate",
     boundary: "safe",
     producesPatches: false,
-    contextProfile: "minimal",
     isolationStrategy: "shared",
     ...overrides,
   };

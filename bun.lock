@@ -20,7 +20,6 @@
         "@brewva/brewva-std": "workspace:*",
         "@brewva/brewva-substrate": "workspace:*",
         "@brewva/brewva-token-estimation": "workspace:*",
-        "@brewva/brewva-tool-protocol": "workspace:*",
         "@brewva/brewva-tools": "workspace:*",
         "@brewva/brewva-tui": "workspace:*",
         "@duckdb/node-api": "1.5.2-r.1",
@@ -139,7 +138,6 @@
         "@brewva/brewva-std": "workspace:*",
         "@brewva/brewva-substrate": "workspace:*",
         "@brewva/brewva-token-estimation": "workspace:*",
-        "@brewva/brewva-tool-protocol": "workspace:*",
         "@brewva/brewva-tools": "workspace:*",
         "@sinclair/typebox": "^0.34.49",
         "ajv": "^8.18.0",
@@ -162,7 +160,7 @@
       "dependencies": {
         "@brewva/brewva-effect": "workspace:*",
         "@brewva/brewva-std": "workspace:*",
-        "@brewva/brewva-tool-protocol": "workspace:*",
+        "@brewva/brewva-substrate": "workspace:*",
         "@modelcontextprotocol/sdk": "1.29.0",
       },
     },
@@ -244,7 +242,6 @@
         "@brewva/brewva-provider-core": "workspace:*",
         "@brewva/brewva-std": "workspace:*",
         "@brewva/brewva-token-estimation": "workspace:*",
-        "@brewva/brewva-tool-protocol": "workspace:*",
         "@sinclair/typebox": "^0.34.49",
         "ajv": "^8.18.0",
         "ajv-formats": "^3.0.1",
@@ -259,10 +256,6 @@
         "gpt-tokenizer": "3.4.0",
       },
     },
-    "packages/brewva-tool-protocol": {
-      "name": "@brewva/brewva-tool-protocol",
-      "version": "0.1.0",
-    },
     "packages/brewva-tools": {
       "name": "@brewva/brewva-tools",
       "version": "0.1.0",
@@ -274,7 +267,6 @@
         "@brewva/brewva-search": "workspace:*",
         "@brewva/brewva-std": "workspace:*",
         "@brewva/brewva-substrate": "workspace:*",
-        "@brewva/brewva-tool-protocol": "workspace:*",
         "@sinclair/typebox": "^0.34.49",
         "date-fns": "^4.1.0",
         "eslint-scope": "^9.1.2",
@@ -406,8 +398,6 @@
     "@brewva/brewva-substrate": ["@brewva/brewva-substrate@workspace:packages/brewva-substrate"],
 
     "@brewva/brewva-token-estimation": ["@brewva/brewva-token-estimation@workspace:packages/brewva-token-estimation"],
-
-    "@brewva/brewva-tool-protocol": ["@brewva/brewva-tool-protocol@workspace:packages/brewva-tool-protocol"],
 
     "@brewva/brewva-tools": ["@brewva/brewva-tools@workspace:packages/brewva-tools"],
 

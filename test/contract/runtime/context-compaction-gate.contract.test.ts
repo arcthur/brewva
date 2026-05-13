@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { BrewvaRuntime, createTrustedLocalGovernancePort } from "@brewva/brewva-runtime";
+import { BrewvaRuntime, createOperatorRuntimePort } from "@brewva/brewva-runtime";
+import { createTrustedLocalGovernancePort } from "@brewva/brewva-runtime/governance";
 import {
   RUNTIME_CONTRACT_CONFIG_PATH,
   createRuntimeContractConfig as createConfig,
@@ -35,16 +36,16 @@ describe("context compaction gate", () => {
       governancePort: createTrustedLocalGovernancePort(),
     });
     const sessionId = "core-compaction-gate-1";
-    runtime.maintain.context.onTurnStart(sessionId, 3);
+    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 3);
 
     const usage = {
       tokens: 95,
       contextWindow: 100,
       percent: 0.95,
     };
-    runtime.maintain.context.observeUsage(sessionId, usage);
+    createOperatorRuntimePort(runtime).operator.context.usage.observe(sessionId, usage);
 
-    const blocked = runtime.authority.tools.start({
+    const blocked = runtime.authority.tools.invocation.start({
       sessionId,
       toolCallId: "tc-blocked",
       toolName: "exec",
@@ -54,10 +55,12 @@ describe("context compaction gate", () => {
     expect(blocked.allowed).toBe(false);
     expect(blocked.reason).toContain("workbench_compact");
     expect(
-      runtime.inspect.events.query(sessionId, { type: "context_compaction_gate_blocked_tool" }),
+      runtime.inspect.events.records.query(sessionId, {
+        type: "context_compaction_gate_blocked_tool",
+      }),
     ).toHaveLength(1);
 
-    const compactAllowed = runtime.authority.tools.start({
+    const compactAllowed = runtime.authority.tools.invocation.start({
       sessionId,
       toolCallId: "tc-compact",
       toolName: "workbench_compact",
@@ -66,7 +69,7 @@ describe("context compaction gate", () => {
     });
     expect(compactAllowed.allowed).toBe(true);
 
-    runtime.authority.session.commitCompaction(sessionId, {
+    runtime.authority.session.compaction.commit(sessionId, {
       compactId: "cmp-core-gate",
       sanitizedSummary: "Keep only the active recovery baseline.",
       summaryDigest: "unused",
@@ -78,7 +81,7 @@ describe("context compaction gate", () => {
       origin: "auto_compaction",
     });
 
-    const unblocked = runtime.authority.tools.start({
+    const unblocked = runtime.authority.tools.invocation.start({
       sessionId,
       toolCallId: "tc-after-compact",
       toolName: "exec",

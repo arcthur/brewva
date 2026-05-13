@@ -42,12 +42,6 @@ export {
   STEER_QUEUED_EVENT_TYPE,
   TOOL_EFFECT_GATE_SELECTED_EVENT_TYPE,
 } from "./events.js";
-export {
-  createGovernanceSurfaceMethods,
-  governanceRuntimeSurface,
-  governanceSurfaceContribution,
-} from "./runtime-surface.js";
-export type { RuntimeGovernanceSurfaceMethods } from "./runtime-surface.js";
 export { registerGovernanceDomain } from "./registrar.js";
 export type { RuntimeGovernanceDomainRegistration } from "./registrar.js";
 export { MutationRollbackService } from "./mutation-rollback.js";

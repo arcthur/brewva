@@ -1,16 +1,14 @@
-import {
-  asBrewvaSessionId,
-  buildItemAddedEvent,
-  buildTapeCheckpointPayload,
-  buildClaimUpsertedEvent,
-} from "@brewva/brewva-runtime";
-import type { TaskState } from "@brewva/brewva-runtime";
+import { buildClaimUpsertedEvent } from "@brewva/brewva-runtime/claim";
+import { asBrewvaSessionId } from "@brewva/brewva-runtime/core";
 import {
   TASK_EVENT_TYPE,
   TAPE_CHECKPOINT_EVENT_TYPE,
   CLAIM_EVENT_TYPE,
 } from "@brewva/brewva-runtime/events";
 import type { BrewvaEventRecord } from "@brewva/brewva-runtime/events";
+import { buildTapeCheckpointPayload } from "@brewva/brewva-runtime/tape";
+import { buildItemAddedEvent } from "@brewva/brewva-runtime/task";
+import type { TaskState } from "@brewva/brewva-runtime/task";
 
 export function taskEvent(input: {
   sessionId: string;

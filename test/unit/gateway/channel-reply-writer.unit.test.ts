@@ -1,8 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { BrewvaRuntime, createTrustedLocalGovernancePort } from "@brewva/brewva-runtime";
+import { BrewvaRuntime, createHostedRuntimePort } from "@brewva/brewva-runtime";
 import type { TurnEnvelope } from "@brewva/brewva-runtime/channels";
+import { createTrustedLocalGovernancePort } from "@brewva/brewva-runtime/governance";
 import { createChannelReplyWriter } from "../../../packages/brewva-gateway/src/channels/channel-reply-writer.js";
 import { cleanupTestWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
+
+function createHostedTestRuntime(options: ConstructorParameters<typeof BrewvaRuntime>[0]) {
+  return createHostedRuntimePort(new BrewvaRuntime(options));
+}
 
 function createInboundTurn(): TurnEnvelope {
   return {
@@ -20,11 +25,11 @@ function createInboundTurn(): TurnEnvelope {
 describe("channel reply writer", () => {
   test("given tool and assistant outputs, when sendAgentOutputs runs, then outbound turns are emitted by the writer with stable sequencing", async () => {
     const workspace = createTestWorkspace("channel-reply-writer");
-    const controllerRuntime = new BrewvaRuntime({
+    const controllerRuntime = createHostedTestRuntime({
       cwd: workspace,
       governancePort: createTrustedLocalGovernancePort({ profile: "team" }),
     });
-    const workerRuntime = new BrewvaRuntime({
+    const workerRuntime = createHostedTestRuntime({
       cwd: workspace,
       governancePort: createTrustedLocalGovernancePort({ profile: "team" }),
       agentId: "worker",

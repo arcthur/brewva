@@ -3,7 +3,7 @@ import {
   startScopedSchedule,
   type ScopedScheduleHandle,
 } from "@brewva/brewva-effect";
-import { type BrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import {
   maybeAdjudicateLatestTaskStall,
   type TaskStallAdjudicator,
@@ -18,7 +18,7 @@ const DEFAULT_POLL_INTERVAL_MS = 60_000;
 const DEFAULT_THRESHOLD_MS = 5 * 60_000;
 
 export interface TaskProgressWatchdogOptions {
-  runtime: BrewvaRuntime;
+  runtime: BrewvaHostedRuntimePort;
   sessionId: string;
   now?: () => number;
   pollIntervalMs?: number;
@@ -35,7 +35,7 @@ function sanitizeDelayMs(value: number | undefined, fallbackMs: number): number 
 }
 
 export class TaskProgressWatchdog {
-  private readonly runtime: BrewvaRuntime;
+  private readonly runtime: BrewvaHostedRuntimePort;
   private readonly sessionId: string;
   private readonly now: () => number;
   private readonly pollIntervalMs: number;
@@ -88,7 +88,7 @@ export class TaskProgressWatchdog {
 
   poll(): void {
     const polledAt = this.now();
-    this.runtime.maintain.session.pollStall(this.sessionId, {
+    this.runtime.operator.session.stall.poll(this.sessionId, {
       now: polledAt,
       thresholdMs: this.thresholdMs,
     });

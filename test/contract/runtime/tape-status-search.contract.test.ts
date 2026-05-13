@@ -11,17 +11,17 @@ describe("tape status and search", () => {
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionId = "tape-status-1";
 
-    runtime.authority.task.setSpec(sessionId, {
+    runtime.authority.task.spec.set(sessionId, {
       schema: "brewva.task.v1",
       goal: "status baseline",
     });
-    runtime.authority.task.addItem(sessionId, { text: "before anchor" });
+    runtime.authority.task.items.add(sessionId, { text: "before anchor" });
 
-    const before = runtime.inspect.tape.getTapeStatus(sessionId);
+    const before = runtime.inspect.tape.status.get(sessionId);
     expect(before.totalEntries).toBeGreaterThan(0);
     expect(before.entriesSinceAnchor).toBe(before.totalEntries);
 
-    const handoff = runtime.authority.tape.recordTapeHandoff(sessionId, {
+    const handoff = runtime.authority.tape.handoff.record(sessionId, {
       name: "investigation-done",
       summary: "captured findings",
       nextSteps: "implement changes",
@@ -32,12 +32,12 @@ describe("tape status and search", () => {
     }
     requireNonEmptyString(handoff.eventId, "missing tape handoff event id");
 
-    const after = runtime.inspect.tape.getTapeStatus(sessionId);
+    const after = runtime.inspect.tape.status.get(sessionId);
     expect(after.lastAnchor?.name).toBe("investigation-done");
     expect(after.entriesSinceAnchor).toBe(0);
 
-    runtime.authority.task.addItem(sessionId, { text: "after anchor" });
-    const afterMore = runtime.inspect.tape.getTapeStatus(sessionId);
+    runtime.authority.task.items.add(sessionId, { text: "after anchor" });
+    const afterMore = runtime.inspect.tape.status.get(sessionId);
     expect(afterMore.entriesSinceAnchor).toBeGreaterThan(0);
   });
 
@@ -46,33 +46,33 @@ describe("tape status and search", () => {
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionId = "tape-search-1";
 
-    runtime.authority.tape.recordTapeHandoff(sessionId, {
+    runtime.authority.tape.handoff.record(sessionId, {
       name: "phase-a",
       summary: "alpha baseline",
       nextSteps: "continue",
     });
-    runtime.authority.task.addItem(sessionId, { text: "alpha task" });
+    runtime.authority.task.items.add(sessionId, { text: "alpha task" });
 
-    runtime.authority.tape.recordTapeHandoff(sessionId, {
+    runtime.authority.tape.handoff.record(sessionId, {
       name: "phase-b",
       summary: "beta baseline",
       nextSteps: "continue",
     });
-    runtime.authority.task.addItem(sessionId, { text: "beta task" });
+    runtime.authority.task.items.add(sessionId, { text: "beta task" });
 
-    const allPhases = runtime.inspect.tape.searchTape(sessionId, {
+    const allPhases = runtime.inspect.tape.search.search(sessionId, {
       query: "alpha",
       scope: "all_phases",
     });
     expect(allPhases.matches.length).toBeGreaterThan(0);
 
-    const currentPhase = runtime.inspect.tape.searchTape(sessionId, {
+    const currentPhase = runtime.inspect.tape.search.search(sessionId, {
       query: "alpha",
       scope: "current_phase",
     });
     expect(currentPhase.matches).toHaveLength(0);
 
-    const anchorOnly = runtime.inspect.tape.searchTape(sessionId, {
+    const anchorOnly = runtime.inspect.tape.search.search(sessionId, {
       query: "phase-b",
       scope: "anchors_only",
     });
@@ -85,28 +85,28 @@ describe("tape status and search", () => {
     const runtime = new BrewvaRuntime({ cwd: workspace });
     const sessionId = "tape-search-cjk";
 
-    runtime.authority.tape.recordTapeHandoff(sessionId, {
+    runtime.authority.tape.handoff.record(sessionId, {
       name: "phase-a",
       summary: "数据库连接失败调查",
       nextSteps: "继续定位启动路径",
     });
-    runtime.authority.task.addItem(sessionId, { text: "修复数据库连接被拒绝导致启动失败" });
+    runtime.authority.task.items.add(sessionId, { text: "修复数据库连接被拒绝导致启动失败" });
 
-    runtime.authority.tape.recordTapeHandoff(sessionId, {
+    runtime.authority.tape.handoff.record(sessionId, {
       name: "phase-b",
       summary: "缓存刷新完成",
       nextSteps: "继续验证",
     });
-    runtime.authority.task.addItem(sessionId, { text: "缓存刷新成功" });
+    runtime.authority.task.items.add(sessionId, { text: "缓存刷新成功" });
 
-    const allPhases = runtime.inspect.tape.searchTape(sessionId, {
+    const allPhases = runtime.inspect.tape.search.search(sessionId, {
       query: "数据库启动失败",
       scope: "all_phases",
     });
     expect(allPhases.matches.length).toBeGreaterThan(0);
     expect(allPhases.matches[0]?.excerpt).toContain("数据库");
 
-    const currentPhase = runtime.inspect.tape.searchTape(sessionId, {
+    const currentPhase = runtime.inspect.tape.search.search(sessionId, {
       query: "数据库启动失败",
       scope: "current_phase",
     });

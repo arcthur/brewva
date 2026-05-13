@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test";
 import {
   buildEffectAuthorityManifestBasis,
   decideEffectAuthorityManifest,
-  type EffectAuthorityManifestFacts,
-} from "@brewva/brewva-runtime";
+} from "@brewva/brewva-runtime/governance";
+import type { EffectAuthorityManifestFacts } from "@brewva/brewva-runtime/governance";
 
 function baseFacts(
   overrides: Partial<EffectAuthorityManifestFacts> = {},

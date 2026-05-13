@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { BrewvaRuntime, createOperatorRuntimePort } from "@brewva/brewva-runtime";
 import {
   RUNTIME_CONTRACT_CONFIG_PATH,
   createRuntimeContractConfig as createConfig,
@@ -23,36 +23,36 @@ describe("session rewind compensation", () => {
     writeFileSync(secondPath, "export const second = 1;\n", "utf8");
 
     const runtime = new BrewvaRuntime({ cwd: workspace, configPath: RUNTIME_CONTRACT_CONFIG_PATH });
-    runtime.maintain.context.onTurnStart(sessionId, 1);
-    runtime.authority.session.recordRewindCheckpoint(sessionId, {
+    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+    runtime.authority.session.rewind.recordCheckpoint(sessionId, {
       prompt: {
         text: "Change two files",
         parts: [],
       },
     });
 
-    runtime.authority.tools.trackCallStart({
+    runtime.authority.tools.tracking.trackCallStart({
       sessionId,
       toolCallId: "tool-first",
       toolName: "edit",
       args: { file_path: "src/first.ts" },
     });
     writeFileSync(firstPath, "export const first = 2;\n", "utf8");
-    runtime.authority.tools.trackCallEnd({
+    runtime.authority.tools.tracking.trackCallEnd({
       sessionId,
       toolCallId: "tool-first",
       toolName: "edit",
       channelSuccess: true,
     });
 
-    runtime.authority.tools.trackCallStart({
+    runtime.authority.tools.tracking.trackCallStart({
       sessionId,
       toolCallId: "tool-second",
       toolName: "edit",
       args: { file_path: "src/second.ts" },
     });
     writeFileSync(secondPath, "export const second = 2;\n", "utf8");
-    runtime.authority.tools.trackCallEnd({
+    runtime.authority.tools.tracking.trackCallEnd({
       sessionId,
       toolCallId: "tool-second",
       toolName: "edit",
@@ -66,7 +66,7 @@ describe("session rewind compensation", () => {
       snapshotKey: "beforeSnapshotFile",
     });
 
-    const undo = runtime.authority.session.rewind(sessionId, {
+    const undo = runtime.authority.session.rewind.rewind(sessionId, {
       mode: "both",
       summary: "carry",
     });
@@ -81,7 +81,7 @@ describe("session rewind compensation", () => {
     expect(readFileSync(firstPath, "utf8")).toBe("export const first = 2;\n");
     expect(readFileSync(secondPath, "utf8")).toBe("export const second = 2;\n");
 
-    const state = runtime.inspect.session.getRewindState(sessionId);
+    const state = runtime.inspect.session.rewind.getState(sessionId);
     expect(state.rewindAvailable).toBe(true);
     expect(state.redoAvailable).toBe(false);
   });
@@ -98,43 +98,43 @@ describe("session rewind compensation", () => {
     writeFileSync(secondPath, "export const second = 1;\n", "utf8");
 
     const runtime = new BrewvaRuntime({ cwd: workspace, configPath: RUNTIME_CONTRACT_CONFIG_PATH });
-    runtime.maintain.context.onTurnStart(sessionId, 1);
-    runtime.authority.session.recordRewindCheckpoint(sessionId, {
+    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+    runtime.authority.session.rewind.recordCheckpoint(sessionId, {
       prompt: {
         text: "Change two files",
         parts: [],
       },
     });
 
-    runtime.authority.tools.trackCallStart({
+    runtime.authority.tools.tracking.trackCallStart({
       sessionId,
       toolCallId: "tool-first",
       toolName: "edit",
       args: { file_path: "src/first.ts" },
     });
     writeFileSync(firstPath, "export const first = 2;\n", "utf8");
-    runtime.authority.tools.trackCallEnd({
+    runtime.authority.tools.tracking.trackCallEnd({
       sessionId,
       toolCallId: "tool-first",
       toolName: "edit",
       channelSuccess: true,
     });
 
-    runtime.authority.tools.trackCallStart({
+    runtime.authority.tools.tracking.trackCallStart({
       sessionId,
       toolCallId: "tool-second",
       toolName: "edit",
       args: { file_path: "src/second.ts" },
     });
     writeFileSync(secondPath, "export const second = 2;\n", "utf8");
-    runtime.authority.tools.trackCallEnd({
+    runtime.authority.tools.tracking.trackCallEnd({
       sessionId,
       toolCallId: "tool-second",
       toolName: "edit",
       channelSuccess: true,
     });
 
-    const undo = runtime.authority.session.rewind(sessionId, {
+    const undo = runtime.authority.session.rewind.rewind(sessionId, {
       mode: "both",
       summary: "carry",
     });
@@ -149,7 +149,7 @@ describe("session rewind compensation", () => {
       snapshotKey: "afterSnapshotFile",
     });
 
-    const redo = runtime.authority.session.redo(sessionId);
+    const redo = runtime.authority.session.rewind.redo(sessionId);
     expect(redo.ok).toBe(false);
     if (redo.ok) {
       throw new Error("Session redo unexpectedly succeeded");
@@ -161,7 +161,7 @@ describe("session rewind compensation", () => {
     expect(readFileSync(firstPath, "utf8")).toBe("export const first = 1;\n");
     expect(readFileSync(secondPath, "utf8")).toBe("export const second = 1;\n");
 
-    const state = runtime.inspect.session.getRewindState(sessionId);
+    const state = runtime.inspect.session.rewind.getState(sessionId);
     expect(state.rewindAvailable).toBe(false);
     expect(state.redoAvailable).toBe(true);
   });

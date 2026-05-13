@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { BrewvaRuntime, createHostedRuntimePort } from "@brewva/brewva-runtime";
 import {
   TASK_PROGRESS_WATCHDOG_TEST_ONLY,
   TaskProgressWatchdog,
@@ -8,19 +8,23 @@ import { patchDateNow } from "../../helpers/global-state.js";
 import { createOpsRuntimeConfig } from "../../helpers/runtime.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
+function createHostedTestRuntime(options: ConstructorParameters<typeof BrewvaRuntime>[0]) {
+  return createHostedRuntimePort(new BrewvaRuntime(options));
+}
+
 describe("task progress watchdog", () => {
   test("records an idle diagnostic event when task progress stalls", () => {
     let now = 1_710_000_000_000;
     const restoreNow = patchDateNow(() => now);
     try {
-      const runtime = new BrewvaRuntime({
+      const runtime = createHostedTestRuntime({
         cwd: createTestWorkspace("watchdog-detect"),
         config: createOpsRuntimeConfig(),
       });
       const sessionId = "watchdog-detect-1";
 
       now = 1_710_000_000_100;
-      runtime.authority.task.setSpec(sessionId, {
+      runtime.authority.task.spec.set(sessionId, {
         schema: "brewva.task.v1",
         goal: "Detect long-running idle periods",
       });
@@ -34,11 +38,13 @@ describe("task progress watchdog", () => {
       now += TASK_PROGRESS_WATCHDOG_TEST_ONLY.DEFAULT_THRESHOLD_MS + 1;
       watchdog.poll();
 
-      const state = runtime.inspect.task.getState(sessionId);
+      const state = runtime.inspect.task.state.get(sessionId);
       expect(state.blockers).toEqual([]);
       expect(state.status?.phase).not.toBe("blocked");
 
-      const detected = runtime.inspect.events.query(sessionId, { type: "task_stuck_detected" });
+      const detected = runtime.inspect.events.records.query(sessionId, {
+        type: "task_stuck_detected",
+      });
       expect(detected).toHaveLength(1);
       expect(detected[0]?.payload).toMatchObject({
         schema: "brewva.task-watchdog.v1",
@@ -48,7 +54,7 @@ describe("task progress watchdog", () => {
         idleMs: TASK_PROGRESS_WATCHDOG_TEST_ONLY.DEFAULT_THRESHOLD_MS + 1,
         openItemCount: 0,
       });
-      const adjudicated = runtime.inspect.events.query(sessionId, {
+      const adjudicated = runtime.inspect.events.records.query(sessionId, {
         type: "task_stall_adjudicated",
       });
       expect(adjudicated).toHaveLength(1);
@@ -60,11 +66,11 @@ describe("task progress watchdog", () => {
 
       now += 60_000;
       watchdog.poll();
-      expect(runtime.inspect.events.query(sessionId, { type: "task_stuck_detected" })).toHaveLength(
-        1,
-      );
       expect(
-        runtime.inspect.events.query(sessionId, { type: "task_stall_adjudicated" }),
+        runtime.inspect.events.records.query(sessionId, { type: "task_stuck_detected" }),
+      ).toHaveLength(1);
+      expect(
+        runtime.inspect.events.records.query(sessionId, { type: "task_stall_adjudicated" }),
       ).toHaveLength(1);
     } finally {
       restoreNow();
@@ -75,7 +81,7 @@ describe("task progress watchdog", () => {
     let now = 1_719_000_000_000;
     const restoreNow = patchDateNow(() => now);
     try {
-      const runtime = new BrewvaRuntime({
+      const runtime = createHostedTestRuntime({
         cwd: createTestWorkspace("watchdog-no-task-state"),
         config: createOpsRuntimeConfig(),
       });
@@ -90,7 +96,9 @@ describe("task progress watchdog", () => {
       now += TASK_PROGRESS_WATCHDOG_TEST_ONLY.DEFAULT_THRESHOLD_MS + 1;
       watchdog.poll();
 
-      expect(runtime.inspect.events.query(sessionId, { type: "task_stuck_detected" })).toEqual([]);
+      expect(
+        runtime.inspect.events.records.query(sessionId, { type: "task_stuck_detected" }),
+      ).toEqual([]);
     } finally {
       restoreNow();
     }
@@ -107,14 +115,14 @@ describe("task progress watchdog", () => {
 
     const restoreNow = patchDateNow(() => now);
     try {
-      const runtime = new BrewvaRuntime({
+      const runtime = createHostedTestRuntime({
         cwd: createTestWorkspace("watchdog-lifecycle"),
         config: createOpsRuntimeConfig(),
       });
       const sessionId = "watchdog-lifecycle-1";
 
       now = 1_725_000_000_100;
-      runtime.authority.task.setSpec(sessionId, {
+      runtime.authority.task.spec.set(sessionId, {
         schema: "brewva.task.v1",
         goal: "Exercise worker-local watchdog lifecycle wiring",
       });
@@ -153,7 +161,7 @@ describe("task progress watchdog", () => {
         });
       triggerPoll();
 
-      const detected = runtime.inspect.events.query(sessionId, {
+      const detected = runtime.inspect.events.records.query(sessionId, {
         type: "task_stuck_detected",
         last: 1,
       })[0];
@@ -162,7 +170,7 @@ describe("task progress watchdog", () => {
         thresholdMs: 1_000,
         idleMs: 1_001,
       });
-      const adjudicated = runtime.inspect.events.query(sessionId, {
+      const adjudicated = runtime.inspect.events.records.query(sessionId, {
         type: "task_stall_adjudicated",
         last: 1,
       })[0];
@@ -183,18 +191,18 @@ describe("task progress watchdog", () => {
     let now = 1_726_000_000_000;
     const restoreNow = patchDateNow(() => now);
     try {
-      const runtime = new BrewvaRuntime({
+      const runtime = createHostedTestRuntime({
         cwd: createTestWorkspace("watchdog-hook-adjudication"),
         config: createOpsRuntimeConfig(),
       });
       const sessionId = "watchdog-hook-adjudication-1";
 
       now = 1_726_000_000_100;
-      runtime.authority.task.setSpec(sessionId, {
+      runtime.authority.task.spec.set(sessionId, {
         schema: "brewva.task.v1",
         goal: "Exercise hook-backed stall adjudication",
       });
-      runtime.authority.task.recordBlocker(sessionId, {
+      runtime.authority.task.blockers.record(sessionId, {
         message: "Awaiting operator decision on retry scope",
         source: "unit_test",
       });
@@ -214,7 +222,7 @@ describe("task progress watchdog", () => {
       now += TASK_PROGRESS_WATCHDOG_TEST_ONLY.DEFAULT_THRESHOLD_MS + 1;
       watchdog.poll();
 
-      const adjudicated = runtime.inspect.events.query(sessionId, {
+      const adjudicated = runtime.inspect.events.records.query(sessionId, {
         type: "task_stall_adjudicated",
         last: 1,
       })[0];

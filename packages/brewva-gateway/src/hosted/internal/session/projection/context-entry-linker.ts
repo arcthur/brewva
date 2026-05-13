@@ -1,4 +1,3 @@
-import type { ContextAdmission, ContextEntryPresentTo } from "@brewva/brewva-runtime";
 import {
   type BrewvaEventRecord,
   CONTEXT_ENTRY_RECORDED_EVENT_TYPE,
@@ -6,6 +5,7 @@ import {
   readSessionRewindCompletedEventPayload,
   SESSION_REWIND_COMPLETED_EVENT_TYPE,
 } from "@brewva/brewva-runtime/events";
+import type { ContextAdmission, ContextEntryPresentTo } from "@brewva/brewva-runtime/session";
 import { sha256Hex } from "@brewva/brewva-std/hash";
 import { isRecord, readFiniteNumberValue } from "@brewva/brewva-std/unknown";
 import {

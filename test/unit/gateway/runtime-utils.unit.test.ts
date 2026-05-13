@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { createHostedRuntimePort } from "@brewva/brewva-runtime";
 import {
   ensureSessionShutdownRecorded,
   recordAbnormalSessionShutdown,
@@ -19,7 +20,7 @@ describe("gateway runtime utils", () => {
     });
     ensureSessionShutdownRecorded(runtime, sessionId);
 
-    const shutdownEvents = runtime.inspect.events.query(sessionId, {
+    const shutdownEvents = runtime.inspect.events.records.query(sessionId, {
       type: "session_shutdown",
     });
     expect(shutdownEvents).toHaveLength(1);
@@ -49,7 +50,7 @@ describe("gateway runtime utils", () => {
     });
     ensureSessionShutdownRecorded(runtime, sessionId);
 
-    const shutdownEvents = runtime.inspect.events.query(sessionId, {
+    const shutdownEvents = runtime.inspect.events.records.query(sessionId, {
       type: "session_shutdown",
     });
     expect(shutdownEvents).toHaveLength(1);
@@ -66,7 +67,8 @@ describe("gateway runtime utils", () => {
   test("records shutdown receipt directly to an event log path once", () => {
     const runtime = createRuntimeFixture();
     const sessionId = "runtime-utils-event-log";
-    const eventLogPath = runtime.extensions.hosted.events.resolveLogPath(sessionId);
+    const eventLogPath =
+      createHostedRuntimePort(runtime).extensions.hosted.events.resolveLogPath(sessionId);
 
     expect(
       recordSessionShutdownReceiptToEventLogIfMissing({
@@ -87,7 +89,7 @@ describe("gateway runtime utils", () => {
       }),
     ).toBe(false);
 
-    const shutdownEvents = runtime.inspect.events.query(sessionId, {
+    const shutdownEvents = runtime.inspect.events.records.query(sessionId, {
       type: "session_shutdown",
     });
     expect(shutdownEvents).toHaveLength(1);

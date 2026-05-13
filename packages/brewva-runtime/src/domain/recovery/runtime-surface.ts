@@ -1,7 +1,3 @@
-import {
-  defineRuntimeSurfaceModule,
-  type SurfaceContribution,
-} from "../../runtime/surface-descriptor.js";
 import type { RecoveryPostureSnapshot, RecoveryWorkingSetSnapshot } from "../context/api.js";
 import type { RecoveryWalRecoveryResult } from "../schedule/api.js";
 import type { RecoveryWalStore } from "./wal-store.js";
@@ -25,13 +21,19 @@ export function createRecoverySurfaceMethods(deps: RecoverySurfaceDependencies) 
 
 export type RuntimeRecoverySurfaceMethods = ReturnType<typeof createRecoverySurfaceMethods>;
 
-export const recoverySurfaceContribution = {
-  inspect: ["listPending", "getPosture", "getWorkingSet"],
-  maintain: ["recover", "compact"],
-} as const satisfies SurfaceContribution<RuntimeRecoverySurfaceMethods>;
+export function createRecoveryInspectSurface(deps: RecoverySurfaceDependencies) {
+  const methods = createRecoverySurfaceMethods(deps);
+  return {
+    listPending: methods.listPending,
+    getPosture: methods.getPosture,
+    getWorkingSet: methods.getWorkingSet,
+  };
+}
 
-export const recoveryRuntimeSurface = defineRuntimeSurfaceModule({
-  name: "recovery",
-  createMethods: createRecoverySurfaceMethods,
-  contribution: recoverySurfaceContribution,
-});
+export function createRecoveryOperatorSurface(deps: RecoverySurfaceDependencies) {
+  const methods = createRecoverySurfaceMethods(deps);
+  return {
+    recover: methods.recover,
+    compact: methods.compact,
+  };
+}

@@ -1,15 +1,15 @@
 import { describe, expect, test } from "bun:test";
-import { asBrewvaSessionId } from "@brewva/brewva-runtime";
-import {
-  MAX_REASONING_CONTINUITY_BYTES,
-  buildReasoningCheckpointPayload,
-  buildReasoningRevertPayload,
-} from "@brewva/brewva-runtime";
+import { asBrewvaSessionId } from "@brewva/brewva-runtime/core";
 import { type BrewvaEventRecord } from "@brewva/brewva-runtime/events";
 import {
   REASONING_CHECKPOINT_EVENT_TYPE,
   REASONING_REVERT_EVENT_TYPE,
 } from "@brewva/brewva-runtime/events";
+import {
+  MAX_REASONING_CONTINUITY_BYTES,
+  buildReasoningCheckpointPayload,
+  buildReasoningRevertPayload,
+} from "@brewva/brewva-runtime/reasoning";
 import {
   normalizeReasoningContinuityPacket,
   coerceReasoningContinuityPacket,

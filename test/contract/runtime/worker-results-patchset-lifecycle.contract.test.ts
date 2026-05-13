@@ -2,7 +2,11 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import {
+  BrewvaRuntime,
+  createHostedRuntimePort,
+  createOperatorRuntimePort,
+} from "@brewva/brewva-runtime";
 import { requireNonEmptyString } from "../../helpers/assertions.js";
 import { createRuntimeConfig } from "../../helpers/runtime.js";
 import { cleanupWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
@@ -39,7 +43,7 @@ describe("worker results patchset lifecycle", () => {
     const runtime = createCleanRuntime();
     const sessionId = "parallel-1";
 
-    runtime.maintain.session.recordWorkerResult(sessionId, {
+    runtime.authority.session.workerResults.record(sessionId, {
       workerId: "w1",
       status: "ok",
       summary: "worker-1",
@@ -49,7 +53,7 @@ describe("worker results patchset lifecycle", () => {
         changes: [{ path: "src/a.ts", action: "modify", diffText: "a" }],
       },
     });
-    runtime.maintain.session.recordWorkerResult(sessionId, {
+    runtime.authority.session.workerResults.record(sessionId, {
       workerId: "w2",
       status: "ok",
       summary: "worker-2",
@@ -60,16 +64,16 @@ describe("worker results patchset lifecycle", () => {
       },
     });
 
-    const listedBeforeMerge = runtime.inspect.session.listWorkerResults(sessionId);
+    const listedBeforeMerge = runtime.inspect.session.workerResults.list(sessionId);
     expect(listedBeforeMerge.map((result) => result.workerId)).toEqual(["w1", "w2"]);
 
-    const conflictReport = runtime.inspect.session.mergeWorkerResults(sessionId);
+    const conflictReport = runtime.inspect.session.workerResults.merge(sessionId);
     expect(conflictReport.status).toBe("conflicts");
     expect(conflictReport.conflicts.length).toBe(1);
 
-    runtime.maintain.session.clearWorkerResults(sessionId);
-    expect(runtime.inspect.session.listWorkerResults(sessionId)).toHaveLength(0);
-    runtime.maintain.session.recordWorkerResult(sessionId, {
+    createOperatorRuntimePort(runtime).operator.session.workerResults.clear(sessionId);
+    expect(runtime.inspect.session.workerResults.list(sessionId)).toHaveLength(0);
+    runtime.authority.session.workerResults.record(sessionId, {
       workerId: "w1",
       status: "ok",
       summary: "worker-1",
@@ -79,7 +83,7 @@ describe("worker results patchset lifecycle", () => {
         changes: [{ path: "src/a.ts", action: "modify", diffText: "a" }],
       },
     });
-    runtime.maintain.session.recordWorkerResult(sessionId, {
+    runtime.authority.session.workerResults.record(sessionId, {
       workerId: "w2",
       status: "ok",
       summary: "worker-2",
@@ -90,10 +94,10 @@ describe("worker results patchset lifecycle", () => {
       },
     });
 
-    const listedAfterReset = runtime.inspect.session.listWorkerResults(sessionId);
+    const listedAfterReset = runtime.inspect.session.workerResults.list(sessionId);
     expect(listedAfterReset.map((result) => result.workerId)).toEqual(["w1", "w2"]);
 
-    const mergedReport = runtime.inspect.session.mergeWorkerResults(sessionId);
+    const mergedReport = runtime.inspect.session.workerResults.merge(sessionId);
     expect(mergedReport.status).toBe("merged");
     expect(mergedReport.mergedPatchSet?.changes.length).toBe(2);
   });
@@ -123,9 +127,9 @@ describe("worker results patchset lifecycle", () => {
       configPath: RUNTIME_CONTRACT_CONFIG_PATH,
     });
     const sessionId = "parallel-apply-1";
-    runtime.maintain.context.onTurnStart(sessionId, 1);
+    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
 
-    runtime.maintain.session.recordWorkerResult(sessionId, {
+    runtime.authority.session.workerResults.record(sessionId, {
       workerId: "w1",
       status: "ok",
       summary: "worker-1",
@@ -144,7 +148,7 @@ describe("worker results patchset lifecycle", () => {
       },
     });
 
-    const report = runtime.authority.session.applyMergedWorkerResults(sessionId, {
+    const report = runtime.authority.session.workerResults.applyMerged(sessionId, {
       toolName: "worker_results_apply",
       toolCallId: "tc-worker-apply-1",
     });
@@ -156,9 +160,9 @@ describe("worker results patchset lifecycle", () => {
     requireNonEmptyString(report.appliedPatchSetId, "missing applied patch set id");
     expect(report.appliedPaths).toEqual(["src/value.ts"]);
     expect(readFileSync(filePath, "utf8")).toBe(afterText);
-    expect(runtime.inspect.session.listWorkerResults(sessionId)).toHaveLength(0);
+    expect(runtime.inspect.session.workerResults.list(sessionId)).toHaveLength(0);
 
-    const appliedEvents = runtime.inspect.events.query(sessionId, {
+    const appliedEvents = runtime.inspect.events.records.query(sessionId, {
       type: "worker_results_applied",
       last: 1,
     });
@@ -166,7 +170,7 @@ describe("worker results patchset lifecycle", () => {
     expect(appliedEvents[0]?.payload?.workerId).toBe("w1");
     expect(appliedEvents[0]?.payload?.workerIds).toEqual(["w1"]);
 
-    const rollback = runtime.authority.tools.rollbackLastPatchSet(sessionId);
+    const rollback = runtime.authority.tools.patches.rollbackLastPatchSet(sessionId);
     expect(rollback.ok).toBe(true);
     expect(readFileSync(filePath, "utf8")).toBe(beforeText);
   });
@@ -185,9 +189,9 @@ describe("worker results patchset lifecycle", () => {
       configPath: RUNTIME_CONTRACT_CONFIG_PATH,
     });
     const sessionId = "parallel-apply-missing-artifact-1";
-    runtime.maintain.context.onTurnStart(sessionId, 1);
+    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
 
-    runtime.maintain.session.recordWorkerResult(sessionId, {
+    runtime.authority.session.workerResults.record(sessionId, {
       workerId: "w1",
       status: "ok",
       summary: "worker-1",
@@ -206,7 +210,7 @@ describe("worker results patchset lifecycle", () => {
       },
     });
 
-    const report = runtime.authority.session.applyMergedWorkerResults(sessionId, {
+    const report = runtime.authority.session.workerResults.applyMerged(sessionId, {
       toolName: "worker_results_apply",
       toolCallId: "tc-worker-apply-missing",
     });
@@ -217,9 +221,9 @@ describe("worker results patchset lifecycle", () => {
     }
     expect(report.reason).toBe("missing_artifact");
     expect(readFileSync(filePath, "utf8")).toBe(beforeText);
-    expect(runtime.inspect.session.listWorkerResults(sessionId)).toHaveLength(1);
+    expect(runtime.inspect.session.workerResults.list(sessionId)).toHaveLength(1);
 
-    const failedEvents = runtime.inspect.events.query(sessionId, {
+    const failedEvents = runtime.inspect.events.records.query(sessionId, {
       type: "worker_results_apply_failed",
       last: 1,
     });
@@ -275,7 +279,7 @@ describe("worker results patchset lifecycle", () => {
       cwd: rehydrateWorkspace,
       configPath: RUNTIME_CONTRACT_CONFIG_PATH,
     });
-    writer.extensions.hosted.events.record({
+    createHostedRuntimePort(writer).extensions.hosted.events.record({
       sessionId,
       type: "subagent_completed",
       payload: {
@@ -301,16 +305,16 @@ describe("worker results patchset lifecycle", () => {
       cwd: rehydrateWorkspace,
       configPath: RUNTIME_CONTRACT_CONFIG_PATH,
     });
-    restarted.maintain.context.onTurnStart(sessionId, 1);
+    createOperatorRuntimePort(restarted).operator.context.lifecycle.onTurnStart(sessionId, 1);
 
-    const workerResults = restarted.inspect.session.listWorkerResults(sessionId);
+    const workerResults = restarted.inspect.session.workerResults.list(sessionId);
     expect(workerResults).toHaveLength(1);
     expect(workerResults[0]).toMatchObject({
       workerId: "delegated-patch-1",
       status: "ok",
     });
 
-    const report = restarted.authority.session.applyMergedWorkerResults(sessionId, {
+    const report = restarted.authority.session.workerResults.applyMerged(sessionId, {
       toolName: "worker_results_apply",
       toolCallId: "tc-worker-apply-rehydrated",
     });

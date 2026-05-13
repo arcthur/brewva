@@ -1,11 +1,4 @@
 import {
-  summarizeShellCommandAnalysis,
-  summarizeVirtualReadonlyEligibility,
-  type CommandPolicySummary,
-  type ShellCommandAnalysis,
-  type VirtualReadonlyEligibility,
-} from "@brewva/brewva-runtime";
-import {
   BOX_ACQUIRED_EVENT_TYPE,
   BOX_BOOTSTRAP_COMPLETED_EVENT_TYPE,
   BOX_BOOTSTRAP_FAILED_EVENT_TYPE,
@@ -19,6 +12,15 @@ import {
   EXEC_FAILED_EVENT_TYPE,
   EXEC_STARTED_EVENT_TYPE,
 } from "@brewva/brewva-runtime/events";
+import {
+  summarizeShellCommandAnalysis,
+  summarizeVirtualReadonlyEligibility,
+} from "@brewva/brewva-runtime/security";
+import type {
+  CommandPolicySummary,
+  ShellCommandAnalysis,
+  VirtualReadonlyEligibility,
+} from "@brewva/brewva-runtime/security";
 import type { BrewvaBundledToolRuntime } from "../../../contracts/index.js";
 import { recordToolRuntimeEvent } from "../../../runtime-port/extensions.js";
 import type { ResolvedExecutionPolicy } from "./policy.js";

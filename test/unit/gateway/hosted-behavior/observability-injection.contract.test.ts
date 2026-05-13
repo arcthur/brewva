@@ -2,7 +2,11 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import {
+  BrewvaRuntime,
+  createOperatorRuntimePort,
+  createHostedRuntimePort,
+} from "@brewva/brewva-runtime";
 import {
   createBrewvaHostPluginRunner,
   type BrewvaHostContext,
@@ -17,6 +21,10 @@ import {
 import { requireNonEmptyString } from "../../../helpers/assertions.js";
 import { createMockExtensionApi, invokeHandlers } from "../../../helpers/extension.js";
 import { createOpsRuntimeConfig } from "../../../helpers/runtime.js";
+
+function createHostedTestRuntime(options: ConstructorParameters<typeof BrewvaRuntime>[0]) {
+  return createHostedRuntimePort(new BrewvaRuntime(options));
+}
 
 function createHostContext(workspace: string, sessionId: string): BrewvaHostContext {
   return {
@@ -79,7 +87,7 @@ describe("Hosted behavior integration: observability injection", () => {
       ),
       "utf8",
     );
-    const runtime = new BrewvaRuntime({
+    const runtime = createHostedTestRuntime({
       cwd: workspace,
       config: createOpsRuntimeConfig((config) => {
         config.projection.enabled = true;
@@ -125,7 +133,7 @@ describe("Hosted behavior integration: observability injection", () => {
     mkdirSync(join(workspace, "src"), { recursive: true });
     writeFileSync(join(workspace, "src/a.ts"), "export const value = 1;\n", "utf8");
 
-    const runtime = new BrewvaRuntime({ cwd: workspace, config: createOpsRuntimeConfig() });
+    const runtime = createHostedTestRuntime({ cwd: workspace, config: createOpsRuntimeConfig() });
     const sessionId = "ext-obs-1";
 
     const { api, handlers } = createMockExtensionApi();
@@ -177,7 +185,7 @@ describe("Hosted behavior integration: observability injection", () => {
       ctx,
     );
 
-    const observed = runtime.inspect.events.query(sessionId, {
+    const observed = runtime.inspect.events.records.query(sessionId, {
       type: "tool_output_observed",
       last: 1,
     })[0];
@@ -203,7 +211,7 @@ describe("Hosted behavior integration: observability injection", () => {
     );
     requireNonEmptyString(observedPayload?.artifactRef, "Expected observed artifactRef.");
 
-    const artifactPersisted = runtime.inspect.events.query(sessionId, {
+    const artifactPersisted = runtime.inspect.events.records.query(sessionId, {
       type: "tool_output_artifact_persisted",
       last: 1,
     })[0];
@@ -213,11 +221,11 @@ describe("Hosted behavior integration: observability injection", () => {
     expect(existsSync(artifactPath)).toBe(true);
     expect(readFileSync(artifactPath, "utf8")).toContain("edited");
 
-    const ledgerRows = runtime.inspect.ledger.listRows(sessionId);
+    const ledgerRows = runtime.inspect.ledger.store.listRows(sessionId);
     expect(ledgerRows).toHaveLength(1);
     expect(ledgerRows[0]?.tool).toBe("edit");
 
-    const recorded = runtime.inspect.events.query(sessionId, {
+    const recorded = runtime.inspect.events.records.query(sessionId, {
       type: "tool_result_recorded",
       last: 1,
     })[0];
@@ -255,17 +263,17 @@ describe("Hosted behavior integration: observability injection", () => {
       "Expected outputArtifact artifactRef.",
     );
     expect(payload?.outputDistillation).toBeNull();
-    expect(runtime.inspect.events.query(sessionId, { type: "tool_result", last: 1 })).toHaveLength(
-      0,
-    );
+    expect(
+      runtime.inspect.events.records.query(sessionId, { type: "tool_result", last: 1 }),
+    ).toHaveLength(0);
 
-    const snapshot = runtime.inspect.events.query(sessionId, {
+    const snapshot = runtime.inspect.events.records.query(sessionId, {
       type: "file_snapshot_captured",
       last: 1,
     })[0];
     expect((snapshot?.payload as { files?: string[] } | undefined)?.files).toContain("src/a.ts");
 
-    const patchRecorded = runtime.inspect.events.query(sessionId, {
+    const patchRecorded = runtime.inspect.events.records.query(sessionId, {
       type: "patch_recorded",
       last: 1,
     })[0];
@@ -274,24 +282,24 @@ describe("Hosted behavior integration: observability injection", () => {
         ?.changes,
     ).toEqual([{ path: "src/a.ts", action: "modify" }]);
 
-    const reloaded = new BrewvaRuntime({ cwd: workspace, config: createOpsRuntimeConfig() });
-    expect(reloaded.inspect.events.query(sessionId).length).toBeGreaterThan(0);
-    expect(reloaded.inspect.ledger.listRows(sessionId)).toHaveLength(1);
+    const reloaded = createHostedTestRuntime({ cwd: workspace, config: createOpsRuntimeConfig() });
+    expect(reloaded.inspect.events.records.query(sessionId).length).toBeGreaterThan(0);
+    expect(reloaded.inspect.ledger.store.listRows(sessionId)).toHaveLength(1);
   });
 
   test("given session_shutdown event, when observability handler runs, then runtime cleanup is dispatched through the public session API", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-ext-shutdown-clean-"));
-    const runtime = new BrewvaRuntime({ cwd: workspace, config: createOpsRuntimeConfig() });
+    const runtime = createHostedTestRuntime({ cwd: workspace, config: createOpsRuntimeConfig() });
     const sessionId = "ext-shutdown-clean-1";
 
-    runtime.maintain.context.onTurnStart(sessionId, 1);
-    runtime.authority.tools.markCall(sessionId, "edit");
-    runtime.maintain.context.observeUsage(sessionId, {
+    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+    runtime.authority.tools.tracking.markCall(sessionId, "edit");
+    createOperatorRuntimePort(runtime).operator.context.usage.observe(sessionId, {
       tokens: 128,
       contextWindow: 4096,
       percent: 0.03125,
     });
-    runtime.authority.tools.recordResult({
+    runtime.authority.tools.invocation.recordResult({
       sessionId,
       toolName: "exec",
       args: { command: "echo ok" },
@@ -302,8 +310,10 @@ describe("Hosted behavior integration: observability injection", () => {
     const { api, handlers } = createMockExtensionApi();
     registerEventStream(api, runtime);
     const clearStateCalls: string[] = [];
-    const originalClearState = runtime.maintain.session.clearState.bind(runtime.maintain.session);
-    runtime.maintain.session.clearState = (nextSessionId: string) => {
+    const originalClearState = createOperatorRuntimePort(runtime).operator.session.state.clear.bind(
+      createOperatorRuntimePort(runtime).operator.session,
+    );
+    createOperatorRuntimePort(runtime).operator.session.state.clear = (nextSessionId: string) => {
       clearStateCalls.push(nextSessionId);
       originalClearState(nextSessionId);
     };
@@ -320,12 +330,12 @@ describe("Hosted behavior integration: observability injection", () => {
         },
       );
     } finally {
-      runtime.maintain.session.clearState = originalClearState;
+      createOperatorRuntimePort(runtime).operator.session.state.clear = originalClearState;
     }
 
     expect(clearStateCalls).toEqual([sessionId]);
     expect(
-      runtime.inspect.events.query(sessionId, { type: "session_shutdown", last: 1 }),
+      runtime.inspect.events.records.query(sessionId, { type: "session_shutdown", last: 1 }),
     ).toHaveLength(1);
   });
 });

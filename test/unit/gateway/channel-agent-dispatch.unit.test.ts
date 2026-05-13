@@ -2,7 +2,11 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import {
+  BrewvaRuntime,
+  createOperatorRuntimePort,
+  createHostedRuntimePort,
+} from "@brewva/brewva-runtime";
 import type { TurnEnvelope } from "@brewva/brewva-runtime/channels";
 import {
   buildBrewvaPromptText,
@@ -17,6 +21,10 @@ import {
 import { resolveTelegramChannelPolicyState } from "../../../packages/brewva-gateway/src/channels/policy/channel-policy.js";
 import type { ChannelSessionHandle } from "../../../packages/brewva-gateway/src/channels/session/coordinator.js";
 import { createRuntimeFixture } from "../../helpers/runtime.js";
+
+function createHostedTestRuntime(options: ConstructorParameters<typeof BrewvaRuntime>[0]) {
+  return createHostedRuntimePort(new BrewvaRuntime(options));
+}
 
 function createInboundTurn(): TurnEnvelope {
   return {
@@ -223,16 +231,16 @@ describe("channel agent dispatch", () => {
   });
 
   test("collectPromptTurnOutputs resumes a pending reasoning revert inline and clears superseded channel outputs", async () => {
-    const runtime = new BrewvaRuntime({
+    const runtime = createHostedTestRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-channel-reasoning-resume-")),
     });
     const sessionId = "agent-session:channel-reasoning";
-    runtime.maintain.context.onTurnStart(sessionId, 1);
-    const checkpointA = runtime.authority.reasoning.recordCheckpoint(sessionId, {
+    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+    const checkpointA = runtime.authority.reasoning.checkpoints.record(sessionId, {
       boundary: "operator_marker",
       leafEntryId: "leaf-channel-a",
     });
-    runtime.authority.reasoning.recordCheckpoint(sessionId, {
+    runtime.authority.reasoning.checkpoints.record(sessionId, {
       boundary: "verification_boundary",
       leafEntryId: "leaf-channel-b",
     });
@@ -289,7 +297,7 @@ describe("channel agent dispatch", () => {
             result: "stale branch output",
             isError: false,
           } as BrewvaPromptSessionEvent);
-          runtime.authority.reasoning.revert(sessionId, {
+          runtime.authority.reasoning.reverts.revert(sessionId, {
             toCheckpointId: checkpointA.checkpointId,
             trigger: "operator_request",
             continuity: "Resume only from the restored channel branch.",

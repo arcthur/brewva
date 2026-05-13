@@ -87,7 +87,7 @@ function normalizeIntent(value: unknown): RecallSearchIntent | undefined {
 }
 
 function hasRecallOperatorProfile(runtime: BrewvaToolOptions["runtime"]): boolean {
-  const scopes = runtime.inspect.skills.getLoadReport().routingScopes;
+  const scopes = runtime.inspect.skills.catalog.getLoadReport().routingScopes;
   return scopes.includes("operator") || scopes.includes("meta");
 }
 

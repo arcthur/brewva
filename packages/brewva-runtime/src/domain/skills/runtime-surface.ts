@@ -1,45 +1,34 @@
-import {
-  defineRuntimeSurfaceModule,
-  type SurfaceContribution,
-} from "../../runtime/surface-descriptor.js";
 import type { SkillRegistry } from "./registry.js";
-import type {
-  SkillDocument,
-  SkillRefreshInput,
-  SkillRefreshResult,
-  SkillRegistryLoadReport,
-} from "./types.js";
+import type { SkillRefreshInput, SkillRefreshResult } from "./types.js";
 
 export interface SkillsSurfaceDependencies {
   skillRegistry: SkillRegistry;
   refreshSkillsState(input?: SkillRefreshInput): SkillRefreshResult;
 }
 
-export interface RuntimeSkillsSurfaceMethods {
-  refresh(input?: SkillRefreshInput): SkillRefreshResult;
-  getLoadReport(): SkillRegistryLoadReport;
-  list(): SkillDocument[];
-  get(name: string): SkillDocument | undefined;
-}
-
-export const skillsSurfaceContribution = {
-  inspect: ["getLoadReport", "list", "get"],
-  maintain: ["refresh"],
-} as const satisfies SurfaceContribution<RuntimeSkillsSurfaceMethods>;
-
-export function createSkillsSurfaceMethods(
-  deps: SkillsSurfaceDependencies,
-): RuntimeSkillsSurfaceMethods {
+export function createSkillsSurfaceMethods(deps: SkillsSurfaceDependencies) {
   return {
-    refresh: (input?: SkillRefreshInput) => deps.refreshSkillsState(input),
-    getLoadReport: () => deps.skillRegistry.getLoadReport(),
-    list: () => deps.skillRegistry.list(),
-    get: (name: string) => deps.skillRegistry.get(name),
+    inspect: {
+      catalog: {
+        getLoadReport: () => deps.skillRegistry.getLoadReport(),
+        list: () => deps.skillRegistry.list(),
+        get: (name: string) => deps.skillRegistry.get(name),
+      },
+    },
+    operator: {
+      catalog: {
+        refresh: (input?: SkillRefreshInput) => deps.refreshSkillsState(input),
+      },
+    },
   };
 }
 
-export const skillsRuntimeSurface = defineRuntimeSurfaceModule({
-  name: "skills",
-  createMethods: createSkillsSurfaceMethods,
-  contribution: skillsSurfaceContribution,
-});
+export type RuntimeSkillsSurfaceMethods = ReturnType<typeof createSkillsSurfaceMethods>;
+
+export function createSkillsInspectSurface(deps: SkillsSurfaceDependencies) {
+  return createSkillsSurfaceMethods(deps).inspect;
+}
+
+export function createSkillsOperatorSurface(deps: SkillsSurfaceDependencies) {
+  return createSkillsSurfaceMethods(deps).operator;
+}

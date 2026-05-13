@@ -3,8 +3,8 @@ import {
   asBrewvaSessionId,
   asBrewvaToolCallId,
   asBrewvaToolName,
-  type SessionWireFrame,
-} from "@brewva/brewva-runtime";
+} from "@brewva/brewva-runtime/core";
+import type { SessionWireFrame } from "@brewva/brewva-runtime/session";
 import {
   deriveSessionPhaseFromRuntimeFactFrame,
   deriveSessionPhaseFromRuntimeFactHistory,

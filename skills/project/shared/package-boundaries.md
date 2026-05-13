@@ -10,22 +10,28 @@ owner: runtime-maintainers
 
 ## Workspace Topology
 
-| Package                        | Responsibility                                                                                                                                          | Must Not Own                                  |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
-| `@brewva/brewva-runtime`       | governance kernel, contracts, gates, verification state, context status, workbench authority, and compaction receipts                                   | CLI wiring or transport-specific behavior     |
-| `@brewva/brewva-provider-core` | provider contracts, catalog lookup, typed registry, streaming, cache rendering, drivers                                                                 | replay authority or credential ownership      |
-| `@brewva/brewva-substrate`     | contract root plus explicit session, turn, prompt/resource, provenance, execution, compaction, tools, host-api, persistence, provider, and sdk subpaths | replay authority, credentials, hosted policy  |
-| `@brewva/brewva-search`        | shared normalization, mandatory CJK segmentation, and semantic query/content token policy                                                               | recall ranking or event evidence projection   |
-| `@brewva/brewva-recall`        | curated root plus explicit broker, knowledge, and evidence subpaths for on-demand recall search, curation semantics, trust labels, and result rendering | event tape authority or database ownership    |
-| `@brewva/brewva-session-index` | curated root plus explicit evidence subpath for the rebuildable DuckDB query plane over session event tapes                                             | replay authority, tokenization policy, SQL UI |
-| `@brewva/brewva-std`           | leaf standard primitives for async, collections, hashing, JSON, markdown, text, unknown readers, and Node-only filesystem helpers                       | product policy, runtime authority, or domains |
-| `@brewva/brewva-tools`         | family-sliced concrete tool adapters, pure tool contracts, managed-tool registry/capability spine, runtime-port helpers, and default bundle assembly    | orchestration policy or model routing         |
-| `@brewva/brewva-cli`           | user entrypoints and frontend command surface                                                                                                           | channel/control-plane ownership               |
-| `@brewva/brewva-gateway`       | domain-sliced control-plane/admin seams, session supervision, channel host, hosted extension composition, and gateway-owned shared utilities            | kernel semantics                              |
+| Package                        | Responsibility                                                                                                                                                        | Must Not Own                                  |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| `@brewva/brewva-runtime`       | governance kernel, contracts, gates, verification state, context status, workbench authority, and compaction receipts                                                 | CLI wiring or transport-specific behavior     |
+| `@brewva/brewva-provider-core` | provider contracts, catalog lookup, typed registry, streaming, cache rendering, drivers                                                                               | replay authority or credential ownership      |
+| `@brewva/brewva-substrate`     | contract root plus explicit session, turn, prompt/resource, provenance, execution, compaction, tools/tool-protocol, host-api, persistence, provider, and sdk subpaths | replay authority, credentials, hosted policy  |
+| `@brewva/brewva-search`        | shared normalization, mandatory CJK segmentation, and semantic query/content token policy                                                                             | recall ranking or event evidence projection   |
+| `@brewva/brewva-recall`        | curated root plus explicit broker, knowledge, and evidence subpaths for on-demand recall search, curation semantics, trust labels, and result rendering               | event tape authority or database ownership    |
+| `@brewva/brewva-session-index` | curated root plus explicit evidence subpath for the rebuildable DuckDB query plane over session event tapes                                                           | replay authority, tokenization policy, SQL UI |
+| `@brewva/brewva-std`           | leaf standard primitives for async, collections, hashing, JSON, markdown, text, unknown readers, and Node-only filesystem helpers                                     | product policy, runtime authority, or domains |
+| `@brewva/brewva-tools`         | family-sliced concrete tool adapters, pure tool contracts, managed-tool registry/capability spine, runtime-port helpers, and default bundle assembly                  | orchestration policy or model routing         |
+| `@brewva/brewva-cli`           | user entrypoints and frontend command surface                                                                                                                         | channel/control-plane ownership               |
+| `@brewva/brewva-gateway`       | domain-sliced control-plane/admin seams, session supervision, channel host, hosted extension composition, and gateway-owned shared utilities                          | kernel semantics                              |
 
 ## Invariants
 
 - tool and budget enforcement are correctness rules, not advisory metadata
+- runtime root exports stay narrow: `BrewvaRuntime`, runtime port factories and
+  port types, `DEFAULT_BREWVA_CONFIG`, and the minimal config/deep-readonly
+  types. Domain contracts are imported through explicit owner subpaths such as
+  `@brewva/brewva-runtime/core`, `/config`, `/events`, `/session`,
+  `/governance`, `/task`, `/skills`, `/context`, `/projection`, and
+  `/security`
 - skill outputs and runtime artifacts must stay explicit and auditable
 - DuckDB session indexes are rebuildable query state; event tape remains replay
   authority
@@ -51,6 +57,10 @@ owner: runtime-maintainers
   vocabulary that has no single mechanism owner, such as context state, session
   phase, and thinking levels. Domain-owned contracts such as tool definitions
   and provider model catalogs are imported from `/tools` and `/provider`
+- tool descriptor/catalog protocol vocabulary belongs to
+  `@brewva/brewva-substrate/tools`; the removed
+  `@brewva/brewva-tool-protocol` package must not return as a standalone
+  workspace package or import path
 - substrate mechanisms are imported through explicit domain subpaths:
   `@brewva/brewva-substrate/session`, `/prompt`, `/resources`, `/tools`,
   `/host-api`, `/persistence`, `/provider`, `/turn`, `/sdk`, `/provenance`,

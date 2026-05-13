@@ -1,7 +1,3 @@
-import {
-  defineRuntimeSurfaceModule,
-  type SurfaceContribution,
-} from "../../runtime/surface-descriptor.js";
 import type { CostService } from "./cost.js";
 
 export interface CostSurfaceDependencies {
@@ -10,21 +6,28 @@ export interface CostSurfaceDependencies {
 
 export function createCostSurfaceMethods(deps: CostSurfaceDependencies) {
   return {
-    recordAssistantUsage: (input: Parameters<CostService["recordAssistantUsage"]>[0]) =>
-      deps.getCostService().recordAssistantUsage(input),
-    getSummary: (sessionId: string) => deps.getCostService().getCostSummary(sessionId),
+    usage: {
+      recordAssistant: (input: Parameters<CostService["recordAssistantUsage"]>[0]) =>
+        deps.getCostService().recordAssistantUsage(input),
+    },
+    summary: {
+      get: (sessionId: string) => deps.getCostService().getCostSummary(sessionId),
+    },
   };
 }
 
 export type RuntimeCostSurfaceMethods = ReturnType<typeof createCostSurfaceMethods>;
 
-export const costSurfaceContribution = {
-  authority: ["recordAssistantUsage"],
-  inspect: ["getSummary"],
-} as const satisfies SurfaceContribution<RuntimeCostSurfaceMethods>;
+export function createCostAuthoritySurface(deps: CostSurfaceDependencies) {
+  const methods = createCostSurfaceMethods(deps);
+  return {
+    usage: methods.usage,
+  };
+}
 
-export const costRuntimeSurface = defineRuntimeSurfaceModule({
-  name: "cost",
-  createMethods: createCostSurfaceMethods,
-  contribution: costSurfaceContribution,
-});
+export function createCostInspectSurface(deps: CostSurfaceDependencies) {
+  const methods = createCostSurfaceMethods(deps);
+  return {
+    summary: methods.summary,
+  };
+}

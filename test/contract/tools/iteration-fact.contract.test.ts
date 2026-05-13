@@ -2,7 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BrewvaRuntime, buildScheduleIntentFiredEvent } from "@brewva/brewva-runtime";
+import { BrewvaRuntime, createHostedRuntimePort } from "@brewva/brewva-runtime";
+import { buildScheduleIntentFiredEvent } from "@brewva/brewva-runtime/schedule";
 import { createIterationFactTool } from "@brewva/brewva-tools/workflow";
 import { requireNonEmptyString } from "../../helpers/assertions.js";
 import { extractTextContent, mergeContext } from "./tools-flow.helpers.js";
@@ -77,10 +78,12 @@ describe("iteration_fact contract", () => {
     expect(text).toContain("key=error_budget");
 
     expect(
-      runtime.inspect.events.listMetricObservations(sessionId, { iterationKey: "iter-2" }),
+      runtime.inspect.events.iteration.listMetricObservations(sessionId, {
+        iterationKey: "iter-2",
+      }),
     ).toHaveLength(1);
     expect(
-      runtime.inspect.events.listGuardResults(sessionId, { iterationKey: "iter-2" }),
+      runtime.inspect.events.iteration.listGuardResults(sessionId, { iterationKey: "iter-2" }),
     ).toHaveLength(1);
   });
 
@@ -115,8 +118,8 @@ describe("iteration_fact contract", () => {
 
     expect(extractTextContent(metricResult)).toContain("evidence_refs");
     expect(extractTextContent(guardResult)).toContain("evidence_refs");
-    expect(runtime.inspect.events.listMetricObservations(sessionId)).toEqual([]);
-    expect(runtime.inspect.events.listGuardResults(sessionId)).toEqual([]);
+    expect(runtime.inspect.events.iteration.listMetricObservations(sessionId)).toEqual([]);
+    expect(runtime.inspect.events.iteration.listGuardResults(sessionId)).toEqual([]);
   });
 
   test("lists lineage-scoped facts through the managed tool surface", async () => {
@@ -128,7 +131,7 @@ describe("iteration_fact contract", () => {
     const loopSource = "goal-loop:coverage-raise-2026-03-22";
     const tool = createIterationFactTool({ runtime });
 
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId: parentSessionId,
       type: "schedule_intent",
       timestamp: 10,
@@ -147,7 +150,7 @@ describe("iteration_fact contract", () => {
         }),
       },
     });
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId: parentSessionId,
       type: "schedule_intent",
       timestamp: 11,

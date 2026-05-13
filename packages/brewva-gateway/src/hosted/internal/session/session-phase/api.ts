@@ -1,4 +1,4 @@
-import type { BrewvaSessionId } from "@brewva/brewva-runtime";
+import type { BrewvaSessionId } from "@brewva/brewva-runtime/core";
 
 export {
   resolveManagedSessionBootstrapPhase,

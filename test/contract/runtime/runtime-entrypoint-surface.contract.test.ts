@@ -101,7 +101,7 @@ describe("runtime entrypoint surface", () => {
     });
 
     expect(() =>
-      runtime.extensions.hosted.events.record({
+      runtimeModule.createHostedRuntimePort(runtime).extensions.hosted.events.record({
         sessionId: "review",
         type: events.VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
         payload: { bad: true },

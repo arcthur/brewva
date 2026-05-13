@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
+import {
+  BrewvaRuntime,
+  DEFAULT_BREWVA_CONFIG,
+  createOperatorRuntimePort,
+} from "@brewva/brewva-runtime";
 import { cleanupTestWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
 
 async function flushAsyncEvents(): Promise<void> {
@@ -38,9 +42,9 @@ describe("cost governance events", () => {
         },
       });
       const sessionId = "cost-governance-none-1";
-      runtime.maintain.context.onTurnStart(sessionId, 1);
+      createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
 
-      runtime.authority.cost.recordAssistantUsage({
+      runtime.authority.cost.usage.recordAssistant({
         sessionId,
         model: "test/model",
         inputTokens: 60,
@@ -58,12 +62,16 @@ describe("cost governance events", () => {
         totalTokens: 75,
         totalCostUsd: 0.0009,
       });
-      expect(runtime.inspect.events.query(sessionId, { type: "cost_update" })).toHaveLength(1);
+      expect(runtime.inspect.events.records.query(sessionId, { type: "cost_update" })).toHaveLength(
+        1,
+      );
       expect(
-        runtime.inspect.events.query(sessionId, { type: "governance_cost_anomaly_detected" }),
+        runtime.inspect.events.records.query(sessionId, {
+          type: "governance_cost_anomaly_detected",
+        }),
       ).toHaveLength(0);
       expect(
-        runtime.inspect.events.query(sessionId, { type: "governance_cost_anomaly_error" }),
+        runtime.inspect.events.records.query(sessionId, { type: "governance_cost_anomaly_error" }),
       ).toHaveLength(0);
     } finally {
       cleanupTestWorkspace(workspace);
@@ -86,9 +94,9 @@ describe("cost governance events", () => {
         },
       });
       const sessionId = "cost-governance-detected-1";
-      runtime.maintain.context.onTurnStart(sessionId, 1);
+      createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
 
-      runtime.authority.cost.recordAssistantUsage({
+      runtime.authority.cost.usage.recordAssistant({
         sessionId,
         model: "test/model",
         inputTokens: 120,
@@ -101,7 +109,7 @@ describe("cost governance events", () => {
 
       await flushAsyncEvents();
 
-      const events = runtime.inspect.events.query(sessionId, {
+      const events = runtime.inspect.events.records.query(sessionId, {
         type: "governance_cost_anomaly_detected",
       });
       expect(events).toHaveLength(1);
@@ -128,9 +136,9 @@ describe("cost governance events", () => {
         },
       });
       const sessionId = "cost-governance-error-1";
-      runtime.maintain.context.onTurnStart(sessionId, 1);
+      createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
 
-      runtime.authority.cost.recordAssistantUsage({
+      runtime.authority.cost.usage.recordAssistant({
         sessionId,
         model: "test/model",
         inputTokens: 80,
@@ -143,7 +151,7 @@ describe("cost governance events", () => {
 
       await flushAsyncEvents();
 
-      const events = runtime.inspect.events.query(sessionId, {
+      const events = runtime.inspect.events.records.query(sessionId, {
         type: "governance_cost_anomaly_error",
       });
       expect(events).toHaveLength(1);

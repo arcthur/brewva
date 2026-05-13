@@ -1,7 +1,12 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { HostedDelegationStore } from "@brewva/brewva-gateway";
-import { BrewvaRuntime, CURRENT_DELEGATION_CONTRACT_VERSION } from "@brewva/brewva-runtime";
+import { BrewvaRuntime, createHostedRuntimePort } from "@brewva/brewva-runtime";
+import { CURRENT_DELEGATION_CONTRACT_VERSION } from "@brewva/brewva-runtime/delegation";
 import { cleanupWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
+
+function createHostedTestRuntime(options: ConstructorParameters<typeof BrewvaRuntime>[0]) {
+  return createHostedRuntimePort(new BrewvaRuntime(options));
+}
 
 let workspace = "";
 
@@ -25,7 +30,7 @@ function recordCompletedRun(input: {
   consultKind?: "review" | "design";
   delegate?: string;
 }): void {
-  input.runtime.extensions.hosted.events.record({
+  createHostedRuntimePort(input.runtime).extensions.hosted.events.record({
     sessionId: input.sessionId,
     type: "subagent_completed",
     timestamp: input.updatedAt,
@@ -62,7 +67,7 @@ function delegationLifecycleFields() {
 
 describe("HostedDelegationStore", () => {
   test("listPendingOutcomes applies limit after filtering pending handoffs", () => {
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createHostedTestRuntime({ cwd: workspace });
     const store = new HostedDelegationStore(runtime);
     const sessionId = "delegation-store-limit";
 
@@ -91,11 +96,11 @@ describe("HostedDelegationStore", () => {
   });
 
   test("replays subagent_running as the live lifecycle transition", () => {
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createHostedTestRuntime({ cwd: workspace });
     const store = new HostedDelegationStore(runtime);
     const sessionId = "delegation-store-running";
 
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: "subagent_spawned",
       timestamp: 100,
@@ -106,7 +111,7 @@ describe("HostedDelegationStore", () => {
         status: "pending",
       },
     });
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: "subagent_running",
       timestamp: 110,
@@ -127,11 +132,11 @@ describe("HostedDelegationStore", () => {
   });
 
   test("does not preserve removed delegated verification kinds in read models", () => {
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createHostedTestRuntime({ cwd: workspace });
     const store = new HostedDelegationStore(runtime);
     const sessionId = "delegation-store-no-legacy-verification";
 
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: "subagent_completed",
       timestamp: 100,
@@ -153,11 +158,11 @@ describe("HostedDelegationStore", () => {
   });
 
   test("rejects missing delegation contract versions", () => {
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createHostedTestRuntime({ cwd: workspace });
     const store = new HostedDelegationStore(runtime);
     const sessionId = "delegation-store-missing-contract-version";
 
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: "subagent_spawned",
       timestamp: 100,
@@ -174,11 +179,11 @@ describe("HostedDelegationStore", () => {
   });
 
   test("rejects current-version records without adoption payloads", () => {
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createHostedTestRuntime({ cwd: workspace });
     const store = new HostedDelegationStore(runtime);
     const sessionId = "delegation-store-missing-adoption";
 
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: "subagent_spawned",
       timestamp: 100,
@@ -199,11 +204,11 @@ describe("HostedDelegationStore", () => {
   });
 
   test("rejects current-version records with malformed adoption payloads", () => {
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createHostedTestRuntime({ cwd: workspace });
     const store = new HostedDelegationStore(runtime);
     const sessionId = "delegation-store-malformed-adoption";
 
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: "subagent_spawned",
       timestamp: 100,
@@ -228,7 +233,7 @@ describe("HostedDelegationStore", () => {
   });
 
   test("preserves canonical design consult kinds in read models", () => {
-    const runtime = new BrewvaRuntime({ cwd: workspace });
+    const runtime = createHostedTestRuntime({ cwd: workspace });
     const store = new HostedDelegationStore(runtime);
     const sessionId = "delegation-store-design-consult";
 

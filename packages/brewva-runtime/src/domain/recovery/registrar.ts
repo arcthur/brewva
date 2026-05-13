@@ -1,12 +1,10 @@
 import type { EventPipelineService } from "../sessions/api.js";
-import { recoverySurfaceContribution } from "./runtime-surface.js";
 import { ToolLifecycleRecoveryWalService } from "./tool-lifecycle-recovery-wal.js";
 
 export interface RuntimeRecoveryDomainRegistration {
   services: {
     toolLifecycleRecoveryWalService: ToolLifecycleRecoveryWalService;
   };
-  surfaceContribution: typeof recoverySurfaceContribution;
 }
 
 export function registerRecoveryDomain(
@@ -26,6 +24,5 @@ export function registerRecoveryDomain(
         eventPipeline: support.eventPipeline,
       }),
     },
-    surfaceContribution: recoverySurfaceContribution,
   };
 }

@@ -212,7 +212,28 @@ function main(): void {
       "@brewva/brewva-tools/workflow",
       "@brewva/brewva-tui",
       "@brewva/brewva-runtime/channels",
+      "@brewva/brewva-runtime/claim",
+      "@brewva/brewva-runtime/config",
+      "@brewva/brewva-runtime/conventions",
+      "@brewva/brewva-runtime/core",
+      "@brewva/brewva-runtime/cost",
+      "@brewva/brewva-runtime/delegation",
+      "@brewva/brewva-runtime/events",
+      "@brewva/brewva-runtime/governance",
+      "@brewva/brewva-runtime/ledger",
+      "@brewva/brewva-runtime/projection",
+      "@brewva/brewva-runtime/proposals",
+      "@brewva/brewva-runtime/reasoning",
       "@brewva/brewva-runtime/recovery",
+      "@brewva/brewva-runtime/schedule",
+      "@brewva/brewva-runtime/security",
+      "@brewva/brewva-runtime/session",
+      "@brewva/brewva-runtime/skills",
+      "@brewva/brewva-runtime/tape",
+      "@brewva/brewva-runtime/task",
+      "@brewva/brewva-runtime/tools",
+      "@brewva/brewva-runtime/verification",
+      "@brewva/brewva-runtime/workbench",
       "@brewva/brewva-gateway/channels",
       "@brewva/brewva-gateway/hosted",
       "@brewva/brewva-gateway/policy/model-routing",
@@ -343,12 +364,25 @@ function main(): void {
     if (typeof sessionIndexEvidenceModule.buildSessionIndexEventSearchText !== "function") {
       throw new Error("session-index evidence subpath missing event search-text export");
     }
-    const { BrewvaRuntime, createToolRuntimePort } = await import("@brewva/brewva-runtime");
+    const runtimeRootModule = await import("@brewva/brewva-runtime");
+    const { BrewvaRuntime, createToolRuntimePort } = runtimeRootModule;
+    const runtimeConfigModule = await import("@brewva/brewva-runtime/config");
+    const runtimeSessionModule = await import("@brewva/brewva-runtime/session");
+    const runtimeTapeModule = await import("@brewva/brewva-runtime/tape");
     const semanticArtifactsModule = await import("@brewva/brewva-runtime/semantic-artifacts");
     const { createOutputSearchTool } = await import("@brewva/brewva-tools/navigation");
     const runtime = new BrewvaRuntime({ cwd: isolatedWorkspace });
-    if ("getSemanticArtifactOutputContract" in (await import("@brewva/brewva-runtime"))) {
+    if ("getSemanticArtifactOutputContract" in runtimeRootModule || "buildTapeCheckpointPayload" in runtimeRootModule) {
       throw new Error("runtime root dist entry unexpectedly re-exported semantic artifact catalog helpers");
+    }
+    if (typeof runtimeConfigModule.loadBrewvaConfig !== "function") {
+      throw new Error("runtime config subpath missing loadBrewvaConfig export");
+    }
+    if (typeof runtimeSessionModule.deriveSessionLineageState !== "function") {
+      throw new Error("runtime session subpath missing deriveSessionLineageState export");
+    }
+    if (typeof runtimeTapeModule.buildTapeCheckpointPayload !== "function") {
+      throw new Error("runtime tape subpath missing buildTapeCheckpointPayload export");
     }
     if (typeof semanticArtifactsModule.getSemanticArtifactOutputContract !== "function") {
       throw new Error("semantic-artifacts subpath missing getSemanticArtifactOutputContract export");
@@ -368,7 +402,8 @@ function main(): void {
     const artifactText = "服务启动中\n数据库连接被拒绝，连接失败需要重试\n";
     mkdirSync(dirname(artifactPath), { recursive: true });
     writeFileSync(artifactPath, artifactText, "utf8");
-    runtime.extensions.tools.recordEvent({
+    const toolRuntime = createToolRuntimePort(runtime);
+    toolRuntime.extensions.tools.recordEvent({
       sessionId,
       type: "tool_output_artifact_persisted",
       payload: {
@@ -378,7 +413,7 @@ function main(): void {
       },
     });
     const outputSearchTool = createOutputSearchTool({
-      runtime: createToolRuntimePort(runtime),
+      runtime: toolRuntime,
     });
     const outputSearchResult = await outputSearchTool.execute(
       "dist-output-search-cjk",

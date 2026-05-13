@@ -1,17 +1,12 @@
 import { randomUUID } from "node:crypto";
-import type {
-  BrewvaConfig,
-  BrewvaRuntime,
-  DelegationRunRecord,
-  ManagedToolMode,
-  PatchSet,
-} from "@brewva/brewva-runtime";
-import {
-  asBrewvaSessionId,
-  isDelegationRunTerminalStatus,
-  type WorkerResult,
-} from "@brewva/brewva-runtime";
+import type { BrewvaConfig, BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
+import { asBrewvaSessionId } from "@brewva/brewva-runtime/core";
+import type { DelegationRunRecord } from "@brewva/brewva-runtime/delegation";
+import { isDelegationRunTerminalStatus } from "@brewva/brewva-runtime/delegation";
 import { SUBAGENT_RUNNING_EVENT_TYPE } from "@brewva/brewva-runtime/events";
+import type { PatchSet } from "@brewva/brewva-runtime/patch-history";
+import type { WorkerResult } from "@brewva/brewva-runtime/patch-history";
+import type { ManagedToolMode } from "@brewva/brewva-runtime/session";
 import type {
   BrewvaToolOrchestration,
   DelegationPacket,
@@ -101,13 +96,12 @@ export interface HostedSubagentSessionOptions {
   builtinToolNames?: readonly HostedDelegationBuiltinToolName[];
   managedToolNames?: readonly string[];
   managedToolMode?: ManagedToolMode;
-  contextProfile?: "minimal" | "standard" | "full";
   enableSubagents?: boolean;
   orchestration?: BrewvaToolOrchestration;
 }
 
 export interface HostedSubagentSessionResult {
-  runtime: BrewvaRuntime;
+  runtime: BrewvaHostedRuntimePort;
   session: SubscribablePromptSession & {
     dispose(): void;
     abort?(): Promise<void>;
@@ -118,7 +112,7 @@ export interface HostedSubagentSessionResult {
 }
 
 export interface HostedSubagentAdapterOptions {
-  runtime: BrewvaRuntime;
+  runtime: BrewvaHostedRuntimePort;
   createChildSession(input: HostedSubagentSessionOptions): Promise<HostedSubagentSessionResult>;
   backgroundController?: HostedSubagentBackgroundController;
   delegationStore?: HostedDelegationStore;
@@ -228,7 +222,7 @@ export function createHostedSubagentAdapter(
         error: string;
       }
   > {
-    const catalog = await loadHostedDelegationCatalog(options.runtime.workspaceRoot);
+    const catalog = await loadHostedDelegationCatalog(options.runtime.identity.workspaceRoot);
     let resolvedTarget;
     try {
       resolvedTarget = resolveDelegationTarget({
@@ -255,7 +249,7 @@ export function createHostedSubagentAdapter(
     );
     if (
       resolvedTarget.target.skillName &&
-      !options.runtime.inspect.skills.get(resolvedTarget.target.skillName)
+      !options.runtime.inspect.skills.catalog.get(resolvedTarget.target.skillName)
     ) {
       return {
         ok: false,
@@ -330,7 +324,7 @@ export function createHostedSubagentAdapter(
 
     let child: HostedSubagentSessionResult | undefined;
     let isolatedWorkspace: IsolatedWorkspaceHandle | undefined;
-    let childSessionId: import("@brewva/brewva-runtime").BrewvaSessionId | undefined;
+    let childSessionId: import("@brewva/brewva-runtime/core").BrewvaSessionId | undefined;
     let executionPlan: ReturnType<typeof resolveDelegationExecutionPlan> | undefined;
     let childCostAggregated = false;
     let parallelSlotReleased = false;
@@ -406,10 +400,7 @@ export function createHostedSubagentAdapter(
       return immediateFailure(error instanceof Error ? error.message : String(error));
     }
 
-    const parallel = options.runtime.authority.tools.acquireParallelSlot(
-      input.parentSessionId,
-      runId,
-    );
+    const parallel = options.runtime.authority.tools.parallel.acquire(input.parentSessionId, runId);
     if (!parallel.accepted) {
       return immediateFailure(`parallel_slot_rejected:${parallel.reason ?? "unknown"}`);
     }
@@ -496,7 +487,7 @@ export function createHostedSubagentAdapter(
           }, input.timeoutMs);
         }
 
-        writeDetachedSubagentContextManifest(options.runtime.workspaceRoot, runId, {
+        writeDetachedSubagentContextManifest(options.runtime.identity.workspaceRoot, runId, {
           schema: "brewva.delegation-context-manifest.v1",
           runId,
           delegate,
@@ -506,9 +497,9 @@ export function createHostedSubagentAdapter(
           contextRefs: input.packet.contextRefs ?? [],
         });
         if (executionPlan.boundary === "effectful") {
-          isolatedWorkspace = await createIsolatedWorkspace(options.runtime.workspaceRoot);
+          isolatedWorkspace = await createIsolatedWorkspace(options.runtime.identity.workspaceRoot);
           await copyDelegationContextManifestToIsolatedWorkspace({
-            sourceRoot: options.runtime.workspaceRoot,
+            sourceRoot: options.runtime.identity.workspaceRoot,
             isolatedRoot: isolatedWorkspace.root,
             runId,
           });
@@ -522,7 +513,6 @@ export function createHostedSubagentAdapter(
           builtinToolNames: executionPlan.builtinToolNames,
           managedToolNames: executionPlan.managedToolNames,
           managedToolMode: executionPlan.managedToolMode,
-          contextProfile: executionPlan.contextProfile,
           enableSubagents: false,
         });
 
@@ -563,7 +553,7 @@ export function createHostedSubagentAdapter(
         if (output.status !== "completed") {
           throw new Error(`subagent_thread_loop_${output.status}`);
         }
-        const childCostSummary = child.runtime.inspect.cost.getSummary(childSessionId);
+        const childCostSummary = child.runtime.inspect.cost.summary.get(childSessionId);
         aggregateChildCost(options.runtime, input.parentSessionId, childCostSummary);
         childCostAggregated = true;
         const structuredOutcome = extractStructuredOutcomeData({
@@ -597,7 +587,7 @@ export function createHostedSubagentAdapter(
         );
         const patches = executionPlan.producesPatches
           ? await captureIsolatedPatchSet(
-              options.runtime.workspaceRoot,
+              options.runtime.identity.workspaceRoot,
               isolatedWorkspace,
               summary,
               childSessionId,
@@ -611,7 +601,10 @@ export function createHostedSubagentAdapter(
             })
           : undefined;
         if (workerResult) {
-          options.runtime.maintain.session.recordWorkerResult(input.parentSessionId, workerResult);
+          options.runtime.authority.session.workerResults.record(
+            input.parentSessionId,
+            workerResult,
+          );
           parallelSlotReleased = true;
         }
 
@@ -736,14 +729,14 @@ export function createHostedSubagentAdapter(
           aggregateChildCost(
             options.runtime,
             input.parentSessionId,
-            child.runtime.inspect.cost.getSummary(childSessionId),
+            child.runtime.inspect.cost.summary.get(childSessionId),
           );
           childCostAggregated = true;
         }
         let workerResult: WorkerResult | undefined;
         if (executionPlan.producesPatches) {
           const patches = await captureIsolatedPatchSet(
-            options.runtime.workspaceRoot,
+            options.runtime.identity.workspaceRoot,
             isolatedWorkspace,
             message,
             childSessionId,
@@ -754,7 +747,10 @@ export function createHostedSubagentAdapter(
             patches,
             errorMessage: message,
           });
-          options.runtime.maintain.session.recordWorkerResult(input.parentSessionId, workerResult);
+          options.runtime.authority.session.workerResults.record(
+            input.parentSessionId,
+            workerResult,
+          );
           parallelSlotReleased = true;
         }
         const terminalStatus: DelegationRunRecord["status"] = timeoutTriggered
@@ -765,7 +761,7 @@ export function createHostedSubagentAdapter(
         const artifactRefs = buildPatchArtifactRefs(workerResult?.patches);
         const terminalCostSummary =
           child && childSessionId
-            ? child.runtime.inspect.cost.getSummary(childSessionId)
+            ? child.runtime.inspect.cost.summary.get(childSessionId)
             : undefined;
         const outcome =
           terminalStatus === "cancelled" || terminalStatus === "timeout"
@@ -868,7 +864,7 @@ export function createHostedSubagentAdapter(
           clearTimeout(timeoutHandle);
         }
         if (!parallelSlotReleased) {
-          options.runtime.authority.tools.releaseParallelSlot(input.parentSessionId, runId);
+          options.runtime.authority.tools.parallel.release(input.parentSessionId, runId);
         }
         if (child) {
           await disposeChildSession(child, {
@@ -898,7 +894,7 @@ export function createHostedSubagentAdapter(
     const startedAt = Date.now();
     const parentSessionId = asBrewvaSessionId(input.fromSessionId);
     const contextPolicy = input.request.contextPolicy ?? "lineage_only";
-    const catalog = await loadHostedDelegationCatalog(options.runtime.workspaceRoot);
+    const catalog = await loadHostedDelegationCatalog(options.runtime.identity.workspaceRoot);
     const readonlyEnvelope = catalog.envelopes.get("readonly-advisor");
     if (!readonlyEnvelope) {
       throw new Error("missing_readonly_advisor_envelope");
@@ -934,10 +930,7 @@ export function createHostedSubagentAdapter(
       record: initialRecord,
     });
 
-    const parallel = options.runtime.authority.tools.acquireParallelSlot(
-      input.fromSessionId,
-      runId,
-    );
+    const parallel = options.runtime.authority.tools.parallel.acquire(input.fromSessionId, runId);
     if (!parallel.accepted) {
       const failedRecord: DelegationRunRecord = {
         ...initialRecord,
@@ -964,7 +957,7 @@ export function createHostedSubagentAdapter(
     }
 
     let child: HostedSubagentSessionResult | undefined;
-    let childSessionId: import("@brewva/brewva-runtime").BrewvaSessionId | undefined;
+    let childSessionId: import("@brewva/brewva-runtime/core").BrewvaSessionId | undefined;
     let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
     let timeoutTriggered = false;
 
@@ -982,7 +975,6 @@ export function createHostedSubagentAdapter(
         builtinToolNames: readonlyEnvelope.builtinToolNames,
         managedToolNames: readonlyEnvelope.managedToolNames,
         managedToolMode: readonlyEnvelope.managedToolMode,
-        contextProfile: readonlyEnvelope.contextProfile,
         enableSubagents: false,
       });
       childSessionId = asBrewvaSessionId(child.session.sessionManager.getSessionId());
@@ -1015,7 +1007,7 @@ export function createHostedSubagentAdapter(
         throw new Error(`subagent_fork_thread_loop_${output.status}`);
       }
 
-      const childCostSummary = child.runtime.inspect.cost.getSummary(childSessionId);
+      const childCostSummary = child.runtime.inspect.cost.summary.get(childSessionId);
       aggregateChildCost(options.runtime, input.fromSessionId, childCostSummary);
       const summary = resolveRunSummary(output.assistantText, "Fork completed.");
       const completedRecord: DelegationRunRecord = {
@@ -1086,7 +1078,7 @@ export function createHostedSubagentAdapter(
       if (timeoutHandle) {
         clearTimeout(timeoutHandle);
       }
-      options.runtime.authority.tools.releaseParallelSlot(input.fromSessionId, runId);
+      options.runtime.authority.tools.parallel.release(input.fromSessionId, runId);
       if (child) {
         await disposeChildSession(child, {
           cancellationReason: timeoutTriggered ? `timeout:${input.request.timeoutMs}` : undefined,
@@ -1098,7 +1090,7 @@ export function createHostedSubagentAdapter(
     }
   }
 
-  options.runtime.maintain.session.onClearState((sessionId) => {
+  options.runtime.operator.session.state.onClear((sessionId) => {
     delegationStore.clearSession(sessionId);
     if (options.backgroundController?.cancelSessionRuns) {
       void options.backgroundController.cancelSessionRuns(sessionId, "parent_session_cleared");

@@ -34,7 +34,7 @@ const pendingOAuthCompletions = new Map<
 
 function createVault(runtime: BrewvaRuntime): CredentialVaultService {
   return createCredentialVaultServiceFromSecurityConfig(
-    runtime.workspaceRoot,
+    runtime.identity.workspaceRoot,
     runtime.config.security as Parameters<typeof createCredentialVaultServiceFromSecurityConfig>[1],
   );
 }

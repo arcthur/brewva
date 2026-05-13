@@ -29,19 +29,26 @@ function listSourceFiles(relativeDir: string): string[] {
 }
 
 describe("runtime workflow derivation ownership", () => {
-  test("runtime public surface exports concrete workflow owner modules without a derivation shim", () => {
+  test("runtime projection subpath exports workflow read models without widening the root", () => {
     const indexSource = readRepoFile("packages/brewva-runtime/src/index.ts");
     const publicIndexSource = readRepoFile("packages/brewva-runtime/src/public/index.ts");
+    const projectionSource = readRepoFile("packages/brewva-runtime/src/projection.ts");
+    const packageManifestSource = readRepoFile("packages/brewva-runtime/package.json");
 
     expect(
       existsSync(resolve(repoRoot, "packages/brewva-runtime/src/domain/workflow/derivation.ts")),
     ).toBe(false);
+    expect(existsSync(resolve(repoRoot, "packages/brewva-runtime/src/domain/workflow"))).toBe(
+      false,
+    );
     expect(indexSource.trim()).toBe('export * from "./public/index.js";');
     expect(publicIndexSource).not.toContain("./workflow/derivation.js");
-    expect(publicIndexSource).toContain("../domain/workflow/types.js");
-    expect(publicIndexSource).toContain("../domain/workflow/artifact-derivation.js");
-    expect(publicIndexSource).toContain("../domain/workflow/status-derivation.js");
-    expect(publicIndexSource).toContain("../domain/workflow/workspace-revision.js");
+    expect(publicIndexSource).not.toContain("../domain/projection/workflow/");
+    expect(packageManifestSource).toContain('"./projection"');
+    expect(projectionSource).toContain("./domain/projection/workflow/types.js");
+    expect(projectionSource).toContain("./domain/projection/workflow/artifact-derivation.js");
+    expect(projectionSource).toContain("./domain/projection/workflow/status-derivation.js");
+    expect(projectionSource).toContain("./domain/projection/workflow/workspace-revision.js");
     expect(publicIndexSource).not.toContain(
       'export * from "../../packages/brewva-runtime/src/domain/workflow/artifact-derivation.js"',
     );

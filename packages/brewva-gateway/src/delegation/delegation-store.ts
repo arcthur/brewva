@@ -1,17 +1,17 @@
-import {
-  type BrewvaRuntime,
-  CURRENT_DELEGATION_CONTRACT_VERSION,
-  type DelegationAdoptionRecord,
-  type DelegationLifecycleEventPayload,
-  type DelegationLineageRecord,
-  type DelegationArtifactRef,
-  type DelegationDeliveryRecord,
-  type DelegationModelRouteRecord,
-  type DelegationRunQuery,
-  type DelegationRunRecord,
-  type PendingDelegationOutcomeQuery,
-} from "@brewva/brewva-runtime";
-import { isDelegationRunTerminalStatus } from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
+import { CURRENT_DELEGATION_CONTRACT_VERSION } from "@brewva/brewva-runtime/delegation";
+import type {
+  DelegationAdoptionRecord,
+  DelegationLifecycleEventPayload,
+  DelegationLineageRecord,
+  DelegationArtifactRef,
+  DelegationDeliveryRecord,
+  DelegationModelRouteRecord,
+  DelegationRunQuery,
+  DelegationRunRecord,
+  PendingDelegationOutcomeQuery,
+} from "@brewva/brewva-runtime/delegation";
+import { isDelegationRunTerminalStatus } from "@brewva/brewva-runtime/delegation";
 import { type BrewvaStructuredEvent } from "@brewva/brewva-runtime/events";
 import {
   SUBAGENT_CANCELLED_EVENT_TYPE,
@@ -419,7 +419,7 @@ function applyDelegationEvent(
 }
 
 function adoptAppliedWorkerResultOutcomes(input: {
-  runtime: BrewvaRuntime;
+  runtime: BrewvaHostedRuntimePort;
   sessionId: string;
   runs: Map<string, DelegationRunRecord>;
   event: DelegationEvent;
@@ -485,13 +485,13 @@ export class HostedDelegationStore {
   private readonly unsubscribe: (() => void) | undefined;
 
   constructor(
-    private readonly runtime: BrewvaRuntime,
+    private readonly runtime: BrewvaHostedRuntimePort,
     options: {
       subscribe?: boolean;
     } = {},
   ) {
     if (options.subscribe !== false) {
-      this.unsubscribe = runtime.inspect.events.subscribe((event) => {
+      this.unsubscribe = runtime.inspect.events.records.subscribe((event) => {
         const runs = this.sessionRuns.get(event.sessionId);
         if (!runs || !this.hydratedSessions.has(event.sessionId)) {
           return;
@@ -606,7 +606,7 @@ export class HostedDelegationStore {
     }
     const runs = this.getOrCreateRuns(sessionId);
     runs.clear();
-    for (const event of this.runtime.inspect.events.queryStructured(sessionId)) {
+    for (const event of this.runtime.inspect.events.records.queryStructured(sessionId)) {
       applyDelegationEvent(runs, event);
     }
     this.hydratedSessions.add(sessionId);

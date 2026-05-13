@@ -21,7 +21,7 @@ export function prepareSubagentEntry(input: {
   const delegatedSkill = input.target.skillName;
   const childOwnsSkill = Boolean(delegatedSkill && input.target.resultMode !== "consult");
   const skillDocument = delegatedSkill
-    ? input.parentRuntime.inspect.skills.get(delegatedSkill)
+    ? input.parentRuntime.inspect.skills.catalog.get(delegatedSkill)
     : undefined;
   if (delegatedSkill && !skillDocument) {
     throw new Error(`unknown_skill:${delegatedSkill}`);

@@ -14,7 +14,7 @@
   - `docs/reference/skills.md`
 - Code anchors:
   - `packages/brewva-runtime/src/domain/claim/api.ts`
-  - `packages/brewva-runtime/src/domain/evidence/refs.ts`
+  - `packages/brewva-runtime/src/evidence/refs.ts`
   - `packages/brewva-runtime/src/domain/conventions/service.ts`
   - `packages/brewva-runtime/src/domain/conventions/runtime-surface.ts`
   - `packages/brewva-runtime/src/domain/conventions/target-writers.ts`

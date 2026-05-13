@@ -43,7 +43,7 @@
 - Turn execution, tool invocation, process execution, box execution, gateway supervision, worker IPC, channel lifecycle, ingress, MCP operations, and runtime-plugin callback guards run through Effect-native core paths with Promise-friendly adapters only at external boundaries.
 - Public edges run one Effect program per logical command, request, message, fetch, plugin callback, or worker lifecycle operation. Platform-neutral Worker code uses `@brewva/brewva-effect/edge` so it does not pull Node platform adapters into edge bundles.
 - Structural observability is owned by `@brewva/brewva-effect`: spans and log annotations are applied in common helpers, while the Node runtime path can opt into `@effect/opentelemetry` `NodeSdk` processors through the foundation layer.
-- Runtime internals are composed through Effect layers behind the `BrewvaRuntime` facade. The internal runtime-effect subpath exposes implementation services and runners, not `runtime.authority`, `runtime.inspect`, or `runtime.maintain`.
+- Runtime internals are composed through Effect layers behind the `BrewvaRuntime` facade. The internal runtime-effect subpath exposes implementation services and runners, not `runtime.authority`, `runtime.inspect`, or `runtime.operator`.
 - Capability-scoped ports remain the only path for tools and plugins to gain runtime access. Effect layer availability never grants authority.
 - Provider-specific retry classification remains local to each protocol, but retry budgets, schedules, interruption, and service-directed delay handling use the shared Effect retry policy when a provider owns a retryable request loop.
 - Pure domain logic remains plain TypeScript unless it needs effectful dependencies.

@@ -2,14 +2,11 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  BrewvaRuntime,
-  asBrewvaToolCallId,
-  asBrewvaToolName,
-  createTrustedLocalGovernancePort,
-  type EffectCommitmentRecord,
-  type EffectAuthorityManifestBasis,
-} from "@brewva/brewva-runtime";
+import { BrewvaRuntime, createOperatorRuntimePort } from "@brewva/brewva-runtime";
+import { asBrewvaToolCallId, asBrewvaToolName } from "@brewva/brewva-runtime/core";
+import { createTrustedLocalGovernancePort } from "@brewva/brewva-runtime/governance";
+import type { EffectAuthorityManifestBasis } from "@brewva/brewva-runtime/governance";
+import type { EffectCommitmentRecord } from "@brewva/brewva-runtime/proposals";
 import { createRuntimeConfig } from "../../helpers/runtime.js";
 import { cleanupWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
 
@@ -47,7 +44,7 @@ describe("runtime proposals API", () => {
     });
     const sessionId = `runtime-proposals-commitment-${crypto.randomUUID()}`;
 
-    const started = runtime.authority.tools.start({
+    const started = runtime.authority.tools.invocation.start({
       sessionId,
       toolCallId: "tc-exec-commitment",
       toolName: "exec",
@@ -58,12 +55,12 @@ describe("runtime proposals API", () => {
     expect(started.boundary).toBe("effectful");
     expect(started.commitmentReceipt?.decision).toBe("accept");
 
-    const effectAuthorityEvent = runtime.inspect.events.query(sessionId, {
+    const effectAuthorityEvent = runtime.inspect.events.records.query(sessionId, {
       type: "effect_authority_decided",
       last: 1,
     })[0];
     const manifestBasis = readManifestBasis(effectAuthorityEvent?.payload);
-    const listed = runtime.inspect.proposals.list(sessionId, {
+    const listed = runtime.inspect.proposals.proposals.list(sessionId, {
       limit: 1,
     })[0] as EffectCommitmentRecord | undefined;
     expect(listed?.proposal.payload.toolName).toBe(asBrewvaToolName("exec"));
@@ -79,7 +76,7 @@ describe("runtime proposals API", () => {
     const runtime = createCleanRuntime();
     const sessionId = `runtime-proposals-commitment-default-${crypto.randomUUID()}`;
 
-    const started = runtime.authority.tools.start({
+    const started = runtime.authority.tools.invocation.start({
       sessionId,
       toolCallId: "tc-exec-default-defer",
       toolName: "exec",
@@ -91,7 +88,7 @@ describe("runtime proposals API", () => {
     expect(started.commitmentReceipt?.decision).toBe("defer");
     expect(started.reason).toContain("effect_commitment_pending_operator_approval:");
     expect(typeof started.effectCommitmentRequestId).toBe("string");
-    const pending = runtime.inspect.proposals.listPendingEffectCommitments(sessionId);
+    const pending = runtime.inspect.proposals.requests.listPending(sessionId);
     expect(pending).toHaveLength(1);
     expect(pending[0]?.toolName).toBe(asBrewvaToolName("exec"));
     expect(pending[0]?.toolCallId).toBe(asBrewvaToolCallId("tc-exec-default-defer"));
@@ -102,7 +99,7 @@ describe("runtime proposals API", () => {
     const runtime = createCleanRuntime();
     const sessionId = `runtime-proposals-commitment-approve-${crypto.randomUUID()}`;
 
-    const deferred = runtime.authority.tools.start({
+    const deferred = runtime.authority.tools.invocation.start({
       sessionId,
       toolCallId: "tc-exec-approval-pending",
       toolName: "exec",
@@ -113,23 +110,19 @@ describe("runtime proposals API", () => {
     expect(deferred.commitmentReceipt?.decision).toBe("defer");
     expect(typeof deferred.effectCommitmentRequestId).toBe("string");
 
-    const pending = runtime.inspect.proposals.listPendingEffectCommitments(sessionId);
+    const pending = runtime.inspect.proposals.requests.listPending(sessionId);
     expect(pending).toHaveLength(1);
     expect(pending[0]?.toolCallId).toBe(asBrewvaToolCallId("tc-exec-approval-pending"));
 
-    const decision = runtime.authority.proposals.decideEffectCommitment(
-      sessionId,
-      pending[0]!.requestId,
-      {
-        decision: "accept",
-        actor: "operator:test",
-        reason: "safe local command",
-      },
-    );
+    const decision = runtime.authority.proposals.requests.decide(sessionId, pending[0]!.requestId, {
+      decision: "accept",
+      actor: "operator:test",
+      reason: "safe local command",
+    });
     expect(decision.ok).toBe(true);
     expect(decision.ok ? decision.decision : null).toBe("accept");
 
-    const wrongToolCall = runtime.authority.tools.start({
+    const wrongToolCall = runtime.authority.tools.invocation.start({
       sessionId,
       toolCallId: "tc-exec-approval-mismatch",
       toolName: "exec",
@@ -139,7 +132,7 @@ describe("runtime proposals API", () => {
     expect(wrongToolCall.allowed).toBe(false);
     expect(wrongToolCall.reason).toContain("effect_commitment_request_tool_call_id_mismatch:");
 
-    const approved = runtime.authority.tools.start({
+    const approved = runtime.authority.tools.invocation.start({
       sessionId,
       toolCallId: "tc-exec-approval-pending",
       toolName: "exec",
@@ -150,9 +143,9 @@ describe("runtime proposals API", () => {
     expect(approved.allowed).toBe(true);
     expect(approved.commitmentReceipt?.decision).toBe("accept");
     expect(approved.effectCommitmentRequestId).toBe(pending[0]!.requestId);
-    expect(runtime.inspect.proposals.listPendingEffectCommitments(sessionId)).toHaveLength(0);
+    expect(runtime.inspect.proposals.requests.listPending(sessionId)).toHaveLength(0);
     expect(
-      runtime.inspect.proposals.listEffectCommitmentRequests(sessionId, {
+      runtime.inspect.proposals.requests.list(sessionId, {
         state: "accepted",
       }),
     ).toMatchObject([
@@ -171,7 +164,7 @@ describe("runtime proposals API", () => {
     const sessionId = `runtime-proposals-commitment-rehydrate-${crypto.randomUUID()}`;
     const runtime = new BrewvaRuntime({ cwd: rehydrateWorkspace });
 
-    const deferred = runtime.authority.tools.start({
+    const deferred = runtime.authority.tools.invocation.start({
       sessionId,
       toolCallId: "tc-exec-rehydrate",
       toolName: "exec",
@@ -182,12 +175,12 @@ describe("runtime proposals API", () => {
     expect(typeof deferred.effectCommitmentRequestId).toBe("string");
 
     const restarted = new BrewvaRuntime({ cwd: rehydrateWorkspace });
-    const pendingAfterRestart = restarted.inspect.proposals.listPendingEffectCommitments(sessionId);
+    const pendingAfterRestart = restarted.inspect.proposals.requests.listPending(sessionId);
     expect(pendingAfterRestart).toHaveLength(1);
     expect(pendingAfterRestart[0]?.requestId).toBe(deferred.effectCommitmentRequestId);
     expect(pendingAfterRestart[0]?.toolCallId).toBe(asBrewvaToolCallId("tc-exec-rehydrate"));
 
-    const accepted = restarted.authority.proposals.decideEffectCommitment(
+    const accepted = restarted.authority.proposals.requests.decide(
       sessionId,
       pendingAfterRestart[0]!.requestId,
       {
@@ -199,11 +192,9 @@ describe("runtime proposals API", () => {
     expect(accepted.ok).toBe(true);
 
     const restartedAgain = new BrewvaRuntime({ cwd: rehydrateWorkspace });
-    expect(restartedAgain.inspect.proposals.listPendingEffectCommitments(sessionId)).toHaveLength(
-      0,
-    );
+    expect(restartedAgain.inspect.proposals.requests.listPending(sessionId)).toHaveLength(0);
     expect(
-      restartedAgain.inspect.proposals.listEffectCommitmentRequests(sessionId, {
+      restartedAgain.inspect.proposals.requests.list(sessionId, {
         state: "accepted",
       }),
     ).toMatchObject([
@@ -216,7 +207,7 @@ describe("runtime proposals API", () => {
       },
     ]);
 
-    const resumed = restartedAgain.authority.tools.start({
+    const resumed = restartedAgain.authority.tools.invocation.start({
       sessionId,
       toolCallId: "tc-exec-rehydrate",
       toolName: "exec",
@@ -234,7 +225,7 @@ describe("runtime proposals API", () => {
     const sessionId = `runtime-proposals-commitment-args-${crypto.randomUUID()}`;
     const sharedPrefix = "x".repeat(320);
 
-    const deferred = runtime.authority.tools.start({
+    const deferred = runtime.authority.tools.invocation.start({
       sessionId,
       toolCallId: "tc-exec-long-args",
       toolName: "exec",
@@ -242,21 +233,17 @@ describe("runtime proposals API", () => {
     });
 
     expect(deferred.allowed).toBe(false);
-    const pending = runtime.inspect.proposals.listPendingEffectCommitments(sessionId);
+    const pending = runtime.inspect.proposals.requests.listPending(sessionId);
     expect(pending).toHaveLength(1);
 
-    const accepted = runtime.authority.proposals.decideEffectCommitment(
-      sessionId,
-      pending[0]!.requestId,
-      {
-        decision: "accept",
-        actor: "operator:test",
-        reason: "exact payload reviewed",
-      },
-    );
+    const accepted = runtime.authority.proposals.requests.decide(sessionId, pending[0]!.requestId, {
+      decision: "accept",
+      actor: "operator:test",
+      reason: "exact payload reviewed",
+    });
     expect(accepted.ok).toBe(true);
 
-    const mismatched = runtime.authority.tools.start({
+    const mismatched = runtime.authority.tools.invocation.start({
       sessionId,
       toolCallId: "tc-exec-long-args",
       toolName: "exec",
@@ -273,7 +260,7 @@ describe("runtime proposals API", () => {
     const runtime = new BrewvaRuntime({ cwd: durableWorkspace });
     const sessionId = `runtime-proposals-commitment-consume-${crypto.randomUUID()}`;
 
-    const deferred = runtime.authority.tools.start({
+    const deferred = runtime.authority.tools.invocation.start({
       sessionId,
       toolCallId: "tc-exec-consume",
       toolName: "exec",
@@ -281,21 +268,17 @@ describe("runtime proposals API", () => {
     });
 
     expect(deferred.allowed).toBe(false);
-    const pending = runtime.inspect.proposals.listPendingEffectCommitments(sessionId);
+    const pending = runtime.inspect.proposals.requests.listPending(sessionId);
     expect(pending).toHaveLength(1);
 
-    const accepted = runtime.authority.proposals.decideEffectCommitment(
-      sessionId,
-      pending[0]!.requestId,
-      {
-        decision: "accept",
-        actor: "operator:test",
-        reason: "approved for execution",
-      },
-    );
+    const accepted = runtime.authority.proposals.requests.decide(sessionId, pending[0]!.requestId, {
+      decision: "accept",
+      actor: "operator:test",
+      reason: "approved for execution",
+    });
     expect(accepted.ok).toBe(true);
 
-    const resumed = runtime.authority.tools.start({
+    const resumed = runtime.authority.tools.invocation.start({
       sessionId,
       toolCallId: "tc-exec-consume",
       toolName: "exec",
@@ -304,7 +287,7 @@ describe("runtime proposals API", () => {
     });
     expect(resumed.allowed).toBe(true);
 
-    runtime.authority.tools.finish({
+    runtime.authority.tools.invocation.finish({
       sessionId,
       toolCallId: "tc-exec-consume",
       toolName: "exec",
@@ -313,20 +296,20 @@ describe("runtime proposals API", () => {
       channelSuccess: true,
     });
 
-    const toolResult = runtime.inspect.events.query(sessionId, {
+    const toolResult = runtime.inspect.events.records.query(sessionId, {
       type: "tool_result_recorded",
       last: 1,
     })[0] as { payload?: { toolCallId?: string; effectCommitmentRequestId?: string } } | undefined;
     expect(toolResult?.payload?.toolCallId).toBe("tc-exec-consume");
     expect(toolResult?.payload?.effectCommitmentRequestId).toBe(pending[0]!.requestId);
 
-    const consumed = runtime.inspect.events.query(sessionId, {
+    const consumed = runtime.inspect.events.records.query(sessionId, {
       type: "effect_commitment_approval_consumed",
       last: 1,
     })[0] as { payload?: { requestId?: string } } | undefined;
     expect(consumed?.payload?.requestId).toBe(pending[0]!.requestId);
     expect(
-      runtime.inspect.proposals.listEffectCommitmentRequests(sessionId, {
+      runtime.inspect.proposals.requests.list(sessionId, {
         state: "consumed",
       }),
     ).toMatchObject([
@@ -339,7 +322,7 @@ describe("runtime proposals API", () => {
 
     const restarted = new BrewvaRuntime({ cwd: durableWorkspace });
     expect(
-      restarted.inspect.proposals.listEffectCommitmentRequests(sessionId, {
+      restarted.inspect.proposals.requests.list(sessionId, {
         state: "consumed",
       }),
     ).toMatchObject([
@@ -349,7 +332,7 @@ describe("runtime proposals API", () => {
         state: "consumed",
       },
     ]);
-    const replayed = restarted.authority.tools.start({
+    const replayed = restarted.authority.tools.invocation.start({
       sessionId,
       toolCallId: "tc-exec-consume",
       toolName: "exec",
@@ -366,7 +349,7 @@ describe("runtime proposals API", () => {
     const runtime = new BrewvaRuntime({ cwd: recordResultWorkspace });
     const sessionId = `runtime-proposals-commitment-record-result-${crypto.randomUUID()}`;
 
-    const deferred = runtime.authority.tools.start({
+    const deferred = runtime.authority.tools.invocation.start({
       sessionId,
       toolCallId: "tc-exec-record-result",
       toolName: "exec",
@@ -374,21 +357,17 @@ describe("runtime proposals API", () => {
     });
 
     expect(deferred.allowed).toBe(false);
-    const pending = runtime.inspect.proposals.listPendingEffectCommitments(sessionId);
+    const pending = runtime.inspect.proposals.requests.listPending(sessionId);
     expect(pending).toHaveLength(1);
 
-    const accepted = runtime.authority.proposals.decideEffectCommitment(
-      sessionId,
-      pending[0]!.requestId,
-      {
-        decision: "accept",
-        actor: "operator:test",
-        reason: "recordResult path approved",
-      },
-    );
+    const accepted = runtime.authority.proposals.requests.decide(sessionId, pending[0]!.requestId, {
+      decision: "accept",
+      actor: "operator:test",
+      reason: "recordResult path approved",
+    });
     expect(accepted.ok).toBe(true);
 
-    runtime.authority.tools.recordResult({
+    runtime.authority.tools.invocation.recordResult({
       sessionId,
       toolCallId: "tc-exec-record-result",
       toolName: "exec",
@@ -399,7 +378,7 @@ describe("runtime proposals API", () => {
     });
 
     const restarted = new BrewvaRuntime({ cwd: recordResultWorkspace });
-    const replayed = restarted.authority.tools.start({
+    const replayed = restarted.authority.tools.invocation.start({
       sessionId,
       toolCallId: "tc-exec-record-result",
       toolName: "exec",
@@ -416,7 +395,7 @@ describe("runtime proposals API", () => {
     const runtime = new BrewvaRuntime({ cwd: pendingLinkageWorkspace });
     const sessionId = `runtime-proposals-commitment-pending-linkage-${crypto.randomUUID()}`;
 
-    const deferred = runtime.authority.tools.start({
+    const deferred = runtime.authority.tools.invocation.start({
       sessionId,
       toolCallId: "tc-exec-pending-linkage",
       toolName: "exec",
@@ -424,10 +403,10 @@ describe("runtime proposals API", () => {
     });
 
     expect(deferred.allowed).toBe(false);
-    const pending = runtime.inspect.proposals.listPendingEffectCommitments(sessionId);
+    const pending = runtime.inspect.proposals.requests.listPending(sessionId);
     expect(pending).toHaveLength(1);
 
-    runtime.authority.tools.recordResult({
+    runtime.authority.tools.invocation.recordResult({
       sessionId,
       toolCallId: "tc-exec-pending-linkage",
       toolName: "exec",
@@ -438,9 +417,9 @@ describe("runtime proposals API", () => {
     });
 
     const restarted = new BrewvaRuntime({ cwd: pendingLinkageWorkspace });
-    expect(restarted.inspect.proposals.listPendingEffectCommitments(sessionId)).toHaveLength(1);
+    expect(restarted.inspect.proposals.requests.listPending(sessionId)).toHaveLength(1);
 
-    const resumed = restarted.authority.tools.start({
+    const resumed = restarted.authority.tools.invocation.start({
       sessionId,
       toolCallId: "tc-exec-pending-linkage",
       toolName: "exec",
@@ -456,7 +435,7 @@ describe("runtime proposals API", () => {
     const runtime = createCleanRuntime();
     const sessionId = `runtime-proposals-commitment-in-flight-${crypto.randomUUID()}`;
 
-    const deferred = runtime.authority.tools.start({
+    const deferred = runtime.authority.tools.invocation.start({
       sessionId,
       toolCallId: "tc-exec-in-flight",
       toolName: "exec",
@@ -464,21 +443,17 @@ describe("runtime proposals API", () => {
     });
 
     expect(deferred.allowed).toBe(false);
-    const pending = runtime.inspect.proposals.listPendingEffectCommitments(sessionId);
+    const pending = runtime.inspect.proposals.requests.listPending(sessionId);
     expect(pending).toHaveLength(1);
 
-    const accepted = runtime.authority.proposals.decideEffectCommitment(
-      sessionId,
-      pending[0]!.requestId,
-      {
-        decision: "accept",
-        actor: "operator:test",
-        reason: "single-flight review complete",
-      },
-    );
+    const accepted = runtime.authority.proposals.requests.decide(sessionId, pending[0]!.requestId, {
+      decision: "accept",
+      actor: "operator:test",
+      reason: "single-flight review complete",
+    });
     expect(accepted.ok).toBe(true);
 
-    const first = runtime.authority.tools.start({
+    const first = runtime.authority.tools.invocation.start({
       sessionId,
       toolCallId: "tc-exec-in-flight",
       toolName: "exec",
@@ -487,12 +462,12 @@ describe("runtime proposals API", () => {
     });
     expect(first.allowed).toBe(true);
     expect(
-      runtime.inspect.proposals
+      runtime.inspect.proposals.proposals
         .list(sessionId)
         .filter((record) => record.receipt.decision === "accept"),
     ).toHaveLength(1);
 
-    const duplicate = runtime.authority.tools.start({
+    const duplicate = runtime.authority.tools.invocation.start({
       sessionId,
       toolCallId: "tc-exec-in-flight",
       toolName: "exec",
@@ -502,12 +477,12 @@ describe("runtime proposals API", () => {
     expect(duplicate.allowed).toBe(false);
     expect(duplicate.reason).toContain("effect_commitment_request_in_flight:");
     expect(
-      runtime.inspect.proposals
+      runtime.inspect.proposals.proposals
         .list(sessionId)
         .filter((record) => record.receipt.decision === "accept"),
     ).toHaveLength(1);
 
-    runtime.authority.tools.finish({
+    runtime.authority.tools.invocation.finish({
       sessionId,
       toolCallId: "tc-exec-in-flight",
       toolName: "exec",
@@ -516,7 +491,7 @@ describe("runtime proposals API", () => {
       channelSuccess: true,
     });
 
-    const replayed = runtime.authority.tools.start({
+    const replayed = runtime.authority.tools.invocation.start({
       sessionId,
       toolCallId: "tc-exec-in-flight",
       toolName: "exec",
@@ -531,17 +506,17 @@ describe("runtime proposals API", () => {
     const runtime = createCleanRuntime();
     const sessionId = `runtime-proposals-commitment-reject-${crypto.randomUUID()}`;
 
-    const firstDeferred = runtime.authority.tools.start({
+    const firstDeferred = runtime.authority.tools.invocation.start({
       sessionId,
       toolCallId: "tc-exec-reject-once",
       toolName: "exec",
       args: { command: "echo hi" },
     });
     expect(firstDeferred.allowed).toBe(false);
-    const firstPending = runtime.inspect.proposals.listPendingEffectCommitments(sessionId);
+    const firstPending = runtime.inspect.proposals.requests.listPending(sessionId);
     expect(firstPending).toHaveLength(1);
 
-    const rejected = runtime.authority.proposals.decideEffectCommitment(
+    const rejected = runtime.authority.proposals.requests.decide(
       sessionId,
       firstPending[0]!.requestId,
       {
@@ -552,7 +527,7 @@ describe("runtime proposals API", () => {
     );
     expect(rejected.ok).toBe(true);
 
-    const rejectedResume = runtime.authority.tools.start({
+    const rejectedResume = runtime.authority.tools.invocation.start({
       sessionId,
       toolCallId: "tc-exec-reject-once",
       toolName: "exec",
@@ -562,7 +537,7 @@ describe("runtime proposals API", () => {
     expect(rejectedResume.allowed).toBe(false);
     expect(rejectedResume.reason).toContain("effect_commitment_operator_rejected:");
 
-    const secondDeferred = runtime.authority.tools.start({
+    const secondDeferred = runtime.authority.tools.invocation.start({
       sessionId,
       toolCallId: "tc-exec-reject-twice",
       toolName: "exec",
@@ -570,7 +545,7 @@ describe("runtime proposals API", () => {
     });
     expect(secondDeferred.allowed).toBe(false);
     expect(secondDeferred.commitmentReceipt?.decision).toBe("defer");
-    const remainingPending = runtime.inspect.proposals.listPendingEffectCommitments(sessionId);
+    const remainingPending = runtime.inspect.proposals.requests.listPending(sessionId);
     expect(remainingPending).toHaveLength(1);
     expect(remainingPending[0]?.requestId).not.toBe(firstPending[0]!.requestId);
     expect(remainingPending[0]?.toolCallId).toBe(asBrewvaToolCallId("tc-exec-reject-twice"));
@@ -579,7 +554,7 @@ describe("runtime proposals API", () => {
   test("custom approval-bound action policies also fail closed without a governance port", () => {
     const toolName = "custom_commitment_probe";
     const runtime = createCleanRuntime();
-    runtime.maintain.tools.registerActionPolicy(toolName, {
+    createOperatorRuntimePort(runtime).operator.tools.actionPolicies.register(toolName, {
       actionClass: "local_exec_effectful",
       riskLevel: "high",
       defaultAdmission: "ask",
@@ -591,7 +566,7 @@ describe("runtime proposals API", () => {
     try {
       const sessionId = `runtime-proposals-custom-commitment-${crypto.randomUUID()}`;
 
-      const started = runtime.authority.tools.start({
+      const started = runtime.authority.tools.invocation.start({
         sessionId,
         toolCallId: "tc-custom-commitment",
         toolName,
@@ -602,9 +577,9 @@ describe("runtime proposals API", () => {
       expect(started.boundary).toBe("effectful");
       expect(started.commitmentReceipt?.decision).toBe("defer");
       expect(started.reason).toContain("effect_commitment_pending_operator_approval:");
-      expect(runtime.inspect.proposals.listPendingEffectCommitments(sessionId)).toHaveLength(1);
+      expect(runtime.inspect.proposals.requests.listPending(sessionId)).toHaveLength(1);
     } finally {
-      runtime.maintain.tools.unregisterActionPolicy(toolName);
+      createOperatorRuntimePort(runtime).operator.tools.actionPolicies.unregister(toolName);
     }
   });
 
@@ -620,7 +595,7 @@ describe("runtime proposals API", () => {
     });
     const sessionId = `runtime-proposals-commitment-defer-${crypto.randomUUID()}`;
 
-    const started = runtime.authority.tools.start({
+    const started = runtime.authority.tools.invocation.start({
       sessionId,
       toolCallId: "tc-exec-deferred",
       toolName: "exec",
@@ -633,12 +608,12 @@ describe("runtime proposals API", () => {
     expect(started.reason).toContain("operator review required");
     expect(typeof started.effectCommitmentRequestId).toBe("string");
 
-    const listed = runtime.inspect.proposals.list(sessionId, {
+    const listed = runtime.inspect.proposals.proposals.list(sessionId, {
       limit: 1,
     })[0] as EffectCommitmentRecord | undefined;
     expect(listed?.receipt.decision).toBe("defer");
     expect(listed?.receipt.policyBasis).toContain("test_governance_port");
-    const pending = runtime.inspect.proposals.listPendingEffectCommitments(sessionId);
+    const pending = runtime.inspect.proposals.requests.listPending(sessionId);
     expect(pending).toHaveLength(1);
     expect(pending[0]?.requestId).toBe(started.effectCommitmentRequestId);
   });
@@ -655,7 +630,7 @@ describe("runtime proposals API", () => {
     });
     const sessionId = `runtime-proposals-commitment-defer-resume-${crypto.randomUUID()}`;
 
-    const deferred = runtime.authority.tools.start({
+    const deferred = runtime.authority.tools.invocation.start({
       sessionId,
       toolCallId: "tc-exec-governance-defer",
       toolName: "exec",
@@ -663,21 +638,17 @@ describe("runtime proposals API", () => {
     });
 
     expect(deferred.allowed).toBe(false);
-    const pending = runtime.inspect.proposals.listPendingEffectCommitments(sessionId);
+    const pending = runtime.inspect.proposals.requests.listPending(sessionId);
     expect(pending).toHaveLength(1);
 
-    const accepted = runtime.authority.proposals.decideEffectCommitment(
-      sessionId,
-      pending[0]!.requestId,
-      {
-        decision: "accept",
-        actor: "operator:test",
-        reason: "approved after governance defer",
-      },
-    );
+    const accepted = runtime.authority.proposals.requests.decide(sessionId, pending[0]!.requestId, {
+      decision: "accept",
+      actor: "operator:test",
+      reason: "approved after governance defer",
+    });
     expect(accepted.ok).toBe(true);
 
-    const resumed = runtime.authority.tools.start({
+    const resumed = runtime.authority.tools.invocation.start({
       sessionId,
       toolCallId: "tc-exec-governance-defer",
       toolName: "exec",
@@ -702,7 +673,7 @@ describe("runtime proposals API", () => {
     const runtime = createCleanRuntime();
     const sessionId = `runtime-proposals-hint-blocked-${crypto.randomUUID()}`;
 
-    const started = runtime.authority.tools.start({
+    const started = runtime.authority.tools.invocation.start({
       sessionId,
       toolCallId: "tc-custom-command-runner",
       toolName: "custom_command_runner",
@@ -711,15 +682,15 @@ describe("runtime proposals API", () => {
 
     expect(started.allowed).toBe(false);
     expect(started.reason).toContain("exact action policy");
-    expect(runtime.inspect.proposals.list(sessionId)).toHaveLength(0);
-    expect(runtime.inspect.proposals.listPendingEffectCommitments(sessionId)).toHaveLength(0);
+    expect(runtime.inspect.proposals.proposals.list(sessionId)).toHaveLength(0);
+    expect(runtime.inspect.proposals.requests.listPending(sessionId)).toHaveLength(0);
   });
 
   test("safe-boundary tool starts do not emit effect_commitment proposals", () => {
     const runtime = createCleanRuntime();
     const sessionId = `runtime-proposals-observe-${crypto.randomUUID()}`;
 
-    const started = runtime.authority.tools.start({
+    const started = runtime.authority.tools.invocation.start({
       sessionId,
       toolCallId: "tc-grep-observe",
       toolName: "grep",
@@ -729,7 +700,7 @@ describe("runtime proposals API", () => {
     expect(started.allowed).toBe(true);
     expect(started.boundary).toBe("safe");
     expect(started.commitmentReceipt).toBeUndefined();
-    expect(runtime.inspect.proposals.list(sessionId)).toHaveLength(0);
+    expect(runtime.inspect.proposals.proposals.list(sessionId)).toHaveLength(0);
   });
 });
 

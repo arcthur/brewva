@@ -114,8 +114,8 @@ export function resolveWorkspaceRoot(runtime: BrewvaToolRuntime, ctx: ExtensionC
   if (typeof cwd === "string" && cwd.trim().length > 0) {
     return resolve(cwd);
   }
-  if (typeof runtime.cwd === "string" && runtime.cwd.trim().length > 0) {
-    return resolve(runtime.cwd);
+  if (typeof runtime.identity.cwd === "string" && runtime.identity.cwd.trim().length > 0) {
+    return resolve(runtime.identity.cwd);
   }
   return process.cwd();
 }
@@ -241,7 +241,7 @@ export function runObservabilityQuery(
   now = Date.now(),
 ): ObservabilityQueryResult {
   const eventPort = resolveToolRuntimeEventPort(runtime);
-  if (!eventPort?.list) {
+  if (!eventPort?.records?.list) {
     return {
       events: [],
       matchCount: 0,
@@ -253,10 +253,10 @@ export function runObservabilityQuery(
   const minTimestamp = spec.windowMinutes === null ? null : now - spec.windowMinutes * 60_000;
   const sourceEvents =
     spec.types.length === 1
-      ? eventPort.list(sessionId, {
+      ? eventPort.records.list(sessionId, {
           type: spec.types[0],
         })
-      : eventPort.list(sessionId);
+      : eventPort.records.list(sessionId);
   const typedEvents = sourceEvents as BrewvaEventRecord[];
   const matched = typedEvents.filter((event) => {
     if (typeSet.size > 0 && !typeSet.has(event.type)) {
@@ -411,7 +411,7 @@ export function getObservabilityThrottleEvents(
   type: string,
 ): BrewvaEventRecord[] {
   const eventPort = resolveToolRuntimeEventPort(runtime);
-  const events = eventPort?.list?.(sessionId, {
+  const events = eventPort?.records?.list?.(sessionId, {
     type,
     last: SEARCH_THROTTLE_EVENT_LOOKBACK,
   });

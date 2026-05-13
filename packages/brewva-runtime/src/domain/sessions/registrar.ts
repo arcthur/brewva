@@ -1,24 +1,23 @@
 import { inferEventCategory } from "../../runtime/runtime-helpers.js";
 import type {
-  RuntimeContextServices,
-  RuntimeGovernanceServices,
   RuntimeLazyServiceFactories,
   RuntimeServiceRegistrarOptions,
   RuntimeSessionServices,
-  RuntimeWorkServices,
-} from "../../runtime/service-registrar-types.js";
-import type { RuntimeLazyServiceRegistrarOptions } from "../../runtime/service-registrar-types.js";
-import { ClaimProjectorService } from "../claim/api.js";
+} from "../../runtime/wiring.js";
+import type { RuntimeLazyServiceRegistrarOptions } from "../../runtime/wiring.js";
+import { ClaimProjectorService, type ClaimService } from "../claim/api.js";
+import type { ReversibleMutationService } from "../governance/api.js";
 import type { FileChangeService } from "../patching/api.js";
 import type { ReasoningService } from "../reasoning/api.js";
 import { registerRecoveryDomain } from "../recovery/api.js";
 import { registerTapeDomain } from "../tape/api.js";
+import type { TaskService } from "../task/api.js";
 import { VerificationGate } from "../verification/api.js";
 import { VerificationProjectorService } from "../verification/api.js";
+import type { WorkbenchService } from "../workbench/api.js";
 import { SESSIONS_EVENT_DESCRIPTORS } from "./event-descriptors.js";
 import { EventPipelineService } from "./event-pipeline.js";
 import { SessionLineageService } from "./lineage.js";
-import { sessionSurfaceContribution, sessionWireSurfaceContribution } from "./runtime-surface.js";
 import { SessionLifecycleService } from "./session-lifecycle.js";
 import { SessionRewindService } from "./session-rewind.js";
 import { SessionWireService } from "./session-wire.js";
@@ -42,8 +41,8 @@ interface RuntimeProjectionSubscriberRegistrarOptions {
   kernel: RuntimeServiceRegistrarOptions["kernel"];
   verificationGate: VerificationGate;
   eventPipeline: EventPipelineService;
-  taskService: RuntimeWorkServices["taskService"];
-  claimService: RuntimeWorkServices["claimService"];
+  taskService: TaskService;
+  claimService: ClaimService;
 }
 
 function registerProjectionSubscribers(options: RuntimeProjectionSubscriberRegistrarOptions): void {
@@ -70,8 +69,6 @@ function registerProjectionSubscribers(options: RuntimeProjectionSubscriberRegis
 
 export interface RuntimeSessionsDomainRegistration {
   services: RuntimeSessionServices;
-  surfaceContribution: typeof sessionSurfaceContribution;
-  wireSurfaceContribution: typeof sessionWireSurfaceContribution;
   eventDescriptors: typeof SESSIONS_EVENT_DESCRIPTORS;
 }
 
@@ -82,11 +79,17 @@ export interface RuntimeSessionsLazyDomainRegistration {
   >;
 }
 
+export interface RuntimeSessionsDomainDependencies {
+  taskService: TaskService;
+  claimService: ClaimService;
+  reversibleMutationService: ReversibleMutationService;
+  workbenchService: WorkbenchService;
+  clearEffectCommitmentDeskState(sessionId: string): void;
+}
+
 export function registerSessionsDomain(
   options: RuntimeServiceRegistrarOptions,
-  workServices: RuntimeWorkServices,
-  contextServices: RuntimeContextServices,
-  governanceServices: RuntimeGovernanceServices,
+  support: RuntimeSessionsDomainDependencies,
 ): RuntimeSessionsDomainRegistration {
   const tapeDomain = registerTapeDomain(options);
 
@@ -108,8 +111,8 @@ export function registerSessionsDomain(
     kernel: options.kernel,
     verificationGate: options.coreDependencies.verificationGate,
     eventPipeline,
-    taskService: workServices.taskService,
-    claimService: workServices.claimService,
+    taskService: support.taskService,
+    claimService: support.claimService,
   });
 
   const recoveryDomain = registerRecoveryDomain(
@@ -140,16 +143,16 @@ export function registerSessionsDomain(
     turnReplay: options.coreDependencies.turnReplay,
     eventStore: options.coreDependencies.eventStore,
     recoveryWalStore: options.coreDependencies.recoveryWalStore,
-    reversibleMutationService: governanceServices.reversibleMutationService,
-    workbenchService: workServices.workbenchService,
+    reversibleMutationService: support.reversibleMutationService,
+    workbenchService: support.workbenchService,
     recordEvent: (input) => options.kernel.recordEvent(input),
   });
 
   sessionLifecycleService.onClearState((sessionId) => {
     recoveryDomain.services.toolLifecycleRecoveryWalService.clearSession(sessionId);
-    governanceServices.reversibleMutationService.clear(sessionId);
-    workServices.workbenchService.clear(sessionId);
-    governanceServices.clearEffectCommitmentDeskState(sessionId);
+    support.reversibleMutationService.clear(sessionId);
+    support.workbenchService.clear(sessionId);
+    support.clearEffectCommitmentDeskState(sessionId);
     options.coreDependencies.reasoningReplay.clear(sessionId);
   });
 
@@ -161,8 +164,6 @@ export function registerSessionsDomain(
       sessionLineageService,
       getTapeService: () => tapeDomain.services.getTapeService(),
     },
-    surfaceContribution: sessionSurfaceContribution,
-    wireSurfaceContribution: sessionWireSurfaceContribution,
     eventDescriptors: SESSIONS_EVENT_DESCRIPTORS,
   };
 }

@@ -112,12 +112,14 @@ different summary with a newer model.
 
 ## Runtime Surface
 
-`BrewvaRuntime` has three semantic roots:
+`BrewvaRuntime` has two public semantic roots:
 
 - `runtime.authority`: commits replay-visible changes or explicit decisions.
 - `runtime.inspect`: reads runtime state without mutating it.
-- `runtime.maintain`: refreshes, rebuilds, registers, or recovers bounded
-  operational surfaces.
+
+Repo-owned hosted and operator ports additionally expose `runtime.operator` for
+bounded refresh, rebuild, registration, recovery, credential-binding, and
+host-observation operations. Managed tools do not receive the operator port.
 
 The root runtime object is not a mixed implementation bag. Hosted sessions,
 tools, and operators receive narrowed ports.
@@ -125,13 +127,14 @@ tools, and operators receive narrowed ports.
 Runtime implementation ownership is sliced under
 `packages/brewva-runtime/src/domain/<name>/`. Each domain owns its public seam,
 type seam, registrar, event declarations, and runtime surface contribution
-through explicit `api.ts`, `types.ts`, `registrar.ts`, and
+through explicit `api.ts`, `types.ts`, `registrar.ts`, and direct
 `runtime-surface.ts` files. Cross-domain source imports go through those seams
 instead of reaching into another domain's implementation files.
 
-Repo-owned implementation-adjacent callers use branded controlled extension
-ports or explicit runtime subpaths. The removed `internal` barrel, method-group
-layer, and legacy assembler files are not compatibility surfaces.
+Repo-owned implementation-adjacent callers use typed controlled extension ports
+or explicit runtime subpaths. Those ports do not carry runtime capability
+tokens. The removed `internal` barrel, method-group layer, and legacy assembler
+files are not compatibility surfaces.
 
 ## Effect Runtime Spine
 
@@ -193,9 +196,10 @@ compatibility story.
 - `@brewva/brewva-substrate`: contract-only root vocabulary plus explicit
   mechanism subpaths for session lifecycle, prompt/resource loading,
   provenance, sequential execution primitives, pure compaction mechanics,
-  host-facing tools, host plugin ports, persistence helpers, the turn-loop
-  substrate, and a thin in-memory SDK composition entrypoint. The SDK assembles
-  substrate mechanisms for direct hosts; it is not the gateway hosted policy
+  host-facing tools, tool protocol vocabulary, host plugin ports, persistence
+  helpers, the turn-loop substrate, and a thin in-memory SDK composition
+  entrypoint. The SDK assembles substrate mechanisms for direct hosts; it is not
+  the gateway hosted policy
   owner, does not execute model calls, and does not own compaction trigger or
   recovery policy.
 - `@brewva/brewva-provider-core`: provider contracts, model catalog lookup,

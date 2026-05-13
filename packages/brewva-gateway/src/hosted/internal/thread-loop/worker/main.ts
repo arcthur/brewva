@@ -5,7 +5,7 @@ import {
   startScopedSchedule,
   type ScopedScheduleHandle,
 } from "@brewva/brewva-effect";
-import { type ContextStatusView, type SessionWireFrame } from "@brewva/brewva-runtime";
+import type { ContextStatusView, SessionWireFrame } from "@brewva/brewva-runtime/session";
 import { recordSessionShutdownIfMissing } from "../../../../utils/runtime.js";
 import {
   createHostedSession as createGatewaySession,
@@ -86,7 +86,7 @@ function recordFakeTurnLifecycle(
   }
 
   const runtime = sessionResult.runtime;
-  const existingSessionStart = runtime.inspect.events.query(agentSessionId, {
+  const existingSessionStart = runtime.inspect.events.records.query(agentSessionId, {
     type: "session_start",
   });
   if (existingSessionStart.length === 0) {
@@ -94,12 +94,12 @@ function recordFakeTurnLifecycle(
       sessionId: agentSessionId,
       type: "session_start",
       payload: {
-        cwd: runtime.workspaceRoot,
+        cwd: runtime.identity.workspaceRoot,
       },
     });
   }
 
-  const existingAgentStart = runtime.inspect.events.query(agentSessionId, {
+  const existingAgentStart = runtime.inspect.events.records.query(agentSessionId, {
     type: "agent_start",
   });
   if (existingAgentStart.length === 0) {
@@ -110,13 +110,13 @@ function recordFakeTurnLifecycle(
   }
 
   const timestamp = Date.now();
-  const localTurn = runtime.inspect.events.query(agentSessionId, {
+  const localTurn = runtime.inspect.events.records.query(agentSessionId, {
     type: "turn_start",
   }).length;
   const runtimeTurn = workerTurnClock.observeTurnStart(agentSessionId, localTurn, timestamp);
   const message = summarizeFakeAssistantMessage(assistantText, timestamp);
 
-  runtime.maintain.context.onTurnStart(agentSessionId, runtimeTurn);
+  runtime.operator.context.lifecycle.onTurnStart(agentSessionId, runtimeTurn);
   runtime.extensions.hosted.events.record({
     sessionId: agentSessionId,
     type: "turn_start",
@@ -136,7 +136,7 @@ function recordFakeTurnLifecycle(
     type: "message_end",
     payload: message,
   });
-  runtime.maintain.context.onTurnEnd(agentSessionId);
+  runtime.operator.context.lifecycle.onTurnEnd(agentSessionId);
   runtime.extensions.hosted.events.record({
     sessionId: agentSessionId,
     type: "turn_end",
@@ -152,7 +152,7 @@ function recordFakeTurnLifecycle(
     type: "agent_end",
     payload: {
       messageCount: 1,
-      costSummary: runtime.inspect.cost.getSummary(agentSessionId),
+      costSummary: runtime.inspect.cost.summary.get(agentSessionId),
     },
   });
 }
@@ -179,7 +179,7 @@ function projectSessionContextStatus(sessionId: string): ContextStatusView | und
   if (!sessionResult) {
     return undefined;
   }
-  const usage = sessionResult.runtime.inspect.context.getUsage(sessionId);
+  const usage = sessionResult.runtime.inspect.context.usage.get(sessionId);
   if (typeof usage?.tokens !== "number" || !Number.isFinite(usage.tokens)) {
     return undefined;
   }
@@ -190,7 +190,7 @@ function projectSessionContextStatus(sessionId: string): ContextStatusView | und
   if (tokensTotal <= 0) {
     return undefined;
   }
-  const contextStatus = sessionResult.runtime.inspect.context.getStatus(sessionId, usage);
+  const contextStatus = sessionResult.runtime.inspect.context.usage.getStatus(sessionId, usage);
   if (
     contextStatus.usageRatio === null ||
     contextStatus.tokensRemaining === null ||
@@ -386,7 +386,7 @@ async function handleInit(
       sessionResult.runtime.extensions.hosted.events.resolveLogPath(agentSessionId);
     const watchdogOverrides = workerTestHarness.watchdog;
     if (watchdogOverrides.taskGoal) {
-      sessionResult.runtime.authority.task.setSpec(agentSessionId, {
+      sessionResult.runtime.authority.task.spec.set(agentSessionId, {
         schema: "brewva.task.v1",
         goal: watchdogOverrides.taskGoal,
       });

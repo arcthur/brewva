@@ -5,7 +5,8 @@ import {
   createProviderConnectionSeams,
   runHostedPromptTurn,
 } from "@brewva/brewva-gateway/hosted";
-import type { BrewvaRuntime, SessionPromptSnapshot } from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
+import type { SessionPromptSnapshot } from "@brewva/brewva-runtime/session";
 import type {
   BrewvaManagedPromptSession,
   BrewvaPromptSessionEvent,
@@ -32,7 +33,7 @@ export interface CliInteractiveShellOptions {
 }
 
 export interface CliInteractiveSessionOptions extends CliInteractiveShellOptions {
-  runtime: BrewvaRuntime;
+  runtime: BrewvaHostedRuntimePort;
   providerConnections?: BrewvaSessionResult["providerConnections"];
   initPhases: BrewvaSessionResult["initPhases"];
   phase: BrewvaSessionResult["phase"];
@@ -83,7 +84,7 @@ function createToolDefinitionMap(
 
 function toCliShellSessionBundle(input: {
   session: BrewvaManagedPromptSession;
-  runtime: BrewvaRuntime;
+  runtime: BrewvaHostedRuntimePort;
   providerConnections?: BrewvaSessionResult["providerConnections"];
   initPhases: BrewvaSessionResult["initPhases"];
   phase: BrewvaSessionResult["phase"];
@@ -114,7 +115,7 @@ async function runCliTurn(
   prompt: string,
   options: {
     printText: boolean;
-    runtime: BrewvaRuntime;
+    runtime: BrewvaHostedRuntimePort;
   },
 ): Promise<string> {
   let emittedText = "";
@@ -168,7 +169,7 @@ async function runCliTurn(
       throw new Error("cli_print_session_missing_session_id");
     }
     const parts = [{ type: "text" as const, text: prompt }];
-    options.runtime.authority.session.recordRewindCheckpoint(sessionId, {
+    options.runtime.authority.session.rewind.recordCheckpoint(sessionId, {
       turnId: `print:${Date.now()}`,
       prompt: {
         text: prompt,
@@ -280,7 +281,7 @@ export async function runCliPrintSession(
   options: {
     mode: CliPrintMode;
     initialMessage?: string;
-    runtime: BrewvaRuntime;
+    runtime: BrewvaHostedRuntimePort;
   },
 ): Promise<void> {
   if (typeof options.initialMessage !== "string" || options.initialMessage.trim().length === 0) {

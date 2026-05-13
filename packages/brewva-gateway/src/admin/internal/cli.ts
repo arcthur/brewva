@@ -4,7 +4,7 @@ import { join, resolve } from "node:path";
 import process from "node:process";
 import { parseArgs as parseNodeArgs } from "node:util";
 import { BrewvaEffect, runEdgeOperation } from "@brewva/brewva-effect";
-import { BrewvaConfigLoadError, resolveBrewvaAgentDir } from "@brewva/brewva-runtime";
+import { BrewvaConfigLoadError, resolveBrewvaAgentDir } from "@brewva/brewva-runtime/config";
 import { GatewayDaemon, isProcessAlive, readPidRecord, removePidRecord } from "../../daemon/api.js";
 import {
   assertLoopbackHost,

@@ -109,7 +109,7 @@ describe("session supervisor watchdog bridge", () => {
 
         const detected = await waitForCondition(
           () =>
-            observer.inspect.events.query(resolvedAgentSessionId, {
+            observer.inspect.events.records.query(resolvedAgentSessionId, {
               type: "task_stuck_detected",
               last: 1,
             })[0],
@@ -126,7 +126,7 @@ describe("session supervisor watchdog bridge", () => {
           idleMs: expect.any(Number),
         });
 
-        const taskState = observer.inspect.task.getState(resolvedAgentSessionId);
+        const taskState = observer.inspect.task.state.get(resolvedAgentSessionId);
         expect(taskState.blockers).toEqual([]);
       } finally {
         await supervisor.stop();
@@ -178,7 +178,7 @@ describe("session supervisor watchdog bridge", () => {
 
         const shutdown = await waitForCondition(
           () =>
-            observer.inspect.events.query(resolvedAgentSessionId, {
+            observer.inspect.events.records.query(resolvedAgentSessionId, {
               type: "session_shutdown",
               last: 1,
             })[0],
@@ -197,12 +197,12 @@ describe("session supervisor watchdog bridge", () => {
         await sleepMs(3_000);
 
         expect(
-          observer.inspect.events.query(resolvedAgentSessionId, {
+          observer.inspect.events.records.query(resolvedAgentSessionId, {
             type: "task_stuck_detected",
           }),
         ).toHaveLength(0);
 
-        const taskState = observer.inspect.task.getState(resolvedAgentSessionId);
+        const taskState = observer.inspect.task.state.get(resolvedAgentSessionId);
         expect(taskState.blockers).toEqual([]);
       } finally {
         await supervisor.stop();
@@ -394,7 +394,7 @@ describe("session supervisor watchdog bridge", () => {
         const shutdown = await waitForCondition(
           () => {
             const observer = new BrewvaRuntime({ cwd: workspace, configPath: TEST_CONFIG_PATH });
-            return observer.inspect.events.query(agentSessionId, {
+            return observer.inspect.events.records.query(agentSessionId, {
               type: "session_shutdown",
               last: 1,
             })[0];
@@ -473,7 +473,7 @@ describe("session supervisor watchdog bridge", () => {
         const shutdown = await waitForCondition(
           () => {
             const observer = new BrewvaRuntime({ cwd: workspace, configPath: TEST_CONFIG_PATH });
-            return observer.inspect.events.query(agentSessionId, {
+            return observer.inspect.events.records.query(agentSessionId, {
               type: "session_shutdown",
               last: 1,
             })[0];
@@ -546,7 +546,7 @@ describe("session supervisor watchdog bridge", () => {
 
         const observer = new BrewvaRuntime({ cwd: workspace, configPath: TEST_CONFIG_PATH });
         expect(
-          observer.inspect.events.query(agentSessionId, {
+          observer.inspect.events.records.query(agentSessionId, {
             type: "session_shutdown",
           }),
         ).toHaveLength(0);
@@ -611,9 +611,9 @@ describe("session supervisor watchdog bridge", () => {
 
         const observer = new BrewvaRuntime({ cwd: workspace, configPath: TEST_CONFIG_PATH });
         expect(
-          observer.inspect.events.query(agentSessionId!, { type: "task_stuck_detected" }),
+          observer.inspect.events.records.query(agentSessionId!, { type: "task_stuck_detected" }),
         ).toHaveLength(0);
-        expect(observer.inspect.task.getState(agentSessionId!).spec).toBeUndefined();
+        expect(observer.inspect.task.state.get(agentSessionId!).spec).toBeUndefined();
       } finally {
         await supervisor.stop();
         restoreEnv();

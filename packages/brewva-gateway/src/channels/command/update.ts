@@ -1,4 +1,4 @@
-import type { BrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import type { TurnEnvelope } from "@brewva/brewva-runtime/channels";
 import {
   CHANNEL_UPDATE_LOCK_BLOCKED_EVENT_TYPE,
@@ -16,7 +16,7 @@ export async function prepareChannelUpdateCommand(input: {
   match: ChannelCommandMatch;
   turn: TurnEnvelope;
   replyWriter: ChannelReplyWriter;
-  runtime: BrewvaRuntime;
+  runtime: BrewvaHostedRuntimePort;
   updateLock: ChannelUpdateLockManager;
   targetAgentId: string;
   isTargetActive: boolean;
@@ -83,7 +83,7 @@ export async function prepareChannelUpdateCommand(input: {
 export async function handleChannelUpdateCommand(input: {
   command: Extract<ChannelControlCommand, { kind: "update" }>;
   turn: TurnEnvelope;
-  runtime: BrewvaRuntime;
+  runtime: BrewvaHostedRuntimePort;
   targetAgentId: string;
   isTargetActive: boolean;
   replyWriter: ChannelReplyWriter;

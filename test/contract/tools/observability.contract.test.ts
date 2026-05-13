@@ -2,7 +2,11 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import {
+  BrewvaRuntime,
+  createOperatorRuntimePort,
+  createHostedRuntimePort,
+} from "@brewva/brewva-runtime";
 import {
   ITERATION_METRIC_OBSERVED_EVENT_TYPE,
   VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
@@ -39,9 +43,9 @@ describe("observability tool contracts", () => {
   test("cost_view returns session, skill, and tool breakdowns", async () => {
     const runtime = createCleanRuntime();
     const sessionId = "s10";
-    runtime.maintain.context.onTurnStart(sessionId, 1);
-    runtime.authority.tools.markCall(sessionId, "read");
-    runtime.authority.cost.recordAssistantUsage({
+    createOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(sessionId, 1);
+    runtime.authority.tools.tracking.markCall(sessionId, "read");
+    runtime.authority.cost.usage.recordAssistant({
       sessionId,
       model: "test/model",
       inputTokens: 10,
@@ -71,7 +75,7 @@ describe("observability tool contracts", () => {
     const runtime = new BrewvaRuntime({ cwd: obsQueryWorkspace });
     const sessionId = "s10-obs-query";
 
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: "latency_sample",
       payload: {
@@ -79,7 +83,7 @@ describe("observability tool contracts", () => {
         latencyMs: 810,
       },
     });
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: "latency_sample",
       payload: {
@@ -120,7 +124,7 @@ describe("observability tool contracts", () => {
     const runtime = new BrewvaRuntime({ cwd: obsSnapshotWorkspace });
     const sessionId = "s10-obs-snapshot";
 
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: "startup_sample",
       payload: {
@@ -128,7 +132,7 @@ describe("observability tool contracts", () => {
         startupMs: 920,
       },
     });
-    runtime.extensions.hosted.events.record({
+    createHostedRuntimePort(runtime).extensions.hosted.events.record({
       sessionId,
       type: VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
       payload: buildVerificationOutcomeRecordedPayload({
@@ -136,26 +140,29 @@ describe("observability tool contracts", () => {
         outcome: "fail",
       }),
     });
-    runtime.maintain.context.observePromptStability(sessionId, {
+    createOperatorRuntimePort(runtime).operator.context.prompt.observeStability(sessionId, {
       stablePrefixHash: "prefix-1",
       dynamicTailHash: "tail-1",
       contextScopeId: "leaf-1",
       turn: 1,
       timestamp: 1_740_000_000_100,
     });
-    runtime.maintain.context.observeTransientReduction(sessionId, {
-      status: "completed",
-      reason: null,
-      eligibleToolResults: 6,
-      clearedToolResults: 2,
-      clearedChars: 2048,
-      estimatedTokenSavings: 580,
-      compactionAdvised: true,
-      forcedCompaction: false,
-      turn: 1,
-      timestamp: 1_740_000_000_101,
-    });
-    runtime.authority.cost.recordAssistantUsage({
+    createOperatorRuntimePort(runtime).operator.context.prompt.observeTransientReduction(
+      sessionId,
+      {
+        status: "completed",
+        reason: null,
+        eligibleToolResults: 6,
+        clearedToolResults: 2,
+        clearedChars: 2048,
+        estimatedTokenSavings: 580,
+        compactionAdvised: true,
+        forcedCompaction: false,
+        turn: 1,
+        timestamp: 1_740_000_000_101,
+      },
+    );
+    runtime.authority.cost.usage.recordAssistant({
       sessionId,
       model: "test/model",
       inputTokens: 20,
@@ -208,7 +215,9 @@ describe("observability tool contracts", () => {
     expect(snapshotText).toContain("cache_write_tokens: 12");
     expect(snapshotText).toContain("verification_level: standard");
     expect(
-      runtime.inspect.events.query(sessionId, { type: ITERATION_METRIC_OBSERVED_EVENT_TYPE }),
+      runtime.inspect.events.records.query(sessionId, {
+        type: ITERATION_METRIC_OBSERVED_EVENT_TYPE,
+      }),
     ).toHaveLength(0);
   });
 });

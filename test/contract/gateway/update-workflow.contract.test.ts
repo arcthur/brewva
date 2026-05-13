@@ -2,11 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { buildBrewvaUpdatePrompt } from "@brewva/brewva-gateway";
-import {
-  BrewvaRuntime,
-  DEFAULT_BREWVA_CONFIG,
-  resolveProjectBrewvaConfigPath,
-} from "@brewva/brewva-runtime";
+import { BrewvaRuntime, DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
+import { resolveProjectBrewvaConfigPath } from "@brewva/brewva-runtime/config";
 import { cleanupTestWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
 
 describe("gateway update workflow prompt", () => {
@@ -41,8 +38,10 @@ describe("gateway update workflow prompt", () => {
       });
 
       expect(prompt).toContain("Run a Brewva update workflow for this environment.");
-      expect(prompt).toContain(`Workspace root: ${runtime.workspaceRoot}`);
-      expect(prompt).toContain(`Project config: ${resolveProjectBrewvaConfigPath(runtime.cwd)}`);
+      expect(prompt).toContain(`Workspace root: ${runtime.identity.workspaceRoot}`);
+      expect(prompt).toContain(
+        `Project config: ${resolveProjectBrewvaConfigPath(runtime.identity.cwd)}`,
+      );
       expect(prompt).toContain("Review the relevant changelog or release notes");
       expect(prompt).toContain("Fail closed if you cannot collect authoritative release evidence");
       expect(prompt).toContain("Resolve changelog sources in this order");

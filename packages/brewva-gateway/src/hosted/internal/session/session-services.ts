@@ -1,4 +1,4 @@
-import type { BrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import type { InternalHostPlugin } from "@brewva/brewva-substrate/host-api";
 import type { BrewvaRegisteredModel } from "@brewva/brewva-substrate/provider";
 import type { BrewvaHostedResourceLoader } from "@brewva/brewva-substrate/resources";
@@ -72,7 +72,7 @@ export interface HostedSessionModelRegistry {
 export type HostedSessionServicesBundle = {
   agentDir: string;
   cwd: string;
-  runtime: BrewvaRuntime;
+  runtime: BrewvaHostedRuntimePort;
   settingsManager: HostedSessionSettingsStore;
   resourceLoader: HostedSessionResourceLoader;
   sessionManager: HostedSessionPersistenceStore;

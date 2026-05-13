@@ -1,8 +1,5 @@
-import type {
-  BrewvaRuntime,
-  DelegationRunQuery,
-  DelegationRunRecord,
-} from "@brewva/brewva-runtime";
+import type { BrewvaRuntime } from "@brewva/brewva-runtime";
+import type { DelegationRunQuery, DelegationRunRecord } from "@brewva/brewva-runtime/delegation";
 import type {
   AdvisorConsultKind,
   DelegationPacket,
@@ -179,7 +176,7 @@ export function deliverDelegationOutcome(input: {
   });
   let supplementalAppended = false;
   if (input.delivery.returnMode === "supplemental") {
-    input.runtime.maintain.workbench.note(input.sessionId, {
+    input.runtime.authority.workbench.note(input.sessionId, {
       content,
       sourceRefs: [input.outcome.runId],
       reason: input.delivery.returnScopeId ?? `subagent:${input.delegate}`,

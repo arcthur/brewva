@@ -1,10 +1,10 @@
+import { EXEC_FAILED_EVENT_TYPE, EXEC_STARTED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
+import { getToolActionPolicy } from "@brewva/brewva-runtime/governance";
 import {
   analyzeVirtualReadonlyEligibility,
   classifyToolBoundaryRequest,
   evaluateBoundaryClassification,
-  getToolActionPolicy,
-} from "@brewva/brewva-runtime";
-import { EXEC_FAILED_EVENT_TYPE, EXEC_STARTED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
+} from "@brewva/brewva-runtime/security";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import { Type } from "@sinclair/typebox";
 import { createRuntimeBoundBrewvaToolFactory } from "../../registry/runtime-bound-tool.js";
@@ -119,7 +119,7 @@ export function createExecTool(options?: ExecToolOptions): ToolDefinition {
           toolName: "exec",
           args: params as Record<string, unknown>,
           cwd: baseCwd,
-          workspaceRoot: runtime?.workspaceRoot,
+          workspaceRoot: runtime?.identity.workspaceRoot,
         });
         const primaryTokens = boundaryClassification.detectedCommands;
         const commandPolicy = boundaryClassification.commandPolicy;
@@ -311,13 +311,6 @@ export function createExecTool(options?: ExecToolOptions): ToolDefinition {
         });
       },
     },
-    {
-      requiredCapabilities: [
-        "inspect.task.getTargetDescriptor",
-        "extensions.tools.onClearState",
-        "extensions.tools.recordEvent",
-        "extensions.tools.resolveCredentialBindings",
-      ],
-    },
+    {},
   );
 }

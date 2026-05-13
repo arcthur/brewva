@@ -10,16 +10,22 @@ export const SESSION_INDEX_SCHEMA_VERSION = 3;
 export type SessionIndexScope = "session_local" | "user_repository_root" | "workspace_wide";
 
 export interface SessionIndexEventSource {
-  listSessionIds(): string[];
-  list(sessionId: string, query?: BrewvaEventQuery): BrewvaEventRecord[];
-  getLogPath(sessionId: string): string;
-  subscribe(listener: (event: BrewvaStructuredEvent) => void): () => void;
+  readonly log: {
+    listSessionIds(): string[];
+    getPath(sessionId: string): string;
+  };
+  readonly records: {
+    list(sessionId: string, query?: BrewvaEventQuery): BrewvaEventRecord[];
+    subscribe(listener: (event: BrewvaStructuredEvent) => void): () => void;
+  };
 }
 
 export interface SessionIndexTaskSource {
-  getTargetDescriptor(sessionId: string): {
-    primaryRoot?: string;
-    roots?: string[];
+  readonly target: {
+    getDescriptor(sessionId: string): {
+      primaryRoot?: string;
+      roots?: string[];
+    };
   };
 }
 

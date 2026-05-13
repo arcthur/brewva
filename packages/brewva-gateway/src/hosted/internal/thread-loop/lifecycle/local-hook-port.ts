@@ -1,4 +1,4 @@
-import { type BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import { type BrewvaStructuredEvent } from "@brewva/brewva-runtime/events";
 import {
   REVERSIBLE_MUTATION_ROLLED_BACK_EVENT_TYPE,
@@ -242,7 +242,7 @@ export function createLocalHookManager(input: {
   }
 
   function ensurePostRollbackSubscription(): void {
-    unsubscribePostRollbackEvents ??= input.runtime.inspect.events.subscribe((event) => {
+    unsubscribePostRollbackEvents ??= input.runtime.inspect.events.records.subscribe((event) => {
       if (!POST_ROLLBACK_EVENT_TYPES.has(event.type)) {
         return;
       }

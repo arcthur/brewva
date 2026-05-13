@@ -1,5 +1,6 @@
-import { BrewvaRuntime, type ToolOutputView } from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import type { TurnEnvelope, TurnPart } from "@brewva/brewva-runtime/channels";
+import type { ToolOutputView } from "@brewva/brewva-runtime/session";
 import { runHostedTurnEnvelope } from "../hosted/api.js";
 import { toErrorMessage } from "../utils/errors.js";
 import { clampText } from "../utils/runtime.js";
@@ -161,7 +162,7 @@ export async function collectPromptTurnOutputs(
   session: PromptTurnOutputSession,
   prompt: string,
   options: {
-    runtime: BrewvaRuntime;
+    runtime: BrewvaHostedRuntimePort;
     sessionId: string;
     turnId?: string;
   },
@@ -194,7 +195,7 @@ export function createChannelAgentDispatch(input: {
     session: PromptTurnOutputSession,
     prompt: string,
     options: {
-      runtime: BrewvaRuntime;
+      runtime: BrewvaHostedRuntimePort;
       sessionId: string;
       turnId?: string;
     },

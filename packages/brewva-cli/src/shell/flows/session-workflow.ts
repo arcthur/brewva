@@ -3,7 +3,7 @@ import type {
   SessionRewindMode,
   SessionRewindSummary,
   SessionRewindTargetView,
-} from "@brewva/brewva-runtime";
+} from "@brewva/brewva-runtime/session";
 import type { BrewvaPromptContentPart } from "@brewva/brewva-substrate/prompt";
 import {
   buildCliShellPromptContentParts,

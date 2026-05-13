@@ -4,11 +4,16 @@ import { join } from "node:path";
 import {
   DEFAULT_BREWVA_CONFIG,
   BrewvaRuntime,
+  createHostedRuntimePort,
   createToolRuntimePort,
-  type BrewvaAuthorityPort,
-  type BrewvaConfig,
-  type BrewvaInspectionPort,
-  type BrewvaMaintenancePort,
+  createOperatorRuntimePort,
+} from "@brewva/brewva-runtime";
+import type {
+  BrewvaAuthorityPort,
+  BrewvaConfig,
+  BrewvaHostedRuntimePort,
+  BrewvaInspectionPort,
+  RuntimeOperatorPort,
 } from "@brewva/brewva-runtime";
 import type { BrewvaBundledToolRuntime } from "@brewva/brewva-tools/contracts";
 
@@ -24,7 +29,7 @@ export interface RuntimeFixtureOptions {
   config?: BrewvaConfig;
   authority?: DeepPartial<BrewvaAuthorityPort>;
   inspect?: DeepPartial<BrewvaInspectionPort>;
-  maintain?: DeepPartial<BrewvaMaintenancePort>;
+  operator?: DeepPartial<RuntimeOperatorPort>;
   context?: Record<string, unknown>;
   events?: Record<string, unknown>;
   tools?: Record<string, unknown>;
@@ -61,7 +66,13 @@ function assignDeep(target: Record<string, unknown>, source: Record<string, unkn
   }
 }
 
-export function createRuntimeFixture(options: RuntimeFixtureOptions = {}): BrewvaRuntime {
+function assignIfDefined(target: Record<string, unknown>, key: string, value: unknown): void {
+  if (value !== undefined) {
+    target[key] = value;
+  }
+}
+
+export function createRuntimeFixture(options: RuntimeFixtureOptions = {}): BrewvaHostedRuntimePort {
   const runtimeConfig =
     options.config || typeof options.events?.record === "function"
       ? structuredClone(options.config ?? DEFAULT_BREWVA_CONFIG)
@@ -86,22 +97,39 @@ export function createRuntimeFixture(options: RuntimeFixtureOptions = {}): Brewv
       options.inspect as Record<string, unknown>,
     );
   }
-  if (options.maintain) {
+  if (options.operator) {
     assignDeep(
-      runtime.maintain as unknown as Record<string, unknown>,
-      options.maintain as Record<string, unknown>,
+      createOperatorRuntimePort(runtime).operator as unknown as Record<string, unknown>,
+      options.operator as Record<string, unknown>,
     );
   }
 
   if (options.context) {
     const inspectContext = runtime.inspect.context as Record<string, unknown>;
-    const maintainContext = runtime.maintain.context as Record<string, unknown>;
+    const operatorContext = createOperatorRuntimePort(runtime).operator.context as Record<
+      string,
+      unknown
+    >;
+    const operatorLifecycle = operatorContext.lifecycle as Record<string, unknown>;
+    const inspectUsage = inspectContext.usage as Record<string, unknown>;
+    const inspectCompaction = inspectContext.compaction as Record<string, unknown>;
+    const operatorCompaction = operatorContext.compaction as Record<string, unknown>;
+    assignIfDefined(operatorLifecycle, "onUserInput", options.context.onUserInput);
+    assignIfDefined(inspectUsage, "get", options.context.getUsage);
+    assignIfDefined(inspectUsage, "getStatus", options.context.getStatus);
+    assignIfDefined(inspectCompaction, "getGateStatus", options.context.getCompactionGateStatus);
+    assignIfDefined(operatorCompaction, "request", options.context.requestCompaction);
+    assignIfDefined(
+      operatorCompaction,
+      "checkAndRequest",
+      options.context.checkAndRequestCompaction,
+    );
     for (const [key, value] of Object.entries(options.context)) {
       if (key in inspectContext) {
         inspectContext[key] = value;
       }
-      if (key in maintainContext) {
-        maintainContext[key] = value;
+      if (key in operatorContext) {
+        operatorContext[key] = value;
       }
     }
   }
@@ -110,7 +138,7 @@ export function createRuntimeFixture(options: RuntimeFixtureOptions = {}): Brewv
     const authorityEvents = runtime.authority.events as Record<string, unknown>;
     const rawRecord = options.events.record;
     if (typeof rawRecord === "function") {
-      runtime.inspect.events.subscribe((event) => {
+      runtime.inspect.events.records.subscribe((event) => {
         rawRecord({
           sessionId: event.sessionId,
           type: event.type,
@@ -135,7 +163,30 @@ export function createRuntimeFixture(options: RuntimeFixtureOptions = {}): Brewv
   if (options.tools) {
     const inspectTools = runtime.inspect.tools as Record<string, unknown>;
     const authorityTools = runtime.authority.tools as Record<string, unknown>;
-    const maintainTools = runtime.maintain.tools as Record<string, unknown>;
+    const operatorTools = createOperatorRuntimePort(runtime).operator.tools as Record<
+      string,
+      unknown
+    >;
+    const authorityInvocation = authorityTools.invocation as Record<string, unknown>;
+    const authorityParallel = authorityTools.parallel as Record<string, unknown>;
+    const authorityResourceLeases = authorityTools.resourceLeases as Record<string, unknown>;
+    const authorityPatches = authorityTools.patches as Record<string, unknown>;
+    const inspectResourceLeases = inspectTools.resourceLeases as Record<string, unknown>;
+    const operatorActionPolicies = operatorTools.actionPolicies as Record<string, unknown>;
+    assignIfDefined(authorityInvocation, "start", options.tools.start);
+    assignIfDefined(authorityInvocation, "finish", options.tools.finish);
+    assignIfDefined(authorityInvocation, "recordResult", options.tools.recordResult);
+    assignIfDefined(authorityParallel, "acquire", options.tools.acquireParallelSlot);
+    assignIfDefined(authorityParallel, "acquireAsync", options.tools.acquireParallelSlotAsync);
+    assignIfDefined(authorityParallel, "release", options.tools.releaseParallelSlot);
+    assignIfDefined(authorityResourceLeases, "request", options.tools.requestResourceLease);
+    assignIfDefined(authorityResourceLeases, "cancel", options.tools.cancelResourceLease);
+    assignIfDefined(authorityPatches, "rollbackLastPatchSet", options.tools.rollbackLastPatchSet);
+    assignIfDefined(authorityPatches, "redoLastPatchSet", options.tools.redoLastPatchSet);
+    assignIfDefined(authorityPatches, "rollbackLastMutation", options.tools.rollbackLastMutation);
+    assignIfDefined(inspectResourceLeases, "list", options.tools.listResourceLeases);
+    assignIfDefined(operatorActionPolicies, "register", options.tools.registerActionPolicy);
+    assignIfDefined(operatorActionPolicies, "unregister", options.tools.unregisterActionPolicy);
     for (const [key, value] of Object.entries(options.tools)) {
       if (key in inspectTools) {
         inspectTools[key] = value;
@@ -143,15 +194,18 @@ export function createRuntimeFixture(options: RuntimeFixtureOptions = {}): Brewv
       if (key in authorityTools) {
         authorityTools[key] = value;
       }
-      if (key in maintainTools) {
-        maintainTools[key] = value;
+      if (key in operatorTools) {
+        operatorTools[key] = value;
       }
     }
   }
   if (options.session) {
     const inspectSession = runtime.inspect.session as Record<string, unknown>;
     const authoritySession = runtime.authority.session as Record<string, unknown>;
-    const maintainSession = runtime.maintain.session as Record<string, unknown>;
+    const operatorSession = createOperatorRuntimePort(runtime).operator.session as Record<
+      string,
+      unknown
+    >;
     for (const [key, value] of Object.entries(options.session)) {
       if (key in inspectSession) {
         inspectSession[key] = value;
@@ -159,17 +213,17 @@ export function createRuntimeFixture(options: RuntimeFixtureOptions = {}): Brewv
       if (key in authoritySession) {
         authoritySession[key] = value;
       }
-      if (key in maintainSession) {
-        maintainSession[key] = value;
+      if (key in operatorSession) {
+        operatorSession[key] = value;
       }
     }
   }
 
-  return runtime;
+  return createHostedRuntimePort(runtime);
 }
 
 export function createBundledToolRuntime(
-  runtime: BrewvaRuntime,
+  runtime: BrewvaRuntime | BrewvaHostedRuntimePort,
   extras?: Pick<BrewvaBundledToolRuntime, "delegation" | "orchestration">,
 ): BrewvaBundledToolRuntime {
   return {

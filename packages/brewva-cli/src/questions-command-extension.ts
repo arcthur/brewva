@@ -12,7 +12,7 @@ import {
   type HostedExtensionPlugin,
   type HostedExtensionApi,
 } from "@brewva/brewva-gateway/extensions";
-import type { BrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import { OPERATOR_QUESTION_ANSWERED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
 import { clampText } from "./inspect-analysis.js";
 
@@ -111,7 +111,9 @@ function parseAnswerArgs(
   return { questionId, answerText };
 }
 
-export function createQuestionsCommandExtension(runtime: BrewvaRuntime): HostedExtensionPlugin {
+export function createQuestionsCommandExtension(
+  runtime: BrewvaHostedRuntimePort,
+): HostedExtensionPlugin {
   return defineHostedExtensionPlugin({
     name: "cli.questions_command",
     capabilities: ["tool_registration.write", "user_message.enqueue"],

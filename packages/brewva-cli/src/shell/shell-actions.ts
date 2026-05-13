@@ -1,4 +1,4 @@
-import type { DecideEffectCommitmentInput } from "@brewva/brewva-runtime";
+import type { DecideEffectCommitmentInput } from "@brewva/brewva-runtime/proposals";
 import type { BrewvaPromptContentPart } from "@brewva/brewva-substrate/prompt";
 import type {
   BrewvaPromptOptions,

@@ -222,9 +222,9 @@ describe("capability view", () => {
     });
 
     expect(result.details[0]?.requiredCapabilities).toEqual([
-      "authority.tools.cancelResourceLease",
-      "authority.tools.requestResourceLease",
-      "inspect.tools.listResourceLeases",
+      "authority.tools.resourceLeases.cancel",
+      "authority.tools.resourceLeases.request",
+      "inspect.tools.resourceLeases.list",
     ]);
 
     const rendered = renderCapabilityView({
@@ -233,8 +233,8 @@ describe("capability view", () => {
       includeInventory: false,
     });
     expect(rendered[2]?.content).toContain("required_capabilities:");
-    expect(rendered[2]?.content).toContain("authority.tools.requestResourceLease");
-    expect(rendered[2]?.content).toContain("inspect.tools.listResourceLeases");
+    expect(rendered[2]?.content).toContain("authority.tools.resourceLeases.request");
+    expect(rendered[2]?.content).toContain("inspect.tools.resourceLeases.list");
   });
 
   test("renders nested enum contract details for schedule intent predicates", () => {
@@ -302,13 +302,13 @@ describe("capability view", () => {
     });
 
     expect(result.inventory.hiddenBySurface.operator).toBe(1);
-    expect(result.inventory.hints).toContain("operator_profile_available");
+    expect(result.inventory.hints).toContain("operator_host_lane_available");
     expect(
       renderCapabilityView({
         capabilityView: result,
         mode: "full",
         includeInventory: true,
-      })[2]?.content.includes("operator_hint: operator/full profile keeps these tools visible"),
+      })[2]?.content.includes("operator_hint: hosted operator turns keep operator tools visible"),
     ).toBe(true);
   });
 

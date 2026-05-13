@@ -42,7 +42,7 @@ export async function rebuildSessionProjection(input: {
   const records = rows.map(rowToEventRecord);
   const taskGoal = extractTaskGoal(records);
   const fallbackRoots = extractTargetRoots(records);
-  const descriptor = input.task.getTargetDescriptor(input.sessionId);
+  const descriptor = input.task.target.getDescriptor(input.sessionId);
   const primaryRoot = normalizeRoot(
     descriptor.primaryRoot ?? fallbackRoots[0],
     input.workspaceRoot,

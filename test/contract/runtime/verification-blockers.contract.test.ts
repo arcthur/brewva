@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { BrewvaRuntime, createOperatorRuntimePort } from "@brewva/brewva-runtime";
 import { createTestConfig } from "../../fixtures/config.js";
 import { requireDefined } from "../../helpers/assertions.js";
 import { createTestWorkspace, writeTestConfig } from "../../helpers/workspace.js";
@@ -14,7 +14,7 @@ function writeConfig(
 }
 
 function latestOutcomePayload(runtime: BrewvaRuntime, sessionId: string) {
-  return runtime.inspect.events.query(sessionId, {
+  return runtime.inspect.events.records.query(sessionId, {
     type: "verification_outcome_recorded",
     last: 1,
   })[0]?.payload as
@@ -34,7 +34,7 @@ function latestOutcomePayload(runtime: BrewvaRuntime, sessionId: string) {
 }
 
 function blockerIds(runtime: BrewvaRuntime, sessionId: string): string[] {
-  return runtime.inspect.task.getState(sessionId).blockers.map((blocker) => blocker.id);
+  return runtime.inspect.task.state.get(sessionId).blockers.map((blocker) => blocker.id);
 }
 
 describe("Verification blockers", () => {
@@ -64,22 +64,22 @@ describe("Verification blockers", () => {
     const runtime = new BrewvaRuntime({ cwd: workspace, configPath: ".brewva/brewva.json" });
     const sessionId = "verify-blockers-1";
 
-    runtime.authority.tools.markCall(sessionId, "edit");
-    const report1 = await runtime.authority.verification.verify(sessionId, "standard", {
+    runtime.authority.tools.tracking.markCall(sessionId, "edit");
+    const report1 = await runtime.authority.verification.checks.verify(sessionId, "standard", {
       executeCommands: true,
       timeoutMs: 5_000,
     });
     expect(report1.passed).toBe(false);
 
-    const state1 = runtime.inspect.task.getState(sessionId);
+    const state1 = runtime.inspect.task.state.get(sessionId);
     const blocker1 = requireDefined(
       state1.blockers.find((blocker) => blocker.id === "verifier:tests"),
       "expected verifier:tests blocker after failing verification",
     );
     expect(blocker1.claimId).toBe("claim:verifier:tests");
     expect(
-      runtime.inspect.claim
-        .getState(sessionId)
+      runtime.inspect.claim.state
+        .get(sessionId)
         .claims.find((fact) => fact.id === "claim:verifier:tests")?.status,
     ).toBe("active");
 
@@ -105,16 +105,16 @@ describe("Verification blockers", () => {
     );
 
     const reloaded = new BrewvaRuntime({ cwd: workspace, configPath: ".brewva/brewva.json" });
-    reloaded.authority.tools.markCall(sessionId, "edit");
-    const report2 = await reloaded.authority.verification.verify(sessionId, "standard", {
+    reloaded.authority.tools.tracking.markCall(sessionId, "edit");
+    const report2 = await reloaded.authority.verification.checks.verify(sessionId, "standard", {
       executeCommands: true,
       timeoutMs: 5_000,
     });
     expect(report2.passed).toBe(true);
     expect(blockerIds(reloaded, sessionId)).not.toContain("verifier:tests");
     expect(
-      reloaded.inspect.claim
-        .getState(sessionId)
+      reloaded.inspect.claim.state
+        .get(sessionId)
         .claims.find((fact) => fact.id === "claim:verifier:tests")?.status,
     ).toBe("resolved");
   });
@@ -150,20 +150,20 @@ describe("Verification blockers", () => {
     });
 
     const sessionId = "verify-governance-1";
-    runtime.authority.tools.markCall(sessionId, "edit");
-    const report = await runtime.authority.verification.verify(sessionId, "standard", {
+    runtime.authority.tools.tracking.markCall(sessionId, "edit");
+    const report = await runtime.authority.verification.checks.verify(sessionId, "standard", {
       executeCommands: true,
       timeoutMs: 5_000,
     });
 
     expect(report.passed).toBe(true);
-    const blockers = runtime.inspect.task.getState(sessionId).blockers;
+    const blockers = runtime.inspect.task.state.get(sessionId).blockers;
     expect(blockers.map((item) => item.id)).toContain("verifier:governance:verify-spec");
-    const events = runtime.inspect.events.query(sessionId, {
+    const events = runtime.inspect.events.records.query(sessionId, {
       type: "governance_verify_spec_failed",
     });
     expect(events.length).toBeGreaterThan(0);
-    const structured = runtime.inspect.events.queryStructured(sessionId, {
+    const structured = runtime.inspect.events.records.queryStructured(sessionId, {
       type: "governance_verify_spec_failed",
     });
     expect(structured[0]?.category).toBe("governance");
@@ -201,8 +201,8 @@ describe("Verification blockers", () => {
     });
 
     const sessionId = "verify-governance-recover-1";
-    runtime.authority.tools.markCall(sessionId, "edit");
-    const first = await runtime.authority.verification.verify(sessionId, "standard", {
+    runtime.authority.tools.tracking.markCall(sessionId, "edit");
+    const first = await runtime.authority.verification.checks.verify(sessionId, "standard", {
       executeCommands: true,
       timeoutMs: 5_000,
     });
@@ -210,21 +210,21 @@ describe("Verification blockers", () => {
     expect(blockerIds(runtime, sessionId)).toContain("verifier:governance:verify-spec");
 
     mode = "pass";
-    runtime.authority.tools.markCall(sessionId, "edit");
-    const second = await runtime.authority.verification.verify(sessionId, "standard", {
+    runtime.authority.tools.tracking.markCall(sessionId, "edit");
+    const second = await runtime.authority.verification.checks.verify(sessionId, "standard", {
       executeCommands: true,
       timeoutMs: 5_000,
     });
     expect(second.passed).toBe(true);
     expect(blockerIds(runtime, sessionId)).not.toContain("verifier:governance:verify-spec");
     expect(
-      runtime.inspect.events.query(sessionId, {
+      runtime.inspect.events.records.query(sessionId, {
         type: "governance_verify_spec_passed",
       }).length,
     ).toBeGreaterThan(0);
     expect(
-      runtime.inspect.claim
-        .getState(sessionId)
+      runtime.inspect.claim.state
+        .get(sessionId)
         .claims.find((fact) => fact.id === "claim:governance:verify-spec")?.status,
     ).toBe("resolved");
   });
@@ -262,13 +262,13 @@ describe("Verification blockers", () => {
     });
 
     const sessionId = "verify-governance-error-1";
-    runtime.authority.tools.markCall(sessionId, "edit");
-    const report = await runtime.authority.verification.verify(sessionId, "standard", {
+    runtime.authority.tools.tracking.markCall(sessionId, "edit");
+    const report = await runtime.authority.verification.checks.verify(sessionId, "standard", {
       executeCommands: true,
       timeoutMs: 5_000,
     });
     expect(report.passed).toBe(true);
-    const events = runtime.inspect.events.query(sessionId, {
+    const events = runtime.inspect.events.records.query(sessionId, {
       type: "governance_verify_spec_error",
     });
     expect(events.length).toBeGreaterThan(0);
@@ -300,12 +300,12 @@ describe("Verification blockers", () => {
 
     const runtime = new BrewvaRuntime({ cwd: workspace, configPath: ".brewva/brewva.json" });
     const sessionId = "verify-outcome-no-write";
-    const report = await runtime.authority.verification.verify(sessionId, "quick", {
+    const report = await runtime.authority.verification.checks.verify(sessionId, "quick", {
       executeCommands: false,
     });
 
     expect(report.skipped).toBe(true);
-    const outcomes = runtime.inspect.events.query(sessionId, {
+    const outcomes = runtime.inspect.events.records.query(sessionId, {
       type: "verification_outcome_recorded",
     });
     expect(outcomes).toHaveLength(1);
@@ -336,9 +336,9 @@ describe("Verification blockers", () => {
 
     const runtime = new BrewvaRuntime({ cwd: workspace, configPath: ".brewva/brewva.json" });
     const sessionId = "verification-missing-blocker-1";
-    runtime.authority.tools.markCall(sessionId, "edit");
+    runtime.authority.tools.tracking.markCall(sessionId, "edit");
 
-    const first = await runtime.authority.verification.verify(sessionId, "standard", {
+    const first = await runtime.authority.verification.checks.verify(sessionId, "standard", {
       executeCommands: false,
     });
     expect(first.passed).toBe(false);
@@ -347,8 +347,8 @@ describe("Verification blockers", () => {
     expect(first.missingEvidence).toEqual(["tests"]);
 
     const blocker = requireDefined(
-      runtime.inspect.task
-        .getState(sessionId)
+      runtime.inspect.task.state
+        .get(sessionId)
         .blockers.find((entry) => entry.id === "verifier:tests"),
       "expected verifier:tests blocker after missing verification evidence",
     );
@@ -356,8 +356,8 @@ describe("Verification blockers", () => {
     expect(blocker.claimId).toBe("claim:verifier:tests");
 
     const fact = requireDefined(
-      runtime.inspect.claim
-        .getState(sessionId)
+      runtime.inspect.claim.state
+        .get(sessionId)
         .claims.find((entry) => entry.id === "claim:verifier:tests"),
       "expected claim:verifier:tests fact after missing verification evidence",
     );
@@ -379,15 +379,15 @@ describe("Verification blockers", () => {
       ]),
     );
 
-    const second = await runtime.authority.verification.verify(sessionId, "standard", {
+    const second = await runtime.authority.verification.checks.verify(sessionId, "standard", {
       executeCommands: true,
       timeoutMs: 5_000,
     });
     expect(second.passed).toBe(true);
     expect(blockerIds(runtime, sessionId)).not.toContain("verifier:tests");
     expect(
-      runtime.inspect.claim
-        .getState(sessionId)
+      runtime.inspect.claim.state
+        .get(sessionId)
         .claims.find((entry) => entry.id === "claim:verifier:tests")?.status,
     ).toBe("resolved");
   });
@@ -417,9 +417,9 @@ describe("Verification blockers", () => {
 
     const runtime = new BrewvaRuntime({ cwd: workspace, configPath: ".brewva/brewva.json" });
     const sessionId = "verification-timeout-folding-1";
-    runtime.authority.tools.markCall(sessionId, "edit");
+    runtime.authority.tools.tracking.markCall(sessionId, "edit");
 
-    const report = await runtime.authority.verification.verify(sessionId, "standard", {
+    const report = await runtime.authority.verification.checks.verify(sessionId, "standard", {
       executeCommands: true,
       timeoutMs: 40,
     });
@@ -430,8 +430,8 @@ describe("Verification blockers", () => {
     expect(report.missingEvidence).toEqual([]);
     expect(blockerIds(runtime, sessionId)).toContain("verifier:tests");
     expect(
-      runtime.inspect.claim
-        .getState(sessionId)
+      runtime.inspect.claim.state
+        .get(sessionId)
         .claims.find((fact) => fact.id === "claim:verifier:tests")?.status,
     ).toBe("active");
 
@@ -455,7 +455,7 @@ describe("Verification blockers", () => {
       ]),
     );
 
-    const verifyRows = runtime.inspect.ledger
+    const verifyRows = runtime.inspect.ledger.store
       .listRows(sessionId)
       .filter((row) => row.tool === "brewva_verify" && row.metadata?.check === "tests");
     expect(verifyRows).toHaveLength(1);
@@ -488,9 +488,9 @@ describe("Verification blockers", () => {
 
     const runtime = new BrewvaRuntime({ cwd: workspace, configPath: ".brewva/brewva.json" });
     const sessionId = "verification-signal-kill-1";
-    runtime.authority.tools.markCall(sessionId, "edit");
+    runtime.authority.tools.tracking.markCall(sessionId, "edit");
 
-    const report = await runtime.authority.verification.verify(sessionId, "standard", {
+    const report = await runtime.authority.verification.checks.verify(sessionId, "standard", {
       executeCommands: true,
       timeoutMs: 5_000,
     });
@@ -513,7 +513,7 @@ describe("Verification blockers", () => {
       ]),
     );
 
-    const verifyRows = runtime.inspect.ledger
+    const verifyRows = runtime.inspect.ledger.store
       .listRows(sessionId)
       .filter((row) => row.tool === "brewva_verify" && row.metadata?.check === "tests");
     expect(verifyRows).toHaveLength(1);
@@ -546,20 +546,20 @@ describe("Verification blockers", () => {
 
     const runtime = new BrewvaRuntime({ cwd: workspace, configPath: ".brewva/brewva.json" });
     const sessionId = "verification-clear-state-1";
-    runtime.authority.tools.markCall(sessionId, "edit");
+    runtime.authority.tools.tracking.markCall(sessionId, "edit");
 
-    const first = await runtime.authority.verification.verify(sessionId, "standard", {
+    const first = await runtime.authority.verification.checks.verify(sessionId, "standard", {
       executeCommands: true,
       timeoutMs: 5_000,
     });
     expect(first.passed).toBe(false);
-    const rowsBeforeClear = runtime.inspect.ledger
+    const rowsBeforeClear = runtime.inspect.ledger.store
       .listRows(sessionId)
       .filter((row) => row.tool === "brewva_verify").length;
 
-    runtime.maintain.session.clearState(sessionId);
+    createOperatorRuntimePort(runtime).operator.session.state.clear(sessionId);
 
-    const second = await runtime.authority.verification.verify(sessionId, "standard", {
+    const second = await runtime.authority.verification.checks.verify(sessionId, "standard", {
       executeCommands: true,
       timeoutMs: 5_000,
     });
@@ -568,7 +568,7 @@ describe("Verification blockers", () => {
     expect(second.failedChecks).toEqual(["tests"]);
     expect(second.missingChecks).toEqual([]);
     expect(second.missingEvidence).toEqual([]);
-    const rowsAfterClear = runtime.inspect.ledger
+    const rowsAfterClear = runtime.inspect.ledger.store
       .listRows(sessionId)
       .filter((row) => row.tool === "brewva_verify").length;
     expect(rowsAfterClear).toBeGreaterThan(rowsBeforeClear);
@@ -626,15 +626,15 @@ describe("Verification blockers", () => {
 
       const runtime = new BrewvaRuntime({ cwd: workspace, configPath: ".brewva/brewva.json" });
       const sessionId = "verification-package-script-runner-1";
-      runtime.authority.tools.markCall(sessionId, "edit");
+      runtime.authority.tools.tracking.markCall(sessionId, "edit");
 
-      const report = await runtime.authority.verification.verify(sessionId, "standard", {
+      const report = await runtime.authority.verification.checks.verify(sessionId, "standard", {
         executeCommands: true,
         timeoutMs: 5_000,
       });
 
       expect(report.passed).toBe(true);
-      const verifyRow = runtime.inspect.ledger
+      const verifyRow = runtime.inspect.ledger.store
         .listRows(sessionId)
         .find((row) => row.tool === "brewva_verify" && row.metadata?.check === "tests");
       expect(verifyRow?.metadata?.command).toBe("bun run test");
@@ -674,23 +674,23 @@ describe("Verification blockers", () => {
 
     const runtime = new BrewvaRuntime({ cwd: workspace, configPath: ".brewva/brewva.json" });
     const sessionId = "verification-multi-root-1";
-    runtime.authority.task.setSpec(sessionId, {
+    runtime.authority.task.spec.set(sessionId, {
       schema: "brewva.task.v1",
       goal: "Verify both repositories.",
       targets: {
         files: [join(repoA, "app.ts"), join(repoB, "app.ts")],
       },
     });
-    runtime.authority.tools.markCall(sessionId, "edit");
+    runtime.authority.tools.tracking.markCall(sessionId, "edit");
 
-    const report = await runtime.authority.verification.verify(sessionId, "standard", {
+    const report = await runtime.authority.verification.checks.verify(sessionId, "standard", {
       executeCommands: true,
       timeoutMs: 5_000,
     });
 
     expect(report.passed).toBe(true);
     expect(report.checks).toHaveLength(2);
-    const verifyRows = runtime.inspect.ledger
+    const verifyRows = runtime.inspect.ledger.store
       .listRows(sessionId)
       .filter(
         (row) =>

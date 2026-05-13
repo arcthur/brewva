@@ -1,4 +1,4 @@
-import type { BrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import type { TurnEnvelope } from "@brewva/brewva-runtime/channels";
 import type { AgentRegistry } from "../agent-registry.js";
 import type { ChannelReplyWriter } from "../channel-reply-writer.js";
@@ -26,7 +26,7 @@ export async function handleChannelAgentCreateCommand(input: {
   turn: TurnEnvelope;
   registry: AgentRegistry;
   replyWriter: ChannelReplyWriter;
-  runtime: BrewvaRuntime;
+  runtime: BrewvaHostedRuntimePort;
 }): Promise<ChannelCommandDispatchResult> {
   const created = await input.registry.createAgent({
     requestedAgentId: input.command.agentId,
@@ -62,7 +62,7 @@ export async function handleChannelAgentDeleteCommand(input: {
   turn: TurnEnvelope;
   registry: AgentRegistry;
   replyWriter: ChannelReplyWriter;
-  runtime: BrewvaRuntime;
+  runtime: BrewvaHostedRuntimePort;
   cleanupAgentSessions(agentId: string): Promise<void>;
   disposeAgentRuntime(agentId: string): boolean;
 }): Promise<ChannelCommandDispatchResult> {
@@ -98,7 +98,7 @@ export async function handleChannelFocusCommand(input: {
   turn: TurnEnvelope;
   registry: AgentRegistry;
   replyWriter: ChannelReplyWriter;
-  runtime: BrewvaRuntime;
+  runtime: BrewvaHostedRuntimePort;
 }): Promise<ChannelCommandDispatchResult> {
   const focused = await input.registry.setFocus(input.command.scopeKey, input.command.agentId);
   if (!focused.ok) {
@@ -131,7 +131,7 @@ export async function handleChannelRunCommand(input: {
   turn: TurnEnvelope;
   coordinator: Pick<ChannelCoordinator, "fanOut">;
   replyWriter: ChannelReplyWriter;
-  runtime: BrewvaRuntime;
+  runtime: BrewvaHostedRuntimePort;
 }): Promise<ChannelCommandDispatchResult> {
   input.runtime.extensions.hosted.events.record({
     sessionId: input.turn.sessionId,
@@ -173,7 +173,7 @@ export async function handleChannelDiscussCommand(input: {
   turn: TurnEnvelope;
   coordinator: Pick<ChannelCoordinator, "discuss">;
   replyWriter: ChannelReplyWriter;
-  runtime: BrewvaRuntime;
+  runtime: BrewvaHostedRuntimePort;
 }): Promise<ChannelCommandDispatchResult> {
   const discussion = await input.coordinator.discuss({
     agentIds: input.command.agentIds,
@@ -206,7 +206,7 @@ export async function handleChannelRouteAgentCommand(input: {
   command: Extract<ChannelControlCommand, { kind: "route-agent" }>;
   turn: TurnEnvelope;
   registry: AgentRegistry;
-  runtime: BrewvaRuntime;
+  runtime: BrewvaHostedRuntimePort;
   replyWriter: ChannelReplyWriter;
   orchestrationOwners: string[];
   aclModeWhenOwnersEmpty: "open" | "closed";

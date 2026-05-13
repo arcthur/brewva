@@ -2,7 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createHostedSession as createBrewvaSession } from "@brewva/brewva-gateway/hosted";
-import { BrewvaRuntime, createTrustedLocalGovernancePort } from "@brewva/brewva-runtime";
+import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { createTrustedLocalGovernancePort } from "@brewva/brewva-runtime/governance";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 describe("brewva session ui settings wiring", () => {
@@ -13,7 +14,7 @@ describe("brewva session ui settings wiring", () => {
       agentId: "Code Reviewer",
     });
     try {
-      expect(result.runtime.agentId).toBe("code-reviewer");
+      expect(result.runtime.identity.agentId).toBe("code-reviewer");
     } finally {
       result.session.dispose();
     }
@@ -85,7 +86,7 @@ describe("brewva session ui settings wiring", () => {
     });
     try {
       const sessionId = result.session.sessionManager.getSessionId();
-      const bootstrap = result.runtime.inspect.events.query(sessionId, {
+      const bootstrap = result.runtime.inspect.events.records.query(sessionId, {
         type: "session_bootstrap",
         last: 1,
       })[0];
@@ -152,7 +153,7 @@ describe("brewva session ui settings wiring", () => {
     });
     try {
       const sessionId = result.session.sessionManager.getSessionId();
-      const bootstrap = result.runtime.inspect.events.query(sessionId, {
+      const bootstrap = result.runtime.inspect.events.records.query(sessionId, {
         type: "session_bootstrap",
         last: 1,
       })[0];
@@ -194,7 +195,7 @@ describe("brewva session ui settings wiring", () => {
     });
     try {
       const sessionId = result.session.sessionManager.getSessionId();
-      const bootstrap = result.runtime.inspect.events.query(sessionId, {
+      const bootstrap = result.runtime.inspect.events.records.query(sessionId, {
         type: "session_bootstrap",
         last: 1,
       })[0];

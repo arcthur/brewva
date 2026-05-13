@@ -11,29 +11,37 @@ import { textResult } from "../../../packages/brewva-tools/src/utils/result.js";
 
 function createToolRuntimeFixture(): BrewvaToolRuntime {
   return {
-    cwd: "/tmp/brewva",
-    workspaceRoot: "/tmp/brewva",
-    agentId: "agent-test",
+    identity: {
+      cwd: "/tmp/brewva",
+      workspaceRoot: "/tmp/brewva",
+      agentId: "agent-test",
+    },
     config: {} as BrewvaToolRuntime["config"],
     authority: {
       tools: {
-        requestResourceLease(sessionId: string) {
-          return { ok: true, sessionId };
+        resourceLeases: {
+          request(sessionId: string) {
+            return { ok: true, sessionId };
+          },
         },
-        rollbackLastPatchSet(sessionId: string) {
-          return {
-            ok: true,
-            sessionId,
-            restoredPaths: [],
-            failedPaths: [],
-          };
+        patches: {
+          rollbackLastPatchSet(sessionId: string) {
+            return {
+              ok: true,
+              sessionId,
+              restoredPaths: [],
+              failedPaths: [],
+            };
+          },
         },
       },
     } as unknown as BrewvaToolRuntime["authority"],
     inspect: {
       tools: {
-        listResourceLeases(sessionId: string) {
-          return [{ id: "lease-1", sessionId }];
+        resourceLeases: {
+          list(sessionId: string) {
+            return [{ id: "lease-1", sessionId }];
+          },
         },
       },
     } as unknown as BrewvaToolRuntime["inspect"],
@@ -80,37 +88,29 @@ describe("runtime-bound managed Brewva tool factory", () => {
       createToolRuntimeFixture(),
       "resource_lease",
     );
-    const tool = factory.define(
-      {
-        name: "resource_lease",
-        label: "Resource Lease",
-        description: "test",
-        parameters: Type.Object({}, { additionalProperties: false }),
-        async execute() {
-          const leases = factory.runtime.inspect.tools.listResourceLeases("session-1", {} as never);
-          expect(leases).toHaveLength(1);
-          expect(() =>
-            (factory.runtime as BrewvaToolRuntime).authority.tools.rollbackLastPatchSet(
-              "session-1",
-            ),
-          ).toThrow(
-            "managed Brewva tool 'resource_lease' attempted to access protected runtime capability 'authority.tools.rollbackLastPatchSet' without declaring it.",
-          );
-          const result = factory.runtime.authority.tools.requestResourceLease(
+    const tool = factory.define({
+      name: "resource_lease",
+      label: "Resource Lease",
+      description: "test",
+      parameters: Type.Object({}, { additionalProperties: false }),
+      async execute() {
+        const leases = factory.runtime.inspect.tools.resourceLeases.list("session-1", {} as never);
+        expect(leases).toHaveLength(1);
+        expect(() =>
+          (factory.runtime as BrewvaToolRuntime).authority.tools.patches.rollbackLastPatchSet(
             "session-1",
-            {} as never,
-          );
-          expect(result.ok).toBe(true);
-          return textResult("ok", { ok: true });
-        },
+          ),
+        ).toThrow(
+          "managed Brewva tool 'resource_lease' attempted to access protected runtime capability 'authority.tools.patches.rollbackLastPatchSet' without declaring it.",
+        );
+        const result = factory.runtime.authority.tools.resourceLeases.request(
+          "session-1",
+          {} as never,
+        );
+        expect(result.ok).toBe(true);
+        return textResult("ok", { ok: true });
       },
-      {
-        requiredCapabilities: [
-          "authority.tools.requestResourceLease",
-          "inspect.tools.listResourceLeases",
-        ],
-      },
-    );
+    });
 
     const result = await tool.execute(
       "call-1",
@@ -121,8 +121,9 @@ describe("runtime-bound managed Brewva tool factory", () => {
     );
 
     expect(getBrewvaToolMetadata(tool)?.requiredCapabilities).toEqual([
-      "authority.tools.requestResourceLease",
-      "inspect.tools.listResourceLeases",
+      "authority.tools.resourceLeases.cancel",
+      "authority.tools.resourceLeases.request",
+      "inspect.tools.resourceLeases.list",
     ]);
     expect(result.details).toMatchObject({ ok: true });
   });

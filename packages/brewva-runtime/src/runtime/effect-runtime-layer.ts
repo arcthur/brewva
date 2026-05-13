@@ -8,8 +8,6 @@ import {
 import { createBrewvaRuntimeSpine, type BrewvaRuntimeSpine } from "@brewva/brewva-effect/runtime";
 import type { BrewvaConfig } from "../config/types.js";
 import type { DeepReadonly } from "../core/index.js";
-import { registerRuntimeCoreDependencies } from "./core-registrar.js";
-import { registerRuntimeKernelContext } from "./kernel-registrar.js";
 import type { RuntimeComposition, RuntimeCompositionInput } from "./runtime-composition.js";
 import type {
   RuntimeCoreDependencies,
@@ -17,10 +15,12 @@ import type {
   RuntimeServiceDependencies,
 } from "./runtime-composition.js";
 import type { RuntimeKernelContext } from "./runtime-kernel.js";
+import { registerRuntimeCoreDependencies } from "./wiring.js";
+import { registerRuntimeKernelContext } from "./wiring.js";
 import {
   registerRuntimeLazyServiceFactories,
   registerRuntimeServiceDependencies,
-} from "./services-registrar.js";
+} from "./wiring.js";
 
 export interface RuntimeIdentityShape {
   readonly cwd: string;

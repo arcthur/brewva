@@ -214,12 +214,14 @@ describe("parallel-read utils", () => {
     const runtime = {
       authority: {
         tools: {
-          async acquireParallelSlotAsync(sessionId: string, runId: string) {
-            calls.push(`acquire:${sessionId}:${runId}`);
-            return { accepted: true };
-          },
-          releaseParallelSlot(sessionId: string, runId: string) {
-            calls.push(`release:${sessionId}:${runId}`);
+          parallel: {
+            async acquireAsync(sessionId: string, runId: string) {
+              calls.push(`acquire:${sessionId}:${runId}`);
+              return { accepted: true };
+            },
+            release(sessionId: string, runId: string) {
+              calls.push(`release:${sessionId}:${runId}`);
+            },
           },
         },
       },
@@ -245,11 +247,13 @@ describe("parallel-read utils", () => {
     const runtime = {
       authority: {
         tools: {
-          async acquireParallelSlotAsync() {
-            return { accepted: false, reason: "max_total" };
-          },
-          releaseParallelSlot() {
-            released = true;
+          parallel: {
+            async acquireAsync() {
+              return { accepted: false, reason: "max_total" };
+            },
+            release() {
+              released = true;
+            },
           },
         },
       },

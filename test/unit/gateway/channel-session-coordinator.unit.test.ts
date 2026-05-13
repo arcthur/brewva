@@ -2,15 +2,20 @@ import { describe, expect, test } from "bun:test";
 import type { HostedSessionResult } from "@brewva/brewva-gateway/hosted";
 import {
   BrewvaRuntime,
-  createTrustedLocalGovernancePort,
   DEFAULT_BREWVA_CONFIG,
+  createHostedRuntimePort,
 } from "@brewva/brewva-runtime";
 import type { TurnEnvelope } from "@brewva/brewva-runtime/channels";
+import { createTrustedLocalGovernancePort } from "@brewva/brewva-runtime/governance";
 import { createDeferred } from "@brewva/brewva-std/async";
 import { AgentRegistry } from "../../../packages/brewva-gateway/src/channels/agent-registry.js";
 import { AgentRuntimeManager } from "../../../packages/brewva-gateway/src/channels/agent-runtime-manager.js";
 import { createChannelSessionCoordinator } from "../../../packages/brewva-gateway/src/channels/session/coordinator.js";
 import { cleanupTestWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
+
+function createHostedTestRuntime(options: ConstructorParameters<typeof BrewvaRuntime>[0]) {
+  return createHostedRuntimePort(new BrewvaRuntime(options));
+}
 
 function createUserTurn(scopeKey: string): TurnEnvelope {
   return {
@@ -61,13 +66,13 @@ async function createCoordinatorFixture(options: {
   const eventRecords: { sessionId: string; type: string; payload?: unknown }[] = [];
   const config = structuredClone(DEFAULT_BREWVA_CONFIG);
   config.infrastructure.events.level = "debug";
-  const runtime = new BrewvaRuntime({
+  const runtime = createHostedTestRuntime({
     cwd: workspace,
     config,
     governancePort: createTrustedLocalGovernancePort({ profile: "team" }),
   });
   if (options.captureEvents) {
-    runtime.inspect.events.subscribe((event) => {
+    runtime.inspect.events.records.subscribe((event) => {
       eventRecords.push({
         sessionId: event.sessionId,
         type: event.type,
@@ -128,9 +133,9 @@ describe("channel session coordinator ownership", () => {
       );
 
       const requestId = "req-accepted-1";
-      Object.assign(handle.runtime.inspect.proposals, {
-        listPendingEffectCommitments: () => [],
-        listEffectCommitmentRequests: (sessionId: string, query?: { state?: string }) =>
+      Object.assign(handle.runtime.inspect.proposals.requests, {
+        listPending: () => [],
+        list: (sessionId: string, query?: { state?: string }) =>
           sessionId === handle.agentSessionId && query?.state === "accepted"
             ? [
                 {
@@ -292,7 +297,7 @@ describe("channel session coordinator ownership", () => {
 
       await fixture.coordinator.cleanupAgentSessions("worker");
 
-      const shutdownEvents = handle.runtime.inspect.events.query(handle.agentSessionId, {
+      const shutdownEvents = handle.runtime.inspect.events.records.query(handle.agentSessionId, {
         type: "session_shutdown",
       });
       expect(shutdownEvents).toHaveLength(1);

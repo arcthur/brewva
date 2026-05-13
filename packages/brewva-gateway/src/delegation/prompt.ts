@@ -2,9 +2,8 @@ import {
   getSkillSemanticBindings,
   getSkillOutputContracts,
   listSkillOutputs,
-  type SkillDocument,
-  type SkillOutputContract,
-} from "@brewva/brewva-runtime";
+} from "@brewva/brewva-runtime/skills";
+import type { SkillDocument, SkillOutputContract } from "@brewva/brewva-runtime/skills";
 import { estimateTokenCount } from "@brewva/brewva-token-estimation";
 import type { DelegationPacket, SubagentContextRef } from "@brewva/brewva-tools/contracts";
 import { buildStructuredOutcomeContract, getCanonicalSubagentPrompt } from "./protocol.js";

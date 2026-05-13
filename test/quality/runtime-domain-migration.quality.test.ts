@@ -38,14 +38,13 @@ const MIGRATED_TOP_LEVEL_DIRS = [
 
 const REQUIRED_DOMAIN_DIRS = [
   "channels",
-  "iteration",
-  "workflow",
-  "evidence",
   "projection",
   "governance",
   "sessions",
   "recovery",
 ] as const;
+
+const REMOVED_SEMANTIC_DOMAIN_DIRS = ["iteration", "workflow", "evidence"] as const;
 
 describe("runtime domain migration guard", () => {
   test("removed top-level src directories no longer exist", () => {
@@ -61,6 +60,44 @@ describe("runtime domain migration guard", () => {
       expect(existsSync(absolutePath), `domain/${name} must exist`).toBe(true);
       expect(statSync(absolutePath).isDirectory()).toBe(true);
     }
+  });
+
+  test("domains without runtime commitments are not semantic domain directories", () => {
+    for (const name of REMOVED_SEMANTIC_DOMAIN_DIRS) {
+      expect(
+        existsSync(resolve(runtimeDomainRoot, name)),
+        `domain/${name} must move to its owning implementation module`,
+      ).toBe(false);
+    }
+    expect(existsSync(resolve(runtimeSrcRoot, "runtime/runtime-iteration-facts.ts"))).toBe(false);
+    expect(existsSync(resolve(runtimeDomainRoot, "events/iteration-controller.ts"))).toBe(true);
+  });
+
+  test("runtime domains do not keep empty registrar or surface shells", () => {
+    const offenders: string[] = [];
+    for (const domainName of readdirSync(runtimeDomainRoot)) {
+      const domainDir = resolve(runtimeDomainRoot, domainName);
+      if (!statSync(domainDir).isDirectory()) {
+        continue;
+      }
+      for (const fileName of ["registrar.ts", "runtime-surface.ts"] as const) {
+        const filePath = resolve(domainDir, fileName);
+        if (!existsSync(filePath)) {
+          continue;
+        }
+        const source = readFileSync(filePath, "utf-8");
+        const hasEmptyRegistration =
+          /interface\s+\w*Registration\s*\{\}\s*[\s\S]*return\s+\{\};/u.test(source);
+        const hasEmptySurface =
+          /interface\s+\w*SurfaceMethods\s*\{\}/u.test(source) &&
+          /satisfies\s+SurfaceContribution<[^>]+>;/u.test(source) &&
+          /return\s+\{\};/u.test(source);
+        if (hasEmptyRegistration || hasEmptySurface) {
+          offenders.push(`domain/${domainName}/${fileName}`);
+        }
+      }
+    }
+    expect(offenders).toEqual([]);
   });
 
   test("former authority/* contents live inside domain/governance", () => {

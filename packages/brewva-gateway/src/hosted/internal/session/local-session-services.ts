@@ -1,4 +1,5 @@
-import { BrewvaRuntime } from "@brewva/brewva-runtime";
+import { BrewvaRuntime, createHostedRuntimePort } from "@brewva/brewva-runtime";
+import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import { MODEL_PRESET_SELECT_EVENT_TYPE } from "@brewva/brewva-runtime/events";
 import { BREWVA_THINKING_LEVELS } from "@brewva/brewva-substrate/contracts";
 import type { InternalHostPlugin } from "@brewva/brewva-substrate/host-api";
@@ -263,12 +264,12 @@ export async function createHostedSessionServicesBundle(input: {
   agentDir: string;
   cwd: string;
   settings: HostedSessionSettings;
-  runtime?: BrewvaRuntime;
+  runtime?: BrewvaRuntime | BrewvaHostedRuntimePort;
   extensions?: readonly InternalHostPlugin[];
   sessionId?: string;
 }): Promise<HostedSessionServicesBundle> {
   const settingsManager = readHostedSettingsHandle(input.settings);
-  const runtime = input.runtime ?? new BrewvaRuntime({ cwd: input.cwd });
+  const runtime = createHostedRuntimePort(input.runtime ?? new BrewvaRuntime({ cwd: input.cwd }));
   const extensions = input.extensions ?? [];
   const resourceLoader = await createHostedResourceLoader({
     cwd: input.cwd,

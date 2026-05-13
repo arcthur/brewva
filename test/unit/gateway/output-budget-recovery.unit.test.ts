@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { SessionWireFrame } from "@brewva/brewva-runtime";
+import type { SessionWireFrame } from "@brewva/brewva-runtime/session";
 import {
   buildBrewvaPromptText,
   type BrewvaPromptContentPart,
@@ -230,7 +230,7 @@ describe("output budget recovery chain", () => {
       ]),
     );
 
-    const transitions = runtime.inspect.events.queryStructured(sessionId, {
+    const transitions = runtime.inspect.events.records.queryStructured(sessionId, {
       type: "session_turn_transition",
     });
     expect(transitions.map((event) => event.payload)).toEqual(

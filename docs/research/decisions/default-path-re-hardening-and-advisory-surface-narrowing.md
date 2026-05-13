@@ -20,7 +20,7 @@
   - `packages/brewva-gateway/src/delegation/orchestrator.ts`
   - `packages/brewva-gateway/src/delegation/background/runner-main.ts`
   - `packages/brewva-runtime/src/domain/context/builtins.ts`
-  - `packages/brewva-runtime/src/domain/iteration/facts.ts`
+  - `packages/brewva-runtime/src/domain/events/iteration-facts.ts`
   - `packages/brewva-runtime/src/domain/sessions/event-pipeline.ts`
 
 ## Decision Summary

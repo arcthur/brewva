@@ -348,3 +348,35 @@ export {
   isClaimLedgerPayload,
   reduceClaimState,
 } from "./domain/claim/api.js";
+
+export {
+  ITERATION_FACTS_SCHEMA,
+  ITERATION_FACT_SESSION_SCOPE_VALUES,
+  ITERATION_GUARD_STATUS_VALUES,
+  ITERATION_METRIC_AGGREGATION_VALUES,
+  applyFactWindow,
+  buildGuardResultPayload,
+  buildMetricObservationPayload,
+  coerceGuardResultPayload,
+  coerceMetricObservationPayload,
+  filterGuardResultRecords,
+  filterMetricObservationRecords,
+  getGuardResultEventQuery,
+  getMetricObservationEventQuery,
+  toGuardResultRecord,
+  toMetricObservationRecord,
+} from "./domain/events/iteration-facts.js";
+export type {
+  GuardResultInput,
+  GuardResultPayload,
+  GuardResultQuery,
+  GuardResultRecord,
+  IterationFactRecord,
+  IterationFactSessionScope,
+  IterationGuardStatus,
+  IterationMetricAggregation,
+  MetricObservationInput,
+  MetricObservationPayload,
+  MetricObservationQuery,
+  MetricObservationRecord,
+} from "./domain/events/iteration-facts.js";
