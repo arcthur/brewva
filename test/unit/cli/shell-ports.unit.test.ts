@@ -295,9 +295,9 @@ describe("cli shell session port", () => {
     }
 
     expect(caughtError).toEqual(expect.objectContaining({ message: "replace failed" }));
-    expect(
-      runtime.inspect.session.lineage.getTree(sessionId).selectedByChannel.cli,
-    ).toBeUndefined();
+    expect(runtime.inspect.session.lineage.getTree(sessionId).selectedByChannel.cli).toBe(
+      undefined,
+    );
     expect(store.getLineageNodeId()).toBe(previousLineageNodeId);
     expect(store.getLeafId()).toBe(previousLeafEntryId);
   });
@@ -389,12 +389,14 @@ describe("cli shell session port", () => {
       showThinking: true,
       toolDetails: true,
     });
-    expect(() =>
-      port.setShellViewPreferences({
-        showThinking: false,
-        toolDetails: false,
-      }),
-    ).not.toThrow();
+    port.setShellViewPreferences({
+      showThinking: false,
+      toolDetails: false,
+    });
+    expect(port.getShellViewPreferences()).toEqual({
+      showThinking: true,
+      toolDetails: true,
+    });
     expect(port.getQueuedPrompts()).toEqual(queuedPrompts);
     expect(port.removeQueuedPrompt("queued-1")).toBe(true);
     expect(port.getQueuedPrompts()).toEqual([]);

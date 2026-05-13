@@ -62,8 +62,8 @@ describe("parallel-read utils", () => {
   });
 
   test("getToolSessionId trims and validates context session id", () => {
-    expect(getToolSessionId(undefined)).toBeUndefined();
-    expect(getToolSessionId({})).toBeUndefined();
+    expect(getToolSessionId(undefined)).toBe(undefined);
+    expect(getToolSessionId({})).toBe(undefined);
     expect(
       getToolSessionId({
         sessionManager: { getSessionId: () => "  session-1  " },
@@ -73,12 +73,12 @@ describe("parallel-read utils", () => {
       getToolSessionId({
         sessionManager: { getSessionId: () => "   " },
       }),
-    ).toBeUndefined();
+    ).toBe(undefined);
     expect(
       getToolSessionId({
         sessionManager: { getSessionId: () => 42 },
       }),
-    ).toBeUndefined();
+    ).toBe(undefined);
   });
 
   test("recordParallelReadTelemetry emits only when runtime and session id are available", () => {

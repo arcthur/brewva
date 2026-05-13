@@ -9,6 +9,7 @@ import {
 } from "@brewva/brewva-gateway";
 import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
+import { requireDefined } from "../../helpers/assertions.js";
 
 function createIsolatedRuntime(name: string): BrewvaHostedRuntimePort {
   const workspace = mkdtempSync(join(tmpdir(), `brewva-subagent-runtime-${name}-`));
@@ -86,8 +87,10 @@ describe("delegation prompt and catalog composition", () => {
 
   test("injects semantic skill markdown for consult runs without requiring skillOutputs", () => {
     const runtime = createIsolatedRuntime("review");
-    const skill = runtime.inspect.skills.catalog.get("review");
-    expect(skill).toBeDefined();
+    const skill = requireDefined(
+      runtime.inspect.skills.catalog.get("review"),
+      "Expected review skill in hosted runtime catalog.",
+    );
 
     const prompt = buildDelegationPrompt({
       target: {
@@ -109,7 +112,7 @@ describe("delegation prompt and catalog composition", () => {
           successCriteria: "Return a review judgment with evidence and next steps.",
         },
       },
-      skill: skill!,
+      skill,
     });
 
     expect(prompt).toContain("## Semantic Context");
@@ -133,8 +136,10 @@ describe("delegation prompt and catalog composition", () => {
 
   test("injects QA anti-rationalization guidance into delegated prompts", () => {
     const runtime = createIsolatedRuntime("qa");
-    const skill = runtime.inspect.skills.catalog.get("qa");
-    expect(skill).toBeDefined();
+    const skill = requireDefined(
+      runtime.inspect.skills.catalog.get("qa"),
+      "Expected QA skill in hosted runtime catalog.",
+    );
 
     const prompt = buildDelegationPrompt({
       target: {
@@ -152,7 +157,7 @@ describe("delegation prompt and catalog composition", () => {
       packet: {
         objective: "Try to break the delegated change and preserve the evidence.",
       },
-      skill: skill!,
+      skill,
     });
 
     expect(prompt).toContain("Recognize your own rationalizations");
@@ -163,14 +168,18 @@ describe("delegation prompt and catalog composition", () => {
 
   test("materializes the built-in patch worker through the catalog", async () => {
     const catalog = await loadHostedDelegationCatalog(process.cwd());
-    const agentSpec = catalog.agentSpecs.get("patch-worker");
-    const envelope = catalog.envelopes.get("patch-worker");
-    expect(agentSpec).toBeDefined();
-    expect(envelope).toBeDefined();
+    const agentSpec = requireDefined(
+      catalog.agentSpecs.get("patch-worker"),
+      "Expected built-in patch-worker agent spec.",
+    );
+    const envelope = requireDefined(
+      catalog.envelopes.get("patch-worker"),
+      "Expected built-in patch-worker envelope.",
+    );
 
     const target = buildHostedDelegationTargetFromAgentSpec({
-      agentSpec: agentSpec!,
-      envelope: envelope!,
+      agentSpec,
+      envelope,
     });
     expect(target.resultMode).toBe("patch");
     expect(target.boundary).toBe("effectful");

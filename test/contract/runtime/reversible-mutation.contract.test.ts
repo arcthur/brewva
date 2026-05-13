@@ -28,7 +28,7 @@ describe("reversible mutation receipts", () => {
 
     expect(started.allowed).toBe(true);
     expect(started.boundary).toBe("effectful");
-    expect(started.mutationReceipt).toBeUndefined();
+    expect(started.mutationReceipt).toBe(undefined);
 
     const nextSpec: TaskSpec = {
       schema: "brewva.task.v1",
@@ -47,11 +47,11 @@ describe("reversible mutation receipts", () => {
       verdict: "pass",
     });
 
-    const receiptEvent = runtime.inspect.events.records.query(sessionId, {
+    const receiptEvents = runtime.inspect.events.records.query(sessionId, {
       type: "reversible_mutation_recorded",
       last: 1,
-    })[0];
-    expect(receiptEvent).toBeUndefined();
+    });
+    expect(receiptEvents).toHaveLength(0);
     expect(runtime.inspect.task.state.get(sessionId).spec?.goal).toBe(nextSpec.goal);
   });
 
@@ -158,11 +158,11 @@ describe("reversible mutation receipts", () => {
       "Apply and rollback task state",
     );
 
-    const rollbackEvent = runtime.inspect.events.records.query(sessionId, {
+    const rollbackEvents = runtime.inspect.events.records.query(sessionId, {
       type: "reversible_mutation_rolled_back",
       last: 1,
-    })[0];
-    expect(rollbackEvent).toBeUndefined();
+    });
+    expect(rollbackEvents).toHaveLength(0);
   });
 
   test("workspace patchset mutations can be rolled back through runtime.authority.tools.rollbackLastMutation", () => {
@@ -279,7 +279,7 @@ describe("reversible mutation receipts", () => {
     });
 
     expect(started.allowed).toBe(true);
-    expect(started.mutationReceipt).toBeUndefined();
+    expect(started.mutationReceipt).toBe(undefined);
 
     runtime.authority.task.acceptance.record(sessionId, {
       status: "accepted",

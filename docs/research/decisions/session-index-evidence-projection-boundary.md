@@ -21,7 +21,7 @@
   - `packages/brewva-session-index/src/query/digests.ts`
   - `packages/brewva-session-index/src/query/tape-evidence.ts`
   - `packages/brewva-session-index/src/duckdb/lifecycle.ts`
-  - `test/quality/retrieval-spine-boundaries.quality.test.ts`
+  - `test/fitness/retrieval-spine-boundaries.fitness.test.ts`
 
 ## Decision Summary
 

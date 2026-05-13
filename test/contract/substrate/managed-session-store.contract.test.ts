@@ -40,7 +40,8 @@ describe("managed session store contract", () => {
 
     expect(store.getLeafId()).toBe(originalLeafId);
     expect(preview.sourceLeafEntryId).toBe(originalLeafId);
-    expect(preview.firstKeptEntryId).toBeDefined();
+    expect(typeof preview.firstKeptEntryId).toBe("string");
+    expect(preview.firstKeptEntryId.length).toBeGreaterThan(0);
     expect(preview.context.messages.map((message) => message.role)).toEqual([
       "compactionSummary",
       "user",

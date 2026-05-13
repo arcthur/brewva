@@ -7,7 +7,7 @@ This repository uses a centralized `test/` tree with five layers.
 - `test/unit/**`
   - White-box tests are allowed.
   - Imports from `packages/*/src/**` are allowed.
-  - Do not spawn CLI processes or rely on network/provides.
+  - Do not spawn CLI processes or rely on network/providers.
 - `test/contract/**`
   - Test package entrypoints and exported contracts only.
   - Do not import `packages/*/src/**`.
@@ -21,11 +21,11 @@ This repository uses a centralized `test/` tree with five layers.
   - Real external dependency coverage only.
   - Do not import `packages/*/src/**`.
   - These tests are excluded from default PR gating.
-- `test/quality/**`
-  - Docs, links, reference guards, and other quality checks.
-  - These tests do not count as product-chain proofs.
-  - `bun run test:quality` runs the whole `test/quality/**` layer.
-  - `bun run test:docs` is the docs-only subset under `test/quality/docs/**`.
+- `test/fitness/**`
+  - Repository fitness checks: architecture boundaries, docs, links, generated inventories, and reference guards.
+  - These tests do not count as product-chain proofs or public contract coverage.
+  - `bun run test:fitness` runs the whole `test/fitness/**` layer.
+  - `bun run test:docs` is the docs-only subset under `test/fitness/docs/**`.
 
 ## Naming
 
@@ -35,7 +35,7 @@ Each file must end with one of:
 - `*.contract.test.ts`
 - `*.system.test.ts`
 - `*.live.test.ts`
-- `*.quality.test.ts`
+- `*.fitness.test.ts`
 
 Do not use ambiguous file labels such as `e2e-ish` or `characterization`.
 
@@ -44,6 +44,7 @@ Do not use ambiguous file labels such as `e2e-ish` or `characterization`.
 - Shared helpers live under `test/helpers.ts` and `test/helpers/**`.
 - Import shared helpers directly from those root paths. Do not add layer-local re-export trees under `test/<layer>/helpers/**`.
 - Do not create local `createWorkspace`, `waitUntil`, or `withTimeout` clones when an equivalent helper exists.
+- Do not call `setTimeout` directly from tests or subtree helpers; add shared timing primitives under `test/helpers/**` instead.
 - Shared fixtures live under `test/fixtures/**`; keep them semantic, not mirror-only.
 - Local `*.helpers.ts` files are allowed when they encode subtree-specific setup or assertions that do not belong in the global helper surface.
 
@@ -53,4 +54,6 @@ Do not use ambiguous file labels such as `e2e-ish` or `characterization`.
 - A test that proves a package public surface belongs in `contract`.
 - A test that proves a deterministic user flow belongs in `system`.
 - A test that depends on a real provider, webhook, or live account belongs in `live`.
+- A test that reads package source text or asserts repository structure belongs in `fitness`.
 - If one test file mixes multiple layers, split it into separate files.
+- Weak assertions such as empty throw checks, truthy checks, and defined-only checks are policy failures unless they are replaced with observable error or state expectations.

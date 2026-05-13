@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { asBrewvaSessionId } from "@brewva/brewva-runtime/core";
 import type { ContextStatusView, SessionWireFrame } from "@brewva/brewva-runtime/session";
 import type WebSocket from "ws";
+import { sleep, waitUntil } from "../../helpers/process.js";
 import {
   createDaemonHarness,
   createSessionBackendStub,
@@ -16,7 +17,6 @@ import {
   startDaemonHarness,
   waitForNoRawFrame,
   waitForRawFrame,
-  withTimeout,
 } from "./gateway-raw.helpers.js";
 
 function makeContextStatus(overrides: Partial<ContextStatusView> = {}): ContextStatusView {
@@ -187,24 +187,10 @@ describe("gateway supervision and subscriptions", () => {
       await closeRawSocket(ws);
       ws = null;
 
-      await withTimeout(
-        new Promise<void>((resolveCleanup, rejectCleanup) => {
-          const startedAt = Date.now();
-          const poll = (): void => {
-            if (harness.daemon.testHooks.getSessionSubscriberIds("session-cleanup").length === 0) {
-              resolveCleanup();
-              return;
-            }
-            if (Date.now() - startedAt > 1_500) {
-              rejectCleanup(new Error("session subscription cleanup timeout"));
-              return;
-            }
-            setTimeout(poll, 25).unref?.();
-          };
-          poll();
-        }),
-        2_000,
-        "subscription cleanup wait timeout",
+      await waitUntil(
+        () => harness.daemon.testHooks.getSessionSubscriberIds("session-cleanup").length === 0,
+        1_500,
+        "session subscription cleanup timeout",
       );
       expect(harness.daemon.testHooks.getSessionSubscriberIds("session-cleanup")).toHaveLength(0);
     } finally {
@@ -427,36 +413,24 @@ describe("gateway supervision and subscriptions", () => {
       resolveReplayQuery?.([]);
 
       await subscribePromise;
-      await withTimeout(
-        new Promise<void>((resolveReady, rejectReady) => {
-          const startedAt = Date.now();
-          const poll = (): void => {
-            const observed = frames
-              .filter((frame): frame is RawEventFrame => {
-                if (!frame || typeof frame !== "object") {
-                  return false;
-                }
-                const row = frame as Partial<RawEventFrame>;
-                return row.type === "event" && row.event === "session.wire.frame";
-              })
-              .map((frame) => frame.payload as SessionWireFrame);
-            if (
-              observed.some((frame) => frame.type === "assistant.delta") &&
-              observed.some((frame) => frame.type === "session.status")
-            ) {
-              resolveReady();
-              return;
-            }
-            if (Date.now() - startedAt > 1_500) {
-              rejectReady(new Error("live replay-window status ordering timeout"));
-              return;
-            }
-            setTimeout(poll, 10).unref?.();
-          };
-          poll();
-        }),
-        2_000,
-        "replay-window status ordering wait timeout",
+      await waitUntil(
+        () => {
+          const observed = frames
+            .filter((frame): frame is RawEventFrame => {
+              if (!frame || typeof frame !== "object") {
+                return false;
+              }
+              const row = frame as Partial<RawEventFrame>;
+              return row.type === "event" && row.event === "session.wire.frame";
+            })
+            .map((frame) => frame.payload as SessionWireFrame);
+          return (
+            observed.some((frame) => frame.type === "assistant.delta") &&
+            observed.some((frame) => frame.type === "session.status")
+          );
+        },
+        1_500,
+        "live replay-window status ordering timeout",
       );
 
       const observedFrames = frames
@@ -630,31 +604,17 @@ describe("gateway supervision and subscriptions", () => {
         },
       });
 
-      await withTimeout(
-        new Promise<void>((resolveReady, rejectReady) => {
-          const startedAt = Date.now();
-          const poll = (): void => {
-            const wireFrames = frames.filter((frame) => {
-              if (!frame || typeof frame !== "object") {
-                return false;
-              }
-              const row = frame as Partial<RawEventFrame>;
-              return row.type === "event" && row.event === "session.wire.frame";
-            });
-            if (wireFrames.length >= 2) {
-              resolveReady();
-              return;
+      await waitUntil(
+        () =>
+          frames.filter((frame) => {
+            if (!frame || typeof frame !== "object") {
+              return false;
             }
-            if (Date.now() - startedAt > 1_500) {
-              rejectReady(new Error("status frame not emitted"));
-              return;
-            }
-            setTimeout(poll, 10).unref?.();
-          };
-          poll();
-        }),
-        2_000,
-        "status frame wait timeout",
+            const row = frame as Partial<RawEventFrame>;
+            return row.type === "event" && row.event === "session.wire.frame";
+          }).length >= 2,
+        1_500,
+        "status frame not emitted",
       );
 
       const wireFrames = frames
@@ -772,10 +732,7 @@ describe("gateway supervision and subscriptions", () => {
         }),
       );
 
-      await new Promise<void>((resolveReady) => {
-        const timer = setTimeout(resolveReady, 150);
-        timer.unref?.();
-      });
+      await sleep(150);
 
       const observedStatuses = frames
         .filter((frame): frame is RawEventFrame => {
@@ -869,37 +826,23 @@ describe("gateway supervision and subscriptions", () => {
         },
       });
 
-      await withTimeout(
-        new Promise<void>((resolveReady, rejectReady) => {
-          const startedAt = Date.now();
-          const poll = (): void => {
-            const observedFrames = connectionAFrames
-              .filter((frame): frame is RawEventFrame => {
-                if (!frame || typeof frame !== "object") {
-                  return false;
-                }
-                const row = frame as Partial<RawEventFrame>;
-                return row.type === "event" && row.event === "session.wire.frame";
-              })
-              .map((frame) => frame.payload as SessionWireFrame);
-            if (
-              observedFrames.some(
-                (frame) => frame.type === "session.status" && frame.state === "closed",
-              )
-            ) {
-              resolveReady();
-              return;
-            }
-            if (Date.now() - startedAt > 1_500) {
-              rejectReady(new Error("closed status frame not observed"));
-              return;
-            }
-            setTimeout(poll, 10).unref?.();
-          };
-          poll();
-        }),
-        2_000,
-        "closed status wait timeout",
+      await waitUntil(
+        () => {
+          const observedFrames = connectionAFrames
+            .filter((frame): frame is RawEventFrame => {
+              if (!frame || typeof frame !== "object") {
+                return false;
+              }
+              const row = frame as Partial<RawEventFrame>;
+              return row.type === "event" && row.event === "session.wire.frame";
+            })
+            .map((frame) => frame.payload as SessionWireFrame);
+          return observedFrames.some(
+            (frame) => frame.type === "session.status" && frame.state === "closed",
+          );
+        },
+        1_500,
+        "closed status frame not observed",
       );
 
       const unsubscribedA = await harness.daemon.testHooks.invokeMethod(
@@ -1044,7 +987,7 @@ describe("gateway supervision and subscriptions", () => {
 
       const snapshot = harness.daemon.testHooks.getConnectionSnapshot(connection.connId);
       expect(snapshot?.replaySessions).toEqual([]);
-      expect(snapshot?.replayDedupFrameCountsBySession["session-large-replay"]).toBeUndefined();
+      expect(snapshot?.replayDedupFrameCountsBySession["session-large-replay"]).toBe(undefined);
     } finally {
       harness.dispose();
     }

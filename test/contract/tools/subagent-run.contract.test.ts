@@ -353,7 +353,7 @@ describe("subagent_fanout public surface", () => {
 
     expect(capturedRequest?.mode).toBe("parallel");
     expect(capturedRequest?.skillName).toBe("review");
-    expect(capturedRequest?.packet).toBeUndefined();
+    expect(capturedRequest?.packet).toBe(undefined);
     expect(capturedRequest?.tasks).toEqual([
       expect.objectContaining({
         label: "gateway",

@@ -5,6 +5,7 @@ import { createTrustedLocalGovernancePort } from "@brewva/brewva-runtime/governa
 import { AgentRegistry } from "../../../packages/brewva-gateway/src/channels/agent-registry.js";
 import { AgentRuntimeManager } from "../../../packages/brewva-gateway/src/channels/agent-runtime-manager.js";
 import { createChannelSessionQueries } from "../../../packages/brewva-gateway/src/channels/session/queries.js";
+import { requireDefined } from "../../helpers/assertions.js";
 import { cleanupTestWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
 
 function createHostedTestRuntime(options: BrewvaRuntimeOptions) {
@@ -55,10 +56,12 @@ describe("channel session queries", () => {
         },
       });
 
-      const surface = await queries.resolveQuestionSurface("scope-a", "worker");
-      expect(surface).toBeDefined();
-      expect(surface?.liveSessionId).toBeUndefined();
-      expect(surface?.sessionIds).toEqual(["agent-session:archived"]);
+      const surface = requireDefined(
+        await queries.resolveQuestionSurface("scope-a", "worker"),
+        "expected archived question surface",
+      );
+      expect(surface.liveSessionId).toBe(undefined);
+      expect(surface.sessionIds).toEqual(["agent-session:archived"]);
     } finally {
       runtimeManager.disposeAll();
       cleanupTestWorkspace(workspace);
@@ -100,9 +103,11 @@ describe("channel session queries", () => {
         },
       });
 
-      const surface = await queries.resolveQuestionSurface("scope-a", "worker");
-      expect(surface).toBeDefined();
-      expect(surface?.sessionIds).toEqual(["agent-session:archived"]);
+      const surface = requireDefined(
+        await queries.resolveQuestionSurface("scope-a", "worker"),
+        "expected archived question surface without a live runtime",
+      );
+      expect(surface.sessionIds).toEqual(["agent-session:archived"]);
     } finally {
       runtimeManager.disposeAll();
       cleanupTestWorkspace(workspace);

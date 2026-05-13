@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { JsonLineWriter, type JsonLineWritable, writeJsonLine } from "@brewva/brewva-cli";
+import { sleep } from "../../helpers/process.js";
 
 class MemoryWritable implements JsonLineWritable {
   private readonly chunks: string[] = [];
@@ -13,10 +14,10 @@ class MemoryWritable implements JsonLineWritable {
   write(chunk: string, callback?: (error?: Error | null) => void): boolean {
     const delay = this.delays[this.callIndex] ?? 0;
     this.callIndex += 1;
-    setTimeout(() => {
+    void sleep(delay).then(() => {
       this.chunks.push(chunk);
       callback?.(null);
-    }, delay);
+    });
     return true;
   }
 
@@ -53,9 +54,9 @@ describe("json line output", () => {
   test("JsonLineWriter surfaces write failures on flush", async () => {
     const output: JsonLineWritable = {
       write(_chunk: string, callback?: (error?: Error | null) => void): boolean {
-        setTimeout(() => {
+        void sleep(0).then(() => {
           callback?.(new Error("write_failed"));
-        }, 0);
+        });
         return true;
       },
     };

@@ -5,6 +5,7 @@ import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
 import type { BrewvaConfig } from "@brewva/brewva-runtime";
 import { buildClaimUpsertedEvent } from "@brewva/brewva-runtime/claim";
+import { requireNonEmptyString } from "../../helpers/assertions.js";
 import { createRuntimeWithInternals } from "../../helpers/runtime-internals.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
@@ -110,7 +111,7 @@ describe("session state cleanup", () => {
 
     runtime.operator.session.state.clear(sessionId);
 
-    expect(runtimeInternals.sessionState.getExistingCell(sessionId)).toBeUndefined();
+    expect(runtimeInternals.sessionState.getExistingCell(sessionId)).toBe(undefined);
     expect(runtimeInternals.turnReplay.hasSession(sessionId)).toBe(false);
     expect(runtimeInternals.contextBudget.sessions.has(sessionId)).toBe(false);
     expect(runtimeInternals.costTracker.sessions.has(sessionId)).toBe(false);
@@ -223,7 +224,11 @@ describe("session state cleanup", () => {
     expect(hydration.issues[0]?.severity).toBe("degraded");
     expect(hydration.issues[0]?.eventType).toBe("cost_update");
     expect(hydration.issues[0]?.reason).toContain("hydration exploded");
-    expect(hydration.latestEventId).toBeDefined();
+    const latestEventId = requireNonEmptyString(
+      hydration.latestEventId,
+      "expected degraded hydration to preserve latest event id",
+    );
+    expect(latestEventId.length).toBeGreaterThan(0);
 
     const integrity = readerRuntime.inspect.session.lifecycle.getIntegrity(sessionId);
     expect(integrity.status).toBe("degraded");

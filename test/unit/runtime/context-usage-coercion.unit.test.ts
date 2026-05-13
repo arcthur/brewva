@@ -3,19 +3,21 @@ import { coerceContextBudgetUsage } from "@brewva/brewva-runtime/context";
 
 describe("coerceContextBudgetUsage", () => {
   test("returns undefined when input is missing or invalid", () => {
-    expect(coerceContextBudgetUsage(undefined)).toBeUndefined();
-    expect(coerceContextBudgetUsage(null)).toBeUndefined();
-    expect(coerceContextBudgetUsage(42)).toBeUndefined();
-    expect(coerceContextBudgetUsage("usage")).toBeUndefined();
+    expect([
+      coerceContextBudgetUsage(undefined),
+      coerceContextBudgetUsage(null),
+      coerceContextBudgetUsage(42),
+      coerceContextBudgetUsage("usage"),
+    ]).toEqual([undefined, undefined, undefined, undefined]);
   });
 
   test("requires a finite positive contextWindow", () => {
-    expect(coerceContextBudgetUsage({ tokens: 100 })).toBeUndefined();
-    expect(coerceContextBudgetUsage({ tokens: 100, contextWindow: 0 })).toBeUndefined();
-    expect(coerceContextBudgetUsage({ tokens: 100, contextWindow: Number.NaN })).toBeUndefined();
-    expect(
+    expect([
+      coerceContextBudgetUsage({ tokens: 100 }),
+      coerceContextBudgetUsage({ tokens: 100, contextWindow: 0 }),
+      coerceContextBudgetUsage({ tokens: 100, contextWindow: Number.NaN }),
       coerceContextBudgetUsage({ tokens: 100, contextWindow: Number.POSITIVE_INFINITY }),
-    ).toBeUndefined();
+    ]).toEqual([undefined, undefined, undefined, undefined]);
   });
 
   test("normalizes tokens, contextWindow, and percent fields", () => {

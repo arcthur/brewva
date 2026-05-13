@@ -12,6 +12,7 @@ import {
 import type { ProviderAuthHandler } from "../../../packages/brewva-gateway/src/hosted/internal/provider/types.js";
 import { HostedAuthStore } from "../../../packages/brewva-gateway/src/hosted/internal/session/settings/hosted-auth-store.js";
 import { HostedModelRegistry } from "../../../packages/brewva-gateway/src/hosted/internal/session/settings/hosted-model-registry.js";
+import { requireDefined, requireNonEmptyString } from "../../helpers/assertions.js";
 import { patchProcessEnv } from "../../helpers/global-state.js";
 
 const INTRINSIC_FETCH = globalThis.fetch;
@@ -172,9 +173,11 @@ describe("provider connection port", () => {
       await port.connectApiKey("demo", "demo-secret");
 
       expect(registry.getAvailable().some((model) => model.provider === "demo")).toBe(true);
-      const model = registry.find("demo", "alpha");
-      expect(model).toBeDefined();
-      expect(await registry.getApiKeyAndHeaders(model!)).toEqual({
+      const model = requireDefined(
+        registry.find("demo", "alpha"),
+        "Expected connected demo alpha model.",
+      );
+      expect(await registry.getApiKeyAndHeaders(model)).toEqual({
         ok: true,
         apiKey: "demo-secret",
         headers: {
@@ -586,16 +589,22 @@ describe("provider connection port", () => {
         projectId: "project-1",
       });
 
-      expect(authorization?.method).toBe("auto");
-      expect(authorization?.openBrowser).toBe(true);
-      expect(authorization?.url).toStartWith("https://accounts.google.com/o/oauth2/v2/auth?");
-      const authorizeUrl = new URL(authorization!.url);
+      const browserAuthorization = requireDefined(
+        authorization,
+        "Expected Google browser authorization.",
+      );
+      expect(browserAuthorization.method).toBe("auto");
+      expect(browserAuthorization.openBrowser).toBe(true);
+      expect(browserAuthorization.url).toStartWith("https://accounts.google.com/o/oauth2/v2/auth?");
+      const authorizeUrl = new URL(browserAuthorization.url);
       expect(authorizeUrl.searchParams.get("access_type")).toBe("offline");
       expect(authorizeUrl.searchParams.get("scope")).toContain(
         "https://www.googleapis.com/auth/cloud-platform",
       );
-      const state = authorizeUrl.searchParams.get("state");
-      expect(state).toBeTruthy();
+      const state = requireNonEmptyString(
+        authorizeUrl.searchParams.get("state"),
+        "Expected Google OAuth state.",
+      );
 
       await port.completeOAuth(
         "google",
@@ -1123,7 +1132,7 @@ describe("provider connection port", () => {
       }
       expect(rejection).toBeInstanceOf(Error);
       expect((rejection as Error).message).toBe("GitHub device authorization was denied.");
-      expect(authStore.get("github-copilot")).toBeUndefined();
+      expect(authStore.get("github-copilot")).toBe(undefined);
     } finally {
       restoreEnv();
       rmSync(workspace, { recursive: true, force: true });
@@ -1171,7 +1180,7 @@ describe("provider connection port", () => {
       expect((rejection as Error).message).toBe(
         "GitHub device authorization expired. Reopen /model to request a new code.",
       );
-      expect(authStore.get("github-copilot")).toBeUndefined();
+      expect(authStore.get("github-copilot")).toBe(undefined);
     } finally {
       restoreEnv();
       rmSync(workspace, { recursive: true, force: true });

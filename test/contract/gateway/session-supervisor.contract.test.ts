@@ -9,6 +9,7 @@ import {
 } from "@brewva/brewva-gateway";
 import { asBrewvaSessionId } from "@brewva/brewva-runtime/core";
 import { requireDefined } from "../../helpers/assertions.js";
+import { sleep } from "../../helpers/process.js";
 
 interface SentPromptMessage {
   kind: "send";
@@ -249,7 +250,7 @@ describe("session supervisor safeguards", () => {
         error: "session is busy with active turn: turn-1",
         errorCode: "session_busy",
       });
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      await sleep(0);
 
       expect(rejectCalls.length).toBe(1);
       expect(rejectCalls[0]).toBeInstanceOf(SessionBackendStateError);
@@ -481,7 +482,7 @@ describe("session supervisor safeguards", () => {
       let sentMessage: SentPromptMessage | undefined;
       supervisor.testHooks.replaceWorkerSend("trigger-session", (message: unknown) => {
         sentMessage = message as SentPromptMessage;
-        setTimeout(() => {
+        void sleep(0).then(() => {
           if (!sentMessage) {
             return;
           }
@@ -495,7 +496,7 @@ describe("session supervisor safeguards", () => {
               accepted: true,
             },
           });
-        }, 0).unref?.();
+        });
         return true;
       });
 
@@ -505,7 +506,7 @@ describe("session supervisor safeguards", () => {
 
       const heartbeatMessage = requireDefined(sentMessage, "expected heartbeat worker message");
       expect(heartbeatMessage.kind).toBe("send");
-      expect(heartbeatMessage.payload.trigger).toBeUndefined();
+      expect(heartbeatMessage.payload.trigger).toBe(undefined);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -534,7 +535,7 @@ describe("session supervisor safeguards", () => {
       let sentMessage: SentPromptMessage | undefined;
       supervisor.testHooks.replaceWorkerSend("schedule-session", (message: unknown) => {
         sentMessage = message as SentPromptMessage;
-        setTimeout(() => {
+        void sleep(0).then(() => {
           if (!sentMessage) {
             return;
           }
@@ -548,7 +549,7 @@ describe("session supervisor safeguards", () => {
               accepted: true,
             },
           });
-        }, 0).unref?.();
+        });
         return true;
       });
 
@@ -634,7 +635,7 @@ describe("session supervisor safeguards", () => {
       let sentMessage: AbortMessage | undefined;
       supervisor.testHooks.replaceWorkerSend("abort-session", (message: unknown) => {
         sentMessage = message as AbortMessage;
-        setTimeout(() => {
+        void sleep(0).then(() => {
           if (!sentMessage) {
             return;
           }
@@ -647,7 +648,7 @@ describe("session supervisor safeguards", () => {
               aborted: true,
             },
           });
-        }, 0).unref?.();
+        });
         return true;
       });
 

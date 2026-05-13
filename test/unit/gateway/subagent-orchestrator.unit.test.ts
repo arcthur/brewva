@@ -13,6 +13,8 @@ import type { BrewvaRuntimeOptions } from "@brewva/brewva-runtime";
 import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
 import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import type { BrewvaPromptSessionEvent } from "@brewva/brewva-substrate/session";
+import { requireDefined, requireNonEmptyString } from "../../helpers/assertions.js";
+import { sleep } from "../../helpers/process.js";
 
 function createHostedTestRuntime(options: BrewvaRuntimeOptions) {
   return createBrewvaRuntime(options).hosted;
@@ -257,8 +259,11 @@ describe("hosted subagent orchestrator", () => {
     });
     expect(workerResults[0]?.patches?.changes).toEqual(outcome.patches?.changes);
     const recordedChange = workerResults[0]?.patches?.changes[0];
-    expect(recordedChange?.artifactRef).toBeTruthy();
-    expect(existsSync(join(workspaceRoot, recordedChange?.artifactRef ?? ""))).toBe(true);
+    const artifactRef = requireNonEmptyString(
+      recordedChange?.artifactRef,
+      "expected recorded patch change to reference a materialized artifact",
+    );
+    expect(existsSync(join(workspaceRoot, artifactRef))).toBe(true);
 
     const parentFile = await readFile(join(workspaceRoot, "src", "message.ts"), "utf8");
     expect(parentFile).toBe("export const message = 'before';\n");
@@ -442,7 +447,7 @@ describe("hosted subagent orchestrator", () => {
     expect(outcome?.ok).toBe(true);
     if (outcome && outcome.ok) {
       expect(outcome.kind).toBe("patch");
-      expect(outcome.patches).toBeUndefined();
+      expect(outcome.patches).toBe(undefined);
     }
 
     await rm(workspaceRoot, { recursive: true, force: true });
@@ -1086,12 +1091,14 @@ describe("hosted subagent orchestrator", () => {
       type: "subagent_cancelled",
     });
     expect(events).toHaveLength(1);
-    expect(childRuntime).toBeDefined();
-    const shutdownEvents =
-      childRuntime?.inspect.events.records.query("child-background", {
-        type: "session_shutdown",
-        last: 1,
-      }) ?? [];
+    const cancelledChildRuntime = requireDefined(
+      childRuntime,
+      "expected child runtime to be created before cancellation",
+    );
+    const shutdownEvents = cancelledChildRuntime.inspect.events.records.query("child-background", {
+      type: "session_shutdown",
+      last: 1,
+    });
     expect(shutdownEvents).toHaveLength(1);
     expect(shutdownEvents[0]?.payload).toMatchObject({
       reason: "subagent_cancelled_manual_stop",
@@ -1232,7 +1239,7 @@ describe("hosted subagent orchestrator", () => {
       if (current?.status === "completed") {
         break;
       }
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      await sleep(0);
     }
 
     const status = await adapter.status({

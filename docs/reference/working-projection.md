@@ -79,7 +79,7 @@ flowchart TD
   mark stale `workflow_artifact:*` keys resolved; it does not truncate older
   rows from the append-only log
 - projection source admission is locked by
-  `test/quality/runtime-projection-admission.quality.test.ts`; new projection
+  `test/fitness/runtime-projection-admission.fitness.test.ts`; new projection
   files must update that allowlist, and the relative TypeScript dependency
   closure must not import gateway hosted internals, provider packages, tool
   families, or runtime root/operator port contracts

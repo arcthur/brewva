@@ -10,6 +10,7 @@ import type { Model } from "@brewva/brewva-provider-core/contracts";
 import type { ProviderAssistantMessageStream } from "@brewva/brewva-provider-core/contracts";
 import { ProviderRuntime, providerRuntimeLayer } from "@brewva/brewva-provider-core/contracts";
 import { runProviderStream } from "../../../packages/brewva-provider-core/src/stream/run-provider-stream.js";
+import { sleep } from "../../helpers/process.js";
 
 const model: Model<"openai-responses"> = {
   id: "gpt-4o",
@@ -144,7 +145,7 @@ describe("provider stream runner", () => {
     );
 
     await thirdPushStarted;
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await sleep(0);
 
     expect(order).toContain("pushed:start");
     expect(order).toContain("pushed:first");

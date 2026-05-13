@@ -1011,7 +1011,7 @@ describe("gateway contract: telegram channel dispatch", () => {
     expect(readTurnText(questionsReply)).toContain(
       "Should the update target the daemon or the print path?",
     );
-    expect(observedQuestionSurface?.liveSessionId).toBeUndefined();
+    expect(observedQuestionSurface?.liveSessionId).toBe(undefined);
     expect(observedQuestionSurface?.sessionIds).toContain(defaultSession?.sessionId ?? "");
     expect(
       capturedPrompts.some((prompt) =>

@@ -8,6 +8,7 @@ import { type BrewvaEventRecord } from "@brewva/brewva-runtime/events";
 import { TASK_EVENT_TYPE } from "@brewva/brewva-runtime/events";
 import { TASK_LEDGER_SCHEMA } from "@brewva/brewva-runtime/task";
 import { ProjectionEngine } from "../../../packages/brewva-runtime/src/domain/projection/engine.js";
+import { requireDefined } from "../../helpers/assertions.js";
 
 function taskSpecEvent(input: {
   id: string;
@@ -65,13 +66,15 @@ describe("projection engine", () => {
       }),
     );
 
-    const snapshot = engine.refreshIfNeeded({
-      sessionId: "projection-engine-session",
-    });
+    const snapshot = requireDefined(
+      engine.refreshIfNeeded({
+        sessionId: "projection-engine-session",
+      }),
+      "expected working projection snapshot",
+    );
 
-    expect(snapshot).toBeDefined();
-    expect(snapshot?.content).toContain("[WorkingProjection]");
-    expect(snapshot?.content).toContain("Ship governance projection");
+    expect(snapshot.content).toContain("[WorkingProjection]");
+    expect(snapshot.content).toContain("Ship governance projection");
 
     const workingPath = workingSnapshotPath(workspace, "projection-engine-session");
     expect(existsSync(workingPath)).toBe(true);
@@ -139,10 +142,12 @@ describe("projection engine", () => {
       workingFile: "working.md",
       maxWorkingChars: 2_000,
     });
-    const rebuilt = secondEngine.refreshIfNeeded({ sessionId });
+    const rebuilt = requireDefined(
+      secondEngine.refreshIfNeeded({ sessionId }),
+      "expected rebuilt working projection snapshot",
+    );
 
-    expect(rebuilt).toBeDefined();
-    expect(rebuilt?.content).toContain("Rebuild working snapshot from persisted units");
+    expect(rebuilt.content).toContain("Rebuild working snapshot from persisted units");
     expect(existsSync(workingSnapshotPath(workspace, sessionId))).toBe(true);
   });
 });

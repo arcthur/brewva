@@ -18,7 +18,7 @@
   - `packages/brewva-search/src/tokenization/ascii.ts`
   - `packages/brewva-search/src/tokenization/cjk.ts`
   - `packages/brewva-search/src/jieba/wasm.ts`
-  - `test/quality/retrieval-spine-boundaries.quality.test.ts`
+  - `test/fitness/retrieval-spine-boundaries.fitness.test.ts`
 
 ## Decision Summary
 

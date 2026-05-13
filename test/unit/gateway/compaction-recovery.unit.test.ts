@@ -20,6 +20,7 @@ import {
 } from "../../../packages/brewva-gateway/src/hosted/internal/compaction/recovery.js";
 import type { ThreadLoopRecoveryPolicyName } from "../../../packages/brewva-gateway/src/hosted/internal/thread-loop/state.js";
 import { buildToolCallBlockedPayload } from "../../helpers/events.js";
+import { sleep, withTimeout } from "../../helpers/process.js";
 
 function textPrompt(text: string): BrewvaPromptContentPart[] {
   return [{ type: "text", text }];
@@ -161,15 +162,12 @@ describe("compaction recovery controller", () => {
       runtime: eventBridge.runtime as any,
     });
 
-    const initialPromptResult = await Promise.race([
-      wrapped.prompt(textPrompt("interactive prompt")).then(() => "resolved"),
-      new Promise<string>((resolve) => {
-        setTimeout(() => resolve("timed_out"), 20);
-      }),
-    ]);
-
-    expect(initialPromptResult).toBe("resolved");
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await withTimeout(
+      wrapped.prompt(textPrompt("interactive prompt")),
+      20,
+      "background generation tracking should not delay interactive prompts",
+    );
+    await sleep(0);
     expect(promptedMessages).toEqual(["interactive prompt"]);
     expect(readTransitionPayloads(eventBridge)).toEqual([]);
   });
@@ -431,7 +429,7 @@ describe("compaction recovery controller", () => {
       sessionId: "agent-session-queued",
     });
 
-    const queuedPromptResult = await Promise.race([
+    await withTimeout(
       dispatchWithSettlement(
         eventBridge,
         session,
@@ -440,14 +438,12 @@ describe("compaction recovery controller", () => {
         {
           streamingBehavior: "followUp",
         },
-      ).then(() => "resolved"),
-      new Promise<string>((resolve) => {
-        setTimeout(() => resolve("timed_out"), 20);
-      }),
-    ]);
+      ),
+      20,
+      "queued streaming prompt should not wait for idle settlement",
+    );
 
     resolveIdle?.();
-    expect(queuedPromptResult).toBe("resolved");
   });
 
   test("dispose on installed sessions tears down recovery without changing the raw prompt", async () => {
@@ -483,7 +479,7 @@ describe("compaction recovery controller", () => {
       payload: { entryId: "comp-1" },
     });
 
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await sleep(0);
     expect(disposeCalls).toEqual(["disposed"]);
     expect(session.prompt).toBe(prompt);
     expect(readTransitionPayloads(eventBridge)).toEqual([]);
@@ -523,7 +519,7 @@ describe("compaction recovery controller", () => {
         turn: attempt + 1,
         payload: { entryId: `comp-${attempt + 1}` },
       });
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      await sleep(0);
     }
 
     eventBridge.runtime.extensions.hosted.events.record({
@@ -532,7 +528,7 @@ describe("compaction recovery controller", () => {
       turn: 4,
       payload: { entryId: "comp-4" },
     });
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await sleep(0);
 
     expect(promptedMessages).toEqual([]);
     expect(readTransitionPayloads(eventBridge)).toEqual([]);

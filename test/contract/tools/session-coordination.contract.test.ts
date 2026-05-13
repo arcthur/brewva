@@ -526,7 +526,8 @@ describe("session coordination tool contracts", () => {
     const stableId = (initialDetails?.results ?? [])
       .map((entry) => entry.stableId)
       .find((value): value is string => typeof value === "string" && value.startsWith("tape:"));
-    expect(stableId).toBeDefined();
+    expect(typeof stableId).toBe("string");
+    expect(stableId?.startsWith("tape:")).toBe(true);
 
     runtime.extensions.hosted.events.record({
       sessionId: currentSessionId,

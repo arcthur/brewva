@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { BoxExecSpec, BoxHandle, BoxPlane, BoxScope } from "@brewva/brewva-box";
 import { createExecTool, createProcessTool } from "@brewva/brewva-tools/execution";
+import { sleep, waitUntil } from "../../helpers/process.js";
 import {
   createRuntimeForExecTests,
   extractTextContent,
@@ -48,7 +49,7 @@ function createCapturingBoxPlane(calls: {
                 await new Promise(() => {});
               }
               if (calls.waitDelayMs && calls.waitDelayMs > 0) {
-                await new Promise((resolveNow) => setTimeout(resolveNow, calls.waitDelayMs));
+                await sleep(calls.waitDelayMs);
               }
               return {
                 id: "exec-captured",
@@ -303,7 +304,7 @@ describe("exec box routing", () => {
     expect(calls.releases).toEqual([]);
 
     clearSession("s13-exec-box-session-release");
-    await new Promise((resolveNow) => setTimeout(resolveNow, 0));
+    await sleep(0);
 
     expect(calls.releases).toEqual([
       {
@@ -413,10 +414,7 @@ describe("exec box routing", () => {
       fakeContext(sessionId),
     );
 
-    const releaseDeadline = Date.now() + 1000;
-    while (calls.releases.length === 0 && Date.now() < releaseDeadline) {
-      await new Promise((resolveNow) => setTimeout(resolveNow, 10));
-    }
+    await waitUntil(() => calls.releases.length > 0, 1000, "box session release timeout");
 
     expect(calls.releases).toEqual([
       {
@@ -455,10 +453,7 @@ describe("exec box routing", () => {
       fakeContext("s13-exec-box-abort-finalizer"),
     );
 
-    const deadline = Date.now() + 1000;
-    while (calls.execs.length === 0 && Date.now() < deadline) {
-      await new Promise((resolveNow) => setTimeout(resolveNow, 10));
-    }
+    await waitUntil(() => calls.execs.length > 0, 1000, "box foreground exec start timeout");
     expect(calls.execs).toHaveLength(1);
 
     controller.abort();

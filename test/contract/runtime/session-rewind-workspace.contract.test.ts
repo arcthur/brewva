@@ -393,7 +393,7 @@ describe("session rewind workspace", () => {
     if (!rewind.ok) {
       throw new Error(`Code-mode rewind failed: ${rewind.reason}`);
     }
-    expect(rewind.reasoningRevert).toBeUndefined();
+    expect(rewind.reasoningRevert).toBe(undefined);
     expect(rewind.divergenceNote).toMatchObject({
       kind: "conversation_ahead",
       patchSetCount: 1,
@@ -419,7 +419,7 @@ describe("session rewind workspace", () => {
     if (!redo.ok) {
       throw new Error(`Code-mode redo failed: ${redo.reason}`);
     }
-    expect(redo.reasoningCheckpoint).toBeUndefined();
+    expect(redo.reasoningCheckpoint).toBe(undefined);
     expect(readFileSync(filePath, "utf8")).toBe("export const value = 2;\n");
   });
 
@@ -547,7 +547,9 @@ describe("session rewind workspace", () => {
       checkpointId: checkpoint.checkpointId,
       status: "active",
     });
-    expect(rewoundCheckpoint?.supersededAt).toBeUndefined();
-    expect(rewoundCheckpoint?.supersededByEventId).toBeUndefined();
+    expect([rewoundCheckpoint?.supersededAt, rewoundCheckpoint?.supersededByEventId]).toEqual([
+      undefined,
+      undefined,
+    ]);
   });
 });

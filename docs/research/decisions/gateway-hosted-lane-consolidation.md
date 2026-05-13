@@ -28,8 +28,8 @@
   - `packages/brewva-gateway/src/hosted/internal/thread-loop/`
   - `packages/brewva-gateway/src/hosted/internal/shared/`
   - `packages/brewva-gateway/src/extensions/api.ts`
-  - `test/quality/gateway/hosted-lane-layout.quality.test.ts`
-  - `test/quality/gateway/gateway-root-export-snapshot.quality.test.ts`
+  - `test/fitness/gateway/hosted-lane-layout.fitness.test.ts`
+  - `test/fitness/gateway/gateway-root-export-snapshot.fitness.test.ts`
 
 ## Decision Summary
 

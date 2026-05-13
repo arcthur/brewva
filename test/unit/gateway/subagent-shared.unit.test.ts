@@ -237,7 +237,7 @@ describe("subagent shared execution resolution", () => {
     expect(resolved.delegate).toBe("advisor");
     expect(resolved.target.agentSpecName).toBe("advisor");
     expect(resolved.target.envelopeName).toBe("readonly-advisor");
-    expect(resolved.target.skillName).toBeUndefined();
+    expect(resolved.target.skillName).toBe(undefined);
     expect(resolved.target.resultMode).toBe("consult");
     expect(resolved.target.consultKind).toBe("review");
   });
@@ -267,7 +267,7 @@ describe("subagent shared execution resolution", () => {
     expect(resolved.delegate).toBe("review-security");
     expect(resolved.target.agentSpecName).toBe("review-security");
     expect(resolved.target.envelopeName).toBe("readonly-advisor");
-    expect(resolved.target.skillName).toBeUndefined();
+    expect(resolved.target.skillName).toBe(undefined);
     expect(resolved.target.resultMode).toBe("consult");
     expect(resolved.target.consultKind).toBe("review");
   });

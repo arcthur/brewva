@@ -584,7 +584,7 @@ Plan from project.
       streamFn: createTestStream("unused"),
     });
 
-    expect(session.turnLoop.state.model).toBeUndefined();
+    expect(session.turnLoop.state.model).toBe(undefined);
     expect(session.diagnostics).toContainEqual(
       expect.objectContaining({
         type: "error",

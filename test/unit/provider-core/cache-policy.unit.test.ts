@@ -167,7 +167,7 @@ describe("provider cache policy", () => {
         baseUrl: "https://api.openai.com/v1",
         transport: "sse",
       }).continuation,
-    ).toBeUndefined();
+    ).toBe(undefined);
 
     expect(
       resolveProviderCacheCapability({
@@ -280,8 +280,7 @@ describe("provider cache policy", () => {
         renderedRetention: "none",
       }),
     );
-    expect(openai.promptCacheKey).toBeUndefined();
-    expect(openai.promptCacheRetention).toBeUndefined();
+    expect([openai.promptCacheKey, openai.promptCacheRetention]).toEqual([undefined, undefined]);
 
     const anthropic = resolveAnthropicCacheRender({
       baseUrl: "https://api.anthropic.com",
@@ -300,7 +299,7 @@ describe("provider cache policy", () => {
         renderedRetention: "none",
       }),
     );
-    expect(anthropic.cacheControl).toBeUndefined();
+    expect(anthropic.cacheControl).toBe(undefined);
   });
 
   test("renders Anthropic long retention only for direct Anthropic requests", () => {

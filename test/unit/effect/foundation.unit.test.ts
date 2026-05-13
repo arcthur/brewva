@@ -32,6 +32,7 @@ import {
 import { nodeFileSystemLayer } from "@brewva/brewva-effect/platform-node";
 import { createBrewvaRuntimeSpine } from "@brewva/brewva-effect/runtime";
 import { BrewvaTestClock, createTestRuntime } from "@brewva/brewva-effect/testing";
+import { sleep } from "../../helpers/process.js";
 
 describe("brewva-effect foundation helpers", () => {
   test("runs boundary effects through the shared boundary runner", async () => {
@@ -237,15 +238,15 @@ describe("brewva-effect foundation helpers", () => {
           calls += 1;
           inFlight += 1;
           maxInFlight = Math.max(maxInFlight, inFlight);
-          await new Promise((resolve) => setTimeout(resolve, 5));
+          await sleep(5);
           inFlight -= 1;
         }),
     });
 
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    await sleep(20);
     await handle.close();
     const callsAfterClose = calls;
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await sleep(10);
 
     expect(callsAfterClose).toBeGreaterThan(0);
     expect(calls).toBe(callsAfterClose);
@@ -264,15 +265,15 @@ describe("brewva-effect foundation helpers", () => {
           calls += 1;
           inFlight += 1;
           maxInFlight = Math.max(maxInFlight, inFlight);
-          await new Promise((resolve) => setTimeout(resolve, 5));
+          await sleep(5);
           inFlight -= 1;
         }),
     });
 
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    await sleep(20);
     await handle.close();
     const callsAfterClose = calls;
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await sleep(10);
 
     expect(callsAfterClose).toBeGreaterThan(0);
     expect(calls).toBe(callsAfterClose);
@@ -404,7 +405,9 @@ describe("brewva-effect foundation helpers", () => {
 
     expect(result).toBe("ok");
     expect(attempts).toBe(3);
-    expect(makeBrewvaRetrySchedule({ maxRetries: 1, baseDelayMs: 1 })).toBeDefined();
+    expect(Object.keys(makeBrewvaRetrySchedule({ maxRetries: 1, baseDelayMs: 1 }))).toEqual([
+      "step",
+    ]);
   });
 
   test("retry policies can preserve service-directed retry delays", async () => {
@@ -488,7 +491,7 @@ describe("brewva-effect foundation helpers", () => {
       ),
     );
     expect(loadedNodeSdk).toBe(true);
-    expect(nodeFileSystemLayer).toBeDefined();
+    expect(typeof nodeFileSystemLayer).toBe("object");
   });
 
   test("common tagged errors flow through the Effect error channel", async () => {

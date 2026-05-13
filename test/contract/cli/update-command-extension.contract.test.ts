@@ -75,7 +75,7 @@ describe("update interactive command extension", () => {
     await command.handler("target=latest", ctx);
 
     expect(sentMessages).toHaveLength(1);
-    expect(sentMessages[0]?.options).toBeUndefined();
+    expect(sentMessages[0]?.options).toBe(undefined);
     expect(buildBrewvaPromptText(sentMessages[0]?.content ?? [])).toContain(
       "Run a Brewva update workflow for this environment.",
     );

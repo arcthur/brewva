@@ -43,7 +43,7 @@ describe("read unchanged state", () => {
         signature,
         visibleHistoryEpoch: 2,
       }),
-    ).toBeUndefined();
+    ).toBe(undefined);
 
     state.recordFullRead({
       sessionId: "session-1",
@@ -60,7 +60,7 @@ describe("read unchanged state", () => {
         signature: { ...signature, mtimeMs: 2000, contentHash: "hash-2" },
         visibleHistoryEpoch: 2,
       }),
-    ).toBeUndefined();
+    ).toBe(undefined);
 
     state.clear("session-1");
     expect(state.match({ sessionId: "session-1", key, signature, visibleHistoryEpoch: 2 })).toBe(

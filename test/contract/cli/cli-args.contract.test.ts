@@ -87,7 +87,7 @@ describe("brewva cli args", () => {
     const parsed = parseArgs([]);
     expect(parsed).not.toBeNull();
     expect(parsed!.mode).toBe("interactive");
-    expect(parsed!.prompt).toBeUndefined();
+    expect(parsed!.prompt).toBe(undefined);
   });
 
   test("given --undo without prompt, when parsing args, then undo is enabled in interactive mode", () => {
@@ -145,7 +145,7 @@ describe("brewva cli args", () => {
     expect(parsed).not.toBeNull();
     expect(parsed!.daemon).toBe(true);
     expect(parsed!.mode).toBe("interactive");
-    expect(parsed!.prompt).toBeUndefined();
+    expect(parsed!.prompt).toBe(undefined);
   });
 
   test("given telegram channel flags, when parsing args, then telegram channel config is populated", () => {

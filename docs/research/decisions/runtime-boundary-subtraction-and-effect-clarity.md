@@ -23,8 +23,8 @@
   - `packages/brewva-substrate/src/tools/protocol.ts`
   - `packages/brewva-tools/src/registry/managed-metadata.ts`
   - `script/generate-doc-inventory.ts`
-  - `test/quality/runtime-promoted-architecture.quality.test.ts`
-  - `test/quality/gateway/hosted-lane-layout.quality.test.ts`
+  - `test/fitness/runtime-promoted-architecture.fitness.test.ts`
+  - `test/fitness/gateway/hosted-lane-layout.fitness.test.ts`
 
 ## Decision Summary
 

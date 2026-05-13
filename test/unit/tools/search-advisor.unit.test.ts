@@ -77,7 +77,7 @@ describe("SearchAdvisor", () => {
         toolName: "grep",
         query: "config",
       }),
-    ).toBeUndefined();
+    ).toBe(undefined);
     expect(
       snapshot.scoreFile({
         toolName: "grep",

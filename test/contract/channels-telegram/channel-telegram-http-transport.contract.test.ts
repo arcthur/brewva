@@ -7,6 +7,7 @@ import {
   type TelegramUpdate,
 } from "@brewva/brewva-channels-telegram";
 import { assertRejectsWithMessage, resolveRequestUrl } from "../../helpers.js";
+import { sleep } from "../../helpers/process.js";
 
 interface FetchCall {
   url: string;
@@ -100,9 +101,7 @@ async function waitFor(
     if (Date.now() - startedAt > timeoutMs) {
       throw new Error("waitFor timeout");
     }
-    await new Promise<void>((resolve) => {
-      setTimeout(resolve, intervalMs);
-    });
+    await sleep(intervalMs);
   }
 }
 
@@ -205,7 +204,7 @@ describe("channel telegram http transport", () => {
     expect(calls).toHaveLength(2);
     expect(calls[0]?.url).toBe("https://api.telegram.org/botbot-token/getUpdates");
     expect(calls[0]?.method).toBe("POST");
-    expect(calls[0]?.bodyJson.offset).toBeUndefined();
+    expect(calls[0]?.bodyJson.offset).toBe(undefined);
     expect(calls[1]?.bodyJson.offset).toBe(11);
   });
 
@@ -255,8 +254,7 @@ describe("channel telegram http transport", () => {
     await transport.stop();
 
     expect(errors).toContain("turn handler failed");
-    expect(calls[0]?.bodyJson.offset).toBeUndefined();
-    expect(calls[1]?.bodyJson.offset).toBeUndefined();
+    expect([calls[0]?.bodyJson.offset, calls[1]?.bodyJson.offset]).toEqual([undefined, undefined]);
   });
 
   test("maps send response message_id to providerMessageId", async () => {

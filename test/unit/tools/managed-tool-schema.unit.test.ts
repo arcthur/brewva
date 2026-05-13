@@ -26,10 +26,10 @@ describe("managed Brewva tool schemas", () => {
     };
 
     expect(parameters.type).toBe("object");
-    expect(parameters.anyOf).toBeUndefined();
-    expect(parameters.allOf).toBeUndefined();
-    expect(parameters.properties?.file_path).toBeDefined();
-    expect(parameters.properties?.filePath).toBeUndefined();
+    expect(Object.hasOwn(parameters, "anyOf")).toBe(false);
+    expect(Object.hasOwn(parameters, "allOf")).toBe(false);
+    expect(Object.hasOwn(parameters.properties ?? {}, "file_path")).toBe(true);
+    expect(Object.hasOwn(parameters.properties ?? {}, "filePath")).toBe(false);
     expect(parameters.required).toEqual(["file_path", "spans"]);
 
     const result = await tool.execute(
@@ -55,11 +55,11 @@ describe("managed Brewva tool schemas", () => {
       required?: string[];
     };
 
-    expect(parameters.properties?.action).toBeDefined();
-    expect(parameters.properties?.sessionId).toBeDefined();
-    expect(parameters.properties?.session_id).toBeUndefined();
-    expect(parameters.properties?.timeout).toBeDefined();
-    expect(parameters.properties?.timeout_ms).toBeUndefined();
+    expect(Object.hasOwn(parameters.properties ?? {}, "action")).toBe(true);
+    expect(Object.hasOwn(parameters.properties ?? {}, "sessionId")).toBe(true);
+    expect(Object.hasOwn(parameters.properties ?? {}, "session_id")).toBe(false);
+    expect(Object.hasOwn(parameters.properties ?? {}, "timeout")).toBe(true);
+    expect(Object.hasOwn(parameters.properties ?? {}, "timeout_ms")).toBe(false);
     expect(parameters.required).toEqual(["action"]);
 
     const result = await tool.execute(

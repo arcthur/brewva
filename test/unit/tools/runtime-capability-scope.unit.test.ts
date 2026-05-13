@@ -406,7 +406,7 @@ describe("tool runtime capability scope", () => {
       "managed Brewva tool 'schedule_intent' attempted to access protected runtime capability 'authority.task.spec.set' without declaring it.",
     );
 
-    expect(() => taskScoped.authority.task.spec.set("session-1", {} as never)).not.toThrow();
+    taskScoped.authority.task.spec.set("session-1", {} as never);
     expect(() => taskScoped.authority.schedule.intents.create("session-1", {} as never)).toThrow(
       "managed Brewva tool 'task_set_spec' attempted to access protected runtime capability 'authority.schedule.intents.create' without declaring it.",
     );

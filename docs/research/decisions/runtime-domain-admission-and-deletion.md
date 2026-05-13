@@ -16,9 +16,9 @@
   - `packages/brewva-runtime/src/internal/evidence/`
   - `packages/brewva-runtime/src/evidence.ts`
   - `packages/brewva-runtime/src/runtime/runtime-surfaces.ts`
-  - `test/quality/runtime-domain-migration.quality.test.ts`
-  - `test/quality/runtime-promoted-architecture.quality.test.ts`
-  - `test/quality/runtime-workflow-ownership.quality.test.ts`
+  - `test/fitness/runtime-domain-migration.fitness.test.ts`
+  - `test/fitness/runtime-promoted-architecture.fitness.test.ts`
+  - `test/fitness/runtime-workflow-ownership.fitness.test.ts`
 
 ## Decision Summary
 

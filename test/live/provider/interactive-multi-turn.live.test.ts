@@ -412,7 +412,7 @@ describe("live: interactive multi-turn regression", () => {
       ],
     };
 
-    expect(() => assertAutoCompactionCompletionContinuity(result.events)).not.toThrow();
+    assertAutoCompactionCompletionContinuity(result.events);
   });
 
   test("assertion helper rejects missing continuation before next turn", () => {
@@ -428,7 +428,15 @@ describe("live: interactive multi-turn regression", () => {
       ],
     };
 
-    expect(() => assertAutoCompactionCompletionContinuity(result.events)).toThrow();
+    let error: unknown;
+    try {
+      assertAutoCompactionCompletionContinuity(result.events);
+    } catch (caught) {
+      error = caught;
+    }
+
+    expect(error).toBeInstanceOf(Error);
+    expect(String(error)).toContain("toBeGreaterThanOrEqual");
   });
 
   test("assertion helper rejects excessive silence after auto compaction completion", () => {
@@ -444,7 +452,15 @@ describe("live: interactive multi-turn regression", () => {
       ],
     };
 
-    expect(() => assertAutoCompactionCompletionContinuity(result.events)).toThrow();
+    let error: unknown;
+    try {
+      assertAutoCompactionCompletionContinuity(result.events);
+    } catch (caught) {
+      error = caught;
+    }
+
+    expect(error).toBeInstanceOf(Error);
+    expect(String(error)).toContain("toBeLessThanOrEqual");
   });
 
   runLive("runs 3~5 round segmented conversation and validates compaction continuity", () => {

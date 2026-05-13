@@ -13,6 +13,7 @@ import {
 import { parseScheduleIntentEvent } from "@brewva/brewva-runtime/schedule";
 import { writeMinimalConfig } from "../../helpers/config.js";
 import { buildGatewayWorkerHarnessEnv, startGatewayDaemonHarness } from "../../helpers/gateway.js";
+import { sleep, withTimeout } from "../../helpers/process.js";
 import { cleanupWorkspace, createWorkspace, repoRoot } from "../../helpers/workspace.js";
 
 interface DaemonProcess {
@@ -59,10 +60,7 @@ async function waitForCondition<T>(
       );
     }
 
-    await new Promise<void>((resolve) => {
-      const timer = setTimeout(resolve, intervalMs);
-      timer.unref?.();
-    });
+    await sleep(intervalMs);
   }
 
   const stderr = options.daemon?.readStderr() ?? "";
@@ -125,25 +123,8 @@ async function stopSchedulerDaemon(daemon: DaemonProcess): Promise<void> {
     return;
   }
 
-  await new Promise<void>((resolve, reject) => {
-    const timer = setTimeout(() => {
-      daemon.child.kill("SIGKILL");
-      reject(
-        new Error(
-          [
-            "scheduler daemon did not stop after SIGTERM",
-            daemon.readStderr() ? `stderr:\n${daemon.readStderr()}` : "",
-            daemon.readStdout() ? `stdout:\n${daemon.readStdout()}` : "",
-          ]
-            .filter(Boolean)
-            .join("\n\n"),
-        ),
-      );
-    }, 8_000);
-    timer.unref?.();
-
+  const stopPromise = new Promise<void>((resolve, reject) => {
     daemon.child.once("close", (code, signal) => {
-      clearTimeout(timer);
       if (signal && signal !== "SIGTERM") {
         reject(new Error(`scheduler daemon exited via signal ${signal}`));
         return;
@@ -167,6 +148,29 @@ async function stopSchedulerDaemon(daemon: DaemonProcess): Promise<void> {
 
     daemon.child.kill("SIGTERM");
   });
+  const timeoutMessage = "scheduler daemon did not stop after SIGTERM";
+  try {
+    await withTimeout(stopPromise, 8_000, timeoutMessage);
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message === timeoutMessage &&
+      daemon.child.exitCode === null
+    ) {
+      daemon.child.kill("SIGKILL");
+      throw new Error(
+        [
+          timeoutMessage,
+          daemon.readStderr() ? `stderr:\n${daemon.readStderr()}` : "",
+          daemon.readStdout() ? `stdout:\n${daemon.readStdout()}` : "",
+        ]
+          .filter(Boolean)
+          .join("\n\n"),
+        { cause: error },
+      );
+    }
+    throw error;
+  }
 }
 
 describe("system: scheduler daemon", () => {

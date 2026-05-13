@@ -269,7 +269,7 @@ describe("context status derivation", () => {
     expect(gateDecision.allowed).toBe(false);
 
     const blocked = events.find((event) => event.type === "context_compaction_gate_blocked_tool");
-    expect(blocked).toBeDefined();
+    expect(blocked?.type).toBe("context_compaction_gate_blocked_tool");
     expect(blocked?.payload).toEqual(
       expect.objectContaining({
         blockedTool: "exec",

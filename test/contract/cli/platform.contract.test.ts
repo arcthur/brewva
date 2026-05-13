@@ -36,9 +36,11 @@ describe("brewva platform package resolution", () => {
   });
 
   test("throws for unsupported or unknown Linux libc", () => {
-    expect(() =>
-      getPlatformPackage({ platform: "linux", arch: "x64", libcFamily: null }),
-    ).toThrow();
-    expect(() => getPlatformPackage({ platform: "freebsd", arch: "x64" })).toThrow();
+    expect(() => getPlatformPackage({ platform: "linux", arch: "x64", libcFamily: null })).toThrow(
+      "could not detect Linux libc family",
+    );
+    expect(() => getPlatformPackage({ platform: "freebsd", arch: "x64" })).toThrow(
+      "unsupported platform target",
+    );
   });
 });

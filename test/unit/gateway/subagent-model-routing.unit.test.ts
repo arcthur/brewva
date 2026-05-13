@@ -141,8 +141,7 @@ describe("subagent model routing", () => {
       },
     });
 
-    expect(resolved.model).toBeUndefined();
-    expect(resolved.modelRoute).toBeUndefined();
+    expect([resolved.model, resolved.modelRoute]).toEqual([undefined, undefined]);
   });
 
   test("keeps explicit executionShape model selections inspectable", () => {
@@ -228,8 +227,7 @@ describe("subagent model routing", () => {
       },
     });
 
-    expect(resolved.model).toBeUndefined();
-    expect(resolved.modelRoute).toBeUndefined();
+    expect([resolved.model, resolved.modelRoute]).toEqual([undefined, undefined]);
   });
 
   test("lets explicit execution intent outrank frontend surface keywords", () => {

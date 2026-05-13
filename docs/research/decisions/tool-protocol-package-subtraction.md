@@ -17,7 +17,7 @@
   - `packages/brewva-gateway/src/`
   - `packages/brewva-mcp-adapter/src/index.ts`
   - `test/contract/substrate/tool-contract.contract.test.ts`
-  - `test/quality/substrate-domain-slicing.quality.test.ts`
+  - `test/fitness/substrate-domain-slicing.fitness.test.ts`
 
 ## Decision Summary
 

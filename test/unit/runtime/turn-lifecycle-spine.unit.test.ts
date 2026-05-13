@@ -116,7 +116,7 @@ describe("turn lifecycle spine", () => {
         "brewva.session.rewind.v1",
       ],
     });
-    expect(getTurnLifecycleRecoveryPlacement("wal_recovery_failed")).toBeUndefined();
-    expect(getTurnLifecycleRecoveryPlacement("wal_recovery_completed")).toBeUndefined();
+    expect(getTurnLifecycleRecoveryPlacement("wal_recovery_failed")).toBe(undefined);
+    expect(getTurnLifecycleRecoveryPlacement("wal_recovery_completed")).toBe(undefined);
   });
 });

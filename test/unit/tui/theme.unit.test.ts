@@ -63,7 +63,7 @@ describe("tui theme", () => {
     };
     expect(resolveTuiTheme("graphite")).toEqual(DEFAULT_TUI_THEME);
     expect(resolveTuiTheme(customTheme)).toEqual(customTheme);
-    expect(resolveTuiTheme("missing-theme")).toBeUndefined();
+    expect(resolveTuiTheme("missing-theme")).toBe(undefined);
   });
 
   test("selects an automatic theme from the terminal background mode", () => {

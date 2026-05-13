@@ -132,7 +132,7 @@ describe("schedule_intent contract", () => {
     expect(intents.length).toBe(1);
     expect(intents[0]?.cron).toBe("*/10 * * * *");
     expect(intents[0]?.timeZone).toBe("Asia/Shanghai");
-    expect(intents[0]?.runAt).toBeUndefined();
+    expect(intents[0]?.runAt).toBe(undefined);
     expect(typeof intents[0]?.nextRunAt).toBe("number");
   });
 
@@ -187,7 +187,7 @@ describe("schedule_intent contract", () => {
     expect(intents[0]?.cron).toBe("*/15 * * * *");
     expect(intents[0]?.timeZone).toBe("Asia/Shanghai");
     expect(intents[0]?.maxRuns).toBe(8);
-    expect(intents[0]?.runAt).toBeUndefined();
+    expect(intents[0]?.runAt).toBe(undefined);
 
     const events = runtime.inspect.events.records.query(sessionId, { type: "schedule_intent" });
     const kinds = events

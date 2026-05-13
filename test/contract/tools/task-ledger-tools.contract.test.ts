@@ -56,7 +56,7 @@ describe("task ledger tool contracts", () => {
       const input = {
         goal: "Review docs",
         verification: {
-          commands: ["bun test test/quality/docs"],
+          commands: ["bun test test/fitness/docs"],
         },
       };
 
@@ -67,8 +67,15 @@ describe("task ledger tool contracts", () => {
           };
         }
       ).properties?.verification as { properties?: Record<string, unknown> } | undefined;
-      expect(verificationSchema?.properties?.commands).toBeDefined();
-      expect(verificationSchema?.properties?.level).toBeUndefined();
+      const commandsSchema = requireDefined(
+        verificationSchema?.properties?.commands as
+          | { items?: { type?: unknown }; type?: unknown }
+          | undefined,
+        "Expected task verification commands schema.",
+      );
+      expect(commandsSchema.type).toBe("array");
+      expect(commandsSchema.items?.type).toBe("string");
+      expect(verificationSchema?.properties?.level).toBe(undefined);
 
       await taskSetSpec.execute(
         "tc-task-set-spec-commands",
@@ -78,7 +85,7 @@ describe("task ledger tool contracts", () => {
         fakeContext(sessionId),
       );
       expect(runtime.inspect.task.state.get(sessionId).spec?.verification).toEqual({
-        commands: ["bun test test/quality/docs"],
+        commands: ["bun test test/fitness/docs"],
       });
     } finally {
       cleanupTestWorkspace(workspace);
@@ -281,7 +288,7 @@ describe("task ledger tool contracts", () => {
       expect(extractTextContent(result)).toBe(
         "Acceptance update rejected (acceptance_not_enabled).",
       );
-      expect(runtime.inspect.task.state.get(sessionId).acceptance).toBeUndefined();
+      expect(runtime.inspect.task.state.get(sessionId).acceptance).toBe(undefined);
     } finally {
       cleanupTestWorkspace(workspace);
     }

@@ -5,6 +5,7 @@ import {
   buildHostedMcpToolName,
   createHostedMcpToolBundle,
 } from "../../../packages/brewva-gateway/src/hosted/internal/session/init/mcp-tools.js";
+import { requireDefined } from "../../helpers/assertions.js";
 
 describe("hosted MCP tools", () => {
   test("bridges MCP catalog entries into executable hosted tools without trusting annotations", async () => {
@@ -48,13 +49,9 @@ describe("hosted MCP tools", () => {
       },
     ]);
 
-    expect(bundle).toBeDefined();
-    expect(bundle?.tools).toHaveLength(1);
-    const tool = bundle?.tools[0];
-    expect(tool).toBeDefined();
-    if (!tool) {
-      throw new Error("expected hosted MCP tool");
-    }
+    const resolvedBundle = requireDefined(bundle, "expected hosted MCP tool bundle");
+    expect(resolvedBundle.tools).toHaveLength(1);
+    const tool = requireDefined(resolvedBundle.tools[0], "expected hosted MCP tool");
     expect(tool.name).toBe("mcp__repo__search_files");
     expect(getBrewvaToolMetadata(tool)).toMatchObject({
       surface: "base",
@@ -114,8 +111,7 @@ describe("hosted MCP tools", () => {
       },
     ]);
 
-    const tool = bundle?.tools[0];
-    expect(tool).toBeDefined();
+    const tool = requireDefined(bundle?.tools[0], "expected hosted MCP policy override tool");
     expect(getBrewvaToolMetadata(tool)).toMatchObject({
       actionClass: "workspace_read",
     });

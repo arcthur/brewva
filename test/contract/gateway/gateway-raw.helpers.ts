@@ -10,6 +10,9 @@ import {
   type SessionBackend,
 } from "@brewva/brewva-gateway";
 import WebSocket, { type RawData } from "ws";
+import { createUnrefTimer, withTimeout } from "../../helpers/process.js";
+
+export { withTimeout };
 
 export interface PolicyRule {
   id: string;
@@ -56,32 +59,6 @@ export function writeHeartbeatPolicy(policyPath: string, rules: PolicyRule[]): v
     ["# HEARTBEAT", "", "```heartbeat", JSON.stringify({ rules }), "```", ""].join("\n"),
     "utf8",
   );
-}
-
-export function withTimeout<T>(
-  promise: Promise<T>,
-  timeoutMs: number,
-  message: string,
-): Promise<T> {
-  return new Promise<T>((resolvePromise, rejectPromise) => {
-    const timer = setTimeout(
-      () => {
-        rejectPromise(new Error(message));
-      },
-      Math.max(100, timeoutMs),
-    );
-    timer.unref?.();
-
-    promise
-      .then((value) => {
-        clearTimeout(timer);
-        resolvePromise(value);
-      })
-      .catch((error) => {
-        clearTimeout(timer);
-        rejectPromise(error);
-      });
-  });
 }
 
 function rawToText(raw: RawData): string {
@@ -142,7 +119,7 @@ export async function waitForNoRawFrame(
 ): Promise<void> {
   await withTimeout(
     new Promise<void>((resolveNoFrame, rejectNoFrame) => {
-      const timer = setTimeout(
+      const timer = createUnrefTimer(
         () => {
           ws.off("message", onMessage);
           ws.off("close", onClose);
@@ -150,7 +127,6 @@ export async function waitForNoRawFrame(
         },
         Math.max(100, timeoutMs),
       );
-      timer.unref?.();
 
       const onMessage = (raw: RawData): void => {
         const frame = parseRawFrame(raw);

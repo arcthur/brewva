@@ -11,6 +11,7 @@ import {
   PROJECTION_REFRESHED_EVENT_TYPE,
   RECALL_RESULTS_SURFACED_EVENT_TYPE,
 } from "@brewva/brewva-runtime/events";
+import { requireDefined } from "../../helpers/assertions.js";
 import {
   buildToolResultRecordedPayload,
   buildVerificationOutcomeRecordedPayload,
@@ -51,7 +52,7 @@ describe("recall broker", () => {
     const digest = (await broker.sync()).sessionDigests.find(
       (entry) => entry.sessionId === priorSessionId,
     );
-    expect(digest).toBeUndefined();
+    expect(digest).toBe(undefined);
 
     const result = await broker.search({
       sessionId: currentSessionId,
@@ -344,20 +345,22 @@ describe("recall broker", () => {
         files: ["packages/gateway"],
       },
     });
-    const sourceEvent = runtime.extensions.hosted.events.record({
-      sessionId: priorSessionId,
-      type: "task_event",
-      payload: {
-        schema: "brewva.task.inspect.ledger.v1",
-        kind: "item_added",
-        item: {
-          id: "recall-decay-item",
-          text: "Fix gateway recall regression",
-          status: "todo",
-        },
-      } as Record<string, unknown>,
-    });
-    expect(sourceEvent).toBeDefined();
+    const sourceEvent = requireDefined(
+      runtime.extensions.hosted.events.record({
+        sessionId: priorSessionId,
+        type: "task_event",
+        payload: {
+          schema: "brewva.task.inspect.ledger.v1",
+          kind: "item_added",
+          item: {
+            id: "recall-decay-item",
+            text: "Fix gateway recall regression",
+            status: "todo",
+          },
+        } as Record<string, unknown>,
+      }),
+      "Expected prior recall source event.",
+    );
 
     runtime.operator.context.lifecycle.onTurnStart(currentSessionId, 1);
     runtime.authority.task.spec.set(currentSessionId, {
@@ -368,7 +371,7 @@ describe("recall broker", () => {
       },
     });
 
-    const stableId = `tape:${priorSessionId}:${sourceEvent!.id}`;
+    const stableId = `tape:${priorSessionId}:${sourceEvent.id}`;
     runtime.extensions.hosted.events.record({
       sessionId: currentSessionId,
       type: "recall_curation_recorded",
@@ -422,20 +425,22 @@ describe("recall broker", () => {
         files: ["packages/gateway/bootstrap.ts"],
       },
     });
-    const priorEvent = runtime.extensions.hosted.events.record({
-      sessionId: priorSessionId,
-      type: "task_event",
-      payload: {
-        schema: "brewva.task.ledger.v1",
-        kind: "item_added",
-        item: {
-          id: "recall-scope-item",
-          text: "Rebuilt the hosted bootstrap path to remove duplicate startup hooks",
-          status: "done",
-        },
-      } as Record<string, unknown>,
-    });
-    expect(priorEvent).toBeDefined();
+    const priorEvent = requireDefined(
+      runtime.extensions.hosted.events.record({
+        sessionId: priorSessionId,
+        type: "task_event",
+        payload: {
+          schema: "brewva.task.ledger.v1",
+          kind: "item_added",
+          item: {
+            id: "recall-scope-item",
+            text: "Rebuilt the hosted bootstrap path to remove duplicate startup hooks",
+            status: "done",
+          },
+        } as Record<string, unknown>,
+      }),
+      "Expected prior scoped recall event.",
+    );
 
     runtime.operator.context.lifecycle.onTurnStart(currentSessionId, 1);
     runtime.authority.task.spec.set(currentSessionId, {
@@ -456,7 +461,7 @@ describe("recall broker", () => {
     expect(result.results).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          stableId: `tape:${priorSessionId}:${priorEvent!.id}`,
+          stableId: `tape:${priorSessionId}:${priorEvent.id}`,
           sourceFamily: "tape_evidence",
           evidenceStrength: "weak",
         }),
@@ -496,7 +501,7 @@ describe("recall broker", () => {
         lateEvent = event;
       }
     }
-    expect(lateEvent).toBeDefined();
+    const durableLateEvent = requireDefined(lateEvent, "Expected late indexed recall event.");
 
     runtime.operator.context.lifecycle.onTurnStart(currentSessionId, 1);
     runtime.authority.task.spec.set(currentSessionId, {
@@ -517,7 +522,7 @@ describe("recall broker", () => {
     expect(result.results).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          stableId: `tape:${priorSessionId}:${lateEvent!.id}`,
+          stableId: `tape:${priorSessionId}:${durableLateEvent.id}`,
           sourceFamily: "tape_evidence",
         }),
       ]),

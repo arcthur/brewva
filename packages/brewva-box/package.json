@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@boxlite-ai/boxlite": "^0.9.3",
+    "@brewva/brewva-effect": "workspace:*",
     "@brewva/brewva-std": "workspace:*"
   },
   "engines": {

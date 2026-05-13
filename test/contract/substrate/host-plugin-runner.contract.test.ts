@@ -11,6 +11,8 @@ import {
 } from "@brewva/brewva-substrate/host-api";
 import type { BrewvaPromptContentPart } from "@brewva/brewva-substrate/prompt";
 import { Type } from "@sinclair/typebox";
+import { requireDefined } from "../../helpers/assertions.js";
+import { sleep } from "../../helpers/process.js";
 
 function createHostContext(options: { signal?: AbortSignal } = {}): BrewvaHostContext {
   return {
@@ -173,7 +175,7 @@ describe("substrate host plugin runner", () => {
         },
         createHostContext({ signal: controller.signal }),
       ),
-    ).rejects.toThrow();
+    ).rejects.toThrow(/interrupted/i);
   });
 
   test("interrupts legacy runtime plugin callbacks with the host signal", async () => {
@@ -183,7 +185,7 @@ describe("substrate host plugin runner", () => {
       plugins: [
         testPlugin("legacy-abort-plugin", ["input_parts.write"], (api) => {
           api.on("input", async () => {
-            await new Promise((resolve) => setTimeout(resolve, 50));
+            await sleep(50);
             return {
               action: "transform" as const,
               parts: textPrompt("should-not-commit"),
@@ -211,7 +213,7 @@ describe("substrate host plugin runner", () => {
         },
         createHostContext({ signal: controller.signal }),
       ),
-    ).rejects.toThrow();
+    ).rejects.toThrow(/interrupted/i);
   });
 
   test("initializes manifest plugins, tracks registrations, and forwards callbacks", async () => {
@@ -769,9 +771,11 @@ describe("substrate host plugin runner", () => {
       },
     });
 
-    const command = runner.getRegisteredCommands().get("queue-demo");
-    expect(command).toBeDefined();
-    await command?.handler("", createCommandContext());
+    const command = requireDefined(
+      runner.getRegisteredCommands().get("queue-demo"),
+      "expected queue-demo command to be registered",
+    );
+    await command.handler("", createCommandContext());
 
     expect(sentUsers).toEqual([{ content: textPrompt("queued"), deliverAs: "followUp" }]);
   });

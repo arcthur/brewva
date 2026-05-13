@@ -10,6 +10,7 @@ import {
   recordPromptStabilityEvidence,
   recordTransientReductionEvidence,
 } from "../../../packages/brewva-gateway/src/hosted/internal/context/evidence/context-evidence.js";
+import { sleep } from "../../helpers/process.js";
 import { createRuntimeFixture } from "../../helpers/runtime.js";
 
 async function waitForEvidenceFile(input: {
@@ -29,7 +30,7 @@ async function waitForEvidenceFile(input: {
     ) {
       return;
     }
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await sleep(10);
   }
   throw new Error(`Timed out waiting for ${input.expectedKind} evidence in ${evidencePath}.`);
 }

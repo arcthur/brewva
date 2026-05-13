@@ -57,7 +57,7 @@ describe("workbench visibility", () => {
         }),
       }),
     );
-    expect(result.messages[1]?.excludeFromContext).toBeUndefined();
+    expect(result.messages[1]?.excludeFromContext).toBe(undefined);
   });
 
   test("excludes session entries by event and turn refs before compaction rendering", () => {

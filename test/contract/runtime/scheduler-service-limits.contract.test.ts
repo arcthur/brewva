@@ -368,7 +368,7 @@ describe("scheduler service limit contract", () => {
       .snapshot()
       .intents.find((intent) => intent.intentId === "intent-revive-1");
     expect(converged?.status).toBe("converged");
-    expect(converged?.nextRunAt).toBeUndefined();
+    expect(converged?.nextRunAt).toBe(undefined);
 
     const updated = scheduler.updateIntent({
       parentSessionId: sessionId,

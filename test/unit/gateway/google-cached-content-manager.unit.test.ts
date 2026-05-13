@@ -127,7 +127,7 @@ describe("google cached content manager", () => {
     });
 
     expect(creates).toHaveLength(1);
-    expect((firstInput.request as { cachedContent?: string }).cachedContent).toBeUndefined();
+    expect((firstInput.request as { cachedContent?: string }).cachedContent).toBe(undefined);
     expect((first.payload as { request: { cachedContent?: string } }).request.cachedContent).toBe(
       "cachedContents/brewva-1",
     );
@@ -291,7 +291,7 @@ describe("google cached content manager", () => {
       expect(created).toBe(0);
       expect(
         (result.payload as { request: { cachedContent?: string } }).request.cachedContent,
-      ).toBeUndefined();
+      ).toBe(undefined);
       expect(result.render).toEqual(
         expect.objectContaining({
           status: "rendered",
@@ -330,7 +330,7 @@ describe("google cached content manager", () => {
       expect(created).toBe(0);
       expect(
         (result.payload as { request: { cachedContent?: string } }).request.cachedContent,
-      ).toBeUndefined();
+      ).toBe(undefined);
       expect(result.render).toEqual(
         expect.objectContaining({
           status: "unsupported",

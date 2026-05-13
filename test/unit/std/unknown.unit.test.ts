@@ -32,8 +32,10 @@ describe("std unknown", () => {
   test("readPath follows only owned record segments", () => {
     const value = { a: { b: 1 } };
     expect(readPath(value, "a", "b")).toBe(1);
-    expect(readPath(value, "a", "missing")).toBeUndefined();
-    expect(readPath({ a: Object.create({ b: 1 }) }, "a", "b")).toBeUndefined();
+    expect([
+      readPath(value, "a", "missing"),
+      readPath({ a: Object.create({ b: 1 }) }, "a", "b"),
+    ]).toEqual([undefined, undefined]);
   });
 
   test("typed readers return values only when the owned field matches the expected type", () => {
@@ -50,25 +52,28 @@ describe("std unknown", () => {
     expect(readString(value, "string")).toBe("value");
     expect(readNumber(value, "number")).toBe(1);
     expect(readFiniteNumber(value, "number")).toBe(1);
-    expect(readFiniteNumber(value, "infinite")).toBeUndefined();
+    expect(readFiniteNumber(value, "infinite")).toBe(undefined);
     expect(readBoolean(value, "boolean")).toBe(false);
   });
 
   test("readTrimmedString rejects blank and non-string values", () => {
     expect(readTrimmedString("  value  ")).toBe("value");
-    expect(readTrimmedString("   ")).toBeUndefined();
-    expect(readTrimmedString(1)).toBeUndefined();
+    expect([readTrimmedString("   "), readTrimmedString(1)]).toEqual([undefined, undefined]);
   });
 
   test("readFiniteNumberValue rejects non-finite values", () => {
     expect(readFiniteNumberValue(3.5)).toBe(3.5);
-    expect(readFiniteNumberValue(Infinity)).toBeUndefined();
-    expect(readFiniteNumberValue("3")).toBeUndefined();
+    expect([readFiniteNumberValue(Infinity), readFiniteNumberValue("3")]).toEqual([
+      undefined,
+      undefined,
+    ]);
   });
 
   test("asPartialObject narrows record-like unknown values", () => {
     expect(asPartialObject<{ value: string }>({ value: "ok" })).toEqual({ value: "ok" });
-    expect(asPartialObject<{ value: string }>(null)).toBeUndefined();
-    expect(asPartialObject<{ value: string }>(["ok"])).toBeUndefined();
+    expect([
+      asPartialObject<{ value: string }>(null),
+      asPartialObject<{ value: string }>(["ok"]),
+    ]).toEqual([undefined, undefined]);
   });
 });

@@ -116,11 +116,15 @@ describe("OpenAI completions DeepSeek compatibility", () => {
       thinking: { type: "disabled" },
       stream_options: { include_usage: true },
     });
-    expect(params.max_completion_tokens).toBeUndefined();
-    expect(params.store).toBeUndefined();
-    expect(params.prompt_cache_key).toBeUndefined();
-    expect(params.cache_control).toBeUndefined();
-    expect(params.reasoning_effort).toBeUndefined();
+    for (const forbiddenKey of [
+      "max_completion_tokens",
+      "store",
+      "prompt_cache_key",
+      "cache_control",
+      "reasoning_effort",
+    ]) {
+      expect(Object.hasOwn(params, forbiddenKey), forbiddenKey).toBe(false);
+    }
     expect((params.messages as Array<{ role: string }>)[0]?.role).toBe("system");
     expect(JSON.stringify(params.tools)).not.toContain('"strict"');
   });
@@ -169,7 +173,7 @@ describe("OpenAI completions DeepSeek compatibility", () => {
     ) as unknown as Record<string, unknown>;
 
     expect(params.prompt_cache_key).toBe("session-openai-short-compat");
-    expect(params.prompt_cache_retention).toBeUndefined();
+    expect(Object.hasOwn(params, "prompt_cache_retention")).toBe(false);
   });
 
   test("adds completions session affinity headers only when compat enables them", () => {
@@ -198,9 +202,9 @@ describe("OpenAI completions DeepSeek compatibility", () => {
       "session-completions",
     );
 
-    expect(defaultCompatHeaders.session_id).toBeUndefined();
-    expect(defaultCompatHeaders["x-client-request-id"]).toBeUndefined();
-    expect(defaultCompatHeaders["x-session-affinity"]).toBeUndefined();
+    expect(Object.hasOwn(defaultCompatHeaders, "session_id")).toBe(false);
+    expect(Object.hasOwn(defaultCompatHeaders, "x-client-request-id")).toBe(false);
+    expect(Object.hasOwn(defaultCompatHeaders, "x-session-affinity")).toBe(false);
     expect(affinityHeaders.session_id).toBe("session-completions");
     expect(affinityHeaders["x-client-request-id"]).toBe("session-completions");
     expect(affinityHeaders["x-session-affinity"]).toBe("explicit-affinity");
@@ -333,7 +337,7 @@ describe("OpenAI completions DeepSeek compatibility", () => {
       thinking: { type: "enabled" },
       reasoning_effort: "max",
     });
-    expect(xhighParams.temperature).toBeUndefined();
+    expect(Object.hasOwn(xhighParams, "temperature")).toBe(false);
   });
 
   test("preserves DeepSeek reasoning content only for tool-call assistant turns", () => {
@@ -398,7 +402,7 @@ describe("OpenAI completions DeepSeek compatibility", () => {
     const assistantMessages = messages.filter(
       (message) => message.role === "assistant",
     ) as unknown as Array<Record<string, unknown>>;
-    expect(assistantMessages[0]?.reasoning_content).toBeUndefined();
+    expect(Object.hasOwn(assistantMessages[0] ?? {}, "reasoning_content")).toBe(false);
     expect(assistantMessages[1]?.reasoning_content).toBe("tool decision");
   });
 

@@ -19,7 +19,7 @@
   - `packages/brewva-std/src/node/fs.ts`
   - `packages/brewva-std/src/text.ts`
   - `packages/brewva-std/src/unknown.ts`
-  - `test/quality/std-boundary.quality.test.ts`
+  - `test/fitness/std-boundary.fitness.test.ts`
   - `test/unit/std`
 
 ## Decision Summary

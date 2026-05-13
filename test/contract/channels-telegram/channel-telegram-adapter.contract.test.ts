@@ -402,9 +402,11 @@ describe("channel telegram adapter", () => {
     expect(inbound[0]?.meta?.approvalScreenId).toBe("screen-1");
     expect(inbound[0]?.meta?.approvalStateKey).toBe("flow-1");
     expect(inbound[0]?.meta?.approvalState).toEqual({ flow: "req-1", step: 1 });
-    expect(inbound[1]?.meta?.approvalScreenId).toBeUndefined();
-    expect(inbound[1]?.meta?.approvalStateKey).toBeUndefined();
-    expect(inbound[1]?.meta?.approvalState).toBeUndefined();
+    expect([
+      inbound[1]?.meta?.approvalScreenId,
+      inbound[1]?.meta?.approvalStateKey,
+      inbound[1]?.meta?.approvalState,
+    ]).toEqual([undefined, undefined, undefined]);
     expect(inbound[2]?.meta?.approvalScreenId).toBe("screen-1");
     expect(inbound[2]?.meta?.approvalStateKey).toBe("flow-1");
     expect(inbound[2]?.meta?.approvalState).toEqual({ flow: "req-1", step: 1 });

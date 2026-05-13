@@ -4,13 +4,8 @@ import { hasProviderRateLimitText, skipLiveForProviderRateLimit } from "../../he
 import { writeMinimalConfig } from "../../helpers/config.js";
 import { parseEventFile, requireLatestEventFile } from "../../helpers/events.js";
 import { runLive } from "../../helpers/live.js";
+import { sleep, withTimeout } from "../../helpers/process.js";
 import { cleanupWorkspace, createWorkspace, repoRoot } from "../../helpers/workspace.js";
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
-}
 
 async function waitForEventType(
   workspace: string,
@@ -28,7 +23,7 @@ async function waitForEventType(
     } catch {
       // Event file persistence is asynchronous; keep polling until timeout.
     }
-    await delay(250);
+    await sleep(250);
   }
   throw new Error(`Timed out waiting for event type: ${eventType}`);
 }
@@ -44,20 +39,18 @@ async function waitForExit(
   child: ChildProcess,
   timeoutMs: number,
 ): Promise<{ code: number | null; signal: NodeJS.Signals | null }> {
-  return await new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      reject(new Error(`Timed out waiting for child process exit after ${timeoutMs}ms`));
-    }, timeoutMs);
-
-    child.once("error", (error) => {
-      clearTimeout(timer);
-      reject(error);
-    });
-    child.once("exit", (code, signal) => {
-      clearTimeout(timer);
-      resolve({ code, signal });
-    });
-  });
+  return await withTimeout(
+    new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve, reject) => {
+      child.once("error", (error) => {
+        reject(error);
+      });
+      child.once("exit", (code, signal) => {
+        resolve({ code, signal });
+      });
+    }),
+    timeoutMs,
+    `Timed out waiting for child process exit after ${timeoutMs}ms`,
+  );
 }
 
 describe("live: signal handling", () => {
@@ -93,7 +86,7 @@ describe("live: signal handling", () => {
 
     try {
       await waitForEventType(workspace, "session_start", 30_000);
-      await delay(500);
+      await sleep(500);
 
       if (child.exitCode !== null && hasProviderRateLimitText(stdout, stderr)) {
         console.warn(
@@ -114,7 +107,7 @@ describe("live: signal handling", () => {
         (event) =>
           event.type === "session_turn_transition" && event.payload?.reason === "signal_interrupt",
       );
-      expect(signalTransition).toBeDefined();
+      expect(signalTransition?.type).toBe("session_turn_transition");
       expect(signalTransition?.payload?.status).toBe("completed");
     } catch (error) {
       if (skipLiveForProviderRateLimit("signal.live", stdout, stderr)) {
@@ -169,7 +162,7 @@ describe("live: signal handling", () => {
 
     try {
       await waitForEventType(workspace, "session_start", 30_000);
-      await delay(500);
+      await sleep(500);
 
       if (child.exitCode !== null && hasProviderRateLimitText(stdout, stderr)) {
         console.warn(
@@ -193,7 +186,7 @@ describe("live: signal handling", () => {
         (event) =>
           event.type === "session_turn_transition" && event.payload?.reason === "signal_interrupt",
       );
-      expect(signalTransition).toBeDefined();
+      expect(signalTransition?.type).toBe("session_turn_transition");
       expect(signalTransition?.payload?.status).toBe("completed");
     } catch (error) {
       if (skipLiveForProviderRateLimit("signal-json.live", stdout, stderr)) {

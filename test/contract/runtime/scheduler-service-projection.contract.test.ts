@@ -73,7 +73,7 @@ describe("scheduler service projection contract", () => {
 
     expect(state?.status).toBe("cancelled");
     expect(state?.reason).toBe("cancelled-second");
-    expect(state?.nextRunAt).toBeUndefined();
+    expect(state?.nextRunAt).toBe(undefined);
   });
 
   test("updates active intent schedule targets and emits intent_updated", async () => {
@@ -120,7 +120,7 @@ describe("scheduler service projection contract", () => {
     expect(updated.intent.cron).toBe("*/20 * * * *");
     expect(updated.intent.timeZone).toBe("Asia/Shanghai");
     expect(updated.intent.maxRuns).toBe(8);
-    expect(updated.intent.runAt).toBeUndefined();
+    expect(updated.intent.runAt).toBe(undefined);
     const expectedNextRunAt = computeExpectedRecurringJitteredNextRunAt({
       intentId: "intent-update-cron",
       cronExpression: "*/20 * * * *",
@@ -268,7 +268,7 @@ describe("scheduler service projection contract", () => {
       .intents.find((intent) => intent.intentId === "intent-replay-missing-next-run");
     scheduler.stop();
 
-    expect(state).toBeUndefined();
+    expect(state).toBe(undefined);
   });
 
   test("rejects updates when the target intent is not active", async () => {

@@ -20,7 +20,7 @@
   - `packages/brewva-cli/runtime/shell/mermaid/`
   - `packages/brewva-tui/src/capabilities.ts`
   - `test/unit/substrate/system-prompt.unit.test.ts`
-  - `test/unit/cli/opentui-shell-renderer.unit.test.ts`
+  - `test/unit/cli/opentui-shell-renderer-*.unit.test.ts`
 
 ## Decision Summary
 

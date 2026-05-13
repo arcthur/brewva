@@ -265,7 +265,7 @@ describe("channel session coordinator ownership", () => {
         fixture.coordinator.getOrCreateSession("scope-b", "worker", createUserTurn("scope-b")),
       ).rejects.toThrow("agent_not_found:worker");
       expect(disposeCalls).toBe(1);
-      expect(fixture.coordinator.getLiveSession("scope-b", "worker")).toBeUndefined();
+      expect(fixture.coordinator.getLiveSession("scope-b", "worker")).toBe(undefined);
       expect(fixture.coordinator.listLiveSessions()).toHaveLength(0);
     } finally {
       await fixture.coordinator.disposeAllSessions();
@@ -303,7 +303,7 @@ describe("channel session coordinator ownership", () => {
         reason: "coordinator_cleanup",
         source: "channel_session_coordinator",
       });
-      expect(fixture.coordinator.getLiveSession("scope-cleanup", "worker")).toBeUndefined();
+      expect(fixture.coordinator.getLiveSession("scope-cleanup", "worker")).toBe(undefined);
     } finally {
       await fixture.coordinator.disposeAllSessions();
       fixture.coordinator.disposeRuntime("worker");

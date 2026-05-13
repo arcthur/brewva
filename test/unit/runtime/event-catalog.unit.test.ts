@@ -50,7 +50,7 @@ describe("runtime event catalog", () => {
 
   test("assigns category metadata to every registered event type", () => {
     for (const eventType of BREWVA_REGISTERED_EVENT_TYPE_SET) {
-      expect(BREWVA_EVENT_CATEGORY_BY_TYPE[eventType]).toBeDefined();
+      expect(typeof BREWVA_EVENT_CATEGORY_BY_TYPE[eventType]).toBe("string");
       expect(getBrewvaEventCategory(eventType)).toBe(BREWVA_EVENT_CATEGORY_BY_TYPE[eventType]);
     }
   });

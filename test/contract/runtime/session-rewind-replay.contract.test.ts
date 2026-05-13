@@ -68,7 +68,7 @@ describe("session rewind replay", () => {
       last: 1,
     })[0];
     const rewindPayload = expectRecord(rewindEvent?.payload);
-    expect(rewindPayload.reasoningRevert).toBeUndefined();
+    expect(rewindPayload.reasoningRevert).toBe(undefined);
     expect(rewindPayload.reasoningRevertId).toBe(rewind.reasoningRevert.revertId);
     expect(rewindPayload.reasoningRevertEventId).toBe(rewind.reasoningRevert.eventId);
 
@@ -93,7 +93,7 @@ describe("session rewind replay", () => {
       last: 1,
     })[0];
     const redoPayload = expectRecord(redoEvent?.payload);
-    expect(redoPayload.reasoningCheckpoint).toBeUndefined();
+    expect(redoPayload.reasoningCheckpoint).toBe(undefined);
     expect(redoPayload.reasoningCheckpointId).toBe(redo.reasoningCheckpoint.checkpointId);
     expect(redoPayload.reasoningCheckpointEventId).toBe(redo.reasoningCheckpoint.eventId);
 

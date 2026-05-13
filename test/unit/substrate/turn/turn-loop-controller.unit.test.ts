@@ -19,6 +19,7 @@ import {
 } from "@brewva/brewva-substrate/turn";
 import { Type } from "@sinclair/typebox";
 import { createTurnEventStream } from "../../../helpers/effect-stream.js";
+import { sleep } from "../../../helpers/process.js";
 
 const TEST_MODEL: BrewvaRegisteredModel = {
   provider: "openai",
@@ -111,7 +112,7 @@ describe("turn loop controller", () => {
       streamFn: () => createStream(createAssistantMessage([{ type: "text", text: "unused" }])),
     });
 
-    expect(engine.state.model).toBeUndefined();
+    expect(engine.state.model).toBe(undefined);
     try {
       await engine.prompt({
         role: "user",
@@ -386,7 +387,7 @@ describe("turn loop controller", () => {
         const firstContent = partialResult.content[0];
         const text = firstContent?.type === "text" ? firstContent.text : "unknown";
         if (text === "first") {
-          await new Promise((resolve) => setTimeout(resolve, 20));
+          await sleep(20);
         }
         observed.push(text);
       }

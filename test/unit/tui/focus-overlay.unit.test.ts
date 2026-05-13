@@ -22,7 +22,7 @@ describe("tui focus and overlay state", () => {
     focus.restore();
 
     expect(focus.getActive()).toBe("transcript");
-    expect(overlays.getActive()).toBeUndefined();
+    expect(overlays.getActive()).toBe(undefined);
   });
 
   test("queues later priority overlays instead of replacing the active one", () => {

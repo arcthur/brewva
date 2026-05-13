@@ -1,12 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { connectGatewayClient } from "@brewva/brewva-gateway";
 import { WebSocketServer, type RawData } from "ws";
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolveSleep) => {
-    setTimeout(resolveSleep, ms);
-  });
-}
+import { sleep } from "../../helpers/process.js";
 
 function rawToText(raw: RawData): string {
   if (typeof raw === "string") {

@@ -169,7 +169,7 @@ describe("substrate provider registry", () => {
     });
 
     const active = catalog.find("anthropic", "claude-custom");
-    expect(active?.headers).toBeUndefined();
+    expect(active?.headers).toBe(undefined);
 
     const auth = await catalog.getApiKeyAndHeaders(active!);
     expect(auth).toEqual({

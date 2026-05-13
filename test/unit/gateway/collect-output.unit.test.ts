@@ -13,6 +13,7 @@ import type { BrewvaPromptSessionEvent } from "@brewva/brewva-substrate/session"
 import { collectSessionPromptOutput } from "../../../packages/brewva-gateway/src/hosted/internal/thread-loop/collect-output.js";
 import { runHostedThreadLoop } from "../../../packages/brewva-gateway/src/hosted/internal/thread-loop/hosted-thread-loop.js";
 import { resolveThreadLoopProfile } from "../../../packages/brewva-gateway/src/hosted/internal/thread-loop/state.js";
+import { requireDefined } from "../../helpers/assertions.js";
 
 type SessionLike = {
   subscribe: (listener: (event: BrewvaPromptSessionEvent) => void) => () => void;
@@ -177,15 +178,17 @@ describe("gateway collect output", () => {
       },
     );
 
-    const toolUpdateFrame = frames.find((frame) => frame.type === "tool.progress");
-    const attemptStartFrame = frames.find(
-      (frame) => frame.type === "attempt.started" && frame.reason === "initial",
+    const toolUpdateFrame = requireDefined(
+      frames.find((frame) => frame.type === "tool.progress"),
+      "expected distilled tool progress frame",
     );
-    expect(attemptStartFrame).toBeDefined();
-    expect(toolUpdateFrame).toBeDefined();
-    if (!toolUpdateFrame || toolUpdateFrame.type !== "tool.progress") {
-      return;
-    }
+    const attemptStartFrame = requireDefined(
+      frames.find((frame) => frame.type === "attempt.started" && frame.reason === "initial"),
+      "expected initial attempt frame",
+    );
+    expect(attemptStartFrame).toMatchObject({ type: "attempt.started", reason: "initial" });
+    expect(toolUpdateFrame.type).toBe("tool.progress");
+    if (toolUpdateFrame.type !== "tool.progress") throw new Error("expected tool progress frame");
     expect(toolUpdateFrame.text).toContain("[ExecDistilled]");
     expect(toolUpdateFrame.display?.summaryText).toContain("[ExecDistilled]");
     expect(toolUpdateFrame.display?.detailsText).toBe(noisyPartial);

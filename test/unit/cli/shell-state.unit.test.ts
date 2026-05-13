@@ -44,7 +44,7 @@ describe("cli shell state", () => {
       id: "question:1",
     });
 
-    expect(state.overlay.active).toBeUndefined();
+    expect(state.overlay.active).toBe(undefined);
     expect(state.focus.active).toBe("composer");
   });
 

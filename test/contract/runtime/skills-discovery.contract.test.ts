@@ -148,7 +148,7 @@ describe("skill discovery and loading", () => {
     mkdirSync(nested, { recursive: true });
 
     const runtime = createBrewvaRuntime({ cwd: nested }).hosted;
-    expect(runtime.inspect.skills.catalog.get("commitcraft")).toBeUndefined();
+    expect(runtime.inspect.skills.catalog.get("commitcraft")).toBe(undefined);
 
     const roots = discoverSkillRegistryRoots({
       cwd: nested,

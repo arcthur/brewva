@@ -910,7 +910,7 @@ Recommended placement by artifact type:
 
 The existing test and contract layout already suggests the right rollout points:
 
-- `test/unit/gateway/hosted-behavior/hosted-behavior-host-api.contract.test.ts`
+- `test/unit/gateway/hosted-behavior/hosted-behavior-host-api.unit.test.ts`
   - hosted `before_agent_start` wiring remains canonical
 - `test/unit/gateway/hosted-context-telemetry.unit.test.ts`
   - keep `context_composed` payload coarse and deterministic

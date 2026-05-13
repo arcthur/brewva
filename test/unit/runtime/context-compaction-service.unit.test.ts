@@ -7,6 +7,7 @@ import {
 } from "../../../packages/brewva-runtime/src/domain/context/context-compaction.js";
 import { RuntimeSessionStateStore } from "../../../packages/brewva-runtime/src/domain/sessions/session-state.js";
 import type { BrewvaEventRecord } from "../../../packages/brewva-runtime/src/events/types.js";
+import { requireDefined } from "../../helpers/assertions.js";
 
 async function flushAsyncEvents(): Promise<void> {
   await Promise.resolve();
@@ -339,9 +340,11 @@ describe("context-compaction module", () => {
     });
     await flushAsyncEvents();
 
-    const failed = events.find((event) => event.type === "governance_compaction_integrity_failed");
-    expect(failed).toBeDefined();
-    const payload = failed?.payload as { reason?: string } | undefined;
+    const failed = requireDefined(
+      events.find((event) => event.type === "governance_compaction_integrity_failed"),
+      "expected compaction integrity failure event",
+    );
+    const payload = failed.payload as { reason?: string } | undefined;
     expect(payload?.reason).toBe("missing-required-fact");
   });
 
@@ -384,9 +387,11 @@ describe("context-compaction module", () => {
     });
     await flushAsyncEvents();
 
-    const errored = events.find((event) => event.type === "governance_compaction_integrity_error");
-    expect(errored).toBeDefined();
-    const payload = errored?.payload as { error?: string } | undefined;
+    const errored = requireDefined(
+      events.find((event) => event.type === "governance_compaction_integrity_error"),
+      "expected compaction integrity error event",
+    );
+    const payload = errored.payload as { error?: string } | undefined;
     expect(payload?.error).toContain("compaction-integrity-port-error");
   });
 });

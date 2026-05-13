@@ -77,7 +77,7 @@ describe("live: replay and persistence", () => {
 
     try {
       const replay = runCliSync(workspace, ["--replay", "--mode", "json"]);
-      expect(replay.error).toBeUndefined();
+      expect(replay.error).toBe(undefined);
       expect(replay.status).toBe(1);
       expect(replay.stdout.trim()).toBe("");
       expect(replay.stderr).toContain("Error: no replayable session found.");

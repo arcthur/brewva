@@ -18,7 +18,7 @@
   - `packages/brewva-substrate/src/{contracts,session,prompt,resources,tools,host-api,persistence,provider}/api.ts`
   - `packages/brewva-substrate/package.json`
   - `test/contract/substrate/substrate-entrypoint.contract.test.ts`
-  - `test/quality/substrate-domain-slicing.quality.test.ts`
+  - `test/fitness/substrate-domain-slicing.fitness.test.ts`
 
 ## Decision Summary
 

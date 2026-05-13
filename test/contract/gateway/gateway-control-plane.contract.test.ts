@@ -145,7 +145,7 @@ describe("gateway daemon control-plane methods", () => {
       });
 
       expect(captured?.options?.source).toBe("heartbeat");
-      expect(captured?.options?.trigger).toBeUndefined();
+      expect(captured?.options?.trigger).toBe(undefined);
       expect(captured?.prompt).toBe(
         ["Check project status.", "Review ship posture.", "ship posture", "backlog risk"].join(
           "\n",
@@ -562,7 +562,7 @@ describe("gateway daemon control-plane methods", () => {
         available: true,
         paused: false,
       });
-      expect(deepAfterResume.scheduler.reason).toBeUndefined();
+      expect(deepAfterResume.scheduler.reason).toBe(undefined);
     } finally {
       harness.dispose();
     }

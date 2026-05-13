@@ -24,8 +24,7 @@ describe("channel adapter registry", () => {
     });
 
     expect(registry.resolveId("telegram")).toBe("telegram");
-    expect(registry.resolveId("TG")).toBeUndefined();
-    expect(registry.resolveId("tg")).toBeUndefined();
+    expect([registry.resolveId("TG"), registry.resolveId("tg")]).toEqual([undefined, undefined]);
     expect(registry.list()).toEqual([{ id: "telegram" }]);
   });
 
@@ -67,6 +66,6 @@ describe("channel adapter registry", () => {
       create: () => createAdapter("telegram"),
     });
     expect(registry.unregister("telegram")).toBe(true);
-    expect(registry.resolveId("telegram")).toBeUndefined();
+    expect(registry.resolveId("telegram")).toBe(undefined);
   });
 });

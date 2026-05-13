@@ -237,7 +237,9 @@ describe("gateway file state store", () => {
       const restoreWrongKey = patchProcessEnv({
         BREWVA_VAULT_KEY: "state-store-wrong-key",
       });
-      expect(() => loadOrCreateGatewayToken(tokenPath, new FileGatewayStateStore())).toThrow();
+      expect(() => loadOrCreateGatewayToken(tokenPath, new FileGatewayStateStore())).toThrow(
+        /Gateway token pointer|credential|decrypt|auth/i,
+      );
       restoreWrongKey();
       expect(readFileSync(tokenPath, "utf8")).toBe(pointerFile);
     } finally {

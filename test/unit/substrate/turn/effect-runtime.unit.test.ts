@@ -6,6 +6,7 @@ import {
   createTurnEventDispatcher,
   type BrewvaTurnLoopEvent,
 } from "@brewva/brewva-substrate/turn";
+import { sleep } from "../../../helpers/process.js";
 
 function userMessage() {
   return {
@@ -24,7 +25,7 @@ describe("turn Effect runtime", () => {
         BrewvaEffect.gen(function* () {
           const dispatcher = yield* createTurnEventDispatcher(async (event) => {
             if (event.type === "message_end") {
-              await new Promise((resolve) => setTimeout(resolve, 10));
+              await sleep(10);
             }
             observed.push(event.type);
             return event;

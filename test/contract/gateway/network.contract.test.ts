@@ -7,13 +7,13 @@ describe("gateway network policy", () => {
     expect(isLoopbackHost("localhost")).toBe(true);
     expect(isLoopbackHost("::1")).toBe(true);
     expect(isLoopbackHost("[::1]")).toBe(true);
-    expect(() => assertLoopbackHost("127.0.0.1")).not.toThrow();
+    assertLoopbackHost("127.0.0.1");
   });
 
   test("given non-loopback host values, when validating host, then host is rejected", () => {
     expect(isLoopbackHost("0.0.0.0")).toBe(false);
     expect(isLoopbackHost("192.168.1.10")).toBe(false);
-    expect(() => assertLoopbackHost("0.0.0.0")).toThrow();
+    expect(() => assertLoopbackHost("0.0.0.0")).toThrow("loopback");
   });
 
   test("given empty host input, when normalizing gateway host, then default loopback host is returned", () => {

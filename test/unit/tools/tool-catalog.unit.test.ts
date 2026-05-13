@@ -7,6 +7,8 @@ import {
   getBrewvaToolDescriptor,
 } from "@brewva/brewva-tools/registry";
 import { Type } from "@sinclair/typebox";
+import { requireDefined } from "../../helpers/assertions.js";
+import { sleep } from "../../helpers/process.js";
 
 describe("tool catalog", () => {
   test("managed tools expose a canonical descriptor", () => {
@@ -38,12 +40,14 @@ describe("tool catalog", () => {
       },
     );
 
-    const descriptor = getBrewvaToolDescriptor(tool);
-    expect(descriptor).toBeDefined();
-    expect(descriptor?.surface).toBe("base");
-    expect(descriptor?.actionClass).toBe("workspace_read");
+    const descriptor = requireDefined(
+      getBrewvaToolDescriptor(tool),
+      "expected managed tool descriptor",
+    );
+    expect(descriptor.surface).toBe("base");
+    expect(descriptor.actionClass).toBe("workspace_read");
     expect(
-      resolveToolExecutionTraits(descriptor?.executionTraits, { toolName: tool.name, args: {} }),
+      resolveToolExecutionTraits(descriptor.executionTraits, { toolName: tool.name, args: {} }),
     ).toMatchObject({
       concurrencySafe: true,
       interruptBehavior: "block",
@@ -256,12 +260,12 @@ describe("tool catalog", () => {
             },
             { once: true },
           );
-          setTimeout(() => {
+          void sleep(250).then(() => {
             resolve({
               isError: false,
               content: [{ type: "text", text: "late" }],
             });
-          }, 250);
+          });
         });
       },
     };
@@ -301,6 +305,6 @@ describe("tool catalog", () => {
     ]);
 
     expect(catalog.has("external_search")).toBe(true);
-    expect(catalog.get("external_search")?.definition).toBeUndefined();
+    expect(catalog.get("external_search")?.definition).toBe(undefined);
   });
 });

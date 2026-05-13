@@ -109,7 +109,7 @@ describe("resolveBrewvaModelSelection", () => {
 
     expect(resolved.model?.provider).toBe("demo");
     expect(resolved.model?.id).toBe("alpha");
-    expect(resolved.thinkingLevel).toBeUndefined();
+    expect(resolved.thinkingLevel).toBe(undefined);
   });
 
   test("falls back to full model ids when provider inference would be wrong", () => {

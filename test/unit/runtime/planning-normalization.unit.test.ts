@@ -78,10 +78,12 @@ describe("planning normalization", () => {
       ],
     });
 
-    expect(normalized.artifacts.executionPlan).toBeUndefined();
-    expect(normalized.artifacts.executionModeHint).toBeUndefined();
-    expect(normalized.artifacts.riskRegister).toBeUndefined();
-    expect(normalized.artifacts.implementationTargets).toBeUndefined();
+    expect([
+      normalized.artifacts.executionPlan,
+      normalized.artifacts.executionModeHint,
+      normalized.artifacts.riskRegister,
+      normalized.artifacts.implementationTargets,
+    ]).toEqual([undefined, undefined, undefined, undefined]);
     expect(normalized.blockingState.status).toBe("partial");
     expect(normalized.blockingState.unresolved).toEqual(
       expect.arrayContaining([

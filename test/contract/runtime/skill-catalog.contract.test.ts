@@ -12,6 +12,7 @@ import {
   parseSkillDocument,
   resolveSkillEffectLevel,
 } from "@brewva/brewva-runtime/skills";
+import { requireDefined } from "../../helpers/assertions.js";
 import { createRuntimeConfig } from "../../helpers/runtime.js";
 import { cleanupWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
 import { repoRoot } from "./skill-contract.helpers.js";
@@ -120,7 +121,7 @@ describe("repository catalog contracts", () => {
     const ship = parseSkillDocument(`${repoRoot()}/skills/core/ship/SKILL.md`, "core");
 
     for (const parsed of [plan, implementation, review, qa, ship]) {
-      expect(parsed.contract.intent?.outputContracts).toBeUndefined();
+      expect(parsed.contract.intent?.outputContracts).toBe(undefined);
       expect(Object.keys(parsed.contract.intent?.semanticBindings ?? {}).length).toBeGreaterThan(0);
       expect(getSkillOutputContracts(parsed.contract)).toEqual({});
     }
@@ -143,16 +144,18 @@ describe("repository catalog contracts", () => {
 
   test("runtime injects shared authored behavior as inherited skill guidance", () => {
     const runtime = createCleanRuntime();
-    const plan = runtime.inspect.skills.catalog.get("plan");
-    expect(plan).toBeDefined();
+    const plan = requireDefined(
+      runtime.inspect.skills.catalog.get("plan"),
+      "expected built-in plan skill",
+    );
 
-    const inheritedReferences = plan?.inheritedResources.references ?? [];
-    const authoredReferences = plan?.authoredResources.references ?? [];
+    const inheritedReferences = plan.inheritedResources.references;
+    const authoredReferences = plan.authoredResources.references;
 
     expect(inheritedReferences.some((entry) => entry.endsWith("authored-behavior.md"))).toBe(true);
     expect(authoredReferences.some((entry) => entry.endsWith("authored-behavior.md"))).toBe(false);
-    expect(plan?.markdown).toContain("Runtime Skill Guidance: authored-behavior");
-    expect(plan?.authoredMarkdown).not.toContain("Runtime Skill Guidance: authored-behavior");
+    expect(plan.markdown).toContain("Runtime Skill Guidance: authored-behavior");
+    expect(plan.authoredMarkdown).not.toContain("Runtime Skill Guidance: authored-behavior");
   });
 
   test("core workflow skills declare the documented handoff graph", () => {

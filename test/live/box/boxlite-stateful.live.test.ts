@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createBoxPlane, type BoxPlane, type BoxScope } from "@brewva/brewva-box";
+import { requireDefined, requireNonEmptyString } from "../../helpers/assertions.js";
+import { sleep } from "../../helpers/process.js";
 
 const boxliteLiveEnabled =
   process.env.BREWVA_TEST_LIVE === "1" && process.env.BREWVA_TEST_BOXLITE === "1";
@@ -156,16 +158,18 @@ describe("live: boxlite stateful box plane", () => {
       let observed = await recoveredPlane.observeExecution(box.id, execution.id);
       const deadline = Date.now() + 30_000;
       while (observed?.status === "running" && Date.now() < deadline) {
-        await new Promise((resolveNow) => setTimeout(resolveNow, 250));
+        await sleep(250);
         observed = await recoveredPlane.observeExecution(box.id, execution.id);
       }
 
       expect(observed?.status).toBe("completed");
       expect(observed?.exitCode).toBe(0);
       expect(observed?.stdout).toContain("detached-ok");
-      const reattached = await recoveredPlane.reattach(box.id, execution.id);
-      expect(reattached).toBeDefined();
-      expect((await reattached!.wait()).stdout).toContain("detached-ok");
+      const reattached = requireDefined(
+        await recoveredPlane.reattach(box.id, execution.id),
+        "expected detached execution to reattach",
+      );
+      expect((await reattached.wait()).stdout).toContain("detached-ok");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -233,15 +237,18 @@ console.log(JSON.stringify({ boxId: box.id, executionId: execution.id }));
         boxId?: string;
         executionId?: string;
       };
-      expect(identity.boxId).toBeDefined();
-      expect(identity.executionId).toBeDefined();
+      const boxId = requireNonEmptyString(identity.boxId, "expected launcher box id");
+      const executionId = requireNonEmptyString(
+        identity.executionId,
+        "expected launcher execution id",
+      );
 
       const plane = createLivePlane(home);
-      let observed = await plane.observeExecution(identity.boxId!, identity.executionId!);
+      let observed = await plane.observeExecution(boxId, executionId);
       const deadline = Date.now() + 30_000;
       while (observed?.status === "running" && Date.now() < deadline) {
-        await new Promise((resolveNow) => setTimeout(resolveNow, 250));
-        observed = await plane.observeExecution(identity.boxId!, identity.executionId!);
+        await sleep(250);
+        observed = await plane.observeExecution(boxId, executionId);
       }
 
       expect(observed?.status).toBe("completed");

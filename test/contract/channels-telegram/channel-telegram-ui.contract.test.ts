@@ -322,9 +322,11 @@ describe("channel telegram telegram-ui rendering", () => {
       expect(firstPart.text).not.toContain("state_path:");
     }
 
-    expect(callbackTurn.meta?.approvalScreenId).toBeUndefined();
-    expect(callbackTurn.meta?.approvalStateKey).toBeUndefined();
-    expect(callbackTurn.meta?.approvalState).toBeUndefined();
+    expect([
+      callbackTurn.meta?.approvalScreenId,
+      callbackTurn.meta?.approvalStateKey,
+      callbackTurn.meta?.approvalState,
+    ]).toEqual([undefined, undefined, undefined]);
   });
 
   test("approval turns cache canonical approval state metadata", () => {
@@ -369,7 +371,17 @@ describe("channel telegram telegram-ui rendering", () => {
       },
     } as never);
 
-    expect(requests[0]?.params.reply_markup).toBeDefined();
+    const replyMarkup = requireDefined(
+      requests[0]?.params.reply_markup as {
+        inline_keyboard?: Array<Array<{ callback_data?: string; text?: string }>>;
+      },
+      "Expected inline approval reply markup.",
+    );
+    const inlineKeyboard = requireArray<Array<{ callback_data?: string; text?: string }>>(
+      replyMarkup.inline_keyboard,
+      "Expected inline approval keyboard.",
+    );
+    expect(inlineKeyboard[0]?.[0]?.text).toBe("Confirm");
     expect(cached).toEqual([
       {
         conversationId: "12345",
@@ -432,7 +444,17 @@ describe("channel telegram telegram-ui rendering", () => {
       },
     } as never);
 
-    expect(requests[0]?.params.reply_markup).toBeDefined();
+    const replyMarkup = requireDefined(
+      requests[0]?.params.reply_markup as {
+        inline_keyboard?: Array<Array<{ callback_data?: string; text?: string }>>;
+      },
+      "Expected inline approval reply markup.",
+    );
+    const inlineKeyboard = requireArray<Array<{ callback_data?: string; text?: string }>>(
+      replyMarkup.inline_keyboard,
+      "Expected inline approval keyboard.",
+    );
+    expect(inlineKeyboard[0]?.[0]?.text).toBe("Confirm");
     expect(cached).toEqual([]);
   });
 
@@ -553,7 +575,7 @@ next
       callbackSecret: "callback-secret",
     });
     expect(requests).toHaveLength(1);
-    expect(requests[0]?.params.reply_markup).toBeUndefined();
+    expect(Object.hasOwn(requests[0]?.params ?? {}, "reply_markup")).toBe(false);
     expect(requests[0]?.params.text).toEqual(expect.stringContaining("telegram-ui"));
   });
 

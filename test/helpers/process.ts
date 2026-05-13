@@ -1,7 +1,12 @@
+export function createUnrefTimer(callback: () => void, ms: number): ReturnType<typeof setTimeout> {
+  const timer = setTimeout(callback, ms);
+  timer.unref?.();
+  return timer;
+}
+
 export async function sleep(ms: number): Promise<void> {
   await new Promise<void>((resolveSleep) => {
-    const timer = setTimeout(resolveSleep, ms);
-    timer.unref?.();
+    createUnrefTimer(resolveSleep, ms);
   });
 }
 
@@ -25,11 +30,17 @@ export async function withTimeout<T>(
   timeoutMs: number,
   message: string,
 ): Promise<T> {
-  return await Promise.race([
-    promise,
-    new Promise<T>((_, rejectPromise) => {
-      const timer = setTimeout(() => rejectPromise(new Error(message)), timeoutMs);
-      timer.unref?.();
-    }),
-  ]);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, rejectPromise) => {
+        timer = createUnrefTimer(() => rejectPromise(new Error(message)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
+    }
+  }
 }

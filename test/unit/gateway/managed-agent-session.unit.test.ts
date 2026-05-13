@@ -654,7 +654,7 @@ describe("managed agent session compaction", () => {
       ],
     });
 
-    expect(captured?.maxOutputTokens).toBeUndefined();
+    expect(captured).toEqual({ maxOutputTokens: undefined });
   });
 
   test("default LLM compaction generator treats summaryMaxOutputRatio zero as no output cap", async () => {
@@ -700,7 +700,7 @@ describe("managed agent session compaction", () => {
       summaryMaxOutputRatio: 0,
     });
 
-    expect(captured?.maxOutputTokens).toBeUndefined();
+    expect(captured).toEqual({ maxOutputTokens: undefined });
   });
 
   test("default LLM compaction prompt wraps transcript in <conversation> tags", async () => {
@@ -933,7 +933,7 @@ describe("managed agent session compaction", () => {
 
     unsubscribe();
 
-    expect(compactError).toBeUndefined();
+    expect(compactError).toBe(undefined);
     expect(completed).toBe(true);
     expect(events).toEqual(expect.arrayContaining(["session_before_compact", "session_compact"]));
 
@@ -1583,7 +1583,7 @@ describe("managed agent session compaction", () => {
         promptText: "request approval and recover",
       },
     });
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await flushMicrotasks();
 
     runtime.extensions.hosted.events.record({
       sessionId,
@@ -1596,7 +1596,7 @@ describe("managed agent session compaction", () => {
         subject: "run command",
       },
     });
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await flushMicrotasks();
 
     runtime.extensions.hosted.events.record({
       sessionId,
@@ -1607,7 +1607,7 @@ describe("managed agent session compaction", () => {
         decision: "accept",
       },
     });
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await flushMicrotasks();
 
     runtime.extensions.hosted.events.record({
       sessionId,
@@ -1626,7 +1626,7 @@ describe("managed agent session compaction", () => {
         model: null,
       },
     });
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await flushMicrotasks();
 
     runtime.extensions.hosted.events.record({
       sessionId,
@@ -1645,7 +1645,7 @@ describe("managed agent session compaction", () => {
         model: null,
       },
     });
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await flushMicrotasks();
 
     unsubscribe();
 

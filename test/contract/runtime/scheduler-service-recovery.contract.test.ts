@@ -358,7 +358,7 @@ describe("scheduler service recovery contract", () => {
     );
     const cancelled = parsed.find((event) => event?.kind === "intent_cancelled");
     expect(fired.error).toBe("boom-once");
-    expect(cancelled).toBeUndefined();
+    expect(cancelled).toBe(undefined);
 
     const state = scheduler
       .snapshot()

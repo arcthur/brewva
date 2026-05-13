@@ -20,7 +20,7 @@
   - `packages/brewva-recall/src/evidence/index.ts`
   - `packages/brewva-recall/src/broker/broker.ts`
   - `packages/brewva-recall/src/broker/tape-evidence.ts`
-  - `test/quality/retrieval-spine-boundaries.quality.test.ts`
+  - `test/fitness/retrieval-spine-boundaries.fitness.test.ts`
 
 ## Decision Summary
 

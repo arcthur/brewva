@@ -5,6 +5,7 @@ import { join } from "node:path";
 import type { BoxExecSpec, BoxHandle, BoxPlane, BoxScope } from "@brewva/brewva-box";
 import { createExecTool, createProcessTool } from "@brewva/brewva-tools/execution";
 import { requireDefined, requireNonEmptyString } from "../../helpers/assertions.js";
+import { sleep } from "../../helpers/process.js";
 import {
   createRuntimeForExecTests,
   extractTextContent,
@@ -20,9 +21,17 @@ function createOutputRaceBoxPlane(output: string, observedOffsets: number[]): Bo
   const observationGate = new Promise<void>((resolveNow) => {
     releaseObservationGate = resolveNow;
   });
+  let observationGateReleased = false;
   let observationCount = 0;
-  let gateTimer: ReturnType<typeof setTimeout> | undefined;
   const scopeRecords: BoxScope[] = [];
+
+  const releaseObservation = () => {
+    if (observationGateReleased) {
+      return;
+    }
+    observationGateReleased = true;
+    releaseObservationGate?.();
+  };
 
   const handleForScope = (scope: BoxScope): BoxHandle => ({
     id: "box-output-race",
@@ -36,7 +45,7 @@ function createOutputRaceBoxPlane(output: string, observedOffsets: number[]): Bo
         detached: spec.detach === true,
         async wait() {
           await firstObservation;
-          await new Promise((resolveNow) => setTimeout(resolveNow, 0));
+          await sleep(0);
           return {
             id: "exec-output-race",
             boxId: "box-output-race",
@@ -77,11 +86,10 @@ function createOutputRaceBoxPlane(output: string, observedOffsets: number[]): Bo
       observedOffsets.push(offset);
       if (observationCount === 1) {
         firstObservationStarted?.();
-        gateTimer = setTimeout(() => releaseObservationGate?.(), 20);
+        void sleep(20).then(releaseObservation);
         await observationGate;
       } else {
-        if (gateTimer) clearTimeout(gateTimer);
-        releaseObservationGate?.();
+        releaseObservation();
       }
       return {
         id: "exec-output-race",
@@ -274,7 +282,7 @@ describe("exec/process tool flow", () => {
 
     expect(observedDone).toBe(true);
     expect(finalStatus).toBe("completed");
-    expect(finalVerdict).toBeUndefined();
+    expect(finalVerdict).toBe(undefined);
   });
 
   test("box background output polling does not duplicate final observed chunks", async () => {

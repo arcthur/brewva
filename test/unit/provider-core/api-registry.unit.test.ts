@@ -90,7 +90,7 @@ describe("provider api registry session resources", () => {
     });
 
     expect(getTypedApiProvider("openai-responses")?.api).toBe("openai-responses");
-    expect(getExternalApiProvider("openai-responses")).toBeUndefined();
+    expect(getExternalApiProvider("openai-responses")).toBe(undefined);
 
     clearApiProviders();
   });

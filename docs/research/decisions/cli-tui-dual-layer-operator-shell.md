@@ -19,8 +19,8 @@
   - `packages/brewva-cli/src/shell/task-details.ts`
   - `packages/brewva-cli/runtime/opentui-shell-renderer.tsx`
   - `test/unit/cli/shell-state.unit.test.ts`
-  - `test/unit/cli/shell-runtime.unit.test.ts`
-  - `test/unit/cli/opentui-shell-renderer.unit.test.ts`
+  - `test/unit/cli/shell-runtime-*.unit.test.ts`
+  - `test/unit/cli/opentui-shell-renderer-*.unit.test.ts`
 
 ## Decision Summary
 

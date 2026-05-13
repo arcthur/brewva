@@ -10,7 +10,7 @@ describe("live: cli exit codes", () => {
     writeMinimalConfig(workspace);
     try {
       const run = runCliSync(workspace, ["--invalid-flag"]);
-      expect(run.error).toBeUndefined();
+      expect(run.error).toBe(undefined);
       expect(run.status).toBe(1);
       expect(run.stderr.includes("Unknown option")).toBe(true);
     } finally {
@@ -23,7 +23,7 @@ describe("live: cli exit codes", () => {
     writeMinimalConfig(workspace);
     try {
       const run = runCliSync(workspace, ["--undo", "--replay"]);
-      expect(run.error).toBeUndefined();
+      expect(run.error).toBe(undefined);
       expect(run.status).toBe(1);
       expect(run.stderr.includes("--undo, --redo, and --replay cannot be combined")).toBe(true);
     } finally {
@@ -40,7 +40,7 @@ describe("live: cli exit codes", () => {
         "--task",
         '{"schema":"brewva.task.v1","goal":"x"}',
       ]);
-      expect(run.error).toBeUndefined();
+      expect(run.error).toBe(undefined);
       expect(run.status).toBe(1);
       expect(
         run.stderr.includes("--undo/--redo/--replay cannot be combined with --task/--task-file"),

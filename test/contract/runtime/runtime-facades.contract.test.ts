@@ -1086,7 +1086,7 @@ describe("runtime facade coverage", () => {
     }).hosted;
     const sessionId = "runtime-facade-prompt-stability-1";
 
-    expect(runtime.inspect.context.prompt.getStability(sessionId)).toBeUndefined();
+    expect(runtime.inspect.context.prompt.getStability(sessionId)).toBe(undefined);
 
     const observed = runtime.operator.context.prompt.observeStability(sessionId, {
       stablePrefixHash: sha256("system-prefix"),
@@ -1109,7 +1109,7 @@ describe("runtime facade coverage", () => {
 
     runtime.operator.session.state.clear(sessionId);
 
-    expect(runtime.inspect.context.prompt.getStability(sessionId)).toBeUndefined();
+    expect(runtime.inspect.context.prompt.getStability(sessionId)).toBe(undefined);
   });
 
   test("context facade exposes transient outbound reduction state without a durable event dependency", () => {
@@ -1119,7 +1119,7 @@ describe("runtime facade coverage", () => {
     }).hosted;
     const sessionId = "runtime-facade-transient-reduction-1";
 
-    expect(runtime.inspect.context.prompt.getTransientReduction(sessionId)).toBeUndefined();
+    expect(runtime.inspect.context.prompt.getTransientReduction(sessionId)).toBe(undefined);
 
     const observed = runtime.operator.context.prompt.observeTransientReduction(sessionId, {
       status: "completed",
@@ -1152,7 +1152,7 @@ describe("runtime facade coverage", () => {
 
     runtime.operator.session.state.clear(sessionId);
 
-    expect(runtime.inspect.context.prompt.getTransientReduction(sessionId)).toBeUndefined();
+    expect(runtime.inspect.context.prompt.getTransientReduction(sessionId)).toBe(undefined);
   });
 
   test("context lifecycle hooks hydrate cold sessions without owning dynamic prompt state", () => {
@@ -1173,7 +1173,7 @@ describe("runtime facade coverage", () => {
       }
     ).sessionState;
 
-    expect(sessionState.getExistingCell(sessionId)).toBeUndefined();
+    expect(sessionState.getExistingCell(sessionId)).toBe(undefined);
 
     runtime.operator.context.lifecycle.onUserInput(sessionId);
 

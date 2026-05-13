@@ -17,6 +17,7 @@ import {
 import { createAssistantMessage } from "../../../packages/brewva-provider-core/src/stream/assistant-message.js";
 import { IncrementalToolCallFolder } from "../../../packages/brewva-provider-core/src/stream/tool-call-folder.js";
 import { createRecordingProviderEventStream } from "../../helpers/effect-stream.js";
+import { sleep } from "../../helpers/process.js";
 
 class FakeCodexWebSocket {
   static sockets: FakeCodexWebSocket[] = [];
@@ -96,7 +97,7 @@ async function waitForSentSocket(index: number): Promise<FakeCodexWebSocket> {
     if (socket && socket.sent.length > 0) {
       return socket;
     }
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await sleep(0);
   }
   throw new Error(`Expected websocket ${index} to send a request`);
 }
@@ -316,7 +317,7 @@ describe("openai codex responses continuation", () => {
       },
     );
 
-    expect(outbound.previous_response_id).toBeUndefined();
+    expect(outbound.previous_response_id).toBe(undefined);
     expect(outbound.input as unknown).toEqual(fullInput);
   });
 
@@ -362,7 +363,7 @@ describe("openai codex responses continuation", () => {
       } as never,
     );
 
-    expect(outbound.previous_response_id).toBeUndefined();
+    expect(outbound.previous_response_id).toBe(undefined);
     expect(outbound.input as unknown).toEqual(fullInput);
   });
 });

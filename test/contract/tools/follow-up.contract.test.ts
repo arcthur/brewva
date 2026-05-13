@@ -28,7 +28,7 @@ describe("follow_up contract", () => {
 
     const intents = await runtime.inspect.schedule.intents.list({ parentSessionId: sessionId });
     expect(intents).toHaveLength(1);
-    expect(intents[0]?.cron).toBeUndefined();
+    expect(intents[0]?.cron).toBe(undefined);
     expect(typeof intents[0]?.runAt).toBe("number");
 
     const listResult = await tool.execute(

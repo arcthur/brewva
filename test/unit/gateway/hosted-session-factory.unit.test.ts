@@ -67,6 +67,13 @@ function createTestHostedRuntime(
   });
 }
 
+function requireDefined<T>(value: T | null | undefined, label: string): T {
+  if (value == null) {
+    throw new Error(`${label} must be available for this test`);
+  }
+  return value;
+}
+
 describe("hosted session factory", () => {
   test("creates a hosted runtime from the configured default model preset", async () => {
     const workspace = createTestWorkspace("session-factory-bootstrap-preset");
@@ -112,7 +119,7 @@ describe("hosted session factory", () => {
     expect(result.session.model?.id).toBe("preset-main");
     expect(result.session.thinkingLevel).toBe("high");
     expect(result.session.getModelPresetState?.().activeName).toBe("Claude Lead");
-    expect(result.modelFallbackMessage).toBeUndefined();
+    expect(result.modelFallbackMessage).toBe(undefined);
 
     await result.session.abort();
     result.session.dispose();
@@ -387,7 +394,7 @@ describe("hosted session factory", () => {
     expect(result.session.model?.provider).toBe("anthropic");
     expect(result.session.model?.id).toBe("explicit-model");
     expect(result.session.thinkingLevel).toBe("low");
-    expect(result.modelFallbackMessage).toBeUndefined();
+    expect(result.modelFallbackMessage).toBe(undefined);
 
     await result.session.abort();
     result.session.dispose();
@@ -434,7 +441,7 @@ describe("hosted session factory", () => {
         customTools: [],
       });
 
-      expect(result.session.model).toBeUndefined();
+      expect(result.session.model).toBe(undefined);
       expect(result.modelFallbackMessage).toBe(
         "Could not use requested model demo/explicit-model: provider auth is not connected",
       );
@@ -494,7 +501,7 @@ describe("hosted session factory", () => {
     expect(result.session.model?.provider).toBe("anthropic");
     expect(result.session.model?.id).toBe("claude-opus-4-6");
     expect(result.session.thinkingLevel).toBe("medium");
-    expect(result.modelFallbackMessage).toBeUndefined();
+    expect(result.modelFallbackMessage).toBe(undefined);
 
     await result.session.abort();
     result.session.dispose();
@@ -594,14 +601,14 @@ describe("hosted session factory", () => {
       customTools: [],
     });
 
-    expect(result.services).toBeDefined();
-    expect(result.services.cwd).toBe(workspace);
-    expect(Array.isArray(result.services.diagnostics)).toBe(true);
-    expect(result.services.settings).toBe(settings.view);
-    expect(result.services.modelCatalog.find("demo", "alpha")).toEqual(
+    const services = requireDefined(result.services, "hosted session services");
+    expect(services.cwd).toBe(workspace);
+    expect(Array.isArray(services.diagnostics)).toBe(true);
+    expect(services.settings).toBe(settings.view);
+    expect(services.modelCatalog.find("demo", "alpha")).toEqual(
       factory.modelCatalog.find("demo", "alpha"),
     );
-    expect(typeof result.services.createSession).toBe("function");
+    expect(typeof services.createSession).toBe("function");
 
     await result.session.abort();
     result.session.dispose();
@@ -769,9 +776,7 @@ describe("hosted session factory", () => {
     const agentDir = join(workspace, ".brewva-agent");
     const factory = createHostedSessionFactory(agentDir);
     const baselineModels = factory.modelCatalog.getAll();
-    const firstModel = baselineModels[0];
-
-    expect(firstModel).toBeDefined();
+    const firstModel = requireDefined(baselineModels[0], "first catalog model");
 
     const originalGetAllDescriptor = Object.getOwnPropertyDescriptor(
       HostedModelRegistry.prototype,
@@ -791,7 +796,7 @@ describe("hosted session factory", () => {
 
     try {
       expect(factory.modelCatalog.getAll()).toEqual(baselineModels);
-      expect(factory.modelCatalog.find(firstModel!.provider, firstModel!.id)).toEqual(firstModel);
+      expect(factory.modelCatalog.find(firstModel.provider, firstModel.id)).toEqual(firstModel);
     } finally {
       Object.defineProperty(HostedModelRegistry.prototype, "getAll", originalGetAllDescriptor!);
       Object.defineProperty(HostedModelRegistry.prototype, "find", originalFindDescriptor!);
@@ -829,10 +834,12 @@ describe("hosted session factory", () => {
     );
 
     const factory = createHostedSessionFactory(agentDir);
-    const model = factory.modelCatalog.find("anthropic", "claude-sonnet-4-5");
+    const model = requireDefined(
+      factory.modelCatalog.find("anthropic", "claude-sonnet-4-5"),
+      "static Anthropic model",
+    );
 
-    expect(model).toBeDefined();
-    const auth = await factory.modelCatalog.getApiKeyAndHeaders(model!);
+    const auth = await factory.modelCatalog.getApiKeyAndHeaders(model);
     expect(auth).toEqual({
       ok: true,
       headers: {
@@ -883,11 +890,10 @@ describe("hosted session factory", () => {
     );
 
     const factory = createHostedSessionFactory(agentDir);
-    const model = factory.modelCatalog.find("demo", "alpha");
+    const model = requireDefined(factory.modelCatalog.find("demo", "alpha"), "custom demo model");
 
-    expect(model).toBeDefined();
-    expect(factory.modelCatalog.hasConfiguredAuth(model!)).toBe(true);
-    const auth = await factory.modelCatalog.getApiKeyAndHeaders(model!);
+    expect(factory.modelCatalog.hasConfiguredAuth(model)).toBe(true);
+    const auth = await factory.modelCatalog.getApiKeyAndHeaders(model);
     expect(auth).toEqual({
       ok: true,
       apiKey: "DEMO_KEY",
@@ -931,10 +937,9 @@ describe("hosted session factory", () => {
       ],
     });
 
-    const model = factory.modelCatalog.find("demo", "alpha");
-    expect(model).toBeDefined();
-    expect(model?.headers).toBeUndefined();
-    const auth = await factory.modelCatalog.getApiKeyAndHeaders(model!);
+    const model = requireDefined(factory.modelCatalog.find("demo", "alpha"), "dynamic demo model");
+    expect(model.headers).toBe(undefined);
+    const auth = await factory.modelCatalog.getApiKeyAndHeaders(model);
     expect(auth).toEqual({
       ok: true,
       apiKey: "DEMO_KEY",

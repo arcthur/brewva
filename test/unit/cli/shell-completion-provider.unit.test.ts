@@ -11,6 +11,7 @@ import {
   createWorkspaceReferenceCompletionSource,
   type ShellCompletionRange,
 } from "../../../packages/brewva-cli/src/shell/completion-provider.js";
+import { requireDefined } from "../../helpers/assertions.js";
 
 function completionRange(trigger: "/" | "@", query: string): ShellCompletionRange {
   return {
@@ -293,9 +294,11 @@ describe("ShellCompletionProvider", () => {
       "src/provider.ts",
     ]);
 
-    const srcProvider = before.find((candidate) => candidate.value === "src/provider.ts");
-    expect(srcProvider).toBeDefined();
-    provider.recordAccepted(srcProvider!);
+    const srcProvider = requireDefined(
+      before.find((candidate) => candidate.value === "src/provider.ts"),
+      "expected src/provider.ts completion candidate",
+    );
+    provider.recordAccepted(srcProvider);
 
     const after = provider.resolve(completionRange("@", "provider"));
     expect(after.map((candidate) => candidate.value)).toEqual([
@@ -364,7 +367,7 @@ describe("ShellCompletionProvider", () => {
           path: "docs/provider.ts",
         },
       }),
-    ).toBeUndefined();
+    ).toBe(undefined);
   });
 
   test("workspace reference completion stays inside cwd for parent and absolute queries", () => {

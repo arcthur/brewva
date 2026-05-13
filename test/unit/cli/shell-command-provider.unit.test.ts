@@ -237,8 +237,8 @@ describe("shell command provider", () => {
         args: "src",
         source: "slash",
       }),
-    ).toBeUndefined();
-    expect(provider.createCommandIntent("disabled.command")).toBeUndefined();
+    ).toBe(undefined);
+    expect(provider.createCommandIntent("disabled.command")).toBe(undefined);
   });
 
   test("built-in registry keeps palette-only commands out of slash and help surfaces", () => {
@@ -251,9 +251,9 @@ describe("shell command provider", () => {
       args: "",
       source: "internal",
     });
-    expect(
-      provider.createSlashCommandIntent("connect", { args: "", source: "slash" }),
-    ).toBeUndefined();
+    expect(provider.createSlashCommandIntent("connect", { args: "", source: "slash" })).toBe(
+      undefined,
+    );
     expect(provider.lookupSlashName("questions")).toMatchObject({
       kind: "reserved",
       reservation: {

@@ -12,7 +12,7 @@
 - Code anchors:
   - `packages/brewva-runtime/src/domain/projection/`
   - `packages/brewva-runtime/src/internal/evidence/api.ts`
-  - `test/quality/runtime-projection-admission.quality.test.ts`
+  - `test/fitness/runtime-projection-admission.fitness.test.ts`
 
 ## Decision Summary
 

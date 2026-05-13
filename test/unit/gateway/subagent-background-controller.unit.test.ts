@@ -11,6 +11,7 @@ import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import type { BrewvaRuntimeOptions } from "@brewva/brewva-runtime";
 import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
 import type { DelegationPacket } from "@brewva/brewva-tools/contracts";
+import { sleep } from "../../helpers/process.js";
 
 function createHostedTestRuntime(options: BrewvaRuntimeOptions) {
   return createBrewvaRuntime(options).hosted;
@@ -115,7 +116,7 @@ describe("detached subagent background controller", () => {
     expect(spec.schema).toBe("brewva.subagent-run-spec.v7");
     expect(spec.agentSpecName).toBe("advisor");
     expect(spec.envelopeName).toBe("readonly-advisor");
-    expect(spec.skillName).toBeUndefined();
+    expect(spec.skillName).toBe(undefined);
     expect(spec.config.infrastructure?.events?.level).toBe("audit");
     expect(delegationStore.getRun("parent-bg-1", run.runId)).toMatchObject({
       agentSpec: "advisor",
@@ -185,7 +186,7 @@ describe("detached subagent background controller", () => {
       if (terminal?.status === "cancelled") {
         break;
       }
-      await new Promise((resolve) => setTimeout(resolve, 25));
+      await sleep(25);
     }
 
     expect(signals).toEqual([{ pid: 43212, signal: "SIGTERM" }]);
@@ -262,7 +263,7 @@ describe("detached subagent background controller", () => {
       if (terminal?.status === "cancelled") {
         break;
       }
-      await new Promise((resolve) => setTimeout(resolve, 25));
+      await sleep(25);
     }
 
     expect(signals).toEqual([{ pid: 43213, signal: "SIGTERM" }]);

@@ -9,7 +9,7 @@ describe("prompt stability runtime state", () => {
     }).hosted;
     const sessionId = "prompt-stability-runtime-1";
 
-    expect(runtime.inspect.context.prompt.getStability(sessionId)).toBeUndefined();
+    expect(runtime.inspect.context.prompt.getStability(sessionId)).toBe(undefined);
 
     const first = runtime.operator.context.prompt.observeStability(sessionId, {
       stablePrefixHash: "prefix-1",
@@ -72,7 +72,7 @@ describe("prompt stability runtime state", () => {
 
     runtime.operator.session.state.clear(sessionId);
 
-    expect(runtime.inspect.context.prompt.getStability(sessionId)).toBeUndefined();
+    expect(runtime.inspect.context.prompt.getStability(sessionId)).toBe(undefined);
   });
 
   test("tracks transient outbound reduction state and clears on session teardown", () => {
@@ -81,7 +81,7 @@ describe("prompt stability runtime state", () => {
     }).hosted;
     const sessionId = "transient-reduction-runtime-1";
 
-    expect(runtime.inspect.context.prompt.getTransientReduction(sessionId)).toBeUndefined();
+    expect(runtime.inspect.context.prompt.getTransientReduction(sessionId)).toBe(undefined);
 
     const observed = runtime.operator.context.prompt.observeTransientReduction(sessionId, {
       status: "completed",
@@ -114,7 +114,7 @@ describe("prompt stability runtime state", () => {
 
     runtime.operator.session.state.clear(sessionId);
 
-    expect(runtime.inspect.context.prompt.getTransientReduction(sessionId)).toBeUndefined();
+    expect(runtime.inspect.context.prompt.getTransientReduction(sessionId)).toBe(undefined);
   });
 
   test("tracks provider cache observations and clears on session teardown", () => {
@@ -123,7 +123,7 @@ describe("prompt stability runtime state", () => {
     }).hosted;
     const sessionId = "provider-cache-runtime-1";
 
-    expect(runtime.inspect.context.providerCache.getObservation(sessionId)).toBeUndefined();
+    expect(runtime.inspect.context.providerCache.getObservation(sessionId)).toBe(undefined);
 
     const observed = runtime.operator.context.providerCache.observe(sessionId, {
       source: "openai:gpt-5.4:session-1",
@@ -199,7 +199,7 @@ describe("prompt stability runtime state", () => {
 
     runtime.operator.session.state.clear(sessionId);
 
-    expect(runtime.inspect.context.providerCache.getObservation(sessionId)).toBeUndefined();
+    expect(runtime.inspect.context.providerCache.getObservation(sessionId)).toBe(undefined);
   });
 
   test("tracks visible read epochs through the runtime context contract", () => {

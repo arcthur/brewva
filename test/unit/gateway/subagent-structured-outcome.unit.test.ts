@@ -94,8 +94,10 @@ describe("subagent structured outcome normalization", () => {
       }),
     });
 
-    expect(outcome.data).toBeUndefined();
-    expect(outcome.parseError).toBe("invalid_structured_outcome_payload");
+    expect([outcome.data, outcome.parseError]).toEqual([
+      undefined,
+      "invalid_structured_outcome_payload",
+    ]);
   });
 
   test("reads legacy openQuestions into canonical followUpQuestions", () => {
@@ -176,8 +178,10 @@ describe("subagent structured outcome normalization", () => {
       }),
     });
 
-    expect(outcome.data).toBeUndefined();
-    expect(outcome.parseError).toBe("invalid_structured_outcome_payload");
+    expect([outcome.data, outcome.parseError]).toEqual([
+      undefined,
+      "invalid_structured_outcome_payload",
+    ]);
   });
 
   test("preserves evidence-backed QA pass verdicts and mirrors canonical fields", () => {
@@ -242,8 +246,10 @@ describe("subagent structured outcome normalization", () => {
       }),
     });
 
-    expect(outcome.data).toBeUndefined();
-    expect(outcome.parseError).toBe("invalid_structured_outcome_payload");
+    expect([outcome.data, outcome.parseError]).toEqual([
+      undefined,
+      "invalid_structured_outcome_payload",
+    ]);
   });
 
   test("rejects QA structured outcomes when the only check omits observed_output", () => {
@@ -266,8 +272,10 @@ describe("subagent structured outcome normalization", () => {
       }),
     });
 
-    expect(outcome.data).toBeUndefined();
-    expect(outcome.parseError).toBe("invalid_structured_outcome_payload");
+    expect([outcome.data, outcome.parseError]).toEqual([
+      undefined,
+      "invalid_structured_outcome_payload",
+    ]);
   });
 
   test("downgrades QA verdicts when malformed checks are discarded by the canonical contract", () => {

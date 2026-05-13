@@ -61,6 +61,6 @@ describe("runtime event registry", () => {
     expect(getBrewvaEventDurabilityClass("workbench_baseline_committed")).toBe("durable_evidence");
     expect(getBrewvaEventDurabilityClass("projection_refreshed")).toBe("rebuildable_signal");
     expect(getBrewvaEventDurabilityClass("tool_parallel_read")).toBe("session_local");
-    expect(getBrewvaEventDurabilityClass("not_a_runtime_event")).toBeUndefined();
+    expect(getBrewvaEventDurabilityClass("not_a_runtime_event")).toBe(undefined);
   });
 });

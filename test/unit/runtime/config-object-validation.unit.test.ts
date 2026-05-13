@@ -20,7 +20,7 @@ describe("config object validation boundary", () => {
       "<test-config>",
     );
 
-    expect(validated.$schema).toBeUndefined();
+    expect(validated.$schema).toBe(undefined);
     expect(validated.skills).toEqual({
       routing: {
         scopes: ["domain"],
@@ -107,7 +107,7 @@ describe("config object validation boundary", () => {
   test("forensic validation skips non-object values with a typed warning", () => {
     const forensic = forensicallyValidateLoadedBrewvaConfigObject("not-an-object", "<test-config>");
 
-    expect(forensic.parsed).toBeUndefined();
+    expect(forensic.parsed).toBe(undefined);
     expect(forensic.warnings).toEqual([
       {
         code: "config_not_object_skipped",

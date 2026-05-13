@@ -427,8 +427,13 @@ describe("TOC tools", () => {
 
     const events = runtime.inspect.events.records.query(sessionId, { type: "tool_toc_query" });
     expect(events).toHaveLength(1);
-    expect(events[0]?.payload?.advisorStatus).toBeDefined();
-    expect(events[0]?.payload?.advisorReorderedMatches).toBeDefined();
+    const payload = requireDefined(events[0]?.payload, "expected tool_toc_query payload") as {
+      advisorStatus?: unknown;
+      advisorReorderedMatches?: unknown;
+    };
+    expect(typeof payload.advisorStatus).toBe("string");
+    expect(Number.isInteger(payload.advisorReorderedMatches)).toBe(true);
+    expect(payload.advisorReorderedMatches).toBeGreaterThanOrEqual(0);
   });
 
   test("toc_search promotes repeated query-conditioned follow-through without tool recursion", async () => {

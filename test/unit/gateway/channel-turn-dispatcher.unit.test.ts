@@ -156,7 +156,7 @@ describe("channel turn dispatcher ingress routing", () => {
       { awaitCompletion: true },
     );
 
-    expect(dispatcher.getLastTurn("scope-b")).toBeUndefined();
+    expect(dispatcher.getLastTurn("scope-b")).toBe(undefined);
     expect(dispatcher.getLastTurn("scope-a")?.turnId).toBe("turn-a");
     expect(dispatcher.getLastTurn("scope-c")?.turnId).toBe("turn-c");
   });

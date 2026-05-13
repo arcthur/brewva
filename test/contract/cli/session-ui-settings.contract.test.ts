@@ -103,7 +103,7 @@ describe("brewva session ui settings wiring", () => {
             }
           | undefined) ?? {};
 
-      expect(payload.skillLoad).toBeUndefined();
+      expect(Object.hasOwn(payload, "skillLoad")).toBe(false);
       expect(payload.runtimeConfig?.artifactRoots?.eventsDir).toBe(".orchestrator/events");
       expect(payload.runtimeConfig?.artifactRoots?.recoveryWalDir).toBe(
         ".orchestrator/recovery-wal",
@@ -164,8 +164,8 @@ describe("brewva session ui settings wiring", () => {
               skillLoad?: unknown;
             }
           | undefined) ?? {};
-      expect(payload.skillBroker).toBeUndefined();
-      expect(payload.skillLoad).toBeUndefined();
+      expect(Object.hasOwn(payload, "skillBroker")).toBe(false);
+      expect(Object.hasOwn(payload, "skillLoad")).toBe(false);
     } finally {
       result.session.dispose();
     }
@@ -207,8 +207,8 @@ describe("brewva session ui settings wiring", () => {
           }
         | undefined) ?? { managedToolMode: "hosted" };
       expect(payload.managedToolMode).toBe("direct");
-      expect(payload.skillBroker).toBeUndefined();
-      expect(payload.skillLoad).toBeUndefined();
+      expect(Object.hasOwn(payload, "skillBroker")).toBe(false);
+      expect(Object.hasOwn(payload, "skillLoad")).toBe(false);
     } finally {
       result.session.dispose();
     }

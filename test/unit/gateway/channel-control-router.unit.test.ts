@@ -657,7 +657,8 @@ describe("channel control router ownership", () => {
 
     const collection = await collectOpenSessionQuestions(runtime, sessionId);
     const questionId = collection.questions[0]?.questionId;
-    expect(questionId).toBeDefined();
+    expect(typeof questionId).toBe("string");
+    expect(questionId?.length).toBeGreaterThan(0);
 
     const router = createChannelControlRouter({
       runtime,

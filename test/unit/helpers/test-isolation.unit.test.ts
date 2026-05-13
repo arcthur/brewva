@@ -18,6 +18,6 @@ describe("test isolation guards", () => {
   test("restores Date.now and process.env between tests", () => {
     expect(dirtiedGlobals).toBe(true);
     expect(Date.now).toBe(TEST_INTRINSIC_DATE_NOW);
-    expect(process.env[ISOLATION_ENV_KEY]).toBeUndefined();
+    expect(process.env[ISOLATION_ENV_KEY]).toBe(undefined);
   });
 });

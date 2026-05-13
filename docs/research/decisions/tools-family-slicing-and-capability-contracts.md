@@ -30,8 +30,8 @@
   - `packages/brewva-tools/package.json`
   - `packages/brewva-gateway/src/policy/model-routing/`
   - `test/contract/tools/tools-entrypoint-surface.contract.test.ts`
-  - `test/quality/tools-domain-slicing.quality.test.ts`
-  - `test/quality/tools-large-adapter-boundary.quality.test.ts`
+  - `test/fitness/tools-domain-slicing.fitness.test.ts`
+  - `test/fitness/tools-large-adapter-boundary.fitness.test.ts`
 
 ## Decision Summary
 

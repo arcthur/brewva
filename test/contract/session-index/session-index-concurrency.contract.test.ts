@@ -8,6 +8,7 @@ import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
 import { type BrewvaEventRecord } from "@brewva/brewva-runtime/events";
 import { createSessionIndex } from "@brewva/brewva-session-index";
 import { buildVerificationOutcomeRecordedPayload } from "../../helpers/events.js";
+import { withTimeout } from "../../helpers/process.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 async function openExternalDuckDBWriter(dbPath: string): Promise<{
@@ -40,19 +41,13 @@ async function openExternalDuckDBWriter(dbPath: string): Promise<{
 
   const stderr: Buffer[] = [];
   child.stderr.on("data", (chunk) => stderr.push(Buffer.from(chunk)));
-  await new Promise<void>((resolvePromise, reject) => {
-    const timeout = setTimeout(() => {
-      child.kill();
-      reject(new Error("timed out waiting for external DuckDB writer"));
-    }, 5_000);
+  const ready = new Promise<void>((resolvePromise, reject) => {
     child.stdout.on("data", (chunk) => {
       if (String(chunk).includes("locked")) {
-        clearTimeout(timeout);
         resolvePromise();
       }
     });
     child.once("exit", (code) => {
-      clearTimeout(timeout);
       reject(
         new Error(
           `external DuckDB writer exited early with ${code}: ${Buffer.concat(stderr).toString("utf8")}`,
@@ -60,6 +55,15 @@ async function openExternalDuckDBWriter(dbPath: string): Promise<{
       );
     });
   });
+  const timeoutMessage = "timed out waiting for external DuckDB writer";
+  try {
+    await withTimeout(ready, 5_000, timeoutMessage);
+  } catch (error) {
+    if (error instanceof Error && error.message === timeoutMessage) {
+      child.kill();
+    }
+    throw error;
+  }
 
   return {
     async close(): Promise<void> {

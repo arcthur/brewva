@@ -196,7 +196,7 @@ describe("runtime session wire properties", () => {
         const frames = fixture.runtime.inspect.sessionWire.query(sessionId);
 
         expect(frames.some((frame) => frame.type === "turn.committed")).toBe(true);
-        expect(frames.find((frame) => frame.type === "tool.finished")).toBeUndefined();
+        expect(frames.find((frame) => frame.type === "tool.finished")).toBe(undefined);
       } finally {
         fixture.dispose();
       }

@@ -5,6 +5,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { AddressInfo } from "node:net";
 import { writeMinimalConfig } from "../../helpers/config.js";
 import { runLive } from "../../helpers/live.js";
+import { sleep } from "../../helpers/process.js";
 import { cleanupWorkspace, createWorkspace, repoRoot } from "../../helpers/workspace.js";
 
 interface TelegramRequestRecord {
@@ -15,12 +16,6 @@ interface TelegramRequestRecord {
 interface TelegramApiCapture {
   getUpdatesCalls: number;
   requests: TelegramRequestRecord[];
-}
-
-function sleep(delayMs: number): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, delayMs);
-  });
 }
 
 async function waitUntil(

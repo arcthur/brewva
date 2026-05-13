@@ -121,7 +121,7 @@ describe("managed-agent-session compaction flow", () => {
     expect(immediate).toBe(true);
     const firstRequest = state.beginDeferredCompaction();
     expect(state.isCompacting).toBe(true);
-    expect(firstRequest?.onComplete).toBeDefined();
+    expect(typeof firstRequest?.onComplete).toBe("function");
     state.finishDeferredCompaction();
 
     const deferred = state.requestCompaction(true, {

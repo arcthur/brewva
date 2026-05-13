@@ -143,7 +143,8 @@ describe("std async utilities", () => {
     const secondFailure = second.then(
       () => expect.unreachable("expected queued task to be rejected"),
       (error) => {
-        expect(error).toBeDefined();
+        expect(error).toBeInstanceOf(Error);
+        expect((error as Error).message).toBe("The operation was aborted.");
       },
     );
 

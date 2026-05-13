@@ -130,24 +130,25 @@ describe("managed Brewva tool definition metadata", () => {
     const tools = buildBrewvaTools({ runtime });
     const toolNames = tools.map((tool) => tool.name);
     const actionPolicies = TOOL_ACTION_POLICY_BY_NAME as Record<string, unknown>;
+    const removedPromotionTools = [
+      "skill_promotion_inspect",
+      "skill_promotion_review",
+      "skill_promotion_promote",
+      "skill_promotion_apply",
+    ] as const;
 
-    expect(toolNames).not.toContain("skill_promotion_inspect");
-    expect(toolNames).not.toContain("skill_promotion_review");
-    expect(toolNames).not.toContain("skill_promotion_promote");
-    expect(toolNames).not.toContain("skill_promotion_apply");
-    expect(MANAGED_BREWVA_TOOL_NAMES).not.toContain("skill_promotion_inspect");
-    expect(MANAGED_BREWVA_TOOL_NAMES).not.toContain("skill_promotion_review");
-    expect(MANAGED_BREWVA_TOOL_NAMES).not.toContain("skill_promotion_promote");
-    expect(MANAGED_BREWVA_TOOL_NAMES).not.toContain("skill_promotion_apply");
-    expect(getBrewvaToolSurface("skill_promotion_inspect")).toBeUndefined();
-    expect(getBrewvaToolSurface("skill_promotion_review")).toBeUndefined();
-    expect(getBrewvaToolSurface("skill_promotion_promote")).toBeUndefined();
-    expect(getBrewvaToolSurface("skill_promotion_apply")).toBeUndefined();
-    expect(actionPolicies.skill_promotion_inspect).toBeUndefined();
-    expect(actionPolicies.skill_promotion_review).toBeUndefined();
-    expect(actionPolicies.skill_promotion_promote).toBeUndefined();
-    expect(actionPolicies.skill_promotion_apply).toBeUndefined();
-    expect(getExactToolActionPolicy("skill_promotion_apply")).toBeUndefined();
+    for (const toolName of removedPromotionTools) {
+      expect(toolNames).not.toContain(toolName);
+      expect(MANAGED_BREWVA_TOOL_NAMES).not.toContain(toolName);
+      expect(Object.hasOwn(actionPolicies, toolName)).toBe(false);
+    }
+    expect(removedPromotionTools.map((toolName) => getBrewvaToolSurface(toolName))).toEqual([
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    ]);
+    expect(getExactToolActionPolicy("skill_promotion_apply")).toBe(undefined);
     expect(buildBrewvaTools({ runtime, toolNames: ["skill_promotion_apply"] })).toEqual([]);
   });
 
@@ -236,7 +237,7 @@ describe("managed Brewva tool definition metadata", () => {
       },
     );
 
-    expect(getBrewvaToolMetadata(tool)).toBeUndefined();
+    expect(getBrewvaToolMetadata(tool)).toBe(undefined);
     expect(
       resolveBrewvaToolExecutionTraits(tool, {
         args: { path: "README.md" },

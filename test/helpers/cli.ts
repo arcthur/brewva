@@ -1,4 +1,5 @@
 import { spawn, spawnSync, type SpawnSyncReturns } from "node:child_process";
+import { createUnrefTimer } from "./process.js";
 import { repoRoot } from "./workspace.js";
 
 const CLI_ENTRYPOINT = "packages/brewva-cli/src/index.ts";
@@ -106,7 +107,7 @@ export async function runCli(
     }
     child.stdin?.end();
 
-    timeout = setTimeout(
+    timeout = createUnrefTimer(
       () => {
         child.kill("SIGTERM");
         settle({
@@ -118,7 +119,6 @@ export async function runCli(
       },
       options?.timeoutMs ?? 10 * 60 * 1000,
     );
-    timeout.unref?.();
   });
 }
 

@@ -106,7 +106,7 @@ describe("provider request recovery", () => {
       },
     );
 
-    expect(patched).toBeUndefined();
+    expect(patched).toBe(undefined);
     expect(
       runtime.inspect.events.records
         .queryStructured(sessionId, {

@@ -147,7 +147,7 @@ describe("managed-agent-session model selection", () => {
     await controller.applyQueuedModelPreset();
 
     expect(controller.getState().activeName).toBe("Low");
-    expect(controller.getState().pendingName).toBeUndefined();
+    expect(controller.getState().pendingName).toBe(undefined);
     expect(currentThinkingLevel as BrewvaPromptThinkingLevel).toBe("low");
     expect(selectedPresets).toEqual(["Low"]);
   });

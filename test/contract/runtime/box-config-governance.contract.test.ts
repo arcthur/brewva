@@ -31,7 +31,7 @@ describe("box runtime contract", () => {
     expect(DEFAULT_BREWVA_CONFIG.security.credentials).not.toHaveProperty(
       ["sandbox", "ApiKeyRef"].join(""),
     );
-    expect(DEFAULT_BREWVA_CONFIG.security.credentials.boxSecretsRef).toBeUndefined();
+    expect(DEFAULT_BREWVA_CONFIG.security.credentials.boxSecretsRef).toBe(undefined);
     expect(DEFAULT_BREWVA_CONFIG.security.execution).toEqual({
       backend: "box",
       box: {

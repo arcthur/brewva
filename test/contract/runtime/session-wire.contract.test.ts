@@ -59,7 +59,7 @@ describe("runtime session wire compiler", () => {
     expect(frames.every((frame) => frame.durability === "durable")).toBe(true);
     expect(frames.every((frame) => typeof frame.sourceEventId === "string")).toBe(true);
     expect(frames.every((frame) => typeof frame.sourceEventType === "string")).toBe(true);
-    expect(frames.find((frame) => frame.type === "tool.finished")).toBeUndefined();
+    expect(frames.find((frame) => frame.type === "tool.finished")).toBe(undefined);
     expect(frames[1]).toMatchObject({
       type: "turn.committed",
       turnId: "turn-1",

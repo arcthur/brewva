@@ -364,10 +364,7 @@ describe("hosted turn transition coordinator", () => {
       type: "session_turn_transition",
     });
     expect(transitions).toHaveLength(4);
-    expect(transitions[0]?.turn).toBe(7);
-    expect(transitions[1]?.turn).toBe(7);
-    expect(transitions[2]?.turn).toBeUndefined();
-    expect(transitions[3]?.turn).toBeUndefined();
+    expect(transitions.map((transition) => transition.turn)).toEqual([7, 7, undefined, undefined]);
   });
 
   test("rejects duplicate entered transitions for an already active reason", () => {
@@ -476,15 +473,13 @@ describe("hosted turn transition coordinator", () => {
       sourceEventType: "session_compact",
     });
 
-    expect(() => {
-      recordSessionTurnTransition(runtime, {
-        sessionId,
-        reason: "compaction_retry",
-        status: "completed",
-        sourceEventId: "compact-1",
-        sourceEventType: "session_compact",
-      });
-    }).not.toThrow();
+    recordSessionTurnTransition(runtime, {
+      sessionId,
+      reason: "compaction_retry",
+      status: "completed",
+      sourceEventId: "compact-1",
+      sourceEventType: "session_compact",
+    });
 
     const transitions = runtime.inspect.events.records.queryStructured(sessionId, {
       type: "session_turn_transition",
@@ -606,7 +601,7 @@ describe("hosted turn transition coordinator", () => {
     });
 
     expect(state.activeTransitionKeys.size).toBe(0);
-    expect(state.activeReasonCounts.compaction_gate_blocked).toBeUndefined();
+    expect(Object.hasOwn(state.activeReasonCounts, "compaction_gate_blocked")).toBe(false);
     expect(state.pendingFamily).toBeNull();
   });
 
@@ -649,15 +644,13 @@ describe("hosted turn transition coordinator", () => {
 
       expect(coordinator.getSnapshot(sessionId).pendingFamily).toBe("delegation");
 
-      expect(() => {
-        recordSessionTurnTransition(runtime, {
-          sessionId,
-          turn: 10,
-          reason: "subagent_delivery_pending",
-          status: "completed",
-          family: "delegation",
-        });
-      }).not.toThrow();
+      recordSessionTurnTransition(runtime, {
+        sessionId,
+        turn: 10,
+        reason: "subagent_delivery_pending",
+        status: "completed",
+        family: "delegation",
+      });
 
       const transitions = runtime.inspect.events.records.queryStructured(sessionId, {
         type: "session_turn_transition",

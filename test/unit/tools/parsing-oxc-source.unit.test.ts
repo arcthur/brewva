@@ -20,6 +20,7 @@ import {
   type OxcError,
   type SourceSymbol,
 } from "../../../packages/brewva-tools/src/families/navigation/parsing/index.js";
+import { requireDefined } from "../../helpers/assertions.js";
 
 const COMMENT_AND_STRING_AWARE_SOURCE = `// rename foo here? no
 /* foo also lives in a block comment */
@@ -409,16 +410,20 @@ describe("parsing/oxc-source: applySourceEdits + renameInFile", () => {
   test("renameInFile throws on invalid identifier names", () => {
     const parsed = parseSource("a.ts", `function foo() {}`);
     const occurrences = findOccurrences(parsed, "foo");
-    expect(() => renameInFile(parsed, occurrences, "1bad")).toThrow();
+    expect(() => renameInFile(parsed, occurrences, "1bad")).toThrow(
+      "renameInFile: '1bad' is not a valid identifier",
+    );
   });
 });
 
 describe("parsing/oxc-source: helper invariants", () => {
   test("formatSymbolLine yields location:line:col -> kind name", () => {
     const parsed = parseSource("fmt.ts", `function widget() { return 1; }`);
-    const symbol = collectSymbols(parsed, { limit: 1 })[0];
-    expect(symbol).toBeDefined();
-    expect(formatSymbolLine("file.ts", symbol!)).toMatch(/^file\.ts:\d+:\d+ -> function widget$/);
+    const symbol = requireDefined(
+      collectSymbols(parsed, { limit: 1 })[0],
+      "expected collected widget symbol",
+    );
+    expect(formatSymbolLine("file.ts", symbol)).toMatch(/^file\.ts:\d+:\d+ -> function widget$/);
   });
 
   test("isValidIdentifierName accepts identifiers and rejects keywords-shaped junk", () => {

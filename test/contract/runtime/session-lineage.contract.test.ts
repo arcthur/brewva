@@ -55,8 +55,10 @@ describe("session lineage runtime surface", () => {
     expect(runtime.inspect.session.lineage.getNode).toBeTypeOf("function");
     expect(runtime.inspect.session.lineage.listChildren).toBeTypeOf("function");
     expect(runtime.inspect.session.lineage.getContextEntryPath).toBeTypeOf("function");
-    expect((runtime.authority as unknown as Record<string, unknown>)["lineage"]).toBeUndefined();
-    expect((runtime.inspect as unknown as Record<string, unknown>)["lineage"]).toBeUndefined();
+    expect([
+      (runtime.authority as unknown as Record<string, unknown>)["lineage"],
+      (runtime.inspect as unknown as Record<string, unknown>)["lineage"],
+    ]).toEqual([undefined, undefined]);
   });
 
   test("records and replays a branch tree without a global active leaf", () => {
@@ -332,15 +334,13 @@ describe("session lineage runtime surface", () => {
     expect(ownerIds.length).toBeGreaterThan(0);
     expect("capabilities" in (runtime.extensions.hosted.events as unknown as object)).toBe(false);
     for (const [index, ownerCapability] of ownerIds.entries()) {
-      expect(() =>
-        runtime.authority.session.lineage.recordCapabilityState(sessionId, {
-          stateId: `state-extension-${index}`,
-          ownerCapability,
-          customType: "extension-cache",
-          data: { index },
-          lineageNodeId: "ln-main",
-        }),
-      ).not.toThrow();
+      runtime.authority.session.lineage.recordCapabilityState(sessionId, {
+        stateId: `state-extension-${index}`,
+        ownerCapability,
+        customType: "extension-cache",
+        data: { index },
+        lineageNodeId: "ln-main",
+      });
     }
   });
 

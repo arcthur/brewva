@@ -26,7 +26,7 @@ retirement_sensitivity: auto_decay_allowed
 ## Standard Utilities
 
 - Standard utility package: `packages/brewva-std/package.json`, `packages/brewva-std/src/async.ts`, `packages/brewva-std/src/collections.ts`, `packages/brewva-std/src/hash.ts`, `packages/brewva-std/src/json.ts`, `packages/brewva-std/src/markdown.ts`, `packages/brewva-std/src/node/fs.ts`, `packages/brewva-std/src/text.ts`, `packages/brewva-std/src/unknown.ts`
-- Standard utility boundary tests: `test/quality/std-boundary.quality.test.ts`, `test/unit/std`
+- Standard utility boundary tests: `test/fitness/std-boundary.fitness.test.ts`, `test/unit/std`
 
 ## Managed Tools and Entrypoints
 

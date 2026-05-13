@@ -18,6 +18,14 @@ const MINIMAL_SELECTION_LINES = [
   "  when_to_use: Use when the task needs the routed test skill.",
 ] as const;
 
+function readOptionalValues(value: unknown, keys: readonly string[]): unknown[] {
+  if (!value || typeof value !== "object") {
+    return keys.map(() => undefined);
+  }
+  const record = value as Record<string, unknown>;
+  return keys.map((key) => record[key]);
+}
+
 describe("skill document parsing", () => {
   test("fails fast when forbidden tier frontmatter field is present", () => {
     const filePath = createTempSkillDocument(
@@ -336,8 +344,10 @@ describe("skill document parsing", () => {
     );
 
     const parsed = parseSkillDocument(filePath, "core");
-    expect(parsed.contract.selection).toBeUndefined();
-    expect(parsed.contract.executionHints).toBeUndefined();
+    expect(readOptionalValues(parsed.contract, ["selection", "executionHints"])).toEqual([
+      undefined,
+      undefined,
+    ]);
     expect(getSkillCostHint(parsed.contract)).toBe("medium");
   });
 
@@ -466,7 +476,7 @@ describe("skill document parsing", () => {
     );
 
     const parsed = parseSkillDocument(filePath, "core");
-    expect(parsed.contract.executionHints).toBeUndefined();
+    expect(readOptionalValues(parsed.contract, ["executionHints"])).toEqual([undefined]);
     expect(listSkillPreferredTools(parsed.contract)).toEqual([]);
     expect(listSkillFallbackTools(parsed.contract)).toEqual([]);
   });
@@ -615,7 +625,7 @@ describe("skill document parsing", () => {
     );
 
     expect(parsed.category).toBe("overlay");
-    expect(parsed.contract.routing).toBeUndefined();
+    expect(readOptionalValues(parsed.contract, ["routing"])).toEqual([undefined]);
     expect(parsed.resources.scripts).toEqual([]);
     expect(parsed.resources.references).toEqual(
       expect.arrayContaining([
@@ -646,9 +656,11 @@ describe("skill document parsing", () => {
     );
 
     const parsed = parseSkillDocument(filePath, "overlay");
-    expect(parsed.contract.intent?.outputs).toBeUndefined();
-    expect(parsed.contract.consumes).toBeUndefined();
-    expect(parsed.contract.composableWith).toBeUndefined();
+    expect(readOptionalValues(parsed.contract.intent, ["outputs"])).toEqual([undefined]);
+    expect(readOptionalValues(parsed.contract, ["consumes", "composableWith"])).toEqual([
+      undefined,
+      undefined,
+    ]);
 
     const merged = mergeOverlayContract(
       createContract({
@@ -874,42 +886,43 @@ describe("skill document parsing", () => {
       },
     });
 
-    expect(() =>
-      mergeOverlayContract(base, {
-        intent: {
-          outputs: ["review_report"],
-          outputContracts: {
-            review_report: {
-              kind: "json",
-              fieldContracts: {
-                precedent_query_summary: {
-                  minLength: 18,
-                  kind: "text",
-                  minWords: 3,
-                },
-                precedent_consult_status: {
-                  fieldContracts: {
-                    status: {
-                      values: ["consulted", "no_match", "not_required"],
-                      kind: "enum",
-                    },
-                  },
-                  requiredFields: ["status"],
-                  kind: "json",
-                },
-                summary: {
-                  minLength: 18,
-                  kind: "text",
-                  minWords: 3,
-                },
+    const merged = mergeOverlayContract(base, {
+      intent: {
+        outputs: ["review_report"],
+        outputContracts: {
+          review_report: {
+            kind: "json",
+            fieldContracts: {
+              precedent_query_summary: {
+                minLength: 18,
+                kind: "text",
+                minWords: 3,
               },
-              requiredFields: ["summary", "precedent_query_summary", "precedent_consult_status"],
-              minKeys: 3,
+              precedent_consult_status: {
+                fieldContracts: {
+                  status: {
+                    values: ["consulted", "no_match", "not_required"],
+                    kind: "enum",
+                  },
+                },
+                requiredFields: ["status"],
+                kind: "json",
+              },
+              summary: {
+                minLength: 18,
+                kind: "text",
+                minWords: 3,
+              },
             },
+            requiredFields: ["summary", "precedent_query_summary", "precedent_consult_status"],
+            minKeys: 3,
           },
         },
-      }),
-    ).not.toThrow();
+      },
+    });
+    expect(merged.intent?.outputContracts?.review_report).toEqual(
+      base.intent?.outputContracts?.review_report,
+    );
   });
 
   test("parses nested json output contracts with required fields and field contracts", () => {
@@ -1009,7 +1022,7 @@ describe("skill document parsing", () => {
       "risk_register",
       "implementation_targets",
     ]);
-    expect(parsed.contract.intent?.outputContracts).toBeUndefined();
+    expect(readOptionalValues(parsed.contract.intent, ["outputContracts"])).toEqual([undefined]);
   });
 
   test("parses semantic bindings for prep skill", () => {
@@ -1027,7 +1040,7 @@ describe("skill document parsing", () => {
       "approach_simplicity_check",
       "scope_declaration",
     ]);
-    expect(parsed.contract.intent?.outputContracts).toBeUndefined();
+    expect(readOptionalValues(parsed.contract.intent, ["outputContracts"])).toEqual([undefined]);
   });
 
   test("rejects authored output contracts for semantic-bound outputs", () => {

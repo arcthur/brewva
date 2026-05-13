@@ -47,8 +47,8 @@ jobs:
       - name: Run System Tests
         run: bun run test:system
 
-      - name: Run Quality Layer Tests
-        run: bun run test:quality
+      - name: Run Repository Fitness Tests
+        run: bun run test:fitness
 
       - name: Run Dist Smoke Checks
         run: bun run test:dist

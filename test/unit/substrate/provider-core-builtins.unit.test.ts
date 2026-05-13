@@ -23,7 +23,8 @@ describe("provider core built-in api catalog", () => {
 
     expect(registrations.map((provider) => provider.api)).toEqual([...BUILT_IN_API_PROVIDER_APIS]);
     expect(
-      registrations.find((provider) => provider.api === "openai-codex-responses")?.sessionResources,
-    ).toBeDefined();
+      typeof registrations.find((provider) => provider.api === "openai-codex-responses")
+        ?.sessionResources?.clearSession,
+    ).toBe("function");
   });
 });

@@ -391,7 +391,7 @@ describe("recovery read model", () => {
         degradedReason: "exact_history_over_budget",
       }),
     );
-    expect(result.workingSet).toBeUndefined();
+    expect(result.workingSet).toBe(undefined);
   });
 
   test("persists a receipt-derived baseline artifact when the pipeline resolves from session_compact", () => {
@@ -796,7 +796,7 @@ describe("recovery read model", () => {
 
     const result = runRecoveryContextPipeline(kernel, { sessionId });
 
-    expect(result.baselineState.snapshot).toBeUndefined();
+    expect(result.baselineState.snapshot).toBe(undefined);
     expect(result.baselineState.degradedReason).toBe("summary_digest_mismatch");
     expect(result.baselineState.postureMode).toBe("diagnostic_only");
   });

@@ -154,7 +154,7 @@ describe("Recovery WAL store", () => {
       scope: "channel-telegram",
     });
 
-    expect(store.markDone(asBrewvaWalId("missing-wal-id"))).toBeUndefined();
+    expect(store.markDone(asBrewvaWalId("missing-wal-id"))).toBe(undefined);
   });
 
   test("given a done record, when markInflight is called again, then transition is ignored", () => {
@@ -170,7 +170,7 @@ describe("Recovery WAL store", () => {
     store.markDone(pending.walId);
 
     const transitioned = store.markInflight(pending.walId);
-    expect(transitioned).toBeUndefined();
+    expect(transitioned).toBe(undefined);
     expect(store.listCurrent().map((row) => row.status)).toEqual(["done"]);
   });
 
@@ -223,7 +223,7 @@ describe("Recovery WAL store", () => {
         source: "gateway",
         channel: "telegram",
       }),
-    ).toBeUndefined();
+    ).toBe(undefined);
   });
 
   test("given stale terminal ingress rows, when compact runs, then the latest ingress watermark is preserved without retaining turn rows", () => {

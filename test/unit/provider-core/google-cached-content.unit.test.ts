@@ -3,6 +3,7 @@ import {
   createGoogleCachedContent,
   deleteGoogleCachedContent,
 } from "../../../packages/brewva-provider-core/src/providers/google-gemini-cli/cached-content.js";
+import { sleep } from "../../helpers/process.js";
 
 const INTRINSIC_FETCH = globalThis.fetch;
 const CREDENTIAL = '{"token":"tok","projectId":"project-1"}';
@@ -46,19 +47,17 @@ describe("google cached content adapter", () => {
     globalThis.fetch = (async (_input, init) => {
       const signal = init?.signal;
       return await new Promise<Response>((_resolve, reject) => {
-        const fallback = setTimeout(() => reject(new Error("missing abort signal")), 50);
+        void sleep(50).then(() => reject(new Error("missing abort signal")));
         if (!signal) {
           return;
         }
         if (signal.aborted) {
-          clearTimeout(fallback);
           reject(new DOMException("Aborted", "AbortError"));
           return;
         }
         signal.addEventListener(
           "abort",
           () => {
-            clearTimeout(fallback);
             reject(new DOMException("Aborted", "AbortError"));
           },
           { once: true },

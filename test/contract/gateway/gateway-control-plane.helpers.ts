@@ -13,6 +13,7 @@ import {
   type SessionWorkerInfo,
 } from "@brewva/brewva-gateway";
 import type { ContextStatusView } from "@brewva/brewva-runtime/session";
+export { sleep } from "../../helpers/process.js";
 
 export interface PolicyRule {
   id: string;
@@ -34,12 +35,6 @@ export interface ReloadPayload {
 export interface SessionsClosePayload {
   sessionId: string;
   closed: boolean;
-}
-
-export function sleep(ms: number): Promise<void> {
-  return new Promise((resolveSleep) => {
-    setTimeout(resolveSleep, ms);
-  });
 }
 
 export function writeHeartbeatPolicy(policyPath: string, rules: PolicyRule[]): void {

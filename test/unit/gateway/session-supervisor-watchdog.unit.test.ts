@@ -16,7 +16,9 @@ import {
   buildWorkerTestHarnessEnv,
   WORKER_TEST_HARNESS_ENV_KEYS,
 } from "../../../packages/brewva-gateway/src/hosted/internal/thread-loop/worker/test-harness.js";
+import { requireNonEmptyString } from "../../helpers/assertions.js";
 import { patchProcessEnv } from "../../helpers/global-state.js";
+import { sleep } from "../../helpers/process.js";
 import { createOpsRuntimeConfig } from "../../helpers/runtime.js";
 import { createTestWorkspace, writeTestConfig } from "../../helpers/workspace.js";
 
@@ -39,20 +41,14 @@ async function waitForCondition<T>(
     if (value !== null && value !== undefined) {
       return value;
     }
-    await new Promise<void>((resolve) => {
-      const timer = setTimeout(resolve, intervalMs);
-      timer.unref?.();
-    });
+    await sleep(intervalMs);
   }
 
   throw new Error(options.message);
 }
 
 async function sleepMs(durationMs: number): Promise<void> {
-  await new Promise<void>((resolve) => {
-    const timer = setTimeout(resolve, durationMs);
-    timer.unref?.();
-  });
+  await sleep(durationMs);
 }
 
 function createWorkerTestEnv(overrides: {
@@ -618,9 +614,10 @@ describe("session supervisor watchdog bridge", () => {
         const opened = await supervisor.openSession({
           sessionId: "watchdog-worker-ambient-env",
         });
-        const agentSessionId = opened.agentSessionId;
-        expect(typeof agentSessionId).toBe("string");
-        expect(agentSessionId?.length).toBeGreaterThan(0);
+        const agentSessionId = requireNonEmptyString(
+          opened.agentSessionId,
+          "expected worker ambient env agent session id",
+        );
 
         await sleepMs(1_500);
 
@@ -629,9 +626,9 @@ describe("session supervisor watchdog bridge", () => {
           configPath: TEST_CONFIG_PATH,
         }).hosted;
         expect(
-          observer.inspect.events.records.query(agentSessionId!, { type: "task_stuck_detected" }),
+          observer.inspect.events.records.query(agentSessionId, { type: "task_stuck_detected" }),
         ).toHaveLength(0);
-        expect(observer.inspect.task.state.get(agentSessionId!).spec).toBeUndefined();
+        expect(observer.inspect.task.state.get(agentSessionId).spec).toBe(undefined);
       } finally {
         await supervisor.stop();
         restoreEnv();

@@ -128,7 +128,7 @@ describe("live: task spec plumbing", () => {
         taskFile,
       ]);
 
-      expect(run.error).toBeUndefined();
+      expect(run.error).toBe(undefined);
       expect(run.status).toBe(1);
       expect(run.stdout.trim()).toBe("");
       expect(run.stderr).toContain("Error: use only one of --task or --task-file.");
@@ -144,7 +144,7 @@ describe("live: task spec plumbing", () => {
     try {
       const run = runCliSync(workspace, ["--mode", "json", "--task", "{invalid-json"]);
 
-      expect(run.error).toBeUndefined();
+      expect(run.error).toBe(undefined);
       expect(run.status).toBe(1);
       expect(run.stdout.trim()).toBe("");
       expect(run.stderr).toContain("Error: failed to parse TaskSpec JSON (");
@@ -162,7 +162,7 @@ describe("live: task spec plumbing", () => {
     try {
       const run = runCliSync(workspace, ["--mode", "json", "--task-file", missingTaskFile]);
 
-      expect(run.error).toBeUndefined();
+      expect(run.error).toBe(undefined);
       expect(run.status).toBe(1);
       expect(run.stdout.trim()).toBe("");
       expect(run.stderr).toContain("Error: failed to read TaskSpec file (");

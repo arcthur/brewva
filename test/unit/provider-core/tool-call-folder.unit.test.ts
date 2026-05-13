@@ -146,8 +146,8 @@ describe("incremental tool call folder", () => {
     const startEvent = findToolCallEvent(events, "toolcall_start");
     const endEvent = findToolCallEvent(events, "toolcall_end");
     // Without registry, parseStatus should be undefined (not set)
-    expect(startEvent?.parseStatus).toBeUndefined();
-    expect(endEvent?.parseStatus).toBeUndefined();
+    expect(startEvent?.parseStatus).toBe(undefined);
+    expect(endEvent?.parseStatus).toBe(undefined);
   });
 
   test("emits parseStatus when registry is provided", async () => {
@@ -258,7 +258,7 @@ describe("incremental tool call folder", () => {
 
     const startEvent = findToolCallEvent(events, "toolcall_start");
     // Permissive parse: no schema, so parseStatus should be undefined
-    expect(startEvent?.parseStatus).toBeUndefined();
+    expect(startEvent?.parseStatus).toBe(undefined);
   });
 
   test("appendArgumentsDelta emits parseStatus on each delta", async () => {
@@ -284,7 +284,7 @@ describe("incremental tool call folder", () => {
     const deltaEvents = filterToolCallEvents(events, "toolcall_delta");
     // Each delta should have a parseStatus since we have a registry and tool name
     for (const delta of deltaEvents) {
-      expect(delta.parseStatus).toBeDefined();
+      expect(typeof delta.parseStatus).toBe("string");
     }
 
     const endEvent = findToolCallEvent(events, "toolcall_end");
@@ -296,7 +296,7 @@ describe("incremental tool call folder", () => {
 describe("parseStreamingJson", () => {
   test("returns incomplete for empty input", () => {
     const result = parseStreamingJson("");
-    expect(result.parseStatus).toBeUndefined();
+    expect(result.parseStatus).toBe(undefined);
     expect(result.output).toEqual({});
   });
 
@@ -315,18 +315,18 @@ describe("parseStreamingJson", () => {
 
   test("returns incomplete for undefined input", () => {
     const result = parseStreamingJson(undefined);
-    expect(result.parseStatus).toBeUndefined();
+    expect(result.parseStatus).toBe(undefined);
   });
 
   test("parses complete JSON without registry", () => {
     const result = parseStreamingJson('{"path":"/tmp/test.txt"}');
-    expect(result.parseStatus).toBeUndefined();
+    expect(result.parseStatus).toBe(undefined);
     expect(result.output).toEqual({ path: "/tmp/test.txt" });
   });
 
   test("parses partial JSON without registry", () => {
     const result = parseStreamingJson('{"path":"/tmp/tes');
-    expect(result.parseStatus).toBeUndefined();
+    expect(result.parseStatus).toBe(undefined);
     expect(result.output).toEqual({ path: "/tmp/tes" });
   });
 
@@ -376,7 +376,7 @@ describe("parseStreamingJson", () => {
     const result = parseStreamingJson('{"mode":"delete"}', "action", registry);
     expect(result.parseStatus).toBe("likely_invalid");
     expect(result.output).toEqual({ mode: "delete" });
-    expect(result.unmetConstraints).toBeDefined();
+    expect(Array.isArray(result.unmetConstraints)).toBe(true);
     expect(result.unmetConstraints!.length).toBeGreaterThan(0);
   });
 
@@ -393,13 +393,13 @@ describe("parseStreamingJson", () => {
     const result = parseStreamingJson('{"mode":"ed', "action", registry);
     expect(result.parseStatus).toBe("pending");
     expect(result.output).toEqual({ mode: "ed" });
-    expect(result.unmetConstraints).toBeUndefined();
+    expect(result.unmetConstraints).toBe(undefined);
   });
 
   test("falls back to permissive parse for unknown tool name", () => {
     const registry = createStreamingParseRegistry([]);
     const result = parseStreamingJson('{"anything":1}', "unknown", registry);
-    expect(result.parseStatus).toBeUndefined();
+    expect(result.parseStatus).toBe(undefined);
     expect(result.output).toEqual({ anything: 1 });
   });
 });
@@ -479,16 +479,17 @@ describe("createStreamingParseRegistry", () => {
       parameters: Type.Object({ path: Type.String() }),
     };
     const registry = createStreamingParseRegistry([tool]);
-    expect(registry.get("read")).toBeDefined();
+    const readSchema = registry.get("read") as { safeParse?: unknown } | undefined;
+    expect(typeof readSchema?.safeParse).toBe("function");
   });
 
   test("returns undefined for unknown tools", () => {
     const registry = createStreamingParseRegistry([]);
-    expect(registry.get("unknown")).toBeUndefined();
+    expect(registry.get("unknown")).toBe(undefined);
   });
 
   test("EMPTY_PARSE_REGISTRY always returns undefined", () => {
-    expect(EMPTY_PARSE_REGISTRY.get("anything")).toBeUndefined();
+    expect(EMPTY_PARSE_REGISTRY.get("anything")).toBe(undefined);
   });
 });
 

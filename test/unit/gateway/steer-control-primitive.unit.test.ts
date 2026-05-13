@@ -35,6 +35,7 @@ import {
   createSessionBackendStub,
   getHandleMethod,
 } from "../../contract/gateway/gateway-control-plane.helpers.js";
+import { requireDefined } from "../../helpers/assertions.js";
 import { createTurnEventStream, createTurnStreamFromPromise } from "../../helpers/effect-stream.js";
 import { createRuntimeFixture } from "../../helpers/runtime.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
@@ -435,7 +436,7 @@ describe("in-flight steer control primitive", () => {
 
       expect(secondCallSawGuidance).toBe(true);
       expect(JSON.stringify(toolResult)).toContain("User guidance: before next model call");
-      expect(dropped).toBeUndefined();
+      expect(dropped).toBe(undefined);
       expect(applied?.toolCallId).toBe("tool-late");
     } finally {
       unsubscribe();
@@ -852,10 +853,10 @@ describe("in-flight steer control primitive", () => {
         .find((message) => message.role === "toolResult");
 
       expect(eventTypes.some((type) => type === "steer_applied")).toBe(true);
-      expect(originalToolResult).toBeDefined();
-      expect(restoredToolResult).toBeDefined();
-      expect(JSON.stringify(restoredToolResult)).toBe(JSON.stringify(originalToolResult));
-      expect(JSON.stringify(restoredToolResult)).toContain("User guidance: persist this hint");
+      const originalResult = requireDefined(originalToolResult, "expected original tool result");
+      const restoredResult = requireDefined(restoredToolResult, "expected restored tool result");
+      expect(JSON.stringify(restoredResult)).toBe(JSON.stringify(originalResult));
+      expect(JSON.stringify(restoredResult)).toContain("User guidance: persist this hint");
     } finally {
       fixture.session.dispose();
       fixture.fauxProvider.unregister();

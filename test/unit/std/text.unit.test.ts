@@ -24,8 +24,8 @@ describe("std text", () => {
 
   test("readNonEmptyString trims and rejects non-strings", () => {
     expect(readNonEmptyString("  value  ")).toBe("value");
-    expect(readNonEmptyString("   ")).toBeUndefined();
-    expect(readNonEmptyString(42)).toBeUndefined();
+    expect(readNonEmptyString("   ")).toBe(undefined);
+    expect(readNonEmptyString(42)).toBe(undefined);
   });
 
   test("string list readers drop non-strings and normalize whitespace", () => {

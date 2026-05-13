@@ -7,6 +7,7 @@ import {
   createHostedModelServices,
   HostedModelRegistry,
 } from "../../../packages/brewva-gateway/src/hosted/internal/session/settings/hosted-model-registry.js";
+import { requireDefined } from "../../helpers/assertions.js";
 import { patchProcessEnv } from "../../helpers/global-state.js";
 
 const TEST_ENV_KEY = "BREWVA_HOSTED_MODEL_REGISTRY_TEST_KEY";
@@ -39,10 +40,12 @@ describe("hosted model registry", () => {
         ],
       });
 
-      const model = registry.find("demo", "alpha");
-      expect(model).toBeDefined();
+      const model = requireDefined(
+        registry.find("demo", "alpha"),
+        "Expected registered demo alpha model.",
+      );
 
-      const auth = await registry.getApiKeyAndHeaders(model!);
+      const auth = await registry.getApiKeyAndHeaders(model);
       expect(auth).toEqual({
         ok: true,
         apiKey: TEST_ENV_KEY,
@@ -78,13 +81,15 @@ describe("hosted model registry", () => {
     try {
       const authStore = HostedAuthStore.inMemory();
       const registry = HostedModelRegistry.inMemory(authStore);
-      const model = registry.find("deepseek", "deepseek-v4-flash");
-      expect(model).toBeDefined();
+      const model = requireDefined(
+        registry.find("deepseek", "deepseek-v4-flash"),
+        "Expected built-in DeepSeek model.",
+      );
 
       expect(authStore.hasAuth("deepseek")).toBe(false);
-      expect(await authStore.getApiKey("deepseek")).toBeUndefined();
-      expect(registry.hasConfiguredAuth(model!)).toBe(false);
-      const auth = await registry.getApiKeyAndHeaders(model!);
+      expect(await authStore.getApiKey("deepseek")).toBe(undefined);
+      expect(registry.hasConfiguredAuth(model)).toBe(false);
+      const auth = await registry.getApiKeyAndHeaders(model);
       expect(auth).toEqual({
         ok: true,
         apiKey: undefined,
@@ -122,7 +127,7 @@ describe("hosted model registry", () => {
 
       second.authStore.remove("openai-codex");
       const third = createHostedModelServices(agentDir);
-      expect(third.authStore.get("openai-codex")).toBeUndefined();
+      expect(third.authStore.get("openai-codex")).toBe(undefined);
     } finally {
       rmSync(agentDir, { recursive: true, force: true });
     }

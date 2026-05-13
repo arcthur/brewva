@@ -185,8 +185,12 @@ describe("projection store", () => {
       content: "[WorkingProjection]\n- task.goal: another state",
     });
 
-    expect(store.getWorkingSnapshot("projection-store-session")).toBeDefined();
-    expect(store.getWorkingSnapshot("projection-store-session-b")).toBeDefined();
+    expect(store.getWorkingSnapshot("projection-store-session")?.content).toBe(
+      "[WorkingProjection]\n- task.goal: current state",
+    );
+    expect(store.getWorkingSnapshot("projection-store-session-b")?.content).toBe(
+      "[WorkingProjection]\n- task.goal: another state",
+    );
     const sessionAPath = workingSnapshotPath(rootDir, "projection-store-session");
     const sessionBPath = workingSnapshotPath(rootDir, "projection-store-session-b");
     expect(existsSync(sessionAPath)).toBe(true);
@@ -195,8 +199,10 @@ describe("projection store", () => {
     expect(readFileSync(sessionBPath, "utf8")).toContain("another state");
 
     store.clearWorkingSnapshot("projection-store-session");
-    expect(store.getWorkingSnapshot("projection-store-session")).toBeUndefined();
-    expect(store.getWorkingSnapshot("projection-store-session-b")).toBeDefined();
+    expect(store.getWorkingSnapshot("projection-store-session")).toBe(undefined);
+    expect(store.getWorkingSnapshot("projection-store-session-b")?.content).toBe(
+      "[WorkingProjection]\n- task.goal: another state",
+    );
     expect(existsSync(sessionAPath)).toBe(true);
   });
 
@@ -225,7 +231,9 @@ describe("projection store", () => {
     });
 
     const currentPath = workingSnapshotPath(rootDir, "projection-store-session");
-    expect(store.getWorkingSnapshot("projection-store-session")).toBeDefined();
+    expect(store.getWorkingSnapshot("projection-store-session")?.content).toBe(
+      "[WorkingProjection]\n- task.goal: current state",
+    );
     expect(existsSync(currentPath)).toBe(true);
     expect(readFileSync(currentPath, "utf8")).toContain("current state");
     expect(readFileSync(join(rootDir, "working.md"), "utf8")).toBe("obsolete root snapshot\n");

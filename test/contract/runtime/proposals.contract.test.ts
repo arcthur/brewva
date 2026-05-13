@@ -698,7 +698,7 @@ describe("runtime proposals API", () => {
 
     expect(started.allowed).toBe(true);
     expect(started.boundary).toBe("safe");
-    expect(started.commitmentReceipt).toBeUndefined();
+    expect(started.commitmentReceipt).toBe(undefined);
     expect(runtime.inspect.proposals.proposals.list(sessionId)).toHaveLength(0);
   });
 });

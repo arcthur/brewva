@@ -19,7 +19,7 @@
   - `packages/brewva-runtime/src/runtime/runtime-effect.ts`
   - `packages/brewva-gateway/src/hosted/internal/context/materialization.ts`
   - `packages/brewva-tools/src/registry/runtime-capability-inventory.ts`
-  - `test/quality/runtime-projection-admission.quality.test.ts`
+  - `test/fitness/runtime-projection-admission.fitness.test.ts`
 
 ## Decision Summary
 

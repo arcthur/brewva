@@ -8,6 +8,7 @@ import {
   collectChangedPathsFromIsolatedWorkspace,
   createIsolatedWorkspace,
 } from "@brewva/brewva-gateway";
+import { requireDefined, requireNonEmptyString } from "../../helpers/assertions.js";
 
 describe("subagent isolated workspace helpers", () => {
   test("captures add/modify/delete changes while ignoring runtime-owned helper artifacts", async () => {
@@ -42,35 +43,50 @@ describe("subagent isolated workspace helpers", () => {
     mkdirSync(join(isolated.root, ".orchestrator"), { recursive: true });
     writeFileSync(join(isolated.root, ".orchestrator", "child.json"), '{"temp":true}\n', "utf8");
 
-    const patchSet = await capturePatchSetFromIsolatedWorkspace({
-      sourceRoot: workspaceRoot,
-      isolatedRoot: isolated.root,
-      summary: "captured",
-    });
+    const patchSet = requireDefined(
+      await capturePatchSetFromIsolatedWorkspace({
+        sourceRoot: workspaceRoot,
+        isolatedRoot: isolated.root,
+        summary: "captured",
+      }),
+      "Expected isolated workspace patch set.",
+    );
 
-    expect(patchSet).toBeDefined();
-    expect(patchSet?.changes).toEqual([
+    expect(patchSet.changes).toEqual([
       expect.objectContaining({ path: "src/add.ts", action: "add" }),
       expect.objectContaining({ path: "src/delete.ts", action: "delete" }),
       expect.objectContaining({ path: "src/keep.ts", action: "modify" }),
     ]);
-    expect(patchSet?.changes.some((change) => change.path.startsWith(".git/"))).toBe(false);
-    expect(patchSet?.changes.some((change) => change.path.startsWith("node_modules/"))).toBe(false);
-    expect(patchSet?.changes.some((change) => change.path.startsWith(".orchestrator/"))).toBe(
+    expect(patchSet.changes.some((change) => change.path.startsWith(".git/"))).toBe(false);
+    expect(patchSet.changes.some((change) => change.path.startsWith("node_modules/"))).toBe(false);
+    expect(patchSet.changes.some((change) => change.path.startsWith(".orchestrator/"))).toBe(false);
+    expect(patchSet.changes.some((change) => change.path === ".brewva/skills_index.json")).toBe(
       false,
     );
-    expect(patchSet?.changes.some((change) => change.path === ".brewva/skills_index.json")).toBe(
-      false,
+    const addChange = requireDefined(
+      patchSet.changes.find((change) => change.path === "src/add.ts"),
+      "Expected added file change.",
     );
-    const addChange = patchSet?.changes.find((change) => change.path === "src/add.ts");
-    const modifyChange = patchSet?.changes.find((change) => change.path === "src/keep.ts");
-    const deleteChange = patchSet?.changes.find((change) => change.path === "src/delete.ts");
+    const modifyChange = requireDefined(
+      patchSet.changes.find((change) => change.path === "src/keep.ts"),
+      "Expected modified file change.",
+    );
+    const deleteChange = requireDefined(
+      patchSet.changes.find((change) => change.path === "src/delete.ts"),
+      "Expected deleted file change.",
+    );
+    const addArtifactRef = requireNonEmptyString(
+      addChange.artifactRef,
+      "Expected added file artifact ref.",
+    );
+    const modifyArtifactRef = requireNonEmptyString(
+      modifyChange.artifactRef,
+      "Expected modified file artifact ref.",
+    );
 
-    expect(addChange?.artifactRef).toBeTruthy();
-    expect(modifyChange?.artifactRef).toBeTruthy();
-    expect(deleteChange?.artifactRef).toBeUndefined();
-    expect(existsSync(resolve(workspaceRoot, addChange?.artifactRef ?? ""))).toBe(true);
-    expect(existsSync(resolve(workspaceRoot, modifyChange?.artifactRef ?? ""))).toBe(true);
+    expect(deleteChange.artifactRef).toBe(undefined);
+    expect(existsSync(resolve(workspaceRoot, addArtifactRef))).toBe(true);
+    expect(existsSync(resolve(workspaceRoot, modifyArtifactRef))).toBe(true);
 
     const isolatedBeforeDispose = isolated.root;
     await isolated.dispose();
