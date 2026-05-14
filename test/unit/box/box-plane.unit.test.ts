@@ -5,7 +5,7 @@ function sessionScope(input: Partial<BoxScope> = {}): BoxScope {
   return {
     kind: "session",
     id: "session-alpha",
-    image: "ghcr.io/brewva/box-default:latest",
+    image: "ghcr.io/arcthur/box-default:latest",
     workspaceRoot: "/workspace/source",
     capabilities: {
       network: { mode: "off" },

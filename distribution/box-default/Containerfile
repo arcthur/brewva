@@ -1,6 +1,16 @@
+FROM oven/bun:1.3.12 AS bun
+
 FROM node:22-bookworm-slim
 
 ENV DEBIAN_FRONTEND=noninteractive
+ENV BUN_INSTALL=/usr/local
+
+LABEL org.opencontainers.image.title="Brewva Box Default"
+LABEL org.opencontainers.image.description="Long-lived default BoxLite workbench image for Brewva exec tools"
+LABEL org.opencontainers.image.source="https://github.com/arcthur/brewva"
+
+COPY --from=bun /usr/local/bin/bun /usr/local/bin/bun
+COPY --from=bun /usr/local/bin/bunx /usr/local/bin/bunx
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
@@ -20,4 +30,4 @@ RUN apt-get update \
 WORKDIR /workspace
 
 ENTRYPOINT ["/usr/bin/tini", "--"]
-CMD ["bash"]
+CMD ["sleep", "infinity"]

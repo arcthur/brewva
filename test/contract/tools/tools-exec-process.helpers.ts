@@ -87,7 +87,7 @@ export function createRuntimeForExecTests(input?: {
       backend: input?.backend ?? "box",
       box: {
         home: "~/.brewva/boxes-test",
-        image: "ghcr.io/brewva/box-default:latest",
+        image: "ghcr.io/arcthur/box-default:latest",
         cpus: 1,
         memoryMib: 512,
         diskGb: 4,

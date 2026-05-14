@@ -36,7 +36,7 @@ describe("box runtime contract", () => {
       backend: "box",
       box: {
         home: "~/.brewva/boxes",
-        image: "ghcr.io/brewva/box-default:latest",
+        image: "ghcr.io/arcthur/box-default:latest",
         cpus: 2,
         memoryMib: 1024,
         diskGb: 8,

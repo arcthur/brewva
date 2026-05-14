@@ -133,7 +133,7 @@ describe("session index concurrency contract", () => {
       timestamp: 1_700_000_000_000,
       payload: {
         boxId: "box_01",
-        image: "ghcr.io/brewva/box-default:latest",
+        image: "ghcr.io/arcthur/box-default:latest",
         fingerprint: "fingerprint-01",
       },
     });
@@ -168,7 +168,7 @@ describe("session index concurrency contract", () => {
         {
           sessionId,
           boxId: "box_01",
-          image: "ghcr.io/brewva/box-default:latest",
+          image: "ghcr.io/arcthur/box-default:latest",
           createdAt: 1_700_000_000_000,
           lastExecAt: 1_700_000_000_500,
           fingerprint: "fingerprint-01",
