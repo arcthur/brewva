@@ -3,6 +3,7 @@ import type {
   BrewvaRegisteredModel,
 } from "@brewva/brewva-substrate/provider";
 import type {
+  BrewvaModelPreferenceRef,
   BrewvaModelPresetSelectionRequest,
   BrewvaModelPresetSelectionResult,
   BrewvaModelPresetState,
@@ -70,6 +71,7 @@ export interface ManagedSessionModelSelectionControllerOptions {
     nextModel: BrewvaSessionModelDescriptor,
   ) => Promise<void>;
   setCurrentModel: (model: BrewvaRegisteredModel) => void;
+  setSelectedModelPreference?: (model: BrewvaModelPreferenceRef) => void;
   applyThinkingLevel: (
     level: BrewvaPromptThinkingLevel,
     options: { persistDefault: boolean },
@@ -97,6 +99,7 @@ export class ManagedSessionModelSelectionController {
   readonly #getCurrentThinkingLevel: ManagedSessionModelSelectionControllerOptions["getCurrentThinkingLevel"];
   readonly #compactBeforeModelDownshiftIfNeeded: ManagedSessionModelSelectionControllerOptions["compactBeforeModelDownshiftIfNeeded"];
   readonly #setCurrentModel: ManagedSessionModelSelectionControllerOptions["setCurrentModel"];
+  readonly #setSelectedModelPreference: ManagedSessionModelSelectionControllerOptions["setSelectedModelPreference"];
   readonly #applyThinkingLevel: ManagedSessionModelSelectionControllerOptions["applyThinkingLevel"];
   readonly #clearProviderCacheSessionState: ManagedSessionModelSelectionControllerOptions["clearProviderCacheSessionState"];
   readonly #appendModelPresetSelection: ManagedSessionModelSelectionControllerOptions["appendModelPresetSelection"];
@@ -111,6 +114,7 @@ export class ManagedSessionModelSelectionController {
     this.#getCurrentThinkingLevel = options.getCurrentThinkingLevel;
     this.#compactBeforeModelDownshiftIfNeeded = options.compactBeforeModelDownshiftIfNeeded;
     this.#setCurrentModel = options.setCurrentModel;
+    this.#setSelectedModelPreference = options.setSelectedModelPreference;
     this.#applyThinkingLevel = options.applyThinkingLevel;
     this.#clearProviderCacheSessionState = options.clearProviderCacheSessionState;
     this.#appendModelPresetSelection = options.appendModelPresetSelection;
@@ -220,6 +224,7 @@ export class ManagedSessionModelSelectionController {
     await this.#compactBeforeModelDownshiftIfNeeded(previousModel, resolved);
     this.#setCurrentModel(resolved);
     this.#applyThinkingLevel(this.#getCurrentThinkingLevel(), { persistDefault: true });
+    this.#setSelectedModelPreference?.({ provider: resolved.provider, id: resolved.id });
 
     if (!hasModelChanged(previousModel, resolved)) {
       return;

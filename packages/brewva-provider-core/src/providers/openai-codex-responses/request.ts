@@ -135,7 +135,10 @@ function responseInputStartsWith(input: ResponseInput, prefix: ResponseInput): b
 function clampReasoningEffort(modelId: string, effort: string): string {
   const id = modelId.includes("/") ? (modelId.split("/").pop() ?? modelId) : modelId;
   if (
-    (id.startsWith("gpt-5.2") || id.startsWith("gpt-5.3") || id.startsWith("gpt-5.4")) &&
+    (id.startsWith("gpt-5.2") ||
+      id.startsWith("gpt-5.3") ||
+      id.startsWith("gpt-5.4") ||
+      id.startsWith("gpt-5.5")) &&
     effort === "minimal"
   )
     return "low";

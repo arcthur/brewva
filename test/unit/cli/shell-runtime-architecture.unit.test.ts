@@ -4,6 +4,7 @@ import type { ShellAction } from "../../../packages/brewva-cli/src/shell/domain/
 import { routeShellInput } from "../../../packages/brewva-cli/src/shell/domain/input-router.js";
 import {
   decodeShellKeybindingEffect,
+  normalizeShellInputTrigger,
   shellBuiltInKeybindings,
 } from "../../../packages/brewva-cli/src/shell/domain/keymap.js";
 import {
@@ -79,6 +80,35 @@ describe("shell runtime architecture", () => {
     expect(decodeShellKeybindingEffect("submit")).toEqual(undefined);
   });
 
+  test("modified key names normalize into keybinding triggers", () => {
+    expect(
+      normalizeShellInputTrigger({
+        key: "ctrl+c",
+        ctrl: false,
+        meta: false,
+        shift: false,
+      }),
+    ).toEqual({
+      key: "c",
+      ctrl: true,
+      meta: false,
+      shift: false,
+    });
+    expect(
+      normalizeShellInputTrigger({
+        key: "control+esc",
+        ctrl: false,
+        meta: false,
+        shift: false,
+      }),
+    ).toEqual({
+      key: "escape",
+      ctrl: true,
+      meta: false,
+      shift: false,
+    });
+  });
+
   test("view overlay payloads are data-only", () => {
     const state = createShellRuntimeState();
     const action: ShellAction = {
@@ -108,6 +138,7 @@ describe("shell runtime architecture", () => {
         input: { key: "enter", ctrl: false, meta: false, shift: false },
         state: {
           hasCompletion: false,
+          isStreaming: false,
           canNavigatePromptHistoryPrevious: false,
           canNavigatePromptHistoryNext: false,
         },
@@ -230,6 +261,7 @@ describe("shell runtime architecture", () => {
         state: {
           activeOverlayKind: "commandPalette",
           hasCompletion: false,
+          isStreaming: false,
           canNavigatePromptHistoryPrevious: true,
           canNavigatePromptHistoryNext: false,
         },
@@ -248,6 +280,7 @@ describe("shell runtime architecture", () => {
         input: { key: "up", ctrl: false, meta: false, shift: false },
         state: {
           hasCompletion: false,
+          isStreaming: false,
           canNavigatePromptHistoryPrevious: true,
           canNavigatePromptHistoryNext: false,
         },

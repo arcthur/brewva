@@ -37,6 +37,7 @@ export function DialogFrame(input: {
   theme: SessionPalette;
   size?: DialogSize;
   verticalAlign?: "topInset" | "center";
+  topInset?: number;
   children: JSX.Element;
 }) {
   const ctx = useShellRenderContext();
@@ -53,7 +54,9 @@ export function DialogFrame(input: {
       flexDirection="column"
       alignItems="center"
       justifyContent={verticalAlign === "center" ? "center" : undefined}
-      paddingTop={verticalAlign === "center" ? 0 : resolveDialogTopInset(input.height)}
+      paddingTop={
+        verticalAlign === "center" ? 0 : (input.topInset ?? resolveDialogTopInset(input.height))
+      }
       onMouseUp={() => {
         void ctx.runtime.handleInput({
           key: "escape",
@@ -95,6 +98,7 @@ export function DialogSelectFrame(input: {
   theme: SessionPalette;
   size?: DialogSize;
   verticalAlign?: "topInset" | "center";
+  topInset?: number;
   search?: JSX.Element;
   children: JSX.Element;
   footer?: JSX.Element;
@@ -106,6 +110,7 @@ export function DialogSelectFrame(input: {
       theme={input.theme}
       size={input.size}
       verticalAlign={input.verticalAlign}
+      topInset={input.topInset}
     >
       <box gap={1} paddingBottom={1}>
         <box paddingLeft={DIALOG_HORIZONTAL_PADDING} paddingRight={DIALOG_HORIZONTAL_PADDING}>

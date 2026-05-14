@@ -100,6 +100,40 @@ describe("hosted model registry", () => {
     }
   });
 
+  test("exposes derived OpenAI Codex models after ChatGPT auth is configured", () => {
+    const authStore = HostedAuthStore.inMemory({
+      "openai-codex": {
+        type: "oauth",
+        accessToken: "access-token",
+        refreshToken: "refresh-token",
+        expiresAt: Date.now() + 60_000,
+      },
+    });
+    const registry = HostedModelRegistry.inMemory(authStore);
+
+    const availableModelIds = registry
+      .getAvailable()
+      .filter((model) => model.provider === "openai-codex")
+      .map((model) => model.id);
+
+    expect(availableModelIds).toContain("gpt-5.5");
+    expect(availableModelIds).toContain("gpt-5.5-pro");
+    expect(availableModelIds).toContain("gpt-5.4");
+
+    const model = requireDefined(
+      registry.find("openai-codex", "gpt-5.5"),
+      "Expected derived OpenAI Codex GPT-5.5 model.",
+    );
+    expect(model).toMatchObject({
+      api: "openai-codex-responses",
+      provider: "openai-codex",
+      baseUrl: "https://chatgpt.com/backend-api",
+      contextWindow: 400_000,
+      maxTokens: 128_000,
+    });
+    expect(registry.hasConfiguredAuth(model)).toBe(true);
+  });
+
   test("persists hosted auth credentials in the agent auth store", () => {
     const agentDir = mkdtempSync(join(tmpdir(), "brewva-hosted-model-services-"));
     try {

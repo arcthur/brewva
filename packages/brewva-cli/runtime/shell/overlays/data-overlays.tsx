@@ -349,7 +349,7 @@ export function InboxOverlay(input: {
   );
 }
 
-const SESSIONS_SIDEBAR_MARKER_WIDTH = 2;
+const SIDEBAR_MARKER_WIDTH = 2;
 
 /** Current session ● in its own column so selection inversion does not recolor it. */
 function SessionsSidebarList(input: {
@@ -391,7 +391,7 @@ function SessionsSidebarList(input: {
               flexDirection="row"
               alignItems="center"
               backgroundColor={selected() ? input.theme.primary : undefined}
-              paddingLeft={DIALOG_HORIZONTAL_PADDING - SESSIONS_SIDEBAR_MARKER_WIDTH}
+              paddingLeft={DIALOG_HORIZONTAL_PADDING - SIDEBAR_MARKER_WIDTH}
               paddingRight={DIALOG_HORIZONTAL_PADDING}
               flexShrink={0}
               gap={0}
@@ -403,13 +403,81 @@ function SessionsSidebarList(input: {
                 across rows. Box width also reserves the column at the
                 flex-layout level as a belt-and-suspenders.
               */}
-              <box width={SESSIONS_SIDEBAR_MARKER_WIDTH} flexShrink={0}>
+              <box width={SIDEBAR_MARKER_WIDTH} flexShrink={0}>
                 <text
                   fg={markerFg()}
                   wrapMode="none"
                   attributes={isCurrent() ? TextAttributes.BOLD : undefined}
                 >
                   {isCurrent() ? "● " : "  "}
+                </text>
+              </box>
+              <text
+                flexGrow={1}
+                fg={selected() ? input.theme.selectionText : input.theme.text}
+                attributes={selected() ? TextAttributes.BOLD : undefined}
+                overflow="hidden"
+                wrapMode="none"
+              >
+                {label()}
+              </text>
+            </box>
+          );
+        }}
+      </For>
+    </box>
+  );
+}
+
+/** Current lineage ● mirrors the sessions sidebar marker column and selection treatment. */
+function LineageSidebarList(input: {
+  payload: CliLineageOverlayPayload;
+  theme: SessionPalette;
+  sidebarWidth: number;
+  maxVisible: number;
+}) {
+  const selectionWindow = createMemo(() =>
+    windowSelection(input.payload.nodes, input.payload.selectedIndex, input.maxVisible),
+  );
+  const labelMaxWidth = createMemo(() =>
+    Math.max(4, input.sidebarWidth - DIALOG_HORIZONTAL_PADDING * 2 - 1),
+  );
+  return (
+    <box width="100%" flexDirection="column" backgroundColor={input.theme.backgroundPanel}>
+      <For each={selectionWindow().items}>
+        {(item, index) => {
+          const absoluteIndex = createMemo(() => selectionWindow().startIndex + index());
+          const selected = createMemo(() => absoluteIndex() === input.payload.selectedIndex);
+          const markerFg = createMemo(() =>
+            selected()
+              ? input.theme.selectionText
+              : item.current
+                ? input.theme.primary
+                : input.theme.textMuted,
+          );
+          const label = createMemo(() => {
+            const title = item.title ?? item.kind;
+            const indent = "  ".repeat(item.depth);
+            return truncateDialogText(`${indent}${title}`, labelMaxWidth());
+          });
+          return (
+            <box
+              width="100%"
+              flexDirection="row"
+              alignItems="center"
+              backgroundColor={selected() ? input.theme.primary : undefined}
+              paddingLeft={DIALOG_HORIZONTAL_PADDING - SIDEBAR_MARKER_WIDTH}
+              paddingRight={DIALOG_HORIZONTAL_PADDING}
+              flexShrink={0}
+              gap={0}
+            >
+              <box width={SIDEBAR_MARKER_WIDTH} flexShrink={0}>
+                <text
+                  fg={markerFg()}
+                  wrapMode="none"
+                  attributes={item.current ? TextAttributes.BOLD : undefined}
+                >
+                  {item.current ? "● " : "  "}
                 </text>
               </box>
               <text
@@ -490,14 +558,7 @@ export function LineageOverlay(input: {
   const sidebarRows = createMemo(() =>
     resolveOverlaySurfaceSelectionRows(input.width, input.height, input.payload.nodes.length),
   );
-  const labelMaxWidth = 28;
-  const labels = createMemo(() =>
-    input.payload.nodes.map((entry) => {
-      const title = entry.title ?? entry.kind;
-      const prefix = `${"  ".repeat(entry.depth)}${entry.current ? "* " : "  "}`;
-      return truncateDialogText(`${prefix}${title}`, labelMaxWidth);
-    }),
-  );
+  const sidebarWidth = 34;
   const detailLines = createMemo(() => {
     const entry = node();
     if (!entry) {
@@ -527,15 +588,15 @@ export function LineageOverlay(input: {
       splitContent
     >
       <box flexDirection="row" gap={1} flexGrow={1}>
-        <box width={34} flexShrink={0}>
+        <box width={sidebarWidth} flexShrink={0}>
           <Show
             when={input.payload.nodes.length > 0}
             fallback={<text fg={input.theme.textMuted}>No lineage nodes found.</text>}
           >
-            <SelectionList
-              items={labels()}
-              selectedIndex={input.payload.selectedIndex}
+            <LineageSidebarList
+              payload={input.payload}
               theme={input.theme}
+              sidebarWidth={sidebarWidth}
               maxVisible={sidebarRows()}
             />
           </Show>

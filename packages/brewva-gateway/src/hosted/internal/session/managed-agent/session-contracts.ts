@@ -21,6 +21,7 @@ import type { BrewvaHostedResourceLoader } from "@brewva/brewva-substrate/resour
 import type {
   BrewvaDiffPreferences,
   BrewvaManagedSessionStore,
+  BrewvaModelPreferenceRef,
   BrewvaModelPreferences,
   BrewvaModelPresetState,
   BrewvaPromptThinkingLevel,
@@ -69,6 +70,8 @@ export interface BrewvaManagedAgentSessionSettingsPort {
   getRetrySettings(): { maxDelayMs: number } | undefined;
   getModelPresetState?(): BrewvaModelPresetState;
   setDefaultThinkingLevel(thinkingLevel: string): void;
+  getSelectedModelPreference?(): BrewvaModelPreferenceRef | undefined;
+  setSelectedModelPreference?(model: BrewvaModelPreferenceRef | undefined): void;
   getModelPreferences(): BrewvaModelPreferences;
   setModelPreferences(preferences: BrewvaModelPreferences): void;
   getDiffPreferences(): BrewvaDiffPreferences;

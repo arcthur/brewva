@@ -39,6 +39,8 @@
     "install:local": "bash script/install-local.sh",
     "lint": "oxlint --type-aware",
     "lint:fix": "oxlint --type-aware --fix && bun run format",
+    "models:catalog": "bun run script/generate-provider-model-catalog.ts --write",
+    "models:catalog:check": "bun run script/generate-provider-model-catalog.ts --check",
     "report:context-evidence": "bun run script/report-context-evidence.ts",
     "start": "bun run --preload @opentui/solid/preload packages/brewva-cli/src/index.ts",
     "test": "bun run test:ci",

@@ -4,7 +4,10 @@ import {
   resolveCodexTransport,
   shouldAttemptCodexWebSocketTransport,
 } from "../../../packages/brewva-provider-core/src/providers/openai-codex-responses/adapter.js";
-import { buildCodexContinuationRequest } from "../../../packages/brewva-provider-core/src/providers/openai-codex-responses/request.js";
+import {
+  buildCodexContinuationRequest,
+  buildRequestBody,
+} from "../../../packages/brewva-provider-core/src/providers/openai-codex-responses/request.js";
 import { processWebSocketStream } from "../../../packages/brewva-provider-core/src/providers/openai-codex-responses/websocket.js";
 import {
   clearCodexSessionState,
@@ -155,6 +158,21 @@ describe("openai codex responses continuation", () => {
     expect(shouldAttemptCodexWebSocketTransport("websocket", "session-fallback")).toBe(true);
 
     clearCodexSessionState("session-fallback");
+  });
+
+  test("clamps GPT-5.5 minimal reasoning to low for Codex requests", () => {
+    const model: Model<"openai-codex-responses"> = {
+      ...CODEX_MODEL,
+      id: "gpt-5.5",
+      name: "GPT-5.5",
+    };
+
+    const body = buildRequestBody(model, { messages: [] }, { reasoningEffort: "minimal" });
+
+    expect(body.reasoning).toEqual({
+      effort: "low",
+      summary: "auto",
+    });
   });
 
   test("does not remember continuation from an uncached websocket after session clear", async () => {

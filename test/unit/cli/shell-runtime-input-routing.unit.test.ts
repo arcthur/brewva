@@ -76,6 +76,7 @@ function createFakeBundle(
     completeOAuth?: (provider: string, methodId: string, code?: string) => Promise<void>;
     queuedPrompts?: BrewvaQueuedPromptView[];
     steerHandler?: (text: string) => Promise<BrewvaSteerOutcome>;
+    abortHandler?: () => Promise<void>;
     modelPresetState?: BrewvaModelPresetState;
     isStreaming?: boolean;
   } = {},
@@ -289,7 +290,9 @@ function createFakeBundle(
       return true;
     },
     async waitForIdle() {},
-    async abort() {},
+    async abort() {
+      await options.abortHandler?.();
+    },
     dispose() {},
     setUiPort(ui: BrewvaToolUiPort) {
       attachedUi = ui;
@@ -538,6 +541,64 @@ describe("shell runtime: input routing", () => {
     expect(runtime.getViewState().overlay.active?.payload).toMatchObject({
       kind: "modelPicker",
     });
+
+    runtime.dispose();
+  });
+
+  test("escape aborts the active streaming turn from the composer context", async () => {
+    let abortCount = 0;
+    const { bundle } = createFakeBundle({
+      isStreaming: true,
+      async abortHandler() {
+        abortCount += 1;
+      },
+    });
+
+    const runtime = new CliShellRuntime(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+    });
+
+    await runtime.handleInput({
+      key: "escape",
+      ctrl: false,
+      meta: false,
+      shift: false,
+    });
+
+    expect(abortCount).toBe(1);
+    expect(runtime.getViewState().notifications.at(-1)).toMatchObject({
+      level: "warning",
+      message: "Aborted the current turn.",
+    });
+
+    runtime.dispose();
+  });
+
+  test("ctrl+c abort-or-exit accepts modified OpenTUI key names", async () => {
+    let abortCount = 0;
+    const { bundle } = createFakeBundle({
+      isStreaming: true,
+      async abortHandler() {
+        abortCount += 1;
+      },
+    });
+
+    const runtime = new CliShellRuntime(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+    });
+
+    await runtime.handleInput({
+      key: "ctrl+c",
+      ctrl: false,
+      meta: false,
+      shift: false,
+    });
+
+    expect(abortCount).toBe(1);
 
     runtime.dispose();
   });

@@ -203,4 +203,41 @@ describe("managed-agent-session model selection", () => {
     expect(modelChangeCount).toBe(0);
     expect(emitCount).toBe(0);
   });
+
+  test("persists explicit model selections even when the model is already current", async () => {
+    let currentModel: BrewvaRegisteredModel | undefined = TEST_MODEL;
+    let currentThinkingLevel: BrewvaPromptThinkingLevel = "off";
+    let selectedModel: { provider: string; id: string } | undefined;
+    let modelChangeCount = 0;
+    const controller = new ManagedSessionModelSelectionController({
+      initialState: createFallbackModelPresetState("Default"),
+      catalog: createCatalog([TEST_MODEL]),
+      getCurrentModel: () => currentModel,
+      getCurrentThinkingLevel: () => currentThinkingLevel,
+      compactBeforeModelDownshiftIfNeeded: async () => undefined,
+      setCurrentModel: (model) => {
+        currentModel = model;
+      },
+      applyThinkingLevel: (level) => {
+        currentThinkingLevel = level;
+      },
+      setSelectedModelPreference: (model) => {
+        selectedModel = model;
+      },
+      clearProviderCacheSessionState: async () => undefined,
+      appendModelPresetSelection: () => undefined,
+      appendModelChange: () => {
+        modelChangeCount += 1;
+      },
+      emitModelSelect: async () => undefined,
+    });
+
+    await controller.setModel(TEST_MODEL);
+
+    expect(selectedModel).toEqual({
+      provider: TEST_MODEL.provider,
+      id: TEST_MODEL.id,
+    });
+    expect(modelChangeCount).toBe(0);
+  });
 });

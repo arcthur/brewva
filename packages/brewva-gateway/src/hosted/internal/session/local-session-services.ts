@@ -6,6 +6,7 @@ import type { InternalHostPlugin } from "@brewva/brewva-substrate/host-api";
 import type { BrewvaMutableModelCatalog } from "@brewva/brewva-substrate/provider";
 import { createHostedResourceLoader } from "@brewva/brewva-substrate/resources";
 import type {
+  BrewvaModelPreferenceRef,
   BrewvaModelPreset,
   BrewvaModelPresetState,
   BrewvaPromptThinkingLevel,
@@ -62,6 +63,7 @@ async function resolveHostedInitialModel(
   modelRegistry: HostedSessionModelRegistry,
   sessionManager: HostedSessionPersistenceStore,
   requestedModel: HostedRegisteredModel | undefined,
+  selectedModelPreference: BrewvaModelPreferenceRef | undefined,
   modelPresetState: BrewvaModelPresetState,
 ): Promise<{
   model: HostedRegisteredModel | undefined;
@@ -116,6 +118,25 @@ async function resolveHostedInitialModel(
     } catch (error) {
       modelFallbackMessage = error instanceof Error ? error.message : "Could not use preset model";
     }
+  }
+
+  if (!hasExistingSession && selectedModelPreference) {
+    const selectedModel = modelRegistry.find(
+      selectedModelPreference.provider,
+      selectedModelPreference.id,
+    );
+    if (selectedModel && modelRegistry.hasConfiguredAuth(selectedModel)) {
+      return {
+        model: selectedModel,
+        modelFallbackMessage,
+        hasExistingSession,
+        hasThinkingEntry,
+        existingThinkingLevel,
+      };
+    }
+    modelFallbackMessage = selectedModel
+      ? `Could not restore selected model ${selectedModel.provider}/${selectedModel.id}: provider auth is not connected`
+      : `Could not restore selected model ${selectedModelPreference.provider}/${selectedModelPreference.id}: model is not available`;
   }
 
   if (hasExistingSession && existingSession.model) {
@@ -314,6 +335,7 @@ export async function createHostedSessionResult(input: {
     input.modelRegistry,
     sessionManager,
     input.options.model,
+    input.services.settingsManager.getSelectedModelPreference(),
     modelPresetState,
   );
   const thinkingLevel = resolveHostedThinkingLevel({

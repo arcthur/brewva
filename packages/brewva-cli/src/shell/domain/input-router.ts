@@ -1,12 +1,13 @@
 import type { KeybindingContext, KeybindingResolver } from "../../internal/tui/index.js";
 import type { CliShellInput } from "./input.js";
 import type { ShellIntent } from "./intent.js";
-import { decodeShellKeybindingEffect, normalizeShellInputKey } from "./keymap.js";
+import { decodeShellKeybindingEffect, normalizeShellInputTrigger } from "./keymap.js";
 import type { CliShellOverlayPayload } from "./overlays/payloads.js";
 
 export interface ShellInputRouterState {
   activeOverlayKind?: CliShellOverlayPayload["kind"];
   hasCompletion: boolean;
+  isStreaming: boolean;
   canNavigatePromptHistoryPrevious: boolean;
   canNavigatePromptHistoryNext: boolean;
 }
@@ -42,13 +43,14 @@ function isPickerOverlay(kind: CliShellOverlayPayload["kind"] | undefined): bool
 
 /** Question overlay: route everything except ctrl+meta combos; allow ^n/^p (shift allowed, flow remaps). */
 function questionOverlayAcceptsShellInput(shellInput: CliShellInput): boolean {
-  if (shellInput.meta) {
+  const trigger = normalizeShellInputTrigger(shellInput);
+  if (trigger.meta) {
     return false;
   }
-  if (!shellInput.ctrl) {
+  if (!trigger.ctrl) {
     return true;
   }
-  const k = normalizeShellInputKey(shellInput.key);
+  const k = trigger.key;
   return k === "n" || k === "p";
 }
 
@@ -71,17 +73,24 @@ export function routeShellInput(input: {
     };
   }
 
-  const binding = input.keybindings.resolve(shellInputContexts(input.state), {
-    key: normalizeShellInputKey(input.input.key),
-    ctrl: input.input.ctrl,
-    meta: input.input.meta,
-    shift: input.input.shift,
-  });
+  const normalizedTrigger = normalizeShellInputTrigger(input.input);
+  const binding = input.keybindings.resolve(shellInputContexts(input.state), normalizedTrigger);
   if (binding) {
     const effect = decodeShellKeybindingEffect(binding.action);
     return {
       handled: true,
       ...(effect ? { intent: { type: "effect.dispatch", effect } } : {}),
+    };
+  }
+
+  const key = normalizedTrigger.key;
+  if (!overlayKind && !input.state.hasCompletion && key === "escape" && input.state.isStreaming) {
+    return {
+      handled: true,
+      intent: {
+        type: "effect.dispatch",
+        effect: { type: "session.abort", notification: "Aborted the current turn." },
+      },
     };
   }
 
@@ -98,7 +107,6 @@ export function routeShellInput(input: {
     };
   }
 
-  const key = normalizeShellInputKey(input.input.key);
   if (key === "up" && input.state.canNavigatePromptHistoryPrevious) {
     return {
       handled: true,

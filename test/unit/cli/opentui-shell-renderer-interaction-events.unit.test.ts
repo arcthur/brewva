@@ -177,6 +177,8 @@ function createFakeBundle(
       inputs?: Record<string, string>,
     ) => Promise<ProviderOAuthAuthorization | undefined>;
     completeOAuth?: (provider: string, methodId: string, code?: string) => Promise<void>;
+    isStreaming?: boolean;
+    abortHandler?: () => Promise<void>;
   } = {},
 ) {
   let attachedUi: BrewvaToolUiPort | undefined;
@@ -241,7 +243,7 @@ function createFakeBundle(
         return allModels.filter((model) => availableModelKeys.has(modelKey(model)));
       },
     },
-    isStreaming: false,
+    isStreaming: options.isStreaming === true,
     sessionManager: {
       getSessionId() {
         return sessionId;
@@ -296,7 +298,9 @@ function createFakeBundle(
       return true;
     },
     async waitForIdle() {},
-    async abort() {},
+    async abort() {
+      await options.abortHandler?.();
+    },
     async setModel(model: BrewvaSessionModelDescriptor) {
       currentModel = model;
     },
@@ -907,6 +911,134 @@ describe("opentui solid shell runtime: interaction events", () => {
         level: "info",
         message: "Copied to clipboard.",
       });
+    } finally {
+      runtime.dispose();
+      testSetup.renderer.destroy();
+    }
+  });
+
+  test("routes ctrl+c to abort the active turn when no transcript text is selected", async () => {
+    let abortCount = 0;
+    const { bundle } = createFakeBundle({
+      isStreaming: true,
+      async abortHandler() {
+        abortCount += 1;
+      },
+    });
+    const runtime = new CliShellRuntime(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+      operatorPollIntervalMs: 60_000,
+    });
+
+    await runtime.start();
+
+    const testSetup = await openTuiSolidTestRender(
+      createOpenTuiSolidElement(BrewvaOpenTuiShell, {
+        runtime: runtime,
+      }),
+      {
+        width: 100,
+        height: 30,
+      },
+    );
+
+    try {
+      await testSetup.renderOnce();
+      await openTuiSolidAct(async () => {
+        testSetup.mockInput.pressKey("c", { ctrl: true });
+        await Bun.sleep(0);
+      });
+      await testSetup.renderOnce();
+
+      expect(abortCount).toBe(1);
+      expect(runtime.getViewState().notifications.at(-1)).toMatchObject({
+        level: "warning",
+        message: "Aborted the current turn.",
+      });
+    } finally {
+      runtime.dispose();
+      testSetup.renderer.destroy();
+    }
+  });
+
+  test("routes escape to abort the active turn from the composer", async () => {
+    let abortCount = 0;
+    const { bundle } = createFakeBundle({
+      isStreaming: true,
+      async abortHandler() {
+        abortCount += 1;
+      },
+    });
+    const runtime = new CliShellRuntime(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+      operatorPollIntervalMs: 60_000,
+    });
+
+    await runtime.start();
+
+    const testSetup = await openTuiSolidTestRender(
+      createOpenTuiSolidElement(BrewvaOpenTuiShell, {
+        runtime: runtime,
+      }),
+      {
+        width: 100,
+        height: 30,
+      },
+    );
+
+    try {
+      await testSetup.renderOnce();
+      await openTuiSolidAct(async () => {
+        testSetup.mockInput.pressKey("\x1B");
+        await Bun.sleep(50);
+      });
+      await testSetup.renderOnce();
+
+      expect(abortCount).toBe(1);
+      expect(runtime.getViewState().notifications.at(-1)).toMatchObject({
+        level: "warning",
+        message: "Aborted the current turn.",
+      });
+    } finally {
+      runtime.dispose();
+      testSetup.renderer.destroy();
+    }
+  });
+
+  test("focuses the composer textarea on initial mount", async () => {
+    const { bundle } = createFakeBundle();
+    const runtime = new CliShellRuntime(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+      operatorPollIntervalMs: 60_000,
+    });
+
+    await runtime.start();
+
+    const testSetup = await openTuiSolidTestRender(
+      createOpenTuiSolidElement(BrewvaOpenTuiShell, {
+        runtime: runtime,
+      }),
+      {
+        width: 100,
+        height: 30,
+      },
+    );
+
+    try {
+      await testSetup.renderOnce();
+      await openTuiSolidAct(async () => {
+        await testSetup.mockInput.typeText("hello");
+        await Bun.sleep(0);
+      });
+      await testSetup.renderOnce();
+
+      expect(runtime.getViewState().composer.text).toBe("hello");
     } finally {
       runtime.dispose();
       testSetup.renderer.destroy();

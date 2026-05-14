@@ -6,6 +6,7 @@ import type {
   BrewvaManagedPromptSession,
   BrewvaDiffPreferences,
   BrewvaShellViewPreferences,
+  BrewvaModelPreferenceRef,
   BrewvaModelPreferences,
   BrewvaModelPresetState,
 } from "@brewva/brewva-substrate/session";
@@ -26,6 +27,8 @@ export interface HostedSessionSettingsStore extends BrewvaManagedAgentSessionSet
   getBlockImages(): boolean;
   getDefaultThinkingLevel(): string | undefined;
   getModelPresetState(): BrewvaModelPresetState;
+  getSelectedModelPreference(): BrewvaModelPreferenceRef | undefined;
+  setSelectedModelPreference(model: BrewvaModelPreferenceRef | undefined): void;
   getModelPreferences(): BrewvaModelPreferences;
   setModelPreferences(preferences: BrewvaModelPreferences): void;
   getDiffPreferences(): BrewvaDiffPreferences;

@@ -1,4 +1,4 @@
-import type { KeybindingDefinition } from "../../internal/tui/index.js";
+import type { KeybindingDefinition, KeybindingTrigger } from "../../internal/tui/index.js";
 import type { ShellEffect } from "./effects.js";
 
 const SHELL_ACTION_PREFIX = "shell:";
@@ -206,11 +206,52 @@ export function decodeShellKeybindingEffect(action: string): ShellEffect | undef
   }
 }
 
+function parseModifiedShellInputKey(inputKey: string): {
+  key: string;
+  ctrl: boolean;
+  meta: boolean;
+  shift: boolean;
+} {
+  let keyPart = inputKey.toLowerCase();
+  let ctrl = false;
+  let meta = false;
+  let shift = false;
+
+  while (true) {
+    const modified = /^(ctrl|control|meta|cmd|command|alt|option|shift)[+-](.+)$/u.exec(keyPart);
+    if (!modified?.[1] || !modified[2]) {
+      break;
+    }
+    switch (modified[1]) {
+      case "ctrl":
+      case "control":
+        ctrl = true;
+        break;
+      case "meta":
+      case "cmd":
+      case "command":
+      case "alt":
+      case "option":
+        meta = true;
+        break;
+      case "shift":
+        shift = true;
+        break;
+    }
+    keyPart = modified[2];
+  }
+
+  return { key: keyPart, ctrl, meta, shift };
+}
+
 export function normalizeShellInputKey(inputKey: string): string {
-  switch (inputKey.toLowerCase()) {
+  const lower = parseModifiedShellInputKey(inputKey).key;
+  switch (lower) {
     case "return":
     case "linefeed":
       return "enter";
+    case "esc":
+      return "escape";
     case "arrowup":
     case "uparrow":
       return "up";
@@ -230,6 +271,16 @@ export function normalizeShellInputKey(inputKey: string): string {
     case "page-down":
       return "pagedown";
     default:
-      return inputKey.toLowerCase();
+      return lower;
   }
+}
+
+export function normalizeShellInputTrigger(trigger: KeybindingTrigger): KeybindingTrigger {
+  const modified = parseModifiedShellInputKey(trigger.key);
+  return {
+    key: normalizeShellInputKey(modified.key),
+    ctrl: trigger.ctrl || modified.ctrl,
+    meta: trigger.meta || modified.meta,
+    shift: trigger.shift || modified.shift,
+  };
 }

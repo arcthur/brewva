@@ -29,7 +29,7 @@ const CACHE_ANCHOR = Array.from(
     `cache-anchor-${String(index).padStart(4, "0")}: Preserve this deterministic prefix for provider prompt-cache live verification.`,
 ).join("\n");
 
-const MODEL = getModel("openai-codex", LIVE_MODEL_ID as never) as Model<"openai-codex-responses">;
+const MODEL = getModel("openai-codex", LIVE_MODEL_ID);
 const KIMI_CODE_MODEL = getModel("kimi-coding", "kimi-for-coding");
 const MOONSHOT_CN_MODEL = getModel("moonshot-cn", "kimi-k2.6");
 const DEEPSEEK_MODEL = getModel("deepseek", "deepseek-v4-flash");

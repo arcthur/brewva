@@ -507,6 +507,108 @@ describe("hosted session factory", () => {
     result.session.dispose();
   });
 
+  test("uses the persisted selected model preference for new sessions", async () => {
+    const workspace = createTestWorkspace("session-factory-selected-model-preference");
+    const agentDir = join(workspace, ".brewva-agent");
+    writeHostedSettings(agentDir, {
+      modelPreferences: {
+        selected: {
+          provider: "demo",
+          id: "beta",
+        },
+      },
+    });
+    const factory = createHostedSessionFactory(agentDir);
+    const settings = createHostedSettingsManager(workspace, agentDir);
+
+    factory.modelCatalog.registerProvider("demo", {
+      baseUrl: "https://demo.example.com/v1",
+      apiKey: "DEMO_KEY",
+      models: [
+        {
+          id: "alpha",
+          name: "Alpha",
+          api: "openai-completions",
+          reasoning: true,
+          input: ["text"],
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+          contextWindow: 32_768,
+          maxTokens: 2_048,
+        },
+        {
+          id: "beta",
+          name: "Beta",
+          api: "openai-completions",
+          reasoning: true,
+          input: ["text"],
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+          contextWindow: 32_768,
+          maxTokens: 2_048,
+        },
+      ],
+    });
+
+    const result = await createTestHostedRuntime(factory, {
+      cwd: workspace,
+      settings,
+      customTools: [],
+    });
+
+    expect(result.session.model?.provider).toBe("demo");
+    expect(result.session.model?.id).toBe("beta");
+    expect(result.modelFallbackMessage).toBe(undefined);
+
+    await result.session.abort();
+    result.session.dispose();
+  });
+
+  test("falls back when the persisted selected model preference is unavailable", async () => {
+    const workspace = createTestWorkspace("session-factory-selected-model-fallback");
+    const agentDir = join(workspace, ".brewva-agent");
+    writeHostedSettings(agentDir, {
+      modelPreferences: {
+        selected: {
+          provider: "demo",
+          id: "missing",
+        },
+      },
+    });
+    const factory = createHostedSessionFactory(agentDir);
+    const settings = createHostedSettingsManager(workspace, agentDir);
+
+    factory.modelCatalog.registerProvider("demo", {
+      baseUrl: "https://demo.example.com/v1",
+      apiKey: "DEMO_KEY",
+      models: [
+        {
+          id: "alpha",
+          name: "Alpha",
+          api: "openai-completions",
+          reasoning: true,
+          input: ["text"],
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+          contextWindow: 32_768,
+          maxTokens: 2_048,
+        },
+      ],
+    });
+
+    const result = await createTestHostedRuntime(factory, {
+      cwd: workspace,
+      settings,
+      customTools: [],
+    });
+
+    expect(result.session.model?.provider).toBe("demo");
+    expect(result.session.model?.id).toBe("alpha");
+    expect(result.modelFallbackMessage).toBe(
+      "Could not restore selected model demo/missing: model is not available. Using demo/alpha",
+    );
+
+    await result.session.abort();
+    result.session.dispose();
+  });
+
   test("clamps hosted runtime thinking level to off for non-reasoning models", async () => {
     const workspace = createTestWorkspace("session-factory-thinking-clamp");
     const agentDir = join(workspace, ".brewva-agent");
@@ -644,6 +746,36 @@ describe("hosted session factory", () => {
     expect(reloaded.getShellViewPreferences()).toEqual({
       showThinking: false,
       toolDetails: false,
+    });
+  });
+
+  test("preserves the selected model preference when updating recent model preferences", () => {
+    const workspace = createTestWorkspace("session-factory-selected-model-settings");
+    const agentDir = join(workspace, ".brewva-agent");
+    writeHostedSettings(agentDir, {
+      modelPreferences: {
+        selected: {
+          provider: "demo",
+          id: "beta",
+        },
+      },
+    });
+    const settings = readHostedSettingsHandle(createHostedSettingsManager(workspace, agentDir));
+
+    settings.setModelPreferences({
+      recent: [{ provider: "demo", id: "alpha" }],
+      favorite: [],
+    });
+
+    expect(
+      JSON.parse(readFileSync(join(agentDir, "settings.json"), "utf8")).modelPreferences,
+    ).toEqual({
+      selected: {
+        provider: "demo",
+        id: "beta",
+      },
+      recent: [{ provider: "demo", id: "alpha" }],
+      favorite: [],
     });
   });
 

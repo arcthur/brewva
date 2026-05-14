@@ -325,6 +325,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
       compactBeforeModelDownshiftIfNeeded: (previousModel, nextModel) =>
         this.compactBeforeModelDownshiftIfNeeded(previousModel, nextModel),
       setCurrentModel: (model) => this.#agent.setModel(model),
+      setSelectedModelPreference: (model) => input.settings.setSelectedModelPreference?.(model),
       applyThinkingLevel: (level, options) => this.applyThinkingLevel(level, options),
       clearProviderCacheSessionState: () => this.clearProviderCacheSessionState(),
       appendModelPresetSelection: (selection) =>

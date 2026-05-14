@@ -307,6 +307,22 @@ function createFakeBundle(
   };
 }
 
+function findRenderedRow(frame: string, needle: string): number {
+  const row = frame.split("\n").findIndex((candidate) => candidate.includes(needle));
+  if (row < 0) {
+    throw new Error(`Expected rendered frame to contain ${needle}`);
+  }
+  return row;
+}
+
+function findRenderedColumn(frame: string, needle: string): number {
+  const line = frame.split("\n").find((candidate) => candidate.includes(needle));
+  if (!line) {
+    throw new Error(`Expected rendered frame to contain ${needle}`);
+  }
+  return line.indexOf(needle);
+}
+
 describe("opentui solid shell runtime: layout contract", () => {
   // Bun v1.3.12 crashes during native TUI renderer teardown on Linux CI
   // (segfault in Bun's internal cleanup, not in test code). The tests all
@@ -459,6 +475,101 @@ describe("opentui solid shell runtime: layout contract", () => {
       expect(modelRows[0]).toContain("…");
       expect(modelRows[0]).toContain("Connect");
       expect(frame).not.toContain("google/gemini-2.5-flash-lite-preview-06-17");
+    } finally {
+      runtime.dispose();
+      testSetup.renderer.destroy();
+    }
+  });
+
+  test("positions the dynamic model picker higher for long lists", async () => {
+    const { bundle } = createFakeBundle();
+    const runtime = new CliShellRuntime(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+      operatorPollIntervalMs: 60_000,
+    });
+
+    await runtime.start();
+    runtime.openOverlay({
+      kind: "modelPicker",
+      title: "Choose model",
+      query: "",
+      selectedIndex: 0,
+      items: Array.from({ length: 18 }, (_, index) => ({
+        id: `model:demo/model-${index}:demo`,
+        kind: "model" as const,
+        section: index < 9 ? "demo-a" : "demo-b",
+        provider: "demo",
+        modelId: `model-${index}`,
+        label: `Demo Model ${index}`,
+        available: true,
+      })),
+    });
+
+    const testSetup = await openTuiSolidTestRender(
+      createOpenTuiSolidElement(BrewvaOpenTuiShell, { runtime: runtime }),
+      {
+        width: 80,
+        height: 24,
+      },
+    );
+
+    try {
+      await testSetup.renderOnce();
+      const frame = testSetup.captureCharFrame();
+
+      expect(findRenderedRow(frame, "Choose model")).toBeLessThanOrEqual(5);
+    } finally {
+      runtime.dispose();
+      testSetup.renderer.destroy();
+    }
+  });
+
+  test("aligns model picker title, search, sections, and model labels", async () => {
+    const { bundle } = createFakeBundle();
+    const runtime = new CliShellRuntime(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+      operatorPollIntervalMs: 60_000,
+    });
+
+    await runtime.start();
+    runtime.openOverlay({
+      kind: "modelPicker",
+      title: "Models",
+      query: "",
+      selectedIndex: 0,
+      items: [
+        {
+          id: "model:deepseek/deepseek-chat:deepseek",
+          kind: "model",
+          section: "Recent",
+          provider: "deepseek",
+          modelId: "deepseek-chat",
+          label: "deepseek-chat",
+          available: true,
+        },
+      ],
+    });
+
+    const testSetup = await openTuiSolidTestRender(
+      createOpenTuiSolidElement(BrewvaOpenTuiShell, { runtime: runtime }),
+      {
+        width: 80,
+        height: 24,
+      },
+    );
+
+    try {
+      await testSetup.renderOnce();
+      const frame = testSetup.captureCharFrame();
+      const titleColumn = findRenderedColumn(frame, "Models");
+
+      expect(findRenderedColumn(frame, "Search")).toBe(titleColumn);
+      expect(findRenderedColumn(frame, "Recent")).toBe(titleColumn);
+      expect(findRenderedColumn(frame, "deepseek-chat")).toBe(titleColumn);
     } finally {
       runtime.dispose();
       testSetup.renderer.destroy();
@@ -945,6 +1056,78 @@ describe("opentui solid shell runtime: layout contract", () => {
       expect(frame).toContain("Review");
       expect(frame).toContain("Should I update the config");
       expect(frame).toContain("Custom");
+    } finally {
+      runtime.dispose();
+      testSetup.renderer.destroy();
+    }
+  });
+
+  test("renders lineage sidebar with session-style marker and left alignment", async () => {
+    const { bundle } = createFakeBundle();
+    const runtime = new CliShellRuntime(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+      operatorPollIntervalMs: 60_000,
+    });
+
+    await runtime.start();
+    runtime.openOverlay({
+      kind: "lineage",
+      sessionId: "lineage-session",
+      rootNodeId: "lineage:main",
+      currentLineageNodeId: "lineage:main",
+      selectedIndex: 0,
+      nodes: [
+        {
+          lineageNodeId: "lineage:main",
+          parentLineageNodeId: null,
+          leafEntryId: null,
+          kind: "main",
+          title: "Main task",
+          depth: 0,
+          current: true,
+          childCount: 1,
+          summaryCount: 0,
+          outcomeCount: 0,
+          adoptedOutcomeCount: 0,
+          forkPoint: "session_root",
+        },
+        {
+          lineageNodeId: "lineage:review",
+          parentLineageNodeId: "lineage:main",
+          leafEntryId: "entry-review",
+          kind: "review",
+          title: "Review branch",
+          depth: 1,
+          current: false,
+          childCount: 0,
+          summaryCount: 0,
+          outcomeCount: 0,
+          adoptedOutcomeCount: 0,
+          forkPoint: "context_entry:lineage:main:entry-review",
+        },
+      ],
+    });
+
+    const testSetup = await openTuiSolidTestRender(
+      createOpenTuiSolidElement(BrewvaOpenTuiShell, { runtime: runtime }),
+      {
+        width: 100,
+        height: 28,
+      },
+    );
+
+    try {
+      await testSetup.renderOnce();
+      await testSetup.renderOnce();
+      const frame = testSetup.captureCharFrame();
+      const titleColumn = findRenderedColumn(frame, "Lineage");
+
+      expect(frame).toContain("● Main task");
+      expect(frame).not.toContain("* Main task");
+      expect(findRenderedColumn(frame, "Main task")).toBe(titleColumn);
+      expect(findRenderedColumn(frame, "Review branch")).toBe(titleColumn + 2);
     } finally {
       runtime.dispose();
       testSetup.renderer.destroy();

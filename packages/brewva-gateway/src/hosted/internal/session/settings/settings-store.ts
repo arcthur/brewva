@@ -10,6 +10,7 @@ import type {
 import type {
   BrewvaDiffPreferences,
   BrewvaShellViewPreferences,
+  BrewvaModelPreferenceRef,
   BrewvaModelPreferences,
   BrewvaModelPresetState,
 } from "@brewva/brewva-substrate/session";
@@ -57,6 +58,7 @@ interface HostedSettingsData {
     high?: number;
   };
   modelPreferences?: {
+    selected?: { provider?: unknown; id?: unknown };
     recent?: Array<{ provider?: unknown; id?: unknown }>;
     favorite?: Array<{ provider?: unknown; id?: unknown }>;
   };
@@ -332,8 +334,29 @@ class BrewvaHostedSettingsHandle implements HostedSessionSettings, HostedSession
     };
   }
 
+  getSelectedModelPreference(): BrewvaModelPreferenceRef | undefined {
+    return readModelPreferenceRef(this.settings.modelPreferences?.selected);
+  }
+
+  setSelectedModelPreference(model: BrewvaModelPreferenceRef | undefined): void {
+    const preferences = this.#globalSettings.modelPreferences ?? {};
+    const selected = readModelPreferenceRef(model);
+    this.#globalSettings.modelPreferences = {
+      recent: normalizeModelPreferenceList(preferences.recent, 10),
+      favorite: normalizeModelPreferenceList(preferences.favorite),
+      ...(selected ? { selected } : {}),
+    };
+    this.persistGlobalSettings();
+  }
+
   setModelPreferences(preferences: BrewvaModelPreferences): void {
-    this.#globalSettings.modelPreferences = normalizeModelPreferences(preferences);
+    const normalized = normalizeModelPreferences(preferences);
+    const selected = readModelPreferenceRef(this.#globalSettings.modelPreferences?.selected);
+    this.#globalSettings.modelPreferences = {
+      ...(selected ? { selected } : {}),
+      recent: normalized.recent,
+      favorite: normalized.favorite,
+    };
     this.persistGlobalSettings();
   }
 

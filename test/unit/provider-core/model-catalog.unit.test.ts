@@ -48,14 +48,17 @@ describe("provider core model catalog", () => {
     expect(googleModelNames.some((name) => name.includes("Cloud Code Assist"))).toBe(false);
   });
 
-  test("exposes documented Kimi Code and Moonshot platform model routes", () => {
+  test("exposes documented Kimi Code route and generated Moonshot platform catalogs", () => {
     const kimiCodeModels = getModels("kimi-coding").map((model) => model.id);
     expect(kimiCodeModels).toEqual(["kimi-for-coding"]);
 
     const moonshotCnModels = getModels("moonshot-cn").map((model) => model.id);
     const moonshotAiModels = getModels("moonshot-ai").map((model) => model.id);
-    expect(moonshotCnModels).toEqual(["kimi-k2.6", "kimi-k2.5"]);
     expect(moonshotAiModels).toEqual(moonshotCnModels);
+    expect(moonshotCnModels).toContain("kimi-k2.6");
+    expect(moonshotCnModels).toContain("kimi-k2.5");
+    expect(moonshotCnModels).toContain("kimi-k2-thinking");
+    expect(moonshotCnModels).not.toContain("k2p6");
   });
 
   test("exposes the current official OpenAI GPT family defaults", () => {
@@ -79,6 +82,33 @@ describe("provider core model catalog", () => {
         input: 5,
         output: 30,
         cacheRead: 0.5,
+        cacheWrite: 0,
+      },
+    });
+  });
+
+  test("derives OpenAI Codex OAuth models from the OpenAI catalog", () => {
+    const codexModels = getModels("openai-codex");
+    const codexModelIds = codexModels.map((model) => model.id);
+
+    expect(codexModelIds).toContain("gpt-5.5");
+    expect(codexModelIds).toContain("gpt-5.5-pro");
+    expect(codexModelIds).toContain("gpt-5.4");
+    expect(codexModelIds).toContain("gpt-5.4-mini");
+    expect(codexModelIds).not.toContain("gpt-5.4-nano");
+
+    const flagship = getModel("openai-codex", "gpt-5.5");
+    expect(flagship).toMatchObject({
+      api: "openai-codex-responses",
+      provider: "openai-codex",
+      baseUrl: "https://chatgpt.com/backend-api",
+      reasoning: true,
+      contextWindow: 400_000,
+      maxTokens: 128_000,
+      cost: {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
         cacheWrite: 0,
       },
     });

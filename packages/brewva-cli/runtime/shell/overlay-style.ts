@@ -30,6 +30,10 @@ export function resolveDialogTopInset(height: number): number {
   return Math.max(0, Math.floor(height / 4));
 }
 
+export function resolveModelPickerTopInset(height: number): number {
+  return Math.max(0, Math.floor(height / 6));
+}
+
 export function resolveDialogSelectRows(height: number, itemCount: number): number {
   const availableRows = Math.max(1, Math.floor(height / 2) - 6);
   return Math.max(1, Math.min(itemCount || 1, availableRows));

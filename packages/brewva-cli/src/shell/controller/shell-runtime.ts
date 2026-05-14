@@ -675,6 +675,7 @@ export class CliShellRuntime {
       state: {
         activeOverlayKind: selectActiveOverlayPayload(this.#state)?.kind,
         hasCompletion: selectHasCompletion(this.#state),
+        isStreaming: this.#bundle.session.isStreaming === true,
         canNavigatePromptHistoryPrevious: this.#promptMemoryHandler.canNavigate(-1, input),
         canNavigatePromptHistoryNext: this.#promptMemoryHandler.canNavigate(1, input),
       },

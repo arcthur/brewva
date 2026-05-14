@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 
-import { For, Show, createMemo } from "solid-js";
+import { For, Show, createEffect, createMemo } from "solid-js";
 import { truncateToWidth, visibleWidth } from "../../src/internal/tui/index.js";
 import {
   cloneCliShellPromptParts,
@@ -21,6 +21,15 @@ import {
   completionKindLabel,
   textOffsetFromLogicalCursor,
 } from "./utils.js";
+
+interface TextareaKeyDownEvent {
+  name?: string;
+  ctrl?: boolean;
+  meta?: boolean;
+  shift?: boolean;
+  preventDefault(): void;
+  stopPropagation?(): void;
+}
 
 export function createPromptPartStyle(theme: SessionPalette): SyntaxStyle {
   return SyntaxStyle.fromTheme([
@@ -177,6 +186,36 @@ export function PromptPanel(input: {
       .filter(Boolean)
       .join(" · "),
   );
+  createEffect(() => {
+    const node = textarea;
+    if (!node || node.isDestroyed) {
+      return;
+    }
+    if (input.overlayActive) {
+      node.blur();
+      return;
+    }
+    node.focus();
+  });
+  const handleTextareaKeyDown = (event: TextareaKeyDownEvent) => {
+    const key = event.name?.toLowerCase();
+    if (key !== "escape" && key !== "esc") {
+      return;
+    }
+    const shellInput = {
+      key: event.name ?? "escape",
+      ctrl: event.ctrl === true,
+      meta: event.meta === true,
+      shift: event.shift === true,
+    };
+    event.preventDefault();
+    event.stopPropagation?.();
+    if (!input.runtime.wantsInput(shellInput)) {
+      return;
+    }
+    void input.runtime.handleInput(shellInput);
+  };
+
   return (
     <box flexShrink={0} flexDirection="column" gap={1}>
       <box
@@ -204,6 +243,10 @@ export function PromptPanel(input: {
               input.setTextarea(node);
             }}
             focused={!input.overlayActive}
+            onMouseDown={(event: { target: { focus?: () => void } | null }) => {
+              event.target?.focus?.();
+            }}
+            onKeyDown={handleTextareaKeyDown}
             initialValue={input.composer.text}
             onSubmit={() => {
               void input.runtime.handleInput({

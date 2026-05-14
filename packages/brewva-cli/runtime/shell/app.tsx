@@ -437,7 +437,6 @@ export function BrewvaOpenTuiShell(input: {
         >
           <scrollbox
             ref={(node: OpenTuiScrollBoxHandle) => setScrollbox(node)}
-            focused={!state.overlay.active}
             viewportOptions={{
               paddingRight: showScrollbar() ? 1 : 0,
             }}

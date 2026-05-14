@@ -17,6 +17,7 @@ import {
   resolveDialogContentWidth,
   resolveDialogSelectRows,
   resolveDialogSurfaceDimensions,
+  resolveModelPickerTopInset,
 } from "../overlay-style.js";
 import type { SessionPalette } from "../palette.js";
 import { TextLineBlock } from "../transcript.js";
@@ -187,6 +188,7 @@ export function ModelPickerOverlay(input: {
       width={input.width}
       height={input.height}
       theme={input.theme}
+      topInset={resolveModelPickerTopInset(input.height)}
       search={<SearchLine query={input.payload.query} theme={input.theme} />}
       footer={
         <box
@@ -213,15 +215,13 @@ export function ModelPickerOverlay(input: {
           </box>
         }
       >
-        <box paddingLeft={1} paddingRight={1}>
-          <PickerList
-            items={input.payload.items}
-            selectedIndex={input.payload.selectedIndex}
-            theme={input.theme}
-            width={listWidth()}
-            maxVisible={resolveDialogSelectRows(input.height, input.payload.items.length)}
-          />
-        </box>
+        <PickerList
+          items={input.payload.items}
+          selectedIndex={input.payload.selectedIndex}
+          theme={input.theme}
+          width={listWidth()}
+          maxVisible={resolveDialogSelectRows(input.height, input.payload.items.length)}
+        />
       </Show>
     </DialogSelectFrame>
   );
@@ -253,15 +253,13 @@ export function ProviderPickerOverlay(input: {
         </box>
       }
     >
-      <box paddingLeft={1} paddingRight={1}>
-        <PickerList
-          items={input.payload.items}
-          selectedIndex={input.payload.selectedIndex}
-          theme={input.theme}
-          width={listWidth()}
-          maxVisible={resolveDialogSelectRows(input.height, input.payload.items.length)}
-        />
-      </box>
+      <PickerList
+        items={input.payload.items}
+        selectedIndex={input.payload.selectedIndex}
+        theme={input.theme}
+        width={listWidth()}
+        maxVisible={resolveDialogSelectRows(input.height, input.payload.items.length)}
+      />
     </DialogSelectFrame>
   );
 }
@@ -279,15 +277,13 @@ export function ThinkingPickerOverlay(input: {
       height={input.height}
       theme={input.theme}
     >
-      <box paddingLeft={1} paddingRight={1}>
-        <PickerList
-          items={input.payload.items}
-          selectedIndex={input.payload.selectedIndex}
-          theme={input.theme}
-          width={resolveDialogContentWidth(input.width)}
-          maxVisible={resolveDialogSelectRows(input.height, input.payload.items.length)}
-        />
-      </box>
+      <PickerList
+        items={input.payload.items}
+        selectedIndex={input.payload.selectedIndex}
+        theme={input.theme}
+        width={resolveDialogContentWidth(input.width)}
+        maxVisible={resolveDialogSelectRows(input.height, input.payload.items.length)}
+      />
     </DialogSelectFrame>
   );
 }
@@ -306,15 +302,13 @@ export function AuthMethodPickerOverlay(input: {
       height={input.height}
       theme={input.theme}
     >
-      <box paddingLeft={1} paddingRight={1}>
-        <PickerList
-          items={input.payload.items}
-          selectedIndex={input.payload.selectedIndex}
-          theme={input.theme}
-          width={listWidth()}
-          maxVisible={resolveDialogSelectRows(input.height, input.payload.items.length)}
-        />
-      </box>
+      <PickerList
+        items={input.payload.items}
+        selectedIndex={input.payload.selectedIndex}
+        theme={input.theme}
+        width={listWidth()}
+        maxVisible={resolveDialogSelectRows(input.height, input.payload.items.length)}
+      />
     </DialogSelectFrame>
   );
 }
