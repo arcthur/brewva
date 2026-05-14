@@ -118,11 +118,7 @@ describe("substrate dependency boundary", () => {
         "completion-client.ts",
       ),
       resolve(repoRoot, "packages", "brewva-gateway", "src", "delegation", "model-routing.ts"),
-      resolve(repoRoot, "packages", "brewva-cli", "src", "inspect-command-extension.ts"),
-      resolve(repoRoot, "packages", "brewva-cli", "src", "insights-command-extension.ts"),
-      resolve(repoRoot, "packages", "brewva-cli", "src", "questions-command-extension.ts"),
-      resolve(repoRoot, "packages", "brewva-cli", "src", "agent-overlays-command-extension.ts"),
-      resolve(repoRoot, "packages", "brewva-cli", "src", "update-command-extension.ts"),
+      resolve(repoRoot, "packages", "brewva-cli", "src", "commands", "extensions"),
       resolve(
         repoRoot,
         "packages",

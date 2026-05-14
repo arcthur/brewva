@@ -128,7 +128,7 @@ flowchart TD
 ## Code Pointers
 
 - Inspect / replay / undo CLI dispatch: `packages/brewva-cli/src/index.ts`
-- Inspect report implementation: `packages/brewva-cli/src/inspect.ts`
+- Inspect report implementation: `packages/brewva-cli/src/operator/inspect/report.ts`
 - Session lifecycle: `packages/brewva-runtime/src/domain/sessions/session-lifecycle.ts`
 - Replay engine: `packages/brewva-runtime/src/domain/tape/replay-engine.ts`
 - Patch-set rollback: `packages/brewva-runtime/src/domain/patching/file-change.ts`

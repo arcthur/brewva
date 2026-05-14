@@ -14,7 +14,7 @@ import type {
 import {
   runCliInteractiveSession,
   runCliPrintSession,
-} from "../../../packages/brewva-cli/src/cli-runtime.js";
+} from "../../../packages/brewva-cli/src/session/cli-runtime.js";
 import type { ProviderConnectionSeams } from "../../../packages/brewva-gateway/src/hosted/api.js";
 import type { HostedSessionPhase } from "../../../packages/brewva-gateway/src/hosted/internal/session/session-phase/api.js";
 import {

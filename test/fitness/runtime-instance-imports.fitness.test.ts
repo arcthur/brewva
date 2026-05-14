@@ -13,7 +13,10 @@ const allowedBrewvaRuntimeInstanceOwners = [
 ] as const;
 
 const allowedCreateBrewvaRuntimeOwners = [
-  /^packages\/brewva-cli\/src\/(?:daemon-mode|index|inspect|insights)\.ts$/u,
+  /^packages\/brewva-cli\/src\/entry\/main\.ts$/u,
+  /^packages\/brewva-cli\/src\/commands\/noninteractive\/daemon\.ts$/u,
+  /^packages\/brewva-cli\/src\/operator\/insights\.ts$/u,
+  /^packages\/brewva-cli\/src\/operator\/inspect\/cli\.ts$/u,
   /^packages\/brewva-gateway\/src\/channels\/(?:agent-runtime-manager|wiring)\.ts$/u,
   /^packages\/brewva-gateway\/src\/daemon\/gateway-daemon\.ts$/u,
   /^packages\/brewva-gateway\/src\/delegation\/background\/runner-main\.ts$/u,

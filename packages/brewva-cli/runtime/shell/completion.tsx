@@ -2,10 +2,10 @@
 
 import { truncateToWidth, visibleWidth } from "@brewva/brewva-tui";
 import type { OpenTuiScrollBoxHandle } from "@brewva/brewva-tui/internal-opentui-runtime";
-import { type BoxRenderable } from "@opentui/core";
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
-import type { CliShellRuntime } from "../../src/shell/runtime.js";
-import type { CliShellViewState } from "../../src/shell/state/index.js";
+import type { ShellRendererController } from "../../src/shell/domain/renderer-contract.js";
+import type { ShellViewModel } from "../../src/shell/domain/view-model.js";
+import type { BoxRenderable } from "../opentui/index.js";
 import { COMPLETION_Z_INDEX } from "./overlay-style.js";
 import { DEFAULT_SCROLL_ACCELERATION, SPLIT_BORDER_CHARS, type SessionPalette } from "./palette.js";
 import { completionItemAuxText } from "./utils.js";
@@ -25,8 +25,8 @@ function truncateCompletionText(text: string, maxWidth: number): string {
 }
 
 export function CompletionOverlay(input: {
-  runtime: CliShellRuntime;
-  completion: NonNullable<CliShellViewState["composer"]["completion"]>;
+  runtime: ShellRendererController;
+  completion: NonNullable<ShellViewModel["composer"]["completion"]>;
   anchor: () => BoxRenderable | null;
   container: () => BoxRenderable | null;
   width: number;
@@ -197,13 +197,13 @@ export function CompletionOverlay(input: {
                     if (pointerMode() !== "mouse") {
                       return;
                     }
-                    input.runtime.setCompletionSelection(index());
+                    void input.runtime.handleInput({ type: "completion.select", index: index() });
                   }}
                   onMouseDown={() => {
                     setPointerMode("mouse");
-                    input.runtime.setCompletionSelection(index());
+                    void input.runtime.handleInput({ type: "completion.select", index: index() });
                   }}
-                  onMouseUp={() => input.runtime.acceptCurrentCompletion()}
+                  onMouseUp={() => void input.runtime.handleInput({ type: "completion.accept" })}
                 >
                   <text
                     fg={selected() ? input.theme.selectionText : input.theme.text}

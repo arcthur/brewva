@@ -13,10 +13,10 @@
   - `docs/guide/cli.md`
   - `docs/journeys/operator/background-and-parallelism.md`
 - Code anchors:
-  - `packages/brewva-cli/src/shell/state/index.ts`
-  - `packages/brewva-cli/src/shell/runtime.ts`
-  - `packages/brewva-cli/src/shell/transcript.ts`
-  - `packages/brewva-cli/src/shell/task-details.ts`
+  - `packages/brewva-cli/src/shell/domain/state.ts`
+  - `packages/brewva-cli/src/shell/controller/shell-runtime.ts`
+  - `packages/brewva-cli/src/shell/domain/transcript.ts`
+  - `packages/brewva-cli/src/shell/domain/task-details.ts`
   - `packages/brewva-cli/runtime/opentui-shell-renderer.tsx`
   - `test/unit/cli/shell-state.unit.test.ts`
   - `test/unit/cli/shell-runtime-*.unit.test.ts`
@@ -32,4 +32,4 @@
 
 ## Superseded by
 
-- None.
+- `docs/research/decisions/cli-tui-experience-ring-decomposition-and-shell-port-boundaries.md` supersedes the implementation-planning portions of this decision.

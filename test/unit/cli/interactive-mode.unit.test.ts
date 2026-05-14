@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   INTERACTIVE_SHELL_UNSUPPORTED_TERMINAL_MESSAGE,
   resolveEffectiveCliMode,
-} from "../../../packages/brewva-cli/src/interactive-mode.js";
+} from "../../../packages/brewva-cli/src/entry/mode.js";
 
 describe("cli interactive mode resolution", () => {
   test("falls back to print-text when interactive mode is implicit and stdin/stdout are not TTYs", () => {

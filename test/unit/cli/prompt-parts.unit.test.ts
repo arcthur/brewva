@@ -3,7 +3,7 @@ import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { buildCliShellPromptContentParts } from "../../../packages/brewva-cli/src/shell/prompt-parts.js";
+import { buildCliShellPromptContentParts } from "../../../packages/brewva-cli/src/shell/domain/prompt-parts.js";
 
 describe("cli prompt parts", () => {
   test("resolves file prompt parts to file URIs only when the attachment exists", () => {

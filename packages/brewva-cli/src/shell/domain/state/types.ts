@@ -1,0 +1,206 @@
+import type { BrewvaQueuedPromptView } from "@brewva/brewva-substrate/session";
+import type { TuiTheme } from "@brewva/brewva-tui";
+import type { OverlayEntry } from "@brewva/brewva-tui";
+import type { ShellCompletionCandidate, ShellCompletionRange } from "../completion-provider.js";
+import type { CliShellOverlayPayload } from "../overlays/payloads.js";
+import type { CliShellPromptPart } from "../prompt.js";
+import type { CliShellTranscriptMessage } from "../transcript.js";
+import type { TrustLoopSessionProjection } from "../trust-loop/projection.js";
+
+export type ShellFocusOwner =
+  | "composer"
+  | "transcript"
+  | "completion"
+  | "approvalOverlay"
+  | "questionOverlay"
+  | "inspectOverlay"
+  | "taskBrowser"
+  | "sessionSwitcher"
+  | "notificationCenter"
+  | "pager"
+  | "dialog"
+  | (string & {});
+
+export interface CliShellNotification {
+  id: string;
+  level: "info" | "warning" | "error";
+  message: string;
+  createdAt: number;
+}
+
+export interface CliShellStatusState {
+  entries: Record<string, string>;
+  trust?: TrustLoopSessionProjection;
+  workingMessage?: string;
+  hiddenThinkingLabel?: string;
+}
+
+export type CliShellDiffStyle = "auto" | "stacked";
+export type CliShellDiffWrapMode = "word" | "none";
+
+export interface CliShellDiffState {
+  style: CliShellDiffStyle;
+  wrapMode: CliShellDiffWrapMode;
+}
+
+export interface CliShellDisplayState {
+  showThinking: boolean;
+  toolDetails: boolean;
+}
+
+export interface CliShellCompletionState {
+  trigger: "/" | "@";
+  query: string;
+  range: ShellCompletionRange;
+  items: ShellCompletionCandidate[];
+  selectedIndex: number;
+}
+
+export interface CliShellOverlayState {
+  active?: OverlayEntry & {
+    focusOwner: ShellFocusOwner;
+    title?: string;
+    lines?: string[];
+    payload?: CliShellOverlayPayload;
+  };
+  queue: Array<
+    OverlayEntry & {
+      focusOwner: ShellFocusOwner;
+      title?: string;
+      lines?: string[];
+      payload?: CliShellOverlayPayload;
+    }
+  >;
+}
+
+export interface CliShellViewState {
+  theme: TuiTheme;
+  focus: {
+    active: ShellFocusOwner;
+    returnStack: ShellFocusOwner[];
+  };
+  overlay: CliShellOverlayState;
+  transcript: {
+    messages: CliShellTranscriptMessage[];
+    followMode: "live" | "scrolled";
+    scrollOffset: number;
+    navigationRequest?:
+      | {
+          id: number;
+          kind: "pageUp" | "pageDown" | "top" | "bottom";
+        }
+      | undefined;
+  };
+  composer: {
+    text: string;
+    cursor: number;
+    parts: CliShellPromptPart[];
+    completion?: CliShellCompletionState;
+  };
+  pager?: {
+    title: string;
+    lines: string[];
+  };
+  notifications: CliShellNotification[];
+  queue: readonly BrewvaQueuedPromptView[];
+  status: CliShellStatusState;
+  diff: CliShellDiffState;
+  view: CliShellDisplayState;
+}
+
+export type CliShellAction =
+  | {
+      type: "theme.set";
+      theme: TuiTheme;
+    }
+  | {
+      type: "overlay.open";
+      overlay: NonNullable<CliShellOverlayState["active"]>;
+    }
+  | {
+      type: "overlay.replace";
+      overlay: NonNullable<CliShellOverlayState["active"]>;
+    }
+  | {
+      type: "overlay.close";
+      id: string;
+    }
+  | {
+      type: "transcript.setMessages";
+      messages: CliShellTranscriptMessage[];
+    }
+  | {
+      type: "transcript.setScrollState";
+      followMode: "live" | "scrolled";
+      scrollOffset: number;
+    }
+  | {
+      type: "transcript.scroll";
+      delta: number;
+    }
+  | {
+      type: "transcript.followLive";
+    }
+  | {
+      type: "transcript.requestNavigation";
+      request: NonNullable<CliShellViewState["transcript"]["navigationRequest"]>;
+    }
+  | {
+      type: "transcript.clearNavigation";
+      id: number;
+    }
+  | {
+      type: "composer.setText";
+      text: string;
+      cursor?: number;
+    }
+  | {
+      type: "composer.setPromptState";
+      text: string;
+      cursor: number;
+      parts: CliShellPromptPart[];
+    }
+  | {
+      type: "completion.set";
+      completion: CliShellCompletionState | undefined;
+    }
+  | {
+      type: "notification.add";
+      notification: CliShellNotification;
+    }
+  | {
+      type: "notification.dismiss";
+      id: string;
+    }
+  | {
+      type: "notification.clear";
+    }
+  | {
+      type: "queue.set";
+      items: readonly BrewvaQueuedPromptView[];
+    }
+  | {
+      type: "status.set";
+      key: string;
+      text: string | undefined;
+    }
+  | {
+      type: "status.setTrust";
+      trust: TrustLoopSessionProjection | undefined;
+    }
+  | {
+      type: "status.working";
+      text: string | undefined;
+    }
+  | {
+      type: "status.hiddenThinking";
+      text: string | undefined;
+    }
+  | {
+      type: "diff.setPreferences";
+      preferences: Partial<CliShellDiffState>;
+    }
+  | {
+      type: "view.setPreferences";
+      preferences: Partial<CliShellDisplayState>;
+    };

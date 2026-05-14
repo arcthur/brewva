@@ -1,7 +1,13 @@
 import { BrewvaEffect, runEdgeOperation } from "@brewva/brewva-effect";
 import type { BrewvaManagedPromptSession } from "@brewva/brewva-substrate/session";
-import type { CliInteractiveSessionOptions, CliInteractiveSmokeResult } from "./cli-runtime.js";
+import type {
+  CliInteractiveSessionOptions,
+  CliInteractiveSmokeResult,
+} from "./session/cli-runtime.js";
 
+// Node-safe package export used by dist verification and external Node importers.
+// The Bun/OpenTUI implementation is intentionally exposed only through
+// runtime/internal-shell-runtime.ts and packaged binaries.
 const UNSUPPORTED_RUNTIME_MESSAGE =
   "OpenTUI-backed interactive shell runtime is only available from Bun source execution or packaged Brewva binaries; direct Node.js dist execution cannot load it.";
 

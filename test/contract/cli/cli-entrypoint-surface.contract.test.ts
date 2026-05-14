@@ -8,7 +8,9 @@ describe("cli entrypoint surface", () => {
     ]);
 
     expect(typeof cli.parseArgs).toBe("function");
-    expect(typeof cli.writeJsonLine).toBe("function");
+    expect("writeJsonLine" in cli).toBe(false);
+    expect("createInspectCommandExtension" in cli).toBe(false);
+    expect("handleInspectChannelCommand" in cli).toBe(false);
     expect("createBrewvaSession" in cli).toBe(false);
     expect("registerRuntimeCoreEventBridge" in cli).toBe(false);
 

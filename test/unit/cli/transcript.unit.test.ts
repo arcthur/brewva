@@ -3,7 +3,7 @@ import {
   buildSeedTranscriptMessages,
   buildTranscriptMessageFromMessage,
   upsertToolExecutionIntoTranscriptMessages,
-} from "../../../packages/brewva-cli/src/shell/transcript.js";
+} from "../../../packages/brewva-cli/src/shell/domain/transcript.js";
 
 describe("cli transcript model", () => {
   test("skips hidden assistant draft messages", () => {

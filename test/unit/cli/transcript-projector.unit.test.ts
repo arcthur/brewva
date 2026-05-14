@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import type { BrewvaPromptSessionEvent } from "@brewva/brewva-substrate/session";
+import type { CliShellAction } from "../../../packages/brewva-cli/src/shell/domain/state.js";
+import type { CliShellTranscriptMessage } from "../../../packages/brewva-cli/src/shell/domain/transcript.js";
+import type { CliShellUiPort } from "../../../packages/brewva-cli/src/shell/ports/ui-port.js";
 import { ShellTranscriptProjector } from "../../../packages/brewva-cli/src/shell/projectors/transcript-projector.js";
-import type { CliShellAction } from "../../../packages/brewva-cli/src/shell/state/index.js";
-import type { CliShellTranscriptMessage } from "../../../packages/brewva-cli/src/shell/transcript.js";
-import type { CliShellUiPort } from "../../../packages/brewva-cli/src/shell/types.js";
 
 function createProjectorHarness() {
   let messages: CliShellTranscriptMessage[] = [];

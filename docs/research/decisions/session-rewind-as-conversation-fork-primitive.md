@@ -21,7 +21,7 @@
   - `packages/brewva-runtime/src/events/registry.ts`
   - `packages/brewva-runtime/src/domain/sessions/types.ts`
   - `packages/brewva-session-index/src/factory.ts`
-  - `packages/brewva-cli/src/shell/flows/session-workflow.ts`
+  - `packages/brewva-cli/src/shell/controller/handlers/session-handler.ts`
 
 ## Decision Summary
 

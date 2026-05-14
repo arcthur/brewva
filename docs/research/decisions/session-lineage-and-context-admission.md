@@ -23,8 +23,8 @@
   - `packages/brewva-gateway/src/hosted/internal/session/projection/runtime-projection-session-store.ts`
   - `packages/brewva-gateway/src/delegation/lineage.ts`
   - `packages/brewva-session-index/src/factory.ts`
-  - `packages/brewva-cli/src/shell/flows/overlay-lifecycle-flow.ts`
-  - `packages/brewva-cli/src/shell/adapters/ports.ts`
+  - `packages/brewva-cli/src/shell/overlays/lifecycle.ts`
+  - `packages/brewva-cli/src/shell/ports/session-adapter.ts`
   - `test/contract/runtime/session-lineage.contract.test.ts`
 
 ## Decision Summary

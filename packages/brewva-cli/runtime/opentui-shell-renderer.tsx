@@ -6,16 +6,17 @@ import {
   createOpenTuiCliRenderer,
   getOpenTuiTerminalBackgroundMode,
 } from "@brewva/brewva-tui/internal-opentui-runtime";
-import { render } from "@opentui/solid";
 import {
   getExternalPagerCommand,
   openExternalEditorWithShell,
   openExternalPagerWithShell,
-} from "../src/external-process.js";
-import { CliShellRuntime } from "../src/shell/runtime.js";
-import type { CliShellRuntimeOptions } from "../src/shell/runtime.js";
-import type { CliShellSessionBundle } from "../src/shell/types.js";
+} from "../src/io/external-process.js";
+import { CliShellRuntime } from "../src/shell/controller/shell-runtime.js";
+import type { CliShellRuntimeOptions } from "../src/shell/controller/shell-runtime.js";
+import type { CliShellSessionBundle } from "../src/shell/ports/session-port.js";
+import { render } from "./opentui/index.js";
 import { BrewvaOpenTuiShell } from "./shell/app.js";
+import { copyTextToClipboard } from "./shell/clipboard.js";
 import { createToolRenderCache, type ToolRenderCache } from "./shell/tool-render.js";
 import { renderCliTranscriptScrollbackLines } from "./shell/transcript-scrollback.js";
 
@@ -90,6 +91,10 @@ class CliInteractiveOpenTuiShellRuntime {
     }
   }
 
+  async copyTextToClipboard(text: string): Promise<void> {
+    await copyTextToClipboard(text, { renderer: this.#renderer });
+  }
+
   private async mount(): Promise<void> {
     this.#renderer = await createOpenTuiCliRenderer();
     await render(
@@ -125,6 +130,9 @@ export async function renderCliInteractiveOpenTuiShell(
     },
     async openExternalTranscriptPager() {
       return (await interactiveRuntime?.openExternalTranscriptPager()) ?? false;
+    },
+    async copyTextToClipboard(text) {
+      await (interactiveRuntime?.copyTextToClipboard(text) ?? copyTextToClipboard(text));
     },
   });
   interactiveRuntime = new CliInteractiveOpenTuiShellRuntime(shellRuntime);

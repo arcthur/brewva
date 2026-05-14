@@ -4,8 +4,8 @@ import { describe, expect, test } from "bun:test";
 import { DEFAULT_TUI_THEME } from "@brewva/brewva-tui";
 import { createToolRenderCache } from "../../../packages/brewva-cli/runtime/shell/tool-render.js";
 import { renderCliTranscriptScrollbackLines } from "../../../packages/brewva-cli/runtime/shell/transcript-scrollback.js";
-import type { CliShellRuntime } from "../../../packages/brewva-cli/src/shell/runtime.js";
-import type { CliShellTranscriptMessage } from "../../../packages/brewva-cli/src/shell/transcript.js";
+import type { CliShellRuntime } from "../../../packages/brewva-cli/src/shell/controller/shell-runtime.js";
+import type { CliShellTranscriptMessage } from "../../../packages/brewva-cli/src/shell/domain/transcript.js";
 
 describe("transcript scrollback rendering", () => {
   test("renders transcript messages through the OpenTUI scrollback snapshot path", async () => {
@@ -66,8 +66,8 @@ describe("transcript scrollback rendering", () => {
       getToolDefinitions() {
         return new Map();
       },
-      openSessionById() {
-        return Promise.resolve();
+      handleInput() {
+        return Promise.resolve(true);
       },
     } as unknown as CliShellRuntime;
 
@@ -114,8 +114,8 @@ describe("transcript scrollback rendering", () => {
       getToolDefinitions() {
         return new Map();
       },
-      openSessionById() {
-        return Promise.resolve();
+      handleInput() {
+        return Promise.resolve(true);
       },
     } as unknown as CliShellRuntime;
 

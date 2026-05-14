@@ -15,13 +15,13 @@ import {
   type OpenTuiRenderer,
 } from "@brewva/brewva-tui/internal-opentui-runtime";
 import { BrewvaOpenTuiShell } from "../../../packages/brewva-cli/runtime/opentui-shell-renderer.js";
-import { CliShellRuntime } from "../../../packages/brewva-cli/src/shell/runtime.js";
+import { CliShellRuntime } from "../../../packages/brewva-cli/src/shell/controller/shell-runtime.js";
 import type {
-  CliShellSessionBundle,
   ProviderAuthMethod,
   ProviderConnectionDescriptor,
   ProviderOAuthAuthorization,
-} from "../../../packages/brewva-cli/src/shell/types.js";
+} from "../../../packages/brewva-cli/src/shell/domain/overlays/payloads.js";
+import type { CliShellSessionBundle } from "../../../packages/brewva-cli/src/shell/ports/session-port.js";
 import { requireDefined } from "../../helpers/assertions.js";
 interface FakeOpenTuiSelectionRenderer extends OpenTuiRenderer {
   console: {

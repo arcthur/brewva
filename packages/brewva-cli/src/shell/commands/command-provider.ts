@@ -1,6 +1,6 @@
 import type { KeybindingDefinition, KeybindingTrigger } from "@brewva/brewva-tui";
-import { fuzzyScore, normalizeSearchQuery } from "../search-scoring.js";
-import type { ShellIntent } from "../shell-actions.js";
+import type { ShellIntent } from "../domain/intent.js";
+import { fuzzyScore, normalizeSearchQuery } from "../domain/search-scoring.js";
 
 export interface ShellCommandRunInput {
   readonly args: string;

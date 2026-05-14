@@ -4,13 +4,13 @@ import { join } from "node:path";
 import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import type { BrewvaRuntimeOptions } from "@brewva/brewva-runtime";
 import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
-import { buildProjectInsightsReport } from "../../../packages/brewva-cli/src/insights.js";
-import { resolveInspectDirectory } from "../../../packages/brewva-cli/src/inspect-analysis.js";
+import { buildProjectInsightsReport } from "../../../packages/brewva-cli/src/operator/insights.js";
+import { resolveInspectDirectory } from "../../../packages/brewva-cli/src/operator/inspect-analysis.js";
 import {
   buildInspectReport,
   buildSessionInspectReport,
   formatInspectText,
-} from "../../../packages/brewva-cli/src/inspect.js";
+} from "../../../packages/brewva-cli/src/operator/inspect.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 function createHostedTestRuntime(options: BrewvaRuntimeOptions) {

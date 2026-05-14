@@ -122,7 +122,7 @@ flowchart TD
 - Schedule projection: `packages/brewva-runtime/src/domain/schedule/projection.ts`
 - Cron / timezone: `packages/brewva-runtime/src/domain/schedule/cron.ts`
 - Scheduler daemon dispatch: `packages/brewva-cli/src/index.ts`
-- Scheduler daemon implementation: `packages/brewva-cli/src/daemon-mode.ts`
+- Scheduler daemon implementation: `packages/brewva-cli/src/commands/noninteractive/daemon.ts`
 - Live scheduler controls: `packages/brewva-gateway/src/admin/internal/cli.ts`
 
 ## Related Docs

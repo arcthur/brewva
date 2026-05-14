@@ -19,14 +19,14 @@ import type {
   BrewvaShellViewPreferences,
   BrewvaSteerOutcome,
 } from "@brewva/brewva-substrate/session";
-import { createCliShellPromptStore } from "../../../packages/brewva-cli/src/shell/prompt-store.js";
-import { CliShellRuntime } from "../../../packages/brewva-cli/src/shell/runtime.js";
+import { CliShellRuntime } from "../../../packages/brewva-cli/src/shell/controller/shell-runtime.js";
 import type {
-  CliShellSessionBundle,
   ProviderAuthMethod,
   ProviderConnectionDescriptor,
   ProviderOAuthAuthorization,
-} from "../../../packages/brewva-cli/src/shell/types.js";
+} from "../../../packages/brewva-cli/src/shell/domain/overlays/payloads.js";
+import { createCliShellPromptStore } from "../../../packages/brewva-cli/src/shell/domain/prompt-store.js";
+import type { CliShellSessionBundle } from "../../../packages/brewva-cli/src/shell/ports/session-port.js";
 
 function modelKey(model: Pick<BrewvaSessionModelDescriptor, "provider" | "id">): string {
   return `${model.provider}/${model.id}`;
@@ -1720,7 +1720,7 @@ describe("shell runtime: input routing", () => {
 
     expect(runtime.getViewState().overlay.active?.payload?.kind).toBe("question");
 
-    await runtime.openSessionById("session-2");
+    await runtime.handleInput({ type: "session.open", sessionId: "session-2" });
 
     expect(await pending).toBe(undefined);
     expect(runtime.getSessionBundle()).toBe(second.bundle);
@@ -1825,7 +1825,11 @@ describe("shell runtime: input routing", () => {
       }),
     ).toBe(false);
 
-    runtime.syncComposerFromEditor("draft now", 0);
+    await runtime.handleInput({
+      type: "composer.editorSync",
+      text: "draft now",
+      cursor: 0,
+    });
     expect(
       runtime.wantsInput({
         key: "up",
@@ -1853,7 +1857,11 @@ describe("shell runtime: input routing", () => {
     expect(runtime.ui.getEditorText()).toBe("first prompt");
     expect(runtime.getViewState().composer.cursor).toBe(0);
 
-    runtime.syncComposerFromEditor("first prompt", "first prompt".length);
+    await runtime.handleInput({
+      type: "composer.editorSync",
+      text: "first prompt",
+      cursor: "first prompt".length,
+    });
     await runtime.handleInput({
       key: "down",
       ctrl: false,
@@ -1863,7 +1871,11 @@ describe("shell runtime: input routing", () => {
     expect(runtime.ui.getEditorText()).toBe("second prompt");
     expect(runtime.getViewState().composer.cursor).toBe("second prompt".length);
 
-    runtime.syncComposerFromEditor("second prompt", "second prompt".length);
+    await runtime.handleInput({
+      type: "composer.editorSync",
+      text: "second prompt",
+      cursor: "second prompt".length,
+    });
     await runtime.handleInput({
       key: "down",
       ctrl: false,
@@ -1944,7 +1956,7 @@ describe("shell runtime: input routing", () => {
       ) ?? -1;
     expect(directoryIndex).toBeGreaterThanOrEqual(0);
 
-    runtime.setCompletionSelection(directoryIndex);
+    await runtime.handleInput({ type: "completion.select", index: directoryIndex });
     await runtime.handleInput({
       key: "tab",
       ctrl: false,
@@ -1986,7 +1998,7 @@ describe("shell runtime: input routing", () => {
         -1;
       expect(fileIndex).toBeGreaterThanOrEqual(0);
 
-      runtime.setCompletionSelection(fileIndex);
+      await runtime.handleInput({ type: "completion.select", index: fileIndex });
       await runtime.handleInput({
         key: "tab",
         ctrl: false,
@@ -2098,7 +2110,7 @@ describe("shell runtime: input routing", () => {
       -1;
     expect(agentIndex).toBeGreaterThanOrEqual(0);
 
-    runtime.setCompletionSelection(agentIndex);
+    await runtime.handleInput({ type: "completion.select", index: agentIndex });
     await runtime.handleInput({
       key: "tab",
       ctrl: false,
@@ -2153,7 +2165,7 @@ describe("shell runtime: input routing", () => {
         -1;
       expect(fileIndex).toBeGreaterThanOrEqual(0);
 
-      runtime.setCompletionSelection(fileIndex);
+      await runtime.handleInput({ type: "completion.select", index: fileIndex });
       await runtime.handleInput({
         key: "tab",
         ctrl: false,

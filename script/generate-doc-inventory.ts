@@ -409,7 +409,7 @@ function renderRuntimeSurface(): string {
 }
 
 function renderCliFlags(): string {
-  const cliSource = readRepoFile("packages/brewva-cli/src/index.ts");
+  const cliSource = readRepoFile("packages/brewva-cli/src/entry/main.ts");
   const gatewaySource = readRepoFile("packages/brewva-gateway/src/admin/internal/cli.ts");
   const flags = [
     ...new Set([...extractLongFlags(cliSource), ...extractGatewayOptionKeys(gatewaySource)]),

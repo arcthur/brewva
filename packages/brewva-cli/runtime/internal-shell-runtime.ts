@@ -5,9 +5,12 @@ import {
   runCliInteractiveSessionOperation as runCliInteractiveSessionBaseOperation,
   type CliInteractiveSessionOptions,
   type CliInteractiveSmokeResult,
-} from "../src/cli-runtime.js";
+} from "../src/session/cli-runtime.js";
 import { renderCliInteractiveOpenTuiShell } from "./opentui-shell-renderer.js";
 
+// Bun-only implementation for the documented internal runtime export. The
+// package root stays Node-safe; this path is selected by Bun source execution
+// and by packaged Brewva binaries that can load OpenTUI native bindings.
 const BREWVA_SHELL_SMOKE_ENV = "BREWVA_SHELL_SMOKE";
 
 export const CLI_INTERNAL_SHELL_RUNTIME_KIND = "bun-runtime";

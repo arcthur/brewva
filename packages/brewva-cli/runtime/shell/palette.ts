@@ -1,4 +1,4 @@
-import { SyntaxStyle, type ScrollAcceleration } from "@opentui/core";
+import { SyntaxStyle, type ScrollAcceleration } from "../opentui/index.js";
 
 export const SPLIT_BORDER_CHARS = {
   topLeft: "",

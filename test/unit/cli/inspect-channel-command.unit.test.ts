@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import type { BrewvaRuntimeOptions } from "@brewva/brewva-runtime";
 import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
-import { handleInspectChannelCommand } from "../../../packages/brewva-cli/src/inspect-channel-command.js";
+import { handleInspectChannelCommand } from "../../../packages/brewva-cli/src/commands/channel-handlers/inspect.js";
 import { cleanupTestWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
 
 function createHostedTestRuntime(options: BrewvaRuntimeOptions) {

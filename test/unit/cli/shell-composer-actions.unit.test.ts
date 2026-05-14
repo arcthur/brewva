@@ -3,7 +3,7 @@ import {
   acceptComposerCompletion,
   createPromptHistoryState,
   navigatePromptHistoryState,
-} from "../../../packages/brewva-cli/src/shell/composer-actions.js";
+} from "../../../packages/brewva-cli/src/shell/domain/composer-actions.js";
 
 describe("shell composer action helpers", () => {
   test("restores the in-flight draft when prompt history returns to the live composer", () => {

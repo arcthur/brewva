@@ -1,4 +1,4 @@
-import { RGBA } from "@opentui/core";
+import { RGBA } from "../opentui/index.js";
 
 export type DialogSize = "medium" | "large" | "xlarge";
 

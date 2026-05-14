@@ -6,7 +6,7 @@ import {
   buildTrustLoopApprovalProjection,
   buildTrustLoopSessionProjection,
   buildTrustLoopToolProjection,
-} from "../../../packages/brewva-cli/src/shell/trust-loop/projection.js";
+} from "../../../packages/brewva-cli/src/shell/domain/trust-loop/projection.js";
 
 describe("trust loop projection", () => {
   test("maps read-only execution to inspect", () => {

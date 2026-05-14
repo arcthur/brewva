@@ -1,20 +1,20 @@
 import { describe, expect, test } from "bun:test";
 import type { KeybindingResolver } from "@brewva/brewva-tui";
-import type { ShellAction } from "../../../packages/brewva-cli/src/shell/shell-actions.js";
-import { routeShellInput } from "../../../packages/brewva-cli/src/shell/shell-input-router.js";
+import type { ShellAction } from "../../../packages/brewva-cli/src/shell/domain/actions.js";
+import { routeShellInput } from "../../../packages/brewva-cli/src/shell/domain/input-router.js";
 import {
-  decodeShellKeybindingAction,
+  decodeShellKeybindingEffect,
   shellBuiltInKeybindings,
-} from "../../../packages/brewva-cli/src/shell/shell-keymap.js";
-import {
-  createShellRuntimeState,
-  reduceShellRuntimeAction,
-} from "../../../packages/brewva-cli/src/shell/shell-runtime-state.js";
+} from "../../../packages/brewva-cli/src/shell/domain/keymap.js";
 import {
   updateShellIntent,
   type ShellUpdateContext,
-} from "../../../packages/brewva-cli/src/shell/shell-update.js";
-import type { CliShellViewState } from "../../../packages/brewva-cli/src/shell/state/index.js";
+} from "../../../packages/brewva-cli/src/shell/domain/reducer.js";
+import {
+  createShellRuntimeState,
+  reduceShellRuntimeAction,
+} from "../../../packages/brewva-cli/src/shell/domain/runtime-state.js";
+import type { CliShellViewState } from "../../../packages/brewva-cli/src/shell/domain/state.js";
 
 function containsFunction(value: unknown, seen = new Set<object>()): boolean {
   if (typeof value === "function") {
@@ -65,7 +65,7 @@ function createUpdateContext(input: Partial<ShellUpdateContext> = {}): ShellUpda
 }
 
 describe("shell runtime architecture", () => {
-  test("built-in keybindings decode to typed shell actions", () => {
+  test("built-in keybindings decode directly to typed shell effects", () => {
     expect(shellBuiltInKeybindings).toContainEqual(
       expect.objectContaining({
         id: "composer.submit",
@@ -73,13 +73,10 @@ describe("shell runtime architecture", () => {
       }),
     );
 
-    expect(decodeShellKeybindingAction("shell:composer.submit")).toEqual({
+    expect(decodeShellKeybindingEffect("shell:composer.submit")).toEqual({
       type: "composer.submit",
     });
-    expect(decodeShellKeybindingAction("submit")).toEqual({
-      type: "unknown",
-      action: "submit",
-    });
+    expect(decodeShellKeybindingEffect("submit")).toEqual(undefined);
   });
 
   test("view overlay payloads are data-only", () => {
@@ -119,17 +116,17 @@ describe("shell runtime architecture", () => {
     ).toEqual({
       handled: true,
       intent: {
-        type: "keybinding.invoke",
-        action: { type: "composer.submit" },
+        type: "effect.dispatch",
+        effect: { type: "composer.submit" },
       },
     });
   });
 
-  test("shell update maps keybinding intents to effects", () => {
+  test("shell update dispatches routed keybinding effects without a second mapping layer", () => {
     expect(
       updateShellIntent(createUpdateContext(), {
-        type: "keybinding.invoke",
-        action: { type: "composer.submit" },
+        type: "effect.dispatch",
+        effect: { type: "composer.submit" },
       }),
     ).toEqual({
       handled: true,

@@ -25,13 +25,13 @@ import type {
   BrewvaShellViewPreferences,
   BrewvaSteerOutcome,
 } from "@brewva/brewva-substrate/session";
-import { CliShellRuntime } from "../../../packages/brewva-cli/src/shell/runtime.js";
+import { CliShellRuntime } from "../../../packages/brewva-cli/src/shell/controller/shell-runtime.js";
 import type {
-  CliShellSessionBundle,
   ProviderAuthMethod,
   ProviderConnectionDescriptor,
   ProviderOAuthAuthorization,
-} from "../../../packages/brewva-cli/src/shell/types.js";
+} from "../../../packages/brewva-cli/src/shell/domain/overlays/payloads.js";
+import type { CliShellSessionBundle } from "../../../packages/brewva-cli/src/shell/ports/session-port.js";
 import {
   createPromptMessageUpdateEvent,
   createToolcallEndAssistantEvent,

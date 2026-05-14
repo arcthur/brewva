@@ -19,8 +19,10 @@ describe("provider connection port isolation", () => {
     const runtime = readRepoFile(
       "packages/brewva-gateway/src/hosted/internal/session/session-runtime.ts",
     );
-    const shellRuntime = readRepoFile("packages/brewva-cli/src/shell/runtime.ts");
-    const authFlow = readRepoFile("packages/brewva-cli/src/shell/flows/provider-auth-flow.ts");
+    const shellRuntime = readRepoFile("packages/brewva-cli/src/shell/controller/shell-runtime.ts");
+    const authFlow = readRepoFile(
+      "packages/brewva-cli/src/shell/controller/handlers/provider-auth-handler.ts",
+    );
     expect(runtime).toContain("createProviderConnectionSeams");
     expect(shellRuntime).toContain("connectionPort.credential.connectApiKey");
     expect(shellRuntime).toContain("connectionPort.authFlow.completeOAuth");

@@ -15,11 +15,11 @@
   - `packages/brewva-cli/src/shell/commands/command-provider.ts`
   - `packages/brewva-cli/src/shell/commands/command-palette.ts`
   - `packages/brewva-cli/src/shell/commands/shell-command-registry.ts`
-  - `packages/brewva-cli/src/shell/completion-provider.ts`
-  - `packages/brewva-cli/src/shell/runtime.ts`
-  - `packages/brewva-cli/src/questions-command-runtime-plugin.ts`
-  - `packages/brewva-cli/src/inspect-command-runtime-plugin.ts`
-  - `packages/brewva-cli/src/insights-command-runtime-plugin.ts`
+  - `packages/brewva-cli/src/shell/domain/completion-provider.ts`
+  - `packages/brewva-cli/src/shell/controller/shell-runtime.ts`
+  - `packages/brewva-cli/src/commands/shell-extensions/questions.ts`
+  - `packages/brewva-cli/src/commands/shell-extensions/inspect.ts`
+  - `packages/brewva-cli/src/commands/shell-extensions/insights.ts`
 
 ## Decision Summary
 

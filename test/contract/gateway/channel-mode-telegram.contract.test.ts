@@ -5,7 +5,7 @@ import {
   handleInspectChannelCommand,
   handleInsightsChannelCommand,
   handleQuestionsChannelCommand,
-} from "@brewva/brewva-cli";
+} from "@brewva/brewva-cli/channel";
 import {
   DEFAULT_TELEGRAM_CHANNEL_NAME,
   runChannelMode,

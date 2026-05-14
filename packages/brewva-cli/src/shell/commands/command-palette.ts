@@ -1,4 +1,4 @@
-import type { CliShellOverlayPayload } from "../types.js";
+import type { CliShellOverlayPayload } from "../domain/overlays/payloads.js";
 import {
   formatKeybindingLabel,
   type ShellCommandListItem,

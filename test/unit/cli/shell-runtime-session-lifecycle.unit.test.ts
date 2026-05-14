@@ -20,13 +20,13 @@ import type {
   BrewvaSteerOutcome,
 } from "@brewva/brewva-substrate/session";
 import { DEFAULT_TUI_THEME } from "@brewva/brewva-tui";
-import { CliShellRuntime } from "../../../packages/brewva-cli/src/shell/runtime.js";
+import { CliShellRuntime } from "../../../packages/brewva-cli/src/shell/controller/shell-runtime.js";
 import type {
-  CliShellSessionBundle,
   ProviderAuthMethod,
   ProviderConnectionDescriptor,
   ProviderOAuthAuthorization,
-} from "../../../packages/brewva-cli/src/shell/types.js";
+} from "../../../packages/brewva-cli/src/shell/domain/overlays/payloads.js";
+import type { CliShellSessionBundle } from "../../../packages/brewva-cli/src/shell/ports/session-port.js";
 import { HostedRuntimeTapeSessionStore } from "../../../packages/brewva-gateway/src/hosted/internal/session/projection/runtime-projection-session-store.js";
 import type { StoredSessionMessage } from "../../../packages/brewva-gateway/src/hosted/internal/thread-loop/runtime-session-transcript.js";
 

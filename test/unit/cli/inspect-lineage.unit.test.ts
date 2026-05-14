@@ -3,7 +3,10 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createBrewvaRuntime } from "@brewva/brewva-runtime";
-import { buildInspectReport, formatInspectText } from "../../../packages/brewva-cli/src/inspect.js";
+import {
+  buildInspectReport,
+  formatInspectText,
+} from "../../../packages/brewva-cli/src/operator/inspect.js";
 
 describe("cli inspect lineage reporting", () => {
   test("prints lineage topology and selected channels", () => {

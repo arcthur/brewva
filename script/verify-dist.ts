@@ -239,6 +239,11 @@ function main(): void {
       "@brewva/brewva-gateway/policy/model-routing",
       "@brewva/brewva-gateway/extensions",
       "@brewva/brewva-cli",
+      "@brewva/brewva-cli/entry",
+      "@brewva/brewva-cli/commands",
+      "@brewva/brewva-cli/channel",
+      "@brewva/brewva-cli/extensions",
+      "@brewva/brewva-cli/io/json-lines",
       "@brewva/brewva-gateway",
     ];
     const resolved = packages.map((name) => ({ name, path: require.resolve(name) }));
@@ -247,8 +252,27 @@ function main(): void {
         throw new Error("expected dist entrypoint, got " + entry.path);
       }
     }
-    const [cliModule, tuiModule, channelsModule, hostModule, extensionsModule, gatewayModule, runtimeChannelsModule, runtimeRecoveryModule] = await Promise.all([
+    const [
+      cliModule,
+      cliEntryModule,
+      cliCommandsModule,
+      cliChannelModule,
+      cliExtensionsModule,
+      cliJsonLinesModule,
+      tuiModule,
+      channelsModule,
+      hostModule,
+      extensionsModule,
+      gatewayModule,
+      runtimeChannelsModule,
+      runtimeRecoveryModule,
+    ] = await Promise.all([
       import("@brewva/brewva-cli"),
+      import("@brewva/brewva-cli/entry"),
+      import("@brewva/brewva-cli/commands"),
+      import("@brewva/brewva-cli/channel"),
+      import("@brewva/brewva-cli/extensions"),
+      import("@brewva/brewva-cli/io/json-lines"),
       import("@brewva/brewva-tui"),
       import("@brewva/brewva-gateway/channels"),
       import("@brewva/brewva-gateway/hosted"),
@@ -260,6 +284,11 @@ function main(): void {
         .filter(
           (name) =>
             name !== "@brewva/brewva-cli" &&
+            name !== "@brewva/brewva-cli/entry" &&
+            name !== "@brewva/brewva-cli/commands" &&
+            name !== "@brewva/brewva-cli/channel" &&
+            name !== "@brewva/brewva-cli/extensions" &&
+            name !== "@brewva/brewva-cli/io/json-lines" &&
             name !== "@brewva/brewva-tui" &&
             name !== "@brewva/brewva-gateway/channels" &&
             name !== "@brewva/brewva-gateway/hosted" &&
@@ -288,13 +317,34 @@ function main(): void {
     if (typeof cliModule.parseArgs !== "function") {
       throw new Error("cli root entry missing parseArgs export");
     }
+    if (typeof cliEntryModule.runCliRootEffect !== "function") {
+      throw new Error("cli entry subpath missing runCliRootEffect export");
+    }
+    if (typeof cliCommandsModule.runOnboardCli !== "function") {
+      throw new Error("cli commands subpath missing runOnboardCli export");
+    }
+    if (typeof cliChannelModule.handleInspectChannelCommand !== "function") {
+      throw new Error("cli channel subpath missing handleInspectChannelCommand export");
+    }
+    if (typeof cliExtensionsModule.createInspectCommandExtension !== "function") {
+      throw new Error("cli extensions subpath missing createInspectCommandExtension export");
+    }
+    if (typeof cliJsonLinesModule.writeJsonLine !== "function") {
+      throw new Error("cli json-lines subpath missing writeJsonLine export");
+    }
     if (typeof runtimeChannelsModule.normalizeChannelId !== "function") {
       throw new Error("runtime channels subpath missing normalizeChannelId export");
     }
     if (typeof runtimeRecoveryModule.createRecoveryWalStore !== "function") {
       throw new Error("runtime recovery subpath missing createRecoveryWalStore export");
     }
-    if ("createBrewvaSession" in cliModule || "registerRuntimeCoreEventBridge" in cliModule) {
+    if (
+      "createBrewvaSession" in cliModule ||
+      "registerRuntimeCoreEventBridge" in cliModule ||
+      "writeJsonLine" in cliModule ||
+      "createInspectCommandExtension" in cliModule ||
+      "handleInspectChannelCommand" in cliModule
+    ) {
       throw new Error("cli root entry unexpectedly re-exported gateway host helpers");
     }
     const cliInternalRuntime = await import("@brewva/brewva-cli/internal-shell-runtime");

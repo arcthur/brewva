@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { createCliShellState, reduceCliShellState } from "@brewva/brewva-cli/shell/state";
+import {
+  createCliShellState,
+  reduceCliShellState,
+} from "../../../packages/brewva-cli/src/shell/domain/state.js";
 
 describe("cli shell state", () => {
   test("queues priority overlays without stealing focus and restores the composer focus after the queue drains", () => {

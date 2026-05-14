@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { runOnboardCli } from "@brewva/brewva-cli";
+import { runOnboardCli } from "@brewva/brewva-cli/commands";
 
 type JsonObject = Record<string, unknown>;
 

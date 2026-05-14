@@ -21,11 +21,35 @@
       "import": "./dist/internal-shell-runtime.js",
       "default": "./dist/internal-shell-runtime.js"
     },
-    "./shell/state": {
-      "types": "./dist/shell/state/index.d.ts",
-      "bun": "./src/shell/state/index.ts",
-      "import": "./dist/shell/state/index.js",
-      "default": "./dist/shell/state/index.js"
+    "./entry": {
+      "types": "./dist/entry/main.d.ts",
+      "bun": "./src/entry/main.ts",
+      "import": "./dist/entry/main.js",
+      "default": "./dist/entry/main.js"
+    },
+    "./commands": {
+      "types": "./dist/commands/index.d.ts",
+      "bun": "./src/commands/index.ts",
+      "import": "./dist/commands/index.js",
+      "default": "./dist/commands/index.js"
+    },
+    "./channel": {
+      "types": "./dist/commands/channel-handlers/index.d.ts",
+      "bun": "./src/commands/channel-handlers/index.ts",
+      "import": "./dist/commands/channel-handlers/index.js",
+      "default": "./dist/commands/channel-handlers/index.js"
+    },
+    "./extensions": {
+      "types": "./dist/commands/shell-extensions/index.d.ts",
+      "bun": "./src/commands/shell-extensions/index.ts",
+      "import": "./dist/commands/shell-extensions/index.js",
+      "default": "./dist/commands/shell-extensions/index.js"
+    },
+    "./io/json-lines": {
+      "types": "./dist/io/json-lines.d.ts",
+      "bun": "./src/io/json-lines.ts",
+      "import": "./dist/io/json-lines.js",
+      "default": "./dist/io/json-lines.js"
     }
   },
   "dependencies": {

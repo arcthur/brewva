@@ -13,11 +13,9 @@ import type {
   BrewvaQueuedPromptView,
   BrewvaPromptSessionEvent,
 } from "@brewva/brewva-substrate/session";
-import {
-  createOperatorSurfacePort,
-  createSessionViewPort,
-} from "../../../packages/brewva-cli/src/shell/adapters/ports.js";
-import type { CliShellSessionBundle } from "../../../packages/brewva-cli/src/shell/types.js";
+import { createOperatorSurfacePort } from "../../../packages/brewva-cli/src/shell/ports/operator-adapter.js";
+import { createSessionViewPort } from "../../../packages/brewva-cli/src/shell/ports/session-adapter.js";
+import type { CliShellSessionBundle } from "../../../packages/brewva-cli/src/shell/ports/session-port.js";
 import { HostedRuntimeTapeSessionStore } from "../../../packages/brewva-gateway/src/hosted/internal/session/projection/runtime-projection-session-store.js";
 import type { StoredSessionMessage } from "../../../packages/brewva-gateway/src/hosted/internal/thread-loop/runtime-session-transcript.js";
 import {

@@ -34,4 +34,4 @@
 
 ## Superseded by
 
-- None.
+- `docs/research/decisions/cli-tui-experience-ring-decomposition-and-shell-port-boundaries.md` supersedes the renderer contract portions of this decision.

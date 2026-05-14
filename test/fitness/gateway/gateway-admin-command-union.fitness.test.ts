@@ -32,7 +32,7 @@ describe("gateway admin command union", () => {
     const adminCli = readRepoFile("packages/brewva-gateway/src/admin/internal/cli.ts");
     const ingressApi = readRepoFile("packages/brewva-gateway/src/ingress/api.ts");
     const ingressWiring = readRepoFile("packages/brewva-gateway/src/ingress/wiring.ts");
-    const cliEntry = readRepoFile("packages/brewva-cli/src/index.ts");
+    const cliEntry = readRepoFile("packages/brewva-cli/src/entry/main.ts");
     expect(adminApi).toContain('from "./internal/cli.js"');
     expect(adminWiring).toContain('from "./internal/cli.js"');
     expect(adminCli).toContain("resolveGatewayAdminCommand");

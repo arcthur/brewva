@@ -3,15 +3,15 @@
 import type { BrewvaToolDefinition } from "@brewva/brewva-substrate/tools";
 import { renderOpenTuiScrollbackLines } from "@brewva/brewva-tui/internal-opentui-runtime";
 import { For } from "solid-js";
-import type { CliShellRuntime } from "../../src/shell/runtime.js";
+import type { ShellRendererController } from "../../src/shell/domain/renderer-contract.js";
 import { createPalette } from "./palette.js";
 import { ShellRenderProvider } from "./render-context.js";
 import { createToolRenderCache, type ToolRenderCache } from "./tool-render.js";
 import { TranscriptMessageView } from "./transcript.js";
 
 function TranscriptScrollbackDocument(input: {
-  runtime: CliShellRuntime;
-  messages: ReturnType<CliShellRuntime["getViewState"]>["transcript"]["messages"];
+  runtime: ShellRendererController;
+  messages: ReturnType<ShellRendererController["getViewState"]>["transcript"]["messages"];
   toolDefinitions: ReadonlyMap<string, BrewvaToolDefinition>;
   toolRenderCache: ToolRenderCache;
   width: number;
@@ -50,7 +50,7 @@ function TranscriptScrollbackDocument(input: {
 }
 
 export async function renderCliTranscriptScrollbackLines(input: {
-  runtime: CliShellRuntime;
+  runtime: ShellRendererController;
   width: number;
   toolRenderCache?: ToolRenderCache;
 }): Promise<string[]> {

@@ -2,14 +2,19 @@
 
 import { truncateToWidth, visibleWidth } from "@brewva/brewva-tui";
 import type { OpenTuiTextareaHandle } from "@brewva/brewva-tui/internal-opentui-runtime";
-import { SyntaxStyle, decodePasteBytes, type BoxRenderable, type PasteEvent } from "@opentui/core";
 import { For, Show, createMemo } from "solid-js";
 import {
   cloneCliShellPromptParts,
   rebasePromptPartsAfterTextReplace,
-} from "../../src/shell/prompt-parts.js";
-import type { CliShellRuntime } from "../../src/shell/runtime.js";
-import type { CliShellViewState } from "../../src/shell/state/index.js";
+} from "../../src/shell/domain/prompt-parts.js";
+import type { ShellRendererController } from "../../src/shell/domain/renderer-contract.js";
+import type { ShellViewModel } from "../../src/shell/domain/view-model.js";
+import {
+  SyntaxStyle,
+  decodePasteBytes,
+  type BoxRenderable,
+  type PasteEvent,
+} from "../opentui/index.js";
 import { SPLIT_BORDER_CHARS, type SessionPalette } from "./palette.js";
 import {
   completionItemAuxText,
@@ -66,10 +71,10 @@ function summarizeQueuedPrompt(text: string, width: number): string {
 }
 
 export function PromptPanel(input: {
-  runtime: CliShellRuntime;
-  composer: CliShellViewState["composer"];
-  queue: CliShellViewState["queue"];
-  status: CliShellViewState["status"];
+  runtime: ShellRendererController;
+  composer: ShellViewModel["composer"];
+  queue: ShellViewModel["queue"];
+  status: ShellViewModel["status"];
   overlayActive: boolean;
   theme: SessionPalette;
   width: number;
@@ -249,11 +254,12 @@ export function PromptPanel(input: {
                   },
                 },
               );
-              input.runtime.syncComposerFromEditor(
-                node.plainText,
-                textOffsetFromLogicalCursor(node.plainText, node.logicalCursor),
-                nextParts,
-              );
+              void input.runtime.handleInput({
+                type: "composer.editorSync",
+                text: node.plainText,
+                cursor: textOffsetFromLogicalCursor(node.plainText, node.logicalCursor),
+                parts: nextParts,
+              });
             }}
             placeholder="Ask Brewva or type / for commands"
             minHeight={1}

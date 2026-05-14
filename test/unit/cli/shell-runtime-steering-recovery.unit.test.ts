@@ -19,13 +19,13 @@ import type {
   BrewvaShellViewPreferences,
   BrewvaSteerOutcome,
 } from "@brewva/brewva-substrate/session";
-import { CliShellRuntime } from "../../../packages/brewva-cli/src/shell/runtime.js";
+import { CliShellRuntime } from "../../../packages/brewva-cli/src/shell/controller/shell-runtime.js";
 import type {
-  CliShellSessionBundle,
   ProviderAuthMethod,
   ProviderConnectionDescriptor,
   ProviderOAuthAuthorization,
-} from "../../../packages/brewva-cli/src/shell/types.js";
+} from "../../../packages/brewva-cli/src/shell/domain/overlays/payloads.js";
+import type { CliShellSessionBundle } from "../../../packages/brewva-cli/src/shell/ports/session-port.js";
 import { patchDateNow } from "../../helpers/global-state.js";
 import {
   createPromptMessageUpdateEvent,
@@ -541,20 +541,25 @@ describe("shell runtime: steering and recovery", () => {
     const token = "[Pasted ~3 lines]";
     const text = `review ${token} now`;
     const pastedText = "line one\nline two\nline three";
-    runtime.syncComposerFromEditor(text, text.length, [
-      {
-        id: "text-part-1",
-        type: "text",
-        text: pastedText,
-        source: {
-          text: {
-            start: "review ".length,
-            end: "review ".length + token.length,
-            value: token,
+    await runtime.handleInput({
+      type: "composer.editorSync",
+      text,
+      cursor: text.length,
+      parts: [
+        {
+          id: "text-part-1",
+          type: "text",
+          text: pastedText,
+          source: {
+            text: {
+              start: "review ".length,
+              end: "review ".length + token.length,
+              value: token,
+            },
           },
         },
-      },
-    ]);
+      ],
+    });
 
     await runtime.handleInput({
       key: "enter",

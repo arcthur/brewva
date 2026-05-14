@@ -16,10 +16,10 @@
   - `packages/brewva-gateway/src/hosted/internal/session/managed-agent/session.ts`
   - `packages/brewva-substrate/src/session/prompt-session.ts`
   - `packages/brewva-substrate/src/session/session-host.ts`
-  - `packages/brewva-cli/src/shell/types.ts`
-  - `packages/brewva-cli/src/shell/state/index.ts`
-  - `packages/brewva-cli/src/shell/runtime.ts`
-  - `packages/brewva-cli/src/shell/overlay-view.ts`
+  - `packages/brewva-cli/src/shell/domain/state.ts`
+  - `packages/brewva-cli/src/shell/domain/state.ts`
+  - `packages/brewva-cli/src/shell/controller/shell-runtime.ts`
+  - `packages/brewva-cli/src/shell/domain/overlays/projectors/index.ts`
 
 ## Decision Summary
 

@@ -28,13 +28,13 @@ import {
 import { createPalette } from "../../../packages/brewva-cli/runtime/shell/palette.js";
 import { ToastStrip } from "../../../packages/brewva-cli/runtime/shell/toast.js";
 import { createToolRenderCache } from "../../../packages/brewva-cli/runtime/shell/tool-render.js";
-import { CliShellRuntime } from "../../../packages/brewva-cli/src/shell/runtime.js";
+import { CliShellRuntime } from "../../../packages/brewva-cli/src/shell/controller/shell-runtime.js";
 import type {
-  CliShellSessionBundle,
   ProviderAuthMethod,
   ProviderConnectionDescriptor,
   ProviderOAuthAuthorization,
-} from "../../../packages/brewva-cli/src/shell/types.js";
+} from "../../../packages/brewva-cli/src/shell/domain/overlays/payloads.js";
+import type { CliShellSessionBundle } from "../../../packages/brewva-cli/src/shell/ports/session-port.js";
 
 interface OpenTuiTestRenderableInspector {
   getChildren(): unknown[];
@@ -1187,7 +1187,7 @@ describe("opentui solid shell runtime: render regression", () => {
       expect(frame).not.toContain("leak:first");
 
       await openTuiSolidAct(async () => {
-        await runtime.openSessionById("session-2");
+        await runtime.handleInput({ type: "session.open", sessionId: "session-2" });
       });
       await testSetup.renderOnce();
       await testSetup.renderOnce();

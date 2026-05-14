@@ -5,9 +5,8 @@ import type {
 } from "@brewva/brewva-tui/internal-opentui-runtime";
 import { onCleanup } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
-import type { ShellCompletionCandidate } from "../../src/shell/completion-provider.js";
-import type { CliShellRuntime } from "../../src/shell/runtime.js";
-import type { CliShellNotification, CliShellViewState } from "../../src/shell/state/index.js";
+import type { ShellCompletionCandidate } from "../../src/shell/domain/completion-provider.js";
+import type { CliShellInput } from "../../src/shell/domain/input.js";
 import type {
   CliApprovalOverlayPayload,
   CliConfirmOverlayPayload,
@@ -18,12 +17,13 @@ import type {
   CliQuestionOverlayPayload,
   CliSelectOverlayPayload,
   CliSessionsOverlayPayload,
-  CliShellInput,
   CliShellOverlayPayload,
   CliTasksOverlayPayload,
-} from "../../src/shell/types.js";
+} from "../../src/shell/domain/overlays/payloads.js";
+import type { ShellRendererController } from "../../src/shell/domain/renderer-contract.js";
+import type { CliShellNotification, ShellViewModel } from "../../src/shell/domain/view-model.js";
 
-export function useShellState(runtime: CliShellRuntime): CliShellViewState {
+export function useShellState(runtime: ShellRendererController): ShellViewModel {
   const [state, setState] = createStore(runtime.getViewState());
   const unsubscribe = runtime.subscribe(() => {
     setState(reconcile(runtime.getViewState()));
@@ -199,7 +199,7 @@ export function renderNotificationSummary(notification: CliShellNotification): s
 }
 
 export function completionKindLabel(
-  trigger: NonNullable<CliShellViewState["composer"]["completion"]>["trigger"],
+  trigger: NonNullable<ShellViewModel["composer"]["completion"]>["trigger"],
 ): string {
   return trigger === "/" ? "command" : "reference";
 }
@@ -267,21 +267,29 @@ export function readTranscriptScrollMetrics(scrollbox: OpenTuiScrollBoxHandle): 
 }
 
 export function syncTranscriptStateFromScrollbox(
-  runtime: CliShellRuntime,
+  runtime: ShellRendererController,
   scrollbox: OpenTuiScrollBoxHandle,
 ): void {
   const { maxScrollTop, currentOffset } = readTranscriptScrollMetrics(scrollbox);
   if (currentOffset <= 1 || maxScrollTop === 0) {
-    runtime.syncTranscriptScrollState("live", 0);
+    void runtime.handleInput({
+      type: "transcript.scrollSync",
+      followMode: "live",
+      scrollOffset: 0,
+    });
     return;
   }
-  runtime.syncTranscriptScrollState("scrolled", currentOffset);
+  void runtime.handleInput({
+    type: "transcript.scrollSync",
+    followMode: "scrolled",
+    scrollOffset: currentOffset,
+  });
 }
 
 export function applyTranscriptNavigationRequest(input: {
-  runtime: CliShellRuntime;
+  runtime: ShellRendererController;
   scrollbox: OpenTuiScrollBoxHandle;
-  request: NonNullable<CliShellViewState["transcript"]["navigationRequest"]>;
+  request: NonNullable<ShellViewModel["transcript"]["navigationRequest"]>;
 }): void {
   const pageStep = Math.max(1, Math.floor(Math.max(2, input.scrollbox.viewport.height) / 2));
 
@@ -310,7 +318,10 @@ export function applyTranscriptNavigationRequest(input: {
   }
 
   syncTranscriptStateFromScrollbox(input.runtime, input.scrollbox);
-  input.runtime.acknowledgeTranscriptNavigation(input.request.id);
+  void input.runtime.handleInput({
+    type: "transcript.navigationAck",
+    requestId: input.request.id,
+  });
 }
 
 export type {

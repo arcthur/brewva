@@ -1,9 +1,12 @@
 /** @jsxImportSource @opentui/solid */
 
 import type { OpenTuiScrollBoxHandle } from "@brewva/brewva-tui/internal-opentui-runtime";
-import { useTerminalDimensions } from "@opentui/solid";
 import type { JSX } from "solid-js";
 import { For, Show, createEffect, createMemo } from "solid-js";
+import type {
+  CliApprovalOverlayPayload,
+  CliQuestionOverlayPayload,
+} from "../../src/shell/domain/overlays/payloads.js";
 import {
   countQuestionRequestKinds,
   isImmediateQuestionRequest,
@@ -11,17 +14,14 @@ import {
   resolveQuestionOverlayTitle,
   questionRequestsFromOverlay,
   questionTabCount,
-} from "../../src/shell/question-utils.js";
-import type { CliShellRuntime } from "../../src/shell/runtime.js";
+} from "../../src/shell/domain/question-utils.js";
+import type { ShellRendererController } from "../../src/shell/domain/renderer-contract.js";
 import {
   buildTrustLoopApprovalEmptyProjection,
   buildTrustLoopApprovalProjection,
   type TrustLoopDetailKey,
-} from "../../src/shell/trust-loop/projection.js";
-import type {
-  CliApprovalOverlayPayload,
-  CliQuestionOverlayPayload,
-} from "../../src/shell/types.js";
+} from "../../src/shell/domain/trust-loop/projection.js";
+import { useTerminalDimensions } from "../opentui/index.js";
 import { DiffView, formatDiffFileTitle } from "./diff-view.js";
 import { DIALOG_Z_INDEX } from "./overlay-style.js";
 import { DEFAULT_SCROLL_ACCELERATION, SPLIT_BORDER_CHARS, type SessionPalette } from "./palette.js";
@@ -255,7 +255,7 @@ function InlinePromptCard(input: {
 }
 
 export function InlineApprovalPrompt(input: {
-  runtime: CliShellRuntime;
+  runtime: ShellRendererController;
   payload: CliApprovalOverlayPayload;
   theme: SessionPalette;
   transcriptWidth: number;
@@ -521,7 +521,7 @@ export function InlineApprovalPrompt(input: {
 }
 
 export function InlineQuestionPrompt(input: {
-  runtime: CliShellRuntime;
+  runtime: ShellRendererController;
   payload: CliQuestionOverlayPayload;
   theme: SessionPalette;
 }) {

@@ -10,7 +10,7 @@ import {
   createInMemoryCompletionUsageStore,
   createWorkspaceReferenceCompletionSource,
   type ShellCompletionRange,
-} from "../../../packages/brewva-cli/src/shell/completion-provider.js";
+} from "../../../packages/brewva-cli/src/shell/domain/completion-provider.js";
 import { requireDefined } from "../../helpers/assertions.js";
 
 function completionRange(trigger: "/" | "@", query: string): ShellCompletionRange {

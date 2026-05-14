@@ -11,9 +11,9 @@ import {
   readMessageRole,
   readMessageStopReason,
   readToolResultMessage,
-} from "../../message-content.js";
-import type { ShellCommitOptions } from "../shell-actions.js";
-import type { CliShellAction } from "../state/index.js";
+} from "../../io/message-content.js";
+import type { ShellCommitOptions } from "../domain/actions.js";
+import type { CliShellAction } from "../domain/state.js";
 import {
   buildSeedTranscriptMessages,
   buildTextTranscriptMessage,
@@ -21,14 +21,14 @@ import {
   upsertToolExecutionIntoTranscriptMessages,
   type CliShellTranscriptMessage,
   type CliShellTranscriptToolStatus,
-} from "../transcript.js";
+} from "../domain/transcript.js";
 import {
   buildTrustLoopSessionProjection,
   buildTrustLoopToolProjection,
   isTrustLoopToolExecutionPhase,
   type TrustLoopToolProjection,
-} from "../trust-loop/projection.js";
-import type { CliShellUiPort } from "../types.js";
+} from "../domain/trust-loop/projection.js";
+import type { CliShellUiPort } from "../ports/ui-port.js";
 
 export interface ShellTranscriptProjectorContext {
   getMessages(): readonly CliShellTranscriptMessage[];

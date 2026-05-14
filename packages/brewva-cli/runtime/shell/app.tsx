@@ -6,23 +6,25 @@ import type {
   OpenTuiScrollBoxHandle,
   OpenTuiTextareaHandle,
 } from "@brewva/brewva-tui/internal-opentui-runtime";
-import { decodePasteBytes, type BoxRenderable, type PasteEvent } from "@opentui/core";
-import { useKeyboard, usePaste, useTerminalDimensions } from "@opentui/solid";
 import { Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
 import { For } from "solid-js";
 import {
   buildPromptPartSignature,
   cloneCliShellPromptParts,
-} from "../../src/shell/prompt-parts.js";
-import type { CliShellRuntime } from "../../src/shell/runtime.js";
-import type { CliShellPromptPart } from "../../src/shell/types.js";
-import type {
-  CliApprovalOverlayPayload,
-  CliQuestionOverlayPayload,
-} from "../../src/shell/types.js";
+} from "../../src/shell/domain/prompt-parts.js";
+import type { CliShellPromptPart } from "../../src/shell/domain/prompt.js";
+import type { ShellRendererController } from "../../src/shell/domain/renderer-contract.js";
+import {
+  decodePasteBytes,
+  type BoxRenderable,
+  type PasteEvent,
+  useKeyboard,
+  usePaste,
+  useTerminalDimensions,
+} from "../opentui/index.js";
 import { CompletionOverlay } from "./completion.js";
 import { InlineApprovalPrompt, InlineQuestionPrompt } from "./inline-cards.js";
-import { ModalOverlay } from "./overlay.js";
+import { ModalOverlay } from "./overlays/modal-overlay.js";
 import { createPalette, DEFAULT_SCROLL_ACCELERATION } from "./palette.js";
 import { PromptPanel, createPromptPartStyle } from "./prompt.js";
 import { ShellRenderProvider } from "./render-context.js";
@@ -45,7 +47,7 @@ import {
 } from "./utils.js";
 
 export function BrewvaOpenTuiShell(input: {
-  runtime: CliShellRuntime;
+  runtime: ShellRendererController;
   toolRenderCache?: ToolRenderCache;
   renderer?: OpenTuiRenderer;
   copyTextToClipboard?: ClipboardCopy;
@@ -159,7 +161,11 @@ export function BrewvaOpenTuiShell(input: {
   };
 
   createEffect(() => {
-    input.runtime.setViewportSize(dimensions().width, dimensions().height);
+    void input.runtime.handleInput({
+      type: "viewport.resize",
+      columns: dimensions().width,
+      rows: dimensions().height,
+    });
   });
 
   const copySelection = async (): Promise<boolean> =>
@@ -213,7 +219,11 @@ export function BrewvaOpenTuiShell(input: {
     const { maxScrollTop, currentOffset } = readTranscriptScrollMetrics(node);
     if (state.transcript.followMode === "live") {
       if (currentOffset > 1 && node.scrollHeight > node.viewport.height) {
-        input.runtime.syncTranscriptScrollState("scrolled", currentOffset);
+        void input.runtime.handleInput({
+          type: "transcript.scrollSync",
+          followMode: "scrolled",
+          scrollOffset: currentOffset,
+        });
         return;
       }
       node.stickyScroll = true;
@@ -223,11 +233,19 @@ export function BrewvaOpenTuiShell(input: {
     }
 
     if (currentOffset <= 1 && maxScrollTop > 0) {
-      input.runtime.syncTranscriptScrollState("live", 0);
+      void input.runtime.handleInput({
+        type: "transcript.scrollSync",
+        followMode: "live",
+        scrollOffset: 0,
+      });
       return;
     }
     if (Math.abs(currentOffset - state.transcript.scrollOffset) > 1) {
-      input.runtime.syncTranscriptScrollState("scrolled", currentOffset);
+      void input.runtime.handleInput({
+        type: "transcript.scrollSync",
+        followMode: "scrolled",
+        scrollOffset: currentOffset,
+      });
       return;
     }
     node.stickyScroll = false;
@@ -282,11 +300,12 @@ export function BrewvaOpenTuiShell(input: {
       if (node.isDestroyed) {
         return;
       }
-      input.runtime.syncComposerFromEditor(
-        node.plainText,
-        textOffsetFromLogicalCursor(node.plainText, node.logicalCursor),
-        readPromptPartsFromExtmarks(node),
-      );
+      void input.runtime.handleInput({
+        type: "composer.editorSync",
+        text: node.plainText,
+        cursor: textOffsetFromLogicalCursor(node.plainText, node.logicalCursor),
+        parts: readPromptPartsFromExtmarks(node),
+      });
     };
     node.editBuffer.on("content-changed", syncFromEditor);
     node.editBuffer.on("cursor-changed", syncFromEditor);
@@ -378,16 +397,14 @@ export function BrewvaOpenTuiShell(input: {
   const lineageLabel = createMemo(
     () => state.status.entries.lineage ?? input.runtime.getSessionIdentity().lineageLabel ?? "",
   );
-  const inlineApproval = createMemo(() =>
-    activeOverlay()?.payload?.kind === "approval"
-      ? (activeOverlay()!.payload as CliApprovalOverlayPayload)
-      : undefined,
-  );
-  const inlineQuestion = createMemo(() =>
-    activeOverlay()?.payload?.kind === "question"
-      ? (activeOverlay()!.payload as CliQuestionOverlayPayload)
-      : undefined,
-  );
+  const inlineApproval = createMemo(() => {
+    const payload = activeOverlay()?.payload;
+    return payload?.kind === "approval" ? payload : undefined;
+  });
+  const inlineQuestion = createMemo(() => {
+    const payload = activeOverlay()?.payload;
+    return payload?.kind === "question" ? payload : undefined;
+  });
   const lastAssistantId = createMemo(() => {
     const messages = state.transcript.messages;
     for (let index = messages.length - 1; index >= 0; index -= 1) {

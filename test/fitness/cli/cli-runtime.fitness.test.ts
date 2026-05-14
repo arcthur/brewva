@@ -11,7 +11,14 @@ describe("cli contract: Brewva-native runtime boundary", () => {
   test("keeps Pi interactive runtime and Pi session bridges out of the cli runtime path", () => {
     const repoRoot = resolve(import.meta.dirname, "../../..");
     const indexPath = resolve(repoRoot, "packages", "brewva-cli", "src", "index.ts");
-    const runtimePath = resolve(repoRoot, "packages", "brewva-cli", "src", "cli-runtime.ts");
+    const runtimePath = resolve(
+      repoRoot,
+      "packages",
+      "brewva-cli",
+      "src",
+      "session",
+      "cli-runtime.ts",
+    );
     const runtimeEntryPath = resolve(
       repoRoot,
       "packages",
@@ -140,7 +147,11 @@ describe("cli contract: Brewva-native runtime boundary", () => {
     expect(indexSource).not.toContain("./pi-cli-runtime");
     expect(indexSource).not.toContain("toPiCliSession(");
     expect(indexSource).not.toContain("PI_SKIP_VERSION_CHECK");
-    expect(indexSource).toContain("@brewva/brewva-cli/internal-shell-runtime");
+    const entrySource = readFileSync(
+      resolve(repoRoot, "packages", "brewva-cli", "src", "entry", "main.ts"),
+      "utf8",
+    );
+    expect(entrySource).toContain("@brewva/brewva-cli/internal-shell-runtime");
 
     expect(runtimeSource).not.toContain('from "@mariozechner/pi-coding-agent"');
     expect(runtimeSource).not.toContain("toPiCliSession(");

@@ -1,15 +1,18 @@
 /** @jsxImportSource @opentui/solid */
 
 import type { BrewvaToolDefinition } from "@brewva/brewva-substrate/tools";
-import { useRenderer } from "@opentui/solid";
 import type { JSX } from "solid-js";
 import { For, Index, Match, Show, Switch, createEffect, createMemo, createSignal } from "solid-js";
 import type {
   CliShellTranscriptMessage,
   CliShellTranscriptPart,
   CliShellTranscriptToolPart,
-} from "../../src/shell/transcript.js";
-import { formatTrustLoopTitle, type TrustLoopTone } from "../../src/shell/trust-loop/projection.js";
+} from "../../src/shell/domain/transcript.js";
+import {
+  formatTrustLoopTitle,
+  type TrustLoopTone,
+} from "../../src/shell/domain/trust-loop/projection.js";
+import { useRenderer } from "../opentui/index.js";
 import { DiffView, formatDiffFileTitle } from "./diff-view.js";
 import { MarkdownTranscriptBlock } from "./markdown-transcript-block.js";
 import { MermaidBlock } from "./mermaid/mermaid-block.js";
@@ -657,7 +660,7 @@ function GenericToolView(input: {
     if (!sessionId) {
       return;
     }
-    void shellContext.runtime.openSessionById(sessionId);
+    void shellContext.runtime.handleInput({ type: "session.open", sessionId });
   };
   const workerSessionHint = createMemo(() =>
     workerSessionId() ? "Click to open worker session" : undefined,

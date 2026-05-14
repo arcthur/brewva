@@ -4,7 +4,7 @@ import type {
   BrewvaRenderableComponent,
   BrewvaToolDefinition,
 } from "@brewva/brewva-substrate/tools";
-import type { CliShellTranscriptToolPart } from "../../src/shell/transcript.js";
+import type { CliShellTranscriptToolPart } from "../../src/shell/domain/transcript.js";
 import type { SessionPalette } from "./palette.js";
 
 export interface ToolRenderCache {

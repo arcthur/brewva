@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { createUpdateCommandExtension } from "@brewva/brewva-cli";
+import { createUpdateCommandExtension } from "@brewva/brewva-cli/extensions";
 import type { HostedExtensionApi } from "@brewva/brewva-gateway/extensions";
 import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";

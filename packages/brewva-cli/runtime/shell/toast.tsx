@@ -1,8 +1,8 @@
 /** @jsxImportSource @opentui/solid */
 
-import { useTerminalDimensions } from "@opentui/solid";
 import { Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
-import type { CliShellNotification } from "../../src/shell/state/index.js";
+import type { CliShellNotification } from "../../src/shell/domain/view-model.js";
+import { useTerminalDimensions } from "../opentui/index.js";
 import { TOAST_Z_INDEX, resolveToastMaxWidth } from "./overlay-style.js";
 import { SPLIT_BORDER_CHARS, type SessionPalette } from "./palette.js";
 import { renderNotificationSummary } from "./utils.js";

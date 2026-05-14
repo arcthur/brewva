@@ -1,0 +1,132 @@
+import { parseArgs as parseNodeArgs } from "node:util";
+import { createBrewvaRuntime, selectOperatorRuntimePort } from "@brewva/brewva-runtime";
+import { loadBrewvaInspectConfigResolution } from "@brewva/brewva-runtime/config";
+import { createTrustedLocalGovernancePort } from "@brewva/brewva-runtime/governance";
+import { resolveInspectDirectory, type InspectDirectory } from "../inspect-analysis.js";
+import { printInspectText, formatInspectText } from "./output.js";
+import {
+  buildInspectReport,
+  buildSessionInspectReport,
+  resolveTargetSession,
+  type InspectReport,
+  type SessionInspectReport,
+} from "./report.js";
+
+const INSPECT_PARSE_OPTIONS = {
+  help: { type: "boolean", short: "h" },
+  cwd: { type: "string" },
+  config: { type: "string" },
+  session: { type: "string" },
+  dir: { type: "string" },
+  json: { type: "boolean" },
+} as const;
+
+function printInspectHelp(): void {
+  console.log(`Brewva Inspect - replay-first session inspection with deterministic analysis
+
+Usage:
+  brewva inspect [directory] [options]
+
+Options:
+  --cwd <path>       Working directory
+  --config <path>    Brewva config path (default: forensic merge of global + workspace config)
+  --session <id>     Inspect a specific replay session
+  --dir <path>       Target directory for deterministic analysis (alternative to positional argument)
+  --json             Emit JSON output
+  -h, --help         Show help
+
+Examples:
+  brewva inspect
+  brewva inspect packages/brewva-runtime/src
+  brewva inspect --dir packages/brewva-cli/src
+  brewva inspect --session <session-id>
+  brewva inspect --json --session <session-id>`);
+}
+
+export async function runInspectCli(argv: string[]): Promise<number> {
+  let parsed: ReturnType<typeof parseNodeArgs>;
+  try {
+    parsed = parseNodeArgs({
+      args: argv,
+      options: INSPECT_PARSE_OPTIONS,
+      allowPositionals: true,
+      strict: true,
+    });
+  } catch (error) {
+    console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
+    return 1;
+  }
+
+  if (parsed.values.help === true) {
+    printInspectHelp();
+    return 0;
+  }
+  if (parsed.positionals.length > 1) {
+    console.error(
+      `Error: unexpected positional args for inspect: ${parsed.positionals.slice(1).join(" ")}`,
+    );
+    return 1;
+  }
+
+  const configPath = typeof parsed.values.config === "string" ? parsed.values.config : undefined;
+  const configLoad = loadBrewvaInspectConfigResolution({
+    cwd: typeof parsed.values.cwd === "string" ? parsed.values.cwd : undefined,
+    configPath,
+  });
+  const runtime = createBrewvaRuntime({
+    cwd: typeof parsed.values.cwd === "string" ? parsed.values.cwd : undefined,
+    config: configLoad.config,
+    governancePort: createTrustedLocalGovernancePort({ profile: "personal" }),
+  });
+  const operatorRuntime = selectOperatorRuntimePort(runtime);
+  const targetSessionId = resolveTargetSession(
+    operatorRuntime,
+    typeof parsed.values.session === "string" ? parsed.values.session : undefined,
+  );
+  if (!targetSessionId) {
+    console.error("Error: no replayable session found.");
+    return 1;
+  }
+
+  let directory: InspectDirectory;
+  try {
+    directory = resolveInspectDirectory(
+      operatorRuntime,
+      typeof parsed.positionals[0] === "string" ? parsed.positionals[0] : undefined,
+      typeof parsed.values.dir === "string" ? parsed.values.dir : undefined,
+    );
+  } catch (error) {
+    console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
+    return 1;
+  }
+
+  const report = buildInspectReport(operatorRuntime, targetSessionId, {
+    directory,
+    configLoad: {
+      mode: typeof parsed.values.config === "string" ? "explicit" : "forensic_default",
+      paths: [...configLoad.consultedPaths],
+      warningCount: configLoad.warnings.length,
+      warnings: configLoad.warnings.map((warning) => ({
+        code: warning.code,
+        configPath: warning.configPath,
+        message: warning.message,
+        fields: [...(warning.fields ?? [])],
+      })),
+    },
+  });
+  if (parsed.values.json === true) {
+    console.log(JSON.stringify(report, null, 2));
+  } else {
+    printInspectText(report);
+  }
+  return 0;
+}
+
+export {
+  buildInspectReport,
+  buildSessionInspectReport,
+  formatInspectText,
+  resolveInspectDirectory,
+  resolveTargetSession,
+};
+export type { InspectReport, SessionInspectReport };
