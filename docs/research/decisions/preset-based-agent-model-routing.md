@@ -2,7 +2,7 @@
 
 ## Metadata
 
-- Decision: Presets are hosted settings, not kernel `BrewvaConfig`. Hosted settings accept `modelPresets` and `defaultModelPreset`; malformed preset names, preset objects, model strings, and subagent model maps fail settings validation instead of being silently normalized away.
+- Decision: Presets are hosted settings, not kernel `BrewvaConfig`. Hosted settings accept `modelPresets` and `defaultModelPreset`; malformed preset names, preset objects, model strings, subagent model maps, and auxiliary model maps fail settings validation instead of being silently normalized away.
 - Date: `2026-04-30`
 - Status: accepted
 - Stable docs:
@@ -23,8 +23,9 @@
 
 ## Decision Summary
 
-- Presets are hosted settings, not kernel `BrewvaConfig`. Hosted settings accept `modelPresets` and `defaultModelPreset`; malformed preset names, preset objects, model strings, and subagent model maps fail settings validation instead of being silently normalized away.
+- Presets are hosted settings, not kernel `BrewvaConfig`. Hosted settings accept `modelPresets` and `defaultModelPreset`; malformed preset names, preset objects, model strings, subagent model maps, and auxiliary model maps fail settings validation instead of being silently normalized away.
 - Main-session routing resolves in this order: explicit launch override, active preset `mainModel`, restored session model, provider/catalog fallback.
+- Auxiliary title generation resolves in this order: active preset `auxiliaryModels.title`, active preset `mainModel`, current session model.
 - Delegated subagent routing resolves in this order: replayed/preselected route, diagnostic explicit route, active preset `subagentModels[resolvedAgentSpec]`, active preset `mainModel` inheritance, policy route, parent/default fallback.
 - Replay owns active preset state. `model_preset_select` events carry the active preset snapshot. Current settings may add future switch targets, but they do not rewrite historical replay decisions. Sessions with no preset-selection events inspect and route as synthetic `Default`.
 - Preset thinking suffixes are session-local. Selecting a preset with a suffix such as `openai/gpt-5.5:xhigh` applies that thinking level to the current session without rewriting `defaultThinkingLevel`.

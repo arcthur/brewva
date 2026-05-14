@@ -58,6 +58,7 @@ import {
   type EventPipelineService,
   type RuntimeRecordEvent,
   type SessionLifecycleService,
+  type SessionTitleService,
   type SessionLifecycleSnapshot,
   type SessionLineageService,
   type SessionRewindService,
@@ -112,6 +113,7 @@ export interface RuntimeServiceDependencies {
   eventPipeline: EventPipelineService;
   toolLifecycleRecoveryWalService: ToolLifecycleRecoveryWalService;
   sessionLifecycleService: SessionLifecycleService;
+  sessionTitleService: SessionTitleService;
   sessionLineageService: SessionLineageService;
   reversibleMutationService: ReversibleMutationService;
   getTapeService(): TapeService;
@@ -174,6 +176,7 @@ export interface RuntimeSessionServices {
   eventPipeline: EventPipelineService;
   toolLifecycleRecoveryWalService: ToolLifecycleRecoveryWalService;
   sessionLifecycleService: SessionLifecycleService;
+  sessionTitleService: SessionTitleService;
   sessionLineageService: SessionLineageService;
   getTapeService(): TapeService;
 }
@@ -344,6 +347,7 @@ export function registerRuntimeServiceDependencies(
     eventPipeline: sessionServices.eventPipeline,
     toolLifecycleRecoveryWalService: sessionServices.toolLifecycleRecoveryWalService,
     sessionLifecycleService: sessionServices.sessionLifecycleService,
+    sessionTitleService: sessionServices.sessionTitleService,
     sessionLineageService: sessionServices.sessionLineageService,
     reversibleMutationService,
     getTapeService: () => sessionServices.getTapeService(),

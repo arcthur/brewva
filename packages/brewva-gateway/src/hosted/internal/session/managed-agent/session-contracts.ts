@@ -37,6 +37,7 @@ import type {
 import type { BrewvaCompactionSummaryGenerator } from "../../compaction/summary-generator.js";
 import type { GoogleCachedContentManager } from "../../provider/cache/index.js";
 import type { HostedSessionLogger } from "../../shared/logger.js";
+import type { BrewvaSessionTitleGenerator } from "../title-generator.js";
 
 export const REQUIRED_HOSTED_PERSISTENCE_EVENTS = ["message_end", "session_compact"] as const;
 
@@ -97,6 +98,7 @@ export interface CreateBrewvaManagedAgentSessionOptions {
   logger?: HostedSessionLogger;
   googleCachedContentManager?: GoogleCachedContentManager;
   compactionSummaryGenerator?: BrewvaCompactionSummaryGenerator;
+  sessionTitleGenerator?: BrewvaSessionTitleGenerator;
 }
 
 type ManagedAgentSessionStoreCore = Pick<

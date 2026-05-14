@@ -5,6 +5,8 @@ import type { BrewvaRegisteredEventType } from "./registry.js";
 export type { BrewvaRegisteredEventType };
 export type {
   SessionRewindCompletedEventPayload,
+  SessionTitleRecordedPayload,
+  SessionTitleView,
   SessionUncleanShutdownReconciledPayload,
 } from "../domain/sessions/types.js";
 export type {
@@ -74,6 +76,7 @@ export interface BrewvaReplaySession {
   sessionId: BrewvaSessionId;
   eventCount: number;
   lastEventAt: number;
+  title: string;
 }
 
 export function asBrewvaEventType(value: string): BrewvaEventType {

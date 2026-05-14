@@ -351,12 +351,14 @@ export async function createHostedSessionResult(input: {
   });
 
   if (!sessionResolution.hasExistingSession) {
+    const activePreset = findModelPreset(modelPresetState);
     sessionManager.appendModelPresetSelection({
       presetName: modelPresetState.activeName,
       source: "startup",
-      mainModel: findModelPreset(modelPresetState)?.mainModel,
-      subagentModels: findModelPreset(modelPresetState)?.subagentModels,
-      synthetic: findModelPreset(modelPresetState)?.synthetic,
+      mainModel: activePreset?.mainModel,
+      subagentModels: activePreset?.subagentModels,
+      auxiliaryModels: activePreset?.auxiliaryModels,
+      synthetic: activePreset?.synthetic,
     });
     if (sessionResolution.model) {
       sessionManager.appendModelChange(

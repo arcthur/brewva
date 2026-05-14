@@ -69,6 +69,9 @@ export interface BrewvaModelPreset {
   name: string;
   mainModel?: string;
   subagentModels: Record<string, string>;
+  auxiliaryModels?: {
+    title?: string;
+  };
   synthetic?: boolean;
 }
 

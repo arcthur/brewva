@@ -10,6 +10,7 @@ export type {
   ManagedToolMode,
   OpenToolCallRecord,
   OpenTurnRecord,
+  RecordGeneratedSessionTitleInput,
   RecordSessionRewindCheckpointInput,
   SessionHydrationState,
   SessionPromptSnapshot,
@@ -17,6 +18,10 @@ export type {
   SessionRedoInput,
   SessionRedoRecord,
   SessionRedoResult,
+  SessionTitleRecordedModel,
+  SessionTitleRecordedPayload,
+  SessionTitleSource,
+  SessionTitleView,
   SessionRewindCompletedEventPayload,
   SessionRewindCheckpointRecord,
   SessionRewindCheckpointStatus,
@@ -39,6 +44,8 @@ export {
   SESSIONS_EVENT_DESCRIPTORS,
   SESSION_REWIND_COMPLETED_EVENT_DESCRIPTOR,
   SESSION_REWIND_COMPLETED_EVENT_TYPE,
+  SESSION_TITLE_RECORDED_EVENT_DESCRIPTOR,
+  SESSION_TITLE_RECORDED_EVENT_TYPE,
   SESSION_TURN_TRANSITION_EVENT_DESCRIPTOR,
   SESSION_TURN_TRANSITION_EVENT_TYPE,
   SESSION_UNCLEAN_SHUTDOWN_RECONCILED_EVENT_DESCRIPTOR,
@@ -48,11 +55,20 @@ export {
   TURN_RENDER_COMMITTED_EVENT_DESCRIPTOR,
   TURN_RENDER_COMMITTED_EVENT_TYPE,
   readSessionRewindCompletedEventPayload,
+  readSessionTitleRecordedEventPayload,
   readSessionTurnTransitionEventPayload,
   readSessionUncleanShutdownDiagnosticEventPayload,
   readTurnInputRecordedEventPayload,
   readTurnRenderCommittedEventPayload,
 } from "./event-descriptors.js";
+export {
+  DEFAULT_SESSION_TITLE,
+  SESSION_TITLE_MAX_CHARS,
+  SessionTitleService,
+  normalizeSessionTitleForStorage,
+  projectSessionReplayMetadata,
+} from "./title.js";
+export type { SessionReplayMetadata, SessionTitleServiceOptions } from "./title.js";
 export {
   CAPABILITY_STATE_RECORDED_EVENT_TYPE,
   CAPABILITY_STATE_RECORDED_EVENT_DESCRIPTOR,

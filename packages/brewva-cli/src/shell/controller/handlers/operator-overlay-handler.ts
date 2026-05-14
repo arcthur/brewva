@@ -19,7 +19,6 @@ export interface ShellOperatorOverlayHandlerContext {
   openPagerOverlay(target: PagerTarget, options?: { scrollOffset?: number }): void;
   getExternalPagerTarget(): PagerTarget | undefined;
   getCurrentSessionId(): string;
-  createSession(): Promise<void>;
   openSession(sessionId: string): Promise<void>;
   handleQuestionPrimary(
     active: Extract<CliShellOverlayPayload, { kind: "question" }>,
@@ -114,12 +113,6 @@ export class ShellOperatorOverlayHandler {
         );
         return true;
       }
-    }
-
-    if (active.kind === "sessions" && key === "n") {
-      await this.context.createSession();
-      this.context.closeActiveOverlay(false);
-      return true;
     }
 
     return false;

@@ -21,6 +21,7 @@ import { SessionLineageService } from "./lineage.js";
 import { SessionLifecycleService } from "./session-lifecycle.js";
 import { SessionRewindService } from "./session-rewind.js";
 import { SessionWireService } from "./session-wire.js";
+import { SessionTitleService } from "./title.js";
 
 function isDeclaredCapabilityStateOwner(
   ownerCapability: string,
@@ -131,6 +132,11 @@ export function registerSessionsDomain(
       isDeclaredCapabilityStateOwner(ownerCapability, options),
   });
 
+  const sessionTitleService = new SessionTitleService({
+    eventStore: options.coreDependencies.eventStore,
+    recordEvent: (input) => options.kernel.recordEvent(input),
+  });
+
   const sessionLifecycleService = new SessionLifecycleService({
     sessionState: options.sessionState,
     contextBudget: options.coreDependencies.contextBudget,
@@ -161,6 +167,7 @@ export function registerSessionsDomain(
       eventPipeline,
       toolLifecycleRecoveryWalService: recoveryDomain.services.toolLifecycleRecoveryWalService,
       sessionLifecycleService,
+      sessionTitleService,
       sessionLineageService,
       getTapeService: () => tapeDomain.services.getTapeService(),
     },

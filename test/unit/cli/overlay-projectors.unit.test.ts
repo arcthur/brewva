@@ -1,15 +1,31 @@
 import { describe, expect, test } from "bun:test";
 import { asBrewvaSessionId } from "@brewva/brewva-runtime/core";
+import type { BrewvaReplaySession } from "@brewva/brewva-runtime/events";
 import type { SessionLineageTree } from "@brewva/brewva-runtime/session";
 import type { OperatorSurfaceSnapshot } from "../../../packages/brewva-cli/src/shell/domain/operator-snapshot.js";
 import {
   buildLineageOverlayPayload,
   buildOverlayView,
   buildSessionsOverlayPayload,
+  buildSessionsOverlayRows,
   mergeSessionsOverlayRows,
   orderSessionsByStableIds,
   reconcileSessionsOverlayStableIds,
 } from "../../../packages/brewva-cli/src/shell/domain/overlays/projectors/index.js";
+
+function replaySession(
+  sessionId: string,
+  eventCount: number,
+  lastEventAt: number,
+  title = sessionId,
+): BrewvaReplaySession {
+  return {
+    sessionId: asBrewvaSessionId(sessionId),
+    eventCount,
+    lastEventAt,
+    title,
+  };
+}
 
 describe("buildSessionsOverlayPayload session ordering", () => {
   test("preserves snapshot order; current session is not moved to index 0", () => {
@@ -18,9 +34,9 @@ describe("buildSessionsOverlayPayload session ordering", () => {
       questions: [],
       taskRuns: [],
       sessions: [
-        { sessionId: asBrewvaSessionId("session-a"), eventCount: 1, lastEventAt: 1 },
-        { sessionId: asBrewvaSessionId("session-b"), eventCount: 2, lastEventAt: 2 },
-        { sessionId: asBrewvaSessionId("session-c"), eventCount: 3, lastEventAt: 3 },
+        replaySession("session-a", 1, 1),
+        replaySession("session-b", 2, 2),
+        replaySession("session-c", 3, 3),
       ],
     };
 
@@ -45,7 +61,7 @@ describe("buildSessionsOverlayPayload session ordering", () => {
       approvals: [],
       questions: [],
       taskRuns: [],
-      sessions: [{ sessionId: asBrewvaSessionId("session-a"), eventCount: 1, lastEventAt: 1 }],
+      sessions: [replaySession("session-a", 1, 1)],
     };
 
     const payload = buildSessionsOverlayPayload({
@@ -68,10 +84,7 @@ describe("buildSessionsOverlayPayload session ordering", () => {
       approvals: [],
       questions: [],
       taskRuns: [],
-      sessions: [
-        { sessionId: asBrewvaSessionId("session-a"), eventCount: 1, lastEventAt: 1 },
-        { sessionId: asBrewvaSessionId("session-b"), eventCount: 2, lastEventAt: 2 },
-      ],
+      sessions: [replaySession("session-a", 1, 1), replaySession("session-b", 2, 2)],
     };
 
     const payload = buildSessionsOverlayPayload({
@@ -90,15 +103,9 @@ describe("buildSessionsOverlayPayload session ordering", () => {
       approvals: [],
       questions: [],
       taskRuns: [],
-      sessions: [
-        { sessionId: asBrewvaSessionId("session-a"), eventCount: 1, lastEventAt: 1 },
-        { sessionId: asBrewvaSessionId("session-b"), eventCount: 2, lastEventAt: 2 },
-      ],
+      sessions: [replaySession("session-a", 1, 1), replaySession("session-b", 2, 2)],
     };
-    const reordered = [
-      { sessionId: asBrewvaSessionId("session-b"), eventCount: 2, lastEventAt: 2 },
-      { sessionId: asBrewvaSessionId("session-a"), eventCount: 1, lastEventAt: 1 },
-    ];
+    const reordered = [replaySession("session-b", 2, 2), replaySession("session-a", 1, 1)];
 
     const payload = buildSessionsOverlayPayload({
       snapshot,
@@ -113,6 +120,55 @@ describe("buildSessionsOverlayPayload session ordering", () => {
       asBrewvaSessionId("session-a"),
     ]);
     expect(payload.selectedIndex).toBe(1);
+  });
+
+  test("filters sessions by search query", () => {
+    const snapshot: OperatorSurfaceSnapshot = {
+      approvals: [],
+      questions: [],
+      taskRuns: [],
+      sessions: [
+        replaySession("session-runtime", 2, 2, "Runtime projection cleanup"),
+        replaySession("session-cli", 1, 1, "CLI command palette"),
+      ],
+    };
+
+    const payload = buildSessionsOverlayPayload({
+      snapshot,
+      currentSessionId: "session-cli",
+      draftsBySessionId: new Map(),
+      currentComposerText: "",
+      query: "runtime",
+    });
+
+    expect(payload.query).toBe("runtime");
+    expect(payload.sessions.map((session) => session.title)).toEqual([
+      "Runtime projection cleanup",
+    ]);
+    expect(payload.selectedIndex).toBe(0);
+  });
+
+  test("text fallback renders sessions search and grouped names", () => {
+    const snapshot: OperatorSurfaceSnapshot = {
+      approvals: [],
+      questions: [],
+      taskRuns: [],
+      sessions: [replaySession("session-cli", 1, 1, "CLI command palette")],
+    };
+
+    const view = buildOverlayView(
+      buildSessionsOverlayPayload({
+        snapshot,
+        currentSessionId: "session-cli",
+        draftsBySessionId: new Map(),
+        currentComposerText: "",
+        query: "cli",
+      }),
+    );
+
+    expect(view.lines).toContain("Search: cli");
+    expect(view.lines.some((line) => line.includes("CLI command palette"))).toBe(true);
+    expect(view.lines.join("\n")).not.toContain("session-cli");
   });
 });
 
@@ -218,10 +274,7 @@ describe("buildLineageOverlayPayload", () => {
 
 describe("reconcileSessionsOverlayStableIds", () => {
   test("anchors to merged order on first call (stableOrderIds undefined)", () => {
-    const merged = [
-      { sessionId: asBrewvaSessionId("x"), eventCount: 9, lastEventAt: 1 },
-      { sessionId: asBrewvaSessionId("y"), eventCount: 1, lastEventAt: 2 },
-    ];
+    const merged = [replaySession("x", 9, 1), replaySession("y", 1, 2)];
     const counts = new Map<string, number>([["y", 0]]);
     expect(
       reconcileSessionsOverlayStableIds({
@@ -237,9 +290,9 @@ describe("reconcileSessionsOverlayStableIds", () => {
 
   test("snapshot order may shuffle but stable ids unchanged without reorder gate", () => {
     const merged = [
-      { sessionId: asBrewvaSessionId("b"), eventCount: 9, lastEventAt: 30 },
-      { sessionId: asBrewvaSessionId("a"), eventCount: 2, lastEventAt: 20 },
-      { sessionId: asBrewvaSessionId("c"), eventCount: 1, lastEventAt: 10 },
+      replaySession("b", 9, 30),
+      replaySession("a", 2, 20),
+      replaySession("c", 1, 10),
     ];
     const counts = new Map<string, number>([
       ["a", 2],
@@ -259,11 +312,7 @@ describe("reconcileSessionsOverlayStableIds", () => {
   });
 
   test("promotes current to front when reorder generation advanced and eventCount grew", () => {
-    const merged = [
-      { sessionId: asBrewvaSessionId("c"), eventCount: 1, lastEventAt: 1 },
-      { sessionId: asBrewvaSessionId("b"), eventCount: 4, lastEventAt: 2 },
-      { sessionId: asBrewvaSessionId("a"), eventCount: 3, lastEventAt: 3 },
-    ];
+    const merged = [replaySession("c", 1, 1), replaySession("b", 4, 2), replaySession("a", 3, 3)];
     const counts = new Map<string, number>([
       ["a", 2],
       ["b", 4],
@@ -284,11 +333,7 @@ describe("reconcileSessionsOverlayStableIds", () => {
 
 describe("sessions overlay replay row helpers", () => {
   test("orderSessionsByStableIds prefers stable ids and appends unseen rows", () => {
-    const sessions = [
-      { sessionId: asBrewvaSessionId("a"), eventCount: 1, lastEventAt: 1 },
-      { sessionId: asBrewvaSessionId("b"), eventCount: 2, lastEventAt: 2 },
-      { sessionId: asBrewvaSessionId("c"), eventCount: 3, lastEventAt: 3 },
-    ];
+    const sessions = [replaySession("a", 1, 1), replaySession("b", 2, 2), replaySession("c", 3, 3)];
     expect(orderSessionsByStableIds(sessions, ["c", "a"]).map((s) => s.sessionId)).toEqual([
       asBrewvaSessionId("c"),
       asBrewvaSessionId("a"),
@@ -297,11 +342,7 @@ describe("sessions overlay replay row helpers", () => {
   });
 
   test("mergeSessionsOverlayRows prepends placeholder when current missing", () => {
-    const existing = {
-      sessionId: asBrewvaSessionId("session-a"),
-      eventCount: 1,
-      lastEventAt: 1,
-    };
+    const existing = replaySession("session-a", 1, 1);
     const snapshot: OperatorSurfaceSnapshot = {
       approvals: [],
       questions: [],
@@ -313,8 +354,38 @@ describe("sessions overlay replay row helpers", () => {
         sessionId: asBrewvaSessionId("session-new"),
         eventCount: 0,
         lastEventAt: 0,
+        title: "New session",
       },
       existing,
+    ]);
+  });
+
+  test("buildSessionsOverlayRows groups sessions by opencode-style update date", () => {
+    const now = new Date(2026, 4, 14, 12, 0, 0).getTime();
+    const yesterday = new Date(2026, 4, 13, 9, 0, 0).getTime();
+    const rows = buildSessionsOverlayRows(
+      [
+        {
+          sessionId: asBrewvaSessionId("session-today"),
+          eventCount: 2,
+          lastEventAt: new Date(2026, 4, 14, 10, 0, 0).getTime(),
+          title: "Today title",
+        },
+        {
+          sessionId: asBrewvaSessionId("session-yesterday"),
+          eventCount: 1,
+          lastEventAt: yesterday,
+          title: "Yesterday title",
+        },
+      ],
+      now,
+    );
+
+    expect(rows.map((row) => (row.kind === "group" ? row.label : row.session.title))).toEqual([
+      "Today",
+      "Today title",
+      new Date(yesterday).toDateString(),
+      "Yesterday title",
     ]);
   });
 });

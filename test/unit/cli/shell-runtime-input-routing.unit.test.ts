@@ -91,6 +91,7 @@ function createFakeBundle(
       sessionId,
       eventCount: 1,
       lastEventAt: Date.now(),
+      title: "New session",
     },
   ];
   const rawRuntime = createBrewvaRuntime({

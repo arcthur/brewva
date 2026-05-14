@@ -110,6 +110,14 @@ function readOptionalStringRecord(value: unknown): Record<string, string> | unde
   return Object.keys(record).length > 0 ? record : {};
 }
 
+function readOptionalAuxiliaryModels(value: unknown): { title?: string } | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  const title = readOptionalString(value.title);
+  return title ? { title } : {};
+}
+
 function ensureTimestamp(value: unknown, fallback: string): string {
   const raw = readOptionalString(value);
   if (!raw) {
@@ -334,6 +342,7 @@ function toImportedSessionEntry(
       source: readOptionalString(entry.source),
       mainModel: readOptionalString(entry.mainModel),
       subagentModels: readOptionalStringRecord(entry.subagentModels),
+      auxiliaryModels: readOptionalAuxiliaryModels(entry.auxiliaryModels),
       synthetic: entry.synthetic === true ? true : undefined,
     } satisfies BrewvaModelPresetSelectEntry;
   }
@@ -542,6 +551,7 @@ export function replayImportedSessionEntries(
           source: entry.source,
           mainModel: entry.mainModel,
           subagentModels: entry.subagentModels,
+          auxiliaryModels: entry.auxiliaryModels,
           synthetic: entry.synthetic,
         });
         break;

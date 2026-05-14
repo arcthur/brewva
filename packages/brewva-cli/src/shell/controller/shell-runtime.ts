@@ -328,8 +328,6 @@ export class CliShellRuntime {
         this.#overlayHandler.openPagerOverlay(target, pagerOptions),
       getExternalPagerTarget: () => this.getExternalPagerTarget(),
       getCurrentSessionId: () => this.#sessionPort.getSessionId(),
-      createSession: async () =>
-        this.#sessionHandler.switchBundle(await this.#operatorPort.createSession()),
       openSession: async (sessionId) =>
         this.#sessionHandler.switchBundle(await this.#operatorPort.openSession(sessionId)),
       handleQuestionPrimary: async (active) => {

@@ -9,12 +9,14 @@ import type { SessionLineageService } from "./lineage.js";
 import type { SessionLifecycleService } from "./session-lifecycle.js";
 import type { SessionRewindService } from "./session-rewind.js";
 import type { SessionWireService } from "./session-wire.js";
+import type { SessionTitleService } from "./title.js";
 import type { SessionHydrationState } from "./types.js";
 
 export interface SessionSurfaceDependencies {
   runtimeConfig: BrewvaConfig;
   getContextService(): ContextService;
   getSessionLifecycleService(): SessionLifecycleService;
+  getSessionTitleService(): SessionTitleService;
   getTaskWatchdogService(): TaskWatchdogService;
   getParallelService(): ParallelService;
   getSessionRewindService(): SessionRewindService;
@@ -52,6 +54,13 @@ export function createSessionSurfaceMethods(deps: SessionSurfaceDependencies) {
           sessionId: string,
           input: Parameters<ContextService["markContextCompacted"]>[1],
         ): BrewvaEventRecord => deps.getContextService().markContextCompacted(sessionId, input),
+      },
+      title: {
+        recordGenerated: (
+          sessionId: string,
+          input: Parameters<SessionTitleService["recordGeneratedTitle"]>[1],
+        ): BrewvaEventRecord =>
+          deps.getSessionTitleService().recordGeneratedTitle(sessionId, input),
       },
       lineage: {
         createNode: (
@@ -107,6 +116,9 @@ export function createSessionSurfaceMethods(deps: SessionSurfaceDependencies) {
         getState: (sessionId: string) => deps.getSessionRewindService().getRewindState(sessionId),
         listTargets: (sessionId: string) =>
           deps.getSessionRewindService().listRewindTargets(sessionId),
+      },
+      title: {
+        get: (sessionId: string) => deps.getSessionTitleService().getTitle(sessionId),
       },
       lineage: {
         getTree: (sessionId: string) => deps.getSessionLineageService().getLineageTree(sessionId),

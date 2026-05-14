@@ -175,6 +175,7 @@ function createFakeBundle(
       sessionId,
       eventCount: 1,
       lastEventAt: Date.now(),
+      title: "New session",
     },
   ];
 
@@ -1244,12 +1245,13 @@ describe("opentui solid shell runtime: render regression", () => {
     }
   });
 
-  test("renders session browser details for the current session even before replay events exist", async () => {
+  test("renders grouped session browser titles without a details panel", async () => {
     const replaySessions = [
       {
         sessionId: asBrewvaSessionId("archived-session"),
         eventCount: 14,
         lastEventAt: 1_710_000_000_000,
+        title: "Archived session",
       },
     ] satisfies BrewvaReplaySession[];
 
@@ -1288,10 +1290,25 @@ describe("opentui solid shell runtime: render regression", () => {
       await testSetup.renderOnce();
       const frame = testSetup.captureCharFrame();
       expect(frame).toContain("Sessions");
-      expect(frame).toContain("fresh-session");
-      expect(frame).toContain("archived-session");
-      expect(frame).toContain("events: 0");
-      expect(frame).toContain("current: yes");
+      expect(frame).toContain("Search:");
+      expect(frame).toContain("New session");
+      expect(frame).toContain("Archived session");
+      expect(frame).toContain("Today");
+      const lines = frame.split("\n");
+      const columnOf = (text: string) => {
+        const line = lines.find((candidate) => candidate.includes(text));
+        return line?.indexOf(text) ?? -1;
+      };
+      const titleColumn = columnOf("Sessions");
+      expect(columnOf("Search:")).toBe(titleColumn);
+      expect(columnOf("Today")).toBe(titleColumn);
+      expect(columnOf("New session")).toBe(titleColumn);
+      expect(columnOf("Archived session")).toBe(titleColumn);
+      expect(frame).not.toContain("fresh-session");
+      expect(frame).not.toContain("archived-session");
+      expect(frame).not.toContain("events: 0");
+      expect(frame).not.toContain("current: yes");
+      expect(frame).not.toContain("n new session");
     } finally {
       runtime.dispose();
       testSetup.renderer.destroy();

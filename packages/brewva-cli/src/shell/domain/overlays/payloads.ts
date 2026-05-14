@@ -49,6 +49,7 @@ export interface CliQueueOverlayPayload {
 export interface CliSessionsOverlayPayload {
   kind: "sessions";
   selectedIndex: number;
+  query: string;
   sessions: BrewvaReplaySession[];
   currentSessionId: string;
   draftStateBySessionId: Record<

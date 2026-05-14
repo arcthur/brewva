@@ -108,6 +108,11 @@ import {
   resolvePhaseTurn,
   subscribeManagedSessionWireHydration,
 } from "../session-phase/api.js";
+import { SessionTitleCoordinator } from "../title-coordinator.js";
+import {
+  createHostedSessionTitleGenerator,
+  type BrewvaSessionTitleGenerator,
+} from "../title-generator.js";
 import {
   ManagedSessionCommandDispatchGate,
   ManagedSessionDeferredTurnState,
@@ -191,6 +196,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
   readonly #agent: BrewvaTurnLoopController;
   readonly #runner: BrewvaHostPluginRunner;
   readonly #compactionSummaryGenerator: BrewvaCompactionSummaryGenerator;
+  readonly #sessionTitleGenerator: BrewvaSessionTitleGenerator;
   readonly #registeredTools: BrewvaToolDefinition[];
   readonly #toolSchemaSnapshotStore = createToolSchemaSnapshotStore();
   readonly #toolRegistry: ManagedSessionToolRegistry;
@@ -209,6 +215,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
   #ui: BrewvaToolUiPort;
   readonly #commandUnsupported = async (): Promise<{ cancelled: boolean }> => ({ cancelled: true });
   #unsubscribeSessionWire: (() => void) | null = null;
+  #unsubscribeSessionTitleCoordinator: (() => void) | null = null;
   #baseSystemPrompt = "";
   #disposed = false;
   #turnIndex = 0;
@@ -235,6 +242,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     runner: BrewvaHostPluginRunner;
     agent: BrewvaTurnLoopController;
     compactionSummaryGenerator: BrewvaCompactionSummaryGenerator;
+    sessionTitleGenerator: BrewvaSessionTitleGenerator;
     ui?: BrewvaToolUiPort;
     logger?: HostedSessionLogger;
     onProviderAssistantMessage?: (
@@ -255,6 +263,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     this.#runner = input.runner;
     this.#agent = input.agent;
     this.#compactionSummaryGenerator = input.compactionSummaryGenerator;
+    this.#sessionTitleGenerator = input.sessionTitleGenerator;
     this.#logger = input.logger ?? null;
     this.#onProviderAssistantMessage = input.onProviderAssistantMessage;
     this.#onDispose = input.onDispose;
@@ -412,6 +421,11 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     const compactionSummaryGenerator =
       options.compactionSummaryGenerator ??
       createHostedLlmCompactionSummaryGenerator({
+        resolveAuth: (model) => options.modelCatalog.getApiKeyAndHeaders(model),
+      });
+    const sessionTitleGenerator =
+      options.sessionTitleGenerator ??
+      createHostedSessionTitleGenerator({
         resolveAuth: (model) => options.modelCatalog.getApiKeyAndHeaders(model),
       });
     const sessionId = options.sessionStore.getSessionId();
@@ -644,6 +658,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
       runner,
       agent,
       compactionSummaryGenerator,
+      sessionTitleGenerator,
       ui: options.ui,
       runtime: options.runtime,
       logger: options.logger,
@@ -680,6 +695,20 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
       getSessionPhase: () => this.getSessionPhase(),
       syncContextState: () => this.syncContextState(),
     });
+    if (this.#runtime) {
+      this.#unsubscribeSessionTitleCoordinator = new SessionTitleCoordinator({
+        runtime: this.#runtime,
+        sessionId: this.sessionManager.getSessionId(),
+        catalog: this.#catalog,
+        generator: this.#sessionTitleGenerator,
+        getCurrentModel: () => this.model,
+        getActiveModelPreset: () => {
+          const state = this.#modelSelection.getState();
+          return state.presets.find((preset) => preset.name === state.activeName);
+        },
+        logger: this.#logger ?? undefined,
+      }).start();
+    }
     await this.syncContextState();
   }
 
@@ -976,6 +1005,8 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     this.#disposed = true;
     this.#unsubscribeSessionWire?.();
     this.#unsubscribeSessionWire = null;
+    this.#unsubscribeSessionTitleCoordinator?.();
+    this.#unsubscribeSessionTitleCoordinator = null;
     this.#onDispose?.();
     clearDefaultTurnLifecycleSpine(this, this.sessionManager.getSessionId());
     this.sessionManager.dispose?.();
