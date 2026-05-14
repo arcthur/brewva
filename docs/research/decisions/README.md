@@ -37,6 +37,7 @@ Every accepted decision inherits these rules:
 - [runtime-domain-admission-and-deletion](./runtime-domain-admission-and-deletion.md)
 - [runtime-boundary-subtraction-and-effect-clarity](./runtime-boundary-subtraction-and-effect-clarity.md)
 - [runtime-domain-slicing-and-controlled-extension-ports](./runtime-domain-slicing-and-controlled-extension-ports.md)
+- [rfc-package-boundary-architecture-vnext](./rfc-package-boundary-architecture-vnext.md)
 - [rfc-narrow-and-provable-runtime-boundaries](./rfc-narrow-and-provable-runtime-boundaries.md)
 - [runtime-factory-ports](./runtime-factory-ports.md)
 - [runtime-public-root-compression](./runtime-public-root-compression.md)

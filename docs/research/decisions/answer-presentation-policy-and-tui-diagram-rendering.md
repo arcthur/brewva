@@ -18,7 +18,7 @@
   - `packages/brewva-cli/runtime/shell/transcript-markdown.ts`
   - `packages/brewva-cli/runtime/shell/markdown-transcript-block.tsx`
   - `packages/brewva-cli/runtime/shell/mermaid/`
-  - `packages/brewva-tui/src/capabilities.ts`
+  - `packages/brewva-cli/src/internal/tui/capabilities.ts`
   - `test/unit/substrate/system-prompt.unit.test.ts`
   - `test/unit/cli/opentui-shell-renderer-*.unit.test.ts`
 

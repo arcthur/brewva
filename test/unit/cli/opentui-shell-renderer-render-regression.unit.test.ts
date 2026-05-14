@@ -19,7 +19,7 @@ import {
   createOpenTuiSolidElement,
   openTuiSolidAct,
   openTuiSolidTestRender,
-} from "@brewva/brewva-tui/internal-opentui-runtime";
+} from "../../../packages/brewva-cli/runtime/internal-opentui-runtime.js";
 import { BrewvaOpenTuiShell } from "../../../packages/brewva-cli/runtime/opentui-shell-renderer.js";
 import {
   COMPLETION_Z_INDEX,

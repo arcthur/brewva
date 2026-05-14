@@ -20,7 +20,7 @@ export function isCliInteractiveRuntimeAvailable(): boolean {
 }
 
 export async function runCliInteractiveSmoke(): Promise<CliInteractiveSmokeResult> {
-  const { runOpenTuiSmoke } = await import("@brewva/brewva-tui/internal-opentui-runtime");
+  const { runOpenTuiSmoke } = await import("./internal-opentui-runtime.js");
   return await runOpenTuiSmoke({
     label: "Brewva OpenTUI smoke",
     screenMode: "alternate-screen",

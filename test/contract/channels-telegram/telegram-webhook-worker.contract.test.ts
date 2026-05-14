@@ -5,7 +5,7 @@ import {
   createTelegramWebhookWorker,
   createWorkerIngressHmacSignature,
   type TelegramWebhookWorkerEnv,
-} from "@brewva/brewva-ingress";
+} from "@brewva/brewva-ingress-telegram";
 
 const NOOP_EXECUTION_CONTEXT = {
   waitUntil() {

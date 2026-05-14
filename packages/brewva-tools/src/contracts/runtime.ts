@@ -1,5 +1,5 @@
-import type { BoxPlane } from "@brewva/brewva-box";
 import type { BrewvaToolRuntimePort as RuntimeToolRuntimePort } from "@brewva/brewva-runtime";
+import type { BoxPlane } from "../internal/box/index.js";
 import type { BrewvaToolDelegationQuery, BrewvaToolOrchestration } from "./delegation.js";
 import type { BrewvaToolRuntimeExtensions, BrewvaToolRuntimeToolsExtension } from "./metadata.js";
 

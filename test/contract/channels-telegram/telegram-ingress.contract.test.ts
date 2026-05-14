@@ -4,7 +4,7 @@ import {
   TelegramIngressProcessor,
   createIngressHmacSignature,
   type TelegramIngressRequest,
-} from "@brewva/brewva-ingress";
+} from "@brewva/brewva-ingress-telegram";
 
 function createUpdate(updateId = 5001): TelegramUpdate {
   return {

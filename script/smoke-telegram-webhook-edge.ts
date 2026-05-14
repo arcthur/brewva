@@ -6,7 +6,7 @@ import {
   createTelegramIngressServer,
   createTelegramWebhookWorker,
   type TelegramWebhookWorkerEnv,
-} from "@brewva/brewva-ingress";
+} from "@brewva/brewva-ingress-telegram";
 
 function listenServer(server: ReturnType<typeof createTelegramIngressServer>): Promise<void> {
   return new Promise<void>((resolve, reject) => {

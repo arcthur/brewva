@@ -31,7 +31,7 @@
   - `packages/brewva-tools/src/families/execution/exec-process-registry/api.ts`
   - `packages/brewva-gateway/src/channels/channel-host-lifecycle.ts`
   - `packages/brewva-gateway/src/channels/effect-serial-queue.ts`
-  - `packages/brewva-ingress/src/telegram-webhook-worker.ts`
+  - `packages/brewva-ingress-telegram/src/telegram-webhook-worker.ts`
   - `packages/brewva-mcp-adapter/src/index.ts`
 
 ## Decision Summary

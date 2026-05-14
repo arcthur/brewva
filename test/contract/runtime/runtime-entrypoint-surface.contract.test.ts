@@ -8,7 +8,6 @@ describe("runtime entrypoint surface", () => {
     const runtime = await import("@brewva/brewva-runtime");
     const events = await import("@brewva/brewva-runtime/events");
     const evidence = await import("@brewva/brewva-runtime/evidence");
-    const semanticArtifacts = await import("@brewva/brewva-runtime/semantic-artifacts");
 
     expect("ProjectionEngine" in runtime).toBe(false);
     expect("ProjectionStore" in runtime).toBe(false);
@@ -29,8 +28,6 @@ describe("runtime entrypoint surface", () => {
     expect("asBrewvaEventType" in events).toBe(true);
     expect("parseTscDiagnostics" in runtime).toBe(false);
     expect("parseTscDiagnostics" in evidence).toBe(true);
-    expect("getSemanticArtifactOutputContract" in semanticArtifacts).toBe(true);
-    expect("renderSemanticArtifactExample" in semanticArtifacts).toBe(true);
   });
 
   test("dedicated subpath extension ports expose only public methods", async () => {

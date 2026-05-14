@@ -1,13 +1,5 @@
 import { posix, relative, resolve } from "node:path";
 import {
-  type BoxCapabilitySet,
-  type BoxExec,
-  type BoxExecResult,
-  type BoxHandle,
-  type BoxScope,
-  type ReleaseReason,
-} from "@brewva/brewva-box";
-import {
   BrewvaBoxScope,
   type BrewvaBoundaryError,
   BrewvaBoundaryFailure,
@@ -17,6 +9,14 @@ import {
   withBrewvaObservability,
 } from "@brewva/brewva-effect";
 import type { BrewvaBundledToolRuntime } from "../../../contracts/index.js";
+import {
+  type BoxCapabilitySet,
+  type BoxExec,
+  type BoxExecResult,
+  type BoxHandle,
+  type BoxScope,
+  type ReleaseReason,
+} from "../../../internal/box/index.js";
 import { resolveConfiguredBoxPlane } from "../box-plane-runtime.js";
 import { startManagedBoxExec } from "../exec-process-registry/api.js";
 import type { ResolvedExecutionPolicy } from "./policy.js";

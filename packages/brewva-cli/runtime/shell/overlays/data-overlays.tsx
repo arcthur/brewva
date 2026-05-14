@@ -1,7 +1,7 @@
 /** @jsxImportSource @opentui/solid */
 
-import { visibleWidth } from "@brewva/brewva-tui";
 import { For, Show, createMemo } from "solid-js";
+import { visibleWidth } from "../../../src/internal/tui/index.js";
 import type {
   CliInboxOverlayPayload,
   CliInspectOverlayPayload,

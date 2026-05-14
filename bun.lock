@@ -5,12 +5,11 @@
     "": {
       "name": "brewva",
       "devDependencies": {
-        "@brewva/brewva-box": "workspace:*",
         "@brewva/brewva-channels-telegram": "workspace:*",
         "@brewva/brewva-cli": "workspace:*",
         "@brewva/brewva-effect": "workspace:*",
         "@brewva/brewva-gateway": "workspace:*",
-        "@brewva/brewva-ingress": "workspace:*",
+        "@brewva/brewva-ingress-telegram": "workspace:*",
         "@brewva/brewva-mcp-adapter": "workspace:*",
         "@brewva/brewva-provider-core": "workspace:*",
         "@brewva/brewva-recall": "workspace:*",
@@ -21,7 +20,6 @@
         "@brewva/brewva-substrate": "workspace:*",
         "@brewva/brewva-token-estimation": "workspace:*",
         "@brewva/brewva-tools": "workspace:*",
-        "@brewva/brewva-tui": "workspace:*",
         "@duckdb/node-api": "1.5.2-r.1",
         "@opentui/core": "0.2.6",
         "@opentui/solid": "0.2.6",
@@ -76,15 +74,6 @@
         "brewva": "./bin/brewva",
       },
     },
-    "packages/brewva-box": {
-      "name": "@brewva/brewva-box",
-      "version": "0.1.0",
-      "dependencies": {
-        "@boxlite-ai/boxlite": "^0.9.3",
-        "@brewva/brewva-effect": "workspace:*",
-        "@brewva/brewva-std": "workspace:*",
-      },
-    },
     "packages/brewva-channels-telegram": {
       "name": "@brewva/brewva-channels-telegram",
       "version": "0.1.0",
@@ -108,11 +97,11 @@
         "@brewva/brewva-session-index": "workspace:*",
         "@brewva/brewva-std": "workspace:*",
         "@brewva/brewva-substrate": "workspace:*",
-        "@brewva/brewva-tui": "workspace:*",
         "@opentui/core": "0.2.6",
         "@opentui/solid": "0.2.6",
         "chalk": "^5.6.2",
         "date-fns": "^4.1.0",
+        "get-east-asian-width": "^1.6.0",
         "solid-js": "1.9.12",
       },
     },
@@ -131,10 +120,9 @@
       "dependencies": {
         "@brewva/brewva-channels-telegram": "workspace:*",
         "@brewva/brewva-effect": "workspace:*",
-        "@brewva/brewva-ingress": "workspace:*",
+        "@brewva/brewva-ingress-telegram": "workspace:*",
         "@brewva/brewva-mcp-adapter": "workspace:*",
         "@brewva/brewva-provider-core": "workspace:*",
-        "@brewva/brewva-recall": "workspace:*",
         "@brewva/brewva-runtime": "workspace:*",
         "@brewva/brewva-std": "workspace:*",
         "@brewva/brewva-substrate": "workspace:*",
@@ -146,8 +134,8 @@
         "ws": "^8.20.0",
       },
     },
-    "packages/brewva-ingress": {
-      "name": "@brewva/brewva-ingress",
+    "packages/brewva-ingress-telegram": {
+      "name": "@brewva/brewva-ingress-telegram",
       "version": "0.1.0",
       "dependencies": {
         "@brewva/brewva-channels-telegram": "workspace:*",
@@ -261,7 +249,6 @@
       "name": "@brewva/brewva-tools",
       "version": "0.1.0",
       "dependencies": {
-        "@brewva/brewva-box": "workspace:*",
         "@brewva/brewva-effect": "workspace:*",
         "@brewva/brewva-recall": "workspace:*",
         "@brewva/brewva-runtime": "workspace:*",
@@ -276,16 +263,6 @@
         "magic-string": "^0.30.21",
         "oxc-parser": "0.128.0",
         "typescript": "^6.0.2",
-      },
-    },
-    "packages/brewva-tui": {
-      "name": "@brewva/brewva-tui",
-      "version": "0.1.0",
-      "dependencies": {
-        "@opentui/core": "0.2.6",
-        "@opentui/solid": "0.2.6",
-        "get-east-asian-width": "^1.6.0",
-        "solid-js": "1.9.12",
       },
     },
   },
@@ -354,17 +331,7 @@
 
     "@borewit/text-codec": ["@borewit/text-codec@0.2.1", "", {}, "sha512-k7vvKPbf7J2fZ5klGRD9AeKfUvojuZIQ3BT5u7Jfv+puwXkUBUT5PVyMDfJZpy30CBDXGMgw7fguK/lpOMBvgw=="],
 
-    "@boxlite-ai/boxlite": ["@boxlite-ai/boxlite@0.9.3", "", { "optionalDependencies": { "@boxlite-ai/boxlite-darwin-arm64": "0.9.3", "@boxlite-ai/boxlite-linux-arm64-gnu": "0.9.3", "@boxlite-ai/boxlite-linux-x64-gnu": "0.9.3" }, "peerDependencies": { "playwright-core": ">=1.58.0" }, "optionalPeers": ["playwright-core"] }, "sha512-TVuq4qbTfzcPvjOi5wKt6sMclvN4TyU9FnFrHRGdHS4Yj+5DqZ0r0c9FKvVMPL12DvAgY3cFPpmCvQcIUT2eqQ=="],
-
-    "@boxlite-ai/boxlite-darwin-arm64": ["@boxlite-ai/boxlite-darwin-arm64@0.9.3", "", { "os": "darwin", "cpu": "arm64" }, "sha512-i8xKqAfHzTqLSB4j42C7VX4Gjo0uExh18E0bEkeyKJvSXjRVqQafOUSvDEIt76j7//viclSfVlZSX0CdmALs0g=="],
-
-    "@boxlite-ai/boxlite-linux-arm64-gnu": ["@boxlite-ai/boxlite-linux-arm64-gnu@0.9.3", "", { "os": "linux", "cpu": "arm64" }, "sha512-LzlBz8VHGZbiJP/1JztlBNHKSAATksIJgjxMcWxsJLLxENrsCgsi0hLfeRKLDvmsyuQawcpzbYzoSYRbAKkCjw=="],
-
-    "@boxlite-ai/boxlite-linux-x64-gnu": ["@boxlite-ai/boxlite-linux-x64-gnu@0.9.3", "", { "os": "linux", "cpu": "x64" }, "sha512-azwKVAiEBUvGTy0kg9bBumUBOysyUVNG8llqOss6Xdu5yu0tm7NRZXgcT9nnS/vuRBPH5056C0iUwsxGI3QgXA=="],
-
     "@brewva/brewva": ["@brewva/brewva@workspace:distribution/brewva"],
-
-    "@brewva/brewva-box": ["@brewva/brewva-box@workspace:packages/brewva-box"],
 
     "@brewva/brewva-channels-telegram": ["@brewva/brewva-channels-telegram@workspace:packages/brewva-channels-telegram"],
 
@@ -376,7 +343,7 @@
 
     "@brewva/brewva-gateway": ["@brewva/brewva-gateway@workspace:packages/brewva-gateway"],
 
-    "@brewva/brewva-ingress": ["@brewva/brewva-ingress@workspace:packages/brewva-ingress"],
+    "@brewva/brewva-ingress-telegram": ["@brewva/brewva-ingress-telegram@workspace:packages/brewva-ingress-telegram"],
 
     "@brewva/brewva-linux-arm64": ["@brewva/brewva-linux-arm64@workspace:distribution/brewva-linux-arm64"],
 
@@ -401,8 +368,6 @@
     "@brewva/brewva-token-estimation": ["@brewva/brewva-token-estimation@workspace:packages/brewva-token-estimation"],
 
     "@brewva/brewva-tools": ["@brewva/brewva-tools@workspace:packages/brewva-tools"],
-
-    "@brewva/brewva-tui": ["@brewva/brewva-tui@workspace:packages/brewva-tui"],
 
     "@duckdb/node-api": ["@duckdb/node-api@1.5.2-r.1", "", { "dependencies": { "@duckdb/node-bindings": "1.5.2-r.1" } }, "sha512-OzBBnS0JGXMoS5mzKNY/Ylr7SshcRQiLFIoxQ4AlePwJ2fNeDL/fbHu/knjxUrXwW1fJBTUgwWftmxDdnZZb3A=="],
 

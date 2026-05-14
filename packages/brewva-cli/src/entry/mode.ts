@@ -1,7 +1,7 @@
 import {
   detectTerminalCapabilities,
   type TerminalCapabilityDetectionInput,
-} from "@brewva/brewva-tui";
+} from "../internal/tui/index.js";
 
 export type CliResolvedMode = "interactive" | "print-text" | "print-json";
 

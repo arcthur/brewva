@@ -16,7 +16,7 @@ import {
   getRuntimeEffectSpine,
   getRuntimeEffectLayer,
   runRuntimeEffectSync,
-} from "@brewva/brewva-runtime/runtime-effect";
+} from "../../../packages/brewva-runtime/src/runtime-effect.js";
 import { createBrewvaRuntimeAssemblyForInternalUse } from "../../../packages/brewva-runtime/src/runtime/runtime.js";
 import { createOpsRuntimeConfig } from "../../helpers/runtime.js";
 

@@ -1,11 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 
-import { resolveAutomaticTuiTheme } from "@brewva/brewva-tui";
-import type { OpenTuiRenderer } from "@brewva/brewva-tui/internal-opentui-runtime";
-import {
-  createOpenTuiCliRenderer,
-  getOpenTuiTerminalBackgroundMode,
-} from "@brewva/brewva-tui/internal-opentui-runtime";
+import { resolveAutomaticTuiTheme } from "../src/internal/tui/index.js";
 import {
   getExternalPagerCommand,
   openExternalEditorWithShell,
@@ -14,6 +9,11 @@ import {
 import { CliShellRuntime } from "../src/shell/controller/shell-runtime.js";
 import type { CliShellRuntimeOptions } from "../src/shell/controller/shell-runtime.js";
 import type { CliShellSessionBundle } from "../src/shell/ports/session-port.js";
+import type { OpenTuiRenderer } from "./internal-opentui-runtime.js";
+import {
+  createOpenTuiCliRenderer,
+  getOpenTuiTerminalBackgroundMode,
+} from "./internal-opentui-runtime.js";
 import { render } from "./opentui/index.js";
 import { BrewvaOpenTuiShell } from "./shell/app.js";
 import { copyTextToClipboard } from "./shell/clipboard.js";

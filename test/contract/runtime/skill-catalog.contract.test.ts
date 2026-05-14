@@ -1,9 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
-import { getSemanticArtifactOutputContract } from "@brewva/brewva-runtime/semantic-artifacts";
 import {
-  REVIEW_REPORT_OUTPUT_CONTRACT,
   buildSkillSelectionProfile,
   getSkillOutputContracts,
   getSkillSemanticBindings,
@@ -85,9 +83,6 @@ describe("repository catalog contracts", () => {
       "review_report",
     ]);
     expect(getSkillOutputContracts(review.contract)).toEqual({});
-    expect(getSemanticArtifactOutputContract("review.review_report.v2")).toMatchObject(
-      REVIEW_REPORT_OUTPUT_CONTRACT,
-    );
   });
 
   test("built-in base skills cover declared outputs through authored contracts or semantic bindings", () => {

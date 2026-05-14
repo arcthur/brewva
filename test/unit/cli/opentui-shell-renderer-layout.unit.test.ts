@@ -14,13 +14,13 @@ import type {
   BrewvaSessionModelDescriptor,
 } from "@brewva/brewva-substrate/session";
 import type { BrewvaToolDefinition } from "@brewva/brewva-substrate/tools";
+import { createTestRenderer } from "@opentui/core/testing";
 import {
   createOpenTuiRoot,
   createOpenTuiSolidElement,
   openTuiSolidAct,
   openTuiSolidTestRender,
-} from "@brewva/brewva-tui/internal-opentui-runtime";
-import { createTestRenderer } from "@opentui/core/testing";
+} from "../../../packages/brewva-cli/runtime/internal-opentui-runtime.js";
 import { BrewvaOpenTuiShell } from "../../../packages/brewva-cli/runtime/opentui-shell-renderer.js";
 import { resolveDiffView } from "../../../packages/brewva-cli/runtime/shell/diff-view.js";
 import {

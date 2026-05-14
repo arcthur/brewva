@@ -1,4 +1,4 @@
-import type { TelegramIngressAuth } from "@brewva/brewva-ingress";
+import type { TelegramIngressAuth } from "@brewva/brewva-ingress-telegram";
 
 export interface TelegramChannelModeConfig {
   token?: string;

@@ -129,7 +129,7 @@ Workflow walkthroughs:
 
 - Runtime package: `packages/brewva-runtime/src/index.ts`
 - Telegram channel package: `packages/brewva-channels-telegram/src/index.ts`
-- Telegram ingress package: `packages/brewva-ingress/src/index.ts`
+- Telegram ingress package: `packages/brewva-ingress-telegram/src/index.ts`
 - Tool package: `packages/brewva-tools/src/index.ts`
 - Runtime plugin package: `@brewva/brewva-gateway/extensions` (`packages/brewva-gateway/src/hosted/internal/session/host-api-installation.ts`)
 - CLI package: `packages/brewva-cli/src/index.ts`

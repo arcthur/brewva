@@ -9,7 +9,7 @@ reference.
 
 - Runtime core: `packages/brewva-runtime/src/runtime/runtime.ts`
 - Telegram channel adapter: `packages/brewva-channels-telegram/src/index.ts`
-- Ingress adapters: `packages/brewva-ingress/src/index.ts`
+- Ingress adapters: `packages/brewva-ingress-telegram/src/index.ts`
 - Gateway control plane: `packages/brewva-gateway/src/index.ts`
 - Tool registry: `packages/brewva-tools/src/index.ts`
 - Model-operated workbench state: `packages/brewva-runtime/src/domain/workbench`

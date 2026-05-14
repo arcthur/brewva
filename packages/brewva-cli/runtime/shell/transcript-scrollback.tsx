@@ -1,9 +1,9 @@
 /** @jsxImportSource @opentui/solid */
 
 import type { BrewvaToolDefinition } from "@brewva/brewva-substrate/tools";
-import { renderOpenTuiScrollbackLines } from "@brewva/brewva-tui/internal-opentui-runtime";
 import { For } from "solid-js";
 import type { ShellRendererController } from "../../src/shell/domain/renderer-contract.js";
+import { renderOpenTuiScrollbackLines } from "../internal-opentui-runtime.js";
 import { createPalette } from "./palette.js";
 import { ShellRenderProvider } from "./render-context.js";
 import { createToolRenderCache, type ToolRenderCache } from "./tool-render.js";

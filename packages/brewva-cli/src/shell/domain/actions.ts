@@ -1,4 +1,4 @@
-import type { OverlayPriority } from "@brewva/brewva-tui";
+import type { OverlayPriority } from "../../internal/tui/index.js";
 import type { ShellEffect } from "./effects.js";
 import type { CliShellOverlayPayload } from "./overlays/payloads.js";
 import type { CliShellAction } from "./state.js";

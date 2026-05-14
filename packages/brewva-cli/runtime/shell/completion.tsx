@@ -1,10 +1,10 @@
 /** @jsxImportSource @opentui/solid */
 
-import { truncateToWidth, visibleWidth } from "@brewva/brewva-tui";
-import type { OpenTuiScrollBoxHandle } from "@brewva/brewva-tui/internal-opentui-runtime";
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
+import { truncateToWidth, visibleWidth } from "../../src/internal/tui/index.js";
 import type { ShellRendererController } from "../../src/shell/domain/renderer-contract.js";
 import type { ShellViewModel } from "../../src/shell/domain/view-model.js";
+import type { OpenTuiScrollBoxHandle } from "../internal-opentui-runtime.js";
 import type { BoxRenderable } from "../opentui/index.js";
 import { COMPLETION_Z_INDEX } from "./overlay-style.js";
 import { DEFAULT_SCROLL_ACCELERATION, SPLIT_BORDER_CHARS, type SessionPalette } from "./palette.js";

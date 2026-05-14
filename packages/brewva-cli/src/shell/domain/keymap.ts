@@ -1,4 +1,4 @@
-import type { KeybindingDefinition } from "@brewva/brewva-tui";
+import type { KeybindingDefinition } from "../../internal/tui/index.js";
 import type { ShellEffect } from "./effects.js";
 
 const SHELL_ACTION_PREFIX = "shell:";

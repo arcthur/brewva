@@ -1,5 +1,5 @@
 import type { ProviderAuthPrompt } from "@brewva/brewva-gateway/hosted";
-import type { OverlayPriority } from "@brewva/brewva-tui";
+import type { OverlayPriority } from "../../../internal/tui/index.js";
 import type { ShellEffect } from "../../domain/effects.js";
 import type {
   CliOAuthWaitOverlayPayload,

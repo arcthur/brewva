@@ -15,8 +15,8 @@
   - `docs/reference/tools.md`
   - `docs/solutions/security/exec-command-policy-and-readonly-shell.md`
 - Code anchors:
-  - `packages/brewva-box/src/index.ts`
-  - `packages/brewva-box/src/boxlite/plane.ts`
+  - `packages/brewva-tools/src/internal/box/index.ts`
+  - `packages/brewva-tools/src/internal/box/boxlite/plane.ts`
   - `packages/brewva-tools/src/families/execution/box-plane-runtime.ts`
   - `packages/brewva-tools/src/families/execution/exec.ts`
   - `packages/brewva-runtime/src/config/defaults.ts`
@@ -30,8 +30,9 @@
 - Box state is explicit but non-authoritative. Brewva may inspect, reconcile, snapshot, and release boxes, but durable truth stays in the event tape, receipts, Recovery WAL, and replayable runtime records.
 - Execution routing is fail-closed. If the selected box route cannot run, Brewva reports the isolated execution failure. It does not silently fall back to host execution.
 - Configuration names match the current primitive. The public surface says `box`; retired `sandbox` and remote-service fields are rejected instead of kept as compatibility aliases.
-- BoxLite is quarantined behind the box plane package. Runtime, tools, and distribution code consume Brewva's `BoxPlane` contract, not raw BoxLite SDK shapes.
+- BoxLite is quarantined behind the tools-internal box plane. Runtime and distribution code consume Brewva's tool execution contracts, not raw BoxLite SDK shapes.
 
 ## Superseded by
 
-- None.
+- `docs/research/decisions/rfc-package-boundary-architecture-vnext.md` folds the
+  former box package into tools while preserving the BoxPlane quarantine.

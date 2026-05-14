@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { KeybindingResolver } from "@brewva/brewva-tui";
+import type { KeybindingResolver } from "../../../packages/brewva-cli/src/internal/tui/index.js";
 import type { ShellAction } from "../../../packages/brewva-cli/src/shell/domain/actions.js";
 import { routeShellInput } from "../../../packages/brewva-cli/src/shell/domain/input-router.js";
 import {

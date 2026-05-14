@@ -102,7 +102,7 @@ Implementation detail and system boundaries:
 - `@brewva/brewva-cli`: interactive CLI, print/json modes, replay/undo, daemon, and the user-facing front door into gateway-hosted channels
 - `@brewva/brewva-gateway`: local control-plane daemon, worker supervision, and subagent/session orchestration
 - `@brewva/brewva-channels-telegram`: Telegram adapter and transport
-- `@brewva/brewva-ingress`: webhook worker/server ingress for Telegram edge delivery
+- `@brewva/brewva-ingress-telegram`: webhook worker/server ingress for Telegram edge delivery
 - `distribution/brewva` and `distribution/brewva-*`: launcher and per-platform binary packages
 - `distribution/worker`: edge deployment templates for webhook ingress
 

@@ -1,6 +1,7 @@
 {
   "name": "@brewva/brewva-tools",
   "version": "0.1.0",
+  "description": "Managed Brewva tool families, capability metadata, and default tool bundle.",
   "license": "Apache-2.0",
   "type": "module",
   "main": "./dist/index.js",
@@ -62,7 +63,6 @@
     }
   },
   "dependencies": {
-    "@brewva/brewva-box": "workspace:*",
     "@brewva/brewva-effect": "workspace:*",
     "@brewva/brewva-recall": "workspace:*",
     "@brewva/brewva-runtime": "workspace:*",

@@ -1,10 +1,10 @@
 import type { Api, Model } from "@brewva/brewva-provider-core/contracts";
-import { completeSimple } from "@brewva/brewva-provider-core/stream";
 import {
   type BrewvaProviderCompletionDriver,
   type BrewvaProviderCompletionResponse,
   UnsupportedBrewvaProviderApiError,
 } from "@brewva/brewva-substrate/provider";
+import { completeProviderMessage } from "./execution-port.js";
 
 function isProviderUnavailableError(error: unknown): boolean {
   return (
@@ -18,7 +18,7 @@ function isProviderUnavailableError(error: unknown): boolean {
 class HostedProviderCoreCompletionClient implements BrewvaProviderCompletionDriver {
   async complete(input: Parameters<BrewvaProviderCompletionDriver["complete"]>[0]) {
     try {
-      const message = await completeSimple(
+      const message = await completeProviderMessage(
         input.model as Model<Api>,
         {
           systemPrompt: input.systemPrompt,

@@ -10,9 +10,9 @@ surface, use the reference docs.
 
 Implementation references:
 
-- Worker handler: `packages/brewva-ingress/src/telegram-webhook-worker.ts`
+- Worker handler: `packages/brewva-ingress-telegram/src/telegram-webhook-worker.ts`
 - Worker entrypoint template: `distribution/worker/telegram-webhook-worker.ts`
-- Fly ingress server: `packages/brewva-ingress/src/telegram-ingress.ts`
+- Fly ingress server: `packages/brewva-ingress-telegram/src/telegram-ingress.ts`
 - Channel bootstrap and webhook config resolution:
   `packages/brewva-gateway/src/channels/launcher.ts`
 - Channel composition shell: `packages/brewva-gateway/src/channels/host.ts`

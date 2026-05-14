@@ -1,4 +1,4 @@
-import { DEFAULT_TUI_THEME } from "@brewva/brewva-tui";
+import { DEFAULT_TUI_THEME } from "../../../internal/tui/index.js";
 import { buildTrustLoopIdleProjection } from "../trust-loop/projection.js";
 import type { CliShellViewState } from "./types.js";
 

@@ -1,6 +1,6 @@
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
-import type { BoxExec, BoxPlane } from "@brewva/brewva-box";
 import type { BrewvaBoundaryFailure, ScopedTimeoutHandle } from "@brewva/brewva-effect";
+import type { BoxExec, BoxPlane } from "../../../internal/box/index.js";
 
 export const MAX_AGGREGATED_OUTPUT_CHARS = 1_000_000;
 export const TAIL_CHARS = 4_000;

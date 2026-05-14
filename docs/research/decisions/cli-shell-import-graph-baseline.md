@@ -10,7 +10,7 @@
   - `docs/guide/cli.md`
 - Code anchors:
   - `test/unit/cli/cli-shell-import-graph.unit.test.ts`
-  - `test/contract/cli/opentui-import-quarantine.contract.test.ts`
+  - `test/fitness/cli/opentui-import-quarantine.fitness.test.ts`
   - `test/contract/cli/cli-package-export-surface.contract.test.ts`
   - `packages/brewva-cli/src/shell/domain`
   - `packages/brewva-cli/runtime/opentui/index.ts`

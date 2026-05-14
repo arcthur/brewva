@@ -1,7 +1,7 @@
 /** @jsxImportSource @opentui/solid */
 
-import { padToWidth, visibleWidth } from "@brewva/brewva-tui";
 import { For, Show, createMemo } from "solid-js";
+import { padToWidth, visibleWidth } from "../../../src/internal/tui/index.js";
 import type {
   CliAuthMethodPickerOverlayPayload,
   CliCommandPaletteOverlayPayload,

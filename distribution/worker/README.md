@@ -5,7 +5,7 @@ the Telegram webhook ingress path:
 
 - Worker entrypoint: `distribution/worker/telegram-webhook-worker.ts`
 - Wrangler template: `distribution/worker/wrangler.toml.example`
-- Worker implementation: `packages/brewva-ingress/src/telegram-webhook-worker.ts`
+- Worker implementation: `packages/brewva-ingress-telegram/src/telegram-webhook-worker.ts`
 
 ## What This Worker Does
 

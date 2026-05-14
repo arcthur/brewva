@@ -1,6 +1,7 @@
 {
   "name": "@brewva/brewva-mcp-adapter",
   "version": "0.1.0",
+  "description": "MCP protocol translation into Brewva substrate tool catalogs.",
   "license": "Apache-2.0",
   "type": "module",
   "main": "./dist/index.js",

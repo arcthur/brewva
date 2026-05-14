@@ -1,10 +1,6 @@
-import { visibleWidth, visualColumnToTextOffset } from "@brewva/brewva-tui";
-import type {
-  OpenTuiKeyEvent,
-  OpenTuiScrollBoxHandle,
-} from "@brewva/brewva-tui/internal-opentui-runtime";
 import { onCleanup } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
+import { visibleWidth, visualColumnToTextOffset } from "../../src/internal/tui/index.js";
 import type { ShellCompletionCandidate } from "../../src/shell/domain/completion-provider.js";
 import type { CliShellInput } from "../../src/shell/domain/input.js";
 import type {
@@ -22,6 +18,7 @@ import type {
 } from "../../src/shell/domain/overlays/payloads.js";
 import type { ShellRendererController } from "../../src/shell/domain/renderer-contract.js";
 import type { CliShellNotification, ShellViewModel } from "../../src/shell/domain/view-model.js";
+import type { OpenTuiKeyEvent, OpenTuiScrollBoxHandle } from "../internal-opentui-runtime.js";
 
 export function useShellState(runtime: ShellRendererController): ShellViewModel {
   const [state, setState] = createStore(runtime.getViewState());

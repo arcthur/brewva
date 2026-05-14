@@ -1,3 +1,3 @@
-import { createTelegramWebhookWorker } from "@brewva/brewva-ingress";
+import { createTelegramWebhookWorker } from "@brewva/brewva-ingress-telegram";
 
 export default createTelegramWebhookWorker();

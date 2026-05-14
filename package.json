@@ -66,12 +66,11 @@
     "uninstall:local": "bash script/install-local.sh --uninstall"
   },
   "devDependencies": {
-    "@brewva/brewva-box": "workspace:*",
     "@brewva/brewva-channels-telegram": "workspace:*",
     "@brewva/brewva-cli": "workspace:*",
     "@brewva/brewva-effect": "workspace:*",
     "@brewva/brewva-gateway": "workspace:*",
-    "@brewva/brewva-ingress": "workspace:*",
+    "@brewva/brewva-ingress-telegram": "workspace:*",
     "@brewva/brewva-mcp-adapter": "workspace:*",
     "@brewva/brewva-provider-core": "workspace:*",
     "@brewva/brewva-recall": "workspace:*",
@@ -82,7 +81,6 @@
     "@brewva/brewva-substrate": "workspace:*",
     "@brewva/brewva-token-estimation": "workspace:*",
     "@brewva/brewva-tools": "workspace:*",
-    "@brewva/brewva-tui": "workspace:*",
     "@duckdb/node-api": "1.5.2-r.1",
     "@opentui/core": "0.2.6",
     "@opentui/solid": "0.2.6",

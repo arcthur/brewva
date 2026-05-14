@@ -13,7 +13,7 @@ import {
   openTuiSolidAct,
   openTuiSolidTestRender,
   type OpenTuiRenderer,
-} from "@brewva/brewva-tui/internal-opentui-runtime";
+} from "../../../packages/brewva-cli/runtime/internal-opentui-runtime.js";
 import { BrewvaOpenTuiShell } from "../../../packages/brewva-cli/runtime/opentui-shell-renderer.js";
 import { CliShellRuntime } from "../../../packages/brewva-cli/src/shell/controller/shell-runtime.js";
 import type {

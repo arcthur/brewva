@@ -25,9 +25,9 @@
   - `packages/brewva-cli/runtime/opentui/index.ts`
   - `packages/brewva-cli/runtime/shell/overlays`
   - `packages/brewva-cli/runtime/internal-shell-runtime.ts`
-  - `packages/brewva-tui/runtime/internal-opentui-runtime.ts`
+  - `packages/brewva-cli/runtime/internal-opentui-runtime.ts`
   - `test/unit/cli/cli-shell-import-graph.unit.test.ts`
-  - `test/contract/cli/opentui-import-quarantine.contract.test.ts`
+  - `test/fitness/cli/opentui-import-quarantine.fitness.test.ts`
   - `test/contract/cli/cli-package-export-surface.contract.test.ts`
 
 ## Decision Summary

@@ -1,6 +1,5 @@
 /** @jsxImportSource @opentui/solid */
 
-import type { OpenTuiScrollBoxHandle } from "@brewva/brewva-tui/internal-opentui-runtime";
 import type { JSX } from "solid-js";
 import { For, Show, createEffect, createMemo } from "solid-js";
 import type {
@@ -21,6 +20,7 @@ import {
   buildTrustLoopApprovalProjection,
   type TrustLoopDetailKey,
 } from "../../src/shell/domain/trust-loop/projection.js";
+import type { OpenTuiScrollBoxHandle } from "../internal-opentui-runtime.js";
 import { useTerminalDimensions } from "../opentui/index.js";
 import { DiffView, formatDiffFileTitle } from "./diff-view.js";
 import { DIALOG_Z_INDEX } from "./overlay-style.js";

@@ -63,6 +63,10 @@ describe("gateway hosted session fitness", () => {
       ),
       "utf8",
     );
+    const providerExecutionPortSource = readFileSync(
+      resolve(repoRoot, "packages/brewva-gateway/src/hosted/internal/provider/execution-port.ts"),
+      "utf8",
+    );
     const providerStreamSource = readFileSync(
       resolve(repoRoot, "packages/brewva-gateway/src/hosted/internal/provider/stream.ts"),
       "utf8",
@@ -73,7 +77,8 @@ describe("gateway hosted session fitness", () => {
     );
 
     expect(managedSessionSource).toContain("@brewva/brewva-substrate/turn");
-    expect(providerStreamSource).toContain("@brewva/brewva-provider-core/stream");
+    expect(providerExecutionPortSource).toContain("@brewva/brewva-provider-core/stream");
+    expect(providerStreamSource).not.toContain("@brewva/brewva-provider-core/stream");
     expect(providerStreamSource).toContain("@brewva/brewva-provider-core/contracts");
     expect(substratePackageSource).toContain('"./turn"');
   });

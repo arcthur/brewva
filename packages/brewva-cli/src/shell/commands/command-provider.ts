@@ -1,4 +1,4 @@
-import type { KeybindingDefinition, KeybindingTrigger } from "@brewva/brewva-tui";
+import type { KeybindingDefinition, KeybindingTrigger } from "../../internal/tui/index.js";
 import type { ShellIntent } from "../domain/intent.js";
 import { fuzzyScore, normalizeSearchQuery } from "../domain/search-scoring.js";
 

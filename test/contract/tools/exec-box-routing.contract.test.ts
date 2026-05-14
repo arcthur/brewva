@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { BoxExecSpec, BoxHandle, BoxPlane, BoxScope } from "@brewva/brewva-box";
+import type { BoxExecSpec, BoxHandle, BoxPlane, BoxScope } from "@brewva/brewva-tools/contracts";
 import { createExecTool, createProcessTool } from "@brewva/brewva-tools/execution";
 import { sleep, waitUntil } from "../../helpers/process.js";
 import {

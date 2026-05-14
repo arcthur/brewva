@@ -1,11 +1,5 @@
 /** @jsxImportSource @opentui/solid */
 
-import type {
-  OpenTuiKeyEvent,
-  OpenTuiRenderer,
-  OpenTuiScrollBoxHandle,
-  OpenTuiTextareaHandle,
-} from "@brewva/brewva-tui/internal-opentui-runtime";
 import { Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
 import { For } from "solid-js";
 import {
@@ -14,6 +8,12 @@ import {
 } from "../../src/shell/domain/prompt-parts.js";
 import type { CliShellPromptPart } from "../../src/shell/domain/prompt.js";
 import type { ShellRendererController } from "../../src/shell/domain/renderer-contract.js";
+import type {
+  OpenTuiKeyEvent,
+  OpenTuiRenderer,
+  OpenTuiScrollBoxHandle,
+  OpenTuiTextareaHandle,
+} from "../internal-opentui-runtime.js";
 import {
   decodePasteBytes,
   type BoxRenderable,

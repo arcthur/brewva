@@ -1,5 +1,5 @@
 import type { BrewvaQueuedPromptView } from "@brewva/brewva-substrate/session";
-import { truncateToWidth, visibleWidth } from "@brewva/brewva-tui";
+import { truncateToWidth, visibleWidth } from "../../../../internal/tui/index.js";
 import type { CliQueueOverlayPayload } from "../payloads.js";
 
 export function buildQueueOverlayPayload(input: {

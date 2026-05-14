@@ -225,8 +225,8 @@ compatibility story.
 - `@brewva/brewva-gateway`: hosted sessions, daemon, hosted extensions,
   subagents, local control-plane orchestration, hosted provider execution,
   cache-aware request shaping, and LLM-driven compaction.
-- `@brewva/brewva-cli` and `@brewva/brewva-tui`: operator shell, one-shot CLI,
-  renderer boundary, and terminal capability policy.
+- `@brewva/brewva-cli`: operator shell, one-shot CLI, CLI-internal renderer
+  boundary, and terminal capability policy.
 - `docs/solutions/**` and knowledge tools: repository precedent and
   compounding knowledge surfaces. Deliberation remains an architecture ring, not
   a standalone package.

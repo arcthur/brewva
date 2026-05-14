@@ -7,6 +7,5 @@
     "jsxImportSource": "@opentui/solid",
     "types": ["node", "bun-types"]
   },
-  "references": [{ "path": "../brewva-tui" }],
   "include": ["src/**/*.ts", "runtime/**/*.ts", "runtime/**/*.tsx"]
 }

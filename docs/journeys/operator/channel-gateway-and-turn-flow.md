@@ -131,7 +131,7 @@ flowchart TD
 - Agent dispatch: `packages/brewva-gateway/src/channels/channel-agent-dispatch.ts`
 - Reply writer: `packages/brewva-gateway/src/channels/channel-reply-writer.ts`
 - Telegram adapter / transport: `packages/brewva-channels-telegram/src`
-- Ingress: `packages/brewva-ingress/src`
+- Ingress: `packages/brewva-ingress-telegram/src`
 
 ## Related Docs
 

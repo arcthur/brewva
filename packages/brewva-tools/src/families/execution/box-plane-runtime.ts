@@ -1,12 +1,12 @@
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
-import { createBoxPlane, type BoxPlane, type BoxPlaneOptions } from "@brewva/brewva-box";
 import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
 import type { BrewvaConfig } from "@brewva/brewva-runtime";
 import { BOX_RELEASED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
 import { stableJsonSha256Hex } from "@brewva/brewva-std/hash";
 import { resolveRuntimeSourceIdentity } from "@brewva/brewva-std/runtime-identity";
 import type { BrewvaBundledToolRuntime } from "../../contracts/index.js";
+import { createBoxPlane, type BoxPlane, type BoxPlaneOptions } from "../../internal/box/index.js";
 
 export type RuntimeBoxConfig = BrewvaConfig["security"]["execution"]["box"];
 

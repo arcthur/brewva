@@ -1,7 +1,10 @@
 import { resolve } from "node:path";
-import { createInMemoryBoxPlane, type BoxPlane } from "@brewva/brewva-box";
 import type { BrewvaToolContext } from "@brewva/brewva-substrate/tools";
 import type { BrewvaBundledToolRuntime } from "@brewva/brewva-tools/contracts";
+import {
+  createInMemoryBoxPlane,
+  type BoxPlane,
+} from "../../../packages/brewva-tools/src/internal/box/index.js";
 import { createRuntimeConfig, createRuntimeFixture } from "../../helpers/runtime.js";
 
 type RecordedExecTestEvent = {

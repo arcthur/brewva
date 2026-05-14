@@ -1,6 +1,6 @@
 import type { BrewvaQueuedPromptView } from "@brewva/brewva-substrate/session";
-import type { TuiTheme } from "@brewva/brewva-tui";
-import type { OverlayEntry } from "@brewva/brewva-tui";
+import type { TuiTheme } from "../../../internal/tui/index.js";
+import type { OverlayEntry } from "../../../internal/tui/index.js";
 import type { ShellCompletionCandidate, ShellCompletionRange } from "../completion-provider.js";
 import type { CliShellOverlayPayload } from "../overlays/payloads.js";
 import type { CliShellPromptPart } from "../prompt.js";

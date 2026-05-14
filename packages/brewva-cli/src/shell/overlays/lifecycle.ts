@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { OverlayPriority } from "@brewva/brewva-tui";
+import type { OverlayPriority } from "../../internal/tui/index.js";
 import { buildSessionInspectReport, resolveInspectDirectory } from "../../operator/inspect.js";
 import { buildCommandPalettePayload, buildHelpHubPayload } from "../commands/command-palette.js";
 import type { ShellCommandProvider } from "../commands/command-provider.js";

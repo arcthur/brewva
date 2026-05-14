@@ -1,9 +1,9 @@
 /** @jsxImportSource @opentui/solid */
 
 import { describe, expect, test } from "bun:test";
-import { DEFAULT_TUI_THEME } from "@brewva/brewva-tui";
 import { createToolRenderCache } from "../../../packages/brewva-cli/runtime/shell/tool-render.js";
 import { renderCliTranscriptScrollbackLines } from "../../../packages/brewva-cli/runtime/shell/transcript-scrollback.js";
+import { DEFAULT_TUI_THEME } from "../../../packages/brewva-cli/src/internal/tui/index.js";
 import type { CliShellRuntime } from "../../../packages/brewva-cli/src/shell/controller/shell-runtime.js";
 import type { CliShellTranscriptMessage } from "../../../packages/brewva-cli/src/shell/domain/transcript.js";
 

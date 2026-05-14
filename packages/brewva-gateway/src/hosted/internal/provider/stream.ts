@@ -4,12 +4,12 @@ import type {
   Model as ProviderStreamModel,
   SimpleStreamOptions as ProviderStreamOptions,
 } from "@brewva/brewva-provider-core/contracts";
-import { streamSimple } from "@brewva/brewva-provider-core/stream";
 import type {
   BrewvaTurnLoopStreamContext,
   BrewvaTurnLoopStreamFunction,
   BrewvaTurnLoopStreamOptions,
 } from "@brewva/brewva-substrate/turn";
+import { streamProviderMessage } from "./execution-port.js";
 
 function toProviderModel(
   model: Parameters<BrewvaTurnLoopStreamFunction>[0],
@@ -69,7 +69,7 @@ function toProviderOptions(
 
 export const createHostedProviderStreamFunction = (): BrewvaTurnLoopStreamFunction => {
   return (model, context, options) => {
-    return streamSimple(
+    return streamProviderMessage(
       toProviderModel(model),
       toProviderContext(context),
       toProviderOptions(options, model),

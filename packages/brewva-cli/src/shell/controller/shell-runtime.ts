@@ -13,7 +13,7 @@ import {
   createKeybindingResolver,
   type KeybindingResolver,
   type OverlayPriority,
-} from "@brewva/brewva-tui";
+} from "../../internal/tui/index.js";
 import { buildCommandPalettePayload, parseShellSlashPrompt } from "../commands/command-palette.js";
 import { ShellCommandProvider } from "../commands/command-provider.js";
 import { registerShellCommands } from "../commands/shell-command-registry.js";

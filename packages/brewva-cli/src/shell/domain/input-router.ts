@@ -1,4 +1,4 @@
-import type { KeybindingContext, KeybindingResolver } from "@brewva/brewva-tui";
+import type { KeybindingContext, KeybindingResolver } from "../../internal/tui/index.js";
 import type { CliShellInput } from "./input.js";
 import type { ShellIntent } from "./intent.js";
 import { decodeShellKeybindingEffect, normalizeShellInputKey } from "./keymap.js";

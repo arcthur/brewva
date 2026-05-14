@@ -19,7 +19,7 @@ import type {
   BrewvaShellViewPreferences,
   BrewvaSteerOutcome,
 } from "@brewva/brewva-substrate/session";
-import { DEFAULT_TUI_THEME } from "@brewva/brewva-tui";
+import { DEFAULT_TUI_THEME } from "../../../packages/brewva-cli/src/internal/tui/index.js";
 import { CliShellRuntime } from "../../../packages/brewva-cli/src/shell/controller/shell-runtime.js";
 import type {
   ProviderAuthMethod,

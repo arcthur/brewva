@@ -1,6 +1,7 @@
 {
   "name": "@brewva/brewva-runtime",
   "version": "0.1.0",
+  "description": "Replay-first Brewva runtime authority, governance, events, and public contracts.",
   "license": "Apache-2.0",
   "type": "module",
   "main": "./dist/index.js",
@@ -66,12 +67,6 @@
       "import": "./dist/parallel.js",
       "default": "./dist/parallel.js"
     },
-    "./semantic-artifacts": {
-      "types": "./dist/semantic-artifacts.d.ts",
-      "bun": "./src/semantic-artifacts.ts",
-      "import": "./dist/semantic-artifacts.js",
-      "default": "./dist/semantic-artifacts.js"
-    },
     "./replay": {
       "types": "./dist/replay.d.ts",
       "bun": "./src/replay.ts",
@@ -89,12 +84,6 @@
       "bun": "./src/runtime/runtime-extensions.ts",
       "import": "./dist/runtime/runtime-extensions.js",
       "default": "./dist/runtime/runtime-extensions.js"
-    },
-    "./runtime-effect": {
-      "types": "./dist/runtime-effect.d.ts",
-      "bun": "./src/runtime-effect.ts",
-      "import": "./dist/runtime-effect.js",
-      "default": "./dist/runtime-effect.js"
     },
     "./schema/brewva.schema.json": "./schema/brewva.schema.json",
     "./claim": {

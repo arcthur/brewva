@@ -2,7 +2,7 @@ import type {
   BrewvaModelPreferences,
   BrewvaSessionModelDescriptor,
 } from "@brewva/brewva-substrate/session";
-import type { OverlayPriority } from "@brewva/brewva-tui";
+import type { OverlayPriority } from "../../../internal/tui/index.js";
 import type { ShellCommitOptions } from "../../domain/actions.js";
 import type { CliShellInput } from "../../domain/input.js";
 import { normalizeShellInputKey } from "../../domain/keymap.js";

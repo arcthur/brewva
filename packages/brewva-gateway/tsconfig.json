@@ -7,7 +7,7 @@
   "references": [
     { "path": "../brewva-provider-core" },
     { "path": "../brewva-channels-telegram" },
-    { "path": "../brewva-ingress" },
+    { "path": "../brewva-ingress-telegram" },
     { "path": "../brewva-mcp-adapter" },
     { "path": "../brewva-runtime" },
     { "path": "../brewva-std" },

@@ -1,6 +1,7 @@
 {
   "name": "@brewva/brewva-gateway",
   "version": "0.1.0",
+  "description": "Hosted Brewva control plane, session supervision, and gateway composition.",
   "license": "Apache-2.0",
   "type": "module",
   "main": "./dist/index.js",
@@ -70,10 +71,9 @@
   "dependencies": {
     "@brewva/brewva-channels-telegram": "workspace:*",
     "@brewva/brewva-effect": "workspace:*",
-    "@brewva/brewva-ingress": "workspace:*",
+    "@brewva/brewva-ingress-telegram": "workspace:*",
     "@brewva/brewva-mcp-adapter": "workspace:*",
     "@brewva/brewva-provider-core": "workspace:*",
-    "@brewva/brewva-recall": "workspace:*",
     "@brewva/brewva-runtime": "workspace:*",
     "@brewva/brewva-std": "workspace:*",
     "@brewva/brewva-substrate": "workspace:*",

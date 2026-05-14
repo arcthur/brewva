@@ -4,7 +4,7 @@ import {
   type BrewvaUiDialogOptions,
   normalizeQuestionPrompt,
 } from "@brewva/brewva-substrate/host-api";
-import type { OverlayPriority } from "@brewva/brewva-tui";
+import type { OverlayPriority } from "../../internal/tui/index.js";
 import type { CliShellOverlayPayload } from "../domain/overlays/payloads.js";
 import { buildOpenQuestionsFromRequest } from "../domain/question-utils.js";
 

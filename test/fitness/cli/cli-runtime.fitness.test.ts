@@ -2,11 +2,6 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-function readJson(relativePath: string): unknown {
-  const repoRoot = resolve(import.meta.dirname, "../../..");
-  return JSON.parse(readFileSync(resolve(repoRoot, relativePath), "utf8")) as unknown;
-}
-
 describe("cli contract: Brewva-native runtime boundary", () => {
   test("keeps Pi interactive runtime and Pi session bridges out of the cli runtime path", () => {
     const repoRoot = resolve(import.meta.dirname, "../../..");
@@ -181,50 +176,8 @@ describe("cli contract: Brewva-native runtime boundary", () => {
     expect(solidPromptSource).not.toContain("CompletionOverlay");
 
     expect(packageJsonSource).not.toContain('"@mariozechner/pi-coding-agent"');
-    expect(packageJsonSource).toContain('"@brewva/brewva-tui"');
-  });
-
-  test("declares brewva-tui as a TypeScript project reference for clean type-aware analysis", () => {
-    const tsconfig = readJson("packages/brewva-cli/tsconfig.json") as {
-      references?: Array<{ path?: string }>;
-    };
-
-    expect(tsconfig.references).toEqual(
-      expect.arrayContaining([expect.objectContaining({ path: "../brewva-tui" })]),
-    );
-  });
-
-  test("declares brewva-tui for the cli runtime project graph", () => {
-    const tsconfig = readJson("packages/brewva-cli/tsconfig.runtime.json") as {
-      references?: Array<{ path?: string }>;
-    };
-
-    expect(tsconfig.references).toEqual(
-      expect.arrayContaining([expect.objectContaining({ path: "../brewva-tui" })]),
-    );
-  });
-
-  test("declares brewva-tui for test typechecking without prebuilt dist", () => {
-    const tsconfig = readJson("test/tsconfig.json") as {
-      references?: Array<{ path?: string }>;
-    };
-
-    expect(tsconfig.references).toEqual(
-      expect.arrayContaining([expect.objectContaining({ path: "../packages/brewva-tui" })]),
-    );
-  });
-
-  test("consumes brewva-tui root types from source instead of prebuilt dist", () => {
-    const packageJson = readJson("packages/brewva-tui/package.json") as {
-      types?: string;
-      exports?: {
-        "."?: {
-          types?: string;
-        };
-      };
-    };
-
-    expect(packageJson.types).toBe("./src/index.ts");
-    expect(packageJson.exports?.["."]?.types).toBe("./src/index.ts");
+    expect(packageJsonSource).toContain('"@opentui/core"');
+    expect(packageJsonSource).toContain('"@opentui/solid"');
+    expect(packageJsonSource).toContain('"get-east-asian-width"');
   });
 });

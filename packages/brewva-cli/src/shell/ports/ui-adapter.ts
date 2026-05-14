@@ -7,7 +7,7 @@ import {
   listTuiThemes,
   resolveTuiTheme,
   type TuiTheme,
-} from "@brewva/brewva-tui";
+} from "../../internal/tui/index.js";
 import {
   cloneCliShellPromptParts,
   rebasePromptPartsAfterTextReplace,

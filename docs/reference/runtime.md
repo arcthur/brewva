@@ -55,10 +55,10 @@ Runtime internals are composed through Effect layers behind the factory-created
 runtime controller. Public `BrewvaRuntimeInstance` objects do not carry a hidden
 controller reference and cannot recover the Effect spine.
 
-The internal subpath `@brewva/brewva-runtime/runtime-effect` accepts the
-runtime package's internal controller handle, created only by the source-owned
-runtime assembly factory, and exposes implementation-only helpers for running
-Effect programs against the runtime spine:
+The source-internal runtime Effect spine accepts the runtime package's internal
+controller handle, created only by the source-owned runtime assembly factory,
+and exposes implementation-only helpers for running Effect programs against the
+runtime spine:
 
 - `getRuntimeEffectSpine(...)`
 - `runRuntimeEffect(...)`

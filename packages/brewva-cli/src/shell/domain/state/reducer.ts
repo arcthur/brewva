@@ -1,4 +1,4 @@
-import { FocusManager, OverlayManager } from "@brewva/brewva-tui";
+import { FocusManager, OverlayManager } from "../../../internal/tui/index.js";
 import type { CliShellAction, CliShellOverlayState, CliShellViewState } from "./types.js";
 
 function snapshotOverlayState(overlays: OverlayManager): CliShellOverlayState {

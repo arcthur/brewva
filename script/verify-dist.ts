@@ -200,7 +200,7 @@ function main(): void {
       "@brewva/brewva-recall/knowledge",
       "@brewva/brewva-recall/evidence",
       "@brewva/brewva-channels-telegram",
-      "@brewva/brewva-ingress",
+      "@brewva/brewva-ingress-telegram",
       "@brewva/brewva-tools",
       "@brewva/brewva-tools/contracts",
       "@brewva/brewva-tools/registry",
@@ -210,7 +210,6 @@ function main(): void {
       "@brewva/brewva-tools/memory",
       "@brewva/brewva-tools/delegation",
       "@brewva/brewva-tools/workflow",
-      "@brewva/brewva-tui",
       "@brewva/brewva-runtime/channels",
       "@brewva/brewva-runtime/claim",
       "@brewva/brewva-runtime/config",
@@ -259,7 +258,6 @@ function main(): void {
       cliChannelModule,
       cliExtensionsModule,
       cliJsonLinesModule,
-      tuiModule,
       channelsModule,
       hostModule,
       extensionsModule,
@@ -273,7 +271,6 @@ function main(): void {
       import("@brewva/brewva-cli/channel"),
       import("@brewva/brewva-cli/extensions"),
       import("@brewva/brewva-cli/io/json-lines"),
-      import("@brewva/brewva-tui"),
       import("@brewva/brewva-gateway/channels"),
       import("@brewva/brewva-gateway/hosted"),
       import("@brewva/brewva-gateway/extensions"),
@@ -289,7 +286,6 @@ function main(): void {
             name !== "@brewva/brewva-cli/channel" &&
             name !== "@brewva/brewva-cli/extensions" &&
             name !== "@brewva/brewva-cli/io/json-lines" &&
-            name !== "@brewva/brewva-tui" &&
             name !== "@brewva/brewva-gateway/channels" &&
             name !== "@brewva/brewva-gateway/hosted" &&
             name !== "@brewva/brewva-gateway/extensions" &&
@@ -307,12 +303,6 @@ function main(): void {
     }
     if (typeof extensionsModule.defineHostedExtensionPlugin !== "function") {
       throw new Error("gateway extensions subpath missing defineHostedExtensionPlugin export");
-    }
-    if (typeof tuiModule.detectTerminalCapabilities !== "function") {
-      throw new Error("tui root entry missing detectTerminalCapabilities export");
-    }
-    if (typeof tuiModule.createHeadlessTerminalHarness !== "function") {
-      throw new Error("tui root entry missing createHeadlessTerminalHarness export");
     }
     if (typeof cliModule.parseArgs !== "function") {
       throw new Error("cli root entry missing parseArgs export");
@@ -348,26 +338,15 @@ function main(): void {
       throw new Error("cli root entry unexpectedly re-exported gateway host helpers");
     }
     const cliInternalRuntime = await import("@brewva/brewva-cli/internal-shell-runtime");
-    const tuiInternalRuntime = await import("@brewva/brewva-tui/internal-opentui-runtime");
     if (typeof cliInternalRuntime.runCliInteractiveSmoke !== "function") {
       throw new Error("cli internal runtime stub missing runCliInteractiveSmoke");
-    }
-    if (typeof tuiInternalRuntime.runOpenTuiSmoke !== "function") {
-      throw new Error("tui internal runtime stub missing runOpenTuiSmoke");
     }
     const cliRuntimeMessage = await cliInternalRuntime
       .runCliInteractiveSmoke()
       .then(() => "")
       .catch((error) => (error instanceof Error ? error.message : String(error)));
-    const tuiRuntimeMessage = await tuiInternalRuntime
-      .runOpenTuiSmoke()
-      .then(() => "")
-      .catch((error) => (error instanceof Error ? error.message : String(error)));
     if (!cliRuntimeMessage.includes("direct Node.js dist execution")) {
       throw new Error("cli internal runtime import did not resolve to the Node-safe stub");
-    }
-    if (!tuiRuntimeMessage.includes("native interactive runtime")) {
-      throw new Error("tui internal runtime import did not resolve to the Node-safe stub");
     }
     if ("registerRuntimeCoreEventBridge" in hostModule) {
       throw new Error("gateway host subpath still exports removed session event bridge helper");
@@ -419,7 +398,6 @@ function main(): void {
     const runtimeConfigModule = await import("@brewva/brewva-runtime/config");
     const runtimeSessionModule = await import("@brewva/brewva-runtime/session");
     const runtimeTapeModule = await import("@brewva/brewva-runtime/tape");
-    const semanticArtifactsModule = await import("@brewva/brewva-runtime/semantic-artifacts");
     const { createOutputSearchTool } = await import("@brewva/brewva-tools/navigation");
     const runtime = createBrewvaRuntime({ cwd: isolatedWorkspace });
     if (typeof createBrewvaRuntime !== "function") {
@@ -451,12 +429,6 @@ function main(): void {
     }
     if (typeof runtimeTapeModule.buildTapeCheckpointPayload !== "function") {
       throw new Error("runtime tape subpath missing buildTapeCheckpointPayload export");
-    }
-    if (typeof semanticArtifactsModule.getSemanticArtifactOutputContract !== "function") {
-      throw new Error("semantic-artifacts subpath missing getSemanticArtifactOutputContract export");
-    }
-    if (typeof semanticArtifactsModule.renderSemanticArtifactExample !== "function") {
-      throw new Error("semantic-artifacts subpath missing renderSemanticArtifactExample export");
     }
     if (!existsSync(join(isolatedHome, "skills", ".system"))) {
       throw new Error("runtime construction smoke failed: system skill root was not installed");
@@ -539,10 +511,7 @@ function main(): void {
     "dist removed exec runtime marker check failed",
   );
   assertNoForbiddenMarkers(
-    [
-      ...collectTextFiles(resolve(repoRoot, "packages", "brewva-cli", "dist")),
-      ...collectTextFiles(resolve(repoRoot, "packages", "brewva-tui", "dist")),
-    ],
+    [...collectTextFiles(resolve(repoRoot, "packages", "brewva-cli", "dist"))],
     NODE_SAFE_DIST_FORBIDDEN_MARKERS,
     "node-safe dist quarantine check failed",
   );

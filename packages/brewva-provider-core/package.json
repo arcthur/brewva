@@ -1,6 +1,7 @@
 {
   "name": "@brewva/brewva-provider-core",
   "version": "0.1.0",
+  "description": "Provider contracts, catalogs, streaming, caching, and driver internals for Brewva.",
   "license": "Apache-2.0",
   "type": "module",
   "main": "./dist/index.js",

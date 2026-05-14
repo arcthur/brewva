@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { BoxExecSpec, BoxHandle, BoxPlane, BoxScope } from "@brewva/brewva-box";
+import type { BoxExecSpec, BoxHandle, BoxPlane, BoxScope } from "@brewva/brewva-tools/contracts";
 import { createExecTool, createProcessTool } from "@brewva/brewva-tools/execution";
 import { requireDefined, requireNonEmptyString } from "../../helpers/assertions.js";
 import { sleep } from "../../helpers/process.js";

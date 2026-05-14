@@ -1,14 +1,14 @@
 /** @jsxImportSource @opentui/solid */
 
-import { truncateToWidth, visibleWidth } from "@brewva/brewva-tui";
-import type { OpenTuiTextareaHandle } from "@brewva/brewva-tui/internal-opentui-runtime";
 import { For, Show, createMemo } from "solid-js";
+import { truncateToWidth, visibleWidth } from "../../src/internal/tui/index.js";
 import {
   cloneCliShellPromptParts,
   rebasePromptPartsAfterTextReplace,
 } from "../../src/shell/domain/prompt-parts.js";
 import type { ShellRendererController } from "../../src/shell/domain/renderer-contract.js";
 import type { ShellViewModel } from "../../src/shell/domain/view-model.js";
+import type { OpenTuiTextareaHandle } from "../internal-opentui-runtime.js";
 import {
   SyntaxStyle,
   decodePasteBytes,

@@ -1,7 +1,7 @@
 import type { Server } from "node:http";
 import { TelegramWebhookTransport } from "@brewva/brewva-channels-telegram";
 import { BrewvaBoundaryFailure, BrewvaEffect, runPromiseAtBoundary } from "@brewva/brewva-effect";
-import { createTelegramIngressServer } from "@brewva/brewva-ingress";
+import { createTelegramIngressServer } from "@brewva/brewva-ingress-telegram";
 import type {
   ChannelModeLaunchBundle,
   ChannelModeLauncher,

@@ -25,6 +25,15 @@ retirement_sensitivity: review_only
 - Reintroducing mixed provider-core root implementation files or flat
   provider-driver siblings when the accepted shape is domain slices plus
   `providers/<api>/`.
+- Importing `@brewva/brewva-provider-core/stream` directly from gateway modules
+  outside `packages/brewva-gateway/src/hosted/internal/provider/execution-port.ts`.
+- Reintroducing `@brewva/brewva-box`, `@brewva/brewva-tui`, or generic
+  `@brewva/brewva-ingress` package identities without a new accepted ownership
+  decision.
+- Importing concrete Telegram channel packages from gateway modules outside the
+  Telegram bridge composition.
+- Letting `@brewva/brewva-mcp-adapter` decide managed-tool capabilities or
+  hosted action policy instead of only translating MCP protocol surfaces.
 - Fire-and-forget provider session cleanup on session replacement, rewind,
   compaction, or model/provider change.
 - Re-exposing removed low-level tuning knobs as public config.

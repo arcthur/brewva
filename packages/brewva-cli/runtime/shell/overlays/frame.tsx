@@ -1,7 +1,7 @@
 /** @jsxImportSource @opentui/solid */
 
-import { truncateToWidth, visibleWidth } from "@brewva/brewva-tui";
 import { For, Show, createMemo, type JSX } from "solid-js";
+import { truncateToWidth, visibleWidth } from "../../../src/internal/tui/index.js";
 import { TextAttributes } from "../../opentui/index.js";
 import {
   DIALOG_BACKDROP,
