@@ -21,6 +21,7 @@ export interface ShellSessionsOverlayProjectorInput {
     }
   >;
   currentComposerText: string;
+  query?: string;
   selection?: {
     sessionId?: string;
     index?: number;
@@ -70,6 +71,7 @@ export class ShellSessionsOverlayProjector {
       currentSessionId: input.currentSessionId,
       draftsBySessionId: input.draftsBySessionId,
       currentComposerText: input.currentComposerText,
+      query: input.query,
       replaySessionsForOverlay: orderedReplay,
       selection: input.selection ?? {},
     });

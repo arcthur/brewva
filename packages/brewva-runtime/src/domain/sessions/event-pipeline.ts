@@ -90,6 +90,7 @@ import {
   SESSION_COMPACT_REQUEST_FAILED_EVENT_TYPE,
   SESSION_SHUTDOWN_EVENT_TYPE,
   SESSION_START_EVENT_TYPE,
+  SESSION_TITLE_RECORDED_EVENT_TYPE,
   SESSION_TURN_TRANSITION_EVENT_TYPE,
   STEER_APPLIED_EVENT_TYPE,
   STEER_DROPPED_EVENT_TYPE,
@@ -161,6 +162,7 @@ import { REASONING_CHECKPOINT_EVENT_TYPE, REASONING_REVERT_EVENT_TYPE } from "..
 import { SCHEDULE_EVENT_TYPE } from "../schedule/api.js";
 import { TAPE_ANCHOR_EVENT_TYPE, TAPE_CHECKPOINT_EVENT_TYPE } from "../tape/api.js";
 import { TASK_EVENT_TYPE } from "../task/api.js";
+import { projectSessionReplayMetadata } from "./title.js";
 
 const AUDIT_EVENT_TYPES = new Set<string>([
   TAPE_ANCHOR_EVENT_TYPE,
@@ -265,6 +267,7 @@ const AUDIT_EVENT_TYPES = new Set<string>([
   SESSION_COMPACT_REQUEST_FAILED_EVENT_TYPE,
   SESSION_SHUTDOWN_EVENT_TYPE,
   SESSION_START_EVENT_TYPE,
+  SESSION_TITLE_RECORDED_EVENT_TYPE,
   SESSION_TURN_TRANSITION_EVENT_TYPE,
   TURN_INPUT_RECORDED_EVENT_TYPE,
   TURN_RENDER_COMMITTED_EVENT_TYPE,
@@ -548,6 +551,7 @@ export class EventPipelineService {
         sessionId: asBrewvaSessionId(sessionId),
         eventCount: events.length,
         lastEventAt: events[events.length - 1]?.timestamp ?? 0,
+        ...projectSessionReplayMetadata(events),
       });
     }
 

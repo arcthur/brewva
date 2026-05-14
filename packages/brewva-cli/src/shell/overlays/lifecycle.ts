@@ -498,6 +498,9 @@ export class ShellOverlayLifecycleHandler {
 
   async handleGenericInput(input: CliShellInput): Promise<void> {
     const active = this.context.getState().overlay.active?.payload;
+    if (active?.kind === "sessions" && this.handleSessionsSearchInput(active, input)) {
+      return;
+    }
     if (active) {
       await this.handleShortcut(active, input);
     }
@@ -660,10 +663,14 @@ export class ShellOverlayLifecycleHandler {
     }
     if (active.kind === "sessions") {
       this.replaceActiveOverlay(
-        this.buildSessionsOverlayPayload(snapshot, {
-          sessionId: active.sessions[active.selectedIndex]?.sessionId,
-          index: active.selectedIndex,
-        }),
+        this.buildSessionsOverlayPayload(
+          snapshot,
+          {
+            sessionId: active.sessions[active.selectedIndex]?.sessionId,
+            index: active.selectedIndex,
+          },
+          active.query,
+        ),
       );
       return;
     }
@@ -859,14 +866,69 @@ export class ShellOverlayLifecycleHandler {
       sessionId?: string;
       index?: number;
     } = {},
+    query = "",
   ): CliShellOverlayPayload {
     return this.#sessionsProjector.build({
       snapshot,
       currentSessionId: this.context.getSessionPort().getSessionId(),
       draftsBySessionId: this.context.getDraftsBySessionId(),
       currentComposerText: this.context.getState().composer.text,
+      query,
       selection,
     });
+  }
+
+  private handleSessionsSearchInput(
+    active: Extract<CliShellOverlayPayload, { kind: "sessions" }>,
+    input: CliShellInput,
+  ): boolean {
+    const key = normalizeShellInputKey(input.key);
+    if (input.meta || input.ctrl) {
+      return false;
+    }
+    if (key === "backspace") {
+      if (active.query.length === 0) {
+        return true;
+      }
+      this.replaceActiveOverlay(
+        this.buildSessionsOverlayPayload(
+          this.context.getOperatorSnapshot(),
+          {
+            sessionId: active.sessions[active.selectedIndex]?.sessionId,
+            index: active.selectedIndex,
+          },
+          active.query.slice(0, -1),
+        ),
+      );
+      return true;
+    }
+    if (key === "paste" && typeof input.text === "string") {
+      this.replaceActiveOverlay(
+        this.buildSessionsOverlayPayload(
+          this.context.getOperatorSnapshot(),
+          {
+            sessionId: active.sessions[active.selectedIndex]?.sessionId,
+            index: active.selectedIndex,
+          },
+          `${active.query}${input.text}`,
+        ),
+      );
+      return true;
+    }
+    if (key === "character" && typeof input.text === "string") {
+      this.replaceActiveOverlay(
+        this.buildSessionsOverlayPayload(
+          this.context.getOperatorSnapshot(),
+          {
+            sessionId: active.sessions[active.selectedIndex]?.sessionId,
+            index: active.selectedIndex,
+          },
+          `${active.query}${input.text}`,
+        ),
+      );
+      return true;
+    }
+    return false;
   }
 
   private buildLineageOverlayPayload(

@@ -54,6 +54,37 @@ export interface SessionUncleanShutdownDiagnostic {
   latestEventAt?: number;
 }
 
+export type SessionTitleSource = "llm";
+
+export interface SessionTitleRecordedModel {
+  provider: string;
+  id: string;
+  api?: string;
+}
+
+export interface SessionTitleRecordedPayload {
+  title: string;
+  source: SessionTitleSource;
+  turnId: string;
+  promptEventId: string;
+  model: SessionTitleRecordedModel;
+  generatedAt: number;
+}
+
+export interface SessionTitleView extends SessionTitleRecordedPayload {
+  sessionId: string;
+  eventId: string;
+  timestamp: number;
+}
+
+export interface RecordGeneratedSessionTitleInput {
+  title: string;
+  turnId: string;
+  promptEventId: string;
+  model: SessionTitleRecordedModel;
+  generatedAt?: number;
+}
+
 export type SessionRewindMode = "conversation" | "code" | "both";
 
 export type SessionRewindSummary = "none" | "carry";

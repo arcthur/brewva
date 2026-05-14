@@ -11,6 +11,7 @@ export type {
   ManagedToolMode,
   OpenToolCallRecord,
   OpenTurnRecord,
+  RecordGeneratedSessionTitleInput,
   RecordSessionRewindCheckpointInput,
   SessionHydrationState,
   SessionPromptSnapshot,
@@ -31,6 +32,10 @@ export type {
   SessionRewindTargetLineage,
   SessionRewindTargetView,
   SessionRewindTrigger,
+  SessionTitleRecordedModel,
+  SessionTitleRecordedPayload,
+  SessionTitleSource,
+  SessionTitleView,
   SessionUncleanShutdownDiagnostic,
   SessionUncleanShutdownReason,
 } from "./domain/sessions/types.js";
@@ -123,3 +128,9 @@ export {
   buildSessionRewindProjection,
   listSessionRewindTargets,
 } from "./domain/projection/session-rewind.js";
+export {
+  DEFAULT_SESSION_TITLE,
+  SESSION_TITLE_MAX_CHARS,
+  normalizeSessionTitleForStorage,
+  projectSessionReplayMetadata,
+} from "./domain/sessions/title.js";

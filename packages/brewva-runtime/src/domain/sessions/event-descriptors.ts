@@ -15,6 +15,7 @@ import {
 import type { RedoResult, RollbackResult } from "../patching/types.js";
 import {
   SESSION_REWIND_COMPLETED_EVENT_TYPE,
+  SESSION_TITLE_RECORDED_EVENT_TYPE,
   SESSION_TURN_TRANSITION_EVENT_TYPE,
   SESSION_UNCLEAN_SHUTDOWN_RECONCILED_EVENT_TYPE,
   TURN_INPUT_RECORDED_EVENT_TYPE,
@@ -28,6 +29,8 @@ import type {
   SessionRewindMode,
   SessionRewindSummary,
   SessionRewindTrigger,
+  SessionTitleRecordedModel,
+  SessionTitleRecordedPayload,
   SessionUncleanShutdownDiagnostic,
   SessionUncleanShutdownReason,
   SessionRewindCompletedEventPayload,
@@ -48,6 +51,7 @@ import type {
 
 export {
   SESSION_REWIND_COMPLETED_EVENT_TYPE,
+  SESSION_TITLE_RECORDED_EVENT_TYPE,
   SESSION_TURN_TRANSITION_EVENT_TYPE,
   SESSION_UNCLEAN_SHUTDOWN_RECONCILED_EVENT_TYPE,
   TURN_INPUT_RECORDED_EVENT_TYPE,
@@ -359,6 +363,59 @@ function readUncleanShutdownReason(value: unknown): SessionUncleanShutdownReason
     : null;
 }
 
+function readSessionTitleRecordedModel(value: unknown): SessionTitleRecordedModel | null {
+  if (value === undefined) {
+    return null;
+  }
+  const record = asRecord(value);
+  if (!record) {
+    return null;
+  }
+  const provider = readString(record.provider);
+  const id = readString(record.id);
+  const api = readString(record.api);
+  if (!provider || !id || (record.api !== undefined && !api)) {
+    return null;
+  }
+  return {
+    provider,
+    id,
+    ...(api ? { api } : {}),
+  };
+}
+
+function readSessionTitleRecordedPayloadValue(
+  payload: unknown,
+): SessionTitleRecordedPayload | null {
+  const record = asRecord(payload);
+  if (!record) {
+    return null;
+  }
+  const title = readString(record.title);
+  const turnId = readString(record.turnId);
+  const promptEventId = readString(record.promptEventId);
+  const generatedAt = readNonNegativeNumber(record.generatedAt);
+  const model = readSessionTitleRecordedModel(record.model);
+  if (
+    !title ||
+    record.source !== "llm" ||
+    !turnId ||
+    !promptEventId ||
+    generatedAt === null ||
+    !model
+  ) {
+    return null;
+  }
+  return {
+    title,
+    source: "llm",
+    turnId,
+    promptEventId,
+    model,
+    generatedAt,
+  };
+}
+
 function readOpenToolCallRecord(value: unknown): OpenToolCallRecord | null {
   const record = asRecord(value);
   if (!record) {
@@ -491,6 +548,13 @@ export const TURN_RENDER_COMMITTED_EVENT_DESCRIPTOR = defineBrewvaEventDescripto
   },
 });
 
+export const SESSION_TITLE_RECORDED_EVENT_DESCRIPTOR = defineBrewvaEventDescriptor({
+  type: SESSION_TITLE_RECORDED_EVENT_TYPE,
+  category: "session",
+  durability: "source_of_truth",
+  readPayload: readSessionTitleRecordedPayloadValue,
+});
+
 export const SESSION_TURN_TRANSITION_EVENT_DESCRIPTOR = defineBrewvaEventDescriptor({
   type: SESSION_TURN_TRANSITION_EVENT_TYPE,
   category: "session",
@@ -515,6 +579,7 @@ export const SESSION_UNCLEAN_SHUTDOWN_RECONCILED_EVENT_DESCRIPTOR = defineBrewva
 export const SESSIONS_EVENT_DESCRIPTORS = [
   TURN_INPUT_RECORDED_EVENT_DESCRIPTOR,
   TURN_RENDER_COMMITTED_EVENT_DESCRIPTOR,
+  SESSION_TITLE_RECORDED_EVENT_DESCRIPTOR,
   SESSION_TURN_TRANSITION_EVENT_DESCRIPTOR,
   SESSION_REWIND_COMPLETED_EVENT_DESCRIPTOR,
   SESSION_UNCLEAN_SHUTDOWN_RECONCILED_EVENT_DESCRIPTOR,
@@ -530,6 +595,12 @@ export function readTurnRenderCommittedEventPayload(
   event: BrewvaEventLike,
 ): TurnRenderCommittedPayload | null {
   return readBrewvaEventPayload(event, TURN_RENDER_COMMITTED_EVENT_DESCRIPTOR);
+}
+
+export function readSessionTitleRecordedEventPayload(
+  event: BrewvaEventLike,
+): SessionTitleRecordedPayload | null {
+  return readBrewvaEventPayload(event, SESSION_TITLE_RECORDED_EVENT_DESCRIPTOR);
 }
 
 export function readSessionTurnTransitionEventPayload(

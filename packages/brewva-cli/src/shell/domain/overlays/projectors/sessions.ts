@@ -1,7 +1,63 @@
 import { asBrewvaSessionId } from "@brewva/brewva-runtime/core";
 import type { BrewvaReplaySession } from "@brewva/brewva-runtime/events";
+import { DEFAULT_SESSION_TITLE } from "@brewva/brewva-runtime/session";
 import type { OperatorSurfaceSnapshot } from "../../operator-snapshot.js";
+import { fuzzyScore, normalizeSearchQuery } from "../../search-scoring.js";
 import type { CliSessionsOverlayPayload } from "../payloads.js";
+
+export type CliSessionsOverlayRow =
+  | {
+      kind: "group";
+      label: string;
+    }
+  | {
+      kind: "session";
+      session: BrewvaReplaySession;
+      sessionIndex: number;
+    };
+
+function sessionsOverlayGroupLabel(timestamp: number, now: number): string {
+  if (!Number.isFinite(timestamp) || timestamp <= 0) {
+    return "Today";
+  }
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) {
+    return "Unknown";
+  }
+  const label = date.toDateString();
+  return label === new Date(now).toDateString() ? "Today" : label;
+}
+
+function matchesSessionsOverlayQuery(
+  session: BrewvaReplaySession,
+  query: string,
+  now: number,
+): boolean {
+  if (!normalizeSearchQuery(query)) {
+    return true;
+  }
+  return (
+    fuzzyScore(query, session.title) !== null ||
+    fuzzyScore(query, sessionsOverlayGroupLabel(session.lastEventAt, now)) !== null
+  );
+}
+
+export function buildSessionsOverlayRows(
+  sessions: readonly BrewvaReplaySession[],
+  now = Date.now(),
+): CliSessionsOverlayRow[] {
+  const rows: CliSessionsOverlayRow[] = [];
+  let previousGroup: string | undefined;
+  for (const [sessionIndex, session] of sessions.entries()) {
+    const group = sessionsOverlayGroupLabel(session.lastEventAt, now);
+    if (group !== previousGroup) {
+      rows.push({ kind: "group", label: group });
+      previousGroup = group;
+    }
+    rows.push({ kind: "session", session, sessionIndex });
+  }
+  return rows;
+}
 
 export function mergeSessionsOverlayRows(
   snapshot: OperatorSurfaceSnapshot,
@@ -14,6 +70,7 @@ export function mergeSessionsOverlayRows(
     sessionId: asBrewvaSessionId(currentSessionId),
     eventCount: 0,
     lastEventAt: 0,
+    title: DEFAULT_SESSION_TITLE,
   } satisfies BrewvaReplaySession;
   return hasCurrentInSnapshot ? [...snapshot.sessions] : [placeholderCurrent, ...snapshot.sessions];
 }
@@ -100,6 +157,7 @@ export function buildSessionsOverlayPayload(input: {
   currentSessionId: string;
   draftsBySessionId: ReadonlyMap<string, { text: string }>;
   currentComposerText: string;
+  query?: string;
   /**
    * Replay rows in display order — used by the sessions overlay to keep keyboard order stable
    * regardless of backend `lastEventAt` reshuffles until the user sends a prompt in the current session.
@@ -110,9 +168,14 @@ export function buildSessionsOverlayPayload(input: {
     index?: number;
   };
 }): CliSessionsOverlayPayload {
-  const sessions = input.replaySessionsForOverlay
+  const query = input.query ?? "";
+  const now = Date.now();
+  const replaySessions = input.replaySessionsForOverlay
     ? [...input.replaySessionsForOverlay]
     : mergeSessionsOverlayRows(input.snapshot, input.currentSessionId);
+  const sessions = replaySessions.filter((session) =>
+    matchesSessionsOverlayQuery(session, query, now),
+  );
   const selectedIndexById =
     typeof input.selection?.sessionId === "string"
       ? sessions.findIndex((session) => session.sessionId === input.selection?.sessionId)
@@ -137,6 +200,7 @@ export function buildSessionsOverlayPayload(input: {
 
   return {
     kind: "sessions",
+    query,
     sessions,
     currentSessionId: input.currentSessionId,
     draftStateBySessionId,

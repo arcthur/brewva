@@ -83,6 +83,9 @@ export interface ManagedSessionModelSelectionControllerOptions {
     source?: string;
     mainModel?: string;
     subagentModels?: Record<string, string>;
+    auxiliaryModels?: {
+      title?: string;
+    };
     synthetic?: boolean;
   }) => void;
   appendModelChange: (provider: string, modelId: string) => void;
@@ -178,6 +181,7 @@ export class ManagedSessionModelSelectionController {
       source: request.source ?? "session",
       mainModel: preset.mainModel,
       subagentModels: preset.subagentModels,
+      auxiliaryModels: preset.auxiliaryModels,
       synthetic: preset.synthetic,
     });
 

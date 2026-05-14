@@ -86,4 +86,88 @@ describe("structured event replay", () => {
       expect.objectContaining({ sessionId: olderSession, lastEventAt: 2000 }),
     ]);
   });
+
+  test("listReplaySessions projects generated titles", async () => {
+    const workspace = createWorkspace("replay-title");
+    writeConfig(workspace, createConfig({}));
+
+    const runtime = createBrewvaRuntime({
+      cwd: workspace,
+      configPath: RUNTIME_CONTRACT_CONFIG_PATH,
+    }).hosted;
+    const sessionId = asBrewvaSessionId("session-title");
+
+    runtime.extensions.hosted.events.record({
+      sessionId,
+      type: "session_start",
+      payload: { cwd: workspace },
+      timestamp: 1000,
+    });
+    runtime.extensions.hosted.events.record({
+      sessionId,
+      type: "turn_input_recorded",
+      turn: 1,
+      payload: { turnId: "turn-1", trigger: "user", promptText: "Build session titles" },
+      timestamp: 2000,
+    });
+    runtime.extensions.hosted.events.record({
+      sessionId,
+      type: "session_title_recorded",
+      payload: {
+        title: "Session Overlay Titles",
+        source: "llm",
+        turnId: "turn-1",
+        promptEventId: "prompt-event-1",
+        model: { provider: "openai", id: "gpt-5.4-mini", api: "openai" },
+        generatedAt: 7000,
+      },
+      timestamp: 3000,
+    });
+
+    expect(runtime.inspect.events.log.listReplaySessions()).toEqual([
+      expect.objectContaining({
+        sessionId,
+        title: "Session Overlay Titles",
+      }),
+    ]);
+  });
+
+  test("listReplaySessions ignores malformed generated title payloads", async () => {
+    const workspace = createWorkspace("replay-title-malformed");
+    writeConfig(workspace, createConfig({}));
+
+    const runtime = createBrewvaRuntime({
+      cwd: workspace,
+      configPath: RUNTIME_CONTRACT_CONFIG_PATH,
+    }).hosted;
+    const sessionId = asBrewvaSessionId("session-title-malformed");
+
+    runtime.extensions.hosted.events.record({
+      sessionId,
+      type: "session_start",
+      payload: { cwd: workspace },
+      timestamp: 1000,
+    });
+    expect(() =>
+      runtime.extensions.hosted.events.record({
+        sessionId,
+        type: "session_title_recorded",
+        payload: {
+          title: "Incomplete Title Fact",
+          source: "llm",
+          turnId: "turn-1",
+          promptEventId: "prompt-event-1",
+          generatedAt: 7000,
+        },
+        timestamp: 3000,
+      }),
+    ).toThrow("invalid_recorded_event_payload:session_title_recorded");
+
+    expect(runtime.inspect.events.log.listReplaySessions()).toEqual([
+      expect.objectContaining({
+        sessionId,
+        title: "New session",
+      }),
+    ]);
+  });
 });

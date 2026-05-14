@@ -87,6 +87,9 @@ describe("hosted session factory", () => {
           subagentModels: {
             advisor: "openai/gpt-5.5:medium",
           },
+          auxiliaryModels: {
+            title: "anthropic/preset-main",
+          },
         },
       },
     });
@@ -119,6 +122,10 @@ describe("hosted session factory", () => {
     expect(result.session.model?.id).toBe("preset-main");
     expect(result.session.thinkingLevel).toBe("high");
     expect(result.session.getModelPresetState?.().activeName).toBe("Claude Lead");
+    expect(
+      result.session.getModelPresetState?.().presets.find((preset) => preset.name === "Claude Lead")
+        ?.auxiliaryModels?.title,
+    ).toBe("anthropic/preset-main");
     expect(result.modelFallbackMessage).toBe(undefined);
 
     await result.session.abort();
@@ -157,6 +164,49 @@ describe("hosted session factory", () => {
     const settings = readHostedSettingsHandle(createHostedSettingsManager(workspace, agentDir));
 
     expect(() => settings.getModelPresetState()).toThrow("Model preset names must be trimmed");
+  });
+
+  test("rejects malformed auxiliary model preset settings", () => {
+    const workspace = createTestWorkspace("session-factory-malformed-auxiliary-preset");
+    const agentDir = join(workspace, ".brewva-agent");
+    writeHostedSettings(agentDir, {
+      defaultModelPreset: "Claude Lead",
+      modelPresets: {
+        "Claude Lead": {
+          mainModel: "anthropic/preset-main:high",
+          auxiliaryModels: [] as unknown as { title?: string },
+        },
+      },
+    });
+
+    const settings = readHostedSettingsHandle(createHostedSettingsManager(workspace, agentDir));
+
+    expect(() => settings.getModelPresetState()).toThrow(
+      "modelPresets.Claude Lead.auxiliaryModels must be an object",
+    );
+  });
+
+  test("rejects unknown auxiliary model preset settings", () => {
+    const workspace = createTestWorkspace("session-factory-unknown-auxiliary-preset");
+    const agentDir = join(workspace, ".brewva-agent");
+    writeHostedSettings(agentDir, {
+      defaultModelPreset: "Claude Lead",
+      modelPresets: {
+        "Claude Lead": {
+          mainModel: "anthropic/preset-main:high",
+          auxiliaryModels: {
+            title: "anthropic/title-model",
+            summary: "anthropic/summary-model",
+          },
+        },
+      },
+    });
+
+    const settings = readHostedSettingsHandle(createHostedSettingsManager(workspace, agentDir));
+
+    expect(() => settings.getModelPresetState()).toThrow(
+      "modelPresets.Claude Lead.auxiliaryModels.summary is not supported",
+    );
   });
 
   test("loads project hosted settings from the Brewva agent directory", () => {

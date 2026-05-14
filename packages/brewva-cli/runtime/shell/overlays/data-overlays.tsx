@@ -17,6 +17,7 @@ import {
   buildQueuePromptDetailLines,
   renderQueuePromptSummary,
 } from "../../../src/shell/domain/overlays/projectors/queue.js";
+import { buildSessionsOverlayRows } from "../../../src/shell/domain/overlays/projectors/sessions.js";
 import {
   buildTaskRunListLabel,
   buildTaskRunPreviewLines,
@@ -36,6 +37,7 @@ import { visibleLineWindow, windowSelection } from "../utils.js";
 import {
   DialogFrame,
   DialogHeader,
+  DialogSelectFrame,
   OverlaySurface,
   SelectionList,
   truncateDialogText,
@@ -352,24 +354,52 @@ export function InboxOverlay(input: {
 const SIDEBAR_MARKER_WIDTH = 2;
 
 /** Current session ● in its own column so selection inversion does not recolor it. */
-function SessionsSidebarList(input: {
+function SessionsList(input: {
   payload: CliSessionsOverlayPayload;
   theme: SessionPalette;
-  sidebarWidth: number;
+  listWidth: number;
   maxVisible: number;
 }) {
+  const rows = createMemo(() => buildSessionsOverlayRows(input.payload.sessions));
+  const selectedRowIndex = createMemo(() => {
+    const index = rows().findIndex(
+      (row) => row.kind === "session" && row.sessionIndex === input.payload.selectedIndex,
+    );
+    return index >= 0 ? index : 0;
+  });
   const selectionWindow = createMemo(() =>
-    windowSelection(input.payload.sessions, input.payload.selectedIndex, input.maxVisible),
+    windowSelection(rows(), selectedRowIndex(), input.maxVisible),
   );
   const labelMaxWidth = createMemo(() =>
-    Math.max(4, input.sidebarWidth - DIALOG_HORIZONTAL_PADDING * 2 - 1),
+    Math.max(4, input.listWidth - DIALOG_HORIZONTAL_PADDING * 2 - 1),
   );
   return (
     <box width="100%" flexDirection="column" backgroundColor={input.theme.backgroundPanel}>
       <For each={selectionWindow().items}>
-        {(item, index) => {
+        {(row, index) => {
           const absoluteIndex = createMemo(() => selectionWindow().startIndex + index());
-          const selected = createMemo(() => absoluteIndex() === input.payload.selectedIndex);
+          if (row.kind === "group") {
+            return (
+              <box
+                width="100%"
+                paddingTop={absoluteIndex() === 0 ? 0 : 1}
+                paddingLeft={DIALOG_HORIZONTAL_PADDING}
+                paddingRight={DIALOG_HORIZONTAL_PADDING}
+                flexShrink={0}
+              >
+                <text
+                  fg={input.theme.accent}
+                  attributes={TextAttributes.BOLD}
+                  overflow="hidden"
+                  wrapMode="none"
+                >
+                  {truncateDialogText(row.label, labelMaxWidth())}
+                </text>
+              </box>
+            );
+          }
+          const item = row.session;
+          const selected = createMemo(() => row.sessionIndex === input.payload.selectedIndex);
           const isCurrent = createMemo(() => item.sessionId === input.payload.currentSessionId);
           const markerFg = createMemo(() =>
             selected()
@@ -380,9 +410,7 @@ function SessionsSidebarList(input: {
           );
           const label = createMemo(() => {
             const draft = input.payload.draftStateBySessionId[String(item.sessionId)];
-            const body = draft
-              ? `${item.sessionId} · draft ${draft.characters} chars`
-              : `${item.sessionId} · ${item.eventCount} events`;
+            const body = draft ? `${item.title} · draft ${draft.characters} chars` : item.title;
             return truncateDialogText(body, labelMaxWidth());
           });
           return (
@@ -398,7 +426,7 @@ function SessionsSidebarList(input: {
             >
               {/*
                 Fixed-width marker column. Marker text is padded to exactly
-                SESSIONS_SIDEBAR_MARKER_WIDTH visible cells so opentui's
+                SIDEBAR_MARKER_WIDTH visible cells so opentui's
                 visibleWidth (●=1, space=1) cannot shift the label column
                 across rows. Box width also reserves the column at the
                 flex-layout level as a belt-and-suspenders.
@@ -503,48 +531,49 @@ export function SessionsOverlay(input: {
   width: number;
   height: number;
 }) {
-  const session = createMemo(() => input.payload.sessions[input.payload.selectedIndex]);
+  const rows = createMemo(() => buildSessionsOverlayRows(input.payload.sessions));
   const sidebarRows = createMemo(() =>
-    resolveOverlaySurfaceSelectionRows(input.width, input.height, input.payload.sessions.length),
+    resolveDialogSelectRows(input.height, Math.max(1, rows().length)),
   );
-  const sidebarWidth = 34;
   return (
-    <OverlaySurface
+    <DialogSelectFrame
       title="Sessions"
       width={input.width}
       height={input.height}
       theme={input.theme}
-      footer="Enter switch · n new session · Esc close"
-      splitContent
+      size="large"
+      verticalAlign="center"
+      search={
+        <box paddingTop={1}>
+          <text fg={input.theme.textMuted}>Search: {input.payload.query}</text>
+        </box>
+      }
+      footer={
+        <box paddingLeft={DIALOG_HORIZONTAL_PADDING} paddingRight={DIALOG_HORIZONTAL_PADDING}>
+          <text fg={input.theme.textMuted}>Enter switch · Esc close · type to search</text>
+        </box>
+      }
     >
-      <box flexDirection="row" gap={1} flexGrow={1}>
-        <box width={sidebarWidth} flexShrink={0}>
-          <SessionsSidebarList
+      <box flexGrow={1} flexDirection="column">
+        <Show
+          when={input.payload.sessions.length > 0}
+          fallback={
+            <box paddingLeft={DIALOG_HORIZONTAL_PADDING} paddingRight={DIALOG_HORIZONTAL_PADDING}>
+              <text fg={input.theme.textMuted}>
+                {input.payload.query.trim() ? "No matching sessions." : "No sessions found."}
+              </text>
+            </box>
+          }
+        >
+          <SessionsList
             payload={input.payload}
             theme={input.theme}
-            sidebarWidth={sidebarWidth}
+            listWidth={resolveDialogWidth(input.width, "large")}
             maxVisible={sidebarRows()}
           />
-        </box>
-        <box flexGrow={1} flexDirection="column" paddingRight={DIALOG_HORIZONTAL_PADDING}>
-          <Show when={session()}>
-            {(entry) => (
-              <TextLineBlock
-                lines={[
-                  `session: ${entry().sessionId}`,
-                  `events: ${entry().eventCount}`,
-                  `lastEventAt: ${new Date(entry().lastEventAt).toISOString()}`,
-                  entry().sessionId === input.payload.currentSessionId
-                    ? "current: yes"
-                    : "current: no",
-                ]}
-                color={input.theme.text}
-              />
-            )}
-          </Show>
-        </box>
+        </Show>
       </box>
-    </OverlaySurface>
+    </DialogSelectFrame>
   );
 }
 

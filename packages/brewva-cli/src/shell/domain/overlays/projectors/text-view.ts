@@ -9,6 +9,7 @@ import { buildTaskRunListLabel, buildTaskRunPreviewLines } from "../../task-deta
 import type { CliInboxOverlayItem, CliShellOverlayPayload } from "../payloads.js";
 import { renderNotificationSummary } from "./notifications.js";
 import { renderQueuePromptSummary } from "./queue.js";
+import { buildSessionsOverlayRows } from "./sessions.js";
 
 interface PickerInspectLineItem {
   section?: string;
@@ -106,17 +107,22 @@ export function buildOverlayView(payload: CliShellOverlayPayload): {
     case "sessions": {
       const lines = [
         `Sessions: ${payload.sessions.length}`,
-        "Use ↑/↓ to choose, Enter to switch, n to create a new session, Esc to close.",
+        `Search: ${payload.query}`,
+        "Use ↑/↓ to choose, type to search, Enter to switch, Esc to close.",
       ];
-      for (const [index, item] of payload.sessions.entries()) {
-        const marker = index === payload.selectedIndex ? ">" : " ";
-        const current = item.sessionId === payload.currentSessionId ? " current" : "";
+      for (const row of buildSessionsOverlayRows(payload.sessions)) {
+        if (row.kind === "group") {
+          lines.push(row.label);
+          continue;
+        }
+        const item = row.session;
+        const marker = row.sessionIndex === payload.selectedIndex ? ">" : " ";
         const draft = payload.draftStateBySessionId[item.sessionId];
         const draftText = draft ? ` draft=${draft.lines}l/${draft.characters}c` : "";
-        lines.push(`${marker} [${item.sessionId}] events=${item.eventCount}${current}${draftText}`);
+        lines.push(`${marker} ${item.title}${draftText}`);
       }
       if (payload.sessions.length === 0) {
-        lines.push("No sessions found.");
+        lines.push(payload.query.trim() ? "No matching sessions." : "No sessions found.");
       }
       return { title: "Sessions", lines };
     }

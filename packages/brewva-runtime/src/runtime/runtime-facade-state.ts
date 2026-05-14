@@ -102,6 +102,7 @@ class RuntimeFacadeStateController implements BrewvaHostedRuntimePort {
   declare private readonly ledgerService: RuntimeServiceDependencyMap["ledgerService"];
   declare private readonly taskWatchdogService: RuntimeServiceDependencyMap["taskWatchdogService"];
   declare private readonly sessionLifecycleService: RuntimeServiceDependencyMap["sessionLifecycleService"];
+  declare private readonly sessionTitleService: RuntimeServiceDependencyMap["sessionTitleService"];
   declare private readonly sessionLineageService: RuntimeServiceDependencyMap["sessionLineageService"];
   declare private readonly taskService: RuntimeServiceDependencyMap["taskService"];
   declare private readonly claimService: RuntimeServiceDependencyMap["claimService"];
@@ -217,6 +218,7 @@ class RuntimeFacadeStateController implements BrewvaHostedRuntimePort {
     this.workbenchService = serviceDependencies.workbenchService;
     this.taskWatchdogService = serviceDependencies.taskWatchdogService;
     this.sessionLineageService = serviceDependencies.sessionLineageService;
+    this.sessionTitleService = serviceDependencies.sessionTitleService;
     this.eventPipeline = serviceDependencies.eventPipeline;
     this.toolLifecycleRecoveryWalService = serviceDependencies.toolLifecycleRecoveryWalService;
     this.sessionLifecycleService = serviceDependencies.sessionLifecycleService;
@@ -247,6 +249,7 @@ class RuntimeFacadeStateController implements BrewvaHostedRuntimePort {
       getContextService: () => this.contextService,
       getWorkbenchService: () => this.workbenchService,
       getSessionLifecycleService: () => this.sessionLifecycleService,
+      getSessionTitleService: () => this.sessionTitleService,
       getSessionLineageService: () => this.sessionLineageService,
       getTaskWatchdogService: () => this.taskWatchdogService,
       getTaskService: () => this.taskService,

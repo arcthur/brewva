@@ -66,6 +66,7 @@ function createFakeBundle(
       sessionId,
       eventCount: 1,
       lastEventAt: Date.now(),
+      title: "New session",
     },
   ];
   const rawRuntime = createBrewvaRuntime({
@@ -1158,11 +1159,13 @@ describe("shell runtime: session lifecycle", () => {
         sessionId: asBrewvaSessionId("session-1"),
         eventCount: 14,
         lastEventAt: 1_710_000_000_000,
+        title: "Session One",
       },
       {
         sessionId: asBrewvaSessionId("session-2"),
         eventCount: 9,
         lastEventAt: 1_710_000_100_000,
+        title: "Session Two",
       },
     ] satisfies BrewvaReplaySession[];
 
@@ -1190,6 +1193,7 @@ describe("shell runtime: session lifecycle", () => {
     runtime.openOverlay({
       kind: "sessions",
       selectedIndex: 1,
+      query: "",
       sessions: replaySessions,
       currentSessionId: "session-1",
       draftStateBySessionId: {
@@ -1215,6 +1219,7 @@ describe("shell runtime: session lifecycle", () => {
     runtime.openOverlay({
       kind: "sessions",
       selectedIndex: 0,
+      query: "",
       sessions: replaySessions,
       currentSessionId: "session-2",
       draftStateBySessionId: {
@@ -1249,11 +1254,13 @@ describe("shell runtime: session lifecycle", () => {
         sessionId: asBrewvaSessionId("session-1"),
         eventCount: 14,
         lastEventAt: 1_710_000_000_000,
+        title: "Session One",
       },
       {
         sessionId: asBrewvaSessionId("session-2"),
         eventCount: 9,
         lastEventAt: 1_710_000_100_000,
+        title: "Session Two",
       },
     ] satisfies BrewvaReplaySession[];
 
@@ -1289,6 +1296,7 @@ describe("shell runtime: session lifecycle", () => {
     runtime.openOverlay({
       kind: "sessions",
       selectedIndex: 1,
+      query: "",
       sessions: replaySessions,
       currentSessionId: "session-1",
       draftStateBySessionId: {},
@@ -1303,6 +1311,59 @@ describe("shell runtime: session lifecycle", () => {
 
     expect(runtime.getSessionBundle().session.sessionManager.getSessionId()).toBe("session-2");
     expect(runtime.getViewState().queue).toEqual(secondQueuedPrompts);
+    runtime.dispose();
+  });
+
+  test("sessions overlay text input filters sessions by title", async () => {
+    const replaySessions = [
+      {
+        sessionId: asBrewvaSessionId("session-1"),
+        eventCount: 14,
+        lastEventAt: 1_710_000_000_000,
+        title: "Command Palette Polish",
+      },
+      {
+        sessionId: asBrewvaSessionId("session-2"),
+        eventCount: 9,
+        lastEventAt: 1_710_000_100_000,
+        title: "Runtime Projection Cleanup",
+      },
+    ] satisfies BrewvaReplaySession[];
+
+    const { bundle } = createFakeBundle({
+      sessionId: "session-1",
+      replaySessions,
+    });
+    const runtime = new CliShellRuntime(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+    });
+
+    await runtime.start();
+    await runtime.handleInput({
+      key: "g",
+      ctrl: true,
+      meta: false,
+      shift: false,
+    });
+    await runtime.handleInput({
+      key: "character",
+      text: "runtime",
+      ctrl: false,
+      meta: false,
+      shift: false,
+    });
+
+    const payload = runtime.getViewState().overlay.active?.payload;
+    expect(payload).toMatchObject({
+      kind: "sessions",
+      query: "runtime",
+      selectedIndex: 0,
+    });
+    expect(
+      payload?.kind === "sessions" ? payload.sessions.map((session) => session.title) : [],
+    ).toEqual(["Runtime Projection Cleanup"]);
     runtime.dispose();
   });
 
@@ -1403,6 +1464,7 @@ describe("shell runtime: session lifecycle", () => {
         sessionId: asBrewvaSessionId("archived-session"),
         eventCount: 12,
         lastEventAt: 1_710_000_000_000,
+        title: "Archived session",
       },
     ] satisfies BrewvaReplaySession[];
 

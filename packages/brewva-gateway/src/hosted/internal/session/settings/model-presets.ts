@@ -46,6 +46,29 @@ function readSubagentModels(value: unknown, presetName: string): Record<string, 
   return models;
 }
 
+function readAuxiliaryModels(
+  value: unknown,
+  presetName: string,
+): BrewvaModelPreset["auxiliaryModels"] | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`modelPresets.${presetName}.auxiliaryModels must be an object`);
+  }
+  const record = value as Record<string, unknown>;
+  for (const key of Object.keys(record)) {
+    if (key !== "title") {
+      throw new Error(`modelPresets.${presetName}.auxiliaryModels.${key} is not supported`);
+    }
+  }
+  const title = readOptionalTrimmedString(
+    record.title,
+    `modelPresets.${presetName}.auxiliaryModels.title`,
+  );
+  return title ? { title } : {};
+}
+
 function readPresetName(name: string): string {
   if (name.trim().length === 0) {
     throw new Error("Model preset names must be non-empty");
@@ -66,6 +89,7 @@ function readPreset(name: string, value: unknown): BrewvaModelPreset | undefined
     name: presetName,
     mainModel: readOptionalTrimmedString(record.mainModel, `modelPresets.${presetName}.mainModel`),
     subagentModels: readSubagentModels(record.subagentModels, presetName),
+    auxiliaryModels: readAuxiliaryModels(record.auxiliaryModels, presetName),
   };
 }
 
@@ -82,6 +106,7 @@ export function cloneModelPreset(preset: BrewvaModelPreset): BrewvaModelPreset {
     name: preset.name,
     mainModel: preset.mainModel,
     subagentModels: { ...preset.subagentModels },
+    auxiliaryModels: preset.auxiliaryModels ? { ...preset.auxiliaryModels } : undefined,
     synthetic: preset.synthetic,
   };
 }

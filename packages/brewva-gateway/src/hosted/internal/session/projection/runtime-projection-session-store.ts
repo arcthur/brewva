@@ -70,6 +70,14 @@ function readOptionalStringRecord(value: unknown): Record<string, string> | unde
   return Object.keys(record).length > 0 ? record : {};
 }
 
+function readOptionalAuxiliaryModels(value: unknown): { title?: string } | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  const title = readOptionalString(value.title);
+  return title ? { title } : {};
+}
+
 function mapContextBudgetPressure(status: {
   compactionAdvised: boolean;
   forcedCompaction: boolean;
@@ -407,6 +415,9 @@ export class HostedRuntimeTapeSessionStore {
     source?: string;
     mainModel?: string;
     subagentModels?: Record<string, string>;
+    auxiliaryModels?: {
+      title?: string;
+    };
     synthetic?: boolean;
   }): string {
     const event = this.runtime.extensions.hosted.events.record({
@@ -418,6 +429,7 @@ export class HostedRuntimeTapeSessionStore {
         source: input.source ?? "session_store",
         mainModel: input.mainModel,
         subagentModels: input.subagentModels ? { ...input.subagentModels } : undefined,
+        auxiliaryModels: input.auxiliaryModels ? { ...input.auxiliaryModels } : undefined,
         synthetic: input.synthetic,
       },
     });
@@ -805,6 +817,7 @@ export class HostedRuntimeTapeSessionStore {
           name: entry.presetName,
           mainModel: entry.mainModel,
           subagentModels: entry.subagentModels ? { ...entry.subagentModels } : {},
+          auxiliaryModels: entry.auxiliaryModels ? { ...entry.auxiliaryModels } : undefined,
           synthetic: entry.synthetic,
         };
         continue;
@@ -944,6 +957,7 @@ export class HostedRuntimeTapeSessionStore {
         source: readOptionalString(payload.source),
         mainModel: readOptionalString(payload.mainModel),
         subagentModels: readOptionalStringRecord(payload.subagentModels),
+        auxiliaryModels: readOptionalAuxiliaryModels(payload.auxiliaryModels),
         synthetic: payload.synthetic === true ? true : undefined,
       } satisfies BrewvaModelPresetSelectEntry;
     }

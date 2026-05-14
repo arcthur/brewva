@@ -88,6 +88,9 @@ export interface BrewvaModelPresetSelectEntry extends BrewvaSessionEntryBase {
   source?: string;
   mainModel?: string;
   subagentModels?: Record<string, string>;
+  auxiliaryModels?: {
+    title?: string;
+  };
   synthetic?: boolean;
 }
 
@@ -145,11 +148,18 @@ function cloneSubagentModels(value: Record<string, string> | undefined): Record<
   return value ? { ...value } : {};
 }
 
+function cloneAuxiliaryModels(
+  value: BrewvaModelPreset["auxiliaryModels"] | undefined,
+): BrewvaModelPreset["auxiliaryModels"] | undefined {
+  return value ? { ...value } : undefined;
+}
+
 function modelPresetFromSelectionEntry(entry: BrewvaModelPresetSelectEntry): BrewvaModelPreset {
   return {
     name: entry.presetName,
     mainModel: entry.mainModel,
     subagentModels: cloneSubagentModels(entry.subagentModels),
+    auxiliaryModels: cloneAuxiliaryModels(entry.auxiliaryModels),
     synthetic: entry.synthetic,
   };
 }
@@ -520,6 +530,7 @@ export class BrewvaManagedSessionStore {
     source?: string;
     mainModel?: string;
     subagentModels?: Record<string, string>;
+    auxiliaryModels?: BrewvaModelPreset["auxiliaryModels"];
     synthetic?: boolean;
   }): string {
     const entry: BrewvaModelPresetSelectEntry = {
@@ -532,6 +543,7 @@ export class BrewvaManagedSessionStore {
       source: input.source,
       mainModel: input.mainModel,
       subagentModels: input.subagentModels ? { ...input.subagentModels } : undefined,
+      auxiliaryModels: cloneAuxiliaryModels(input.auxiliaryModels),
       synthetic: input.synthetic,
     };
     this.#append(entry);
