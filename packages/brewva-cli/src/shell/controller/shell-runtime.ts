@@ -488,6 +488,7 @@ export class CliShellRuntime {
 
   getSessionIdentity(): {
     sessionId: string;
+    assistantLabel: string;
     lineageLabel: string | null;
     modelLabel: string;
     thinkingLevel: string;
@@ -495,6 +496,7 @@ export class CliShellRuntime {
     const lineageStatus = this.#sessionPort.getLineageStatus();
     return {
       sessionId: this.#sessionPort.getSessionId(),
+      assistantLabel: this.formatAssistantStatusLabel(),
       lineageLabel: this.formatLineageStatusLabel(lineageStatus),
       modelLabel: this.#sessionPort.getModelLabel(),
       thinkingLevel: this.#sessionPort.getThinkingLevel(),
@@ -783,6 +785,18 @@ export class CliShellRuntime {
         text: this.buildRewindStatusText(),
       },
     ];
+  }
+
+  private formatAssistantStatusLabel(): string {
+    const presetState = this.#sessionPort.getModelPresetState();
+    const activeName = presetState.activeName.trim();
+    if (!activeName) {
+      return "Brewva";
+    }
+    const activePreset = presetState.presets.find(
+      (preset) => preset.name === presetState.activeName,
+    );
+    return activePreset?.synthetic ? "Brewva" : activeName;
   }
 
   private formatLineageStatusLabel(

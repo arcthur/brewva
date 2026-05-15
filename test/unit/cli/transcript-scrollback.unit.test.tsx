@@ -58,6 +58,7 @@ describe("transcript scrollback rendering", () => {
       getSessionIdentity() {
         return {
           sessionId: "session-1",
+          assistantLabel: "Brewva",
           lineageLabel: null,
           modelLabel: "GPT-5.4 Mini",
           thinkingLevel: "high",
@@ -106,6 +107,7 @@ describe("transcript scrollback rendering", () => {
       getSessionIdentity() {
         return {
           sessionId: "session-empty",
+          assistantLabel: "Brewva",
           lineageLabel: null,
           modelLabel: "GPT-5.4 Mini",
           thinkingLevel: "high",

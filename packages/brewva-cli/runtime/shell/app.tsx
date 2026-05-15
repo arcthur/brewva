@@ -391,6 +391,10 @@ export function BrewvaOpenTuiShell(input: {
     }
     return input.runtime.getSessionIdentity().modelLabel;
   });
+  const assistantLabel = createMemo(() => {
+    const presetLabel = state.status.entries.preset;
+    return input.runtime.getSessionIdentity().assistantLabel || presetLabel || "Brewva";
+  });
   const thinkingLevel = createMemo(
     () => state.status.entries.thinking ?? input.runtime.getSessionIdentity().thinkingLevel,
   );
@@ -466,6 +470,7 @@ export function BrewvaOpenTuiShell(input: {
                   showToolDetails={state.view.toolDetails}
                   index={index()}
                   isLast={message.id === lastAssistantId()}
+                  assistantLabel={assistantLabel()}
                   modelLabel={modelLabel()}
                 />
               )}
@@ -496,6 +501,7 @@ export function BrewvaOpenTuiShell(input: {
             overlayActive={Boolean(state.overlay.active)}
             theme={theme()}
             width={dimensions().width}
+            assistantLabel={assistantLabel()}
             modelLabel={modelLabel()}
             thinkingLevel={thinkingLevel()}
             lineageLabel={lineageLabel()}
