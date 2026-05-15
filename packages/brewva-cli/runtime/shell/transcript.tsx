@@ -951,6 +951,7 @@ function AssistantMessageView(input: {
   transcriptWidth: number;
   showToolDetails: boolean;
   isLast: boolean;
+  assistantLabel: string;
   modelLabel: string;
 }) {
   return (
@@ -982,7 +983,7 @@ function AssistantMessageView(input: {
         <box paddingLeft={3}>
           <text marginTop={1}>
             <span style={{ fg: input.theme.accent }}>▣ </span>
-            <span style={{ fg: input.theme.text }}>Brewva</span>
+            <span style={{ fg: input.theme.text }}>{input.assistantLabel}</span>
             <span style={{ fg: input.theme.textMuted }}> · {input.modelLabel}</span>
           </text>
         </box>
@@ -1076,6 +1077,7 @@ export function TranscriptMessageView(input: {
   showToolDetails: boolean;
   index: number;
   isLast: boolean;
+  assistantLabel: string;
   modelLabel: string;
 }) {
   if (input.message.role === "user") {
@@ -1091,6 +1093,7 @@ export function TranscriptMessageView(input: {
         transcriptWidth={input.transcriptWidth}
         showToolDetails={input.showToolDetails}
         isLast={input.isLast}
+        assistantLabel={input.assistantLabel}
         modelLabel={input.modelLabel}
       />
     );

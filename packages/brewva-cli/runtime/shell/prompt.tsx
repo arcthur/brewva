@@ -87,6 +87,7 @@ export function PromptPanel(input: {
   overlayActive: boolean;
   theme: SessionPalette;
   width: number;
+  assistantLabel: string;
   modelLabel: string;
   thinkingLevel: string;
   lineageLabel: string;
@@ -339,7 +340,7 @@ export function PromptPanel(input: {
           >
             <box flexDirection={narrow() ? "column" : "row"} gap={1} flexShrink={0}>
               <text fg={promptAccent()} wrapMode="none">
-                Brewva
+                {input.assistantLabel}
               </text>
               <text fg={input.theme.text} wrapMode="none">
                 {input.modelLabel}

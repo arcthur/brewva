@@ -7,6 +7,7 @@ import { type BrewvaReplaySession } from "@brewva/brewva-runtime/events";
 import type { SessionWireFrame } from "@brewva/brewva-runtime/session";
 import type { BrewvaToolUiPort } from "@brewva/brewva-substrate/host-api";
 import type {
+  BrewvaModelPresetState,
   BrewvaPromptSessionEvent,
   BrewvaQueuedPromptView,
   BrewvaSessionModelDescriptor,
@@ -118,6 +119,7 @@ function createFakeBundle(
     seedMessages?: unknown[];
     queuedPrompts?: BrewvaQueuedPromptView[];
     sessionId?: string;
+    modelPresetState?: BrewvaModelPresetState;
     replaySessions?: BrewvaReplaySession[];
     sessionWireBySessionId?: Record<string, SessionWireFrame[]>;
     toolDefinitions?: Map<string, BrewvaToolDefinition>;
@@ -169,6 +171,11 @@ function createFakeBundle(
   let shellViewPreferences = {
     showThinking: true,
     toolDetails: true,
+  };
+  const modelPresetState = options.modelPresetState ?? {
+    activeName: "Default",
+    defaultName: "Default",
+    presets: [{ name: "Default", subagentModels: {}, synthetic: true }],
   };
   const replaySessions = options.replaySessions ?? [
     {
@@ -258,6 +265,9 @@ function createFakeBundle(
     },
     setThinkingLevel(level: string) {
       thinkingLevel = level;
+    },
+    getModelPresetState() {
+      return structuredClone(modelPresetState);
     },
     dispose() {},
     setUiPort(ui: BrewvaToolUiPort) {
@@ -488,6 +498,70 @@ describe("opentui solid shell runtime: render regression", () => {
       expect(frame).toContain("Heads");
       expect(frame).toContain("/inspect");
       expect(frame).toContain("┃  /ins");
+    } finally {
+      runtime.dispose();
+      testSetup.renderer.destroy();
+    }
+  });
+
+  test("renders active model preset as the assistant label", async () => {
+    const { bundle } = createFakeBundle({
+      models: [
+        {
+          provider: "openai",
+          id: "gpt-5.5",
+          name: "GPT-5.5",
+          contextWindow: 200_000,
+          maxTokens: 16_384,
+          reasoning: true,
+        },
+      ],
+      modelPresetState: {
+        activeName: "Chhogori",
+        defaultName: "Chhogori",
+        presets: [
+          { name: "Default", mainModel: "deepseek/deepseek-v4-pro:xhigh", subagentModels: {} },
+          { name: "Chhogori", mainModel: "openai/gpt-5.5:xhigh", subagentModels: {} },
+        ],
+      },
+      seedMessages: [
+        {
+          role: "assistant",
+          content: "Preset routed response",
+        },
+      ],
+    });
+
+    const runtime = new CliShellRuntime(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+      operatorPollIntervalMs: 60_000,
+    });
+
+    await runtime.start();
+    const testSetup = await openTuiSolidTestRender(
+      createOpenTuiSolidElement(BrewvaOpenTuiShell, { runtime: runtime }),
+      {
+        width: 100,
+        height: 36,
+      },
+    );
+
+    try {
+      await openTuiSolidAct(async () => {
+        await Bun.sleep(CliShellRuntime.STATUS_DEBOUNCE_MS + 20);
+      });
+      const frame = await waitForRenderedFrame(testSetup, {
+        predicate: (candidate) =>
+          candidate.includes("▣ Chhogori") &&
+          candidate.includes("openai/gpt-5.5") &&
+          candidate.includes("Preset routed response"),
+      });
+      expect(frame).toContain("▣ Chhogori");
+      expect(frame).toContain("openai/gpt-5.5");
+      expect(frame).toContain("Preset routed response");
+      expect(frame).not.toContain("▣ Brewva · openai/gpt-5.5");
     } finally {
       runtime.dispose();
       testSetup.renderer.destroy();

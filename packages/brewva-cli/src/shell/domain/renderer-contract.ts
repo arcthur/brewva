@@ -12,6 +12,7 @@ export interface ShellRendererController {
   getToolDefinitions(): ReadonlyMap<string, BrewvaToolDefinition>;
   getSessionIdentity(): {
     sessionId: string;
+    assistantLabel: string;
     lineageLabel: string | null;
     modelLabel: string;
     thinkingLevel: string;

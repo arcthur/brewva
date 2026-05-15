@@ -40,6 +40,7 @@ function TranscriptScrollbackDocument(input: {
               showToolDetails={viewState.view.toolDetails}
               index={index()}
               isLast={index() === input.messages.length - 1}
+              assistantLabel={sessionIdentity.assistantLabel}
               modelLabel={sessionIdentity.modelLabel}
             />
           )}
