@@ -8,6 +8,7 @@ import {
 } from "../../src/shell/domain/prompt-parts.js";
 import type { CliShellPromptPart } from "../../src/shell/domain/prompt.js";
 import type { ShellRendererController } from "../../src/shell/domain/renderer-contract.js";
+import { selectSubagentActivityItems } from "../../src/shell/domain/subagent-activity.js";
 import type {
   OpenTuiKeyEvent,
   OpenTuiRenderer,
@@ -401,6 +402,7 @@ export function BrewvaOpenTuiShell(input: {
   const lineageLabel = createMemo(
     () => state.status.entries.lineage ?? input.runtime.getSessionIdentity().lineageLabel ?? "",
   );
+  const subagentActivity = createMemo(() => selectSubagentActivityItems(state.operator.taskRuns));
   const inlineApproval = createMemo(() => {
     const payload = activeOverlay()?.payload;
     return payload?.kind === "approval" ? payload : undefined;
@@ -505,6 +507,8 @@ export function BrewvaOpenTuiShell(input: {
             modelLabel={modelLabel()}
             thinkingLevel={thinkingLevel()}
             lineageLabel={lineageLabel()}
+            subagentActivity={subagentActivity()}
+            subagentActivityTotal={state.operator.taskRuns.length}
             setAnchor={(node) => setPromptAnchor(node)}
             setTextarea={(node) => setTextarea(node)}
           />

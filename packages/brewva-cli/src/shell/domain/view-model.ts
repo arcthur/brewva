@@ -42,6 +42,9 @@ export function projectShellViewModel(state: CliShellViewState): ShellViewModel 
     pager: state.pager ? { title: state.pager.title, lines: [...state.pager.lines] } : undefined,
     notifications: [...state.notifications],
     queue: [...state.queue],
+    operator: {
+      taskRuns: [...state.operator.taskRuns],
+    },
     status: {
       ...state.status,
       entries: { ...state.status.entries },

@@ -199,6 +199,14 @@ export function reduceCliShellState(
         ...state,
         queue: [...action.items],
       };
+    case "operator.setTaskRuns":
+      return {
+        ...state,
+        operator: {
+          ...state.operator,
+          taskRuns: [...action.taskRuns],
+        },
+      };
     case "status.set": {
       const nextEntries = { ...state.status.entries };
       if (typeof action.text === "string" && action.text.length > 0) {

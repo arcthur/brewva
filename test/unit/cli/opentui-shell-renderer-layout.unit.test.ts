@@ -4,7 +4,10 @@ import {
   asBrewvaToolCallId,
   asBrewvaToolName,
 } from "@brewva/brewva-runtime/core";
-import { CURRENT_DELEGATION_CONTRACT_VERSION } from "@brewva/brewva-runtime/delegation";
+import {
+  CURRENT_DELEGATION_CONTRACT_VERSION,
+  type DelegationRunRecord,
+} from "@brewva/brewva-runtime/delegation";
 import { type BrewvaReplaySession } from "@brewva/brewva-runtime/events";
 import type { SessionWireFrame } from "@brewva/brewva-runtime/session";
 import type { BrewvaToolUiPort } from "@brewva/brewva-substrate/host-api";
@@ -46,6 +49,7 @@ function createFakeBundle(
     sessionId?: string;
     replaySessions?: BrewvaReplaySession[];
     sessionWireBySessionId?: Record<string, SessionWireFrame[]>;
+    taskRuns?: DelegationRunRecord[];
     toolDefinitions?: Map<string, BrewvaToolDefinition>;
     providers?: ProviderConnectionDescriptor[];
     authMethods?: Record<string, ProviderAuthMethod[]>;
@@ -260,6 +264,22 @@ function createFakeBundle(
         },
       },
     },
+    orchestration: {
+      subagents: {
+        async status() {
+          return {
+            ok: true,
+            runs: options.taskRuns ?? [],
+          };
+        },
+        async cancel() {
+          return {
+            ok: false,
+            error: "not_live",
+          };
+        },
+      },
+    },
     providerConnections: options.providers
       ? {
           catalog: {
@@ -421,6 +441,76 @@ describe("opentui solid shell runtime: layout contract", () => {
       expect(frame).toContain("Brewva");
       expect(frame).toContain("Solid");
       expect(frame).toContain("notice");
+    } finally {
+      runtime.dispose();
+      testSetup.renderer.destroy();
+    }
+  });
+
+  test("renders live subagent activity with an accurate hidden count above the prompt", async () => {
+    const now = Date.now();
+    const { bundle } = createFakeBundle({
+      taskRuns: Array.from({ length: 7 }, (_, index): DelegationRunRecord => {
+        const primary = index === 0;
+        const name = primary ? "review-operator-state" : `background-${index}`;
+        return {
+          contractVersion: CURRENT_DELEGATION_CONTRACT_VERSION,
+          runId: `run-worker-${index + 1}`,
+          agent: "worker",
+          targetName: primary ? "patch-worker" : "worker",
+          delegate: primary ? "patch-worker" : "worker",
+          taskName: name,
+          taskPath: `/${name}`,
+          nickname: primary ? "Review operator state" : `Background ${index}`,
+          depth: 1,
+          forkTurns: "none",
+          gateReason: "implement_isolated",
+          modelCategory: "isolated-execution",
+          executionPrimitive: "named",
+          visibility: "public",
+          isolationStrategy: "worktree",
+          adoption: {
+            contractId: "cli-subagent-activity-test",
+            decision: "require_human",
+            reason: "Fixture record has not reached parent adoption.",
+          },
+          parentSessionId: asBrewvaSessionId("session-1"),
+          status: "running",
+          createdAt: now - 500 - index,
+          updatedAt: primary ? now + 1_000 : now - index,
+          label: primary ? "Review operator state" : `Background ${index}`,
+          summary: primary ? "Inspecting OpenTUI status lane" : `Running background ${index}`,
+          workerSessionId: asBrewvaSessionId(`worker-session-${index + 1}`),
+        };
+      }),
+    });
+    const runtime = new CliShellRuntime(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+      operatorPollIntervalMs: 60_000,
+    });
+
+    await runtime.start();
+
+    const testSetup = await openTuiSolidTestRender(
+      createOpenTuiSolidElement(BrewvaOpenTuiShell, { runtime: runtime }),
+      {
+        width: 160,
+        height: 28,
+      },
+    );
+
+    try {
+      await testSetup.renderOnce();
+      await testSetup.renderOnce();
+      const frame = testSetup.captureCharFrame();
+
+      expect(runtime.getViewState().operator.taskRuns).toHaveLength(7);
+      expect(frame).toContain("subagents");
+      expect(frame).toContain("Patch Worker running");
+      expect(frame).toContain("+2");
+      expect(frame).toContain("tasks=7");
     } finally {
       runtime.dispose();
       testSetup.renderer.destroy();

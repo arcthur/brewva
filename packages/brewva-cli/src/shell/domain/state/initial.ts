@@ -26,6 +26,9 @@ export function createCliShellState(): CliShellViewState {
     },
     notifications: [],
     queue: [],
+    operator: {
+      taskRuns: [],
+    },
     status: {
       entries: {},
       trust: buildTrustLoopIdleProjection(),

@@ -7,6 +7,7 @@ import {
   rebasePromptPartsAfterTextReplace,
 } from "../../src/shell/domain/prompt-parts.js";
 import type { ShellRendererController } from "../../src/shell/domain/renderer-contract.js";
+import type { SubagentActivityItem } from "../../src/shell/domain/subagent-activity.js";
 import type { ShellViewModel } from "../../src/shell/domain/view-model.js";
 import type { OpenTuiTextareaHandle } from "../internal-opentui-runtime.js";
 import {
@@ -79,6 +80,99 @@ function summarizeQueuedPrompt(text: string, width: number): string {
   return `${truncateToWidth(firstLine, availableWidth - 1)}…`;
 }
 
+function activityToneColor(item: SubagentActivityItem, theme: SessionPalette): string {
+  switch (item.tone) {
+    case "running":
+      return theme.accent;
+    case "success":
+      return theme.success;
+    case "warning":
+      return theme.warning;
+    case "error":
+      return theme.error;
+    case "muted":
+      return theme.textMuted;
+    default:
+      return theme.textMuted;
+  }
+}
+
+function formatActivityText(item: SubagentActivityItem, width: number): string {
+  const status = item.live && item.status === "running" ? "running" : item.status;
+  const detail = item.detail ? ` · ${item.detail}` : "";
+  const text = `${item.roleLabel} ${status} · ${item.title}${detail}`;
+  if (visibleWidth(text) <= width) {
+    return text;
+  }
+  if (width <= 1) {
+    return "…";
+  }
+  return `${truncateToWidth(text, width - 1)}…`;
+}
+
+function SubagentActivityStrip(input: {
+  items: readonly SubagentActivityItem[];
+  totalCount: number;
+  theme: SessionPalette;
+  width: number;
+}) {
+  const narrow = createMemo(() => input.width < 96);
+  const visibleLimit = createMemo(() => (narrow() ? 3 : 5));
+  const visibleItems = createMemo(() => input.items.slice(0, visibleLimit()));
+  const hiddenCount = createMemo(() => Math.max(0, input.totalCount - visibleItems().length));
+  const itemWidth = createMemo(() => {
+    if (narrow()) {
+      return Math.max(14, input.width - 8);
+    }
+    const count = Math.max(1, visibleItems().length);
+    const fixedWidth = 14 + (hiddenCount() > 0 ? 6 : 0);
+    return Math.max(12, Math.floor((input.width - fixedWidth) / count));
+  });
+
+  return (
+    <box
+      id="brewva-subagent-activity"
+      width="100%"
+      border={["left"]}
+      customBorderChars={{
+        ...SPLIT_BORDER_CHARS,
+        bottomLeft: "╹",
+      }}
+      borderColor={input.theme.borderSubtle}
+      backgroundColor={input.theme.backgroundPanel}
+      paddingLeft={2}
+      paddingRight={2}
+      paddingTop={1}
+      paddingBottom={1}
+      flexDirection={narrow() ? "column" : "row"}
+      gap={1}
+    >
+      <text fg={input.theme.textMuted} wrapMode="none" flexShrink={0}>
+        subagents
+      </text>
+      <box flexDirection={narrow() ? "column" : "row"} gap={narrow() ? 0 : 2} flexGrow={1}>
+        <For each={visibleItems()}>
+          {(item) => (
+            <box flexDirection="row" gap={1} flexShrink={narrow() ? 0 : 1}>
+              <text fg={activityToneColor(item, input.theme)} wrapMode="none" flexShrink={0}>
+                {item.icon}
+              </text>
+              <text fg={input.theme.text} wrapMode="none" overflow="hidden">
+                {formatActivityText(item, itemWidth())}
+              </text>
+            </box>
+          )}
+        </For>
+      </box>
+      <Show when={hiddenCount() > 0}>
+        <text fg={input.theme.textDim} wrapMode="none" flexShrink={0}>
+          +{hiddenCount()}
+        </text>
+      </Show>
+    </box>
+  );
+}
+
 export function PromptPanel(input: {
   runtime: ShellRendererController;
   composer: ShellViewModel["composer"];
@@ -91,6 +185,8 @@ export function PromptPanel(input: {
   modelLabel: string;
   thinkingLevel: string;
   lineageLabel: string;
+  subagentActivity: readonly SubagentActivityItem[];
+  subagentActivityTotal: number;
   setAnchor(node: BoxRenderable): void;
   setTextarea(node: OpenTuiTextareaHandle): void;
 }) {
@@ -219,6 +315,14 @@ export function PromptPanel(input: {
 
   return (
     <box flexShrink={0} flexDirection="column" gap={1}>
+      <Show when={input.subagentActivity.length > 0}>
+        <SubagentActivityStrip
+          items={input.subagentActivity}
+          totalCount={input.subagentActivityTotal}
+          theme={input.theme}
+          width={input.width}
+        />
+      </Show>
       <box
         ref={(node: BoxRenderable) => input.setAnchor(node)}
         width="100%"

@@ -1,3 +1,4 @@
+import type { DelegationRunRecord } from "@brewva/brewva-runtime/delegation";
 import type { BrewvaQueuedPromptView } from "@brewva/brewva-substrate/session";
 import type { TuiTheme } from "../../../internal/tui/index.js";
 import type { OverlayEntry } from "../../../internal/tui/index.js";
@@ -33,6 +34,10 @@ export interface CliShellStatusState {
   trust?: TrustLoopSessionProjection;
   workingMessage?: string;
   hiddenThinkingLabel?: string;
+}
+
+export interface CliShellOperatorState {
+  taskRuns: DelegationRunRecord[];
 }
 
 export type CliShellDiffStyle = "auto" | "stacked";
@@ -103,6 +108,7 @@ export interface CliShellViewState {
   };
   notifications: CliShellNotification[];
   queue: readonly BrewvaQueuedPromptView[];
+  operator: CliShellOperatorState;
   status: CliShellStatusState;
   diff: CliShellDiffState;
   view: CliShellDisplayState;
@@ -178,6 +184,10 @@ export type CliShellAction =
   | {
       type: "queue.set";
       items: readonly BrewvaQueuedPromptView[];
+    }
+  | {
+      type: "operator.setTaskRuns";
+      taskRuns: DelegationRunRecord[];
     }
   | {
       type: "status.set";

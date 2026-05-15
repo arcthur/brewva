@@ -80,6 +80,10 @@ export class ShellOperatorSnapshotSync {
           key: "tasks",
           text: String(snapshot.taskRuns.length),
         },
+        {
+          type: "operator.setTaskRuns",
+          taskRuns: snapshot.taskRuns,
+        },
         ...trustActions,
       ],
       { debounceStatus: false },
