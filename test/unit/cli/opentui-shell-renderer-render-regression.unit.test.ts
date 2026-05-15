@@ -111,6 +111,14 @@ function findRenderedColumn(frame: string, needle: string): number {
   return line.indexOf(needle);
 }
 
+function findRenderedRow(frame: string, needle: string): number {
+  const row = frame.split("\n").findIndex((candidate) => candidate.includes(needle));
+  if (row < 0) {
+    throw new Error(`Expected rendered frame to contain ${needle}`);
+  }
+  return row;
+}
+
 function createFakeBundle(
   options: {
     approvals?: number;
@@ -599,7 +607,7 @@ describe("opentui solid shell runtime: render regression", () => {
       createOpenTuiSolidElement(BrewvaOpenTuiShell, { runtime: runtime }),
       {
         width: 120,
-        height: 36,
+        height: 24,
       },
     );
 
@@ -727,6 +735,332 @@ describe("opentui solid shell runtime: render regression", () => {
       expect(frame).toContain("Agent");
       expect(frame).toContain("/model");
       expect(frame).toContain("Ctrl+K");
+    } finally {
+      runtime.dispose();
+      testSetup.renderer.destroy();
+    }
+  });
+
+  test("renders command palette names and shortcuts without descriptions or hard truncation", async () => {
+    const { bundle } = createFakeBundle();
+
+    const runtime = new CliShellRuntime(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+      operatorPollIntervalMs: 60_000,
+    });
+
+    const longTitle = "Open command palette action with complete title visible in full row";
+    const longFooter = "/very-long-command  Ctrl+Shift+K";
+    const hiddenDescription = "Hidden note";
+
+    runtime.openOverlay({
+      kind: "commandPalette",
+      title: "Commands",
+      query: "",
+      selectedIndex: 0,
+      items: [
+        {
+          id: "long-title",
+          section: "System",
+          label: longTitle,
+          detail: hiddenDescription,
+          footer: "/x",
+        },
+        {
+          id: "long-footer",
+          section: "System",
+          label: "Open command",
+          detail: hiddenDescription,
+          footer: longFooter,
+        },
+      ],
+    });
+
+    const testSetup = await openTuiSolidTestRender(
+      createOpenTuiSolidElement(BrewvaOpenTuiShell, { runtime: runtime }),
+      {
+        width: 120,
+        height: 36,
+      },
+    );
+
+    try {
+      await testSetup.renderOnce();
+      await testSetup.renderOnce();
+      const frame = testSetup.captureCharFrame();
+      expect(frame).toContain(longTitle);
+      expect(frame).toContain(longFooter);
+      expect(frame).not.toContain(hiddenDescription);
+    } finally {
+      runtime.dispose();
+      testSetup.renderer.destroy();
+    }
+  });
+
+  test("renders command palette empty state without a blank scrollbox", async () => {
+    const { bundle } = createFakeBundle();
+
+    const runtime = new CliShellRuntime(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+      operatorPollIntervalMs: 60_000,
+    });
+
+    runtime.openOverlay({
+      kind: "commandPalette",
+      title: "Commands",
+      query: "missing",
+      selectedIndex: 0,
+      items: [],
+    });
+
+    const testSetup = await openTuiSolidTestRender(
+      createOpenTuiSolidElement(BrewvaOpenTuiShell, { runtime: runtime }),
+      {
+        width: 100,
+        height: 30,
+      },
+    );
+
+    try {
+      await testSetup.renderOnce();
+      await testSetup.renderOnce();
+      const frame = testSetup.captureCharFrame();
+      expect(frame).toContain("Commands");
+      expect(frame).toContain("Search: missing");
+      expect(frame).toContain("No results found");
+    } finally {
+      runtime.dispose();
+      testSetup.renderer.destroy();
+    }
+  });
+
+  test("keeps command palette frame anchored while selection window crosses sections", async () => {
+    const { bundle } = createFakeBundle();
+
+    const runtime = new CliShellRuntime(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+      operatorPollIntervalMs: 60_000,
+    });
+
+    runtime.openOverlay({
+      kind: "commandPalette",
+      title: "Commands",
+      query: "",
+      selectedIndex: 0,
+      items: [
+        ...Array.from({ length: 12 }, (_, index) => ({
+          id: `primary-${index}`,
+          section: "Primary",
+          label: `Primary command ${index}`,
+        })),
+        ...Array.from({ length: 6 }, (_, index) => ({
+          id: `secondary-${index}`,
+          section: "Secondary",
+          label: `Secondary command ${index}`,
+        })),
+        ...Array.from({ length: 6 }, (_, index) => ({
+          id: `tertiary-${index}`,
+          section: "Tertiary",
+          label: `Tertiary command ${index}`,
+        })),
+      ],
+    });
+
+    const testSetup = await openTuiSolidTestRender(
+      createOpenTuiSolidElement(BrewvaOpenTuiShell, { runtime: runtime }),
+      {
+        width: 120,
+        height: 36,
+      },
+    );
+
+    try {
+      await testSetup.renderOnce();
+      await testSetup.renderOnce();
+      const firstFrame = testSetup.captureCharFrame();
+      const firstTitleRow = findRenderedRow(firstFrame, "Commands");
+      const rendererInspector = testSetup.renderer as unknown as OpenTuiTestRendererInspector;
+      const firstScrollbox = requireDefined(
+        rendererInspector.root.findDescendantById("command-palette-scrollbox"),
+        "command palette scrollbox",
+      );
+      expect(firstTitleRow).toBe(5);
+      expect(firstFrame).toContain("Secondary command 5");
+      expect(firstFrame).toContain("Tertiary");
+
+      await openTuiSolidAct(async () => {
+        for (let index = 0; index < 20; index += 1) {
+          await runtime.handleInput({
+            key: "down",
+            ctrl: false,
+            meta: false,
+            shift: false,
+          });
+        }
+      });
+      await testSetup.renderOnce();
+      await testSetup.renderOnce();
+
+      const movedFrame = testSetup.captureCharFrame();
+      expect(findRenderedRow(movedFrame, "Commands")).toBe(firstTitleRow);
+      expect(
+        requireDefined(
+          rendererInspector.root.findDescendantById("command-palette-scrollbox"),
+          "command palette scrollbox after move",
+        ),
+      ).toBe(firstScrollbox);
+      expect(movedFrame).toContain("Tertiary command 2");
+      expect(findRenderedRow(movedFrame, "Enter run")).toBeGreaterThan(
+        findRenderedRow(movedFrame, "Tertiary command 2"),
+      );
+    } finally {
+      runtime.dispose();
+      testSetup.renderer.destroy();
+    }
+  });
+
+  test("keeps model and provider picker frames anchored with native scrollboxes", async () => {
+    const { bundle } = createFakeBundle();
+
+    const runtime = new CliShellRuntime(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+      operatorPollIntervalMs: 60_000,
+    });
+
+    await runtime.start();
+    runtime.openOverlay({
+      kind: "modelPicker",
+      title: "Models",
+      query: "",
+      selectedIndex: 0,
+      items: Array.from({ length: 24 }, (_, index) => ({
+        id: `model:demo/model-${index}:Available`,
+        kind: "model" as const,
+        section: "Available",
+        provider: "demo",
+        modelId: `model-${index}`,
+        label: `Demo Model ${index}`,
+        detail: `demo/model-${index}`,
+        available: true,
+        current: index === 0,
+      })),
+    });
+
+    const testSetup = await openTuiSolidTestRender(
+      createOpenTuiSolidElement(BrewvaOpenTuiShell, { runtime: runtime }),
+      {
+        width: 120,
+        height: 36,
+      },
+    );
+
+    try {
+      await testSetup.renderOnce();
+      await testSetup.renderOnce();
+      const firstFrame = testSetup.captureCharFrame();
+      const firstTitleRow = findRenderedRow(firstFrame, "Models");
+      const rendererInspector = testSetup.renderer as unknown as OpenTuiTestRendererInspector;
+      const modelScrollbox = requireDefined(
+        rendererInspector.root.findDescendantById("model-picker-scrollbox"),
+        "model picker scrollbox",
+      );
+
+      await openTuiSolidAct(async () => {
+        for (let index = 0; index < 18; index += 1) {
+          await runtime.handleInput({
+            key: "down",
+            ctrl: false,
+            meta: false,
+            shift: false,
+          });
+        }
+      });
+      await testSetup.renderOnce();
+      await testSetup.renderOnce();
+
+      const movedModelFrame = testSetup.captureCharFrame();
+      expect(findRenderedRow(movedModelFrame, "Models")).toBe(firstTitleRow);
+      expect(
+        requireDefined(
+          rendererInspector.root.findDescendantById("model-picker-scrollbox"),
+          "model picker scrollbox after move",
+        ),
+      ).toBe(modelScrollbox);
+      expect(movedModelFrame).toContain("Demo Model 18");
+
+      const providers = Array.from(
+        { length: 18 },
+        (_, index): ProviderConnectionDescriptor => ({
+          id: `provider-${index}`,
+          name: `Provider ${index}`,
+          description: `Provider ${index} connection`,
+          modelProviders: [`provider-${index}`],
+          group: "popular",
+          connected: false,
+          connectionSource: "none",
+          modelCount: 4,
+          availableModelCount: 0,
+          credentialRef: `provider-${index}`,
+        }),
+      );
+
+      await openTuiSolidAct(async () => {
+        runtime.openOverlay({
+          kind: "providerPicker",
+          title: "Connect a provider",
+          query: "",
+          selectedIndex: 0,
+          providers,
+          items: providers.map((provider) => ({
+            id: `provider:${provider.id}`,
+            section: "Popular",
+            label: provider.name,
+            detail: provider.description,
+            footer: "Connect",
+            provider,
+          })),
+        });
+      });
+      await testSetup.renderOnce();
+      await testSetup.renderOnce();
+
+      const firstProviderFrame = testSetup.captureCharFrame();
+      const firstProviderTitleRow = findRenderedRow(firstProviderFrame, "Connect a provider");
+      const providerScrollbox = requireDefined(
+        rendererInspector.root.findDescendantById("provider-picker-scrollbox"),
+        "provider picker scrollbox",
+      );
+
+      await openTuiSolidAct(async () => {
+        for (let index = 0; index < 12; index += 1) {
+          await runtime.handleInput({
+            key: "down",
+            ctrl: false,
+            meta: false,
+            shift: false,
+          });
+        }
+      });
+      await testSetup.renderOnce();
+      await testSetup.renderOnce();
+
+      const movedProviderFrame = testSetup.captureCharFrame();
+      expect(findRenderedRow(movedProviderFrame, "Connect a provider")).toBe(firstProviderTitleRow);
+      expect(
+        requireDefined(
+          rendererInspector.root.findDescendantById("provider-picker-scrollbox"),
+          "provider picker scrollbox after move",
+        ),
+      ).toBe(providerScrollbox);
+      expect(movedProviderFrame).toContain("Provider 12");
     } finally {
       runtime.dispose();
       testSetup.renderer.destroy();
@@ -1364,6 +1698,7 @@ describe("opentui solid shell runtime: render regression", () => {
       await testSetup.renderOnce();
       const frame = testSetup.captureCharFrame();
       expect(frame).toContain("Sessions");
+      expect(findRenderedRow(frame, "Sessions")).toBeLessThanOrEqual(5);
       expect(frame).toContain("Search:");
       expect(frame).toContain("New session");
       expect(frame).toContain("Archived session");
@@ -1383,6 +1718,82 @@ describe("opentui solid shell runtime: render regression", () => {
       expect(frame).not.toContain("events: 0");
       expect(frame).not.toContain("current: yes");
       expect(frame).not.toContain("n new session");
+    } finally {
+      runtime.dispose();
+      testSetup.renderer.destroy();
+    }
+  });
+
+  test("keeps sessions picker frame anchored with a native scrollbox", async () => {
+    const replaySessions = Array.from({ length: 24 }, (_, index) => ({
+      sessionId: asBrewvaSessionId(`session-${index}`),
+      eventCount: index + 1,
+      lastEventAt: 1_710_000_000_000 - index * 1_000,
+      title: `Session ${index}`,
+    })) satisfies BrewvaReplaySession[];
+
+    const { bundle } = createFakeBundle({
+      sessionId: "session-0",
+      replaySessions,
+    });
+    const runtime = new CliShellRuntime(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+      operatorPollIntervalMs: 60_000,
+    });
+
+    await runtime.start();
+    runtime.openOverlay({
+      kind: "sessions",
+      selectedIndex: 0,
+      query: "",
+      sessions: replaySessions,
+      currentSessionId: "session-0",
+      draftStateBySessionId: {},
+    });
+
+    const testSetup = await openTuiSolidTestRender(
+      createOpenTuiSolidElement(BrewvaOpenTuiShell, { runtime: runtime }),
+      {
+        width: 100,
+        height: 28,
+      },
+    );
+
+    try {
+      await testSetup.renderOnce();
+      await testSetup.renderOnce();
+      const firstFrame = testSetup.captureCharFrame();
+      const firstTitleRow = findRenderedRow(firstFrame, "Sessions");
+      const rendererInspector = testSetup.renderer as unknown as OpenTuiTestRendererInspector;
+      const sessionsScrollbox = requireDefined(
+        rendererInspector.root.findDescendantById("sessions-scrollbox"),
+        "sessions scrollbox",
+      );
+
+      await openTuiSolidAct(async () => {
+        for (let index = 0; index < 18; index += 1) {
+          await runtime.handleInput({
+            key: "down",
+            ctrl: false,
+            meta: false,
+            shift: false,
+          });
+        }
+      });
+      await testSetup.renderOnce();
+      await testSetup.renderOnce();
+
+      const movedFrame = testSetup.captureCharFrame();
+      expect(findRenderedRow(movedFrame, "Sessions")).toBe(firstTitleRow);
+      expect(
+        requireDefined(
+          rendererInspector.root.findDescendantById("sessions-scrollbox"),
+          "sessions scrollbox after move",
+        ),
+      ).toBe(sessionsScrollbox);
+      expect(movedFrame).toContain("Session 18");
     } finally {
       runtime.dispose();
       testSetup.renderer.destroy();

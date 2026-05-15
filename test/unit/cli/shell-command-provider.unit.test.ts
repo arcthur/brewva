@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { buildCommandPalettePayload } from "../../../packages/brewva-cli/src/shell/commands/command-palette.js";
 import { ShellCommandProvider } from "../../../packages/brewva-cli/src/shell/commands/command-provider.js";
 import { registerShellCommands } from "../../../packages/brewva-cli/src/shell/commands/shell-command-registry.js";
 
@@ -89,6 +90,41 @@ describe("shell command provider", () => {
     ]);
     expect(provider.searchPaletteCommands("opq").map((command) => command.id)).toEqual([
       "operator.questions",
+    ]);
+  });
+
+  test("command palette suggestions render a visible section without row markers or descriptions", () => {
+    const provider = new ShellCommandProvider();
+    provider.register({
+      id: "suggested.command",
+      title: "Suggested command",
+      description: "Appears first in an empty command palette.",
+      category: "System",
+      suggested: true,
+    });
+    provider.register({
+      id: "regular.command",
+      title: "Regular command",
+      description: "Appears after suggested commands.",
+      category: "System",
+    });
+
+    const payload = buildCommandPalettePayload({ commandProvider: provider });
+
+    expect(payload.items.map((item) => ({ id: item.id, section: item.section }))).toEqual([
+      { id: "suggested.command", section: "Suggested" },
+      { id: "suggested.command", section: "System" },
+      { id: "regular.command", section: "System" },
+    ]);
+    expect(payload.items.map((item) => item.marker)).toEqual([undefined, undefined, undefined]);
+    expect(payload.items.map((item) => item.detail)).toEqual([undefined, undefined, undefined]);
+
+    const filteredPayload = buildCommandPalettePayload({
+      commandProvider: provider,
+      query: "regular",
+    });
+    expect(filteredPayload.items.map((item) => ({ id: item.id, section: item.section }))).toEqual([
+      { id: "regular.command", section: "System" },
     ]);
   });
 

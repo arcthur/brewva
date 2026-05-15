@@ -1,6 +1,7 @@
 /** @jsxImportSource @opentui/solid */
 
-import { createMemo } from "solid-js";
+import { Show, createMemo } from "solid-js";
+import type { CliShellOverlayPayload } from "../../../src/shell/domain/overlays/payloads.js";
 import type { ShellViewModel } from "../../../src/shell/domain/view-model.js";
 import type { SessionPalette } from "../palette.js";
 import {
@@ -28,190 +29,208 @@ import {
   ThinkingPickerOverlay,
 } from "./picker-overlays.js";
 
+type OverlayPayloadOf<TKind extends CliShellOverlayPayload["kind"]> = Extract<
+  CliShellOverlayPayload,
+  { kind: TKind }
+>;
+
+function overlayPayloadOf<TKind extends CliShellOverlayPayload["kind"]>(
+  payload: CliShellOverlayPayload | undefined,
+  kind: TKind,
+): OverlayPayloadOf<TKind> | undefined {
+  return payload?.kind === kind ? (payload as OverlayPayloadOf<TKind>) : undefined;
+}
+
 export function ModalOverlay(input: {
   overlay: NonNullable<ShellViewModel["overlay"]["active"]>;
   width: number;
   height: number;
   theme: SessionPalette;
 }) {
-  const rendered = createMemo(() => {
-    const payload = input.overlay.payload;
-    if (!payload) {
-      return null;
-    }
+  const payload = createMemo(() => input.overlay.payload);
 
-    switch (payload.kind) {
-      case "pager":
-        return (
+  return (
+    <>
+      <Show when={overlayPayloadOf(payload(), "pager")}>
+        {(current) => (
           <PagerOverlay
-            payload={payload}
+            payload={current()}
             theme={input.theme}
             width={input.width}
             height={input.height}
           />
-        );
-      case "inspect":
-        return (
+        )}
+      </Show>
+      <Show when={overlayPayloadOf(payload(), "inspect")}>
+        {(current) => (
           <InspectOverlay
-            payload={payload}
+            payload={current()}
             theme={input.theme}
             width={input.width}
             height={input.height}
           />
-        );
-      case "notifications":
-        return (
+        )}
+      </Show>
+      <Show when={overlayPayloadOf(payload(), "notifications")}>
+        {(current) => (
           <NotificationsOverlay
-            payload={payload}
+            payload={current()}
             theme={input.theme}
             width={input.width}
             height={input.height}
           />
-        );
-      case "inbox":
-        return (
+        )}
+      </Show>
+      <Show when={overlayPayloadOf(payload(), "inbox")}>
+        {(current) => (
           <InboxOverlay
-            payload={payload}
+            payload={current()}
             theme={input.theme}
             width={input.width}
             height={input.height}
           />
-        );
-      case "sessions":
-        return (
+        )}
+      </Show>
+      <Show when={overlayPayloadOf(payload(), "sessions")}>
+        {(current) => (
           <SessionsOverlay
-            payload={payload}
+            payload={current()}
             theme={input.theme}
             width={input.width}
             height={input.height}
           />
-        );
-      case "lineage":
-        return (
+        )}
+      </Show>
+      <Show when={overlayPayloadOf(payload(), "lineage")}>
+        {(current) => (
           <LineageOverlay
-            payload={payload}
+            payload={current()}
             theme={input.theme}
             width={input.width}
             height={input.height}
           />
-        );
-      case "queue":
-        return (
+        )}
+      </Show>
+      <Show when={overlayPayloadOf(payload(), "queue")}>
+        {(current) => (
           <QueueOverlay
-            payload={payload}
+            payload={current()}
             theme={input.theme}
             width={input.width}
             height={input.height}
           />
-        );
-      case "tasks":
-        return (
+        )}
+      </Show>
+      <Show when={overlayPayloadOf(payload(), "tasks")}>
+        {(current) => (
           <TasksOverlay
-            payload={payload}
+            payload={current()}
             theme={input.theme}
             width={input.width}
             height={input.height}
           />
-        );
-      case "confirm":
-        return (
+        )}
+      </Show>
+      <Show when={overlayPayloadOf(payload(), "confirm")}>
+        {(current) => (
           <ConfirmDialogOverlay
-            payload={payload}
+            payload={current()}
             theme={input.theme}
             width={input.width}
             height={input.height}
           />
-        );
-      case "input":
-        return (
+        )}
+      </Show>
+      <Show when={overlayPayloadOf(payload(), "input")}>
+        {(current) => (
           <InputOverlay
-            payload={payload}
+            payload={current()}
             theme={input.theme}
             width={input.width}
             height={input.height}
           />
-        );
-      case "select":
-        return (
+        )}
+      </Show>
+      <Show when={overlayPayloadOf(payload(), "select")}>
+        {(current) => (
           <SelectOverlay
-            payload={payload}
+            payload={current()}
             theme={input.theme}
             width={input.width}
             height={input.height}
           />
-        );
-      case "modelPicker":
-        return (
+        )}
+      </Show>
+      <Show when={overlayPayloadOf(payload(), "modelPicker")}>
+        {(current) => (
           <ModelPickerOverlay
-            payload={payload}
+            payload={current()}
             theme={input.theme}
             width={input.width}
             height={input.height}
           />
-        );
-      case "providerPicker":
-        return (
+        )}
+      </Show>
+      <Show when={overlayPayloadOf(payload(), "providerPicker")}>
+        {(current) => (
           <ProviderPickerOverlay
-            payload={payload}
+            payload={current()}
             theme={input.theme}
             width={input.width}
             height={input.height}
           />
-        );
-      case "thinkingPicker":
-        return (
+        )}
+      </Show>
+      <Show when={overlayPayloadOf(payload(), "thinkingPicker")}>
+        {(current) => (
           <ThinkingPickerOverlay
-            payload={payload}
+            payload={current()}
             theme={input.theme}
             width={input.width}
             height={input.height}
           />
-        );
-      case "authMethodPicker":
-        return (
+        )}
+      </Show>
+      <Show when={overlayPayloadOf(payload(), "authMethodPicker")}>
+        {(current) => (
           <AuthMethodPickerOverlay
-            payload={payload}
+            payload={current()}
             theme={input.theme}
             width={input.width}
             height={input.height}
           />
-        );
-      case "commandPalette":
-        return (
+        )}
+      </Show>
+      <Show when={overlayPayloadOf(payload(), "commandPalette")}>
+        {(current) => (
           <CommandPaletteOverlay
-            payload={payload}
+            payload={current()}
             theme={input.theme}
             width={input.width}
             height={input.height}
           />
-        );
-      case "helpHub":
-        return (
+        )}
+      </Show>
+      <Show when={overlayPayloadOf(payload(), "helpHub")}>
+        {(current) => (
           <HelpHubOverlay
-            payload={payload}
+            payload={current()}
             theme={input.theme}
             width={input.width}
             height={input.height}
           />
-        );
-      case "oauthWait":
-        return (
+        )}
+      </Show>
+      <Show when={overlayPayloadOf(payload(), "oauthWait")}>
+        {(current) => (
           <OAuthWaitOverlay
-            payload={payload}
+            payload={current()}
             theme={input.theme}
             width={input.width}
             height={input.height}
           />
-        );
-      case "approval":
-      case "question":
-        return null;
-      default: {
-        const exhaustiveCheck: never = payload;
-        return exhaustiveCheck;
-      }
-    }
-  });
-
-  return <>{rendered()}</>;
+        )}
+      </Show>
+    </>
+  );
 }

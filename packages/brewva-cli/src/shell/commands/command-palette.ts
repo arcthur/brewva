@@ -8,16 +8,17 @@ import {
 type CommandPalettePayload = Extract<CliShellOverlayPayload, { kind: "commandPalette" }>;
 type HelpHubPayload = Extract<CliShellOverlayPayload, { kind: "helpHub" }>;
 
-function commandPaletteItem(command: ShellCommandListItem): CommandPalettePayload["items"][number] {
+function commandPaletteItem(
+  command: ShellCommandListItem,
+  input: { section?: string } = {},
+): CommandPalettePayload["items"][number] {
   const slash = command.slashName ? `/${command.slashName}` : undefined;
   const keybinding = formatKeybindingLabel(command.keybinding);
   return {
     id: command.id,
-    section: command.category,
+    section: input.section ?? command.category,
     label: command.title,
-    detail: command.description,
     footer: [slash, keybinding].filter(Boolean).join("  ") || undefined,
-    marker: command.suggested ? "●" : undefined,
   };
 }
 
@@ -28,7 +29,15 @@ export function buildCommandPalettePayload(input: {
 }): CommandPalettePayload {
   const query = input.query ?? "";
   const commands = input.commandProvider.searchPaletteCommands(query);
-  const items = commands.map((command) => commandPaletteItem(command));
+  const baseItems = commands.map((command) => commandPaletteItem(command));
+  const items = query.trim()
+    ? baseItems
+    : [
+        ...commands
+          .filter((command) => command.suggested)
+          .map((command) => commandPaletteItem(command, { section: "Suggested" })),
+        ...baseItems,
+      ];
   return {
     kind: "commandPalette",
     title: "Commands",

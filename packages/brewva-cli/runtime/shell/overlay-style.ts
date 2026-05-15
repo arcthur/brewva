@@ -34,9 +34,31 @@ export function resolveModelPickerTopInset(height: number): number {
   return Math.max(0, Math.floor(height / 6));
 }
 
+export function resolveHighDensityPickerTopInset(height: number): number {
+  return Math.max(0, Math.min(6, Math.floor(Math.max(0, Math.trunc(height)) / 8)));
+}
+
+export function resolveCommandPaletteTopInset(height: number): number {
+  return resolveHighDensityPickerTopInset(height);
+}
+
+export function resolveHighDensityPickerRows(
+  height: number,
+  rowCount: number,
+  topInset = resolveHighDensityPickerTopInset(height),
+): number {
+  const normalizedRowCount = Math.max(1, Math.trunc(rowCount) || 1);
+  const availableRows = Math.max(1, Math.trunc(height) - topInset - 8);
+  return Math.max(1, Math.min(normalizedRowCount, availableRows));
+}
+
 export function resolveDialogSelectRows(height: number, itemCount: number): number {
   const availableRows = Math.max(1, Math.floor(height / 2) - 6);
   return Math.max(1, Math.min(itemCount || 1, availableRows));
+}
+
+export function resolveCommandPaletteRows(height: number, rowCount: number): number {
+  return resolveHighDensityPickerRows(height, rowCount, resolveCommandPaletteTopInset(height));
 }
 
 /** Rows for compact left-column {@link OverlaySurface} selection lists (sessions, inbox, etc.). */

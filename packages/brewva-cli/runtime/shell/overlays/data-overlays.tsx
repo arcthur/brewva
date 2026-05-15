@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 
-import { For, Show, createMemo } from "solid-js";
+import { For, Show, createEffect, createMemo } from "solid-js";
 import { visibleWidth } from "../../../src/internal/tui/index.js";
 import type {
   CliInboxOverlayPayload,
@@ -22,16 +22,23 @@ import {
   buildTaskRunListLabel,
   buildTaskRunPreviewLines,
 } from "../../../src/shell/domain/task-details.js";
+import type { OpenTuiScrollBoxHandle } from "../../internal-opentui-runtime.js";
 import { TextAttributes } from "../../opentui/index.js";
 import {
   DIALOG_FOOTER_RIGHT_PADDING,
   DIALOG_HORIZONTAL_PADDING,
+  resolveHighDensityPickerRows,
   resolveDialogSelectRows,
   resolveDialogSurfaceDimensions,
   resolveDialogWidth,
+  resolveHighDensityPickerTopInset,
   resolveOverlaySurfaceSelectionRows,
 } from "../overlay-style.js";
-import { SPLIT_BORDER_CHARS, type SessionPalette } from "../palette.js";
+import {
+  DEFAULT_SCROLL_ACCELERATION,
+  SPLIT_BORDER_CHARS,
+  type SessionPalette,
+} from "../palette.js";
 import { TextLineBlock } from "../transcript.js";
 import { visibleLineWindow, windowSelection } from "../utils.js";
 import {
@@ -352,37 +359,92 @@ export function InboxOverlay(input: {
 }
 
 const SIDEBAR_MARKER_WIDTH = 2;
+type SessionRenderRow = ReturnType<typeof buildSessionsOverlayRows>[number];
+
+function sessionRenderRowHeight(row: SessionRenderRow, index: number): number {
+  return row.kind === "group" && index > 0 ? 2 : 1;
+}
+
+function sessionRenderRowsHeight(rows: readonly SessionRenderRow[]): number {
+  return rows.reduce((height, row, index) => height + sessionRenderRowHeight(row, index), 0);
+}
+
+function findSessionVisualRowIndex(
+  rows: readonly SessionRenderRow[],
+  selectedSessionIndex: number,
+): number {
+  let visualIndex = 0;
+  for (const [index, row] of rows.entries()) {
+    if (row.kind === "group" && index > 0) {
+      visualIndex += 1;
+    }
+    if (row.kind === "session" && row.sessionIndex === selectedSessionIndex) {
+      return visualIndex;
+    }
+    visualIndex += 1;
+  }
+  return 0;
+}
 
 /** Current session ● in its own column so selection inversion does not recolor it. */
 function SessionsList(input: {
   payload: CliSessionsOverlayPayload;
   theme: SessionPalette;
   listWidth: number;
-  maxVisible: number;
+  height: number;
+  topInset: number;
 }) {
+  let scrollbox: OpenTuiScrollBoxHandle | undefined;
+  let previousResetKey: string | undefined;
   const rows = createMemo(() => buildSessionsOverlayRows(input.payload.sessions));
-  const selectedRowIndex = createMemo(() => {
-    const index = rows().findIndex(
-      (row) => row.kind === "session" && row.sessionIndex === input.payload.selectedIndex,
-    );
-    return index >= 0 ? index : 0;
-  });
-  const selectionWindow = createMemo(() =>
-    windowSelection(rows(), selectedRowIndex(), input.maxVisible),
+  const selectedVisualRowIndex = createMemo(() =>
+    findSessionVisualRowIndex(rows(), input.payload.selectedIndex),
+  );
+  const viewportRows = createMemo(() =>
+    resolveHighDensityPickerRows(input.height, sessionRenderRowsHeight(rows()), input.topInset),
   );
   const labelMaxWidth = createMemo(() =>
     Math.max(4, input.listWidth - DIALOG_HORIZONTAL_PADDING * 2 - 1),
   );
+  createEffect(() => {
+    const node = scrollbox;
+    if (!node || node.isDestroyed) {
+      return;
+    }
+    const resetKey = input.payload.query;
+    if (resetKey !== previousResetKey) {
+      previousResetKey = resetKey;
+      node.scrollTo(0);
+    }
+    const selectedRow = selectedVisualRowIndex();
+    const viewportHeight = Math.max(1, node.viewport.height || viewportRows());
+    const scrollBottom = node.scrollTop + viewportHeight;
+    if (selectedRow < node.scrollTop) {
+      node.scrollBy(selectedRow - node.scrollTop);
+      return;
+    }
+    if (selectedRow + 1 > scrollBottom) {
+      node.scrollBy(selectedRow + 1 - scrollBottom);
+    }
+  });
   return (
-    <box width="100%" flexDirection="column" backgroundColor={input.theme.backgroundPanel}>
-      <For each={selectionWindow().items}>
+    <scrollbox
+      id="sessions-scrollbox"
+      ref={(node: OpenTuiScrollBoxHandle) => {
+        scrollbox = node;
+      }}
+      width="100%"
+      height={viewportRows()}
+      scrollbarOptions={{ visible: false }}
+      scrollAcceleration={DEFAULT_SCROLL_ACCELERATION}
+    >
+      <For each={rows()}>
         {(row, index) => {
-          const absoluteIndex = createMemo(() => selectionWindow().startIndex + index());
           if (row.kind === "group") {
             return (
               <box
                 width="100%"
-                paddingTop={absoluteIndex() === 0 ? 0 : 1}
+                paddingTop={index() === 0 ? 0 : 1}
                 paddingLeft={DIALOG_HORIZONTAL_PADDING}
                 paddingRight={DIALOG_HORIZONTAL_PADDING}
                 flexShrink={0}
@@ -453,7 +515,7 @@ function SessionsList(input: {
           );
         }}
       </For>
-    </box>
+    </scrollbox>
   );
 }
 
@@ -531,10 +593,7 @@ export function SessionsOverlay(input: {
   width: number;
   height: number;
 }) {
-  const rows = createMemo(() => buildSessionsOverlayRows(input.payload.sessions));
-  const sidebarRows = createMemo(() =>
-    resolveDialogSelectRows(input.height, Math.max(1, rows().length)),
-  );
+  const topInset = createMemo(() => resolveHighDensityPickerTopInset(input.height));
   return (
     <DialogSelectFrame
       title="Sessions"
@@ -542,7 +601,7 @@ export function SessionsOverlay(input: {
       height={input.height}
       theme={input.theme}
       size="large"
-      verticalAlign="center"
+      topInset={topInset()}
       search={
         <box paddingTop={1}>
           <text fg={input.theme.textMuted}>Search: {input.payload.query}</text>
@@ -569,7 +628,8 @@ export function SessionsOverlay(input: {
             payload={input.payload}
             theme={input.theme}
             listWidth={resolveDialogWidth(input.width, "large")}
-            maxVisible={sidebarRows()}
+            height={input.height}
+            topInset={topInset()}
           />
         </Show>
       </box>
