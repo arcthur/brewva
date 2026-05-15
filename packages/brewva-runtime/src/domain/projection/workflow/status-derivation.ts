@@ -152,7 +152,7 @@ function determineReviewRequired(input: {
   );
 }
 
-function determineQaRequired(input: {
+function determineVerifierRequired(input: {
   latestArtifacts: Partial<Record<WorkflowArtifactKind, WorkflowArtifact>>;
   planningPosture: PlanningPosture | undefined;
   implementation: WorkflowImplementationStatus;
@@ -163,10 +163,10 @@ function determineQaRequired(input: {
   );
   return Boolean(
     input.planningPosture === "high_risk" ||
-    ownerLanes.includes("qa") ||
+    ownerLanes.includes("verifier") ||
     requiredEvidence.length > 0 ||
     input.implementation !== "missing" ||
-    input.latestArtifacts.qa,
+    input.latestArtifacts.verifier,
   );
 }
 
@@ -196,11 +196,11 @@ function determineUnsatisfiedRequiredEvidence(
   if (requiredEvidence.length === 0) {
     return [];
   }
-  const qaCoverageTexts = readStringArray(latestArtifacts.qa?.metadata?.coverageTexts);
+  const verifierCoverageTexts = readStringArray(latestArtifacts.verifier?.metadata?.coverageTexts);
   const verificationCoverageTexts = resolveLatestFreshVerificationCoverageTexts(artifacts);
   const coveredRequiredEvidence = collectCoveredRequiredEvidence(
     requiredEvidence,
-    uniqueStrings([...qaCoverageTexts, ...verificationCoverageTexts]),
+    uniqueStrings([...verifierCoverageTexts, ...verificationCoverageTexts]),
   );
   return requiredEvidence.filter((evidenceName) => !coveredRequiredEvidence.includes(evidenceName));
 }
@@ -209,7 +209,7 @@ function determineShipStatus(input: {
   latestArtifacts: Partial<Record<WorkflowArtifactKind, WorkflowArtifact>>;
   implementation: WorkflowImplementationStatus;
   review: WorkflowLaneStatus;
-  qa: WorkflowLaneStatus;
+  verifier: WorkflowLaneStatus;
   verification: WorkflowLaneStatus;
   acceptance: WorkflowAcceptanceStatus;
   hasBlockers: boolean;
@@ -221,9 +221,9 @@ function determineShipStatus(input: {
     input.implementation === "pending" ||
     input.review === "blocked" ||
     input.review === "stale" ||
-    input.qa === "blocked" ||
-    input.qa === "pending" ||
-    input.qa === "stale" ||
+    input.verifier === "blocked" ||
+    input.verifier === "pending" ||
+    input.verifier === "stale" ||
     input.verification === "blocked" ||
     input.verification === "stale" ||
     (input.acceptance !== "not_required" && input.acceptance !== "ready") ||
@@ -274,7 +274,7 @@ function createShipPostureArtifact(input: {
     input.latestArtifacts.execution_plan,
     input.latestArtifacts.implementation,
     input.latestArtifacts.review,
-    input.latestArtifacts.qa,
+    input.latestArtifacts.verifier,
     input.latestArtifacts.verification,
     input.latestArtifacts.ship,
     input.latestArtifacts.retro,
@@ -308,7 +308,7 @@ function createShipPostureArtifact(input: {
         ? "fresh"
         : input.posture.ship === "stale" ||
             input.posture.review === "stale" ||
-            input.posture.qa === "stale" ||
+            input.posture.verifier === "stale" ||
             input.posture.verification === "stale"
           ? "stale"
           : "unknown",
@@ -335,11 +335,11 @@ function deriveFinishView(input: {
 }): WorkflowFinishView {
   const posture = input.posture;
   const reviewSatisfied = !posture.review_required || posture.review === "ready";
-  const qaSatisfied = !posture.qa_required || posture.qa === "ready";
+  const verifierSatisfied = !posture.verifier_required || posture.verifier === "ready";
   const completed =
     posture.implementation === "ready" &&
     reviewSatisfied &&
-    qaSatisfied &&
+    verifierSatisfied &&
     posture.unsatisfied_required_evidence.length === 0;
   const verified = posture.verification === "ready";
   const acceptanceReady = posture.acceptance === "not_required" || posture.acceptance === "ready";
@@ -352,7 +352,9 @@ function deriveFinishView(input: {
   const missingEvidence = uniqueStrings([
     ...posture.unsatisfied_required_evidence,
     ...(posture.review_required && posture.review !== "ready" ? [`review:${posture.review}`] : []),
-    ...(posture.qa_required && posture.qa !== "ready" ? [`qa:${posture.qa}`] : []),
+    ...(posture.verifier_required && posture.verifier !== "ready"
+      ? [`verifier:${posture.verifier}`]
+      : []),
     ...(completed && posture.verification !== "ready"
       ? [`verification:${posture.verification}`]
       : []),
@@ -374,7 +376,7 @@ function deriveFinishView(input: {
     posture.planning === "ready" ||
     posture.implementation !== "missing" ||
     posture.review !== "missing" ||
-    posture.qa !== "missing" ||
+    posture.verifier !== "missing" ||
     posture.verification !== "missing" ||
     posture.ship !== "missing" ||
     posture.retro === "ready" ||
@@ -487,7 +489,7 @@ export function deriveWorkflowStatus(input: {
   const strategy = determinePresenceStatus(latestArtifacts.strategy_review);
   let implementation = determineImplementationStatus(latestArtifacts);
   const review = determineLaneStatus(latestArtifacts.review);
-  const qa = determineLaneStatus(latestArtifacts.qa);
+  const verifier = determineLaneStatus(latestArtifacts.verifier);
   const verification = determineLaneStatus(latestArtifacts.verification);
   const acceptance = determineAcceptanceStatus(input.taskState);
 
@@ -500,7 +502,7 @@ export function deriveWorkflowStatus(input: {
     planComplete,
     implementation,
   });
-  const qaRequired = determineQaRequired({
+  const verifierRequired = determineVerifierRequired({
     latestArtifacts,
     planningPosture: strictestPlanningPosture,
     implementation,
@@ -521,8 +523,8 @@ export function deriveWorkflowStatus(input: {
   if (reviewRequired && review === "missing") {
     blockers.push("Review is required for the current scope and has not been completed.");
   }
-  if (qaRequired && qa === "missing") {
-    blockers.push("QA is required for the current scope and has not been completed.");
+  if (verifierRequired && verifier === "missing") {
+    blockers.push("Verifier is required for the current scope and has not been completed.");
   }
   if (unsatisfiedRequiredEvidence.length > 0) {
     blockers.push(
@@ -574,21 +576,23 @@ export function deriveWorkflowStatus(input: {
     blockers.push("Verification artifact is stale after later workspace mutations.");
   }
 
-  const qaNormalizationBlocker = buildNormalizationBlockerMessage(
-    "QA artifact",
-    latestArtifacts.qa,
+  const verifierNormalizationBlocker = buildNormalizationBlockerMessage(
+    "Verifier artifact",
+    latestArtifacts.verifier,
   );
-  if (qaNormalizationBlocker) {
-    blockers.push(qaNormalizationBlocker);
-  } else if (latestArtifacts.qa?.state === "blocked") {
-    const qaVerdict = readString(latestArtifacts.qa.metadata?.qaVerdict);
+  if (verifierNormalizationBlocker) {
+    blockers.push(verifierNormalizationBlocker);
+  } else if (latestArtifacts.verifier?.state === "blocked") {
+    const verifierVerdict = readString(latestArtifacts.verifier.metadata?.verifierVerdict);
     blockers.push(
-      qaVerdict === "fail" ? "QA reported failing checks before shipping." : "QA lane is blocked.",
+      verifierVerdict === "fail"
+        ? "Verifier reported failing checks before shipping."
+        : "Verifier lane is blocked.",
     );
-  } else if (latestArtifacts.qa?.state === "pending") {
-    blockers.push("QA remains inconclusive and needs more executable evidence.");
-  } else if (qa === "stale") {
-    blockers.push("QA artifact is stale after later workspace mutations.");
+  } else if (latestArtifacts.verifier?.state === "pending") {
+    blockers.push("Verifier remains inconclusive and needs more executable evidence.");
+  } else if (verifier === "stale") {
+    blockers.push("Verifier artifact is stale after later workspace mutations.");
   }
 
   if (latestArtifacts.worker_patch?.state === "blocked") {
@@ -612,7 +616,7 @@ export function deriveWorkflowStatus(input: {
     latestArtifacts,
     implementation,
     review,
-    qa,
+    verifier,
     verification,
     acceptance,
     hasBlockers: dedupedBlockers.length > 0,
@@ -661,8 +665,8 @@ export function deriveWorkflowStatus(input: {
     implementation,
     review_required: reviewRequired,
     review,
-    qa_required: qaRequired,
-    qa,
+    verifier_required: verifierRequired,
+    verifier,
     unsatisfied_required_evidence: unsatisfiedRequiredEvidence,
     verification,
     acceptance,
@@ -678,7 +682,7 @@ export function deriveWorkflowStatus(input: {
         latestArtifacts.execution_plan?.artifactId,
         latestArtifacts.implementation?.artifactId,
         latestArtifacts.review?.artifactId,
-        latestArtifacts.qa?.artifactId,
+        latestArtifacts.verifier?.artifactId,
         latestArtifacts.verification?.artifactId,
         latestArtifacts.ship?.artifactId,
         latestArtifacts.retro?.artifactId,

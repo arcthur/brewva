@@ -28,7 +28,7 @@ describe("subagent public surface snapshot", () => {
           run: async () => ({
             ok: true,
             mode: "single",
-            delegate: "advisor",
+            delegate: "explorer",
             outcomes: [],
           }),
         },
@@ -61,7 +61,7 @@ describe("subagent public surface snapshot", () => {
           run: async () => ({
             ok: true,
             mode: "single",
-            delegate: "advisor",
+            delegate: "explorer",
             outcomes: [],
           }),
         },
@@ -72,9 +72,9 @@ describe("subagent public surface snapshot", () => {
       collectPromptText(createSubagentFanoutTool({ runtime }) as BrewvaManagedToolDefinition),
     ].join("\n");
 
-    expect(publicText).toContain("advisor");
-    expect(publicText).toContain("qa");
-    expect(publicText).toContain("patch-worker");
+    expect(publicText).toContain("explorer");
+    expect(publicText).toContain("verifier");
+    expect(publicText).toContain("worker");
     expect(publicText).not.toContain("review-correctness");
     expect(publicText).not.toContain("review-security");
     expect(publicText).not.toContain("agentSpec");
@@ -89,6 +89,6 @@ describe("subagent public surface snapshot", () => {
       .map((agentSpec) => agentSpec.name)
       .toSorted();
 
-    expect(publicNames).toEqual(["advisor", "patch-worker", "qa"]);
+    expect(publicNames).toEqual(["explorer", "librarian", "navigator", "verifier", "worker"]);
   });
 });

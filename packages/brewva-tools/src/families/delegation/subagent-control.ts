@@ -55,6 +55,8 @@ function summarizeRun(
 ): string {
   const head = [
     `status=${run.status}`,
+    `agent=${run.agent}`,
+    `path=${run.taskPath}`,
     run.kind ? `kind=${run.kind}` : null,
     `primitive=${run.executionPrimitive}`,
     `isolation=${run.isolationStrategy}`,
@@ -62,7 +64,9 @@ function summarizeRun(
     run.live ? "live=yes" : "live=no",
     run.cancelable ? "cancelable=yes" : "cancelable=no",
   ].filter(Boolean);
-  const lines = [`- ${run.label ?? run.runId} (${run.delegate}): ${head.join(" ")}`];
+  const lines = [
+    `- ${run.nickname ?? run.label ?? run.runId} (${run.delegate}): ${head.join(" ")}`,
+  ];
   if (detailMode !== "public") {
     const delegateIdentity = [
       run.agentSpec ? `agentSpec=${run.agentSpec}` : null,
@@ -90,10 +94,11 @@ function summarizeRun(
   if (run.modelRoute && detailMode === "diagnostic") {
     const route = [
       run.modelRoute.selectedModel,
+      `category=${run.modelRoute.category}`,
       `source=${run.modelRoute.source}`,
       `mode=${run.modelRoute.mode}`,
       run.modelRoute.policyId ? `policy=${run.modelRoute.policyId}` : null,
-      run.modelRoute.requestedModel ? `requested=${run.modelRoute.requestedModel}` : null,
+      run.modelRoute.presetName ? `preset=${run.modelRoute.presetName}` : null,
     ].filter(Boolean);
     lines.push(`  model: ${route.join(" ")}`);
     lines.push(`  routeReason: ${run.modelRoute.reason}`);
@@ -145,7 +150,16 @@ function projectRunForDetailMode(
   const projected: Record<string, unknown> = {
     contractVersion: run.contractVersion,
     runId: run.runId,
+    agent: run.agent,
+    targetName: run.targetName,
     delegate: run.delegate,
+    taskName: run.taskName,
+    taskPath: run.taskPath,
+    nickname: run.nickname,
+    depth: run.depth,
+    forkTurns: run.forkTurns,
+    gateReason: run.gateReason,
+    modelCategory: run.modelCategory,
     executionPrimitive: run.executionPrimitive,
     visibility: run.visibility,
     isolationStrategy: run.isolationStrategy,
@@ -192,10 +206,14 @@ export function createSubagentStatusTool(options: BrewvaToolOptions): ToolDefini
       "Use this to inspect running, completed, failed, or merged subagent runs without replaying the whole event tape.",
     promptGuidelines: [
       "Prefer filtering to pending/running when checking live delegation progress.",
-      "Use runId when you need the exact status of a known delegated run.",
+      "Use runId or taskPath when you need the exact status of a known delegated run.",
+      "Use nickname for display aliases; nicknames may return multiple matching live runs.",
     ],
     parameters: Type.Object({
       runId: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
+      taskPath: Type.Optional(Type.String({ minLength: 1, maxLength: 500 })),
+      nickname: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
+      pathPrefix: Type.Optional(Type.String({ minLength: 1, maxLength: 500 })),
       statuses: Type.Optional(Type.Array(StatusSchema, { minItems: 1, maxItems: 7 })),
       includeTerminal: Type.Optional(Type.Boolean()),
       limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 50 })),
@@ -206,6 +224,9 @@ export function createSubagentStatusTool(options: BrewvaToolOptions): ToolDefini
       const adapter = runtime.orchestration?.subagents;
       const query = {
         runIds: typeof params.runId === "string" ? [params.runId] : undefined,
+        taskPaths: typeof params.taskPath === "string" ? [params.taskPath] : undefined,
+        nicknames: typeof params.nickname === "string" ? [params.nickname] : undefined,
+        pathPrefix: typeof params.pathPrefix === "string" ? params.pathPrefix : undefined,
         statuses: normalizeStatuses(params.statuses),
         includeTerminal:
           typeof params.includeTerminal === "boolean" ? params.includeTerminal : true,

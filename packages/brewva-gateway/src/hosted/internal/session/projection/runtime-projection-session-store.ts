@@ -414,7 +414,7 @@ export class HostedRuntimeTapeSessionStore {
     previousPresetName?: string;
     source?: string;
     mainModel?: string;
-    subagentModels?: Record<string, string>;
+    delegationModels?: Record<string, string>;
     auxiliaryModels?: {
       title?: string;
     };
@@ -428,7 +428,7 @@ export class HostedRuntimeTapeSessionStore {
         previousPresetName: input.previousPresetName,
         source: input.source ?? "session_store",
         mainModel: input.mainModel,
-        subagentModels: input.subagentModels ? { ...input.subagentModels } : undefined,
+        delegationModels: input.delegationModels ? { ...input.delegationModels } : undefined,
         auxiliaryModels: input.auxiliaryModels ? { ...input.auxiliaryModels } : undefined,
         synthetic: input.synthetic,
       },
@@ -798,7 +798,7 @@ export class HostedRuntimeTapeSessionStore {
       activeModelPresetName: "Default",
       activeModelPreset: {
         name: "Default",
-        subagentModels: {},
+        delegationModels: {},
         synthetic: true,
       },
     };
@@ -816,7 +816,7 @@ export class HostedRuntimeTapeSessionStore {
         control.activeModelPreset = {
           name: entry.presetName,
           mainModel: entry.mainModel,
-          subagentModels: entry.subagentModels ? { ...entry.subagentModels } : {},
+          delegationModels: entry.delegationModels ? { ...entry.delegationModels } : {},
           auxiliaryModels: entry.auxiliaryModels ? { ...entry.auxiliaryModels } : undefined,
           synthetic: entry.synthetic,
         };
@@ -956,7 +956,7 @@ export class HostedRuntimeTapeSessionStore {
         previousPresetName: readOptionalString(payload.previousPresetName),
         source: readOptionalString(payload.source),
         mainModel: readOptionalString(payload.mainModel),
-        subagentModels: readOptionalStringRecord(payload.subagentModels),
+        delegationModels: readOptionalStringRecord(payload.delegationModels),
         auxiliaryModels: readOptionalAuxiliaryModels(payload.auxiliaryModels),
         synthetic: payload.synthetic === true ? true : undefined,
       } satisfies BrewvaModelPresetSelectEntry;

@@ -96,6 +96,7 @@ describe("hosted subagent orchestrator", () => {
     const result = await adapter.run({
       fromSessionId: parentSessionId,
       request: {
+        agent: "navigator",
         skillName: "discovery",
         mode: "single",
         packet: {
@@ -126,7 +127,7 @@ describe("hosted subagent orchestrator", () => {
     expect(subagentNode).toEqual(
       expect.objectContaining({
         parentLineageNodeId: "lineage:main",
-        kind: "subagent.consult",
+        kind: "subagent.evidence",
       }),
     );
     expect(subagentNode?.outcomes).toEqual([
@@ -144,7 +145,7 @@ describe("hosted subagent orchestrator", () => {
     await rm(workspaceRoot, { recursive: true, force: true });
   });
 
-  test("records patch worker results from an isolated child workspace", async () => {
+  test("records worker patch results from an isolated child workspace", async () => {
     const workspaceRoot = createTempWorkspace("brewva-subagent-parent-");
     mkdirSync(join(workspaceRoot, "src"), { recursive: true });
     writeFileSync(join(workspaceRoot, "src", "message.ts"), "export const message = 'before';\n");
@@ -212,7 +213,7 @@ describe("hosted subagent orchestrator", () => {
     const result = await adapter.run({
       fromSessionId: parentSessionId,
       request: {
-        agentSpec: "patch-worker",
+        agent: "worker",
         mode: "single",
         packet: {
           objective: "Update the exported message constant.",
@@ -336,7 +337,8 @@ describe("hosted subagent orchestrator", () => {
     const result = await adapter.run({
       fromSessionId: parentSessionId,
       request: {
-        skillName: "discovery",
+        agent: "explorer",
+        skillName: "review",
         mode: "parallel",
         tasks: [
           {
@@ -362,11 +364,67 @@ describe("hosted subagent orchestrator", () => {
     expect(result.ok).toBe(true);
     expect(result.outcomes).toHaveLength(2);
     expect(result.outcomes.every((outcome) => outcome.ok)).toBe(true);
+    const taskPaths = result.outcomes
+      .map((outcome) => (outcome.ok ? outcome.taskPath : ""))
+      .toSorted();
+    const parentTaskPath = requireNonEmptyString(
+      taskPaths[0]?.replace(/\/gateway$/u, ""),
+      "expected first fanout task path",
+    );
+    expect(parentTaskPath).toMatch(/^\/explorer-[a-f0-9]{8}$/u);
+    expect(taskPaths).toEqual([`${parentTaskPath}/gateway`, `${parentTaskPath}/runtime`]);
+
+    const status = await adapter.status?.({
+      fromSessionId: parentSessionId,
+      query: {
+        pathPrefix: parentTaskPath,
+      },
+    });
+    expect(status?.runs.map((run) => run.taskPath).toSorted()).toEqual(taskPaths);
+
+    const secondResult = await adapter.run({
+      fromSessionId: parentSessionId,
+      request: {
+        agent: "explorer",
+        skillName: "review",
+        mode: "parallel",
+        tasks: [
+          {
+            label: "gateway",
+            objective: "Inspect gateway delegation entrypoints again.",
+            consultBrief: {
+              decision: "Which gateway entrypoints still matter?",
+              successCriteria: "Return one concrete gateway finding.",
+            },
+          },
+          {
+            label: "runtime",
+            objective: "Inspect runtime delegation records again.",
+            consultBrief: {
+              decision: "Which runtime records still matter?",
+              successCriteria: "Return one concrete runtime finding.",
+            },
+          },
+        ],
+      },
+    });
+    if (!secondResult.ok) {
+      throw new Error(secondResult.error);
+    }
+    const secondTaskPaths = secondResult.outcomes
+      .map((outcome) => (outcome.ok ? outcome.taskPath : ""))
+      .toSorted();
+    const secondParentTaskPath = requireNonEmptyString(
+      secondTaskPaths[0]?.replace(/\/gateway$/u, ""),
+      "expected second fanout task path",
+    );
+    expect(secondParentTaskPath).toMatch(/^\/explorer-[a-f0-9]{8}$/u);
+    expect(secondParentTaskPath).not.toBe(parentTaskPath);
 
     await rm(workspaceRoot, { recursive: true, force: true });
   });
 
-  test("allows packet boundary to narrow a patch-worker target back to safe", async () => {
+  test("allows packet boundary to narrow a worker target back to safe", async () => {
     const workspaceRoot = createTempWorkspace("brewva-subagent-narrow-");
     const runtimeConfig = structuredClone(DEFAULT_BREWVA_CONFIG);
     runtimeConfig.infrastructure.events.level = "ops";
@@ -422,7 +480,7 @@ describe("hosted subagent orchestrator", () => {
     const result = await adapter.run({
       fromSessionId: parentSessionId,
       request: {
-        agentSpec: "patch-worker",
+        agent: "worker",
         mode: "single",
         packet: {
           objective: "Inspect the module without changing files.",
@@ -449,6 +507,36 @@ describe("hosted subagent orchestrator", () => {
       expect(outcome.kind).toBe("patch");
       expect(outcome.patches).toBe(undefined);
     }
+
+    await rm(workspaceRoot, { recursive: true, force: true });
+  });
+
+  test("rejects worker runs that request full inherited fork context", async () => {
+    const workspaceRoot = createTempWorkspace("brewva-subagent-worker-fork-turns-");
+    const runtime = createHostedTestRuntime({ cwd: workspaceRoot });
+    const adapter = createHostedSubagentAdapter({
+      runtime,
+      async createChildSession() {
+        throw new Error("worker forkTurns=all should fail before child creation");
+      },
+    });
+
+    const result = await adapter.run({
+      fromSessionId: "parent-session-worker-fork-turns",
+      request: {
+        agent: "worker",
+        forkTurns: "all",
+        mode: "single",
+        packet: {
+          objective: "Implement a patch with full parent context.",
+        },
+      },
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: "worker_fork_turns_all_not_allowed",
+    });
 
     await rm(workspaceRoot, { recursive: true, force: true });
   });
@@ -544,7 +632,7 @@ describe("hosted subagent orchestrator", () => {
     const result = await adapter.run({
       fromSessionId: parentSessionId,
       request: {
-        agentSpec: "patch-worker",
+        agent: "worker",
         mode: "single",
         packet: {
           objective: "Inspect the module after a recoverable provider retry.",
@@ -579,7 +667,7 @@ describe("hosted subagent orchestrator", () => {
     await rm(workspaceRoot, { recursive: true, force: true });
   });
 
-  test("captures structured QA outcomes from the child assistant response", async () => {
+  test("captures structured Verifier outcomes from the child assistant response", async () => {
     const workspaceRoot = createTempWorkspace("brewva-subagent-structured-success-");
     const runtime = createHostedTestRuntime({ cwd: workspaceRoot });
     const parentSessionId = "parent-session-structured-success";
@@ -605,10 +693,10 @@ describe("hosted subagent orchestrator", () => {
                       {
                         type: "text",
                         text: [
-                          "QA completed with one inconclusive probe.",
+                          "Verifier completed with one inconclusive probe.",
                           "<delegation_outcome_json>",
                           JSON.stringify({
-                            kind: "qa",
+                            kind: "verifier",
                             verdict: "inconclusive",
                             checks: [
                               {
@@ -661,10 +749,10 @@ describe("hosted subagent orchestrator", () => {
     const result = await adapter.run({
       fromSessionId: parentSessionId,
       request: {
-        agentSpec: "qa",
+        agent: "verifier",
         mode: "single",
         packet: {
-          objective: "QA the runtime checks.",
+          objective: "Verifier the runtime checks.",
         },
       },
     });
@@ -673,12 +761,12 @@ describe("hosted subagent orchestrator", () => {
     const outcome = result.outcomes[0];
     expect(outcome?.ok).toBe(true);
     if (!outcome || !outcome.ok) {
-      throw new Error("expected a successful QA outcome");
+      throw new Error("expected a successful Verifier outcome");
     }
 
-    expect(outcome.kind).toBe("qa");
+    expect(outcome.kind).toBe("verifier");
     expect(outcome.data).toEqual({
-      kind: "qa",
+      kind: "verifier",
       verdict: "inconclusive",
       checks: [
         {
@@ -702,7 +790,7 @@ describe("hosted subagent orchestrator", () => {
         },
       ],
     });
-    expect(outcome.summary).toBe("QA completed with one inconclusive probe.");
+    expect(outcome.summary).toBe("Verifier completed with one inconclusive probe.");
     expect(outcome.evidenceRefs).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -816,7 +904,8 @@ describe("hosted subagent orchestrator", () => {
     const result = await adapter.run({
       fromSessionId: parentSessionId,
       request: {
-        agentSpec: "review-boundaries",
+        agent: "explorer",
+        targetName: "review-boundaries",
         consultKind: "review",
         mode: "single",
         packet: {
@@ -908,7 +997,7 @@ describe("hosted subagent orchestrator", () => {
     await rm(workspaceRoot, { recursive: true, force: true });
   });
 
-  test("records a parse warning for prose-only QA output without failing the handoff", async () => {
+  test("records a parse warning for prose-only Verifier output without failing the handoff", async () => {
     const workspaceRoot = createTempWorkspace("brewva-subagent-structured-fallback-");
     const runtime = createHostedTestRuntime({ cwd: workspaceRoot });
     const parentSessionId = "parent-session-structured-fallback";
@@ -933,7 +1022,7 @@ describe("hosted subagent orchestrator", () => {
                     content: [
                       {
                         type: "text",
-                        text: "QA completed, but only a prose summary is available.",
+                        text: "Verifier completed, but only a prose summary is available.",
                       },
                     ],
                   },
@@ -960,13 +1049,10 @@ describe("hosted subagent orchestrator", () => {
     const result = await adapter.run({
       fromSessionId: parentSessionId,
       request: {
-        agentSpec: "qa",
-        executionShape: {
-          resultMode: "qa",
-        },
+        agent: "verifier",
         mode: "single",
         packet: {
-          objective: "QA the runtime checks.",
+          objective: "Verifier the runtime checks.",
         },
       },
     });
@@ -975,10 +1061,10 @@ describe("hosted subagent orchestrator", () => {
     const outcome = result.outcomes[0];
     expect(outcome?.ok).toBe(true);
     if (!outcome || !outcome.ok) {
-      throw new Error("expected a successful QA outcome");
+      throw new Error("expected a successful Verifier outcome");
     }
 
-    expect(outcome.summary).toContain("QA completed, but only a prose summary is available.");
+    expect(outcome.summary).toContain("Verifier completed, but only a prose summary is available.");
     expect(
       runtime.inspect.events.records.list(parentSessionId, {
         type: "subagent_outcome_parse_failed",
@@ -1040,7 +1126,7 @@ describe("hosted subagent orchestrator", () => {
     const started = await adapter.start({
       fromSessionId: parentSessionId,
       request: {
-        agentSpec: "advisor",
+        agent: "explorer",
         consultKind: "investigate",
         mode: "single",
         packet: {
@@ -1103,6 +1189,196 @@ describe("hosted subagent orchestrator", () => {
     expect(shutdownEvents[0]?.payload).toMatchObject({
       reason: "subagent_cancelled_manual_stop",
       source: "subagent_orchestrator",
+    });
+
+    await rm(workspaceRoot, { recursive: true, force: true });
+  });
+
+  test("scopes subagent A2A to live parent-child messages", async () => {
+    const workspaceRoot = createTempWorkspace("brewva-subagent-a2a-");
+    const runtime = createHostedTestRuntime({ cwd: workspaceRoot });
+    const parentSessionId = "parent-session-a2a";
+    let rejectPendingPrompt: ((error: Error) => void) | undefined;
+
+    const adapter = createHostedSubagentAdapter({
+      runtime,
+      async createChildSession(input: HostedSubagentSessionOptions) {
+        const childRuntime = createHostedTestRuntime({ cwd: input.cwd ?? workspaceRoot });
+        const childSessionId = "child-a2a";
+        const listeners = new Set<(event: BrewvaPromptSessionEvent) => void>();
+
+        return {
+          runtime: childRuntime,
+          session: {
+            dispose() {},
+            async abort() {
+              rejectPendingPrompt?.(new Error("aborted"));
+            },
+            async prompt() {
+              await new Promise<void>((_, reject) => {
+                rejectPendingPrompt = (error) => reject(error);
+              });
+            },
+            async waitForIdle() {},
+            sessionManager: {
+              getSessionId() {
+                return childSessionId;
+              },
+            },
+            subscribe(listener) {
+              listeners.add(listener);
+              return () => {
+                listeners.delete(listener);
+              };
+            },
+          },
+        };
+      },
+    });
+    if (!adapter.start || !adapter.sendMessage || !adapter.listAgents || !adapter.cancel) {
+      throw new Error("expected subagent adapter A2A controls");
+    }
+
+    const started = await adapter.start({
+      fromSessionId: parentSessionId,
+      request: {
+        agent: "explorer",
+        taskName: "Runtime Map",
+        nickname: "runtime-scout",
+        consultKind: "investigate",
+        mode: "single",
+        packet: {
+          objective: "Inspect the runtime map in the background.",
+          consultBrief: {
+            decision: "Which runtime files matter?",
+            successCriteria: "Stay alive long enough to receive scoped A2A messages.",
+          },
+        },
+      },
+    });
+    expect(started.ok).toBe(true);
+    const run = requireDefined(started.runs[0], "expected a launched A2A run");
+    await Promise.resolve();
+
+    const listedAgents = await adapter.listAgents();
+    expect(listedAgents).toEqual(
+      expect.arrayContaining([
+        {
+          agentId: run.runId,
+          primaryAddress: run.taskPath,
+          aliases: [run.taskPath, "runtime-scout"],
+          kind: "subagent",
+          status: "active",
+        },
+      ]),
+    );
+
+    const parentToPath = await adapter.sendMessage({
+      fromSessionId: parentSessionId,
+      toAgentId: run.taskPath,
+      message: "Please include concrete file refs.",
+      correlationId: "a2a-parent-path",
+    });
+    expect(parentToPath).toMatchObject({
+      ok: true,
+      toAgentId: run.taskPath,
+      responseText: `subagent message recorded for ${run.taskPath} (audit-only; v1 delivery is deferred)`,
+    });
+
+    const parentToNickname = await adapter.sendMessage({
+      fromSessionId: parentSessionId,
+      toAgentId: "runtime-scout",
+      message: "Also record missing evidence.",
+      correlationId: "a2a-parent-nickname",
+    });
+    expect(parentToNickname.ok).toBe(true);
+
+    const childToParent = await adapter.sendMessage({
+      fromSessionId: "child-a2a",
+      fromAgentId: run.runId,
+      toAgentId: "parent",
+      message: "I need one more source ref.",
+      correlationId: "a2a-child-parent",
+    });
+    expect(childToParent).toMatchObject({
+      ok: true,
+      toAgentId: "parent",
+      responseText: "subagent message recorded for parent (audit-only; v1 delivery is deferred)",
+    });
+
+    const childToChild = await adapter.sendMessage({
+      fromSessionId: "child-a2a",
+      fromAgentId: run.runId,
+      toAgentId: run.taskPath,
+      message: "Try sibling delivery.",
+    });
+    expect(childToChild).toMatchObject({
+      ok: false,
+      error: "child_to_child_not_allowed",
+    });
+
+    const selfTarget = await adapter.sendMessage({
+      fromSessionId: parentSessionId,
+      toAgentId: "parent",
+      message: "Self target should fail.",
+    });
+    expect(selfTarget).toMatchObject({
+      ok: false,
+      error: "a2a_self_target_blocked",
+    });
+
+    const depthOverflow = await adapter.sendMessage({
+      fromSessionId: parentSessionId,
+      toAgentId: run.runId,
+      message: "Depth overflow should fail.",
+      depth: runtime.config.channels.orchestration.limits.a2aMaxDepth,
+    });
+    expect(depthOverflow).toMatchObject({
+      ok: false,
+      error: "a2a_depth_limit_exceeded",
+    });
+
+    const messageEvents = runtime.inspect.events.records.list(parentSessionId, {
+      type: "subagent_a2a_message",
+    });
+    expect(messageEvents.map((event) => event.payload)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          runId: run.runId,
+          direction: "parent_to_child",
+          toAgentId: run.taskPath,
+          correlationId: "a2a-parent-path",
+        }),
+        expect.objectContaining({
+          runId: run.runId,
+          direction: "parent_to_child",
+          toAgentId: "runtime-scout",
+          correlationId: "a2a-parent-nickname",
+        }),
+        expect.objectContaining({
+          runId: run.runId,
+          direction: "child_to_parent",
+          toAgentId: "parent",
+          correlationId: "a2a-child-parent",
+        }),
+      ]),
+    );
+
+    const cancelled = await adapter.cancel({
+      fromSessionId: parentSessionId,
+      runId: run.runId,
+      reason: "a2a_test_done",
+    });
+    expect(cancelled.ok).toBe(true);
+
+    const inactiveTarget = await adapter.sendMessage({
+      fromSessionId: parentSessionId,
+      toAgentId: run.runId,
+      message: "Inactive target should fail.",
+    });
+    expect(inactiveTarget).toMatchObject({
+      ok: false,
+      error: "inactive_subagent_target",
     });
 
     await rm(workspaceRoot, { recursive: true, force: true });
@@ -1209,16 +1485,13 @@ describe("hosted subagent orchestrator", () => {
     const started = await adapter.start({
       fromSessionId: parentSessionId,
       request: {
-        agentSpec: "advisor",
+        agent: "explorer",
         consultKind: "investigate",
-        executionShape: {
-          resultMode: "consult",
-        },
         mode: "single",
         packet: {
           objective: "Inspect the runtime boundary changes.",
           consultBrief: {
-            decision: "What should this advisor inspect first?",
+            decision: "What should this explorer inspect first?",
             successCriteria: "Launch a diagnostic consult run through an explicit agent spec.",
           },
         },

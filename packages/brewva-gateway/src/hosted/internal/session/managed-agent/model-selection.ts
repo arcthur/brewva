@@ -26,7 +26,7 @@ export function createFallbackModelPresetState(
     presets: [
       {
         name: DEFAULT_MODEL_PRESET_NAME,
-        subagentModels: {},
+        delegationModels: {},
         synthetic: true,
       },
     ],
@@ -82,7 +82,7 @@ export interface ManagedSessionModelSelectionControllerOptions {
     previousPresetName?: string;
     source?: string;
     mainModel?: string;
-    subagentModels?: Record<string, string>;
+    delegationModels?: Record<string, string>;
     auxiliaryModels?: {
       title?: string;
     };
@@ -180,7 +180,7 @@ export class ManagedSessionModelSelectionController {
       previousPresetName: previousName,
       source: request.source ?? "session",
       mainModel: preset.mainModel,
-      subagentModels: preset.subagentModels,
+      delegationModels: preset.delegationModels,
       auxiliaryModels: preset.auxiliaryModels,
       synthetic: preset.synthetic,
     });

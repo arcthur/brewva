@@ -141,7 +141,7 @@ otherwise apply the missing-lane rule manually.
 
 Autofix routing rule: this skill is read-only. If a fix is obvious, record it
 as a disposition or handoff target (`implementation` for parent-owned edits,
-`patch-worker` for delegated patch work). Do not mutate files from review.
+`worker` for delegated patch work). Do not mutate files from review.
 
 ### Phase 5: Emit findings-first output
 

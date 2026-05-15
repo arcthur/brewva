@@ -319,7 +319,16 @@ function buildSubagentStartedFrame(
   const runId = payload?.runId;
   const delegate = payload?.delegate;
   const kind = payload?.kind;
-  if (!turnId || !runId || !delegate || (kind !== "consult" && kind !== "qa" && kind !== "patch")) {
+  if (
+    !turnId ||
+    !runId ||
+    !delegate ||
+    (kind !== "evidence" &&
+      kind !== "consult" &&
+      kind !== "verifier" &&
+      kind !== "patch" &&
+      kind !== "knowledge")
+  ) {
     return [];
   }
   return [
@@ -347,7 +356,16 @@ function buildSubagentFinishedFrame(
   const runId = payload?.runId;
   const delegate = payload?.delegate;
   const kind = payload?.kind;
-  if (!turnId || !runId || !delegate || (kind !== "consult" && kind !== "qa" && kind !== "patch")) {
+  if (
+    !turnId ||
+    !runId ||
+    !delegate ||
+    (kind !== "evidence" &&
+      kind !== "consult" &&
+      kind !== "verifier" &&
+      kind !== "patch" &&
+      kind !== "knowledge")
+  ) {
     return [];
   }
   return [

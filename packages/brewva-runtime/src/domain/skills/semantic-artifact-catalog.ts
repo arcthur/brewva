@@ -13,7 +13,7 @@ import type {
 
 export interface SemanticArtifactSchema {
   id: SemanticArtifactSchemaId;
-  family: "planning" | "implementation" | "review" | "qa" | "ship";
+  family: "planning" | "implementation" | "review" | "verifier" | "ship";
   description: string;
   outputContract: SkillOutputContract;
   example: JsonValue | string;
@@ -61,7 +61,7 @@ const FILE_ARRAY_REQUIRED: SkillOutputContract = {
   },
 };
 
-const QA_CHECKS_OUTPUT_CONTRACT: SkillOutputContract = {
+const VERIFIER_CHECKS_OUTPUT_CONTRACT: SkillOutputContract = {
   kind: "json",
   minItems: 1,
   itemContract: {
@@ -434,39 +434,39 @@ const SEMANTIC_ARTIFACT_SCHEMAS: Readonly<
     },
     example: "needs_changes",
   },
-  "qa.qa_report.v2": {
-    id: "qa.qa_report.v2",
-    family: "qa",
-    description: "Narrative QA report.",
+  "verifier.verifier_report.v2": {
+    id: "verifier.verifier_report.v2",
+    family: "verifier",
+    description: "Narrative Verifier report.",
     outputContract: TEXT_LONG,
     example:
       "Exercised the repair posture with invalid planning outputs and confirmed the session stayed inside completion-only recovery.",
   },
-  "qa.qa_findings.v2": {
-    id: "qa.qa_findings.v2",
-    family: "qa",
-    description: "QA findings list.",
+  "verifier.verifier_findings.v2": {
+    id: "verifier.verifier_findings.v2",
+    family: "verifier",
+    description: "Verifier findings list.",
     outputContract: {
       kind: "json",
       minItems: 0,
     },
     example: [],
   },
-  "qa.qa_verdict.v2": {
-    id: "qa.qa_verdict.v2",
-    family: "qa",
-    description: "Canonical QA verdict.",
+  "verifier.verifier_verdict.v2": {
+    id: "verifier.verifier_verdict.v2",
+    family: "verifier",
+    description: "Canonical Verifier verdict.",
     outputContract: {
       kind: "enum",
       values: ["pass", "fail", "inconclusive"],
     },
     example: "pass",
   },
-  "qa.qa_checks.v2": {
-    id: "qa.qa_checks.v2",
-    family: "qa",
-    description: "Canonical executed QA checks.",
-    outputContract: QA_CHECKS_OUTPUT_CONTRACT,
+  "verifier.verifier_checks.v2": {
+    id: "verifier.verifier_checks.v2",
+    family: "verifier",
+    description: "Canonical executed Verifier checks.",
+    outputContract: VERIFIER_CHECKS_OUTPUT_CONTRACT,
     example: [
       {
         name: "verification blocker is visible",
@@ -477,24 +477,24 @@ const SEMANTIC_ARTIFACT_SCHEMAS: Readonly<
       },
     ],
   },
-  "qa.qa_missing_evidence.v2": {
-    id: "qa.qa_missing_evidence.v2",
-    family: "qa",
-    description: "Missing QA evidence list.",
+  "verifier.verifier_missing_evidence.v2": {
+    id: "verifier.verifier_missing_evidence.v2",
+    family: "verifier",
+    description: "Missing Verifier evidence list.",
     outputContract: STRING_ARRAY_OPTIONAL,
     example: [],
   },
-  "qa.qa_confidence_gaps.v2": {
-    id: "qa.qa_confidence_gaps.v2",
-    family: "qa",
-    description: "Residual QA confidence gaps.",
+  "verifier.verifier_confidence_gaps.v2": {
+    id: "verifier.verifier_confidence_gaps.v2",
+    family: "verifier",
+    description: "Residual Verifier confidence gaps.",
     outputContract: STRING_ARRAY_OPTIONAL,
     example: [],
   },
-  "qa.qa_environment_limits.v2": {
-    id: "qa.qa_environment_limits.v2",
-    family: "qa",
-    description: "QA environment limits.",
+  "verifier.verifier_environment_limits.v2": {
+    id: "verifier.verifier_environment_limits.v2",
+    family: "verifier",
+    description: "Verifier environment limits.",
     outputContract: STRING_ARRAY_OPTIONAL,
     example: [],
   },

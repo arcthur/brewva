@@ -49,13 +49,13 @@ consumes:
   - review_report
   - review_findings
   - merge_decision
-  - qa_report
-  - qa_findings
-  - qa_verdict
-  - qa_checks
-  - qa_missing_evidence
-  - qa_confidence_gaps
-  - qa_environment_limits
+  - verifier_report
+  - verifier_findings
+  - verifier_verdict
+  - verifier_checks
+  - verifier_missing_evidence
+  - verifier_confidence_gaps
+  - verifier_environment_limits
   - github_context
   - ci_findings
 ---
@@ -81,14 +81,14 @@ It does not patch product code or perform release mutations.
 **Do NOT use when:**
 
 - Implementation or review is still in progress
-- The real work is QA, not release readiness
+- The real work is a verifier pass, not release readiness
 - No concrete release target exists
 
 ## Workflow
 
 ### Phase 1: Rebuild release context
 
-Collect current branch state, release target, review state, QA result, CI
+Collect current branch state, release target, review state, verifier result, CI
 status, and outstanding blockers from upstream artifacts.
 
 **If upstream artifacts are missing**: Record each gap. Missing evidence is a
@@ -114,9 +114,9 @@ blocking gates and what must change.
 
 - `ready`: evidence supports the intended release action, no material blockers
 - `needs_follow_up`: close but missing CI, metadata, or bounded follow-up
-- `blocked`: correctness, QA, approval, or safety is unresolved
+- `blocked`: correctness, verifier evidence, approval, or safety is unresolved
 
-**If new code edits are required**: Route back to implementation or QA. Do not
+**If new code edits are required**: Route back to implementation or verifier. Do not
 perform release-time patch work.
 
 ### Phase 5: Emit shipping artifacts
@@ -125,7 +125,7 @@ Produce `ship_report`, `release_checklist`, `ship_decision`.
 
 ## Scripts
 
-- `scripts/check_release_gates.py` — Input: review_state, qa_state, ci_state,
+- `scripts/check_release_gates.py` — Input: review_state, verifier_state, ci_state,
   branch_state. Output: all_clear flag, per-gate results, blocking gate list.
   Run during Phase 3 before deciding ship posture.
 
@@ -142,7 +142,7 @@ Produce `ship_report`, `release_checklist`, `ship_decision`.
 If you catch yourself thinking any of these, STOP and return to Phase 1:
 
 - "Review passed, so it's ready to ship" — review is one gate, not all gates
-- "QA was inconclusive but it's probably fine" — inconclusive blocks `ready`
+- "The verifier pass was inconclusive but it's probably fine" — inconclusive blocks `ready`
 - "CI will pass eventually" — evaluate current state, not future hope
 - "The branch is a little behind but that's okay" — diverged is not clean
 - "I'll just fix this one thing before shipping" — ship does not patch code
@@ -171,5 +171,5 @@ See `references/example.md` for the grounded example output shape.
 
 - The requested release path is unclear and cannot be inferred
 - Repository or credential context cannot support the intended release action
-- Code or QA work is still the real blocker, not release mechanics
+- Code changes or verifier work are still the real blocker, not release mechanics
 - A gate cannot be evaluated because its upstream evidence is completely absent

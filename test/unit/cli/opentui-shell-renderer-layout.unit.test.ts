@@ -1150,7 +1150,7 @@ describe("opentui solid shell runtime: layout contract", () => {
             turnId: "turn-1",
             attemptId: "attempt-1",
             status: "completed",
-            assistantText: "QA summary line\nFound stale contract drift.",
+            assistantText: "Verifier summary line\nFound stale contract drift.",
             toolOutputs: [
               {
                 toolCallId: asBrewvaToolCallId("tool-1"),
@@ -1182,7 +1182,16 @@ describe("opentui solid shell runtime: layout contract", () => {
           {
             contractVersion: CURRENT_DELEGATION_CONTRACT_VERSION,
             runId: "run-1",
+            agent: "worker",
+            targetName: "worker",
             delegate: "worker-1",
+            taskName: "review-operator-state",
+            taskPath: "/review-operator-state",
+            nickname: "Review operator state",
+            depth: 1,
+            forkTurns: "none",
+            gateReason: "implement_isolated",
+            modelCategory: "isolated-execution",
             executionPrimitive: "named",
             visibility: "public",
             isolationStrategy: "shared",

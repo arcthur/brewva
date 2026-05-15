@@ -10,7 +10,7 @@ file does not introduce automatic cascades, aliases, or `suggested_chains`.
 | ------------- | ------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Pre-build     | `repository-analysis`, `architecture`, `office-hours`, `discovery`, `strategy`, `learning-research`, `plan`, `prep` | The task needs orientation, idea diagnosis, architecture deepening, scope pressure, precedent, planning, or explicit implementation targets before code changes |
 | Build         | `implementation`, `goal-loop`, `ci-iteration`, `frontend-design`, `extract`                                         | The task is bounded execution, repeated improvement, CI repair, UI-specific design, or structured data extraction                                               |
-| Post-build    | `review`, `qa`, `ship`, `retro`, `knowledge-capture`                                                                | The change needs risk review, executable verification, release handoff, retrospective analysis, or durable lesson capture                                       |
+| Post-build    | `review`, `verifier`, `ship`, `retro`, `knowledge-capture`                                                          | The change needs risk review, executable verification, release handoff, retrospective analysis, or durable lesson capture                                       |
 | Diagnostic    | `debugging`, `runtime-forensics`, `predict-review`                                                                  | The task needs root cause, runtime trace reconstruction, or pre-merge adversarial prediction                                                                    |
 | Operator/Data | `git`, `github`, `telegram`, `agent-browser`                                                                        | The work centers on repository operations, GitHub workflow, Telegram delivery, or browser observation                                                           |
 
@@ -47,13 +47,13 @@ that a skill is less important.
 Use chains as explicit handoffs, not automatic cascades. Each transition should
 be selected by the user, the model, or `workflow_status`.
 
-- `repository-analysis -> discovery -> strategy -> learning-research -> plan -> prep -> implementation -> review -> qa -> ship`
+- `repository-analysis -> discovery -> strategy -> learning-research -> plan -> prep -> implementation -> review -> verifier -> ship`
 - `office-hours -> discovery -> strategy -> plan` when a new product, startup, side-project, hackathon, or "worth building" idea needs diagnosis before an existing request frame exists
 - `office-hours -> strategy -> plan` when office-hours confirms a plausible wedge and the next question is timing, sequencing, or scope posture
 - `repository-analysis -> architecture -> plan -> implementation -> review` when the task is to deepen modules, improve testability, or reduce caller burden
 - `repository-analysis -> plan -> implementation -> review`
-- `frontend-design -> implementation -> qa`
-- `frontend-design -> plan -> implementation -> qa` when UI direction changes
+- `frontend-design -> implementation -> verifier`
+- `frontend-design -> plan -> implementation -> verifier` when UI direction changes
   cross-package architecture, data contracts, or product scope.
 - `extract -> review -> knowledge-capture`
 - `runtime-forensics -> debugging -> plan -> implementation`
@@ -64,12 +64,12 @@ be selected by the user, the model, or `workflow_status`.
 Escalation means the current skill hit a stop condition and names the next owner
 explicitly.
 
-- `debugging -> implementation -> review -> qa`: confirmed local root cause with a bounded fix.
+- `debugging -> implementation -> review -> verifier`: confirmed local root cause with a bounded fix.
 - `debugging -> plan`: root cause is confirmed but the repair crosses ownership or public contract boundaries.
 - `goal-loop -> plan`: the loop is below the noise floor or the goal contract is still fuzzy.
-- `qa -> debugging`: verification found a reproducible failure without confirmed cause.
+- `verifier -> debugging`: verification found a reproducible failure without confirmed cause.
 - `review -> implementation`: findings are actionable and scoped to parent-owned edits.
-- `review -> patch-worker`: findings are suitable for delegated patch work.
+- `review -> worker`: findings are suitable for delegated patch work.
 - `prep -> plan`: scope or success criteria require planning decisions, not just implementation bounds.
 - `strategy -> office-hours`: demand, status quo, target human, or wedge evidence is still missing.
 - `discovery -> office-hours`: the prompt is a new idea rather than an existing request that can be reframed.

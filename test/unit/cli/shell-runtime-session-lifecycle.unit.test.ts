@@ -111,7 +111,7 @@ function createFakeBundle(
   let modelPresetState: BrewvaModelPresetState = options.modelPresetState ?? {
     activeName: "Default",
     defaultName: "Default",
-    presets: [{ name: "Default", subagentModels: {}, synthetic: true }],
+    presets: [{ name: "Default", delegationModels: {}, synthetic: true }],
   };
   let modelPreferences = { recent: [], favorite: [] } as {
     recent: Array<{ provider: string; id: string }>;
@@ -590,8 +590,8 @@ describe("shell runtime: session lifecycle", () => {
         activeName: "Default",
         defaultName: "Default",
         presets: [
-          { name: "Default", subagentModels: {}, synthetic: true },
-          { name: "Claude Lead", mainModel: "anthropic/claude-main:high", subagentModels: {} },
+          { name: "Default", delegationModels: {}, synthetic: true },
+          { name: "Claude Lead", mainModel: "anthropic/claude-main:high", delegationModels: {} },
         ],
       },
     });
@@ -629,8 +629,8 @@ describe("shell runtime: session lifecycle", () => {
         activeName: "Default",
         defaultName: "Default",
         presets: [
-          { name: "Default", subagentModels: {}, synthetic: true },
-          { name: "Claude Lead", mainModel: "anthropic/claude-main:high", subagentModels: {} },
+          { name: "Default", delegationModels: {}, synthetic: true },
+          { name: "Claude Lead", mainModel: "anthropic/claude-main:high", delegationModels: {} },
         ],
       },
     });

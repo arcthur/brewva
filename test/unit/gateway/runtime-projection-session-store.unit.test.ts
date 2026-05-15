@@ -77,8 +77,8 @@ describe("hosted runtime tape session store", () => {
         previousPresetName: "Default",
         source: "tui",
         mainModel: "anthropic/claude-main:high",
-        subagentModels: {
-          advisor: "openai/gpt-5.5:medium",
+        delegationModels: {
+          "deep-reasoning": "openai/gpt-5.5:medium",
         },
       });
       store.appendModelChange("openai", "gpt-5.4");
@@ -110,8 +110,8 @@ describe("hosted runtime tape session store", () => {
       expect(context.activeModelPreset).toEqual({
         name: "Claude Lead",
         mainModel: "anthropic/claude-main:high",
-        subagentModels: {
-          advisor: "openai/gpt-5.5:medium",
+        delegationModels: {
+          "deep-reasoning": "openai/gpt-5.5:medium",
         },
       });
       expect(context.thinkingLevel).toBe("high");

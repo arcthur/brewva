@@ -62,7 +62,7 @@ At a high level, the families map like this:
 
 - core: delivery and engineering lifecycle surfaces such as
   `repository-analysis`, `office-hours`, `architecture`, `plan`,
-  `implementation`, `review`, `qa`, and `ship`
+  `implementation`, `review`, `verifier`, and `ship`
 - domain: specialized environments and bounded protocols such as
   `agent-browser`, `github`, `telegram`, `extract`, and
   `goal-loop`

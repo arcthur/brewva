@@ -3,14 +3,16 @@ import type {
   DelegationAdoptionRecord,
   DelegationExecutionPrimitive,
   DelegationOutcomeKind,
-  QaSubagentOutcomeData,
+  VerifierSubagentOutcomeData,
 } from "./types.js";
 
 export type DelegationAdoptionContractId =
+  | "delegation.evidence"
   | "delegation.consult.review"
   | "delegation.fork.consult"
-  | "delegation.qa"
-  | "delegation.patch";
+  | "delegation.verifier"
+  | "delegation.patch"
+  | "delegation.knowledge";
 
 export interface DelegationAdoptionInput {
   outcomeKind: DelegationOutcomeKind;
@@ -34,21 +36,23 @@ function adoptionRecord(input: {
   };
 }
 
-function readQaOutcome(value: unknown): QaSubagentOutcomeData | undefined {
+function readVerifierOutcome(value: unknown): VerifierSubagentOutcomeData | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return undefined;
   }
   const record = value as Record<string, unknown>;
-  if (record.kind !== "qa") {
+  if (record.kind !== undefined && record.kind !== "verifier" && record.kind !== "qa") {
     return undefined;
   }
-  if (record.verdict !== "pass" && record.verdict !== "fail" && record.verdict !== "inconclusive") {
+  const verdict = record.verdict ?? record.verifier_verdict ?? record.qa_verdict;
+  if (verdict !== "pass" && verdict !== "fail" && verdict !== "inconclusive") {
     return undefined;
   }
+  const checks = record.checks ?? record.verifier_checks ?? record.qa_checks;
   return {
-    kind: "qa",
-    verdict: record.verdict,
-    checks: Array.isArray(record.checks) ? (record.checks as QaSubagentOutcomeData["checks"]) : [],
+    kind: "verifier",
+    verdict,
+    checks: Array.isArray(checks) ? (checks as VerifierSubagentOutcomeData["checks"]) : [],
   };
 }
 
@@ -76,29 +80,47 @@ export function evaluateDelegationAdoption(
     });
   }
 
-  if (input.outcomeKind === "qa") {
-    const qa = readQaOutcome(input.resultData);
-    if (qa?.verdict === "pass" && qa.checks.length > 0) {
+  if (input.outcomeKind === "evidence") {
+    return adoptionRecord({
+      contractId: "delegation.evidence",
+      decision: "require_human",
+      reason: "evidence_requires_parent_judgment",
+      requiredEvidence: ["source_refs"],
+    });
+  }
+
+  if (input.outcomeKind === "knowledge") {
+    return adoptionRecord({
+      contractId: "delegation.knowledge",
+      decision: "require_human",
+      reason: "knowledge_requires_parent_promotion",
+      requiredEvidence: ["provenance", "promotion_receipt"],
+    });
+  }
+
+  if (input.outcomeKind === "verifier") {
+    const verifier = readVerifierOutcome(input.resultData);
+    if (verifier?.verdict === "pass" && verifier.checks.length > 0) {
       return adoptionRecord({
-        contractId: "delegation.qa",
+        contractId: "delegation.verifier",
         decision: "allow",
-        reason: "qa_passed_with_checks",
-        requiredEvidence: ["qa_checks"],
+        reason: "verifier_passed_with_checks",
+        requiredEvidence: ["verifier_checks"],
       });
     }
-    if (qa?.verdict === "fail") {
+    if (verifier?.verdict === "fail") {
       return adoptionRecord({
-        contractId: "delegation.qa",
+        contractId: "delegation.verifier",
         decision: "block",
-        reason: "qa_failed",
-        requiredEvidence: ["qa_checks"],
+        reason: "verifier_failed",
+        requiredEvidence: ["verifier_checks"],
       });
     }
     return adoptionRecord({
-      contractId: "delegation.qa",
+      contractId: "delegation.verifier",
       decision: "require_human",
-      reason: "qa_inconclusive_or_missing_checks",
-      requiredEvidence: ["qa_checks"],
+      reason: "verifier_inconclusive_or_missing_checks",
+      requiredEvidence: ["verifier_checks"],
     });
   }
 

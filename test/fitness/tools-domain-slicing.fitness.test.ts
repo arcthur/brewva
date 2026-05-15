@@ -18,9 +18,9 @@ const ALLOWED_TOOLS_SRC_ROOT_DIRS = new Set([
   "utils",
 ]);
 const EXPECTED_CONTRACT_FILES = [
-  "advisor.ts",
   "a2a.ts",
   "delegation.ts",
+  "explorer.ts",
   "index.ts",
   "metadata.ts",
   "runtime.ts",

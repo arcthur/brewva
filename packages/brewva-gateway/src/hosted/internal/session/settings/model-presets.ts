@@ -2,6 +2,14 @@ import type { BrewvaModelPreset, BrewvaModelPresetState } from "@brewva/brewva-s
 
 export const DEFAULT_MODEL_PRESET_NAME = "Default";
 
+const DELEGATION_MODEL_CATEGORIES = new Set([
+  "fast-evidence",
+  "deep-reasoning",
+  "isolated-execution",
+  "verification",
+  "knowledge",
+] as const);
+
 export interface HostedModelPresetSettingsShape {
   defaultModelPreset?: unknown;
   modelPresets?: Record<string, unknown>;
@@ -23,24 +31,29 @@ function readOptionalTrimmedString(value: unknown, field: string): string | unde
   return value;
 }
 
-function readSubagentModels(value: unknown, presetName: string): Record<string, string> {
+function readDelegationModels(value: unknown, presetName: string): Record<string, string> {
   if (value === undefined) {
     return {};
   }
   if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error(`modelPresets.${presetName}.subagentModels must be an object`);
+    throw new Error(`modelPresets.${presetName}.delegationModels must be an object`);
   }
   const models: Record<string, string> = {};
   for (const [rawKey, rawValue] of Object.entries(value)) {
     if (rawKey.trim().length === 0) {
-      throw new Error(`modelPresets.${presetName}.subagentModels keys must be non-empty`);
+      throw new Error(`modelPresets.${presetName}.delegationModels keys must be non-empty`);
     }
     if (rawKey !== rawKey.trim()) {
-      throw new Error(`modelPresets.${presetName}.subagentModels keys must be trimmed`);
+      throw new Error(`modelPresets.${presetName}.delegationModels keys must be trimmed`);
+    }
+    if (!DELEGATION_MODEL_CATEGORIES.has(rawKey as never)) {
+      throw new Error(
+        `modelPresets.${presetName}.delegationModels.${rawKey} must be a delegation model category`,
+      );
     }
     models[rawKey] = readOptionalTrimmedString(
       rawValue,
-      `modelPresets.${presetName}.subagentModels.${rawKey}`,
+      `modelPresets.${presetName}.delegationModels.${rawKey}`,
     )!;
   }
   return models;
@@ -85,10 +98,15 @@ function readPreset(name: string, value: unknown): BrewvaModelPreset | undefined
     throw new Error(`modelPresets.${presetName} must be an object`);
   }
   const record = value as Record<string, unknown>;
+  if (record.subagentModels !== undefined) {
+    throw new Error(
+      `modelPresets.${presetName}.subagentModels is no longer supported; use delegationModels keyed by model category`,
+    );
+  }
   return {
     name: presetName,
     mainModel: readOptionalTrimmedString(record.mainModel, `modelPresets.${presetName}.mainModel`),
-    subagentModels: readSubagentModels(record.subagentModels, presetName),
+    delegationModels: readDelegationModels(record.delegationModels, presetName),
     auxiliaryModels: readAuxiliaryModels(record.auxiliaryModels, presetName),
   };
 }
@@ -96,7 +114,7 @@ function readPreset(name: string, value: unknown): BrewvaModelPreset | undefined
 export function createSyntheticDefaultModelPreset(): BrewvaModelPreset {
   return {
     name: DEFAULT_MODEL_PRESET_NAME,
-    subagentModels: {},
+    delegationModels: {},
     synthetic: true,
   };
 }
@@ -105,7 +123,7 @@ export function cloneModelPreset(preset: BrewvaModelPreset): BrewvaModelPreset {
   return {
     name: preset.name,
     mainModel: preset.mainModel,
-    subagentModels: { ...preset.subagentModels },
+    delegationModels: { ...preset.delegationModels },
     auxiliaryModels: preset.auxiliaryModels ? { ...preset.auxiliaryModels } : undefined,
     synthetic: preset.synthetic,
   };

@@ -26,17 +26,45 @@ function uniqueStrings(values: readonly string[]): string[] {
   return [...new Set(values.filter((value) => value.trim().length > 0))];
 }
 
+function readFirstArrayField(
+  record: Record<string, unknown>,
+  keys: readonly string[],
+): unknown[] | undefined {
+  for (const key of keys) {
+    const value = record[key];
+    if (Array.isArray(value)) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+function readFirstStringField(
+  record: Record<string, unknown>,
+  keys: readonly string[],
+): string | undefined {
+  for (const key of keys) {
+    const value = readString(record[key]);
+    if (value) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
 export function normalizeComparableText(value: string): string {
   return value
     .trim()
     .toLowerCase()
-    .replace(/[^a-z0-9/_-]+/g, " ");
+    .replace(/[^a-z0-9/_-]+/g, " ")
+    .trim();
 }
 
-export function collectQaCoverageTexts(outputs: Record<string, unknown>): string[] {
+export function collectVerifierCoverageTexts(outputs: Record<string, unknown>): string[] {
   const texts: string[] = [];
-  const qaChecks = Array.isArray(outputs.qa_checks) ? outputs.qa_checks : [];
-  for (const check of qaChecks) {
+  const verifierChecks =
+    readFirstArrayField(outputs, ["verifier_checks", "checks", "qa_checks"]) ?? [];
+  for (const check of verifierChecks) {
     if (!isRecord(check)) {
       continue;
     }
@@ -58,11 +86,13 @@ export function collectQaCoverageTexts(outputs: Record<string, unknown>): string
       texts.push(normalizeComparableText(artifactRef));
     }
   }
-  const qaReport = readString(outputs.qa_report);
-  if (qaReport) {
-    texts.push(normalizeComparableText(qaReport));
+  const verifierReport = readFirstStringField(outputs, ["verifier_report", "report", "qa_report"]);
+  if (verifierReport) {
+    texts.push(normalizeComparableText(verifierReport));
   }
-  for (const finding of readStringArray(outputs.qa_findings)) {
+  for (const finding of readStringArray(
+    readFirstArrayField(outputs, ["verifier_findings", "findings", "qa_findings"]),
+  )) {
     texts.push(normalizeComparableText(finding));
   }
   return uniqueStrings(texts);

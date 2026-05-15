@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Deterministic QA verdict classification based on execution evidence.
+"""Deterministic verifier verdict classification based on execution evidence.
 
 Input (JSON on stdin):
   {

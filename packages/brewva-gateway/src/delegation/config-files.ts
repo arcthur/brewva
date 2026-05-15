@@ -8,7 +8,7 @@ import { parseMarkdownFrontmatter } from "@brewva/brewva-std/markdown";
 import { normalizeStringList, readNonEmptyString } from "@brewva/brewva-std/text";
 import { isRecord as isUnknownRecord, readFiniteNumberValue } from "@brewva/brewva-std/unknown";
 import type {
-  AdvisorConsultKind,
+  ExplorerConsultKind,
   SubagentContextBudget,
   SubagentExecutionBoundary,
   SubagentResultMode,
@@ -60,10 +60,16 @@ export function asManagedToolMode(value: unknown): ManagedToolMode | undefined {
 }
 
 export function asResultMode(value: unknown): SubagentResultMode | undefined {
-  return value === "consult" || value === "qa" || value === "patch" ? value : undefined;
+  return value === "evidence" ||
+    value === "consult" ||
+    value === "verifier" ||
+    value === "patch" ||
+    value === "knowledge"
+    ? value
+    : undefined;
 }
 
-export function asConsultKind(value: unknown): AdvisorConsultKind | undefined {
+export function asConsultKind(value: unknown): ExplorerConsultKind | undefined {
   return value === "investigate" || value === "diagnose" || value === "design" || value === "review"
     ? value
     : undefined;

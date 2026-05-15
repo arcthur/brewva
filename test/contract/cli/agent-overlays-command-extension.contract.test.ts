@@ -37,7 +37,7 @@ describe("agent-overlays interactive command extension", () => {
       join(workspace, ".brewva", "subagents", "reviewer.md"),
       `---
 name: reviewer
-extends: advisor
+extends: explorer
 description: Reviewer override
 ---
 Keep findings short and concrete.

@@ -30,11 +30,14 @@ export function createSubagentRunTool(options: BrewvaToolOptions): ToolDefinitio
       name: "subagent_run",
       label: "Subagent Run",
       description:
-        "Delegate a bounded task by semantic skill intent and return structured results.",
+        "Delegate a bounded task to a public subagent role and return structured results.",
       promptSnippet:
-        "Use delegated runs for focused advisor consults, QA, or patch work without exposing low-level worker configuration.",
+        "Use delegated runs for navigator evidence, explorer judgment, worker patches, verifier verification, or librarian knowledge proposals.",
       promptGuidelines: [
-        "Use skillName to express intent; Brewva resolves advisor, qa, or patch-worker internally.",
+        "Set agent explicitly: navigator, explorer, worker, verifier, or librarian.",
+        "Delegation Gate vocabulary: find_evidence -> navigator, make_judgment -> explorer, implement_isolated -> worker, verify_reproducibly -> verifier, compound_knowledge -> librarian.",
+        "Use skillName only as an optional semantic contract compatible with the selected agent.",
+        "Use gateReason when the reason is not obvious from the role; the resolver validates it instead of auto-spawning teams.",
         "For consult-style skills, provide brief with the decision and success criteria.",
         "Delegate when the task needs cross-3+-file investigation, diagnosis, a second-opinion review pass, or parallel slice analysis.",
         "Keep objectives specific, pass only the context references the child needs, and avoid broad parent-context dumps.",
@@ -96,11 +99,13 @@ export function createSubagentFanoutTool(options: BrewvaToolOptions): ToolDefini
       name: "subagent_fanout",
       label: "Subagent Fanout",
       description:
-        "Launch multiple delegated runs under one semantic skill intent for independent slices of work.",
+        "Launch multiple delegated runs under one public subagent role for independent slices of work.",
       promptSnippet:
-        "Use this for explicit fan-out when several repository slices can run independently under the same skill intent.",
+        "Use this for explicit fan-out when several repository slices can run independently under the same role and result contract.",
       promptGuidelines: [
-        "Use skillName to express intent; Brewva resolves advisor, qa, or patch-worker internally.",
+        "Set agent explicitly and keep each task independently addressable with taskName when useful.",
+        "Delegation Gate vocabulary: find_evidence -> navigator, make_judgment -> explorer, implement_isolated -> worker, verify_reproducibly -> verifier, compound_knowledge -> librarian.",
+        "Use skillName only as an optional semantic contract compatible with the selected agent.",
         "For consult-style fan-out, provide one shared brief unless the parent can safely complete without advisory framing.",
         "Use this when tasks are independent and a shared packet plus per-task objectives is clearer than one large delegated run.",
         "Keep each task label and objective specific so the parent can inspect outcomes separately.",
@@ -161,13 +166,12 @@ export function createSubagentRunDiagnosticTool(options: BrewvaToolOptions): Too
     {
       name: "subagent_run_diagnostic",
       label: "Subagent Run Diagnostic",
-      description:
-        "Maintainer-only delegated run with explicit low-level target, envelope, result, and model fields.",
+      description: "Maintainer-only delegated run with explicit v3 target and envelope fields.",
       promptSnippet:
-        "Use only for maintainer diagnostics when the public skillName-based delegation interface cannot express the routing probe.",
+        "Use only for maintainer diagnostics when the public role-first delegation interface cannot express the routing probe.",
       promptGuidelines: [
         "Prefer public subagent_run for ordinary work.",
-        "Use explicit agentSpec, envelope, consultKind, fallbackResultMode, and executionShape only to diagnose routing or envelope behavior.",
+        "Use explicit targetName, boundary, and managedToolMode only to diagnose routing or envelope behavior.",
         "Do not present diagnostic lane invocation as normal workflow guidance.",
       ],
       parameters: Type.Object({

@@ -207,6 +207,7 @@ export const MANAGED_BREWVA_TOOL_METADATA_BY_NAME = {
   subagent_run_diagnostic: metadata("control_plane", "delegation"),
   subagent_status: metadata("skill", "delegation"),
   subagent_cancel: metadata("skill", "delegation"),
+  subagent_knowledge_adopt: metadata("skill", "delegation", ["extensions.tools.recordEvent"]),
   task_add_item: metadata("control_plane", "memory_write", ["authority.task.items.add"]),
   task_record_acceptance: metadata("operator", "memory_write", [
     "authority.task.acceptance.record",

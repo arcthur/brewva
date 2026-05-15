@@ -19,7 +19,10 @@ import type {
 } from "@brewva/brewva-tools/contracts";
 import { isProcessAlive } from "../../daemon/api.js";
 import { sleep } from "../../utils/async.js";
-import { buildDelegationRunRecordSeed } from "../delegation-records.js";
+import {
+  buildDelegationRunRecordSeed,
+  buildDelegationTaskIdentity,
+} from "../delegation-records.js";
 import {
   HostedDelegationStore,
   buildDelegationLifecyclePayload,
@@ -54,6 +57,10 @@ export interface HostedSubagentBackgroundController {
     packet: DelegationPacket;
     executionShape?: SubagentRunRequest["executionShape"];
     label?: string;
+    taskName?: string;
+    nickname?: string;
+    parentTaskPath?: string;
+    forkTurns?: SubagentRunRequest["forkTurns"];
     timeoutMs?: number;
     delivery?: NonNullable<SubagentRunRequest["delivery"]>;
   }): Promise<DelegationRunRecord>;
@@ -332,6 +339,17 @@ export function createDetachedSubagentBackgroundController(
         input.target.agentSpecName ??
         input.target.envelopeName ??
         input.target.name;
+      const taskIdentity = buildDelegationTaskIdentity({
+        target: input.target,
+        requestedTaskName: input.taskName,
+        requestedNickname: input.nickname,
+        label: input.label,
+        parentTaskPath: input.parentTaskPath,
+        reservedTaskPaths: delegationStore
+          .listRuns(input.parentSessionId, { includeTerminal: true })
+          .map((record) => record.taskPath),
+      });
+      const forkTurns = input.forkTurns ?? "none";
       let executionPlan: ResolvedDelegationExecutionPlan;
       try {
         executionPlan = resolveDelegationExecutionPlan({
@@ -353,6 +371,8 @@ export function createDetachedSubagentBackgroundController(
             createdAt,
             updatedAt: createdAt,
             label: input.label,
+            taskIdentity,
+            forkTurns,
             delivery: buildDeliveryRecord(input.delivery, createdAt),
           }),
           "failed",
@@ -366,6 +386,8 @@ export function createDetachedSubagentBackgroundController(
         parentSessionId: asBrewvaSessionId(input.parentSessionId),
         createdAt,
         label: input.label,
+        taskIdentity,
+        forkTurns,
         boundary: executionPlan.boundary,
         modelRoute: executionPlan.modelRoute,
         delivery: buildDeliveryRecord(input.delivery, createdAt),
@@ -430,14 +452,14 @@ export function createDetachedSubagentBackgroundController(
         routingScopes: options.routingScopes,
         delegate,
         target: input.target,
-        skillName: input.target.skillName,
-        consultKind: input.target.consultKind,
-        envelopeName: input.target.envelopeName,
-        agentSpecName: input.target.agentSpecName,
-        fallbackResultMode: input.target.fallbackResultMode,
         executionShape: input.executionShape,
         modelRoute: executionPlan.modelRoute,
         label: input.label,
+        taskName: taskIdentity.taskName,
+        taskPath: taskIdentity.taskPath,
+        nickname: taskIdentity.nickname,
+        depth: taskIdentity.depth,
+        forkTurns,
         packet: input.packet,
         timeoutMs: input.timeoutMs,
         delivery: input.delivery,

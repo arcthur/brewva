@@ -33,23 +33,41 @@ describe("subagent delegation catalog", () => {
   test("classifies built-in public specialists and internal review lanes", async () => {
     const catalog = await loadHostedDelegationCatalog(process.cwd());
 
-    expect(catalog.agentSpecs.get("advisor")).toMatchObject({
-      name: "advisor",
+    expect(
+      [...catalog.agentSpecs.values()]
+        .filter((agentSpec) => agentSpec.visibility === "public")
+        .map((agentSpec) => agentSpec.name)
+        .toSorted(),
+    ).toEqual(["explorer", "librarian", "navigator", "verifier", "worker"]);
+    expect(catalog.agentSpecs.get("navigator")).toMatchObject({
+      name: "navigator",
       visibility: "public",
-      envelope: "readonly-advisor",
+      envelope: "navigator-readonly",
+      fallbackResultMode: "evidence",
+    });
+    expect(catalog.agentSpecs.get("explorer")).toMatchObject({
+      name: "explorer",
+      visibility: "public",
+      envelope: "explorer-readonly",
       fallbackResultMode: "consult",
     });
-    expect(catalog.agentSpecs.get("qa")).toMatchObject({
-      name: "qa",
+    expect(catalog.agentSpecs.get("verifier")).toMatchObject({
+      name: "verifier",
       visibility: "public",
-      envelope: "qa-runner",
-      fallbackResultMode: "qa",
+      envelope: "verifier-runner",
+      fallbackResultMode: "verifier",
     });
-    expect(catalog.agentSpecs.get("patch-worker")).toMatchObject({
-      name: "patch-worker",
+    expect(catalog.agentSpecs.get("worker")).toMatchObject({
+      name: "worker",
       visibility: "public",
-      envelope: "patch-worker",
+      envelope: "worker",
       fallbackResultMode: "patch",
+    });
+    expect(catalog.agentSpecs.get("librarian")).toMatchObject({
+      name: "librarian",
+      visibility: "public",
+      envelope: "librarian-readonly",
+      fallbackResultMode: "knowledge",
     });
 
     for (const agentSpecName of [
@@ -64,7 +82,7 @@ describe("subagent delegation catalog", () => {
       expect(catalog.agentSpecs.get(agentSpecName)).toMatchObject({
         name: agentSpecName,
         visibility: "internal",
-        envelope: "readonly-advisor",
+        envelope: "explorer-readonly",
         fallbackResultMode: "consult",
         defaultConsultKind: "review",
       });
@@ -74,30 +92,63 @@ describe("subagent delegation catalog", () => {
   test("classifies built-in execution envelope isolation strategies", async () => {
     const catalog = await loadHostedDelegationCatalog(process.cwd());
 
-    expect(catalog.envelopes.get("readonly-advisor")).toMatchObject({
+    expect(catalog.envelopes.get("explorer-readonly")).toMatchObject({
       boundary: "safe",
       isolationStrategy: "shared",
       producesPatches: false,
     });
-    expect(catalog.envelopes.get("qa-runner")).toMatchObject({
+    expect(catalog.envelopes.get("verifier-runner")).toMatchObject({
       boundary: "effectful",
       isolationStrategy: "ephemeral",
       producesPatches: false,
     });
-    expect(catalog.envelopes.get("patch-worker")).toMatchObject({
+    expect(catalog.envelopes.get("worker")).toMatchObject({
       boundary: "effectful",
       isolationStrategy: "snapshot",
       producesPatches: true,
     });
   });
 
+  test("keeps read-only role tool sets capability-distinct", async () => {
+    const catalog = await loadHostedDelegationCatalog(process.cwd());
+
+    const navigatorTools = catalog.envelopes.get("navigator-readonly")?.managedToolNames ?? [];
+    const explorerTools = catalog.envelopes.get("explorer-readonly")?.managedToolNames ?? [];
+    const librarianTools = catalog.envelopes.get("librarian-readonly")?.managedToolNames ?? [];
+    const verifierTools = catalog.envelopes.get("verifier-runner")?.managedToolNames ?? [];
+    const workerTools = catalog.envelopes.get("worker")?.managedToolNames ?? [];
+
+    expect(navigatorTools).toEqual(expect.arrayContaining(["grep", "read_spans", "toc_search"]));
+    expect(navigatorTools).toContain("agent_send");
+    expect(navigatorTools).not.toContain("knowledge_search");
+    expect(navigatorTools).not.toContain("recall_search");
+    expect(navigatorTools).not.toContain("workflow_status");
+
+    expect(explorerTools).toEqual(
+      expect.arrayContaining(["grep", "ledger_query", "task_view_state", "workflow_status"]),
+    );
+    expect(explorerTools).toContain("agent_send");
+    expect(explorerTools).not.toContain("knowledge_search");
+    expect(explorerTools).not.toContain("recall_search");
+
+    expect(librarianTools).toEqual(
+      expect.arrayContaining(["knowledge_search", "recall_search", "precedent_sweep"]),
+    );
+    expect(librarianTools).toContain("agent_send");
+    expect(librarianTools).not.toContain("grep");
+    expect(librarianTools).not.toContain("workflow_status");
+
+    expect(verifierTools).not.toContain("agent_send");
+    expect(workerTools).not.toContain("agent_send");
+  });
+
   test("loads markdown-authored custom specialists from .brewva/subagents", async () => {
     const workspace = createWorkspace("brewva-subagent-custom-md-");
-    writeWorkspaceSubagent(workspace, "security-advisor.md", [
+    writeWorkspaceSubagent(workspace, "security-explorer.md", [
       "---",
-      'name: "security-advisor"',
-      'description: "Workspace security advisor"',
-      'extends: "advisor"',
+      'name: "security-explorer"',
+      'description: "Workspace security explorer"',
+      'extends: "explorer"',
       'tools: ["grep", "read_spans"]',
       'modelPreset: "high-reasoning"',
       'reasoningEffort: "high"',
@@ -109,30 +160,33 @@ describe("subagent delegation catalog", () => {
 
     const catalog = await loadHostedDelegationCatalog(workspace);
 
-    expect(catalog.agentSpecs.get("security-advisor")).toEqual({
-      name: "security-advisor",
-      description: "Workspace security advisor",
+    expect(catalog.agentSpecs.get("security-explorer")).toMatchObject({
+      name: "security-explorer",
+      agent: "explorer",
+      description: "Workspace security explorer",
       visibility: "public",
-      envelope: "readonly-advisor",
+      envelope: "explorer-readonly",
+      gateReason: "make_judgment",
+      modelCategory: "deep-reasoning",
       fallbackResultMode: "consult",
       modelPreset: "high-reasoning",
       reasoningEffort: "high",
       managedToolNames: ["grep", "read_spans"],
       executorPreamble:
-        "Operate as a read-only advisor. Reduce uncertainty, keep evidence concrete, and optimize for the parent's next decision.",
+        "Operate as an explorer. Use evidence to make a bounded judgment, preserve counterevidence, and recommend the parent's next decision.",
       instructionsMarkdown: "Focus on trust boundaries, credential exposure, and misuse paths.",
     });
-    expect(catalog.workspaceAgentSpecNames.has("security-advisor")).toBe(true);
+    expect(catalog.workspaceAgentSpecNames.has("security-explorer")).toBe(true);
     expect(catalog.workspaceEnvelopeNames.size).toBe(0);
   });
 
   test("rejects custom specialist tools outside the base envelope", async () => {
     const workspace = createWorkspace("brewva-subagent-custom-wide-tools-");
-    writeWorkspaceSubagent(workspace, "unsafe-advisor.md", [
+    writeWorkspaceSubagent(workspace, "unsafe-explorer.md", [
       "---",
-      'name: "unsafe-advisor"',
-      'description: "Invalid write-capable advisor"',
-      'extends: "advisor"',
+      'name: "unsafe-explorer"',
+      'description: "Invalid write-capable explorer"',
+      'extends: "explorer"',
       'tools: ["grep", "exec"]',
       "---",
       "Try to execute commands.",
@@ -140,7 +194,7 @@ describe("subagent delegation catalog", () => {
 
     await expectCatalogLoadToReject(
       workspace,
-      "invalid_agent_spec:unsafe-advisor:managedToolNames widens the base envelope with exec",
+      "invalid_agent_spec:unsafe-explorer:managedToolNames widens the base envelope with exec",
     );
   });
 
@@ -150,7 +204,7 @@ describe("subagent delegation catalog", () => {
       "---",
       'name: "lane"',
       'description: "Invalid review lane declaration"',
-      'extends: "advisor"',
+      'extends: "explorer"',
       'reviewLane: "review-security"',
       "---",
       "Do not load.",
@@ -175,7 +229,7 @@ describe("subagent delegation catalog", () => {
 
     await expectCatalogLoadToReject(
       workspace,
-      "invalid_agent_spec:review-security-wrapper.md:extends must be advisor, qa, or patch-worker",
+      "invalid_agent_spec:review-security-wrapper.md:extends must be navigator, explorer, worker, verifier, or librarian",
     );
   });
 
@@ -184,27 +238,27 @@ describe("subagent delegation catalog", () => {
     const subagentDir = join(workspace, ".brewva", "subagents");
     mkdirSync(subagentDir, { recursive: true });
     writeFileSync(
-      join(subagentDir, "tight-advisor.json"),
+      join(subagentDir, "tight-explorer.json"),
       JSON.stringify({
         kind: "envelope",
-        name: "tight-advisor",
-        extends: "readonly-advisor",
+        name: "tight-explorer",
+        extends: "explorer-readonly",
       }),
       "utf8",
     );
     writeFileSync(
-      join(subagentDir, "wide-qa.json"),
+      join(subagentDir, "wide-verifier.json"),
       JSON.stringify({
         kind: "envelope",
-        name: "wide-qa",
-        extends: "qa-runner",
+        name: "wide-verifier",
+        extends: "verifier-runner",
       }),
       "utf8",
     );
 
     await expectCatalogLoadToReject(
       workspace,
-      "invalid_subagent_config:[tight-advisor.json,wide-qa.json]:JSON subagent configs are no longer supported",
+      "invalid_subagent_config:[tight-explorer.json,wide-verifier.json]:JSON subagent configs are no longer supported",
     );
   });
 
@@ -213,8 +267,8 @@ describe("subagent delegation catalog", () => {
     const agentDir = join(workspace, ".brewva", "agents");
     mkdirSync(agentDir, { recursive: true });
     writeFileSync(
-      join(agentDir, "advisor.md"),
-      ["---", "extends: advisor", "---", "Legacy location."].join("\n"),
+      join(agentDir, "explorer.md"),
+      ["---", "extends: explorer", "---", "Legacy location."].join("\n"),
       "utf8",
     );
 

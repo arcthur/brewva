@@ -1,5 +1,5 @@
 import type {
-  AdvisorConsultBrief,
+  ExplorerConsultBrief,
   DelegationCompletionPredicate,
   DelegationOutcomeFinding,
   ReviewLaneDisposition,
@@ -62,7 +62,7 @@ export interface ReviewLaneActivationPlan {
 export interface ReviewLaneDelegationPacketInput {
   objective: string;
   deliverable?: string;
-  consultBrief: AdvisorConsultBrief;
+  consultBrief: ExplorerConsultBrief;
   constraints?: readonly string[];
   sharedNotes?: readonly string[];
   executionHints?: SubagentExecutionHints;

@@ -31,7 +31,7 @@ describe("task stall adjudication", () => {
       source: "unit_test",
     });
     runtime.authority.session.workerResults.record(sessionId, {
-      workerId: "patch-worker-1",
+      workerId: "worker-1",
       status: "ok",
       summary: "Patch result is ready for parent review.",
       patches: {

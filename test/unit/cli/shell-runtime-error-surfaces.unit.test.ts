@@ -137,7 +137,7 @@ function createFakeBundle(
   let modelPresetState: BrewvaModelPresetState = options.modelPresetState ?? {
     activeName: "Default",
     defaultName: "Default",
-    presets: [{ name: "Default", subagentModels: {}, synthetic: true }],
+    presets: [{ name: "Default", delegationModels: {}, synthetic: true }],
   };
   let modelPreferences = { recent: [], favorite: [] } as {
     recent: Array<{ provider: string; id: string }>;
@@ -673,7 +673,7 @@ describe("shell runtime: error surfaces and overlays", () => {
             turnId: "turn-1",
             attemptId: "attempt-1",
             status: "completed",
-            assistantText: "QA summary line\nFound stale contract drift.",
+            assistantText: "Verifier summary line\nFound stale contract drift.",
             toolOutputs: [
               {
                 toolCallId: asBrewvaToolCallId("tool-1"),
@@ -704,7 +704,16 @@ describe("shell runtime: error surfaces and overlays", () => {
           {
             contractVersion: CURRENT_DELEGATION_CONTRACT_VERSION,
             runId: "run-1",
+            agent: "worker",
+            targetName: "worker",
             delegate: "worker-1",
+            taskName: "review-operator-state",
+            taskPath: "/review-operator-state",
+            nickname: "Review operator state",
+            depth: 1,
+            forkTurns: "none",
+            gateReason: "implement_isolated",
+            modelCategory: "isolated-execution",
             executionPrimitive: "named",
             visibility: "public",
             isolationStrategy: "shared",
@@ -762,7 +771,7 @@ describe("shell runtime: error surfaces and overlays", () => {
       expect.arrayContaining([
         "workerSessionRecentOutput:",
         "  assistant:",
-        "    QA summary line",
+        "    Verifier summary line",
         "    Found stale contract drift.",
         "  toolOutputs:",
         "    - exec [pass]",

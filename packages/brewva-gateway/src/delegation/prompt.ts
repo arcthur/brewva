@@ -107,6 +107,7 @@ export function buildDelegationPrompt(input: {
   packet: DelegationPacket;
   promptOverride?: string;
   skill?: SkillDocument;
+  inheritedContext?: string;
 }): string {
   const prompt =
     input.promptOverride ??
@@ -116,15 +117,11 @@ export function buildDelegationPrompt(input: {
     "# Delegated Subagent Run",
     "",
     `Delegate: ${input.delegate ?? input.target.agentSpecName ?? input.target.envelopeName ?? input.target.name}`,
+    `Agent: ${input.target.agent}`,
+    `Target: ${input.target.targetName}`,
+    `Delegation gate reason: ${input.target.gateReason}`,
     `Description: ${input.target.description}`,
   ];
-
-  if (input.target.agentSpecName) {
-    lines.push(`Agent spec: ${input.target.agentSpecName}`);
-  }
-  if (input.target.envelopeName) {
-    lines.push(`Envelope: ${input.target.envelopeName}`);
-  }
 
   lines.push("", "## Executor Preamble", prompt);
 
@@ -148,6 +145,10 @@ export function buildDelegationPrompt(input: {
   }
   if (input.packet.contextBudget?.maxTurnTokens) {
     lines.push(`Turn token ceiling: ${input.packet.contextBudget.maxTurnTokens}`);
+  }
+
+  if (input.inheritedContext) {
+    lines.push("", input.inheritedContext);
   }
 
   if (input.skill) {

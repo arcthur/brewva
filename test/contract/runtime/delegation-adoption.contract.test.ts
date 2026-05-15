@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { evaluateDelegationAdoption } from "@brewva/brewva-runtime/delegation";
-import type { QaSubagentOutcomeData } from "@brewva/brewva-runtime/delegation";
+import type { VerifierSubagentOutcomeData } from "@brewva/brewva-runtime/delegation";
 
 describe("delegation adoption contracts", () => {
-  test("allows QA adoption only when pass verdict includes check evidence", () => {
-    const qa: QaSubagentOutcomeData = {
-      kind: "qa",
+  test("allows Verifier adoption only when pass verdict includes check evidence", () => {
+    const verifier: VerifierSubagentOutcomeData = {
+      kind: "verifier",
       verdict: "pass",
       checks: [
         {
@@ -20,23 +20,68 @@ describe("delegation adoption contracts", () => {
 
     expect(
       evaluateDelegationAdoption({
-        outcomeKind: "qa",
-        resultData: qa as unknown as Record<string, unknown>,
+        outcomeKind: "verifier",
+        resultData: verifier as unknown as Record<string, unknown>,
       }),
     ).toMatchObject({
-      contractId: "delegation.qa",
+      contractId: "delegation.verifier",
       decision: "allow",
-      reason: "qa_passed_with_checks",
+      reason: "verifier_passed_with_checks",
     });
 
     expect(
       evaluateDelegationAdoption({
-        outcomeKind: "qa",
-        resultData: { kind: "qa", verdict: "pass", checks: [] },
+        outcomeKind: "verifier",
+        resultData: { kind: "verifier", verdict: "pass", checks: [] },
       }),
     ).toMatchObject({
       decision: "require_human",
-      reason: "qa_inconclusive_or_missing_checks",
+      reason: "verifier_inconclusive_or_missing_checks",
+    });
+  });
+
+  test("accepts verifier-prefixed and legacy qa verifier outcomes", () => {
+    expect(
+      evaluateDelegationAdoption({
+        outcomeKind: "verifier",
+        resultData: {
+          verifier_verdict: "pass",
+          verifier_checks: [
+            {
+              name: "command gate",
+              status: "pass",
+              command: "bun test",
+              exit_code: 0,
+              observed_output: "pass",
+            },
+          ],
+        },
+      }),
+    ).toMatchObject({
+      decision: "allow",
+      reason: "verifier_passed_with_checks",
+    });
+
+    expect(
+      evaluateDelegationAdoption({
+        outcomeKind: "verifier",
+        resultData: {
+          kind: "qa",
+          qa_verdict: "fail",
+          qa_checks: [
+            {
+              name: "legacy gate",
+              status: "fail",
+              command: "bun test",
+              exit_code: 1,
+              observed_output: "fail",
+            },
+          ],
+        },
+      }),
+    ).toMatchObject({
+      decision: "block",
+      reason: "verifier_failed",
     });
   });
 

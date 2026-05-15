@@ -1,11 +1,14 @@
 import type {
+  DelegationGateReason,
   DelegationIsolationStrategy,
+  DelegationModelCategory,
+  PublicSubagentRole,
   DelegationVisibility,
 } from "@brewva/brewva-runtime/delegation";
 import type { ManagedToolMode } from "@brewva/brewva-runtime/session";
 import { normalizeReviewLaneName } from "@brewva/brewva-runtime/skills";
 import type {
-  AdvisorConsultKind,
+  ExplorerConsultKind,
   ReviewLaneName,
   SubagentContextBudget,
   SubagentExecutionBoundary,
@@ -19,10 +22,12 @@ import {
 import { getDefaultAgentSpecNameForResultMode } from "../protocol.js";
 import type { HostedDelegationBuiltinToolName, HostedDelegationTarget } from "../targets.js";
 import {
-  ADVISOR_SPECIALIST_CONSTITUTION,
-  PATCH_WORKER_SPECIALIST_CONSTITUTION,
-  QA_SPECIALIST_CONSTITUTION,
+  EXPLORER_SPECIALIST_CONSTITUTION,
+  LIBRARIAN_SPECIALIST_CONSTITUTION,
+  NAVIGATOR_SPECIALIST_CONSTITUTION,
+  VERIFIER_SPECIALIST_CONSTITUTION,
   REVIEW_OPERABILITY_SPECIALIST_CONSTITUTION,
+  WORKER_SPECIALIST_CONSTITUTION,
 } from "./constitutions.js";
 
 export interface HostedExecutionEnvelope {
@@ -39,11 +44,14 @@ export interface HostedExecutionEnvelope {
 
 export interface HostedAgentSpec {
   name: string;
+  agent: PublicSubagentRole;
   description: string;
   visibility: DelegationVisibility;
   envelope: string;
+  gateReason: DelegationGateReason;
+  modelCategory: DelegationModelCategory;
   skillName?: string;
-  defaultConsultKind?: AdvisorConsultKind;
+  defaultConsultKind?: ExplorerConsultKind;
   reviewLane?: ReviewLaneName;
   fallbackResultMode?: SubagentResultMode;
   modelPreset?: string;
@@ -68,9 +76,12 @@ function buildReviewLaneAgentSpec(input: {
 }): HostedAgentSpec {
   return {
     name: input.name,
+    agent: "explorer",
     description: input.description,
     visibility: "internal",
-    envelope: "readonly-advisor",
+    envelope: "explorer-readonly",
+    gateReason: "make_judgment",
+    modelCategory: "deep-reasoning",
     defaultConsultKind: "review",
     reviewLane: normalizeReviewLaneName(input.name) ?? undefined,
     fallbackResultMode: "consult",
@@ -95,7 +106,13 @@ const ISOLATION_STRATEGY_RANK: Record<DelegationIsolationStrategy, number> = {
   container: 4,
 };
 
-const PUBLIC_AGENT_SPEC_NAMES = new Set(["advisor", "qa", "patch-worker"] as const);
+const PUBLIC_AGENT_SPEC_NAMES = new Set([
+  "navigator",
+  "explorer",
+  "worker",
+  "verifier",
+  "librarian",
+] as const);
 
 const FORBIDDEN_WORKSPACE_AGENT_FIELDS = [
   "kind",
@@ -257,7 +274,10 @@ function toAgentSpec(
   const name = asString(source.name) ?? defaults?.name;
   const description = asString(source.description) ?? defaults?.description;
   const envelope = defaults?.envelope;
-  if (!name || !description || !envelope) {
+  const agent = defaults?.agent;
+  const gateReason = defaults?.gateReason;
+  const modelCategory = defaults?.modelCategory;
+  if (!name || !description || !envelope || !agent || !gateReason || !modelCategory) {
     return undefined;
   }
   const executorPreamble = asString(source.executorPreamble) ?? defaults?.executorPreamble;
@@ -278,9 +298,12 @@ function toAgentSpec(
   }
   return {
     name,
+    agent,
     description,
     visibility: defaults?.visibility ?? "diagnostic",
     envelope,
+    gateReason,
+    modelCategory,
     skillName: defaults?.skillName,
     defaultConsultKind: defaults?.defaultConsultKind,
     reviewLane: defaults?.reviewLane,
@@ -293,7 +316,7 @@ function toAgentSpec(
   };
 }
 
-const READONLY_MANAGED_TOOLS = [
+const NAVIGATOR_MANAGED_TOOLS = [
   "grep",
   "git_status",
   "git_diff",
@@ -308,15 +331,33 @@ const READONLY_MANAGED_TOOLS = [
   "lsp_goto_definition",
   "lsp_symbols",
   "output_search",
+  "agent_send",
+] as const;
+
+const EXPLORER_MANAGED_TOOLS = [
+  ...NAVIGATOR_MANAGED_TOOLS,
   "ledger_query",
-  "recall_search",
   "task_view_state",
   "workflow_status",
 ] as const;
 
-const PATCH_WORKER_TOOLS = READONLY_MANAGED_TOOLS.filter((tool) => tool !== "workflow_status");
-const QA_MANAGED_TOOLS = [
-  ...READONLY_MANAGED_TOOLS,
+const LIBRARIAN_MANAGED_TOOLS = [
+  "knowledge_search",
+  "recall_search",
+  "precedent_sweep",
+  "precedent_audit",
+  "read_spans",
+  "look_at",
+  "toc_search",
+  "toc_document",
+  "agent_send",
+] as const;
+
+const WORKER_TOOLS = EXPLORER_MANAGED_TOOLS.filter(
+  (tool) => tool !== "workflow_status" && tool !== "agent_send",
+);
+const VERIFIER_MANAGED_TOOLS = [
+  ...EXPLORER_MANAGED_TOOLS.filter((tool) => tool !== "agent_send"),
   "exec",
   "browser_open",
   "browser_wait",
@@ -329,14 +370,27 @@ const QA_MANAGED_TOOLS = [
 ] as const;
 
 export const BUILTIN_EXECUTION_ENVELOPES: Readonly<Record<string, HostedExecutionEnvelope>> = {
-  "readonly-advisor": {
-    name: "readonly-advisor",
-    description:
-      "Read-only advisor envelope for bounded investigation, diagnosis, design, and review.",
+  "navigator-readonly": {
+    name: "navigator-readonly",
+    description: "Task-local evidence discovery envelope with no institutional recall tools.",
     boundary: "safe",
     isolationStrategy: "shared",
     builtinToolNames: ["read"],
-    managedToolNames: [...READONLY_MANAGED_TOOLS],
+    managedToolNames: [...NAVIGATOR_MANAGED_TOOLS],
+    defaultContextBudget: {
+      maxInjectionTokens: 1800,
+      maxTurnTokens: 6500,
+    },
+    managedToolMode: "direct",
+    producesPatches: false,
+  },
+  "explorer-readonly": {
+    name: "explorer-readonly",
+    description: "Read-only judgment envelope for diagnosis, design, review, and risk calls.",
+    boundary: "safe",
+    isolationStrategy: "shared",
+    builtinToolNames: ["read"],
+    managedToolNames: [...EXPLORER_MANAGED_TOOLS],
     defaultContextBudget: {
       maxInjectionTokens: 2000,
       maxTurnTokens: 7000,
@@ -344,14 +398,28 @@ export const BUILTIN_EXECUTION_ENVELOPES: Readonly<Record<string, HostedExecutio
     managedToolMode: "direct",
     producesPatches: false,
   },
-  "qa-runner": {
-    name: "qa-runner",
+  "librarian-readonly": {
+    name: "librarian-readonly",
+    description: "Institutional knowledge envelope for precedents, conventions, and proposals.",
+    boundary: "safe",
+    isolationStrategy: "shared",
+    builtinToolNames: ["read"],
+    managedToolNames: [...LIBRARIAN_MANAGED_TOOLS],
+    defaultContextBudget: {
+      maxInjectionTokens: 2200,
+      maxTurnTokens: 7600,
+    },
+    managedToolMode: "direct",
+    producesPatches: false,
+  },
+  "verifier-runner": {
+    name: "verifier-runner",
     description:
-      "Effectful but non-patch-producing QA envelope for executable checks and adversarial probes.",
+      "Effectful but non-patch-producing verifier envelope for executable checks and adversarial probes.",
     boundary: "effectful",
     isolationStrategy: "ephemeral",
     builtinToolNames: ["read"],
-    managedToolNames: [...QA_MANAGED_TOOLS],
+    managedToolNames: [...VERIFIER_MANAGED_TOOLS],
     defaultContextBudget: {
       maxInjectionTokens: 2000,
       maxTurnTokens: 8500,
@@ -359,13 +427,13 @@ export const BUILTIN_EXECUTION_ENVELOPES: Readonly<Record<string, HostedExecutio
     managedToolMode: "direct",
     producesPatches: false,
   },
-  "patch-worker": {
-    name: "patch-worker",
-    description: "Isolated patch-worker envelope with editable snapshot-backed workspace access.",
+  worker: {
+    name: "worker",
+    description: "Isolated worker envelope with editable snapshot-backed workspace access.",
     boundary: "effectful",
     isolationStrategy: "snapshot",
     builtinToolNames: ["read", "edit", "write"],
-    managedToolNames: [...PATCH_WORKER_TOOLS],
+    managedToolNames: [...WORKER_TOOLS],
     defaultContextBudget: {
       maxInjectionTokens: 2000,
       maxTurnTokens: 8000,
@@ -376,16 +444,31 @@ export const BUILTIN_EXECUTION_ENVELOPES: Readonly<Record<string, HostedExecutio
 } as const;
 
 export const BUILTIN_AGENT_SPECS: Readonly<Record<string, HostedAgentSpec>> = {
-  advisor: {
-    name: "advisor",
-    description:
-      "Read-only advisor for repository investigation, debugging diagnosis, design judgment, and second-opinion review.",
+  navigator: {
+    name: "navigator",
+    agent: "navigator",
+    description: "Task-local evidence finder that stops before design judgment.",
     visibility: "public",
-    envelope: "readonly-advisor",
+    envelope: "navigator-readonly",
+    gateReason: "find_evidence",
+    modelCategory: "fast-evidence",
+    fallbackResultMode: "evidence",
+    executorPreamble:
+      "Operate as a navigator. Find task-local evidence, cite sources, and stop before recommendation or design judgment.",
+    instructionsMarkdown: NAVIGATOR_SPECIALIST_CONSTITUTION,
+  },
+  explorer: {
+    name: "explorer",
+    agent: "explorer",
+    description: "Read-only explorer for diagnosis, design judgment, review, and risk decisions.",
+    visibility: "public",
+    envelope: "explorer-readonly",
+    gateReason: "make_judgment",
+    modelCategory: "deep-reasoning",
     fallbackResultMode: "consult",
     executorPreamble:
-      "Operate as a read-only advisor. Reduce uncertainty, keep evidence concrete, and optimize for the parent's next decision.",
-    instructionsMarkdown: ADVISOR_SPECIALIST_CONSTITUTION,
+      "Operate as an explorer. Use evidence to make a bounded judgment, preserve counterevidence, and recommend the parent's next decision.",
+    instructionsMarkdown: EXPLORER_SPECIALIST_CONSTITUTION,
   },
   "review-correctness": buildReviewLaneAgentSpec({
     name: "review-correctness",
@@ -430,61 +513,81 @@ export const BUILTIN_AGENT_SPECS: Readonly<Record<string, HostedAgentSpec>> = {
     executorPreamble:
       "Operate as the performance lane. Focus on hot paths, wide scans, indexing, queue growth, fan-out cost, and artifact-volume regressions.",
   }),
-  qa: {
-    name: "qa",
+  verifier: {
+    name: "verifier",
+    agent: "verifier",
     description:
-      "Executable QA delegate for adversarial verification without parent-source mutation.",
+      "Executable Verifier delegate for adversarial verification without parent-source mutation.",
     visibility: "public",
-    envelope: "qa-runner",
-    skillName: "qa",
-    fallbackResultMode: "qa",
+    envelope: "verifier-runner",
+    gateReason: "verify_reproducibly",
+    modelCategory: "verification",
+    skillName: "verifier",
+    fallbackResultMode: "verifier",
     executorPreamble:
-      "Operate as an adversarial QA verifier. Execute real checks, look for breakage, and keep verdicts evidence-backed.",
-    instructionsMarkdown: QA_SPECIALIST_CONSTITUTION,
+      "Operate as an adversarial verifier. Execute real checks, look for breakage, and keep verdicts evidence-backed.",
+    instructionsMarkdown: VERIFIER_SPECIALIST_CONSTITUTION,
   },
-  "patch-worker": {
-    name: "patch-worker",
-    description: "Execution-first isolated patch worker preset.",
+  worker: {
+    name: "worker",
+    agent: "worker",
+    description: "Execution-first isolated worker preset.",
     visibility: "public",
-    envelope: "patch-worker",
+    envelope: "worker",
+    gateReason: "implement_isolated",
+    modelCategory: "isolated-execution",
     fallbackResultMode: "patch",
     executorPreamble:
-      "Operate as an isolated patch worker. Keep edits minimal, preserve surrounding behavior, and summarize the patch concisely.",
-    instructionsMarkdown: PATCH_WORKER_SPECIALIST_CONSTITUTION,
+      "Operate as an isolated worker. Keep edits minimal, preserve surrounding behavior, and summarize the patch concisely.",
+    instructionsMarkdown: WORKER_SPECIALIST_CONSTITUTION,
+  },
+  librarian: {
+    name: "librarian",
+    agent: "librarian",
+    description: "Read-only institutional knowledge researcher and proposal author.",
+    visibility: "public",
+    envelope: "librarian-readonly",
+    gateReason: "compound_knowledge",
+    modelCategory: "knowledge",
+    skillName: "learning-research",
+    fallbackResultMode: "knowledge",
+    executorPreamble:
+      "Operate as a librarian. Search institutional knowledge, summarize provenance and conflicts, and return proposals without promoting authority.",
+    instructionsMarkdown: LIBRARIAN_SPECIALIST_CONSTITUTION,
   },
 } as const;
 
 const DEFAULT_AGENT_SPEC_BY_SKILL_NAME: Readonly<Record<string, string>> = {
-  "repository-analysis": "advisor",
-  architecture: "advisor",
-  "office-hours": "advisor",
-  discovery: "advisor",
-  "learning-research": "advisor",
-  debugging: "advisor",
-  strategy: "advisor",
-  plan: "advisor",
-  review: "advisor",
-  "predict-review": "advisor",
-  qa: "qa",
-  implementation: "patch-worker",
+  "repository-analysis": "navigator",
+  architecture: "explorer",
+  "office-hours": "explorer",
+  discovery: "navigator",
+  "learning-research": "librarian",
+  debugging: "explorer",
+  strategy: "explorer",
+  plan: "explorer",
+  review: "explorer",
+  "predict-review": "explorer",
+  verifier: "verifier",
+  implementation: "worker",
 } as const;
 
 const DEFAULT_FALLBACK_RESULT_MODE_BY_SKILL_NAME: Readonly<Record<string, SubagentResultMode>> = {
-  "repository-analysis": "consult",
+  "repository-analysis": "evidence",
   architecture: "consult",
   "office-hours": "consult",
-  discovery: "consult",
-  "learning-research": "consult",
+  discovery: "evidence",
+  "learning-research": "knowledge",
   debugging: "consult",
   strategy: "consult",
   plan: "consult",
   review: "consult",
   "predict-review": "consult",
-  qa: "qa",
+  verifier: "verifier",
   implementation: "patch",
 } as const;
 
-const DEFAULT_CONSULT_KIND_BY_SKILL_NAME: Readonly<Record<string, AdvisorConsultKind>> = {
+const DEFAULT_CONSULT_KIND_BY_SKILL_NAME: Readonly<Record<string, ExplorerConsultKind>> = {
   "repository-analysis": "investigate",
   architecture: "design",
   "office-hours": "design",
@@ -540,9 +643,13 @@ export async function loadHostedDelegationCatalog(
       if (!explicitBaseName) {
         throw new Error(`invalid_agent_spec:${entry.fileName}:extends is required`);
       }
-      if (!PUBLIC_AGENT_SPEC_NAMES.has(explicitBaseName as "advisor" | "qa" | "patch-worker")) {
+      if (
+        !PUBLIC_AGENT_SPEC_NAMES.has(
+          explicitBaseName as "navigator" | "explorer" | "worker" | "verifier" | "librarian",
+        )
+      ) {
         throw new Error(
-          `invalid_agent_spec:${entry.fileName}:extends must be advisor, qa, or patch-worker`,
+          `invalid_agent_spec:${entry.fileName}:extends must be navigator, explorer, worker, verifier, or librarian`,
         );
       }
       const baseAgentSpec = catalog.agentSpecs.get(explicitBaseName);
@@ -604,7 +711,7 @@ export function deriveFallbackResultModeForSkillName(
 
 export function deriveDefaultConsultKindForSkillName(
   skillName: string | undefined,
-): AdvisorConsultKind | undefined {
+): ExplorerConsultKind | undefined {
   if (!skillName) {
     return undefined;
   }
@@ -631,9 +738,13 @@ export function buildHostedDelegationTargetFromAgentSpec(input: {
   const consultKind = resultMode === "consult" ? input.agentSpec.defaultConsultKind : undefined;
   return {
     name: input.agentSpec.name,
+    agent: input.agentSpec.agent,
+    targetName: input.agentSpec.name,
     description: input.agentSpec.description,
     visibility: input.agentSpec.visibility,
     resultMode,
+    modelCategory: input.agentSpec.modelCategory,
+    gateReason: input.agentSpec.gateReason,
     executorPreamble: input.agentSpec.executorPreamble,
     instructionsMarkdown: input.agentSpec.instructionsMarkdown,
     boundary: input.envelope.boundary ?? "safe",

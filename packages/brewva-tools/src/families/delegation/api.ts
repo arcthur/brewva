@@ -23,6 +23,7 @@ export {
 } from "../../shared/review-ensemble/index.js";
 export { createSubagentCancelTool, createSubagentStatusTool } from "./subagent-control.js";
 export { createSubagentForkTool } from "./subagent-fork.js";
+export { createSubagentKnowledgeAdoptTool } from "./subagent-knowledge-adopt.js";
 export {
   createSubagentFanoutTool,
   createSubagentRunDiagnosticTool,

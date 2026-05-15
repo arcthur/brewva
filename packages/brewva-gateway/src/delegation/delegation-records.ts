@@ -1,5 +1,6 @@
 import type {
   DelegationAdoptionRecord,
+  DelegationForkTurns,
   DelegationIsolationStrategy,
   DelegationLineageRecord,
   DelegationModelRouteRecord,
@@ -12,6 +13,64 @@ import {
 } from "@brewva/brewva-runtime/delegation";
 import type { ToolExecutionBoundary } from "@brewva/brewva-runtime/governance";
 import type { HostedDelegationTarget } from "./targets.js";
+
+export interface DelegationTaskIdentity {
+  taskName: string;
+  taskPath: string;
+  nickname: string;
+  depth: number;
+}
+
+function normalizeTaskSegment(value: string): string {
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return normalized || "task";
+}
+
+function joinTaskPath(parentTaskPath: string | undefined, segment: string): string {
+  const parent = parentTaskPath?.trim();
+  if (!parent || parent === "/") {
+    return `/${segment}`;
+  }
+  return `${parent.replace(/\/+$/g, "")}/${segment}`;
+}
+
+function taskPathDepth(taskPath: string): number {
+  return taskPath.split("/").filter((segment) => segment.length > 0).length;
+}
+
+export function buildDelegationTaskIdentity(input: {
+  target: Pick<HostedDelegationTarget, "agent">;
+  requestedTaskName?: string;
+  requestedNickname?: string;
+  label?: string;
+  parentTaskPath?: string;
+  reservedTaskPaths?: Iterable<string>;
+}): DelegationTaskIdentity {
+  // v1 callers pass parentTaskPath only for fanout grouping. Future nested subagents must
+  // carry the active parent task path explicitly; this helper only composes what it receives.
+  const baseTaskName =
+    input.requestedTaskName?.trim() || input.label?.trim() || `${input.target.agent}-task`;
+  const baseSegment = normalizeTaskSegment(baseTaskName);
+  const reserved = new Set(input.reservedTaskPaths ?? []);
+  let suffix = 0;
+  let segment = baseSegment;
+  let taskPath = joinTaskPath(input.parentTaskPath, segment);
+  while (reserved.has(taskPath)) {
+    suffix += 1;
+    segment = `${baseSegment}-${suffix + 1}`;
+    taskPath = joinTaskPath(input.parentTaskPath, segment);
+  }
+  return {
+    taskName: segment,
+    taskPath,
+    nickname: input.requestedNickname?.trim() || baseTaskName,
+    depth: taskPathDepth(taskPath),
+  };
+}
 
 export function buildInitialDelegationAdoption(
   target: Pick<HostedDelegationTarget, "resultMode">,
@@ -41,7 +100,7 @@ export function buildDelegationContractRecordFields(
 
 export function buildForkDelegationContractRecordFields(input: {
   parentSessionId: DelegationLineageRecord["parentSessionId"];
-  contextPolicy: DelegationLineageRecord["contextPolicy"];
+  forkTurns: DelegationLineageRecord["forkTurns"];
   isolationStrategy?: DelegationIsolationStrategy;
 }): {
   contractVersion: typeof CURRENT_DELEGATION_CONTRACT_VERSION;
@@ -62,7 +121,7 @@ export function buildForkDelegationContractRecordFields(input: {
     }),
     lineage: {
       parentSessionId: input.parentSessionId,
-      contextPolicy: input.contextPolicy,
+      forkTurns: input.forkTurns,
     },
   };
 }
@@ -87,8 +146,13 @@ export function resolveDelegationRecordIdentity(input: {
   target: HostedDelegationTarget;
   delegate?: string;
   delegatedSkillName?: string;
-}): Pick<DelegationRunRecord, "delegate" | "agentSpec" | "envelope" | "skillName" | "consultKind"> {
+}): Pick<
+  DelegationRunRecord,
+  "agent" | "targetName" | "delegate" | "agentSpec" | "envelope" | "skillName" | "consultKind"
+> {
   return {
+    agent: input.target.agent,
+    targetName: input.target.targetName,
     delegate:
       input.delegate ??
       input.target.agentSpecName ??
@@ -113,6 +177,8 @@ export function buildDelegationRunRecordSeed(input: {
   label?: string;
   parentSkill?: string;
   boundary?: ToolExecutionBoundary;
+  taskIdentity: DelegationTaskIdentity;
+  forkTurns?: DelegationForkTurns;
   modelRoute?: DelegationModelRouteRecord;
   delivery?: DelegationRunRecord["delivery"];
   workerSessionId?: DelegationRunRecord["workerSessionId"];
@@ -127,6 +193,13 @@ export function buildDelegationRunRecordSeed(input: {
     }),
     parentSessionId: input.parentSessionId,
     status: input.status ?? "pending",
+    taskName: input.taskIdentity.taskName,
+    taskPath: input.taskIdentity.taskPath,
+    nickname: input.taskIdentity.nickname,
+    depth: input.taskIdentity.depth,
+    forkTurns: input.forkTurns ?? "none",
+    gateReason: input.target.gateReason,
+    modelCategory: input.target.modelCategory,
     createdAt: input.createdAt,
     updatedAt: input.updatedAt ?? input.createdAt,
     label: input.label,

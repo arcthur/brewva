@@ -57,7 +57,16 @@ describe("subagent control tools", () => {
       payload: {
         contractVersion: CURRENT_DELEGATION_CONTRACT_VERSION,
         runId: "run-status-1",
-        delegate: "advisor",
+        agent: "explorer",
+        targetName: "explorer",
+        taskName: "review-runtime-deltas",
+        taskPath: "/review-runtime-deltas",
+        nickname: "review runtime deltas",
+        depth: 1,
+        forkTurns: "none",
+        gateReason: "make_judgment",
+        modelCategory: "deep-reasoning",
+        delegate: "explorer",
         executionPrimitive: "named",
         visibility: "public",
         isolationStrategy: "shared",
@@ -66,8 +75,8 @@ describe("subagent control tools", () => {
           decision: "require_human",
           reason: "Fixture record has not reached parent adoption.",
         },
-        agentSpec: "advisor",
-        envelope: "readonly-advisor",
+        agentSpec: "explorer",
+        envelope: "explorer-readonly",
         skillName: "review",
         status: "running",
         kind: "consult",
@@ -75,10 +84,10 @@ describe("subagent control tools", () => {
         summary: "Inspecting runtime deltas.",
         modelRoute: {
           selectedModel: "openai/gpt-5.4:medium",
+          category: "deep-reasoning",
           source: "policy",
           mode: "auto",
           policyId: "review-and-verification",
-          requestedModel: "gpt-5.4:medium",
           reason: "Review and verification work should bias toward higher-fidelity reasoning.",
         },
       },
@@ -94,15 +103,16 @@ describe("subagent control tools", () => {
     );
 
     expect(extractText(result)).toContain("# Subagent Status");
-    expect(extractText(result)).toContain("run-status-1");
+    expect(extractText(result)).toContain("review runtime deltas");
+    expect(extractText(result)).toContain("path=/review-runtime-deltas");
     expect(extractText(result)).toContain("status=running");
     expect(extractText(result)).toContain("adoption: decision=require_human");
-    expect(extractText(result)).not.toContain("agentSpec=advisor");
-    expect(extractText(result)).not.toContain("envelope=readonly-advisor");
+    expect(extractText(result)).not.toContain("agentSpec=explorer");
+    expect(extractText(result)).not.toContain("envelope=explorer-readonly");
     expect(extractText(result)).not.toContain("delegatedSkill=review");
     expect(extractText(result)).not.toContain("model: openai/gpt-5.4:medium");
     expect(JSON.stringify(result.details)).not.toContain("agentSpec");
-    expect(JSON.stringify(result.details)).not.toContain("readonly-advisor");
+    expect(JSON.stringify(result.details)).not.toContain("explorer-readonly");
     expect(JSON.stringify(result.details)).not.toContain("consultKind");
 
     const diagnosticResult = await tool.execute(
@@ -113,10 +123,10 @@ describe("subagent control tools", () => {
       fakeContext("session-status"),
     );
     expect(extractText(diagnosticResult)).toContain(
-      "delegate: agentSpec=advisor envelope=readonly-advisor delegatedSkill=review consultKind=review",
+      "delegate: agentSpec=explorer envelope=explorer-readonly delegatedSkill=review consultKind=review",
     );
     expect(extractText(diagnosticResult)).toContain(
-      "model: openai/gpt-5.4:medium source=policy mode=auto policy=review-and-verification requested=gpt-5.4:medium",
+      "model: openai/gpt-5.4:medium category=deep-reasoning source=policy mode=auto policy=review-and-verification",
     );
   });
 
@@ -131,7 +141,16 @@ describe("subagent control tools", () => {
       payload: {
         contractVersion: CURRENT_DELEGATION_CONTRACT_VERSION,
         runId: "run-status-handoff-1",
-        delegate: "advisor",
+        agent: "explorer",
+        targetName: "explorer",
+        taskName: "review-handoff",
+        taskPath: "/review-handoff",
+        nickname: "review handoff",
+        depth: 1,
+        forkTurns: "none",
+        gateReason: "make_judgment",
+        modelCategory: "deep-reasoning",
+        delegate: "explorer",
         executionPrimitive: "named",
         visibility: "public",
         isolationStrategy: "shared",
@@ -160,7 +179,8 @@ describe("subagent control tools", () => {
       fakeContext("session-status-handoff"),
     );
 
-    expect(extractText(result)).toContain("run-status-handoff-1");
+    expect(extractText(result)).toContain("review handoff");
+    expect(extractText(result)).toContain("path=/review-handoff");
     expect(extractText(result)).toContain("delivery: mode=text_only handoff=pending_parent_turn");
   });
 
@@ -175,7 +195,16 @@ describe("subagent control tools", () => {
       payload: {
         contractVersion: CURRENT_DELEGATION_CONTRACT_VERSION,
         runId: "run-public",
-        delegate: "advisor",
+        agent: "explorer",
+        targetName: "explorer",
+        taskName: "public-review",
+        taskPath: "/public-review",
+        nickname: "public review",
+        depth: 1,
+        forkTurns: "none",
+        gateReason: "make_judgment",
+        modelCategory: "deep-reasoning",
+        delegate: "explorer",
         executionPrimitive: "named",
         visibility: "public",
         isolationStrategy: "shared",
@@ -196,6 +225,15 @@ describe("subagent control tools", () => {
       payload: {
         contractVersion: CURRENT_DELEGATION_CONTRACT_VERSION,
         runId: "run-internal-lane",
+        agent: "explorer",
+        targetName: "review-security",
+        taskName: "security-review",
+        taskPath: "/security-review",
+        nickname: "security review",
+        depth: 1,
+        forkTurns: "none",
+        gateReason: "make_judgment",
+        modelCategory: "deep-reasoning",
         delegate: "review-security",
         agentSpec: "review-security",
         executionPrimitive: "named",
@@ -229,10 +267,12 @@ describe("subagent control tools", () => {
       fakeContext("session-status-detail-mode"),
     );
 
-    expect(extractText(publicResult)).toContain("run-public");
+    expect(extractText(publicResult)).toContain("public review");
+    expect(extractText(publicResult)).toContain("path=/public-review");
     expect(extractText(publicResult)).not.toContain("run-internal-lane");
     expect(extractText(publicResult)).toContain("hidden internal/diagnostic runs=1");
-    expect(extractText(internalResult)).toContain("run-internal-lane");
+    expect(extractText(internalResult)).toContain("security review");
+    expect(extractText(internalResult)).toContain("path=/security-review");
   });
 
   test("subagent_cancel delegates cancellation to the orchestration adapter", async () => {
@@ -251,6 +291,15 @@ describe("subagent control tools", () => {
               run: {
                 contractVersion: CURRENT_DELEGATION_CONTRACT_VERSION,
                 runId: input.runId,
+                agent: "explorer" as const,
+                targetName: "explorer",
+                taskName: "explore",
+                taskPath: "/explore",
+                nickname: "explore",
+                depth: 1,
+                forkTurns: "none" as const,
+                gateReason: "make_judgment" as const,
+                modelCategory: "deep-reasoning" as const,
                 delegate: "explore",
                 executionPrimitive: "named" as const,
                 visibility: "public" as const,
@@ -284,7 +333,8 @@ describe("subagent control tools", () => {
     );
 
     expect(extractText(result)).toContain("Subagent cancelled.");
-    expect(extractText(result)).toContain("run-cancel-1");
+    expect(extractText(result)).toContain("explore");
+    expect(extractText(result)).toContain("path=/explore");
     expect((result.details as { ok?: boolean } | undefined)?.ok).toBe(true);
   });
 });

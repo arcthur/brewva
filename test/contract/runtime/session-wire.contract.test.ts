@@ -252,7 +252,7 @@ describe("runtime session wire compiler", () => {
         runId: "run-1",
         delegate: "worker-1",
         kind: "patch",
-        label: "Patch worker",
+        label: "Worker",
       },
     });
     runtime.extensions.hosted.events.record({

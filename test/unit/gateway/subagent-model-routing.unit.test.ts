@@ -54,11 +54,15 @@ const AVAILABLE_MODELS: RegisteredModel[] = [
 
 function makeTarget(overrides: Partial<HostedDelegationTarget> = {}): HostedDelegationTarget {
   return {
-    name: "advisor",
-    description: "Repository advisor",
+    name: "explorer",
+    agent: "explorer",
+    targetName: "explorer",
+    description: "Repository explorer",
     visibility: "public",
     resultMode: "consult",
     consultKind: "investigate",
+    modelCategory: "deep-reasoning",
+    gateReason: "make_judgment",
     boundary: "safe",
     producesPatches: false,
     isolationStrategy: "shared",
@@ -70,7 +74,7 @@ describe("subagent model routing", () => {
   test("prefers active preset subagent model before policy routes", () => {
     const resolved = resolveDelegationModelRoute({
       target: makeTarget({
-        agentSpecName: "advisor",
+        agentSpecName: "explorer",
         resultMode: "patch",
       }),
       packet: {
@@ -80,8 +84,8 @@ describe("subagent model routing", () => {
         availableModels: [...AVAILABLE_MODELS],
         activePreset: {
           name: "Claude Lead",
-          subagentModels: {
-            advisor: "anthropic/claude-opus-4.1",
+          delegationModels: {
+            "deep-reasoning": "anthropic/claude-opus-4.1",
           },
         },
       } as unknown as Parameters<typeof resolveDelegationModelRoute>[0]["modelRouting"],
@@ -90,7 +94,6 @@ describe("subagent model routing", () => {
     expect(resolved.model).toBe("anthropic/claude-opus-4.1");
     expect(resolved.modelRoute).toMatchObject({
       selectedModel: "anthropic/claude-opus-4.1",
-      requestedModel: "anthropic/claude-opus-4.1",
       source: "preset",
       mode: "explicit",
       presetName: "Claude Lead",
@@ -100,8 +103,11 @@ describe("subagent model routing", () => {
   test("inherits active preset main model when no subagent-specific model is configured", () => {
     const resolved = resolveDelegationModelRoute({
       target: makeTarget({
-        agentSpecName: "qa",
+        agent: "verifier",
+        targetName: "verifier",
+        agentSpecName: "verifier",
         consultKind: "review",
+        modelCategory: "verification",
       }),
       packet: {
         objective: "Review the runtime change.",
@@ -111,8 +117,8 @@ describe("subagent model routing", () => {
         activePreset: {
           name: "OpenAI Stack",
           mainModel: "openai/gpt-5.5:high",
-          subagentModels: {
-            advisor: "anthropic/claude-opus-4.1",
+          delegationModels: {
+            "deep-reasoning": "anthropic/claude-opus-4.1",
           },
         },
       } as unknown as Parameters<typeof resolveDelegationModelRoute>[0]["modelRouting"],
@@ -121,7 +127,6 @@ describe("subagent model routing", () => {
     expect(resolved.model).toBe("openai/gpt-5.5:high");
     expect(resolved.modelRoute).toMatchObject({
       selectedModel: "openai/gpt-5.5:high",
-      requestedModel: "openai/gpt-5.5:high",
       source: "preset",
       mode: "explicit",
       presetName: "OpenAI Stack",
@@ -144,7 +149,7 @@ describe("subagent model routing", () => {
     expect([resolved.model, resolved.modelRoute]).toEqual([undefined, undefined]);
   });
 
-  test("keeps explicit executionShape model selections inspectable", () => {
+  test("does not accept explicit executionShape model selections", () => {
     const resolved = resolveDelegationModelRoute({
       target: makeTarget({
         consultKind: "review",
@@ -152,22 +157,17 @@ describe("subagent model routing", () => {
       packet: {
         objective: "Review the runtime change.",
       },
-      executionShape: {
-        model: "openai/gpt-5.5:high",
-      },
       modelRouting: {
         availableModels: [...AVAILABLE_MODELS],
       },
     });
 
-    expect(resolved.model).toBe("openai/gpt-5.5:high");
-    expect(resolved.modelRoute).toEqual({
-      selectedModel: "openai/gpt-5.5:high",
-      requestedModel: "openai/gpt-5.5:high",
-      source: "execution_shape",
-      mode: "explicit",
-      reason: "Explicit executionShape model override.",
+    expect(resolved.modelRoute).toMatchObject({
+      source: "policy",
+      policyId: "review-and-verification",
+      category: "deep-reasoning",
     });
+    expect(resolved.modelRoute?.source).not.toBe("execution_shape");
   });
 
   test("auto-routes execution-first patch work to the fast codex path when available", () => {

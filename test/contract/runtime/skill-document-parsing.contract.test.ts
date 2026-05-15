@@ -1043,6 +1043,48 @@ describe("skill document parsing", () => {
     expect(readOptionalValues(parsed.contract.intent, ["outputContracts"])).toEqual([undefined]);
   });
 
+  test("normalizes legacy qa semantic artifact bindings to verifier bindings", () => {
+    const filePath = createTempSkillDocument(
+      "brewva-legacy-qa-semantic-binding-",
+      "skills/core/verifier/SKILL.md",
+      [
+        "---",
+        "name: verifier",
+        "description: verifier skill",
+        ...MINIMAL_SELECTION_LINES,
+        "intent:",
+        "  outputs:",
+        "    - verifier_report",
+        "    - verifier_checks",
+        "  semantic_bindings:",
+        "    verifier_report: qa.qa_report.v2",
+        "    verifier_checks: qa.qa_checks.v2",
+        "effects:",
+        "  allowed_effects: [workspace_read]",
+        "resources:",
+        "  default_lease:",
+        "    max_tool_calls: 10",
+        "    max_tokens: 10000",
+        "  hard_ceiling:",
+        "    max_tool_calls: 20",
+        "    max_tokens: 20000",
+        "execution_hints:",
+        "  preferred_tools: [read]",
+        "  fallback_tools: []",
+        "consumes: []",
+        "---",
+        "# verifier",
+      ],
+    );
+
+    const parsed = parseSkillDocument(filePath, "core");
+
+    expect(parsed.contract.intent?.semanticBindings).toEqual({
+      verifier_report: "verifier.verifier_report.v2",
+      verifier_checks: "verifier.verifier_checks.v2",
+    });
+  });
+
   test("rejects authored output contracts for semantic-bound outputs", () => {
     const filePath = createTempSkillDocument(
       "brewva-semantic-bound-authored-contract-",

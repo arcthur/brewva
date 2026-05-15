@@ -175,7 +175,7 @@ function createFakeBundle(
   const modelPresetState = options.modelPresetState ?? {
     activeName: "Default",
     defaultName: "Default",
-    presets: [{ name: "Default", subagentModels: {}, synthetic: true }],
+    presets: [{ name: "Default", delegationModels: {}, synthetic: true }],
   };
   const replaySessions = options.replaySessions ?? [
     {
@@ -520,8 +520,8 @@ describe("opentui solid shell runtime: render regression", () => {
         activeName: "Chhogori",
         defaultName: "Chhogori",
         presets: [
-          { name: "Default", mainModel: "deepseek/deepseek-v4-pro:xhigh", subagentModels: {} },
-          { name: "Chhogori", mainModel: "openai/gpt-5.5:xhigh", subagentModels: {} },
+          { name: "Default", mainModel: "deepseek/deepseek-v4-pro:xhigh", delegationModels: {} },
+          { name: "Chhogori", mainModel: "openai/gpt-5.5:xhigh", delegationModels: {} },
         ],
       },
       seedMessages: [

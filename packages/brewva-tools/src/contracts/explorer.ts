@@ -1,7 +1,7 @@
 import type {
   DelegationConsultKind as RuntimeDelegationConsultKind,
-  QaCheck as RuntimeQaCheck,
-  QaSubagentOutcomeData as RuntimeQaSubagentOutcomeData,
+  VerifierCheck as RuntimeVerifierCheck,
+  VerifierSubagentOutcomeData as RuntimeVerifierSubagentOutcomeData,
 } from "@brewva/brewva-runtime/delegation";
 import type {
   DesignExecutionStep as RuntimeDesignExecutionStep,
@@ -16,10 +16,10 @@ import type { DelegationOutcomeFinding } from "./delegation.js";
 
 export type ReviewPrecedentConsultStatus = RuntimeReviewPrecedentConsultStatus;
 export type ReviewReportArtifact = RuntimeReviewReportArtifact;
-export type AdvisorConsultKind = RuntimeDelegationConsultKind;
-export type AdvisorConsultConfidence = "low" | "medium" | "high";
+export type ExplorerConsultKind = RuntimeDelegationConsultKind;
+export type ExplorerConsultConfidence = "low" | "medium" | "high";
 
-export interface AdvisorConsultBrief {
+export interface ExplorerConsultBrief {
   decision: string;
   successCriteria: string;
   currentBestGuess?: string;
@@ -33,11 +33,11 @@ export interface DelegatedQuestionRequest {
   questions: BrewvaQuestionPrompt[];
 }
 
-export interface AdvisorConsultOutcomeBase {
+export interface ExplorerConsultOutcomeBase {
   kind: "consult";
-  consultKind: AdvisorConsultKind;
+  consultKind: ExplorerConsultKind;
   conclusion: string;
-  confidence?: AdvisorConsultConfidence;
+  confidence?: ExplorerConsultConfidence;
   evidence?: string[];
   counterevidence?: string[];
   risks?: string[];
@@ -46,7 +46,7 @@ export interface AdvisorConsultOutcomeBase {
   recommendedNextSteps?: string[];
 }
 
-export interface AdvisorInvestigateSubagentOutcomeData extends AdvisorConsultOutcomeBase {
+export interface ExplorerInvestigateSubagentOutcomeData extends ExplorerConsultOutcomeBase {
   consultKind: "investigate";
   findings?: DelegationOutcomeFinding[];
   ownershipHints?: string[];
@@ -59,29 +59,29 @@ export type PlanImplementationTarget = RuntimeDesignImplementationTarget;
 
 export type PlanRiskItem = RuntimeDesignRiskItem;
 
-export interface AdvisorDiagnoseHypothesis {
+export interface ExplorerDiagnoseHypothesis {
   hypothesis: string;
-  likelihood?: AdvisorConsultConfidence;
+  likelihood?: ExplorerConsultConfidence;
   evidence?: string[];
   gaps?: string[];
 }
 
-export interface AdvisorDiagnoseSubagentOutcomeData extends AdvisorConsultOutcomeBase {
+export interface ExplorerDiagnoseSubagentOutcomeData extends ExplorerConsultOutcomeBase {
   consultKind: "diagnose";
-  hypotheses: AdvisorDiagnoseHypothesis[];
+  hypotheses: ExplorerDiagnoseHypothesis[];
   likelyRootCause: string;
   nextProbe: string;
 }
 
-export interface AdvisorDesignOption {
+export interface ExplorerDesignOption {
   option: string;
   summary: string;
   tradeoffs?: string[];
 }
 
-export interface AdvisorDesignSubagentOutcomeData extends AdvisorConsultOutcomeBase {
+export interface ExplorerDesignSubagentOutcomeData extends ExplorerConsultOutcomeBase {
   consultKind: "design";
-  options: AdvisorDesignOption[];
+  options: ExplorerDesignOption[];
   recommendedOption: string;
   boundaryImplications: string[];
   verificationPlan: string[];
@@ -93,7 +93,7 @@ export type ReviewLaneDisposition = "clear" | "concern" | "blocked" | "inconclus
 
 export type ReviewLaneConfidence = "low" | "medium" | "high";
 
-export interface AdvisorReviewSubagentOutcomeData extends AdvisorConsultOutcomeBase {
+export interface ExplorerReviewSubagentOutcomeData extends ExplorerConsultOutcomeBase {
   consultKind: "review";
   lane?: ReviewLaneName;
   disposition?: ReviewLaneDisposition;
@@ -105,11 +105,11 @@ export interface AdvisorReviewSubagentOutcomeData extends AdvisorConsultOutcomeB
   confidence?: ReviewLaneConfidence;
 }
 
-export type QaCheck = RuntimeQaCheck;
-export type QaSubagentOutcomeData = RuntimeQaSubagentOutcomeData;
+export type VerifierCheck = RuntimeVerifierCheck;
+export type VerifierSubagentOutcomeData = RuntimeVerifierSubagentOutcomeData;
 
-export type AdvisorSubagentOutcomeData =
-  | AdvisorInvestigateSubagentOutcomeData
-  | AdvisorDiagnoseSubagentOutcomeData
-  | AdvisorDesignSubagentOutcomeData
-  | AdvisorReviewSubagentOutcomeData;
+export type ExplorerSubagentOutcomeData =
+  | ExplorerInvestigateSubagentOutcomeData
+  | ExplorerDiagnoseSubagentOutcomeData
+  | ExplorerDesignSubagentOutcomeData
+  | ExplorerReviewSubagentOutcomeData;

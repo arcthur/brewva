@@ -1,54 +1,68 @@
-import type { AdvisorConsultKind, SubagentResultMode } from "@brewva/brewva-tools/contracts";
+import type { ExplorerConsultKind, SubagentResultMode } from "@brewva/brewva-tools/contracts";
 import { ALWAYS_ON_REVIEW_LANES } from "@brewva/brewva-tools/delegation";
 
 export const STRUCTURED_OUTCOME_OPEN = "<delegation_outcome_json>";
 export const STRUCTURED_OUTCOME_CLOSE = "</delegation_outcome_json>";
 
-const CANONICAL_CONSULT_PROMPT_BY_KIND: Record<AdvisorConsultKind, string> = {
+const CANONICAL_CONSULT_PROMPT_BY_KIND: Record<ExplorerConsultKind, string> = {
   investigate:
-    "Investigate the delegated question with a bounded advisor mindset. Gather only the evidence needed to reduce uncertainty, keep findings concrete, and avoid implementation commitments.",
+    "Investigate the delegated question with an explorer mindset. Gather the evidence needed to reduce uncertainty, keep findings concrete, and avoid implementation commitments.",
   diagnose:
     "Diagnose the delegated problem with a skeptical debugger mindset. Form multiple hypotheses, try to falsify the strongest one, and recommend the highest-value next probe.",
   design:
-    "Evaluate the delegated design decision as a read-only advisor. Compare bounded options, make boundary implications explicit, and recommend the strongest path without turning the consult into implementation.",
+    "Evaluate the delegated design decision as a read-only explorer. Compare bounded options, make boundary implications explicit, and recommend the strongest path without turning the consult into implementation.",
   review:
     "Provide a strict second-opinion review. Prioritize correctness risk, contract drift, missing evidence, and merge posture, while preserving counterevidence and unresolved uncertainty.",
 };
 
 const CANONICAL_PROMPT_BY_RESULT_MODE: Record<Exclude<SubagentResultMode, "consult">, string> = {
-  qa: "Verify the delegated scope with an adversarial QA mindset. Actively try to break it, record executed checks with real observations, and separate pass, fail, and inconclusive evidence honestly.",
+  evidence:
+    "Find task-local evidence as a navigator. Cite concrete source references, record missing evidence, and stop before recommendation or design judgment.",
+  verifier:
+    "Verify the delegated scope with an adversarial Verifier mindset. Actively try to break it, record executed checks with real observations, and separate pass, fail, and inconclusive evidence honestly.",
   patch:
     "Implement the delegated change inside the isolated workspace. Keep edits minimal, preserve surrounding behavior, and explain the patch and verification evidence concisely.",
+  knowledge:
+    "Research institutional knowledge as a librarian. Preserve provenance, freshness, conflicts, and a proposed destination without promoting the result to authority.",
 };
 
 const DEFAULT_AGENT_SPEC_BY_RESULT_MODE: Record<SubagentResultMode, string> = {
-  consult: "advisor",
-  qa: "qa",
-  patch: "patch-worker",
+  evidence: "navigator",
+  consult: "explorer",
+  verifier: "verifier",
+  patch: "worker",
+  knowledge: "librarian",
 };
 
 export function getCanonicalSubagentPrompt(
   resultMode: SubagentResultMode,
-  consultKind?: AdvisorConsultKind,
+  consultKind?: ExplorerConsultKind,
 ): string {
   if (resultMode === "consult") {
     return consultKind
       ? CANONICAL_CONSULT_PROMPT_BY_KIND[consultKind]
-      : "Act as a read-only advisor. Reduce uncertainty, keep evidence concrete, and optimize for the parent's next decision.";
+      : "Act as a read-only explorer. Reduce uncertainty, keep evidence concrete, and optimize for the parent's next decision.";
   }
   return CANONICAL_PROMPT_BY_RESULT_MODE[resultMode];
 }
 
 export function getCanonicalForkPrompt(input: {
-  contextPolicy: "lineage_only" | "working_snapshot";
+  forkTurns: "none" | "all" | number;
   objective: string;
   deliverable?: string;
+  inheritedContext?: string;
 }): string {
   return [
     getCanonicalSubagentPrompt("consult", "investigate"),
     "",
     "You are executing as a fork of the parent session.",
-    `Context policy: ${input.contextPolicy}`,
+    `Fork turns: ${input.forkTurns}`,
+    input.forkTurns === "all"
+      ? "The fork receives the filtered mainline conversation, excluding raw tool frames and internal reasoning."
+      : input.forkTurns === "none"
+        ? "The fork receives no inherited turns beyond the explicit objective and deliverable."
+        : `The fork receives the most recent ${input.forkTurns} filtered mainline turns.`,
+    input.inheritedContext ? ["", input.inheritedContext].join("\n") : "",
     "Do not exceed the parent's authority. This fork is read-only unless a narrower runtime grants less.",
     "",
     "Objective:",
@@ -65,9 +79,27 @@ export function getDefaultAgentSpecNameForResultMode(resultMode: SubagentResultM
 
 function buildJsonShapeExample(input: {
   resultMode: SubagentResultMode;
-  consultKind?: AdvisorConsultKind;
+  consultKind?: ExplorerConsultKind;
   skillName?: string;
 }): string {
+  if (input.resultMode === "evidence") {
+    return JSON.stringify(
+      {
+        kind: "evidence",
+        summary: "Task-local evidence found for the delegated question.",
+        sourceRefs: [
+          "packages/brewva-gateway/src/delegation/target-resolution.ts:42",
+          "docs/reference/tools/delegation.md:18",
+        ],
+        missingEvidence: ["No replay fixture covered the new result mode yet."],
+        recommendedReads: ["packages/brewva-gateway/src/delegation/delegation-store.ts"],
+        ownershipHints: ["Delegation lifecycle projection owns durable status fields."],
+      },
+      null,
+      2,
+    );
+  }
+
   if (input.resultMode === "consult") {
     const base = {
       kind: "consult",
@@ -120,13 +152,13 @@ function buildJsonShapeExample(input: {
               tradeoffs: ["Semantic overlap and prompt drift remain."],
             },
             {
-              option: "Unify read-only public delegation under advisor.",
+              option: "Unify read-only judgment delegation under explorer.",
               summary:
                 "Keeps execution identity singular while leaving semantic workflow lanes in the parent workbench.",
               tradeoffs: ["Requires a broader contract and parser cutover."],
             },
           ],
-          recommendedOption: "Unify read-only public delegation under advisor.",
+          recommendedOption: "Unify read-only judgment delegation under explorer.",
           boundaryImplications: [
             "Delegation transport changes, but workflow.design and workflow.review remain parent-owned.",
           ],
@@ -189,8 +221,28 @@ function buildJsonShapeExample(input: {
     );
   }
 
+  if (input.resultMode === "knowledge") {
+    return JSON.stringify(
+      {
+        kind: "knowledge",
+        summary: "Institutional convention relevant to this task.",
+        provenance: [
+          "docs/solutions/subagent-routing.md",
+          "skills/project/shared/critical-rules.md",
+        ],
+        proposedDestination: "docs/solutions/subagent-orchestration-v2.md",
+        freshnessNotes: ["No conflicting decision after 2026-05-01 was found."],
+        conflictNotes: ["Older docs still mention retired role names; treat them as superseded."],
+        proposal:
+          "Capture the role/result/envelope split as the durable rule for future subagent extensions.",
+      },
+      null,
+      2,
+    );
+  }
+
   const base =
-    input.resultMode === "qa"
+    input.resultMode === "verifier"
       ? ({
           verdict: "inconclusive",
           checks: [
@@ -209,7 +261,7 @@ function buildJsonShapeExample(input: {
               evidence_refs: ["session:child:agent_end"],
             },
           ],
-          missing_evidence: ["No authoritative QA command evidence was attached."],
+          missing_evidence: ["No authoritative verifier command evidence was attached."],
           confidence_gaps: ["Happy-path only; no adversarial probe was observed."],
         } as Record<string, unknown>)
       : ({
@@ -232,7 +284,7 @@ function buildJsonShapeExample(input: {
 
 export function buildStructuredOutcomeContract(input: {
   resultMode: SubagentResultMode;
-  consultKind?: AdvisorConsultKind;
+  consultKind?: ExplorerConsultKind;
   skillName?: string;
 }): string[] {
   const skillLines =
@@ -263,16 +315,34 @@ export function buildStructuredOutcomeContract(input: {
                 "For investigate consults, include kind=consult, consultKind=investigate, conclusion, findings, ownershipHints, and recommendedReads.",
                 "Keep recommendedReads tightly scoped to the highest-value follow-up files or artifacts.",
               ]
-      : input.resultMode === "qa"
+      : input.resultMode === "verifier"
         ? [
-            "For qa mode, include verdict, checks, and any missing_evidence, confidence_gaps, or environment_limits.",
-            "Do not invent QA checks from code reading or expectation alone. If you did not run it, record missing_evidence instead.",
-            "Every QA check must carry an execution descriptor and observed evidence.",
-            "Command-based QA checks should record command, exit_code, observed_output, and status.",
-            "Tool-driven QA checks should record tool, observed_output, and status. evidence_refs are supplemental evidence, not a substitute for observed_output.",
+            "For verifier mode, include verdict, checks, and any missing_evidence, confidence_gaps, or environment_limits.",
+            "Do not invent verifier checks from code reading or expectation alone. If you did not run it, record missing_evidence instead.",
+            "Every verifier check must carry an execution descriptor and observed evidence.",
+            "Command-based verifier checks should record command, exit_code, observed_output, and status.",
+            "Tool-driven verifier checks should record tool, observed_output, and status. evidence_refs are supplemental evidence, not a substitute for observed_output.",
             "Use inconclusive when the environment or evidence is insufficient for a pass/fail claim.",
           ]
-        : ["For patch mode, include patchSummary and changes."];
+        : input.resultMode === "patch"
+          ? ["For patch mode, include kind=patch, patchSummary, and changes."]
+          : [];
+  const evidenceLines =
+    input.resultMode === "evidence"
+      ? [
+          "For evidence mode, include kind=evidence, summary, sourceRefs, and missingEvidence when evidence is incomplete.",
+          "Do not include recommendation-style consult fields such as conclusion, recommendedNextSteps, options, hypotheses, or risks.",
+          "sourceRefs must point to concrete files, artifacts, events, or tool results.",
+        ]
+      : [];
+  const knowledgeLines =
+    input.resultMode === "knowledge"
+      ? [
+          "For knowledge mode, include kind=knowledge, summary, provenance, proposedDestination, and freshness or conflict notes when relevant.",
+          "Do not claim the proposal is authoritative. The parent must explicitly promote or adopt it.",
+          "provenance must identify existing docs, skills, prior artifacts, or explicit gaps.",
+        ]
+      : [];
   return [
     "After the human-readable summary, emit exactly one structured JSON block using these markers:",
     `- opening marker: ${STRUCTURED_OUTCOME_OPEN}`,
@@ -286,6 +356,8 @@ export function buildStructuredOutcomeContract(input: {
       : []),
     ...skillLines,
     ...modeLines,
+    ...evidenceLines,
+    ...knowledgeLines,
     "Use this shape:",
     "```json",
     buildJsonShapeExample(input),

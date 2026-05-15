@@ -20,14 +20,18 @@ describe("delegation prompt and catalog composition", () => {
   test("truncates context references when prompt injection budget is small", () => {
     const prompt = buildDelegationPrompt({
       target: {
-        name: "advisor",
-        description: "Read-only advisor",
+        name: "explorer",
+        agent: "explorer",
+        targetName: "explorer",
+        description: "Read-only explorer",
         visibility: "public",
         resultMode: "consult",
         consultKind: "investigate",
+        modelCategory: "deep-reasoning",
+        gateReason: "make_judgment",
         executorPreamble: "Investigate and summarize.",
-        agentSpecName: "advisor",
-        envelopeName: "readonly-advisor",
+        agentSpecName: "explorer",
+        envelopeName: "explorer-readonly",
         producesPatches: false,
         isolationStrategy: "shared",
       },
@@ -52,20 +56,25 @@ describe("delegation prompt and catalog composition", () => {
     });
 
     expect(prompt).toContain("Context References");
+    expect(prompt).toContain("Delegation gate reason: make_judgment");
     expect(prompt).toContain("[truncated]");
   });
 
   test("renders execution hints without parent skill state in the delegated prompt", () => {
     const prompt = buildDelegationPrompt({
       target: {
-        name: "advisor",
-        description: "Read-only advisor",
+        name: "explorer",
+        agent: "explorer",
+        targetName: "explorer",
+        description: "Read-only explorer",
         visibility: "public",
         resultMode: "consult",
         consultKind: "review",
+        modelCategory: "deep-reasoning",
+        gateReason: "make_judgment",
         executorPreamble: "Review and summarize.",
-        agentSpecName: "advisor",
-        envelopeName: "readonly-advisor",
+        agentSpecName: "explorer",
+        envelopeName: "explorer-readonly",
         producesPatches: false,
         isolationStrategy: "shared",
       },
@@ -94,14 +103,18 @@ describe("delegation prompt and catalog composition", () => {
 
     const prompt = buildDelegationPrompt({
       target: {
-        name: "advisor",
-        description: "Read-only advisor",
+        name: "explorer",
+        agent: "explorer",
+        targetName: "explorer",
+        description: "Read-only explorer",
         visibility: "public",
         resultMode: "consult",
         consultKind: "review",
-        executorPreamble: "Operate as a strict read-only advisor.",
-        agentSpecName: "advisor",
-        envelopeName: "readonly-advisor",
+        modelCategory: "deep-reasoning",
+        gateReason: "make_judgment",
+        executorPreamble: "Operate as a strict read-only explorer.",
+        agentSpecName: "explorer",
+        envelopeName: "explorer-readonly",
         producesPatches: false,
         isolationStrategy: "shared",
       },
@@ -134,23 +147,27 @@ describe("delegation prompt and catalog composition", () => {
     expect(prompt).toContain("include questionRequests as an array of structured requests");
   });
 
-  test("injects QA anti-rationalization guidance into delegated prompts", () => {
-    const runtime = createIsolatedRuntime("qa");
+  test("injects Verifier anti-rationalization guidance into delegated prompts", () => {
+    const runtime = createIsolatedRuntime("verifier");
     const skill = requireDefined(
-      runtime.inspect.skills.catalog.get("qa"),
-      "Expected QA skill in hosted runtime catalog.",
+      runtime.inspect.skills.catalog.get("verifier"),
+      "Expected Verifier skill in hosted runtime catalog.",
     );
 
     const prompt = buildDelegationPrompt({
       target: {
-        name: "qa",
-        description: "Adversarial QA verifier",
+        name: "verifier",
+        agent: "verifier",
+        targetName: "verifier",
+        description: "Adversarial verifier",
         visibility: "public",
-        resultMode: "qa",
-        executorPreamble: "Operate as an adversarial QA verifier.",
-        skillName: "qa",
-        agentSpecName: "qa",
-        envelopeName: "qa-runner",
+        resultMode: "verifier",
+        modelCategory: "verification",
+        gateReason: "verify_reproducibly",
+        executorPreamble: "Operate as an adversarial verifier.",
+        skillName: "verifier",
+        agentSpecName: "verifier",
+        envelopeName: "verifier-runner",
         producesPatches: false,
         isolationStrategy: "ephemeral",
       },
@@ -162,19 +179,21 @@ describe("delegation prompt and catalog composition", () => {
 
     expect(prompt).toContain("Recognize your own rationalizations");
     expect(prompt).toContain("The code looks correct based on my reading.");
-    expect(prompt).toContain("Do not invent QA checks from code reading or expectation alone.");
+    expect(prompt).toContain(
+      "Do not invent verifier checks from code reading or expectation alone.",
+    );
     expect(prompt).toContain("exit_code");
   });
 
-  test("materializes the built-in patch worker through the catalog", async () => {
+  test("materializes the built-in worker through the catalog", async () => {
     const catalog = await loadHostedDelegationCatalog(process.cwd());
     const agentSpec = requireDefined(
-      catalog.agentSpecs.get("patch-worker"),
-      "Expected built-in patch-worker agent spec.",
+      catalog.agentSpecs.get("worker"),
+      "Expected built-in worker agent spec.",
     );
     const envelope = requireDefined(
-      catalog.envelopes.get("patch-worker"),
-      "Expected built-in patch-worker envelope.",
+      catalog.envelopes.get("worker"),
+      "Expected built-in worker envelope.",
     );
 
     const target = buildHostedDelegationTargetFromAgentSpec({
@@ -194,9 +213,9 @@ describe("delegation prompt and catalog composition", () => {
       join(subagentDir, "explore.json"),
       JSON.stringify(
         {
-          name: "advisor",
+          name: "explorer",
           description: "Missing explicit kind",
-          envelope: "readonly-advisor",
+          envelope: "explorer-readonly",
         },
         null,
         2,
@@ -224,11 +243,11 @@ describe("delegation prompt and catalog composition", () => {
       [
         "---",
         'name: "reviewer"',
-        'description: "Markdown-backed advisor"',
-        'extends: "advisor"',
+        'description: "Markdown-backed explorer"',
+        'extends: "explorer"',
         "---",
         "",
-        "Operate as a strict advisor and summarize the highest-risk findings.",
+        "Operate as a strict explorer and summarize the highest-risk findings.",
         "",
       ].join("\n"),
       "utf8",
@@ -238,12 +257,12 @@ describe("delegation prompt and catalog composition", () => {
     expect(catalog.agentSpecs.get("reviewer")).toEqual(
       expect.objectContaining({
         name: "reviewer",
-        description: "Markdown-backed advisor",
+        description: "Markdown-backed explorer",
         visibility: "public",
-        envelope: "readonly-advisor",
+        envelope: "explorer-readonly",
         fallbackResultMode: "consult",
         instructionsMarkdown:
-          "Operate as a strict advisor and summarize the highest-risk findings.",
+          "Operate as a strict explorer and summarize the highest-risk findings.",
       }),
     );
   });

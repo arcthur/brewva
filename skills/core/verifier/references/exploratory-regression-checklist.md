@@ -1,6 +1,6 @@
-# QA Exploratory Regression Checklist
+# Verifier Exploratory Regression Checklist
 
-Use this reference when `qa` needs a practical, high-signal pass instead of a
+Use this reference when `verifier` needs a practical, high-signal pass instead of a
 large generic test matrix.
 
 ## Core Questions
@@ -17,7 +17,7 @@ large generic test matrix.
 - Start diff-aware, not checklist-first.
 - Prefer browser-first evidence for UI surfaces and executable traces for CLI or
   service behavior.
-- If QA applies a bounded fix, rerun the same failing path before closing it.
+- If a handoff fix is applied, rerun the same failing path before closing it.
 - If basic test harness setup is missing but local to the task, bootstrap the
   minimum viable path and record what was added.
 
@@ -26,7 +26,7 @@ large generic test matrix.
 - browser snapshots or screenshots for UI behavior
 - executable command output for CLI, service, or build flows
 - precise reproduction steps for any remaining failures
-- after-fix proof if QA applied a bounded repair
+- after-fix proof when a handoff fix has been applied
 
 ## Anti-Patterns
 

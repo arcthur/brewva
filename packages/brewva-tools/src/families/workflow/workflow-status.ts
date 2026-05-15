@@ -86,7 +86,7 @@ function laneVerdict(status: WorkflowLaneStatus): "pass" | "fail" | "inconclusiv
 
 function overallVerdict(input: {
   review: WorkflowLaneStatus;
-  qa: WorkflowLaneStatus;
+  verifier: WorkflowLaneStatus;
   verification: WorkflowLaneStatus;
   ship: WorkflowLaneStatus;
   acceptance: "not_required" | WorkflowLaneStatus;
@@ -96,7 +96,7 @@ function overallVerdict(input: {
     input.ship === "blocked" ||
     input.acceptance === "blocked" ||
     laneVerdict(input.review) === "fail" ||
-    laneVerdict(input.qa) === "fail" ||
+    laneVerdict(input.verifier) === "fail" ||
     laneVerdict(input.verification) === "fail"
   ) {
     return "fail";
@@ -177,7 +177,7 @@ export function createWorkflowStatusTool(options: BrewvaToolOptions): ToolDefini
     promptSnippet:
       "Inspect workflow posture, blockers, and the latest derived artifacts before deciding the next move.",
     promptGuidelines: [
-      "Use this to understand whether discovery and strategy are present, whether implementation is blocked or pending, and whether review, QA, verification, ship, or retro state needs attention.",
+      "Use this to understand whether discovery and strategy are present, whether implementation is blocked or pending, and whether review, Verifier, verification, ship, or retro state needs attention.",
       "Treat the result as advisory state; it does not force a workflow path.",
     ],
     parameters: Type.Object({
@@ -225,10 +225,10 @@ export function createWorkflowStatusTool(options: BrewvaToolOptions): ToolDefini
         "implementation",
       );
       const latestReviewArtifact = findLatestArtifactByKind(snapshot.artifacts, "review");
-      const latestQaArtifact = findLatestArtifactByKind(snapshot.artifacts, "qa");
+      const latestVerifierArtifact = findLatestArtifactByKind(snapshot.artifacts, "verifier");
       const verdict = overallVerdict({
         review: posture.review,
-        qa: posture.qa,
+        verifier: posture.verifier,
         verification: posture.verification,
         acceptance: posture.acceptance,
         ship: posture.ship,
@@ -254,9 +254,9 @@ export function createWorkflowStatusTool(options: BrewvaToolOptions): ToolDefini
         `review_required: ${posture.review_required}`,
         `review: ${posture.review}`,
         renderNormalizationLine("review_normalization", latestReviewArtifact),
-        `qa_required: ${posture.qa_required}`,
-        `qa: ${posture.qa}`,
-        renderNormalizationLine("qa_normalization", latestQaArtifact),
+        `verifier_required: ${posture.verifier_required}`,
+        `verifier: ${posture.verifier}`,
+        renderNormalizationLine("verifier_normalization", latestVerifierArtifact),
         `unsatisfied_required_evidence: ${
           posture.unsatisfied_required_evidence.length > 0
             ? posture.unsatisfied_required_evidence.join(", ")

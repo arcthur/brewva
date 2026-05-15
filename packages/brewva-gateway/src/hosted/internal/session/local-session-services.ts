@@ -356,7 +356,7 @@ export async function createHostedSessionResult(input: {
       presetName: modelPresetState.activeName,
       source: "startup",
       mainModel: activePreset?.mainModel,
-      subagentModels: activePreset?.subagentModels,
+      delegationModels: activePreset?.delegationModels,
       auxiliaryModels: activePreset?.auxiliaryModels,
       synthetic: activePreset?.synthetic,
     });

@@ -483,6 +483,7 @@ export const TOOL_ACTION_POLICY_BY_NAME: Record<string, ToolActionPolicy> = {
   subagent_run_diagnostic: delegation("high"),
   subagent_status: delegation("low"),
   subagent_cancel: delegation(),
+  subagent_knowledge_adopt: delegation(),
   task_view_state: runtimeObserve(),
   task_set_spec: memoryWrite(),
   task_add_item: memoryWrite(),

@@ -22,7 +22,7 @@ describe("skill authored behavior coverage", () => {
     "skills/core/debugging/SKILL.md",
     "skills/core/implementation/SKILL.md",
     "skills/core/review/SKILL.md",
-    "skills/core/qa/SKILL.md",
+    "skills/core/verifier/SKILL.md",
     "skills/core/ship/SKILL.md",
     "skills/core/retro/SKILL.md",
     "skills/core/knowledge-capture/SKILL.md",
@@ -97,10 +97,10 @@ describe("skill authored behavior coverage", () => {
     expect(alternatives).toContain("Creative or lateral path");
   });
 
-  test("qa documents diff-aware, browser-first, and rerun-after-fix behavior", () => {
-    const markdown = readRepoFile("skills/core/qa/SKILL.md");
+  test("verifier documents diff-aware, browser-first, and rerun-after-fix behavior", () => {
+    const markdown = readRepoFile("skills/core/verifier/SKILL.md");
     const referenceMarkdown = readRepoFile(
-      "skills/core/qa/references/exploratory-regression-checklist.md",
+      "skills/core/verifier/references/exploratory-regression-checklist.md",
     );
 
     expect(markdown).toContain("diff-aware");
@@ -142,9 +142,8 @@ describe("skill authored behavior coverage", () => {
     expect(referenceMarkdown).toContain("review-operability");
     expect(referenceMarkdown).toContain("review-concurrency");
     expect(referenceMarkdown).toContain("review-compatibility");
-    expect(referenceMarkdown).toContain("`qa`");
+    expect(referenceMarkdown).toContain("`verifier`");
     expect(referenceMarkdown).not.toContain("`reviewer`");
     expect(referenceMarkdown).not.toContain("`researcher`");
-    expect(referenceMarkdown).not.toContain("`verifier`");
   });
 });

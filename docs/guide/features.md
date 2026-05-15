@@ -74,8 +74,9 @@ Skill taxonomy is split by role:
 - project overlays tighten behavior for this repository
 - shared project guidance adds repo-local context and provenance
 
-Delegated public specialist roles remain narrow: advisor, QA, and patch-worker
-postures. Internal review lanes are control-plane implementation detail.
+Delegated public specialist roles remain narrow: `navigator`, `explorer`,
+`worker`, `verifier`, and `librarian`. Internal review lanes remain control-plane
+implementation detail behind `explorer`.
 
 ## Where To Inspect Exact State
 

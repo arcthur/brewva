@@ -26,8 +26,8 @@ parallel-budget limits, isolated workspaces, and parent-controlled adoption.
 
 - parallel slot gate
 - detached child runs
-- `advisor` consultation, executable QA delegation, and
-  `PatchSet`-producing delegation
+- `navigator` evidence runs, `explorer` consultation, executable `verifier`
+  delegation, `worker` patch delegation, and `librarian` knowledge proposals
 - worker-result merge / apply
 
 ## Out Of Scope
@@ -43,23 +43,29 @@ flowchart TD
   A["Acquire parallel slot"] --> B{"Accepted?"}
   B -->|No| C["Return budget rejection"]
   B -->|Yes| D{"Delegation posture"}
-  D -->|Consult| E["Run advisor child session"]
-  D -->|QA| F["Run isolated executable verifier"]
-  D -->|Patch| G["Create isolated snapshot workspace"]
-  E --> H["Return typed consult outcome / evidence / artifact refs"]
-  F --> I["Persist QA outcome / artifact refs"]
-  G --> J["Persist WorkerResult and patch artifacts"]
-  J --> K["Parent reviews results"]
-  K --> L["worker_results_merge"]
-  L --> M{"Conflicts?"}
-  M -->|Yes| N["Return conflict report"]
-  M -->|No| O["worker_results_apply"]
-  O --> P["Record reversible mutation receipt"]
-  H --> Q["Release slot"]
-  I --> Q
-  J --> Q
-  N --> Q
-  P --> Q
+  D -->|Evidence| E["Run navigator child session"]
+  D -->|Consult| F["Run explorer child session"]
+  D -->|Verifier| G["Run isolated executable verifier"]
+  D -->|Patch| H["Create isolated snapshot workspace"]
+  D -->|Knowledge| I["Run librarian child session"]
+  E --> J["Return evidence outcome / missing evidence"]
+  F --> K["Return typed consult outcome / artifact refs"]
+  G --> L["Persist Verifier outcome / artifact refs"]
+  H --> M["Persist WorkerResult and patch artifacts"]
+  I --> N["Return knowledge proposal / provenance"]
+  M --> O["Parent reviews results"]
+  O --> P["worker_results_merge"]
+  P --> Q{"Conflicts?"}
+  Q -->|Yes| R["Return conflict report"]
+  Q -->|No| S["worker_results_apply"]
+  S --> T["Record reversible mutation receipt"]
+  J --> U["Release slot"]
+  K --> U
+  L --> U
+  M --> U
+  N --> U
+  R --> U
+  T --> U
 ```
 
 ## Key Steps
@@ -67,10 +73,11 @@ flowchart TD
 1. The parent session acquires parallel budget through the runtime slot gate.
 2. Child work can only start through explicit `subagent_*` tools; there is no
    hidden auto-spawn path.
-3. Public `subagent_run` and `subagent_fanout` take `skillName` plus packet
-   fields. The resolver derives advisor consult kind, QA posture, or
-   patch-worker posture from that intent.
-4. Executable `qa` runs may use isolated execution and artifact capture, but
+3. Public `subagent_run` and `subagent_fanout` require `agent` and accept
+   `skillName` only as an optional compatible semantic contract. The resolver
+   validates the role, result mode, gate reason, envelope, managed-tool set, and
+   model category; it never auto-spawns hidden teams.
+4. Executable `verifier` runs may use isolated execution and artifact capture, but
    they do not produce `WorkerResult` and never enter merge/apply posture.
 5. `PatchSet`-producing delegation runs inside an isolated snapshot workspace
    and emits `WorkerResult` plus `PatchSet` artifacts instead of mutating the
@@ -78,27 +85,30 @@ flowchart TD
    workspace directly.
 6. The parent session must explicitly call `worker_results_merge` and
    `worker_results_apply` before any child patch is adopted.
-7. Pending patch worker outcomes flow into `workflow_status` until the parent
-   resolves the adoption step; QA outcomes surface as delegation outcomes and
-   `workflow.qa`, not as pending patch adoption work.
-8. `subagent_fork` records a fork primitive with parent lineage and context
-   policy. It is not a catalog specialist and cannot expand authority beyond
-   the parent ceiling.
+7. Pending worker outcomes flow into `workflow_status` until the parent
+   resolves the adoption step; Verifier outcomes surface as delegation outcomes and
+   `workflow.verifier`, not as pending patch adoption work.
+8. Librarian knowledge proposals require an explicit knowledge adoption receipt
+   before they become authoritative docs, skills, or final artifacts.
+9. `subagent_fork` records a fork primitive with parent lineage and
+   `forkTurns`. It is not a catalog specialist and cannot expand authority
+   beyond the parent ceiling.
 
 ## Execution Semantics
 
-- public delegated workers resolve through `skillName` intent, not through
-  public `agentSpec` or envelope fields
-- the stable public delegated surface is `advisor`, `qa`, and `patch-worker`
-- `advisor` is the only public read-only consultation identity and runs under
-  the minimal-context `readonly-advisor` envelope
-- consult kind is derived by the resolver for public skills; diagnostic tools
-  may still select it explicitly for maintainer probes
+- public delegated workers resolve through explicit `agent` plus optional
+  compatible `skillName`, not through public `agentSpec` or envelope fields
+- the stable public delegated surface is `navigator`, `explorer`, `worker`,
+  `verifier`, and `librarian`
+- `navigator`, `explorer`, and `librarian` are separate read-only roles with
+  distinct result contracts and managed-tool sets
+- consult kind is derived by the resolver for public explorer skills;
+  diagnostic tools may still select it explicitly for maintainer probes
 - when `skillName` is present, the child prompt is assembled from authored
   specialist instructions, delegated skill body, task packet, context
   references, and output contracts
 - internal review lanes remain parent-orchestrated fan-out behind the review
-  ensemble and run as `consult/review` delegates under the advisor envelope
+  ensemble and run as `consult/review` delegates under the explorer envelope
   family
 - same-turn `returnMode=supplemental` and durable handoff state are separate:
   - same-turn supplemental append affects the current parent-turn hidden tail
@@ -150,7 +160,7 @@ Operator expectations:
   - `.orchestrator/subagent-runs/<runId>/`
   - `WorkerResult`
   - patch manifests
-  - QA artifact refs and canonical QA outcome data
+  - Verifier artifact refs and canonical Verifier outcome data
   - `delegation-context-manifest.json`
 
 ## Code Pointers

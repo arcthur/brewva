@@ -341,7 +341,7 @@ function toImportedSessionEntry(
       previousPresetName: readOptionalString(entry.previousPresetName),
       source: readOptionalString(entry.source),
       mainModel: readOptionalString(entry.mainModel),
-      subagentModels: readOptionalStringRecord(entry.subagentModels),
+      delegationModels: readOptionalStringRecord(entry.delegationModels),
       auxiliaryModels: readOptionalAuxiliaryModels(entry.auxiliaryModels),
       synthetic: entry.synthetic === true ? true : undefined,
     } satisfies BrewvaModelPresetSelectEntry;
@@ -550,7 +550,7 @@ export function replayImportedSessionEntries(
           previousPresetName: entry.previousPresetName,
           source: entry.source,
           mainModel: entry.mainModel,
-          subagentModels: entry.subagentModels,
+          delegationModels: entry.delegationModels,
           auxiliaryModels: entry.auxiliaryModels,
           synthetic: entry.synthetic,
         });

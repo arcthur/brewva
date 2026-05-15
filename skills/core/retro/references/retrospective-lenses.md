@@ -7,14 +7,14 @@ after-the-fact commentary.
 
 - scope quality: was the wedge right-sized from the start?
 - planning clarity: did the plan make implementation easier or force redesign?
-- evidence quality: did review, QA, and verification provide timely signal?
+- evidence quality: did review, verifier checks, and command-backed verification provide timely signal?
 - release friction: what blocked merge, PR, or deploy readiness?
 - repeatability: which pains are likely to happen again if nothing changes?
 
 ## Metrics-First Questions
 
 - How many late blockers appeared after implementation started?
-- Which stage produced the most churn: planning, review, QA, or ship?
+- Which stage produced the most churn: planning, review, verifier pass, or ship?
 - Did evidence arrive early enough to avoid rework, or only after patch churn?
 - Was the dominant pain local to this task or recurring across cycles?
 

@@ -1,9 +1,10 @@
 import type { BrewvaRuntimeRoot } from "@brewva/brewva-runtime";
 import type { DelegationRunQuery, DelegationRunRecord } from "@brewva/brewva-runtime/delegation";
 import type {
-  AdvisorConsultKind,
+  ExplorerConsultKind,
   DelegationPacket,
   DelegationTaskPacket,
+  SubagentAgent,
   SubagentOutcome,
   SubagentOutcomeArtifactRef,
   SubagentRunRequest,
@@ -47,11 +48,15 @@ export function mergeTaskPacket(
 
 export function buildFailureOutcome(input: {
   runId: string;
+  agent: SubagentAgent;
+  taskName: string;
+  taskPath: string;
+  nickname: string;
   delegate: string;
   agentSpec?: string;
   envelope?: string;
   skillName?: string;
-  consultKind?: AdvisorConsultKind;
+  consultKind?: ExplorerConsultKind;
   label?: string;
   workerSessionId?: string;
   artifactRefs?: SubagentOutcomeArtifactRef[];
@@ -61,6 +66,10 @@ export function buildFailureOutcome(input: {
   return {
     ok: false,
     runId: input.runId,
+    agent: input.agent,
+    taskName: input.taskName,
+    taskPath: input.taskPath,
+    nickname: input.nickname,
     delegate: input.delegate,
     agentSpec: input.agentSpec,
     envelope: input.envelope,

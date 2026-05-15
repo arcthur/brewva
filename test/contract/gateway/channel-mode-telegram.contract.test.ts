@@ -66,15 +66,15 @@ function recordDelegatedOpenQuestion(input: {
     sessionId: input.sessionId,
     runId: input.runId,
     payload: {
-      delegate: "advisor",
+      delegate: "explorer",
       kind: "consult",
       consultKind: "review",
     },
     outcome: {
       ok: true,
       runId: input.runId,
-      delegate: "advisor",
-      label: "advisor",
+      delegate: "explorer",
+      label: "explorer",
       kind: "consult",
       consultKind: "review",
       status: "ok",

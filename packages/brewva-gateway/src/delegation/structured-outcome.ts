@@ -3,20 +3,22 @@ import { normalizeStringList, readNonEmptyString } from "@brewva/brewva-std/text
 import { isRecord, readFiniteNumberValue } from "@brewva/brewva-std/unknown";
 import type { BrewvaQuestionOption, BrewvaQuestionPrompt } from "@brewva/brewva-substrate/host-api";
 import type {
-  AdvisorConsultConfidence,
-  AdvisorConsultKind,
-  AdvisorDesignOption,
-  AdvisorDesignSubagentOutcomeData,
-  AdvisorDiagnoseHypothesis,
-  AdvisorDiagnoseSubagentOutcomeData,
-  AdvisorInvestigateSubagentOutcomeData,
-  AdvisorReviewSubagentOutcomeData,
+  ExplorerConsultConfidence,
+  ExplorerConsultKind,
+  ExplorerDesignOption,
+  ExplorerDesignSubagentOutcomeData,
+  ExplorerDiagnoseHypothesis,
+  ExplorerDiagnoseSubagentOutcomeData,
+  ExplorerInvestigateSubagentOutcomeData,
+  ExplorerReviewSubagentOutcomeData,
   DelegatedQuestionRequest,
   DelegationOutcomeChange,
   DelegationOutcomeFinding,
+  EvidenceSubagentOutcomeData,
+  KnowledgeSubagentOutcomeData,
   PatchSubagentOutcomeData,
-  QaCheck,
-  QaSubagentOutcomeData,
+  VerifierCheck,
+  VerifierSubagentOutcomeData,
   SubagentOutcomeData,
   SubagentResultMode,
 } from "@brewva/brewva-tools/contracts";
@@ -146,7 +148,7 @@ function readFindings(value: unknown): DelegationOutcomeFinding[] | undefined {
   return findings.length > 0 ? findings : undefined;
 }
 
-function readQaCheck(value: unknown): QaCheck | undefined {
+function readVerifierCheck(value: unknown): VerifierCheck | undefined {
   if (!isRecord(value)) {
     return undefined;
   }
@@ -170,7 +172,7 @@ function readQaCheck(value: unknown): QaCheck | undefined {
     probe_type: readString(value.probe_type),
     summary: readString(value.summary),
     evidence_refs: readStringArray(value.evidence_refs),
-  } satisfies Omit<QaCheck, "command" | "exit_code" | "tool">;
+  } satisfies Omit<VerifierCheck, "command" | "exit_code" | "tool">;
   if (command) {
     const exitCode = readFiniteNumberValue(value.exit_code);
     if (exitCode === undefined) {
@@ -200,7 +202,7 @@ function appendUnique(values: string[] | undefined, message: string): string[] {
   return next;
 }
 
-function isAdversarialQaCheck(check: QaCheck): boolean {
+function isAdversarialVerifierCheck(check: VerifierCheck): boolean {
   const probeType = readString(check.probe_type)?.toLowerCase();
   if (!probeType) {
     return false;
@@ -219,11 +221,13 @@ function isAdversarialQaCheck(check: QaCheck): boolean {
   );
 }
 
-function normalizeQaOutcomeData(data: QaSubagentOutcomeData): QaSubagentOutcomeData {
+function normalizeVerifierOutcomeData(
+  data: VerifierSubagentOutcomeData,
+): VerifierSubagentOutcomeData {
   const failedChecks = data.checks.filter((check) => check.status === "fail");
   const inconclusiveChecks = data.checks.filter((check) => check.status === "inconclusive");
   const hasExecutableEvidence = data.checks.length > 0;
-  const hasAdversarialProbe = data.checks.some(isAdversarialQaCheck);
+  const hasAdversarialProbe = data.checks.some(isAdversarialVerifierCheck);
   let verdict = data.verdict;
   let missingEvidence = data.missing_evidence;
   let confidenceGaps = data.confidence_gaps;
@@ -237,19 +241,19 @@ function normalizeQaOutcomeData(data: QaSubagentOutcomeData): QaSubagentOutcomeD
     if (!hasExecutableEvidence) {
       confidenceGaps = appendUnique(
         confidenceGaps,
-        "No executable QA check was captured for a pass verdict.",
+        "No executable Verifier check was captured for a pass verdict.",
       );
     }
     if (!hasAdversarialProbe) {
       confidenceGaps = appendUnique(
         confidenceGaps,
-        "No adversarial QA probe was captured for a pass verdict.",
+        "No adversarial Verifier probe was captured for a pass verdict.",
       );
     }
     if (inconclusiveChecks.length > 0) {
       confidenceGaps = appendUnique(
         confidenceGaps,
-        "At least one QA check remained inconclusive, so the verdict cannot stay pass.",
+        "At least one Verifier check remained inconclusive, so the verdict cannot stay pass.",
       );
     }
     if (
@@ -265,12 +269,12 @@ function normalizeQaOutcomeData(data: QaSubagentOutcomeData): QaSubagentOutcomeD
     verdict = "inconclusive";
     confidenceGaps = appendUnique(
       confidenceGaps,
-      "The QA verdict was fail, but no failed qa_check was captured.",
+      "The Verifier verdict was fail, but no failed verifier_check was captured.",
     );
   }
 
   return {
-    kind: "qa",
+    kind: "verifier",
     verdict,
     checks: data.checks,
     ...(missingEvidence?.length ? { missing_evidence: missingEvidence } : {}),
@@ -296,14 +300,14 @@ function readChange(value: unknown): DelegationOutcomeChange | undefined {
   };
 }
 
-function readConsultConfidence(value: unknown): AdvisorConsultConfidence | undefined {
+function readConsultConfidence(value: unknown): ExplorerConsultConfidence | undefined {
   const confidence = readString(value);
   return confidence === "low" || confidence === "medium" || confidence === "high"
     ? confidence
     : undefined;
 }
 
-function readConsultKind(value: unknown): AdvisorConsultKind | undefined {
+function readConsultKind(value: unknown): ExplorerConsultKind | undefined {
   return value === "investigate" || value === "diagnose" || value === "design" || value === "review"
     ? value
     : undefined;
@@ -330,7 +334,7 @@ function readBaseConsultPayload(payload: Record<string, unknown>) {
   };
 }
 
-function readDiagnoseHypothesis(value: unknown): AdvisorDiagnoseHypothesis | undefined {
+function readDiagnoseHypothesis(value: unknown): ExplorerDiagnoseHypothesis | undefined {
   if (!isRecord(value)) {
     return undefined;
   }
@@ -346,7 +350,7 @@ function readDiagnoseHypothesis(value: unknown): AdvisorDiagnoseHypothesis | und
   };
 }
 
-function readDesignOption(value: unknown): AdvisorDesignOption | undefined {
+function readDesignOption(value: unknown): ExplorerDesignOption | undefined {
   if (!isRecord(value)) {
     return undefined;
   }
@@ -380,7 +384,7 @@ function normalizeJsonBlock(text: string): { rawJson?: string; narrativeText: st
 }
 
 function parseConsultOutcomeData(
-  consultKind: AdvisorConsultKind | undefined,
+  consultKind: ExplorerConsultKind | undefined,
   payload: Record<string, unknown>,
 ): SubagentOutcomeData | undefined {
   const payloadConsultKind = readConsultKind(payload.consultKind);
@@ -400,14 +404,14 @@ function parseConsultOutcomeData(
       findings: readFindings(payload.findings),
       ownershipHints: readStringArray(payload.ownershipHints),
       recommendedReads: readStringArray(payload.recommendedReads),
-    } satisfies AdvisorInvestigateSubagentOutcomeData;
+    } satisfies ExplorerInvestigateSubagentOutcomeData;
   }
 
   if (resolvedConsultKind === "diagnose") {
     const rawHypotheses = Array.isArray(payload.hypotheses) ? payload.hypotheses : [];
     const hypotheses = rawHypotheses
       .map((entry) => readDiagnoseHypothesis(entry))
-      .filter((entry): entry is AdvisorDiagnoseHypothesis => Boolean(entry));
+      .filter((entry): entry is ExplorerDiagnoseHypothesis => Boolean(entry));
     const likelyRootCause = readString(payload.likelyRootCause);
     const nextProbe = readString(payload.nextProbe);
     if (hypotheses.length === 0 || !likelyRootCause || !nextProbe) {
@@ -419,14 +423,14 @@ function parseConsultOutcomeData(
       hypotheses,
       likelyRootCause,
       nextProbe,
-    } satisfies AdvisorDiagnoseSubagentOutcomeData;
+    } satisfies ExplorerDiagnoseSubagentOutcomeData;
   }
 
   if (resolvedConsultKind === "design") {
     const rawOptions = Array.isArray(payload.options) ? payload.options : [];
     const options = rawOptions
       .map((entry) => readDesignOption(entry))
-      .filter((entry): entry is AdvisorDesignOption => Boolean(entry));
+      .filter((entry): entry is ExplorerDesignOption => Boolean(entry));
     const recommendedOption = readString(payload.recommendedOption);
     const boundaryImplications = readStringArray(payload.boundaryImplications);
     const verificationPlan = readStringArray(payload.verificationPlan);
@@ -440,7 +444,7 @@ function parseConsultOutcomeData(
       recommendedOption,
       boundaryImplications,
       verificationPlan,
-    } satisfies AdvisorDesignSubagentOutcomeData;
+    } satisfies ExplorerDesignSubagentOutcomeData;
   }
 
   const disposition = readString(payload.disposition);
@@ -487,12 +491,64 @@ function parseConsultOutcomeData(
     ...(findings ? { findings } : {}),
     ...(strongestCounterpoint ? { strongestCounterpoint } : {}),
     ...(missingEvidence ? { missingEvidence } : {}),
-  } satisfies AdvisorReviewSubagentOutcomeData;
+  } satisfies ExplorerReviewSubagentOutcomeData;
+}
+
+function parseEvidenceOutcomeData(
+  payload: Record<string, unknown>,
+): EvidenceSubagentOutcomeData | undefined {
+  const prohibitedConsultFields = [
+    "conclusion",
+    "recommendedNextSteps",
+    "options",
+    "hypotheses",
+    "risks",
+    "recommendedOption",
+    "likelyRootCause",
+  ];
+  if (
+    prohibitedConsultFields.some((field) => Object.prototype.hasOwnProperty.call(payload, field))
+  ) {
+    return undefined;
+  }
+  const summary = readString(payload.summary);
+  const sourceRefs = readStringArray(payload.sourceRefs);
+  if (!summary || !sourceRefs || sourceRefs.length === 0) {
+    return undefined;
+  }
+  return {
+    kind: "evidence",
+    summary,
+    sourceRefs,
+    recommendedReads: readStringArray(payload.recommendedReads),
+    ownershipHints: readStringArray(payload.ownershipHints),
+    missingEvidence: readStringArray(payload.missingEvidence),
+  };
+}
+
+function parseKnowledgeOutcomeData(
+  payload: Record<string, unknown>,
+): KnowledgeSubagentOutcomeData | undefined {
+  const summary = readString(payload.summary);
+  const provenance = readStringArray(payload.provenance);
+  const proposedDestination = readString(payload.proposedDestination);
+  if (!summary || !provenance || provenance.length === 0 || !proposedDestination) {
+    return undefined;
+  }
+  return {
+    kind: "knowledge",
+    summary,
+    provenance,
+    proposedDestination,
+    freshnessNotes: readStringArray(payload.freshnessNotes),
+    conflictNotes: readStringArray(payload.conflictNotes),
+    proposal: readString(payload.proposal),
+  };
 }
 
 function parseOutcomeData(
   resultMode: SubagentResultMode,
-  consultKind: AdvisorConsultKind | undefined,
+  consultKind: ExplorerConsultKind | undefined,
   payload: unknown,
 ): SubagentOutcomeData | undefined {
   if (!isRecord(payload)) {
@@ -507,19 +563,27 @@ function parseOutcomeData(
     return parseConsultOutcomeData(consultKind, payload);
   }
 
-  if (resultMode === "qa") {
+  if (resultMode === "evidence") {
+    return parseEvidenceOutcomeData(payload);
+  }
+
+  if (resultMode === "knowledge") {
+    return parseKnowledgeOutcomeData(payload);
+  }
+
+  if (resultMode === "verifier") {
     const rawChecks = Array.isArray(payload.checks) ? payload.checks : [];
     const checks = rawChecks
-      .map((entry) => readQaCheck(entry))
-      .filter((entry): entry is QaCheck => Boolean(entry));
+      .map((entry) => readVerifierCheck(entry))
+      .filter((entry): entry is VerifierCheck => Boolean(entry));
     if (checks.length === 0) {
       return undefined;
     }
     const verdict = readString(payload.verdict);
     const invalidCheckCount = rawChecks.length - checks.length;
     const confidenceGaps = readStringArray(payload.confidence_gaps);
-    return normalizeQaOutcomeData({
-      kind: "qa",
+    return normalizeVerifierOutcomeData({
+      kind: "verifier",
       checks,
       verdict:
         verdict === "pass" || verdict === "fail" || verdict === "inconclusive"
@@ -530,11 +594,11 @@ function parseOutcomeData(
         invalidCheckCount > 0
           ? appendUnique(
               confidenceGaps,
-              `${invalidCheckCount} qa_check entr${invalidCheckCount === 1 ? "y was" : "ies were"} discarded because the canonical execution evidence contract was not satisfied.`,
+              `${invalidCheckCount} verifier_check entr${invalidCheckCount === 1 ? "y was" : "ies were"} discarded because the canonical execution evidence contract was not satisfied.`,
             )
           : confidenceGaps,
       environment_limits: readStringArray(payload.environment_limits),
-    } satisfies QaSubagentOutcomeData);
+    } satisfies VerifierSubagentOutcomeData);
   }
 
   return {
@@ -554,15 +618,18 @@ export function summarizeStructuredOutcomeData(data: SubagentOutcomeData): strin
       ? (data.primaryClaim ?? data.conclusion ?? data.findings?.[0]?.summary)
       : data.conclusion;
   }
-  if (data.kind === "qa") {
+  if (data.kind === "verifier") {
     return data.checks[0]?.summary ?? data.checks[0]?.name;
+  }
+  if (data.kind === "evidence" || data.kind === "knowledge") {
+    return data.summary;
   }
   return data.patchSummary ?? data.changes?.[0]?.summary ?? data.changes?.[0]?.path;
 }
 
 export function extractStructuredOutcomeData(input: {
   resultMode: SubagentResultMode;
-  consultKind?: AdvisorConsultKind;
+  consultKind?: ExplorerConsultKind;
   assistantText: string;
   skillName?: string;
 }): {

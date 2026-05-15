@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
+import { CURRENT_DELEGATION_CONTRACT_VERSION } from "@brewva/brewva-runtime/delegation";
 import type { BrewvaEventRecord } from "@brewva/brewva-runtime/events";
 
 export type RuntimeEventLike = {
@@ -233,6 +234,13 @@ export function recordHostedDelegationOutcome(input: {
     artifactPath,
   ).replaceAll("\\", "/");
   const payload = input.payload ?? {};
+  const delegate =
+    typeof payload.delegate === "string" && payload.delegate.trim()
+      ? payload.delegate.trim()
+      : "explorer";
+  const agent = ["navigator", "explorer", "worker", "verifier", "librarian"].includes(delegate)
+    ? delegate
+    : "explorer";
   return {
     artifactPath: relativeArtifactPath,
     event: input.runtime.extensions.hosted.events.record({
@@ -242,6 +250,17 @@ export function recordHostedDelegationOutcome(input: {
       payload: {
         runId: input.runId,
         status: "completed",
+        contractVersion: CURRENT_DELEGATION_CONTRACT_VERSION,
+        agent,
+        targetName: delegate,
+        delegate,
+        taskName: input.runId,
+        taskPath: `/${input.runId}`,
+        nickname: delegate,
+        depth: 1,
+        forkTurns: "none",
+        gateReason: agent === "verifier" ? "verify_reproducibly" : "make_judgment",
+        modelCategory: agent === "verifier" ? "verification" : "deep-reasoning",
         ...payload,
         artifactRefs: [
           {

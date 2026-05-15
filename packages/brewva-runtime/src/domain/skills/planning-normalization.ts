@@ -360,7 +360,7 @@ function readRiskItem(
         outputName: "risk_register",
         path: `risk_register[${index}]`,
         reason:
-          "risk_register items must be objects so QA and workflow consumers can inspect risk metadata.",
+          "risk_register items must be objects so Verifier and workflow consumers can inspect risk metadata.",
         tier: "tier_c",
       }),
     );

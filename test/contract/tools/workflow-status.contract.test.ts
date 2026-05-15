@@ -60,7 +60,7 @@ function recordVerificationOutcome(input: {
   });
 }
 
-function recordDelegatedQa(input: {
+function recordDelegatedVerifier(input: {
   runtime: BrewvaHostedRuntimePort;
   sessionId: string;
   timestamp: number;
@@ -71,13 +71,13 @@ function recordDelegatedQa(input: {
     type: "subagent_completed",
     timestamp: input.timestamp,
     payload: {
-      runId: `qa-${input.timestamp}`,
-      delegate: "qa",
+      runId: `verifier-${input.timestamp}`,
+      delegate: "verifier",
       status: "completed",
-      kind: "qa",
-      summary: `Delegated QA verdict: ${input.verdict}.`,
+      kind: "verifier",
+      summary: `Delegated Verifier verdict: ${input.verdict}.`,
       resultData: {
-        kind: "qa",
+        kind: "verifier",
         verdict: input.verdict,
         checks: [
           {
@@ -190,7 +190,7 @@ describe("workflow_status contract", () => {
     const runtime = createHostedTestRuntime({ cwd: workspace });
     const sessionId = "workflow-status-missing";
 
-    recordDelegatedQa({
+    recordDelegatedVerifier({
       runtime,
       sessionId,
       timestamp: 100,
@@ -224,17 +224,17 @@ describe("workflow_status contract", () => {
     expect(text).toContain("verified: false");
     expect(text).toContain("ship: missing");
     expect(text).toContain("Verification missing fresh evidence for tests.");
-    expect(text).toContain("- qa | state=ready | freshness=fresh");
+    expect(text).toContain("- verifier | state=ready | freshness=fresh");
     expect(text).toContain("- verification | state=blocked | freshness=fresh");
     expect((result.details as { verdict?: string } | undefined)?.verdict).toBe("fail");
   });
 
-  test("reports delegated QA as an advisory artifact without a skill output contract", async () => {
-    const workspace = mkdtempSync(join(tmpdir(), "brewva-tools-workflow-status-qa-"));
+  test("reports delegated Verifier as an advisory artifact without a skill output contract", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-tools-workflow-status-verifier-"));
     const runtime = createHostedTestRuntime({ cwd: workspace });
-    const sessionId = "workflow-status-qa";
+    const sessionId = "workflow-status-verifier";
 
-    recordDelegatedQa({
+    recordDelegatedVerifier({
       runtime,
       sessionId,
       timestamp: 100,
@@ -243,7 +243,7 @@ describe("workflow_status contract", () => {
 
     const tool = createWorkflowStatusTool({ runtime });
     const result = await tool.execute(
-      "tc-workflow-status-qa",
+      "tc-workflow-status-verifier",
       {
         include_artifacts: true,
         history_limit: 2,
@@ -254,13 +254,13 @@ describe("workflow_status contract", () => {
     );
 
     const text = extractTextContent(result);
-    expect(text).toContain("qa: ready");
-    expect(text).toContain("- qa | state=ready | freshness=fresh");
-    expect(text).toContain("Delegated QA verdict: pass.");
+    expect(text).toContain("verifier: ready");
+    expect(text).toContain("- verifier | state=ready | freshness=fresh");
+    expect(text).toContain("Delegated Verifier verdict: pass.");
     expect(
       (result.details as { artifacts?: Array<{ kind: string }> } | undefined)?.artifacts,
     ).toEqual([
-      expect.objectContaining({ kind: "qa" }),
+      expect.objectContaining({ kind: "verifier" }),
       expect.objectContaining({ kind: "ship_posture" }),
     ]);
   });
@@ -280,7 +280,16 @@ describe("workflow_status contract", () => {
         visibility: "public",
         isolationStrategy: "shared",
         runId: "delegation-handoff-1",
-        delegate: "advisor",
+        agent: "explorer",
+        targetName: "explorer",
+        delegate: "explorer",
+        taskName: "delegation-handoff-1",
+        taskPath: "/delegation-handoff-1",
+        nickname: "handoff-review",
+        depth: 1,
+        forkTurns: "none",
+        gateReason: "make_judgment",
+        modelCategory: "deep-reasoning",
         status: "completed",
         kind: "consult",
         consultKind: "review",
@@ -314,7 +323,7 @@ describe("workflow_status contract", () => {
     expect(text).toContain("pending_delegation_outcomes: 1");
     expect(text).toContain("Pending delegation outcomes require parent attention (1 outcome).");
     expect(text).toContain("pending_delegation_outcome_runs:");
-    expect(text).toContain("- advisor/delegation-handoff-1: completed");
+    expect(text).toContain("- explorer/delegation-handoff-1: completed");
     expect(
       (
         result.details as
@@ -333,7 +342,7 @@ describe("workflow_status contract", () => {
     ).toEqual([
       {
         runId: "delegation-handoff-1",
-        delegate: "advisor",
+        delegate: "explorer",
         label: undefined,
         status: "completed",
         summary: "Review completed and is waiting for parent surfacing.",

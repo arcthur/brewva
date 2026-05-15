@@ -17,6 +17,7 @@ export function prepareSubagentEntry(input: {
   readonly packet: DelegationPacket;
   readonly delegate?: string;
   readonly promptOverride?: string;
+  readonly inheritedContext?: string;
 }): PreparedSubagentEntry {
   const delegatedSkill = input.target.skillName;
   const childOwnsSkill = Boolean(delegatedSkill && input.target.resultMode !== "consult");
@@ -32,6 +33,7 @@ export function prepareSubagentEntry(input: {
       delegate: input.delegate,
       packet: input.packet,
       promptOverride: input.promptOverride,
+      inheritedContext: input.inheritedContext,
       skill: skillDocument,
     }),
     childOwnsSkill,

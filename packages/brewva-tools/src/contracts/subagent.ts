@@ -1,11 +1,12 @@
+import type {
+  DelegationForkTurns,
+  DelegationGateReason,
+  DelegationModelCategory,
+  PublicSubagentRole,
+} from "@brewva/brewva-runtime/delegation";
 import type { ToolExecutionBoundary } from "@brewva/brewva-runtime/governance";
 import type { PatchSet } from "@brewva/brewva-runtime/patch-history";
 import type { ManagedToolMode } from "@brewva/brewva-runtime/session";
-import type {
-  AdvisorConsultKind,
-  AdvisorSubagentOutcomeData,
-  QaSubagentOutcomeData,
-} from "./advisor.js";
 import type {
   DelegationContextBudget,
   DelegationContextRef,
@@ -16,31 +17,40 @@ import type {
   DelegationRunRecord,
   DelegationTaskPacket,
 } from "./delegation.js";
+import type {
+  ExplorerConsultKind,
+  ExplorerSubagentOutcomeData,
+  VerifierSubagentOutcomeData,
+} from "./explorer.js";
 
-export type SubagentResultMode = "consult" | "qa" | "patch";
+export type SubagentResultMode = "evidence" | "consult" | "verifier" | "patch" | "knowledge";
+export type SubagentAgent = PublicSubagentRole;
+export type SubagentGateReason = DelegationGateReason;
+export type SubagentModelCategory = DelegationModelCategory;
 export type SubagentDelegationMode = "single" | "parallel";
 export type SubagentReturnMode = "text_only" | "supplemental";
 export type SubagentContextRefKind = Exclude<DelegationRefKind, "tool_result"> | "tool_result";
 export type SubagentExecutionBoundary = ToolExecutionBoundary;
-export type SubagentForkContextPolicy = "lineage_only" | "working_snapshot";
+export type SubagentForkTurns = DelegationForkTurns;
 export type SubagentContextBudget = DelegationContextBudget;
 export type SubagentContextRef = DelegationContextRef;
 export type SubagentExecutionHints = DelegationExecutionHints;
 
 export interface SubagentExecutionShape {
-  resultMode?: SubagentResultMode;
   boundary?: SubagentExecutionBoundary;
-  model?: string;
   managedToolMode?: ManagedToolMode;
 }
 
 export interface SubagentRunRequest {
-  agentSpec?: string;
-  envelope?: string;
+  agent: SubagentAgent;
+  targetName?: string;
   skillName?: string;
-  consultKind?: AdvisorConsultKind;
-  fallbackResultMode?: SubagentResultMode;
+  consultKind?: ExplorerConsultKind;
   executionShape?: SubagentExecutionShape;
+  taskName?: string;
+  nickname?: string;
+  forkTurns?: SubagentForkTurns;
+  gateReason?: SubagentGateReason;
   mode: SubagentDelegationMode;
   packet?: DelegationPacket;
   tasks?: DelegationTaskPacket[];
@@ -55,7 +65,9 @@ export interface SubagentRunRequest {
 export interface SubagentForkRequest {
   objective: string;
   deliverable?: string;
-  contextPolicy?: SubagentForkContextPolicy;
+  taskName?: string;
+  nickname?: string;
+  forkTurns?: SubagentForkTurns;
   timeoutMs?: number;
   delivery?: {
     returnMode: SubagentReturnMode;
@@ -86,20 +98,46 @@ export interface PatchSubagentOutcomeData {
   patchSummary?: string;
 }
 
+export interface EvidenceSubagentOutcomeData {
+  kind: "evidence";
+  summary: string;
+  sourceRefs: string[];
+  recommendedReads?: string[];
+  ownershipHints?: string[];
+  missingEvidence?: string[];
+}
+
+export interface KnowledgeSubagentOutcomeData {
+  kind: "knowledge";
+  summary: string;
+  provenance: string[];
+  proposedDestination: string;
+  freshnessNotes?: string[];
+  conflictNotes?: string[];
+  proposal?: string;
+}
+
 export type SubagentOutcomeData =
-  | AdvisorSubagentOutcomeData
-  | QaSubagentOutcomeData
-  | PatchSubagentOutcomeData;
+  | EvidenceSubagentOutcomeData
+  | ExplorerSubagentOutcomeData
+  | VerifierSubagentOutcomeData
+  | PatchSubagentOutcomeData
+  | KnowledgeSubagentOutcomeData;
 
 export interface SubagentOutcomeBase {
   runId: string;
+  agent: SubagentAgent;
+  taskName: string;
+  taskPath: string;
+  nickname: string;
+  targetName?: string;
   delegate: string;
   agentSpec?: string;
   envelope?: string;
   skillName?: string;
   label?: string;
   kind: SubagentResultMode;
-  consultKind?: AdvisorConsultKind;
+  consultKind?: ExplorerConsultKind;
   status: "ok" | "error" | "cancelled" | "timeout";
   workerSessionId?: string;
   summary: string;
@@ -119,12 +157,17 @@ export interface SubagentOutcomeSuccess extends SubagentOutcomeBase {
 export interface SubagentOutcomeFailure {
   ok: false;
   runId: string;
+  agent?: SubagentAgent;
+  taskName?: string;
+  taskPath?: string;
+  nickname?: string;
+  targetName?: string;
   delegate: string;
   agentSpec?: string;
   envelope?: string;
   skillName?: string;
   label?: string;
-  consultKind?: AdvisorConsultKind;
+  consultKind?: ExplorerConsultKind;
   status: "error" | "cancelled" | "timeout";
   workerSessionId?: string;
   error: string;

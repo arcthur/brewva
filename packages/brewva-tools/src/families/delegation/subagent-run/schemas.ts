@@ -5,6 +5,14 @@ const SUBAGENT_MODE_VALUES = ["single", "parallel"] as const;
 const SUBAGENT_BOUNDARY_VALUES = ["safe", "effectful"] as const;
 const SUBAGENT_RETURN_MODE_VALUES = ["text_only", "supplemental"] as const;
 const SUBAGENT_WAIT_MODE_VALUES = ["completion", "start"] as const;
+const SUBAGENT_AGENT_VALUES = ["navigator", "explorer", "worker", "verifier", "librarian"] as const;
+const SUBAGENT_GATE_REASON_VALUES = [
+  "find_evidence",
+  "make_judgment",
+  "implement_isolated",
+  "verify_reproducibly",
+  "compound_knowledge",
+] as const;
 
 export const LEGACY_DELEGATION_FIELDS = new Set([
   "profile",
@@ -13,6 +21,7 @@ export const LEGACY_DELEGATION_FIELDS = new Set([
 ] as const);
 
 export const PUBLIC_DELEGATION_FORBIDDEN_FIELDS = new Set([
+  "targetName",
   "agentSpec",
   "envelope",
   "consultKind",
@@ -41,14 +50,26 @@ const WaitModeSchema = buildStringEnumSchema(SUBAGENT_WAIT_MODE_VALUES, {
     "Use completion to wait for delegated results in the current turn, or start to launch background delegation and inspect it later with subagent_status/subagent_cancel.",
 });
 
-const ResultModeSchema = buildStringEnumSchema(["consult", "qa", "patch"] as const, {
-  guidance: "Choose the delegated result contract the child must satisfy.",
+const AgentSchema = buildStringEnumSchema(SUBAGENT_AGENT_VALUES, {
+  guidance:
+    "Choose navigator for evidence, explorer for judgment, worker for isolated patches, verifier for verification, or librarian for institutional knowledge.",
 });
+
+const GateReasonSchema = buildStringEnumSchema(SUBAGENT_GATE_REASON_VALUES, {
+  guidance:
+    "Delegation Gate mapping: find_evidence/navigator, make_judgment/explorer, implement_isolated/worker, verify_reproducibly/verifier, compound_knowledge/librarian.",
+});
+
+const ForkTurnsSchema = Type.Union([
+  Type.Literal("none"),
+  Type.Literal("all"),
+  Type.Integer({ minimum: 1, maximum: 8 }),
+]);
 
 const ConsultKindSchema = buildStringEnumSchema(
   ["investigate", "diagnose", "design", "review"] as const,
   {
-    guidance: "Required for consult runs. Choose the type of advisory reasoning to delegate.",
+    guidance: "Required for consult runs. Choose the type of explorer reasoning to delegate.",
   },
 );
 
@@ -86,9 +107,7 @@ const ExecutionHintsSchema = Type.Object({
 });
 
 export const ExecutionShapeSchema = Type.Object({
-  resultMode: Type.Optional(ResultModeSchema),
   boundary: Type.Optional(BoundarySchema),
-  model: Type.Optional(Type.String({ minLength: 1, maxLength: 240 })),
   managedToolMode: Type.Optional(ManagedToolModeSchema),
 });
 
@@ -171,6 +190,8 @@ const PacketFields = {
 
 export const TaskPacketSchema = Type.Object({
   label: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
+  taskName: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
+  nickname: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
   objective: Type.String({ minLength: 1, maxLength: 4000 }),
   deliverable: PacketFields.deliverable,
   constraints: PacketFields.constraints,
@@ -188,6 +209,8 @@ const PublicBriefSchema = PacketFields.consultBrief;
 
 export const PublicTaskPacketSchema = Type.Object({
   label: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
+  taskName: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
+  nickname: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
   objective: Type.String({ minLength: 1, maxLength: 4000 }),
   deliverable: PacketFields.deliverable,
   constraints: PacketFields.constraints,
@@ -200,7 +223,12 @@ export const PublicTaskPacketSchema = Type.Object({
 });
 
 export const SubagentRunParamsSchema = Type.Object({
-  skillName: Type.String({ minLength: 1, maxLength: 200 }),
+  agent: AgentSchema,
+  skillName: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
+  taskName: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
+  nickname: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
+  forkTurns: Type.Optional(ForkTurnsSchema),
+  gateReason: Type.Optional(GateReasonSchema),
   objective: Type.String({ minLength: 1, maxLength: 4000 }),
   deliverable: PacketFields.deliverable,
   brief: Type.Optional(PublicBriefSchema),
@@ -219,7 +247,12 @@ export const SubagentRunParamsSchema = Type.Object({
 });
 
 export const SubagentFanoutParamsSchema = Type.Object({
-  skillName: Type.String({ minLength: 1, maxLength: 200 }),
+  agent: AgentSchema,
+  skillName: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
+  taskName: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
+  nickname: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
+  forkTurns: Type.Optional(ForkTurnsSchema),
+  gateReason: Type.Optional(GateReasonSchema),
   objective: PacketFields.objective,
   deliverable: PacketFields.deliverable,
   brief: Type.Optional(PublicBriefSchema),
@@ -239,12 +272,12 @@ export const SubagentFanoutParamsSchema = Type.Object({
 });
 
 export const DiagnosticSubagentRunParamsSchema = Type.Object({
-  agentSpec: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
-  envelope: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
+  agent: Type.Optional(AgentSchema),
+  targetName: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
   skillName: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
   consultKind: Type.Optional(ConsultKindSchema),
-  fallbackResultMode: Type.Optional(ResultModeSchema),
-  executionShape: Type.Optional(ExecutionShapeSchema),
+  boundary: Type.Optional(BoundarySchema),
+  managedToolMode: Type.Optional(ManagedToolModeSchema),
   mode: Type.Optional(ModeSchema),
   objective: PacketFields.objective,
   deliverable: PacketFields.deliverable,
@@ -265,12 +298,12 @@ export const DiagnosticSubagentRunParamsSchema = Type.Object({
 });
 
 export const DiagnosticSubagentFanoutParamsSchema = Type.Object({
-  agentSpec: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
-  envelope: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
+  agent: Type.Optional(AgentSchema),
+  targetName: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
   skillName: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
   consultKind: Type.Optional(ConsultKindSchema),
-  fallbackResultMode: Type.Optional(ResultModeSchema),
-  executionShape: Type.Optional(ExecutionShapeSchema),
+  boundary: Type.Optional(BoundarySchema),
+  managedToolMode: Type.Optional(ManagedToolModeSchema),
   objective: PacketFields.objective,
   deliverable: PacketFields.deliverable,
   consultBrief: PacketFields.consultBrief,

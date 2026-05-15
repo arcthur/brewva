@@ -1,5 +1,5 @@
 ---
-name: qa
+name: verifier
 description: Behavior validation through realistic flows, adversarial probes,
   and executable evidence.
 stability: stable
@@ -7,21 +7,21 @@ selection:
   when_to_use: Use when shipped behavior must be validated through realistic flows, adversarial probes, or executable evidence.
 intent:
   outputs:
-    - qa_report
-    - qa_findings
-    - qa_verdict
-    - qa_checks
-    - qa_missing_evidence
-    - qa_confidence_gaps
-    - qa_environment_limits
+    - verifier_report
+    - verifier_findings
+    - verifier_verdict
+    - verifier_checks
+    - verifier_missing_evidence
+    - verifier_confidence_gaps
+    - verifier_environment_limits
   semantic_bindings:
-    qa_report: qa.qa_report.v2
-    qa_findings: qa.qa_findings.v2
-    qa_verdict: qa.qa_verdict.v2
-    qa_checks: qa.qa_checks.v2
-    qa_missing_evidence: qa.qa_missing_evidence.v2
-    qa_confidence_gaps: qa.qa_confidence_gaps.v2
-    qa_environment_limits: qa.qa_environment_limits.v2
+    verifier_report: verifier.verifier_report.v2
+    verifier_findings: verifier.verifier_findings.v2
+    verifier_verdict: verifier.verifier_verdict.v2
+    verifier_checks: verifier.verifier_checks.v2
+    verifier_missing_evidence: verifier.verifier_missing_evidence.v2
+    verifier_confidence_gaps: verifier.verifier_confidence_gaps.v2
+    verifier_environment_limits: verifier.verifier_environment_limits.v2
 effects:
   allowed_effects:
     - workspace_read
@@ -50,11 +50,11 @@ execution_hints:
     - grep
 references:
   - references/exploratory-regression-checklist.md
-  - references/qa-taxonomy.md
+  - references/verifier-taxonomy.md
   - references/example.md
   - references/rationalizations.md
 scripts:
-  - scripts/classify_qa_verdict.py
+  - scripts/classify_verifier_verdict.py
 consumes:
   - design_spec
   - execution_plan
@@ -69,7 +69,7 @@ consumes:
   - merge_decision
 ---
 
-# QA Skill
+# Verifier Skill
 
 ## The Iron Law
 
@@ -99,7 +99,7 @@ concrete release blockers. Reading code is not verification.
 Verify: environment testable, target flow reachable, branch/workspace state
 coherent enough to interpret failures.
 
-**If environment is broken**: Stop. Classify as blocker. Emit `qa_environment_limits`
+**If environment is broken**: Stop. Classify as blocker. Emit `verifier_environment_limits`
 and set verdict to `inconclusive`. Do not bury setup failure inside a vague summary.
 
 ### Phase 2: Reconstruct risk surface from actual diff
@@ -116,29 +116,29 @@ means more testing, not less.
 
 Run realistic end-to-end checks. Use browser evidence for UI surfaces,
 executable verification for service/CLI. At least one probe must be adversarial.
-Use `templates/qa-report.md` for structuring output.
-Classify findings using `references/qa-taxonomy.md` severity and categories.
+Use `templates/verifier-report.md` for structuring output.
+Classify findings using `references/verifier-taxonomy.md` severity and categories.
 
-**If a check cannot be executed**: Record it under `qa_missing_evidence`.
+**If a check cannot be executed**: Record it under `verifier_missing_evidence`.
 Do not emit it as a passed check.
 
 ### Phase 4: Classify verdict
 
-Run `scripts/classify_qa_verdict.py` with execution summary. The script
+Run `scripts/classify_verifier_verdict.py` with execution summary. The script
 returns the deterministic verdict from executed checks, failed checks,
 adversarial coverage, and required-evidence coverage.
 
 **If verdict is `fail`**: Do not silently repair. Escalate to implementation.
 **If verdict is `inconclusive`**: Name exactly what is missing and why.
 
-### Phase 5: Emit QA artifacts
+### Phase 5: Emit verification artifacts
 
-Produce `qa_report`, `qa_findings`, `qa_verdict`, `qa_checks`,
-`qa_missing_evidence`, `qa_confidence_gaps`, `qa_environment_limits`.
+Produce `verifier_report`, `verifier_findings`, `verifier_verdict`, `verifier_checks`,
+`verifier_missing_evidence`, `verifier_confidence_gaps`, `verifier_environment_limits`.
 
 ## Scripts
 
-- `scripts/classify_qa_verdict.py` — Input: checks_executed, failed_checks,
+- `scripts/classify_verifier_verdict.py` — Input: checks_executed, failed_checks,
   adversarial_attempted, environment_reachable, plus either
   required_evidence_covered or missing_required_evidence. Output: verdict and
   reason. Missing required evidence yields `inconclusive`; executed failing
@@ -156,9 +156,9 @@ Produce `qa_report`, `qa_findings`, `qa_verdict`, `qa_checks`,
 
 - Recognize your own rationalizations before downgrading or skipping a check.
 - "The code looks correct based on my reading." Reading is not verification. Run it.
-- Do not invent QA checks from code reading or expectation alone.
+- Do not invent checks from code reading or expectation alone.
 - Prefer a browser-first path for UI surfaces, executable traces for CLI/service
-  behavior, and rerun the same failing path after any bounded fix.
+  behavior, and rerun the same failing path after any implementation fix.
 
 ## Red Flags — STOP
 
@@ -180,16 +180,16 @@ See `references/example.md` for the grounded example output shape.
 
 ## Handoff Expectations
 
-- `qa_report`: what was exercised, what changed, confidence level earned.
-- `qa_findings`: reproducible, actionable, classified per `references/qa-taxonomy.md`.
-- `qa_verdict`: real release confidence, not issue count.
-- `qa_checks`: command/tool identity, observed output, probe type on every entry.
+- `verifier_report`: what was exercised, what changed, confidence level earned.
+- `verifier_findings`: reproducible, actionable, classified per `references/verifier-taxonomy.md`.
+- `verifier_verdict`: real release confidence, not issue count.
+- `verifier_checks`: command/tool identity, observed output, probe type on every entry.
 - Handoff explains which risky path was exercised first and why the verdict
   is `pass`, `fail`, or `inconclusive`.
 
 ## Stop Conditions
 
 - The target environment cannot be reached or exercised credibly
-- The real blocker is unresolved design or review debt, not QA execution
+- The real blocker is unresolved design or review debt, not a verifier pass
 - The requested product surface cannot be tested with current access
 - Setup requires credentials or approvals not available in the current context

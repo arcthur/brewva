@@ -8,7 +8,7 @@ export const WORKFLOW_ARTIFACT_KINDS = [
   "execution_plan",
   "implementation",
   "review",
-  "qa",
+  "verifier",
   "verification",
   "ship",
   "retro",
@@ -59,8 +59,8 @@ export interface WorkflowPosture {
   implementation: WorkflowImplementationStatus;
   review_required: boolean;
   review: WorkflowLaneStatus;
-  qa_required: boolean;
-  qa: WorkflowLaneStatus;
+  verifier_required: boolean;
+  verifier: WorkflowLaneStatus;
   unsatisfied_required_evidence: string[];
   verification: WorkflowLaneStatus;
   acceptance: WorkflowAcceptanceStatus;

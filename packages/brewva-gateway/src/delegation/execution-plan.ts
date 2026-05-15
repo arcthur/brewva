@@ -166,9 +166,6 @@ export function assertDelegationShapeNarrowing(
   if (!executionShape) {
     return;
   }
-  if (executionShape.resultMode && executionShape.resultMode !== target.resultMode) {
-    throw new Error("subagent_result_mode_override_not_allowed");
-  }
   const targetBoundary = target.boundary ?? "safe";
   if (
     executionShape.boundary &&

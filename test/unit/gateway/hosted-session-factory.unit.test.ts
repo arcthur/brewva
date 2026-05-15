@@ -84,8 +84,8 @@ describe("hosted session factory", () => {
       modelPresets: {
         "Claude Lead": {
           mainModel: "anthropic/preset-main:high",
-          subagentModels: {
-            advisor: "openai/gpt-5.5:medium",
+          delegationModels: {
+            "deep-reasoning": "openai/gpt-5.5:medium",
           },
           auxiliaryModels: {
             title: "anthropic/preset-main",
@@ -225,8 +225,8 @@ describe("hosted session factory", () => {
       modelPresets: {
         Project: {
           mainModel: "anthropic/project-main:high",
-          subagentModels: {
-            advisor: "anthropic/project-advisor:medium",
+          delegationModels: {
+            "deep-reasoning": "anthropic/project-explorer:medium",
           },
         },
       },
@@ -241,8 +241,8 @@ describe("hosted session factory", () => {
         expect.objectContaining({
           name: "Project",
           mainModel: "anthropic/project-main:high",
-          subagentModels: {
-            advisor: "anthropic/project-advisor:medium",
+          delegationModels: {
+            "deep-reasoning": "anthropic/project-explorer:medium",
           },
         }),
       ]),
@@ -323,8 +323,8 @@ describe("hosted session factory", () => {
       previousPresetName: "Default",
       source: "tui",
       mainModel: "anthropic/replayed-main:high",
-      subagentModels: {
-        advisor: "anthropic/replayed-advisor:medium",
+      delegationModels: {
+        "deep-reasoning": "anthropic/replayed-explorer:medium",
       },
     });
     store.appendModelChange("anthropic", "replayed-main");
@@ -334,8 +334,8 @@ describe("hosted session factory", () => {
       modelPresets: {
         "Claude Lead": {
           mainModel: "anthropic/current-main:low",
-          subagentModels: {
-            advisor: "anthropic/current-advisor:low",
+          delegationModels: {
+            "deep-reasoning": "anthropic/current-explorer:low",
           },
         },
       },
@@ -344,9 +344,9 @@ describe("hosted session factory", () => {
     const factory = createHostedSessionFactory(agentDir);
     registerAnthropicModels(factory, [
       "replayed-main",
-      "replayed-advisor",
+      "replayed-explorer",
       "current-main",
-      "current-advisor",
+      "current-explorer",
     ]);
     const settings = createHostedSettingsManager(workspace, agentDir);
     const result = await createTestHostedRuntime(factory, {
@@ -363,8 +363,8 @@ describe("hosted session factory", () => {
       expect.objectContaining({
         name: "Claude Lead",
         mainModel: "anthropic/replayed-main:high",
-        subagentModels: {
-          advisor: "anthropic/replayed-advisor:medium",
+        delegationModels: {
+          "deep-reasoning": "anthropic/replayed-explorer:medium",
         },
       }),
     );

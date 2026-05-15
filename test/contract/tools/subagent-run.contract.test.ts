@@ -49,20 +49,20 @@ describe("subagent_run public surface", () => {
                   {
                     ok: true,
                     runId: "run-public-1",
-                    delegate: "advisor",
-                    agentSpec: "advisor",
-                    envelope: "readonly-advisor",
+                    agent: "navigator",
+                    taskName: "trace-gateway-entrypoints",
+                    taskPath: "/trace-gateway-entrypoints",
+                    nickname: "trace gateway entrypoints",
+                    delegate: "navigator",
                     skillName: input.request.skillName,
-                    kind: "consult" as const,
-                    consultKind: "investigate" as const,
+                    kind: "evidence" as const,
                     status: "ok" as const,
                     workerSessionId: "worker-public-1",
                     summary: `summary:${input.request.packet?.objective}`,
                     data: {
-                      kind: "consult" as const,
-                      consultKind: "investigate" as const,
-                      conclusion: "Gateway entrypoints are the first read target.",
-                      lane: "review-correctness",
+                      kind: "evidence" as const,
+                      summary: "Gateway entrypoints are the first read target.",
+                      sourceRefs: ["packages/brewva-gateway/src/hosted/api.ts"],
                     },
                     metrics: { durationMs: 12 },
                     evidenceRefs: [],
@@ -78,6 +78,7 @@ describe("subagent_run public surface", () => {
     const result = await tool.execute(
       "tc-public-run",
       {
+        agent: "navigator",
         skillName: "discovery",
         objective: "trace the gateway entrypoints",
         brief: buildBrief("Which gateway entrypoints matter first?"),
@@ -87,9 +88,14 @@ describe("subagent_run public surface", () => {
       fakeContext("session-public-run"),
     );
 
-    expect(extractText(result)).toContain("delegate=discovery");
+    expect(extractText(result)).toContain("delegate=navigator");
     expect(capturedRequest).toEqual({
+      agent: "navigator",
       skillName: "discovery",
+      taskName: undefined,
+      nickname: undefined,
+      forkTurns: "none",
+      gateReason: undefined,
       mode: "single",
       timeoutMs: undefined,
       packet: {
@@ -102,7 +108,7 @@ describe("subagent_run public surface", () => {
     });
     const detailsText = JSON.stringify(result.details);
     expect(detailsText).not.toContain("agentSpec");
-    expect(detailsText).not.toContain("readonly-advisor");
+    expect(detailsText).not.toContain("explorer-readonly");
     expect(detailsText).not.toContain("consultKind");
     expect(detailsText).not.toContain("worker-public-1");
   });
@@ -131,7 +137,8 @@ describe("subagent_run public surface", () => {
     const result = await tool.execute(
       "tc-public-run-missing-brief",
       {
-        skillName: "discovery",
+        agent: "explorer",
+        skillName: "review",
         objective: "trace the gateway entrypoints",
       },
       undefined,
@@ -154,7 +161,7 @@ describe("subagent_run public surface", () => {
               return {
                 ok: true,
                 mode: "single",
-                delegate: "advisor",
+                delegate: "explorer",
                 outcomes: [],
               };
             },
@@ -202,6 +209,10 @@ describe("subagent_run public surface", () => {
                 {
                   ok: true,
                   runId: "run-supplemental",
+                  agent: "explorer",
+                  taskName: "review",
+                  taskPath: "/review",
+                  nickname: "review",
                   delegate: input.request.skillName ?? "derived",
                   kind: "consult" as const,
                   consultKind: "investigate" as const,
@@ -220,7 +231,8 @@ describe("subagent_run public surface", () => {
     const result = await tool.execute(
       "tc-public-run-supplemental",
       {
-        skillName: "discovery",
+        agent: "explorer",
+        skillName: "review",
         objective: "summarize repository impact",
         brief: buildBrief("What repository impact should the parent remember?"),
         returnMode: "supplemental",
@@ -253,6 +265,15 @@ describe("subagent_run public surface", () => {
                 {
                   contractVersion: CURRENT_DELEGATION_CONTRACT_VERSION,
                   runId: "run-background-1",
+                  agent: "explorer" as const,
+                  targetName: "explorer",
+                  taskName: "review",
+                  taskPath: "/review",
+                  nickname: "review",
+                  depth: 1,
+                  forkTurns: "none" as const,
+                  gateReason: "make_judgment" as const,
+                  modelCategory: "deep-reasoning" as const,
                   delegate: input.request.skillName ?? "derived",
                   executionPrimitive: "named" as const,
                   visibility: "public" as const,
@@ -267,8 +288,8 @@ describe("subagent_run public surface", () => {
                   createdAt: 1,
                   updatedAt: 1,
                   kind: "consult" as const,
-                  agentSpec: "advisor",
-                  envelope: "readonly-advisor",
+                  agentSpec: "explorer",
+                  envelope: "explorer-readonly",
                   consultKind: "investigate" as const,
                   workerSessionId: "worker-background-1",
                 },
@@ -282,7 +303,8 @@ describe("subagent_run public surface", () => {
     const result = await tool.execute(
       "tc-public-run-start",
       {
-        skillName: "discovery",
+        agent: "explorer",
+        skillName: "review",
         objective: "scan the runtime surface",
         brief: buildBrief("Which runtime surfaces should be scanned first?"),
         waitMode: "start",
@@ -292,11 +314,11 @@ describe("subagent_run public surface", () => {
       fakeContext("session-start"),
     );
 
-    expect(extractText(result)).toContain("subagent_run started for delegate=discovery");
+    expect(extractText(result)).toContain("subagent_run started for delegate=explorer");
     expect(extractText(result)).toContain("run-background-1");
     const detailsText = JSON.stringify(result.details);
     expect(detailsText).not.toContain("agentSpec");
-    expect(detailsText).not.toContain("readonly-advisor");
+    expect(detailsText).not.toContain("explorer-readonly");
     expect(detailsText).not.toContain("consultKind");
     expect(detailsText).not.toContain("worker-background-1");
   });
@@ -339,6 +361,7 @@ describe("subagent_fanout public surface", () => {
     const result = await tool.execute(
       "tc-public-fanout",
       {
+        agent: "explorer",
         skillName: "review",
         brief: buildBrief("Which findings should block merge?"),
         tasks: [
@@ -368,7 +391,7 @@ describe("subagent_fanout public surface", () => {
     ]);
     expect(capturedRequest?.tasks?.[0]).not.toHaveProperty("activeSkillName");
     expect(capturedRequest?.tasks?.[1]).not.toHaveProperty("activeSkillName");
-    expect(extractText(result)).toContain("subagent_fanout completed for delegate=review");
+    expect(extractText(result)).toContain("subagent_fanout completed for delegate=explorer");
   });
 
   test("hard-fails diagnostic fields nested in public tasks", async () => {
@@ -426,14 +449,18 @@ describe("subagent_run_diagnostic tool", () => {
               return {
                 ok: true,
                 mode: input.request.mode,
-                delegate: input.request.agentSpec ?? "diagnostic",
+                delegate: input.request.targetName ?? "diagnostic",
                 outcomes: [
                   {
                     ok: true,
                     runId: "diagnostic-run-1",
-                    delegate: input.request.agentSpec ?? "diagnostic",
-                    agentSpec: input.request.agentSpec,
-                    envelope: "readonly-advisor",
+                    agent: "explorer",
+                    taskName: "review-security",
+                    taskPath: "/review-security",
+                    nickname: "review-security",
+                    targetName: input.request.targetName,
+                    delegate: input.request.targetName ?? "diagnostic",
+                    envelope: "explorer-readonly",
                     kind: "consult" as const,
                     consultKind: input.request.consultKind,
                     status: "ok" as const,
@@ -453,12 +480,9 @@ describe("subagent_run_diagnostic tool", () => {
     const result = await tool.execute(
       "tc-diagnostic-run",
       {
-        agentSpec: "review-security",
+        agent: "explorer",
+        targetName: "review-security",
         consultKind: "review",
-        fallbackResultMode: "consult",
-        executionShape: {
-          model: "openai/gpt-5.5:high",
-        },
         objective: "probe review-security routing",
         consultBrief: buildBrief("Does this diagnostic lane route correctly?"),
       },
@@ -469,16 +493,13 @@ describe("subagent_run_diagnostic tool", () => {
 
     expect((result.details as { ok?: boolean } | undefined)?.ok).toBe(true);
     expect(capturedRequest).toMatchObject({
-      agentSpec: "review-security",
+      agent: "explorer",
+      targetName: "review-security",
       consultKind: "review",
-      fallbackResultMode: "consult",
-      executionShape: {
-        model: "openai/gpt-5.5:high",
-      },
     });
     const detailsText = JSON.stringify(result.details);
-    expect(detailsText).toContain("agentSpec");
-    expect(detailsText).toContain("readonly-advisor");
+    expect(detailsText).toContain("targetName");
+    expect(detailsText).toContain("explorer-readonly");
     expect(detailsText).toContain("consultKind");
     expect(detailsText).toContain("diagnostic-worker-1");
   });
@@ -504,7 +525,16 @@ describe("subagent_fork tool", () => {
                 run: {
                   contractVersion: CURRENT_DELEGATION_CONTRACT_VERSION,
                   runId: "fork-1",
+                  agent: "explorer",
+                  targetName: "fork",
                   delegate: "fork",
+                  taskName: "try-same-context-investigation-branch",
+                  taskPath: "/try-same-context-investigation-branch",
+                  nickname: "try a same-context investigation branch",
+                  depth: 1,
+                  forkTurns: "all" as const,
+                  gateReason: "make_judgment" as const,
+                  modelCategory: "deep-reasoning" as const,
                   executionPrimitive: "fork" as const,
                   visibility: "public" as const,
                   isolationStrategy: "shared" as const,
@@ -515,14 +545,14 @@ describe("subagent_fork tool", () => {
                   },
                   lineage: {
                     parentSessionId: input.fromSessionId,
-                    contextPolicy: "lineage_only" as const,
+                    forkTurns: "all" as const,
                   },
                   parentSessionId: input.fromSessionId,
                   status: "completed" as const,
                   createdAt: 1,
                   updatedAt: 2,
-                  agentSpec: "advisor",
-                  envelope: "readonly-advisor",
+                  agentSpec: "explorer",
+                  envelope: "explorer-readonly",
                   consultKind: "investigate" as const,
                   workerSessionId: "fork-worker-1",
                   kind: "consult" as const,
@@ -539,7 +569,7 @@ describe("subagent_fork tool", () => {
       "tc-fork",
       {
         objective: "try a same-context investigation branch",
-        contextPolicy: "lineage_only",
+        forkTurns: "all",
       },
       undefined,
       undefined,
@@ -548,7 +578,9 @@ describe("subagent_fork tool", () => {
 
     expect(capturedRequest).toEqual({
       objective: "try a same-context investigation branch",
-      contextPolicy: "lineage_only",
+      taskName: undefined,
+      nickname: undefined,
+      forkTurns: "all",
       deliverable: undefined,
       timeoutMs: undefined,
     });
@@ -556,7 +588,7 @@ describe("subagent_fork tool", () => {
     expect(extractText(result)).toContain("fork complete");
     const detailsText = JSON.stringify(result.details);
     expect(detailsText).not.toContain("agentSpec");
-    expect(detailsText).not.toContain("readonly-advisor");
+    expect(detailsText).not.toContain("explorer-readonly");
     expect(detailsText).not.toContain("consultKind");
     expect(detailsText).not.toContain("fork-worker-1");
   });
@@ -568,7 +600,7 @@ describe("subagent_fork tool", () => {
           subagents: {
             fork: async () => ({
               ok: false,
-              error: "missing_readonly_advisor_envelope",
+              error: "missing_readonly_explorer_envelope",
             }),
           },
         },
@@ -586,6 +618,6 @@ describe("subagent_fork tool", () => {
     );
 
     expect(extractText(result)).toContain("subagent_fork failed");
-    expect(extractText(result)).toContain("error=missing_readonly_advisor_envelope");
+    expect(extractText(result)).toContain("error=missing_readonly_explorer_envelope");
   });
 });

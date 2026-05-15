@@ -12,10 +12,10 @@ export type DelegationRunStatus =
   | "merged";
 
 export type DelegationConsultKind = "investigate" | "diagnose" | "design" | "review";
-export type DelegationOutcomeKind = "consult" | "qa" | "patch";
+export type DelegationOutcomeKind = "evidence" | "consult" | "verifier" | "patch" | "knowledge";
 export type DelegationDeliveryMode = "text_only" | "supplemental";
 export type DelegationDeliveryHandoffState = "none" | "pending_parent_turn" | "surfaced";
-export type DelegationModelRouteSource = "execution_shape" | "preset" | "policy";
+export type DelegationModelRouteSource = "preset" | "policy" | "replay";
 export type DelegationModelRouteMode = "explicit" | "auto";
 export type DelegationExecutionPrimitive = "named" | "fork";
 export type DelegationVisibility = "public" | "internal" | "diagnostic";
@@ -27,7 +27,25 @@ export type DelegationIsolationStrategy =
   | "container";
 export type DelegationAdoptionDecision = "allow" | "block" | "require_human";
 
-export const CURRENT_DELEGATION_CONTRACT_VERSION = 2 as const;
+export const CURRENT_DELEGATION_CONTRACT_VERSION = 3 as const;
+
+export type PublicSubagentRole = "navigator" | "explorer" | "worker" | "verifier" | "librarian";
+
+export type DelegationGateReason =
+  | "find_evidence"
+  | "make_judgment"
+  | "implement_isolated"
+  | "verify_reproducibly"
+  | "compound_knowledge";
+
+export type DelegationModelCategory =
+  | "fast-evidence"
+  | "deep-reasoning"
+  | "isolated-execution"
+  | "verification"
+  | "knowledge";
+
+export type DelegationForkTurns = "none" | "all" | number;
 
 export interface DelegationArtifactRef {
   kind: string;
@@ -35,7 +53,7 @@ export interface DelegationArtifactRef {
   summary?: string;
 }
 
-interface QaCheckBase {
+interface VerifierCheckBase {
   name: string;
   status: "pass" | "fail" | "inconclusive";
   cwd?: string;
@@ -46,36 +64,55 @@ interface QaCheckBase {
   evidence_refs?: string[];
 }
 
-export interface QaCommandCheck extends QaCheckBase {
+export interface VerifierCommandCheck extends VerifierCheckBase {
   command: string;
   exit_code: number;
   tool?: string;
 }
 
-export interface QaToolCheck extends QaCheckBase {
+export interface VerifierToolCheck extends VerifierCheckBase {
   tool: string;
   command?: never;
   exit_code?: never;
 }
 
-export type QaCheck = QaCommandCheck | QaToolCheck;
+export type VerifierCheck = VerifierCommandCheck | VerifierToolCheck;
 
-export interface QaSubagentOutcomeData {
-  kind: "qa";
+export interface VerifierSubagentOutcomeData {
+  kind: "verifier";
   verdict: "pass" | "fail" | "inconclusive";
-  checks: QaCheck[];
+  checks: VerifierCheck[];
   missing_evidence?: string[];
   confidence_gaps?: string[];
   environment_limits?: string[];
 }
 
+export interface EvidenceSubagentOutcomeData {
+  kind: "evidence";
+  summary: string;
+  sourceRefs: string[];
+  recommendedReads?: string[];
+  ownershipHints?: string[];
+  missingEvidence?: string[];
+}
+
+export interface KnowledgeSubagentOutcomeData {
+  kind: "knowledge";
+  summary: string;
+  provenance: string[];
+  proposedDestination: string;
+  freshnessNotes?: string[];
+  conflictNotes?: string[];
+  proposal?: string;
+}
+
 export interface DelegationModelRouteRecord {
   selectedModel: string;
+  category: DelegationModelCategory;
   source: DelegationModelRouteSource;
   mode: DelegationModelRouteMode;
   reason: string;
   policyId?: string;
-  requestedModel?: string;
   presetName?: string;
 }
 
@@ -99,17 +136,27 @@ export interface DelegationAdoptionRecord {
 
 export interface DelegationLineageRecord {
   parentSessionId: BrewvaSessionId;
-  contextPolicy: "lineage_only" | "working_snapshot";
+  forkTurns: DelegationForkTurns;
 }
 
 export interface DelegationRunRecord {
   contractVersion: typeof CURRENT_DELEGATION_CONTRACT_VERSION;
   runId: string;
+  agent: PublicSubagentRole;
+  targetName: string;
   delegate: string;
+  taskName: string;
+  taskPath: string;
+  nickname: string;
+  depth: number;
+  forkTurns: DelegationForkTurns;
+  gateReason: DelegationGateReason;
+  modelCategory: DelegationModelCategory;
   executionPrimitive: DelegationExecutionPrimitive;
   visibility: DelegationVisibility;
   isolationStrategy: DelegationIsolationStrategy;
   adoption: DelegationAdoptionRecord;
+  historicallyNormalized?: true;
   lineage?: DelegationLineageRecord;
   agentSpec?: string;
   envelope?: string;
@@ -137,7 +184,16 @@ export interface DelegationRunRecord {
 export interface DelegationLifecycleEventPayload {
   runId: string;
   contractVersion?: typeof CURRENT_DELEGATION_CONTRACT_VERSION;
+  agent?: PublicSubagentRole;
+  targetName?: string;
   delegate?: string;
+  taskName?: string;
+  taskPath?: string;
+  nickname?: string;
+  depth?: number;
+  forkTurns?: DelegationForkTurns;
+  gateReason?: DelegationGateReason;
+  modelCategory?: DelegationModelCategory;
   executionPrimitive?: DelegationExecutionPrimitive;
   visibility?: DelegationVisibility;
   isolationStrategy?: DelegationIsolationStrategy;
@@ -173,6 +229,9 @@ export interface WorkerResultsAppliedEventPayload {
 
 export interface DelegationRunQuery {
   runIds?: string[];
+  taskPaths?: string[];
+  nicknames?: string[];
+  pathPrefix?: string;
   statuses?: DelegationRunStatus[];
   includeTerminal?: boolean;
   limit?: number;

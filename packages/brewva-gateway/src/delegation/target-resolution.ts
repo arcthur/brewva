@@ -1,11 +1,8 @@
 import { readNonEmptyString } from "@brewva/brewva-std/text";
 import type { SubagentRunRequest } from "@brewva/brewva-tools/contracts";
 import {
-  assertHostedExecutionEnvelopeTightening,
   buildHostedDelegationTargetFromAgentSpec,
   deriveDefaultConsultKindForSkillName,
-  deriveDefaultAgentSpecNameForResultMode,
-  deriveDefaultAgentSpecNameForSkillName,
   deriveFallbackResultModeForSkillName,
   isKnownDelegationSkillName,
   resolveHostedExecutionEnvelope,
@@ -22,40 +19,34 @@ export interface ResolvedDelegationTarget {
 export function resolveDelegationTarget(input: {
   request: Pick<
     SubagentRunRequest,
-    "agentSpec" | "envelope" | "skillName" | "consultKind" | "fallbackResultMode" | "executionShape"
+    "agent" | "targetName" | "skillName" | "consultKind" | "executionShape" | "gateReason"
   >;
   catalog: HostedDelegationCatalog;
 }): ResolvedDelegationTarget {
-  const requestedAgentSpec = readNonEmptyString(input.request.agentSpec);
-  const requestedResultMode =
-    input.request.executionShape?.resultMode ?? input.request.fallbackResultMode;
-  let resolvedAgentSpecName = requestedAgentSpec;
-  const derivedFromSkillName = !requestedAgentSpec && Boolean(input.request.skillName);
-  const skillNameAgentSpec = input.request.skillName
-    ? input.catalog.agentSpecs.get(input.request.skillName)
-    : undefined;
+  const roleSkillMatrix: Record<SubagentRunRequest["agent"], readonly string[]> = {
+    navigator: ["discovery", "repository-analysis"],
+    explorer: [
+      "architecture",
+      "office-hours",
+      "debugging",
+      "strategy",
+      "plan",
+      "review",
+      "predict-review",
+    ],
+    worker: ["implementation"],
+    verifier: ["verifier"],
+    librarian: ["learning-research"],
+  };
+  const requestedTargetName = readNonEmptyString(input.request.targetName);
+  let resolvedAgentSpecName = requestedTargetName ?? input.request.agent;
+  const targetNameExplicit = Boolean(requestedTargetName);
   if (
     input.request.skillName &&
-    !requestedAgentSpec &&
-    !input.request.envelope &&
-    !isKnownDelegationSkillName(input.request.skillName) &&
-    !skillNameAgentSpec
+    (!isKnownDelegationSkillName(input.request.skillName) ||
+      !roleSkillMatrix[input.request.agent].includes(input.request.skillName))
   ) {
-    throw new Error(`unknown_delegation_skill:${input.request.skillName}`);
-  }
-  if (!resolvedAgentSpecName && !input.request.envelope) {
-    if (input.request.skillName) {
-      resolvedAgentSpecName =
-        deriveDefaultAgentSpecNameForSkillName(input.request.skillName) ?? skillNameAgentSpec?.name;
-      if (!resolvedAgentSpecName) {
-        throw new Error(`missing_default_agent_spec_for_skill:${input.request.skillName}`);
-      }
-    } else if (requestedResultMode) {
-      resolvedAgentSpecName = deriveDefaultAgentSpecNameForResultMode(requestedResultMode);
-      if (!resolvedAgentSpecName) {
-        throw new Error(`missing_default_agent_spec_for_result_mode:${requestedResultMode}`);
-      }
-    }
+    throw new Error(`incompatible_agent_skill:${input.request.agent}:${input.request.skillName}`);
   }
 
   const resolvedAgentSpec = resolvedAgentSpecName
@@ -67,16 +58,25 @@ export function resolveDelegationTarget(input: {
   }
 
   if (resolvedAgentSpec) {
+    if (resolvedAgentSpec.agent !== input.request.agent) {
+      throw new Error(
+        `incompatible_agent_spec_role:${resolvedAgentSpec.name}:${input.request.agent}`,
+      );
+    }
+    if (input.request.gateReason && input.request.gateReason !== resolvedAgentSpec.gateReason) {
+      throw new Error(
+        `incompatible_agent_gate_reason:${input.request.agent}:${input.request.gateReason}`,
+      );
+    }
     if (
       input.request.skillName &&
       resolvedAgentSpec.skillName &&
       input.request.skillName !== resolvedAgentSpec.skillName &&
-      !derivedFromSkillName
+      targetNameExplicit
     ) {
       throw new Error("conflicting_agent_spec_and_skill_name");
     }
     const baseEnvelope = resolveHostedExecutionEnvelope(input.catalog, resolvedAgentSpec.envelope);
-    const requestedEnvelope = resolveHostedExecutionEnvelope(input.catalog, input.request.envelope);
     const resolvedSkillName =
       input.request.skillName && isKnownDelegationSkillName(input.request.skillName)
         ? input.request.skillName
@@ -84,38 +84,20 @@ export function resolveDelegationTarget(input: {
     const derivedConsultKind =
       input.request.consultKind ??
       resolvedAgentSpec.defaultConsultKind ??
-      deriveDefaultConsultKindForSkillName(input.request.skillName) ??
-      (derivedFromSkillName &&
-      !isKnownDelegationSkillName(input.request.skillName) &&
-      (resolvedAgentSpec.fallbackResultMode ?? "consult") === "consult"
-        ? "investigate"
-        : undefined);
+      deriveDefaultConsultKindForSkillName(input.request.skillName);
     if (!baseEnvelope) {
       throw new Error(`unknown_envelope:${resolvedAgentSpec.envelope}`);
     }
-    if (input.request.envelope && !requestedEnvelope) {
-      throw new Error(`unknown_envelope:${input.request.envelope}`);
-    }
-    if (requestedEnvelope && requestedEnvelope.name !== baseEnvelope.name) {
-      assertHostedExecutionEnvelopeTightening(
-        baseEnvelope,
-        requestedEnvelope,
-        "conflicting_agent_spec_and_envelope",
-      );
-    }
-    const envelope = requestedEnvelope ?? baseEnvelope;
     const target = buildHostedDelegationTargetFromAgentSpec({
       agentSpec: {
         ...resolvedAgentSpec,
         skillName: resolvedSkillName,
         defaultConsultKind: derivedConsultKind,
         fallbackResultMode:
-          input.request.fallbackResultMode ??
-          input.request.executionShape?.resultMode ??
           deriveFallbackResultModeForSkillName(input.request.skillName) ??
           resolvedAgentSpec.fallbackResultMode,
       },
-      envelope,
+      envelope: baseEnvelope,
     });
     if (target.resultMode === "consult" && !target.consultKind) {
       throw new Error("missing_consult_kind");
@@ -130,9 +112,5 @@ export function resolveDelegationTarget(input: {
     };
   }
 
-  if (input.request.envelope) {
-    throw new Error("envelope_requires_agent_spec");
-  }
-
-  throw new Error("missing_agent_spec_or_skill_name");
+  throw new Error("missing_agent");
 }

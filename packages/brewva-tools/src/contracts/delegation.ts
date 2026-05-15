@@ -4,7 +4,7 @@ import type {
 } from "@brewva/brewva-runtime/delegation";
 import type { ToolExecutionBoundary } from "@brewva/brewva-runtime/governance";
 import type { A2ABroadcastResult, A2ASendResult } from "./a2a.js";
-import type { AdvisorConsultBrief } from "./advisor.js";
+import type { ExplorerConsultBrief } from "./explorer.js";
 import type {
   SubagentCancelResult,
   SubagentForkRequest,
@@ -64,7 +64,7 @@ export type DelegationCompletionPredicate =
 export interface DelegationPacket {
   objective: string;
   deliverable?: string;
-  consultBrief?: AdvisorConsultBrief;
+  consultBrief?: ExplorerConsultBrief;
   constraints?: string[];
   sharedNotes?: string[];
   executionHints?: DelegationExecutionHints;
@@ -78,6 +78,8 @@ export interface DelegationPacket {
 
 export interface DelegationTaskPacket extends DelegationPacket {
   label?: string;
+  taskName?: string;
+  nickname?: string;
 }
 
 export interface DelegationOutcomeFinding {
@@ -123,6 +125,9 @@ export interface BrewvaToolOrchestration {
     listAgents(input?: { includeDeleted?: boolean }): Promise<
       Array<{
         agentId: string;
+        primaryAddress?: string;
+        aliases?: string[];
+        kind?: "channel" | "subagent";
         status: "active" | "deleted";
       }>
     >;
@@ -146,6 +151,24 @@ export interface BrewvaToolOrchestration {
       fromSessionId: string;
       request: SubagentForkRequest;
     }): Promise<SubagentForkResult>;
+    sendMessage?(input: {
+      fromSessionId: string;
+      fromAgentId?: string;
+      toAgentId: string;
+      message: string;
+      correlationId?: string;
+      depth?: number;
+      hops?: number;
+    }): Promise<A2ASendResult>;
+    listAgents?(input?: { includeDeleted?: boolean }): Promise<
+      Array<{
+        agentId: string;
+        primaryAddress?: string;
+        aliases?: string[];
+        kind?: "channel" | "subagent";
+        status: "active" | "deleted";
+      }>
+    >;
   };
 }
 

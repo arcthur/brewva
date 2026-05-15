@@ -56,7 +56,7 @@ function activePreset(input: { titleModel?: string; mainModel?: string } = {}): 
   return {
     name: "Default",
     mainModel: input.mainModel ?? "openai/gpt-main",
-    subagentModels: {},
+    delegationModels: {},
     auxiliaryModels: input.titleModel
       ? {
           title: input.titleModel,

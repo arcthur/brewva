@@ -27,7 +27,7 @@ function recordCompletedRun(input: {
   runId: string;
   updatedAt: number;
   handoffState: "pending_parent_turn" | "surfaced";
-  kind?: "consult";
+  kind?: "consult" | "verifier" | "evidence" | "patch" | "knowledge";
   consultKind?: "review" | "design";
   delegate?: string;
 }): void {
@@ -38,7 +38,16 @@ function recordCompletedRun(input: {
     payload: {
       ...delegationLifecycleFields(),
       runId: input.runId,
-      delegate: input.delegate ?? "advisor",
+      agent: "explorer",
+      targetName: "explorer",
+      delegate: input.delegate ?? "explorer",
+      taskName: input.runId,
+      taskPath: `/${input.runId}`,
+      nickname: input.runId,
+      depth: 1,
+      forkTurns: "none",
+      gateReason: "make_judgment",
+      modelCategory: "deep-reasoning",
       status: "completed",
       kind: input.kind ?? "consult",
       consultKind: input.consultKind ?? "review",
@@ -108,6 +117,15 @@ describe("HostedDelegationStore", () => {
       payload: {
         ...delegationLifecycleFields(),
         runId: "run-1",
+        agent: "explorer",
+        targetName: "explorer",
+        taskName: "review",
+        taskPath: "/review",
+        nickname: "review",
+        depth: 1,
+        forkTurns: "none",
+        gateReason: "make_judgment",
+        modelCategory: "deep-reasoning",
         delegate: "review",
         status: "pending",
       },
@@ -119,6 +137,15 @@ describe("HostedDelegationStore", () => {
       payload: {
         ...delegationLifecycleFields(),
         runId: "run-1",
+        agent: "explorer",
+        targetName: "explorer",
+        taskName: "review",
+        taskPath: "/review",
+        nickname: "review",
+        depth: 1,
+        forkTurns: "none",
+        gateReason: "make_judgment",
+        modelCategory: "deep-reasoning",
         delegate: "review",
         status: "running",
         childSessionId: "child-1",
@@ -144,7 +171,16 @@ describe("HostedDelegationStore", () => {
       payload: {
         ...delegationLifecycleFields(),
         runId: "run-legacy-kind",
-        delegate: "qa",
+        agent: "verifier",
+        targetName: "verifier",
+        taskName: "run-legacy-kind",
+        taskPath: "/run-legacy-kind",
+        nickname: "run-legacy-kind",
+        depth: 1,
+        forkTurns: "none",
+        gateReason: "verify_reproducibly",
+        modelCategory: "verification",
+        delegate: "verifier",
         status: "completed",
         kind: "verification",
         summary: "legacy verification run",
@@ -158,10 +194,10 @@ describe("HostedDelegationStore", () => {
     });
   });
 
-  test("rejects missing delegation contract versions", () => {
+  test("normalizes historical records without v3 identity fields", () => {
     const runtime = createHostedTestRuntime({ cwd: workspace });
     const store = new HostedDelegationStore(runtime);
-    const sessionId = "delegation-store-missing-contract-version";
+    const sessionId = "delegation-store-historical-contract";
 
     runtime.extensions.hosted.events.record({
       sessionId,
@@ -169,14 +205,29 @@ describe("HostedDelegationStore", () => {
       timestamp: 100,
       payload: {
         runId: "run-missing-version",
-        delegate: "advisor",
+        delegate: "explorer",
         status: "pending",
       },
     });
 
-    expect(() => store.getRun(sessionId, "run-missing-version")).toThrow(
-      "unsupported_delegation_contract_version:missing",
-    );
+    expect(store.getRun(sessionId, "run-missing-version")).toMatchObject({
+      contractVersion: CURRENT_DELEGATION_CONTRACT_VERSION,
+      runId: "run-missing-version",
+      agent: "explorer",
+      targetName: "explorer",
+      taskName: "explorer",
+      taskPath: "/historical/run-missing-version",
+      nickname: "explorer",
+      depth: 2,
+      forkTurns: "none",
+      gateReason: "make_judgment",
+      modelCategory: "deep-reasoning",
+      adoption: {
+        contractId: "delegation.consult",
+        decision: "require_human",
+      },
+      historicallyNormalized: true,
+    });
   });
 
   test("rejects current-version records without adoption payloads", () => {
@@ -194,7 +245,16 @@ describe("HostedDelegationStore", () => {
         visibility: "public",
         isolationStrategy: "shared",
         runId: "run-missing-adoption",
-        delegate: "advisor",
+        agent: "explorer",
+        targetName: "explorer",
+        taskName: "run-missing-adoption",
+        taskPath: "/run-missing-adoption",
+        nickname: "run-missing-adoption",
+        depth: 1,
+        forkTurns: "none",
+        gateReason: "make_judgment",
+        modelCategory: "deep-reasoning",
+        delegate: "explorer",
         status: "pending",
       },
     });
@@ -223,7 +283,16 @@ describe("HostedDelegationStore", () => {
           decision: "allow",
         },
         runId: "run-malformed-adoption",
-        delegate: "advisor",
+        agent: "explorer",
+        targetName: "explorer",
+        taskName: "run-malformed-adoption",
+        taskPath: "/run-malformed-adoption",
+        nickname: "run-malformed-adoption",
+        depth: 1,
+        forkTurns: "none",
+        gateReason: "make_judgment",
+        modelCategory: "deep-reasoning",
+        delegate: "explorer",
         status: "pending",
       },
     });
@@ -246,7 +315,7 @@ describe("HostedDelegationStore", () => {
       handoffState: "surfaced",
       kind: "consult",
       consultKind: "design",
-      delegate: "advisor",
+      delegate: "explorer",
     });
 
     expect(store.getRun(sessionId, "run-design-consult")).toMatchObject({

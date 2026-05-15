@@ -3,7 +3,10 @@ import type { BrewvaConfig, BrewvaHostedRuntimePort } from "@brewva/brewva-runti
 import { asBrewvaSessionId } from "@brewva/brewva-runtime/core";
 import type { DelegationRunRecord } from "@brewva/brewva-runtime/delegation";
 import { isDelegationRunTerminalStatus } from "@brewva/brewva-runtime/delegation";
-import { SUBAGENT_RUNNING_EVENT_TYPE } from "@brewva/brewva-runtime/events";
+import {
+  SUBAGENT_A2A_MESSAGE_EVENT_TYPE,
+  SUBAGENT_RUNNING_EVENT_TYPE,
+} from "@brewva/brewva-runtime/events";
 import type { PatchSet } from "@brewva/brewva-runtime/patch-history";
 import type { WorkerResult } from "@brewva/brewva-runtime/patch-history";
 import type { ManagedToolMode } from "@brewva/brewva-runtime/session";
@@ -33,6 +36,7 @@ import { loadHostedDelegationCatalog } from "./catalog/registry.js";
 import {
   buildCompletedDelegationAdoption,
   buildDelegationRunRecordSeed,
+  buildDelegationTaskIdentity,
   buildForkDelegationContractRecordFields,
   resolveDelegationRecordIdentity,
 } from "./delegation-records.js";
@@ -43,6 +47,7 @@ import {
 } from "./delegation-store.js";
 import { prepareSubagentEntry } from "./entry.js";
 import { resolveDelegationExecutionPlan } from "./execution-plan.js";
+import { renderInheritedSubagentContext } from "./fork-context.js";
 import {
   adoptDelegationLineageOutcome,
   ensureDelegationLineageNode,
@@ -177,31 +182,166 @@ interface LiveHostedDelegationRun {
   };
 }
 
+interface LiveHostedDelegationRegistry {
+  byRunId: Map<string, LiveHostedDelegationRun>;
+  byTaskPath: Map<string, LiveHostedDelegationRun>;
+  byNickname: Map<string, Set<LiveHostedDelegationRun>>;
+}
+
+function createLiveDelegationRegistry(): LiveHostedDelegationRegistry {
+  return {
+    byRunId: new Map<string, LiveHostedDelegationRun>(),
+    byTaskPath: new Map<string, LiveHostedDelegationRun>(),
+    byNickname: new Map<string, Set<LiveHostedDelegationRun>>(),
+  };
+}
+
 export function createHostedSubagentAdapter(
   options: HostedSubagentAdapterOptions,
 ): NonNullable<BrewvaToolOrchestration["subagents"]> {
   const delegationStore = options.delegationStore ?? new HostedDelegationStore(options.runtime);
-  const liveRunsByParentSession = new Map<string, Map<string, LiveHostedDelegationRun>>();
+  const liveRunsByParentSession = new Map<string, LiveHostedDelegationRegistry>();
+  const liveRunsByChildSession = new Map<string, { parentSessionId: string; runId: string }>();
 
-  function getLiveRuns(sessionId: string): Map<string, LiveHostedDelegationRun> {
+  function getLiveRegistry(sessionId: string): LiveHostedDelegationRegistry {
     const existing = liveRunsByParentSession.get(sessionId);
     if (existing) {
       return existing;
     }
-    const created = new Map<string, LiveHostedDelegationRun>();
+    const created = createLiveDelegationRegistry();
     liveRunsByParentSession.set(sessionId, created);
     return created;
   }
 
+  function registerLiveRun(sessionId: string, run: LiveHostedDelegationRun): void {
+    const registry = getLiveRegistry(sessionId);
+    const record = run.getView();
+    registry.byRunId.set(record.runId, run);
+    registry.byTaskPath.set(record.taskPath, run);
+    const nicknameRuns =
+      registry.byNickname.get(record.nickname) ?? new Set<LiveHostedDelegationRun>();
+    nicknameRuns.add(run);
+    registry.byNickname.set(record.nickname, nicknameRuns);
+  }
+
   function removeLiveRun(sessionId: string, runId: string): void {
-    const liveRuns = liveRunsByParentSession.get(sessionId);
-    if (!liveRuns) {
+    const registry = liveRunsByParentSession.get(sessionId);
+    if (!registry) {
       return;
     }
-    liveRuns.delete(runId);
-    if (liveRuns.size === 0) {
+    const run = registry.byRunId.get(runId);
+    if (!run) {
+      return;
+    }
+    const record = run.getView();
+    registry.byRunId.delete(record.runId);
+    registry.byTaskPath.delete(record.taskPath);
+    const nicknameRuns = registry.byNickname.get(record.nickname);
+    if (nicknameRuns) {
+      nicknameRuns.delete(run);
+      if (nicknameRuns.size === 0) {
+        registry.byNickname.delete(record.nickname);
+      }
+    }
+    if (registry.byRunId.size === 0) {
       liveRunsByParentSession.delete(sessionId);
     }
+  }
+
+  function isLiveAddressMatch(run: LiveHostedDelegationRun): boolean {
+    return !isDelegationRunTerminalStatus(run.getView().status);
+  }
+
+  function collectReservedTaskPaths(parentSessionId: string): string[] {
+    const persisted = delegationStore
+      .listRuns(parentSessionId, { includeTerminal: true })
+      .map((record) => record.taskPath);
+    const live = liveRunsByParentSession.get(parentSessionId);
+    if (!live) {
+      return persisted;
+    }
+    return [...persisted, ...live.byTaskPath.keys()];
+  }
+
+  function resolveLiveRunAddress(
+    parentSessionId: string,
+    address: string,
+  ): { run: LiveHostedDelegationRun } | { error: string } {
+    const registry = liveRunsByParentSession.get(parentSessionId);
+    if (!registry) {
+      return { error: "inactive_subagent_target" };
+    }
+    const directRun = registry.byRunId.get(address) ?? registry.byTaskPath.get(address);
+    if (directRun) {
+      return isLiveAddressMatch(directRun)
+        ? { run: directRun }
+        : { error: "inactive_subagent_target" };
+    }
+    const matches = [...(registry.byNickname.get(address) ?? [])].filter(isLiveAddressMatch);
+    if (matches.length === 0) {
+      return { error: "inactive_subagent_target" };
+    }
+    if (matches.length > 1) {
+      return { error: "ambiguous_subagent_target" };
+    }
+    return { run: matches[0]! };
+  }
+
+  function buildFanoutParentTaskPath(input: {
+    parentSessionId: string;
+    request: SubagentRunRequest;
+    target: HostedDelegationTarget;
+    invocationId: string;
+  }): string | undefined {
+    if (input.request.mode !== "parallel") {
+      return undefined;
+    }
+    const invocationSegment = input.invocationId.replace(/-/g, "").slice(0, 8) || "fanout";
+    const requestedLabel =
+      input.request.taskName ??
+      input.request.nickname ??
+      input.request.packet?.objective ??
+      input.target.targetName;
+    const identity = buildDelegationTaskIdentity({
+      target: input.target,
+      label: `${requestedLabel}-${invocationSegment}`,
+      reservedTaskPaths: collectReservedTaskPaths(input.parentSessionId),
+    });
+    return identity.taskPath;
+  }
+
+  function recordSubagentA2AMessage(input: {
+    parentSessionId: string;
+    runId: string;
+    direction: "parent_to_child" | "child_to_parent";
+    fromAgentId?: string;
+    toAgentId: string;
+    message: string;
+    correlationId?: string;
+    depth: number;
+    hops: number;
+  }): void {
+    options.runtime.extensions.hosted.events.record({
+      sessionId: input.parentSessionId,
+      type: SUBAGENT_A2A_MESSAGE_EVENT_TYPE,
+      payload: {
+        runId: input.runId,
+        direction: input.direction,
+        fromAgentId: input.fromAgentId ?? null,
+        toAgentId: input.toAgentId,
+        message: input.message,
+        correlationId: input.correlationId ?? null,
+        depth: input.depth,
+        hops: input.hops,
+      },
+    });
+  }
+
+  function resolveA2ALimits(): { maxDepth: number; maxHops: number } {
+    return {
+      maxDepth: options.runtime.config.channels.orchestration.limits.a2aMaxDepth,
+      maxHops: options.runtime.config.channels.orchestration.limits.a2aMaxHops,
+    };
   }
 
   async function resolveLaunchPlan(input: {
@@ -214,6 +354,8 @@ export function createHostedSubagentAdapter(
         delegate: string;
         runs: Array<{
           label?: string;
+          taskName?: string;
+          nickname?: string;
           packet: DelegationPacket;
         }>;
       }
@@ -227,12 +369,12 @@ export function createHostedSubagentAdapter(
     try {
       resolvedTarget = resolveDelegationTarget({
         request: {
-          agentSpec: input.request.agentSpec,
-          envelope: input.request.envelope,
+          agent: input.request.agent,
+          targetName: input.request.targetName,
           skillName: input.request.skillName,
           consultKind: input.request.consultKind,
-          fallbackResultMode: input.request.fallbackResultMode,
           executionShape: input.request.executionShape,
+          gateReason: input.request.gateReason,
         },
         catalog,
       });
@@ -240,6 +382,13 @@ export function createHostedSubagentAdapter(
       return {
         ok: false,
         error: error instanceof Error ? error.message : String(error),
+      };
+    }
+    const forkTurns = input.request.forkTurns ?? "none";
+    if (resolvedTarget.target.agent === "worker" && forkTurns === "all") {
+      return {
+        ok: false,
+        error: "worker_fork_turns_all_not_allowed",
       };
     }
 
@@ -285,7 +434,13 @@ export function createHostedSubagentAdapter(
         ok: true,
         target: resolvedTarget.target,
         delegate: resolvedTarget.delegate,
-        runs: [{ packet: sharedPacket }],
+        runs: [
+          {
+            packet: sharedPacket,
+            taskName: input.request.taskName,
+            nickname: input.request.nickname,
+          },
+        ],
       };
     }
 
@@ -303,6 +458,8 @@ export function createHostedSubagentAdapter(
       delegate: resolvedTarget.delegate,
       runs: tasks.map((task) => ({
         label: task.label,
+        taskName: task.taskName,
+        nickname: task.nickname,
         packet: mergeTaskPacket(sharedPacket, task),
       })),
     };
@@ -315,12 +472,25 @@ export function createHostedSubagentAdapter(
     packet: DelegationPacket;
     executionShape?: SubagentRunRequest["executionShape"];
     label?: string;
+    taskName?: string;
+    nickname?: string;
+    parentTaskPath?: string;
+    forkTurns?: SubagentRunRequest["forkTurns"];
     timeoutMs?: number;
     delivery?: NonNullable<SubagentRunRequest["delivery"]>;
   }): LiveHostedDelegationRun {
     const runId = randomUUID();
     const startedAt = Date.now();
     const delegate = input.delegate ?? resolveDelegationLabel(input.target);
+    const taskIdentity = buildDelegationTaskIdentity({
+      target: input.target,
+      requestedTaskName: input.taskName,
+      requestedNickname: input.nickname,
+      label: input.label,
+      parentTaskPath: input.parentTaskPath,
+      reservedTaskPaths: collectReservedTaskPaths(input.parentSessionId),
+    });
+    const forkTurns = input.forkTurns ?? "none";
 
     let child: HostedSubagentSessionResult | undefined;
     let isolatedWorkspace: IsolatedWorkspaceHandle | undefined;
@@ -343,6 +513,8 @@ export function createHostedSubagentAdapter(
           updatedAt: Date.now(),
           status: "failed",
           label: input.label,
+          taskIdentity,
+          forkTurns,
           delivery: buildDeliveryRecordFromRequest(input.delivery, Date.now()),
         }),
         status: "failed",
@@ -364,6 +536,10 @@ export function createHostedSubagentAdapter(
         outcomePromise: Promise.resolve(
           buildFailureOutcome({
             runId,
+            agent: input.target.agent,
+            taskName: taskIdentity.taskName,
+            taskPath: taskIdentity.taskPath,
+            nickname: taskIdentity.nickname,
             delegate,
             agentSpec: input.target.agentSpecName,
             envelope: input.target.envelopeName,
@@ -412,6 +588,8 @@ export function createHostedSubagentAdapter(
         parentSessionId: asBrewvaSessionId(input.parentSessionId),
         createdAt: startedAt,
         label: input.label,
+        taskIdentity,
+        forkTurns,
         boundary: executionPlan.boundary,
         modelRoute: executionPlan.modelRoute,
         delivery: buildDeliveryRecordFromRequest(input.delivery, startedAt),
@@ -466,6 +644,10 @@ export function createHostedSubagentAdapter(
       outcomePromise: Promise.resolve(
         buildFailureOutcome({
           runId,
+          agent: input.target.agent,
+          taskName: taskIdentity.taskName,
+          taskPath: taskIdentity.taskPath,
+          nickname: taskIdentity.nickname,
           delegate,
           agentSpec: input.target.agentSpecName,
           envelope: input.target.envelopeName,
@@ -514,9 +696,78 @@ export function createHostedSubagentAdapter(
           managedToolNames: executionPlan.managedToolNames,
           managedToolMode: executionPlan.managedToolMode,
           enableSubagents: false,
+          orchestration: {
+            a2a: {
+              send: async (messageInput) => {
+                const limits = resolveA2ALimits();
+                const depth = (messageInput.depth ?? 0) + 1;
+                const hops = (messageInput.hops ?? 0) + 1;
+                if (depth > limits.maxDepth) {
+                  return {
+                    ok: false,
+                    toAgentId: messageInput.toAgentId,
+                    error: "a2a_depth_limit_exceeded",
+                    depth,
+                    hops,
+                  };
+                }
+                if (hops > limits.maxHops) {
+                  return {
+                    ok: false,
+                    toAgentId: messageInput.toAgentId,
+                    error: "a2a_hops_limit_exceeded",
+                    depth,
+                    hops,
+                  };
+                }
+                if (messageInput.toAgentId !== "parent") {
+                  return {
+                    ok: false,
+                    toAgentId: messageInput.toAgentId,
+                    error: "child_to_child_not_allowed",
+                    depth,
+                    hops,
+                  };
+                }
+                recordSubagentA2AMessage({
+                  parentSessionId: input.parentSessionId,
+                  runId,
+                  direction: "child_to_parent",
+                  fromAgentId: messageInput.fromAgentId,
+                  toAgentId: messageInput.toAgentId,
+                  message: messageInput.message,
+                  correlationId: messageInput.correlationId,
+                  depth,
+                  hops,
+                });
+                return {
+                  ok: true,
+                  toAgentId: "parent",
+                  responseText:
+                    "subagent message recorded for parent (audit-only; v1 delivery is deferred)",
+                  depth,
+                  hops,
+                };
+              },
+              broadcast: async (messageInput) => ({
+                ok: false,
+                error: "child_broadcast_not_allowed",
+                results: messageInput.toAgentIds.map((toAgentId) => ({
+                  ok: false,
+                  toAgentId,
+                  error: "child_broadcast_not_allowed",
+                })),
+              }),
+              listAgents: async () => [{ agentId: "parent", status: "active" as const }],
+            },
+          },
         });
 
         childSessionId = asBrewvaSessionId(child.session.sessionManager.getSessionId());
+        liveRunsByChildSession.set(childSessionId, {
+          parentSessionId: input.parentSessionId,
+          runId,
+        });
         if (timeoutTriggered && child.session.abort) {
           await child.session.abort().catch(() => undefined);
         }
@@ -541,6 +792,11 @@ export function createHostedSubagentAdapter(
           target: input.target,
           packet: input.packet,
           promptOverride: executionPlan.prompt,
+          inheritedContext: renderInheritedSubagentContext({
+            runtime: options.runtime,
+            sessionId: input.parentSessionId,
+            forkTurns,
+          }),
         });
         const { delegatedSkill, childOwnsSkill, prompt } = preparedEntry;
         const output = await runHostedTurnEnvelope({
@@ -611,6 +867,10 @@ export function createHostedSubagentAdapter(
         const outcome: SubagentOutcomeSuccess = {
           ok: true,
           runId,
+          agent: input.target.agent,
+          taskName: taskIdentity.taskName,
+          taskPath: taskIdentity.taskPath,
+          nickname: taskIdentity.nickname,
           delegate,
           agentSpec: input.target.agentSpecName,
           envelope: input.target.envelopeName,
@@ -768,6 +1028,10 @@ export function createHostedSubagentAdapter(
             ? ({
                 ok: false,
                 runId,
+                agent: input.target.agent,
+                taskName: taskIdentity.taskName,
+                taskPath: taskIdentity.taskPath,
+                nickname: taskIdentity.nickname,
                 delegate,
                 agentSpec: input.target.agentSpecName,
                 envelope: input.target.envelopeName,
@@ -784,6 +1048,10 @@ export function createHostedSubagentAdapter(
               } satisfies SubagentOutcome)
             : buildFailureOutcome({
                 runId,
+                agent: input.target.agent,
+                taskName: taskIdentity.taskName,
+                taskPath: taskIdentity.taskPath,
+                nickname: taskIdentity.nickname,
                 delegate,
                 agentSpec: input.target.agentSpecName,
                 envelope: input.target.envelopeName,
@@ -878,11 +1146,14 @@ export function createHostedSubagentAdapter(
           await isolatedWorkspace.dispose();
         }
         removeLiveRun(input.parentSessionId, runId);
+        if (childSessionId) {
+          liveRunsByChildSession.delete(childSessionId);
+        }
       }
     })();
 
     liveRun.outcomePromise = runPromise;
-    getLiveRuns(input.parentSessionId).set(runId, liveRun);
+    registerLiveRun(input.parentSessionId, liveRun);
     return liveRun;
   }
 
@@ -893,20 +1164,36 @@ export function createHostedSubagentAdapter(
     const runId = randomUUID();
     const startedAt = Date.now();
     const parentSessionId = asBrewvaSessionId(input.fromSessionId);
-    const contextPolicy = input.request.contextPolicy ?? "lineage_only";
+    const forkTurns = input.request.forkTurns ?? "all";
+    const taskIdentity = buildDelegationTaskIdentity({
+      target: { agent: "explorer" },
+      requestedTaskName: input.request.taskName,
+      requestedNickname: input.request.nickname,
+      label: "fork",
+      reservedTaskPaths: collectReservedTaskPaths(input.fromSessionId),
+    });
     const catalog = await loadHostedDelegationCatalog(options.runtime.identity.workspaceRoot);
-    const readonlyEnvelope = catalog.envelopes.get("readonly-advisor");
+    const readonlyEnvelope = catalog.envelopes.get("explorer-readonly");
     if (!readonlyEnvelope) {
-      throw new Error("missing_readonly_advisor_envelope");
+      throw new Error("missing_explorer_readonly_envelope");
     }
     const contractFields = buildForkDelegationContractRecordFields({
       parentSessionId,
-      contextPolicy,
+      forkTurns,
       isolationStrategy: readonlyEnvelope.isolationStrategy,
     });
     const initialRecord: DelegationRunRecord = {
       runId,
+      agent: "explorer",
+      targetName: "fork",
       delegate: "fork",
+      taskName: taskIdentity.taskName,
+      taskPath: taskIdentity.taskPath,
+      nickname: taskIdentity.nickname,
+      depth: taskIdentity.depth,
+      forkTurns,
+      gateReason: "make_judgment",
+      modelCategory: "deep-reasoning",
       ...contractFields,
       parentSessionId,
       status: "pending",
@@ -992,9 +1279,14 @@ export function createHostedSubagentAdapter(
       });
 
       const prompt = getCanonicalForkPrompt({
-        contextPolicy,
+        forkTurns,
         objective: input.request.objective,
         deliverable: input.request.deliverable,
+        inheritedContext: renderInheritedSubagentContext({
+          runtime: options.runtime,
+          sessionId: input.fromSessionId,
+          forkTurns,
+        }),
       });
       const output = await runHostedTurnEnvelope({
         session: child.session,
@@ -1095,11 +1387,11 @@ export function createHostedSubagentAdapter(
     if (options.backgroundController?.cancelSessionRuns) {
       void options.backgroundController.cancelSessionRuns(sessionId, "parent_session_cleared");
     }
-    const liveRuns = liveRunsByParentSession.get(sessionId);
-    if (!liveRuns) {
+    const liveRegistry = liveRunsByParentSession.get(sessionId);
+    if (!liveRegistry) {
       return;
     }
-    for (const run of liveRuns.values()) {
+    for (const run of liveRegistry.byRunId.values()) {
       void run.cancel("parent_session_cleared");
     }
     liveRunsByParentSession.delete(sessionId);
@@ -1111,16 +1403,17 @@ export function createHostedSubagentAdapter(
       if (!launchPlan.ok) {
         return createLaunchRunFailure({
           mode: request.mode,
-          delegate:
-            request.agentSpec ??
-            request.envelope ??
-            request.skillName ??
-            request.executionShape?.resultMode ??
-            "derived",
+          delegate: request.targetName ?? request.skillName ?? request.agent ?? "derived",
           error: launchPlan.error,
         });
       }
 
+      const parentTaskPath = buildFanoutParentTaskPath({
+        parentSessionId: fromSessionId,
+        request,
+        target: launchPlan.target,
+        invocationId: randomUUID(),
+      });
       const liveRuns = launchPlan.runs.map((run) =>
         startDelegationRun({
           parentSessionId: fromSessionId,
@@ -1129,6 +1422,10 @@ export function createHostedSubagentAdapter(
           packet: run.packet,
           executionShape: request.executionShape,
           label: run.label,
+          taskName: run.taskName,
+          nickname: run.nickname,
+          parentTaskPath,
+          forkTurns: request.forkTurns,
           timeoutMs: request.timeoutMs,
         }),
       );
@@ -1155,16 +1452,17 @@ export function createHostedSubagentAdapter(
       if (!launchPlan.ok) {
         return createLaunchStartFailure({
           mode: request.mode,
-          delegate:
-            request.agentSpec ??
-            request.envelope ??
-            request.skillName ??
-            request.executionShape?.resultMode ??
-            "derived",
+          delegate: request.targetName ?? request.skillName ?? request.agent ?? "derived",
           error: launchPlan.error,
         });
       }
 
+      const parentTaskPath = buildFanoutParentTaskPath({
+        parentSessionId: fromSessionId,
+        request,
+        target: launchPlan.target,
+        invocationId: randomUUID(),
+      });
       if (options.backgroundController) {
         const runs = await Promise.all(
           launchPlan.runs.map((run) =>
@@ -1175,6 +1473,10 @@ export function createHostedSubagentAdapter(
               packet: run.packet,
               executionShape: request.executionShape,
               label: run.label,
+              taskName: run.taskName,
+              nickname: run.nickname,
+              parentTaskPath,
+              forkTurns: request.forkTurns,
               timeoutMs: request.timeoutMs,
               delivery: request.delivery,
             }),
@@ -1206,6 +1508,10 @@ export function createHostedSubagentAdapter(
           packet: run.packet,
           executionShape: request.executionShape,
           label: run.label,
+          taskName: run.taskName,
+          nickname: run.nickname,
+          parentTaskPath,
+          forkTurns: request.forkTurns,
           timeoutMs: request.timeoutMs,
           delivery: request.delivery,
         }),
@@ -1236,9 +1542,9 @@ export function createHostedSubagentAdapter(
           })
         : undefined;
       const persistedRuns = resolveRunRecords(delegationStore, fromSessionId, query);
-      const liveRuns = liveRunsByParentSession.get(fromSessionId);
+      const liveRegistry = liveRunsByParentSession.get(fromSessionId);
       const runs = persistedRuns.map((record) => {
-        const liveRun = liveRuns?.get(record.runId);
+        const liveRun = liveRegistry?.byRunId.get(record.runId);
         const backgroundLive = backgroundLiveStates?.get(record.runId);
         return Object.assign(cloneDelegationRunRecord(record), {
           live:
@@ -1261,7 +1567,7 @@ export function createHostedSubagentAdapter(
           reason,
         });
       }
-      const liveRun = liveRunsByParentSession.get(fromSessionId)?.get(runId);
+      const liveRun = liveRunsByParentSession.get(fromSessionId)?.byRunId.get(runId);
       if (!liveRun) {
         const persisted = delegationStore.getRun(fromSessionId, runId);
         if (!persisted) {
@@ -1312,5 +1618,126 @@ export function createHostedSubagentAdapter(
     },
     fork: async ({ fromSessionId, request }): Promise<SubagentForkResult> =>
       runFork({ fromSessionId, request }),
+    sendMessage: async (input) => {
+      const limits = resolveA2ALimits();
+      const depth = (input.depth ?? 0) + 1;
+      const hops = (input.hops ?? 0) + 1;
+      if (depth > limits.maxDepth) {
+        return {
+          ok: false,
+          toAgentId: input.toAgentId,
+          error: "a2a_depth_limit_exceeded",
+          depth,
+          hops,
+        };
+      }
+      if (hops > limits.maxHops) {
+        return {
+          ok: false,
+          toAgentId: input.toAgentId,
+          error: "a2a_hops_limit_exceeded",
+          depth,
+          hops,
+        };
+      }
+      const childOrigin = liveRunsByChildSession.get(input.fromSessionId);
+      if (childOrigin) {
+        if (input.toAgentId !== "parent") {
+          return {
+            ok: false,
+            toAgentId: input.toAgentId,
+            error: "child_to_child_not_allowed",
+            depth,
+            hops,
+          };
+        }
+        recordSubagentA2AMessage({
+          parentSessionId: childOrigin.parentSessionId,
+          runId: childOrigin.runId,
+          direction: "child_to_parent",
+          fromAgentId: input.fromAgentId,
+          toAgentId: input.toAgentId,
+          message: input.message,
+          correlationId: input.correlationId,
+          depth,
+          hops,
+        });
+        return {
+          ok: true,
+          toAgentId: input.toAgentId,
+          responseText:
+            "subagent message recorded for parent (audit-only; v1 delivery is deferred)",
+          depth,
+          hops,
+        };
+      }
+      if (input.toAgentId === "parent" || input.fromAgentId === input.toAgentId) {
+        return {
+          ok: false,
+          toAgentId: input.toAgentId,
+          error: "a2a_self_target_blocked",
+          depth,
+          hops,
+        };
+      }
+      const resolved = resolveLiveRunAddress(input.fromSessionId, input.toAgentId);
+      if ("error" in resolved) {
+        return {
+          ok: false,
+          toAgentId: input.toAgentId,
+          error: resolved.error,
+          depth,
+          hops,
+        };
+      }
+      const record = resolved.run.getView();
+      recordSubagentA2AMessage({
+        parentSessionId: input.fromSessionId,
+        runId: record.runId,
+        direction: "parent_to_child",
+        fromAgentId: input.fromAgentId,
+        toAgentId: input.toAgentId,
+        message: input.message,
+        correlationId: input.correlationId,
+        depth,
+        hops,
+      });
+      return {
+        ok: true,
+        toAgentId: input.toAgentId,
+        responseText: `subagent message recorded for ${record.taskPath} (audit-only; v1 delivery is deferred)`,
+        depth,
+        hops,
+      };
+    },
+    listAgents: async (input) => {
+      const agents: Array<{
+        agentId: string;
+        primaryAddress?: string;
+        aliases?: string[];
+        kind?: "subagent";
+        status: "active" | "deleted";
+      }> = [];
+      for (const registry of liveRunsByParentSession.values()) {
+        for (const run of registry.byRunId.values()) {
+          const record = run.getView();
+          if (!input?.includeDeleted && isDelegationRunTerminalStatus(record.status)) {
+            continue;
+          }
+          const status = isDelegationRunTerminalStatus(record.status) ? "deleted" : "active";
+          const aliases = [record.taskPath, record.nickname].filter(
+            (alias, index, values) => alias !== record.runId && values.indexOf(alias) === index,
+          );
+          agents.push({
+            agentId: record.runId,
+            primaryAddress: record.taskPath,
+            aliases,
+            kind: "subagent",
+            status,
+          });
+        }
+      }
+      return agents;
+    },
   };
 }

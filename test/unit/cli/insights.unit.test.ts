@@ -35,8 +35,8 @@ describe("project insights aggregation", () => {
         previousPresetName: "Default",
         source: "tui",
         mainModel: "anthropic/claude-main:high",
-        subagentModels: {
-          advisor: "openai/gpt-5.5:medium",
+        delegationModels: {
+          "deep-reasoning": "openai/gpt-5.5:medium",
         },
       },
     });
@@ -48,8 +48,8 @@ describe("project insights aggregation", () => {
       previousName: "Default",
       source: "tui",
       mainModel: "anthropic/claude-main:high",
-      subagentModels: {
-        advisor: "openai/gpt-5.5:medium",
+      delegationModels: {
+        "deep-reasoning": "openai/gpt-5.5:medium",
       },
     });
   });
@@ -69,8 +69,8 @@ describe("project insights aggregation", () => {
       payload: {
         presetName: "Mixed Stack",
         source: "tui",
-        subagentModels: {
-          advisor: "openai/gpt-5.5:medium",
+        delegationModels: {
+          "deep-reasoning": "openai/gpt-5.5:medium",
           "ghost-reviewer": "anthropic/claude-main:high",
         },
       },
@@ -80,7 +80,7 @@ describe("project insights aggregation", () => {
 
     expect(report.modelPreset.unmatchedSubagentModelKeys).toEqual(["ghost-reviewer"]);
     expect(formatInspectText(report)).toContain(
-      "Model preset diagnostic: unmatchedSubagentModels=ghost-reviewer",
+      "Model preset diagnostic: unmatchedDelegationModels=ghost-reviewer",
     );
   });
 

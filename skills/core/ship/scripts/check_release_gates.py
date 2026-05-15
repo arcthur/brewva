@@ -4,7 +4,7 @@
 Input (JSON on stdin):
   {
     "review_state": "ready" | "needs_changes" | "blocked" | "missing",
-    "qa_state": "pass" | "fail" | "inconclusive" | "missing",
+    "verifier_state": "pass" | "fail" | "inconclusive" | "missing",
     "ci_state": "green" | "red" | "unknown",
     "branch_state": "clean" | "dirty" | "diverged"
   }
@@ -35,14 +35,14 @@ GATE_SPECS = [
         },
     },
     {
-        "name": "qa",
-        "field": "qa_state",
+        "name": "verifier",
+        "field": "verifier_state",
         "pass_values": {"pass"},
         "details": {
-            "pass": "QA passed with executable evidence",
-            "fail": "QA found release-blocking failures",
-            "inconclusive": "QA evidence incomplete",
-            "missing": "No QA evidence found",
+            "pass": "Executable verifier evidence passed",
+            "fail": "Verifier evidence includes release-blocking failures",
+            "inconclusive": "Verifier evidence is incomplete",
+            "missing": "No verifier evidence found",
         },
     },
     {

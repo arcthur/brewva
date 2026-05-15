@@ -12,9 +12,11 @@ import {
 } from "../../events/descriptor-core.js";
 import {
   SUBAGENT_CANCELLED_EVENT_TYPE,
+  SUBAGENT_A2A_MESSAGE_EVENT_TYPE,
   SUBAGENT_COMPLETED_EVENT_TYPE,
   SUBAGENT_DELIVERY_SURFACED_EVENT_TYPE,
   SUBAGENT_FAILED_EVENT_TYPE,
+  SUBAGENT_KNOWLEDGE_ADOPTION_RECORDED_EVENT_TYPE,
   SUBAGENT_OUTCOME_PARSE_FAILED_EVENT_TYPE,
   SUBAGENT_RUNNING_EVENT_TYPE,
   SUBAGENT_SPAWNED_EVENT_TYPE,
@@ -34,9 +36,11 @@ import { CURRENT_DELEGATION_CONTRACT_VERSION as DELEGATION_CONTRACT_VERSION } fr
 
 export {
   SUBAGENT_CANCELLED_EVENT_TYPE,
+  SUBAGENT_A2A_MESSAGE_EVENT_TYPE,
   SUBAGENT_COMPLETED_EVENT_TYPE,
   SUBAGENT_DELIVERY_SURFACED_EVENT_TYPE,
   SUBAGENT_FAILED_EVENT_TYPE,
+  SUBAGENT_KNOWLEDGE_ADOPTION_RECORDED_EVENT_TYPE,
   SUBAGENT_OUTCOME_PARSE_FAILED_EVENT_TYPE,
   SUBAGENT_RUNNING_EVENT_TYPE,
   SUBAGENT_SPAWNED_EVENT_TYPE,
@@ -100,13 +104,60 @@ function isDelegationIsolationStrategy(
 function isDelegationModelRouteSource(
   value: unknown,
 ): value is NonNullable<DelegationModelRouteRecord["source"]> {
-  return value === "execution_shape" || value === "preset" || value === "policy";
+  return value === "preset" || value === "policy" || value === "replay";
 }
 
 function isDelegationModelRouteMode(
   value: unknown,
 ): value is NonNullable<DelegationModelRouteRecord["mode"]> {
   return value === "explicit" || value === "auto";
+}
+
+function isPublicSubagentRole(
+  value: unknown,
+): value is NonNullable<DelegationLifecycleEventPayload["agent"]> {
+  return (
+    value === "navigator" ||
+    value === "explorer" ||
+    value === "worker" ||
+    value === "verifier" ||
+    value === "librarian"
+  );
+}
+
+function isDelegationGateReason(
+  value: unknown,
+): value is NonNullable<DelegationLifecycleEventPayload["gateReason"]> {
+  return (
+    value === "find_evidence" ||
+    value === "make_judgment" ||
+    value === "implement_isolated" ||
+    value === "verify_reproducibly" ||
+    value === "compound_knowledge"
+  );
+}
+
+function isDelegationModelCategory(
+  value: unknown,
+): value is NonNullable<DelegationLifecycleEventPayload["modelCategory"]> {
+  return (
+    value === "fast-evidence" ||
+    value === "deep-reasoning" ||
+    value === "isolated-execution" ||
+    value === "verification" ||
+    value === "knowledge"
+  );
+}
+
+function readDelegationForkTurnsValue(
+  value: unknown,
+): DelegationLifecycleEventPayload["forkTurns"] | undefined {
+  if (value === "none" || value === "all") {
+    return value;
+  }
+  return typeof value === "number" && Number.isFinite(value) && value > 0
+    ? Math.trunc(value)
+    : undefined;
 }
 
 function readDelegationAdoptionValue(value: unknown): DelegationAdoptionRecord | undefined {
@@ -141,16 +192,13 @@ function readDelegationAdoptionValue(value: unknown): DelegationAdoptionRecord |
 function readDelegationLineageValue(value: unknown): DelegationLineageRecord | undefined {
   const record = asRecord(value);
   const parentSessionId = readString(record?.parentSessionId);
-  const contextPolicy = record?.contextPolicy;
-  if (
-    !parentSessionId ||
-    (contextPolicy !== "lineage_only" && contextPolicy !== "working_snapshot")
-  ) {
+  const forkTurns = readDelegationForkTurnsValue(record?.forkTurns);
+  if (!parentSessionId || forkTurns === undefined) {
     return undefined;
   }
   return {
     parentSessionId: parentSessionId as DelegationLineageRecord["parentSessionId"],
-    contextPolicy,
+    forkTurns,
   };
 }
 
@@ -181,11 +229,13 @@ function readDelegationArtifactRefsValue(value: unknown): DelegationArtifactRef[
 function readDelegationModelRouteValue(value: unknown): DelegationModelRouteRecord | undefined {
   const record = asRecord(value);
   const selectedModel = readString(record?.selectedModel);
+  const category = record?.category;
   const source = record?.source;
   const mode = record?.mode;
   const reason = readString(record?.reason);
   if (
     !selectedModel ||
+    !isDelegationModelCategory(category) ||
     !isDelegationModelRouteSource(source) ||
     !isDelegationModelRouteMode(mode) ||
     !reason
@@ -194,13 +244,11 @@ function readDelegationModelRouteValue(value: unknown): DelegationModelRouteReco
   }
   return {
     selectedModel,
+    category,
     source,
     mode,
     reason,
     ...(readString(record?.policyId) ? { policyId: readString(record?.policyId)! } : {}),
-    ...(readString(record?.requestedModel)
-      ? { requestedModel: readString(record?.requestedModel)! }
-      : {}),
     ...(readString(record?.presetName) ? { presetName: readString(record?.presetName)! } : {}),
   };
 }
@@ -208,19 +256,23 @@ function readDelegationModelRouteValue(value: unknown): DelegationModelRouteReco
 function readDelegationKindValue(
   value: unknown,
 ): DelegationLifecycleEventPayload["kind"] | undefined {
-  if (value === "consult" || value === "qa" || value === "patch") {
-    return value;
+  if (value === "qa") {
+    return "verifier";
   }
-  if (value === "exploration" || value === "plan" || value === "review") {
-    return "consult";
+  if (
+    value === "evidence" ||
+    value === "consult" ||
+    value === "verifier" ||
+    value === "patch" ||
+    value === "knowledge"
+  ) {
+    return value;
   }
   return undefined;
 }
 
 function readDelegationConsultKindValue(
   consultKind: unknown,
-  rawKind: unknown,
-  record: Record<string, unknown> | null,
 ): DelegationLifecycleEventPayload["consultKind"] | undefined {
   if (
     consultKind === "investigate" ||
@@ -230,17 +282,7 @@ function readDelegationConsultKindValue(
   ) {
     return consultKind;
   }
-  if (rawKind === "review") {
-    return "review";
-  }
-  if (rawKind === "plan") {
-    return "design";
-  }
-  if (rawKind !== "exploration") {
-    return undefined;
-  }
-  const delegatedSkill = readString(record?.skillName) ?? readString(record?.parentSkill);
-  return delegatedSkill === "debugging" ? "diagnose" : "investigate";
+  return undefined;
 }
 
 function readDelegationDeliveryValue(
@@ -312,7 +354,22 @@ function readDelegationLifecycleEventPayloadValue(
   return {
     runId,
     ...(contractVersion !== undefined ? { contractVersion } : {}),
+    ...(isPublicSubagentRole(record?.agent) ? { agent: record.agent } : {}),
+    ...(readString(record?.targetName) ? { targetName: readString(record?.targetName)! } : {}),
     ...(readString(record?.delegate) ? { delegate: readString(record?.delegate)! } : {}),
+    ...(readString(record?.taskName) ? { taskName: readString(record?.taskName)! } : {}),
+    ...(readString(record?.taskPath) ? { taskPath: readString(record?.taskPath)! } : {}),
+    ...(readString(record?.nickname) ? { nickname: readString(record?.nickname)! } : {}),
+    ...(readNonNegativeNumber(record?.depth) !== null
+      ? { depth: readNonNegativeNumber(record?.depth)! }
+      : {}),
+    ...(readDelegationForkTurnsValue(record?.forkTurns) !== undefined
+      ? { forkTurns: readDelegationForkTurnsValue(record?.forkTurns)! }
+      : {}),
+    ...(isDelegationGateReason(record?.gateReason) ? { gateReason: record.gateReason } : {}),
+    ...(isDelegationModelCategory(record?.modelCategory)
+      ? { modelCategory: record.modelCategory }
+      : {}),
     ...(isDelegationExecutionPrimitive(record?.executionPrimitive)
       ? { executionPrimitive: record.executionPrimitive }
       : {}),
@@ -341,8 +398,8 @@ function readDelegationLifecycleEventPayloadValue(
     ...(readDelegationKindValue(record?.kind)
       ? { kind: readDelegationKindValue(record?.kind)! }
       : {}),
-    ...(readDelegationConsultKindValue(record?.consultKind, record?.kind, record)
-      ? { consultKind: readDelegationConsultKindValue(record?.consultKind, record?.kind, record)! }
+    ...(readDelegationConsultKindValue(record?.consultKind)
+      ? { consultKind: readDelegationConsultKindValue(record?.consultKind)! }
       : {}),
     ...(isToolExecutionBoundary(record?.boundary) ? { boundary: record.boundary } : {}),
     ...(resolvedStatus ? { status: resolvedStatus } : {}),
@@ -490,6 +547,16 @@ export const DELEGATION_EVENT_DESCRIPTORS = [
 ] as const;
 
 export const DELEGATION_UNTYPED_EVENT_DEFINITIONS = [
+  defineBrewvaUntypedEventDefinition({
+    type: SUBAGENT_A2A_MESSAGE_EVENT_TYPE,
+    category: "control",
+    durability: "source_of_truth",
+  }),
+  defineBrewvaUntypedEventDefinition({
+    type: SUBAGENT_KNOWLEDGE_ADOPTION_RECORDED_EVENT_TYPE,
+    category: "control",
+    durability: "source_of_truth",
+  }),
   defineBrewvaUntypedEventDefinition({
     type: WORKER_RESULTS_APPLY_FAILED_EVENT_TYPE,
     category: "other",

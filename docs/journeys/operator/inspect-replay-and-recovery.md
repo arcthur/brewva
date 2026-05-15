@@ -77,7 +77,7 @@ flowchart TD
    reasoning leaf selected before rewind when the prior operation changed
    conversation state.
 8. Delegated inspect surfaces now reflect the canonical specialist cutover:
-   public delegated outcomes are `consult`, `qa`, or `patch`, while kernel
+   public delegated outcomes are `consult`, `verifier`, or `patch`, while kernel
    `runtime.authority.verification.*` remains a separate replayed authority.
 
 ## Execution Semantics

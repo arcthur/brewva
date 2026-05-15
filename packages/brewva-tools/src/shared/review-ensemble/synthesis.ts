@@ -2,7 +2,7 @@ import { uniqueNonEmptyStrings as uniqueStrings } from "@brewva/brewva-std/colle
 import { normalizeStringList, readNonEmptyString as readString } from "@brewva/brewva-std/text";
 import { isRecord } from "@brewva/brewva-std/unknown";
 import type {
-  AdvisorReviewSubagentOutcomeData,
+  ExplorerReviewSubagentOutcomeData,
   DelegationOutcomeFinding,
   DelegationRunRecord,
   ReviewLaneDisposition,
@@ -59,7 +59,7 @@ function readStoredFinding(value: unknown): DelegationOutcomeFinding | undefined
 
 function coerceStoredReviewOutcomeData(
   value: unknown,
-): AdvisorReviewSubagentOutcomeData | undefined {
+): ExplorerReviewSubagentOutcomeData | undefined {
   if (!isRecord(value)) {
     return undefined;
   }
@@ -156,7 +156,7 @@ function dedupeFindings(findings: readonly DelegationOutcomeFinding[]): Delegati
 
 function readReviewOutcomeData(
   outcome: SubagentOutcome,
-): AdvisorReviewSubagentOutcomeData | undefined {
+): ExplorerReviewSubagentOutcomeData | undefined {
   return outcome.ok && outcome.data?.kind === "consult" && outcome.data.consultKind === "review"
     ? outcome.data
     : undefined;
@@ -173,7 +173,7 @@ function inferLaneFromOutcome(outcome: SubagentOutcome): ReviewLaneName | undefi
 
 function coerceDisposition(
   outcome: SubagentOutcome,
-  data: AdvisorReviewSubagentOutcomeData | undefined,
+  data: ExplorerReviewSubagentOutcomeData | undefined,
 ): ReviewLaneDisposition {
   if (!outcome.ok) {
     return "blocked";
@@ -195,7 +195,7 @@ function coerceDisposition(
 
 function buildLaneSummary(
   outcome: SubagentOutcome,
-  data: AdvisorReviewSubagentOutcomeData | undefined,
+  data: ExplorerReviewSubagentOutcomeData | undefined,
 ): string | undefined {
   if (!outcome.ok) {
     return outcome.error;
@@ -240,6 +240,10 @@ export function materializeReviewLaneOutcomes(
         return {
           ok: true,
           runId: run.runId,
+          agent: run.agent,
+          taskName: run.taskName,
+          taskPath: run.taskPath,
+          nickname: run.nickname,
           delegate: run.delegate,
           agentSpec: run.agentSpec,
           envelope: run.envelope,
@@ -261,6 +265,10 @@ export function materializeReviewLaneOutcomes(
       return {
         ok: false,
         runId: run.runId,
+        agent: run.agent,
+        taskName: run.taskName,
+        taskPath: run.taskPath,
+        nickname: run.nickname,
         delegate: run.delegate,
         agentSpec: run.agentSpec,
         envelope: run.envelope,

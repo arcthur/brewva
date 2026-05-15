@@ -1,10 +1,13 @@
 import type {
+  DelegationGateReason,
   DelegationIsolationStrategy,
+  DelegationModelCategory,
+  PublicSubagentRole,
   DelegationVisibility,
 } from "@brewva/brewva-runtime/delegation";
 import type { ManagedToolMode } from "@brewva/brewva-runtime/session";
 import type {
-  AdvisorConsultKind,
+  ExplorerConsultKind,
   DelegationPacket,
   ReviewLaneName,
   SubagentContextBudget,
@@ -17,14 +20,18 @@ export type { HostedDelegationBuiltinToolName } from "./config-files.js";
 
 export interface HostedDelegationTarget {
   name: string;
+  agent: PublicSubagentRole;
+  targetName: string;
   description: string;
   visibility: DelegationVisibility;
   resultMode: SubagentResultMode;
+  modelCategory: DelegationModelCategory;
+  gateReason: DelegationGateReason;
   executorPreamble?: string;
   instructionsMarkdown?: string;
   boundary?: SubagentExecutionBoundary;
   skillName?: string;
-  consultKind?: AdvisorConsultKind;
+  consultKind?: ExplorerConsultKind;
   reviewLane?: ReviewLaneName;
   fallbackResultMode?: SubagentResultMode;
   agentSpecName?: string;

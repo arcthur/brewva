@@ -46,7 +46,7 @@ export type ReviewChangeCategory = (typeof REVIEW_CHANGE_CATEGORIES)[number];
 
 export const PLANNING_OWNER_LANES = [
   ...REVIEW_LANE_NAMES,
-  "qa",
+  "verifier",
   "implementation",
   "operator",
 ] as const;

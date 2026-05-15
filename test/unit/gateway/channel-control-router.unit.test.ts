@@ -631,15 +631,15 @@ describe("channel control router ownership", () => {
       sessionId,
       runId: "router-answer-question-1",
       payload: {
-        delegate: "advisor",
+        delegate: "explorer",
         kind: "consult",
         consultKind: "review",
       },
       outcome: {
         ok: true,
         runId: "router-answer-question-1",
-        delegate: "advisor",
-        label: "advisor",
+        delegate: "explorer",
+        label: "explorer",
         kind: "consult",
         consultKind: "review",
         status: "ok",

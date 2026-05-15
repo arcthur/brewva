@@ -22,28 +22,32 @@ function createTempWorkspace(prefix: string): string {
 }
 
 const ADVISOR_TARGET: HostedDelegationTarget = {
-  name: "advisor",
-  description: "Repository investigation advisor.",
+  name: "explorer",
+  agent: "explorer",
+  targetName: "explorer",
+  description: "Repository investigation explorer.",
   visibility: "public",
   resultMode: "consult",
   consultKind: "investigate",
+  modelCategory: "deep-reasoning",
+  gateReason: "make_judgment",
   executorPreamble: "Inspect the repository and summarize the strongest evidence-backed findings.",
-  agentSpecName: "advisor",
-  envelopeName: "readonly-advisor",
+  agentSpecName: "explorer",
+  envelopeName: "explorer-readonly",
   boundary: "safe",
   builtinToolNames: ["read"],
   producesPatches: false,
   isolationStrategy: "shared",
 };
 
-function buildAdvisorPacket(
+function buildExplorerPacket(
   objective: string,
   overrides: Partial<DelegationPacket> = {},
 ): DelegationPacket {
   return {
     objective,
     consultBrief: {
-      decision: "What should the advisor determine for the parent next?",
+      decision: "What should the explorer determine for the parent next?",
       successCriteria: "Return a bounded, evidence-backed consult result.",
     },
     ...overrides,
@@ -105,6 +109,11 @@ describe("detached subagent background controller", () => {
       agentSpecName?: string;
       envelopeName?: string;
       skillName?: string;
+      target?: {
+        agentSpecName?: string;
+        envelopeName?: string;
+        skillName?: string;
+      };
       config: {
         infrastructure?: {
           events?: {
@@ -114,13 +123,15 @@ describe("detached subagent background controller", () => {
       };
     };
     expect(spec.schema).toBe("brewva.subagent-run-spec.v7");
-    expect(spec.agentSpecName).toBe("advisor");
-    expect(spec.envelopeName).toBe("readonly-advisor");
+    expect(spec.agentSpecName).toBe(undefined);
+    expect(spec.envelopeName).toBe(undefined);
     expect(spec.skillName).toBe(undefined);
+    expect(spec.target?.agentSpecName).toBe("explorer");
+    expect(spec.target?.envelopeName).toBe("explorer-readonly");
+    expect(spec.target?.skillName).toBe(undefined);
     expect(spec.config.infrastructure?.events?.level).toBe("audit");
     expect(delegationStore.getRun("parent-bg-1", run.runId)).toMatchObject({
-      agentSpec: "advisor",
-      envelope: "readonly-advisor",
+      envelope: "explorer-readonly",
       kind: "consult",
       consultKind: "investigate",
     });
@@ -300,7 +311,7 @@ describe("detached subagent background controller", () => {
     const run = await controller.startRun({
       parentSessionId: "parent-bg-cancel",
       target: ADVISOR_TARGET,
-      packet: buildAdvisorPacket("Inspect the gateway package."),
+      packet: buildExplorerPacket("Inspect the gateway package."),
     });
 
     const cancelled = await controller.cancelRun({
@@ -344,17 +355,17 @@ describe("detached subagent background controller", () => {
     const first = await controller.startRun({
       parentSessionId: "parent-bg-session",
       target: ADVISOR_TARGET,
-      packet: buildAdvisorPacket("Inspect runtime package."),
+      packet: buildExplorerPacket("Inspect runtime package."),
     });
     await controller.startRun({
       parentSessionId: "parent-bg-session",
       target: ADVISOR_TARGET,
-      packet: buildAdvisorPacket("Inspect gateway package."),
+      packet: buildExplorerPacket("Inspect gateway package."),
     });
     await controller.startRun({
       parentSessionId: "other-parent",
       target: ADVISOR_TARGET,
-      packet: buildAdvisorPacket("Ignore this run."),
+      packet: buildExplorerPacket("Ignore this run."),
     });
 
     await controller.cancelSessionRuns?.("parent-bg-session", "session_teardown");
@@ -401,12 +412,12 @@ describe("detached subagent background controller", () => {
     const first = await controller.startRun({
       parentSessionId: "parent-bg-slot-budget",
       target: ADVISOR_TARGET,
-      packet: buildAdvisorPacket("Inspect runtime package."),
+      packet: buildExplorerPacket("Inspect runtime package."),
     });
     const second = await controller.startRun({
       parentSessionId: "parent-bg-slot-budget",
       target: ADVISOR_TARGET,
-      packet: buildAdvisorPacket("Inspect gateway package."),
+      packet: buildExplorerPacket("Inspect gateway package."),
     });
 
     expect(first.status).toBe("pending");
@@ -446,7 +457,7 @@ describe("detached subagent background controller", () => {
     const first = await controller.startRun({
       parentSessionId: "parent-bg-slot-restore",
       target: ADVISOR_TARGET,
-      packet: buildAdvisorPacket("Inspect runtime package."),
+      packet: buildExplorerPacket("Inspect runtime package."),
     });
 
     const restartedRuntime = createHostedTestRuntime({
@@ -471,7 +482,7 @@ describe("detached subagent background controller", () => {
     const second = await restartedController.startRun({
       parentSessionId: "parent-bg-slot-restore",
       target: ADVISOR_TARGET,
-      packet: buildAdvisorPacket("Inspect gateway package."),
+      packet: buildExplorerPacket("Inspect gateway package."),
     });
 
     expect(first.status).toBe("pending");
@@ -509,7 +520,7 @@ describe("detached subagent background controller", () => {
     const run = await controller.startRun({
       parentSessionId: "parent-bg-predicate-preflight",
       target: ADVISOR_TARGET,
-      packet: buildAdvisorPacket("Inspect runtime until an applied worker result exists.", {
+      packet: buildExplorerPacket("Inspect runtime until an applied worker result exists.", {
         completionPredicate: {
           source: "events",
           type: "worker_results_applied",
@@ -548,7 +559,7 @@ describe("detached subagent background controller", () => {
     const run = await controller.startRun({
       parentSessionId: "parent-bg-predicate-restart",
       target: ADVISOR_TARGET,
-      packet: buildAdvisorPacket("Inspect runtime package until merge evidence exists.", {
+      packet: buildExplorerPacket("Inspect runtime package until merge evidence exists.", {
         completionPredicate: {
           source: "events",
           type: "worker_results_applied",

@@ -78,6 +78,7 @@ Every accepted decision inherits these rules:
 - [skill-surface-compression-and-project-guidance-boundaries](./skill-surface-compression-and-project-guidance-boundaries.md)
 - [specialist-subagents-and-adversarial-verification](./specialist-subagents-and-adversarial-verification.md)
 - [subagent-interface-depth-and-review-ensemble-surface](./subagent-interface-depth-and-review-ensemble-surface.md)
+- [subagent-orchestration-v2-role-taxonomy-and-trigger-governance](./subagent-orchestration-v2-role-taxonomy-and-trigger-governance.md)
 - [tool-search-advisor-and-auto-broadened-discovery](./tool-search-advisor-and-auto-broadened-discovery.md)
 
 ### Gateway, Session, And Scheduling

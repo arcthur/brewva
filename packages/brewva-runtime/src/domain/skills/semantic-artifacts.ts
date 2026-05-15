@@ -13,13 +13,13 @@ export const SEMANTIC_ARTIFACT_SCHEMA_IDS = [
   "review.review_report.v2",
   "review.review_findings.v2",
   "review.merge_decision.v2",
-  "qa.qa_report.v2",
-  "qa.qa_findings.v2",
-  "qa.qa_verdict.v2",
-  "qa.qa_checks.v2",
-  "qa.qa_missing_evidence.v2",
-  "qa.qa_confidence_gaps.v2",
-  "qa.qa_environment_limits.v2",
+  "verifier.verifier_report.v2",
+  "verifier.verifier_findings.v2",
+  "verifier.verifier_verdict.v2",
+  "verifier.verifier_checks.v2",
+  "verifier.verifier_missing_evidence.v2",
+  "verifier.verifier_confidence_gaps.v2",
+  "verifier.verifier_environment_limits.v2",
   "ship.ship_report.v2",
   "ship.release_checklist.v2",
   "ship.ship_decision.v2",
@@ -27,6 +27,28 @@ export const SEMANTIC_ARTIFACT_SCHEMA_IDS = [
 
 type SemanticArtifactSchemaId = (typeof SEMANTIC_ARTIFACT_SCHEMA_IDS)[number];
 
+export const LEGACY_SEMANTIC_ARTIFACT_SCHEMA_ID_ALIASES = {
+  "qa.qa_report.v2": "verifier.verifier_report.v2",
+  "qa.qa_findings.v2": "verifier.verifier_findings.v2",
+  "qa.qa_verdict.v2": "verifier.verifier_verdict.v2",
+  "qa.qa_checks.v2": "verifier.verifier_checks.v2",
+  "qa.qa_missing_evidence.v2": "verifier.verifier_missing_evidence.v2",
+  "qa.qa_confidence_gaps.v2": "verifier.verifier_confidence_gaps.v2",
+  "qa.qa_environment_limits.v2": "verifier.verifier_environment_limits.v2",
+} as const satisfies Record<string, SemanticArtifactSchemaId>;
+
 export function isSemanticArtifactSchemaId(value: string): value is SemanticArtifactSchemaId {
   return (SEMANTIC_ARTIFACT_SCHEMA_IDS as readonly string[]).includes(value);
+}
+
+export function normalizeSemanticArtifactSchemaId(
+  value: string,
+): SemanticArtifactSchemaId | undefined {
+  const normalized = value.trim();
+  if (isSemanticArtifactSchemaId(normalized)) {
+    return normalized;
+  }
+  return LEGACY_SEMANTIC_ARTIFACT_SCHEMA_ID_ALIASES[
+    normalized as keyof typeof LEGACY_SEMANTIC_ARTIFACT_SCHEMA_ID_ALIASES
+  ];
 }

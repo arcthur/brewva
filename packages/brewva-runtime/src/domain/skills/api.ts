@@ -58,7 +58,12 @@ export {
   getSemanticArtifactOutputContract,
   renderSemanticArtifactExample,
 } from "./semantic-artifact-catalog.js";
-export { SEMANTIC_ARTIFACT_SCHEMA_IDS, isSemanticArtifactSchemaId } from "./semantic-artifacts.js";
+export {
+  LEGACY_SEMANTIC_ARTIFACT_SCHEMA_ID_ALIASES,
+  SEMANTIC_ARTIFACT_SCHEMA_IDS,
+  isSemanticArtifactSchemaId,
+  normalizeSemanticArtifactSchemaId,
+} from "./semantic-artifacts.js";
 export { ensureBundledSystemSkills } from "./system-install.js";
 export {
   SKILL_TIER_EFFECT_CEILINGS,

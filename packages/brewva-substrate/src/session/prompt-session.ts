@@ -68,7 +68,7 @@ export interface BrewvaModelPreferences {
 export interface BrewvaModelPreset {
   name: string;
   mainModel?: string;
-  subagentModels: Record<string, string>;
+  delegationModels: Record<string, string>;
   auxiliaryModels?: {
     title?: string;
   };

@@ -2,14 +2,20 @@ import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import { CURRENT_DELEGATION_CONTRACT_VERSION } from "@brewva/brewva-runtime/delegation";
 import type {
   DelegationAdoptionRecord,
+  DelegationExecutionPrimitive,
+  DelegationGateReason,
+  DelegationIsolationStrategy,
   DelegationLifecycleEventPayload,
   DelegationLineageRecord,
   DelegationArtifactRef,
   DelegationDeliveryRecord,
+  DelegationModelCategory,
   DelegationModelRouteRecord,
   DelegationRunQuery,
   DelegationRunRecord,
+  DelegationVisibility,
   PendingDelegationOutcomeQuery,
+  PublicSubagentRole,
 } from "@brewva/brewva-runtime/delegation";
 import { isDelegationRunTerminalStatus } from "@brewva/brewva-runtime/delegation";
 import { type BrewvaStructuredEvent } from "@brewva/brewva-runtime/events";
@@ -49,11 +55,11 @@ function cloneJsonRecord(
 function cloneModelRoute(route: DelegationModelRouteRecord): DelegationModelRouteRecord {
   return {
     selectedModel: route.selectedModel,
+    category: route.category,
     source: route.source,
     mode: route.mode,
     reason: route.reason,
     policyId: route.policyId,
-    requestedModel: route.requestedModel,
     presetName: route.presetName,
   };
 }
@@ -70,7 +76,7 @@ function cloneAdoption(adoption: DelegationAdoptionRecord): DelegationAdoptionRe
 function cloneLineage(lineage: DelegationLineageRecord): DelegationLineageRecord {
   return {
     parentSessionId: lineage.parentSessionId,
-    contextPolicy: lineage.contextPolicy,
+    forkTurns: lineage.forkTurns,
   };
 }
 
@@ -82,15 +88,47 @@ function readRawEventPayload(event: DelegationEvent): Record<string, unknown> | 
     : null;
 }
 
-function requireCurrentDelegationContractVersion(
+function normalizeHistoricalTaskPathSegment(value: string): string {
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return normalized || "run";
+}
+
+function isLegacyDelegationContractVersion(value: unknown): boolean {
+  return (
+    value === undefined ||
+    value === null ||
+    value === 1 ||
+    value === 2 ||
+    value === "1" ||
+    value === "2"
+  );
+}
+
+function resolveDelegationContractVersion(
   event: DelegationEvent,
   payload: DelegationLifecycleEventPayload,
-): typeof CURRENT_DELEGATION_CONTRACT_VERSION {
+): {
+  contractVersion: typeof CURRENT_DELEGATION_CONTRACT_VERSION;
+  historicallyNormalized: boolean;
+} {
   if (payload.contractVersion === CURRENT_DELEGATION_CONTRACT_VERSION) {
-    return CURRENT_DELEGATION_CONTRACT_VERSION;
+    return {
+      contractVersion: CURRENT_DELEGATION_CONTRACT_VERSION,
+      historicallyNormalized: false,
+    };
   }
   const raw = readRawEventPayload(event);
   const value = raw?.contractVersion;
+  if (isLegacyDelegationContractVersion(value)) {
+    return {
+      contractVersion: CURRENT_DELEGATION_CONTRACT_VERSION,
+      historicallyNormalized: true,
+    };
+  }
   const rendered =
     typeof value === "string" || typeof value === "number" || typeof value === "boolean"
       ? String(value)
@@ -98,14 +136,221 @@ function requireCurrentDelegationContractVersion(
   throw new Error(`unsupported_delegation_contract_version:${rendered}`);
 }
 
+function normalizeHistoricalAgent(
+  payload: DelegationLifecycleEventPayload,
+  raw: Record<string, unknown> | null,
+): PublicSubagentRole {
+  const candidates = [payload.agent, raw?.agent, raw?.targetName, raw?.delegate];
+  for (const candidate of candidates) {
+    if (
+      candidate === "navigator" ||
+      candidate === "explorer" ||
+      candidate === "worker" ||
+      candidate === "verifier" ||
+      candidate === "librarian"
+    ) {
+      return candidate;
+    }
+    if (candidate === "advisor") {
+      return "explorer";
+    }
+    if (candidate === "patch-worker") {
+      return "worker";
+    }
+    if (candidate === "qa") {
+      return "verifier";
+    }
+  }
+  return "explorer";
+}
+
+function defaultGateReasonForAgent(agent: PublicSubagentRole): DelegationGateReason {
+  switch (agent) {
+    case "navigator":
+      return "find_evidence";
+    case "worker":
+      return "implement_isolated";
+    case "verifier":
+      return "verify_reproducibly";
+    case "librarian":
+      return "compound_knowledge";
+    case "explorer":
+      return "make_judgment";
+  }
+  return "make_judgment";
+}
+
+function defaultModelCategoryForAgent(agent: PublicSubagentRole): DelegationModelCategory {
+  switch (agent) {
+    case "navigator":
+      return "fast-evidence";
+    case "worker":
+      return "isolated-execution";
+    case "verifier":
+      return "verification";
+    case "librarian":
+      return "knowledge";
+    case "explorer":
+      return "deep-reasoning";
+  }
+  return "deep-reasoning";
+}
+
+function defaultKindForAgent(agent: PublicSubagentRole): DelegationRunRecord["kind"] {
+  switch (agent) {
+    case "navigator":
+      return "evidence";
+    case "worker":
+      return "patch";
+    case "verifier":
+      return "verifier";
+    case "librarian":
+      return "knowledge";
+    case "explorer":
+      return "consult";
+  }
+  return "consult";
+}
+
 function requireDelegationAdoption(
   payload: DelegationLifecycleEventPayload,
   runId: string,
+  historicallyNormalized: boolean,
+  kind: DelegationRunRecord["kind"],
 ): DelegationAdoptionRecord {
   if (payload.adoption) {
     return payload.adoption;
   }
+  if (historicallyNormalized) {
+    return {
+      contractId: `delegation.${kind ?? "consult"}`,
+      decision: "require_human",
+      reason: "historical delegation record normalized without a v3 adoption contract",
+    };
+  }
   throw new Error(`invalid_delegation_contract:${runId}:missing_adoption`);
+}
+
+function requireV3IdentityFields(
+  payload: DelegationLifecycleEventPayload,
+  existing: DelegationRunRecord | undefined,
+  runId: string,
+  input: {
+    historicallyNormalized: boolean;
+    raw: Record<string, unknown> | null;
+  },
+): Pick<
+  DelegationRunRecord,
+  | "agent"
+  | "targetName"
+  | "taskName"
+  | "taskPath"
+  | "nickname"
+  | "depth"
+  | "forkTurns"
+  | "gateReason"
+  | "modelCategory"
+> {
+  const agent = payload.agent ?? existing?.agent;
+  const targetName = payload.targetName ?? existing?.targetName;
+  const taskName = payload.taskName ?? existing?.taskName;
+  const taskPath = payload.taskPath ?? existing?.taskPath;
+  const nickname = payload.nickname ?? existing?.nickname;
+  const depth = payload.depth ?? existing?.depth;
+  const forkTurns = payload.forkTurns ?? existing?.forkTurns;
+  const gateReason = payload.gateReason ?? existing?.gateReason;
+  const modelCategory = payload.modelCategory ?? existing?.modelCategory;
+  if (
+    !agent ||
+    !targetName ||
+    !taskName ||
+    !taskPath ||
+    !nickname ||
+    typeof depth !== "number" ||
+    !forkTurns ||
+    !gateReason ||
+    !modelCategory
+  ) {
+    if (input.historicallyNormalized) {
+      const historicalAgent = normalizeHistoricalAgent(payload, input.raw);
+      const historicalTaskName =
+        payload.taskName ??
+        (typeof input.raw?.taskName === "string" ? input.raw.taskName : undefined) ??
+        payload.label ??
+        payload.delegate ??
+        existing?.taskName ??
+        runId;
+      const historicalTaskPath =
+        payload.taskPath ??
+        existing?.taskPath ??
+        `/historical/${normalizeHistoricalTaskPathSegment(runId)}`;
+      return {
+        agent: historicalAgent,
+        targetName: payload.targetName ?? existing?.targetName ?? historicalAgent,
+        taskName: historicalTaskName,
+        taskPath: historicalTaskPath,
+        nickname:
+          payload.nickname ??
+          existing?.nickname ??
+          payload.label ??
+          payload.delegate ??
+          historicalTaskName,
+        depth: payload.depth ?? existing?.depth ?? 2,
+        forkTurns: payload.forkTurns ?? existing?.forkTurns ?? "none",
+        gateReason:
+          payload.gateReason ?? existing?.gateReason ?? defaultGateReasonForAgent(historicalAgent),
+        modelCategory:
+          payload.modelCategory ??
+          existing?.modelCategory ??
+          defaultModelCategoryForAgent(historicalAgent),
+      };
+    }
+    throw new Error(`invalid_delegation_contract:${runId}:missing_v3_identity`);
+  }
+  return {
+    agent,
+    targetName,
+    taskName,
+    taskPath,
+    nickname,
+    depth,
+    forkTurns,
+    gateReason,
+    modelCategory,
+  };
+}
+
+function requireExecutionContractFields(
+  payload: DelegationLifecycleEventPayload,
+  existing: DelegationRunRecord | undefined,
+  runId: string,
+  input: {
+    historicallyNormalized: boolean;
+    agent: PublicSubagentRole;
+  },
+): {
+  executionPrimitive: DelegationExecutionPrimitive;
+  visibility: DelegationVisibility;
+  isolationStrategy: DelegationIsolationStrategy;
+} {
+  const executionPrimitive = payload.executionPrimitive ?? existing?.executionPrimitive;
+  const visibility = payload.visibility ?? existing?.visibility;
+  const isolationStrategy = payload.isolationStrategy ?? existing?.isolationStrategy;
+  if (executionPrimitive && visibility && isolationStrategy) {
+    return {
+      executionPrimitive,
+      visibility,
+      isolationStrategy,
+    };
+  }
+  if (!input.historicallyNormalized) {
+    throw new Error(`invalid_delegation_contract:${runId}`);
+  }
+  return {
+    executionPrimitive: executionPrimitive ?? "named",
+    visibility: visibility ?? "public",
+    isolationStrategy: isolationStrategy ?? (input.agent === "worker" ? "snapshot" : "shared"),
+  };
 }
 
 function mergeDeliveryRecord(
@@ -167,7 +412,16 @@ export function buildDelegationLifecyclePayload(
   return {
     contractVersion: record.contractVersion,
     runId: record.runId,
+    agent: record.agent,
+    targetName: record.targetName,
     delegate: record.delegate,
+    taskName: record.taskName,
+    taskPath: record.taskPath,
+    nickname: record.nickname,
+    depth: record.depth,
+    forkTurns: record.forkTurns,
+    gateReason: record.gateReason,
+    modelCategory: record.modelCategory,
     executionPrimitive: record.executionPrimitive,
     visibility: record.visibility,
     isolationStrategy: record.isolationStrategy,
@@ -207,26 +461,33 @@ function applyDelegationEvent(
 ): void {
   if (event.type === SUBAGENT_SPAWNED_EVENT_TYPE || event.type === SUBAGENT_RUNNING_EVENT_TYPE) {
     const payload = readDelegationLifecycleEventPayload(event);
-    if (!payload?.runId || !payload.delegate) {
+    if (!payload?.runId) {
       return;
     }
     const runId = payload.runId;
     const existing = runs.get(runId);
-    const contractVersion = requireCurrentDelegationContractVersion(event, payload);
-    const executionPrimitive = payload.executionPrimitive;
-    const visibility = payload.visibility;
-    const isolationStrategy = payload.isolationStrategy;
-    if (!executionPrimitive || !visibility || !isolationStrategy) {
-      throw new Error(`invalid_delegation_contract:${runId}`);
-    }
+    const contract = resolveDelegationContractVersion(event, payload);
+    const identityFields = requireV3IdentityFields(payload, existing, runId, {
+      historicallyNormalized: contract.historicallyNormalized,
+      raw: readRawEventPayload(event),
+    });
+    const executionFields = requireExecutionContractFields(payload, existing, runId, {
+      historicallyNormalized: contract.historicallyNormalized,
+      agent: identityFields.agent,
+    });
+    const kind =
+      payload.kind ??
+      existing?.kind ??
+      (contract.historicallyNormalized ? defaultKindForAgent(identityFields.agent) : undefined);
     upsertRun(runs, {
-      contractVersion,
+      contractVersion: contract.contractVersion,
       runId,
-      delegate: payload.delegate,
-      executionPrimitive,
-      visibility,
-      isolationStrategy,
-      adoption: requireDelegationAdoption(payload, runId),
+      ...identityFields,
+      delegate: payload.delegate ?? existing?.delegate ?? identityFields.targetName,
+      ...executionFields,
+      adoption: requireDelegationAdoption(payload, runId, contract.historicallyNormalized, kind),
+      historicallyNormalized:
+        contract.historicallyNormalized || existing?.historicallyNormalized ? true : undefined,
       lineage: payload.lineage ?? existing?.lineage,
       agentSpec: payload.agentSpec ?? existing?.agentSpec,
       envelope: payload.envelope ?? existing?.envelope,
@@ -239,7 +500,7 @@ function applyDelegationEvent(
       label: payload.label ?? existing?.label,
       workerSessionId: payload.childSessionId ?? existing?.workerSessionId,
       parentSkill: payload.parentSkill ?? existing?.parentSkill,
-      kind: payload.kind ?? existing?.kind,
+      kind,
       consultKind: payload.consultKind ?? existing?.consultKind,
       boundary: payload.boundary ?? existing?.boundary,
       modelRoute: payload.modelRoute ?? existing?.modelRoute,
@@ -261,21 +522,28 @@ function applyDelegationEvent(
     }
     const runId = payload.runId;
     const existing = runs.get(runId);
-    const contractVersion = requireCurrentDelegationContractVersion(event, payload);
-    const executionPrimitive = payload.executionPrimitive;
-    const visibility = payload.visibility;
-    const isolationStrategy = payload.isolationStrategy;
-    if (!executionPrimitive || !visibility || !isolationStrategy) {
-      throw new Error(`invalid_delegation_contract:${runId}`);
-    }
+    const contract = resolveDelegationContractVersion(event, payload);
+    const identityFields = requireV3IdentityFields(payload, existing, runId, {
+      historicallyNormalized: contract.historicallyNormalized,
+      raw: readRawEventPayload(event),
+    });
+    const executionFields = requireExecutionContractFields(payload, existing, runId, {
+      historicallyNormalized: contract.historicallyNormalized,
+      agent: identityFields.agent,
+    });
+    const kind =
+      payload.kind ??
+      existing?.kind ??
+      (contract.historicallyNormalized ? defaultKindForAgent(identityFields.agent) : undefined);
     upsertRun(runs, {
-      contractVersion,
+      contractVersion: contract.contractVersion,
       runId,
+      ...identityFields,
       delegate: payload.delegate ?? existing?.delegate ?? "unknown",
-      executionPrimitive,
-      visibility,
-      isolationStrategy,
-      adoption: requireDelegationAdoption(payload, runId),
+      ...executionFields,
+      adoption: requireDelegationAdoption(payload, runId, contract.historicallyNormalized, kind),
+      historicallyNormalized:
+        contract.historicallyNormalized || existing?.historicallyNormalized ? true : undefined,
       lineage: payload.lineage ?? existing?.lineage,
       agentSpec: payload.agentSpec ?? existing?.agentSpec,
       envelope: payload.envelope ?? existing?.envelope,
@@ -287,7 +555,7 @@ function applyDelegationEvent(
       label: payload.label ?? existing?.label,
       workerSessionId: payload.childSessionId ?? existing?.workerSessionId,
       parentSkill: payload.parentSkill ?? existing?.parentSkill,
-      kind: payload.kind ?? existing?.kind,
+      kind,
       consultKind: payload.consultKind ?? existing?.consultKind,
       boundary: payload.boundary ?? existing?.boundary,
       modelRoute: payload.modelRoute ?? existing?.modelRoute,
@@ -347,13 +615,19 @@ function applyDelegationEvent(
     }
     const runId = payload.runId;
     const existing = runs.get(runId);
-    const contractVersion = requireCurrentDelegationContractVersion(event, payload);
-    const executionPrimitive = payload.executionPrimitive;
-    const visibility = payload.visibility;
-    const isolationStrategy = payload.isolationStrategy;
-    if (!executionPrimitive || !visibility || !isolationStrategy) {
-      throw new Error(`invalid_delegation_contract:${runId}`);
-    }
+    const contract = resolveDelegationContractVersion(event, payload);
+    const identityFields = requireV3IdentityFields(payload, existing, runId, {
+      historicallyNormalized: contract.historicallyNormalized,
+      raw: readRawEventPayload(event),
+    });
+    const executionFields = requireExecutionContractFields(payload, existing, runId, {
+      historicallyNormalized: contract.historicallyNormalized,
+      agent: identityFields.agent,
+    });
+    const kind =
+      payload.kind ??
+      existing?.kind ??
+      (contract.historicallyNormalized ? defaultKindForAgent(identityFields.agent) : undefined);
     const statusFromPayload = payload.status;
     const fallbackError =
       statusFromPayload === "timeout"
@@ -362,13 +636,14 @@ function applyDelegationEvent(
           ? "cancelled"
           : "failed";
     upsertRun(runs, {
-      contractVersion,
+      contractVersion: contract.contractVersion,
       runId,
+      ...identityFields,
       delegate: payload.delegate ?? existing?.delegate ?? "unknown",
-      executionPrimitive,
-      visibility,
-      isolationStrategy,
-      adoption: requireDelegationAdoption(payload, runId),
+      ...executionFields,
+      adoption: requireDelegationAdoption(payload, runId, contract.historicallyNormalized, kind),
+      historicallyNormalized:
+        contract.historicallyNormalized || existing?.historicallyNormalized ? true : undefined,
       lineage: payload.lineage ?? existing?.lineage,
       agentSpec: payload.agentSpec ?? existing?.agentSpec,
       envelope: payload.envelope ?? existing?.envelope,
@@ -382,7 +657,7 @@ function applyDelegationEvent(
       label: payload.label ?? existing?.label,
       workerSessionId: payload.childSessionId ?? existing?.workerSessionId,
       parentSkill: payload.parentSkill ?? existing?.parentSkill,
-      kind: payload.kind ?? existing?.kind,
+      kind,
       consultKind: payload.consultKind ?? existing?.consultKind,
       boundary: payload.boundary ?? existing?.boundary,
       modelRoute: payload.modelRoute ?? existing?.modelRoute,
@@ -448,6 +723,15 @@ function filterDelegationRuns(
 ): DelegationRunRecord[] {
   const runIdFilter =
     Array.isArray(query.runIds) && query.runIds.length > 0 ? new Set(query.runIds) : undefined;
+  const taskPathFilter =
+    Array.isArray(query.taskPaths) && query.taskPaths.length > 0
+      ? new Set(query.taskPaths)
+      : undefined;
+  const nicknameFilter =
+    Array.isArray(query.nicknames) && query.nicknames.length > 0
+      ? new Set(query.nicknames)
+      : undefined;
+  const pathPrefix = typeof query.pathPrefix === "string" ? query.pathPrefix : undefined;
   const statusFilter =
     Array.isArray(query.statuses) && query.statuses.length > 0
       ? new Set(query.statuses)
@@ -456,6 +740,15 @@ function filterDelegationRuns(
   const filtered = [...runs]
     .filter((record) => {
       if (runIdFilter && !runIdFilter.has(record.runId)) {
+        return false;
+      }
+      if (taskPathFilter && !taskPathFilter.has(record.taskPath)) {
+        return false;
+      }
+      if (nicknameFilter && !nicknameFilter.has(record.nickname)) {
+        return false;
+      }
+      if (pathPrefix && !record.taskPath.startsWith(pathPrefix)) {
         return false;
       }
       if (!includeTerminal && isDelegationRunTerminalStatus(record.status)) {

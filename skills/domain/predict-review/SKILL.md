@@ -111,7 +111,7 @@ Independent analysis first. Debate second. Require:
 3. Devil's Advocate challenges the majority position explicitly.
 4. Unresolved objections stay visible — do not smooth them away.
 
-Optional: `subagent_run` QA pass to break the leading hypothesis.
+Optional: run an empirical verifier pass through `subagent_run` to break the leading hypothesis.
 
 **If majority agreement forms with no recorded dissent**: Stop. The Iron Law
 is violated. Force explicit disagreement.

@@ -1,11 +1,14 @@
 import type {
-  AdvisorConsultBrief,
+  ExplorerConsultBrief,
   DelegationCompletionPredicate,
   DelegationPacket,
   DelegationTaskPacket,
+  SubagentAgent,
   SubagentDelegationMode,
   SubagentExecutionBoundary,
   SubagentExecutionShape,
+  SubagentForkTurns,
+  SubagentGateReason,
   SubagentReturnMode,
   SubagentRunRequest,
 } from "../../../contracts/index.js";
@@ -13,7 +16,6 @@ import type {
   CompletionPredicateInput,
   DiagnosticSubagentFanoutParams,
   DiagnosticSubagentRunParams,
-  ExecutionShapeInput,
   PublicTaskPacketInput,
   SharedPacketInput,
   SubagentFanoutParams,
@@ -55,7 +57,7 @@ function buildExecutionHints(
 
 function buildConsultBrief(
   value: SharedPacketInput["consultBrief"],
-): AdvisorConsultBrief | undefined {
+): ExplorerConsultBrief | undefined {
   if (!value) {
     return undefined;
   }
@@ -125,10 +127,19 @@ function buildPacket(packet: SharedPacketInput): DelegationPacket | undefined {
 }
 
 function buildPublicPacket(input: {
-  skillName: string;
   packet: Omit<
     SubagentRunParams,
-    "waitMode" | "timeoutMs" | "returnMode" | "returnLabel" | "returnScopeId"
+    | "agent"
+    | "skillName"
+    | "taskName"
+    | "nickname"
+    | "forkTurns"
+    | "gateReason"
+    | "waitMode"
+    | "timeoutMs"
+    | "returnMode"
+    | "returnLabel"
+    | "returnScopeId"
   >;
 }): DelegationPacket | undefined {
   return buildPacket({
@@ -146,9 +157,8 @@ function buildPublicPacket(input: {
 }
 
 function buildPublicTask(input: {
-  skillName: string;
   task: PublicTaskPacketInput;
-  brief?: AdvisorConsultBrief;
+  brief?: ExplorerConsultBrief;
 }): DelegationTaskPacket {
   const packet = buildPacket({
     objective: input.task.objective,
@@ -167,33 +177,61 @@ function buildPublicTask(input: {
   }
   return {
     label: input.task.label,
+    taskName: input.task.taskName,
+    nickname: input.task.nickname,
     ...packet,
   };
 }
 
+function normalizeAgent(value: unknown): SubagentAgent | undefined {
+  return value === "navigator" ||
+    value === "explorer" ||
+    value === "worker" ||
+    value === "verifier" ||
+    value === "librarian"
+    ? value
+    : undefined;
+}
+
+function normalizeGateReason(value: unknown): SubagentGateReason | undefined {
+  return value === "find_evidence" ||
+    value === "make_judgment" ||
+    value === "implement_isolated" ||
+    value === "verify_reproducibly" ||
+    value === "compound_knowledge"
+    ? value
+    : undefined;
+}
+
+function normalizeForkTurns(value: unknown): SubagentForkTurns | undefined {
+  if (value === "none" || value === "all") {
+    return value;
+  }
+  if (typeof value === "number" && Number.isInteger(value) && value > 0) {
+    return value;
+  }
+  return undefined;
+}
+
 function buildExecutionShape(
-  value: ExecutionShapeInput | undefined,
+  value:
+    | Pick<DiagnosticSubagentRunParams, "boundary" | "managedToolMode">
+    | Pick<DiagnosticSubagentFanoutParams, "boundary" | "managedToolMode">
+    | undefined,
 ): SubagentExecutionShape | undefined {
   if (!value) {
     return undefined;
   }
-  const resultMode =
-    value.resultMode === "consult" || value.resultMode === "qa" || value.resultMode === "patch"
-      ? value.resultMode
-      : undefined;
   const boundary = normalizeBoundary(value.boundary);
-  const model = typeof value.model === "string" ? value.model : undefined;
   const managedToolMode =
     value.managedToolMode === "direct" || value.managedToolMode === "hosted"
       ? value.managedToolMode
       : undefined;
-  if (!resultMode && !boundary && !model && !managedToolMode) {
+  if (!boundary && !managedToolMode) {
     return undefined;
   }
   return {
-    resultMode,
     boundary,
-    model,
     managedToolMode,
   };
 }
@@ -234,6 +272,8 @@ function toTask(task: TaskPacketInput): DelegationTaskPacket {
   }
   return {
     label: task.label,
+    taskName: task.taskName,
+    nickname: task.nickname,
     ...packet,
   };
 }
@@ -243,8 +283,8 @@ export function buildRunRequestFromParams(input: {
   mode: SubagentDelegationMode;
 }): { ok: true; request: SubagentRunRequest } | { ok: false; message: string } {
   const { params } = input;
-  const agentSpec = params.agentSpec?.trim() ? params.agentSpec : undefined;
-  const envelope = params.envelope?.trim() ? params.envelope : undefined;
+  const agent = normalizeAgent(params.agent) ?? "explorer";
+  const targetName = params.targetName?.trim() ? params.targetName : undefined;
   const explicitSkillName = params.skillName?.trim() ? params.skillName : undefined;
   const consultKind =
     params.consultKind === "investigate" ||
@@ -253,32 +293,16 @@ export function buildRunRequestFromParams(input: {
     params.consultKind === "review"
       ? params.consultKind
       : undefined;
-  const executionShape = buildExecutionShape(params.executionShape);
-  const fallbackResultMode =
-    params.fallbackResultMode === "consult" ||
-    params.fallbackResultMode === "qa" ||
-    params.fallbackResultMode === "patch"
-      ? params.fallbackResultMode
-      : undefined;
+  const executionShape = buildExecutionShape(params);
   const request: SubagentRunRequest = {
-    agentSpec,
-    envelope,
+    agent,
+    targetName,
     skillName: explicitSkillName,
     consultKind,
-    fallbackResultMode,
     executionShape,
     mode: input.mode,
     timeoutMs: params.timeoutMs,
   };
-  if (
-    (request.executionShape?.resultMode ?? request.fallbackResultMode) === "consult" &&
-    !consultKind
-  ) {
-    return {
-      ok: false,
-      message: "Error: consultKind is required for consult delegation.",
-    };
-  }
 
   if (input.mode === "single") {
     const packet = buildPacket(params);
@@ -286,15 +310,6 @@ export function buildRunRequestFromParams(input: {
       return {
         ok: false,
         message: "Error: objective is required for mode=single.",
-      };
-    }
-    if (
-      (request.executionShape?.resultMode ?? request.fallbackResultMode) === "consult" &&
-      !packet.consultBrief
-    ) {
-      return {
-        ok: false,
-        message: "Error: consultBrief is required for consult delegation.",
       };
     }
     request.packet = packet;
@@ -310,15 +325,6 @@ export function buildRunRequestFromParams(input: {
   if (hasSinglePacketInput(params)) {
     const sharedPacket = buildPacket(params);
     if (sharedPacket) {
-      if (
-        (request.executionShape?.resultMode ?? request.fallbackResultMode) === "consult" &&
-        !sharedPacket.consultBrief
-      ) {
-        return {
-          ok: false,
-          message: "Error: consultBrief is required for consult delegation.",
-        };
-      }
       request.packet = sharedPacket;
     }
   }
@@ -336,8 +342,15 @@ export function buildRunRequestFromParams(input: {
 export function buildPublicRunRequestFromParams(input: {
   params: SubagentRunParams;
 }): { ok: true; request: SubagentRunRequest } | { ok: false; message: string } {
-  const skillName = input.params.skillName.trim();
-  const packet = buildPublicPacket({ skillName, packet: input.params });
+  const agent = normalizeAgent(input.params.agent);
+  if (!agent) {
+    return {
+      ok: false,
+      message: "Error: agent is required for subagent_run.",
+    };
+  }
+  const skillName = input.params.skillName?.trim() || undefined;
+  const packet = buildPublicPacket({ packet: input.params });
   if (!packet) {
     return {
       ok: false,
@@ -347,7 +360,12 @@ export function buildPublicRunRequestFromParams(input: {
   return {
     ok: true,
     request: {
+      agent,
       skillName,
+      taskName: input.params.taskName,
+      nickname: input.params.nickname,
+      forkTurns: normalizeForkTurns(input.params.forkTurns) ?? "none",
+      gateReason: normalizeGateReason(input.params.gateReason),
       mode: "single",
       timeoutMs: input.params.timeoutMs,
       packet,
@@ -358,10 +376,16 @@ export function buildPublicRunRequestFromParams(input: {
 export function buildPublicFanoutRequestFromParams(input: {
   params: SubagentFanoutParams;
 }): { ok: true; request: SubagentRunRequest } | { ok: false; message: string } {
-  const skillName = input.params.skillName.trim();
+  const agent = normalizeAgent(input.params.agent);
+  if (!agent) {
+    return {
+      ok: false,
+      message: "Error: agent is required for subagent_fanout.",
+    };
+  }
+  const skillName = input.params.skillName?.trim() || undefined;
   const sharedPacket = input.params.objective
     ? buildPublicPacket({
-        skillName,
         packet: {
           ...input.params,
           objective: input.params.objective,
@@ -372,12 +396,17 @@ export function buildPublicFanoutRequestFromParams(input: {
     return {
       ok: true,
       request: {
+        agent,
         skillName,
+        taskName: input.params.taskName,
+        nickname: input.params.nickname,
+        forkTurns: normalizeForkTurns(input.params.forkTurns) ?? "none",
+        gateReason: normalizeGateReason(input.params.gateReason),
         mode: "parallel",
         timeoutMs: input.params.timeoutMs,
         packet: sharedPacket,
         tasks: input.params.tasks.map((task) =>
-          buildPublicTask({ skillName, task, brief: input.params.brief }),
+          buildPublicTask({ task, brief: input.params.brief }),
         ),
       },
     };
@@ -406,16 +435,16 @@ export function buildDeliveryRequest(
 export function resolveDelegationLabel(
   request: Pick<
     SubagentRunRequest,
-    "agentSpec" | "envelope" | "skillName" | "consultKind" | "fallbackResultMode" | "executionShape"
+    "agent" | "targetName" | "skillName" | "consultKind" | "taskName" | "nickname"
   >,
 ): string {
   return (
-    request.agentSpec ??
-    request.envelope ??
+    request.taskName ??
+    request.nickname ??
+    request.targetName ??
+    request.agent ??
     request.consultKind ??
     request.skillName ??
-    request.executionShape?.resultMode ??
-    request.fallbackResultMode ??
     "ad-hoc"
   );
 }

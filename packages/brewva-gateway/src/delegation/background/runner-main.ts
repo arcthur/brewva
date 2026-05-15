@@ -11,7 +11,8 @@ import type { DelegationRunRecord } from "@brewva/brewva-runtime/delegation";
 import { SUBAGENT_RUNNING_EVENT_TYPE } from "@brewva/brewva-runtime/events";
 import type { SkillRoutingScope } from "@brewva/brewva-runtime/skills";
 import type {
-  AdvisorConsultKind,
+  ExplorerConsultKind,
+  SubagentAgent,
   SubagentOutcome,
   SubagentOutcomeArtifactRef,
   SubagentRunRequest,
@@ -29,6 +30,7 @@ import {
 import { HostedDelegationStore, buildDelegationLifecyclePayload } from "../delegation-store.js";
 import { prepareSubagentEntry } from "../entry.js";
 import { resolveDelegationExecutionPlan } from "../execution-plan.js";
+import { renderInheritedSubagentContext } from "../fork-context.js";
 import { ensureDelegationLineageNode, recordDelegationLineageOutcome } from "../lineage.js";
 import { createDelegationModelRoutingContextFromAgentDir } from "../model-routing.js";
 import {
@@ -67,6 +69,10 @@ function normalizeRelativePath(path: string): string {
   return path.replaceAll("\\", "/");
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 const hostedSessionLogger = {
   warn(message: string, fields?: Record<string, unknown>) {
     console.error(
@@ -93,11 +99,15 @@ function buildOutcomeArtifactRef(workspaceRoot: string, runId: string): Subagent
 
 function buildFailureOutcome(input: {
   runId: string;
+  agent: SubagentAgent;
+  taskName: string;
+  taskPath: string;
+  nickname: string;
   delegate: string;
   agentSpec?: string;
   envelope?: string;
   skillName?: string;
-  consultKind?: AdvisorConsultKind;
+  consultKind?: ExplorerConsultKind;
   label?: string;
   workerSessionId?: string;
   artifactRefs?: SubagentOutcomeArtifactRef[];
@@ -108,6 +118,10 @@ function buildFailureOutcome(input: {
   return {
     ok: false,
     runId: input.runId,
+    agent: input.agent,
+    taskName: input.taskName,
+    taskPath: input.taskPath,
+    nickname: input.nickname,
     delegate: input.delegate,
     agentSpec: input.agentSpec,
     envelope: input.envelope,
@@ -151,6 +165,9 @@ async function loadSpec(path: string): Promise<DetachedSubagentRunSpec> {
   if (schema !== "brewva.subagent-run-spec.v7") {
     throw new Error(`unsupported_detached_subagent_spec_schema:${schema}`);
   }
+  if (!isRecord(raw.target)) {
+    throw new Error("invalid_detached_subagent_spec:missing_target");
+  }
   return {
     ...raw,
     schema: "brewva.subagent-run-spec.v7",
@@ -184,40 +201,6 @@ async function main(): Promise<void> {
   const delegationStore = new HostedDelegationStore(parentRuntime);
   const existing = delegationStore.getRun(spec.parentSessionId, spec.runId);
   const target = spec.target;
-  if (!target) {
-    const failed = {
-      ...(existing ?? {
-        contractVersion: CURRENT_DELEGATION_CONTRACT_VERSION,
-        runId: spec.runId,
-        delegate: spec.delegate,
-        executionPrimitive: "named" as const,
-        visibility: "diagnostic" as const,
-        isolationStrategy: "shared" as const,
-        adoption: evaluateDelegationAdoption({ outcomeKind: "consult" }),
-        parentSessionId: specParentSessionId,
-        status: "failed" as const,
-        createdAt: spec.createdAt,
-        updatedAt: Date.now(),
-      }),
-      status: "failed" as const,
-      updatedAt: Date.now(),
-      error: `missing_delegate_target:${spec.delegate}`,
-      summary: `missing_delegate_target:${spec.delegate}`,
-    };
-    parentRuntime.extensions.hosted.events.record({
-      sessionId: spec.parentSessionId,
-      type: "subagent_failed",
-      payload: buildDelegationLifecyclePayload(failed),
-    });
-    recordDelegationLineageOutcome({
-      runtime: parentRuntime,
-      sessionId: spec.parentSessionId,
-      record: failed,
-    });
-    removeDetachedSubagentLiveState(spec.workspaceRoot, spec.runId);
-    process.exitCode = 1;
-    return;
-  }
 
   const delegationTarget = target;
   const packet = mergeDelegationPacketWithTargetDefaults(delegationTarget, spec.packet);
@@ -226,11 +209,20 @@ async function main(): Promise<void> {
       ...(existing ?? {
         contractVersion: CURRENT_DELEGATION_CONTRACT_VERSION,
         runId: spec.runId,
+        agent: target.agent,
+        targetName: target.targetName,
         delegate: spec.delegate,
+        taskName: spec.taskName,
+        taskPath: spec.taskPath,
+        nickname: spec.nickname,
+        depth: spec.depth,
+        forkTurns: spec.forkTurns,
+        gateReason: target.gateReason,
+        modelCategory: target.modelCategory,
         executionPrimitive: "named" as const,
-        visibility: "diagnostic" as const,
-        isolationStrategy: "shared" as const,
-        adoption: evaluateDelegationAdoption({ outcomeKind: "consult" }),
+        visibility: target.visibility,
+        isolationStrategy: target.isolationStrategy,
+        adoption: evaluateDelegationAdoption({ outcomeKind: target.resultMode }),
         parentSessionId: specParentSessionId,
         status: "failed" as const,
         createdAt: spec.createdAt,
@@ -319,6 +311,13 @@ async function main(): Promise<void> {
           parentSessionId: specParentSessionId,
           createdAt: spec.createdAt,
           label: spec.label,
+          taskIdentity: {
+            taskName: spec.taskName,
+            taskPath: spec.taskPath,
+            nickname: spec.nickname,
+            depth: spec.depth,
+          },
+          forkTurns: spec.forkTurns,
           boundary: executionPlan.boundary,
           modelRoute: executionPlan.modelRoute,
           delivery: existing?.delivery,
@@ -373,6 +372,11 @@ async function main(): Promise<void> {
       delegate: spec.delegate,
       packet,
       promptOverride: executionPlan.prompt,
+      inheritedContext: renderInheritedSubagentContext({
+        runtime: parentRuntime,
+        sessionId: spec.parentSessionId,
+        forkTurns: spec.forkTurns,
+      }),
     });
     const { delegatedSkill, childOwnsSkill, prompt } = preparedEntry;
     const output = await runHostedTurnEnvelope({
@@ -447,6 +451,10 @@ async function main(): Promise<void> {
     const outcome: SubagentOutcome = {
       ok: true,
       runId: spec.runId,
+      agent: targetRecord.agent,
+      taskName: spec.taskName,
+      taskPath: spec.taskPath,
+      nickname: spec.nickname,
       delegate: spec.delegate,
       agentSpec: targetRecord.agentSpecName,
       envelope: targetRecord.envelopeName,
@@ -502,6 +510,13 @@ async function main(): Promise<void> {
           delegatedSkillName: delegatedSkill,
           parentSessionId: specParentSessionId,
           createdAt: spec.createdAt,
+          taskIdentity: {
+            taskName: spec.taskName,
+            taskPath: spec.taskPath,
+            nickname: spec.nickname,
+            depth: spec.depth,
+          },
+          forkTurns: spec.forkTurns,
         })),
       status: "completed",
       updatedAt: Date.now(),
@@ -572,6 +587,10 @@ async function main(): Promise<void> {
     }
     const outcome = buildFailureOutcome({
       runId: spec.runId,
+      agent: targetRecord.agent,
+      taskName: spec.taskName,
+      taskPath: spec.taskPath,
+      nickname: spec.nickname,
       delegate: spec.delegate,
       agentSpec: targetRecord.agentSpecName,
       envelope: targetRecord.envelopeName,
@@ -600,6 +619,13 @@ async function main(): Promise<void> {
           delegate: spec.delegate,
           parentSessionId: specParentSessionId,
           createdAt: spec.createdAt,
+          taskIdentity: {
+            taskName: spec.taskName,
+            taskPath: spec.taskPath,
+            nickname: spec.nickname,
+            depth: spec.depth,
+          },
+          forkTurns: spec.forkTurns,
         })),
       status: terminalStatus,
       updatedAt: Date.now(),

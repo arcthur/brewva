@@ -1,4 +1,4 @@
-# QA Report: {{feature_name}}
+# Verifier Report: {{feature_name}}
 
 ## Environment
 

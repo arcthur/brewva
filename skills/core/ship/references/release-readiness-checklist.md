@@ -6,7 +6,7 @@ release decision.
 ## Core Release Questions
 
 - Is the intended release target explicit: PR, merge, or deploy handoff?
-- Do review and QA both support the same release posture?
+- Do review and verifier evidence both support the same release posture?
 - Is verification current, not stale relative to the latest change?
 - Are repository, CI, and approval mechanics aligned with the requested action?
 
@@ -14,14 +14,14 @@ release decision.
 
 - State which path is being audited before giving the verdict.
 - Keep product-code changes out of ship. If correctness work remains, route back
-  to implementation or QA.
+  to implementation or verifier.
 - Make the final handoff explicit: operator action, GitHub action, CI gate, or
   deploy gate.
 
 ## Common Blockers
 
 - merge decision is not yet `ready`
-- QA still has unresolved findings or a non-pass verdict
+- the verifier still has unresolved findings or a non-pass verdict
 - verification evidence is stale or too weak for the requested release action
 - GitHub or CI context is missing for a PR- or pipeline-driven flow
 

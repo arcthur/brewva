@@ -44,7 +44,7 @@
   `/workflow`. `bundle/`, family internals, and `shared/` remain private source
   structure.
 - `contracts/` owns stable vocabulary only: runtime-port types, metadata,
-  surfaces, delegation, A2A, subagent, advisor, and semantic-reranker port
+  surfaces, delegation, A2A, subagent, explorer, and semantic-reranker port
   contracts. Runtime strategies, scoring, rendering, and review synthesis stay
   in the owning family, registry, runtime-port, or private shared helper.
 - `registry/` is the single managed-tool capability spine. It owns managed tool

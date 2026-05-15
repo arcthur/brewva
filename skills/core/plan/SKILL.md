@@ -43,7 +43,7 @@ execution_hints:
     - ledger_query
 references:
   - references/executable-evidence-bridge.md
-  - references/advisor-consultation-protocol.md
+  - references/explorer-consultation-protocol.md
   - references/plan-output-template.md
   - references/example.md
   - references/rationalizations.md

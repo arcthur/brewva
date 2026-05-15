@@ -1,7 +1,6 @@
 import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import {
-  BUILTIN_AGENT_SPECS,
   projectHostedTransitionSnapshot,
   type HostedTransitionSnapshot,
 } from "@brewva/brewva-gateway";
@@ -115,7 +114,7 @@ interface InspectReport {
     previousName: string | null;
     source: string | null;
     mainModel: string | null;
-    subagentModels: Record<string, string>;
+    delegationModels: Record<string, string>;
     unmatchedSubagentModelKeys: string[];
     eventId: string | null;
     selectedAt: string | null;
@@ -286,21 +285,27 @@ function readEventPayloadString(event: BrewvaEventRecord, key: string): string |
 }
 
 function resolveUnmatchedPresetSubagentModelKeys(input: {
-  subagentModels: Record<string, string>;
+  delegationModels: Record<string, string>;
   events: BrewvaEventRecord[];
 }): string[] {
-  const knownAgentSpecs = new Set(Object.keys(BUILTIN_AGENT_SPECS));
+  const knownDelegationModelCategories = new Set([
+    "fast-evidence",
+    "deep-reasoning",
+    "isolated-execution",
+    "verification",
+    "knowledge",
+  ]);
   for (const event of input.events) {
     if (event.type !== SUBAGENT_SPAWNED_EVENT_TYPE && event.type !== SUBAGENT_RUNNING_EVENT_TYPE) {
       continue;
     }
-    const agentSpec = readEventPayloadString(event, "agentSpec");
-    if (agentSpec) {
-      knownAgentSpecs.add(agentSpec);
+    const modelCategory = readEventPayloadString(event, "modelCategory");
+    if (modelCategory) {
+      knownDelegationModelCategories.add(modelCategory);
     }
   }
-  return Object.keys(input.subagentModels)
-    .filter((key) => !knownAgentSpecs.has(key))
+  return Object.keys(input.delegationModels)
+    .filter((key) => !knownDelegationModelCategories.has(key))
     .toSorted((left, right) => left.localeCompare(right));
 }
 
@@ -559,9 +564,9 @@ function buildInspectReport(
   const latestModelPresetEvent = events
     .toReversed()
     .find((event) => event.type === MODEL_PRESET_SELECT_EVENT_TYPE);
-  const modelPresetSubagentModels = readPayloadStringRecord(
+  const modelPresetDelegationModels = readPayloadStringRecord(
     latestModelPresetEvent?.payload,
-    "subagentModels",
+    "delegationModels",
   );
 
   const projectionRoot = resolve(runtime.identity.workspaceRoot, effectiveProjectionDir);
@@ -652,9 +657,9 @@ function buildInspectReport(
       previousName: readPayloadString(latestModelPresetEvent?.payload, "previousPresetName"),
       source: readPayloadString(latestModelPresetEvent?.payload, "source"),
       mainModel: readPayloadString(latestModelPresetEvent?.payload, "mainModel"),
-      subagentModels: modelPresetSubagentModels,
+      delegationModels: modelPresetDelegationModels,
       unmatchedSubagentModelKeys: resolveUnmatchedPresetSubagentModelKeys({
-        subagentModels: modelPresetSubagentModels,
+        delegationModels: modelPresetDelegationModels,
         events,
       }),
       eventId: latestModelPresetEvent?.id ?? null,

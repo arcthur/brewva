@@ -26,11 +26,14 @@ function runJsonScript<T>(
 
 describe("skill script protocol contracts", () => {
   const repoRoot = resolve(import.meta.dir, "../../..");
-  const qaScript = join(repoRoot, "skills/core/qa/scripts/classify_qa_verdict.py");
+  const verifierScript = join(
+    repoRoot,
+    "skills/core/verifier/scripts/classify_verifier_verdict.py",
+  );
 
-  test("QA verdict stays inconclusive when required evidence is missing", () => {
+  test("Verifier verdict stays inconclusive when required evidence is missing", () => {
     const result = runJsonScript<{ verdict: string; reason: string }>({
-      scriptPath: qaScript,
+      scriptPath: verifierScript,
       cwd: repoRoot,
       payload: {
         checks_executed: 3,
@@ -49,9 +52,9 @@ describe("skill script protocol contracts", () => {
     });
   });
 
-  test("QA verdict fails when executed checks fail", () => {
+  test("Verifier verdict fails when executed checks fail", () => {
     const result = runJsonScript<{ verdict: string; reason: string }>({
-      scriptPath: qaScript,
+      scriptPath: verifierScript,
       cwd: repoRoot,
       payload: {
         checks_executed: 2,

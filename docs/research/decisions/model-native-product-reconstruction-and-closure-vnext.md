@@ -26,7 +26,7 @@
 
 - Hosted seam hardening repairs structure, not semantics. Hosted request shaping may raise an explicitly present low output-budget on bounded retry paths, but it must not invent new authority, bypass tool gating, or guess semantic intent.
 - The self bundle is narrative only. `identity.md`, `constitution.md`, and `memory.md` are explicit provenance-bearing context providers. They do not become kernel state, routing policy, or durable control hints. `HEARTBEAT.md` remains separate control-plane material.
-- Delegation uses canonical public posture names. The stable public specialist surface is `advisor`, `qa`, and `patch-worker`; consult runs remain explicit via `investigate`, `diagnose`, `design`, and `review`, and removed legacy aliases are not preserved as compatibility shims on the built-in surface.
+- Delegation uses canonical public posture names. The specific public delegation taxonomy from this earlier phase has since been superseded by the role-first Subagent Orchestration V2 surface; removed legacy aliases are not preserved as compatibility shims on the built-in surface.
 - Capability disclosure is a scan-friendly exploration surface. It shows duty, risk, approval, and rollbackability so the model can see available capability without turning disclosure into a routing engine.
 - Deliberation continuity is model-operated working memory, not an injected typed artifact plane. Workbench notes and on-demand recall are admissible context; they do not become kernel authority.
 

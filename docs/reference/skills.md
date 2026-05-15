@@ -40,7 +40,6 @@ Skill count: 33. Project guidance count: 7.
 - `plan`
 - `predict-review`
 - `prep`
-- `qa`
 - `repository-analysis`
 - `repository-analysis`
 - `retro`
@@ -53,6 +52,7 @@ Skill count: 33. Project guidance count: 7.
 - `skill-authoring`
 - `strategy`
 - `telegram`
+- `verifier`
 
 ### Project Guidance
 
@@ -70,7 +70,7 @@ Skill count: 33. Project guidance count: 7.
 Skill taxonomy is split by role:
 
 - `core`: reusable coding-agent work such as analysis, planning,
-  implementation, review, QA, and shipping
+  implementation, review, verifier-driven validation, and shipping
 - `domain`: environment or problem specialties such as browser, GitHub,
   Telegram, extraction, and goal loops
 - `operator`: replay, runtime, git, and operator-maintenance surfaces

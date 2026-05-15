@@ -147,7 +147,7 @@ See `references/example.md` for the grounded example output shape.
 
 - `knowledge_brief` teaches `plan` or `review` what matters from the precedent layer without requiring a second round of document hunting.
 - `precedent_refs` identify the exact records consulted, not just vague category names.
-- `preventive_checks` are concrete enough to appear later in planning, review, QA, or verification reasoning.
+- `preventive_checks` are concrete enough to appear later in planning, review, a verifier pass, or command-backed verification reasoning.
 - `precedent_query_summary` is auditably specific: search terms, filters, source types, and scope.
 
 ## Stop Conditions

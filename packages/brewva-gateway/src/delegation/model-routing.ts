@@ -183,13 +183,13 @@ const ROUTING_POLICIES: readonly DelegationRoutingPolicy[] = [
   },
   {
     id: "review-and-verification",
-    reason: "Review and QA work should bias toward higher-fidelity reasoning.",
+    reason: "Review and Verifier work should bias toward higher-fidelity reasoning.",
     candidateModels: ["openai/gpt-5.5:medium", "openai/gpt-5.4-mini:medium"],
     score({ target, effectiveSkillName }) {
       return target.consultKind === "review" ||
-        target.resultMode === "qa" ||
+        target.resultMode === "verifier" ||
         effectiveSkillName === "review" ||
-        effectiveSkillName === "qa"
+        effectiveSkillName === "verifier"
         ? 8
         : 0;
     },
@@ -249,39 +249,21 @@ export function resolveDelegationModelRoute(input: {
     };
   }
 
-  const explicitModel = input.executionShape?.model?.trim();
-  if (explicitModel) {
-    const selectedModel = resolveModelTextAgainstInventory(explicitModel, input.modelRouting);
-    return {
-      model: selectedModel,
-      modelRoute: {
-        selectedModel,
-        requestedModel: explicitModel,
-        source: "execution_shape",
-        mode: "explicit",
-        reason: "Explicit executionShape model override.",
-      },
-    };
-  }
-
   const activePreset = input.modelRouting?.getActivePreset?.() ?? input.modelRouting?.activePreset;
-  const agentSpecIdentity = input.target.agentSpecName ?? input.target.name;
-  const presetModel =
-    (agentSpecIdentity ? activePreset?.subagentModels[agentSpecIdentity] : undefined) ??
-    activePreset?.mainModel;
+  const category = input.target.modelCategory;
+  const presetModel = activePreset?.delegationModels[category] ?? activePreset?.mainModel;
   if (activePreset && presetModel) {
     const selectedModel = resolveModelTextAgainstInventory(presetModel, input.modelRouting);
-    const subagentSpecific =
-      Boolean(agentSpecIdentity) && activePreset.subagentModels[agentSpecIdentity] === presetModel;
+    const categorySpecific = activePreset.delegationModels[category] === presetModel;
     return {
       model: selectedModel,
       modelRoute: {
         selectedModel,
-        requestedModel: presetModel,
+        category,
         source: "preset",
         mode: "explicit",
-        reason: subagentSpecific
-          ? `Model selected by preset "${activePreset.name}" for delegated agent "${agentSpecIdentity}".`
+        reason: categorySpecific
+          ? `Model selected by preset "${activePreset.name}" for delegation category "${category}".`
           : `Model inherited from preset "${activePreset.name}" mainModel.`,
         presetName: activePreset.name,
       },
@@ -318,7 +300,7 @@ export function resolveDelegationModelRoute(input: {
             model: selectedModel,
             modelRoute: {
               selectedModel,
-              requestedModel: candidateModel,
+              category,
               source: "policy",
               mode: "auto",
               reason: policy.reason,

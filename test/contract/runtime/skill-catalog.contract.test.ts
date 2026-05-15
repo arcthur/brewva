@@ -51,7 +51,7 @@ describe("repository catalog contracts", () => {
         "knowledge-capture",
         "extract",
         "git",
-        "qa",
+        "verifier",
         "ship",
         "retro",
         "runtime-forensics",
@@ -112,10 +112,10 @@ describe("repository catalog contracts", () => {
       "core",
     );
     const review = parseSkillDocument(`${repoRoot()}/skills/core/review/SKILL.md`, "core");
-    const qa = parseSkillDocument(`${repoRoot()}/skills/core/qa/SKILL.md`, "core");
+    const verifier = parseSkillDocument(`${repoRoot()}/skills/core/verifier/SKILL.md`, "core");
     const ship = parseSkillDocument(`${repoRoot()}/skills/core/ship/SKILL.md`, "core");
 
-    for (const parsed of [plan, implementation, review, qa, ship]) {
+    for (const parsed of [plan, implementation, review, verifier, ship]) {
       expect(parsed.contract.intent?.outputContracts).toBe(undefined);
       expect(Object.keys(parsed.contract.intent?.semanticBindings ?? {}).length).toBeGreaterThan(0);
       expect(getSkillOutputContracts(parsed.contract)).toEqual({});
@@ -173,7 +173,7 @@ describe("repository catalog contracts", () => {
       "core",
     );
     const plan = parseSkillDocument(`${repoRoot()}/skills/core/plan/SKILL.md`, "core");
-    const qa = parseSkillDocument(`${repoRoot()}/skills/core/qa/SKILL.md`, "core");
+    const verifier = parseSkillDocument(`${repoRoot()}/skills/core/verifier/SKILL.md`, "core");
     const ship = parseSkillDocument(`${repoRoot()}/skills/core/ship/SKILL.md`, "core");
     const retro = parseSkillDocument(`${repoRoot()}/skills/core/retro/SKILL.md`, "core");
     const knowledgeCapture = parseSkillDocument(
@@ -252,7 +252,7 @@ describe("repository catalog contracts", () => {
     expect(learningResearch.contract.consumes).toEqual(
       expect.arrayContaining(["repository_snapshot", "impact_map", "planning_posture"]),
     );
-    expect(qa.contract.consumes).toEqual(
+    expect(verifier.contract.consumes).toEqual(
       expect.arrayContaining([
         "execution_plan",
         "risk_register",
@@ -262,10 +262,15 @@ describe("repository catalog contracts", () => {
       ]),
     );
     expect(ship.contract.consumes).toEqual(
-      expect.arrayContaining(["qa_report", "qa_verdict", "review_report", "verification_evidence"]),
+      expect.arrayContaining([
+        "verifier_report",
+        "verifier_verdict",
+        "review_report",
+        "verification_evidence",
+      ]),
     );
     expect(retro.contract.consumes).toEqual(
-      expect.arrayContaining(["ship_report", "ship_decision", "qa_report"]),
+      expect.arrayContaining(["ship_report", "ship_decision", "verifier_report"]),
     );
     expect(knowledgeCapture.contract.consumes).toEqual(
       expect.arrayContaining(["review_findings", "retro_findings", "verification_evidence"]),

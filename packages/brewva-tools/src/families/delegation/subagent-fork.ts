@@ -7,22 +7,21 @@ import type {
   SubagentForkResult,
 } from "../../contracts/index.js";
 import { createRuntimeBoundBrewvaToolFactory } from "../../registry/runtime-bound-tool.js";
-import { buildStringEnumSchema } from "../../registry/string-enum-contract.js";
 import { failTextResult, textResult, toolDetails, withVerdict } from "../../utils/result.js";
 import { getSessionId } from "../../utils/session.js";
 
-const ForkContextPolicySchema = buildStringEnumSchema(
-  ["lineage_only", "working_snapshot"] as const,
-  {
-    guidance:
-      "lineage_only records parent lineage without copying transient context. working_snapshot requests a bounded working snapshot when the runtime supports it.",
-  },
-);
+const ForkTurnsSchema = Type.Union([
+  Type.Literal("none"),
+  Type.Literal("all"),
+  Type.Integer({ minimum: 1, maximum: 8 }),
+]);
 
 const SubagentForkParamsSchema = Type.Object({
   objective: Type.String({ minLength: 1, maxLength: 4000 }),
   deliverable: Type.Optional(Type.String({ minLength: 1, maxLength: 2000 })),
-  contextPolicy: Type.Optional(ForkContextPolicySchema),
+  taskName: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
+  nickname: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
+  forkTurns: Type.Optional(ForkTurnsSchema),
   timeoutMs: Type.Optional(Type.Integer({ minimum: 1 })),
 });
 
@@ -37,14 +36,18 @@ function decodeForkParams(value: unknown): SubagentForkParams {
 }
 
 function buildForkRequest(params: SubagentForkParams): SubagentForkRequest {
-  const contextPolicy =
-    params.contextPolicy === "lineage_only" || params.contextPolicy === "working_snapshot"
-      ? params.contextPolicy
+  const forkTurns =
+    params.forkTurns === "none" ||
+    params.forkTurns === "all" ||
+    (typeof params.forkTurns === "number" && Number.isInteger(params.forkTurns))
+      ? params.forkTurns
       : undefined;
   return {
     objective: params.objective,
     deliverable: params.deliverable,
-    contextPolicy,
+    taskName: params.taskName,
+    nickname: params.nickname,
+    forkTurns,
     timeoutMs: params.timeoutMs,
   };
 }
@@ -94,11 +97,12 @@ export function createSubagentForkTool(options: BrewvaToolOptions): ToolDefiniti
     description:
       "Fork the current parent session into a read-only parallel execution branch without selecting a catalog specialist.",
     promptSnippet:
-      "Use this when the child should inherit the parent's current posture and lineage instead of running as advisor, qa, or patch-worker.",
+      "Use this when the child should inherit filtered parent turns and continue a same-context branch.",
     promptGuidelines: [
       "Use fork for same-context exploration, trial reasoning, or parallel probes that should not become public specialist names.",
-      "Do not use fork to request additional authority; the runtime records the parent lineage and keeps the fork under the parent ceiling.",
-      "Use subagent_run or subagent_fanout when the work fits advisor, qa, or patch-worker contracts.",
+      "forkTurns defaults to all, meaning filtered mainline turns without raw tool frames or internal reasoning.",
+      "Do not use fork to request additional authority; the runtime records lineage and keeps the fork under the parent ceiling.",
+      "Use subagent_run or subagent_fanout when the work fits navigator, explorer, worker, verifier, or librarian contracts.",
     ],
     parameters: Type.Object({
       ...SubagentForkParamsSchema.properties,

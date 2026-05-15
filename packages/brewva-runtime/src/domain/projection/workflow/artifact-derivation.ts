@@ -16,7 +16,10 @@ import {
 } from "../../../events/registry.js";
 import type { BrewvaEventRecord } from "../../../events/types.js";
 import { coerceGuardResultPayload, coerceMetricObservationPayload } from "../../events/api.js";
-import { collectVerificationCoverageTexts } from "./coverage-utils.js";
+import {
+  collectVerificationCoverageTexts,
+  collectVerifierCoverageTexts,
+} from "./coverage-utils.js";
 import {
   compactJsonValue,
   compactText,
@@ -73,6 +76,38 @@ function createDraftArtifact(input: {
     metadata: input.metadata,
     writeSide: input.writeSide === true,
   };
+}
+
+function readFirstArrayField(
+  record: Record<string, unknown> | undefined,
+  keys: readonly string[],
+): unknown[] | undefined {
+  if (!record) {
+    return undefined;
+  }
+  for (const key of keys) {
+    const value = record[key];
+    if (Array.isArray(value)) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+function readFirstStringField(
+  record: Record<string, unknown> | undefined,
+  keys: readonly string[],
+): string | undefined {
+  if (!record) {
+    return undefined;
+  }
+  for (const key of keys) {
+    const value = readString(record[key]);
+    if (value) {
+      return value;
+    }
+  }
+  return undefined;
 }
 
 function extractVerificationArtifact(event: BrewvaEventRecord): WorkflowDraftArtifact[] {
@@ -216,35 +251,36 @@ function extractSubagentPatchArtifact(event: BrewvaEventRecord): WorkflowDraftAr
   ];
 }
 
-function extractSubagentQaArtifact(event: BrewvaEventRecord): WorkflowDraftArtifact[] {
+function extractSubagentVerifierArtifact(event: BrewvaEventRecord): WorkflowDraftArtifact[] {
   const payload = readDelegationLifecycleEventPayload(event);
-  if (!payload || payload.kind !== "qa") return [];
+  if (!payload || payload.kind !== "verifier") return [];
 
   const delegate = payload.delegate ?? null;
   const skillName = payload.skillName;
   const resultData = payload.resultData;
-  const verdict = readString(resultData?.verdict);
+  const verdict = readFirstStringField(resultData, ["verdict", "verifier_verdict", "qa_verdict"]);
+  const checks = readFirstArrayField(resultData, ["checks", "verifier_checks", "qa_checks"]);
   const summary =
     compactJsonValue(payload.summary, 200) ??
-    compactJsonValue(resultData?.checks, 200) ??
+    compactJsonValue(checks, 200) ??
     (event.type === SUBAGENT_COMPLETED_EVENT_TYPE
-      ? "Delegated QA completed."
-      : "Delegated QA failed.");
+      ? "Delegated Verifier completed."
+      : "Delegated Verifier failed.");
 
   return [
     createDraftArtifact({
       event,
-      kind: "qa",
+      kind: "verifier",
       summary,
       sourceSkillNames: skillName ? [skillName] : [],
       outputKeys: [
-        "qa_report",
-        "qa_findings",
-        "qa_verdict",
-        "qa_checks",
-        "qa_missing_evidence",
-        "qa_confidence_gaps",
-        "qa_environment_limits",
+        "verifier_report",
+        "verifier_findings",
+        "verifier_verdict",
+        "verifier_checks",
+        "verifier_missing_evidence",
+        "verifier_confidence_gaps",
+        "verifier_environment_limits",
       ],
       freshness: "fresh",
       state:
@@ -259,10 +295,29 @@ function extractSubagentQaArtifact(event: BrewvaEventRecord): WorkflowDraftArtif
         source: event.type,
         delegate,
         runId: payload.runId,
-        qaVerdict: verdict ?? null,
-        missingEvidence: readStringArray(resultData?.missing_evidence),
-        confidenceGaps: readStringArray(resultData?.confidence_gaps),
-        environmentLimits: readStringArray(resultData?.environment_limits),
+        verifierVerdict: verdict ?? null,
+        missingEvidence: readStringArray(
+          readFirstArrayField(resultData, [
+            "missing_evidence",
+            "verifier_missing_evidence",
+            "qa_missing_evidence",
+          ]),
+        ),
+        confidenceGaps: readStringArray(
+          readFirstArrayField(resultData, [
+            "confidence_gaps",
+            "verifier_confidence_gaps",
+            "qa_confidence_gaps",
+          ]),
+        ),
+        environmentLimits: readStringArray(
+          readFirstArrayField(resultData, [
+            "environment_limits",
+            "verifier_environment_limits",
+            "qa_environment_limits",
+          ]),
+        ),
+        coverageTexts: resultData ? collectVerifierCoverageTexts(resultData) : [],
       },
     }),
   ];
@@ -363,7 +418,7 @@ export function deriveWorkflowArtifactsFromEvent(event: BrewvaEventRecord): Work
       return extractWorkerApplyFailedArtifact(event);
     }
     if (event.type === SUBAGENT_COMPLETED_EVENT_TYPE || event.type === SUBAGENT_FAILED_EVENT_TYPE) {
-      return [...extractSubagentPatchArtifact(event), ...extractSubagentQaArtifact(event)];
+      return [...extractSubagentPatchArtifact(event), ...extractSubagentVerifierArtifact(event)];
     }
     return [];
   })();
@@ -405,7 +460,7 @@ export function deriveWorkflowArtifacts(events: readonly BrewvaEventRecord[]): W
     const isShipDependency =
       artifact.kind === "implementation" ||
       artifact.kind === "review" ||
-      artifact.kind === "qa" ||
+      artifact.kind === "verifier" ||
       artifact.kind === "verification" ||
       (artifact.kind === "worker_patch" && source === WORKER_RESULTS_APPLIED_EVENT_TYPE);
     return isShipDependency ? Math.max(max, artifact.producedAt) : max;
@@ -437,7 +492,7 @@ export function deriveWorkflowArtifacts(events: readonly BrewvaEventRecord[]): W
 
       if (
         (artifact.kind === "review" ||
-          artifact.kind === "qa" ||
+          artifact.kind === "verifier" ||
           artifact.kind === "verification") &&
         latestWriteAt > artifact.producedAt
       ) {

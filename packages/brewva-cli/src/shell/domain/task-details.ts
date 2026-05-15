@@ -214,13 +214,21 @@ function buildStructuredResultLines(resultData: CliTaskRunRecord["resultData"]):
   }
 
   const lines: string[] = [];
-  const verdict = readString(record.verdict) ?? readString(record.qa_verdict);
+  const verdict =
+    readString(record.verdict) ??
+    readString(record.verifier_verdict) ??
+    readString(record.qa_verdict);
   if (verdict) {
     lines.push(`  verdict: ${verdict}`);
   }
 
   const summaryFields = [
-    ["report", readString(record.qa_report)],
+    [
+      "report",
+      readString(record.report) ??
+        readString(record.verifier_report) ??
+        readString(record.qa_report),
+    ],
     ["conclusion", readString(record.conclusion)],
     ["summary", readString(record.summary)],
     ["likelyRootCause", readString(record.likelyRootCause)],
@@ -238,12 +246,14 @@ function buildStructuredResultLines(resultData: CliTaskRunRecord["resultData"]):
     lines.push(`  ${label}: ${value}`);
   }
 
-  const findings = buildFindingsLines(record.findings ?? record.qa_findings);
+  const findings = buildFindingsLines(
+    record.findings ?? record.verifier_findings ?? record.qa_findings,
+  );
   if (findings.length > 0) {
     lines.push("  findings:", ...findings);
   }
 
-  const checks = buildChecksLines(record.checks ?? record.qa_checks);
+  const checks = buildChecksLines(record.checks ?? record.verifier_checks ?? record.qa_checks);
   if (checks.length > 0) {
     lines.push("  checks:", ...checks);
   }

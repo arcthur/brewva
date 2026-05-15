@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import type { BrewvaRuntimeOptions } from "@brewva/brewva-runtime";
+import { CURRENT_DELEGATION_CONTRACT_VERSION } from "@brewva/brewva-runtime/delegation";
 import { OPERATOR_QUESTION_ANSWERED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
 import {
   buildBrewvaPromptText,
@@ -414,8 +415,8 @@ describe("cli shell session port", () => {
     const artifactPath = writeDelegationOutcomeArtifact(workspaceRoot, runId, {
       ok: true,
       runId,
-      delegate: "advisor",
-      label: "advisor",
+      delegate: "explorer",
+      label: "explorer",
       kind: "consult",
       consultKind: "review",
       status: "ok",
@@ -453,8 +454,20 @@ describe("cli shell session port", () => {
       sessionId,
       type: "subagent_completed",
       payload: {
+        contractVersion: CURRENT_DELEGATION_CONTRACT_VERSION,
         runId,
-        delegate: "advisor",
+        agent: "explorer",
+        targetName: "explorer",
+        delegate: "explorer",
+        taskName: runId,
+        taskPath: `/${runId}`,
+        nickname: "explorer",
+        depth: 1,
+        forkTurns: "none",
+        gateReason: "make_judgment",
+        modelCategory: "deep-reasoning",
+        kind: "consult",
+        status: "completed",
         artifactRefs: [
           {
             kind: "delegation_outcome",

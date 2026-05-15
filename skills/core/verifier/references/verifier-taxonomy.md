@@ -1,4 +1,4 @@
-# QA Finding Taxonomy
+# Verifier Finding Taxonomy
 
 ## Severity Levels
 

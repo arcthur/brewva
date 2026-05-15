@@ -4,6 +4,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
+import { CURRENT_DELEGATION_CONTRACT_VERSION } from "@brewva/brewva-runtime/delegation";
 import { requireNonEmptyString } from "../../helpers/assertions.js";
 import { createRuntimeConfig } from "../../helpers/runtime.js";
 import { cleanupWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
@@ -227,7 +228,7 @@ describe("worker results patchset lifecycle", () => {
     expect(failedEvents).toHaveLength(1);
   });
 
-  test("rehydrates delegated patch worker results from durable patch manifests after restart", async () => {
+  test("rehydrates delegated worker results from durable patch manifests after restart", async () => {
     const rehydrateWorkspace = createWorkspace("parallel-rehydrate-delegation");
     writeConfig(rehydrateWorkspace, createConfig({}));
     mkdirSync(join(rehydrateWorkspace, "src"), { recursive: true });
@@ -280,11 +281,21 @@ describe("worker results patchset lifecycle", () => {
       sessionId,
       type: "subagent_completed",
       payload: {
+        contractVersion: CURRENT_DELEGATION_CONTRACT_VERSION,
         runId: "delegated-patch-1",
-        delegate: "patch-worker",
+        agent: "worker",
+        targetName: "worker",
+        delegate: "worker",
+        taskName: "delegated-patch-1",
+        taskPath: "/delegated-patch-1",
+        nickname: "worker",
+        depth: 1,
+        forkTurns: "none",
+        gateReason: "isolate_execution",
+        modelCategory: "isolated-execution",
         kind: "patch",
         status: "completed",
-        summary: "Detached patch worker finished.",
+        summary: "Detached worker finished.",
         artifactRefs: [
           {
             kind: "patch_manifest",

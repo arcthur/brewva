@@ -14,11 +14,15 @@ import type { HostedDelegationTarget } from "../../../packages/brewva-gateway/sr
 
 function makeTarget(overrides: Partial<HostedDelegationTarget> = {}): HostedDelegationTarget {
   return {
-    name: "advisor",
-    description: "Read-only advisor",
+    name: "explorer",
+    agent: "explorer",
+    targetName: "explorer",
+    description: "Read-only explorer",
     visibility: "public",
     resultMode: "consult",
     consultKind: "review",
+    modelCategory: "deep-reasoning",
+    gateReason: "make_judgment",
     executorPreamble: "Review and summarize.",
     boundary: "safe",
     builtinToolNames: ["read"],
@@ -76,11 +80,6 @@ describe("subagent shared execution resolution", () => {
     ).toThrow("subagent_effect_ceiling_widening_not_allowed");
     expect(() =>
       assertDelegationShapeNarrowing(target, {
-        resultMode: "patch",
-      }),
-    ).toThrow("subagent_result_mode_override_not_allowed");
-    expect(() =>
-      assertDelegationShapeNarrowing(target, {
         managedToolMode: "hosted",
       }),
     ).toThrow("subagent_managed_tool_mode_widening_not_allowed");
@@ -112,7 +111,6 @@ describe("subagent shared execution resolution", () => {
       },
       executionShape: {
         boundary: "safe",
-        model: "openai/gpt-5.4-mini",
       },
       modelRouting: {
         availableModels: [
@@ -122,6 +120,12 @@ describe("subagent shared execution resolution", () => {
             name: "GPT-5.4 Mini",
           }),
         ],
+        activePreset: {
+          name: "Test",
+          delegationModels: {
+            "deep-reasoning": "openai/gpt-5.4-mini",
+          },
+        },
       },
     });
 
@@ -129,10 +133,11 @@ describe("subagent shared execution resolution", () => {
     expect(plan.model).toBe("openai/gpt-5.4-mini");
     expect(plan.modelRoute).toEqual({
       selectedModel: "openai/gpt-5.4-mini",
-      requestedModel: "openai/gpt-5.4-mini",
-      source: "execution_shape",
+      category: "deep-reasoning",
+      source: "preset",
       mode: "explicit",
-      reason: "Explicit executionShape model override.",
+      reason: 'Model selected by preset "Test" for delegation category "deep-reasoning".',
+      presetName: "Test",
     });
     expect(plan.managedToolMode).toBe("direct");
     expect(plan.builtinToolNames).toEqual(["read"]);
@@ -150,8 +155,8 @@ describe("subagent shared execution resolution", () => {
       resolveDelegationExecutionPlan({
         runtime,
         target: makeTarget({
-          agentSpecName: "advisor",
-          envelopeName: "readonly-advisor",
+          agentSpecName: "explorer",
+          envelopeName: "explorer-readonly",
         }),
         packet: {
           objective: "Review the gateway deltas.",
@@ -160,65 +165,68 @@ describe("subagent shared execution resolution", () => {
     ).toThrow("missing_consult_brief");
   });
 
-  test("resolveDelegationTarget derives a default agent spec from executionShape.resultMode", async () => {
+  test("resolveDelegationTarget derives a default agent spec from the public agent role", async () => {
     const catalog = await loadHostedDelegationCatalog(process.cwd());
     const resolved = resolveDelegationTarget({
       catalog,
       request: {
+        agent: "verifier",
         executionShape: {
-          resultMode: "qa",
           boundary: "safe",
         },
       },
     });
 
-    expect(resolved.delegate).toBe("qa");
-    expect(resolved.target.resultMode).toBe("qa");
+    expect(resolved.delegate).toBe("verifier");
+    expect(resolved.target.resultMode).toBe("verifier");
   });
 
-  test("resolveDelegationTarget derives consultKind from registered skillName", async () => {
+  test("resolveDelegationTarget routes discovery through navigator evidence", async () => {
     const catalog = await loadHostedDelegationCatalog(process.cwd());
     const resolved = resolveDelegationTarget({
       catalog,
       request: {
+        agent: "navigator",
         skillName: "discovery",
       },
     });
 
-    expect(resolved.delegate).toBe("advisor");
-    expect(resolved.target.agentSpecName).toBe("advisor");
+    expect(resolved.delegate).toBe("navigator");
+    expect(resolved.target.agentSpecName).toBe("navigator");
     expect(resolved.target.skillName).toBe("discovery");
-    expect(resolved.target.resultMode).toBe("consult");
-    expect(resolved.target.consultKind).toBe("investigate");
+    expect(resolved.target.resultMode).toBe("evidence");
+    expect(resolved.target.consultKind).toBe(undefined);
   });
 
-  test("resolveDelegationTarget routes architecture through advisor design consults", async () => {
+  test("resolveDelegationTarget routes architecture through explorer design consults", async () => {
     const catalog = await loadHostedDelegationCatalog(process.cwd());
     const resolved = resolveDelegationTarget({
       catalog,
       request: {
+        agent: "explorer",
         skillName: "architecture",
       },
     });
 
-    expect(resolved.delegate).toBe("advisor");
-    expect(resolved.target.agentSpecName).toBe("advisor");
+    expect(resolved.delegate).toBe("explorer");
+    expect(resolved.target.agentSpecName).toBe("explorer");
     expect(resolved.target.skillName).toBe("architecture");
     expect(resolved.target.resultMode).toBe("consult");
     expect(resolved.target.consultKind).toBe("design");
   });
 
-  test("resolveDelegationTarget routes office-hours through advisor design consults", async () => {
+  test("resolveDelegationTarget routes office-hours through explorer design consults", async () => {
     const catalog = await loadHostedDelegationCatalog(process.cwd());
     const resolved = resolveDelegationTarget({
       catalog,
       request: {
+        agent: "explorer",
         skillName: "office-hours",
       },
     });
 
-    expect(resolved.delegate).toBe("advisor");
-    expect(resolved.target.agentSpecName).toBe("advisor");
+    expect(resolved.delegate).toBe("explorer");
+    expect(resolved.target.agentSpecName).toBe("explorer");
     expect(resolved.target.skillName).toBe("office-hours");
     expect(resolved.target.resultMode).toBe("consult");
     expect(resolved.target.consultKind).toBe("design");
@@ -229,27 +237,27 @@ describe("subagent shared execution resolution", () => {
     const resolved = resolveDelegationTarget({
       catalog,
       request: {
-        agentSpec: "advisor",
+        agent: "explorer",
         consultKind: "review",
       },
     });
 
-    expect(resolved.delegate).toBe("advisor");
-    expect(resolved.target.agentSpecName).toBe("advisor");
-    expect(resolved.target.envelopeName).toBe("readonly-advisor");
+    expect(resolved.delegate).toBe("explorer");
+    expect(resolved.target.agentSpecName).toBe("explorer");
+    expect(resolved.target.envelopeName).toBe("explorer-readonly");
     expect(resolved.target.skillName).toBe(undefined);
     expect(resolved.target.resultMode).toBe("consult");
     expect(resolved.target.consultKind).toBe("review");
   });
 
-  test("resolveDelegationTarget rejects advisor runs without an explicit consultKind", async () => {
+  test("resolveDelegationTarget rejects explorer runs without an explicit consultKind", async () => {
     const catalog = await loadHostedDelegationCatalog(process.cwd());
 
     expect(() =>
       resolveDelegationTarget({
         catalog,
         request: {
-          agentSpec: "advisor",
+          agent: "explorer",
         },
       }),
     ).toThrow("missing_consult_kind");
@@ -260,43 +268,41 @@ describe("subagent shared execution resolution", () => {
     const resolved = resolveDelegationTarget({
       catalog,
       request: {
-        agentSpec: "review-security",
+        agent: "explorer",
+        targetName: "review-security",
       },
     });
 
     expect(resolved.delegate).toBe("review-security");
     expect(resolved.target.agentSpecName).toBe("review-security");
-    expect(resolved.target.envelopeName).toBe("readonly-advisor");
+    expect(resolved.target.envelopeName).toBe("explorer-readonly");
     expect(resolved.target.skillName).toBe(undefined);
     expect(resolved.target.resultMode).toBe("consult");
     expect(resolved.target.consultKind).toBe("review");
   });
 
-  test("resolveDelegationTarget rejects envelope-only ad hoc runs", async () => {
+  test("resolveDelegationTarget rejects unknown target names", async () => {
     const catalog = await loadHostedDelegationCatalog(process.cwd());
     expect(() =>
       resolveDelegationTarget({
         catalog,
         request: {
-          envelope: "readonly-advisor",
-          consultKind: "investigate",
-          executionShape: {
-            resultMode: "consult",
-          },
+          agent: "explorer",
+          targetName: "does-not-exist",
         },
       }),
-    ).toThrow("envelope_requires_agent_spec");
+    ).toThrow("unknown_agent_spec:does-not-exist");
   });
 
-  test("resolveDelegationTarget fails fast on unknown agent specs even when an envelope is supplied", async () => {
+  test("resolveDelegationTarget fails fast on unknown target names", async () => {
     const catalog = await loadHostedDelegationCatalog(process.cwd());
 
     expect(() =>
       resolveDelegationTarget({
         catalog,
         request: {
-          agentSpec: "does-not-exist",
-          envelope: "readonly-advisor",
+          agent: "explorer",
+          targetName: "does-not-exist",
         },
       }),
     ).toThrow("unknown_agent_spec:does-not-exist");
@@ -307,12 +313,12 @@ describe("subagent shared execution resolution", () => {
     const subagentDir = join(workspace, ".brewva", "subagents");
     mkdirSync(subagentDir, { recursive: true });
     writeFileSync(
-      join(subagentDir, "security-advisor.md"),
+      join(subagentDir, "security-explorer.md"),
       [
         "---",
-        'name: "security-advisor"',
-        'description: "Workspace security advisor"',
-        'extends: "advisor"',
+        'name: "security-explorer"',
+        'description: "Workspace security explorer"',
+        'extends: "explorer"',
         'tools: ["grep", "read_spans"]',
         "---",
         "Focus on security-relevant evidence.",
@@ -324,14 +330,15 @@ describe("subagent shared execution resolution", () => {
     const resolved = resolveDelegationTarget({
       catalog,
       request: {
-        agentSpec: "security-advisor",
+        agent: "explorer",
+        targetName: "security-explorer",
         consultKind: "review",
       },
     });
 
-    expect(resolved.delegate).toBe("security-advisor");
-    expect(resolved.target.agentSpecName).toBe("security-advisor");
-    expect(resolved.target.envelopeName).toBe("readonly-advisor");
+    expect(resolved.delegate).toBe("security-explorer");
+    expect(resolved.target.agentSpecName).toBe("security-explorer");
+    expect(resolved.target.envelopeName).toBe("explorer-readonly");
     expect(resolved.target.managedToolNames).toEqual(["grep", "read_spans"]);
   });
 
@@ -340,13 +347,13 @@ describe("subagent shared execution resolution", () => {
     const subagentDir = join(workspace, ".brewva", "subagents");
     mkdirSync(subagentDir, { recursive: true });
     writeFileSync(
-      join(subagentDir, "tight-advisor.json"),
+      join(subagentDir, "tight-explorer.json"),
       JSON.stringify(
         {
           kind: "envelope",
-          name: "tight-advisor",
-          extends: "readonly-advisor",
-          description: "Narrowed advisor envelope",
+          name: "tight-explorer",
+          extends: "explorer-readonly",
+          description: "Narrowed explorer envelope",
           managedToolNames: ["grep", "read_spans", "look_at"],
           defaultContextBudget: {
             maxTurnTokens: 3200,
@@ -361,18 +368,17 @@ describe("subagent shared execution resolution", () => {
     await expectCatalogLoadToReject(workspace, "JSON subagent configs are no longer supported");
   });
 
-  test("resolveDelegationTarget rejects request envelopes that widen an agent spec envelope", async () => {
+  test("resolveDelegationTarget rejects target names that do not match the selected role", async () => {
     const catalog = await loadHostedDelegationCatalog(process.cwd());
 
     expect(() =>
       resolveDelegationTarget({
         catalog,
         request: {
-          agentSpec: "advisor",
-          consultKind: "review",
-          envelope: "patch-worker",
+          agent: "verifier",
+          targetName: "review-security",
         },
       }),
-    ).toThrow("conflicting_agent_spec_and_envelope:boundary cannot widen beyond the base envelope");
+    ).toThrow("incompatible_agent_spec_role:review-security:verifier");
   });
 });

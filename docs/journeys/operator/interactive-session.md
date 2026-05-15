@@ -103,10 +103,10 @@ flowchart TD
 - workbench entries are model-authored notebook entries with source references,
   not typed runtime slots
 - recall is an on-demand tool, not a per-turn hidden provider
-- delegated `qa` remains separate from `runtime.authority.verification.*`: QA
+- delegated `verifier` remains separate from `runtime.authority.verification.*`: Verifier
   provides executable break-it evidence, while the runtime verification gate
   decides whether the session has sufficient fresh evidence
-- canonical QA outcome data preserves `pass`, `fail`, and `inconclusive`
+- canonical Verifier outcome data preserves `pass`, `fail`, and `inconclusive`
   instead of flattening inconclusive validation into failure
 - verification freshness is evaluated against the latest
   `verification_write_marked` boundary, not against any historical passing run

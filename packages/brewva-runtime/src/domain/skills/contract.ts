@@ -3,7 +3,7 @@ import { basename, dirname } from "node:path";
 import { parseMarkdownFrontmatter } from "@brewva/brewva-std/markdown";
 import { normalizeToolName } from "../../utils/tool-name.js";
 import type { ToolEffectClass } from "../governance/api.js";
-import { isSemanticArtifactSchemaId } from "./semantic-artifacts.js";
+import { normalizeSemanticArtifactSchemaId } from "./semantic-artifacts.js";
 import { listEffectsExceedingSkillTierCeiling } from "./tier-policy.js";
 import type {
   LoadableSkillCategory,
@@ -410,13 +410,15 @@ function normalizeSemanticBindings(
         `intent.semantic_bindings contains undeclared output '${outputName}'.`,
       );
     }
-    if (typeof rawSchemaId !== "string" || !isSemanticArtifactSchemaId(rawSchemaId.trim())) {
+    const normalizedSchemaId =
+      typeof rawSchemaId === "string" ? normalizeSemanticArtifactSchemaId(rawSchemaId) : undefined;
+    if (!normalizedSchemaId) {
       failSkillContract(
         filePath,
         `intent.semantic_bindings.${outputName} must reference a known semantic artifact schema id.`,
       );
     }
-    normalized[outputName] = rawSchemaId.trim() as SemanticArtifactSchemaId;
+    normalized[outputName] = normalizedSchemaId;
   }
   return Object.keys(normalized).length > 0 ? normalized : undefined;
 }

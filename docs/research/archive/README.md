@@ -28,6 +28,7 @@ time before stabilizing in the current runtime and operator surfaces.
 - [`rfc-delegation-protocol-thinning-and-replayable-outcomes.md`](./rfc-delegation-protocol-thinning-and-replayable-outcomes.md)
 - [`rfc-skill-first-delegation-and-execution-envelopes.md`](./rfc-skill-first-delegation-and-execution-envelopes.md)
 - [`rfc-subagent-delegation-and-isolated-execution.md`](./rfc-subagent-delegation-and-isolated-execution.md)
+- [`rfc-subagent-orchestration-v2-role-taxonomy-and-trigger-governance.md`](./rfc-subagent-orchestration-v2-role-taxonomy-and-trigger-governance.md)
 
 ## Runtime Contract And Product Migrations
 

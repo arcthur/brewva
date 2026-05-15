@@ -12,7 +12,7 @@ export function formatInspectText(report: InspectReport): string {
     `Integrity: status=${report.integrity.status} issues=${report.integrity.issueCount}`,
     `Replay: events=${report.replay.eventCount} first=${report.replay.firstEventAt ?? "n/a"} last=${report.replay.lastEventAt ?? "n/a"}`,
     `Replay: anchors=${report.replay.anchorCount} checkpoints=${report.replay.checkpointCount} tapePressure=${report.replay.tapePressure} entriesSinceAnchor=${report.replay.entriesSinceAnchor}`,
-    `Model preset: active=${report.modelPreset.activeName} main=${report.modelPreset.mainModel ?? "none"} subagents=${renderList(Object.keys(report.modelPreset.subagentModels))} source=${report.modelPreset.source ?? "synthetic"} selectedAt=${report.modelPreset.selectedAt ?? "n/a"}`,
+    `Model preset: active=${report.modelPreset.activeName} main=${report.modelPreset.mainModel ?? "none"} delegation=${renderList(Object.keys(report.modelPreset.delegationModels))} source=${report.modelPreset.source ?? "synthetic"} selectedAt=${report.modelPreset.selectedAt ?? "n/a"}`,
     `Rewind: checkpoints=${report.rewind.checkpointCount} targets=${report.rewind.targetCount} active=${report.rewind.activeTargetCount} abandoned=${report.rewind.abandonedTargetCount}`,
     `Rewind: available=${report.rewind.rewindAvailable ? "yes" : "no"} redo=${report.rewind.redoAvailable ? "yes" : "no"} redoDepth=${report.rewind.redoDepth} latestCheckpoint=${report.rewind.latestCheckpointId ?? "n/a"} status=${report.rewind.latestCheckpointStatus ?? "n/a"}`,
     report.lineage.supported
@@ -38,7 +38,7 @@ export function formatInspectText(report: InspectReport): string {
 
   if (report.modelPreset.unmatchedSubagentModelKeys.length > 0) {
     lines.push(
-      `Model preset diagnostic: unmatchedSubagentModels=${renderList(report.modelPreset.unmatchedSubagentModelKeys)}`,
+      `Model preset diagnostic: unmatchedDelegationModels=${renderList(report.modelPreset.unmatchedSubagentModelKeys)}`,
     );
   }
   if (report.ledger.integrityReason) {

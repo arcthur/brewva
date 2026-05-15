@@ -76,7 +76,7 @@ export {
 } from "./workflow/artifact-derivation.js";
 export {
   collectCoveredRequiredEvidence,
-  collectQaCoverageTexts,
+  collectVerifierCoverageTexts,
   collectVerificationCoverageTexts,
   isRequiredEvidenceCovered,
   normalizeComparableText,

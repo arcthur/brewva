@@ -52,7 +52,7 @@ consumes:
   - ship_report
   - release_checklist
   - ship_decision
-  - qa_report
+  - verifier_report
   - review_report
   - verification_evidence
 ---
@@ -70,22 +70,22 @@ NO SYSTEMIC LESSON WITHOUT CONCRETE DELIVERY EVIDENCE
 Use when:
 
 - a feature, fix, or rollout has just shipped or been blocked
-- the team wants to capture lessons from review, QA, and release friction
+- the team wants to capture lessons from review findings, verifier evidence, and release friction
 - repeated delivery waste needs to be named before the next cycle begins
 
 Do NOT use when:
 
 - the delivery cycle is still in flight (wait for a terminal state)
 - the real need is live debugging or shipping, not reflection (use `debugging` or `implementation`)
-- there is no concrete evidence to justify a retrospective (no ship report, no review report, no QA data)
+- there is no concrete evidence to justify a retrospective (no ship report, no review report, no verifier data)
 
 ## Workflow
 
 ### Phase 1: Collect measurable delivery facts
 
-Gather the concrete arc: scope decision, review outcome, QA verdict, verification result, ship decision, notable blockers, and change surface.
+Gather the concrete arc: scope decision, review outcome, verifier verdict, command-backed verification, ship decision, notable blockers, and change surface.
 
-**If source artifacts (ship_report, review_report, qa_report) are missing**: Stop. Record what is unavailable. Do not fabricate delivery facts from memory.
+**If source artifacts (ship_report, review_report, verifier_report) are missing**: Stop. Record what is unavailable. Do not fabricate delivery facts from memory.
 **If facts are available**: Proceed to Phase 2.
 
 ### Phase 2: Reconstruct the delivery arc

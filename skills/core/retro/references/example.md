@@ -17,7 +17,7 @@ Output:
     {
       "finding": "Generated inspect artifacts needed explicit patch-ignore verification",
       "type": "local",
-      "evidence": "qa_report noted `.brewva/skills_index.json` appearing in workspace patch previews until the generated-artifact expectation was rechecked",
+      "evidence": "verifier_report noted `.brewva/skills_index.json` appearing in workspace patch previews until the generated-artifact expectation was rechecked",
       "impact": "Short rework cycle; added targeted workspace regression coverage"
     },
     {

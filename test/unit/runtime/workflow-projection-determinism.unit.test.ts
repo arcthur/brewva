@@ -106,4 +106,82 @@ describe("workflow projection determinism", () => {
     expect(first.currentWorkspaceRevision).toBe(revision);
     expect(first.updatedAt).toBe(2_000);
   });
+
+  test("derives verifier artifacts from verifier-prefixed and legacy qa subagent outputs", () => {
+    const artifacts = deriveWorkflowArtifacts([
+      event({
+        id: "event-verifier",
+        type: "subagent_completed",
+        timestamp: 1_000,
+        payload: {
+          runId: "run-legacy-qa",
+          delegate: "qa",
+          skillName: "qa",
+          kind: "qa",
+          resultData: {
+            qa_verdict: "fail",
+            qa_report: "Legacy QA found a reproducible failure.",
+            qa_findings: ["The browser flow still fails."],
+            qa_checks: [
+              {
+                name: "browser flow",
+                status: "fail",
+                summary: "The login redirect stayed broken.",
+                observed_output: "redirect loop",
+              },
+            ],
+            qa_missing_evidence: ["mobile browser"],
+          },
+        },
+      }),
+      event({
+        id: "event-verifier-current",
+        type: "subagent_completed",
+        timestamp: 2_000,
+        payload: {
+          runId: "run-verifier",
+          delegate: "verifier",
+          skillName: "verifier",
+          kind: "verifier",
+          resultData: {
+            verifier_verdict: "pass",
+            verifier_report: "Current verifier evidence passed.",
+            verifier_checks: [
+              {
+                name: "unit gate",
+                status: "pass",
+                summary: "The focused test passed.",
+                observed_output: "pass",
+              },
+            ],
+          },
+        },
+      }),
+    ]);
+
+    expect(artifacts.map((artifact) => artifact.kind)).toEqual(["verifier", "verifier"]);
+    const legacyArtifact = artifacts.find(
+      (artifact) => artifact.metadata?.runId === "run-legacy-qa",
+    );
+    const currentArtifact = artifacts.find(
+      (artifact) => artifact.metadata?.runId === "run-verifier",
+    );
+    expect(legacyArtifact).toMatchObject({
+      state: "blocked",
+      metadata: {
+        verifierVerdict: "fail",
+        missingEvidence: ["mobile browser"],
+      },
+    });
+    expect(currentArtifact).toMatchObject({
+      state: "ready",
+      metadata: {
+        verifierVerdict: "pass",
+      },
+    });
+    expect(legacyArtifact?.metadata?.coverageTexts).toContain(
+      "legacy qa found a reproducible failure",
+    );
+    expect(currentArtifact?.metadata?.coverageTexts).toContain("current verifier evidence passed");
+  });
 });

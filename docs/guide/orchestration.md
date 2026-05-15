@@ -83,13 +83,13 @@ Delegated worker authoring now has two layers:
 
 Markdown worker files narrow one of the existing public specialists. The
 allowed frontmatter fields are `name`, `description`, `extends`, `modelPreset`,
-`reasoningEffort`, and `tools`. `extends` must be `advisor`, `qa`, or
-`patch-worker`; tools must be a subset of the base envelope tools. The Markdown
-body becomes additive authored instructions rendered in the delegated prompt.
-Built-in specialists now follow the same authored-behavior model through
-catalog-backed constitutions instead of relying only on thin preambles.
-Authority still comes from the normalized hosted catalog, not from ad hoc
-prompt text outside the narrowing rules.
+`reasoningEffort`, and `tools`. `extends` must be one of `navigator`,
+`explorer`, `worker`, `verifier`, or `librarian`; tools must be a subset of the base
+role's managed-tool set. The Markdown body becomes additive authored
+instructions rendered in the delegated prompt. Built-in specialists follow the
+same authored-behavior model through catalog-backed constitutions. Authority
+still comes from the normalized hosted catalog, not from ad hoc prompt text
+outside the narrowing rules.
 
 Custom specialists cannot declare `model`, `envelope`, `skillName`,
 `defaultConsultKind`, `reviewLane`, `fallbackResultMode`, or
@@ -100,9 +100,10 @@ Custom specialists cannot declare `model`, `envelope`, `skillName`,
 Delegated model routing stays in the hosted control plane rather than the
 runtime kernel.
 
-- public callers provide `skillName` intent and packet fields
-- the resolver derives internal agent spec, envelope, result kind, consult kind,
-  context profile, adoption contract, and model route
+- public callers provide `agent` plus optional compatible `skillName` intent and
+  packet fields
+- the resolver derives internal target, envelope, result kind, consult kind when
+  applicable, managed-tool set, adoption contract, and model route
 - maintainer-only `subagent_run_diagnostic` can still probe explicit low-level
   routing fields
 - active presets and policy routes select child-session models
@@ -118,31 +119,33 @@ hidden planner.
 
 The current stable built-in specialist surface is:
 
-- public specialists: `advisor`, `qa`, `patch-worker`
+- public specialists: `navigator`, `explorer`, `worker`, `verifier`, and `librarian`
 - internal review fan-out lanes remain behind the review ensemble and are not
-  part of the public specialist taxonomy
+  part of the public specialist taxonomy; they are internal `explorer` targets
 
 Execution posture is intentionally split:
 
-- `advisor` is the single public read-only consultation identity and runs under
-  the minimal-context `readonly-advisor` envelope
+- `navigator` finds task-local evidence and returns `evidence`
+- `explorer` makes read-only diagnoses, design judgments, strategy calls, and
+  reviews, returning `consult`
+- `librarian` researches institutional knowledge and returns `knowledge`
 - public consult intent derives `investigate`, `diagnose`, `design`, or
   `review` internally; only diagnostics select consult kind directly
 - consult runs do not make the child own semantic skill completion; parent
   skills still emit semantic workflow artifacts such as `workflow.design` and
   `workflow.review`
-- `qa` is effectful for commands, browser flows, and evidence capture, but it
+- `verifier` is effectful for commands, browser flows, and evidence capture, but it
   is non-patch-producing and does not enter `WorkerResult` adoption semantics
-- `qa` is intentionally adversarial: a `pass` posture depends on evidence-backed
+- `verifier` is intentionally adversarial: a `pass` posture depends on evidence-backed
   executed checks, not static code reading or inherited implementer confidence
-- `patch-worker` is the isolated patch-producing specialist
+- `worker` is the isolated patch-producing specialist
 - `subagent_fork` is an execution primitive rather than a specialist; it
-  records parent lineage, context policy, and `executionPrimitive=fork`
+  records parent lineage, `forkTurns`, and `executionPrimitive=fork`
 - hosted context shape is owned by gateway materialization policy, not by a
   passive envelope profile field
-- hosted envelopes also pin `isolationStrategy`:
-  `readonly-advisor=shared`, `qa-runner=ephemeral`, and
-  `patch-worker=snapshot`
+- hosted role targets also pin `isolationStrategy`: read-only evidence,
+  consult, and knowledge roles use shared isolation, `verifier` uses ephemeral
+  execution, and `worker` uses snapshot isolation
 - recovery-critical baseline materialization
   (`historyViewBaseline` + `recoveryWorkingSet`) is preserved by the gateway
   context materializer when the hosted lane needs it
@@ -166,7 +169,7 @@ gateway worker now adds a second, inspectable adjudication step.
   `continue`, `steer`, `compact_recommended`, or `abort_recommended`
 - inspection surfaces such as `workflow_status` can expose that recommendation
   together with planning assurance posture such as `plan_complete`,
-  `plan_fresh`, `review_required`, `qa_required`, and
+  `plan_fresh`, `review_required`, `verifier_required`, and
   `unsatisfied_required_evidence`, without turning any of it into hidden
   autonomous session control
 

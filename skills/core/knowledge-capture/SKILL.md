@@ -77,7 +77,7 @@ Use when:
 
 - a feature, bug fix, or incident has reached a meaningful terminal state
 - a blocked delivery was resolved and the path should become reusable precedent
-- a high-signal review, QA, or verification lesson should compound into the repository
+- a high-signal review finding, verifier result, or reusable verification lesson should compound into the repository
 
 Do NOT use when:
 

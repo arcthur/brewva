@@ -19,7 +19,14 @@ export function createA2ATools(options: CreateA2AToolsOptions): ToolDefinition[]
   const send = agentSendTool.define({
     name: "agent_send",
     label: "Agent Send",
-    description: "Send a message to another orchestrated agent and receive its response.",
+    description:
+      "Send a message to another orchestrated channel agent. For live subagents this records a scoped audit-only message; v1 subagent delivery is deferred.",
+    promptSnippet:
+      "Use agent_send for channel A2A delivery, or for subagent parent-child audit receipts when no same-turn delivery is required.",
+    promptGuidelines: [
+      "Subagent targets are parent-child scoped and audit-only in v1; do not assume the child or parent has received a new turn.",
+      "Use subagent_status for durable subagent state. agent_send does not broadcast to sibling subagents.",
+    ],
     parameters: Type.Object({
       toAgentId: Type.String({ minLength: 1 }),
       message: Type.String({ minLength: 1 }),
@@ -29,11 +36,12 @@ export function createA2ATools(options: CreateA2AToolsOptions): ToolDefinition[]
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const adapter = options.runtime.orchestration?.a2a;
-      if (!adapter) {
+      const subagentAdapter = options.runtime.orchestration?.subagents;
+      if (!adapter && !subagentAdapter?.sendMessage) {
         return failTextResult("A2A orchestration is unavailable in this session.", { ok: false });
       }
       const sessionId = getSessionId(ctx);
-      const result = await adapter.send({
+      const subagentResult = await subagentAdapter?.sendMessage?.({
         fromSessionId: sessionId,
         toAgentId: params.toAgentId,
         message: params.message,
@@ -41,6 +49,19 @@ export function createA2ATools(options: CreateA2AToolsOptions): ToolDefinition[]
         depth: params.depth,
         hops: params.hops,
       });
+      const result =
+        !adapter ||
+        (subagentResult &&
+          (subagentResult.ok || subagentResult.error !== "inactive_subagent_target"))
+          ? subagentResult!
+          : await adapter.send({
+              fromSessionId: sessionId,
+              toAgentId: params.toAgentId,
+              message: params.message,
+              correlationId: params.correlationId,
+              depth: params.depth,
+              hops: params.hops,
+            });
       if (!result.ok) {
         return failTextResult(
           `agent_send failed for ${result.toAgentId}: ${result.error}`,
@@ -106,12 +127,19 @@ export function createA2ATools(options: CreateA2AToolsOptions): ToolDefinition[]
     }),
     async execute(_toolCallId, params) {
       const adapter = options.runtime.orchestration?.a2a;
-      if (!adapter) {
+      const subagentAdapter = options.runtime.orchestration?.subagents;
+      if (!adapter && !subagentAdapter?.listAgents) {
         return failTextResult("A2A orchestration is unavailable in this session.", { ok: false });
       }
-      const agents = await adapter.listAgents({
-        includeDeleted: params.includeDeleted,
-      });
+      const [channelAgents, subagentAgents] = await Promise.all([
+        adapter?.listAgents({
+          includeDeleted: params.includeDeleted,
+        }) ?? Promise.resolve([]),
+        subagentAdapter?.listAgents?.({
+          includeDeleted: params.includeDeleted,
+        }) ?? Promise.resolve([]),
+      ]);
+      const agents = [...channelAgents, ...subagentAgents];
       if (agents.length === 0) {
         return textResult("No agents found.", {
           ok: true,
@@ -119,7 +147,15 @@ export function createA2ATools(options: CreateA2AToolsOptions): ToolDefinition[]
           agents,
         });
       }
-      const lines = ["Agents:", ...agents.map((agent) => `- ${agent.agentId} (${agent.status})`)];
+      const lines = [
+        "Agents:",
+        ...agents.map((agent) => {
+          const aliases =
+            agent.aliases && agent.aliases.length > 0 ? ` aliases=${agent.aliases.join(",")}` : "";
+          const primary = agent.primaryAddress ? ` primary=${agent.primaryAddress}` : "";
+          return `- ${agent.agentId} (${agent.status})${primary}${aliases}`;
+        }),
+      ];
       return textResult(lines.join("\n"), {
         ok: true,
         count: agents.length,

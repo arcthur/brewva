@@ -3639,8 +3639,11 @@ describe("managed agent session compaction", () => {
           activeName: "Default",
           defaultName: "Default",
           presets: [
-            { name: "Default", subagentModels: {}, synthetic: true },
-            { name: "Claude Lead", subagentModels: { advisor: "faux-preset-dispatch/advisor" } },
+            { name: "Default", delegationModels: {}, synthetic: true },
+            {
+              name: "Claude Lead",
+              delegationModels: { "deep-reasoning": "faux-preset-dispatch/explorer" },
+            },
           ],
           pendingName: "Claude Lead",
         },
@@ -3668,8 +3671,8 @@ describe("managed agent session compaction", () => {
           presetName: "Claude Lead",
           previousPresetName: "Default",
           source: "queued",
-          subagentModels: {
-            advisor: "faux-preset-dispatch/advisor",
+          delegationModels: {
+            "deep-reasoning": "faux-preset-dispatch/explorer",
           },
         });
       } finally {

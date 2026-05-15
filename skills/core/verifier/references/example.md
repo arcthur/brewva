@@ -4,8 +4,8 @@ Input: "Exercise the staging onboarding flow, try to break the risky path, and t
 
 ```json
 {
-  "qa_verdict": "fail",
-  "qa_findings": [
+  "verifier_verdict": "fail",
+  "verifier_findings": [
     {
       "severity": "high",
       "category": "functional",
@@ -14,7 +14,7 @@ Input: "Exercise the staging onboarding flow, try to break the risky path, and t
       "reproducible": true
     }
   ],
-  "qa_checks": [
+  "verifier_checks": [
     {
       "flow": "onboarding happy path",
       "probe_type": "happy_path",
@@ -30,8 +30,8 @@ Input: "Exercise the staging onboarding flow, try to break the risky path, and t
       "status": "fail"
     }
   ],
-  "qa_missing_evidence": [],
-  "qa_confidence_gaps": ["Password strength meter not exercised"],
-  "qa_environment_limits": []
+  "verifier_missing_evidence": [],
+  "verifier_confidence_gaps": ["Password strength meter not exercised"],
+  "verifier_environment_limits": []
 }
 ```

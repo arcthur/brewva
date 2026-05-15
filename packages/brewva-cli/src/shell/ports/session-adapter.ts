@@ -133,7 +133,7 @@ export function createSessionViewPort(bundle: CliShellSessionBundle): SessionVie
   const fallbackPresetState = (): BrewvaModelPresetState => ({
     activeName: "Default",
     defaultName: "Default",
-    presets: [{ name: "Default", subagentModels: {}, synthetic: true }],
+    presets: [{ name: "Default", delegationModels: {}, synthetic: true }],
   });
   return {
     session: bundle.session,
