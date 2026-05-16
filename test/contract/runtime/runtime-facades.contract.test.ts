@@ -400,14 +400,14 @@ describe("runtime facade coverage", () => {
     );
   });
 
-  test("inspect.lifecycle invalidates cached snapshots on prompt stability changes", () => {
+  test("inspect.lifecycle ignores lossy prompt evidence when deriving recovery posture", async () => {
     const runtime = createBrewvaRuntime({
       cwd: createTestWorkspace("runtime-facade-lifecycle-prompt-stability-cache"),
       config: createOpsRuntimeConfig(),
     }).hosted;
     const sessionId = "runtime-facade-lifecycle-prompt-stability-cache-1";
 
-    runtime.authority.session.compaction.commit(sessionId, {
+    await runtime.authority.session.compaction.commit(sessionId, {
       compactId: "cmp-lifecycle-prompt-stability-cache",
       sanitizedSummary: "[CompactSummary]\nKeep the resumable baseline.",
       summaryDigest: sha256("[CompactSummary]\nKeep the resumable baseline."),
@@ -417,6 +417,13 @@ describe("runtime facade coverage", () => {
       fromTokens: 720,
       toTokens: 260,
       origin: "extension_api",
+      cacheImpact: {
+        before: null,
+        after: null,
+        explicitEpochChanges: 1,
+        prefixBytesChanged: null,
+        degradedReason: null,
+      },
     });
 
     expect(runtime.inspect.lifecycle.getSnapshot(sessionId)).toEqual(
@@ -431,22 +438,32 @@ describe("runtime facade coverage", () => {
       }),
     );
 
-    runtime.operator.context.prompt.observeStability(sessionId, {
-      stablePrefixHash: "prefix-new",
-      dynamicTailHash: "tail-new",
+    runtime.operator.context.evidence.append(sessionId, {
+      kind: "prompt_stability",
       turn: 1,
       timestamp: 1_740_000_000_100,
+      payload: {
+        stablePrefixHash: "prefix-new",
+        dynamicTailHash: "tail-new",
+      },
     });
 
     expect(runtime.inspect.lifecycle.getSnapshot(sessionId)).toEqual(
       expect.objectContaining({
         recovery: expect.objectContaining({
-          mode: "diagnostic_only",
-          degradedReason: "reference_context_digest_mismatch",
+          mode: "idle",
+          degradedReason: null,
         }),
         summary: expect.objectContaining({
-          kind: "degraded",
-          reason: "reference_context_digest_mismatch",
+          kind: "idle",
+        }),
+      }),
+    );
+    expect(runtime.inspect.context.evidence.latest(sessionId, "prompt_stability")).toEqual(
+      expect.objectContaining({
+        kind: "prompt_stability",
+        payload: expect.objectContaining({
+          stablePrefixHash: "prefix-new",
         }),
       }),
     );
@@ -1043,8 +1060,8 @@ describe("runtime facade coverage", () => {
   test("context facade normalizes usage ratios, reads stored pressure, and exposes compaction window turns", () => {
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
     setStaticContextStatusThresholds(config, {
-      hardLimitPercent: 0.8,
-      compactionThresholdPercent: 0.7,
+      hardRatio: 0.8,
+      advisoryRatio: 0.7,
     });
     config.infrastructure.contextBudget.compaction.minTurnsBetween = 5;
     const runtime = createBrewvaRuntime({
@@ -1078,80 +1095,88 @@ describe("runtime facade coverage", () => {
     expect(runtime.inspect.context.compaction.getWindowTurns()).toBe(5);
   });
 
-  test("context facade exposes live prompt stability state without a durable event dependency", () => {
+  test("context facade exposes latest prompt stability evidence without a durable event dependency", () => {
     const runtime = createBrewvaRuntime({
       cwd: createTestWorkspace("runtime-facade-prompt-stability"),
       config: createOpsRuntimeConfig(),
     }).hosted;
     const sessionId = "runtime-facade-prompt-stability-1";
 
-    expect(runtime.inspect.context.prompt.getStability(sessionId)).toBe(undefined);
+    expect(runtime.inspect.context.evidence.latest(sessionId, "prompt_stability")).toBe(undefined);
 
-    const observed = runtime.operator.context.prompt.observeStability(sessionId, {
-      stablePrefixHash: sha256("system-prefix"),
-      dynamicTailHash: sha256("dynamic-tail"),
-      contextScopeId: "leaf-one",
+    runtime.operator.context.evidence.append(sessionId, {
+      kind: "prompt_stability",
       turn: 4,
       timestamp: 1_740_000_000_400,
+      payload: {
+        scopeKey: "runtime-facade-prompt-stability-1::leaf-one",
+        stablePrefixHash: sha256("system-prefix"),
+        dynamicTailHash: sha256("dynamic-tail"),
+        stablePrefix: true,
+        stableTail: true,
+      },
     });
 
-    expect(observed).toEqual({
+    expect(runtime.inspect.context.evidence.latest(sessionId, "prompt_stability")).toEqual({
+      kind: "prompt_stability",
       turn: 4,
-      updatedAt: 1_740_000_000_400,
-      scopeKey: "runtime-facade-prompt-stability-1::leaf-one",
-      stablePrefixHash: sha256("system-prefix"),
-      dynamicTailHash: sha256("dynamic-tail"),
-      stablePrefix: true,
-      stableTail: true,
+      timestamp: 1_740_000_000_400,
+      payload: {
+        scopeKey: "runtime-facade-prompt-stability-1::leaf-one",
+        stablePrefixHash: sha256("system-prefix"),
+        dynamicTailHash: sha256("dynamic-tail"),
+        stablePrefix: true,
+        stableTail: true,
+      },
     });
-    expect(runtime.inspect.context.prompt.getStability(sessionId)).toEqual(observed);
-
-    runtime.operator.session.state.clear(sessionId);
-
-    expect(runtime.inspect.context.prompt.getStability(sessionId)).toBe(undefined);
   });
 
-  test("context facade exposes transient outbound reduction state without a durable event dependency", () => {
+  test("context facade exposes latest transient outbound reduction evidence", () => {
     const runtime = createBrewvaRuntime({
       cwd: createTestWorkspace("runtime-facade-transient-reduction"),
       config: createOpsRuntimeConfig(),
     }).hosted;
     const sessionId = "runtime-facade-transient-reduction-1";
 
-    expect(runtime.inspect.context.prompt.getTransientReduction(sessionId)).toBe(undefined);
+    expect(runtime.inspect.context.evidence.latest(sessionId, "transient_reduction")).toBe(
+      undefined,
+    );
 
-    const observed = runtime.operator.context.prompt.observeTransientReduction(sessionId, {
-      status: "completed",
-      reason: null,
-      eligibleToolResults: 5,
-      clearedToolResults: 1,
-      clearedChars: 1536,
-      estimatedTokenSavings: 431,
-      compactionAdvised: true,
-      forcedCompaction: false,
+    runtime.operator.context.evidence.append(sessionId, {
+      kind: "transient_reduction",
       turn: 5,
       timestamp: 1_740_000_000_500,
+      payload: {
+        status: "completed",
+        reason: null,
+        eligibleToolResults: 5,
+        clearedToolResults: 1,
+        clearedChars: 1536,
+        estimatedTokenSavings: 431,
+        compactionAdvised: true,
+        forcedCompaction: false,
+        classification: null,
+        expectedCacheBreak: false,
+      },
     });
 
-    expect(observed).toEqual({
+    expect(runtime.inspect.context.evidence.latest(sessionId, "transient_reduction")).toEqual({
+      kind: "transient_reduction",
       turn: 5,
-      updatedAt: 1_740_000_000_500,
-      status: "completed",
-      reason: null,
-      eligibleToolResults: 5,
-      clearedToolResults: 1,
-      clearedChars: 1536,
-      estimatedTokenSavings: 431,
-      compactionAdvised: true,
-      forcedCompaction: false,
-      classification: null,
-      expectedCacheBreak: false,
+      timestamp: 1_740_000_000_500,
+      payload: {
+        status: "completed",
+        reason: null,
+        eligibleToolResults: 5,
+        clearedToolResults: 1,
+        clearedChars: 1536,
+        estimatedTokenSavings: 431,
+        compactionAdvised: true,
+        forcedCompaction: false,
+        classification: null,
+        expectedCacheBreak: false,
+      },
     });
-    expect(runtime.inspect.context.prompt.getTransientReduction(sessionId)).toEqual(observed);
-
-    runtime.operator.session.state.clear(sessionId);
-
-    expect(runtime.inspect.context.prompt.getTransientReduction(sessionId)).toBe(undefined);
   });
 
   test("context lifecycle hooks hydrate cold sessions without owning dynamic prompt state", () => {

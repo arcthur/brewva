@@ -66,15 +66,9 @@ describe("context transform compaction contract", () => {
 
     const runtime = createRuntimeFixture({
       config: createRuntimeConfig((config) => {
+        config.infrastructure.contextBudget.thresholds.headroomTokens = 0;
         config.infrastructure.contextBudget.compactionInstructions = "compact-only-active-state";
       }),
-      context: {
-        onTurnStart: () => undefined,
-        observeUsage: () => undefined,
-        checkAndRequestCompaction: () => true,
-        getPendingCompactionReason: () => "usage_threshold",
-        markCompacted: () => undefined,
-      },
       events: {
         record: (input: { type: string; payload?: { reason?: string } }) => {
           if (input.type === "context_compaction_skipped" && input.payload?.reason) {
@@ -117,7 +111,7 @@ describe("context transform compaction contract", () => {
         compactOptions.push(options ?? {});
       },
       sessionManager,
-      getContextUsage: () => ({ tokens: 990, contextWindow: 1000, percent: 0.99 }),
+      getContextUsage: () => ({ tokens: 850, contextWindow: 1000, percent: 0.85 }),
     };
 
     invokeHandler(handlers, "context", {}, interactiveContext);
@@ -142,13 +136,9 @@ describe("context transform compaction contract", () => {
     const compactCalls: Array<Record<string, unknown>> = [];
 
     const runtime = createRuntimeFixture({
-      context: {
-        onTurnStart: () => undefined,
-        observeUsage: () => undefined,
-        checkAndRequestCompaction: () => true,
-        getPendingCompactionReason: () => "usage_threshold",
-        markCompacted: () => undefined,
-      },
+      config: createRuntimeConfig((config) => {
+        config.infrastructure.contextBudget.thresholds.headroomTokens = 0;
+      }),
       events: {
         record: (input: { type: string; payload?: { reason?: string } }) => {
           if (input.type === "context_compaction_skipped" && input.payload?.reason) {
@@ -188,7 +178,7 @@ describe("context transform compaction contract", () => {
           compactCalls.push(options ?? {});
         },
         sessionManager,
-        getContextUsage: () => ({ tokens: 990, contextWindow: 1000, percent: 0.99 }),
+        getContextUsage: () => ({ tokens: 850, contextWindow: 1000, percent: 0.85 }),
       },
     );
 
@@ -204,13 +194,9 @@ describe("context transform compaction contract", () => {
     const compactCalls: Array<Record<string, unknown>> = [];
 
     const runtime = createRuntimeFixture({
-      context: {
-        onTurnStart: () => undefined,
-        observeUsage: () => undefined,
-        checkAndRequestCompaction: () => true,
-        getPendingCompactionReason: () => "usage_threshold",
-        markCompacted: () => undefined,
-      },
+      config: createRuntimeConfig((config) => {
+        config.infrastructure.contextBudget.thresholds.headroomTokens = 0;
+      }),
       events: {
         record: (input: { type: string; payload?: { reason?: string } }) => {
           if (input.type === "context_compaction_skipped" && input.payload?.reason) {
@@ -249,7 +235,7 @@ describe("context transform compaction contract", () => {
           compactCalls.push(options ?? {});
         },
         sessionManager,
-        getContextUsage: () => ({ tokens: 990, contextWindow: 1000, percent: 0.99 }),
+        getContextUsage: () => ({ tokens: 850, contextWindow: 1000, percent: 0.85 }),
       },
     );
 
@@ -263,13 +249,9 @@ describe("context transform compaction contract", () => {
     const skippedReasons: string[] = [];
 
     const runtime = createRuntimeFixture({
-      context: {
-        onTurnStart: () => undefined,
-        observeUsage: () => undefined,
-        checkAndRequestCompaction: () => true,
-        getPendingCompactionReason: () => "usage_threshold",
-        markCompacted: () => undefined,
-      },
+      config: createRuntimeConfig((config) => {
+        config.infrastructure.contextBudget.thresholds.headroomTokens = 0;
+      }),
       events: {
         record: (input: { type: string; payload?: { reason?: string } }) => {
           if (input.type === "context_compaction_skipped" && input.payload?.reason) {
@@ -302,7 +284,7 @@ describe("context transform compaction contract", () => {
         throw new Error("compact should not be called while agent is active");
       },
       sessionManager,
-      getContextUsage: () => ({ tokens: 995, contextWindow: 1000, percent: 0.995 }),
+      getContextUsage: () => ({ tokens: 850, contextWindow: 1000, percent: 0.85 }),
     };
 
     invokeHandler(handlers, "context", {}, busyContext);

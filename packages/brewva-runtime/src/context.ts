@@ -42,6 +42,8 @@ export type {
   ContextCompactionDecision,
   ContextCompactionGateStatus,
   ContextCompactionReason,
+  ContextEvidenceKind,
+  ContextEvidenceSample,
   ContextStatus,
   ExpectedProviderCacheBreak,
   HistoryViewBaselineOrigin,

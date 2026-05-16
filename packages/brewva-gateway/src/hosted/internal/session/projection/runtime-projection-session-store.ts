@@ -1,5 +1,10 @@
 import { randomUUID } from "node:crypto";
 import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
+import type {
+  SessionCompactionCacheImpact,
+  SessionCompactionCacheImpactSnapshot,
+  SessionCompactionGenerationMetadata,
+} from "@brewva/brewva-runtime/context";
 import {
   CONTEXT_ENTRY_RECORDED_EVENT_TYPE,
   MESSAGE_END_EVENT_TYPE,
@@ -73,6 +78,56 @@ const HOSTED_MAIN_LINEAGE_NODE_ID = "lineage:main";
 
 function readOptionalString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim().length > 0 ? value : undefined;
+}
+
+function readNullableString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function readNonNegativeInteger(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.trunc(value) : 0;
+}
+
+function readCacheImpactSnapshot(value: unknown): SessionCompactionCacheImpactSnapshot | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  return {
+    cacheReadTokens: readNonNegativeInteger(value.cacheReadTokens),
+    cacheWriteTokens: readNonNegativeInteger(value.cacheWriteTokens),
+    bucketKey: readNullableString(value.bucketKey),
+    stablePrefixHash: readNullableString(value.stablePrefixHash),
+    dynamicTailHash: readNullableString(value.dynamicTailHash),
+    visibleHistoryReductionHash: readNullableString(value.visibleHistoryReductionHash),
+    workbenchContextHash: readNullableString(value.workbenchContextHash),
+  };
+}
+
+function readCacheImpact(value: unknown): SessionCompactionCacheImpact {
+  const record = isRecord(value) ? value : {};
+  return {
+    before: readCacheImpactSnapshot(record.before),
+    after: readCacheImpactSnapshot(record.after),
+    explicitEpochChanges: readNonNegativeInteger(record.explicitEpochChanges) || 1,
+    prefixBytesChanged:
+      typeof record.prefixBytesChanged === "number" && Number.isFinite(record.prefixBytesChanged)
+        ? Math.max(0, Math.trunc(record.prefixBytesChanged))
+        : null,
+    degradedReason: readNullableString(record.degradedReason),
+  };
+}
+
+function readCompactionGenerationMetadata(
+  value: unknown,
+): SessionCompactionGenerationMetadata | undefined {
+  if (
+    !isRecord(value) ||
+    typeof value.strategy !== "string" ||
+    value.strategy.trim().length === 0
+  ) {
+    return undefined;
+  }
+  return value as unknown as SessionCompactionGenerationMetadata;
 }
 
 function readOptionalStringRecord(value: unknown): Record<string, string> | undefined {
@@ -229,15 +284,24 @@ export class HostedRuntimeTapeSessionStore {
   readContextState(): ContextState {
     const usage = this.runtime.inspect.context.usage.get(this.sessionId);
     const contextStatus = this.runtime.inspect.context.usage.getStatus(this.sessionId, usage);
-    const promptStability = this.runtime.inspect.context.prompt.getStability(this.sessionId);
+    const promptStability = this.runtime.inspect.context.evidence.latest(
+      this.sessionId,
+      "prompt_stability",
+    )?.payload;
+    const transientReduction = this.runtime.inspect.context.evidence.latest(
+      this.sessionId,
+      "transient_reduction",
+    )?.payload;
+    const promptStabilityFingerprint =
+      typeof promptStability?.stablePrefixHash === "string"
+        ? promptStability.stablePrefixHash
+        : undefined;
 
     return {
       ...DEFAULT_CONTEXT_STATE,
       budgetPressure: mapContextBudgetPressure(contextStatus),
-      promptStabilityFingerprint: promptStability?.stablePrefixHash,
-      transientReductionActive:
-        this.runtime.inspect.context.prompt.getTransientReduction(this.sessionId)?.status ===
-        "completed",
+      promptStabilityFingerprint,
+      transientReductionActive: transientReduction?.status === "completed",
       historyBaselineAvailable:
         this.runtime.inspect.context.prompt.getHistoryViewBaseline(this.sessionId) !== undefined,
     };
@@ -587,18 +651,19 @@ export class HostedRuntimeTapeSessionStore {
     return event.id;
   }
 
-  appendCompaction(
+  async appendCompaction(
     summary: string,
     firstKeptEntryId: string,
     tokensBefore: number,
     details?: unknown,
     fromHook?: boolean,
-  ): string {
+  ): Promise<string> {
     const detailRecord =
       details && typeof details === "object" && !Array.isArray(details)
         ? (details as Record<string, unknown>)
         : undefined;
-    const event = this.runtime.authority.session.compaction.commit(this.sessionId, {
+    const summaryGeneration = readCompactionGenerationMetadata(detailRecord?.summaryGeneration);
+    const event = await this.runtime.authority.session.compaction.commit(this.sessionId, {
       compactId: readOptionalString(detailRecord?.compactId) ?? randomUUID(),
       sanitizedSummary: summary,
       summaryDigest: readOptionalString(detailRecord?.summaryDigest) ?? sha256Hex(summary),
@@ -617,9 +682,8 @@ export class HostedRuntimeTapeSessionStore {
           | "extension_api"
           | "hosted_recovery"
           | undefined) ?? (fromHook ? "extension_api" : "hosted_recovery"),
-      ...(detailRecord?.summaryGeneration
-        ? { summaryGeneration: detailRecord.summaryGeneration }
-        : {}),
+      ...(summaryGeneration ? { summaryGeneration } : {}),
+      cacheImpact: readCacheImpact(detailRecord?.cacheImpact),
     });
     if (!event) {
       throw new Error("failed to record compaction");

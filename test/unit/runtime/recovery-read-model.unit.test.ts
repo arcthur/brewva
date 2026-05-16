@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { asBrewvaSessionId } from "@brewva/brewva-runtime/core";
@@ -11,7 +11,6 @@ import {
 } from "@brewva/brewva-runtime/events";
 import type { TaskState } from "@brewva/brewva-runtime/task";
 import { sha256Hex } from "@brewva/brewva-std/hash";
-import { getHistoryViewBaselineArtifactPath } from "../../../packages/brewva-runtime/src/domain/context/history-view-baseline-artifact.js";
 import { runRecoveryContextPipeline } from "../../../packages/brewva-runtime/src/domain/context/read-models.js";
 import {
   deriveDuplicateSideEffectSuppressionCount,
@@ -394,7 +393,7 @@ describe("recovery read model", () => {
     expect(result.workingSet).toBe(undefined);
   });
 
-  test("persists a receipt-derived baseline artifact when the pipeline resolves from session_compact", () => {
+  test("derives a receipt baseline from session_compact without a history-view artifact", () => {
     const sessionId = asBrewvaSessionId("s-recovery-baseline-artifact");
     const sanitizedSummary = "[CompactSummary]\nArtifact baseline.";
     const kernel = createPipelineKernel({
@@ -432,9 +431,6 @@ describe("recovery read model", () => {
         rebuildSource: "receipt",
       }),
     );
-    expect(
-      existsSync(getHistoryViewBaselineArtifactPath(kernel.workspaceRoot, sessionId)),
-    ).toBeTrue();
   });
 
   test("uses completed reasoning revert authority as the baseline when the target leaf has no compact baseline", () => {
@@ -955,36 +951,9 @@ describe("recovery read model", () => {
     );
   });
 
-  test("clears a stale baseline artifact when recovery falls back to exact history", () => {
-    const sessionId = asBrewvaSessionId("s-recovery-clear-stale-artifact");
+  test("falls back to exact history without relying on a history-view artifact", () => {
+    const sessionId = asBrewvaSessionId("s-recovery-exact-history-without-artifact");
     const workspaceRoot = mkdtempSync(join(tmpdir(), "brewva-recovery-read-model-shared-"));
-    const sanitizedSummary = "[CompactSummary]\nArtifact baseline.";
-
-    const artifactKernel = createPipelineKernel({
-      workspaceRoot,
-      events: [
-        {
-          id: "ev-compact-artifact",
-          sessionId,
-          type: "session_compact",
-          timestamp: 1,
-          turn: 1,
-          payload: {
-            compactId: "cmp-artifact",
-            sanitizedSummary,
-            summaryDigest: sha256Hex(sanitizedSummary),
-            sourceTurn: 1,
-            leafEntryId: "leaf-artifact",
-            referenceContextDigest: null,
-            fromTokens: 300,
-            toTokens: 90,
-            origin: "extension_api",
-          },
-        },
-      ],
-    });
-    runRecoveryContextPipeline(artifactKernel, { sessionId });
-    expect(existsSync(getHistoryViewBaselineArtifactPath(workspaceRoot, sessionId))).toBeTrue();
 
     const fallbackKernel = createPipelineKernel({
       workspaceRoot,
@@ -1028,6 +997,5 @@ describe("recovery read model", () => {
         rebuildSource: "exact_history",
       }),
     );
-    expect(existsSync(getHistoryViewBaselineArtifactPath(workspaceRoot, sessionId))).toBeFalse();
   });
 });

@@ -67,17 +67,12 @@ function writeWorkspaceConfig(workspace: string): void {
           contextBudget: {
             enabled: true,
             thresholds: {
-              compactionFloorPercent: 0.0001,
-              compactionCeilingPercent: 0.0001,
-              compactionHeadroomTokens: 24_000,
-              hardLimitFloorPercent: 0.999,
-              hardLimitCeilingPercent: 0.999,
-              hardLimitHeadroomTokens: 8_000,
+              advisoryRatio: 0.0001,
+              hardRatio: 0.999,
+              headroomTokens: 24_000,
             },
             compaction: {
               minTurnsBetween: 1,
-              minSecondsBetween: 0,
-              cooldownBypassPercent: 0,
             },
           },
         },

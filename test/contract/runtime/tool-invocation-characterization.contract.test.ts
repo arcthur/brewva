@@ -507,18 +507,15 @@ describe("Tool invocation characterization", () => {
     ]);
   });
 
-  test("compaction gate blocks before commitment flow and preserves unblock path", () => {
+  test("compaction gate blocks before commitment flow and preserves unblock path", async () => {
     const workspace = createWorkspace("brewva-tool-char-compact-");
     const runtime = createBrewvaRuntime({
       cwd: workspace,
       config: createOpsRuntimeConfig((config) => {
         config.infrastructure.contextBudget.enabled = true;
-        config.infrastructure.contextBudget.thresholds.compactionFloorPercent = 0.8;
-        config.infrastructure.contextBudget.thresholds.compactionCeilingPercent = 0.8;
-        config.infrastructure.contextBudget.thresholds.compactionHeadroomTokens = 24_000;
-        config.infrastructure.contextBudget.thresholds.hardLimitFloorPercent = 0.9;
-        config.infrastructure.contextBudget.thresholds.hardLimitCeilingPercent = 0.9;
-        config.infrastructure.contextBudget.thresholds.hardLimitHeadroomTokens = 8_000;
+        config.infrastructure.contextBudget.thresholds.advisoryRatio = 0.8;
+        config.infrastructure.contextBudget.thresholds.hardRatio = 0.9;
+        config.infrastructure.contextBudget.thresholds.headroomTokens = 0;
       }),
       governancePort: createTrustedLocalGovernancePort(),
     }).hosted;
@@ -560,7 +557,7 @@ describe("Tool invocation characterization", () => {
     });
     expect(compactAllowed.allowed).toBe(true);
 
-    runtime.authority.session.compaction.commit(sessionId, {
+    await runtime.authority.session.compaction.commit(sessionId, {
       compactId: "cmp-tool-gate",
       sanitizedSummary: "Retain only the active working summary after compaction.",
       summaryDigest: "unused",
@@ -570,6 +567,13 @@ describe("Tool invocation characterization", () => {
       fromTokens: usage.tokens,
       toTokens: 40,
       origin: "auto_compaction",
+      cacheImpact: {
+        before: null,
+        after: null,
+        explicitEpochChanges: 1,
+        prefixBytesChanged: null,
+        degradedReason: null,
+      },
     });
     const unblocked = runtime.authority.tools.invocation.start({
       sessionId,

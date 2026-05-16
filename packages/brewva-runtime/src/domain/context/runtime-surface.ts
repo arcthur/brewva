@@ -24,14 +24,11 @@ export function createContextSurfaceMethods(deps: ContextSurfaceDependencies) {
           deps.getContextService().getContextUsageRatio(usage),
       },
       prompt: {
-        getStability: (sessionId: string) => deps.getContextService().getPromptStability(sessionId),
-        getTransientReduction: (sessionId: string) =>
-          deps.getContextService().getTransientReduction(sessionId),
         getHistoryViewBaseline: (sessionId: string) => deps.getHistoryViewBaseline(sessionId),
       },
-      providerCache: {
-        getObservation: (sessionId: string) =>
-          deps.getContextService().getProviderCacheObservation(sessionId),
+      evidence: {
+        latest: (sessionId: string, kind: Parameters<ContextService["latestEvidence"]>[1]) =>
+          deps.getContextService().latestEvidence(sessionId, kind),
       },
       visibleRead: {
         getEpoch: (sessionId: string) => deps.getContextService().getVisibleReadEpoch(sessionId),
@@ -41,6 +38,9 @@ export function createContextSurfaceMethods(deps: ContextSurfaceDependencies) {
         ) => deps.getContextService().isVisibleReadStateCurrent(sessionId, state),
       },
       compaction: {
+        resolveEligibility: (
+          input: Parameters<ContextService["resolveCompactionEligibility"]>[0],
+        ) => deps.getContextService().resolveCompactionEligibility(input),
         getHardLimitRatio: (
           sessionId: string,
           usage?: Parameters<ContextService["getContextHardLimitRatio"]>[1],
@@ -60,6 +60,8 @@ export function createContextSurfaceMethods(deps: ContextSurfaceDependencies) {
         ) => deps.getContextService().checkContextCompactionGate(sessionId, toolName, usage),
         getPendingReason: (sessionId: string) =>
           deps.getContextService().getPendingCompactionReason(sessionId),
+        getAutoPolicyState: (sessionId: string) =>
+          deps.getContextService().getAutoCompactionPolicyState(sessionId),
         getInstructions: () => deps.getContextService().getCompactionInstructions(),
         getWindowTurns: () => deps.getContextService().getRecentCompactionWindowTurns(),
       },
@@ -81,25 +83,9 @@ export function createContextSurfaceMethods(deps: ContextSurfaceDependencies) {
         observe: (sessionId: string, usage: Parameters<ContextService["observeContextUsage"]>[1]) =>
           deps.getContextService().observeContextUsage(sessionId, usage),
       },
-      prompt: {
-        observeStability: (
-          sessionId: string,
-          input: Parameters<ContextService["observePromptStability"]>[1],
-        ) => {
-          const observed = deps.getContextService().observePromptStability(sessionId, input);
-          deps.invalidateSessionLifecycleSnapshot(sessionId);
-          return observed;
-        },
-        observeTransientReduction: (
-          sessionId: string,
-          input: Parameters<ContextService["observeTransientReduction"]>[1],
-        ) => deps.getContextService().observeTransientReduction(sessionId, input),
-      },
-      providerCache: {
-        observe: (
-          sessionId: string,
-          input: Parameters<ContextService["observeProviderCache"]>[1],
-        ) => deps.getContextService().observeProviderCache(sessionId, input),
+      evidence: {
+        append: (sessionId: string, sample: Parameters<ContextService["appendEvidence"]>[1]) =>
+          deps.getContextService().appendEvidence(sessionId, sample),
       },
       visibleRead: {
         advanceEpoch: (
@@ -118,6 +104,12 @@ export function createContextSurfaceMethods(deps: ContextSurfaceDependencies) {
         ) => deps.getContextService().checkAndRequestCompaction(sessionId, usage),
         request: (sessionId: string, reason: Parameters<ContextService["requestCompaction"]>[1]) =>
           deps.getContextService().requestCompaction(sessionId, reason),
+        recordAutoFailure: (sessionId: string) =>
+          deps.getContextService().recordAutoCompactionFailure(sessionId),
+        recordAutoSuccess: (sessionId: string) =>
+          deps.getContextService().recordAutoCompactionSuccess(sessionId),
+        rememberDeferredReason: (sessionId: string, reason: string | null) =>
+          deps.getContextService().rememberDeferredAutoCompactionReason(sessionId, reason),
       },
     },
   };

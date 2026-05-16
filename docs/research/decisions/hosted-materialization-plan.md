@@ -2,7 +2,7 @@
 
 ## Metadata
 
-- Decision: Hosted context composition plans materialization as validated command data before executing side effects.
+- Decision: Hosted context composition owns direct lifecycle side effects without a plan/commit DAG.
 - Date: `2026-05-13`
 - Status: accepted
 - Stable docs:
@@ -15,13 +15,15 @@
 
 ## Decision Summary
 
-- `planHostedContextMaterialization(...)` returns `{ modelContext, effects, audit }`.
-- `HostedContextEffectCommand` is the single type source for the effect union; the committed order and effect-to-command map are generated from one typed command metadata tuple.
-- `commitHostedContextMaterialization(...)` validates order, duplicates, and supported effect commands before interpreting the plan.
-- Observer return values are step-local commit data and are not written into plans.
-- Full effect command payloads stay inside gateway hosted owner modules.
+- Hosted lifecycle call sites invoke the context owner directly for usage
+  observation, telemetry, context composition, prompt evidence, provider-cache
+  evidence, visible-read state, and delegation surfacing.
+- There is no hosted context materialization plan/commit DAG or command-order
+  validator.
+- Observer return values are step-local data and are not persisted as plans.
+- Full effect payloads stay inside gateway hosted owner modules.
 - Extension-facing materialization views remain redacted and read-only.
 
 ## Superseded by
 
-- None.
+- Context chain subtraction and evidence-state collapse.

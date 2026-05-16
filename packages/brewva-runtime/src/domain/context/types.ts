@@ -102,6 +102,18 @@ export type ProviderCacheBreakClassification =
   | "providerEdit"
   | "cacheCold";
 
+export type ContextEvidenceKind =
+  | "prompt_stability"
+  | "transient_reduction"
+  | "provider_cache_observation";
+
+export interface ContextEvidenceSample {
+  kind: ContextEvidenceKind;
+  turn: number;
+  timestamp: number;
+  payload: Record<string, unknown>;
+}
+
 /** Opaque SHA-256 hex digest. Consumers should compare for equality only. */
 export type ProviderCacheFingerprintDigest = string;
 
@@ -231,7 +243,7 @@ export interface SessionCompactionCommitInput {
   toTokens: number | null;
   origin: SessionCompactionOrigin;
   summaryGeneration?: SessionCompactionGenerationMetadata;
-  cacheImpact?: SessionCompactionCacheImpact;
+  cacheImpact: SessionCompactionCacheImpact;
 }
 
 export interface SessionCompactionGenerationMetadata {

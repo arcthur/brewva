@@ -145,7 +145,7 @@ describe("ledger persistence safety", () => {
     expect(rows.map((row) => row.turn)).toEqual([7, 7, 7]);
   });
 
-  test("writes session_compact evidence into ledger", async () => {
+  test("does not mirror session_compact receipts into the ledger", async () => {
     const workspace = createWorkspace("context-compaction-ledger");
     writeConfig(workspace, createConfig({}));
     const runtime = createBrewvaRuntime({
@@ -155,7 +155,7 @@ describe("ledger persistence safety", () => {
     const sessionId = "context-compaction-ledger-1";
 
     runtime.operator.context.lifecycle.onTurnStart(sessionId, 3);
-    runtime.authority.session.compaction.commit(sessionId, {
+    await runtime.authority.session.compaction.commit(sessionId, {
       compactId: "cmp-ledger",
       sanitizedSummary: "Persist the durable compaction receipt in the ledger.",
       summaryDigest: "unused",
@@ -165,9 +165,22 @@ describe("ledger persistence safety", () => {
       fromTokens: 8000,
       toTokens: 1200,
       origin: "auto_compaction",
+      cacheImpact: {
+        before: null,
+        after: null,
+        explicitEpochChanges: 1,
+        prefixBytesChanged: null,
+        degradedReason: null,
+      },
     });
 
+    expect(
+      runtime.inspect.events.records.query(sessionId, {
+        type: "session_compact",
+        last: 1,
+      }),
+    ).toHaveLength(1);
     const rows = runtime.inspect.ledger.store.listRows(sessionId);
-    expect(rows.map((row) => row.tool)).toContain("brewva_session_compaction");
+    expect(rows.map((row) => row.tool)).not.toContain("brewva_session_compaction");
   });
 });

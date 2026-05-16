@@ -75,6 +75,13 @@ export function coerceSessionCompactionCommitInput(
     fromTokens: normalizeNullableNumber(candidate.fromTokens),
     toTokens: normalizeNullableNumber(candidate.toTokens),
     origin,
+    cacheImpact: {
+      before: null,
+      after: null,
+      explicitEpochChanges: 1,
+      prefixBytesChanged: null,
+      degradedReason: null,
+    },
   };
 }
 

@@ -2,11 +2,9 @@ import type {
   ContextBudgetUsage,
   ContextCompactionGateStatus,
   ContextCompactionReason,
+  ContextEvidenceSample,
   ContextStatus,
   HistoryViewBaselineSnapshot,
-  PromptStabilityState,
-  ProviderCacheObservationState,
-  TransientReductionState,
 } from "@brewva/brewva-runtime/context";
 import type {
   ProducerContract,
@@ -71,54 +69,43 @@ function formatUsage(usage: ContextBudgetUsage | undefined): string {
   ].join(" ");
 }
 
-function formatPromptStability(state: PromptStabilityState | undefined): string {
-  if (!state) {
-    return "state=none";
+function formatPromptStabilityEvidence(sample: ContextEvidenceSample | undefined): string {
+  if (!sample) {
+    return "evidence=none";
   }
+  const p = sample.payload;
   return [
-    `turn=${state.turn}`,
-    `scope=${state.scopeKey}`,
-    `stablePrefixHash=${formatShortHash(state.stablePrefixHash)}`,
-    `dynamicTailHash=${formatShortHash(state.dynamicTailHash)}`,
-    `stablePrefix=${formatBoolean(state.stablePrefix)}`,
-    `stableTail=${formatBoolean(state.stableTail)}`,
-    `updatedAt=${formatTimestamp(state.updatedAt)}`,
+    `turn=${sample.turn}`,
+    `scope=${(p.scopeKey as string) ?? "?"}`,
+    `stablePrefix=${formatBoolean(p.stablePrefix as boolean)}`,
+    `stableTail=${formatBoolean(p.stableTail as boolean)}`,
+    `updatedAt=${formatTimestamp(sample.timestamp)}`,
   ].join(" ");
 }
 
-function formatTransientReduction(state: TransientReductionState | undefined): string {
-  if (!state) {
-    return "state=none";
+function formatTransientReductionEvidence(sample: ContextEvidenceSample | undefined): string {
+  if (!sample) {
+    return "evidence=none";
   }
+  const p = sample.payload;
   return [
-    `turn=${state.turn}`,
-    `status=${state.status}`,
-    `reason=${formatOptionalString(state.reason)}`,
-    `eligible=${state.eligibleToolResults}`,
-    `cleared=${state.clearedToolResults}`,
-    `clearedChars=${state.clearedChars}`,
-    `estimatedTokenSavings=${state.estimatedTokenSavings}`,
-    `expectedCacheBreak=${formatBoolean(state.expectedCacheBreak)}`,
-    `classification=${formatOptionalString(state.classification)}`,
+    `turn=${sample.turn}`,
+    `status=${(p.status as string) ?? "?"}`,
+    `reason=${formatOptionalString(p.reason as string | null)}`,
+    `cleared=${(p.clearedToolResults as number) ?? "?"}`,
+    `updatedAt=${formatTimestamp(sample.timestamp)}`,
   ].join(" ");
 }
 
-function formatProviderCache(state: ProviderCacheObservationState | undefined): string {
-  if (!state) {
-    return "state=none";
+function formatProviderCacheEvidence(sample: ContextEvidenceSample | undefined): string {
+  if (!sample) {
+    return "evidence=none";
   }
+  const p = sample.payload;
   return [
-    `turn=${state.turn}`,
-    `source=${state.source}`,
-    `provider=${state.fingerprint.provider}`,
-    `api=${state.fingerprint.api}`,
-    `model=${state.fingerprint.model}`,
-    `render=${state.render.status}`,
-    `retention=${state.render.renderedRetention}`,
-    `break=${state.breakObservation.status}`,
-    `classification=${state.breakObservation.classification}`,
-    `expected=${formatBoolean(state.breakObservation.expected)}`,
-    `changedFields=${formatList(state.breakObservation.changedFields, 4)}`,
+    `turn=${sample.turn}`,
+    `source=${(p.source as string) ?? "?"}`,
+    `updatedAt=${formatTimestamp(sample.timestamp)}`,
   ].join(" ");
 }
 
@@ -144,9 +131,9 @@ export function buildContextOverlayPayload(input: {
   status: ContextStatus;
   pendingCompactionReason: ContextCompactionReason | null;
   gateStatus: ContextCompactionGateStatus;
-  promptStability: PromptStabilityState | undefined;
-  transientReduction: TransientReductionState | undefined;
-  providerCache: ProviderCacheObservationState | undefined;
+  promptStabilityEvidence: ContextEvidenceSample | undefined;
+  transientReductionEvidence: ContextEvidenceSample | undefined;
+  providerCacheEvidence: ContextEvidenceSample | undefined;
   visibleReadEpoch: number;
   historyViewBaseline: HistoryViewBaselineSnapshot | undefined;
 }): CliContextOverlayPayload {
@@ -165,9 +152,9 @@ export function buildContextOverlayPayload(input: {
       `Prediction: growth=${status.predictedTurnGrowthTokens} overflow=${formatBoolean(status.predictedOverflow)} untilOverflow=${formatOptionalNumber(status.tokensUntilPredictedOverflow)}`,
       `Compaction: advised=${formatBoolean(status.compactionAdvised)} forced=${formatBoolean(status.forcedCompaction)} pending=${formatOptionalString(input.pendingCompactionReason)}`,
       `Gate: required=${formatBoolean(gate.required)} reason=${formatOptionalString(gate.reason)} recent=${formatBoolean(gate.recentCompaction)} windowTurns=${gate.windowTurns} lastTurn=${formatOptionalNumber(gate.lastCompactionTurn)} turnsSince=${formatOptionalNumber(gate.turnsSinceCompaction)}`,
-      `Prompt: ${formatPromptStability(input.promptStability)}`,
-      `Reduction: ${formatTransientReduction(input.transientReduction)}`,
-      `Provider cache: ${formatProviderCache(input.providerCache)}`,
+      `Prompt: ${formatPromptStabilityEvidence(input.promptStabilityEvidence)}`,
+      `Reduction: ${formatTransientReductionEvidence(input.transientReductionEvidence)}`,
+      `Provider cache: ${formatProviderCacheEvidence(input.providerCacheEvidence)}`,
       `History baseline: ${formatHistoryBaseline(input.historyViewBaseline)}`,
       `Visible read: visibleReadEpoch=${input.visibleReadEpoch}`,
       "Action: Request compaction with c or Command Palette > Context: request compaction.",

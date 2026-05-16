@@ -30,7 +30,7 @@ describe("Brewva config loader normalization", () => {
     );
   });
 
-  test("fails fast on replaced legacy context-budget keys for direct runtime config", () => {
+  test("fails fast on removed legacy context-budget keys for direct runtime config", () => {
     const legacyCases = [
       {
         key: "hardLimitPercent",
@@ -73,7 +73,7 @@ describe("Brewva config loader normalization", () => {
       ).toThrow(
         new RegExp(
           `infrastructure\\.contextBudget\\.${legacyCase.key} ${
-            "message" in legacyCase ? legacyCase.message : "has been replaced"
+            "message" in legacyCase ? legacyCase.message : "has been removed"
           }`,
         ),
       );
@@ -215,20 +215,23 @@ describe("Brewva config loader normalization", () => {
     expect(loaded.projection.maxWorkingChars).toBe(2400);
   });
 
-  test("normalizes predictive turn-growth tuning into monotonic bounds", () => {
-    const workspace = createTestWorkspace("predictive-turn-growth-monotonic");
+  test("normalizes contracted context budget tuning", () => {
+    const workspace = createTestWorkspace("contracted-context-budget");
     writeFileSync(
       join(workspace, ".brewva/brewva.json"),
       JSON.stringify(
         {
           infrastructure: {
             contextBudget: {
-              predictiveTurnGrowth: {
-                floorContextWindow: 100_000,
-                largeContextWindow: 50_000,
-                standardTokens: 50_000,
-                largeTokens: 10_000,
+              thresholds: {
+                hardRatio: 0.7,
+                advisoryRatio: 0.9,
+                headroomTokens: 0,
               },
+              dynamicTailTokens: 320,
+              predictedTurnGrowthTokens: -1,
+              providerCacheStalenessMs: 60_000,
+              consequenceDigestMaxChars: 240,
             },
           },
         },
@@ -239,68 +242,13 @@ describe("Brewva config loader normalization", () => {
     );
 
     const loaded = loadBrewvaConfig({ cwd: workspace, configPath: ".brewva/brewva.json" });
-    expect(loaded.infrastructure.contextBudget.predictiveTurnGrowth.largeContextWindow).toBe(
-      100_000,
-    );
-    expect(loaded.infrastructure.contextBudget.predictiveTurnGrowth.largeTokens).toBe(50_000);
-  });
-
-  test("normalizes model-physics budget tuning", () => {
-    const workspace = createTestWorkspace("model-physics-normalization");
-    writeFileSync(
-      join(workspace, ".brewva/brewva.json"),
-      JSON.stringify(
-        {
-          infrastructure: {
-            contextBudget: {
-              modelPhysics: {
-                effectiveContextWindowPercent: 0,
-                autoCompactLimitRatio: 0,
-                controllableBaselineTokens: -10,
-              },
-            },
-          },
-        },
-        null,
-        2,
-      ),
-      "utf8",
-    );
-
-    const loaded = loadBrewvaConfig({ cwd: workspace, configPath: ".brewva/brewva.json" });
-    expect(loaded.infrastructure.contextBudget.modelPhysics.effectiveContextWindowPercent).toBe(
-      0.01,
-    );
-    expect(loaded.infrastructure.contextBudget.modelPhysics.autoCompactLimitRatio).toBe(0.01);
-    expect(loaded.infrastructure.contextBudget.modelPhysics.controllableBaselineTokens).toBe(0);
-  });
-
-  test("normalizes consequence digest dynamic-tail budget", () => {
-    const workspace = createTestWorkspace("consequence-digest-budget");
-    writeFileSync(
-      join(workspace, ".brewva/brewva.json"),
-      JSON.stringify(
-        {
-          infrastructure: {
-            contextBudget: {
-              dynamicTail: {
-                baseTokens: 800,
-                maxTokens: 400,
-                consequenceDigestMaxChars: 320,
-              },
-            },
-          },
-        },
-        null,
-        2,
-      ),
-      "utf8",
-    );
-
-    const loaded = loadBrewvaConfig({ cwd: workspace, configPath: ".brewva/brewva.json" });
-    expect(loaded.infrastructure.contextBudget.dynamicTail.baseTokens).toBe(800);
-    expect(loaded.infrastructure.contextBudget.dynamicTail.maxTokens).toBe(800);
-    expect(loaded.infrastructure.contextBudget.dynamicTail.consequenceDigestMaxChars).toBe(320);
+    expect(loaded.infrastructure.contextBudget.thresholds.hardRatio).toBe(0.7);
+    expect(loaded.infrastructure.contextBudget.thresholds.advisoryRatio).toBe(0.7);
+    expect(loaded.infrastructure.contextBudget.thresholds.headroomTokens).toBe(0);
+    expect(loaded.infrastructure.contextBudget.dynamicTailTokens).toBe(320);
+    expect(loaded.infrastructure.contextBudget.predictedTurnGrowthTokens).toBe(0);
+    expect(loaded.infrastructure.contextBudget.providerCacheStalenessMs).toBe(60_000);
+    expect(loaded.infrastructure.contextBudget.consequenceDigestMaxChars).toBe(240);
   });
 
   test("normalizes MCP integration config", () => {
@@ -695,7 +643,7 @@ describe("Brewva config loader normalization", () => {
     );
 
     expect(() => loadBrewvaConfig({ cwd: workspace, configPath: ".brewva/brewva.json" })).toThrow(
-      /infrastructure\.contextBudget\.hardLimitPercent has been replaced/,
+      /infrastructure\.contextBudget\.hardLimitPercent has been removed/,
     );
   });
 

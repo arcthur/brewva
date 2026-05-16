@@ -113,17 +113,47 @@ const ACTIVE_CONFIG_FIELD_POLICY_RULES: readonly ActiveConfigFieldPolicyRule[] =
   {
     path: ["infrastructure", "contextBudget", "hardLimitPercent"],
     message:
-      "infrastructure.contextBudget.hardLimitPercent has been replaced. Use infrastructure.contextBudget.thresholds.* and dynamicTail.* instead.",
+      "infrastructure.contextBudget.hardLimitPercent has been removed. Use infrastructure.contextBudget.thresholds.hardRatio.",
   },
   {
     path: ["infrastructure", "contextBudget", "compactionThresholdPercent"],
     message:
-      "infrastructure.contextBudget.compactionThresholdPercent has been replaced. Use infrastructure.contextBudget.thresholds.* and dynamicTail.* instead.",
+      "infrastructure.contextBudget.compactionThresholdPercent has been removed. Use infrastructure.contextBudget.thresholds.advisoryRatio.",
   },
   {
     path: ["infrastructure", "contextBudget", "maxInjectionTokens"],
     message:
-      "infrastructure.contextBudget.maxInjectionTokens has been replaced. Use infrastructure.contextBudget.dynamicTail.* instead.",
+      "infrastructure.contextBudget.maxInjectionTokens has been removed. Use infrastructure.contextBudget.dynamicTailTokens.",
+  },
+  {
+    path: ["infrastructure", "contextBudget", "dynamicTail"],
+    message:
+      "infrastructure.contextBudget.dynamicTail has been removed. Use infrastructure.contextBudget.dynamicTailTokens and consequenceDigestMaxChars.",
+  },
+  {
+    path: ["infrastructure", "contextBudget", "predictiveTurnGrowth"],
+    message:
+      "infrastructure.contextBudget.predictiveTurnGrowth has been removed. Use infrastructure.contextBudget.predictedTurnGrowthTokens.",
+  },
+  {
+    path: ["infrastructure", "contextBudget", "modelPhysics"],
+    message:
+      "infrastructure.contextBudget.modelPhysics has been removed. Use thresholds.hardRatio/advisoryRatio/headroomTokens.",
+  },
+  {
+    path: ["infrastructure", "contextBudget", "compaction", "minSecondsBetween"],
+    message:
+      "infrastructure.contextBudget.compaction.minSecondsBetween has been removed. Turn-based cooldown is controlled by minTurnsBetween.",
+  },
+  {
+    path: ["infrastructure", "contextBudget", "compaction", "cooldownBypassPercent"],
+    message:
+      "infrastructure.contextBudget.compaction.cooldownBypassPercent has been removed. Hard-limit pressure bypasses cooldown directly.",
+  },
+  {
+    path: ["infrastructure", "contextBudget", "compaction", "summaryMaxOutputRatio"],
+    message:
+      "infrastructure.contextBudget.compaction.summaryMaxOutputRatio has been removed. Summary generation uses provider defaults.",
   },
   {
     path: ["infrastructure", "contextBudget", "arena"],

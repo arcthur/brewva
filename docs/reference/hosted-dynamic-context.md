@@ -72,7 +72,7 @@ category, provenance, family id, lane reason, or retention policy.
 The consequence digest is rendered from runtime inspect
 `events.effects.renderTurnDigest` for the most recent completed runtime turn.
 It is descriptive, not imperative, and its character budget is
-`infrastructure.contextBudget.dynamicTail.consequenceDigestMaxChars`.
+`infrastructure.contextBudget.consequenceDigestMaxChars`.
 
 Compaction gate/advisory blocks are nudge-throttled per session. The first
 appearance of a stable gate/advisory state is rendered in full; repeated

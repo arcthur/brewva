@@ -424,11 +424,18 @@ class RuntimeFacadeStateController implements BrewvaHostedRuntimePort {
     return this.turnReplay.getTaskState(sessionId);
   }
 
+  private getLatestReferenceContextDigest(sessionId: string): string | null {
+    const payload = this.contextService.latestEvidence(sessionId, "prompt_stability")?.payload;
+    return typeof payload?.stablePrefixHash === "string" && payload.stablePrefixHash.length > 0
+      ? payload.stablePrefixHash
+      : null;
+  }
+
   private resolveHistoryViewBaselineState(sessionId: string) {
     return resolveHistoryViewBaselineView(this.kernel, {
       sessionId,
       usage: this.contextService.getContextUsage(sessionId),
-      referenceContextDigest: this.sessionState.getPromptStability(sessionId)?.stablePrefixHash,
+      referenceContextDigest: this.getLatestReferenceContextDigest(sessionId),
       reservedBudgetRatio: HISTORY_VIEW_BASELINE_RESERVED_BUDGET_RATIO,
     });
   }
@@ -443,7 +450,7 @@ class RuntimeFacadeStateController implements BrewvaHostedRuntimePort {
     return resolveRecoveryWorkingSetView(this.kernel, {
       sessionId,
       usage: this.contextService.getContextUsage(sessionId),
-      referenceContextDigest: this.sessionState.getPromptStability(sessionId)?.stablePrefixHash,
+      referenceContextDigest: this.getLatestReferenceContextDigest(sessionId),
       reservedBudgetRatio: HISTORY_VIEW_BASELINE_RESERVED_BUDGET_RATIO,
     }).posture;
   }
@@ -453,7 +460,7 @@ class RuntimeFacadeStateController implements BrewvaHostedRuntimePort {
     return resolveRecoveryWorkingSetView(this.kernel, {
       sessionId,
       usage: this.contextService.getContextUsage(sessionId),
-      referenceContextDigest: this.sessionState.getPromptStability(sessionId)?.stablePrefixHash,
+      referenceContextDigest: this.getLatestReferenceContextDigest(sessionId),
       reservedBudgetRatio: HISTORY_VIEW_BASELINE_RESERVED_BUDGET_RATIO,
     }).workingSet;
   }
@@ -469,8 +476,7 @@ class RuntimeFacadeStateController implements BrewvaHostedRuntimePort {
     }
     this.sessionLifecycleService.ensureHydrated(sessionId);
     const usage = this.contextService.getContextUsage(sessionId);
-    const referenceContextDigest =
-      this.sessionState.getPromptStability(sessionId)?.stablePrefixHash;
+    const referenceContextDigest = this.getLatestReferenceContextDigest(sessionId);
     const recoveryContext = resolveRecoveryWorkingSetView(this.kernel, {
       sessionId,
       usage,

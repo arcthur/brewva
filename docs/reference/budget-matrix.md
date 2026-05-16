@@ -9,13 +9,13 @@ This page is the enforcement summary. Full event-family semantics live in
 
 ## Runtime Budget Pipelines
 
-| Pipeline                    | Unit                  | Enforcement Point                                                                  | Events                                                                                                                                                                                                                   | Config Key                                                                                                                                      | Recovery Source                                                                 |
-| --------------------------- | --------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| **Session Cost**            | USD                   | `ToolAccessPolicyService.checkToolAccess` via `SessionCostTracker.getBudgetStatus` | `tool_call_marked`, `cost_update`, `budget_alert`                                                                                                                                                                        | `infrastructure.costTracking.*`                                                                                                                 | checkpoint `state.cost` + shared cost fold                                      |
-| **Workbench Context**       | tokens                | model-authored `workbench_note` / `workbench_evict` plus request rendering         | `workbench_note_recorded`, `workbench_eviction_recorded`, `workbench_eviction_undone`, `workbench_baseline_committed`                                                                                                    | `infrastructure.contextBudget.*`                                                                                                                | durable workbench entries + compaction baselines                                |
-| **Context Compaction Gate** | context window ratio  | stateless `evaluateContextCompactionGate`                                          | `context_compaction_advisory`, `context_compaction_requested`, `context_compaction_gate_armed`, `critical_without_compact`, `context_compaction_gate_blocked_tool`, `session_compact`, `context_compaction_gate_cleared` | `infrastructure.contextBudget.compaction.*`, `infrastructure.contextBudget.thresholds.*`, `infrastructure.contextBudget.predictiveTurnGrowth.*` | runtime-local gate state; `session_compact` receipts remain durable evidence    |
-| **Governance Checks**       | checks / turn         | effect authorization plus verification/cost/compaction governance hooks            | `proposal_*`, `decision_receipt_recorded`, `governance_verify_spec_*`, `governance_cost_anomaly_*`, `governance_compaction_integrity_*`                                                                                  | `BrewvaRuntimeOptions.governancePort`                                                                                                           | tape events + checkpoint replay                                                 |
-| **Parallel**                | concurrent/total runs | `ParallelBudgetManager.acquire`                                                    | `parallel_slot_rejected` plus durable delegation lifecycle events such as `subagent_*` and `worker_results_applied`                                                                                                      | `parallel.*` (`parallel.maxTotalPerSession`)                                                                                                    | durable delegation events reconciled into runtime-local slot state on hydration |
+| Pipeline                    | Unit                  | Enforcement Point                                                                  | Events                                                                                                                                                                                                                   | Config Key                                                                                                                                         | Recovery Source                                                                  |
+| --------------------------- | --------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| **Session Cost**            | USD                   | `ToolAccessPolicyService.checkToolAccess` via `SessionCostTracker.getBudgetStatus` | `tool_call_marked`, `cost_update`, `budget_alert`                                                                                                                                                                        | `infrastructure.costTracking.*`                                                                                                                    | checkpoint `state.cost` + shared cost fold                                       |
+| **Workbench Context**       | tokens                | model-authored `workbench_note` / `workbench_evict` plus request rendering         | `workbench_note_recorded`, `workbench_eviction_recorded`, `workbench_eviction_undone`, `workbench_baseline_committed`                                                                                                    | `infrastructure.contextBudget.*`                                                                                                                   | durable workbench entries + compaction baselines                                 |
+| **Context Compaction Gate** | context window ratio  | stateless gate evaluation plus shared compaction eligibility                       | `context_compaction_advisory`, `context_compaction_requested`, `context_compaction_gate_armed`, `critical_without_compact`, `context_compaction_gate_blocked_tool`, `session_compact`, `context_compaction_gate_cleared` | `infrastructure.contextBudget.compaction.*`, `infrastructure.contextBudget.thresholds.*`, `infrastructure.contextBudget.predictedTurnGrowthTokens` | replayed budget policy state; `session_compact` receipts remain durable evidence |
+| **Governance Checks**       | checks / turn         | effect authorization plus verification/cost/compaction governance hooks            | `proposal_*`, `decision_receipt_recorded`, `governance_verify_spec_*`, `governance_cost_anomaly_*`, `governance_compaction_integrity_*`                                                                                  | `BrewvaRuntimeOptions.governancePort`                                                                                                              | tape events + checkpoint replay                                                  |
+| **Parallel**                | concurrent/total runs | `ParallelBudgetManager.acquire`                                                    | `parallel_slot_rejected` plus durable delegation lifecycle events such as `subagent_*` and `worker_results_applied`                                                                                                      | `parallel.*` (`parallel.maxTotalPerSession`)                                                                                                       | durable delegation events reconciled into runtime-local slot state on hydration  |
 
 ## Skill Budgets
 
@@ -69,25 +69,18 @@ runtime decision loop:
 - Deleted context-arena ceilings are not replay contracts; recovery relies on
   workbench entries, compaction baselines, and request-shaping events.
 
-## Model Physics, Adaptive Headroom, And Outbound Reduction
+## Context Budget, Evidence, And Outbound Reduction
 
-`infrastructure.contextBudget.modelPhysics.*` is the physical budget layer:
-`effectiveContextWindowPercent` caps the hard boundary below the provider's
-advertised window, `autoCompactLimitRatio` caps the compact-soon line (it is a
-physical hard ceiling that overrides the adaptive compaction threshold when the
-adaptive calculation would produce a higher ratio — adaptive is advisory,
-`autoCompactLimitRatio` is the limit), and `controllableBaselineTokens` powers
-diagnostic remaining-context metrics. These fields do not admit or inject
-context; they only describe runtime physics for status, gates, and cache-aware
-request shaping.
+`infrastructure.contextBudget.thresholds` is the physical budget layer:
+`hardRatio` sets the hard gate, `advisoryRatio` sets the compact-soon line, and
+`headroomTokens` reserves fixed headroom before ratio checks. The manager adds
+`predictedTurnGrowthTokens` when evaluating projected overflow; there is no
+separate model-physics or predictive-growth sub-surface.
 
-`infrastructure.contextBudget.thresholds.*HeadroomTokens` are tuning floors,
-not fixed reservations. When a provider reports `maxOutputTokens` in usage
-telemetry the manager substitutes `max(configured, maxOutputTokens)` for that
-turn so larger output windows do not silently push the conversation past the
-projected hard limit. `coerceContextBudgetUsage` is the entrypoint that
-extracts the field from raw provider responses; usage objects without
-`maxOutputTokens` fall back to the configured headroom.
+Prompt-stability, transient-reduction, and provider-cache observations are not
+runtime session-state slots. Hosted code writes them to the runtime latest
+evidence ring and to `.orchestrator/context-evidence`; losing that latest ring
+on restart changes diagnostics and request efficiency only, not replay truth.
 
 The transient outbound provider-request reduction plugin honors two
 compaction-scoped policies on top of the recent-window protection:

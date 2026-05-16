@@ -97,6 +97,7 @@ import {
   createToolSchemaSnapshotStore,
   type ToolSchemaSnapshot,
 } from "../../provider/cache/index.js";
+import { consumeProviderRequestReductionExpectedCacheBreak } from "../../provider/request/provider-request-reduction.js";
 import { createHostedProviderStreamFunction } from "../../provider/stream.js";
 import type { HostedSessionLogger } from "../../shared/logger.js";
 import { HOSTED_PROMPT_ATTEMPT_DISPATCH } from "../../thread-loop/hosted-prompt-attempt.js";
@@ -144,7 +145,6 @@ import {
 import {
   buildProviderDynamicTailSummary,
   EMPTY_WORKBENCH_CONTEXT_FINGERPRINT,
-  resolveExpectedProviderCacheBreak,
   resolveWorkbenchContextFingerprint,
   type WorkbenchContextFingerprintInput,
 } from "./provider-payload-summary.js";
@@ -421,6 +421,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
       lastCacheRenderModelKey: undefined,
       lastGoogleCredential: undefined,
       lastGoogleModelBaseUrl: undefined,
+      lastExpectedProviderCacheBreak: undefined,
     };
     const cacheBreakDetector = new ProviderCacheBreakDetector({
       diagnosticDumpDirectory: resolveProviderCacheDiagnosticDumpDirectory(options.cwd),
@@ -528,6 +529,8 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
           session.createHostContext(),
         );
         if (options.runtime) {
+          providerCacheRuntime.lastExpectedProviderCacheBreak =
+            consumeProviderRequestReductionExpectedCacheBreak(nextPayload);
           const channelContext = session.resolveProviderCacheChannelContext();
           const cachePolicy = options.settings.getCachePolicy();
           let cacheRender = normalizeProviderCacheRender({
@@ -574,13 +577,15 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
             reasoning: metadata?.reasoning ?? agent.state.thinkingLevel,
             channelContext,
           });
-          const transientReduction =
-            options.runtime.inspect.context.prompt.getTransientReduction(sessionId);
+          const transientReduction = options.runtime.inspect.context.evidence.latest(
+            sessionId,
+            "transient_reduction",
+          )?.payload;
           const visibleHistoryReduction = {
             epoch: options.runtime.inspect.context.visibleRead.getEpoch(sessionId),
             transientReductionStatus: transientReduction?.status ?? "none",
             transientReductionClassification: transientReduction?.classification ?? null,
-            expectedCacheBreak: transientReduction?.expectedCacheBreak ?? false,
+            expectedCacheBreak: providerCacheRuntime.lastExpectedProviderCacheBreak !== undefined,
           };
           const workbenchContext = session.#lastWorkbenchContextFingerprint;
           providerCacheRuntime.lastProviderFingerprint = createProviderRequestFingerprint({
@@ -647,8 +652,11 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
       sessionId,
       googleCachedContentManager,
       cacheBreakDetector,
-      resolveExpectedBreak: () =>
-        options.runtime ? resolveExpectedProviderCacheBreak(options.runtime, sessionId) : undefined,
+      resolveExpectedBreak: () => {
+        const hint = providerCacheRuntime.lastExpectedProviderCacheBreak;
+        providerCacheRuntime.lastExpectedProviderCacheBreak = undefined;
+        return hint;
+      },
       state: () => ({
         lastProviderFingerprint: providerCacheRuntime.lastProviderFingerprint,
         lastCacheRender: providerCacheRuntime.lastCacheRender,
@@ -1354,8 +1362,6 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
         messages: input.messages,
         systemPrompt: this.#agent.state.systemPrompt,
         customInstructions: input.customInstructions,
-        summaryMaxOutputRatio:
-          this.#runtime?.config.infrastructure.contextBudget.compaction.summaryMaxOutputRatio,
       });
       return {
         summary: normalizeCompactionSummaryForStorage(generated.summary),

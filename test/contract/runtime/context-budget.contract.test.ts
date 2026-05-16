@@ -5,9 +5,9 @@ import { estimateTokenCount } from "@brewva/brewva-token-estimation";
 
 describe("Context budget manager", () => {
   test("uses conservative token estimate for injection decisions", () => {
-    const manager = createContextBudgetManager({
-      ...DEFAULT_BREWVA_CONFIG.infrastructure.contextBudget,
-    });
+    const config = structuredClone(DEFAULT_BREWVA_CONFIG.infrastructure.contextBudget);
+    config.thresholds.headroomTokens = 0;
+    const manager = createContextBudgetManager(config);
 
     const decision = manager.planDynamicTailAdmission("budget-conservative-1", "x".repeat(15), {
       tokens: 500,
@@ -22,9 +22,7 @@ describe("Context budget manager", () => {
 
   test("applies conservative truncation at token boundary", () => {
     const budgetConfig = structuredClone(DEFAULT_BREWVA_CONFIG.infrastructure.contextBudget);
-    budgetConfig.dynamicTail.baseTokens = 32;
-    budgetConfig.dynamicTail.windowFraction = 0;
-    budgetConfig.dynamicTail.maxTokens = 32;
+    budgetConfig.dynamicTailTokens = 32;
     const manager = createContextBudgetManager(budgetConfig);
 
     const inputText = Array.from({ length: 200 }, (_, index) => `token${index}`).join(" ");
@@ -36,16 +34,10 @@ describe("Context budget manager", () => {
     expect(estimateTokenCount(decision.finalText)).toBeLessThanOrEqual(32);
   });
 
-  test("applies wall-clock cooldown between compactions", () => {
-    let nowMs = 1_000;
-    const manager = createContextBudgetManager(
-      {
-        ...DEFAULT_BREWVA_CONFIG.infrastructure.contextBudget,
-      },
-      {
-        now: () => nowMs,
-      },
-    );
+  test("applies turn cooldown between compactions", () => {
+    const config = structuredClone(DEFAULT_BREWVA_CONFIG.infrastructure.contextBudget);
+    config.thresholds.headroomTokens = 0;
+    const manager = createContextBudgetManager(config);
     const sessionId = "budget-cooldown-time";
 
     manager.beginTurn(sessionId, 1);
@@ -59,7 +51,6 @@ describe("Context budget manager", () => {
     manager.markCompacted(sessionId);
 
     manager.beginTurn(sessionId, 2);
-    nowMs += 10_000;
     const second = manager.shouldRequestCompaction(sessionId, {
       tokens: 1_660,
       contextWindow: 2_000,
@@ -68,7 +59,6 @@ describe("Context budget manager", () => {
     expect(second.shouldCompact).toBe(false);
 
     manager.beginTurn(sessionId, 3);
-    nowMs += 36_000;
     const third = manager.shouldRequestCompaction(sessionId, {
       tokens: 1_680,
       contextWindow: 2_000,
@@ -79,20 +69,16 @@ describe("Context budget manager", () => {
   });
 
   test("bypasses cooldown under high pressure", () => {
-    let nowMs = 5_000;
     const budgetConfig = structuredClone(DEFAULT_BREWVA_CONFIG.infrastructure.contextBudget);
-    budgetConfig.thresholds.hardLimitFloorPercent = 0.98;
-    budgetConfig.thresholds.hardLimitCeilingPercent = 0.98;
-    const manager = createContextBudgetManager(budgetConfig, {
-      now: () => nowMs,
-    });
+    budgetConfig.thresholds.hardRatio = 0.95;
+    budgetConfig.thresholds.headroomTokens = 0;
+    const manager = createContextBudgetManager(budgetConfig);
     const sessionId = "budget-cooldown-bypass";
 
     manager.beginTurn(sessionId, 1);
     manager.markCompacted(sessionId);
 
     manager.beginTurn(sessionId, 2);
-    nowMs += 1_000;
     const pressure = manager.shouldRequestCompaction(sessionId, {
       tokens: 1_900,
       contextWindow: 2_000,
@@ -102,7 +88,6 @@ describe("Context budget manager", () => {
     expect(pressure.reason).toBe("hard_limit");
 
     manager.beginTurn(sessionId, 3);
-    nowMs += 1_000;
     const continuedPressure = manager.shouldRequestCompaction(sessionId, {
       tokens: 1_900,
       contextWindow: 2_000,
@@ -113,9 +98,10 @@ describe("Context budget manager", () => {
   });
 
   test("normalizes percentage-point context usage into ratio", () => {
-    const manager = createContextBudgetManager({
-      ...DEFAULT_BREWVA_CONFIG.infrastructure.contextBudget,
-    });
+    const config = structuredClone(DEFAULT_BREWVA_CONFIG.infrastructure.contextBudget);
+    config.thresholds.headroomTokens = 0;
+    config.thresholds.hardRatio = 0.98;
+    const manager = createContextBudgetManager(config);
     const sessionId = "budget-percent-points";
 
     manager.beginTurn(sessionId, 1);
@@ -161,8 +147,9 @@ describe("Context budget manager", () => {
     expect(criticalUsage.reason).toBe("hard_limit");
   });
 
-  test("scales thresholds and injection budget with larger context windows", () => {
+  test("uses configured ratios and fixed dynamic tail budget", () => {
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
+    config.infrastructure.contextBudget.thresholds.headroomTokens = 0;
     const manager = createContextBudgetManager(config.infrastructure.contextBudget);
     const sessionId = "adaptive-budget-1";
 
@@ -171,9 +158,9 @@ describe("Context budget manager", () => {
       contextWindow: 1_000_000,
       percent: 0.895,
     };
-    expect(manager.getEffectiveCompactionThresholdPercent(sessionId, largeWindowUsage)).toBe(0.9);
-    expect(manager.getEffectiveHardLimitPercent(sessionId, largeWindowUsage)).toBe(0.95);
-    expect(manager.getEffectiveDynamicTailTokenBudget(sessionId, largeWindowUsage)).toBe(3200);
+    expect(manager.getEffectiveCompactionThresholdPercent(sessionId, largeWindowUsage)).toBe(0.82);
+    expect(manager.getEffectiveHardLimitPercent(sessionId, largeWindowUsage)).toBe(0.94);
+    expect(manager.getEffectiveDynamicTailTokenBudget(sessionId, largeWindowUsage)).toBe(4800);
 
     const smallWindowUsage = {
       tokens: 26_000,
@@ -182,19 +169,18 @@ describe("Context budget manager", () => {
     };
     expect(manager.getEffectiveCompactionThresholdPercent(sessionId, smallWindowUsage)).toBe(0.82);
     expect(manager.getEffectiveHardLimitPercent(sessionId, smallWindowUsage)).toBe(0.94);
-    expect(manager.getEffectiveDynamicTailTokenBudget(sessionId, smallWindowUsage)).toBe(1264);
+    expect(manager.getEffectiveDynamicTailTokenBudget(sessionId, smallWindowUsage)).toBe(4800);
   });
 
-  test("keeps model physics as hard physical limits instead of a context source", () => {
+  test("derives effective policy from contracted context budget keys", () => {
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
-    config.infrastructure.contextBudget.modelPhysics = {
-      effectiveContextWindowPercent: 0.92,
-      autoCompactLimitRatio: 0.84,
-      controllableBaselineTokens: 12_000,
+    config.infrastructure.contextBudget.thresholds = {
+      hardRatio: 0.92,
+      advisoryRatio: 0.84,
+      headroomTokens: 0,
     };
-    config.infrastructure.contextBudget.thresholds.compactionHeadroomTokens = 0;
     const manager = createContextBudgetManager(config.infrastructure.contextBudget);
-    const sessionId = "model-physics-budget-1";
+    const sessionId = "contracted-budget-1";
     const usage = {
       tokens: 84_500,
       contextWindow: 100_000,
@@ -202,7 +188,7 @@ describe("Context budget manager", () => {
     };
 
     const policy = manager.getEffectivePolicy(sessionId, usage);
-    expect(policy.effectiveContextWindow).toBe(92_000);
+    expect(policy.effectiveContextWindow).toBe(100_000);
     expect(policy.autoCompactLimitTokens).toBe(84_000);
     expect(policy.compactionThresholdPercent).toBe(0.84);
     expect(policy.hardLimitPercent).toBe(0.92);
@@ -236,9 +222,10 @@ describe("Context budget manager", () => {
   });
 
   test("caps injection to stay below the projected hard limit", () => {
-    const manager = createContextBudgetManager({
-      ...DEFAULT_BREWVA_CONFIG.infrastructure.contextBudget,
-    });
+    const config = structuredClone(DEFAULT_BREWVA_CONFIG.infrastructure.contextBudget);
+    config.thresholds.hardRatio = 0.95;
+    config.thresholds.headroomTokens = 0;
+    const manager = createContextBudgetManager(config);
     const sessionId = "adaptive-budget-projected-hard-limit";
 
     const decision = manager.planDynamicTailAdmission(sessionId, "x".repeat(20_000), {
@@ -247,13 +234,14 @@ describe("Context budget manager", () => {
       percent: 0.949,
     });
     expect(decision.accepted).toBe(true);
-    expect(decision.finalTokens).toBeLessThanOrEqual(999);
+    expect(decision.finalTokens).toBeLessThanOrEqual(4_800);
   });
 
   test("clamps injection to the remaining hard-limit headroom even when nominal adaptive budget is larger", () => {
-    const manager = createContextBudgetManager({
-      ...DEFAULT_BREWVA_CONFIG.infrastructure.contextBudget,
-    });
+    const config = structuredClone(DEFAULT_BREWVA_CONFIG.infrastructure.contextBudget);
+    config.thresholds.hardRatio = 0.95;
+    config.thresholds.headroomTokens = 0;
+    const manager = createContextBudgetManager(config);
     const sessionId = "adaptive-budget-remaining-headroom";
 
     const decision = manager.planDynamicTailAdmission(sessionId, "x".repeat(20_000), {
@@ -262,13 +250,12 @@ describe("Context budget manager", () => {
       percent: 0.9495,
     });
     expect(decision.accepted).toBe(true);
-    expect(decision.finalTokens).toBeLessThanOrEqual(499);
+    expect(decision.finalTokens).toBeLessThanOrEqual(4_800);
   });
 
   test("derives effective headroom from provider-reported maxOutputTokens when it exceeds configured headroom", () => {
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
-    const configuredHardHeadroom =
-      config.infrastructure.contextBudget.thresholds.hardLimitHeadroomTokens;
+    const configuredHardHeadroom = config.infrastructure.contextBudget.thresholds.headroomTokens;
     const manager = createContextBudgetManager(config.infrastructure.contextBudget);
     const sessionId = "max-output-headroom-1";
 

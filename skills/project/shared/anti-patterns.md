@@ -37,5 +37,12 @@ retirement_sensitivity: review_only
 - Fire-and-forget provider session cleanup on session replacement, rewind,
   compaction, or model/provider change.
 - Re-exposing removed low-level tuning knobs as public config.
+- Reintroducing runtime-stored context evidence slots or legacy
+  `prompt.getStability`, `prompt.getTransientReduction`, and
+  `providerCache.getObservation` ports.
+- Reintroducing hosted context materialization plan/commit DAGs instead of
+  direct lifecycle calls owned by hosted context modules.
+- Writing history-view baseline artifact files as compaction authority instead
+  of deriving baseline state from `session_compact` receipts.
 - Editing generated distribution artifacts by hand.
 - Skipping `test:dist` for export, CLI, or distribution changes.

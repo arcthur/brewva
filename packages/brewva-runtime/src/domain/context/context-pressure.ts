@@ -3,33 +3,6 @@ import { resolveContextUsageRatio } from "../../utils/token.js";
 import type { ContextBudgetManager } from "./budget.js";
 import type { ContextBudgetUsage, ContextCompactionGateStatus, ContextStatus } from "./types.js";
 
-export type PredictiveTurnGrowthPolicy =
-  BrewvaConfig["infrastructure"]["contextBudget"]["predictiveTurnGrowth"];
-
-export function estimatePredictiveTurnGrowthTokens(
-  contextWindow: number,
-  policy: PredictiveTurnGrowthPolicy,
-): number {
-  const normalizedWindow = Math.max(0, Math.trunc(contextWindow));
-  if (normalizedWindow <= 0) {
-    return 0;
-  }
-  const floorContextWindow = Math.max(1, Math.trunc(policy.floorContextWindow));
-  const largeContextWindow = Math.max(floorContextWindow, Math.trunc(policy.largeContextWindow));
-  const standardTokens = Math.max(1, Math.trunc(policy.standardTokens));
-  const largeTokens = Math.max(1, Math.trunc(policy.largeTokens));
-  const scalingFactor = Math.max(0, Math.min(1, policy.scalingFactor));
-
-  if (normalizedWindow < floorContextWindow) {
-    return 0;
-  }
-  if (normalizedWindow >= largeContextWindow) {
-    return largeTokens;
-  }
-  const scaledGrowth = Math.floor(normalizedWindow * scalingFactor);
-  return Math.max(1, Math.min(largeTokens, Math.max(standardTokens, scaledGrowth)));
-}
-
 export function getContextUsage(
   contextBudget: ContextBudgetManager,
   sessionId: string,

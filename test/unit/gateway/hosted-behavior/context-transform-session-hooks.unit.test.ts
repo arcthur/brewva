@@ -73,7 +73,7 @@ describe("context transform session hook contract", () => {
 
     const runtime = createRuntimeFixture({
       config: createRuntimeConfig((config) => {
-        setStaticContextStatusThresholds(config, { hardLimitPercent: 0.8 });
+        setStaticContextStatusThresholds(config, { hardRatio: 0.8 });
       }),
       events: {
         record: (input: { type: string; payload?: object }) => {
@@ -288,7 +288,7 @@ describe("context transform session hook contract", () => {
 
     const runtime = createRuntimeFixture({
       config: createRuntimeConfig((config) => {
-        setStaticContextStatusThresholds(config, { hardLimitPercent: 0.8 });
+        setStaticContextStatusThresholds(config, { hardRatio: 0.8 });
       }),
       context: {
         onTurnStart: () => undefined,
@@ -348,7 +348,7 @@ describe("context transform session hook contract", () => {
       },
     );
 
-    invokeHandler(
+    await invokeHandlerAsync(
       handlers,
       "session_compact",
       {
@@ -377,7 +377,7 @@ describe("context transform session hook contract", () => {
 
     const runtime = createRuntimeFixture({
       config: createRuntimeConfig((config) => {
-        setStaticContextStatusThresholds(config, { hardLimitPercent: 0.8 });
+        setStaticContextStatusThresholds(config, { hardRatio: 0.8 });
       }),
       events: {
         record: (input: { type: string }) => {
@@ -438,7 +438,7 @@ describe("context transform session hook contract", () => {
 
     const runtime = createRuntimeFixture({
       config: createRuntimeConfig((config) => {
-        setStaticContextStatusThresholds(config, { hardLimitPercent: 0.8 });
+        setStaticContextStatusThresholds(config, { hardRatio: 0.8 });
       }),
       events: {
         query: () => [],
@@ -520,7 +520,7 @@ describe("context transform session hook contract", () => {
 
     const runtime = createRuntimeFixture({
       config: createRuntimeConfig((config) => {
-        setStaticContextStatusThresholds(config, { hardLimitPercent: 0.8 });
+        setStaticContextStatusThresholds(config, { hardRatio: 0.8 });
       }),
       events: {
         record: (input: { type: string }) => {

@@ -9,11 +9,6 @@ import {
   type RecoveryCanonicalizationResult,
   type RecoveryTransitionState,
 } from "../recovery/api.js";
-import {
-  deleteHistoryViewBaselineArtifact,
-  readHistoryViewBaselineArtifact,
-  writeHistoryViewBaselineArtifact,
-} from "./history-view-baseline-artifact.js";
 import { deriveHistoryViewBaselineState } from "./history-view-baseline.js";
 import type {
   ContextBudgetUsage,
@@ -90,22 +85,12 @@ function resolveHistoryViewBaselineStateFromEvents(
       postureMode: cached.postureMode,
     };
   }
-  const artifact = readHistoryViewBaselineArtifact(kernel.workspaceRoot, input.sessionId);
   const derived = deriveHistoryViewBaselineState(events, {
     referenceContextDigest,
     maxBaselineTokens,
   });
-  const snapshot =
-    artifact &&
-    derived.snapshot?.rebuildSource === "receipt" &&
-    artifact.eventId === derived.snapshot.eventId &&
-    artifact.summaryDigest === derived.snapshot.summaryDigest &&
-    artifact.leafEntryId === derived.snapshot.leafEntryId &&
-    artifact.referenceContextDigest === derived.snapshot.referenceContextDigest
-      ? artifact
-      : derived.snapshot;
   kernel.sessionState.setHistoryViewBaselineCache(input.sessionId, {
-    snapshot,
+    snapshot: derived.snapshot,
     latestEventId,
     eventCount: events.length,
     degradedReason: derived.degradedReason,
@@ -113,13 +98,8 @@ function resolveHistoryViewBaselineStateFromEvents(
     referenceContextDigest,
     maxBaselineTokens,
   });
-  if (derived.snapshot?.rebuildSource === "receipt") {
-    writeHistoryViewBaselineArtifact(kernel.workspaceRoot, input.sessionId, derived.snapshot);
-  } else {
-    deleteHistoryViewBaselineArtifact(kernel.workspaceRoot, input.sessionId);
-  }
   return {
-    snapshot,
+    snapshot: derived.snapshot,
     degradedReason: derived.degradedReason,
     postureMode: derived.postureMode,
   };

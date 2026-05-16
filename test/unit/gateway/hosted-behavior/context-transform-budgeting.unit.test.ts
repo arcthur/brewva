@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   createMockExtensionApi,
+  createRuntimeConfig,
   createRuntimeFixture,
   invokeHandlerAsync,
   registerContextTransform,
@@ -12,6 +13,9 @@ describe("context transform budgeting contract", () => {
     const eventTypes: string[] = [];
     const advisoryPayloads: Record<string, unknown>[] = [];
     const runtime = createRuntimeFixture({
+      config: createRuntimeConfig((config) => {
+        config.infrastructure.contextBudget.thresholds.headroomTokens = 0;
+      }),
       context: {
         onTurnStart: () => undefined,
         observeUsage: () => undefined,

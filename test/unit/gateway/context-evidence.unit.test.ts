@@ -2,6 +2,11 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createBrewvaRuntime } from "@brewva/brewva-runtime";
+import type {
+  PromptStabilityState,
+  ProviderCacheObservationState,
+  TransientReductionState,
+} from "@brewva/brewva-runtime/context";
 import {
   buildContextEvidenceReport,
   persistContextEvidenceReport,
@@ -35,12 +40,82 @@ async function waitForEvidenceFile(input: {
   throw new Error(`Timed out waiting for ${input.expectedKind} evidence in ${evidencePath}.`);
 }
 
+function appendPromptEvidence(
+  runtime: ReturnType<typeof createRuntimeFixture>,
+  sessionId: string,
+  input: {
+    stablePrefixHash: string;
+    dynamicTailHash: string;
+    contextScopeId: string;
+    turn: number;
+    timestamp: number;
+    stablePrefix?: boolean;
+    stableTail?: boolean;
+  },
+) {
+  const observed = {
+    turn: input.turn,
+    updatedAt: input.timestamp,
+    scopeKey: `${sessionId}::${input.contextScopeId}`,
+    stablePrefixHash: input.stablePrefixHash,
+    dynamicTailHash: input.dynamicTailHash,
+    stablePrefix: input.stablePrefix ?? true,
+    stableTail: input.stableTail ?? true,
+  } satisfies PromptStabilityState;
+  runtime.operator.context.evidence.append(sessionId, {
+    kind: "prompt_stability",
+    turn: observed.turn,
+    timestamp: observed.updatedAt,
+    payload: { ...observed },
+  });
+  return observed;
+}
+
+function appendReductionEvidence(
+  runtime: ReturnType<typeof createRuntimeFixture>,
+  sessionId: string,
+  input: {
+    status: "completed" | "skipped";
+    reason: string | null;
+    eligibleToolResults: number;
+    clearedToolResults: number;
+    clearedChars: number;
+    estimatedTokenSavings: number;
+    compactionAdvised: boolean;
+    forcedCompaction: boolean;
+    turn: number;
+    timestamp: number;
+  },
+) {
+  const observed = {
+    turn: input.turn,
+    updatedAt: input.timestamp,
+    status: input.status,
+    reason: input.reason,
+    eligibleToolResults: input.eligibleToolResults,
+    clearedToolResults: input.clearedToolResults,
+    clearedChars: input.clearedChars,
+    estimatedTokenSavings: input.estimatedTokenSavings,
+    compactionAdvised: input.compactionAdvised,
+    forcedCompaction: input.forcedCompaction,
+    classification: null,
+    expectedCacheBreak: false,
+  } satisfies TransientReductionState;
+  runtime.operator.context.evidence.append(sessionId, {
+    kind: "transient_reduction",
+    turn: observed.turn,
+    timestamp: observed.updatedAt,
+    payload: { ...observed },
+  });
+  return observed;
+}
+
 describe("context evidence", () => {
   test("persists sidecar samples and aggregates a promotion report from live evidence plus runtime facts", () => {
     const runtime = createRuntimeFixture();
     const sessionId = "context-evidence-session";
 
-    const promptTurn1 = runtime.operator.context.prompt.observeStability(sessionId, {
+    const promptTurn1 = appendPromptEvidence(runtime, sessionId, {
       stablePrefixHash: "prefix-1",
       dynamicTailHash: "tail-1",
       contextScopeId: "leaf-a",
@@ -58,7 +133,7 @@ describe("context evidence", () => {
       gateRequired: false,
     });
 
-    const promptTurn2 = runtime.operator.context.prompt.observeStability(sessionId, {
+    const promptTurn2 = appendPromptEvidence(runtime, sessionId, {
       stablePrefixHash: "prefix-1",
       dynamicTailHash: "tail-1",
       contextScopeId: "leaf-a",
@@ -76,7 +151,7 @@ describe("context evidence", () => {
       gateRequired: false,
     });
 
-    const reduction = runtime.operator.context.prompt.observeTransientReduction(sessionId, {
+    const reduction = appendReductionEvidence(runtime, sessionId, {
       status: "completed",
       reason: null,
       eligibleToolResults: 6,
@@ -290,7 +365,7 @@ describe("context evidence", () => {
     const runtime = createRuntimeFixture();
     const sessionId = "context-evidence-cache-accounting-missing";
 
-    const prompt = runtime.operator.context.prompt.observeStability(sessionId, {
+    const prompt = appendPromptEvidence(runtime, sessionId, {
       stablePrefixHash: "prefix-zero-cache",
       dynamicTailHash: "tail-zero-cache",
       contextScopeId: "leaf-zero-cache",
@@ -417,7 +492,9 @@ describe("context evidence", () => {
     const runtime = createRuntimeFixture();
     const sessionId = "context-evidence-cache-break-reasons";
 
-    const observed = runtime.operator.context.providerCache.observe(sessionId, {
+    const observed = {
+      turn: 1,
+      updatedAt: 1_740_000_004_100,
       source:
         "provider=openai|api=openai-responses|model=gpt-5.4|session=context-evidence-cache-break-reasons",
       fingerprint: {
@@ -467,7 +544,7 @@ describe("context evidence", () => {
         relativeDropThreshold: 0.05,
         changedFields: ["dynamicTailHash", "tool:exec"],
       },
-    });
+    } satisfies ProviderCacheObservationState;
     recordProviderCacheObservationEvidence({
       workspaceRoot: runtime.identity.workspaceRoot,
       sessionId,

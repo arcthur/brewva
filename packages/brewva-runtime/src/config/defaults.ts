@@ -175,39 +175,19 @@ export const DEFAULT_BREWVA_CONFIG: BrewvaConfig = {
     },
     contextBudget: {
       enabled: true,
-      dynamicTail: {
-        baseTokens: 1200,
-        windowFraction: 0.002,
-        maxTokens: 4800,
-        consequenceDigestMaxChars: 1200,
-      },
       thresholds: {
-        compactionFloorPercent: 0.82,
-        compactionCeilingPercent: 0.9,
-        compactionHeadroomTokens: 24_000,
-        hardLimitFloorPercent: 0.94,
-        hardLimitCeilingPercent: 0.97,
-        hardLimitHeadroomTokens: 8_000,
+        hardRatio: 0.94,
+        advisoryRatio: 0.82,
+        headroomTokens: 8_000,
       },
-      predictiveTurnGrowth: {
-        floorContextWindow: 100_000,
-        largeContextWindow: 800_000,
-        standardTokens: 35_000,
-        largeTokens: 50_000,
-        scalingFactor: 0.25,
-      },
-      modelPhysics: {
-        effectiveContextWindowPercent: 0.95,
-        autoCompactLimitRatio: 0.9,
-        controllableBaselineTokens: 12_000,
-      },
+      dynamicTailTokens: 4800,
+      predictedTurnGrowthTokens: 35_000,
+      providerCacheStalenessMs: 300_000,
+      consequenceDigestMaxChars: 1200,
       compactionInstructions:
         "Summarize stale tool outputs and keep only active objectives, unresolved failures, and latest verification evidence.",
       compaction: {
         minTurnsBetween: 2,
-        minSecondsBetween: 45,
-        cooldownBypassPercent: 0.94,
-        summaryMaxOutputRatio: 0.8,
         protectedTools: [
           "workbench_note",
           "workbench_evict",

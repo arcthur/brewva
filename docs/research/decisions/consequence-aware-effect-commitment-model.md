@@ -31,7 +31,7 @@
 - Use `brewva.effect_authority_basis.v2` as the effect authority manifest basis; old v1 basis and single-bit recovery wording are not compatibility surfaces.
 - Runtime owns per-turn effect commitment projection and inspect surfaces. Gateway only renders the bounded `[TurnConsequenceDigest]` model context block.
 - `inspect.events.effects.getTurnProjection` is the structured operator view; `inspect.events.effects.renderTurnDigest` is the bounded model-facing view.
-- Consequence digest budget is deployment-configurable through `infrastructure.contextBudget.dynamicTail.consequenceDigestMaxChars`.
+- Consequence digest budget is deployment-configurable through `infrastructure.contextBudget.consequenceDigestMaxChars`.
 - Managed-tool `requiredCapabilities` remain hard enforcement. Capability and consequence disclosure are separate from implementation authority.
 - Skill tiers are directory-derived policy surfaces. Skill metadata remains advisory and cannot exceed tier ceilings.
 

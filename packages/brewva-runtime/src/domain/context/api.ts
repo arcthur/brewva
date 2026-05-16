@@ -3,6 +3,8 @@ export type {
   ContextCompactionDecision,
   ContextCompactionGateStatus,
   ContextCompactionReason,
+  ContextEvidenceKind,
+  ContextEvidenceSample,
   ContextStatus,
   ExpectedProviderCacheBreak,
   HistoryViewBaselineOrigin,
@@ -79,6 +81,13 @@ export {
   resolveHistoryViewBaselineView,
   resolveRecoveryWorkingSetView,
 } from "./dependency-views.js";
+export {
+  resolveContextCompactionEligibility,
+  type ContextCompactionEligibility,
+  type ContextCompactionEligibilityInput,
+  type ContextCompactionEligibilitySkipReason,
+  type ContextCompactionGateMode,
+} from "./eligibility.js";
 export { normalizeAgentId } from "./identity.js";
 export { HISTORY_VIEW_BASELINE_RESERVED_BUDGET_RATIO } from "./reserved-budget.js";
 export type { VerificationOutcomeSnapshot } from "./runtime-status.js";

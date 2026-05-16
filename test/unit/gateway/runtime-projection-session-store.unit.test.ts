@@ -439,7 +439,7 @@ describe("hosted runtime tape session store", () => {
     );
   });
 
-  test("appendCompaction records a canonical compact payload that produces a context entry", () => {
+  test("appendCompaction records a canonical compact payload that produces a context entry", async () => {
     const workspace = createTestWorkspace("runtime-projection-session-store-canonical-compaction");
     const runtime = createHostedTestRuntime({ cwd: workspace });
     const sessionId = "agent-session:canonical-compaction";
@@ -461,7 +461,7 @@ describe("hosted runtime tape session store", () => {
       timestamp: Date.now() + 1,
     } as StoredSessionMessage);
 
-    store.appendCompaction("[CompactSummary]\nCanonical compact.", firstKeptEntryId, 1200);
+    await store.appendCompaction("[CompactSummary]\nCanonical compact.", firstKeptEntryId, 1200);
 
     const contextEntry = runtime.inspect.events.records
       .list(sessionId)
@@ -724,7 +724,7 @@ describe("hosted runtime tape session store", () => {
     }
 
     const store = new HostedRuntimeTapeSessionStore(runtime, artifact.sessionId);
-    replayImportedSessionEntries(store, artifact.entries);
+    replayImportedSessionEntries(store as never, artifact.entries);
 
     expect(store.buildSessionContext()).toMatchObject({
       activeModelPresetName: "Claude Lead",
@@ -758,7 +758,7 @@ describe("hosted runtime tape session store", () => {
     const sessionId = "agent-session:control-parent-chain";
     const store = new HostedRuntimeTapeSessionStore(runtime, sessionId);
 
-    const idMap = replayImportedSessionEntries(store, [
+    const idMap = replayImportedSessionEntries(store as never, [
       {
         type: "message",
         id: "u1",
@@ -832,7 +832,7 @@ describe("hosted runtime tape session store", () => {
     const sessionId = "agent-session:branch-summary-parent";
     const store = new HostedRuntimeTapeSessionStore(runtime, sessionId);
 
-    replayImportedSessionEntries(store, [
+    replayImportedSessionEntries(store as never, [
       {
         type: "message",
         id: "u1",

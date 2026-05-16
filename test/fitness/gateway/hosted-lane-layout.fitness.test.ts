@@ -59,24 +59,22 @@ describe("hosted lane layout", () => {
     ).toContain("createHostedBehaviorHostAdapter");
   });
 
-  test("routes context materialization side effects through the hosted materialization owner", () => {
+  test("keeps hosted context materialization side effects in the direct materialization owner", () => {
     const materializationPath =
       "packages/brewva-gateway/src/hosted/internal/context/materialization.ts";
     const materialization = readRepoFile(materializationPath);
-    expect(materialization).toContain("planHostedContextMaterialization");
-    expect(materialization).toContain("commitHostedContextMaterialization");
-    expect(materialization).toContain("HOSTED_CONTEXT_MATERIALIZATION_EFFECT_ORDER");
-    expect(materialization).not.toMatch(/effects\.push\("[a-z_]+"/u);
+    expect(materialization).toContain("materializeHostedContext");
+    expect(materialization).toContain("observeHostedProviderCache");
+    expect(materialization).toContain("rememberHostedVisibleReadState");
+    expect(materialization).not.toContain("planHostedContextMaterialization");
+    expect(materialization).not.toContain("commitHostedContextMaterialization");
+    expect(materialization).not.toContain("HOSTED_CONTEXT_MATERIALIZATION_EFFECT_ORDER");
     for (const expectedEffect of [
       "usage_observed",
-      "compaction_nudge_rendered",
       "prompt_stability_observed",
       "provider_cache_observed",
       "visible_read_state_remembered",
-      "capability_disclosure_rendered",
-      "workbench_context_rendered",
       "delegation_outcome_surfaced",
-      "telemetry_emitted",
     ]) {
       expect(materialization).toContain(expectedEffect);
     }
@@ -86,10 +84,7 @@ describe("hosted lane layout", () => {
       .filter((file) => file !== materializationPath)
       .filter((file) => {
         const source = readRepoFile(file);
-        return (
-          source.includes(".operator.context.providerCache.observe(") ||
-          source.includes(".operator.context.visibleRead.rememberState(")
-        );
+        return source.includes(".operator.context.visibleRead.rememberState(");
       })
       .toSorted();
     expect(offenders).toEqual([]);

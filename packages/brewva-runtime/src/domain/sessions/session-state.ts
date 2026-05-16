@@ -1,9 +1,6 @@
 import type {
   HistoryViewBaselineSnapshot,
-  PromptStabilityState,
-  ProviderCacheObservationState,
   ResourceLeaseRecord,
-  TransientReductionState,
   VisibleReadState,
 } from "../context/api.js";
 import type {
@@ -26,9 +23,6 @@ export class RuntimeSessionStateCell {
   consecutiveToolCall?: ConsecutiveToolCallState;
   effectCommitmentRequestIdsByToolCallId = new Map<string, string>();
   inflightEffectCommitmentRequestIds = new Set<string>();
-  promptStability?: PromptStabilityState;
-  transientReduction?: TransientReductionState;
-  providerCacheObservation?: ProviderCacheObservationState;
   visibleReadEpoch = 0;
   visibleReadStates = new Map<string, VisibleReadState>();
   historyViewBaselineCache?: HistoryViewBaselineSnapshot;
@@ -74,36 +68,6 @@ export class RuntimeSessionStateStore {
 
   getCurrentTurn(sessionId: string): number {
     return this.cells.get(sessionId)?.turn ?? 0;
-  }
-
-  buildContextScopeKey(sessionId: string, scopeId?: string): string {
-    const normalizedScope = scopeId?.trim();
-    if (!normalizedScope) return `${sessionId}::root`;
-    return `${sessionId}::${normalizedScope}`;
-  }
-
-  getPromptStability(sessionId: string): PromptStabilityState | undefined {
-    return this.getExistingCell(sessionId)?.promptStability;
-  }
-
-  setPromptStability(sessionId: string, state: PromptStabilityState): void {
-    this.getCell(sessionId).promptStability = state;
-  }
-
-  getTransientReduction(sessionId: string): TransientReductionState | undefined {
-    return this.getExistingCell(sessionId)?.transientReduction;
-  }
-
-  setTransientReduction(sessionId: string, state: TransientReductionState): void {
-    this.getCell(sessionId).transientReduction = state;
-  }
-
-  getProviderCacheObservation(sessionId: string): ProviderCacheObservationState | undefined {
-    return this.getExistingCell(sessionId)?.providerCacheObservation;
-  }
-
-  setProviderCacheObservation(sessionId: string, state: ProviderCacheObservationState): void {
-    this.getCell(sessionId).providerCacheObservation = state;
   }
 
   getVisibleReadEpoch(sessionId: string): number {

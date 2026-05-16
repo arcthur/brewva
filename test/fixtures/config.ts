@@ -42,31 +42,21 @@ export function createTestConfig(
 }
 
 export function setStaticDynamicTailBudget(config: BrewvaConfig, maxTokens: number): BrewvaConfig {
-  config.infrastructure.contextBudget.dynamicTail.baseTokens = maxTokens;
-  config.infrastructure.contextBudget.dynamicTail.windowFraction = 0;
-  config.infrastructure.contextBudget.dynamicTail.maxTokens = maxTokens;
+  config.infrastructure.contextBudget.dynamicTailTokens = maxTokens;
   return config;
 }
 
 export function setStaticContextStatusThresholds(
   config: BrewvaConfig,
   input: {
-    compactionThresholdPercent?: number;
-    hardLimitPercent: number;
+    advisoryRatio?: number;
+    hardRatio: number;
   },
 ): BrewvaConfig {
   const { thresholds } = config.infrastructure.contextBudget;
-  thresholds.hardLimitFloorPercent = input.hardLimitPercent;
-  thresholds.hardLimitCeilingPercent = input.hardLimitPercent;
-  const compactionThresholdPercent =
-    input.compactionThresholdPercent ??
-    Math.min(input.hardLimitPercent, thresholds.compactionFloorPercent);
-  thresholds.compactionFloorPercent = Math.min(compactionThresholdPercent, input.hardLimitPercent);
-  thresholds.compactionCeilingPercent = Math.min(
-    compactionThresholdPercent,
-    input.hardLimitPercent,
-  );
-  config.infrastructure.contextBudget.modelPhysics.effectiveContextWindowPercent = 1;
-  config.infrastructure.contextBudget.modelPhysics.autoCompactLimitRatio = input.hardLimitPercent;
+  const advisoryRatio = input.advisoryRatio ?? Math.min(input.hardRatio, thresholds.advisoryRatio);
+  thresholds.hardRatio = input.hardRatio;
+  thresholds.advisoryRatio = Math.min(advisoryRatio, input.hardRatio);
+  thresholds.headroomTokens = 0;
   return config;
 }

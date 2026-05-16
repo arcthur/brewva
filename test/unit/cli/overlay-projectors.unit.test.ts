@@ -235,75 +235,44 @@ describe("interactive command overlays", () => {
         lastCompactionTurn: null,
         turnsSinceCompaction: null,
       },
-      promptStability: {
+      promptStabilityEvidence: {
+        kind: "prompt_stability",
         turn: 4,
-        updatedAt: 1,
-        scopeKey: "session-context",
-        stablePrefixHash: "abc123def456",
-        dynamicTailHash: "def456abc123",
-        stablePrefix: true,
-        stableTail: false,
+        timestamp: 1,
+        payload: {
+          scopeKey: "session-context",
+          stablePrefixHash: "abc123def456",
+          dynamicTailHash: "def456abc123",
+          stablePrefix: true,
+          stableTail: false,
+        },
       },
-      transientReduction: {
+      transientReductionEvidence: {
+        kind: "transient_reduction",
         turn: 4,
-        updatedAt: 2,
-        status: "completed",
-        reason: null,
-        eligibleToolResults: 3,
-        clearedToolResults: 2,
-        clearedChars: 1_024,
-        estimatedTokenSavings: 512,
-        compactionAdvised: true,
-        forcedCompaction: false,
-        classification: "prefixPreserving",
-        expectedCacheBreak: false,
+        timestamp: 2,
+        payload: {
+          status: "completed",
+          reason: null,
+          eligibleToolResults: 3,
+          clearedToolResults: 2,
+          clearedChars: 1_024,
+          estimatedTokenSavings: 512,
+          compactionAdvised: true,
+          forcedCompaction: false,
+          classification: "prefixPreserving",
+          expectedCacheBreak: false,
+        },
       },
-      providerCache: {
+      providerCacheEvidence: {
+        kind: "provider_cache_observation",
         turn: 4,
-        updatedAt: 3,
-        source: "provider",
-        fingerprint: {
-          bucketKey: "bucket",
+        timestamp: 3,
+        payload: {
+          source: "provider",
           provider: "google",
           api: "responses",
           model: "gemini",
-          cachePolicyHash: "a".repeat(64),
-          toolSchemaSnapshotHash: "b".repeat(64),
-          toolSchemaOverlayHash: "c".repeat(64),
-          perToolHashes: {},
-          stablePrefixHash: "d".repeat(64),
-          dynamicTailHash: "e".repeat(64),
-          requestHash: "f".repeat(64),
-          channelContextHash: "1".repeat(64),
-          renderedCacheHash: "2".repeat(64),
-          cacheCapabilityHash: "3".repeat(64),
-          stickyLatchHash: "4".repeat(64),
-          reasoningHash: "5".repeat(64),
-          thinkingBudgetHash: "6".repeat(64),
-          cacheRelevantHeadersHash: "7".repeat(64),
-          extraBodyHash: "8".repeat(64),
-          visibleHistoryReductionHash: "9".repeat(64),
-          workbenchContextHash: "0".repeat(64),
-          providerFallbackHash: "a".repeat(64),
-        },
-        render: {
-          status: "rendered",
-          reason: "ok",
-          renderedRetention: "short",
-          bucketKey: "bucket",
-        },
-        breakObservation: {
-          status: "warm",
-          classification: "prefixPreserving",
-          expected: false,
-          reason: null,
-          previousCacheReadTokens: 1,
-          cacheReadTokens: 2,
-          cacheWriteTokens: 3,
-          cacheMissTokens: 4,
-          thresholdTokens: 5,
-          relativeDropThreshold: 0.5,
-          changedFields: ["tools"],
         },
       },
       visibleReadEpoch: 7,
@@ -331,8 +300,8 @@ describe("interactive command overlays", () => {
     expect(view.lines.join("\n")).toContain("advised=true");
     expect(view.lines.join("\n")).toContain("pending=usage_threshold");
     expect(view.lines.join("\n")).toContain("required=true");
-    expect(view.lines.join("\n")).toContain("stablePrefixHash=abc123");
-    expect(view.lines.join("\n")).toContain("provider=google");
+    expect(view.lines.join("\n")).toContain("scope=session-context");
+    expect(view.lines.join("\n")).toContain("source=provider");
     expect(view.lines.join("\n")).toContain("visibleReadEpoch=7");
     expect(view.lines.join("\n")).toContain("Request compaction");
   });

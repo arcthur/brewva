@@ -1,8 +1,6 @@
 import type { BrewvaEventRecord } from "../../events/types.js";
 import type { RuntimeKernelContext } from "../../runtime/runtime-kernel.js";
 import type { GovernancePort } from "../governance/api.js";
-import type { LedgerService } from "../ledger/api.js";
-import type { WorkbenchService } from "../workbench/api.js";
 import {
   checkAndRequestContextCompaction,
   evaluateContextCompactionGate,
@@ -18,29 +16,28 @@ import {
   getContextUsageRatio,
   getRecentCompactionWindowTurns,
 } from "./context-pressure.js";
+import {
+  resolveContextCompactionEligibility,
+  type ContextCompactionEligibility,
+  type ContextCompactionEligibilityInput,
+} from "./eligibility.js";
 import type {
   ContextBudgetUsage,
   ContextCompactionGateStatus,
   ContextCompactionReason,
+  ContextEvidenceKind,
+  ContextEvidenceSample,
   ContextStatus,
-  PromptStabilityObservationInput,
-  PromptStabilityState,
-  ProviderCacheObservationInput,
-  ProviderCacheObservationState,
-  TransientReductionObservationInput,
-  TransientReductionState,
+  SessionCompactionCommitInput,
   VisibleReadState,
 } from "./types.js";
 
 export interface ContextServiceDeps {
-  workspaceRoot: RuntimeKernelContext["workspaceRoot"];
   config: RuntimeKernelContext["config"];
   contextBudget: RuntimeKernelContext["contextBudget"];
   sessionState: RuntimeKernelContext["sessionState"];
   getCurrentTurn: RuntimeKernelContext["getCurrentTurn"];
   recordEvent: RuntimeKernelContext["recordEvent"];
-  ledgerService: Pick<LedgerService, "recordInfrastructureRow">;
-  workbenchService?: Pick<WorkbenchService, "commitBaseline">;
   governancePort?: GovernancePort;
 }
 
@@ -53,21 +50,8 @@ export interface ContextService {
   getContextUsageRatio(usage: ContextBudgetUsage | undefined): number | null;
   getContextHardLimitRatio(sessionId: string, usage?: ContextBudgetUsage): number;
   getContextCompactionThresholdRatio(sessionId: string, usage?: ContextBudgetUsage): number;
-  observePromptStability(
-    sessionId: string,
-    input: PromptStabilityObservationInput,
-  ): PromptStabilityState;
-  getPromptStability(sessionId: string): PromptStabilityState | undefined;
-  observeTransientReduction(
-    sessionId: string,
-    input: TransientReductionObservationInput,
-  ): TransientReductionState;
-  getTransientReduction(sessionId: string): TransientReductionState | undefined;
-  observeProviderCache(
-    sessionId: string,
-    input: ProviderCacheObservationInput,
-  ): ProviderCacheObservationState;
-  getProviderCacheObservation(sessionId: string): ProviderCacheObservationState | undefined;
+  appendEvidence(sessionId: string, sample: ContextEvidenceSample): void;
+  latestEvidence(sessionId: string, kind: ContextEvidenceKind): ContextEvidenceSample | undefined;
   getVisibleReadEpoch(sessionId: string): number;
   advanceVisibleReadEpoch(sessionId: string, reason: string): number;
   rememberVisibleReadState(sessionId: string, state: VisibleReadState): void;
@@ -77,6 +61,9 @@ export interface ContextService {
     sessionId: string,
     usage?: ContextBudgetUsage,
   ): ContextCompactionGateStatus;
+  resolveCompactionEligibility(
+    input: Omit<ContextCompactionEligibilityInput, "enabled">,
+  ): ContextCompactionEligibility;
   checkContextCompactionGate(
     sessionId: string,
     toolName: string,
@@ -93,36 +80,31 @@ export interface ContextService {
     reason: ContextCompactionReason,
     usage?: ContextBudgetUsage,
   ): void;
+  recordAutoCompactionFailure(sessionId: string): void;
+  recordAutoCompactionSuccess(sessionId: string): void;
+  getAutoCompactionPolicyState(sessionId: string): {
+    consecutiveFailures: number;
+    breakerOpen: boolean;
+    deferredReason: string | null;
+  };
+  rememberDeferredAutoCompactionReason(sessionId: string, reason: string | null): boolean;
   getPendingCompactionReason(sessionId: string): ContextCompactionReason | null;
   getCompactionInstructions(): string;
   markContextCompacted(
     sessionId: string,
-    input: {
-      compactId: string;
-      sanitizedSummary: string;
-      summaryDigest: string;
-      sourceTurn: number;
-      leafEntryId: string | null;
-      firstKeptEntryId?: string | null;
-      referenceContextDigest: string | null;
-      fromTokens: number | null;
-      toTokens: number | null;
-      origin: "extension_api" | "auto_compaction" | "hosted_recovery";
-    },
-  ): BrewvaEventRecord;
+    input: SessionCompactionCommitInput,
+  ): Promise<BrewvaEventRecord>;
   isContextBudgetEnabled(): boolean;
 }
 
 export function createContextService(options: ContextServiceDeps): ContextService {
+  const latestEvidenceBySession = new Map<
+    string,
+    Map<ContextEvidenceKind, ContextEvidenceSample>
+  >();
   const contextCompactionDeps: ContextCompactionDeps = {
-    workspaceRoot: options.workspaceRoot,
-    sessionState: options.sessionState,
-    recordInfrastructureRow: (input) => options.ledgerService.recordInfrastructureRow(input),
     governancePort: options.governancePort,
     markPressureCompacted: (sessionId) => options.contextBudget.markCompacted(sessionId),
-    commitWorkbenchBaseline: options.workbenchService
-      ? (sessionId) => options.workbenchService?.commitBaseline(sessionId)
-      : undefined,
     getCurrentTurn: (sessionId) => options.getCurrentTurn(sessionId),
     recordEvent: (input) => options.recordEvent(input),
   };
@@ -166,71 +148,27 @@ export function createContextService(options: ContextServiceDeps): ContextServic
       return getContextCompactionThresholdRatio(options.contextBudget, sessionId, usage);
     },
 
-    observePromptStability(sessionId, input) {
-      const scopeKey = options.sessionState.buildContextScopeKey(sessionId, input.contextScopeId);
-      const previous = options.sessionState.getPromptStability(sessionId);
-      const scopeChanged = previous !== undefined && previous.scopeKey !== scopeKey;
-      const nextState: PromptStabilityState = {
-        turn: input.turn ?? options.getCurrentTurn(sessionId),
-        updatedAt: input.timestamp ?? Date.now(),
-        scopeKey,
-        stablePrefixHash: input.stablePrefixHash,
-        dynamicTailHash: input.dynamicTailHash,
-        stablePrefix:
-          previous === undefined ||
-          scopeChanged ||
-          previous.stablePrefixHash === input.stablePrefixHash,
-        stableTail:
-          previous === undefined ||
-          (previous.dynamicTailHash === input.dynamicTailHash && previous.scopeKey === scopeKey),
-      };
-      options.sessionState.setPromptStability(sessionId, nextState);
-      return nextState;
+    appendEvidence(sessionId, sample) {
+      const byKind = latestEvidenceBySession.get(sessionId) ?? new Map();
+      byKind.set(sample.kind, {
+        kind: sample.kind,
+        turn: Math.max(0, Math.trunc(sample.turn)),
+        timestamp: Math.max(0, Math.trunc(sample.timestamp)),
+        payload: structuredClone(sample.payload),
+      });
+      latestEvidenceBySession.set(sessionId, byKind);
     },
 
-    getPromptStability(sessionId) {
-      return options.sessionState.getPromptStability(sessionId);
-    },
-
-    observeTransientReduction(sessionId, input) {
-      const nextState: TransientReductionState = {
-        turn: input.turn ?? options.getCurrentTurn(sessionId),
-        updatedAt: input.timestamp ?? Date.now(),
-        status: input.status,
-        reason: input.reason ?? null,
-        eligibleToolResults: Math.max(0, Math.trunc(input.eligibleToolResults)),
-        clearedToolResults: Math.max(0, Math.trunc(input.clearedToolResults)),
-        clearedChars: Math.max(0, Math.trunc(input.clearedChars ?? 0)),
-        estimatedTokenSavings: Math.max(0, Math.trunc(input.estimatedTokenSavings ?? 0)),
-        compactionAdvised: input.compactionAdvised ?? false,
-        forcedCompaction: input.forcedCompaction ?? false,
-        classification: input.classification ?? null,
-        expectedCacheBreak: input.expectedCacheBreak ?? false,
-      };
-      options.sessionState.setTransientReduction(sessionId, nextState);
-      return nextState;
-    },
-
-    getTransientReduction(sessionId) {
-      return options.sessionState.getTransientReduction(sessionId);
-    },
-
-    observeProviderCache(sessionId, input) {
-      const nextState: ProviderCacheObservationState = {
-        turn: input.turn ?? options.getCurrentTurn(sessionId),
-        updatedAt: input.timestamp ?? Date.now(),
-        source: input.source,
-        fingerprint: structuredClone(input.fingerprint),
-        render: structuredClone(input.render),
-        breakObservation: structuredClone(input.breakObservation),
-      };
-      options.sessionState.setProviderCacheObservation(sessionId, nextState);
-      return nextState;
-    },
-
-    getProviderCacheObservation(sessionId) {
-      const state = options.sessionState.getProviderCacheObservation(sessionId);
-      return state ? structuredClone(state) : undefined;
+    latestEvidence(sessionId, kind) {
+      const sample = latestEvidenceBySession.get(sessionId)?.get(kind);
+      return sample
+        ? {
+            kind: sample.kind,
+            turn: sample.turn,
+            timestamp: sample.timestamp,
+            payload: structuredClone(sample.payload),
+          }
+        : undefined;
     },
 
     getVisibleReadEpoch(sessionId) {
@@ -260,6 +198,13 @@ export function createContextService(options: ContextServiceDeps): ContextServic
         sessionId,
         usage,
         getCurrentTurn: (targetSessionId) => options.getCurrentTurn(targetSessionId),
+      });
+    },
+
+    resolveCompactionEligibility(input) {
+      return resolveContextCompactionEligibility({
+        ...input,
+        enabled: options.config.infrastructure.contextBudget.enabled,
       });
     },
 
@@ -305,6 +250,22 @@ export function createContextService(options: ContextServiceDeps): ContextServic
       });
     },
 
+    recordAutoCompactionFailure(sessionId) {
+      options.contextBudget.recordAutoCompactionFailure(sessionId);
+    },
+
+    recordAutoCompactionSuccess(sessionId) {
+      options.contextBudget.recordAutoCompactionSuccess(sessionId);
+    },
+
+    getAutoCompactionPolicyState(sessionId) {
+      return options.contextBudget.getAutoCompactionPolicyState(sessionId);
+    },
+
+    rememberDeferredAutoCompactionReason(sessionId, reason) {
+      return options.contextBudget.rememberDeferredAutoCompactionReason(sessionId, reason);
+    },
+
     getPendingCompactionReason(sessionId) {
       return options.contextBudget.getPendingCompactionReason(sessionId);
     },
@@ -313,8 +274,8 @@ export function createContextService(options: ContextServiceDeps): ContextServic
       return options.contextBudget.getCompactionInstructions();
     },
 
-    markContextCompacted(sessionId, input) {
-      const event = commitSessionCompaction(contextCompactionDeps, sessionId, input);
+    async markContextCompacted(sessionId, input) {
+      const event = await commitSessionCompaction(contextCompactionDeps, sessionId, input);
       service.advanceVisibleReadEpoch(sessionId, "session_compact");
       return event;
     },

@@ -1,9 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ContextBudgetUsage } from "@brewva/brewva-runtime/context";
-import {
-  HOSTED_COMPACTION_LADDER_TEST_ONLY,
-  createHostedCompactionController,
-} from "../../../packages/brewva-gateway/src/hosted/internal/context/hosted-compaction-controller.js";
+import { createHostedCompactionController } from "../../../packages/brewva-gateway/src/hosted/internal/context/hosted-compaction-controller.js";
 import { createHostedContextTelemetry } from "../../../packages/brewva-gateway/src/hosted/internal/context/hosted-context-telemetry.js";
 import { createRuntimeFixture } from "../../helpers/runtime.js";
 
@@ -14,96 +11,44 @@ const HIGH_USAGE: ContextBudgetUsage = {
 };
 
 describe("hosted compaction controller", () => {
-  test("resolves the auto-compaction trigger ladder in safety order", () => {
+  test("emits non-interactive skip without exposing an internal trigger ladder", () => {
+    const skippedReasons: string[] = [];
+    let compactCalls = 0;
     const runtime = createRuntimeFixture({
-      context: {
-        checkAndRequestCompaction: () => true,
-        getPendingCompactionReason: () => "usage_threshold",
+      events: {
+        record: (input: { type: string; payload?: { reason?: string } }) => {
+          if (input.type === "context_compaction_skipped" && input.payload?.reason) {
+            skippedReasons.push(input.payload.reason);
+          }
+          return undefined;
+        },
+      },
+    });
+    const telemetry = createHostedContextTelemetry(runtime);
+    const controller = createHostedCompactionController(runtime, telemetry);
+
+    controller.turnStart({
+      sessionId: "s-ladder",
+      turnIndex: 1,
+      timestamp: 10,
+    });
+    controller.context({
+      sessionId: "s-ladder",
+      usage: HIGH_USAGE,
+      hasUI: false,
+      idle: true,
+      compact: () => {
+        compactCalls += 1;
       },
     });
 
-    const baseState = {
-      hydrated: true,
-      turnIndex: 1,
-      lastObservedUsageTokens: null,
-      lastRuntimeGateRequired: false,
-      autoCompactionInFlight: false,
-      autoCompactionWatchdog: null,
-      autoCompactionAttemptId: 0,
-      activeAutoCompactionAttemptId: null,
-      autoCompactionConsecutiveFailures: 0,
-      autoCompactionBreakerOpen: false,
-      autoCompactionBreakerSkipReason: null,
-      deferredAutoCompactionReason: null,
-    };
-
-    expect(
-      HOSTED_COMPACTION_LADDER_TEST_ONLY.resolveCompactionLadderDecision({
-        runtime,
-        sessionId: "s-ladder",
-        usage: HIGH_USAGE,
-        hasUI: false,
-        idle: true,
-        state: baseState,
-      }).step,
-    ).toBe("non_interactive_mode");
-    expect(
-      HOSTED_COMPACTION_LADDER_TEST_ONLY.resolveCompactionLadderDecision({
-        runtime,
-        sessionId: "s-ladder",
-        usage: HIGH_USAGE,
-        hasUI: true,
-        idle: false,
-        state: baseState,
-      }).step,
-    ).toBe("agent_active_manual_compaction_unsafe");
-    expect(
-      HOSTED_COMPACTION_LADDER_TEST_ONLY.resolveCompactionLadderDecision({
-        runtime,
-        sessionId: "s-ladder",
-        usage: HIGH_USAGE,
-        hasUI: true,
-        idle: true,
-        state: {
-          ...baseState,
-          autoCompactionBreakerOpen: true,
-        },
-      }).step,
-    ).toBe("auto_compaction_breaker_open");
-    expect(
-      HOSTED_COMPACTION_LADDER_TEST_ONLY.resolveCompactionLadderDecision({
-        runtime,
-        sessionId: "s-ladder",
-        usage: HIGH_USAGE,
-        hasUI: true,
-        idle: true,
-        state: {
-          ...baseState,
-          autoCompactionInFlight: true,
-        },
-      }).step,
-    ).toBe("auto_compaction_in_flight");
-    expect(
-      HOSTED_COMPACTION_LADDER_TEST_ONLY.resolveCompactionLadderDecision({
-        runtime,
-        sessionId: "s-ladder",
-        usage: HIGH_USAGE,
-        hasUI: true,
-        idle: true,
-        state: baseState,
-      }).step,
-    ).toBe("execute_auto_compaction");
+    expect(compactCalls).toBe(0);
+    expect(skippedReasons).toEqual(["non_interactive_mode"]);
   });
 
   test("deduplicates active-agent auto-compaction skips per pending reason", () => {
     const skippedReasons: string[] = [];
     const runtime = createRuntimeFixture({
-      context: {
-        onTurnStart: () => undefined,
-        observeUsage: () => undefined,
-        checkAndRequestCompaction: () => true,
-        getPendingCompactionReason: () => "usage_threshold",
-      },
       events: {
         record: (input: { type: string; payload?: { reason?: string } }) => {
           if (input.type === "context_compaction_skipped" && input.payload?.reason) {
@@ -139,13 +84,9 @@ describe("hosted compaction controller", () => {
     expect(skippedReasons).toEqual(["agent_active_manual_compaction_unsafe"]);
   });
 
-  test("clears a previously armed runtime gate when session compact completes", () => {
+  test("clears a previously armed runtime gate when session compact completes", async () => {
     const eventTypes: string[] = [];
     const runtime = createRuntimeFixture({
-      context: {
-        onTurnStart: () => undefined,
-        observeUsage: () => undefined,
-      },
       events: {
         record: (input: { type: string }) => {
           eventTypes.push(input.type);
@@ -176,8 +117,7 @@ describe("hosted compaction controller", () => {
       idle: false,
       compact: undefined,
     });
-    controller.setLastRuntimeGateRequired("s-compact", true);
-    controller.sessionCompact({
+    await controller.sessionCompact({
       sessionId: "s-compact",
       usage: HIGH_USAGE,
       compactionEntry: {
@@ -200,22 +140,22 @@ describe("hosted compaction controller", () => {
         fromTokens: 990,
         toTokens: 990,
         origin: "extension_api",
+        cacheImpact: {
+          before: null,
+          after: null,
+          explicitEpochChanges: 1,
+          prefixBytesChanged: null,
+          degradedReason: null,
+        },
       },
     ]);
     expect(eventTypes).toContain("session_compact");
     expect(eventTypes).toContain("context_compaction_gate_cleared");
   });
 
-  test("opens the auto-compaction breaker after repeated failures and resets it after session compact", () => {
+  test("opens the auto-compaction breaker after repeated failures and resets it after session compact", async () => {
     let compactCalls = 0;
-    const runtime = createRuntimeFixture({
-      context: {
-        onTurnStart: () => undefined,
-        observeUsage: () => undefined,
-        checkAndRequestCompaction: () => true,
-        getPendingCompactionReason: () => "usage_threshold",
-      },
-    });
+    const runtime = createRuntimeFixture({});
     const telemetry = createHostedContextTelemetry(runtime);
     const controller = createHostedCompactionController(runtime, telemetry);
     const sessionId = "s-auto-breaker";
@@ -262,7 +202,7 @@ describe("hosted compaction controller", () => {
     expect(compactCalls).toBe(3);
     expect(skippedBeforeReset).toContain("auto_compaction_breaker_open");
 
-    controller.sessionCompact({
+    await controller.sessionCompact({
       sessionId,
       usage: HIGH_USAGE,
       compactionEntry: {
@@ -286,14 +226,7 @@ describe("hosted compaction controller", () => {
   });
 
   test("rehydrates an open auto-compaction breaker from durable telemetry", () => {
-    const runtime = createRuntimeFixture({
-      context: {
-        onTurnStart: () => undefined,
-        observeUsage: () => undefined,
-        checkAndRequestCompaction: () => true,
-        getPendingCompactionReason: () => "usage_threshold",
-      },
-    });
+    const runtime = createRuntimeFixture({});
     const sessionId = "s-auto-breaker-hydrated";
     for (let attempt = 0; attempt < 3; attempt += 1) {
       runtime.extensions.hosted.events.record({

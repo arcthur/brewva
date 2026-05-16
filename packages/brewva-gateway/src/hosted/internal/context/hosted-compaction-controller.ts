@@ -1,6 +1,8 @@
 import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import type {
   ContextBudgetUsage,
+  SessionCompactionCacheImpact,
+  SessionCompactionCacheImpactSnapshot,
   SessionCompactionGenerationMetadata,
 } from "@brewva/brewva-runtime/context";
 import { sha256Hex } from "@brewva/brewva-std/hash";
@@ -28,7 +30,6 @@ export type HostedManualCompact = ((options: HostedManualCompactOptions) => void
 
 export interface HostedContextGateStatePort {
   getTurnIndex: (sessionId: string) => number;
-  setLastRuntimeGateRequired: (sessionId: string, required: boolean) => void;
 }
 
 export interface HostedCompactionController extends HostedContextGateStatePort {
@@ -55,7 +56,7 @@ export interface HostedCompactionController extends HostedContextGateStatePort {
       summaryGeneration?: unknown;
     };
     fromExtension?: unknown;
-  }) => void;
+  }) => Promise<void>;
   sessionShutdown: (input: { sessionId: string }) => void;
 }
 
@@ -63,40 +64,16 @@ export interface HostedCompactionControllerOptions {
   autoCompactionWatchdogMs?: number;
 }
 
-type CompactionLadderStep =
-  | "no_request"
-  | "non_interactive_mode"
-  | "agent_active_manual_compaction_unsafe"
-  | "auto_compaction_breaker_open"
-  | "auto_compaction_in_flight"
-  | "execute_auto_compaction";
-
-interface CompactionLadderDecision {
-  step: CompactionLadderStep;
-  compactionReason: string | null;
-}
-
 interface CompactionGateState {
-  hydrated: boolean;
   turnIndex: number;
-  lastObservedUsageTokens: number | null;
-  lastRuntimeGateRequired: boolean;
   autoCompactionInFlight: boolean;
   autoCompactionWatchdog: ReturnType<typeof setTimeout> | null;
   autoCompactionAttemptId: number;
   activeAutoCompactionAttemptId: number | null;
-  autoCompactionConsecutiveFailures: number;
-  autoCompactionBreakerOpen: boolean;
-  autoCompactionBreakerSkipReason: string | null;
-  deferredAutoCompactionReason: string | null;
 }
 
 export const DEFAULT_AUTO_COMPACTION_WATCHDOG_MS = 30_000;
 export const AUTO_COMPACTION_BREAKER_THRESHOLD = 3;
-
-const AUTO_COMPACTION_COMPLETED_EVENT_TYPE = "context_compaction_auto_completed";
-const AUTO_COMPACTION_FAILED_EVENT_TYPE = "context_compaction_auto_failed";
-const SESSION_COMPACT_EVENT_TYPE = "session_compact";
 
 function normalizeUsageTokens(usage: ContextBudgetUsage | undefined): number | null {
   return typeof usage?.tokens === "number" && Number.isFinite(usage.tokens) && usage.tokens >= 0
@@ -147,6 +124,40 @@ function extractSummaryGeneration(
   return summaryGeneration as SessionCompactionGenerationMetadata;
 }
 
+function readOptionalString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function readNonNegativeInteger(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.trunc(value) : 0;
+}
+
+function buildCompactionCacheImpact(
+  runtime: BrewvaHostedRuntimePort,
+  sessionId: string,
+): SessionCompactionCacheImpact {
+  const sample = runtime.inspect.context.evidence.latest(sessionId, "provider_cache_observation");
+  const payload = sample?.payload;
+  const before: SessionCompactionCacheImpactSnapshot | null = payload
+    ? {
+        cacheReadTokens: readNonNegativeInteger(payload.cacheReadTokens),
+        cacheWriteTokens: readNonNegativeInteger(payload.cacheWriteTokens),
+        bucketKey: readOptionalString(payload.bucketKey),
+        stablePrefixHash: readOptionalString(payload.stablePrefixHash),
+        dynamicTailHash: readOptionalString(payload.dynamicTailHash),
+        visibleHistoryReductionHash: readOptionalString(payload.visibleHistoryReductionHash),
+        workbenchContextHash: readOptionalString(payload.workbenchContextHash),
+      }
+    : null;
+  return {
+    before,
+    after: null,
+    explicitEpochChanges: 1,
+    prefixBytesChanged: null,
+    degradedReason: null,
+  };
+}
+
 function getOrCreateGateState(
   store: Map<string, CompactionGateState>,
   sessionId: string,
@@ -156,18 +167,11 @@ function getOrCreateGateState(
     return existing;
   }
   const created: CompactionGateState = {
-    hydrated: false,
     turnIndex: 0,
-    lastObservedUsageTokens: null,
-    lastRuntimeGateRequired: false,
     autoCompactionInFlight: false,
     autoCompactionWatchdog: null,
     autoCompactionAttemptId: 0,
     activeAutoCompactionAttemptId: null,
-    autoCompactionConsecutiveFailures: 0,
-    autoCompactionBreakerOpen: false,
-    autoCompactionBreakerSkipReason: null,
-    deferredAutoCompactionReason: null,
   };
   store.set(sessionId, created);
   return created;
@@ -175,78 +179,11 @@ function getOrCreateGateState(
 
 function clearAutoCompactionExecutionState(state: CompactionGateState): void {
   state.autoCompactionInFlight = false;
-  state.deferredAutoCompactionReason = null;
   state.activeAutoCompactionAttemptId = null;
   if (state.autoCompactionWatchdog) {
     clearTimeout(state.autoCompactionWatchdog);
     state.autoCompactionWatchdog = null;
   }
-}
-
-function resetAutoCompactionBreaker(state: CompactionGateState): void {
-  state.autoCompactionConsecutiveFailures = 0;
-  state.autoCompactionBreakerOpen = false;
-  state.autoCompactionBreakerSkipReason = null;
-}
-
-function recordAutoCompactionFailure(state: CompactionGateState): void {
-  state.autoCompactionConsecutiveFailures += 1;
-  state.autoCompactionBreakerSkipReason = null;
-  if (state.autoCompactionConsecutiveFailures >= AUTO_COMPACTION_BREAKER_THRESHOLD) {
-    state.autoCompactionBreakerOpen = true;
-  }
-}
-
-function resolveCompactionLadderDecision(input: {
-  runtime: BrewvaHostedRuntimePort;
-  sessionId: string;
-  usage?: ContextBudgetUsage;
-  hasUI: boolean;
-  idle: boolean;
-  state: CompactionGateState;
-}): CompactionLadderDecision {
-  if (!input.runtime.operator.context.compaction.checkAndRequest(input.sessionId, input.usage)) {
-    return {
-      step: "no_request",
-      compactionReason: null,
-    };
-  }
-
-  const compactionReason =
-    input.runtime.inspect.context.compaction.getPendingReason(input.sessionId) ?? "usage_threshold";
-
-  if (!input.hasUI) {
-    return {
-      step: "non_interactive_mode",
-      compactionReason,
-    };
-  }
-
-  if (!input.idle) {
-    return {
-      step: "agent_active_manual_compaction_unsafe",
-      compactionReason,
-    };
-  }
-
-  if (input.state.autoCompactionBreakerOpen) {
-    return {
-      step: "auto_compaction_breaker_open",
-      compactionReason,
-    };
-  }
-
-  if (input.state.autoCompactionInFlight) {
-    return {
-      step: "auto_compaction_in_flight",
-      compactionReason,
-    };
-  }
-
-  return {
-    step: "execute_auto_compaction",
-    compactionReason,
-  };
 }
 
 export function createHostedCompactionController(
@@ -260,42 +197,13 @@ export function createHostedCompactionController(
     1,
     Math.trunc(options.autoCompactionWatchdogMs ?? DEFAULT_AUTO_COMPACTION_WATCHDOG_MS),
   );
-  const queryStructured = runtime.inspect.events.records.queryStructured.bind(
-    runtime.inspect.events.records,
-  );
-
-  const ensureHydrated = (sessionId: string, state: CompactionGateState): void => {
-    if (state.hydrated) {
-      return;
-    }
-    state.hydrated = true;
-    const events = queryStructured(sessionId);
-    for (const event of events) {
-      if (event.type === AUTO_COMPACTION_FAILED_EVENT_TYPE) {
-        recordAutoCompactionFailure(state);
-        continue;
-      }
-      if (
-        event.type === AUTO_COMPACTION_COMPLETED_EVENT_TYPE ||
-        event.type === SESSION_COMPACT_EVENT_TYPE
-      ) {
-        resetAutoCompactionBreaker(state);
-      }
-    }
-  };
-
   const getSessionState = (sessionId: string): CompactionGateState => {
-    const state = getOrCreateGateState(gateStateBySession, sessionId);
-    ensureHydrated(sessionId, state);
-    return state;
+    return getOrCreateGateState(gateStateBySession, sessionId);
   };
 
   return {
     getTurnIndex(sessionId) {
       return getSessionState(sessionId).turnIndex;
-    },
-    setLastRuntimeGateRequired(sessionId, required) {
-      getSessionState(sessionId).lastRuntimeGateRequired = required;
     },
     turnStart(input) {
       const state = getSessionState(input.sessionId);
@@ -309,22 +217,30 @@ export function createHostedCompactionController(
     },
     context(input) {
       const state = getSessionState(input.sessionId);
-      state.lastObservedUsageTokens = normalizeUsageTokens(input.usage);
       runtime.operator.context.usage.observe(input.sessionId, input.usage);
-      const decision = resolveCompactionLadderDecision({
-        runtime,
-        sessionId: input.sessionId,
-        usage: input.usage,
+      runtime.operator.context.compaction.checkAndRequest(input.sessionId, input.usage);
+      const gateStatus = runtime.inspect.context.compaction.getGateStatus(
+        input.sessionId,
+        input.usage,
+      );
+      const autoPolicy = runtime.inspect.context.compaction.getAutoPolicyState(input.sessionId);
+      const eligibility = runtime.inspect.context.compaction.resolveEligibility({
+        status: gateStatus.status,
+        pendingReason: runtime.inspect.context.compaction.getPendingReason(input.sessionId),
+        recentCompaction: gateStatus.recentCompaction,
         hasUI: input.hasUI,
         idle: input.idle,
-        state,
+        recoveryPosture: "idle",
+        autoCompactionInFlight: state.autoCompactionInFlight,
+        autoCompactionBreakerOpen: autoPolicy.breakerOpen,
+        gateMode: "hosted_auto",
       });
 
-      if (decision.step === "no_request") {
+      if (eligibility.decision === "skip" && eligibility.reason === "no_request") {
         return;
       }
 
-      if (decision.step === "non_interactive_mode") {
+      if (eligibility.decision === "skip" && eligibility.reason === "non_interactive_mode") {
         telemetry.emitCompactionSkipped({
           sessionId: input.sessionId,
           turn: state.turnIndex,
@@ -333,11 +249,18 @@ export function createHostedCompactionController(
         return;
       }
 
-      if (decision.step === "agent_active_manual_compaction_unsafe") {
-        if (state.deferredAutoCompactionReason === decision.compactionReason) {
+      if (
+        eligibility.decision === "skip" &&
+        eligibility.reason === "agent_active_manual_compaction_unsafe"
+      ) {
+        if (
+          !runtime.operator.context.compaction.rememberDeferredReason(
+            input.sessionId,
+            runtime.inspect.context.compaction.getPendingReason(input.sessionId),
+          )
+        ) {
           return;
         }
-        state.deferredAutoCompactionReason = decision.compactionReason;
         telemetry.emitCompactionSkipped({
           sessionId: input.sessionId,
           turn: state.turnIndex,
@@ -346,21 +269,21 @@ export function createHostedCompactionController(
         return;
       }
 
-      state.deferredAutoCompactionReason = null;
+      runtime.operator.context.compaction.rememberDeferredReason(input.sessionId, null);
 
-      if (decision.step === "auto_compaction_breaker_open") {
-        if (state.autoCompactionBreakerSkipReason !== decision.compactionReason) {
-          state.autoCompactionBreakerSkipReason = decision.compactionReason;
-          telemetry.emitCompactionSkipped({
-            sessionId: input.sessionId,
-            turn: state.turnIndex,
-            reason: "auto_compaction_breaker_open",
-          });
-        }
+      if (
+        eligibility.decision === "skip" &&
+        eligibility.reason === "auto_compaction_breaker_open"
+      ) {
+        telemetry.emitCompactionSkipped({
+          sessionId: input.sessionId,
+          turn: state.turnIndex,
+          reason: "auto_compaction_breaker_open",
+        });
         return;
       }
 
-      if (decision.step === "auto_compaction_in_flight") {
+      if (eligibility.decision === "skip" && eligibility.reason === "auto_compaction_in_flight") {
         telemetry.emitCompactionSkipped({
           sessionId: input.sessionId,
           turn: state.turnIndex,
@@ -369,12 +292,15 @@ export function createHostedCompactionController(
         return;
       }
 
-      const compactionReason = decision.compactionReason ?? "usage_threshold";
+      if (eligibility.decision !== "execute") {
+        return;
+      }
+
+      const compactionReason = eligibility.reason;
       state.autoCompactionAttemptId += 1;
       const attemptId = state.autoCompactionAttemptId;
       state.autoCompactionInFlight = true;
       state.activeAutoCompactionAttemptId = attemptId;
-      state.autoCompactionBreakerSkipReason = null;
       if (state.autoCompactionWatchdog) {
         clearTimeout(state.autoCompactionWatchdog);
       }
@@ -383,7 +309,7 @@ export function createHostedCompactionController(
           return;
         }
         clearAutoCompactionExecutionState(state);
-        recordAutoCompactionFailure(state);
+        runtime.operator.context.compaction.recordAutoFailure(input.sessionId);
         telemetry.emitAutoFailed({
           sessionId: input.sessionId,
           turn: state.turnIndex,
@@ -414,7 +340,7 @@ export function createHostedCompactionController(
           reason: compactionReason,
           error: telemetry.normalizeRuntimeError(error),
         });
-        recordAutoCompactionFailure(state);
+        runtime.operator.context.compaction.recordAutoFailure(input.sessionId);
         clearInFlight();
       };
 
@@ -427,7 +353,7 @@ export function createHostedCompactionController(
               return;
             }
             clearInFlight();
-            resetAutoCompactionBreaker(state);
+            runtime.operator.context.compaction.recordAutoSuccess(input.sessionId);
             telemetry.emitAutoCompleted({
               sessionId: input.sessionId,
               turn: state.turnIndex,
@@ -442,12 +368,15 @@ export function createHostedCompactionController(
         recordAutoFailure(error);
       }
     },
-    sessionCompact(input) {
+    async sessionCompact(input) {
       const state = getSessionState(input.sessionId);
-      const wasGated = state.lastRuntimeGateRequired;
-      state.lastRuntimeGateRequired = false;
+      const previousUsage = runtime.inspect.context.usage.get(input.sessionId);
+      const wasGated = runtime.inspect.context.compaction.getGateStatus(
+        input.sessionId,
+        previousUsage,
+      ).required;
       clearAutoCompactionExecutionState(state);
-      resetAutoCompactionBreaker(state);
+      runtime.operator.context.compaction.recordAutoSuccess(input.sessionId);
       const sanitizedSummary =
         extractCompactionSummary({
           compactionEntry: input.compactionEntry,
@@ -458,8 +387,15 @@ export function createHostedCompactionController(
         }) ?? `compact:${input.sessionId}:${state.turnIndex}`;
       const toTokens = normalizeUsageTokens(input.usage);
       const summaryGeneration = extractSummaryGeneration(input.compactionEntry);
+      const latestPromptEvidence = runtime.inspect.context.evidence.latest(
+        input.sessionId,
+        "prompt_stability",
+      );
+      const referenceContextDigest = readOptionalString(
+        latestPromptEvidence?.payload.stablePrefixHash,
+      );
 
-      runtime.authority.session.compaction.commit(input.sessionId, {
+      await runtime.authority.session.compaction.commit(input.sessionId, {
         compactId,
         sanitizedSummary,
         summaryDigest: sha256Hex(sanitizedSummary),
@@ -473,14 +409,13 @@ export function createHostedCompactionController(
         firstKeptEntryId: extractFirstKeptEntryId({
           compactionEntry: input.compactionEntry,
         }),
-        referenceContextDigest:
-          runtime.inspect.context.prompt.getStability(input.sessionId)?.stablePrefixHash ?? null,
-        fromTokens: state.lastObservedUsageTokens,
+        referenceContextDigest,
+        fromTokens: runtime.inspect.context.usage.get(input.sessionId)?.tokens ?? null,
         toTokens,
         origin: input.fromExtension === true ? "extension_api" : "auto_compaction",
         ...(summaryGeneration ? { summaryGeneration } : {}),
+        cacheImpact: buildCompactionCacheImpact(runtime, input.sessionId),
       });
-      state.lastObservedUsageTokens = toTokens;
 
       if (wasGated) {
         telemetry.emitGateCleared({
@@ -500,7 +435,3 @@ export function createHostedCompactionController(
     },
   };
 }
-
-export const HOSTED_COMPACTION_LADDER_TEST_ONLY = {
-  resolveCompactionLadderDecision,
-};

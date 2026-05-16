@@ -139,33 +139,31 @@ provider-safe tool-name syntax before they enter the hosted tool surface.
 - `parallel` controls runtime parallelism ceilings.
 - `channels` controls external orchestration limits and access control.
 - `infrastructure` controls event storage, context-budget thresholds,
-  model-physics budget tuning, predictive turn-growth tuning, and
-  cost/recovery infrastructure.
+  request-shaping policy, and cost/recovery infrastructure.
 
 ## Context Budget Compaction
 
-`infrastructure.contextBudget.dynamicTail` controls budget for hosted dynamic
-tail context blocks:
+`infrastructure.contextBudget` is a deliberately small tuning surface:
 
-- `baseTokens` (`number`, default `1200`), `windowFraction` (`number`, default
-  `0.002`), and `maxTokens` (`number`, default `4800`) define the general
-  dynamic-tail budget envelope.
-- `consequenceDigestMaxChars` (`number`, default `1200`) caps the model-facing
-  turn consequence digest before it enters hosted context. Smaller-provider
-  deployments can lower this value without changing runtime projection or
-  operator inspect output.
-
-`infrastructure.contextBudget.compaction` governs how the runtime triggers and
-shapes session compactions. In addition to cooldown and bypass thresholds, the
-following keys tune summary generation and outbound provider-request reduction:
-
-- `summaryMaxOutputRatio` (`number`, default `0.8`): fraction of the active
-  model's `maxTokens` that the LLM compaction summary may consume. The hosted
-  compaction generator forwards
-  `floor(model.maxTokens * summaryMaxOutputRatio)` as the model's
-  `maxOutputTokens` so the summary stays well within the model's single-turn
-  output capability and leaves headroom for the next turn's reasoning. Set
-  `summaryMaxOutputRatio=0` to omit the explicit hosted compaction output cap.
+- `enabled` (`boolean`, default `true`) enables context status, gate, and
+  request-shaping policy.
+- `thresholds.hardRatio` (`number`, default `0.94`) is the hard gate line.
+- `thresholds.advisoryRatio` (`number`, default `0.82`) is the compact-soon
+  advisory line.
+- `thresholds.headroomTokens` (`number`, default `8000`) reserves expected
+  output/growth headroom before ratio checks.
+- `dynamicTailTokens` (`number`, default `4800`) caps hosted dynamic-tail
+  context blocks.
+- `predictedTurnGrowthTokens` (`number`, default `35000`) is the fixed
+  projected next-turn growth used by gate/advisory evaluation.
+- `providerCacheStalenessMs` (`number`, default `300000`) bounds how long
+  provider-cache evidence is considered warm for request reduction policy.
+- `consequenceDigestMaxChars` (`number`, default `1200`) caps the
+  model-facing turn consequence digest before it enters hosted context.
+- `compactionInstructions` (`string`) provides default model-facing
+  compaction guidance.
+- `compaction.minTurnsBetween` (`number`, default `2`) is the turn-based
+  compaction cooldown.
 - `protectedTools` (`string[]`, default
   `["workbench_note", "workbench_evict", "workbench_undo_evict", "workbench_compact", "recall_search", "recall_curate", "tape_handoff"]`):
   tool names whose tool-result messages are exempt from transient outbound
@@ -179,37 +177,12 @@ following keys tune summary generation and outbound provider-request reduction:
   count-based recent-window protection only. Set to a large value to disable
   reduction in practice when the tail is small.
 
-The hard-limit and compaction-threshold headroom values in
-`infrastructure.contextBudget.thresholds` are now adaptive per turn: when a
-provider reports `maxOutputTokens` in usage telemetry, the manager derives the
-effective headroom as `max(configured, maxOutputTokens)` so large output
-windows do not silently push the conversation through the projected hard
-limit.
-
-`infrastructure.contextBudget.modelPhysics` defines provider/model physical
-budget assumptions. These values are not context sources and do not route the
-model through a staged plan:
-
-- `effectiveContextWindowPercent` (`number`, default `0.95`): the usable
-  fraction of a provider's advertised context window. Hard-limit thresholds
-  are capped at this ratio so Brewva keeps a physical reserve even when a
-  model reports a large raw window.
-- `autoCompactLimitRatio` (`number`, default `0.9`): the physical hard
-  ceiling for the compact-soon line. The adaptive compaction threshold (from
-  `compactionFloorPercent`/`compactionCeilingPercent` plus headroom) is an
-  advisory suggestion that varies with window size; `autoCompactLimitRatio`
-  overrides it when the adaptive calculation would produce a higher ratio. If
-  the adaptive threshold says 0.93 but `autoCompactLimitRatio` is 0.9, the
-  effective compact-soon line stays at 0.9. This keeps compaction nudges ahead
-  of the hard physical boundary while preserving model choice about when to
-  write or evict workbench state.
-- `controllableBaselineTokens` (`number`, default `12000`): baseline system
-  and protocol budget subtracted from context-status telemetry to expose
-  `controllable_*` remaining metrics. It is diagnostic only.
-
-`infrastructure.contextBudget.predictiveTurnGrowth` is normalized into
-monotonic bounds: `largeContextWindow` is at least `floorContextWindow`, and
-`largeTokens` is at least `standardTokens`.
+Removed context-budget keys fail fast during config load rather than being
+normalized through compatibility shims. This includes the old flat
+`hardLimitPercent`, `compactionThresholdPercent`, `maxInjectionTokens`,
+`dynamicTail`, `predictiveTurnGrowth`, `modelPhysics`,
+`compaction.minSecondsBetween`, `compaction.cooldownBypassPercent`, and
+`compaction.summaryMaxOutputRatio` surfaces.
 
 ## Schema Maintenance
 

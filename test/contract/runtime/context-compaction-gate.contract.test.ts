@@ -18,12 +18,9 @@ describe("context compaction gate", () => {
           contextBudget: {
             enabled: true,
             thresholds: {
-              compactionFloorPercent: 0.8,
-              compactionCeilingPercent: 0.8,
-              compactionHeadroomTokens: 24_000,
-              hardLimitFloorPercent: 0.9,
-              hardLimitCeilingPercent: 0.9,
-              hardLimitHeadroomTokens: 8_000,
+              advisoryRatio: 0.8,
+              hardRatio: 0.9,
+              headroomTokens: 0,
             },
           },
         },
@@ -69,7 +66,7 @@ describe("context compaction gate", () => {
     });
     expect(compactAllowed.allowed).toBe(true);
 
-    runtime.authority.session.compaction.commit(sessionId, {
+    await runtime.authority.session.compaction.commit(sessionId, {
       compactId: "cmp-core-gate",
       sanitizedSummary: "Keep only the active recovery baseline.",
       summaryDigest: "unused",
@@ -79,6 +76,13 @@ describe("context compaction gate", () => {
       fromTokens: usage.tokens,
       toTokens: 40,
       origin: "auto_compaction",
+      cacheImpact: {
+        before: null,
+        after: null,
+        explicitEpochChanges: 1,
+        prefixBytesChanged: null,
+        degradedReason: null,
+      },
     });
 
     const unblocked = runtime.authority.tools.invocation.start({

@@ -648,9 +648,18 @@ export class ShellOverlayLifecycleHandler {
         status: runtime.inspect.context.usage.getStatus(sessionId, usage),
         pendingCompactionReason: runtime.inspect.context.compaction.getPendingReason(sessionId),
         gateStatus: runtime.inspect.context.compaction.getGateStatus(sessionId, usage),
-        promptStability: runtime.inspect.context.prompt.getStability(sessionId),
-        transientReduction: runtime.inspect.context.prompt.getTransientReduction(sessionId),
-        providerCache: runtime.inspect.context.providerCache.getObservation(sessionId),
+        promptStabilityEvidence: runtime.inspect.context.evidence.latest(
+          sessionId,
+          "prompt_stability",
+        ),
+        transientReductionEvidence: runtime.inspect.context.evidence.latest(
+          sessionId,
+          "transient_reduction",
+        ),
+        providerCacheEvidence: runtime.inspect.context.evidence.latest(
+          sessionId,
+          "provider_cache_observation",
+        ),
         visibleReadEpoch: runtime.inspect.context.visibleRead.getEpoch(sessionId),
         historyViewBaseline: runtime.inspect.context.prompt.getHistoryViewBaseline(sessionId),
       }),

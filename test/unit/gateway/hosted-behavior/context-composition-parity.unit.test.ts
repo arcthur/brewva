@@ -15,7 +15,7 @@ import { createRuntimeConfig, createRuntimeFixture } from "./fixtures/runtime.js
 describe("context composition parity", () => {
   test("keeps gate-clearing semantics aligned between direct context registration and hosted behavior", async () => {
     const config = createRuntimeConfig((draft) => {
-      setStaticContextStatusThresholds(draft, { hardLimitPercent: 0.8 });
+      setStaticContextStatusThresholds(draft, { hardRatio: 0.8 });
     });
 
     const makeRuntime = () =>

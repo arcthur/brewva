@@ -53,7 +53,8 @@ export function createSessionSurfaceMethods(deps: SessionSurfaceDependencies) {
         commit: (
           sessionId: string,
           input: Parameters<ContextService["markContextCompacted"]>[1],
-        ): BrewvaEventRecord => deps.getContextService().markContextCompacted(sessionId, input),
+        ): Promise<BrewvaEventRecord> =>
+          deps.getContextService().markContextCompacted(sessionId, input),
       },
       title: {
         recordGenerated: (

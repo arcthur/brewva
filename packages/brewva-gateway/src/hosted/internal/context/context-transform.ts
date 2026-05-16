@@ -27,7 +27,7 @@ export interface ContextTransformOptions {
 export interface ContextTransformLifecycle {
   turnStart: (event: unknown, ctx: unknown) => undefined;
   context: (event: unknown, ctx: unknown) => { messages: BrewvaTurnLoopMessage[] } | undefined;
-  sessionCompact: (event: unknown, ctx: unknown) => undefined;
+  sessionCompact: (event: unknown, ctx: unknown) => Promise<undefined>;
   sessionShutdown: (event: unknown, ctx: unknown) => undefined;
   beforeAgentStart: (event: unknown, ctx: unknown) => Promise<HostedWorkbenchContextResult>;
 }
@@ -132,10 +132,10 @@ export function createContextTransformLifecycle(
         }),
       };
     },
-    sessionCompact(event, ctx) {
+    async sessionCompact(event, ctx) {
       const lifecycleContext = asLifecycleContext(ctx);
       const compactEvent = event as SessionCompactEvent;
-      compactionController.sessionCompact({
+      await compactionController.sessionCompact({
         sessionId: lifecycleContext.sessionManager.getSessionId(),
         usage: resolveUsage(lifecycleContext),
         sessionManager: lifecycleContext.sessionManager,

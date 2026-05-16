@@ -7,7 +7,11 @@ import type { BrewvaConfig } from "@brewva/brewva-runtime";
 import { createOpsRuntimeConfig } from "../../helpers/runtime.js";
 
 function createConfig(): BrewvaConfig {
-  return createOpsRuntimeConfig();
+  return createOpsRuntimeConfig((config) => {
+    config.infrastructure.contextBudget.thresholds.hardRatio = 0.95;
+    config.infrastructure.contextBudget.thresholds.headroomTokens = 0;
+    config.infrastructure.contextBudget.compaction.minTurnsBetween = 3;
+  });
 }
 
 describe("context compaction request dedupe", () => {
@@ -31,7 +35,7 @@ describe("context compaction request dedupe", () => {
     expect(reasons).toEqual(["usage_threshold", "hard_limit"]);
   });
 
-  test("respects minTurnsBetweenCompaction when usage stays high", () => {
+  test("respects minTurnsBetweenCompaction when usage stays high", async () => {
     const runtime = createBrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-context-compaction-interval-")),
       config: createConfig(),
@@ -46,7 +50,7 @@ describe("context compaction request dedupe", () => {
         percent: 0.9,
       }),
     ).toBe(true);
-    runtime.authority.session.compaction.commit(sessionId, {
+    await runtime.authority.session.compaction.commit(sessionId, {
       compactId: "cmp-interval",
       sanitizedSummary: "Reset compaction interval state.",
       summaryDigest: "unused",
@@ -56,6 +60,13 @@ describe("context compaction request dedupe", () => {
       fromTokens: 820,
       toTokens: 120,
       origin: "auto_compaction",
+      cacheImpact: {
+        before: null,
+        after: null,
+        explicitEpochChanges: 1,
+        prefixBytesChanged: null,
+        degradedReason: null,
+      },
     });
 
     runtime.operator.context.lifecycle.onTurnStart(sessionId, 2);
@@ -75,5 +86,14 @@ describe("context compaction request dedupe", () => {
         percent: 0.9,
       }),
     ).toBe(false);
+
+    runtime.operator.context.lifecycle.onTurnStart(sessionId, 4);
+    expect(
+      runtime.operator.context.compaction.checkAndRequest(sessionId, {
+        tokens: 820,
+        contextWindow: 1000,
+        percent: 0.9,
+      }),
+    ).toBe(true);
   });
 });

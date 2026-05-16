@@ -4,6 +4,7 @@ import type { BrewvaEventRecord } from "../../events/types.js";
 import { normalizeToolName } from "../../utils/tool-name.js";
 import type { ContextBudgetManager } from "./budget.js";
 import { getContextCompactionGateStatus, getContextUsageRatio } from "./context-pressure.js";
+import { resolveContextCompactionEligibility } from "./eligibility.js";
 import type { ContextBudgetUsage, ContextCompactionReason } from "./types.js";
 
 export type ContextEventRecorder = (input: {
@@ -30,7 +31,19 @@ export function evaluateContextCompactionGate(input: {
   }
 
   const gate = getContextCompactionGateStatus(input);
-  if (!gate.required) {
+  const eligibility = resolveContextCompactionEligibility({
+    enabled: input.config.infrastructure.contextBudget.enabled,
+    status: gate.status,
+    pendingReason: input.contextBudget.getPendingCompactionReason(input.sessionId),
+    recentCompaction: gate.recentCompaction,
+    hasUI: true,
+    idle: true,
+    recoveryPosture: "idle",
+    autoCompactionInFlight: false,
+    autoCompactionBreakerOpen: false,
+    gateMode: "tool_gate",
+  });
+  if (eligibility.decision !== "gate_blocked") {
     return { allowed: true };
   }
 

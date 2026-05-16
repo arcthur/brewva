@@ -4,6 +4,7 @@ import type {
 } from "@brewva/brewva-provider-core/contracts";
 import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import type {
+  ExpectedProviderCacheBreak,
   ProviderCacheRenderState,
   SessionCompactionGenerationMetadata,
 } from "@brewva/brewva-runtime/context";
@@ -114,10 +115,17 @@ type ManagedAgentSessionStoreCore = Pick<
   | "appendModelPresetSelection"
   | "appendMessage"
   | "appendCustomMessageEntry"
-  | "appendCompaction"
   | "appendBranchSummaryEntry"
   | "branchWithSummary"
->;
+> & {
+  appendCompaction(
+    summary: string,
+    firstKeptEntryId: string,
+    tokensBefore: number,
+    details?: unknown,
+    fromHook?: boolean,
+  ): string | Promise<string>;
+};
 
 export interface ManagedSessionInitialModelPresetSelection {
   presetName: string;
@@ -209,4 +217,5 @@ export interface ProviderCacheRuntimeState {
   lastCacheRenderModelKey: string | undefined;
   lastGoogleCredential: string | undefined;
   lastGoogleModelBaseUrl: string | undefined;
+  lastExpectedProviderCacheBreak: ExpectedProviderCacheBreak | undefined;
 }

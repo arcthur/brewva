@@ -137,24 +137,32 @@ describe("observability tool contracts", () => {
         outcome: "fail",
       }),
     });
-    runtime.operator.context.prompt.observeStability(sessionId, {
-      stablePrefixHash: "prefix-1",
-      dynamicTailHash: "tail-1",
-      contextScopeId: "leaf-1",
+    runtime.operator.context.evidence.append(sessionId, {
+      kind: "prompt_stability",
       turn: 1,
       timestamp: 1_740_000_000_100,
+      payload: {
+        scopeKey: `${sessionId}::leaf-1`,
+        stablePrefixHash: "prefix-1",
+        dynamicTailHash: "tail-1",
+        stablePrefix: true,
+        stableTail: true,
+      },
     });
-    runtime.operator.context.prompt.observeTransientReduction(sessionId, {
-      status: "completed",
-      reason: null,
-      eligibleToolResults: 6,
-      clearedToolResults: 2,
-      clearedChars: 2048,
-      estimatedTokenSavings: 580,
-      compactionAdvised: true,
-      forcedCompaction: false,
+    runtime.operator.context.evidence.append(sessionId, {
+      kind: "transient_reduction",
       turn: 1,
       timestamp: 1_740_000_000_101,
+      payload: {
+        status: "completed",
+        reason: null,
+        eligibleToolResults: 6,
+        clearedToolResults: 2,
+        clearedChars: 2048,
+        estimatedTokenSavings: 580,
+        compactionAdvised: true,
+        forcedCompaction: false,
+      },
     });
     runtime.authority.cost.usage.recordAssistant({
       sessionId,

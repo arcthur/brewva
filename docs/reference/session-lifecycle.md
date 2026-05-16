@@ -274,9 +274,9 @@ Session lifecycle behavior is anchored to the repository durability taxonomy:
 Deletion consequences:
 
 - removing projection files must not change replay correctness
-- removing `session_compact` receipts does change replay correctness because the
-  history-view baseline is authority-bearing even though its inspect/context
-  view is rebuilt on demand
+- removing `session_compact` receipts does change replay correctness because
+  they are the history-rewrite authority used to derive the inspect/context
+  baseline on demand
 - removing channel helper state must not break approval truth or exact resume
 - removing Recovery WAL can affect in-flight recovery, but not historical truth
 
@@ -286,15 +286,16 @@ Target recovery order is:
 
 1. canonicalize and diagnose recovery posture
 2. hydrate replay-owned runtime state from tape
-3. rebuild the history-view baseline
+3. derive the history-view baseline from event tape
 4. derive the recovery working set
 5. resolve a hosted-loop decision from turn-local state and transition signals
 6. admit context through the normal provider path when the decision streams or
    retries
 
-Step 3 is not a projection-cache rebuild. The history-view baseline is the
-receipt-derived rewrite authority rebuilt from durable `session_compact`
-history, while working projection remains a separate rebuildable snapshot.
+Step 3 is not a projection-cache rebuild and does not read a history-view
+artifact file. The history-view baseline is a receipt-derived view over
+durable `session_compact` history, while working projection remains a separate
+rebuildable snapshot.
 
 Current implementation now performs the first recovery canonicalization pass
 before hydration from tape alone. If the tape already contains a durable
@@ -376,7 +377,7 @@ permanent degradation.
   history-view baseline still comes from durable `session_compact` receipts or
   a completed reasoning branch reset, plus reference-context compatibility
   checks. If no compatible receipt-backed baseline exists,
-  `inspect.context.getHistoryViewBaseline(...)` can still expose a bounded
+  `inspect.context.prompt.getHistoryViewBaseline(...)` can still expose a bounded
   `exact_history` continuity snapshot rebuilt from the surviving branch's
   `turn_input_recorded` / `turn_render_committed` history, but that fallback is
   not a replacement for receipt-backed history rewrite authority.

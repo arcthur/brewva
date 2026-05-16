@@ -458,9 +458,13 @@ process restart.
 Runtime exposes token-cache diagnostics through live, non-authoritative
 inspection:
 
-- `inspect.context.getProviderCacheObservation(sessionId)`
-- `inspect.context.getVisibleReadEpoch(sessionId)`
-- `inspect.context.isVisibleReadStateCurrent(sessionId, state)`
+- `inspect.context.evidence.latest(sessionId, "provider_cache_observation")`
+- `inspect.context.visibleRead.getEpoch(sessionId)`
+- `inspect.context.visibleRead.isCurrent(sessionId, state)`
+
+The evidence sink is lossy by contract: `latest(...)` may return `undefined`
+after process restart or when no recent sample is available. Visible-read
+inspection remains authoritative for tool-dispatch staleness checks.
 
 Maintenance surfaces may observe cache state and advance visible-read epochs,
 but these remain session-local diagnostic or lifecycle operations. They do not

@@ -43,7 +43,7 @@ flowchart TD
   A["Turn start"] --> B["Observe usage and current workbench"]
   B --> C["Render dynamic tail once"]
   C --> D["Derive status and compaction gate"]
-  D --> R{"Compaction advised below hard gate?"}
+  D --> R{"Shared eligibility allows reduction?"}
   R -->|Yes| S["Transient outbound reduction on request copy only"]
   R -->|No| E{"Compaction requested?"}
   S --> E
@@ -53,7 +53,7 @@ flowchart TD
   G -->|Yes, agent active| I["Defer auto-compaction and expose advisory"]
   G -->|Yes, idle| J["Run auto-compaction watchdog path"]
   J --> K["workbench_compact or hosted auto-compaction"]
-  K --> L["authority.session.commitCompaction + clear breaker and gate state"]
+  K --> L["async compaction commit writes one session_compact receipt"]
   L --> M["Resume interrupted turn from current evidence state"]
 ```
 
@@ -64,8 +64,9 @@ flowchart TD
    renders the dynamic tail once for the turn.
 3. Hosted logic may append fixed dynamic-tail blocks without back-modeling them
    as registered context sources.
-4. Runtime context functions derive gate status from usage ratio, hard limit,
-   and the recent-compaction window.
+4. Runtime context functions derive gate status and compaction eligibility from
+   usage ratio, predicted turn growth, recovery posture, in-flight state, and
+   the recent-compaction window.
 5. Under forced-compaction status without recent compaction, every tool except
    `workbench_compact` and the minimal context-critical allowlist is blocked by
    the gate.
@@ -77,8 +78,8 @@ flowchart TD
    may clear older large tool-result bodies on the outbound provider request
    copy before the provider call is sent.
 8. After `workbench_compact` or hosted auto-compaction completes, the runtime
-   records the durable `session_compact` receipt, clears the gate, and resumes
-   the interrupted turn when required.
+   records one durable `session_compact` receipt from caller-provided digest and
+   cache-impact evidence, then resumes the interrupted turn when required.
 9. If a durable `reasoning_revert` arrives, hosted recovery rebuilds the active
    branch from the target checkpoint and resumes from that surviving context
    instead of keeping superseded branch history visible to the model.
@@ -92,13 +93,13 @@ flowchart TD
   - they do not participate in hidden provider selection or arena budget floors
 - composer policy blocks are provenance-tagged render artifacts rather than
   source-typed admission objects
-- the effective compaction threshold is derived from context window, threshold
-  floor / ceiling, and headroom policy
+- the effective compaction threshold is derived from the configured advisory
+  ratio, hard ratio, fixed headroom tokens, and predicted turn growth
 - those live ratios drive turn-scoped gate and advisory guidance; the hosted
   system-prompt contract stays static and does not cache window-derived
   percentages
-- recent-compaction cooldown is governed by both `minTurnsBetween` and
-  `minSecondsBetween`; forced-compaction status may cross the fixed bypass line
+- recent-compaction cooldown is governed by `minTurnsBetween`; hard-limit
+  pressure bypasses cooldown directly
 - while the compaction gate is armed, `workbench_compact` remains the required
   repair action and only the minimal context-critical allowlist remains usable;
   this is narrower than the broader control-plane tool set
@@ -106,6 +107,8 @@ flowchart TD
   - when the agent is active, the host records advisory state rather than
     triggering implicit compaction
   - when the session is idle, the host may trigger the auto-compaction path
+  - breaker and deferred-policy state belongs to the runtime context budget
+    manager and is replayed from compaction receipts/events
 - transient outbound reduction runs only on the outbound provider-request copy:
   - it may clear older large text-only tool-result bodies
   - it keeps recent tool results intact
@@ -137,8 +140,8 @@ flowchart TD
   in flight
 - watchdog timeout records `auto_compaction_watchdog_timeout` and clears the
   in-flight state
-- after compaction, the interrupted turn resumes from current task and evidence
-  state instead of restarting as a blank session
+- after compaction, the interrupted turn resumes from current task and
+  gateway-owned evidence samples instead of restarting as a blank session
 - compaction retry projects the runtime-internal turn spine to
   `recovery_settled`; it does not create a separate context-owned lifecycle
   state machine
@@ -150,8 +153,9 @@ flowchart TD
   branch reset must be re-applied before the next prompt runs
 - recovery posture remains inspectable as a derived read model; it is not
   rendered as a hidden working-set block in the model prompt
-- projection remains a rebuildable helper; compaction and recovery correctness
-  do not depend on projection-cache files being present
+- history baseline and recovery posture are derived from event tape and
+  in-memory cache; compaction and recovery correctness do not depend on
+  projection-cache or history-view artifact files being present
 
 ## Observability
 
@@ -173,10 +177,10 @@ flowchart TD
     - `reason=max_output_recovery`
     - `reason=reasoning_revert_resume`
     - `reason=wal_recovery_resume`
-- hosted auto-compaction trigger ladder:
-  - `no_request -> non_interactive_mode -> agent_active_manual_compaction_unsafe -> auto_compaction_breaker_open -> auto_compaction_in_flight -> execute_auto_compaction`
-- ladder note:
-  - this trigger ladder decides whether hosted auto-compaction runs at all
+- hosted auto-compaction state:
+  - the hosted controller owns only turn/watchdog/attempt/in-flight state
+  - shared eligibility owns disabled/no-usage/cooldown/advisory/hard/predicted
+    overflow/recovery/breaker decisions
   - summary quality is owned by the hosted compaction summary path; deterministic
     summary projection is an emergency fallback, not the primary order
 - prompt failure recovery:
@@ -195,10 +199,11 @@ flowchart TD
     reduction
   - request-copy edits remain invisible to replay and tape truth
   - live reduction state is exposed through
-    `runtime.inspect.context.getTransientReduction(sessionId)`
+    `runtime.inspect.context.evidence.latest(sessionId, "transient_reduction")`
 - promotion evidence:
-  - hosted prompt-stability and transient-reduction samples are written to the
-    sidecar directory `.orchestrator/context-evidence`
+  - hosted prompt-stability, provider-cache, and transient-reduction samples are
+    written to the runtime latest evidence ring and the sidecar directory
+    `.orchestrator/context-evidence`
   - `bun run report:context-evidence` aggregates those samples with durable
     `session_compact` receipts and cost-summary cache counters
   - this report is the promotion-evidence surface; it is not a replay input

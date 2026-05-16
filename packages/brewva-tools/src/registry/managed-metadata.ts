@@ -233,8 +233,7 @@ export const MANAGED_BREWVA_TOOL_METADATA_BY_NAME = {
   ]),
   obs_snapshot: metadata("operator", "runtime_observe", [
     "inspect.context.usage.getStatus",
-    "inspect.context.prompt.getStability",
-    "inspect.context.prompt.getTransientReduction",
+    "inspect.context.evidence.latest",
     "inspect.context.usage.get",
     "inspect.cost.summary.get",
     "inspect.tape.status.get",

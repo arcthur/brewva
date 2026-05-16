@@ -71,7 +71,7 @@ describe("model-operated workbench reset", () => {
     expect(runtime.inspect.workbench.list(sessionId).map((entry) => entry.id)).toEqual([note.id]);
   });
 
-  test("compaction commits the workbench reversibility baseline", () => {
+  test("compaction leaves workbench reversibility state outside the compaction receipt", async () => {
     const runtime = createBrewvaRuntime({
       cwd: createWorkspace("workbench-reset-baseline"),
     }).hosted;
@@ -89,7 +89,7 @@ describe("model-operated workbench reset", () => {
       reason: "Raw output should not stay in active attention.",
     });
 
-    runtime.authority.session.compaction.commit(sessionId, {
+    await runtime.authority.session.compaction.commit(sessionId, {
       compactId: "cmp-workbench-baseline",
       sanitizedSummary: "[CompactSummary]\nKeep the active Phase A cleanup objective.",
       summaryDigest: "summary-digest",
@@ -99,30 +99,31 @@ describe("model-operated workbench reset", () => {
       fromTokens: 900,
       toTokens: 240,
       origin: "extension_api",
+      cacheImpact: {
+        before: null,
+        after: null,
+        explicitEpochChanges: 1,
+        prefixBytesChanged: null,
+        degradedReason: null,
+      },
     });
 
     expect(runtime.inspect.workbench.list(sessionId)).toEqual([
       expect.objectContaining({
         id: note.id,
-        baselineCommitted: true,
+        baselineCommitted: false,
         reversible: false,
       }),
       expect.objectContaining({
         id: eviction.id,
-        baselineCommitted: true,
-        reversible: false,
+        baselineCommitted: false,
+        reversible: true,
       }),
     ]);
-    expect(runtime.authority.workbench.undoEviction(sessionId, eviction.id).undone).toBe(false);
+    expect(runtime.authority.workbench.undoEviction(sessionId, eviction.id).undone).toBe(true);
     expect(
       runtime.inspect.events.records.query(sessionId, { type: "workbench_baseline_committed" }),
-    ).toEqual([
-      expect.objectContaining({
-        payload: {
-          entryIds: [note.id, eviction.id],
-        },
-      }),
-    ]);
+    ).toEqual([]);
   });
 
   test("dedupes identical workbench entries inside the same runtime turn", () => {
@@ -167,18 +168,11 @@ describe("model-operated workbench reset", () => {
           contextBudget: {
             enabled: true,
             thresholds: {
-              compactionFloorPercent: 0.8,
-              compactionCeilingPercent: 0.8,
-              compactionHeadroomTokens: 0,
-              hardLimitFloorPercent: 0.9,
-              hardLimitCeilingPercent: 0.9,
-              hardLimitHeadroomTokens: 0,
+              advisoryRatio: 0.8,
+              hardRatio: 0.9,
+              headroomTokens: 0,
             },
-            modelPhysics: {
-              effectiveContextWindowPercent: 1,
-              autoCompactLimitRatio: 0.9,
-              controllableBaselineTokens: 100,
-            },
+            predictedTurnGrowthTokens: 0,
           },
         },
       }),
@@ -201,12 +195,12 @@ describe("model-operated workbench reset", () => {
       tokensTotal: 1000,
       effectiveTokensTotal: 1000,
       tokensRemaining: 150,
-      autoCompactLimitTokens: 900,
-      controllableBaselineTokens: 100,
-      controllableTokensUsed: 750,
-      controllableTokensTotal: 900,
+      autoCompactLimitTokens: 800,
+      controllableBaselineTokens: 0,
+      controllableTokensUsed: 850,
+      controllableTokensTotal: 1000,
       controllableTokensRemaining: 150,
-      controllableContextRemainingRatio: 150 / 900,
+      controllableContextRemainingRatio: 150 / 1000,
       tokensUntilForcedCompact: 50,
       predictedTurnGrowthTokens: 0,
       tokensUntilPredictedOverflow: 50,

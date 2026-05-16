@@ -86,6 +86,7 @@ Every accepted decision inherits these rules:
 ### Gateway, Session, And Scheduling
 
 - [canonical-hosted-turn-envelope](./canonical-hosted-turn-envelope.md)
+- [context-chain-subtraction-and-evidence-state-collapse](./context-chain-subtraction-and-evidence-state-collapse.md)
 - [derived-session-wire-schema-and-frontend-session-protocol](./derived-session-wire-schema-and-frontend-session-protocol.md)
 - [gateway-domain-slicing-and-control-plane-ports](./gateway-domain-slicing-and-control-plane-ports.md)
 - [gateway-experience-ring-decomposition](./gateway-experience-ring-decomposition.md)

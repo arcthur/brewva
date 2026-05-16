@@ -213,38 +213,18 @@ export interface BrewvaConfig {
     };
     contextBudget: {
       enabled: boolean;
-      dynamicTail: {
-        baseTokens: number;
-        windowFraction: number;
-        maxTokens: number;
-        consequenceDigestMaxChars: number;
-      };
       thresholds: {
-        compactionFloorPercent: number;
-        compactionCeilingPercent: number;
-        compactionHeadroomTokens: number;
-        hardLimitFloorPercent: number;
-        hardLimitCeilingPercent: number;
-        hardLimitHeadroomTokens: number;
+        hardRatio: number;
+        advisoryRatio: number;
+        headroomTokens: number;
       };
-      predictiveTurnGrowth: {
-        floorContextWindow: number;
-        largeContextWindow: number;
-        standardTokens: number;
-        largeTokens: number;
-        scalingFactor: number;
-      };
-      modelPhysics: {
-        effectiveContextWindowPercent: number;
-        autoCompactLimitRatio: number;
-        controllableBaselineTokens: number;
-      };
+      dynamicTailTokens: number;
+      predictedTurnGrowthTokens: number;
+      providerCacheStalenessMs: number;
+      consequenceDigestMaxChars: number;
       compactionInstructions: string;
       compaction: {
         minTurnsBetween: number;
-        minSecondsBetween: number;
-        cooldownBypassPercent: number;
-        summaryMaxOutputRatio: number;
         protectedTools: string[];
         tailProtectTokens: number;
       };

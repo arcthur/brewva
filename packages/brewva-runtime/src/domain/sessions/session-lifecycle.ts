@@ -173,6 +173,7 @@ export class SessionLifecycleService {
       integrityIssues,
     });
     const parallelBudgetState = deriveParallelBudgetStateFromEvents(events);
+    this.contextBudget.restoreAutoCompactionPolicyFromEvents(sessionId, events);
     this.parallel.restoreSession(sessionId, {
       activeRunIds: parallelBudgetState.activeRunIds,
       totalStarted: parallelBudgetState.totalStarted,

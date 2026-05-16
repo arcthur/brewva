@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync } from "node:fs";
+import { mkdirSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createBrewvaRuntime } from "@brewva/brewva-runtime";
@@ -38,17 +38,6 @@ function requireTool<T extends { name: string }>(tools: T[], name: string): T {
   return requireDefined(
     tools.find((tool) => tool.name === name),
     `Expected tool ${name}.`,
-  );
-}
-
-function getHistoryViewBaselineArtifactPath(workspaceRoot: string, sessionId: string): string {
-  return join(
-    workspaceRoot,
-    ".orchestrator",
-    "history-view",
-    "sessions",
-    `sess_${Buffer.from(sessionId, "utf8").toString("base64url")}`,
-    "baseline.json",
   );
 }
 
@@ -183,14 +172,14 @@ describe("session coordination tool contracts", () => {
     );
   });
 
-  test("authority.session.compaction.commit records the durable compaction receipt and updates history-view baseline", () => {
+  test("authority.session.compaction.commit records the durable compaction receipt and derives history-view baseline", async () => {
     const runtime = createCleanRuntime();
     const sessionId = "s11-commit";
     const sanitizedSummary = "[CompactSummary]\nKeep only the latest verification failures.";
 
     runtime.operator.context.lifecycle.onTurnStart(sessionId, 1);
 
-    runtime.authority.session.compaction.commit(sessionId, {
+    await runtime.authority.session.compaction.commit(sessionId, {
       compactId: "cmp-42",
       sanitizedSummary,
       summaryDigest: sha256Hex(sanitizedSummary),
@@ -200,6 +189,13 @@ describe("session coordination tool contracts", () => {
       fromTokens: 900,
       toTokens: 320,
       origin: "extension_api",
+      cacheImpact: {
+        before: null,
+        after: null,
+        explicitEpochChanges: 1,
+        prefixBytesChanged: null,
+        degradedReason: null,
+      },
     });
 
     const compactEvent = runtime.inspect.events.records.query(sessionId, {
@@ -233,7 +229,6 @@ describe("session coordination tool contracts", () => {
         referenceContextDigest: "prefix-42",
       }),
     );
-    expect(existsSync(getHistoryViewBaselineArtifactPath(workspace, sessionId))).toBeTrue();
   });
 
   test("tape_handoff writes an anchor and tape_info reports tape and context status", async () => {
@@ -300,7 +295,7 @@ describe("session coordination tool contracts", () => {
       undefined,
       undefined,
       mergeContext(sessionId, {
-        getContextUsage: () => ({ tokens: 880, contextWindow: 1000, percent: 0.88 }),
+        getContextUsage: () => ({ tokens: 88_000, contextWindow: 100_000, percent: 0.88 }),
       }),
     );
     const infoText = extractTextContent(infoResult);

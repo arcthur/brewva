@@ -124,12 +124,6 @@
                   "type": "object",
                   "additionalProperties": false,
                   "properties": {
-                    "cooldownBypassPercent": {
-                      "type": "number"
-                    },
-                    "minSecondsBetween": {
-                      "type": "number"
-                    },
                     "minTurnsBetween": {
                       "type": "number"
                     },
@@ -139,9 +133,6 @@
                         "type": "string"
                       }
                     },
-                    "summaryMaxOutputRatio": {
-                      "type": "number"
-                    },
                     "tailProtectTokens": {
                       "type": "number"
                     }
@@ -150,83 +141,32 @@
                 "compactionInstructions": {
                   "type": "string"
                 },
-                "dynamicTail": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "properties": {
-                    "baseTokens": {
-                      "type": "number"
-                    },
-                    "consequenceDigestMaxChars": {
-                      "type": "number"
-                    },
-                    "maxTokens": {
-                      "type": "number"
-                    },
-                    "windowFraction": {
-                      "type": "number"
-                    }
-                  }
+                "consequenceDigestMaxChars": {
+                  "type": "number"
+                },
+                "dynamicTailTokens": {
+                  "type": "number"
                 },
                 "enabled": {
                   "type": "boolean"
                 },
-                "modelPhysics": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "properties": {
-                    "autoCompactLimitRatio": {
-                      "type": "number"
-                    },
-                    "controllableBaselineTokens": {
-                      "type": "number"
-                    },
-                    "effectiveContextWindowPercent": {
-                      "type": "number"
-                    }
-                  }
+                "predictedTurnGrowthTokens": {
+                  "type": "number"
                 },
-                "predictiveTurnGrowth": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "properties": {
-                    "floorContextWindow": {
-                      "type": "number"
-                    },
-                    "largeContextWindow": {
-                      "type": "number"
-                    },
-                    "largeTokens": {
-                      "type": "number"
-                    },
-                    "scalingFactor": {
-                      "type": "number"
-                    },
-                    "standardTokens": {
-                      "type": "number"
-                    }
-                  }
+                "providerCacheStalenessMs": {
+                  "type": "number"
                 },
                 "thresholds": {
                   "type": "object",
                   "additionalProperties": false,
                   "properties": {
-                    "compactionCeilingPercent": {
+                    "advisoryRatio": {
                       "type": "number"
                     },
-                    "compactionFloorPercent": {
+                    "hardRatio": {
                       "type": "number"
                     },
-                    "compactionHeadroomTokens": {
-                      "type": "number"
-                    },
-                    "hardLimitCeilingPercent": {
-                      "type": "number"
-                    },
-                    "hardLimitFloorPercent": {
-                      "type": "number"
-                    },
-                    "hardLimitHeadroomTokens": {
+                    "headroomTokens": {
                       "type": "number"
                     }
                   }

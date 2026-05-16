@@ -12,6 +12,18 @@ function formatPercent(value: number | null): string {
   return `${(value * 100).toFixed(1)}%`;
 }
 
+function readString(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
+}
+
+function readBoolean(value: unknown): boolean | undefined {
+  return typeof value === "boolean" ? value : undefined;
+}
+
+function readNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
 export function createObsSnapshotTool(options: BrewvaToolOptions): ToolDefinition {
   const obsSnapshotTool = createRuntimeBoundBrewvaToolFactory(options.runtime, "obs_snapshot");
   return obsSnapshotTool.define({
@@ -23,10 +35,22 @@ export function createObsSnapshotTool(options: BrewvaToolOptions): ToolDefinitio
       const sessionId = getSessionId(ctx);
       const tape = obsSnapshotTool.runtime.inspect.tape.status.get(sessionId);
       const usage = obsSnapshotTool.runtime.inspect.context.usage.get(sessionId);
-      const promptStability =
-        obsSnapshotTool.runtime.inspect.context.prompt.getStability(sessionId);
-      const transientReduction =
-        obsSnapshotTool.runtime.inspect.context.prompt.getTransientReduction(sessionId);
+      const promptStability = obsSnapshotTool.runtime.inspect.context.evidence.latest(
+        sessionId,
+        "prompt_stability",
+      )?.payload;
+      const transientReduction = obsSnapshotTool.runtime.inspect.context.evidence.latest(
+        sessionId,
+        "transient_reduction",
+      )?.payload;
+      const promptPrefixStable = readBoolean(promptStability?.stablePrefix);
+      const promptTailStable = readBoolean(promptStability?.stableTail);
+      const promptScopeKey = readString(promptStability?.scopeKey);
+      const transientStatus = readString(transientReduction?.status);
+      const transientReason = readString(transientReduction?.reason);
+      const transientClearedToolResults = readNumber(transientReduction?.clearedToolResults) ?? 0;
+      const transientEstimatedTokenSavings =
+        readNumber(transientReduction?.estimatedTokenSavings) ?? 0;
       const contextStatus = obsSnapshotTool.runtime.inspect.context.usage.getStatus(
         sessionId,
         usage,
@@ -55,13 +79,13 @@ export function createObsSnapshotTool(options: BrewvaToolOptions): ToolDefinitio
         `predicted_turn_growth_tokens: ${contextStatus.predictedTurnGrowthTokens}`,
         `tokens_until_predicted_overflow: ${contextStatus.tokensUntilPredictedOverflow ?? "unknown"}`,
         `predicted_overflow: ${contextStatus.predictedOverflow ? "yes" : "no"}`,
-        `prompt_prefix_stable: ${promptStability?.stablePrefix ?? "unknown"}`,
-        `dynamic_tail_stable: ${promptStability?.stableTail ?? "unknown"}`,
-        `prompt_scope_key: ${promptStability?.scopeKey ?? "none"}`,
-        `transient_reduction_status: ${transientReduction?.status ?? "unknown"}`,
-        `transient_reduction_reason: ${transientReduction?.reason ?? "none"}`,
-        `transient_reduction_cleared_tool_results: ${transientReduction?.clearedToolResults ?? 0}`,
-        `transient_reduction_estimated_token_savings: ${transientReduction?.estimatedTokenSavings ?? 0}`,
+        `prompt_prefix_stable: ${promptPrefixStable ?? "unknown"}`,
+        `dynamic_tail_stable: ${promptTailStable ?? "unknown"}`,
+        `prompt_scope_key: ${promptScopeKey ?? "none"}`,
+        `transient_reduction_status: ${transientStatus ?? "unknown"}`,
+        `transient_reduction_reason: ${transientReason ?? "none"}`,
+        `transient_reduction_cleared_tool_results: ${transientClearedToolResults}`,
+        `transient_reduction_estimated_token_savings: ${transientEstimatedTokenSavings}`,
         `cost_total_usd: ${cost.totalCostUsd.toFixed(6)}`,
         `cache_read_tokens: ${cost.cacheReadTokens}`,
         `cache_write_tokens: ${cost.cacheWriteTokens}`,

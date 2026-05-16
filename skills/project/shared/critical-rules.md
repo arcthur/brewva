@@ -18,3 +18,15 @@ owner: runtime-maintainers
 - Do not import from `distribution/**` packages inside workspace package code; treat distribution as release output.
 - Keep DuckDB session index state rebuildable and non-authoritative; event tape remains replay authority.
 - Keep search tokenization centralized in `@brewva/brewva-search`; Chinese-aware retrieval depends on mandatory `jieba-wasm`.
+- Keep runtime context evidence out of session state. Prompt stability, transient
+  reduction, and provider-cache samples live in the context evidence latest
+  ring plus hosted evidence sidecars.
+- Keep compaction commit single-receipt and async: `session_compact` is the
+  durable authority, while history baselines are derived from event tape and
+  in-memory cache.
+- Keep `infrastructure.contextBudget` on the contracted small surface:
+  `enabled`, `thresholds.{hardRatio,advisoryRatio,headroomTokens}`,
+  `dynamicTailTokens`, `predictedTurnGrowthTokens`,
+  `providerCacheStalenessMs`, `consequenceDigestMaxChars`,
+  `compactionInstructions`, and
+  `compaction.{minTurnsBetween,protectedTools,tailProtectTokens}`.

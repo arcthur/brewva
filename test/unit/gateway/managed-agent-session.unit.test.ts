@@ -7,6 +7,7 @@ import {
 } from "@brewva/brewva-provider-core/registry";
 import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import type { BrewvaRuntimeOptions } from "@brewva/brewva-runtime";
+import type { TransientReductionState } from "@brewva/brewva-runtime/context";
 import { redactedStableJsonSha256Hex, sha256Hex } from "@brewva/brewva-std/hash";
 import type { ContextState } from "@brewva/brewva-substrate/contracts";
 import {
@@ -51,6 +52,56 @@ import { createTestWorkspace } from "../../helpers/workspace.js";
 
 function createHostedTestRuntime(options: BrewvaRuntimeOptions) {
   return createBrewvaRuntime(options).hosted;
+}
+
+type HostedTestRuntime = ReturnType<typeof createHostedTestRuntime>;
+
+function appendPromptStabilityEvidence(
+  runtime: HostedTestRuntime,
+  sessionId: string,
+  input: {
+    stablePrefixHash: string;
+    dynamicTailHash: string;
+    contextScopeId: string;
+    turn: number;
+  },
+): void {
+  runtime.operator.context.evidence.append(sessionId, {
+    kind: "prompt_stability",
+    turn: input.turn,
+    timestamp: Date.now(),
+    payload: {
+      turn: input.turn,
+      updatedAt: Date.now(),
+      scopeKey: `${sessionId}::${input.contextScopeId}`,
+      stablePrefixHash: input.stablePrefixHash,
+      dynamicTailHash: input.dynamicTailHash,
+      stablePrefix: true,
+      stableTail: true,
+    },
+  });
+}
+
+function appendTransientReductionEvidence(
+  runtime: HostedTestRuntime,
+  sessionId: string,
+  input: Omit<TransientReductionState, "updatedAt" | "classification" | "expectedCacheBreak">,
+): void {
+  runtime.operator.context.evidence.append(sessionId, {
+    kind: "transient_reduction",
+    turn: input.turn,
+    timestamp: Date.now(),
+    payload: {
+      ...input,
+      updatedAt: Date.now(),
+      classification: null,
+      expectedCacheBreak: false,
+    },
+  });
+}
+
+function latestProviderCacheEvidence(runtime: HostedTestRuntime, sessionId: string) {
+  return runtime.inspect.context.evidence.latest(sessionId, "provider_cache_observation")?.payload;
 }
 
 type TestHostPlugin = NonNullable<CreateBrewvaHostPluginRunnerOptions["plugins"]>[number];
@@ -549,7 +600,7 @@ describe("managed agent session compaction", () => {
     );
   });
 
-  test("default LLM compaction generator derives maxOutputTokens from model.maxTokens × summaryMaxOutputRatio", async () => {
+  test("default LLM compaction generator leaves output budget to provider defaults", async () => {
     let captured:
       | {
           maxOutputTokens?: number;
@@ -589,98 +640,6 @@ describe("managed agent session compaction", () => {
           content: [{ type: "text", text: "Continue working." }],
         },
       ],
-      summaryMaxOutputRatio: 0.6,
-    });
-
-    expect(captured?.maxOutputTokens).toBe(6_000);
-  });
-
-  test("default LLM compaction generator omits maxOutputTokens when model.maxTokens is missing", async () => {
-    let captured:
-      | {
-          maxOutputTokens?: number;
-        }
-      | undefined;
-    const generator = createHostedLlmCompactionSummaryGenerator({
-      resolveAuth: async () => ({ ok: true, apiKey: "test-key" }),
-      completionClient: {
-        async complete(input) {
-          captured = { maxOutputTokens: input.maxOutputTokens };
-          return {
-            content: [
-              "[CompactSummary]",
-              "## Current Objective",
-              "Captured.",
-              "## Current State",
-              "Captured.",
-              "## Failed Attempts",
-              "None observed.",
-              "## Next Step",
-              "Continue.",
-              "## Dropped Digests",
-            ].join("\n"),
-          };
-        },
-      },
-    });
-
-    await generator({
-      sessionId: "managed-agent-session-compaction-no-budget",
-      cwd: "/tmp/brewva",
-      model: { ...TEST_MODEL, maxTokens: 0 },
-      systemPrompt: "Stable system prompt.",
-      messages: [
-        {
-          role: "user",
-          content: [{ type: "text", text: "Continue working." }],
-        },
-      ],
-    });
-
-    expect(captured).toEqual({ maxOutputTokens: undefined });
-  });
-
-  test("default LLM compaction generator treats summaryMaxOutputRatio zero as no output cap", async () => {
-    let captured:
-      | {
-          maxOutputTokens?: number;
-        }
-      | undefined;
-    const generator = createHostedLlmCompactionSummaryGenerator({
-      resolveAuth: async () => ({ ok: true, apiKey: "test-key" }),
-      completionClient: {
-        async complete(input) {
-          captured = { maxOutputTokens: input.maxOutputTokens };
-          return {
-            content: [
-              "[CompactSummary]",
-              "## Current Objective",
-              "Captured.",
-              "## Current State",
-              "Captured.",
-              "## Failed Attempts",
-              "None observed.",
-              "## Next Step",
-              "Continue.",
-              "## Dropped Digests",
-            ].join("\n"),
-          };
-        },
-      },
-    });
-
-    await generator({
-      sessionId: "managed-agent-session-compaction-zero-ratio",
-      cwd: "/tmp/brewva",
-      model: { ...TEST_MODEL, maxTokens: 10_000 },
-      systemPrompt: "Stable system prompt.",
-      messages: [
-        {
-          role: "user",
-          content: [{ type: "text", text: "Continue working." }],
-        },
-      ],
-      summaryMaxOutputRatio: 0,
     });
 
     expect(captured).toEqual({ maxOutputTokens: undefined });
@@ -1724,23 +1683,17 @@ describe("managed agent session compaction", () => {
           source: "channel:telegram",
         });
         await session.waitForIdle();
-        expect(
-          runtime.inspect.context.providerCache.getObservation(sessionStore.getSessionId())
-            ?.breakObservation.status,
-        ).toBe("cold");
+        expect(latestProviderCacheEvidence(runtime, sessionStore.getSessionId())?.status).toBe(
+          "cold",
+        );
 
         await session.prompt(textPrompt("Repeat cacheable prompt."), {
           expandPromptTemplates: false,
           source: "channel:telegram",
         });
         await session.waitForIdle();
-        const warmObservation = runtime.inspect.context.providerCache.getObservation(
-          sessionStore.getSessionId(),
-        );
-        expect(warmObservation?.breakObservation.status).toBe("warm");
-        expect(warmObservation?.fingerprint.channelContextHash).toBe(
-          redactedStableJsonSha256Hex({ source: "channel:telegram" }),
-        );
+        const warmObservation = latestProviderCacheEvidence(runtime, sessionStore.getSessionId());
+        expect(warmObservation?.status).toBe("warm");
 
         runtime.operator.session.state.clear(sessionStore.getSessionId());
 
@@ -1749,10 +1702,9 @@ describe("managed agent session compaction", () => {
           source: "channel:telegram",
         });
         await session.waitForIdle();
-        expect(
-          runtime.inspect.context.providerCache.getObservation(sessionStore.getSessionId())
-            ?.breakObservation.status,
-        ).toBe("cold");
+        expect(latestProviderCacheEvidence(runtime, sessionStore.getSessionId())?.status).toBe(
+          "cold",
+        );
       } finally {
         session.dispose();
       }
@@ -3108,13 +3060,13 @@ describe("managed agent session compaction", () => {
       sourceRefs: ["test.contextState"],
       reason: "Seed active workbench for hosted context state.",
     });
-    runtime.operator.context.prompt.observeStability(sessionId, {
+    appendPromptStabilityEvidence(runtime, sessionId, {
       stablePrefixHash: "stable-prefix-hash",
       dynamicTailHash: "dynamic-tail-hash",
       contextScopeId: "leaf-one",
       turn: 1,
     });
-    runtime.operator.context.prompt.observeTransientReduction(sessionId, {
+    appendTransientReductionEvidence(runtime, sessionId, {
       status: "completed",
       reason: null,
       eligibleToolResults: 5,
@@ -3126,20 +3078,27 @@ describe("managed agent session compaction", () => {
       turn: 1,
     });
     runtime.operator.context.usage.observe(sessionId, {
-      tokens: 6_800,
-      contextWindow: 8_192,
+      tokens: 83_000,
+      contextWindow: 100_000,
       percent: 0.83,
     });
-    runtime.authority.session.compaction.commit(sessionId, {
+    await runtime.authority.session.compaction.commit(sessionId, {
       compactId: "compact-1",
       sanitizedSummary: "Recovered baseline",
       summaryDigest: "digest-1",
       sourceTurn: 1,
       leafEntryId: null,
       referenceContextDigest: null,
-      fromTokens: 6_800,
+      fromTokens: 83_000,
       toTokens: 1_200,
       origin: "extension_api",
+      cacheImpact: {
+        before: null,
+        after: null,
+        explicitEpochChanges: 0,
+        prefixBytesChanged: null,
+        degradedReason: null,
+      },
     });
 
     const modelCatalog = createInMemoryModelCatalog();
@@ -3190,7 +3149,7 @@ describe("managed agent session compaction", () => {
         }),
       );
 
-      runtime.operator.context.prompt.observeTransientReduction(sessionId, {
+      appendTransientReductionEvidence(runtime, sessionId, {
         status: "skipped",
         reason: "pressure dropped",
         eligibleToolResults: 1,
@@ -3202,8 +3161,8 @@ describe("managed agent session compaction", () => {
         turn: 2,
       });
       runtime.operator.context.usage.observe(sessionId, {
-        tokens: 1_024,
-        contextWindow: 8_192,
+        tokens: 12_500,
+        contextWindow: 100_000,
         percent: 0.125,
       });
       const syncContextState = (
@@ -3294,7 +3253,7 @@ describe("managed agent session compaction", () => {
         sourceRefs: ["test.pluginState"],
         reason: "Seed active workbench for plugin context state.",
       });
-      runtime.operator.context.prompt.observeStability(sessionStore.getSessionId(), {
+      appendPromptStabilityEvidence(runtime, sessionStore.getSessionId(), {
         stablePrefixHash: "plugin-state-fingerprint",
         dynamicTailHash: "plugin-state-tail",
         contextScopeId: "plugin-scope",

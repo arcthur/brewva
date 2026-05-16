@@ -40,11 +40,11 @@ Runtime extension ports are typed method ports only. They do not carry branded
 runtime capability tokens or reflective `capabilities` arrays; capability
 declaration remains a gateway/plugin concern, not a runtime-port guardrail.
 
-Hosted context materialization is gateway-owned. The planner produces an
-internal `{ modelContext, effects, audit }` command plan, and the committer is
-the only code path that interprets effect payloads. Extension-facing views must
-stay redacted and read-only; full effect command payloads remain inside hosted
-owner modules.
+Hosted context materialization is gateway-owned. Hosted lifecycle call sites
+invoke the context owner directly for usage observation, telemetry, context
+composition, evidence append, visible-read state, and delegation surfacing.
+Extension-facing views must stay redacted and read-only; full effect payloads
+remain inside hosted owner modules.
 
 ## Boundary
 

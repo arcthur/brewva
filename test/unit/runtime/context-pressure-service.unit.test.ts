@@ -9,7 +9,6 @@ import {
   requestContextCompaction,
 } from "../../../packages/brewva-runtime/src/domain/context/context-compaction-gate.js";
 import {
-  estimatePredictiveTurnGrowthTokens,
   getContextCompactionGateStatus,
   getContextUsageRatio,
 } from "../../../packages/brewva-runtime/src/domain/context/context-pressure.js";
@@ -105,28 +104,12 @@ function createPressureHarness(input: {
 }
 
 describe("context status derivation", () => {
-  test("uses predictive turn-growth scaling between floor and large context windows", () => {
-    const policy = {
-      floorContextWindow: 1_000,
-      largeContextWindow: 10_000,
-      standardTokens: 200,
-      largeTokens: 400,
-      scalingFactor: 0.05,
-    };
-
-    expect(estimatePredictiveTurnGrowthTokens(999, policy)).toBe(0);
-    expect(estimatePredictiveTurnGrowthTokens(1_000, policy)).toBe(200);
-    expect(estimatePredictiveTurnGrowthTokens(6_000, policy)).toBe(300);
-    expect(estimatePredictiveTurnGrowthTokens(9_000, policy)).toBe(400);
-    expect(estimatePredictiveTurnGrowthTokens(10_000, policy)).toBe(400);
-  });
-
   test("derives predictive overflow headroom from the hard compaction boundary", () => {
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
     config.infrastructure.contextBudget.enabled = true;
     setStaticContextStatusThresholds(config, {
-      hardLimitPercent: 0.9,
-      compactionThresholdPercent: 0.8,
+      hardRatio: 0.9,
+      advisoryRatio: 0.8,
     });
 
     const budget = new ContextBudgetManager(config.infrastructure.contextBudget);
@@ -155,20 +138,14 @@ describe("context status derivation", () => {
     );
   });
 
-  test("derives predictive overflow from context-budget tuning", () => {
+  test("derives predictive overflow from fixed turn-growth tuning", () => {
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
     config.infrastructure.contextBudget.enabled = true;
     setStaticContextStatusThresholds(config, {
-      hardLimitPercent: 0.9,
-      compactionThresholdPercent: 0.8,
+      hardRatio: 0.9,
+      advisoryRatio: 0.8,
     });
-    config.infrastructure.contextBudget.predictiveTurnGrowth = {
-      floorContextWindow: 1_000,
-      largeContextWindow: 10_000,
-      standardTokens: 200,
-      largeTokens: 400,
-      scalingFactor: 0.1,
-    };
+    config.infrastructure.contextBudget.predictedTurnGrowthTokens = 400;
 
     const budget = new ContextBudgetManager(config.infrastructure.contextBudget);
     const service = createPressureHarness({
@@ -194,13 +171,13 @@ describe("context status derivation", () => {
     );
   });
 
-  test("exposes effective and controllable context headroom from model physics", () => {
+  test("exposes effective and controllable context headroom from contracted policy", () => {
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
     config.infrastructure.contextBudget.enabled = true;
-    config.infrastructure.contextBudget.modelPhysics = {
-      effectiveContextWindowPercent: 0.95,
-      autoCompactLimitRatio: 0.9,
-      controllableBaselineTokens: 12_000,
+    config.infrastructure.contextBudget.thresholds = {
+      hardRatio: 0.95,
+      advisoryRatio: 0.9,
+      headroomTokens: 0,
     };
 
     const budget = new ContextBudgetManager(config.infrastructure.contextBudget);
@@ -219,13 +196,13 @@ describe("context status derivation", () => {
 
     expect(status).toEqual(
       expect.objectContaining({
-        effectiveTokensTotal: 95_000,
+        effectiveTokensTotal: 100_000,
         autoCompactLimitTokens: 90_000,
-        controllableBaselineTokens: 12_000,
-        controllableTokensUsed: 8_000,
-        controllableTokensTotal: 83_000,
-        controllableTokensRemaining: 75_000,
-        controllableContextRemainingRatio: 75_000 / 83_000,
+        controllableBaselineTokens: 0,
+        controllableTokensUsed: 20_000,
+        controllableTokensTotal: 100_000,
+        controllableTokensRemaining: 80_000,
+        controllableContextRemainingRatio: 0.8,
       }),
     );
   });
@@ -234,8 +211,8 @@ describe("context status derivation", () => {
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
     config.infrastructure.contextBudget.enabled = true;
     setStaticContextStatusThresholds(config, {
-      hardLimitPercent: 0.8,
-      compactionThresholdPercent: 0.7,
+      hardRatio: 0.8,
+      advisoryRatio: 0.7,
     });
 
     const events: Array<{
@@ -405,8 +382,8 @@ describe("context status derivation", () => {
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
     config.infrastructure.contextBudget.enabled = true;
     setStaticContextStatusThresholds(config, {
-      hardLimitPercent: 0.8,
-      compactionThresholdPercent: 0.7,
+      hardRatio: 0.8,
+      advisoryRatio: 0.7,
     });
 
     const budget = new ContextBudgetManager(config.infrastructure.contextBudget);
@@ -435,7 +412,7 @@ describe("context status derivation", () => {
   test("explaining the compaction gate does not emit blocked-tool telemetry", () => {
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
     config.infrastructure.contextBudget.enabled = true;
-    setStaticContextStatusThresholds(config, { hardLimitPercent: 0.8 });
+    setStaticContextStatusThresholds(config, { hardRatio: 0.8 });
 
     const events: Array<{
       sessionId: string;
@@ -470,7 +447,7 @@ describe("context status derivation", () => {
   test("allows only workbench_compact during critical pressure", () => {
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
     config.infrastructure.contextBudget.enabled = true;
-    setStaticContextStatusThresholds(config, { hardLimitPercent: 0.8 });
+    setStaticContextStatusThresholds(config, { hardRatio: 0.8 });
 
     const budget = new ContextBudgetManager(config.infrastructure.contextBudget);
     budget.beginTurn("pressure-session", 12);
@@ -500,8 +477,8 @@ describe("context status derivation", () => {
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
     config.infrastructure.contextBudget.enabled = true;
     setStaticContextStatusThresholds(config, {
-      hardLimitPercent: 0.8,
-      compactionThresholdPercent: 0.7,
+      hardRatio: 0.8,
+      advisoryRatio: 0.7,
     });
     config.infrastructure.events.enabled = true;
     config.infrastructure.events.dir = ".orchestrator/events";

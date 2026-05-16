@@ -33,7 +33,6 @@ export interface BrewvaCompactionSummaryGenerationInput {
   customInstructions?: string;
   retainedTailMessages?: number;
   previousSummary?: string;
-  summaryMaxOutputRatio?: number;
 }
 
 export interface BrewvaCompactionSummaryGenerationResult {
@@ -333,19 +332,6 @@ export function createHostedLlmCompactionSummaryGenerator(
     }
 
     const prompt = buildCompactionUserPrompt(input);
-    const configuredSummaryMaxOutputRatio = input.summaryMaxOutputRatio ?? 0.8;
-    const summaryMaxOutputRatio =
-      Number.isFinite(configuredSummaryMaxOutputRatio) && configuredSummaryMaxOutputRatio > 0
-        ? Math.min(1, configuredSummaryMaxOutputRatio)
-        : null;
-    const modelMaxOutputTokens =
-      typeof input.model.maxTokens === "number" && Number.isFinite(input.model.maxTokens)
-        ? Math.max(0, Math.trunc(input.model.maxTokens))
-        : 0;
-    const maxOutputTokens =
-      summaryMaxOutputRatio !== null && modelMaxOutputTokens > 0
-        ? Math.max(1, Math.floor(modelMaxOutputTokens * summaryMaxOutputRatio))
-        : undefined;
     const response = await completionClient.complete({
       model: input.model,
       systemPrompt: COMPACTION_SYSTEM_PROMPT,
@@ -354,7 +340,6 @@ export function createHostedLlmCompactionSummaryGenerator(
         apiKey: auth.apiKey,
         headers: auth.headers,
       },
-      maxOutputTokens,
     });
     const summary = sanitizeDroppedDigestLines(
       normalizeGeneratedSummary(responseText(response)),

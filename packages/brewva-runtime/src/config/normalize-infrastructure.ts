@@ -23,17 +23,8 @@ export function normalizeInfrastructureConfig(
   const contextBudgetInput = isRecord(infrastructureInput.contextBudget)
     ? infrastructureInput.contextBudget
     : {};
-  const contextBudgetDynamicTailInput = isRecord(contextBudgetInput.dynamicTail)
-    ? contextBudgetInput.dynamicTail
-    : {};
   const contextBudgetThresholdsInput = isRecord(contextBudgetInput.thresholds)
     ? contextBudgetInput.thresholds
-    : {};
-  const contextBudgetPredictiveTurnGrowthInput = isRecord(contextBudgetInput.predictiveTurnGrowth)
-    ? contextBudgetInput.predictiveTurnGrowth
-    : {};
-  const contextBudgetModelPhysicsInput = isRecord(contextBudgetInput.modelPhysics)
-    ? contextBudgetInput.modelPhysics
     : {};
   const contextBudgetCompactionInput = isRecord(contextBudgetInput.compaction)
     ? contextBudgetInput.compaction
@@ -51,64 +42,18 @@ export function normalizeInfrastructureConfig(
     ? infrastructureInput.recoveryWal
     : {};
   const defaultContextBudget = defaults.contextBudget;
-  const defaultContextBudgetDynamicTail = defaultContextBudget.dynamicTail;
   const defaultContextBudgetThresholds = defaultContextBudget.thresholds;
-  const defaultContextBudgetPredictiveTurnGrowth = defaultContextBudget.predictiveTurnGrowth;
-  const defaultContextBudgetModelPhysics = defaultContextBudget.modelPhysics;
   const defaultContextCompaction = defaultContextBudget.compaction;
   const defaultToolFailureInjection = defaults.toolFailureInjection;
-  const normalizedDynamicTailBaseTokens = normalizePositiveInteger(
-    contextBudgetDynamicTailInput.baseTokens,
-    defaultContextBudgetDynamicTail.baseTokens,
+  const normalizedHardRatio = normalizeUnitInterval(
+    contextBudgetThresholdsInput.hardRatio,
+    defaultContextBudgetThresholds.hardRatio,
   );
-  const normalizedDynamicTailMaxTokens = Math.max(
-    normalizedDynamicTailBaseTokens,
-    normalizePositiveInteger(
-      contextBudgetDynamicTailInput.maxTokens,
-      defaultContextBudgetDynamicTail.maxTokens,
-    ),
-  );
-  const normalizedHardLimitFloorPercent = normalizeUnitInterval(
-    contextBudgetThresholdsInput.hardLimitFloorPercent,
-    defaultContextBudgetThresholds.hardLimitFloorPercent,
-  );
-  const normalizedHardLimitCeilingPercent = Math.max(
-    normalizedHardLimitFloorPercent,
+  const normalizedAdvisoryRatio = Math.min(
+    normalizedHardRatio,
     normalizeUnitInterval(
-      contextBudgetThresholdsInput.hardLimitCeilingPercent,
-      defaultContextBudgetThresholds.hardLimitCeilingPercent,
-    ),
-  );
-  const normalizedCompactionFloorPercent = Math.min(
-    normalizedHardLimitFloorPercent,
-    normalizeUnitInterval(
-      contextBudgetThresholdsInput.compactionFloorPercent,
-      defaultContextBudgetThresholds.compactionFloorPercent,
-    ),
-  );
-  const normalizedCompactionCeilingPercent = Math.min(
-    normalizedHardLimitCeilingPercent,
-    Math.max(
-      normalizedCompactionFloorPercent,
-      normalizeUnitInterval(
-        contextBudgetThresholdsInput.compactionCeilingPercent,
-        defaultContextBudgetThresholds.compactionCeilingPercent,
-      ),
-    ),
-  );
-  const normalizedPredictiveFloorContextWindow = normalizePositiveInteger(
-    contextBudgetPredictiveTurnGrowthInput.floorContextWindow,
-    defaultContextBudgetPredictiveTurnGrowth.floorContextWindow,
-  );
-  const normalizedPredictiveStandardTokens = normalizePositiveInteger(
-    contextBudgetPredictiveTurnGrowthInput.standardTokens,
-    defaultContextBudgetPredictiveTurnGrowth.standardTokens,
-  );
-  const normalizedPredictiveLargeTokens = Math.max(
-    normalizedPredictiveStandardTokens,
-    normalizePositiveInteger(
-      contextBudgetPredictiveTurnGrowthInput.largeTokens,
-      defaultContextBudgetPredictiveTurnGrowth.largeTokens,
+      contextBudgetThresholdsInput.advisoryRatio,
+      defaultContextBudgetThresholds.advisoryRatio,
     ),
   );
 
@@ -122,68 +67,30 @@ export function normalizeInfrastructureConfig(
     },
     contextBudget: {
       enabled: normalizeBoolean(contextBudgetInput.enabled, defaultContextBudget.enabled),
-      dynamicTail: {
-        baseTokens: normalizedDynamicTailBaseTokens,
-        windowFraction: normalizeUnitInterval(
-          contextBudgetDynamicTailInput.windowFraction,
-          defaultContextBudgetDynamicTail.windowFraction,
-        ),
-        maxTokens: normalizedDynamicTailMaxTokens,
-        consequenceDigestMaxChars: normalizePositiveInteger(
-          contextBudgetDynamicTailInput.consequenceDigestMaxChars,
-          defaultContextBudgetDynamicTail.consequenceDigestMaxChars,
-        ),
-      },
       thresholds: {
-        compactionFloorPercent: normalizedCompactionFloorPercent,
-        compactionCeilingPercent: normalizedCompactionCeilingPercent,
-        compactionHeadroomTokens: normalizePositiveInteger(
-          contextBudgetThresholdsInput.compactionHeadroomTokens,
-          defaultContextBudgetThresholds.compactionHeadroomTokens,
-        ),
-        hardLimitFloorPercent: normalizedHardLimitFloorPercent,
-        hardLimitCeilingPercent: normalizedHardLimitCeilingPercent,
-        hardLimitHeadroomTokens: normalizePositiveInteger(
-          contextBudgetThresholdsInput.hardLimitHeadroomTokens,
-          defaultContextBudgetThresholds.hardLimitHeadroomTokens,
+        hardRatio: normalizedHardRatio,
+        advisoryRatio: normalizedAdvisoryRatio,
+        headroomTokens: normalizeNonNegativeInteger(
+          contextBudgetThresholdsInput.headroomTokens,
+          defaultContextBudgetThresholds.headroomTokens,
         ),
       },
-      predictiveTurnGrowth: {
-        floorContextWindow: normalizedPredictiveFloorContextWindow,
-        largeContextWindow: Math.max(
-          normalizedPredictiveFloorContextWindow,
-          normalizePositiveInteger(
-            contextBudgetPredictiveTurnGrowthInput.largeContextWindow,
-            defaultContextBudgetPredictiveTurnGrowth.largeContextWindow,
-          ),
-        ),
-        standardTokens: normalizedPredictiveStandardTokens,
-        largeTokens: normalizedPredictiveLargeTokens,
-        scalingFactor: normalizeUnitInterval(
-          contextBudgetPredictiveTurnGrowthInput.scalingFactor,
-          defaultContextBudgetPredictiveTurnGrowth.scalingFactor,
-        ),
-      },
-      modelPhysics: {
-        effectiveContextWindowPercent: Math.max(
-          0.01,
-          normalizeUnitInterval(
-            contextBudgetModelPhysicsInput.effectiveContextWindowPercent,
-            defaultContextBudgetModelPhysics.effectiveContextWindowPercent,
-          ),
-        ),
-        autoCompactLimitRatio: Math.max(
-          0.01,
-          normalizeUnitInterval(
-            contextBudgetModelPhysicsInput.autoCompactLimitRatio,
-            defaultContextBudgetModelPhysics.autoCompactLimitRatio,
-          ),
-        ),
-        controllableBaselineTokens: normalizeNonNegativeInteger(
-          contextBudgetModelPhysicsInput.controllableBaselineTokens,
-          defaultContextBudgetModelPhysics.controllableBaselineTokens,
-        ),
-      },
+      dynamicTailTokens: normalizePositiveInteger(
+        contextBudgetInput.dynamicTailTokens,
+        defaultContextBudget.dynamicTailTokens,
+      ),
+      predictedTurnGrowthTokens: normalizeNonNegativeInteger(
+        contextBudgetInput.predictedTurnGrowthTokens,
+        defaultContextBudget.predictedTurnGrowthTokens,
+      ),
+      providerCacheStalenessMs: normalizePositiveInteger(
+        contextBudgetInput.providerCacheStalenessMs,
+        defaultContextBudget.providerCacheStalenessMs,
+      ),
+      consequenceDigestMaxChars: normalizePositiveInteger(
+        contextBudgetInput.consequenceDigestMaxChars,
+        defaultContextBudget.consequenceDigestMaxChars,
+      ),
       compactionInstructions: normalizeNonEmptyString(
         contextBudgetInput.compactionInstructions,
         defaultContextBudget.compactionInstructions,
@@ -192,18 +99,6 @@ export function normalizeInfrastructureConfig(
         minTurnsBetween: normalizeNonNegativeInteger(
           contextBudgetCompactionInput.minTurnsBetween,
           defaultContextCompaction.minTurnsBetween,
-        ),
-        minSecondsBetween: normalizeNonNegativeInteger(
-          contextBudgetCompactionInput.minSecondsBetween,
-          defaultContextCompaction.minSecondsBetween,
-        ),
-        cooldownBypassPercent: normalizeUnitInterval(
-          contextBudgetCompactionInput.cooldownBypassPercent,
-          defaultContextCompaction.cooldownBypassPercent,
-        ),
-        summaryMaxOutputRatio: normalizeUnitInterval(
-          contextBudgetCompactionInput.summaryMaxOutputRatio,
-          defaultContextCompaction.summaryMaxOutputRatio,
         ),
         protectedTools: normalizeStringArray(
           contextBudgetCompactionInput.protectedTools,

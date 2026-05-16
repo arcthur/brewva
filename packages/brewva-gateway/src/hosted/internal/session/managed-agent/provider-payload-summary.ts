@@ -1,5 +1,3 @@
-import type { BrewvaRuntimeRoot } from "@brewva/brewva-runtime";
-import type { ExpectedProviderCacheBreak } from "@brewva/brewva-runtime/context";
 import { redactedStableJsonStringify, sha256Hex } from "@brewva/brewva-std/hash";
 import { isRecord } from "@brewva/brewva-std/unknown";
 import type { BrewvaHostCustomMessage } from "@brewva/brewva-substrate/host-api";
@@ -61,23 +59,6 @@ export function buildProviderDynamicTailSummary(input: {
     channelContext: input.channelContext,
     workbenchContext: input.workbenchContext,
     visibleHistoryReduction: input.visibleHistoryReduction,
-  };
-}
-
-export function resolveExpectedProviderCacheBreak(
-  runtime: BrewvaRuntimeRoot,
-  sessionId: string,
-): ExpectedProviderCacheBreak | undefined {
-  const transientReduction = runtime.inspect.context.prompt.getTransientReduction(sessionId);
-  if (!transientReduction?.expectedCacheBreak || !transientReduction.classification) {
-    return undefined;
-  }
-  if (transientReduction.classification === "cacheCold") {
-    return undefined;
-  }
-  return {
-    classification: transientReduction.classification,
-    reason: transientReduction.reason ?? "expected_provider_cache_break",
   };
 }
 

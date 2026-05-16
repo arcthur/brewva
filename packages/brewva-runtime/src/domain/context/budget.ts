@@ -6,7 +6,6 @@ import {
   resolveContextUsageTokens,
   truncateTextToTokenBudget,
 } from "../../utils/token.js";
-import { estimatePredictiveTurnGrowthTokens } from "./context-pressure.js";
 import type {
   ContextAdmissionDecision,
   ContextBudgetUsage,
@@ -20,6 +19,9 @@ interface SessionBudgetState {
   lastCompactionAtMs?: number;
   lastContextUsage?: ContextBudgetUsage;
   pendingCompactionReason?: ContextCompactionReason;
+  autoCompactionConsecutiveFailures: number;
+  autoCompactionBreakerOpen: boolean;
+  deferredAutoCompactionReason?: string | null;
 }
 
 export interface EffectiveContextBudgetPolicy {
@@ -68,66 +70,33 @@ export class ContextBudgetManager {
       current.contextWindow > 0
         ? current.contextWindow
         : null;
-    const effectiveContextWindow = this.resolveEffectiveContextWindow(contextWindow);
-    const autoCompactLimitRatio = normalizePercent(this.config.modelPhysics.autoCompactLimitRatio);
-    const autoCompactLimitPercent = autoCompactLimitRatio ?? 1;
-    const autoCompactLimitTokens =
-      contextWindow === null ? null : Math.floor(contextWindow * autoCompactLimitPercent);
-
-    const effectiveHardLimitHeadroom = this.resolveEffectiveHeadroom(
+    const effectiveHeadroom = this.resolveEffectiveHeadroom(
       contextWindow,
-      this.config.thresholds.hardLimitHeadroomTokens,
+      this.config.thresholds.headroomTokens,
       current?.maxOutputTokens,
     );
-    const effectiveCompactionHeadroom = this.resolveEffectiveHeadroom(
-      contextWindow,
-      this.config.thresholds.compactionHeadroomTokens,
-      current?.maxOutputTokens,
-    );
-
-    const hardLimitPercent = Math.min(
-      this.resolveEffectiveContextWindowPercent(),
-      this.resolveAdaptiveThreshold({
-        contextWindow,
-        floorPercent: this.config.thresholds.hardLimitFloorPercent,
-        ceilingPercent: this.config.thresholds.hardLimitCeilingPercent,
-        headroomTokens: effectiveHardLimitHeadroom,
-      }),
-    );
+    const configuredHardLimitPercent = normalizePercent(this.config.thresholds.hardRatio) ?? 1;
+    const hardLimitPercent =
+      contextWindow === null || contextWindow <= 0
+        ? configuredHardLimitPercent
+        : Math.min(
+            configuredHardLimitPercent,
+            Math.max(0, Math.min(1, 1 - effectiveHeadroom / contextWindow)),
+          );
     const compactionThresholdPercent = Math.min(
       hardLimitPercent,
-      autoCompactLimitPercent,
-      this.resolveAdaptiveThreshold({
-        contextWindow,
-        floorPercent: this.config.thresholds.compactionFloorPercent,
-        ceilingPercent: this.config.thresholds.compactionCeilingPercent,
-        headroomTokens: effectiveCompactionHeadroom,
-      }),
+      normalizePercent(this.config.thresholds.advisoryRatio) ?? hardLimitPercent,
     );
-
-    const baseDynamicTailTokens = Math.max(1, Math.floor(this.config.dynamicTail.baseTokens));
-    const adaptiveDynamicTailTokens =
-      contextWindow === null
-        ? 0
-        : Math.floor(contextWindow * this.config.dynamicTail.windowFraction);
-    const dynamicTailTokens = Math.max(
-      1,
-      Math.min(
-        Math.max(baseDynamicTailTokens, Math.floor(this.config.dynamicTail.maxTokens)),
-        baseDynamicTailTokens + adaptiveDynamicTailTokens,
-      ),
-    );
+    const dynamicTailTokens = Math.max(1, Math.trunc(this.config.dynamicTailTokens));
 
     return {
       dynamicTailTokens,
       compactionThresholdPercent,
       hardLimitPercent,
-      effectiveContextWindow,
-      autoCompactLimitTokens,
-      controllableBaselineTokens: Math.max(
-        0,
-        Math.trunc(this.config.modelPhysics.controllableBaselineTokens),
-      ),
+      effectiveContextWindow: contextWindow,
+      autoCompactLimitTokens:
+        contextWindow === null ? null : Math.floor(contextWindow * compactionThresholdPercent),
+      controllableBaselineTokens: 0,
     };
   }
 
@@ -152,7 +121,7 @@ export class ContextBudgetManager {
   }
 
   getPredictiveTurnGrowthTokens(contextWindow: number): number {
-    return estimatePredictiveTurnGrowthTokens(contextWindow, this.config.predictiveTurnGrowth);
+    return contextWindow > 0 ? Math.max(0, Math.trunc(this.config.predictedTurnGrowthTokens)) : 0;
   }
 
   planDynamicTailAdmission(
@@ -244,26 +213,12 @@ export class ContextBudgetManager {
     const effectivePolicy = this.getEffectivePolicy(sessionId, usage);
     const hardLimitPercent = effectivePolicy.hardLimitPercent;
     const compactionThresholdPercent = effectivePolicy.compactionThresholdPercent;
-    const cooldownBypassPercent = normalizePercent(this.config.compaction.cooldownBypassPercent);
-    // This stays static on purpose. A fixed bypass line lets large-window models skip cooldown
-    // earlier than the adaptive hard limit would, which is desirable near forced compaction.
-    const bypassCooldown =
-      usagePercent >= hardLimitPercent ||
-      (cooldownBypassPercent !== null && usagePercent >= cooldownBypassPercent);
+    const bypassCooldown = usagePercent >= hardLimitPercent;
 
     if (!bypassCooldown) {
       const sinceLastCompaction = Math.max(0, state.turnIndex - state.lastCompactionTurn);
       if (sinceLastCompaction < this.config.compaction.minTurnsBetween) {
         return { shouldCompact: false, usage: current };
-      }
-
-      const minSecondsBetweenCompaction = this.config.compaction.minSecondsBetween;
-      const minCooldownMs = Math.floor(minSecondsBetweenCompaction * 1000);
-      if (minCooldownMs > 0 && typeof state.lastCompactionAtMs === "number") {
-        const elapsedMs = Math.max(0, this.now() - state.lastCompactionAtMs);
-        if (elapsedMs < minCooldownMs) {
-          return { shouldCompact: false, usage: current };
-        }
       }
     }
 
@@ -312,6 +267,66 @@ export class ContextBudgetManager {
     return state.pendingCompactionReason;
   }
 
+  getAutoCompactionPolicyState(sessionId: string): {
+    consecutiveFailures: number;
+    breakerOpen: boolean;
+    deferredReason: string | null;
+  } {
+    const state = this.getOrCreate(sessionId);
+    return {
+      consecutiveFailures: state.autoCompactionConsecutiveFailures,
+      breakerOpen: state.autoCompactionBreakerOpen,
+      deferredReason: state.deferredAutoCompactionReason ?? null,
+    };
+  }
+
+  rememberDeferredAutoCompactionReason(sessionId: string, reason: string | null): boolean {
+    const state = this.getOrCreate(sessionId);
+    const previous = state.deferredAutoCompactionReason ?? null;
+    state.deferredAutoCompactionReason = reason;
+    return previous !== reason;
+  }
+
+  recordAutoCompactionFailure(sessionId: string): void {
+    const state = this.getOrCreate(sessionId);
+    state.autoCompactionConsecutiveFailures += 1;
+    state.deferredAutoCompactionReason = null;
+    if (state.autoCompactionConsecutiveFailures >= 3) {
+      state.autoCompactionBreakerOpen = true;
+    }
+  }
+
+  recordAutoCompactionSuccess(sessionId: string): void {
+    const state = this.getOrCreate(sessionId);
+    state.autoCompactionConsecutiveFailures = 0;
+    state.autoCompactionBreakerOpen = false;
+    state.deferredAutoCompactionReason = null;
+  }
+
+  restoreAutoCompactionPolicyFromEvents(
+    sessionId: string,
+    events: readonly { type: string }[],
+  ): void {
+    const state = this.getOrCreate(sessionId);
+    state.autoCompactionConsecutiveFailures = 0;
+    state.autoCompactionBreakerOpen = false;
+    state.deferredAutoCompactionReason = null;
+    for (const event of events) {
+      if (event.type === "context_compaction_auto_failed") {
+        state.autoCompactionConsecutiveFailures += 1;
+        if (state.autoCompactionConsecutiveFailures >= 3) {
+          state.autoCompactionBreakerOpen = true;
+        }
+        continue;
+      }
+      if (event.type === "context_compaction_auto_completed" || event.type === "session_compact") {
+        state.autoCompactionConsecutiveFailures = 0;
+        state.autoCompactionBreakerOpen = false;
+        state.deferredAutoCompactionReason = null;
+      }
+    }
+  }
+
   getLastContextUsage(sessionId: string): ContextBudgetUsage | undefined {
     const state = this.sessions.get(sessionId);
     if (!state?.lastContextUsage) return undefined;
@@ -353,43 +368,11 @@ export class ContextBudgetManager {
     return configured;
   }
 
-  private resolveEffectiveContextWindow(contextWindow: number | null): number | null {
-    if (contextWindow === null || contextWindow <= 0) {
-      return null;
-    }
-    return Math.max(1, Math.floor(contextWindow * this.resolveEffectiveContextWindowPercent()));
-  }
-
-  private resolveEffectiveContextWindowPercent(): number {
-    return Math.max(
-      0.01,
-      Math.min(1, normalizePercent(this.config.modelPhysics.effectiveContextWindowPercent) ?? 1),
-    );
-  }
-
   private resolveUsage(
     sessionId: string,
     usage?: ContextBudgetUsage,
   ): ContextBudgetUsage | undefined {
     return usage ?? this.getOrCreate(sessionId).lastContextUsage;
-  }
-
-  private resolveAdaptiveThreshold(input: {
-    contextWindow: number | null;
-    floorPercent: number;
-    ceilingPercent: number;
-    headroomTokens: number;
-  }): number {
-    const floorPercent = normalizePercent(input.floorPercent) ?? 0;
-    const ceilingPercent = Math.max(
-      floorPercent,
-      normalizePercent(input.ceilingPercent) ?? floorPercent,
-    );
-    if (input.contextWindow === null || input.contextWindow <= 0) {
-      return floorPercent;
-    }
-    const byHeadroom = Math.max(0, Math.min(1, 1 - input.headroomTokens / input.contextWindow));
-    return Math.max(floorPercent, Math.min(ceilingPercent, byHeadroom));
   }
 
   private resolveProjectedDynamicTailTokenBudget(
@@ -420,6 +403,9 @@ export class ContextBudgetManager {
       lastCompactionTurn: -Number.MAX_SAFE_INTEGER,
       lastCompactionAtMs: undefined,
       lastContextUsage: undefined,
+      autoCompactionConsecutiveFailures: 0,
+      autoCompactionBreakerOpen: false,
+      deferredAutoCompactionReason: null,
     };
     this.sessions.set(sessionId, state);
     return state;

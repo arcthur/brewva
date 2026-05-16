@@ -20,8 +20,8 @@ import { dispatchHostedPromptAttempt } from "../thread-loop/hosted-prompt-attemp
 import {
   armNextPromptOutputBudgetEscalation,
   clearNextPromptOutputBudgetEscalation,
-  hasProviderRequestRecoveryInstalled,
 } from "../thread-loop/recovery/output-budget-state.js";
+import { getHostedRecoveryProjection } from "../thread-loop/recovery/projection.js";
 import {
   COMPACTION_RESUME_PROMPT,
   MAX_OUTPUT_RECOVERY_PROMPT,
@@ -324,18 +324,21 @@ const outputBudgetEscalationPolicy: PromptRecoveryPolicy = {
       };
     }
     const currentModel = readCurrentModel(input.session);
+    const recoveryProjection = getHostedRecoveryProjection(input.runtime).getSnapshot(
+      input.sessionId,
+    );
     if (
       !input.controller ||
       !currentModel ||
       currentModel.maxTokens <= 0 ||
-      !hasProviderRequestRecoveryInstalled(input.runtime)
+      !recoveryProjection.providerRequestRecoveryInstalled
     ) {
       recordSessionTurnTransition(input.runtime, {
         sessionId: input.sessionId,
         reason: "output_budget_escalation",
         status: "skipped",
         error:
-          !hasProviderRequestRecoveryInstalled(input.runtime) &&
+          !recoveryProjection.providerRequestRecoveryInstalled &&
           input.controller &&
           currentModel &&
           currentModel.maxTokens > 0

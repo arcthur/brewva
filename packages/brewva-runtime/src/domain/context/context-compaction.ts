@@ -12,38 +12,18 @@ import {
   validateCompactionSummary,
 } from "../../security/compaction-integrity.js";
 import type { GovernancePort } from "../governance/api.js";
-import type { RuntimeSessionStateStore } from "../sessions/api.js";
-import { writeHistoryViewBaselineArtifact } from "./history-view-baseline-artifact.js";
 import type {
-  ProviderCacheObservationState,
   SessionCompactionCacheImpact,
   SessionCompactionCacheImpactSnapshot,
   SessionCompactionCommitInput,
   SessionCompactionGenerationMetadata,
 } from "./types.js";
 
+const GOVERNANCE_INTEGRITY_TIMEOUT_MS = 1_000;
+
 export interface ContextCompactionDeps {
-  workspaceRoot: string;
-  sessionState: RuntimeSessionStateStore;
-  recordInfrastructureRow: RuntimeCallback<
-    [
-      input: {
-        sessionId: string;
-        tool: string;
-        argsSummary: string;
-        outputSummary: string;
-        fullOutput?: string;
-        verdict?: "pass" | "fail" | "inconclusive";
-        metadata?: Record<string, unknown>;
-        turn?: number;
-        skill?: string | null;
-      },
-    ],
-    string
-  >;
   governancePort?: GovernancePort;
   markPressureCompacted: RuntimeCallback<[sessionId: string]>;
-  commitWorkbenchBaseline?: RuntimeCallback<[sessionId: string], unknown>;
   getCurrentTurn: RuntimeCallback<[sessionId: string], number>;
   recordEvent: RuntimeCallback<
     [
@@ -122,47 +102,95 @@ function normalizeCacheImpactSnapshot(
   };
 }
 
-function providerCacheObservationSnapshot(
-  observation: ProviderCacheObservationState | undefined,
-): SessionCompactionCacheImpactSnapshot | null {
-  if (!observation) {
-    return null;
-  }
-  return {
-    cacheReadTokens: observation.breakObservation.cacheReadTokens,
-    cacheWriteTokens: observation.breakObservation.cacheWriteTokens,
-    bucketKey: observation.fingerprint.bucketKey,
-    stablePrefixHash: observation.fingerprint.stablePrefixHash,
-    dynamicTailHash: observation.fingerprint.dynamicTailHash,
-    visibleHistoryReductionHash: observation.fingerprint.visibleHistoryReductionHash,
-    workbenchContextHash: observation.fingerprint.workbenchContextHash,
-  };
-}
-
 function normalizeCompactionCacheImpact(
-  input: SessionCompactionCacheImpact | undefined,
-  before: SessionCompactionCacheImpactSnapshot | null,
+  input: SessionCompactionCacheImpact,
 ): SessionCompactionCacheImpact {
   return {
-    before: normalizeCacheImpactSnapshot(input?.before) ?? before,
-    after: normalizeCacheImpactSnapshot(input?.after),
-    explicitEpochChanges: Math.max(0, Math.trunc(input?.explicitEpochChanges ?? 1)),
+    before: normalizeCacheImpactSnapshot(input.before),
+    after: normalizeCacheImpactSnapshot(input.after),
+    explicitEpochChanges: Math.max(0, Math.trunc(input.explicitEpochChanges)),
     prefixBytesChanged:
-      typeof input?.prefixBytesChanged === "number" && Number.isFinite(input.prefixBytesChanged)
+      typeof input.prefixBytesChanged === "number" && Number.isFinite(input.prefixBytesChanged)
         ? Math.max(0, Math.trunc(input.prefixBytesChanged))
         : null,
     degradedReason:
-      typeof input?.degradedReason === "string" && input.degradedReason.trim().length > 0
+      typeof input.degradedReason === "string" && input.degradedReason.trim().length > 0
         ? input.degradedReason.trim()
         : null,
   };
 }
 
-export function commitSessionCompaction(
+async function runGovernanceIntegrityBarrier(input: {
+  deps: ContextCompactionDeps;
+  sessionId: string;
+  turn: number;
+  summary: string;
+  violations: readonly string[];
+}): Promise<void> {
+  const governancePort = input.deps.governancePort;
+  if (!governancePort?.checkCompactionIntegrity || !input.summary) {
+    return;
+  }
+
+  const checkCompactionIntegrity = governancePort.checkCompactionIntegrity.bind(governancePort);
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const result = await Promise.race([
+      checkCompactionIntegrity({
+        sessionId: input.sessionId,
+        summary: input.summary,
+        violations: [...input.violations],
+      }),
+      new Promise<"timeout">((resolveTimeout) => {
+        timeout = setTimeout(() => resolveTimeout("timeout"), GOVERNANCE_INTEGRITY_TIMEOUT_MS);
+      }),
+    ]);
+
+    if (result === "timeout") {
+      input.deps.recordEvent({
+        sessionId: input.sessionId,
+        type: GOVERNANCE_COMPACTION_INTEGRITY_ERROR_EVENT_TYPE,
+        turn: input.turn,
+        payload: {
+          error: `compaction integrity check timed out after ${GOVERNANCE_INTEGRITY_TIMEOUT_MS}ms`,
+        },
+      });
+      return;
+    }
+
+    input.deps.recordEvent({
+      sessionId: input.sessionId,
+      type: result.ok
+        ? GOVERNANCE_COMPACTION_INTEGRITY_CHECKED_EVENT_TYPE
+        : GOVERNANCE_COMPACTION_INTEGRITY_FAILED_EVENT_TYPE,
+      turn: input.turn,
+      payload: {
+        ok: result.ok,
+        reason: result.ok ? null : result.reason,
+        violationCount: input.violations.length,
+      },
+    });
+  } catch (error) {
+    input.deps.recordEvent({
+      sessionId: input.sessionId,
+      type: GOVERNANCE_COMPACTION_INTEGRITY_ERROR_EVENT_TYPE,
+      turn: input.turn,
+      payload: {
+        error: error instanceof Error ? error.message : String(error),
+      },
+    });
+  } finally {
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+  }
+}
+
+export async function commitSessionCompaction(
   deps: ContextCompactionDeps,
   sessionId: string,
   input: SessionCompactionCommitInput,
-): BrewvaEventRecord {
+): Promise<BrewvaEventRecord> {
   deps.markPressureCompacted(sessionId);
 
   const turn = deps.getCurrentTurn(sessionId);
@@ -174,10 +202,7 @@ export function commitSessionCompaction(
   let governanceSummary = "";
   let governanceViolations: string[] = [];
   const summaryGeneration = normalizeCompactionGenerationMetadata(input.summaryGeneration);
-  const cacheImpact = normalizeCompactionCacheImpact(
-    input.cacheImpact,
-    providerCacheObservationSnapshot(deps.sessionState.getProviderCacheObservation(sessionId)),
-  );
+  const cacheImpact = normalizeCompactionCacheImpact(input.cacheImpact);
   if (rawSummary) {
     const integrity = validateCompactionSummary(rawSummary);
     if (!integrity.clean) {
@@ -222,94 +247,13 @@ export function commitSessionCompaction(
   if (!event) {
     throw new Error("failed to record session_compact receipt");
   }
-  const snapshot = {
-    compactId,
-    sanitizedSummary: summary ?? "",
-    summaryDigest: sha256Hex(summary ?? ""),
-    sourceTurn: input.sourceTurn,
-    leafEntryId: input.leafEntryId,
-    referenceContextDigest: input.referenceContextDigest,
-    fromTokens: input.fromTokens,
-    toTokens: input.toTokens,
-    origin: input.origin,
-    eventId: event.id,
-    timestamp: event.timestamp,
-    rebuildSource: "artifact" as const,
-    diagnostics: [],
-  };
-  writeHistoryViewBaselineArtifact(deps.workspaceRoot, sessionId, snapshot);
-  deps.commitWorkbenchBaseline?.(sessionId);
-
-  deps.recordInfrastructureRow({
+  await runGovernanceIntegrityBarrier({
+    deps,
     sessionId,
     turn,
-    skill: null,
-    tool: "brewva_session_compaction",
-    argsSummary: "session_compaction",
-    outputSummary: `from=${input.fromTokens ?? "unknown"} to=${input.toTokens ?? "unknown"}`,
-    fullOutput: JSON.stringify({
-      compactId,
-      sanitizedSummary: summary ?? "",
-      summaryDigest: sha256Hex(summary ?? ""),
-      fromTokens: input.fromTokens,
-      toTokens: input.toTokens,
-      ...(summaryGeneration ? { summaryGeneration } : {}),
-      cacheImpact,
-    }),
-    verdict: "inconclusive",
-    metadata: {
-      source: "session_compact",
-      compactId,
-      sourceTurn: input.sourceTurn,
-      leafEntryId: input.leafEntryId,
-      referenceContextDigest: input.referenceContextDigest,
-      fromTokens: input.fromTokens,
-      toTokens: input.toTokens,
-      summaryChars: summary?.length ?? null,
-      integrityViolations: integrityViolations,
-      ...(summaryGeneration ? { summaryGeneration } : {}),
-      cacheImpact,
-    },
+    summary: governanceSummary,
+    violations: governanceViolations,
   });
-
-  const governancePort = deps.governancePort;
-  if (!governancePort?.checkCompactionIntegrity || !governanceSummary) {
-    return event;
-  }
-  const checkCompactionIntegrity = governancePort.checkCompactionIntegrity.bind(governancePort);
-
-  void Promise.resolve()
-    .then(() =>
-      checkCompactionIntegrity({
-        sessionId,
-        summary: governanceSummary,
-        violations: governanceViolations,
-      }),
-    )
-    .then((result) => {
-      deps.recordEvent({
-        sessionId,
-        type: result.ok
-          ? GOVERNANCE_COMPACTION_INTEGRITY_CHECKED_EVENT_TYPE
-          : GOVERNANCE_COMPACTION_INTEGRITY_FAILED_EVENT_TYPE,
-        turn,
-        payload: {
-          ok: result.ok,
-          reason: result.ok ? null : result.reason,
-          violationCount: governanceViolations.length,
-        },
-      });
-    })
-    .catch((error) => {
-      deps.recordEvent({
-        sessionId,
-        type: GOVERNANCE_COMPACTION_INTEGRITY_ERROR_EVENT_TYPE,
-        turn,
-        payload: {
-          error: error instanceof Error ? error.message : String(error),
-        },
-      });
-    });
 
   return event;
 }

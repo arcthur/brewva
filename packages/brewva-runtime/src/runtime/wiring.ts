@@ -322,8 +322,6 @@ export function registerRuntimeServiceDependencies(
 
   const contextDomain = registerContextDomain(options, {
     taskService,
-    ledgerService,
-    workbenchService,
   });
   const { contextService } = contextDomain.services;
 

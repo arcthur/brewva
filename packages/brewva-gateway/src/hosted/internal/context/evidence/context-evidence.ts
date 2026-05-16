@@ -1,7 +1,6 @@
 import { writeFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
 import type { BrewvaHostedRuntimePort, BrewvaRuntimeRoot } from "@brewva/brewva-runtime";
-import type { ProviderCacheObservationState } from "@brewva/brewva-runtime/context";
 import {
   ensureParentDirectory,
   normalizeRelativePath,
@@ -340,28 +339,54 @@ function projectProviderCacheEvidenceSample(
   };
 }
 
-function projectProviderCacheObservation(
-  observation: ProviderCacheObservationState | undefined,
+function readString(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function readStringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
+}
+
+function projectProviderCacheEvidencePayload(
+  observation:
+    | {
+        turn: number;
+        timestamp: number;
+        payload: Record<string, unknown>;
+      }
+    | undefined,
 ): ProviderCacheEvidenceProjection | null {
   if (!observation) {
     return null;
   }
+  const status = readString(observation.payload.status);
+  if (status !== "cold" && status !== "warm" && status !== "break" && status !== "limited") {
+    return null;
+  }
+  const expected = observation.payload.expected === true;
   return {
-    timestamp: observation.updatedAt,
+    timestamp: observation.timestamp,
     turn: observation.turn,
-    status: observation.breakObservation.status,
-    reason: observation.breakObservation.reason,
-    unexpectedBreak:
-      observation.breakObservation.status === "break" && !observation.breakObservation.expected,
-    changedFields: [...observation.breakObservation.changedFields],
+    status,
+    reason: readString(observation.payload.reason),
+    unexpectedBreak: status === "break" && !expected,
+    changedFields: readStringArray(observation.payload.changedFields),
   };
 }
 
 function resolveLatestProviderCacheEvidence(
   samples: readonly ProviderCacheObservationEvidenceSample[],
-  liveObservation: ProviderCacheObservationState | undefined,
+  liveObservation:
+    | {
+        turn: number;
+        timestamp: number;
+        payload: Record<string, unknown>;
+      }
+    | undefined,
 ): ProviderCacheEvidenceProjection | null {
-  const liveProjection = projectProviderCacheObservation(liveObservation);
+  const liveProjection = projectProviderCacheEvidencePayload(liveObservation);
   return (
     [
       ...samples.map((sample) => projectProviderCacheEvidenceSample(sample)),
@@ -498,7 +523,7 @@ export function buildContextEvidenceReport(
       ).length;
       const latestProviderCacheEvidence = resolveLatestProviderCacheEvidence(
         providerCacheSamples,
-        runtime.inspect.context.providerCache.getObservation(sessionId),
+        runtime.inspect.context.evidence.latest(sessionId, "provider_cache_observation"),
       );
 
       return {

@@ -97,7 +97,7 @@ describe("model-operated Phase A architecture guard", () => {
     expect(sessionWire).toContain("contextStatus?: ContextStatusView");
   });
 
-  test("context budget config exposes dynamic tail and cooldown bypass naming", () => {
+  test("context budget config exposes contracted threshold and dynamic-tail naming", () => {
     const configTypes = readRepoFile("packages/brewva-runtime/src/config/types.ts");
     const configDefaults = readRepoFile("packages/brewva-runtime/src/config/defaults.ts");
     const configNormalizer = readRepoFile(
@@ -106,10 +106,12 @@ describe("model-operated Phase A architecture guard", () => {
     const contextBudget = readRepoFile("packages/brewva-runtime/src/domain/context/budget.ts");
 
     for (const source of [configTypes, configDefaults, configNormalizer, contextBudget]) {
-      expect(source).toContain("dynamicTail");
-      expect(source).toContain("cooldownBypassPercent");
+      expect(source).toContain("dynamicTailTokens");
+      expect(source).toContain("predictedTurnGrowthTokens");
+      expect(source).toContain("headroomTokens");
       expect(source).not.toContain("contextBudget.injection");
       expect(source).not.toContain("pressureBypassPercent");
+      expect(source).not.toContain("cooldownBypassPercent");
     }
   });
 

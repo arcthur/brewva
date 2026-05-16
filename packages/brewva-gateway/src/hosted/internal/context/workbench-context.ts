@@ -21,10 +21,7 @@ import {
 } from "./hosted-context-blocks.js";
 import { prepareHostedContextSupport } from "./hosted-context-support.js";
 import type { HostedContextTelemetry } from "./hosted-context-telemetry.js";
-import {
-  commitHostedContextMaterialization,
-  planHostedContextMaterialization,
-} from "./materialization.js";
+import { materializeHostedContext } from "./materialization.js";
 import { buildReadPathRecoveryBlocks } from "./read-path-recovery.js";
 
 export const HOSTED_WORKBENCH_CONTEXT_MESSAGE_TYPE = "brewva-workbench-context";
@@ -419,8 +416,7 @@ function buildConsequenceDigestBlock(input: {
   const digest = input.runtime.inspect.events.effects.renderTurnDigest(input.sessionId, {
     runtimeTurn: input.turn - 1,
     turnId: `turn-${input.turn - 1}`,
-    maxChars:
-      input.runtime.config.infrastructure.contextBudget.dynamicTail.consequenceDigestMaxChars,
+    maxChars: input.runtime.config.infrastructure.contextBudget.consequenceDigestMaxChars,
   });
   if (digest.includes("effects=none_recorded")) {
     return null;
@@ -510,7 +506,6 @@ export function createHostedWorkbenchContextController(
       });
 
       const systemPromptWithContract = applyContextContract(input.systemPrompt);
-      statePort.setLastRuntimeGateRequired(input.sessionId, gateStatus.required);
 
       const rendered = buildHostedDynamicTail({
         runtime,
@@ -522,7 +517,10 @@ export function createHostedWorkbenchContextController(
         capabilityView,
         delegationStore: options.delegationStore,
       });
-      const materializationPlan = planHostedContextMaterialization({
+      materializeHostedContext({
+        runtime,
+        telemetry,
+        delegationStore: options.delegationStore,
         sessionId: input.sessionId,
         turn,
         contextScopeId,
@@ -532,19 +530,7 @@ export function createHostedWorkbenchContextController(
         gateStatus,
         pendingCompactionReason,
         workbenchContextRendered: rendered.blocks.some((block) => block.id === "active-workbench"),
-        capabilityDisclosureRendered:
-          capabilityView.requested.length > 0 ||
-          capabilityView.details.length > 0 ||
-          capabilityView.missing.length > 0,
-        consequenceDigestRendered: rendered.blocks.some(
-          (block) => block.id === "turn-consequence-digest",
-        ),
         surfacedDelegationRunIds: rendered.surfacedDelegationRunIds,
-      });
-      commitHostedContextMaterialization(materializationPlan, {
-        runtime,
-        telemetry,
-        delegationStore: options.delegationStore,
       });
 
       return buildHiddenContextResult({

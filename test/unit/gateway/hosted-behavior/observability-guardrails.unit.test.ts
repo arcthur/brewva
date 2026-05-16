@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import type { BrewvaRuntimeOptions } from "@brewva/brewva-runtime";
+import type { TransientReductionState } from "@brewva/brewva-runtime/context";
 import {
   buildContextEvidenceReport,
   recordPromptStabilityEvidence,
@@ -240,12 +241,20 @@ describe("Hosted behavior integration: observability guardrails", () => {
     const runtime = createHostedTestRuntime({ cwd: workspace, config: createOpsRuntimeConfig() });
     const sessionId = "ext-context-evidence-1";
 
-    const prompt = runtime.operator.context.prompt.observeStability(sessionId, {
+    const prompt = {
+      turn: 1,
+      updatedAt: 1_740_000_003_100,
+      scopeKey: `${sessionId}::leaf-live`,
       stablePrefixHash: "prefix-live",
       dynamicTailHash: "tail-live",
-      contextScopeId: "leaf-live",
+      stablePrefix: true,
+      stableTail: true,
+    };
+    runtime.operator.context.evidence.append(sessionId, {
+      kind: "prompt_stability",
       turn: 1,
       timestamp: 1_740_000_003_100,
+      payload: { ...prompt },
     });
     recordPromptStabilityEvidence({
       workspaceRoot: runtime.identity.workspaceRoot,
@@ -258,7 +267,9 @@ describe("Hosted behavior integration: observability guardrails", () => {
       gateRequired: false,
     });
 
-    const reduction = runtime.operator.context.prompt.observeTransientReduction(sessionId, {
+    const reduction = {
+      turn: 1,
+      updatedAt: 1_740_000_003_110,
       status: "completed",
       reason: null,
       eligibleToolResults: 4,
@@ -267,8 +278,14 @@ describe("Hosted behavior integration: observability guardrails", () => {
       estimatedTokenSavings: 410,
       compactionAdvised: true,
       forcedCompaction: false,
+      classification: null,
+      expectedCacheBreak: false,
+    } satisfies TransientReductionState;
+    runtime.operator.context.evidence.append(sessionId, {
+      kind: "transient_reduction",
       turn: 1,
       timestamp: 1_740_000_003_110,
+      payload: { ...reduction },
     });
     recordTransientReductionEvidence({
       workspaceRoot: runtime.identity.workspaceRoot,

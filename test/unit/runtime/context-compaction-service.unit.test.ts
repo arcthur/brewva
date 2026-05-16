@@ -5,13 +5,16 @@ import {
   commitSessionCompaction,
   type ContextCompactionDeps,
 } from "../../../packages/brewva-runtime/src/domain/context/context-compaction.js";
-import { RuntimeSessionStateStore } from "../../../packages/brewva-runtime/src/domain/sessions/session-state.js";
 import type { BrewvaEventRecord } from "../../../packages/brewva-runtime/src/events/types.js";
-import { requireDefined } from "../../helpers/assertions.js";
 
-async function flushAsyncEvents(): Promise<void> {
-  await Promise.resolve();
-  await Promise.resolve();
+function emptyCacheImpact() {
+  return {
+    before: null,
+    after: null,
+    explicitEpochChanges: 1,
+    prefixBytesChanged: null,
+    degradedReason: null,
+  };
 }
 
 function createRecordedEvent(
@@ -33,37 +36,45 @@ function createRecordedEvent(
   };
 }
 
-describe("context-compaction module", () => {
-  test("marks compaction without clearing prompt-cache state, emits event, and appends ledger evidence", () => {
-    const sessionState = new RuntimeSessionStateStore();
-
-    const events: Array<{
-      sessionId: string;
-      type: string;
-      turn?: number;
-      payload?: object;
-    }> = [];
-    const ledgerRows: Array<Record<string, unknown>> = [];
-    const pressureMarks: string[] = [];
-
-    const deps: ContextCompactionDeps = {
-      workspaceRoot: "/tmp/context-compaction",
-      sessionState,
-      recordInfrastructureRow: (row) => {
-        ledgerRows.push(row as Record<string, unknown>);
-        return "ev_test";
-      },
+function createDeps(input?: { governancePort?: ContextCompactionDeps["governancePort"] }): {
+  deps: ContextCompactionDeps;
+  events: Array<{
+    sessionId: string;
+    type: string;
+    turn?: number;
+    payload?: object;
+  }>;
+  pressureMarks: string[];
+} {
+  const events: Array<{
+    sessionId: string;
+    type: string;
+    turn?: number;
+    payload?: object;
+  }> = [];
+  const pressureMarks: string[] = [];
+  return {
+    deps: {
+      governancePort: input?.governancePort,
       markPressureCompacted: (sessionId) => {
         pressureMarks.push(sessionId);
       },
       getCurrentTurn: () => 17,
-      recordEvent: (input) => {
-        events.push(input);
-        return createRecordedEvent(events.length, input);
+      recordEvent: (eventInput) => {
+        events.push(eventInput);
+        return createRecordedEvent(events.length, eventInput);
       },
-    };
+    },
+    events,
+    pressureMarks,
+  };
+}
 
-    commitSessionCompaction(deps, "session-a", {
+describe("context-compaction module", () => {
+  test("records only the durable session_compact receipt", async () => {
+    const { deps, events, pressureMarks } = createDeps();
+
+    await commitSessionCompaction(deps, "session-a", {
       compactId: "  cmp-42 ",
       sanitizedSummary: "  keep latest failures only  ",
       summaryDigest: "unused",
@@ -73,6 +84,7 @@ describe("context-compaction module", () => {
       fromTokens: 900,
       toTokens: 320,
       origin: "auto_compaction",
+      cacheImpact: emptyCacheImpact(),
     });
 
     expect(pressureMarks).toEqual(["session-a"]);
@@ -89,309 +101,35 @@ describe("context-compaction module", () => {
           leafEntryId: "leaf-a",
           referenceContextDigest: "ref-digest",
           sanitizedSummary: "keep latest failures only",
-          cacheImpact: expect.objectContaining({
-            before: null,
-            after: null,
-            explicitEpochChanges: 1,
-            prefixBytesChanged: null,
-            degradedReason: null,
-          }),
-        }),
-      }),
-    );
-
-    expect(ledgerRows).toHaveLength(1);
-    expect(ledgerRows[0]).toEqual(
-      expect.objectContaining({
-        sessionId: "session-a",
-        turn: 17,
-        tool: "brewva_session_compaction",
-        skill: null,
-      }),
-    );
-    expect(ledgerRows[0]?.metadata).toEqual(
-      expect.objectContaining({
-        source: "session_compact",
-        fromTokens: 900,
-        toTokens: 320,
-        compactId: "cmp-42",
-      }),
-    );
-  });
-
-  test("keeps compaction payload normalization when summary text is empty after trim", () => {
-    const sessionState = new RuntimeSessionStateStore();
-
-    const events: Array<{
-      sessionId: string;
-      type: string;
-      turn?: number;
-      payload?: object;
-    }> = [];
-
-    const deps: ContextCompactionDeps = {
-      workspaceRoot: "/tmp/context-compaction",
-      sessionState,
-      recordInfrastructureRow: () => "ev_test",
-      markPressureCompacted: () => undefined,
-      getCurrentTurn: () => 3,
-      recordEvent: (input) => {
-        events.push(input);
-        return createRecordedEvent(events.length, input);
-      },
-    };
-
-    commitSessionCompaction(deps, "session-a", {
-      compactId: "  ",
-      sanitizedSummary: "   ",
-      summaryDigest: "unused",
-      sourceTurn: 3,
-      leafEntryId: null,
-      referenceContextDigest: null,
-      fromTokens: null,
-      toTokens: null,
-      origin: "auto_compaction",
-    });
-
-    expect(events[0]?.payload).toEqual(
-      expect.objectContaining({
-        compactId: "",
-        sanitizedSummary: "",
-      }),
-    );
-  });
-
-  test("records cache impact baseline from the last provider cache observation", () => {
-    const sessionState = new RuntimeSessionStateStore();
-    sessionState.setProviderCacheObservation("session-cache", {
-      turn: 8,
-      updatedAt: 123,
-      source: "bucket-a",
-      fingerprint: {
-        bucketKey: "bucket-a",
-        provider: "openai",
-        api: "openai-responses",
-        model: "gpt-5.4",
-        cachePolicyHash: "cache-policy",
-        toolSchemaSnapshotHash: "tools",
-        toolSchemaOverlayHash: "tool-overlay",
-        perToolHashes: {},
-        stablePrefixHash: "stable-prefix",
-        dynamicTailHash: "dynamic-tail",
-        requestHash: "request",
-        channelContextHash: "channel",
-        renderedCacheHash: "rendered",
-        cacheCapabilityHash: "capability",
-        stickyLatchHash: "sticky",
-        reasoningHash: "reasoning",
-        thinkingBudgetHash: "thinking",
-        cacheRelevantHeadersHash: "headers",
-        extraBodyHash: "body",
-        visibleHistoryReductionHash: "visible-history",
-        workbenchContextHash: "workbench",
-        providerFallbackHash: "provider-fallback",
-      },
-      render: {
-        status: "rendered",
-        reason: "ok",
-        renderedRetention: "short",
-        bucketKey: "bucket-a",
-      },
-      breakObservation: {
-        status: "warm",
-        classification: "prefixPreserving",
-        expected: false,
-        reason: null,
-        previousCacheReadTokens: 20,
-        cacheReadTokens: 15,
-        cacheWriteTokens: 5,
-        cacheMissTokens: 0,
-        thresholdTokens: 1_000,
-        relativeDropThreshold: 0.2,
-        changedFields: [],
-      },
-    });
-    const events: Array<{
-      sessionId: string;
-      type: string;
-      turn?: number;
-      payload?: object;
-    }> = [];
-
-    const deps: ContextCompactionDeps = {
-      workspaceRoot: "/tmp/context-compaction",
-      sessionState,
-      recordInfrastructureRow: () => "ev_test",
-      markPressureCompacted: () => undefined,
-      getCurrentTurn: () => 8,
-      recordEvent: (input) => {
-        events.push(input);
-        return createRecordedEvent(events.length, input);
-      },
-    };
-
-    commitSessionCompaction(deps, "session-cache", {
-      compactId: "cmp-cache",
-      sanitizedSummary: "cache summary",
-      summaryDigest: "unused",
-      sourceTurn: 8,
-      leafEntryId: null,
-      referenceContextDigest: null,
-      fromTokens: 800,
-      toTokens: 240,
-      origin: "auto_compaction",
-    });
-
-    expect(events[0]?.payload).toEqual(
-      expect.objectContaining({
-        cacheImpact: expect.objectContaining({
-          before: expect.objectContaining({
-            cacheReadTokens: 15,
-            cacheWriteTokens: 5,
-            bucketKey: "bucket-a",
-            stablePrefixHash: "stable-prefix",
-            dynamicTailHash: "dynamic-tail",
-            visibleHistoryReductionHash: "visible-history",
-            workbenchContextHash: "workbench",
-          }),
-          after: null,
-          explicitEpochChanges: 1,
+          cacheImpact: emptyCacheImpact(),
         }),
       }),
     );
   });
 
-  test("emits governance_compaction_integrity_checked when governance port accepts summary", async () => {
-    const sessionState = new RuntimeSessionStateStore();
-    const events: Array<{
-      sessionId: string;
-      type: string;
-      turn?: number;
-      payload?: object;
-    }> = [];
-
-    const deps: ContextCompactionDeps = {
-      workspaceRoot: "/tmp/context-compaction",
-      sessionState,
-      recordInfrastructureRow: () => "ev_test",
+  test("awaits governance integrity check inside the commit barrier", async () => {
+    const { deps, events } = createDeps({
       governancePort: {
-        checkCompactionIntegrity: () => ({ ok: true }),
+        checkCompactionIntegrity: async () => ({ ok: true }),
       },
-      markPressureCompacted: () => undefined,
-      getCurrentTurn: () => 3,
-      recordEvent: (input) => {
-        events.push(input);
-        return createRecordedEvent(events.length, input);
-      },
-    };
+    });
 
-    commitSessionCompaction(deps, "session-a", {
-      compactId: "cmp-ok",
-      sanitizedSummary: "compact summary",
+    await commitSessionCompaction(deps, "session-b", {
+      compactId: "cmp-43",
+      sanitizedSummary: "keep latest failures only",
       summaryDigest: "unused",
-      sourceTurn: 3,
+      sourceTurn: 17,
       leafEntryId: null,
       referenceContextDigest: null,
-      fromTokens: 400,
-      toTokens: 120,
+      fromTokens: 900,
+      toTokens: 320,
       origin: "auto_compaction",
+      cacheImpact: emptyCacheImpact(),
     });
-    await flushAsyncEvents();
 
-    expect(events.some((event) => event.type === "governance_compaction_integrity_checked")).toBe(
-      true,
-    );
-  });
-
-  test("emits governance_compaction_integrity_failed when governance port rejects summary", async () => {
-    const sessionState = new RuntimeSessionStateStore();
-    const events: Array<{
-      sessionId: string;
-      type: string;
-      turn?: number;
-      payload?: object;
-    }> = [];
-
-    const deps: ContextCompactionDeps = {
-      workspaceRoot: "/tmp/context-compaction",
-      sessionState,
-      recordInfrastructureRow: () => "ev_test",
-      governancePort: {
-        checkCompactionIntegrity: () => ({ ok: false, reason: "missing-required-fact" }),
-      },
-      markPressureCompacted: () => undefined,
-      getCurrentTurn: () => 3,
-      recordEvent: (input) => {
-        events.push(input);
-        return createRecordedEvent(events.length, input);
-      },
-    };
-
-    commitSessionCompaction(deps, "session-a", {
-      compactId: "cmp-failed",
-      sanitizedSummary: "compact summary",
-      summaryDigest: "unused",
-      sourceTurn: 3,
-      leafEntryId: null,
-      referenceContextDigest: null,
-      fromTokens: 400,
-      toTokens: 120,
-      origin: "auto_compaction",
-    });
-    await flushAsyncEvents();
-
-    const failed = requireDefined(
-      events.find((event) => event.type === "governance_compaction_integrity_failed"),
-      "expected compaction integrity failure event",
-    );
-    const payload = failed.payload as { reason?: string } | undefined;
-    expect(payload?.reason).toBe("missing-required-fact");
-  });
-
-  test("emits governance_compaction_integrity_error when governance port throws", async () => {
-    const sessionState = new RuntimeSessionStateStore();
-    const events: Array<{
-      sessionId: string;
-      type: string;
-      turn?: number;
-      payload?: object;
-    }> = [];
-
-    const deps: ContextCompactionDeps = {
-      workspaceRoot: "/tmp/context-compaction",
-      sessionState,
-      recordInfrastructureRow: () => "ev_test",
-      governancePort: {
-        checkCompactionIntegrity: () => {
-          throw new Error("compaction-integrity-port-error");
-        },
-      },
-      markPressureCompacted: () => undefined,
-      getCurrentTurn: () => 3,
-      recordEvent: (input) => {
-        events.push(input);
-        return createRecordedEvent(events.length, input);
-      },
-    };
-
-    commitSessionCompaction(deps, "session-a", {
-      compactId: "cmp-error",
-      sanitizedSummary: "compact summary",
-      summaryDigest: "unused",
-      sourceTurn: 3,
-      leafEntryId: null,
-      referenceContextDigest: null,
-      fromTokens: 400,
-      toTokens: 120,
-      origin: "auto_compaction",
-    });
-    await flushAsyncEvents();
-
-    const errored = requireDefined(
-      events.find((event) => event.type === "governance_compaction_integrity_error"),
-      "expected compaction integrity error event",
-    );
-    const payload = errored.payload as { error?: string } | undefined;
-    expect(payload?.error).toContain("compaction-integrity-port-error");
+    expect(events.map((event) => event.type)).toEqual([
+      "session_compact",
+      "governance_compaction_integrity_checked",
+    ]);
   });
 });

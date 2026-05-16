@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { recordSessionTurnTransition } from "@brewva/brewva-gateway";
+import type { TransientReductionState } from "@brewva/brewva-runtime/context";
 import { readContextEvidenceRecords } from "../../../packages/brewva-gateway/src/hosted/internal/context/evidence/context-evidence.js";
 import {
   registerProviderRequestRecovery,
@@ -13,68 +14,38 @@ const CLEARED_TOOL_RESULT_PLACEHOLDER = "[cleared_for_request]";
 const MIN_CLEARABLE_TOOL_RESULT_CHARS = 512;
 const LARGE_TOOL_RESULT = "x".repeat(MIN_CLEARABLE_TOOL_RESULT_CHARS);
 
-function observeProviderCache(input: {
+function recordMessageEnd(input: {
   runtime: ReturnType<typeof createRuntimeFixture>;
   sessionId: string;
-  status: "cold" | "warm" | "break" | "limited";
-  reason: string | null;
-  cacheReadTokens?: number;
   timestamp?: number;
 }): void {
-  input.runtime.operator.context.providerCache.observe(input.sessionId, {
-    source: `provider=openai|api=openai-responses|model=gpt-5.4|session=${input.sessionId}`,
-    timestamp: input.timestamp,
-    fingerprint: {
-      bucketKey: `provider=openai|api=openai-responses|model=gpt-5.4|session=${input.sessionId}`,
-      provider: "openai",
-      api: "openai-responses",
-      model: "gpt-5.4",
-      transport: "sse",
-      sessionId: input.sessionId,
-      cachePolicyHash: "policy",
-      toolSchemaSnapshotHash: "tools",
-      toolSchemaOverlayHash: "overlay",
-      perToolHashes: {},
-      stablePrefixHash: "stable",
-      dynamicTailHash: "tail",
-      requestHash: "request",
-      channelContextHash: "channel",
-      renderedCacheHash: "render",
-      cacheCapabilityHash: "capability",
-      stickyLatchHash: "latch",
-      reasoningHash: "reasoning",
-      thinkingBudgetHash: "budget",
-      cacheRelevantHeadersHash: "headers",
-      extraBodyHash: "extra",
-      visibleHistoryReductionHash: "visible",
-      workbenchContextHash: "workbench",
-      providerFallbackHash: "fallback",
-    },
-    render: {
-      status: "rendered",
-      reason: "rendered_openai_prompt_cache",
-      renderedRetention: "short",
-      bucketKey: `openai-responses|session=${input.sessionId}|retention=short|writeMode=readWrite`,
-    },
-    breakObservation: {
-      status: input.status,
-      classification: input.status === "cold" ? "cacheCold" : "prefixPreserving",
-      expected: false,
-      reason: input.reason,
-      previousCacheReadTokens: input.cacheReadTokens ?? 12_000,
-      cacheReadTokens: input.cacheReadTokens ?? 0,
-      cacheWriteTokens: 0,
-      cacheMissTokens: input.cacheReadTokens ?? 12_000,
-      thresholdTokens: 2_000,
-      relativeDropThreshold: 0.05,
-      changedFields: [],
-    },
+  input.runtime.extensions.hosted.events.record({
+    sessionId: input.sessionId,
+    type: "message_end",
+    turn: 0,
+    timestamp: input.timestamp ?? Date.now(),
+    payload: { messageId: "assistant-cache-clock" },
   });
+}
+
+function readTransientReduction(
+  runtime: ReturnType<typeof createRuntimeFixture>,
+  sessionId: string,
+): TransientReductionState | undefined {
+  const sample = runtime.inspect.context.evidence.latest(sessionId, "transient_reduction");
+  return sample
+    ? ({
+        turn: sample.turn,
+        updatedAt: sample.timestamp,
+        ...sample.payload,
+      } as TransientReductionState)
+    : undefined;
 }
 
 function createReductionTestRuntime(): ReturnType<typeof createRuntimeFixture> {
   return createRuntimeFixture({
     config: createRuntimeConfig((config) => {
+      config.infrastructure.contextBudget.thresholds.headroomTokens = 0;
       config.infrastructure.contextBudget.compaction.tailProtectTokens = 0;
     }),
   });
@@ -178,7 +149,7 @@ describe("provider request reduction", () => {
       },
     ]);
     expect(payload.messages[0]?.content).toBe(`${LARGE_TOOL_RESULT}:1`);
-    expect(runtime.inspect.context.prompt.getTransientReduction(sessionId)).toEqual(
+    expect(readTransientReduction(runtime, sessionId)).toEqual(
       expect.objectContaining({
         status: "completed",
         eligibleToolResults: 6,
@@ -517,7 +488,7 @@ describe("provider request reduction", () => {
     expect((reducedPayload.messages as Array<Record<string, unknown>>)[0]?.content).toBe(
       CLEARED_TOOL_RESULT_PLACEHOLDER,
     );
-    expect(runtime.inspect.context.prompt.getTransientReduction(sessionId)).toEqual(
+    expect(readTransientReduction(runtime, sessionId)).toEqual(
       expect.objectContaining({
         status: "completed",
         compactionAdvised: true,
@@ -541,7 +512,7 @@ describe("provider request reduction", () => {
     expect((untouchedPayload.messages as Array<Record<string, unknown>>)[0]?.content).toBe(
       `${LARGE_TOOL_RESULT}:1`,
     );
-    expect(runtime.inspect.context.prompt.getTransientReduction(sessionId)).toEqual(
+    expect(readTransientReduction(runtime, sessionId)).toEqual(
       expect.objectContaining({
         status: "skipped",
         reason: "context status is below the transient reduction threshold",
@@ -566,7 +537,7 @@ describe("provider request reduction", () => {
     expect((recoveryPayload.messages as Array<Record<string, unknown>>)[0]?.content).toBe(
       `${LARGE_TOOL_RESULT}:1`,
     );
-    expect(runtime.inspect.context.prompt.getTransientReduction(sessionId)).toEqual(
+    expect(readTransientReduction(runtime, sessionId)).toEqual(
       expect.objectContaining({
         status: "skipped",
         reason: "recovery posture is active",
@@ -593,7 +564,7 @@ describe("provider request reduction", () => {
     expect((payload.messages as Array<Record<string, unknown>>)[0]?.content).toBe(
       `${"x".repeat(4_000)}:1`,
     );
-    expect(runtime.inspect.context.prompt.getTransientReduction(sessionId)).toEqual(
+    expect(readTransientReduction(runtime, sessionId)).toEqual(
       expect.objectContaining({
         status: "skipped",
         reason: "context usage is unavailable",
@@ -626,7 +597,7 @@ describe("provider request reduction", () => {
     expect((payload.messages as Array<Record<string, unknown>>)[0]?.content).toBe(
       `${"x".repeat(3_000)}:1`,
     );
-    expect(runtime.inspect.context.prompt.getTransientReduction(sessionId)).toEqual(
+    expect(readTransientReduction(runtime, sessionId)).toEqual(
       expect.objectContaining({
         status: "skipped",
         reason: "context status is below the transient reduction threshold",
@@ -636,7 +607,7 @@ describe("provider request reduction", () => {
     );
   });
 
-  test("allows request-local reduction below pressure threshold when the provider cache is already cold", () => {
+  test("allows request-local reduction below pressure threshold when the provider cache clock is stale", () => {
     const runtime = createReductionTestRuntime();
     const { api, handlers } = createMockExtensionApi();
     const sessionId = "provider-request-reduction-cache-cold";
@@ -647,57 +618,9 @@ describe("provider request reduction", () => {
       contextWindow: 100_000,
       percent: 0.2,
     });
-    observeProviderCache({
+    recordMessageEnd({
       runtime,
       sessionId,
-      status: "break",
-      reason: "possible_cache_ttl_expiry_5m",
-      cacheReadTokens: 0,
-    });
-
-    const payload = invokeBeforeProviderRequestChain(
-      handlers,
-      {
-        model: "gpt-5.4",
-        messages: buildToolMessages(6),
-      },
-      sessionId,
-    );
-
-    expect((payload.messages as Array<Record<string, unknown>>)[0]?.content).toBe(
-      CLEARED_TOOL_RESULT_PLACEHOLDER,
-    );
-    expect(runtime.inspect.context.prompt.getTransientReduction(sessionId)).toEqual(
-      expect.objectContaining({
-        status: "completed",
-        reason: null,
-        eligibleToolResults: 6,
-        clearedToolResults: 2,
-        compactionAdvised: false,
-        forcedCompaction: false,
-        classification: "cacheCold",
-        expectedCacheBreak: false,
-      }),
-    );
-  });
-
-  test("treats expired short-retention provider cache observations as cache cold", () => {
-    const runtime = createReductionTestRuntime();
-    const { api, handlers } = createMockExtensionApi();
-    const sessionId = "provider-request-reduction-cache-expired";
-
-    registerProviderRequestReduction(api, runtime);
-    runtime.operator.context.usage.observe(sessionId, {
-      tokens: 20_000,
-      contextWindow: 100_000,
-      percent: 0.2,
-    });
-    observeProviderCache({
-      runtime,
-      sessionId,
-      status: "warm",
-      reason: null,
-      cacheReadTokens: 8_000,
       timestamp: Date.now() - 6 * 60 * 1000,
     });
 
@@ -713,7 +636,50 @@ describe("provider request reduction", () => {
     expect((payload.messages as Array<Record<string, unknown>>)[0]?.content).toBe(
       CLEARED_TOOL_RESULT_PLACEHOLDER,
     );
-    expect(runtime.inspect.context.prompt.getTransientReduction(sessionId)).toEqual(
+    expect(readTransientReduction(runtime, sessionId)).toEqual(
+      expect.objectContaining({
+        status: "completed",
+        reason: null,
+        eligibleToolResults: 6,
+        clearedToolResults: 2,
+        compactionAdvised: false,
+        forcedCompaction: false,
+        classification: "cacheCold",
+        expectedCacheBreak: false,
+      }),
+    );
+  });
+
+  test("treats an expired short-retention provider cache clock as cache cold", () => {
+    const runtime = createReductionTestRuntime();
+    const { api, handlers } = createMockExtensionApi();
+    const sessionId = "provider-request-reduction-cache-expired";
+
+    registerProviderRequestReduction(api, runtime);
+    runtime.operator.context.usage.observe(sessionId, {
+      tokens: 20_000,
+      contextWindow: 100_000,
+      percent: 0.2,
+    });
+    recordMessageEnd({
+      runtime,
+      sessionId,
+      timestamp: Date.now() - 6 * 60 * 1000,
+    });
+
+    const payload = invokeBeforeProviderRequestChain(
+      handlers,
+      {
+        model: "gpt-5.4",
+        messages: buildToolMessages(6),
+      },
+      sessionId,
+    );
+
+    expect((payload.messages as Array<Record<string, unknown>>)[0]?.content).toBe(
+      CLEARED_TOOL_RESULT_PLACEHOLDER,
+    );
+    expect(readTransientReduction(runtime, sessionId)).toEqual(
       expect.objectContaining({
         status: "completed",
         classification: "cacheCold",
@@ -784,7 +750,7 @@ describe("provider request reduction", () => {
     expect((payload.messages as Array<Record<string, unknown>>)[0]?.content).toBe(
       `${LARGE_TOOL_RESULT}:1`,
     );
-    expect(runtime.inspect.context.prompt.getTransientReduction(sessionId)).toEqual(
+    expect(readTransientReduction(runtime, sessionId)).toEqual(
       expect.objectContaining({
         status: "skipped",
         reason: "recovery posture is active",
@@ -870,7 +836,7 @@ describe("provider request reduction", () => {
     expect((payload.messages as Array<Record<string, unknown>>)[0]?.content).toBe(
       CLEARED_TOOL_RESULT_PLACEHOLDER,
     );
-    expect(runtime.inspect.context.prompt.getTransientReduction(sessionId)).toEqual(
+    expect(readTransientReduction(runtime, sessionId)).toEqual(
       expect.objectContaining({
         status: "completed",
         reason: null,
@@ -906,7 +872,7 @@ describe("provider request reduction", () => {
     expect((finalPayload.messages as Array<Record<string, unknown>>)[0]?.content).toBe(
       CLEARED_TOOL_RESULT_PLACEHOLDER,
     );
-    expect(runtime.inspect.context.prompt.getTransientReduction(sessionId)).toEqual(
+    expect(readTransientReduction(runtime, sessionId)).toEqual(
       expect.objectContaining({
         status: "completed",
         reason: null,
@@ -917,9 +883,7 @@ describe("provider request reduction", () => {
         forcedCompaction: false,
       }),
     );
-    expect(
-      runtime.inspect.context.prompt.getTransientReduction(sessionId)?.estimatedTokenSavings,
-    ).toBeGreaterThan(0);
+    expect(readTransientReduction(runtime, sessionId)?.estimatedTokenSavings).toBeGreaterThan(0);
     expect(
       runtime.inspect.events.records
         .queryStructured(sessionId)
@@ -942,88 +906,6 @@ describe("provider request reduction", () => {
         forcedCompaction: false,
       }),
     ]);
-  });
-
-  test("preserves a valuable warm provider cache when reduction savings are smaller", () => {
-    const runtime = createReductionTestRuntime();
-    const { api, handlers } = createMockExtensionApi();
-    const sessionId = "provider-request-reduction-cache-aware";
-
-    registerProviderRequestReduction(api, runtime);
-    runtime.operator.context.usage.observe(sessionId, {
-      tokens: 88_000,
-      contextWindow: 100_000,
-      percent: 88,
-    });
-    runtime.operator.context.providerCache.observe(sessionId, {
-      source:
-        "provider=openai|api=openai-responses|model=gpt-5.4|transport=sse|scope=session|retention=short|writeMode=readWrite|session=provider-request-reduction-cache-aware",
-      fingerprint: {
-        bucketKey:
-          "provider=openai|api=openai-responses|model=gpt-5.4|transport=sse|scope=session|retention=short|writeMode=readWrite|session=provider-request-reduction-cache-aware",
-        provider: "openai",
-        api: "openai-responses",
-        model: "gpt-5.4",
-        transport: "sse",
-        sessionId,
-        cachePolicyHash: "policy",
-        toolSchemaSnapshotHash: "tools",
-        toolSchemaOverlayHash: "overlay",
-        perToolHashes: {},
-        stablePrefixHash: "stable",
-        dynamicTailHash: "tail",
-        requestHash: "request",
-        channelContextHash: "channel",
-        renderedCacheHash: "render",
-        cacheCapabilityHash: "capability",
-        stickyLatchHash: "latch",
-        reasoningHash: "reasoning",
-        thinkingBudgetHash: "budget",
-        cacheRelevantHeadersHash: "headers",
-        extraBodyHash: "extra",
-        visibleHistoryReductionHash: "visible",
-        workbenchContextHash: "recall",
-        providerFallbackHash: "fallback",
-      },
-      render: {
-        status: "rendered",
-        reason: "rendered_openai_prompt_cache",
-        renderedRetention: "short",
-        bucketKey:
-          "openai-responses|session=provider-request-reduction-cache-aware|retention=short|writeMode=readWrite",
-      },
-      breakObservation: {
-        status: "warm",
-        classification: "prefixPreserving",
-        expected: false,
-        reason: null,
-        previousCacheReadTokens: 12_000,
-        cacheReadTokens: 12_000,
-        cacheWriteTokens: 200,
-        cacheMissTokens: 0,
-        thresholdTokens: 2_000,
-        relativeDropThreshold: 0.05,
-        changedFields: [],
-      },
-    });
-
-    const payload = {
-      model: "gpt-5.4",
-      messages: buildToolMessages(6),
-    };
-    const result = invokeBeforeProviderRequestChain(handlers, payload, sessionId);
-
-    expect((result.messages as Array<Record<string, unknown>>)[0]?.content).toBe(
-      `${LARGE_TOOL_RESULT}:1`,
-    );
-    expect(runtime.inspect.context.prompt.getTransientReduction(sessionId)).toEqual(
-      expect.objectContaining({
-        status: "skipped",
-        reason: "warm provider cache is more valuable than transient reduction savings",
-        classification: "prefixPreserving",
-        expectedCacheBreak: false,
-      }),
-    );
   });
 
   test("skips reduction during output-budget recovery and preserves the recovery payload patch", () => {
@@ -1068,7 +950,7 @@ describe("provider request reduction", () => {
     expect((finalPayload.messages as Array<Record<string, unknown>>)[0]?.content).toBe(
       `${LARGE_TOOL_RESULT}:1`,
     );
-    expect(runtime.inspect.context.prompt.getTransientReduction(sessionId)).toEqual(
+    expect(readTransientReduction(runtime, sessionId)).toEqual(
       expect.objectContaining({
         status: "skipped",
         reason: "recovery posture is active",
@@ -1125,6 +1007,7 @@ describe("provider request reduction", () => {
   test("does not clear tool messages whose tool name is in protectedTools", () => {
     const runtime = createRuntimeFixture({
       config: createRuntimeConfig((config) => {
+        config.infrastructure.contextBudget.thresholds.headroomTokens = 0;
         config.infrastructure.contextBudget.compaction.tailProtectTokens = 0;
         config.infrastructure.contextBudget.compaction.protectedTools = [
           "workbench_compact",
@@ -1169,6 +1052,7 @@ describe("provider request reduction", () => {
   test("preserves all tool results when tail-protect token budget exceeds the cumulative tail", () => {
     const runtime = createRuntimeFixture({
       config: createRuntimeConfig((config) => {
+        config.infrastructure.contextBudget.thresholds.headroomTokens = 0;
         config.infrastructure.contextBudget.compaction.tailProtectTokens = 1_000_000;
       }),
     });
@@ -1193,6 +1077,7 @@ describe("provider request reduction", () => {
   test("clears only the prefix that overflows a finite tail-protect budget", () => {
     const runtime = createRuntimeFixture({
       config: createRuntimeConfig((config) => {
+        config.infrastructure.contextBudget.thresholds.headroomTokens = 0;
         config.infrastructure.contextBudget.compaction.tailProtectTokens = 256;
       }),
     });
