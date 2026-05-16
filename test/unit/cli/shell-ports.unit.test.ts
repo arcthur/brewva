@@ -5,7 +5,10 @@ import { join, relative } from "node:path";
 import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import type { BrewvaRuntimeOptions } from "@brewva/brewva-runtime";
 import { CURRENT_DELEGATION_CONTRACT_VERSION } from "@brewva/brewva-runtime/delegation";
-import { OPERATOR_QUESTION_ANSWERED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
+import {
+  OPERATOR_QUESTION_ANSWERED_EVENT_TYPE,
+  SESSION_LINEAGE_NODE_CREATED_EVENT_TYPE,
+} from "@brewva/brewva-runtime/events";
 import {
   buildBrewvaPromptText,
   type BrewvaPromptContentPart,
@@ -405,6 +408,69 @@ describe("cli shell session port", () => {
     expect(sentMessages).toHaveLength(2);
     expect(sentMessages[0]).toBe("hello shell");
     expect(sentMessages[1]).toContain("Context compaction completed");
+  });
+
+  test("records rewind checkpoints only after initial persistence creates the lineage root", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-shell-port-rewind-root-"));
+    const runtime = createHostedTestRuntime({ cwd: workspace });
+    const sessionId = "shell-port-rewind-root-session";
+    const store = new HostedRuntimeTapeSessionStore(runtime, sessionId, {
+      deferInitialPersistence: true,
+    });
+
+    const session = {
+      model: {
+        provider: "openai",
+        id: "gpt-5.4-mini",
+      },
+      thinkingLevel: "high",
+      isStreaming: false,
+      sessionManager: store,
+      async ensureInitialPersistence() {
+        store.ensureInitialPersistence();
+      },
+      subscribe() {
+        return () => undefined;
+      },
+      async prompt() {},
+      async waitForIdle() {},
+      async abort() {},
+      dispose() {},
+      getQueuedPrompts() {
+        return [];
+      },
+      removeQueuedPrompt() {
+        return false;
+      },
+      getRegisteredTools() {
+        return [];
+      },
+    };
+
+    const port = createSessionViewPort({
+      session,
+      runtime,
+      toolDefinitions: new Map(),
+    } as unknown as CliShellSessionBundle);
+
+    await port.recordRewindCheckpoint({
+      turnId: "interactive:1:1",
+      prompt: {
+        text: "hello root",
+        parts: [{ type: "text", text: "hello root" }],
+      },
+    });
+
+    const eventTypes = runtime.inspect.events.records.list(sessionId).map((event) => event.type);
+
+    expect(eventTypes[0]).toBe(SESSION_LINEAGE_NODE_CREATED_EVENT_TYPE);
+    expect(eventTypes).toEqual([
+      SESSION_LINEAGE_NODE_CREATED_EVENT_TYPE,
+      "reasoning_checkpoint",
+      "brewva.session.rewind.checkpoint.v1",
+    ]);
+    const lineageTree = runtime.inspect.session.lineage.getTree(sessionId);
+    expect(lineageTree.nodes.map((node) => node.lineageNodeId)).toContain(lineageTree.rootNodeId);
   });
 
   test("operator question request answers record receipts from the resolved request without recollecting", async () => {

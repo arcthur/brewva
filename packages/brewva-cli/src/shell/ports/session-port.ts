@@ -84,7 +84,7 @@ export interface SessionViewPort {
   abort(): Promise<void>;
   subscribe(listener: (event: BrewvaPromptSessionEvent) => void): () => void;
   getTranscriptSeed(): unknown[];
-  recordRewindCheckpoint(input: RecordSessionRewindCheckpointInput): void;
+  recordRewindCheckpoint(input: RecordSessionRewindCheckpointInput): Promise<void>;
   rewindSession(input?: SessionRewindInput): Promise<SessionRewindResult>;
   redoSession(input?: SessionRedoInput): Promise<SessionRedoResult>;
   getRewindState(): SessionRewindState;

@@ -55,6 +55,16 @@ function readSessionManagerResolveLineageLeafEntryId(
     : undefined;
 }
 
+async function ensureSessionInitialPersistence(session: unknown): Promise<void> {
+  const ensureInitialPersistence = (
+    session as { ensureInitialPersistence?: unknown } | null | undefined
+  )?.ensureInitialPersistence;
+  if (typeof ensureInitialPersistence !== "function") {
+    return;
+  }
+  await ensureInitialPersistence.call(session);
+}
+
 function readLineageStatus(bundle: CliShellSessionBundle): SessionLineageStatusView {
   const sessionId = bundle.session.sessionManager.getSessionId();
   try {
@@ -328,7 +338,8 @@ export function createSessionViewPort(bundle: CliShellSessionBundle): SessionVie
       const messages = bundle.session.sessionManager.buildSessionContext?.().messages;
       return Array.isArray(messages) ? messages : [];
     },
-    recordRewindCheckpoint(input) {
+    async recordRewindCheckpoint(input) {
+      await ensureSessionInitialPersistence(bundle.session);
       bundle.runtime.authority.session.rewind.recordCheckpoint(
         bundle.session.sessionManager.getSessionId(),
         {

@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { BrewvaEffect, BrewvaStream, runPromiseAtBoundary } from "@brewva/brewva-effect";
+import {
+  BrewvaCancelled,
+  BrewvaEffect,
+  BrewvaStream,
+  runPromiseAtBoundary,
+} from "@brewva/brewva-effect";
 import { providerRuntimeLayer } from "@brewva/brewva-provider-core/contracts";
 import type { BrewvaRegisteredModel } from "@brewva/brewva-substrate/provider";
 import type { ToolExecutionPhase } from "@brewva/brewva-substrate/tools";
@@ -428,6 +433,375 @@ describe("turn loop controller", () => {
     unsubscribe();
 
     expect(observed).toEqual(["first", "second", "end"]);
+  });
+
+  test("converts tool execution failures into terminal tool results instead of aborting the turn", async () => {
+    const events: BrewvaTurnLoopEvent[] = [];
+    const streamFn: BrewvaTurnLoopStreamFunction = (_model, context, _options) => {
+      const lastMessage = context.messages[context.messages.length - 1] as
+        | BrewvaTurnLoopLlmMessage
+        | undefined;
+      if (lastMessage?.role === "toolResult") {
+        return createStream(createAssistantMessage([{ type: "text", text: "recovered" }]));
+      }
+
+      return createStream(
+        createAssistantMessage(
+          [
+            {
+              type: "toolCall",
+              id: "tool-failure-1",
+              name: "failing_tool",
+              arguments: {},
+            },
+          ],
+          "toolUse",
+        ),
+      );
+    };
+
+    const engine = createBrewvaTurnLoopController({
+      initialModel: TEST_MODEL,
+      initialThinkingLevel: "off",
+      sessionId: "session-tool-failure",
+      queueMode: "one-at-a-time",
+      followUpMode: "one-at-a-time",
+      transport: "sse",
+      thinkingBudgets: undefined,
+      maxRetryDelayMs: 1000,
+      beforeToolCall: async () => undefined,
+      afterToolCall: async () => undefined,
+      onPayload: async (payload) => payload,
+      transformContext: async (messages) => messages,
+      resolveRequestAuth: async () => ({ ok: true, apiKey: "tool-key" }),
+      streamFn,
+    });
+
+    const unsubscribe = engine.subscribe((event) => {
+      events.push(event);
+    });
+
+    engine.setTools([
+      {
+        name: "failing_tool",
+        label: "Failing Tool",
+        description: "Always fails",
+        parameters: Type.Object({}),
+        async execute() {
+          throw new Error("box_exec_failed: simulated");
+        },
+      },
+    ]);
+
+    await engine.prompt({
+      role: "user",
+      content: [{ type: "text", text: "call failing tool" }],
+      timestamp: Date.now(),
+    });
+
+    unsubscribe();
+
+    const toolEnd = events.find(
+      (event): event is Extract<BrewvaTurnLoopEvent, { type: "tool_execution_end" }> =>
+        event.type === "tool_execution_end",
+    );
+    expect(toolEnd?.isError).toBe(true);
+    expect((toolEnd?.result as BrewvaTurnLoopToolResult | undefined)?.content).toEqual([
+      { type: "text", text: "box_exec_failed: simulated" },
+    ]);
+    expect(events.map((event) => event.type)).toContain("tool_execution_end");
+
+    const turnEnds = events.filter(
+      (event): event is Extract<BrewvaTurnLoopEvent, { type: "turn_end" }> =>
+        event.type === "turn_end",
+    );
+    expect(
+      turnEnds.some(
+        (event) => event.message.role === "assistant" && event.message.stopReason === "error",
+      ),
+    ).toBe(false);
+  });
+
+  test("preserves aborts during tool execution instead of converting them to tool results", async () => {
+    const events: BrewvaTurnLoopEvent[] = [];
+    let toolStarted!: () => void;
+    const toolStartedPromise = new Promise<void>((resolve) => {
+      toolStarted = resolve;
+    });
+    const streamFn: BrewvaTurnLoopStreamFunction = (_model, context, _options) => {
+      const lastMessage = context.messages[context.messages.length - 1] as
+        | BrewvaTurnLoopLlmMessage
+        | undefined;
+      if (lastMessage?.role === "toolResult") {
+        return createStream(
+          createAssistantMessage([{ type: "text", text: "unexpected continuation after abort" }]),
+        );
+      }
+
+      return createStream(
+        createAssistantMessage(
+          [
+            {
+              type: "toolCall",
+              id: "tool-abort-1",
+              name: "abortable_tool",
+              arguments: {},
+            },
+          ],
+          "toolUse",
+        ),
+      );
+    };
+
+    const engine = createBrewvaTurnLoopController({
+      initialModel: TEST_MODEL,
+      initialThinkingLevel: "off",
+      sessionId: "session-tool-abort",
+      queueMode: "one-at-a-time",
+      followUpMode: "one-at-a-time",
+      transport: "sse",
+      thinkingBudgets: undefined,
+      maxRetryDelayMs: 1000,
+      beforeToolCall: async () => undefined,
+      afterToolCall: async () => undefined,
+      onPayload: async (payload) => payload,
+      transformContext: async (messages) => messages,
+      resolveRequestAuth: async () => ({ ok: true, apiKey: "tool-key" }),
+      streamFn,
+    });
+
+    const unsubscribe = engine.subscribe((event) => {
+      events.push(event);
+    });
+
+    engine.setTools([
+      {
+        name: "abortable_tool",
+        label: "Abortable Tool",
+        description: "Waits for abort",
+        parameters: Type.Object({}),
+        async execute(_toolCallId, _params, signal) {
+          toolStarted();
+          return await new Promise<BrewvaTurnLoopToolResult>((_resolve, reject) => {
+            if (!signal) {
+              reject(new Error("missing tool abort signal"));
+              return;
+            }
+            if (signal.aborted) {
+              reject(new Error("tool aborted before listener"));
+              return;
+            }
+            signal.addEventListener("abort", () => reject(new Error("tool aborted by test")), {
+              once: true,
+            });
+          });
+        },
+      },
+    ]);
+
+    const promptPromise = engine.prompt({
+      role: "user",
+      content: [{ type: "text", text: "call abortable tool" }],
+      timestamp: Date.now(),
+    });
+    await toolStartedPromise;
+    engine.abort();
+    await promptPromise;
+    unsubscribe();
+
+    expect(events.some((event) => event.type === "tool_execution_end")).toBe(false);
+    expect(
+      events.some(
+        (event) =>
+          event.type === "message_end" &&
+          event.message.role === "assistant" &&
+          event.message.stopReason === "aborted",
+      ),
+    ).toBe(true);
+
+    const assistantTexts = events.flatMap((event) =>
+      event.type === "message_end" && event.message.role === "assistant"
+        ? event.message.content.flatMap((part) => (part.type === "text" ? [part.text] : []))
+        : [],
+    );
+    expect(assistantTexts).not.toContain("unexpected continuation after abort");
+  });
+
+  test("propagates tool cancellation failures instead of converting them to tool results", async () => {
+    const events: BrewvaTurnLoopEvent[] = [];
+    const streamFn: BrewvaTurnLoopStreamFunction = (_model, context, _options) => {
+      const lastMessage = context.messages[context.messages.length - 1] as
+        | BrewvaTurnLoopLlmMessage
+        | undefined;
+      if (lastMessage?.role === "toolResult") {
+        return createStream(
+          createAssistantMessage([{ type: "text", text: "unexpected continuation after cancel" }]),
+        );
+      }
+
+      return createStream(
+        createAssistantMessage(
+          [
+            {
+              type: "toolCall",
+              id: "tool-cancel-1",
+              name: "cancelling_tool",
+              arguments: {},
+            },
+          ],
+          "toolUse",
+        ),
+      );
+    };
+
+    const engine = createBrewvaTurnLoopController({
+      initialModel: TEST_MODEL,
+      initialThinkingLevel: "off",
+      sessionId: "session-tool-cancel",
+      queueMode: "one-at-a-time",
+      followUpMode: "one-at-a-time",
+      transport: "sse",
+      thinkingBudgets: undefined,
+      maxRetryDelayMs: 1000,
+      beforeToolCall: async () => undefined,
+      afterToolCall: async () => undefined,
+      onPayload: async (payload) => payload,
+      transformContext: async (messages) => messages,
+      resolveRequestAuth: async () => ({ ok: true, apiKey: "tool-key" }),
+      streamFn,
+    });
+
+    const unsubscribe = engine.subscribe((event) => {
+      events.push(event);
+    });
+
+    engine.setTools([
+      {
+        name: "cancelling_tool",
+        label: "Cancelling Tool",
+        description: "Raises cancellation",
+        parameters: Type.Object({}),
+        async execute() {
+          throw new BrewvaCancelled({ message: "tool cancelled by runtime" });
+        },
+      },
+    ]);
+
+    await engine.prompt({
+      role: "user",
+      content: [{ type: "text", text: "call cancelling tool" }],
+      timestamp: Date.now(),
+    });
+    unsubscribe();
+
+    expect(events.some((event) => event.type === "tool_execution_end")).toBe(false);
+    expect(
+      events.some(
+        (event) =>
+          event.type === "message_end" &&
+          event.message.role === "assistant" &&
+          event.message.stopReason === "aborted" &&
+          event.message.errorMessage === "tool cancelled by runtime",
+      ),
+    ).toBe(true);
+
+    const assistantTexts = events.flatMap((event) =>
+      event.type === "message_end" && event.message.role === "assistant"
+        ? event.message.content.flatMap((part) => (part.type === "text" ? [part.text] : []))
+        : [],
+    );
+    expect(assistantTexts).not.toContain("unexpected continuation after cancel");
+  });
+
+  test("converts afterToolCall failures into terminal tool results instead of aborting the turn", async () => {
+    const events: BrewvaTurnLoopEvent[] = [];
+    const streamFn: BrewvaTurnLoopStreamFunction = (_model, context, _options) => {
+      const lastMessage = context.messages[context.messages.length - 1] as
+        | BrewvaTurnLoopLlmMessage
+        | undefined;
+      if (lastMessage?.role === "toolResult") {
+        return createStream(createAssistantMessage([{ type: "text", text: "recovered" }]));
+      }
+
+      return createStream(
+        createAssistantMessage(
+          [
+            {
+              type: "toolCall",
+              id: "tool-after-failure-1",
+              name: "after_failure_tool",
+              arguments: {},
+            },
+          ],
+          "toolUse",
+        ),
+      );
+    };
+
+    const engine = createBrewvaTurnLoopController({
+      initialModel: TEST_MODEL,
+      initialThinkingLevel: "off",
+      sessionId: "session-after-tool-failure",
+      queueMode: "one-at-a-time",
+      followUpMode: "one-at-a-time",
+      transport: "sse",
+      thinkingBudgets: undefined,
+      maxRetryDelayMs: 1000,
+      beforeToolCall: async () => undefined,
+      afterToolCall: async () => {
+        throw new Error("after_tool_failed");
+      },
+      onPayload: async (payload) => payload,
+      transformContext: async (messages) => messages,
+      resolveRequestAuth: async () => ({ ok: true, apiKey: "tool-key" }),
+      streamFn,
+    });
+
+    const unsubscribe = engine.subscribe((event) => {
+      events.push(event);
+    });
+
+    engine.setTools([
+      {
+        name: "after_failure_tool",
+        label: "After Failure Tool",
+        description: "Fails in afterToolCall",
+        parameters: Type.Object({}),
+        async execute() {
+          return {
+            content: [{ type: "text", text: "ok" }],
+            details: undefined,
+          };
+        },
+      },
+    ]);
+
+    await engine.prompt({
+      role: "user",
+      content: [{ type: "text", text: "call after failure tool" }],
+      timestamp: Date.now(),
+    });
+
+    unsubscribe();
+
+    const toolEnd = events.find(
+      (event): event is Extract<BrewvaTurnLoopEvent, { type: "tool_execution_end" }> =>
+        event.type === "tool_execution_end",
+    );
+    expect(toolEnd?.isError).toBe(true);
+    expect((toolEnd?.result as BrewvaTurnLoopToolResult | undefined)?.content).toEqual([
+      { type: "text", text: "after_tool_failed" },
+    ]);
+
+    const turnEnds = events.filter(
+      (event): event is Extract<BrewvaTurnLoopEvent, { type: "turn_end" }> =>
+        event.type === "turn_end",
+    );
+    expect(
+      turnEnds.some(
+        (event) => event.message.role === "assistant" && event.message.stopReason === "error",
+      ),
+    ).toBe(false);
   });
 
   test("emits explicit tool execution phase transitions across the hosted loop", async () => {

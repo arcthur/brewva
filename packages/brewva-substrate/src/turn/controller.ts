@@ -1,4 +1,9 @@
-import { BrewvaEffect, runPromiseAtBoundary } from "@brewva/brewva-effect";
+import {
+  BrewvaCancelled,
+  BrewvaEffect,
+  BrewvaInterruptedError,
+  runPromiseAtBoundary,
+} from "@brewva/brewva-effect";
 import type {
   ProviderCachePolicy,
   ProviderCacheRenderResult,
@@ -83,6 +88,12 @@ function excludeTransientFailureFromEvent(event: BrewvaTurnLoopEvent): BrewvaTur
     default:
       return event;
   }
+}
+
+function isAbortedRunFailure(error: unknown, signalAborted: boolean): boolean {
+  return (
+    signalAborted || error instanceof BrewvaCancelled || error instanceof BrewvaInterruptedError
+  );
 }
 
 class PendingMessageQueue {
@@ -455,12 +466,13 @@ class BrewvaTurnLoopControllerImpl implements BrewvaTurnLoopController {
     // return path itself and drains pendingSteer there. This method only runs
     // when runBrewvaTurnLoop throws an uncaught error, so the two paths are
     // mutually exclusive and cannot emit steer_dropped twice.
+    const runWasAborted = isAbortedRunFailure(error, aborted);
     const pendingSteer = this.#consumePendingSteer();
     if (pendingSteer) {
       await this.#processEvents({
         type: "steer_dropped",
         text: pendingSteer,
-        reason: aborted ? "aborted" : "failed",
+        reason: runWasAborted ? "aborted" : "failed",
       });
     }
     const model = this.#requireModel();
@@ -484,7 +496,7 @@ class BrewvaTurnLoopControllerImpl implements BrewvaTurnLoopController {
           total: 0,
         },
       },
-      stopReason: aborted ? "aborted" : "error",
+      stopReason: runWasAborted ? "aborted" : "error",
       errorMessage: error instanceof Error ? error.message : String(error),
       timestamp: Date.now(),
     } as BrewvaTurnLoopMessage;

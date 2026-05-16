@@ -211,7 +211,7 @@ export class ShellSessionHandler {
     type RewindPromptParts = NonNullable<
       Parameters<SessionViewPort["recordRewindCheckpoint"]>[0]["prompt"]
     >["parts"];
-    this.context.getSessionPort().recordRewindCheckpoint({
+    await this.context.getSessionPort().recordRewindCheckpoint({
       turnId: `interactive:${Date.now()}:${++this.#interactiveTurnSequence}`,
       prompt: {
         text: promptText,

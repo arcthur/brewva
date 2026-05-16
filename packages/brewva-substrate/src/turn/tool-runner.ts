@@ -1,6 +1,8 @@
 import {
   BrewvaBoundaryFailure,
+  BrewvaCancelled,
   BrewvaEffect,
+  BrewvaInterruptedError,
   fromAbortableBoundaryPromise,
 } from "@brewva/brewva-effect";
 import {
@@ -61,6 +63,20 @@ type ScopedToolRuntimeEffect<A> = BrewvaEffect.Effect<
   BrewvaTurnRuntimeError,
   BrewvaTurnScope | BrewvaToolInvocationScope
 >;
+
+function describeToolStageError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function recoverToolStageFailure<A>(
+  error: BrewvaTurnRuntimeError,
+  outcome: A,
+): BrewvaEffect.Effect<A, BrewvaTurnRuntimeError> {
+  if (error instanceof BrewvaCancelled || error instanceof BrewvaInterruptedError) {
+    return BrewvaEffect.fail(error);
+  }
+  return BrewvaEffect.succeed(outcome);
+}
 
 function toolInvocationScopeFor(toolCall: BrewvaTurnLoopToolCall): BrewvaToolInvocationScopeShape {
   return {
@@ -294,15 +310,15 @@ function prepareToolCall(
         };
       }
 
-      yield* emitToolExecutionPhaseChange(
-        toolCall,
-        "authorize",
-        dispatcher,
-        "classify",
-        validatedArgs.args,
-      );
-      if (config.beforeToolCall) {
-        try {
+      return yield* BrewvaEffect.gen(function* () {
+        yield* emitToolExecutionPhaseChange(
+          toolCall,
+          "authorize",
+          dispatcher,
+          "classify",
+          validatedArgs.args,
+        );
+        if (config.beforeToolCall) {
           const beforeResult = yield* fromAbortableBoundaryPromise(
             (abortSignal) =>
               config.beforeToolCall?.(
@@ -318,41 +334,45 @@ function prepareToolCall(
           );
           if (beforeResult?.block) {
             return {
-              kind: "immediate",
+              kind: "immediate" as const,
               result: createErrorToolResult(beforeResult.reason ?? "Tool execution was blocked"),
               isError: true,
-              phase: "authorize",
+              phase: "authorize" as const,
               args: validatedArgs.args,
             };
           }
-        } catch (error) {
-          return {
-            kind: "immediate",
-            result: createErrorToolResult(error instanceof Error ? error.message : String(error)),
-            isError: true,
-            phase: "authorize",
-            args: validatedArgs.args,
-          };
         }
-      }
-      yield* emitToolExecutionPhaseChange(
-        toolCall,
-        "prepare",
-        dispatcher,
-        "authorize",
-        validatedArgs.args,
+        yield* emitToolExecutionPhaseChange(
+          toolCall,
+          "prepare",
+          dispatcher,
+          "authorize",
+          validatedArgs.args,
+        );
+        return {
+          kind: "prepared" as const,
+          toolCall,
+          tool,
+          args: validatedArgs.args,
+          phase: "prepare" as const,
+        };
+      }).pipe(
+        BrewvaEffect.matchEffect({
+          onSuccess: (prepared) => BrewvaEffect.succeed(prepared),
+          onFailure: (error) =>
+            recoverToolStageFailure(error, {
+              kind: "immediate" as const,
+              result: createErrorToolResult(describeToolStageError(error)),
+              isError: true,
+              phase: "authorize" as const,
+              args: validatedArgs.args,
+            }),
+        }),
       );
-      return {
-        kind: "prepared",
-        toolCall,
-        tool,
-        args: validatedArgs.args,
-        phase: "prepare",
-      };
     } catch (error) {
       return {
         kind: "immediate",
-        result: createErrorToolResult(error instanceof Error ? error.message : String(error)),
+        result: createErrorToolResult(describeToolStageError(error)),
         isError: true,
         phase: "classify",
         args: toolCall.arguments,
@@ -386,29 +406,31 @@ function executePreparedToolCall(
       );
     };
 
-    try {
-      yield* emitToolExecutionPhaseChange(
-        prepared.toolCall,
-        "execute",
-        dispatcher,
-        prepared.phase,
-        prepared.args,
-      );
-      const result = yield* fromAbortableBoundaryPromise((signal) => {
-        activeExecutionSignal = signal;
-        return prepared.tool.execute(prepared.toolCall.id, prepared.args, signal, emitUpdate);
-      }, externalSignal);
-      return { result, isError: result.isError === true, phase: "execute" as const };
-    } catch (error) {
-      return {
-        result: createErrorToolResult(error instanceof Error ? error.message : String(error)),
-        isError: true,
-        phase: "execute" as const,
-      };
-    }
+    yield* emitToolExecutionPhaseChange(
+      prepared.toolCall,
+      "execute",
+      dispatcher,
+      prepared.phase,
+      prepared.args,
+    );
+    const result = yield* fromAbortableBoundaryPromise((signal) => {
+      activeExecutionSignal = signal;
+      return prepared.tool.execute(prepared.toolCall.id, prepared.args, signal, emitUpdate);
+    }, externalSignal);
+    return { result, isError: result.isError === true, phase: "execute" as const };
   });
 
-  return BrewvaEffect.scoped(program);
+  return BrewvaEffect.scoped(program).pipe(
+    BrewvaEffect.matchEffect({
+      onSuccess: (executed) => BrewvaEffect.succeed(executed),
+      onFailure: (error) =>
+        recoverToolStageFailure(error, {
+          result: createErrorToolResult(describeToolStageError(error)),
+          isError: true,
+          phase: "execute" as const,
+        }),
+    }),
+  );
 }
 
 function finalizeExecutedToolCall(
@@ -421,46 +443,59 @@ function finalizeExecutedToolCall(
   dispatcher: BrewvaTurnEventDispatcher,
 ): ScopedToolRuntimeEffect<ToolCallOutcomeEnvelope> {
   return BrewvaEffect.gen(function* () {
-    let result = executed.result;
-    let isError = executed.isError;
-    yield* emitToolExecutionPhaseChange(
-      prepared.toolCall,
-      "record",
-      dispatcher,
-      executed.phase,
-      prepared.args,
-    );
-
-    if (config.afterToolCall) {
-      const afterResult = yield* fromAbortableBoundaryPromise(
-        (abortSignal) =>
-          config.afterToolCall?.(
-            {
-              assistantMessage,
-              toolCall: prepared.toolCall,
-              args: prepared.args,
-              result,
-              isError,
-              context: currentContext,
-            },
-            abortSignal,
-          ) ?? Promise.resolve(undefined),
-        signal,
+    const finalized = yield* BrewvaEffect.gen(function* () {
+      let result = executed.result;
+      let isError = executed.isError;
+      yield* emitToolExecutionPhaseChange(
+        prepared.toolCall,
+        "record",
+        dispatcher,
+        executed.phase,
+        prepared.args,
       );
-      if (afterResult) {
-        result = {
-          content: afterResult.content ?? result.content,
-          details: afterResult.details ?? result.details,
-          isError: afterResult.isError ?? result.isError,
-        };
-        isError = afterResult.isError ?? isError;
+
+      if (config.afterToolCall) {
+        const afterResult = yield* fromAbortableBoundaryPromise(
+          (abortSignal) =>
+            config.afterToolCall?.(
+              {
+                assistantMessage,
+                toolCall: prepared.toolCall,
+                args: prepared.args,
+                result,
+                isError,
+                context: currentContext,
+              },
+              abortSignal,
+            ) ?? Promise.resolve(undefined),
+          signal,
+        );
+        if (afterResult) {
+          result = {
+            content: afterResult.content ?? result.content,
+            details: afterResult.details ?? result.details,
+            isError: afterResult.isError ?? result.isError,
+          };
+          isError = afterResult.isError ?? isError;
+        }
       }
-    }
+
+      return { result, isError };
+    }).pipe(
+      BrewvaEffect.matchEffect({
+        onSuccess: (result) => BrewvaEffect.succeed(result),
+        onFailure: (error) =>
+          recoverToolStageFailure(error, {
+            result: createErrorToolResult(describeToolStageError(error)),
+            isError: true,
+          }),
+      }),
+    );
 
     return yield* buildToolCallOutcome(
       prepared.toolCall,
-      result,
-      isError,
+      finalized.result,
+      finalized.isError,
       "record",
       prepared.args,
       dispatcher,
