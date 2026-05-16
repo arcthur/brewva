@@ -94,6 +94,8 @@ export interface CreateBrewvaManagedAgentSessionOptions {
   initialModel?: BrewvaRegisteredModel;
   initialThinkingLevel?: BrewvaPromptThinkingLevel;
   initialModelPresetState?: BrewvaModelPresetState;
+  deferPersistenceUntilPrompt?: boolean;
+  onInitialPersistence?: () => void;
   ui?: BrewvaToolUiPort;
   logger?: HostedSessionLogger;
   googleCachedContentManager?: GoogleCachedContentManager;
@@ -117,8 +119,29 @@ type ManagedAgentSessionStoreCore = Pick<
   | "branchWithSummary"
 >;
 
+export interface ManagedSessionInitialModelPresetSelection {
+  presetName: string;
+  previousPresetName?: string;
+  source?: string;
+  mainModel?: string;
+  delegationModels?: Record<string, string>;
+  auxiliaryModels?: {
+    title?: string;
+  };
+  synthetic?: boolean;
+}
+
 export interface ManagedAgentSessionStore extends ManagedAgentSessionStoreCore {
   hasSessionEntryType?(type: string): boolean;
+  deferInitialSessionEntries?(input: {
+    modelPresetSelection?: ManagedSessionInitialModelPresetSelection;
+    modelChange?: {
+      provider: string;
+      modelId: string;
+    };
+    thinkingLevel?: string;
+  }): void;
+  ensureInitialPersistence?(): void;
   subscribeSessionWire?(listener: (frame: SessionWireFrame) => void): () => void;
   querySessionWire?(): SessionWireFrame[];
   dispose?(): void;

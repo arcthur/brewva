@@ -180,6 +180,15 @@ function createActionSummary(): HostedTurnEnvelopeActionSummary {
   };
 }
 
+async function ensureSessionInitialPersistence(session: unknown): Promise<void> {
+  const ensureInitialPersistence = (session as { ensureInitialPersistence?: unknown })
+    ?.ensureInitialPersistence;
+  if (typeof ensureInitialPersistence !== "function") {
+    return;
+  }
+  await ensureInitialPersistence.call(session);
+}
+
 function withAction(
   summary: HostedTurnEnvelopeActionSummary,
   update: Partial<HostedTurnEnvelopeActionSummary>,
@@ -512,6 +521,7 @@ export async function runHostedTurnEnvelope(
       turnId,
       runtimeTurn,
     });
+    await ensureSessionInitialPersistence(input.session);
     recordTurnInputReceipt({
       runtime: input.runtime,
       sessionId,

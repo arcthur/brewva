@@ -243,6 +243,8 @@ class HostedSessionRuntimeFactory implements HostedSessionFactory {
       model: options.requestedModel,
       thinkingLevel: options.requestedThinkingLevel,
       customTools: options.customTools,
+      deferPersistenceUntilPrompt: options.deferPersistenceUntilPrompt,
+      onInitialPersistence: options.onInitialPersistence,
       ui: options.ui,
       logger: options.logger,
     });
@@ -255,7 +257,7 @@ class HostedSessionRuntimeFactory implements HostedSessionFactory {
   private async createServices(
     options: Pick<
       CreateHostedSessionRuntimeOptions,
-      "cwd" | "settings" | "runtime" | "extensions" | "sessionId"
+      "cwd" | "settings" | "runtime" | "extensions" | "sessionId" | "deferPersistenceUntilPrompt"
     >,
   ): Promise<HostedSessionServices> {
     const runtime = await createHostedSessionServicesBundle({
@@ -265,6 +267,7 @@ class HostedSessionRuntimeFactory implements HostedSessionFactory {
       runtime: options.runtime,
       extensions: options.extensions,
       sessionId: options.sessionId,
+      deferPersistenceUntilPrompt: options.deferPersistenceUntilPrompt,
     });
     configureCredentialVaultModelAuth({
       runtime: runtime.runtime,

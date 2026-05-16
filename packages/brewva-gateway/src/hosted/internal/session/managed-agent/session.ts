@@ -229,6 +229,9 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     | ((message: Extract<BrewvaTurnLoopMessage, { role: "assistant" }>) => void)
     | undefined;
   readonly #onDispose: (() => void) | undefined;
+  readonly #onInitialPersistence: (() => void) | undefined;
+  #initialPersistenceEnsured = false;
+  #sessionStartEmitted = false;
 
   constructor(input: {
     cwd: string;
@@ -248,6 +251,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     onProviderAssistantMessage?: (
       message: Extract<BrewvaTurnLoopMessage, { role: "assistant" }>,
     ) => void;
+    onInitialPersistence?: () => void;
     onDispose?: () => void;
   }) {
     this.#cwd = input.cwd;
@@ -266,6 +270,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     this.#sessionTitleGenerator = input.sessionTitleGenerator;
     this.#logger = input.logger ?? null;
     this.#onProviderAssistantMessage = input.onProviderAssistantMessage;
+    this.#onInitialPersistence = input.onInitialPersistence;
     this.#onDispose = input.onDispose;
     this.#liveTranscript = new ManagedSessionLiveTranscript({
       agent: this.#agent,
@@ -341,8 +346,12 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
         this.sessionManager.appendModelPresetSelection(selection),
       appendModelChange: (provider, modelId) =>
         this.sessionManager.appendModelChange(provider, modelId),
-      emitModelSelect: ({ model, previousModel, source }) =>
-        this.#eventBridge.emitModelSelect({ model, previousModel, source }),
+      emitModelSelect: ({ model, previousModel, source }) => {
+        if (!this.#initialPersistenceEnsured) {
+          return Promise.resolve();
+        }
+        return this.#eventBridge.emitModelSelect({ model, previousModel, source });
+      },
     });
   }
 
@@ -664,13 +673,16 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
       logger: options.logger,
       onProviderAssistantMessage: (message) =>
         providerAssistantObserver.onCommittedAssistantMessage(message),
+      onInitialPersistence: options.onInitialPersistence,
       onDispose: () => {
         releaseGoogleCachedContent();
         clearCacheState?.();
       },
     });
     await session.initialize();
-    await session.emitSessionStart();
+    if (!options.deferPersistenceUntilPrompt) {
+      await session.ensureInitialPersistence();
+    }
     return session;
   }
 
@@ -800,6 +812,8 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
         return;
       }
     }
+
+    await this.ensureInitialPersistence();
 
     if (this.#runner.hasHandlers("input")) {
       const result = await this.#runner.emitInput(
@@ -971,11 +985,13 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
       if (options.persistDefault) {
         this.#settings.setDefaultThinkingLevel(effective);
       }
-      this.#eventBridge.emitThinkingLevelSelect({
-        thinkingLevel: effective,
-        previousThinkingLevel,
-        source: "set",
-      });
+      if (this.#initialPersistenceEnsured) {
+        this.#eventBridge.emitThinkingLevelSelect({
+          thinkingLevel: effective,
+          previousThinkingLevel,
+          source: "set",
+        });
+      }
     }
   }
 
@@ -1011,10 +1027,26 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     clearDefaultTurnLifecycleSpine(this, this.sessionManager.getSessionId());
     this.sessionManager.dispose?.();
     this.#listeners.clear();
-    this.#eventBridge.emitSessionShutdown();
+    if (this.#sessionStartEmitted) {
+      this.#eventBridge.emitSessionShutdown();
+    }
+  }
+
+  async ensureInitialPersistence(): Promise<void> {
+    if (this.#initialPersistenceEnsured) {
+      return;
+    }
+    this.#initialPersistenceEnsured = true;
+    this.sessionManager.ensureInitialPersistence?.();
+    await this.emitSessionStart();
+    this.#onInitialPersistence?.();
   }
 
   private async emitSessionStart(): Promise<void> {
+    if (this.#sessionStartEmitted) {
+      return;
+    }
+    this.#sessionStartEmitted = true;
     await this.#eventBridge.emitSessionStart();
   }
 

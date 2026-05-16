@@ -118,6 +118,38 @@ describe("hosted turn envelope", () => {
     expect(observedFrames.map((frame) => frame.type)).toEqual(["turn.input", "turn.committed"]);
   });
 
+  test("flushes deferred initial persistence before recording turn input", async () => {
+    const runtime = createRuntime("brewva-turn-envelope-initial-persistence-");
+    const sessionId = "session-envelope-initial-persistence";
+    const session = {
+      sessionManager: {
+        getSessionId: () => sessionId,
+      },
+      async ensureInitialPersistence() {
+        runtime.extensions.hosted.events.record({
+          sessionId,
+          type: "session_start",
+          payload: { cwd: "/tmp/brewva" },
+        });
+      },
+    };
+
+    await runHostedTurnEnvelope({
+      session: session as unknown as Parameters<typeof runHostedTurnEnvelope>[0]["session"],
+      runtime,
+      sessionId,
+      prompt: "hello",
+      source: "interactive",
+      turnId: "turn-initial-persistence-1",
+      runLoop: async () => createLoopResult({ assistantText: "done" }),
+    });
+
+    expect(eventTypes(runtime, sessionId).slice(0, 2)).toEqual([
+      "session_start",
+      "turn_input_recorded",
+    ]);
+  });
+
   test("advances the internal turn lifecycle spine without writing extra receipts", async () => {
     const runtime = createRuntime("brewva-turn-envelope-spine-");
     const sessionId = "session-envelope-spine";

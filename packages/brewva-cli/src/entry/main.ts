@@ -582,6 +582,7 @@ export async function runCliRootOperation(): Promise<void> {
       agentId: parsed.agentId,
       managedToolMode: parsed.managedToolMode,
       sessionId,
+      deferPersistenceUntilPrompt: mode === "interactive",
       extensions: createExtensions(),
     });
   let sessionResult = await openEmbeddedSession(parsed.sessionId);
@@ -590,8 +591,29 @@ export async function runCliRootOperation(): Promise<void> {
   const printSession = session;
 
   const getSessionId = (): string => session.sessionManager.getSessionId();
+  const sessionEventBaselineById = new Map<string, number>();
+  const rememberSessionEventBaseline = (sessionId: string): void => {
+    if (sessionEventBaselineById.has(sessionId)) {
+      return;
+    }
+    sessionEventBaselineById.set(sessionId, runtime.inspect.events.records.list(sessionId).length);
+  };
+  const hasSessionPersistedActivity = (sessionId: string): boolean => {
+    const baseline = sessionEventBaselineById.get(sessionId) ?? 0;
+    return runtime.inspect.events.records.list(sessionId).length > baseline;
+  };
+  const ensureSessionInitialPersistence = async (): Promise<void> => {
+    const ensureInitialPersistence = (session as { ensureInitialPersistence?: unknown })
+      .ensureInitialPersistence;
+    if (typeof ensureInitialPersistence !== "function") {
+      return;
+    }
+    await ensureInitialPersistence.call(session);
+  };
   const initialSessionId = getSessionId();
+  rememberSessionEventBaseline(initialSessionId);
   if (taskSpec) {
+    await ensureSessionInitialPersistence();
     runtime.authority.task.spec.set(initialSessionId, taskSpec);
   }
   const gracefulTimeoutMs = runtime.config.infrastructure.interruptRecovery.gracefulTimeoutMs;
@@ -606,11 +628,14 @@ export async function runCliRootOperation(): Promise<void> {
   const finalizeAndExit = (code: number): void => {
     if (finalized) return;
     finalized = true;
-    recordSessionShutdownIfMissing(runtime, {
-      sessionId: getSessionId(),
-      reason: shutdownReceipt?.reason ?? "cli_session_terminated",
-      source: shutdownReceipt?.source ?? "cli_embedded_session",
-    });
+    const sessionId = getSessionId();
+    if (hasSessionPersistedActivity(sessionId)) {
+      recordSessionShutdownIfMissing(runtime, {
+        sessionId,
+        reason: shutdownReceipt?.reason ?? "cli_session_terminated",
+        source: shutdownReceipt?.source ?? "cli_embedded_session",
+      });
+    }
     session.dispose();
     process.exit(code);
   };
@@ -624,8 +649,12 @@ export async function runCliRootOperation(): Promise<void> {
     };
 
     const sessionId = getSessionId();
+    const shouldRecordSignalTransition = hasSessionPersistedActivity(sessionId);
     let signalTransitionFinalized = false;
     const finalizeSignalTransition = (status: "completed" | "failed", error?: string): void => {
+      if (!shouldRecordSignalTransition) {
+        return;
+      }
       if (signalTransitionFinalized) {
         return;
       }
@@ -638,13 +667,15 @@ export async function runCliRootOperation(): Promise<void> {
         error: error?.trim().length ? error : undefined,
       });
     };
-    recordSessionTurnTransition(runtime, {
-      sessionId,
-      reason: "signal_interrupt",
-      status: "entered",
-      family: "interrupt",
-      error: signal,
-    });
+    if (shouldRecordSignalTransition) {
+      recordSessionTurnTransition(runtime, {
+        sessionId,
+        reason: "signal_interrupt",
+        status: "entered",
+        family: "interrupt",
+        error: signal,
+      });
+    }
 
     const timeout: ScopedTimeoutHandle = startScopedTimeout({
       delayMs: gracefulTimeoutMs,
@@ -696,6 +727,7 @@ export async function runCliRootOperation(): Promise<void> {
           sessionResult = next;
           session = next.session;
           orchestration = next.orchestration;
+          rememberSessionEventBaseline(next.session.sessionManager.getSessionId());
         },
       };
       await interactiveRuntime.runCliInteractiveSessionOperation(session, interactiveOptions);
@@ -732,11 +764,13 @@ export async function runCliRootOperation(): Promise<void> {
     process.off("SIGTERM", handleSignal);
     if (!terminatedBySignal) {
       const sessionId = getSessionId();
-      recordSessionShutdownIfMissing(runtime, {
-        sessionId,
-        reason: resolveCliSessionCompleteReason(runtime, sessionId),
-        source: "cli_embedded_session",
-      });
+      if (hasSessionPersistedActivity(sessionId)) {
+        recordSessionShutdownIfMissing(runtime, {
+          sessionId,
+          reason: resolveCliSessionCompleteReason(runtime, sessionId),
+          source: "cli_embedded_session",
+        });
+      }
       if (emitJsonBundle) {
         const replayEvents = runtime.inspect.events.records.queryStructured(sessionId);
         await writeJsonLine({

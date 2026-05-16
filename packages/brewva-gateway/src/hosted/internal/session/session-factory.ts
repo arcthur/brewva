@@ -54,6 +54,8 @@ export interface CreateHostedManagedSessionOptions {
   model?: BrewvaRegisteredModel;
   thinkingLevel?: string;
   customTools?: HostedSessionCustomTool[];
+  deferPersistenceUntilPrompt?: boolean;
+  onInitialPersistence?: (sessionId: string) => void;
   ui?: BrewvaToolUiPort;
   logger?: HostedSessionLogger;
 }
@@ -78,6 +80,8 @@ export interface CreateHostedSessionRuntimeOptions {
   requestedThinkingLevel?: string;
   customTools?: HostedSessionCustomTool[];
   sessionId?: string;
+  deferPersistenceUntilPrompt?: boolean;
+  onInitialPersistence?: (sessionId: string) => void;
   ui?: BrewvaToolUiPort;
   logger?: HostedSessionLogger;
 }

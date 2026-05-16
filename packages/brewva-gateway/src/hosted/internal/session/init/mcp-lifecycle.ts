@@ -68,6 +68,7 @@ export function installHostedMcpBundleDisposal(
   runtime: BrewvaHostedRuntimePort,
   sessionId: string,
   bundle: HostedMcpToolBundle | undefined,
+  options: { shouldRecordDisposeFailure?: () => boolean } = {},
 ): HostedSession {
   if (!bundle) {
     return session;
@@ -85,6 +86,9 @@ export function installHostedMcpBundleDisposal(
     let timedOut = false;
 
     const recordDisposeFailure = (payload: Record<string, unknown>) => {
+      if (options.shouldRecordDisposeFailure && !options.shouldRecordDisposeFailure()) {
+        return;
+      }
       runtime.extensions.hosted.events.record({
         sessionId,
         type: "mcp_server_disconnected",

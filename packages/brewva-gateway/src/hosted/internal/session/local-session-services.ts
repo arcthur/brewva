@@ -289,6 +289,7 @@ export async function createHostedSessionServicesBundle(input: {
   runtime?: BrewvaRuntimeInstance | BrewvaHostedRuntimePort;
   extensions?: readonly InternalHostPlugin[];
   sessionId?: string;
+  deferPersistenceUntilPrompt?: boolean;
 }): Promise<HostedSessionServicesBundle> {
   const settingsManager = readHostedSettingsHandle(input.settings);
   const runtime = toHostedRuntimePort(input.runtime ?? createBrewvaRuntime({ cwd: input.cwd }));
@@ -304,7 +305,9 @@ export async function createHostedSessionServicesBundle(input: {
     runtime,
     settingsManager,
     resourceLoader,
-    sessionManager: new HostedRuntimeTapeSessionStore(runtime, input.sessionId),
+    sessionManager: new HostedRuntimeTapeSessionStore(runtime, input.sessionId, {
+      deferInitialPersistence: input.deferPersistenceUntilPrompt,
+    }),
     extensions,
   };
 }
@@ -352,23 +355,41 @@ export async function createHostedSessionResult(input: {
 
   if (!sessionResolution.hasExistingSession) {
     const activePreset = findModelPreset(modelPresetState);
-    sessionManager.appendModelPresetSelection({
-      presetName: modelPresetState.activeName,
-      source: "startup",
-      mainModel: activePreset?.mainModel,
-      delegationModels: activePreset?.delegationModels,
-      auxiliaryModels: activePreset?.auxiliaryModels,
-      synthetic: activePreset?.synthetic,
-    });
-    if (sessionResolution.model) {
-      sessionManager.appendModelChange(
-        sessionResolution.model.provider,
-        sessionResolution.model.id,
-      );
+    const initialEntries = {
+      modelPresetSelection: {
+        presetName: modelPresetState.activeName,
+        source: "startup",
+        mainModel: activePreset?.mainModel,
+        delegationModels: activePreset?.delegationModels,
+        auxiliaryModels: activePreset?.auxiliaryModels,
+        synthetic: activePreset?.synthetic,
+      },
+      modelChange: sessionResolution.model
+        ? {
+            provider: sessionResolution.model.provider,
+            modelId: sessionResolution.model.id,
+          }
+        : undefined,
+      thinkingLevel,
+    };
+    if (input.options.deferPersistenceUntilPrompt) {
+      sessionManager.deferInitialSessionEntries?.(initialEntries);
+    } else {
+      sessionManager.appendModelPresetSelection(initialEntries.modelPresetSelection);
+      if (initialEntries.modelChange) {
+        sessionManager.appendModelChange(
+          initialEntries.modelChange.provider,
+          initialEntries.modelChange.modelId,
+        );
+      }
+      sessionManager.appendThinkingLevelChange(thinkingLevel);
     }
-    sessionManager.appendThinkingLevelChange(thinkingLevel);
   } else if (!sessionResolution.hasThinkingEntry) {
-    sessionManager.appendThinkingLevelChange(thinkingLevel);
+    if (input.options.deferPersistenceUntilPrompt) {
+      sessionManager.deferInitialSessionEntries?.({ thinkingLevel });
+    } else {
+      sessionManager.appendThinkingLevelChange(thinkingLevel);
+    }
   }
 
   return {
@@ -384,6 +405,10 @@ export async function createHostedSessionResult(input: {
       customTools,
       ui: input.options.ui,
       logger: input.options.logger,
+      deferPersistenceUntilPrompt: input.options.deferPersistenceUntilPrompt,
+      onInitialPersistence: input.options.onInitialPersistence
+        ? () => input.options.onInitialPersistence?.(sessionManager.getSessionId())
+        : undefined,
       initialModel: sessionResolution.model,
       initialThinkingLevel: thinkingLevel,
       initialModelPresetState: modelPresetState,

@@ -95,6 +95,7 @@ export interface CreateHostedSessionOptions extends RuntimeCreateBrewvaSessionOp
   enableSubagents?: boolean;
   scopeId?: string;
   sessionId?: string;
+  deferPersistenceUntilPrompt?: boolean;
   ui?: BrewvaToolUiPort;
   logger?: HostedSessionLogger;
 }
@@ -617,6 +618,8 @@ export async function createHostedSession(
   });
 
   const managedToolMode = resolveManagedToolMode(options.managedToolMode);
+  const deferPersistenceUntilPrompt = options.deferPersistenceUntilPrompt === true;
+  let initialPersistenceRecorded = false;
   const toolExecutionCoordinator = createHostedToolExecutionCoordinator();
   const mcpEventRecorder = createHostedMcpEventRecorder(runtime);
   const configuredMcpToolSources = createHostedMcpToolSourcesFromConfig(
@@ -675,6 +678,17 @@ export async function createHostedSession(
     hostedToolDefinitionsByName,
     managedToolMode,
   });
+  const recordInitialPersistence = (activeSessionId: string) => {
+    initialPersistenceRecorded = true;
+    mcpEventRecorder.setSessionId(activeSessionId);
+    recordHostedBootstrap({
+      runtime,
+      sessionId: activeSessionId,
+      cwd: environment.cwd,
+      configPath: options.configPath,
+      managedToolMode,
+    });
+  };
 
   const sessionRuntime = await environment.sessionFactory.createRuntime({
     cwd: environment.cwd,
@@ -685,6 +699,8 @@ export async function createHostedSession(
     requestedThinkingLevel: environment.requestedModelSelection.thinkingLevel,
     customTools,
     sessionId: options.sessionId,
+    deferPersistenceUntilPrompt,
+    onInitialPersistence: deferPersistenceUntilPrompt ? recordInitialPersistence : undefined,
     ui: options.ui,
     logger: options.logger,
   });
@@ -699,15 +715,22 @@ export async function createHostedSession(
     providerApi: environment.requestedModelSelection.model?.api,
     toolNames: customTools.map((tool) => tool.name),
   });
-  mcpEventRecorder.setSessionId(sessionId);
-  session = installHostedMcpBundleDisposal(session, runtime, sessionId, mcpToolBundle);
-  recordHostedBootstrap({
-    runtime,
-    sessionId,
-    cwd: environment.cwd,
-    configPath: options.configPath,
-    managedToolMode,
+  if (!deferPersistenceUntilPrompt) {
+    mcpEventRecorder.setSessionId(sessionId);
+  }
+  session = installHostedMcpBundleDisposal(session, runtime, sessionId, mcpToolBundle, {
+    shouldRecordDisposeFailure: () => !deferPersistenceUntilPrompt || initialPersistenceRecorded,
   });
+  if (!deferPersistenceUntilPrompt) {
+    recordHostedBootstrap({
+      runtime,
+      sessionId,
+      cwd: environment.cwd,
+      configPath: options.configPath,
+      managedToolMode,
+    });
+    initialPersistenceRecorded = true;
+  }
 
   return {
     session,

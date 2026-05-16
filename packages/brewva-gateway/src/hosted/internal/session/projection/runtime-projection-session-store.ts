@@ -49,6 +49,24 @@ import {
 import { shouldExcludeSessionEntryForWorkbench } from "./workbench-visibility.js";
 
 type CustomMessageContentPart = { type: string };
+type DeferredInitialSessionEntries = {
+  modelPresetSelection?: {
+    presetName: string;
+    previousPresetName?: string;
+    source?: string;
+    mainModel?: string;
+    delegationModels?: Record<string, string>;
+    auxiliaryModels?: {
+      title?: string;
+    };
+    synthetic?: boolean;
+  };
+  modelChange?: {
+    provider: string;
+    modelId: string;
+  };
+  thinkingLevel?: string;
+};
 
 const SESSION_COMPACT_EVENT_TYPE = "session_compact";
 const HOSTED_MAIN_LINEAGE_NODE_ID = "lineage:main";
@@ -125,14 +143,24 @@ export class HostedRuntimeTapeSessionStore {
   #leafId: string | null = null;
   #lineageNodeId: string = HOSTED_MAIN_LINEAGE_NODE_ID;
   #unsubscribeEvents: (() => void) | null = null;
+  #deferInitialPersistence = false;
+  #initialPersistenceEnsured = false;
+  #deferredInitialEntries: DeferredInitialSessionEntries = {};
   readonly sessionId: string;
 
   constructor(
     private readonly runtime: BrewvaHostedRuntimePort,
     sessionId: string = randomUUID(),
+    options: { deferInitialPersistence?: boolean } = {},
   ) {
     this.sessionId = sessionId;
-    this.#ensureLineageRoot();
+    const existingEvents = this.runtime.inspect.events.records.list(this.sessionId);
+    this.#deferInitialPersistence =
+      options.deferInitialPersistence === true && existingEvents.length === 0;
+    if (!this.#deferInitialPersistence) {
+      this.#ensureLineageRoot();
+      this.#initialPersistenceEnsured = true;
+    }
     this.#hydrateFromRuntime();
     this.#unsubscribeEvents = this.runtime.inspect.events.records.subscribe((event) => {
       if (event.sessionId !== this.sessionId) {
@@ -156,6 +184,46 @@ export class HostedRuntimeTapeSessionStore {
 
   hasSessionEntryType(type: string): boolean {
     return this.#entries.some((entry) => entry.type === type);
+  }
+
+  deferInitialSessionEntries(input: DeferredInitialSessionEntries): void {
+    if (!this.#deferInitialPersistence || this.#initialPersistenceEnsured) {
+      if (input.modelPresetSelection) {
+        this.appendModelPresetSelection(input.modelPresetSelection);
+      }
+      if (input.modelChange) {
+        this.appendModelChange(input.modelChange.provider, input.modelChange.modelId);
+      }
+      if (input.thinkingLevel) {
+        this.appendThinkingLevelChange(input.thinkingLevel);
+      }
+      return;
+    }
+    this.#deferredInitialEntries = {
+      modelPresetSelection: input.modelPresetSelection,
+      modelChange: input.modelChange,
+      thinkingLevel: input.thinkingLevel,
+    };
+  }
+
+  ensureInitialPersistence(): void {
+    if (this.#initialPersistenceEnsured) {
+      return;
+    }
+    this.#initialPersistenceEnsured = true;
+    this.#deferInitialPersistence = false;
+    const deferred = this.#deferredInitialEntries;
+    this.#deferredInitialEntries = {};
+    this.#ensureLineageRoot();
+    if (deferred.modelPresetSelection) {
+      this.appendModelPresetSelection(deferred.modelPresetSelection);
+    }
+    if (deferred.modelChange) {
+      this.appendModelChange(deferred.modelChange.provider, deferred.modelChange.modelId);
+    }
+    if (deferred.thinkingLevel) {
+      this.appendThinkingLevelChange(deferred.thinkingLevel);
+    }
   }
 
   readContextState(): ContextState {
@@ -365,6 +433,7 @@ export class HostedRuntimeTapeSessionStore {
   }
 
   appendMessage(message: StoredSessionMessage): string {
+    this.ensureInitialPersistence();
     const event = this.runtime.extensions.hosted.events.record({
       sessionId: this.sessionId,
       type: MESSAGE_END_EVENT_TYPE,
@@ -378,6 +447,10 @@ export class HostedRuntimeTapeSessionStore {
   }
 
   appendThinkingLevelChange(thinkingLevel: string): string {
+    if (this.#deferInitialPersistence && !this.#initialPersistenceEnsured) {
+      this.#deferredInitialEntries.thinkingLevel = thinkingLevel;
+      return `deferred:thinking:${this.sessionId}`;
+    }
     const event = this.runtime.extensions.hosted.events.record({
       sessionId: this.sessionId,
       type: THINKING_LEVEL_SELECTED_EVENT_TYPE,
@@ -393,6 +466,10 @@ export class HostedRuntimeTapeSessionStore {
   }
 
   appendModelChange(provider: string, modelId: string): string {
+    if (this.#deferInitialPersistence && !this.#initialPersistenceEnsured) {
+      this.#deferredInitialEntries.modelChange = { provider, modelId };
+      return `deferred:model:${this.sessionId}`;
+    }
     const event = this.runtime.extensions.hosted.events.record({
       sessionId: this.sessionId,
       type: MODEL_SELECT_EVENT_TYPE,
@@ -420,6 +497,18 @@ export class HostedRuntimeTapeSessionStore {
     };
     synthetic?: boolean;
   }): string {
+    if (this.#deferInitialPersistence && !this.#initialPersistenceEnsured) {
+      this.#deferredInitialEntries.modelPresetSelection = {
+        presetName: input.presetName,
+        previousPresetName: input.previousPresetName,
+        source: input.source,
+        mainModel: input.mainModel,
+        delegationModels: input.delegationModels ? { ...input.delegationModels } : undefined,
+        auxiliaryModels: input.auxiliaryModels ? { ...input.auxiliaryModels } : undefined,
+        synthetic: input.synthetic,
+      };
+      return `deferred:preset:${this.sessionId}`;
+    }
     const event = this.runtime.extensions.hosted.events.record({
       sessionId: this.sessionId,
       type: MODEL_PRESET_SELECT_EVENT_TYPE,
