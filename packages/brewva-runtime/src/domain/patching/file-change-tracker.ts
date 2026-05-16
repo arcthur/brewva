@@ -11,6 +11,7 @@ import { isMutationTool } from "../verification/api.js";
 import {
   PATCH_HISTORY_FILE,
   readPersistedPatchHistory,
+  resolveSessionPatchHistoryDirectory,
   type PersistedPatchHistory,
 } from "./patch-history.js";
 import type {
@@ -62,10 +63,6 @@ type AppliedChange = AppliedMutation["changes"][number];
 interface FileChangeTrackerOptions {
   snapshotsDir?: string;
   artifactsBaseDir?: string;
-}
-
-function sanitizeSessionId(sessionId: string): string {
-  return sessionId.replaceAll(/[^\w.-]+/g, "_");
 }
 
 function shouldTrackMutationTool(toolName: string): boolean {
@@ -984,7 +981,7 @@ export class FileChangeTracker {
   }
 
   private sessionDir(sessionId: string): string {
-    return resolve(this.snapshotsDir, sanitizeSessionId(sessionId));
+    return resolveSessionPatchHistoryDirectory({ snapshotsDir: this.snapshotsDir, sessionId });
   }
 
   private historyPath(sessionId: string): string {

@@ -22,9 +22,12 @@ evidence-ledger records.
 
 Interactive shell command ownership follows the narrowed slash contract:
 high-frequency entrypoints such as `/model`, `/inbox`, `/inspect`,
-`/transcript`, and session-history actions stay in the shell slash surface,
-while lower-signal view/config toggles live in the command palette and headless
-or channel command grammars remain separate control planes.
+`/context`, `/authority`, `/skills`, `/transcript`, and session-history actions
+stay in the shell slash surface. `/diff` and `/export` are read-only evidence
+surfaces: `/diff` combines Git state with replay/patch attribution, while
+`/export` assembles a session handoff bundle. Confirming or mutating actions
+such as manual compaction live in the command palette or view-local actions,
+while headless and channel command grammars remain separate control planes.
 
 ## In Scope
 

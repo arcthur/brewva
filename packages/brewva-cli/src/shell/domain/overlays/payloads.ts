@@ -123,6 +123,23 @@ export interface CliInboxOverlayPayload {
   items: CliInboxOverlayItem[];
 }
 
+export interface CliContextOverlayPayload {
+  kind: "context";
+  sessionId: string;
+  lines: string[];
+  canRequestCompaction: boolean;
+}
+
+export interface CliAuthorityOverlayPayload {
+  kind: "authority";
+  lines: string[];
+}
+
+export interface CliSkillsOverlayPayload {
+  kind: "skills";
+  lines: string[];
+}
+
 export interface CliOverlaySection {
   id: string;
   title: string;
@@ -279,6 +296,9 @@ export interface OverlayPayloadMap {
   oauthWait: CliOAuthWaitOverlayPayload;
   commandPalette: CliCommandPaletteOverlayPayload;
   helpHub: CliHelpHubOverlayPayload;
+  context: CliContextOverlayPayload;
+  authority: CliAuthorityOverlayPayload;
+  skills: CliSkillsOverlayPayload;
 }
 
 export type ShellOverlayKind = keyof OverlayPayloadMap;

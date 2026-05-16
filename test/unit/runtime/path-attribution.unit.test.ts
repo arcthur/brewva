@@ -5,6 +5,7 @@ import {
   collectPathCandidates,
   collectPersistedPatchPaths,
   listPersistedPatchSets,
+  resolveSessionPatchHistoryPath,
   resolveWorkspacePath,
   toWorkspaceRelativePath,
 } from "@brewva/brewva-runtime/patch-history";
@@ -20,6 +21,18 @@ describe("shared path attribution helpers", () => {
       "shared-session",
       "patchsets.json",
     );
+    expect(
+      resolveSessionPatchHistoryPath({
+        workspaceRoot: workspace,
+        sessionId: "shared-session",
+      }),
+    ).toBe(patchHistoryPath);
+    expect(
+      resolveSessionPatchHistoryPath({
+        workspaceRoot: workspace,
+        sessionId: "session/with spaces",
+      }),
+    ).toBe(join(workspace, ".orchestrator", "snapshots", "session_with_spaces", "patchsets.json"));
     mkdirSync(join(workspace, ".orchestrator", "snapshots", "shared-session"), {
       recursive: true,
     });

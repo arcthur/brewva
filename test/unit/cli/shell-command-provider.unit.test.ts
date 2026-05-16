@@ -333,4 +333,74 @@ describe("shell command provider", () => {
       provider.keyboundCommands().some((command) => command.action === "command:app.exit"),
     ).toBe(true);
   });
+
+  test("built-in registry exposes the promoted interactive command surface", () => {
+    const provider = new ShellCommandProvider();
+    registerShellCommands(provider);
+
+    const slashNames = provider.slashCommands().map((command) => command.slashName);
+    expect(slashNames).toEqual(
+      expect.arrayContaining(["context", "authority", "diff", "copy", "export", "skills", "init"]),
+    );
+
+    for (const rejected of ["compact", "permissions", "review", "security-review"]) {
+      expect(slashNames).not.toContain(rejected);
+      expect(provider.lookupSlashName(rejected)).toMatchObject({ kind: "reserved" });
+    }
+
+    expect(provider.searchPaletteCommands("Context request compaction")).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "context.requestCompaction",
+          slashName: undefined,
+        }),
+      ]),
+    );
+    expect(provider.searchPaletteCommands("Transcript copy latest answer")).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "transcript.copyLatestAnswer",
+          slashName: undefined,
+        }),
+      ]),
+    );
+    expect(provider.searchPaletteCommands("Session export inspect bundle")).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "session.exportInspectBundle",
+          slashName: undefined,
+        }),
+      ]),
+    );
+    expect(provider.searchPaletteCommands("Diff export patch evidence")).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "diff.exportPatchEvidence",
+          slashName: undefined,
+        }),
+      ]),
+    );
+
+    expect(provider.lookupSlashName("compact")).toMatchObject({
+      kind: "reserved",
+      reservation: {
+        message: expect.stringContaining("/context"),
+        redirectCommandId: "session.context",
+      },
+    });
+    expect(provider.lookupSlashName("permissions")).toMatchObject({
+      kind: "reserved",
+      reservation: {
+        message: expect.stringContaining("/authority"),
+        redirectCommandId: "runtime.authority",
+      },
+    });
+    expect(provider.lookupSlashName("review")).toMatchObject({
+      kind: "reserved",
+      reservation: {
+        message: expect.stringContaining("/skills"),
+        redirectCommandId: "skills.catalog",
+      },
+    });
+  });
 });

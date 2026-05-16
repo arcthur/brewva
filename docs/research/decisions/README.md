@@ -63,6 +63,7 @@ Every accepted decision inherits these rules:
 - [model-native-product-reconstruction-and-closure-vnext](./model-native-product-reconstruction-and-closure-vnext.md)
 - [narrative-memory-product-and-bounded-semantic-recall](./narrative-memory-product-and-bounded-semantic-recall.md)
 - [opentui-adoption-for-brewva-cli-shell-and-native-boundary](./opentui-adoption-for-brewva-cli-shell-and-native-boundary.md)
+- [interactive-command-surface-refinement](./interactive-command-surface-refinement.md)
 - [slash-command-surface-layering-and-control-plane-separation](./slash-command-surface-layering-and-control-plane-separation.md)
 - [search-token-policy-and-cjk-tokenizer-boundary](./search-token-policy-and-cjk-tokenizer-boundary.md)
 - [session-index-evidence-projection-boundary](./session-index-evidence-projection-boundary.md)

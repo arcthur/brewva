@@ -86,8 +86,28 @@ function updateCommandIntent(
       return handled({ effects: [{ type: "overlay.openSessions" }] });
     case "session.inspect":
       return handled({ effects: [{ type: "overlay.openInspect" }] });
+    case "session.context":
+      return intent.args.trim() === "compact"
+        ? handled({
+            effects: [
+              {
+                type: "notification.show",
+                message:
+                  "Use /context, then Request compaction; /context compact is not a canonical command.",
+                level: "warning",
+              },
+              { type: "overlay.openContext" },
+            ],
+          })
+        : handled({ effects: [{ type: "overlay.openContext" }] });
     case "session.transcript":
       return handled({ effects: [{ type: "transcript.externalPager" }] });
+    case "session.diff":
+      return handled({ effects: [{ type: "session.diffExternalPager" }] });
+    case "transcript.copy":
+      return handled({ effects: [{ type: "transcript.copyLatestAnswer" }] });
+    case "session.export":
+      return handled({ effects: [{ type: "session.exportBundle" }] });
     case "session.lineage":
       return handled({ effects: [{ type: "overlay.openLineage" }] });
     case "session.queue":
@@ -159,6 +179,8 @@ function updateCommandIntent(
           },
         ],
       });
+    case "runtime.authority":
+      return handled({ effects: [{ type: "overlay.openAuthority" }] });
     case "operator.inbox":
       return handled({ effects: [{ type: "overlay.openInbox" }] });
     case "operator.questions":
@@ -217,6 +239,18 @@ function updateCommandIntent(
         ],
       });
     }
+    case "skills.catalog":
+      return handled({ effects: [{ type: "overlay.openSkills" }] });
+    case "project.init":
+      return handled({ effects: [{ type: "project.initGuidance" }] });
+    case "context.requestCompaction":
+      return handled({ effects: [{ type: "context.requestCompaction" }] });
+    case "transcript.copyLatestAnswer":
+      return handled({ effects: [{ type: "transcript.copyLatestAnswer" }] });
+    case "session.exportInspectBundle":
+      return handled({ effects: [{ type: "session.exportInspectBundle" }] });
+    case "diff.exportPatchEvidence":
+      return handled({ effects: [{ type: "diff.exportPatchEvidence" }] });
     case "composer.stash":
       if (intent.source === "keybinding") {
         return handled({ effects: [{ type: "promptMemory.stashCurrent" }] });

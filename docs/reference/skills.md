@@ -162,6 +162,20 @@ parent session owns effect receipts, verification, and patch adoption.
 Child-owned consult runs remain advisory unless the parent records a new
 authoritative fact or adoption receipt.
 
+## Interactive Catalog Surface
+
+The interactive shell exposes skills through `/skills`. That command reads the
+runtime skill catalog, producer contracts, and load report; it does not grant
+tool authority and does not special-case workflow names.
+
+Review-oriented workflows such as `review` and security review remain
+catalog-discoverable skills or producer-backed workflows. They are intentionally
+not built-in `/review` or `/security-review` shell commands.
+
+The catalog is read-only until a runtime-owned user-invocable skill operator
+port exists. The shell must not simulate invocation by submitting prompts or by
+hard-coding workflow command IDs.
+
 ## Authoring Rules
 
 - Keep `SKILL.md` advisory. Put action authority in capability manifests.

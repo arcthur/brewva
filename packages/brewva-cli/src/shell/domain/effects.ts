@@ -38,12 +38,20 @@ export type ShellEffect =
   | { type: "overlay.openQueue" }
   | { type: "overlay.openInspect" }
   | { type: "overlay.openNotifications" }
+  | { type: "overlay.openContext" }
+  | { type: "overlay.openAuthority" }
+  | { type: "overlay.openSkills" }
   | { type: "pager.externalActive" }
   | { type: "transcript.externalPager" }
+  | { type: "transcript.copyLatestAnswer" }
   | { type: "transcript.navigate"; kind: "pageUp" | "pageDown" | "top" | "bottom" }
+  | { type: "context.requestCompaction" }
   | { type: "session.projectEvent"; event: BrewvaPromptSessionEvent }
   | { type: "session.abort"; notification?: string }
   | { type: "session.create" }
+  | { type: "session.diffExternalPager" }
+  | { type: "session.exportBundle" }
+  | { type: "session.exportInspectBundle" }
   | { type: "session.steer"; sessionGeneration: number; text: string }
   | { type: "session.undo" }
   | { type: "session.rewind"; argument?: string }
@@ -91,4 +99,6 @@ export type ShellEffect =
   | { type: "provider.completeOAuth"; providerId: string; methodId: string; code?: string }
   | { type: "provider.disconnect"; providerId: string }
   | { type: "clipboard.copy"; text: string }
+  | { type: "diff.exportPatchEvidence" }
+  | { type: "project.initGuidance" }
   | { type: "url.open"; url: string };

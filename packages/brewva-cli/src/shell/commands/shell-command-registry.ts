@@ -69,11 +69,40 @@ const builtInShellCommands: readonly ShellCommand[] = [
     keybinding: { key: "i", ctrl: true, meta: false, shift: false },
   },
   {
+    id: "session.context",
+    title: "Context",
+    description: "Open the read-only context pressure and compaction dashboard.",
+    category: "Session",
+    slash: { name: "context", argumentMode: "optional" },
+    suggested: true,
+  },
+  {
     id: "session.transcript",
     title: "Transcript snapshot",
     description: "Open a read-only transcript snapshot in the external pager.",
     category: "Session",
     slash: { name: "transcript" },
+  },
+  {
+    id: "session.diff",
+    title: "Diff",
+    description: "Open the working-tree and session diff view.",
+    category: "Session",
+    slash: { name: "diff" },
+  },
+  {
+    id: "transcript.copy",
+    title: "Copy latest answer",
+    description: "Copy the latest assistant response as Markdown.",
+    category: "Transcript",
+    slash: { name: "copy" },
+  },
+  {
+    id: "session.export",
+    title: "Export session",
+    description: "Export a replay-visible session handoff bundle.",
+    category: "Session",
+    slash: { name: "export" },
   },
   {
     id: "session.lineage",
@@ -187,6 +216,14 @@ const builtInShellCommands: readonly ShellCommand[] = [
     keybinding: { key: "a", ctrl: true, meta: false, shift: false },
   },
   {
+    id: "runtime.authority",
+    title: "Authority",
+    description: "Open the read-only runtime authority posture view.",
+    category: "Operator",
+    slash: { name: "authority" },
+    suggested: true,
+  },
+  {
     id: "operator.inbox",
     title: "Inbox",
     description: "Open pending operator questions and shell notifications.",
@@ -233,6 +270,45 @@ const builtInShellCommands: readonly ShellCommand[] = [
     slash: { name: "theme", argumentMode: "optional" },
   },
   {
+    id: "skills.catalog",
+    title: "Skills",
+    description: "Open the skill and producer catalog.",
+    category: "Skills",
+    slash: { name: "skills" },
+    suggested: true,
+  },
+  {
+    id: "project.init",
+    title: "Initialize project guidance",
+    description: "Preview Brewva project guidance initialization.",
+    category: "Project",
+    slash: { name: "init" },
+  },
+  {
+    id: "context.requestCompaction",
+    title: "Context: request compaction",
+    description: "Submit a durable context compaction request for the current session.",
+    category: "Context",
+  },
+  {
+    id: "transcript.copyLatestAnswer",
+    title: "Transcript: copy latest answer",
+    description: "Copy the latest assistant response as Markdown.",
+    category: "Transcript",
+  },
+  {
+    id: "session.exportInspectBundle",
+    title: "Session: export inspect bundle",
+    description: "Open a replay-first inspect bundle for export.",
+    category: "Session",
+  },
+  {
+    id: "diff.exportPatchEvidence",
+    title: "Diff: export patch evidence",
+    description: "Open working-tree diff evidence for export.",
+    category: "Diff",
+  },
+  {
     id: "composer.stash",
     title: "Stash prompt",
     description: "Browse stashed prompt drafts.",
@@ -274,6 +350,30 @@ const reservedShellSlashNames: readonly ShellSlashReservation[] = [
     owner: "runtime.agent-overlays",
     message:
       "/agent-overlays is reserved for custom subagent inspection; it is not an interactive shell slash command.",
+  },
+  {
+    name: "compact",
+    owner: "runtime.context",
+    message: "Use /context, then Request compaction; /compact is not a Brewva command.",
+    redirectCommandId: "session.context",
+  },
+  {
+    name: "permissions",
+    owner: "runtime.authority",
+    message: "Use /authority for posture and /approvals for pending commitments.",
+    redirectCommandId: "runtime.authority",
+  },
+  {
+    name: "review",
+    owner: "runtime.skills",
+    message: "Use /skills to discover review workflows.",
+    redirectCommandId: "skills.catalog",
+  },
+  {
+    name: "security-review",
+    owner: "runtime.skills",
+    message: "Use /skills to discover security review workflows.",
+    redirectCommandId: "skills.catalog",
   },
 ];
 

@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import {
   isIgnoredWorkspacePath,
   normalizeWorkspaceRelativePath,
@@ -6,6 +7,7 @@ import {
 import type { PatchFileAction } from "./types.js";
 
 export const PATCH_HISTORY_FILE = "patchsets.json";
+export const DEFAULT_PATCH_HISTORY_SNAPSHOTS_DIR = ".orchestrator/snapshots";
 
 export type PersistedPatchSetStatus = "applied" | "undone" | "redone";
 
@@ -37,6 +39,35 @@ export interface PersistedPatchHistory {
   sessionId: string;
   updatedAt: number;
   patchSets: PersistedPatchSet[];
+}
+
+export function sanitizePatchHistorySessionId(sessionId: string): string {
+  return sessionId.replaceAll(/[^\w.-]+/g, "_");
+}
+
+export function resolveSessionPatchHistoryDirectory(input: {
+  snapshotsDir: string;
+  sessionId: string;
+}): string {
+  return resolve(input.snapshotsDir, sanitizePatchHistorySessionId(input.sessionId));
+}
+
+export function resolveSessionPatchHistoryPath(input: {
+  workspaceRoot: string;
+  sessionId: string;
+  snapshotsDir?: string;
+}): string {
+  const snapshotsDir = resolve(
+    input.workspaceRoot,
+    input.snapshotsDir ?? DEFAULT_PATCH_HISTORY_SNAPSHOTS_DIR,
+  );
+  return resolve(
+    resolveSessionPatchHistoryDirectory({
+      snapshotsDir,
+      sessionId: input.sessionId,
+    }),
+    PATCH_HISTORY_FILE,
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

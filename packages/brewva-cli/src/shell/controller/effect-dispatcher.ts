@@ -39,12 +39,20 @@ export interface ShellEffectDispatcherContext {
   openQueue(): void;
   openInspect(): Promise<void>;
   openNotifications(): void;
+  openContext(): void;
+  openAuthority(): void;
+  openSkills(): void;
   openActivePagerExternally(): Promise<void>;
   openExternalTranscriptPager(): Promise<boolean>;
+  copyLatestAssistantAnswer(): Promise<void>;
   requestTranscriptNavigation(kind: "pageUp" | "pageDown" | "top" | "bottom"): void;
+  requestContextCompaction(): void;
   projectSessionEvent(effect: Extract<ShellEffect, { type: "session.projectEvent" }>): void;
   abortSession(notification?: string): Promise<void>;
   createSession(): Promise<void>;
+  openSessionDiffExternalPager(): Promise<void>;
+  exportSessionBundle(): Promise<void>;
+  exportInspectBundle(): Promise<void>;
   steerSession(effect: Extract<ShellEffect, { type: "session.steer" }>): Promise<void>;
   undoSession(): Promise<void>;
   rewindSession(argument?: string): Promise<void>;
@@ -85,6 +93,8 @@ export interface ShellEffectDispatcherContext {
   ): Promise<void>;
   disconnectProvider(providerId: string): Promise<void>;
   copyToClipboard(text: string): Promise<void>;
+  exportPatchEvidence(): Promise<void>;
+  previewProjectGuidanceInit(): Promise<void>;
   openUrl(url: string): Promise<void>;
 }
 
@@ -189,6 +199,15 @@ export async function dispatchShellEffect(
     case "overlay.openNotifications":
       context.openNotifications();
       return;
+    case "overlay.openContext":
+      context.openContext();
+      return;
+    case "overlay.openAuthority":
+      context.openAuthority();
+      return;
+    case "overlay.openSkills":
+      context.openSkills();
+      return;
     case "pager.externalActive":
       await context.openActivePagerExternally();
       return;
@@ -199,8 +218,14 @@ export async function dispatchShellEffect(
       }
       return;
     }
+    case "transcript.copyLatestAnswer":
+      await context.copyLatestAssistantAnswer();
+      return;
     case "transcript.navigate":
       context.requestTranscriptNavigation(effect.kind);
+      return;
+    case "context.requestCompaction":
+      context.requestContextCompaction();
       return;
     case "session.projectEvent":
       context.projectSessionEvent(effect);
@@ -210,6 +235,15 @@ export async function dispatchShellEffect(
       return;
     case "session.create":
       await context.createSession();
+      return;
+    case "session.diffExternalPager":
+      await context.openSessionDiffExternalPager();
+      return;
+    case "session.exportBundle":
+      await context.exportSessionBundle();
+      return;
+    case "session.exportInspectBundle":
+      await context.exportInspectBundle();
       return;
     case "session.steer":
       await context.steerSession(effect);
@@ -294,6 +328,12 @@ export async function dispatchShellEffect(
       return;
     case "clipboard.copy":
       await context.copyToClipboard(effect.text);
+      return;
+    case "diff.exportPatchEvidence":
+      await context.exportPatchEvidence();
+      return;
+    case "project.initGuidance":
+      await context.previewProjectGuidanceInit();
       return;
     case "url.open":
       await context.openUrl(effect.url);

@@ -220,6 +220,25 @@ were previously scattered across method-level reference prose:
 | `inspect.context` / `operator.context`                                                       | Numeric context status, compaction, provider cache, visible-read state, and prompt-stability observations.                               |
 | `authority.verification`                                                                     | Verification evidence recording; failures remain verification debt unless promoted by a higher authority surface.                        |
 
+## Interactive Inspection Veneers
+
+Interactive slash commands are runtime veneers, not additional authority
+surfaces:
+
+- `/context` reads `inspect.context.*` and opens the context dashboard. Manual
+  compaction is a view-local or command-palette action that submits the
+  existing operator compaction request path.
+- `/authority` reads approval counts, managed-tool capability metadata, and
+  `inspect.tools.access` posture. It does not edit approval policy, provider
+  auth, gateway scope, or tool authorization.
+- `/skills` reads `inspect.skills.catalog` and keeps review workflows in the
+  skill/producer catalog instead of promoting workflow-specific shell
+  commands.
+
+Gateway, network, and channel scope must be rendered as explicit
+`not surfaced` values until a runtime or gateway inspect surface owns those
+facts.
+
 `inspect.events.effects.getTurnProjection` is the structured operator view for
 effect commitment review. It returns the replay-derived projection object:
 declared effects, attempts, decisions, recovery preparation, execution

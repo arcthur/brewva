@@ -1,5 +1,6 @@
 export * from "./inbox.js";
 export * from "./inspect.js";
+export * from "./interactive-command-surfaces.js";
 export * from "./lineage.js";
 export * from "./notifications.js";
 export * from "./queue.js";

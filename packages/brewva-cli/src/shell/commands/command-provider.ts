@@ -21,6 +21,7 @@ export interface ShellSlashReservation {
   readonly aliases?: readonly string[];
   readonly owner: string;
   readonly message?: string;
+  readonly redirectCommandId?: string;
 }
 
 export interface ShellCommand {

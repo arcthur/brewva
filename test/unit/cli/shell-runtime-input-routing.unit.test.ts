@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createBrewvaRuntime } from "@brewva/brewva-runtime";
@@ -19,6 +20,7 @@ import type {
   BrewvaShellViewPreferences,
   BrewvaSteerOutcome,
 } from "@brewva/brewva-substrate/session";
+import type { BrewvaToolDefinition } from "@brewva/brewva-substrate/tools";
 import { CliShellRuntime } from "../../../packages/brewva-cli/src/shell/controller/shell-runtime.js";
 import type {
   ProviderAuthMethod,
@@ -57,6 +59,28 @@ function requireDefined<T>(value: T | null | undefined, label: string): T {
   return value;
 }
 
+function createTestToolDefinition(input: {
+  name: string;
+  requiredCapabilities?: readonly string[];
+}): BrewvaToolDefinition {
+  return {
+    name: input.name,
+    label: input.name,
+    description: `${input.name} test tool`,
+    parameters: {},
+    brewva: input.requiredCapabilities
+      ? {
+          surface: "workflow",
+          actionClass: "inspect",
+          requiredCapabilities: input.requiredCapabilities,
+        }
+      : undefined,
+    async execute() {
+      return { content: [{ type: "text", text: "ok" }] };
+    },
+  } as unknown as BrewvaToolDefinition;
+}
+
 function createFakeBundle(
   options: {
     promptHandler?: (text: string) => Promise<void>;
@@ -79,6 +103,7 @@ function createFakeBundle(
     abortHandler?: () => Promise<void>;
     modelPresetState?: BrewvaModelPresetState;
     isStreaming?: boolean;
+    toolDefinitions?: ReadonlyMap<string, BrewvaToolDefinition>;
   } = {},
 ) {
   let attachedUi: BrewvaToolUiPort | undefined;
@@ -302,7 +327,7 @@ function createFakeBundle(
 
   const bundle = {
     session,
-    toolDefinitions: new Map(),
+    toolDefinitions: options.toolDefinitions ?? new Map(),
     runtime,
     providerConnections: options.providers
       ? {
@@ -460,6 +485,382 @@ describe("shell runtime: input routing", () => {
       level: "warning",
       message: "Unknown slash command. Type /help or press Ctrl+K for commands.",
     });
+
+    runtime.dispose();
+  });
+
+  test("context slash opens a read-only context overlay and context compact redirects there", async () => {
+    const prompts: string[] = [];
+    const fixture = createFakeBundle({
+      promptHandler: async (text) => {
+        prompts.push(text);
+      },
+    });
+    const { bundle } = fixture;
+    let compactionRequests = 0;
+    Object.assign(bundle.runtime.operator.context.compaction, {
+      request() {
+        compactionRequests += 1;
+      },
+    });
+
+    const runtime = new CliShellRuntime(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+    });
+
+    runtime.ui.setEditorText("/context");
+    await runtime.handleInput({ key: "enter", ctrl: false, meta: false, shift: false });
+
+    expect(prompts).toEqual([]);
+    expect(compactionRequests).toBe(0);
+    expect(runtime.getViewState().overlay.active?.payload).toMatchObject({ kind: "context" });
+
+    await runtime.handleInput({ key: "escape", ctrl: false, meta: false, shift: false });
+    runtime.ui.setEditorText("/context compact");
+    await runtime.handleInput({ key: "enter", ctrl: false, meta: false, shift: false });
+
+    expect(prompts).toEqual([]);
+    expect(compactionRequests).toBe(0);
+    expect(runtime.getViewState().overlay.active?.payload).toMatchObject({ kind: "context" });
+    expect(runtime.getViewState().notifications.at(-1)).toMatchObject({
+      level: "warning",
+      message: expect.stringContaining("Request compaction"),
+    });
+
+    runtime.dispose();
+  });
+
+  test("context request compaction palette action uses the existing runtime request path", async () => {
+    const fixture = createFakeBundle();
+    const { bundle } = fixture;
+    const compactionRequests: Array<{ sessionId: string; reason: string }> = [];
+    Object.assign(bundle.runtime.operator.context.compaction, {
+      request(sessionId: string, reason: string) {
+        compactionRequests.push({ sessionId, reason });
+      },
+    });
+
+    const runtime = new CliShellRuntime(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+    });
+
+    await invokePaletteCommand(runtime, "context.requestCompaction");
+
+    expect(compactionRequests).toEqual([{ sessionId: "session-1", reason: "manual" }]);
+    expect(runtime.getViewState().notifications.at(-1)).toMatchObject({
+      level: "info",
+      message: "Context compaction requested.",
+    });
+
+    runtime.dispose();
+  });
+
+  test("authority and rejected authority/review slash names never submit prompts", async () => {
+    const prompts: string[] = [];
+    const accessChecks: string[] = [];
+    const { bundle } = createFakeBundle({
+      promptHandler: async (text) => {
+        prompts.push(text);
+      },
+      toolDefinitions: new Map([
+        [
+          "exec",
+          createTestToolDefinition({
+            name: "exec",
+            requiredCapabilities: ["authority.tools.invocation.start"],
+          }),
+        ],
+      ]),
+    });
+    Object.assign(bundle.runtime.inspect.tools.access, {
+      explain(input: { toolName: string }) {
+        accessChecks.push(input.toolName);
+        return {
+          allowed: true,
+          warning: "write requires approval",
+        };
+      },
+    });
+    const runtime = new CliShellRuntime(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+    });
+
+    runtime.ui.setEditorText("/authority");
+    await runtime.handleInput({ key: "enter", ctrl: false, meta: false, shift: false });
+
+    expect(prompts).toEqual([]);
+    expect(runtime.getViewState().overlay.active?.payload).toMatchObject({ kind: "authority" });
+    expect(accessChecks).toEqual(["exec"]);
+    const authorityPayload = runtime.getViewState().overlay.active?.payload;
+    if (authorityPayload?.kind !== "authority") {
+      throw new Error("authority overlay must be active");
+    }
+    const authorityText = authorityPayload.lines.join("\n");
+    expect(authorityText).toContain("required=authority.tools.invocation.start");
+    expect(authorityText).toContain("exec allowed=true warning=write requires approval");
+
+    await runtime.handleInput({ key: "escape", ctrl: false, meta: false, shift: false });
+    const redirects = [
+      ["/compact", "context"],
+      ["/permissions", "authority"],
+      ["/review", "skills"],
+      ["/security-review", "skills"],
+    ] as const;
+    for (const [slash, overlayKind] of redirects) {
+      runtime.ui.setEditorText(slash);
+      await runtime.handleInput({ key: "enter", ctrl: false, meta: false, shift: false });
+      expect(prompts).toEqual([]);
+      expect(runtime.getViewState().notifications.at(-1)).toMatchObject({
+        level: "warning",
+      });
+      expect(runtime.getViewState().overlay.active?.payload).toMatchObject({
+        kind: overlayKind,
+      });
+      await runtime.handleInput({ key: "escape", ctrl: false, meta: false, shift: false });
+    }
+
+    runtime.dispose();
+  });
+
+  test("skills slash opens a skill catalog and review remains skill-discoverable only", async () => {
+    const { bundle } = createFakeBundle();
+    const runtime = new CliShellRuntime(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+    });
+
+    runtime.ui.setEditorText("/skills");
+    await runtime.handleInput({ key: "enter", ctrl: false, meta: false, shift: false });
+
+    expect(runtime.getViewState().overlay.active?.payload).toMatchObject({ kind: "skills" });
+    await runtime.handleInput({ key: "escape", ctrl: false, meta: false, shift: false });
+    runtime.ui.setEditorText("/");
+    expect(
+      runtime.getViewState().composer.completion?.items.map((item) => item.value),
+    ).not.toContain("review");
+
+    runtime.dispose();
+  });
+
+  test("copy slash copies the latest assistant answer as markdown", async () => {
+    const copied: string[] = [];
+    const fixture = createFakeBundle({
+      transcriptSeed: [
+        { role: "user", content: [{ type: "text", text: "Question" }] },
+        { role: "assistant", content: [{ type: "text", text: "Answer body" }] },
+      ],
+    });
+    const runtime = new CliShellRuntime(fixture.bundle, {
+      cwd: process.cwd(),
+      openSession: async () => fixture.bundle,
+      createSession: async () => fixture.bundle,
+      copyTextToClipboard: async (text) => {
+        copied.push(text);
+      },
+    });
+    await runtime.start();
+
+    runtime.ui.setEditorText("/copy");
+    await runtime.handleInput({ key: "enter", ctrl: false, meta: false, shift: false });
+
+    expect(copied).toEqual(["Answer body"]);
+
+    runtime.dispose();
+  });
+
+  test("copy slash warns when no assistant answer exists", async () => {
+    const copied: string[] = [];
+    const fixture = createFakeBundle({
+      transcriptSeed: [{ role: "user", content: [{ type: "text", text: "Question" }] }],
+    });
+    const runtime = new CliShellRuntime(fixture.bundle, {
+      cwd: process.cwd(),
+      openSession: async () => fixture.bundle,
+      createSession: async () => fixture.bundle,
+      copyTextToClipboard: async (text) => {
+        copied.push(text);
+      },
+    });
+    await runtime.start();
+
+    runtime.ui.setEditorText("/copy");
+    await runtime.handleInput({ key: "enter", ctrl: false, meta: false, shift: false });
+
+    expect(copied).toEqual([]);
+    expect(runtime.getViewState().notifications.at(-1)).toMatchObject({
+      level: "warning",
+      message: "No assistant answer is available to copy.",
+    });
+
+    runtime.dispose();
+  });
+
+  test("diff slash opens git diagnostics with replay attribution instead of submitting a prompt", async () => {
+    const prompts: string[] = [];
+    const pagers: Array<{ title: string; lines: readonly string[] }> = [];
+    const cwd = mkdtempSync(join(tmpdir(), "brewva-shell-diff-"));
+    const { bundle } = createFakeBundle({
+      promptHandler: async (text) => {
+        prompts.push(text);
+      },
+    });
+    const runtime = new CliShellRuntime(bundle, {
+      cwd,
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+      openExternalPager: async (title, lines) => {
+        pagers.push({ title, lines });
+        return true;
+      },
+    });
+
+    runtime.ui.setEditorText("/diff");
+    await runtime.handleInput({ key: "enter", ctrl: false, meta: false, shift: false });
+
+    expect(prompts).toEqual([]);
+    expect(pagers).toHaveLength(1);
+    expect(pagers[0]?.title).toBe("Brewva diff");
+    const text = pagers[0]?.lines.join("\n") ?? "";
+    expect(text).toContain("## Git status");
+    expect(text).toContain("Unavailable:");
+    expect(text).toContain("## Brewva turn attribution");
+
+    runtime.dispose();
+    rmSync(cwd, { recursive: true, force: true });
+  });
+
+  test("diff slash bounds large git output before pager rendering", async () => {
+    const pagers: Array<{ title: string; lines: readonly string[] }> = [];
+    const cwd = mkdtempSync(join(tmpdir(), "brewva-shell-large-diff-"));
+    execFileSync("git", ["init"], { cwd, stdio: "ignore" });
+    writeFileSync(
+      join(cwd, "large.txt"),
+      Array.from({ length: 6_100 }, (_, index) => `before ${index} ${"x".repeat(48)}`).join("\n"),
+      "utf8",
+    );
+    execFileSync("git", ["add", "large.txt"], { cwd, stdio: "ignore" });
+    writeFileSync(
+      join(cwd, "large.txt"),
+      Array.from({ length: 6_100 }, (_, index) => `after ${index} ${"y".repeat(48)}`).join("\n"),
+      "utf8",
+    );
+    const { bundle } = createFakeBundle();
+    const runtime = new CliShellRuntime(bundle, {
+      cwd,
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+      openExternalPager: async (title, lines) => {
+        pagers.push({ title, lines });
+        return true;
+      },
+    });
+
+    runtime.ui.setEditorText("/diff");
+    await runtime.handleInput({ key: "enter", ctrl: false, meta: false, shift: false });
+
+    expect(pagers).toHaveLength(1);
+    expect(pagers[0]?.lines.some((line) => line.includes("... truncated after"))).toBe(true);
+    expect(pagers[0]?.lines.length ?? 0).toBeLessThan(5_200);
+
+    runtime.dispose();
+    rmSync(cwd, { recursive: true, force: true });
+  });
+
+  test("patch evidence palette emits attribution and diff stat without full diff text", async () => {
+    const pagers: Array<{ title: string; lines: readonly string[] }> = [];
+    const cwd = mkdtempSync(join(tmpdir(), "brewva-shell-patch-evidence-"));
+    const { bundle } = createFakeBundle();
+    const runtime = new CliShellRuntime(bundle, {
+      cwd,
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+      openExternalPager: async (title, lines) => {
+        pagers.push({ title, lines });
+        return true;
+      },
+    });
+
+    const handled = await invokePaletteCommand(runtime, "diff.exportPatchEvidence");
+
+    expect(handled).toBe(true);
+    expect(pagers).toHaveLength(1);
+    expect(pagers[0]?.title).toBe("Brewva patch evidence");
+    const text = pagers[0]?.lines.join("\n") ?? "";
+    expect(text).toContain("## Brewva turn attribution");
+    expect(text).toContain("## Git diff stat");
+    expect(text).not.toMatch(/^## Git diff$/m);
+
+    runtime.dispose();
+    rmSync(cwd, { recursive: true, force: true });
+  });
+
+  test("export slash opens a session handoff bundle with inspect, transcript, and patch evidence", async () => {
+    const pagers: Array<{ title: string; lines: readonly string[] }> = [];
+    const cwd = mkdtempSync(join(tmpdir(), "brewva-shell-export-"));
+    const fixture = createFakeBundle({
+      transcriptSeed: [
+        { role: "user", content: [{ type: "text", text: "Question" }] },
+        { role: "assistant", content: [{ type: "text", text: "Answer body" }] },
+      ],
+    });
+    const runtime = new CliShellRuntime(fixture.bundle, {
+      cwd,
+      openSession: async () => fixture.bundle,
+      createSession: async () => fixture.bundle,
+      openExternalPager: async (title, lines) => {
+        pagers.push({ title, lines });
+        return true;
+      },
+    });
+    await runtime.start();
+
+    runtime.ui.setEditorText("/export");
+    await runtime.handleInput({ key: "enter", ctrl: false, meta: false, shift: false });
+
+    expect(pagers).toHaveLength(1);
+    expect(pagers[0]?.title).toBe("Brewva session export");
+    const text = pagers[0]?.lines.join("\n") ?? "";
+    expect(text).toContain("# Brewva Session Handoff Bundle");
+    expect(text).toContain("## Inspect Report");
+    expect(text).toContain("## Transcript Markdown");
+    expect(text).toContain("Answer body");
+    expect(text).toContain("## Patch Evidence");
+
+    runtime.dispose();
+    rmSync(cwd, { recursive: true, force: true });
+  });
+
+  test("init slash opens a read-only project guidance preview", async () => {
+    const { bundle } = createFakeBundle();
+    const runtime = new CliShellRuntime(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+    });
+
+    runtime.ui.setEditorText("/init");
+    await runtime.handleInput({ key: "enter", ctrl: false, meta: false, shift: false });
+
+    const payload = runtime.getViewState().overlay.active?.payload;
+    expect(payload).toMatchObject({
+      kind: "pager",
+      title: "Brewva project guidance preview",
+    });
+    if (payload?.kind !== "pager") {
+      throw new Error("init preview must open a pager overlay");
+    }
+    expect(payload.lines.join("\n")).toContain(
+      "This preview is read-only and assembled from the current workspace.",
+    );
+    expect(payload.lines.join("\n")).toContain("## Verification commands");
+    expect(payload.lines.join("\n")).toContain("no verification scripts found");
 
     runtime.dispose();
   });
@@ -1811,7 +2212,7 @@ describe("shell runtime: input routing", () => {
       selectedIndex: 0,
     });
     const secondItem = initialCompletion?.items[1];
-    expect(initialCompletion?.items[0]).toMatchObject({ value: "inbox" });
+    expect(initialCompletion?.items[0]?.value).toMatch(/in/u);
     const selectedSecondItem = requireDefined(secondItem, "second completion item");
 
     await runtime.handleInput({

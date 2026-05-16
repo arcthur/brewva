@@ -241,6 +241,21 @@ export function buildOverlayView(payload: CliShellOverlayPayload): {
         title: payload.title,
         lines: payload.lines,
       };
+    case "context":
+      return {
+        title: "Context",
+        lines: payload.lines,
+      };
+    case "authority":
+      return {
+        title: "Authority",
+        lines: payload.lines,
+      };
+    case "skills":
+      return {
+        title: "Skills",
+        lines: payload.lines,
+      };
     case "oauthWait":
       return {
         title: payload.title,

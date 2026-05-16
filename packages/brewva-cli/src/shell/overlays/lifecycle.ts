@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { getBrewvaToolMetadata } from "@brewva/brewva-tools/registry";
 import type { OverlayPriority } from "../../internal/tui/index.js";
 import { buildSessionInspectReport, resolveInspectDirectory } from "../../operator/inspect.js";
 import { buildCommandPalettePayload, buildHelpHubPayload } from "../commands/command-palette.js";
@@ -11,6 +12,8 @@ import { normalizeShellInputKey } from "../domain/keymap.js";
 import type { OperatorSurfaceSnapshot } from "../domain/operator-snapshot.js";
 import type { CliShellOverlayPayload } from "../domain/overlays/payloads.js";
 import {
+  buildAuthorityOverlayPayload,
+  buildContextOverlayPayload,
   buildInspectOverlayPayload,
   buildLineageOverlayPayload,
   buildQueueOverlayPayload,
@@ -18,6 +21,7 @@ import {
   buildInboxOverlayPayload,
   buildNotificationDetailLines,
   buildNotificationsOverlayPayload,
+  buildSkillsOverlayPayload,
 } from "../domain/overlays/projectors/index.js";
 import type { CliShellPromptPart } from "../domain/prompt.js";
 import { questionRequestsFromSnapshot } from "../domain/question-utils.js";
@@ -27,10 +31,82 @@ import type { CliShellSessionBundle, SessionViewPort } from "../ports/session-po
 import { getOverlayPageStep, hasDiffPreviewPayload, selectableItemCount } from "./navigation.js";
 import { ShellSessionsOverlayProjector } from "./sessions-projector.js";
 
+type AuthorityCapabilitySummary = NonNullable<
+  Parameters<typeof buildAuthorityOverlayPayload>[0]["capabilitySummary"]
+>;
+
+type AuthorityToolAccessRow = NonNullable<
+  Parameters<typeof buildAuthorityOverlayPayload>[0]["toolAccess"]
+>[number];
+
 type PagerTarget = {
   readonly title: string;
   readonly lines: readonly string[];
 };
+
+function buildAuthorityCapabilitySummary(
+  toolDefinitions: CliShellSessionBundle["toolDefinitions"],
+): AuthorityCapabilitySummary {
+  let managedTools = 0;
+  let capabilityScopedTools = 0;
+  const requiredCapabilities = new Set<string>();
+  for (const definition of toolDefinitions.values()) {
+    const metadata = getBrewvaToolMetadata(definition);
+    if (!metadata) {
+      continue;
+    }
+    managedTools += 1;
+    const capabilities = metadata.requiredCapabilities ?? [];
+    if (capabilities.length > 0) {
+      capabilityScopedTools += 1;
+      for (const capability of capabilities) {
+        requiredCapabilities.add(capability);
+      }
+    }
+  }
+  return {
+    managedTools,
+    capabilityScopedTools,
+    requiredCapabilities: [...requiredCapabilities].toSorted(),
+  };
+}
+
+function buildAuthorityToolAccessRows(input: {
+  bundle: CliShellSessionBundle;
+  sessionId: string;
+}): AuthorityToolAccessRow[] {
+  const runtime = input.bundle.runtime;
+  const explain = runtime.inspect.tools.access.explain;
+  const usage = runtime.inspect.context.usage.get(input.sessionId);
+  const rows: AuthorityToolAccessRow[] = [];
+  for (const definition of input.bundle.toolDefinitions.values()) {
+    const toolName = typeof definition.name === "string" ? definition.name : "";
+    if (!toolName) {
+      continue;
+    }
+    try {
+      const result = explain({
+        sessionId: input.sessionId,
+        toolName,
+        cwd: runtime.identity.cwd,
+        usage,
+      });
+      rows.push({
+        toolName,
+        allowed: result.allowed,
+        reason: result.reason,
+        warning: result.warning,
+      });
+    } catch (error) {
+      rows.push({
+        toolName,
+        allowed: false,
+        reason: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+  return rows.toSorted((left, right) => left.toolName.localeCompare(right.toolName));
+}
 
 export type ShellOverlayCommitOptions = ShellCommitOptions;
 
@@ -375,6 +451,16 @@ export class ShellOverlayLifecycleHandler {
       return true;
     }
 
+    if (active.kind === "context" && key === "c") {
+      await this.context.handleShellIntent({
+        type: "command.invoke",
+        commandId: "context.requestCompaction",
+        args: "",
+        source: "internal",
+      });
+      return true;
+    }
+
     if (active.kind === "oauthWait" && key === "c") {
       await this.context.providerAuth.copyOAuthWaitText(active);
       return true;
@@ -549,6 +635,49 @@ export class ShellOverlayLifecycleHandler {
       directory: resolveInspectDirectory(operatorRuntime, undefined, undefined),
     });
     this.openOverlay(buildInspectOverlayPayload(report));
+  }
+
+  openContextOverlay(): void {
+    const runtime = this.context.getBundle().runtime;
+    const sessionId = this.context.getSessionPort().getSessionId();
+    const usage = runtime.inspect.context.usage.get(sessionId);
+    this.openOverlay(
+      buildContextOverlayPayload({
+        sessionId,
+        usage,
+        status: runtime.inspect.context.usage.getStatus(sessionId, usage),
+        pendingCompactionReason: runtime.inspect.context.compaction.getPendingReason(sessionId),
+        gateStatus: runtime.inspect.context.compaction.getGateStatus(sessionId, usage),
+        promptStability: runtime.inspect.context.prompt.getStability(sessionId),
+        transientReduction: runtime.inspect.context.prompt.getTransientReduction(sessionId),
+        providerCache: runtime.inspect.context.providerCache.getObservation(sessionId),
+        visibleReadEpoch: runtime.inspect.context.visibleRead.getEpoch(sessionId),
+        historyViewBaseline: runtime.inspect.context.prompt.getHistoryViewBaseline(sessionId),
+      }),
+    );
+  }
+
+  openAuthorityOverlay(): void {
+    const bundle = this.context.getBundle();
+    const sessionId = this.context.getSessionPort().getSessionId();
+    this.openOverlay(
+      buildAuthorityOverlayPayload({
+        snapshot: this.context.getOperatorSnapshot(),
+        capabilitySummary: buildAuthorityCapabilitySummary(bundle.toolDefinitions),
+        toolAccess: buildAuthorityToolAccessRows({ bundle, sessionId }),
+      }),
+    );
+  }
+
+  openSkillsOverlay(): void {
+    const catalog = this.context.getBundle().runtime.inspect.skills.catalog;
+    this.openOverlay(
+      buildSkillsOverlayPayload({
+        loadReport: catalog.getLoadReport(),
+        skills: catalog.list(),
+        producers: catalog.listProducers(),
+      }),
+    );
   }
 
   openNotificationsOverlay(): void {

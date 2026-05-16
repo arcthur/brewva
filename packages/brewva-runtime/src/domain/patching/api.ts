@@ -27,10 +27,14 @@ export type { RuntimePatchingDomainRegistration } from "./registrar.js";
 export type { FileChangeService } from "./file-change.js";
 export { FileChangeTracker } from "./file-change-tracker.js";
 export {
+  DEFAULT_PATCH_HISTORY_SNAPSHOTS_DIR,
   PATCH_HISTORY_FILE,
   collectPersistedPatchPaths,
   listPersistedPatchSets,
   readPersistedPatchHistory,
+  resolveSessionPatchHistoryDirectory,
+  resolveSessionPatchHistoryPath,
+  sanitizePatchHistorySessionId,
 } from "./patch-history.js";
 export type {
   PersistedPatchChange,

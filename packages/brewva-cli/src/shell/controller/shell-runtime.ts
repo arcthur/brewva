@@ -1,9 +1,19 @@
+import { execFile } from "node:child_process";
+import { readdir, readFile } from "node:fs/promises";
+import { resolve as resolvePath } from "node:path";
+import { promisify } from "node:util";
 import {
   BrewvaEffect,
   startScopedSchedule,
   startScopedTimeout,
   type ScopedScheduleHandle,
 } from "@brewva/brewva-effect";
+import {
+  listPersistedPatchSets,
+  resolveSessionPatchHistoryPath,
+} from "@brewva/brewva-runtime/patch-history";
+import type { PersistedPatchSet } from "@brewva/brewva-runtime/patch-history";
+import { safeParseJson, type JsonObject } from "@brewva/brewva-std/json";
 import type { BrewvaUiDialogOptions } from "@brewva/brewva-substrate/host-api";
 import type {
   BrewvaPromptSessionEvent,
@@ -14,6 +24,11 @@ import {
   type KeybindingResolver,
   type OverlayPriority,
 } from "../../internal/tui/index.js";
+import {
+  buildSessionInspectReport,
+  formatInspectText,
+  resolveInspectDirectory,
+} from "../../operator/inspect.js";
 import { buildCommandPalettePayload, parseShellSlashPrompt } from "../commands/command-palette.js";
 import { ShellCommandProvider } from "../commands/command-provider.js";
 import { registerShellCommands } from "../commands/shell-command-registry.js";
@@ -34,6 +49,7 @@ import type { ShellIntent } from "../domain/intent.js";
 import { shellBuiltInKeybindings } from "../domain/keymap.js";
 import type { OperatorSurfaceSnapshot } from "../domain/operator-snapshot.js";
 import type { CliShellOverlayPayload } from "../domain/overlays/payloads.js";
+import { renderTranscriptAsMarkdown } from "../domain/overlays/projectors/transcript-markdown.js";
 import { cloneCliShellPromptParts } from "../domain/prompt-parts.js";
 import type { CliShellPromptStorePort } from "../domain/prompt.js";
 import { updateShellIntent } from "../domain/reducer.js";
@@ -91,6 +107,90 @@ export interface CliShellRuntimeOptions {
   operatorPollIntervalMs?: number;
   promptStore?: CliShellPromptStorePort;
   completionAgents?: readonly ShellCompletionAgent[] | (() => readonly ShellCompletionAgent[]);
+}
+
+const execFileAsync = promisify(execFile);
+const GIT_EVIDENCE_SECTION_MAX_LINES = 5_000;
+const GIT_EVIDENCE_SECTION_MAX_CHARS = 200_000;
+
+type GitCommandResult =
+  | {
+      readonly ok: true;
+      readonly stdout: string;
+      readonly stderr: string;
+    }
+  | {
+      readonly ok: false;
+      readonly message: string;
+      readonly stdout: string;
+      readonly stderr: string;
+    };
+
+function trimProcessOutput(value: unknown): string {
+  if (typeof value === "string") {
+    return value.trimEnd();
+  }
+  if (Buffer.isBuffer(value)) {
+    return value.toString("utf8").trimEnd();
+  }
+  return "";
+}
+
+function isJsonObject(value: unknown): value is JsonObject {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function formatBoundedGitOutput(text: string, emptyMessage: string): string[] {
+  if (text.length === 0) {
+    return [emptyMessage];
+  }
+
+  const lines: string[] = [];
+  let offset = 0;
+  let renderedChars = 0;
+  let truncated = false;
+
+  while (offset <= text.length) {
+    if (lines.length >= GIT_EVIDENCE_SECTION_MAX_LINES) {
+      truncated = true;
+      break;
+    }
+
+    const newlineIndex = text.indexOf("\n", offset);
+    const rawLineEnd = newlineIndex === -1 ? text.length : newlineIndex;
+    const lineEnd = text.charAt(rawLineEnd - 1) === "\r" ? rawLineEnd - 1 : rawLineEnd;
+    const line = text.slice(offset, lineEnd);
+    const lineSeparatorChars = lines.length === 0 ? 0 : 1;
+    const remainingChars = GIT_EVIDENCE_SECTION_MAX_CHARS - renderedChars - lineSeparatorChars;
+
+    if (remainingChars <= 0) {
+      truncated = true;
+      break;
+    }
+
+    if (line.length > remainingChars) {
+      lines.push(line.slice(0, remainingChars));
+      renderedChars += lineSeparatorChars + remainingChars;
+      truncated = true;
+      break;
+    }
+
+    lines.push(line);
+    renderedChars += lineSeparatorChars + line.length;
+
+    if (newlineIndex === -1) {
+      break;
+    }
+    offset = newlineIndex + 1;
+  }
+
+  if (truncated) {
+    lines.push(
+      `... truncated after ${lines.length} lines/${renderedChars} chars; run git diff in your shell for full output.`,
+    );
+  }
+
+  return lines;
 }
 
 function formatSteerDropReason(reason: unknown): string {
@@ -1011,9 +1111,14 @@ export class CliShellRuntime {
       openQueue: () => this.#overlayHandler.openQueueOverlay(),
       openInspect: () => this.#overlayHandler.openInspectOverlay(),
       openNotifications: () => this.#overlayHandler.openNotificationsOverlay(),
+      openContext: () => this.#overlayHandler.openContextOverlay(),
+      openAuthority: () => this.#overlayHandler.openAuthorityOverlay(),
+      openSkills: () => this.#overlayHandler.openSkillsOverlay(),
       openActivePagerExternally: () => this.openActivePagerExternally(),
       openExternalTranscriptPager: () => this.openExternalTranscriptPager(),
+      copyLatestAssistantAnswer: () => this.copyLatestAssistantAnswer(),
       requestTranscriptNavigation: (kind) => this.requestTranscriptNavigation(kind),
+      requestContextCompaction: () => this.requestContextCompaction(),
       projectSessionEvent: (projectEffect) => {
         try {
           this.#transcriptProjector.handleSessionEvent(projectEffect.event);
@@ -1039,6 +1144,9 @@ export class CliShellRuntime {
       createSession: async () => {
         await this.#sessionHandler.switchBundle(await this.#operatorPort.createSession());
       },
+      openSessionDiffExternalPager: () => this.openSessionDiffExternalPager(),
+      exportSessionBundle: () => this.exportSessionBundle(),
+      exportInspectBundle: () => this.exportInspectBundle(),
       steerSession: async (steerEffect) => {
         if (steerEffect.sessionGeneration !== this.#sessionGeneration) {
           return;
@@ -1157,6 +1265,8 @@ export class CliShellRuntime {
         }
         await this.ui.copyText(text);
       },
+      exportPatchEvidence: () => this.exportPatchEvidence(),
+      previewProjectGuidanceInit: () => this.previewProjectGuidanceInit(),
       openUrl: async (url) => {
         if (!this.ui.openUrl) {
           throw new Error("URL open is unavailable.");
@@ -1223,11 +1333,12 @@ export class CliShellRuntime {
       return false;
     }
     if (slashMatch.kind === "reserved") {
+      const reservedName = slashCommand.name.toLowerCase();
       this.commit(
         {
           type: "notification.add",
           notification: {
-            id: `reserved-slash:${Date.now()}:${slashCommand.name.toLowerCase()}`,
+            id: `reserved-slash:${Date.now()}:${reservedName}`,
             level: "warning",
             message:
               slashMatch.reservation.message ??
@@ -1237,6 +1348,15 @@ export class CliShellRuntime {
         },
         { refreshCompletions: false },
       );
+      const redirectCommandId = slashMatch.reservation.redirectCommandId;
+      if (redirectCommandId) {
+        await this.handleShellIntent({
+          type: "command.invoke",
+          commandId: redirectCommandId,
+          args: "",
+          source: "internal",
+        });
+      }
       return true;
     }
     const intent = this.#commandProvider.createCommandIntent(slashMatch.command.id, {
@@ -1264,6 +1384,392 @@ export class CliShellRuntime {
       },
       { debounceStatus: false },
     );
+  }
+
+  private requestContextCompaction(): void {
+    const sessionId = this.#sessionPort.getSessionId();
+    const usage = this.#bundle.runtime.inspect.context.usage.get(sessionId);
+    const gateStatus = this.#bundle.runtime.inspect.context.compaction.getGateStatus(
+      sessionId,
+      usage,
+    );
+    const previousPendingReason =
+      this.#bundle.runtime.inspect.context.compaction.getPendingReason(sessionId);
+    this.#bundle.runtime.operator.context.compaction.request(sessionId, "manual");
+    if (gateStatus.required) {
+      this.ui.notify(
+        `Context compaction requested; gate is already required (${gateStatus.reason ?? "unknown"}).`,
+        "warning",
+      );
+      return;
+    }
+    if (previousPendingReason) {
+      this.ui.notify(
+        `Context compaction requested; existing pending reason was ${previousPendingReason}.`,
+        "warning",
+      );
+      return;
+    }
+    this.ui.notify("Context compaction requested.", "info");
+  }
+
+  private async copyLatestAssistantAnswer(): Promise<void> {
+    for (let index = this.#state.transcript.messages.length - 1; index >= 0; index -= 1) {
+      const message = this.#state.transcript.messages[index];
+      if (message?.role !== "assistant") {
+        continue;
+      }
+      const text = message.parts
+        .filter((part) => part.type === "text")
+        .map((part) => part.text)
+        .join("\n\n")
+        .trim();
+      if (!text) {
+        continue;
+      }
+      await this.runShellEffects([{ type: "clipboard.copy", text }]);
+      this.ui.notify("Copied latest assistant answer.", "info");
+      return;
+    }
+    this.ui.notify("No assistant answer is available to copy.", "warning");
+  }
+
+  private async readGitOutput(args: readonly string[]): Promise<GitCommandResult> {
+    try {
+      const { stdout, stderr } = await execFileAsync("git", [...args], {
+        cwd: this.options.cwd,
+        encoding: "utf8",
+        maxBuffer: 20 * 1024 * 1024,
+      });
+      return {
+        ok: true,
+        stdout: trimProcessOutput(stdout),
+        stderr: trimProcessOutput(stderr),
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        message: error instanceof Error ? error.message : String(error),
+        stdout: trimProcessOutput(
+          error instanceof Error && "stdout" in error ? error.stdout : undefined,
+        ),
+        stderr: trimProcessOutput(
+          error instanceof Error && "stderr" in error ? error.stderr : undefined,
+        ),
+      };
+    }
+  }
+
+  private resolvePatchHistoryPath(): string {
+    return resolveSessionPatchHistoryPath({
+      workspaceRoot: this.#bundle.runtime.identity.workspaceRoot,
+      sessionId: this.#sessionPort.getSessionId(),
+    });
+  }
+
+  private listSessionPatchSets(): PersistedPatchSet[] {
+    return listPersistedPatchSets({
+      path: this.resolvePatchHistoryPath(),
+      sessionId: this.#sessionPort.getSessionId(),
+    });
+  }
+
+  private appendGitCommandSection(input: {
+    lines: string[];
+    title: string;
+    result: GitCommandResult;
+    emptyMessage: string;
+  }): void {
+    input.lines.push("", `## ${input.title}`);
+    if (input.result.ok) {
+      input.lines.push(...formatBoundedGitOutput(input.result.stdout, input.emptyMessage));
+      if (input.result.stderr) {
+        input.lines.push("", "stderr:", ...formatBoundedGitOutput(input.result.stderr, ""));
+      }
+      return;
+    }
+    input.lines.push(`Unavailable: ${input.result.message}`);
+    if (input.result.stderr) {
+      input.lines.push("", "stderr:", ...formatBoundedGitOutput(input.result.stderr, ""));
+    }
+    if (input.result.stdout) {
+      input.lines.push("", "stdout:", ...formatBoundedGitOutput(input.result.stdout, ""));
+    }
+  }
+
+  private appendPatchAttributionSection(lines: string[]): void {
+    const sessionId = this.#sessionPort.getSessionId();
+    const projection = this.#bundle.runtime.inspect.events.effects.getTurnProjection(sessionId);
+    const patchSets = this.listSessionPatchSets().slice(-8).toReversed();
+    lines.push(
+      "",
+      "## Brewva turn attribution",
+      `runtimeTurn=${projection.runtimeTurn} declared=${projection.declared.length} attempted=${projection.attempted.length} decisions=${projection.decisions.length} executed=${projection.executed.length} recovery=${projection.recovery.length} warnings=${projection.warnings.length}`,
+    );
+    const digest = this.#bundle.runtime.inspect.events.effects.renderTurnDigest(sessionId, {
+      maxChars: 1_800,
+    });
+    lines.push("", digest);
+    lines.push("", "## Brewva patch sets");
+    if (patchSets.length === 0) {
+      lines.push(`No patch sets recorded at ${this.resolvePatchHistoryPath()}.`);
+      return;
+    }
+    for (const patchSet of patchSets) {
+      const paths = patchSet.changes.map((change) => change.path);
+      lines.push(
+        [
+          `- patchSet=${patchSet.id}`,
+          `status=${patchSet.status}`,
+          `tool=${patchSet.toolName}`,
+          `changes=${patchSet.changes.length}`,
+          `appliedAt=${new Date(patchSet.appliedAt).toISOString()}`,
+          patchSet.summary ? `summary=${patchSet.summary}` : undefined,
+          `paths=${paths.slice(0, 5).join(",") || "none"}${paths.length > 5 ? `,+${paths.length - 5}` : ""}`,
+        ]
+          .filter((part): part is string => part !== undefined)
+          .join(" "),
+      );
+    }
+  }
+
+  private async buildDiffEvidenceLines(): Promise<string[]> {
+    const [status, diffStat, diff] = await Promise.all([
+      this.readGitOutput(["status", "--short"]),
+      this.readGitOutput(["diff", "--stat", "--", "."]),
+      this.readGitOutput(["diff", "--", "."]),
+    ]);
+    const lines = [
+      `Session: ${this.#sessionPort.getSessionId()}`,
+      `Working directory: ${this.options.cwd}`,
+    ];
+    this.appendGitCommandSection({
+      lines,
+      title: "Git status",
+      result: status,
+      emptyMessage: "No tracked or untracked changes.",
+    });
+    this.appendGitCommandSection({
+      lines,
+      title: "Git diff stat",
+      result: diffStat,
+      emptyMessage: "No tracked diff stat.",
+    });
+    this.appendGitCommandSection({
+      lines,
+      title: "Git diff",
+      result: diff,
+      emptyMessage: "No tracked diff.",
+    });
+    this.appendPatchAttributionSection(lines);
+    return lines;
+  }
+
+  private async buildPatchEvidenceLines(): Promise<string[]> {
+    const diffStat = await this.readGitOutput(["diff", "--stat", "--", "."]);
+    const lines = [
+      `Session: ${this.#sessionPort.getSessionId()}`,
+      `Working directory: ${this.options.cwd}`,
+    ];
+    this.appendPatchAttributionSection(lines);
+    this.appendGitCommandSection({
+      lines,
+      title: "Git diff stat",
+      result: diffStat,
+      emptyMessage: "No tracked diff stat.",
+    });
+    return lines;
+  }
+
+  private async openSessionDiffExternalPager(): Promise<void> {
+    await this.openExternalPagerTarget({
+      title: "Brewva diff",
+      lines: await this.buildDiffEvidenceLines(),
+    });
+  }
+
+  private async exportPatchEvidence(): Promise<void> {
+    await this.openExternalPagerTarget({
+      title: "Brewva patch evidence",
+      lines: await this.buildPatchEvidenceLines(),
+    });
+  }
+
+  private buildInspectTextLines(): string[] {
+    const report = buildSessionInspectReport({
+      runtime: this.#bundle.runtime,
+      sessionId: this.#sessionPort.getSessionId(),
+      directory: resolveInspectDirectory(this.#bundle.runtime, undefined, undefined),
+    });
+    return formatInspectText(report.base).split("\n");
+  }
+
+  private buildTranscriptMarkdownLines(): string[] {
+    return renderTranscriptAsMarkdown(this.#state.transcript.messages);
+  }
+
+  private async exportSessionBundle(): Promise<void> {
+    const sessionId = this.#sessionPort.getSessionId();
+    const lines = [
+      "# Brewva Session Handoff Bundle",
+      "",
+      `Session: ${sessionId}`,
+      `Workspace: ${this.#bundle.runtime.identity.workspaceRoot}`,
+      `Working directory: ${this.options.cwd}`,
+      "",
+      "## Inspect Report",
+      ...this.buildInspectTextLines(),
+      "",
+      "## Transcript Markdown",
+      ...this.buildTranscriptMarkdownLines(),
+      "",
+      "## Patch Evidence",
+      ...(await this.buildPatchEvidenceLines()),
+    ];
+    await this.openExternalPagerTarget({
+      title: "Brewva session export",
+      lines,
+    });
+  }
+
+  private async exportInspectBundle(): Promise<void> {
+    await this.openExternalPagerTarget({
+      title: "Brewva inspect bundle",
+      lines: this.buildInspectTextLines(),
+    });
+  }
+
+  private async readWorkspaceText(relativePath: string): Promise<string | null> {
+    try {
+      return await readFile(
+        resolvePath(this.#bundle.runtime.identity.workspaceRoot, relativePath),
+        "utf8",
+      );
+    } catch {
+      return null;
+    }
+  }
+
+  private extractMarkdownHeadings(text: string | null, limit: number): string[] {
+    if (!text) {
+      return [];
+    }
+    return text
+      .split(/\r?\n/u)
+      .map((line) => line.match(/^#{2,3}\s+(.+)$/u)?.[1]?.trim())
+      .filter((heading): heading is string => Boolean(heading))
+      .slice(0, limit);
+  }
+
+  private extractPackageScripts(packageJson: string | null): Record<string, string> {
+    if (!packageJson) {
+      return {};
+    }
+    const parsed = safeParseJson(packageJson);
+    if (!isJsonObject(parsed) || !isJsonObject(parsed.scripts)) {
+      return {};
+    }
+    return Object.fromEntries(
+      Object.entries(parsed.scripts).filter(
+        (entry): entry is [string, string] => typeof entry[1] === "string",
+      ),
+    );
+  }
+
+  private buildVerificationCommandLines(scripts: Record<string, string>): string[] {
+    const preferred = [
+      "check",
+      "test",
+      "test:docs",
+      "format:docs:check",
+      "test:dist",
+      "build:binaries",
+    ];
+    const selected = preferred.filter((script) => scripts[script]);
+    if (selected.length === 0) {
+      return ["- no verification scripts found in package.json"];
+    }
+    return selected.map((script) => `- bun run ${script} :: ${scripts[script]}`);
+  }
+
+  private async listScriptDirectoryEntries(): Promise<string[]> {
+    try {
+      const entries = await readdir(
+        resolvePath(this.#bundle.runtime.identity.workspaceRoot, "script"),
+        {
+          withFileTypes: true,
+        },
+      );
+      return entries
+        .filter((entry) => entry.isFile() || entry.isDirectory())
+        .map((entry) => entry.name)
+        .toSorted()
+        .slice(0, 12);
+    } catch {
+      return [];
+    }
+  }
+
+  private async previewProjectGuidanceInit(): Promise<void> {
+    const [
+      packageJson,
+      agentsGuide,
+      workflowGates,
+      packageBoundaries,
+      criticalRules,
+      scriptEntries,
+    ] = await Promise.all([
+      this.readWorkspaceText("package.json"),
+      this.readWorkspaceText("AGENTS.md"),
+      this.readWorkspaceText("skills/project/shared/workflow-gates.md"),
+      this.readWorkspaceText("skills/project/shared/package-boundaries.md"),
+      this.readWorkspaceText("skills/project/shared/critical-rules.md"),
+      this.listScriptDirectoryEntries(),
+    ]);
+    const scripts = this.extractPackageScripts(packageJson);
+    const workflowHeadings = this.extractMarkdownHeadings(workflowGates, 8);
+    const packageBoundaryHeadings = this.extractMarkdownHeadings(packageBoundaries, 6);
+    const criticalRuleHeadings = this.extractMarkdownHeadings(criticalRules, 6);
+    const agentHeadings = this.extractMarkdownHeadings(agentsGuide, 8);
+    this.#overlayHandler.openPagerOverlay({
+      title: "Brewva project guidance preview",
+      lines: [
+        "# Brewva Project Guidance Preview",
+        "",
+        "This preview is read-only and assembled from the current workspace. It does not write AGENTS.md or .brewva metadata.",
+        "",
+        `Workspace: ${this.#bundle.runtime.identity.workspaceRoot}`,
+        `AGENTS.md: ${agentsGuide ? "present" : "missing"}`,
+        "",
+        "## Verification commands",
+        ...this.buildVerificationCommandLines(scripts),
+        "",
+        "## Workflow gates",
+        ...(workflowHeadings.length > 0
+          ? workflowHeadings.map((heading) => `- ${heading}`)
+          : ["- no workflow gate headings found"]),
+        "",
+        "## Package-boundary notes",
+        ...(packageBoundaryHeadings.length > 0
+          ? packageBoundaryHeadings.map((heading) => `- ${heading}`)
+          : ["- no package-boundary guidance found"]),
+        "",
+        "## Critical rules",
+        ...(criticalRuleHeadings.length > 0
+          ? criticalRuleHeadings.map((heading) => `- ${heading}`)
+          : ["- no critical-rule guidance found"]),
+        "",
+        "## Existing agent guide headings",
+        ...(agentHeadings.length > 0
+          ? agentHeadings.map((heading) => `- ${heading}`)
+          : ["- no existing guide headings found"]),
+        "",
+        "## Script inventory",
+        ...(scriptEntries.length > 0
+          ? scriptEntries.map((entry) => `- script/${entry}`)
+          : ["- no script/ entries found"]),
+      ],
+    });
   }
 
   private resolveDialog(dialogId: string | undefined, value: unknown): void {

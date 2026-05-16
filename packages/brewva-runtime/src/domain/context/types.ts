@@ -10,7 +10,11 @@ export interface ContextBudgetUsage {
 
 export type TapePressureLevel = "none" | "low" | "medium" | "high";
 
-export type ContextCompactionReason = "usage_threshold" | "hard_limit" | "predicted_overflow";
+export type ContextCompactionReason =
+  | "usage_threshold"
+  | "hard_limit"
+  | "predicted_overflow"
+  | "manual";
 
 export interface ContextCompactionGateStatus {
   required: boolean;

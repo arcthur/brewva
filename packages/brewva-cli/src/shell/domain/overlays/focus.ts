@@ -43,6 +43,9 @@ export function resolveOverlayFocusOwner(
     case "oauthWait":
     case "commandPalette":
     case "helpHub":
+    case "context":
+    case "authority":
+    case "skills":
       return "dialog";
     default: {
       const exhaustiveCheck: never = payload;

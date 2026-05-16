@@ -1,8 +1,12 @@
 export {
+  DEFAULT_PATCH_HISTORY_SNAPSHOTS_DIR,
   PATCH_HISTORY_FILE,
   collectPersistedPatchPaths,
   listPersistedPatchSets,
   readPersistedPatchHistory,
+  resolveSessionPatchHistoryDirectory,
+  resolveSessionPatchHistoryPath,
+  sanitizePatchHistorySessionId,
   type PersistedPatchChange,
   type PersistedPatchHistory,
   type PersistedPatchSet,
