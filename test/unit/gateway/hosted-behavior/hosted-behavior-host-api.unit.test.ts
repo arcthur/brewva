@@ -65,8 +65,6 @@ function createRuntimeFixture(
 
   const runtime = createBaseRuntimeFixture({
     config: createRuntimeConfig((config) => {
-      config.skills.routing.enabled = true;
-      config.skills.routing.scopes = ["core", "domain"];
       config.infrastructure.events.level = "debug";
       config.infrastructure.contextBudget.compaction.tailProtectTokens = 0;
     }),
@@ -262,18 +260,6 @@ describe("hosted behavior host-api installation", () => {
     expect(handlers.has("agent_end")).toBe(true);
     expect(handlers.has("session_compact")).toBe(true);
     expect(handlers.has("session_shutdown")).toBe(true);
-  });
-
-  test("rejects routingDefaultScopes when an existing runtime is supplied", () => {
-    const { api } = createMockExtensionApi();
-    const { runtime } = createRuntimeFixture();
-
-    expect(() =>
-      createHostedBehaviorHostAdapter({
-        runtime,
-        routingDefaultScopes: ["core", "domain"],
-      }).register(api),
-    ).toThrow(/routingDefaultScopes must be applied when calling createBrewvaRuntime/);
   });
 
   test("composes context through before_agent_start on the canonical hosted behavior", async () => {

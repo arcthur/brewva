@@ -102,33 +102,31 @@ describe("skill layout quality", () => {
     expect(missing, `Directories missing SKILL.md: ${missing.join(", ")}`).toEqual([]);
   });
 
-  it("does not list lifecycle completion as a fallback tool", () => {
+  it("keeps authority fields out of SkillCard frontmatter", () => {
     const repoRoot = resolve(import.meta.dirname, "../../..");
     const skillFiles = collectSkillFiles(resolve(repoRoot, "skills"));
+    const removedFields = [
+      "routing",
+      "intent",
+      "effects",
+      "resources",
+      "execution_hints",
+      "consumes",
+      "requires",
+      "composable_with",
+      "stability",
+      "budget",
+      "tools",
+      "dispatch",
+    ];
 
     for (const skillFile of skillFiles) {
-      const parsed = parseSkillDocument(skillFile, inferCategory(skillFile));
-      const fallbackTools = parsed.contract.executionHints?.fallbackTools ?? [];
-      expect(
-        fallbackTools,
-        `${skillFile} should not list skill_complete as fallback`,
-      ).not.toContain("skill_complete");
-    }
-  });
-
-  it("keeps executable scripts aligned with local_exec permission", () => {
-    const repoRoot = resolve(import.meta.dirname, "../../..");
-    const skillFiles = collectSkillFiles(resolve(repoRoot, "skills"));
-
-    for (const skillFile of skillFiles) {
-      const parsed = parseSkillDocument(skillFile, inferCategory(skillFile));
-      if (parsed.resources.scripts.length === 0) continue;
-
-      const allowedEffects = parsed.contract.effects?.allowedEffects ?? [];
-      expect(
-        allowedEffects,
-        `${skillFile} declares scripts but does not allow local_exec`,
-      ).toContain("local_exec");
+      const content = readFileSync(skillFile, "utf8");
+      for (const field of removedFields) {
+        expect(content, `${skillFile} should not declare removed field '${field}'`).not.toMatch(
+          new RegExp(`^${field}:`, "m"),
+        );
+      }
     }
   });
 
@@ -164,7 +162,7 @@ describe("skill layout quality", () => {
 
     for (const skillFile of skillFiles) {
       const parsed = parseSkillDocument(skillFile, inferCategory(skillFile));
-      const whenToUse = parsed.contract.selection?.whenToUse;
+      const whenToUse = parsed.card.selection?.whenToUse;
       if (!whenToUse) continue;
 
       expect(

@@ -10,7 +10,7 @@ import { normalizeParallelConfig } from "./normalize-parallel.js";
 import { normalizeProjectionConfig } from "./normalize-projection.js";
 import { normalizeScheduleConfig } from "./normalize-schedule.js";
 import { normalizeSecurityConfig } from "./normalize-security.js";
-import { normalizeSkillsConfig } from "./normalize-skills.js";
+import { normalizeCapabilitiesConfig, normalizeSkillsConfig } from "./normalize-skills.js";
 import { normalizeUiConfig } from "./normalize-ui.js";
 import { normalizeVerificationConfig } from "./normalize-verification.js";
 import type { BrewvaConfig } from "./types.js";
@@ -19,6 +19,7 @@ export function normalizeBrewvaConfig(config: unknown, defaults: BrewvaConfig): 
   const input = isRecord(config) ? config : {};
   const uiInput = isRecord(input.ui) ? input.ui : {};
   const skillsInput = isRecord(input.skills) ? input.skills : {};
+  const capabilitiesInput = isRecord(input.capabilities) ? input.capabilities : {};
   const verificationInput = isRecord(input.verification) ? input.verification : {};
   const ledgerInput = isRecord(input.ledger) ? input.ledger : {};
   const tapeInput = isRecord(input.tape) ? input.tape : {};
@@ -33,6 +34,7 @@ export function normalizeBrewvaConfig(config: unknown, defaults: BrewvaConfig): 
   return {
     ui: normalizeUiConfig(uiInput, defaults.ui),
     skills: normalizeSkillsConfig(skillsInput, defaults.skills),
+    capabilities: normalizeCapabilitiesConfig(capabilitiesInput, defaults.capabilities),
     verification: normalizeVerificationConfig(verificationInput, defaults.verification),
     ledger: {
       path: normalizeNonEmptyString(ledgerInput.path, defaults.ledger.path),

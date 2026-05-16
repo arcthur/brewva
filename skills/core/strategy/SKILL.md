@@ -1,70 +1,13 @@
 ---
 name: strategy
-description: Pressure-test the wedge, scope, and product leverage before detailed
-  execution planning begins.
-stability: stable
+description: Pressure-test the wedge, scope, and product leverage before detailed execution planning begins.
 selection:
-  when_to_use: Use when a wedge, scope, or product leverage decision needs strategic pressure before detailed implementation planning.
-intent:
-  outputs:
-    - strategy_review
-    - scope_decision
-    - planning_posture
-    - strategic_risks
-  output_contracts:
-    strategy_review:
-      kind: text
-      min_words: 3
-      min_length: 18
-    scope_decision:
-      kind: text
-      min_words: 3
-      min_length: 18
-    planning_posture:
-      kind: enum
-      values:
-        - trivial
-        - moderate
-        - complex
-        - high_risk
-    strategic_risks:
-      kind: json
-      min_items: 1
-effects:
-  allowed_effects:
-    - workspace_read
-    - runtime_observe
-  denied_effects:
-    - workspace_write
-    - local_exec
-resources:
-  default_lease:
-    max_tool_calls: 70
-    max_tokens: 140000
-  hard_ceiling:
-    max_tool_calls: 110
-    max_tokens: 200000
-execution_hints:
-  preferred_tools:
-    - read
-    - grep
-  fallback_tools:
-    - ledger_query
+  when_to_use: Use when a wedge, scope, or product leverage decision needs strategic pressure before
+    detailed implementation planning.
 references:
   - references/scope-postures.md
   - references/example.md
   - references/rationalizations.md
-consumes:
-  - office_hours_brief
-  - premise_challenge
-  - approach_options
-  - next_assignment
-  - problem_frame
-  - user_pains
-  - scope_recommendation
-  - design_seed
-  - open_questions
-  - repository_snapshot
 ---
 
 # Strategy Skill

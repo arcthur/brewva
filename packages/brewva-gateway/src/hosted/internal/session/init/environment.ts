@@ -6,7 +6,6 @@ import { createTrustedLocalGovernancePort } from "@brewva/brewva-runtime/governa
 import type { ManagedToolMode } from "@brewva/brewva-runtime/session";
 import { resolveBrewvaModelSelection } from "../../../../policy/model-routing/api.js";
 import { toHostedRuntimePort } from "../runtime-ports.js";
-import { DEFAULT_HOSTED_ROUTING_SCOPES } from "../session-factory.js";
 import type { HostedSessionSettingsView } from "../session-factory.js";
 import { createHostedSessionFactory, type HostedSessionFactory } from "../session-factory.js";
 import type { CreateHostedSessionOptions } from "./session-assembly.js";
@@ -16,13 +15,6 @@ export interface HostedEnvironment {
   agentDir: string;
   sessionFactory: HostedSessionFactory;
   requestedModelSelection: ReturnType<typeof resolveBrewvaModelSelection>;
-}
-
-function sameRoutingScopes(actual: readonly string[], expected: readonly string[]): boolean {
-  if (actual.length !== expected.length) {
-    return false;
-  }
-  return actual.every((scope, index) => scope === expected[index]);
 }
 
 export function applyRuntimeUiSettings(
@@ -66,36 +58,13 @@ export function createKernelRuntime(
         config: options.config,
         agentId: options.agentId,
         governancePort: createTrustedLocalGovernancePort({ profile: "team" }),
-        routingScopes: options.routingScopes,
-        routingDefaultScopes:
-          options.routingScopes && options.routingScopes.length > 0
-            ? options.routingDefaultScopes
-            : (options.routingDefaultScopes ?? [...DEFAULT_HOSTED_ROUTING_SCOPES]),
       }),
   );
 }
 
 export function assertRoutingScopeCompatibility(
-  runtime: BrewvaHostedRuntimePort,
-  options: CreateHostedSessionOptions,
+  _runtime: BrewvaHostedRuntimePort,
+  _options: CreateHostedSessionOptions,
 ): void {
-  const hasRoutingOverride = Boolean(options.routingScopes && options.routingScopes.length > 0);
-  const requestedRoutingScopes = options.routingScopes ? [...new Set(options.routingScopes)] : [];
-  if (options.runtime && hasRoutingOverride) {
-    const runtimeRoutingEnabled = runtime.config.skills.routing.enabled;
-    const runtimeRoutingScopes = [...runtime.config.skills.routing.scopes];
-    if (
-      !runtimeRoutingEnabled ||
-      !sameRoutingScopes(runtimeRoutingScopes, requestedRoutingScopes)
-    ) {
-      throw new Error(
-        "routingScopes must be applied when calling createBrewvaRuntime; createHostedSession no longer mutates runtime.config",
-      );
-    }
-  }
-  if (options.runtime && options.routingDefaultScopes && options.routingDefaultScopes.length > 0) {
-    throw new Error(
-      "routingDefaultScopes must be applied when calling createBrewvaRuntime; createHostedSession does not infer runtime config intent from an existing runtime",
-    );
-  }
+  return;
 }

@@ -1,51 +1,10 @@
 ---
 name: goal-loop
-description: Bounded repeated improvement loop with cadence, continuation state,
-  and objective convergence checks.
-stability: experimental
+description: Bounded repeated improvement loop with cadence, continuation state, and objective
+  convergence checks.
 selection:
-  when_to_use: Use when progress requires repeated bounded runs with explicit cadence, continuation state, and objective convergence checks.
-intent:
-  outputs:
-    - loop_contract
-    - iteration_report
-    - convergence_report
-    - continuation_plan
-  output_contracts:
-    loop_contract:
-      kind: json
-      min_items: 8
-    iteration_report:
-      kind: json
-      min_items: 5
-    convergence_report:
-      kind: json
-      min_items: 4
-    continuation_plan:
-      kind: json
-      min_items: 3
-effects:
-  allowed_effects:
-    - workspace_read
-    - memory_write
-    - schedule_mutation
-resources:
-  default_lease:
-    max_tool_calls: 70
-    max_tokens: 140000
-  hard_ceiling:
-    max_tool_calls: 110
-    max_tokens: 200000
-execution_hints:
-  preferred_tools:
-    - read
-    - iteration_fact
-  fallback_tools:
-    - schedule_intent
-    - task_view_state
-    - ledger_query
-    - read_spans
-    - grep
+  when_to_use: Use when progress requires repeated bounded runs with explicit cadence, continuation
+    state, and objective convergence checks.
 references:
   - references/convergence-patterns.md
   - references/handoff-patterns.md
@@ -58,10 +17,6 @@ invariants:
   - invariants/preflight.md
   - invariants/loop-contract.md
   - invariants/outcome-classification.md
-consumes:
-  - design_spec
-  - execution_plan
-  - verification_evidence
 ---
 
 # Goal Loop Skill

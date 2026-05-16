@@ -37,7 +37,6 @@ export function registerToolsDomain(
       recordEvent: (input) => options.kernel.recordEvent(input),
       alwaysAllowedTools: CONTROL_PLANE_TOOLS,
       resolveToolAuthority: (toolName, args) => options.resolveToolAuthority(toolName, args),
-      hasRoutingScope: (scope) => new Set<string>(options.config.skills.routing.scopes).has(scope),
     });
     return toolAccessPolicyService;
   };

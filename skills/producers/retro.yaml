@@ -1,0 +1,17 @@
+producer: retro
+outputs:
+  - retro_summary
+  - retro_findings
+  - followup_recommendation
+output_contracts:
+  retro_summary:
+    kind: text
+    min_words: 3
+    min_length: 18
+  retro_findings:
+    kind: json
+    min_items: 1
+  followup_recommendation:
+    kind: text
+    min_words: 3
+    min_length: 18

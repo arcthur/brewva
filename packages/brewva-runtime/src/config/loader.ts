@@ -34,12 +34,7 @@ export interface NormalizeExplicitBrewvaConfigOptions {
 }
 
 export interface BrewvaConfigMetadata {
-  skills: {
-    routing: {
-      enabledExplicit: boolean;
-      scopesExplicit: boolean;
-    };
-  };
+  skills: Record<string, never>;
 }
 
 export interface BrewvaConfigResolution {
@@ -58,40 +53,22 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function createDefaultBrewvaConfigMetadata(): BrewvaConfigMetadata {
   return {
-    skills: {
-      routing: {
-        enabledExplicit: false,
-        scopesExplicit: false,
-      },
-    },
+    skills: {},
   };
 }
 
 function collectBrewvaConfigMetadata(config: unknown): BrewvaConfigMetadata {
   const metadata = createDefaultBrewvaConfigMetadata();
-  if (!isRecord(config)) {
-    return metadata;
-  }
-
-  const skills = isRecord(config.skills) ? config.skills : null;
-  const routing = skills && isRecord(skills.routing) ? skills.routing : null;
-  metadata.skills.routing.enabledExplicit = Boolean(routing && Object.hasOwn(routing, "enabled"));
-  metadata.skills.routing.scopesExplicit = Boolean(routing && Object.hasOwn(routing, "scopes"));
+  void config;
   return metadata;
 }
 
 function mergeBrewvaConfigMetadata(
-  current: BrewvaConfigMetadata,
-  next: BrewvaConfigMetadata,
+  _current: BrewvaConfigMetadata,
+  _next: BrewvaConfigMetadata,
 ): BrewvaConfigMetadata {
   return {
-    skills: {
-      routing: {
-        enabledExplicit:
-          current.skills.routing.enabledExplicit || next.skills.routing.enabledExplicit,
-        scopesExplicit: current.skills.routing.scopesExplicit || next.skills.routing.scopesExplicit,
-      },
-    },
+    skills: {},
   };
 }
 

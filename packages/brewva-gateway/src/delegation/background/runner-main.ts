@@ -9,7 +9,6 @@ import {
 } from "@brewva/brewva-runtime/delegation";
 import type { DelegationRunRecord } from "@brewva/brewva-runtime/delegation";
 import { SUBAGENT_RUNNING_EVENT_TYPE } from "@brewva/brewva-runtime/events";
-import type { SkillRoutingScope } from "@brewva/brewva-runtime/skills";
 import type {
   ExplorerConsultKind,
   SubagentAgent,
@@ -174,15 +173,6 @@ async function loadSpec(path: string): Promise<DetachedSubagentRunSpec> {
   } as unknown as DetachedSubagentRunSpec;
 }
 
-function normalizeRoutingScopes(
-  scopes: SkillRoutingScope[] | undefined,
-): SkillRoutingScope[] | undefined {
-  if (!scopes || scopes.length === 0) {
-    return undefined;
-  }
-  return [...new Set(scopes)];
-}
-
 async function main(): Promise<void> {
   const specPath = process.argv[2];
   if (!specPath) {
@@ -196,7 +186,6 @@ async function main(): Promise<void> {
     cwd: spec.workspaceRoot,
     config: spec.config,
     configPath: spec.configPath,
-    routingScopes: normalizeRoutingScopes(spec.routingScopes),
   }).hosted;
   const delegationStore = new HostedDelegationStore(parentRuntime);
   const existing = delegationStore.getRun(spec.parentSessionId, spec.runId);
@@ -297,7 +286,6 @@ async function main(): Promise<void> {
       enableSubagents: false,
       managedToolNames: executionPlan.managedToolNames,
       builtinToolNames: executionPlan.builtinToolNames,
-      routingScopes: normalizeRoutingScopes(spec.routingScopes),
       logger: hostedSessionLogger,
     });
     childSessionId = asBrewvaSessionId(childSession.session.sessionManager.getSessionId());

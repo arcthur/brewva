@@ -5,10 +5,10 @@ Skill parsing, merge, and inventory anchors:
 - `packages/brewva-runtime/src/domain/skills/contract.ts`
 - `packages/brewva-runtime/src/domain/skills/registry.ts`
 
-This page owns skill taxonomy, contract metadata, and the generated skill
-inventory. Hosted turns treat skills as readable files and advisory context,
-not as a runtime attention gate. The reset boundary is described in
-`docs/reference/skill-routing.md`.
+This page owns skill taxonomy, SkillCard metadata, ProducerContract metadata,
+and the generated skill inventory. Hosted turns treat skills as readable files
+and advisory context. External action authority lives in capability manifests,
+selection receipts, and tool policy, not in skill frontmatter.
 
 ## Generated Inventory
 
@@ -82,24 +82,41 @@ Runtime/control-plane workflow semantics are not public skills. Verification,
 finishing, recovery, and distribution behavior belong to runtime or operator
 surfaces unless a skill explicitly owns a semantic work contract.
 
-## Contract Semantics
+## SkillCard Semantics
 
-Skill frontmatter is strong only where runtime or control-plane code consumes
-it. The stable consumed families are:
+Skill frontmatter is intentionally small. The accepted SkillCard fields are:
 
-- `name` and `description`
-- `selection.when_to_use` and `selection.paths`
-- `requires` and `consumes`
-- `composable_with`
-- `intent.outputs`, `intent.output_contracts`, and semantic bindings
-- `effects.allowed_effects` and `effects.denied_effects`
-- `resources.default_lease` and `resources.hard_ceiling`
-- `execution_hints.preferred_tools`, fallback tools, and cost hints
-- resource references such as `references`, `scripts`, `heuristics`, and
-  `invariants`
+- `name`
+- `description`
+- `selection.when_to_use`
+- `selection.triggers`
+- `selection.path_globs`
+- `references`
+- `scripts`
+- `invariants`
 
-Authored markdown remains part of the skill contract for model behavior. It is
-not a substitute for structured metadata when runtime code requires a field.
+The following old authority fields are rejected at load time in every skill
+root: `routing`, `intent`, `effects`, `resources`, `execution_hints`,
+`consumes`, `requires`, `composable_with`, `stability`, `budget`, `tools`, and
+`dispatch`.
+
+Authored markdown remains advisory model context. It can describe workflow and
+reasoning expectations, but it cannot grant tool authority, accounts, budgets,
+side effects, or structured output obligations.
+
+## Producer Contracts
+
+Structured producer outputs live outside `SKILL.md` in
+`skills/producers/<name>.yaml`, keyed by producer name. Producer contracts carry:
+
+- `producer`
+- `outputs`
+- `output_contracts`
+- `semantic_bindings`
+
+Delegation and prompt rendering read required outputs from the producer
+registry. Semantic-bound outputs must not duplicate `output_contracts`; non-
+semantic outputs must declare an explicit output contract.
 
 ## File Semantics
 
@@ -111,33 +128,26 @@ Directory layout derives category and discoverability:
 - `skills/meta/*` -> `meta`
 - `skills/project/overlays/*` -> overlay for the matching skill
 
-Hosted runtime code does not score or load skills before useful work. The model
-may read these files through ordinary file/search tools when relevant. Skill
-metadata can still support repository indexing, documentation, and migration
-checks, but it is not a per-turn control surface.
+Hosted runtime code may use SkillCard selection fields for advisory lookup, but
+selection is not authorization. Authored frontmatter cannot override `category`
+or `tier`; attempts to do so are rejected at load time.
 
-## Tier Policy
+`skills/project/shared/*` remains outside the loadable skill graph and is
+treated as repository guidance, not model-callable capability. Its frontmatter
+is convention provenance only: `strength`, `scope`, `convention_kind`,
+`retirement_sensitivity`, and optional `owner`.
 
-Skill tier is a mechanical runtime policy surface derived from directory
-layout. Authored frontmatter cannot override `tier` or `category`; attempts to
-do so are rejected at load time. `skills/project/shared/*` remains outside the
-loadable skill graph and is treated as repository guidance, not model-callable
-capability.
+## Capability Defaults
 
-`effects.allowed_effects` is advisory metadata bounded by the tier ceiling:
+`capabilities.defaults` maps a domain key to a capability name. Use stable
+domain keys such as `email`, `calendar`, `crm`, `deploy`, or `observability`;
+do not key defaults by provider or verb unless that is the actual domain. The
+selector checks the key against user intent before applying the default, so
+`email: gmail-draft` is replayable while `work: gmail-draft` is ambiguous.
 
-- `core`: `workspace_read`, `workspace_write`, `local_exec`,
-  `runtime_observe`, and `delegation`
-- `domain`: the `core` ceiling plus `memory_write`, `schedule_mutation`, and
-  policy-bound external effects
-- `operator`: governance, control, and forensic effects except credential
-  access unless an explicit operator policy allows it
-- `meta`: `workspace_read`, `workspace_write`, `local_exec`,
-  `runtime_observe`, and `memory_write`
-- `internal`: implementation-owned and not model-callable by default
-
-Project overlays can narrow effects or add legal effects within the same tier
-ceiling. They cannot widen a skill beyond the directory-derived tier.
+Account policy still wins over defaults. If a default points at a capability
+whose `auth_profile` is outside the allowed account set, the selector filters
+it out instead of exposing the capability.
 
 ## Skills Versus Delegation
 
@@ -154,9 +164,10 @@ authoritative fact or adoption receipt.
 
 ## Authoring Rules
 
-- Use structured metadata for boundaries the runtime consumes.
-- Keep `selection` useful for humans and repository tooling, not mandatory
-  runtime routing.
+- Keep `SKILL.md` advisory. Put action authority in capability manifests.
+- Put structured producer outputs in `skills/producers/<name>.yaml`.
+- Keep `selection` useful for humans and repository tooling, not runtime
+  authorization.
 - Keep operator/meta skills inspectable even when they are not part of the
   default model context.
 - Put project-specific tightening in overlays or shared project guidance

@@ -2,8 +2,6 @@ import { describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createHostedSession as createBrewvaSession } from "@brewva/brewva-gateway/hosted";
-import { createBrewvaRuntime } from "@brewva/brewva-runtime";
-import { createTrustedLocalGovernancePort } from "@brewva/brewva-runtime/governance";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 describe("brewva session ui settings wiring", () => {
@@ -48,16 +46,15 @@ describe("brewva session ui settings wiring", () => {
     }
   });
 
-  test("preserves runtime ui defaults when config only changes skills routing", async () => {
+  test("preserves runtime ui defaults when config only changes skills catalog", async () => {
     const workspace = createTestWorkspace("session-ui-default");
     writeFileSync(
       join(workspace, ".brewva/brewva.json"),
       JSON.stringify(
         {
           skills: {
-            routing: {
-              scopes: ["core", "domain", "operator"],
-            },
+            roots: ["./skills"],
+            disabled: ["unused-skill"],
           },
         },
         null,
@@ -113,40 +110,8 @@ describe("brewva session ui settings wiring", () => {
     }
   });
 
-  test("existing runtimes reject routingDefaultScopes inference", async () => {
-    const workspace = createTestWorkspace("session-ui-routing-default-scopes-existing-runtime");
-    const runtime = createBrewvaRuntime({
-      cwd: workspace,
-      governancePort: createTrustedLocalGovernancePort({ profile: "team" }),
-    }).hosted;
-
-    return expect(
-      createBrewvaSession({
-        runtime,
-        cwd: workspace,
-        routingDefaultScopes: ["core", "domain"],
-      }),
-    ).rejects.toThrow(/routingDefaultScopes must be applied when calling createBrewvaRuntime/);
-  });
-
   test("session bootstrap no longer exposes removed skill-broker metadata", async () => {
     const workspace = createTestWorkspace("session-ui-skill-broker-bootstrap");
-    writeFileSync(
-      join(workspace, ".brewva/brewva.json"),
-      JSON.stringify(
-        {
-          skills: {
-            routing: {
-              enabled: true,
-              scopes: ["core", "domain"],
-            },
-          },
-        },
-        null,
-        2,
-      ),
-      "utf8",
-    );
     const result = await createBrewvaSession({
       cwd: workspace,
       configPath: ".brewva/brewva.json",
@@ -173,21 +138,6 @@ describe("brewva session ui settings wiring", () => {
 
   test("direct managed tools session bootstrap does not reintroduce removed skill-broker metadata", async () => {
     const workspace = createTestWorkspace("session-ui-skill-broker-direct-tools");
-    writeFileSync(
-      join(workspace, ".brewva/brewva.json"),
-      JSON.stringify(
-        {
-          skills: {
-            routing: {
-              enabled: true,
-            },
-          },
-        },
-        null,
-        2,
-      ),
-      "utf8",
-    );
     const result = await createBrewvaSession({
       cwd: workspace,
       configPath: ".brewva/brewva.json",

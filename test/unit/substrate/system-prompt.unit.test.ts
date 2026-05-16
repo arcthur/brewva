@@ -75,4 +75,32 @@ describe("Brewva system prompt", () => {
       "When progress depends on a blocking user choice or missing requirement, use the question tool",
     );
   });
+
+  test("summarizes advisory skills without listing skill names", () => {
+    const prompt = buildBrewvaSystemPrompt({
+      selectedTools: ["read"],
+      toolSnippets: {
+        read: "Read files from the workspace.",
+      },
+      cwd: "/workspace",
+      skills: [
+        {
+          name: "gmail",
+          description: "Send Gmail messages",
+          filePath: "/workspace/skills/domain/gmail/SKILL.md",
+        },
+        {
+          name: "review",
+          description: "Review code",
+          filePath: "/workspace/skills/core/review/SKILL.md",
+        },
+      ],
+    });
+
+    expect(prompt).toContain("# Available Skills");
+    expect(prompt).toContain("- core: 1");
+    expect(prompt).toContain("- domain: 1");
+    expect(prompt).not.toContain("gmail: Send Gmail messages");
+    expect(prompt).not.toContain("review: Review code");
+  });
 });

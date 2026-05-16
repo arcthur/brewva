@@ -3,7 +3,6 @@ import type { BrewvaToolCallId, BrewvaToolName } from "../../core/identifiers.js
 import type { JsonValue } from "../../core/shared.js";
 import type { RedoResult, RollbackResult } from "../patching/api.js";
 import type { ReasoningCheckpointRecord, ReasoningRevertRecord } from "../reasoning/types.js";
-import type { SkillRoutingScope } from "../skills/api.js";
 import type { IntegrityIssue } from "./integrity.js";
 
 export type ManagedToolMode = "hosted" | "direct";
@@ -14,8 +13,6 @@ export interface CreateBrewvaSessionOptions {
   config?: BrewvaConfig;
   model?: string;
   agentId?: string;
-  routingScopes?: SkillRoutingScope[];
-  routingDefaultScopes?: SkillRoutingScope[];
   managedToolMode?: ManagedToolMode;
 }
 

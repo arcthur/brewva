@@ -1,68 +1,12 @@
 ---
 name: learning-research
-description: Retrieve repository precedents and preventive guidance before non-trivial
-  planning or review.
-stability: stable
+description: Retrieve repository precedents and preventive guidance before non-trivial planning or review.
 selection:
-  when_to_use: Use when a non-trivial task needs repository precedents, prior failure patterns, or preventive guidance before deeper execution.
-intent:
-  outputs:
-    - knowledge_brief
-    - precedent_refs
-    - preventive_checks
-    - precedent_query_summary
-    - precedent_consult_status
-  output_contracts:
-    knowledge_brief:
-      kind: text
-      min_words: 3
-      min_length: 18
-    precedent_refs:
-      kind: json
-    preventive_checks:
-      kind: json
-    precedent_query_summary:
-      kind: text
-      min_words: 3
-      min_length: 18
-    precedent_consult_status:
-      kind: enum
-      values:
-        - matched
-        - no_relevant_precedent_found
-effects:
-  allowed_effects:
-    - workspace_read
-    - runtime_observe
-  denied_effects:
-    - workspace_write
-    - local_exec
-resources:
-  default_lease:
-    max_tool_calls: 90
-    max_tokens: 180000
-  hard_ceiling:
-    max_tool_calls: 130
-    max_tokens: 240000
-execution_hints:
-  preferred_tools:
-    - knowledge_search
-    - read
-    - grep
-  fallback_tools:
-    - ledger_query
-    - workflow_status
+  when_to_use: Use when a non-trivial task needs repository precedents, prior failure patterns, or
+    preventive guidance before deeper execution.
 references:
   - references/example.md
   - references/rationalizations.md
-consumes:
-  - repository_snapshot
-  - impact_map
-  - problem_frame
-  - scope_decision
-  - strategic_risks
-  - planning_posture
-  - root_cause
 ---
 
 # Learning Research Skill

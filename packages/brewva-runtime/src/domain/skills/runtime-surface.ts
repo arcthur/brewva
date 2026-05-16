@@ -13,6 +13,8 @@ export function createSkillsSurfaceMethods(deps: SkillsSurfaceDependencies) {
         getLoadReport: () => deps.skillRegistry.getLoadReport(),
         list: () => deps.skillRegistry.list(),
         get: (name: string) => deps.skillRegistry.get(name),
+        listProducers: () => deps.skillRegistry.listProducers(),
+        getProducer: (name: string) => deps.skillRegistry.getProducer(name),
       },
     },
     operator: {

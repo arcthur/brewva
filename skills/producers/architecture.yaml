@@ -1,0 +1,17 @@
+producer: architecture
+outputs:
+  - architecture_assessment
+  - deepening_opportunities
+  - interface_exploration_brief
+output_contracts:
+  architecture_assessment:
+    kind: text
+    min_words: 8
+    min_length: 48
+  deepening_opportunities:
+    kind: json
+    min_items: 1
+  interface_exploration_brief:
+    kind: text
+    min_words: 8
+    min_length: 48

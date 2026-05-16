@@ -70,7 +70,6 @@ export function createHostedOrchestration(input: {
       runtime,
       delegationStore,
       configPath: options.configPath,
-      routingScopes: options.routingScopes,
       modelRouting,
     }),
     createChildSession: (childOptions) =>
@@ -85,7 +84,6 @@ export function createHostedOrchestration(input: {
         orchestration: childOptions.orchestration,
         managedToolNames: childOptions.managedToolNames,
         builtinToolNames: childOptions.builtinToolNames,
-        routingScopes: options.routingScopes,
         scopeId: options.scopeId,
         logger: options.logger,
       }),

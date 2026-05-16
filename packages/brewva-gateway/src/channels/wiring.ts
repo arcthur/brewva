@@ -74,10 +74,6 @@ export async function runChannelModeOperation(options: RunChannelModeOptions): P
     controllerRuntime: runtime,
     maxLiveRuntimes: orchestrationConfig.limits.maxLiveRuntimes,
     idleRuntimeTtlMs: orchestrationConfig.limits.idleRuntimeTtlMs,
-    routingScopes: orchestrationConfig.enabled ? ["core", "domain", "operator", "meta"] : undefined,
-    routingDefaultScopes: orchestrationConfig.enabled
-      ? ["core", "domain", "operator", "meta"]
-      : undefined,
   });
   const commandRouter = new CommandRouter();
 

@@ -131,9 +131,9 @@ Execution posture is intentionally split:
 - `librarian` researches institutional knowledge and returns `knowledge`
 - public consult intent derives `investigate`, `diagnose`, `design`, or
   `review` internally; only diagnostics select consult kind directly
-- consult runs do not make the child own semantic skill completion; parent
-  skills still emit semantic workflow artifacts such as `workflow.design` and
-  `workflow.review`
+- consult runs do not make the child own semantic completion; parent-owned
+  producer contracts still describe semantic workflow artifacts such as
+  `workflow.design` and `workflow.review`
 - `verifier` is effectful for commands, browser flows, and evidence capture, but it
   is non-patch-producing and does not enter `WorkerResult` adoption semantics
 - `verifier` is intentionally adversarial: a `pass` posture depends on evidence-backed

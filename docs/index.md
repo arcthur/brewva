@@ -84,6 +84,7 @@ Workflow walkthroughs:
   - Delegation tools: `docs/reference/tools/delegation.md`
   - Workflow and scheduling tools: `docs/reference/tools/workflow-and-scheduling.md`
 - Skills: `docs/reference/skills.md`
+- Skill routing and capability selection: `docs/reference/skill-routing.md`
 - Runtime contract and ports: `docs/reference/runtime.md`
 - Provider streaming: `docs/reference/provider-streaming.md`
 - Hosted dynamic context: `docs/reference/hosted-dynamic-context.md`

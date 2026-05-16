@@ -20,8 +20,8 @@ At minimum, validation needs:
 - a candidate output
 - an invariant set
 
-If the schema or candidate is large, place the full content in a temporary artifact and keep only
-a summary plus `artifact_ref` in the final skill outputs.
+If the schema or candidate is large, place the full content in a temporary
+artifact and keep only a summary plus `artifact_ref` in the producer output.
 
 ## Reference Validator
 
@@ -97,7 +97,7 @@ Classification rules:
 Validation evidence should live in:
 
 - raw `exec` output
-- `zca_validation` inside `skill_complete`
+- `zca_validation` inside the extraction producer output
 
 Do not depend on a direct claim-upsert tool, because it is not part of the default tool surface used here.
 

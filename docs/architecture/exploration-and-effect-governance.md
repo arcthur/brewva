@@ -20,10 +20,21 @@ The boundary is practical:
 
 ## Effect Governance
 
-Tool calls pass through action policy, capability scope, command policy,
-boundary policy, skill posture, numeric context status, and approval state.
-Those inputs produce facts. The runtime authority decision owns allow, block,
-defer, receipt, and rollback meaning.
+Tool calls pass through action policy, runtime capability scope, capability
+selection, command policy, boundary policy, numeric context status, and
+approval state. Those inputs produce facts. The runtime authority decision owns
+allow, block, defer, receipt, and rollback meaning.
+
+Skills are deliberately outside this authority chain. `SkillCard` metadata can
+make advisory context discoverable, and producer contracts can describe
+structured workflow artifacts, but neither grants an account, tool surface,
+budget, or external side effect.
+
+External authority first needs a selected capability receipt. The current
+selector is deterministic-only: explicit capability target, policy default
+inside scope, then deterministic filters and selection-field ranking. Embedding
+ranking and LLM fallback are reserved extension points, not active authority
+paths.
 
 ## Runtime Effect Substrate
 
@@ -50,6 +61,7 @@ Use the distinction precisely:
 
 - Authority surface: `docs/reference/runtime.md`
 - Tool policy and receipts: `docs/reference/tools.md`
+- Skill and capability split: `docs/reference/skill-routing.md`
 - Proposal boundary: `docs/reference/proposal-boundary.md`
 - Event families: `docs/reference/events/README.md`
 - Decision provenance: `docs/research/decisions/README.md`

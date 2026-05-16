@@ -1,78 +1,16 @@
 ---
 name: debugging
-description: Root-cause investigation for failing tests or runtime behavior
-  before patching.
-stability: stable
+description: Root-cause investigation for failing tests or runtime behavior before patching.
 selection:
-  when_to_use: Use when tests or runtime behavior fail and the next step is to reproduce the problem, rank hypotheses, and confirm root cause before patching.
-intent:
-  outputs:
-    - root_cause
-    - fix_strategy
-    - failure_evidence
-    - investigation_record
-    - planning_posture
-  output_contracts:
-    root_cause:
-      kind: text
-      min_words: 3
-      min_length: 18
-    fix_strategy:
-      kind: text
-      min_words: 3
-      min_length: 18
-    failure_evidence:
-      kind: text
-      min_words: 2
-      min_length: 12
-    investigation_record:
-      kind: json
-      min_keys: 5
-    planning_posture:
-      kind: enum
-      values:
-        - trivial
-        - moderate
-        - complex
-        - high_risk
-effects:
-  allowed_effects:
-    - workspace_read
-    - local_exec
-    - runtime_observe
-  denied_effects:
-    - workspace_write
-resources:
-  default_lease:
-    max_tool_calls: 100
-    max_tokens: 180000
-  hard_ceiling:
-    max_tool_calls: 140
-    max_tokens: 240000
-execution_hints:
-  preferred_tools:
-    - read
-    - exec
-    - grep
-    - knowledge_search
-  fallback_tools:
-    - lsp_diagnostics
-    - ast_grep_search
-    - ledger_query
+  when_to_use:
+    Use when tests or runtime behavior fail and the next step is to reproduce the problem,
+    rank hypotheses, and confirm root cause before patching.
 references:
   - references/failure-triage.md
   - references/example.md
   - references/rationalizations.md
-consumes:
-  - repository_snapshot
-  - impact_map
-  - verification_evidence
-  - runtime_trace
 scripts:
   - scripts/hypothesis_tracker.py
-composable_with:
-  - implementation
-  - runtime-forensics
 ---
 
 # Debugging

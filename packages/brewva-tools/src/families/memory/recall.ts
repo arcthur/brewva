@@ -86,11 +86,6 @@ function normalizeIntent(value: unknown): RecallSearchIntent | undefined {
     : undefined;
 }
 
-function hasRecallOperatorProfile(runtime: BrewvaToolOptions["runtime"]): boolean {
-  const scopes = runtime.inspect.skills.catalog.getLoadReport().routingScopes;
-  return scopes.includes("operator") || scopes.includes("meta");
-}
-
 function renderRecallEntry(entry: RecallSearchEntry): string {
   const header = [
     `- ranking_score=${entry.rankingScore.toFixed(3)}`,
@@ -354,12 +349,6 @@ export function createRecallCurateTool(options: BrewvaToolOptions): ToolDefiniti
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const sessionId = getSessionId(ctx);
-      if (!hasRecallOperatorProfile(runtime)) {
-        return failTextResult("recall_curate rejected (operator_profile_required).", {
-          ok: false,
-          error: "operator_profile_required",
-        });
-      }
       const stableIds = normalizeStableIds(params.stable_ids);
       if (stableIds.length === 0) {
         return failTextResult("recall_curate rejected (missing_stable_ids).", {

@@ -1,30 +1,8 @@
 ---
 name: plan
-effects:
-  allowed_effects:
-    - workspace_read
-    - runtime_observe
-resources:
-  default_lease:
-    max_tool_calls: 70
-    max_tokens: 140000
-execution_hints:
-  preferred_tools:
-    - read
-    - grep
-  fallback_tools:
-    - glob
-    - lsp_symbols
-    - ledger_query
 references:
   - skills/project/shared/package-boundaries.md
   - skills/project/shared/migration-priority-matrix.md
-consumes:
-  - root_cause
-  - runtime_trace
-requires:
-  - repository_snapshot
-  - impact_map
 ---
 
 # Brewva Plan Overlay

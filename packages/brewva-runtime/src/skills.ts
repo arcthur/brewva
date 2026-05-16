@@ -1,47 +1,36 @@
-// Curated skills contract subpath. Keep root imports focused on createBrewvaRuntime and explicit port types.
+// Curated skills contract subpath. Skills are advisory SkillCards; external
+// authority lives in capability manifests and tool policy.
 export type {
   LoadableSkillCategory,
   OverlaySkillDocument,
   ParsedSkillDocument,
+  ProducerContract,
   ProjectGuidanceEntry,
   ProjectGuidanceStrength,
-  ResourceBudgetLimits,
   SemanticArtifactSchemaId,
+  SkillCard,
+  SkillCardLike,
+  SkillCardOverride,
   SkillCategory,
-  SkillCompletionDefinition,
-  SkillContract,
-  SkillContractLike,
-  SkillContractOverride,
-  SkillCostHint,
   SkillDocument,
-  SkillEffectLevel,
-  SkillEffectsContract,
-  SkillEffectsOverride,
-  SkillEffectsPolicy,
-  SkillExecutionHints,
   SkillIndexOrigin,
-  SkillIntentContract,
   SkillOutputContract,
   SkillOutputEnumContract,
   SkillOutputJsonContract,
   SkillOutputTextContract,
+  SkillOverlayCard,
   SkillOverlayCategory,
-  SkillOverlayContract,
   SkillRefreshInput,
   SkillRefreshResult,
   SkillRegistryLoadReport,
   SkillRegistryRoot,
-  SkillResourceBudget,
-  SkillResourcePolicy,
   SkillResourceSet,
   SkillRootSource,
-  SkillRoutingPolicy,
-  SkillRoutingScope,
   SkillSelectionPolicy,
   SkillSemanticBindings,
+  SkillSystemInstallResult,
   SkillsIndexEntry,
   SkillsIndexFile,
-  SkillSystemInstallResult,
 } from "./domain/skills/types.js";
 export type {
   SkillArtifactIssueTier,
@@ -82,27 +71,16 @@ export type {
 } from "./domain/skills/planning.js";
 export {
   createEmptySkillResources,
-  mergeOverlayContract,
+  mergeOverlayCard,
   mergeSkillResources,
   parseSkillDocument,
-  tightenContract,
 } from "./domain/skills/contract.js";
 export {
-  deriveSkillEffectLevel,
-  getSkillCostHint,
-  getSkillOutputContracts,
-  getSkillSemanticBindings,
-  listSkillAllowedEffects,
-  listSkillDeniedEffects,
-  listSkillFallbackTools,
-  listSkillOutputs,
-  listSkillPreferredTools,
-  resolveSkillDefaultLease,
-  resolveSkillEffectLevel,
-  resolveSkillExecutionHints,
-  resolveSkillHardCeiling,
-  resolveSkillIntent,
-} from "./domain/skills/facets.js";
+  getProducerOutputContracts,
+  getProducerSemanticBindings,
+  listProducerOutputs,
+  parseProducerContractFile,
+} from "./domain/skills/producers.js";
 export {
   FIELD_TO_PLANE,
   SELECTION_PROFILE_SOURCE_FIELDS,
@@ -110,9 +88,33 @@ export {
   hasSelectionProfileSignals,
   type SkillFieldPath,
 } from "./domain/skills/profiles.js";
-export { discoverSkillRegistryRoots } from "./domain/skills/registry.js";
+export { discoverSkillRegistryRoots, SkillRegistry } from "./domain/skills/registry.js";
 export {
   collectPlanningRiskCategories,
   coercePlanningArtifactSet,
 } from "./domain/skills/planning-normalization.js";
 export { coerceReviewReportArtifact } from "./domain/skills/review-normalization.js";
+export { SKILL_REFRESH_RECORDED_EVENT_TYPE } from "./domain/skills/events.js";
+export { SKILLS_EVENT_DESCRIPTORS } from "./domain/skills/event-descriptors.js";
+export {
+  createSkillsInspectSurface,
+  createSkillsOperatorSurface,
+  createSkillsSurfaceMethods,
+} from "./domain/skills/runtime-surface.js";
+export type {
+  RuntimeSkillsSurfaceMethods,
+  SkillsSurfaceDependencies,
+} from "./domain/skills/runtime-surface.js";
+export { registerSkillsDomain } from "./domain/skills/registrar.js";
+export type { RuntimeSkillsDomainRegistration } from "./domain/skills/registrar.js";
+export {
+  getSemanticArtifactOutputContract,
+  renderSemanticArtifactExample,
+} from "./domain/skills/semantic-artifact-catalog.js";
+export {
+  LEGACY_SEMANTIC_ARTIFACT_SCHEMA_ID_ALIASES,
+  SEMANTIC_ARTIFACT_SCHEMA_IDS,
+  isSemanticArtifactSchemaId,
+  normalizeSemanticArtifactSchemaId,
+} from "./domain/skills/semantic-artifacts.js";
+export { ensureBundledSystemSkills } from "./domain/skills/system-install.js";

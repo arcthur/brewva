@@ -12,9 +12,7 @@ describe("config object validation boundary", () => {
       {
         $schema: "./brewva.schema.json",
         skills: {
-          routing: {
-            scopes: ["domain"],
-          },
+          roots: ["./skills"],
         },
       },
       "<test-config>",
@@ -22,9 +20,7 @@ describe("config object validation boundary", () => {
 
     expect(validated.$schema).toBe(undefined);
     expect(validated.skills).toEqual({
-      routing: {
-        scopes: ["domain"],
-      },
+      roots: ["./skills"],
     });
   });
 

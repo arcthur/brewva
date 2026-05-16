@@ -380,6 +380,8 @@ function adaptMcpServerConfigTransport(
       command: server.command,
       args: [...server.args],
       env: { ...server.env },
+      envAllowlist: [...server.envAllowlist],
+      inheritEnv: false,
     };
   }
   return {

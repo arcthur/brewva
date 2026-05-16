@@ -1193,7 +1193,7 @@ describe("turn loop controller", () => {
           message.role === "user" &&
           message.content.some(
             (content) =>
-              content.type === "text" && content.text.includes("complete the active skill"),
+              content.type === "text" && content.text.includes("handle the guard follow-up"),
           ),
       );
       return createStream(
@@ -1228,7 +1228,7 @@ describe("turn loop controller", () => {
         engine.followUp({
           role: "custom",
           customType: "brewva-guard",
-          content: "complete the active skill",
+          content: "handle the guard follow-up",
           display: true,
           timestamp: Date.now(),
         });

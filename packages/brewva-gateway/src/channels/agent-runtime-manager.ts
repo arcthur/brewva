@@ -6,7 +6,6 @@ import type { BrewvaHostedRuntimePort, BrewvaConfig } from "@brewva/brewva-runti
 import { parseJsonc } from "@brewva/brewva-runtime/config";
 import { normalizeAgentId } from "@brewva/brewva-runtime/context";
 import { createTrustedLocalGovernancePort } from "@brewva/brewva-runtime/governance";
-import type { SkillRoutingScope } from "@brewva/brewva-runtime/skills";
 
 export interface AgentRuntimeHandle {
   agentId: string;
@@ -27,8 +26,6 @@ export interface AgentRuntimeManagerOptions {
   controllerRuntime: BrewvaHostedRuntimePort;
   maxLiveRuntimes: number;
   idleRuntimeTtlMs: number;
-  routingScopes?: SkillRoutingScope[];
-  routingDefaultScopes?: SkillRoutingScope[];
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -107,8 +104,6 @@ export class AgentRuntimeManager {
   readonly idleRuntimeTtlMs: number;
 
   private readonly controllerRuntime: BrewvaHostedRuntimePort;
-  private readonly routingScopes?: SkillRoutingScope[];
-  private readonly routingDefaultScopes?: SkillRoutingScope[];
   private readonly handles = new Map<string, AgentRuntimeHandle>();
   private readonly creating = new Map<string, Promise<AgentRuntimeHandle>>();
 
@@ -117,10 +112,6 @@ export class AgentRuntimeManager {
     this.workspaceRoot = options.controllerRuntime.identity.workspaceRoot;
     this.maxLiveRuntimes = Math.max(1, Math.floor(options.maxLiveRuntimes));
     this.idleRuntimeTtlMs = Math.max(1, Math.floor(options.idleRuntimeTtlMs));
-    this.routingScopes = options.routingScopes ? [...new Set(options.routingScopes)] : undefined;
-    this.routingDefaultScopes = options.routingDefaultScopes
-      ? [...new Set(options.routingDefaultScopes)]
-      : undefined;
   }
 
   listRuntimes(): AgentRuntimeSummary[] {
@@ -242,8 +233,6 @@ export class AgentRuntimeManager {
       agentId,
       config,
       governancePort: createTrustedLocalGovernancePort({ profile: "team" }),
-      routingScopes: this.routingScopes,
-      routingDefaultScopes: this.routingDefaultScopes,
     }).hosted;
   }
 

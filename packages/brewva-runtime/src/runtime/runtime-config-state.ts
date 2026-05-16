@@ -26,20 +26,6 @@ export function resolveRuntimeConfigState(input: {
       });
   const config = resolution.config;
 
-  if (input.options.routingScopes && input.options.routingScopes.length > 0) {
-    config.skills.routing.enabled = true;
-    config.skills.routing.scopes = [...new Set(input.options.routingScopes)];
-  } else if (
-    input.options.routingDefaultScopes &&
-    input.options.routingDefaultScopes.length > 0 &&
-    !resolution.metadata.skills.routing.enabledExplicit
-  ) {
-    config.skills.routing.enabled = true;
-    if (!resolution.metadata.skills.routing.scopesExplicit) {
-      config.skills.routing.scopes = [...new Set(input.options.routingDefaultScopes)];
-    }
-  }
-
   return {
     config,
     readonlyConfig: deepFreezeValue(config),

@@ -1,9 +1,13 @@
 import {
-  getSkillSemanticBindings,
-  getSkillOutputContracts,
-  listSkillOutputs,
+  getProducerSemanticBindings,
+  getProducerOutputContracts,
+  listProducerOutputs,
 } from "@brewva/brewva-runtime/skills";
-import type { SkillDocument, SkillOutputContract } from "@brewva/brewva-runtime/skills";
+import type {
+  ProducerContract,
+  SkillDocument,
+  SkillOutputContract,
+} from "@brewva/brewva-runtime/skills";
 import { estimateTokenCount } from "@brewva/brewva-token-estimation";
 import type { DelegationPacket, SubagentContextRef } from "@brewva/brewva-tools/contracts";
 import { buildStructuredOutcomeContract, getCanonicalSubagentPrompt } from "./protocol.js";
@@ -64,10 +68,10 @@ function renderSkillOutputContract(
   return `- ${name}: enum (${contract.values.join(", ")}).`;
 }
 
-function renderSkillContractSection(skill: SkillDocument): string[] {
-  const outputNames = listSkillOutputs(skill.contract);
-  const outputContracts = getSkillOutputContracts(skill.contract);
-  const semanticBindings = getSkillSemanticBindings(skill.contract);
+function renderSkillCardSection(skill: SkillDocument, producer?: ProducerContract): string[] {
+  const outputNames = listProducerOutputs(producer);
+  const outputContracts = getProducerOutputContracts(producer);
+  const semanticBindings = getProducerSemanticBindings(producer);
   const lines = [
     "",
     "## Delegated Skill",
@@ -77,7 +81,7 @@ function renderSkillContractSection(skill: SkillDocument): string[] {
   if (outputNames.length > 0) {
     lines.push(
       "",
-      "### Required Skill Outputs",
+      "### Required Producer Outputs",
       ...outputNames.map((name) => {
         const schemaId = semanticBindings[name];
         const contractLine = renderSkillOutputContract(name, outputContracts[name]);
@@ -107,6 +111,7 @@ export function buildDelegationPrompt(input: {
   packet: DelegationPacket;
   promptOverride?: string;
   skill?: SkillDocument;
+  producer?: ProducerContract;
   inheritedContext?: string;
 }): string {
   const prompt =
@@ -155,7 +160,7 @@ export function buildDelegationPrompt(input: {
     lines.push(
       ...(input.target.resultMode === "consult"
         ? renderSkillContextSection(input.skill)
-        : renderSkillContractSection(input.skill)),
+        : renderSkillCardSection(input.skill, input.producer)),
     );
   }
 

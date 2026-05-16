@@ -1,52 +1,7 @@
 ---
 name: skill-authoring
-description: Design or revise a skill contract, instructions, and artifacts so the
-  catalog stays coherent and composable.
-stability: stable
-selection:
-  when_to_use: Use when adding or revising a skill contract, instructions, or artifact schema so the skill is easier to load, execute, and complete correctly.
-  paths:
-    - skills
-intent:
-  outputs:
-    - skill_spec
-    - skill_contract
-    - skill_scaffold
-  output_contracts:
-    skill_spec:
-      kind: text
-      min_words: 3
-      min_length: 18
-    skill_contract:
-      kind: text
-      min_words: 3
-      min_length: 18
-    skill_scaffold:
-      kind: text
-      min_words: 3
-      min_length: 18
-effects:
-  allowed_effects:
-    - workspace_read
-    - local_exec
-    - runtime_observe
-  denied_effects:
-    - workspace_write
-resources:
-  default_lease:
-    max_tool_calls: 70
-    max_tokens: 140000
-  hard_ceiling:
-    max_tool_calls: 110
-    max_tokens: 200000
-execution_hints:
-  preferred_tools:
-    - read
-    - grep
-  fallback_tools:
-    - exec
-    - glob
-    - ledger_query
+description: Design or revise a SkillCard, ProducerContract, instructions, and artifacts so
+  the catalog stays coherent and composable.
 references:
   - references/authored-behavior.md
   - references/output-patterns.md
@@ -59,9 +14,6 @@ scripts:
   - scripts/fork_skill.py
   - scripts/package_skill.py
   - scripts/quick_validate.py
-consumes:
-  - repository_snapshot
-  - design_spec
 ---
 
 # Skill Authoring
@@ -79,15 +31,15 @@ Author the behavior, not just the schema.
 Use when:
 
 - adding a new skill to the catalog
-- redesigning an existing skill boundary or contract
-- tightening artifact schemas or output contracts
+- redesigning an existing SkillCard boundary or ProducerContract
+- tightening producer artifact schemas or output contracts
 - migrating a skill body to the v2 anatomy (`references/skill-anatomy-v2.md`)
 
 Do NOT use when:
 
 - the change is a runtime phase or policy — that belongs in runtime config
 - a mode or project overlay would suffice — do not create a new public skill
-- the work is pure implementation with no skill contract impact
+- the work is pure implementation with no SkillCard or ProducerContract impact
 
 ## Workflow
 
@@ -129,14 +81,20 @@ is read-only.
 **If the territory overlaps an existing skill**: Stop. Prefer tightening the
 existing skill or creating an overlay.
 
-### Phase 3: Shape the contract
+### Phase 3: Shape the card and producer
 
 Produce:
 
 - `skill_spec`: purpose, trigger, boundaries, and non-goals
-- `skill_contract`: intent, effect governance, `default_lease` + `hard_ceiling`,
-  execution hints, and output contracts
+- `skill_card`: minimal advisory frontmatter: `name`, `description`,
+  optional `selection`, and resource links only
+- `producer_contract`: `producers/<name>.yaml` output names,
+  `output_contracts`, and `semantic_bindings`
 - `skill_scaffold`: minimal SKILL.md skeleton following v2 anatomy
+
+Do not put authority, tool access, effects, resources, routing, budgets, or
+outputs in SKILL.md. Capability manifests own external action authority.
+Producer contracts own structured output shape.
 
 Apply the v2 section order: Iron Law → When to Use → Workflow (with failure
 branches) → Invariants or Scripts → Decision Protocol → Red Flags → Common
@@ -165,7 +123,9 @@ and `scripts/package_skill.py` when a distributable bundle is needed.
 ## Decision Protocol
 
 - Does this need a new skill, or can an existing skill absorb it?
-- Is every piece of deterministic content in a script, not prose?
+- Is every piece of deterministic content in a script or invariant, not prose?
+- Are all external actions represented by capabilities rather than skill prose?
+- Are all structured outputs represented by a ProducerContract rather than SKILL.md frontmatter?
 - Does the Iron Law capture the single most important constraint?
 - Do workflow phases have explicit failure branches?
 - Would a model that reads only the Iron Law and the Workflow still behave safely?
@@ -192,14 +152,15 @@ See `references/example.md` for the grounded example output shape.
 
 - `skill_spec` makes semantic territory and non-goals obvious to the next
   maintainer without reading the full body.
-- `skill_contract` captures the runtime-facing boundary so implementation does
-  not need to infer missing authority rules.
+- `skill_card` stays advisory and does not imply external action authority.
+- `producer_contract` captures the structured output boundary so downstream
+  consumers do not infer artifact shape from prose.
 - `skill_scaffold` gives a maintainer enough structure to finish the skill body
   following v2 anatomy without reinventing sections.
 
 ## Stop Conditions
 
-- The proposed skill is really a runtime phase or policy, not a capability.
+- The proposed skill is really a runtime phase, policy, or capability manifest.
 - The skill duplicates existing semantic territory without justification.
 - There is no stable artifact contract to justify a new skill.
 - The failing test cannot be articulated — boundary is too vague.

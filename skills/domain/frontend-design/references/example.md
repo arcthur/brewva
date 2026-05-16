@@ -1,24 +1,24 @@
 # Concrete Example
 
-Input: "Define the v2 catalog page UI for skills taxonomy and routing profiles."
+Input: "Define the v2 catalog page UI for SkillCards, ProducerContracts, and capability authority."
 
 Output:
 
 ```yaml
 ui_direction:
   The catalog is a workspace tool, not a storefront. Visual weight goes to the
-  skill name, stability badge, and phase tags — the three things an operator
-  scans when choosing a skill. Routing profiles are secondary metadata, shown
-  inline but never competing with the skill identity. The page should feel
-  dense and scannable, like a well-organized reference table, not a marketing
-  grid. No cards. Use a compact list with inline expansion for details.
+  SkillCard name, category, and advisory selection summary. ProducerContracts
+  and capabilities are separate metadata lanes so operators can distinguish
+  reference context from authority. The page should feel dense and scannable,
+  like a well-organized reference table, not a marketing grid. No cards. Use a
+  compact list with inline expansion for details.
 
 ui_spec:
   layout: single-column compact list, 720px max content width
-  hierarchy: primary row is [stability_badge, skill_name, phase_tags] — left-aligned,
-    single line, 14px/600 name, 12px/400 tags
+  hierarchy: primary row is [category_badge, skill_name, selection_summary] — left-aligned,
+    single line, 14px/600 name, 12px/400 summary
   expansion: click row to expand inline panel showing description,
-    output_contracts summary, routing_profile, and references
+    ProducerContract summary, capability authority status, and references
   state_behavior:
     loading: skeleton rows matching primary_row shape, 8 rows
     empty: centered text "No skills match the current filter" with
@@ -27,8 +27,8 @@ ui_spec:
       action button
     filtered: active filter chips above list with clear-all action
   breakpoints:
-    <640px: phase_tags wrap below skill_name, stability_badge stays inline
-    >=1024px: optional second column for routing_profile summary without
+    <640px: selection_summary wraps below skill_name, category_badge stays inline
+    >=1024px: optional second column for ProducerContract summary without
       expansion
   motion: expand/collapse is 150ms ease-out height transition, no other
     animation

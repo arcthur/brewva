@@ -32,7 +32,7 @@ describe("skill-authoring quick validator", () => {
     });
 
     expect(result.status).toBe(0);
-    expect(toTextOutput(result.stdout)).toContain("Skill is valid!");
+    expect(toTextOutput(result.stdout)).toContain("SkillCard is valid!");
   });
 
   test("accepts compressed skills without selection or execution hints", () => {
@@ -47,18 +47,6 @@ describe("skill-authoring quick validator", () => {
           "---",
           "name: compressed",
           "description: Validate compressed authoring surface.",
-          "intent:",
-          "  outputs: []",
-          "effects:",
-          "  allowed_effects: [workspace_read]",
-          "resources:",
-          "  default_lease:",
-          "    max_tool_calls: 20",
-          "    max_tokens: 20000",
-          "  hard_ceiling:",
-          "    max_tool_calls: 30",
-          "    max_tokens: 30000",
-          "consumes: []",
           "---",
           "# compressed",
           "",
@@ -102,7 +90,7 @@ describe("skill-authoring quick validator", () => {
       });
 
       expect(result.status).toBe(0);
-      expect(toTextOutput(result.stdout)).toContain("Skill is valid!");
+      expect(toTextOutput(result.stdout)).toContain("SkillCard is valid!");
     } finally {
       rmSync(workspace, { recursive: true, force: true });
     }
@@ -181,6 +169,7 @@ describe("skill-authoring quick validator", () => {
     try {
       const skillDirectory = join(workspace, "skills/domain/contractcraft");
       mkdirSync(skillDirectory, { recursive: true });
+      mkdirSync(join(workspace, "skills/producers"), { recursive: true });
       writeFileSync(
         join(skillDirectory, "SKILL.md"),
         [
@@ -189,28 +178,49 @@ describe("skill-authoring quick validator", () => {
           "description: Validate recursive item contracts.",
           "selection:",
           "  when_to_use: Use when the task needs the routed test skill.",
-          "intent:",
-          "  outputs: [execution_plan]",
-          "  output_contracts:",
-          "    execution_plan:",
-          "      kind: json",
-          "      min_items: 1",
-          "      item_contract: []",
-          "effects:",
-          "  allowed_effects: [workspace_read]",
-          "resources:",
-          "  default_lease:",
-          "    max_tool_calls: 20",
-          "    max_tokens: 20000",
-          "  hard_ceiling:",
-          "    max_tool_calls: 30",
-          "    max_tokens: 30000",
-          "execution_hints:",
-          "  preferred_tools: [read]",
-          "  fallback_tools: []",
-          "consumes: []",
           "---",
           "# contractcraft",
+          "",
+          "## The Iron Law",
+          "",
+          "```",
+          "VALIDATE PRODUCER CONTRACTS BEFORE SHIPPING",
+          "```",
+          "",
+          "## When to Use",
+          "",
+          "- Validate producer output contracts.",
+          "",
+          "## Workflow",
+          "",
+          "### Step 1",
+          "",
+          "Validate the producer.",
+          "",
+          "**If validation fails**: Stop.",
+          "",
+          "## Red Flags",
+          "",
+          "- Producer shape is ambiguous.",
+          "",
+          "## Stop Conditions",
+          "",
+          "- Producer contract fails.",
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+      writeFileSync(
+        join(workspace, "skills/producers/contractcraft.yaml"),
+        [
+          "producer: contractcraft",
+          "outputs:",
+          "  - execution_plan",
+          "output_contracts:",
+          "  execution_plan:",
+          "    kind: json",
+          "    min_items: 1",
+          "    item_contract: []",
           "",
         ].join("\n"),
         "utf8",
@@ -224,14 +234,14 @@ describe("skill-authoring quick validator", () => {
 
       expect(result.status).toBe(1);
       expect(toTextOutput(result.stdout)).toContain(
-        "Field 'intent.output_contracts.execution_plan.item_contract' must be an object",
+        "Field 'output_contracts.execution_plan.item_contract' must be an object",
       );
     } finally {
       rmSync(workspace, { recursive: true, force: true });
     }
   });
 
-  test("rejects structured suggested_chains execution hints", () => {
+  test("rejects removed execution hints", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-skill-quick-validate-suggested-"));
 
     try {
@@ -277,7 +287,7 @@ describe("skill-authoring quick validator", () => {
 
       expect(result.status).toBe(1);
       expect(toTextOutput(result.stdout)).toContain(
-        "Field 'execution_hints.suggested_chains' is not supported; move workflow guidance into the skill markdown",
+        "Removed authority field(s) in SKILL.md frontmatter: consumes, effects, execution_hints, intent, resources",
       );
     } finally {
       rmSync(workspace, { recursive: true, force: true });

@@ -1,10 +1,12 @@
 # Authored Behavior Patterns
 
-High-quality skills need more than frontmatter contracts.
+High-quality skills need more than frontmatter metadata.
 
-The contract tells Brewva what a skill is allowed to do and what artifacts it
-must emit. The skill body tells the model how a capable specialist should
-behave while doing the work. Strong skills need both.
+The SkillCard tells Brewva when advisory context may be useful. The
+ProducerContract tells Brewva which artifacts the skill can emit. Capability
+manifests tell Brewva which external actions may be authorized. The skill body
+tells the model how a capable specialist should behave while doing the work.
+Strong skills keep those boundaries separate.
 
 Violating the letter of a skill's hard rule is violating the spirit of that
 rule.
@@ -108,9 +110,9 @@ for ordinary ambiguity.
 
 Every output should make the next skill easier to run.
 
-Document what downstream consumers must learn from each artifact. A weak output
-contract rejects placeholders; a strong handoff section tells the model what the
-artifact must contain to be useful.
+Document what downstream consumers must learn from each artifact. A weak
+ProducerContract rejects placeholders; a strong handoff section tells the model
+what the artifact must contain to be useful.
 
 Examples:
 
@@ -195,17 +197,17 @@ applies.
 
 These excuses apply across all skills. Every skill activation should resist them.
 
-| Excuse                                       | Reality                                                                                                                      |
-| -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| "This skill doesn't apply to my task"        | Check the selection criteria. If ambiguous, run the skill anyway — a false activation is cheap, a missed skill is expensive. |
-| "I'll skip the skill and just do the work"   | Skills encode hard-won failure modes. Skipping is betting you won't hit them.                                                |
-| "I know the answer, the process is overhead" | Process produces evidence. Knowing without evidence is guessing with confidence.                                             |
-| "The user wants speed, not process"          | The fastest path is the one that doesn't require rework. Process prevents rework.                                            |
-| "I'll follow the spirit, not the letter"     | Spirit without steps produces inconsistent outputs. Follow the steps, then adapt.                                            |
+| Excuse                                       | Reality                                                                                                                        |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| "This skill doesn't apply to my task"        | Check the selection criteria. If ambiguous, prefer the smallest advisory context and do not infer tool authority from a skill. |
+| "I'll skip the skill and just do the work"   | Skills encode hard-won failure modes. Skipping is betting you won't hit them.                                                  |
+| "I know the answer, the process is overhead" | Process produces evidence. Knowing without evidence is guessing with confidence.                                               |
+| "The user wants speed, not process"          | The fastest path is the one that doesn't require rework. Process prevents rework.                                              |
+| "I'll follow the spirit, not the letter"     | Spirit without steps produces inconsistent outputs. Follow the steps, then adapt.                                              |
 
 ## What To Avoid
 
-- contract-only skeletons that describe outputs but not working behavior
+- metadata-only skeletons that describe outputs but not working behavior
 - giant host-specific preambles inside every skill
 - vague instructions such as "be thorough" without a concrete protocol
 - duplicating runtime authority in skill prose
@@ -224,14 +226,14 @@ Good memory candidates:
 - a constraint or convention that was not obvious from code alone
 
 The `deliberation_memory` tool is read-only inspection. Memory artifacts are
-derived automatically from durable evidence such as skill completions,
+derived automatically from durable evidence such as producer outputs,
 verification outcomes, iteration facts, and task specs. The model does not need
 to write memory explicitly. But the model should use `self-improve` or `retro`
-to surface lessons worth preserving, because those skill outputs feed the
+to surface lessons worth preserving, because those producer outputs feed the
 derivation pipeline.
 
 Do not treat every observation as a systemic lesson. One-off findings stay in
-skill outputs; only repeated, evidence-backed patterns earn long-term memory.
+producer outputs; only repeated, evidence-backed patterns earn long-term memory.
 
 ## Brewva-Specific Boundary
 
@@ -242,5 +244,7 @@ runtime:
   machine
 - skills may describe approval-sensitive choices, but `effect_commitment`
   remains the proposal boundary
+- skills may describe SaaS, CLI, or MCP workflows, but capability selection
+  remains the only action authority boundary
 - skills should improve specialist behavior without reintroducing hidden control
   loops

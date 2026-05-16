@@ -1,54 +1,10 @@
 ---
 name: agent-browser
-description: Use browser automation to inspect pages, gather evidence, and validate
-  flows that cannot be trusted from static code alone.
-stability: stable
+description: Use browser automation to inspect pages, gather evidence, and validate flows that
+  cannot be trusted from static code alone.
 selection:
-  when_to_use: Use when a page, workflow, or UI behavior must be inspected live instead of inferred from static code.
-intent:
-  outputs:
-    - browser_observations
-    - browser_artifacts
-  output_contracts:
-    browser_observations:
-      kind: text
-      min_words: 3
-      min_length: 18
-    browser_artifacts:
-      kind: json
-      min_keys: 1
-      min_items: 1
-effects:
-  allowed_effects:
-    - workspace_read
-    - workspace_write
-    - local_exec
-    - runtime_observe
-resources:
-  default_lease:
-    max_tool_calls: 80
-    max_tokens: 140000
-  hard_ceiling:
-    max_tool_calls: 120
-    max_tokens: 200000
-execution_hints:
-  preferred_tools:
-    - browser_open
-    - browser_wait
-    - browser_snapshot
-    - browser_click
-    - browser_fill
-    - browser_get
-    - browser_screenshot
-    - browser_pdf
-    - browser_diff_snapshot
-    - browser_state_load
-    - browser_state_save
-    - browser_close
-  fallback_tools:
-    - read
-    - look_at
-    - grep
+  when_to_use: Use when a page, workflow, or UI behavior must be inspected live instead of inferred
+    from static code.
 references:
   - references/diff-verification.md
   - references/eval-safe-mode.md
@@ -56,9 +12,6 @@ references:
   - references/semantic-locators.md
   - references/example.md
   - references/rationalizations.md
-consumes:
-  - structured_payload
-  - design_spec
 ---
 
 # Agent Browser Skill

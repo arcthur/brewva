@@ -19,6 +19,12 @@
       "import": "./dist/channels.js",
       "default": "./dist/channels.js"
     },
+    "./capabilities": {
+      "types": "./dist/capabilities.d.ts",
+      "bun": "./src/capabilities.ts",
+      "import": "./dist/capabilities.js",
+      "default": "./dist/capabilities.js"
+    },
     "./core": {
       "types": "./dist/core.d.ts",
       "bun": "./src/core.ts",
@@ -202,6 +208,7 @@
     }
   },
   "dependencies": {
+    "@brewva/brewva-capabilities": "workspace:*",
     "@brewva/brewva-effect": "workspace:*",
     "@brewva/brewva-search": "workspace:*",
     "@brewva/brewva-std": "workspace:*",

@@ -1,0 +1,17 @@
+producer: self-improve
+outputs:
+  - improvement_hypothesis
+  - learning_backlog
+  - improvement_plan
+output_contracts:
+  improvement_hypothesis:
+    kind: text
+    min_words: 3
+    min_length: 18
+  learning_backlog:
+    kind: json
+    min_items: 1
+  improvement_plan:
+    kind: text
+    min_words: 3
+    min_length: 18

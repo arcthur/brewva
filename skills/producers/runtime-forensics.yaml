@@ -1,0 +1,17 @@
+producer: runtime-forensics
+outputs:
+  - runtime_trace
+  - session_summary
+  - artifact_findings
+output_contracts:
+  runtime_trace:
+    kind: text
+    min_words: 3
+    min_length: 18
+  session_summary:
+    kind: text
+    min_words: 3
+    min_length: 18
+  artifact_findings:
+    kind: json
+    min_items: 1

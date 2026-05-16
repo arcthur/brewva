@@ -10,7 +10,7 @@ permanent location. Use `scripts/promote.sh` or apply manually.
 | Project convention  | `AGENTS.md`                               | Affects how agents work in this repo |
 | Workspace pattern   | `AGENTS.md` (CONVENTIONS / ANTI-PATTERNS) | Cross-cutting coding rule            |
 | Runtime behavior    | `docs/reference/`                         | Behavior an operator needs to know   |
-| Core capability     | `skills/core/<name>/SKILL.md`             | Reusable capability boundary         |
+| Core advisory skill | `skills/core/<name>/SKILL.md`             | Reusable advisory workflow boundary  |
 | Domain recipe       | `skills/domain/<name>/SKILL.md`           | Domain-specific tool knowledge       |
 | Operator workflow   | `skills/operator/<name>/SKILL.md`         | Audit / archaeology / git-safe ops   |
 | Meta workflow       | `skills/meta/<name>/SKILL.md`             | Authoring or learning meta-logic     |
@@ -49,7 +49,11 @@ When promoting to a new skill, the extracted skill must satisfy Brewva DoD:
 
 - Use the current category layout (`core`, `domain`, `operator`, `meta`, or `project/overlays`)
 - Do not add `tier` or `category` frontmatter; category is directory-derived
-- YAML frontmatter with `name`, `description`, `stability`, `intent`, `effects`, `resources`, `execution_hints`, `consumes`, and `requires`
+- YAML frontmatter with compact SkillCard fields only: `name`, `description`,
+  optional `selection`, optional `references`, optional `scripts`, and optional
+  `invariants`
+- Put structured outputs in `skills/producers/<name>.yaml`
+- Put external authority in capability manifests, not in `SKILL.md`
 - Sections: Objective, Trigger, Workflow, Stop Conditions, Anti-Patterns, Examples
 - Pass `skills/project/scripts/check-skill-dod.sh`
 

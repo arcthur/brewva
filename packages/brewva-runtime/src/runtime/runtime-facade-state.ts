@@ -539,8 +539,7 @@ class RuntimeFacadeStateController implements BrewvaHostedRuntimePort {
           systemInstall,
           summary: {
             loadedSkills: loadReport.loadedSkills.length,
-            routableSkills: loadReport.routableSkills.length,
-            hiddenSkills: loadReport.hiddenSkills.length,
+            selectableSkills: loadReport.selectableSkills.length,
             overlaySkills: loadReport.overlaySkills.length,
           },
         },

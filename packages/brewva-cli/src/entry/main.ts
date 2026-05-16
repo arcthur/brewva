@@ -9,7 +9,6 @@ import {
 } from "@brewva/brewva-gateway";
 import { runGatewayCliOperation } from "@brewva/brewva-gateway/admin";
 import { runChannelMode } from "@brewva/brewva-gateway/channels";
-import { DEFAULT_HOSTED_ROUTING_SCOPES } from "@brewva/brewva-gateway/hosted";
 import { createBrewvaRuntime, selectOperatorRuntimePort } from "@brewva/brewva-runtime";
 import type { BrewvaRuntimeRoot } from "@brewva/brewva-runtime";
 import type { RuntimeResult } from "@brewva/brewva-runtime/core";
@@ -35,6 +34,7 @@ import {
   writeGatewayAssistantText,
 } from "../io/gateway-print.js";
 import { writeJsonLine } from "../io/json-lines.js";
+import { runSkillsMigrateCli } from "../io/skills-migrate.js";
 import { resolveTargetSession, runInspectCli } from "../operator/inspect.js";
 import type { CliInteractiveSessionOptions } from "../session/cli-runtime.js";
 import { runCliPrintSession } from "../session/cli-runtime.js";
@@ -276,6 +276,10 @@ export async function runCliRootOperation(): Promise<void> {
   }
   if (subcommand?.name === "insights") {
     process.exitCode = await runInsightsCli(subcommand.args);
+    return;
+  }
+  if (subcommand?.name === "skills") {
+    process.exitCode = await runSkillsMigrateCli(subcommand.args);
     return;
   }
 
@@ -562,7 +566,6 @@ export async function runCliRootOperation(): Promise<void> {
     configPath: parsed.configPath,
     agentId: parsed.agentId,
     governancePort: createTrustedLocalGovernancePort({ profile: "team" }),
-    routingDefaultScopes: [...DEFAULT_HOSTED_ROUTING_SCOPES],
   });
   const runtime = runtimeInstance.hosted;
   const operatorRuntime = selectOperatorRuntimePort(runtimeInstance);

@@ -1,4 +1,10 @@
 {
+  "./capabilities": {
+    "owner": "runtime capability authority contracts",
+    "stability": "stable",
+    "decision": "keep",
+    "allowedConsumers": ["gateway", "tools", "cli"]
+  },
   "./channels": {
     "owner": "runtime channel contracts",
     "stability": "stable",

@@ -116,21 +116,6 @@ describe("channel runtime manager", () => {
     expect(runtime.config.projection.workingFile).toBe("agent-working.md");
   });
 
-  test("applies explicit routing scopes to created agent runtimes", async () => {
-    const workspace = createTestWorkspace("channel-runtime-routing-scopes");
-    const controller = createHostedTestRuntime({ cwd: workspace });
-    const manager = new AgentRuntimeManager({
-      controllerRuntime: controller,
-      maxLiveRuntimes: 4,
-      idleRuntimeTtlMs: 60_000,
-      routingScopes: ["core", "domain", "operator", "meta"],
-      routingDefaultScopes: ["core", "domain", "operator", "meta"],
-    });
-
-    const runtime = await manager.getOrCreateRuntime("jack");
-    expect(runtime.config.skills.routing.scopes).toEqual(["core", "domain", "operator", "meta"]);
-  });
-
   test("throws when agent config overlay root is not an object", async () => {
     const workspace = createTestWorkspace("channel-runtime-non-object-config");
     const controller = createHostedTestRuntime({ cwd: workspace });

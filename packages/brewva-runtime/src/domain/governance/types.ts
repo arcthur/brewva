@@ -1,6 +1,5 @@
 import type { BrewvaToolCallId, BrewvaToolName } from "../../core/identifiers-bridge.js";
 import type { RollbackOutcome } from "../../core/shared.js";
-import type { SkillRoutingScope } from "../skills/api.js";
 
 export type ToolEffectClass =
   | "workspace_read"
@@ -119,7 +118,6 @@ export interface ToolActionPolicy {
   effectClasses: ToolEffectClass[];
   boxPolicy?: ToolBoxPolicy;
   budgetWeight?: number;
-  requiredRoutingScopes?: SkillRoutingScope[];
   safetyGate?: ToolActionPolicySafetyGate;
 }
 
@@ -142,7 +140,6 @@ export interface ToolGovernanceDescriptor {
   effects: ToolEffectClass[];
   defaultRisk?: ToolGovernanceRisk;
   boundary?: ToolExecutionBoundary;
-  requiredRoutingScopes?: SkillRoutingScope[];
 }
 
 export interface EffectAuthorityManifestBasis {

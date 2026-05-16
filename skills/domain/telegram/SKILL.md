@@ -1,46 +1,9 @@
 ---
 name: telegram
-description: Telegram-native delivery guidance for message structure,
-  interaction payloads, and CTAs.
-stability: stable
+description: Telegram-native delivery guidance for message structure, interaction payloads, and CTAs.
 selection:
-  when_to_use: Use when output is delivered in Telegram and message structure, interaction payloads, or CTA design must be channel-native.
-intent:
-  outputs:
-    - telegram_response_plan
-    - telegram_payload
-  output_contracts:
-    telegram_response_plan:
-      kind: text
-      min_words: 3
-      min_length: 18
-    telegram_payload:
-      kind: json
-      min_keys: 1
-      min_items: 1
-effects:
-  allowed_effects:
-    - workspace_read
-    - runtime_observe
-  denied_effects:
-    - workspace_write
-    - local_exec
-resources:
-  default_lease:
-    max_tool_calls: 60
-    max_tokens: 120000
-  hard_ceiling:
-    max_tool_calls: 90
-    max_tokens: 180000
-execution_hints:
-  preferred_tools:
-    - read
-  fallback_tools:
-    - grep
-    - look_at
-consumes:
-  - structured_payload
-  - review_report
+  when_to_use: Use when output is delivered in Telegram and message structure, interaction payloads,
+    or CTA design must be channel-native.
 references:
   - references/example.md
   - references/rationalizations.md

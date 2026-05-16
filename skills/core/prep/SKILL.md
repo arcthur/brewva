@@ -1,51 +1,9 @@
 ---
 name: prep
-description: Scope, simplicity, and success-criteria gate for coding tasks before
-  file edits.
-stability: stable
+description: Scope, simplicity, and success-criteria gate for coding tasks before file edits.
 selection:
-  when_to_use: Use when a coding task needs explicit scope, simplicity verdict, and success criteria before any file is edited.
-intent:
-  outputs:
-    - implementation_targets
-    - success_criteria
-    - approach_simplicity_check
-    - scope_declaration
-  semantic_bindings:
-    implementation_targets: planning.implementation_targets.v2
-    success_criteria: planning.success_criteria.v2
-    approach_simplicity_check: planning.approach_simplicity_check.v2
-    scope_declaration: planning.scope_declaration.v2
-effects:
-  allowed_effects:
-    - workspace_read
-    - runtime_observe
-  denied_effects:
-    - workspace_write
-    - local_exec
-resources:
-  default_lease:
-    max_tool_calls: 40
-    max_tokens: 80000
-  hard_ceiling:
-    max_tool_calls: 60
-    max_tokens: 120000
-execution_hints:
-  preferred_tools:
-    - read
-    - grep
-  fallback_tools:
-    - glob
-    - ledger_query
-composable_with:
-  - implementation
-  - plan
-consumes:
-  - problem_frame
-  - design_spec
-  - execution_plan
-  - implementation_targets
-  - planning_posture
+  when_to_use: Use when a coding task needs explicit scope, simplicity verdict, and success criteria
+    before any file is edited.
 references:
   - references/example.md
   - references/rationalizations.md

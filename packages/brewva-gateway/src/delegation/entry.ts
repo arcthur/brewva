@@ -24,6 +24,9 @@ export function prepareSubagentEntry(input: {
   const skillDocument = delegatedSkill
     ? input.parentRuntime.inspect.skills.catalog.get(delegatedSkill)
     : undefined;
+  const producerContract = delegatedSkill
+    ? input.parentRuntime.inspect.skills.catalog.getProducer(delegatedSkill)
+    : undefined;
   if (delegatedSkill && !skillDocument) {
     throw new Error(`unknown_skill:${delegatedSkill}`);
   }
@@ -35,6 +38,7 @@ export function prepareSubagentEntry(input: {
       promptOverride: input.promptOverride,
       inheritedContext: input.inheritedContext,
       skill: skillDocument,
+      producer: producerContract,
     }),
     childOwnsSkill,
   };

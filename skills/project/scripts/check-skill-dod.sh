@@ -34,8 +34,18 @@ validate_project_guidance() {
   if ! printf '%s\n' "${metadata}" | grep -Eq '^scope: [^[:space:]].*$'; then
     failures+=("scope")
   fi
+  if ! printf '%s\n' "${metadata}" | grep -Eq '^convention_kind: (project_fact|user_preference|style_rule|workflow_rule|routing_rule|verification_rule|permission_rule|safety_boundary|compliance_rule)$'; then
+    failures+=("convention_kind")
+  fi
+  if ! printf '%s\n' "${metadata}" | grep -Eq '^retirement_sensitivity: (auto_decay_allowed|review_only|non_retirable_without_owner|pinned)$'; then
+    failures+=("retirement_sensitivity")
+  fi
+  if printf '%s\n' "${metadata}" | grep -Eq '^retirement_sensitivity: (non_retirable_without_owner|pinned)$' &&
+    ! printf '%s\n' "${metadata}" | grep -Eq '^owner: [^[:space:]].*$'; then
+    failures+=("owner")
+  fi
 
-  if printf '%s\n' "${metadata}" | grep -Evq '^(strength|scope):|^[[:space:]]*$|^[[:space:]]*#'; then
+  if printf '%s\n' "${metadata}" | grep -Evq '^(strength|scope|convention_kind|retirement_sensitivity|owner):|^[[:space:]]*$|^[[:space:]]*#'; then
     failures+=("unsupported_frontmatter_field")
   fi
 
@@ -57,25 +67,14 @@ fi
 while IFS= read -r file; do
   count=$((count + 1))
   missing=()
+  removed=()
 
   if ! grep -Eq '^---$' "${file}"; then
     missing+=("frontmatter")
   fi
 
-  if ! grep -Eq '^intent:' "${file}"; then
-    missing+=("intent_contract_field")
-  fi
-
-  if ! grep -Eq '^consumes:' "${file}"; then
-    missing+=("consumes_field")
-  fi
-
-  if ! grep -Eq '^effects:' "${file}"; then
-    missing+=("effects_field")
-  fi
-
-  if ! grep -Eq '^resources:' "${file}"; then
-    missing+=("resources_field")
+  if ! grep -Eq '^name: [^[:space:]].*$' "${file}"; then
+    missing+=("name")
   fi
 
   if ! grep -Eq '^## (The Iron Law|Intent)' "${file}"; then
@@ -98,9 +97,11 @@ while IFS= read -r file; do
     missing+=("anti_patterns_or_red_flags")
   fi
 
-  if ! grep -Eq '^## (Example|Concrete Example)' "${file}"; then
-    missing+=("example")
-  fi
+  for field in routing intent effects resources execution_hints consumes requires composable_with stability budget tools dispatch; do
+    if grep -Eq "^${field}:" "${file}"; then
+      removed+=("${field}")
+    fi
+  done
 
   # Determine skill category and overlay status
   dir="$(dirname "${file}")"
@@ -118,6 +119,12 @@ while IFS= read -r file; do
 
   # Overlays are delta documents — skip v2-specific checks
   if [ "${is_overlay}" = true ]; then
+    if [ "${#removed[@]}" -gt 0 ]; then
+      status=1
+      printf 'FAIL %s\n' "${file}"
+      printf '  removed SkillCard authority fields: %s\n' "${removed[*]}"
+      continue
+    fi
     if grep -Eiq '^(## )?(Hard Invariants|Workflow Gates|Build Baseline|Where To Look|Verification)$' "${file}"; then
       status=1
       printf 'FAIL %s\n' "${file}"
@@ -145,6 +152,10 @@ while IFS= read -r file; do
     continue
   fi
 
+  if ! grep -Eq '^description: [^[:space:]].*$' "${file}"; then
+    missing+=("description")
+  fi
+
   if [ "${category}" = "core" ] || [ "${category}" = "domain" ]; then
     if ! grep -Eq '^## The Iron Law' "${file}"; then
       missing+=("iron_law_v2")
@@ -169,16 +180,11 @@ while IFS= read -r file; do
     fi
   fi
 
-  # v2 check: Example section must have substantial content (at least 5 lines after header)
-  example_lines=0
-  if grep -Eq '^## (Example|Concrete Example)' "${file}"; then
-    example_lines=$(sed -n '/^## \(Example\|Concrete Example\)/,/^## /p' "${file}" | tail -n +2 | head -n -1 | sed '/^[[:space:]]*$/d' | wc -l | tr -d ' ')
-  fi
-  if [ "${example_lines}" -lt 5 ] 2>/dev/null; then
-    missing+=("example_too_short")
-  fi
-
-  if [ "${#missing[@]}" -gt 0 ]; then
+  if [ "${#removed[@]}" -gt 0 ]; then
+    status=1
+    printf 'FAIL %s\n' "${file}"
+    printf '  removed SkillCard authority fields: %s\n' "${removed[*]}"
+  elif [ "${#missing[@]}" -gt 0 ]; then
     status=1
     printf 'FAIL %s\n' "${file}"
     printf '  missing: %s\n' "${missing[*]}"

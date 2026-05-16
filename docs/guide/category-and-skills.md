@@ -1,14 +1,15 @@
 # Category And Skills
 
-This guide explains how the skill catalog is organized and how routing sees it.
-It focuses on catalog layout and routing boundaries, not the exhaustive skill
-inventory. For the authoritative skill list and contract details, use
+This guide explains how the skill catalog is organized after skills were
+reduced to advisory SkillCards. It focuses on catalog layout and the separation
+between skill context and capability authority. For the authoritative skill list
+and contract details, use
 `docs/reference/skills.md`.
 
 ## Current Layout
 
-- Core capability skills: `skills/core`
-- Domain capability skills: `skills/domain`
+- Core advisory skills: `skills/core`
+- Domain advisory skills: `skills/domain`
 - Operator skills: `skills/operator`
 - Meta skills: `skills/meta`
 - Reserved internal skills: `skills/internal`
@@ -22,34 +23,43 @@ tier naming scheme.
 
 The important distinction is semantic:
 
-- public skill: routable capability boundary
+- public skill: advisory instruction and selection context
 - runtime or control-plane workflow semantics: not public skills
 - project overlay: project-specific tightening plus project guidance
-- operator and meta skills: loaded catalog entries, usually hidden from default
-  routing scopes
+- operator and meta skills: loaded catalog entries, explicit or specialist use
 
 Skills should remain behavior-rich, not just contract-rich. Frontmatter defines
-authority, outputs, effects, and resources; the Markdown body still teaches the
+advisory selection and resource references; the Markdown body still teaches the
 model how the specialist reasons, decides, asks questions, and hands work off.
+Outputs live in producer contracts. External actions live in capability
+manifests and tool policy.
 
-## Routing Scopes
+## Selection And Authority
 
-`skills.routing.enabled=false` by default. When routing is enabled,
-`skills.routing.scopes` is the explicit allowlist for routing visibility, but
-scope is not enough by itself. A skill must also declare at least one
-`selection` signal (`when_to_use`, `examples`, `paths`, or `phases`) to appear
-as routable.
+Skill selection is not authorization. A SkillCard can make advisory context easy
+to find, but it cannot expose a SaaS account, CLI, MCP server, write action, or
+external side effect.
 
-Typical hosted defaults are `core`, `domain`, and `operator`. Meta skills remain
-loaded but hidden unless scopes explicitly opt in.
+The runtime accepts only these SkillCard fields:
 
-Interactive hosted entrypoints may apply
-`routingDefaultScopes=["core", "domain"]`; that default only
-activates when config omitted `skills.routing.enabled`, and it does not replace
-explicit `skills.routing.scopes`.
+- `name`
+- `description`
+- `selection.when_to_use`
+- `selection.triggers`
+- `selection.path_globs`
+- `references`
+- `scripts`
+- `invariants`
 
-Bounded or advisory protocol skills are still gated by routing context and
-required artifacts. For example:
+Capability manifests are the authority plane. They are selected separately and
+record durable selection receipts. `skills.routing` and runtime routing scopes
+are removed.
+
+Current capability selection is deterministic: explicit target, policy default,
+then selection-field ranking. Embedding ranking and LLM fallback remain reserved
+RFC stages and do not expose authority in the promoted implementation.
+
+Bounded or advisory protocol skills should still be used narrowly. For example:
 
 - `goal-loop` is not a generic implementation fallback
 - `predict-review` is not a generic replacement for `review`
@@ -85,19 +95,21 @@ than examples.
 
 Project overlays do not create new semantic territory. They:
 
-- add project-specific execution hints and skill-specific tightening
-- tighten allowed and denied effects, resource ceilings, and routing
-  constraints
-- keep base outputs and consumes unless the overlay explicitly replaces them
+- add project-specific advisory tightening
+- add resource references, scripts, invariants, or body guidance
+- cannot add authority fields, tool effects, resource budgets, or output
+  contracts
 
 Runtime prepends shared project guidance from `skills/project/shared` to final
 loaded skills in root order, with each shared document injected at most once per
 skill. This happens independently of whether a skill has a project overlay.
 
 Shared project guidance files must use metadata-only frontmatter with
-`strength` and `scope`. Runtime strips that frontmatter before injection and
-uses it only for provenance labels; it does not grant or deny tool authority,
-change routing, alter provider payloads, mutate tool results, or affect replay.
+`strength`, `scope`, `convention_kind`, `retirement_sensitivity`, and optional
+`owner`. Runtime strips that frontmatter before injection and uses it only for
+provenance and convention-lifecycle labels; it does not grant or deny tool
+authority, change routing, alter provider payloads, mutate tool results, or
+affect replay.
 
 This keeps project knowledge centralized without turning every project into a
 new catalog of public super-skills.

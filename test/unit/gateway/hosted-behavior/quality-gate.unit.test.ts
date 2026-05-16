@@ -154,7 +154,7 @@ describe("Hosted behavior gaps: quality gate", () => {
     expect(calls[0].usage.contextWindow).toBe(4096);
   });
 
-  test("given managed tool metadata, when quality gate starts a tool, then runtime capability facts reach authority", () => {
+  test("given managed external action without selected capability, when quality gate starts a tool, then authority receives denial fact", () => {
     const { api, handlers } = createMockExtensionApi();
     const calls: any[] = [];
     const runtime = createRuntimeFixture({
@@ -189,12 +189,161 @@ describe("Hosted behavior gaps: quality gate", () => {
     );
 
     expect(calls[0].runtimeCapabilityAccess).toMatchObject({
-      allowed: true,
-      basis: "runtime_capability_scope",
+      allowed: false,
+      basis: "capability_selection_scope",
+      reason: "tool 'schedule_intent' requires an explicit selected capability receipt.",
     });
-    expect(calls[0].runtimeCapabilityAccess.advisory).toContain(
-      "authority.schedule.intents.create",
+  });
+
+  test("given naked SaaS CLI command without selected capability, when tool_call hook runs, then hosted behavior blocks call", () => {
+    const { api, handlers } = createMockExtensionApi();
+    const runtime = createRuntimeFixture({
+      tools: {
+        start: (input: any) => ({
+          allowed: input.runtimeCapabilityAccess.allowed,
+          reason: input.runtimeCapabilityAccess.reason,
+        }),
+      },
+      context: {
+        sanitizeInput: (text: string) => text,
+      },
+    });
+
+    registerQualityGate(api, runtime);
+
+    const result = invokeHandler<{ block?: boolean; reason?: string } | undefined>(
+      handlers,
+      "tool_call",
+      {
+        toolCallId: "tc-gh-cli",
+        toolName: "exec",
+        input: { command: "gh repo view" },
+      },
+      {
+        sessionManager: { getSessionId: () => "qg-gh-cli" },
+        getContextUsage: () => ({ tokens: 1, contextWindow: 4096, percent: 0.001 }),
+      },
     );
+
+    expect(result).toEqual({
+      block: true,
+      reason: "CLI 'gh' requires an explicit selected capability receipt.",
+    });
+  });
+
+  test("given publish and credential CLIs without selected capability, when tool_call hook runs, then hosted behavior blocks call", () => {
+    const blockedCommands = [
+      { command: "npm publish", target: "npm-publish" },
+      { command: "pnpm publish", target: "pnpm-publish" },
+      { command: "cargo publish", target: "cargo-publish" },
+      { command: "op item get production-token", target: "op" },
+      { command: "env NODE_AUTH_TOKEN=token npm --workspace app publish", target: "npm-publish" },
+    ];
+
+    for (const { command, target } of blockedCommands) {
+      const { api, handlers } = createMockExtensionApi();
+      const runtime = createRuntimeFixture({
+        tools: {
+          start: (input: any) => ({
+            allowed: input.runtimeCapabilityAccess.allowed,
+            reason: input.runtimeCapabilityAccess.reason,
+          }),
+        },
+        context: {
+          sanitizeInput: (text: string) => text,
+        },
+      });
+
+      registerQualityGate(api, runtime);
+
+      const result = invokeHandler<{ block?: boolean; reason?: string }>(
+        handlers,
+        "tool_call",
+        {
+          toolCallId: `tc-${target}`,
+          toolName: "exec",
+          input: { command },
+        },
+        {
+          sessionManager: { getSessionId: () => `qg-${target}` },
+          getContextUsage: () => ({ tokens: 1, contextWindow: 4096, percent: 0.001 }),
+        },
+      );
+
+      expect(result).toEqual({
+        block: true,
+        reason: `CLI '${target}' requires an explicit selected capability receipt.`,
+      });
+    }
+  });
+
+  test("given ordinary package-manager commands, when tool_call hook runs, then hosted behavior does not require capability selection", () => {
+    const { api, handlers } = createMockExtensionApi();
+    const runtime = createRuntimeFixture({
+      tools: {
+        start: (input: any) => ({
+          allowed: input.runtimeCapabilityAccess.allowed,
+          reason: input.runtimeCapabilityAccess.reason,
+        }),
+      },
+      context: {
+        sanitizeInput: (text: string) => text,
+      },
+    });
+
+    registerQualityGate(api, runtime);
+
+    const result = invokeHandler<{ block?: boolean; reason?: string } | undefined>(
+      handlers,
+      "tool_call",
+      {
+        toolCallId: "tc-npm-test",
+        toolName: "exec",
+        input: { command: "npm test" },
+      },
+      {
+        sessionManager: { getSessionId: () => "qg-npm-test" },
+        getContextUsage: () => ({ tokens: 1, contextWindow: 4096, percent: 0.001 }),
+      },
+    );
+
+    expect(result).toBe(undefined);
+  });
+
+  test("given operator tool without selected capability, when tool_call hook runs, then hosted behavior blocks call", () => {
+    const { api, handlers } = createMockExtensionApi();
+    const runtime = createRuntimeFixture({
+      tools: {
+        start: (input: any) => ({
+          allowed: input.runtimeCapabilityAccess.allowed,
+          reason: input.runtimeCapabilityAccess.reason,
+        }),
+      },
+      context: {
+        sanitizeInput: (text: string) => text,
+      },
+    });
+
+    registerQualityGate(api, runtime);
+
+    const result = invokeHandler<{ block?: boolean; reason?: string }>(
+      handlers,
+      "tool_call",
+      {
+        toolCallId: "tc-operator-tool",
+        toolName: "obs_query",
+        input: { query: "events" },
+      },
+      {
+        sessionManager: { getSessionId: () => "qg-operator-tool" },
+        getContextUsage: () => ({ tokens: 1, contextWindow: 4096, percent: 0.001 }),
+      },
+    );
+
+    expect(result).toEqual({
+      block: true,
+      reason: "tool 'obs_query' requires an explicit selected capability receipt.",
+    });
   });
 
   test("given malformed tool capability metadata, when quality gate starts a tool, then manifest receives a denial fact", () => {

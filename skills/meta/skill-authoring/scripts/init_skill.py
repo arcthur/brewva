@@ -12,38 +12,43 @@ from skill_roots import resolve_global_brewva_root, resolve_project_brewva_root
 
 
 VALID_CATEGORIES = {"core", "domain", "operator", "meta", "internal", "overlay"}
-ROUTABLE_CATEGORIES = {"core", "domain", "operator", "meta"}
+SELECTABLE_CATEGORIES = {"core", "domain", "operator"}
 
-SKILL_TEMPLATE = """---
+SELECTABLE_SKILL_TEMPLATE = """---
 name: {skill_name}
 description: "TODO: explain what this skill does and exactly when it should be used."
-stability: experimental
-intent:
-  outputs: []
-effects:
-  allowed_effects:
-{allowed_effects}
-resources:
-  default_lease:
-    max_tool_calls: 40
-    max_tokens: 80000
-  hard_ceiling:
-    max_tool_calls: 60
-    max_tokens: 120000
-consumes: []
+selection:
+  when_to_use: "TODO: describe when this advisory context should be selected."
+  triggers: []
+  path_globs: []
+references:
+  - references/api_reference.md
+scripts:
+  - scripts/example.py
+invariants: []
 ---
 
 # {skill_title}
+
+## The Iron Law
+
+```
+TODO: NAME THE HARD RULE THAT MUST NOT BE BROKEN
+```
 
 ## Intent
 
 TODO: state the semantic territory of this skill.
 
-## Trigger
+## When to Use / When NOT to Use
 
 Use this skill when:
 
 - TODO: concrete trigger
+
+Do NOT use this skill when:
+
+- TODO: concrete counter-trigger
 
 ## Workflow
 
@@ -58,6 +63,65 @@ TODO: describe the first meaningful action.
 ## Anti-Patterns
 
 - TODO: document the common boundary mistakes
+
+## Red Flags
+
+- TODO: name shortcuts that require stopping or returning to an earlier step
+
+## Example
+
+Input: TODO
+"""
+
+STATIC_SKILL_TEMPLATE = """---
+name: {skill_name}
+description: "TODO: explain what this skill does and exactly when it should be used."
+references:
+  - references/api_reference.md
+scripts:
+  - scripts/example.py
+invariants: []
+---
+
+# {skill_title}
+
+## The Iron Law
+
+```
+TODO: NAME THE HARD RULE THAT MUST NOT BE BROKEN
+```
+
+## Intent
+
+TODO: state the semantic territory of this skill.
+
+## When to Use / When NOT to Use
+
+Use this skill when:
+
+- TODO: concrete trigger
+
+Do NOT use this skill when:
+
+- TODO: concrete counter-trigger
+
+## Workflow
+
+### Step 1
+
+TODO: describe the first meaningful action.
+
+## Stop Conditions
+
+- TODO: call out what should stay out of scope
+
+## Anti-Patterns
+
+- TODO: document the common boundary mistakes
+
+## Red Flags
+
+- TODO: name shortcuts that require stopping or returning to an earlier step
 
 ## Example
 
@@ -127,14 +191,6 @@ def resolve_explicit_skill_parent(base_path: Path, category: str) -> Path:
     return (normalized / "skills" / relative_dir).resolve()
 
 
-def default_allowed_effects(category: str) -> str:
-    if category == "operator":
-        effects = ["workspace_read", "runtime_observe", "local_exec"]
-    else:
-        effects = ["workspace_read", "runtime_observe"]
-    return "\n".join(f"    - {effect}" for effect in effects)
-
-
 def validate_skill_name(skill_name: str) -> None:
     if not re.fullmatch(r"[a-z0-9-]+", skill_name):
         raise ValueError("skill name must be kebab-case ([a-z0-9-]+).")
@@ -153,11 +209,15 @@ def init_skill(skill_name: str, parent_dir: Path, category: str) -> Path:
     (skill_dir / "assets").mkdir()
 
     skill_title = title_case_skill_name(skill_name)
+    template = (
+        SELECTABLE_SKILL_TEMPLATE
+        if category in SELECTABLE_CATEGORIES
+        else STATIC_SKILL_TEMPLATE
+    )
     (skill_dir / "SKILL.md").write_text(
-        SKILL_TEMPLATE.format(
+        template.format(
             skill_name=skill_name,
             skill_title=skill_title,
-            allowed_effects=default_allowed_effects(category),
         ),
         encoding="utf8",
     )
@@ -212,8 +272,10 @@ def main() -> int:
     print(f"  - {skill_dir / 'scripts' / 'example.py'}")
     print(f"  - {skill_dir / 'references' / 'api_reference.md'}")
     print(f"  - {skill_dir / 'assets' / 'example_asset.txt'}")
-    if args.category in ROUTABLE_CATEGORIES:
-        print(f"Routing scope: {args.category}")
+    if args.category in SELECTABLE_CATEGORIES:
+        print(f"Selection category: {args.category}")
+    else:
+        print("Selection hints omitted for static meta/internal/overlay skill category.")
     return 0
 
 

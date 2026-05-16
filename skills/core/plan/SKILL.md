@@ -1,46 +1,9 @@
 ---
 name: plan
-description: Bounded planning for multi-approach, cross-boundary, or
-  trade-off-heavy requests.
-stability: stable
+description: Bounded planning for multi-approach, cross-boundary, or trade-off-heavy requests.
 selection:
-  when_to_use: Use when a request needs a bounded plan, explicit trade-offs, or an executable implementation path before code changes.
-intent:
-  outputs:
-    - design_spec
-    - execution_plan
-    - execution_mode_hint
-    - risk_register
-    - implementation_targets
-  semantic_bindings:
-    design_spec: planning.design_spec.v2
-    execution_plan: planning.execution_plan.v2
-    execution_mode_hint: planning.execution_mode_hint.v2
-    risk_register: planning.risk_register.v2
-    implementation_targets: planning.implementation_targets.v2
-effects:
-  allowed_effects:
-    - workspace_read
-    - runtime_observe
-  denied_effects:
-    - workspace_write
-    - local_exec
-resources:
-  default_lease:
-    max_tool_calls: 90
-    max_tokens: 180000
-  hard_ceiling:
-    max_tool_calls: 130
-    max_tokens: 240000
-execution_hints:
-  preferred_tools:
-    - read
-    - grep
-  fallback_tools:
-    - glob
-    - lsp_symbols
-    - lsp_find_references
-    - ledger_query
+  when_to_use: Use when a request needs a bounded plan, explicit trade-offs, or an executable
+    implementation path before code changes.
 references:
   - references/executable-evidence-bridge.md
   - references/explorer-consultation-protocol.md
@@ -49,25 +12,6 @@ references:
   - references/rationalizations.md
 invariants:
   - invariants/planning-posture.md
-consumes:
-  - problem_frame
-  - user_pains
-  - scope_recommendation
-  - design_seed
-  - open_questions
-  - planning_posture
-  - strategy_review
-  - scope_decision
-  - strategic_risks
-  - repository_snapshot
-  - impact_map
-  - knowledge_brief
-  - precedent_refs
-  - preventive_checks
-  - precedent_query_summary
-  - precedent_consult_status
-  - root_cause
-  - runtime_trace
 ---
 
 # Plan Skill

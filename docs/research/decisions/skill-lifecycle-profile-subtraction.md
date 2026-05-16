@@ -32,3 +32,4 @@
 ## Superseded by
 
 - `docs/research/decisions/model-operated-working-memory-and-context-governance-reset.md`
+- `docs/research/decisions/capability-selection-and-authority-isolation.md`

@@ -1,66 +1,14 @@
 ---
 name: knowledge-capture
-description: Materialize canonical repository precedents under docs/solutions from
-  terminal typed artifacts.
-stability: stable
+description: Materialize canonical repository precedents under docs/solutions from terminal typed artifacts.
 selection:
-  when_to_use: Use when a resolved feature, bug, incident, or review lesson should be turned into reusable repository precedent.
-  paths:
+  when_to_use: Use when a resolved feature, bug, incident, or review lesson should be turned into
+    reusable repository precedent.
+  path_globs:
     - docs/solutions
-intent:
-  outputs:
-    - solution_record
-    - solution_doc_path
-    - capture_status
-  output_contracts:
-    solution_record:
-      kind: json
-      min_keys: 4
-    solution_doc_path:
-      kind: text
-      min_length: 4
-    capture_status:
-      kind: enum
-      values:
-        - created
-        - updated
-        - skipped
-effects:
-  allowed_effects:
-    - workspace_read
-    - workspace_write
-    - runtime_observe
-    - delegation
-  denied_effects:
-    - local_exec
-resources:
-  default_lease:
-    max_tool_calls: 110
-    max_tokens: 220000
-  hard_ceiling:
-    max_tool_calls: 150
-    max_tokens: 280000
-execution_hints:
-  preferred_tools:
-    - knowledge_capture
-    - knowledge_search
-    - read
-    - grep
-    - output_search
-  fallback_tools:
-    - subagent_fanout
 references:
   - references/example.md
   - references/rationalizations.md
-consumes:
-  - investigation_record
-  - review_findings
-  - review_report
-  - retro_findings
-  - followup_recommendation
-  - verification_evidence
-  - design_spec
-  - change_set
 ---
 
 # Knowledge Capture Skill

@@ -278,16 +278,16 @@ const SEMANTIC_ARTIFACT_SCHEMAS: Readonly<
           "Keep semantic schema ids consumer-facing without turning them into producer-side exact contracts.",
         owner: "runtime-contracts",
         exit_criteria:
-          "The active plan skill emits raw planning outputs while runtime inspect surfaces derive the canonical view.",
+          "The plan producer emits raw planning outputs while runtime inspect surfaces derive the canonical view.",
         verification_intent:
           "Contract and normalization tests prove semantic bindings stay consumer-facing and producer validation remains narrow.",
       },
       {
-        step: "Restrict repair posture to completion-only control-plane tools.",
+        step: "Restrict repair posture to producer-output repair tools.",
         intent: "Prevent contract-fix retries from expanding back into repository exploration.",
         owner: "gateway-runtime",
         exit_criteria:
-          "A rejected skill completion can only inspect workflow state and retry completion.",
+          "A rejected producer output can only inspect workflow state and retry the bounded output.",
         verification_intent:
           "Repair posture tests confirm read/search/edit tools are hidden and blocked.",
       },
@@ -515,7 +515,8 @@ const SEMANTIC_ARTIFACT_SCHEMAS: Readonly<
       {
         item: "repair posture contract tests",
         status: "pending",
-        evidence: "CI has not yet executed the new skill completion and reconciliation suites.",
+        evidence:
+          "CI has not yet executed the new producer-output repair and reconciliation suites.",
       },
     ],
   },

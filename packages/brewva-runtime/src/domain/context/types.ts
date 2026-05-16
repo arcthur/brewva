@@ -1,6 +1,5 @@
 import type { BrewvaSessionId } from "../../core/identifiers-bridge.js";
 import type { RuntimeResult } from "../../core/runtime-result.js";
-import type { ResourceBudgetLimits } from "../skills/api.js";
 
 export interface ContextBudgetUsage {
   tokens: number | null;
@@ -412,7 +411,11 @@ export interface ToolAccessResult {
   warning?: string;
 }
 
-export type ResourceLeaseBudget = ResourceBudgetLimits;
+export interface ResourceLeaseBudget {
+  maxToolCalls?: number;
+  maxTokens?: number;
+  maxParallel?: number;
+}
 
 export interface ResourceLeaseRecord {
   id: string;

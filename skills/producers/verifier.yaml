@@ -1,0 +1,17 @@
+producer: verifier
+outputs:
+  - verifier_report
+  - verifier_findings
+  - verifier_verdict
+  - verifier_checks
+  - verifier_missing_evidence
+  - verifier_confidence_gaps
+  - verifier_environment_limits
+semantic_bindings:
+  verifier_report: verifier.verifier_report.v2
+  verifier_findings: verifier.verifier_findings.v2
+  verifier_verdict: verifier.verifier_verdict.v2
+  verifier_checks: verifier.verifier_checks.v2
+  verifier_missing_evidence: verifier.verifier_missing_evidence.v2
+  verifier_confidence_gaps: verifier.verifier_confidence_gaps.v2
+  verifier_environment_limits: verifier.verifier_environment_limits.v2

@@ -37,9 +37,16 @@ It does not decide:
 A hosted turn has one stable request shape:
 
 - stable system prompt plus `[Brewva Context Contract]`
+- an optional `[CapabilitySelection]` section appended by the hosted tool
+  surface when deterministic capability selection produces selected,
+  forbidden, or policy evidence
 - stable managed tool definitions
 - one hidden dynamic tail rendered by `createHostedWorkbenchContextController`
 - ordinary conversation messages and tool results
+
+`[CapabilitySelection]` is not part of the dynamic-tail renderer. It is a
+system-prompt authority view backed by a durable selection receipt, and it is
+kept physically separate from advisory skill inventory.
 
 There is no `ContextSourceProvider` registry, no supplemental family registry,
 no category/provenance lane model, and no per-turn context admission budget.

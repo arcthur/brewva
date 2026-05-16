@@ -1,7 +1,8 @@
 # Plan Output Example
 
-Use `skill_complete` with a structured `outputs` object that matches the canonical
-planning artifacts.
+Use this shape when emitting the structured planning artifacts described by
+`skills/producers/plan.yaml`. The SkillCard remains advisory; this example is a
+producer output shape, not `SKILL.md` frontmatter.
 
 ```json
 {
@@ -11,8 +12,8 @@ planning artifacts.
       "step": "Introduce semantic bindings for runtime-consumed planning artifacts.",
       "intent": "Make planning outputs derive from canonical schema ids instead of drifting copies.",
       "owner": "runtime",
-      "exit_criteria": "Stable planning skills declare semantic_bindings and runtime validates against canonical contracts.",
-      "verification_intent": "Contract tests prove semantic_bindings, output_contracts, and examples stay aligned."
+      "exit_criteria": "Producer contracts declare semantic_bindings and runtime validates against canonical contracts.",
+      "verification_intent": "Contract tests prove producer contracts and examples stay aligned."
     },
     {
       "step": "Move task and workflow lifecycle tools onto the control plane.",
@@ -22,17 +23,17 @@ planning artifacts.
       "verification_intent": "Authorization tests show task ledger updates no longer emit unauthorized-effects warnings."
     },
     {
-      "step": "Enforce repair posture after invalid skill completion.",
-      "intent": "Prevent free-form retries from re-expanding context after a contract failure.",
+      "step": "Enforce repair posture after invalid producer output.",
+      "intent": "Prevent free-form retries from re-expanding context after a producer contract failure.",
       "owner": "runtime",
-      "exit_criteria": "Invalid completion enters repair_required with bounded attempts, tool calls, and token budget.",
-      "verification_intent": "skill_complete tests show invalid outputs surface repair state and restricted tool availability."
+      "exit_criteria": "Invalid output enters repair_required with bounded attempts, tool calls, and token budget.",
+      "verification_intent": "Producer contract tests show invalid outputs surface repair state and restricted tool availability."
     }
   ],
   "execution_mode_hint": "coordinated_rollout",
   "risk_register": [
     {
-      "risk": "Control-plane reclassification could accidentally widen tool visibility during active skills.",
+      "risk": "Control-plane reclassification could accidentally widen tool visibility during capability-selected turns.",
       "category": "permission_policy",
       "severity": "high",
       "mitigation": "Restrict repair posture to an explicit control-plane allowlist and keep tool-surface tests exhaustive.",
@@ -46,29 +47,23 @@ planning artifacts.
       "risk": "Hydration reconciliation could flag live sessions as unclean if it runs too aggressively.",
       "category": "wal_replay",
       "severity": "medium",
-      "mitigation": "Only reconcile when open tool calls, open turns, or active skill state remain after a grace period and no terminal receipt exists.",
+      "mitigation": "Only reconcile when open tool calls or open turns remain after a grace period and no terminal receipt exists.",
       "required_evidence": ["session recovery system test", "event tape inspection assertion"],
       "owner_lane": "review-operability"
     }
   ],
   "implementation_targets": [
     {
-      "target": "packages/brewva-runtime/src/domain/skills/skill-lifecycle.ts",
+      "target": "packages/brewva-runtime/src/domain/skills/producers.ts",
       "kind": "runtime-service",
-      "owner_boundary": "runtime semantic contracts",
-      "reason": "Own completion validation, repair budgeting, and canonical output enforcement."
+      "owner_boundary": "runtime producer contracts",
+      "reason": "Own producer validation and canonical output enforcement."
     },
     {
-      "target": "packages/brewva-gateway/src/hosted/internal/session/tool-surface.ts",
+      "target": "packages/brewva-gateway/src/hosted/internal/session/tools/tool-surface.ts",
       "kind": "runtime-plugin",
       "owner_boundary": "gateway tool visibility",
-      "reason": "Apply repair posture restrictions and expose control-plane tools intentionally."
-    },
-    {
-      "target": "packages/brewva-tools/src/skill-complete.ts",
-      "kind": "managed-tool",
-      "owner_boundary": "public skill lifecycle tool",
-      "reason": "Make skill_complete validate-first and persist structured repair failures."
+      "reason": "Apply capability selection and expose control-plane tools intentionally."
     }
   ]
 }

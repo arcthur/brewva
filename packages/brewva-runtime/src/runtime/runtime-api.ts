@@ -1,7 +1,6 @@
 import type { BrewvaConfig } from "../config/types.js";
 import type { DeepReadonly } from "../core/deep-readonly.js";
 import type { GovernancePort } from "../domain/governance/api.js";
-import type { SkillRoutingScope } from "../domain/skills/api.js";
 import type { BrewvaRuntimeExtensions, BrewvaToolRuntimeExtensions } from "./runtime-extensions.js";
 import type { RuntimeSemanticSurfaces } from "./runtime-surfaces.js";
 
@@ -11,8 +10,6 @@ export interface BrewvaRuntimeOptions {
   config?: BrewvaConfig;
   governancePort?: GovernancePort;
   agentId?: string;
-  routingScopes?: SkillRoutingScope[];
-  routingDefaultScopes?: SkillRoutingScope[];
 }
 
 export interface VerifyCompletionOptions {

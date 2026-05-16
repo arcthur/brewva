@@ -1,55 +1,10 @@
 ---
 name: github
-description: Coherent GitHub issue, pull request, check, and repository metadata
-  workflow.
-stability: stable
+description: Coherent GitHub issue, pull request, check, and repository metadata workflow.
 selection:
-  when_to_use: Use when a request targets GitHub issues, pull requests, checks, or repository metadata and should run through one coherent gh workflow.
-intent:
-  outputs:
-    - github_context
-    - issue_brief
-    - pr_brief
-    - ci_findings
-  output_contracts:
-    github_context:
-      kind: text
-      min_words: 3
-      min_length: 18
-    issue_brief:
-      kind: text
-      min_words: 3
-      min_length: 18
-    pr_brief:
-      kind: text
-      min_words: 3
-      min_length: 18
-    ci_findings:
-      kind: json
-      min_items: 1
-effects:
-  allowed_effects:
-    - workspace_read
-    - local_exec
-    - runtime_observe
-resources:
-  default_lease:
-    max_tool_calls: 90
-    max_tokens: 160000
-  hard_ceiling:
-    max_tool_calls: 130
-    max_tokens: 220000
-execution_hints:
-  preferred_tools:
-    - exec
-    - read
-  fallback_tools:
-    - grep
-    - ledger_query
-consumes:
-  - change_set
-  - verification_evidence
-  - review_report
+  when_to_use:
+    Use when a request targets GitHub issues, pull requests, checks, or repository metadata
+    and should run through one coherent gh workflow.
 references:
   - references/example.md
   - references/rationalizations.md

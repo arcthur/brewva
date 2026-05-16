@@ -16,7 +16,6 @@ import type {
   DelegationModelRouteRecord,
   DelegationRunRecord,
 } from "@brewva/brewva-runtime/delegation";
-import type { SkillRoutingScope } from "@brewva/brewva-runtime/skills";
 import type {
   DelegationPacket,
   SubagentExecutionShape,
@@ -31,7 +30,6 @@ export interface DetachedSubagentRunSpec {
   workspaceRoot: string;
   config: BrewvaConfig;
   configPath?: string;
-  routingScopes?: SkillRoutingScope[];
   delegate: string;
   target: HostedDelegationTarget;
   executionShape?: SubagentExecutionShape;

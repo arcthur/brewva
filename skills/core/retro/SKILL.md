@@ -1,60 +1,14 @@
 ---
 name: retro
-description: Distill a delivery cycle into concrete lessons, recurring friction, and
-  next-step improvements after the work has been shipped or blocked.
-stability: stable
+description: Distill a delivery cycle into concrete lessons, recurring friction, and next-step
+  improvements after the work has been shipped or blocked.
 selection:
-  when_to_use: Use when a completed or blocked delivery cycle should be distilled into concrete lessons, repeated friction, and next-step improvements.
-intent:
-  outputs:
-    - retro_summary
-    - retro_findings
-    - followup_recommendation
-  output_contracts:
-    retro_summary:
-      kind: text
-      min_words: 3
-      min_length: 18
-    retro_findings:
-      kind: json
-      min_items: 1
-    followup_recommendation:
-      kind: text
-      min_words: 3
-      min_length: 18
-effects:
-  allowed_effects:
-    - workspace_read
-    - local_exec
-    - runtime_observe
-  denied_effects:
-    - workspace_write
-resources:
-  default_lease:
-    max_tool_calls: 80
-    max_tokens: 150000
-  hard_ceiling:
-    max_tool_calls: 120
-    max_tokens: 210000
-execution_hints:
-  preferred_tools:
-    - read
-    - exec
-    - workflow_status
-  fallback_tools:
-    - ledger_query
-    - recall_search
+  when_to_use: Use when a completed or blocked delivery cycle should be distilled into concrete
+    lessons, repeated friction, and next-step improvements.
 references:
   - references/retrospective-lenses.md
   - references/example.md
   - references/rationalizations.md
-consumes:
-  - ship_report
-  - release_checklist
-  - ship_decision
-  - verifier_report
-  - review_report
-  - verification_evidence
 ---
 
 # Retro Skill

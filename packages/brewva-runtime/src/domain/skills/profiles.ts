@@ -1,33 +1,17 @@
-import type {
-  SkillContract,
-  SkillDocument,
-  SkillRoutingScope,
-  SkillSelectionPolicy,
-} from "./types.js";
+import type { SkillCard, SkillDocument, SkillSelectionPolicy } from "./types.js";
 
 export type SkillCatalogPlane = "discovery" | "selection";
 type SkillSelectionFieldPath = `selection.${Extract<keyof SkillSelectionPolicy, string>}`;
-export type SkillFieldPath =
-  | keyof SkillContract
-  | SkillSelectionFieldPath
-  | "authoredMarkdown.Trigger";
+export type SkillFieldPath = keyof SkillCard | SkillSelectionFieldPath | "authoredMarkdown.Trigger";
 
 export const FIELD_TO_PLANE = {
   name: ["discovery", "selection"],
   category: ["discovery"],
-  routing: ["discovery"],
   selection: [],
   "selection.whenToUse": ["selection"],
-  "selection.paths": ["selection"],
+  "selection.triggers": ["selection"],
+  "selection.pathGlobs": ["selection"],
   "authoredMarkdown.Trigger": ["selection"],
-  intent: [],
-  effects: [],
-  resources: [],
-  executionHints: [],
-  composableWith: ["discovery"],
-  consumes: [],
-  requires: [],
-  stability: ["discovery"],
   description: ["discovery"],
 } as const satisfies Record<SkillFieldPath, readonly SkillCatalogPlane[]>;
 
@@ -43,7 +27,8 @@ export const SELECTION_PROFILE_SOURCE_FIELDS = listSkillFieldsForPlane("selectio
 export interface SkillSelectionScorerProfile {
   name: string;
   whenToUse?: string;
-  paths: string[];
+  triggers: string[];
+  pathGlobs: string[];
   triggerBullets: string[];
 }
 
@@ -64,8 +49,6 @@ export interface SkillDiscoveryProfile {
   description: string;
   filePath: string;
   baseDir: string;
-  routingScope?: SkillRoutingScope;
-  stability: NonNullable<SkillContract["stability"]>;
 }
 
 function extractMarkdownSection(markdown: string | undefined, heading: string): string {
@@ -90,12 +73,14 @@ function buildSelectionModelProfile(
 ): SkillSelectionModelProfile {
   const reasonLabels = [
     scorer.whenToUse ? "when_to_use" : undefined,
-    scorer.paths.length > 0 ? "paths" : undefined,
+    scorer.triggers.length > 0 ? "triggers" : undefined,
+    scorer.pathGlobs.length > 0 ? "path_globs" : undefined,
     scorer.triggerBullets.length > 0 ? "trigger" : undefined,
   ].filter((entry): entry is string => Boolean(entry));
   const summaryParts = [
     scorer.whenToUse,
-    ...scorer.paths.map((path) => `path:${path}`),
+    ...scorer.triggers,
+    ...scorer.pathGlobs.map((path) => `path:${path}`),
     ...scorer.triggerBullets,
   ].filter((entry): entry is string => Boolean(entry));
 
@@ -107,14 +92,13 @@ function buildSelectionModelProfile(
 }
 
 export function buildSkillSelectionProfile(
-  skill: Pick<SkillDocument, "name" | "authoredMarkdown" | "contract">,
+  skill: Pick<SkillDocument, "name" | "authoredMarkdown" | "card">,
 ): SkillSelectionProfile {
   const scorer = {
     name: skill.name,
-    ...(skill.contract.selection?.whenToUse
-      ? { whenToUse: skill.contract.selection.whenToUse }
-      : {}),
-    paths: [...(skill.contract.selection?.paths ?? [])],
+    ...(skill.card.selection?.whenToUse ? { whenToUse: skill.card.selection.whenToUse } : {}),
+    triggers: [...(skill.card.selection?.triggers ?? [])],
+    pathGlobs: [...(skill.card.selection?.pathGlobs ?? [])],
     triggerBullets: extractMarkdownBullets(skill.authoredMarkdown, "Trigger"),
   } satisfies SkillSelectionScorerProfile;
 
@@ -127,16 +111,14 @@ export function buildSkillSelectionProfile(
 export function hasSelectionProfileSignals(profile: SkillSelectionProfile): boolean {
   return Boolean(
     profile.forScorer.whenToUse ||
-    profile.forScorer.paths.length > 0 ||
+    profile.forScorer.triggers.length > 0 ||
+    profile.forScorer.pathGlobs.length > 0 ||
     profile.forScorer.triggerBullets.length > 0,
   );
 }
 
 export function buildSkillDiscoveryProfile(
-  skill: Pick<
-    SkillDocument,
-    "name" | "category" | "description" | "filePath" | "baseDir" | "contract"
-  >,
+  skill: Pick<SkillDocument, "name" | "category" | "description" | "filePath" | "baseDir">,
 ): SkillDiscoveryProfile {
   return {
     name: skill.name,
@@ -144,7 +126,5 @@ export function buildSkillDiscoveryProfile(
     description: skill.description,
     filePath: skill.filePath,
     baseDir: skill.baseDir,
-    routingScope: skill.contract.routing?.scope,
-    stability: skill.contract.stability ?? "stable",
   };
 }

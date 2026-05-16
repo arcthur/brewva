@@ -1,6 +1,5 @@
 export type { CreateHostedSessionOptions, HostedSession, HostedSessionResult } from "./session.js";
 export {
-  DEFAULT_HOSTED_ROUTING_SCOPES,
   createHostedModelCatalog,
   createHostedSession,
   selectNextModelPresetName,

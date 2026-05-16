@@ -61,6 +61,22 @@ describe("computeMcpTransportPoolKey", () => {
     expect(computeMcpTransportPoolKey(configA)).not.toBe(computeMcpTransportPoolKey(configB));
   });
 
+  test("includes explicit stdio env allowlist in the key", () => {
+    const configA: McpTransportConfig = {
+      type: "stdio",
+      command: "node",
+      args: ["server.js"],
+      envAllowlist: ["AWS_PROFILE"],
+    };
+    const configB: McpTransportConfig = {
+      type: "stdio",
+      command: "node",
+      args: ["server.js"],
+      envAllowlist: ["GOOGLE_APPLICATION_CREDENTIALS"],
+    };
+    expect(computeMcpTransportPoolKey(configA)).not.toBe(computeMcpTransportPoolKey(configB));
+  });
+
   test("normalizes streamable_http header casing into the key", () => {
     const a: McpTransportConfig = {
       type: "streamable_http",

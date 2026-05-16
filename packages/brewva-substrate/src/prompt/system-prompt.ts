@@ -3,6 +3,21 @@ export interface BrewvaSystemPromptSkill {
   description: string;
   filePath: string;
   baseDir?: string;
+  category?: string;
+}
+
+export interface BrewvaSystemPromptCapabilitySelection {
+  selectedCapabilities?: Array<{
+    name: string;
+    profile?: string;
+    mode?: string;
+    reason?: string;
+  }>;
+  forbiddenCandidates?: Array<{
+    name: string;
+    reason: string;
+  }>;
+  selectionReason?: string;
 }
 
 export interface BuildBrewvaSystemPromptOptions {
@@ -18,6 +33,7 @@ export interface BuildBrewvaSystemPromptOptions {
   cwd?: string;
   contextFiles?: Array<{ path: string; content: string }>;
   skills?: BrewvaSystemPromptSkill[];
+  capabilitySelection?: BrewvaSystemPromptCapabilitySelection;
 }
 
 const DEFAULT_COMMUNICATION_SECTION = `Communication:
@@ -35,10 +51,60 @@ function formatSkillsForPrompt(skills: readonly BrewvaSystemPromptSkill[]): stri
   }
 
   const lines = ["", "", "# Available Skills", ""];
+  const counts = new Map<string, number>();
   for (const skill of skills) {
-    const location = skill.baseDir ?? skill.filePath;
-    lines.push(`- ${skill.name}: ${skill.description}`);
-    lines.push(`  Location: ${location}`);
+    const category = skill.category ?? inferSkillCategory(skill.filePath);
+    counts.set(category, (counts.get(category) ?? 0) + 1);
+  }
+  for (const [category, count] of [...counts.entries()]
+    .toSorted(([left], [right]) => left.localeCompare(right))
+    .slice(0, 8)) {
+    lines.push(`- ${category}: ${count}`);
+  }
+  return lines.join("\n");
+}
+
+function inferSkillCategory(filePath: string): string {
+  const normalized = filePath.replace(/\\/gu, "/");
+  const match = /(?:^|\/)skills\/([^/]+)\//u.exec(normalized);
+  const category = match?.[1];
+  if (!category || category === "project") {
+    return "overlay";
+  }
+  return category;
+}
+
+export function formatBrewvaCapabilitySelectionForPrompt(
+  selection: BrewvaSystemPromptCapabilitySelection | undefined,
+): string {
+  const selected = selection?.selectedCapabilities ?? [];
+  const forbidden = selection?.forbiddenCandidates ?? [];
+  if (selected.length === 0 && forbidden.length === 0 && !selection?.selectionReason) {
+    return "";
+  }
+
+  const lines = ["", "", "[CapabilitySelection]", ""];
+  if (selection?.selectionReason) {
+    lines.push(`reason: ${selection.selectionReason}`);
+  }
+  if (selected.length > 0) {
+    lines.push("selected:");
+    for (const capability of selected) {
+      const details = [
+        capability.profile ? `profile=${capability.profile}` : null,
+        capability.mode ? `mode=${capability.mode}` : null,
+        capability.reason ? `reason=${capability.reason}` : null,
+      ]
+        .filter((part): part is string => typeof part === "string")
+        .join(", ");
+      lines.push(`- ${capability.name}${details ? ` (${details})` : ""}`);
+    }
+  }
+  if (forbidden.length > 0) {
+    lines.push("forbidden:");
+    for (const capability of forbidden) {
+      lines.push(`- ${capability.name}: ${capability.reason}`);
+    }
   }
   return lines.join("\n");
 }
@@ -91,6 +157,7 @@ export function buildBrewvaSystemPrompt(options: BuildBrewvaSystemPromptOptions 
     if (hasRead && skills.length > 0) {
       prompt += formatSkillsForPrompt(skills);
     }
+    prompt += formatBrewvaCapabilitySelectionForPrompt(options.capabilitySelection);
     prompt += `\nCurrent date: ${date}`;
     prompt += `\nCurrent working directory: ${cwd}`;
     return prompt;
@@ -127,6 +194,7 @@ ${guidelines}${communicationSection}`;
   if (hasRead && skills.length > 0) {
     prompt += formatSkillsForPrompt(skills);
   }
+  prompt += formatBrewvaCapabilitySelectionForPrompt(options.capabilitySelection);
 
   prompt += `\nCurrent date: ${date}`;
   prompt += `\nCurrent working directory: ${cwd}`;

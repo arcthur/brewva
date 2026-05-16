@@ -29,6 +29,19 @@ Important boundary:
 Effect-commitment approval events link operator decisions to the request id and
 digest that resumed the exact effectful action.
 
+## Capability Selection
+
+`capability_selection_recorded` is durable evidence on the event tape. It
+records the selector trigger, input intent hash, selected capabilities,
+filtered candidates, policy decisions, conflicts, registry version, and
+carry-forward linkage for tool-only turns.
+
+The receipt explains why external authority was visible. It does not replace
+effect governance, proposal admission, or tool-result receipts. Replay and
+audit should read capability selection and effect receipts together: one
+answers why a capability was exposed, the other answers why an action was
+allowed, blocked, or deferred.
+
 ## Context And Budget
 
 Context events record numeric compaction status, auto-compaction attempts, workbench

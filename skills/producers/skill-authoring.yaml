@@ -1,0 +1,23 @@
+producer: skill-authoring
+outputs:
+  - skill_spec
+  - skill_card
+  - producer_contract
+  - skill_scaffold
+output_contracts:
+  skill_spec:
+    kind: text
+    min_words: 3
+    min_length: 18
+  skill_card:
+    kind: text
+    min_words: 3
+    min_length: 18
+  producer_contract:
+    kind: text
+    min_words: 3
+    min_length: 18
+  skill_scaffold:
+    kind: text
+    min_words: 3
+    min_length: 18

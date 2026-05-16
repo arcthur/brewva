@@ -1,53 +1,7 @@
 ---
 name: self-improve
-description: Distill recurring failures, weak heuristics, or loop friction into
-  explicit improvement hypotheses and evidence-backed follow-up changes.
-stability: experimental
-selection:
-  when_to_use: Use when recurring failures or loop friction should be turned into concrete heuristics, guardrails, or process changes.
-intent:
-  outputs:
-    - improvement_hypothesis
-    - learning_backlog
-    - improvement_plan
-  output_contracts:
-    improvement_hypothesis:
-      kind: text
-      min_words: 3
-      min_length: 18
-    learning_backlog:
-      kind: json
-      min_items: 1
-    improvement_plan:
-      kind: text
-      min_words: 3
-      min_length: 18
-effects:
-  allowed_effects:
-    - workspace_read
-    - local_exec
-    - memory_write
-  denied_effects:
-    - workspace_write
-resources:
-  default_lease:
-    max_tool_calls: 80
-    max_tokens: 150000
-  hard_ceiling:
-    max_tool_calls: 120
-    max_tokens: 210000
-execution_hints:
-  preferred_tools:
-    - read
-    - iteration_fact
-    - grep
-  fallback_tools:
-    - ledger_query
-    - recall_search
-    - cost_view
-    - task_view_state
-    - exec
-    - process
+description: Distill recurring failures, weak heuristics, or loop friction into explicit improvement
+  hypotheses and evidence-backed follow-up changes.
 references:
   - references/promotion-targets.md
   - references/stuck-signals.md
@@ -60,12 +14,6 @@ scripts:
   - scripts/promote.sh
   - scripts/review.sh
   - scripts/setup.sh
-consumes:
-  - review_report
-  - retro_findings
-  - ship_report
-  - runtime_trace
-  - artifact_findings
 ---
 
 # Self Improve

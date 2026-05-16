@@ -10,7 +10,6 @@ import shutil
 import sys
 import tempfile
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -37,7 +36,14 @@ SOURCE_PRIORITIES = {
     "config_root": 4,
 }
 FRONTMATTER_RE = re.compile(r"^---\n([\s\S]*?)\n---\n?([\s\S]*)$")
-DEFAULT_TOOL_PATH = "skill-authoring/scripts/fork_skill.py"
+SKILL_CARD_FIELDS = {
+    "name",
+    "description",
+    "selection",
+    "references",
+    "scripts",
+    "invariants",
+}
 
 
 @dataclass(frozen=True)
@@ -319,14 +325,20 @@ def resolve_active_destination_root(base_root: Path) -> Path:
 
 def annotate_frontmatter(raw: str, entry: SkillEntry) -> str:
     frontmatter, body = parse_frontmatter(raw)
-    frontmatter.pop("routing", None)
-    frontmatter["source_name"] = entry.name
-    frontmatter["source_category"] = entry.category
-    frontmatter["forked_from"] = str(entry.file_path)
-    frontmatter["forked_at"] = datetime.now(timezone.utc).isoformat()
-    frontmatter["tool"] = DEFAULT_TOOL_PATH
-    yaml_text = yaml.safe_dump(frontmatter, sort_keys=False, allow_unicode=False).strip()
+    skill_card = {
+        key: value
+        for key, value in frontmatter.items()
+        if key in SKILL_CARD_FIELDS
+    }
+    skill_card["name"] = entry.name
+    yaml_text = yaml.safe_dump(skill_card, sort_keys=False, allow_unicode=False).strip()
+    provenance = (
+        f"\n> Overlay forked from `{entry.file_path}` ({entry.category}). "
+        "Keep this file advisory-only; capability manifests own external action authority.\n"
+    )
     body_text = body if body.startswith("\n") else f"\n{body}" if body else "\n"
+    if "Overlay forked from" not in body_text:
+        body_text = provenance + body_text
     return f"---\n{yaml_text}\n---{body_text}"
 
 

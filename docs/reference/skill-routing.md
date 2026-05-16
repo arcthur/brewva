@@ -17,7 +17,8 @@ skill activation step before exploration, execution, or verification.
 - completion is expressed through normal task, verification, and workbench
   surfaces
 
-Skills are advisory context. Effects still go through runtime governance.
+Skills are advisory context. External action authority goes through capability
+selection, durable selection receipts, and runtime governance.
 
 ## Deleted Runtime Concept
 
@@ -35,9 +36,11 @@ call, while the runtime governs consequences.
 
 ## Replacement Pattern
 
-Use ordinary capabilities:
+Use ordinary advisory and authority surfaces:
 
 - file/search tools to inspect skill markdown
+- capability manifests for SaaS, CLI, and MCP authority
+- durable `capability_selection_recorded` events for selection evidence
 - `workbench_note` for model-authored durable working notes
 - `workbench_evict` to evict stale context with optional replacement notes
 - `task_set_spec` and `task_view_state` for task state
@@ -46,6 +49,22 @@ Use ordinary capabilities:
 
 The runtime may still expose skill inventory for inspection or migration work,
 but that inventory is not a control plane for hosted attention.
+
+## Capability Selection Priority
+
+External action authority is selected by the capability control plane, not by
+skill routing. The promoted implementation currently executes only the
+deterministic stages:
+
+1. explicit target, such as `/capability:name` or `@capability:name`
+2. policy default within the agent, workspace, and account allowlists
+3. deterministic filters and selection-field ranking
+
+Stages 4 and 5 from the RFC, embedding ranking and LLM fallback, are reserved
+and intentionally inactive in this implementation. If stages 1-3 do not select
+a capability, no SaaS, CLI, MCP, or operator authority is exposed. This is a
+stricter fail-closed behavior than the RFC fallback path and prevents write
+authority from appearing because a model guessed the route.
 
 ## Migration Guidance
 
@@ -56,5 +75,7 @@ When old docs or tests describe mandatory skill activation, rewrite the flow as:
 3. the runtime records effects, verification, and receipts
 4. recovery uses tape and workbench baselines rather than an active skill slot
 
-Do not replace the removed gate with another hidden router. If a workflow needs
-extra context, make it a model-callable tool or a readable file.
+Do not replace the removed gate with another hidden prompt-only router. If a
+workflow needs external authority, put it behind a manifest-backed capability
+and deterministic policy gate. If it only needs extra context, make it a
+readable file or advisory tool.

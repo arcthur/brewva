@@ -43,13 +43,15 @@ TOOL_BRIDGE
 
 ## Contract Note
 
-In Brewva, `outputs:` in skill frontmatter is a **required** contract enforced by `skill_complete`.
-Do not add `tool_bridge` to `outputs:` unless you want it required on every completion.
+In Brewva, structured producer outputs live in
+`skills/producers/<name>.yaml`. Do not add `tool_bridge` to a
+ProducerContract unless every producer run must emit it.
 
 `TOOL_BRIDGE` should be treated as:
 
 - a section in the skill's narrative report, and/or
-- an extra output key provided to `skill_complete` (allowed, but not required by contract).
+- an optional producer artifact captured by the caller when executable proof
+  cannot run in the current environment.
 
 ## Language Selection
 

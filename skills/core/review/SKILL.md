@@ -1,47 +1,10 @@
 ---
 name: review
-description: Findings-first risk review for diffs and change plans, including
-  merge readiness and conformance checks.
-stability: stable
+description: Findings-first risk review for diffs and change plans, including merge readiness and
+  conformance checks.
 selection:
-  when_to_use: Use when a diff or change plan needs findings-first risk review, merge readiness assessment, or conformance checking.
-intent:
-  outputs:
-    - review_report
-    - review_findings
-    - merge_decision
-  semantic_bindings:
-    review_report: review.review_report.v2
-    review_findings: review.review_findings.v2
-    merge_decision: review.merge_decision.v2
-effects:
-  allowed_effects:
-    - workspace_read
-    - runtime_observe
-    - delegation
-  denied_effects:
-    - workspace_write
-    - local_exec
-resources:
-  default_lease:
-    max_tool_calls: 80
-    max_tokens: 160000
-  hard_ceiling:
-    max_tool_calls: 120
-    max_tokens: 220000
-execution_hints:
-  preferred_tools:
-    - read
-    - grep
-    - knowledge_search
-    - subagent_fanout
-  fallback_tools:
-    - subagent_run
-    - lsp_diagnostics
-    - lsp_symbols
-    - lsp_find_references
-    - ast_grep_search
-    - ledger_query
+  when_to_use: Use when a diff or change plan needs findings-first risk review, merge readiness
+    assessment, or conformance checking.
 references:
   - references/boundary-failure.md
   - references/contract-drift.md
@@ -51,16 +14,6 @@ references:
   - references/rationalizations.md
 invariants:
   - invariants/review-lane-rules.md
-consumes:
-  - change_set
-  - files_changed
-  - design_spec
-  - execution_plan
-  - verification_evidence
-  - impact_map
-  - risk_register
-  - implementation_targets
-  - planning_posture
 ---
 
 # Review Skill

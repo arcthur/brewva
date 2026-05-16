@@ -15,21 +15,6 @@ function writeSkill(filePath: string, input: { name: string; description: string
       `description: ${input.description}`,
       "selection:",
       "  when_to_use: Use when the task needs the routed test skill.",
-      "intent:",
-      "  outputs: []",
-      "effects:",
-      "  allowed_effects: [workspace_read]",
-      "resources:",
-      "  default_lease:",
-      "    max_tool_calls: 20",
-      "    max_tokens: 20000",
-      "  hard_ceiling:",
-      "    max_tool_calls: 30",
-      "    max_tokens: 30000",
-      "execution_hints:",
-      "  preferred_tools: [read]",
-      "  fallback_tools: []",
-      "consumes: []",
       "---",
       `# ${input.name}`,
       "",
@@ -94,10 +79,12 @@ describe("skill-authoring fork script", () => {
       const destination = join(workspace, ".brewva/skills/project/overlays/chaincraft/SKILL.md");
       expect(existsSync(destination)).toBe(true);
       const forked = readFileSync(destination, "utf8");
-      expect(forked).toContain("source_name: chaincraft");
-      expect(forked).toContain("tool: skill-authoring/scripts/fork_skill.py");
-      expect(forked).toContain("source_category: domain");
+      expect(forked).toContain("name: chaincraft");
+      expect(forked).toContain("Overlay forked from");
+      expect(forked).toContain("capability manifests own external action authority");
       expect(forked.includes("routing:")).toBe(false);
+      expect(forked.includes("intent:")).toBe(false);
+      expect(forked.includes("effects:")).toBe(false);
 
       writeSkill(join(workspace, ".brewva/skills/domain/chaincraft/SKILL.md"), {
         name: "chaincraft",

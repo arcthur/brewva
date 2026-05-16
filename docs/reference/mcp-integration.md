@@ -63,6 +63,20 @@ Lower-risk classes require an explicit Brewva `toolPolicies` override. The
 hosted tool surface still enforces runtime-bound capability checks, so a policy
 override does not create undeclared runtime authority.
 
+For stdio transports, environment inheritance is allowlist-only. `inheritEnv`
+is fixed to `false`; setting it to `true` is invalid. Brewva starts the child
+process with only:
+
+- explicit `env` values from the MCP server config
+- host environment keys named in `envAllowlist`
+
+The adapter does not spread `process.env` and then remove known secrets.
+Blacklist sanitization is not an accepted model for MCP stdio execution.
+
+MCP tools can also be capability-gated by hosted tool surface policy. A
+capability selection receipt explains why an external MCP authority was exposed;
+tool policy and effect governance still decide each action.
+
 ## Hosted Names
 
 MCP tools become hosted tools named:

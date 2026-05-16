@@ -546,7 +546,7 @@ describe("inspect subcommand", () => {
         expect.arrayContaining([
           "/skills/cascade",
           "/skills/selector",
-          "/skills/routing/profile",
+          "/skills/routing",
           "/security/execution/commandDenyList",
           "/infrastructure/contextBudget/hardLimitPercent",
         ]),

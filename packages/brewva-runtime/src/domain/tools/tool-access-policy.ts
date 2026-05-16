@@ -45,7 +45,6 @@ interface ToolAccessContext {
   state: ReturnType<RuntimeSessionStateStore["getCell"]>;
   normalizedToolName: string;
   authority: ResolvedToolAuthority;
-  routingAccess: { allowed: boolean; reason?: string };
 }
 
 interface ToolAuthorityFactCollectionOptions {
@@ -61,7 +60,6 @@ export interface ToolAccessPolicyServiceOptions {
   recordEvent: RuntimeKernelContext["recordEvent"];
   alwaysAllowedTools: string[];
   resolveToolAuthority: (toolName: string, args?: Record<string, unknown>) => ResolvedToolAuthority;
-  hasRoutingScope: (scope: string) => boolean;
 }
 
 export class ToolAccessPolicyService {
@@ -81,7 +79,6 @@ export class ToolAccessPolicyService {
     timestamp?: number;
     skipTapeCheckpoint?: boolean;
   }) => BrewvaEventRecord | undefined;
-  private readonly hasRoutingScope: (scope: string) => boolean;
 
   constructor(options: ToolAccessPolicyServiceOptions) {
     this.costTracker = options.costTracker;
@@ -94,7 +91,6 @@ export class ToolAccessPolicyService {
     this.resolveToolAuthority = (toolName, args) => options.resolveToolAuthority(toolName, args);
     this.getCurrentTurn = (sessionId) => options.getCurrentTurn(sessionId);
     this.recordEvent = (input) => options.recordEvent(input);
-    this.hasRoutingScope = (scope) => options.hasRoutingScope(scope);
   }
 
   checkToolAccess(
@@ -123,20 +119,10 @@ export class ToolAccessPolicyService {
     const state = this.sessionState.getCell(sessionId);
     const normalizedToolName = normalizeToolName(toolName);
     const authority = this.resolveToolAuthority(normalizedToolName, args);
-    const requiredRoutingScopes = authority.descriptor?.requiredRoutingScopes ?? [];
-    const routingAccess =
-      requiredRoutingScopes.length === 0 ||
-      requiredRoutingScopes.some((scope) => this.hasRoutingScope(scope))
-        ? { allowed: true }
-        : {
-            allowed: false,
-            reason: `Tool '${normalizedToolName}' requires one of the routing scopes: ${requiredRoutingScopes.join(", ")}.`,
-          };
     return {
       state,
       normalizedToolName,
       authority,
-      routingAccess,
     };
   }
 
@@ -187,7 +173,7 @@ export class ToolAccessPolicyService {
     _usage?: ContextBudgetUsage,
     capabilityAccess?: EffectAuthorityFactDecision,
   ): EffectAuthorityManifestFacts {
-    const { state, normalizedToolName, authority, routingAccess } = context;
+    const { state, normalizedToolName, authority } = context;
 
     if (emitEvents) {
       this.recordGovernanceMetadataWarning(sessionId, state, normalizedToolName, authority);
@@ -219,9 +205,8 @@ export class ToolAccessPolicyService {
       policyBasis: authority.policyBasis,
       controlPlaneTool: this.alwaysAllowedToolSet.has(normalizedToolName),
       routingAccess: {
-        allowed: routingAccess.allowed,
-        basis: "routing_scope",
-        reason: routingAccess.reason,
+        allowed: true,
+        basis: "skill_card_advisory_only",
       },
       capabilityAccess: capabilityAccess ?? {
         allowed: true,

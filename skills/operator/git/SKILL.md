@@ -1,46 +1,10 @@
 ---
 name: git
-description: Handle commit shaping, history inspection, and non-destructive branch
-  operations with explicit safety gates.
-stability: stable
+description: Handle commit shaping, history inspection, and non-destructive branch operations with
+  explicit safety gates.
 selection:
-  when_to_use: Use when the task centers on commits, history inspection, branch operations, or other non-destructive git workflow management.
-intent:
-  outputs:
-    - git_context
-    - commit_plan
-    - git_operation_report
-  output_contracts:
-    git_context:
-      kind: text
-      min_words: 3
-      min_length: 18
-    commit_plan:
-      kind: json
-      min_items: 1
-    git_operation_report:
-      kind: text
-      min_words: 3
-      min_length: 18
-effects:
-  allowed_effects:
-    - workspace_read
-    - local_exec
-    - runtime_observe
-resources:
-  default_lease:
-    max_tool_calls: 80
-    max_tokens: 140000
-  hard_ceiling:
-    max_tool_calls: 120
-    max_tokens: 200000
-execution_hints:
-  preferred_tools:
-    - exec
-    - read
-  fallback_tools:
-    - grep
-    - ledger_query
+  when_to_use: Use when the task centers on commits, history inspection, branch operations, or other
+    non-destructive git workflow management.
 references:
   - references/conventional-commits.md
   - references/history-search-cheatsheet.md
@@ -50,11 +14,6 @@ references:
 scripts:
   - scripts/detect-commit-style.sh
   - scripts/check_branch_safety.sh
-consumes:
-  - change_set
-  - files_changed
-  - verification_evidence
-  - review_report
 ---
 
 # Git Skill

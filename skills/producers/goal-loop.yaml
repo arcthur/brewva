@@ -1,0 +1,19 @@
+producer: goal-loop
+outputs:
+  - loop_contract
+  - iteration_report
+  - convergence_report
+  - continuation_plan
+output_contracts:
+  loop_contract:
+    kind: json
+    min_items: 8
+  iteration_report:
+    kind: json
+    min_items: 5
+  convergence_report:
+    kind: json
+    min_items: 4
+  continuation_plan:
+    kind: json
+    min_items: 3

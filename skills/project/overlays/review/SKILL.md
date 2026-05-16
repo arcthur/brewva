@@ -1,34 +1,8 @@
 ---
 name: review
-effects:
-  allowed_effects:
-    - workspace_read
-    - runtime_observe
-resources:
-  default_lease:
-    max_tool_calls: 70
-    max_tokens: 140000
-execution_hints:
-  preferred_tools:
-    - read
-    - grep
-  fallback_tools:
-    - lsp_diagnostics
-    - lsp_symbols
-    - lsp_find_references
-    - ast_grep_search
-    - ledger_query
 references:
   - skills/project/shared/package-boundaries.md
   - skills/project/shared/migration-priority-matrix.md
-consumes:
-  - change_set
-  - files_changed
-  - design_spec
-  - verification_evidence
-  - impact_map
-  - risk_register
-  - planning_posture
 ---
 
 # Brewva Review Overlay

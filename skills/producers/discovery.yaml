@@ -1,0 +1,25 @@
+producer: discovery
+outputs:
+  - problem_frame
+  - user_pains
+  - scope_recommendation
+  - design_seed
+  - open_questions
+output_contracts:
+  problem_frame:
+    kind: text
+    min_words: 4
+    min_length: 24
+  user_pains:
+    kind: json
+    min_items: 1
+  scope_recommendation:
+    kind: text
+    min_words: 3
+    min_length: 18
+  design_seed:
+    kind: text
+    min_words: 3
+    min_length: 18
+  open_questions:
+    kind: json

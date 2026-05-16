@@ -3,11 +3,7 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
-import {
-  loadBrewvaConfig,
-  loadBrewvaConfigResolution,
-  resolveGlobalBrewvaConfigPath,
-} from "@brewva/brewva-runtime/config";
+import { loadBrewvaConfig, resolveGlobalBrewvaConfigPath } from "@brewva/brewva-runtime/config";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 describe("Brewva config loader normalization", () => {
@@ -307,28 +303,6 @@ describe("Brewva config loader normalization", () => {
     expect(loaded.infrastructure.contextBudget.dynamicTail.consequenceDigestMaxChars).toBe(320);
   });
 
-  test("normalizes skills.routing scopes", () => {
-    const workspace = createTestWorkspace("routing-scopes");
-    writeFileSync(
-      join(workspace, ".brewva/brewva.json"),
-      JSON.stringify(
-        {
-          skills: {
-            routing: {
-              scopes: ["domain", "operator", "domain"],
-            },
-          },
-        },
-        null,
-        2,
-      ),
-      "utf8",
-    );
-
-    const loaded = loadBrewvaConfig({ cwd: workspace, configPath: ".brewva/brewva.json" });
-    expect(loaded.skills.routing.scopes).toEqual(["domain", "operator"]);
-  });
-
   test("normalizes MCP integration config", () => {
     const workspace = createTestWorkspace("mcp-integration-config");
     writeFileSync(
@@ -348,6 +322,8 @@ describe("Brewva config loader normalization", () => {
                   env: {
                     MCP_LOG_LEVEL: "info",
                   },
+                  envAllowlist: ["PATH"],
+                  inheritEnv: false,
                   timeoutMs: 5000,
                   includeToolNames: ["search"],
                   toolPolicies: {
@@ -380,6 +356,8 @@ describe("Brewva config loader normalization", () => {
           env: {
             MCP_LOG_LEVEL: "info",
           },
+          envAllowlist: ["PATH"],
+          inheritEnv: false,
           timeoutMs: 5000,
           includeToolNames: ["search"],
           toolPolicies: {
@@ -434,6 +412,8 @@ describe("Brewva config loader normalization", () => {
         command: "bunx",
         args: [],
         env: {},
+        envAllowlist: [],
+        inheritEnv: false,
         timeoutMs: 30_000,
         includeToolNames: [],
         toolPolicies: {},
@@ -455,137 +435,23 @@ describe("Brewva config loader normalization", () => {
     );
   });
 
-  test("tracks explicit routing intent separately from normalized routing defaults", () => {
-    const workspace = createTestWorkspace("routing-intent-metadata");
-    writeFileSync(
-      join(workspace, ".brewva/brewva.json"),
-      JSON.stringify(
-        {
-          skills: {
-            routing: {
-              scopes: ["operator"],
-            },
-          },
-        },
-        null,
-        2,
-      ),
-      "utf8",
-    );
-
-    const loaded = loadBrewvaConfigResolution({
-      cwd: workspace,
-      configPath: ".brewva/brewva.json",
-    });
-    expect(loaded.config.skills.routing.enabled).toBe(false);
-    expect(loaded.config.skills.routing.scopes).toEqual(["operator"]);
-    expect(loaded.metadata.skills.routing.enabledExplicit).toBe(false);
-    expect(loaded.metadata.skills.routing.scopesExplicit).toBe(true);
-  });
-
-  test("routingDefaultScopes enables routing when config leaves enabled unset", () => {
-    const workspace = createTestWorkspace("routing-default-scopes-enable-when-unset");
-    writeFileSync(
-      join(workspace, ".brewva/brewva.json"),
-      JSON.stringify(
-        {
-          skills: {
-            routing: {
-              scopes: ["operator"],
-            },
-          },
-        },
-        null,
-        2,
-      ),
-      "utf8",
-    );
-
-    const runtime = createBrewvaRuntime({
-      cwd: workspace,
-      configPath: ".brewva/brewva.json",
-      routingDefaultScopes: ["core", "domain"],
-    }).hosted;
-    expect(runtime.config.skills.routing.enabled).toBe(true);
-    expect(runtime.config.skills.routing.scopes).toEqual(["operator"]);
-  });
-
-  test("routingDefaultScopes respects explicit routing disable", () => {
-    const workspace = createTestWorkspace("routing-default-scopes-explicit-disable");
-    writeFileSync(
-      join(workspace, ".brewva/brewva.json"),
-      JSON.stringify(
-        {
-          skills: {
-            routing: {
-              enabled: false,
-              scopes: ["operator"],
-            },
-          },
-        },
-        null,
-        2,
-      ),
-      "utf8",
-    );
-
-    const runtime = createBrewvaRuntime({
-      cwd: workspace,
-      configPath: ".brewva/brewva.json",
-      routingDefaultScopes: ["core", "domain"],
-    }).hosted;
-    expect(runtime.config.skills.routing.enabled).toBe(false);
-    expect(runtime.config.skills.routing.scopes).toEqual(["operator"]);
-  });
-
-  test("routingScopes remains a hard override over explicit routing disable", () => {
-    const workspace = createTestWorkspace("routing-hard-override-explicit-disable");
-    writeFileSync(
-      join(workspace, ".brewva/brewva.json"),
-      JSON.stringify(
-        {
-          skills: {
-            routing: {
-              enabled: false,
-              scopes: ["operator"],
-            },
-          },
-        },
-        null,
-        2,
-      ),
-      "utf8",
-    );
-
-    const runtime = createBrewvaRuntime({
-      cwd: workspace,
-      configPath: ".brewva/brewva.json",
-      routingScopes: ["meta"],
-      routingDefaultScopes: ["core", "domain"],
-    }).hosted;
-    expect(runtime.config.skills.routing.enabled).toBe(true);
-    expect(runtime.config.skills.routing.scopes).toEqual(["meta"]);
-  });
-
   test("accepts JSONC comments and trailing commas in config files", () => {
     const workspace = createTestWorkspace("config-jsonc");
     writeFileSync(
       join(workspace, ".brewva/brewva.json"),
       [
         "{",
-        "  // workspace-local routing override",
-        '  "skills": {',
-        '    "routing": {',
-        '      "scopes": ["domain", "operator",],',
+        "  // workspace-local capability catalog override",
+        '  "capabilities": {',
+        '    "roots": ["./capabilities",],',
         "    },",
-        "  },",
         "}",
       ].join("\n"),
       "utf8",
     );
 
     const loaded = loadBrewvaConfig({ cwd: workspace, configPath: ".brewva/brewva.json" });
-    expect(loaded.skills.routing.scopes).toEqual(["domain", "operator"]);
+    expect(loaded.capabilities.roots).toEqual(["./capabilities"]);
   });
 
   test("fails fast when an action admission override exceeds the action class maximum", () => {
@@ -631,9 +497,7 @@ describe("Brewva config loader normalization", () => {
       JSON.stringify(
         {
           skills: {
-            routing: {
-              scopes: ["operator"],
-            },
+            roots: ["./skills"],
           },
         },
         null,
@@ -644,7 +508,7 @@ describe("Brewva config loader normalization", () => {
     writeFileSync(join(workspace, ".git"), "", "utf8");
 
     const loaded = loadBrewvaConfig({ cwd: nestedCwd });
-    expect(loaded.skills.routing.scopes).toEqual(["operator"]);
+    expect(loaded.skills.roots).toEqual([join(workspace, ".brewva/skills")]);
   });
 
   test("rejects null session cost cap now that zero is the only unlimited sentinel", () => {
@@ -900,7 +764,6 @@ describe("Brewva config loader normalization", () => {
     config["skills"] = {
       ...DEFAULT_BREWVA_CONFIG.skills,
       routing: {
-        ...DEFAULT_BREWVA_CONFIG.skills.routing,
         continuityPhrases: ["keep going"],
       },
     };
@@ -911,7 +774,7 @@ describe("Brewva config loader normalization", () => {
           cwd: workspace,
           config: config as unknown as typeof DEFAULT_BREWVA_CONFIG,
         }).hosted,
-    ).toThrow(/skills\.routing\.continuityPhrases has been removed/);
+    ).toThrow(/skills\.routing has been removed/);
   });
 
   test("fails fast on direct runtime config when removed skills.cascade appears", () => {

@@ -21,20 +21,29 @@ instead of implying local execution.
 
 ## SKILL.md Anatomy
 
-```
-YAML frontmatter (contracts, effects, resources, output_contracts — unchanged)
+```markdown
+YAML frontmatter (SkillCard only: name, description, selection, references, scripts, invariants)
 
 # Skill Name
 
 ## The Iron Law
+
 ## When to Use / When NOT to Use
+
 ## Workflow
+
 ## Invariants or Scripts
+
 ## Decision Protocol
+
 ## Red Flags — STOP
+
 ## Common Rationalizations
+
 ## Concrete Example
+
 ## Handoff Expectations
+
 ## Stop Conditions
 ```
 
@@ -59,8 +68,8 @@ remembers nothing else, it must remember this.
 
 ### When to Use / When NOT to Use
 
-Bullet lists of concrete triggers and counter-triggers. Match the frontmatter
-`selection.when_to_use` but add the negative case.
+Bullet lists of concrete triggers and counter-triggers. Match the SkillCard
+`selection.when_to_use` when the skill is selectable, but add the negative case.
 
 ### Workflow
 
@@ -106,7 +115,8 @@ heuristics, classification criteria that genuinely require reasoning.
 
 Use concrete questions, not vague instructions:
 
-- What user-visible behavior can fail now that could not fail before? - Which contract does the diff rely on without proving?
+- What user-visible behavior can fail now that could not fail before?
+- Which producer or capability contract does the diff rely on without proving?
 - Review for architecture issues. - Check whether the root cause is clear.
 
 ### Red Flags — STOP

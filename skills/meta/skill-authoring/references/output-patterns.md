@@ -9,12 +9,13 @@ prompt; skills may still use the patterns below for declared outputs,
 templates, examples, and machine-consumed artifacts.
 
 For ordinary authored outputs, pair each declared output with an explicit
-`intent.output_contracts` entry in frontmatter. Keep the contract just strong
-enough to reject placeholder output without over-constraining normal use.
+`output_contracts` entry in `producers/<name>.yaml`. Keep the contract just
+strong enough to reject placeholder output without over-constraining normal use.
 
-For runtime-owned canonical artifacts, declare `intent.semantic_bindings`
-instead and let runtime derive the matching output contracts. Do not hand-author
-duplicate `intent.output_contracts` entries for semantic-bound outputs.
+For runtime-owned canonical artifacts, declare `semantic_bindings` in the
+ProducerContract instead and let runtime derive the matching output contracts.
+Do not hand-author duplicate `output_contracts` entries for semantic-bound
+outputs.
 
 ## Structured Array Pattern
 
@@ -22,21 +23,21 @@ When downstream tooling consumes arrays of typed objects, encode that shape in
 the contract instead of leaving it to prose.
 
 ```yaml
-intent:
-  outputs:
-    - execution_plan
-  output_contracts:
-    execution_plan:
+producer: plan
+outputs:
+  - execution_plan
+output_contracts:
+  execution_plan:
+    kind: json
+    min_items: 1
+    item_contract:
       kind: json
-      min_items: 1
-      item_contract:
-        kind: json
-        required_fields:
-          - step
-          - intent
-          - owner
-          - exit_criteria
-          - verification_intent
+      required_fields:
+        - step
+        - intent
+        - owner
+        - exit_criteria
+        - verification_intent
 ```
 
 Use this pattern for artifacts such as execution steps, risk registers,

@@ -71,8 +71,8 @@ function targetStateKey(target: ConventionTarget): string {
   switch (target.kind) {
     case "project_guidance":
       return `project_guidance:${target.path}`;
-    case "skill_contract":
-      return `skill_contract:${target.path}`;
+    case "skill_card":
+      return `skill_card:${target.path}`;
     case "runtime_config":
       return `runtime_config:${target.path}:${[...target.configPaths].toSorted().join(",")}`;
     default:

@@ -17,4 +17,9 @@ export {
   type BrewvaPromptTemplate,
   type LoadBrewvaPromptTemplatesOptions,
 } from "./templates.js";
-export { buildBrewvaSystemPrompt, type BuildBrewvaSystemPromptOptions } from "./system-prompt.js";
+export {
+  buildBrewvaSystemPrompt,
+  formatBrewvaCapabilitySelectionForPrompt,
+  type BrewvaSystemPromptCapabilitySelection,
+  type BuildBrewvaSystemPromptOptions,
+} from "./system-prompt.js";

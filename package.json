@@ -68,6 +68,7 @@
     "uninstall:local": "bash script/install-local.sh --uninstall"
   },
   "devDependencies": {
+    "@brewva/brewva-capabilities": "workspace:*",
     "@brewva/brewva-channels-telegram": "workspace:*",
     "@brewva/brewva-cli": "workspace:*",
     "@brewva/brewva-effect": "workspace:*",

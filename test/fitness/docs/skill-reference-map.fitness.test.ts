@@ -58,7 +58,6 @@ describe("skill resource maps", () => {
       const declaredResources = [
         ...parsed.resources.references,
         ...parsed.resources.scripts,
-        ...parsed.resources.heuristics,
         ...parsed.resources.invariants,
       ];
 

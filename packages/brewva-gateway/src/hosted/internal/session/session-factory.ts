@@ -1,5 +1,4 @@
 import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
-import type { SkillRoutingScope } from "@brewva/brewva-runtime/skills";
 import type { InternalHostPlugin, BrewvaToolUiPort } from "@brewva/brewva-substrate/host-api";
 import type {
   BrewvaModelCatalog,
@@ -27,8 +26,6 @@ import {
 export type HostedSessionCustomTool = BrewvaToolDefinition;
 export type HostedSessionReadToolDetails = BrewvaReadToolDetails;
 export type HostedSessionReadToolOptions = BrewvaReadToolOptions;
-
-export const DEFAULT_HOSTED_ROUTING_SCOPES: readonly SkillRoutingScope[] = ["core", "domain"];
 
 export interface HostedSessionUiOverrides {
   quietStartup?: boolean;

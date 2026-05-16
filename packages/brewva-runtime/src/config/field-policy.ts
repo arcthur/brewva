@@ -63,7 +63,17 @@ const ACTIVE_CONFIG_FIELD_POLICY_RULES: readonly ActiveConfigFieldPolicyRule[] =
   {
     path: ["skills", "selector"],
     message:
-      "skills.selector has been removed; candidate skill selection is model-native and only skills.routing remains configurable.",
+      "skills.selector has been removed; use the capabilities control plane for external authority selection.",
+  },
+  {
+    path: ["skills", "routing"],
+    message:
+      "skills.routing has been removed; skills are advisory SkillCards and cannot grant runtime authority.",
+  },
+  {
+    path: ["skills", "overrides"],
+    message:
+      "skills.overrides has been removed; use file-based SkillCard overlays for advisory guidance only.",
   },
   {
     path: ["skills", "routing", "continuityPhrases"],

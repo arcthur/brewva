@@ -75,6 +75,27 @@ Exact reversibility is evidence-backed. A tool may prepare a workspace patchset,
 but it is only treated as reversible after execution records an applicable undo
 handle or reversible mutation receipt.
 
+## External Capability Authority
+
+External SaaS, CLI, MCP, credential, publish, deploy, and operator authority is
+not granted by a skill card or by a provider appearing in the prompt. The
+hosted gateway records a `capability_selection_recorded` receipt before
+materializing the tool surface. Only selected capabilities can expose matching
+operator-surface tools or pass the capability-aware quality gate.
+
+The current implementation is intentionally deterministic. Explicit
+`/capability:name` or `@capability:name` signals, policy defaults, and
+deterministic filters can select a capability. Embedding ranking and LLM
+fallback are reserved and inactive; no selected receipt means no external
+authority.
+
+Raw external CLI use is guarded by command classification. Account-scoped CLIs
+such as `gh`, `aws`, `gcloud`, and `op`, plus publish/push/login commands such
+as `npm publish`, `pnpm publish`, `cargo publish`, and `docker push`, require a
+matching selected capability receipt. Ordinary package-manager commands such as
+`npm test` do not become external authority just because they share the same
+binary.
+
 ## Family Map
 
 - Navigation, source inspection, browser artifacts, grep, output search, TOC,
@@ -195,6 +216,8 @@ Boundary rules:
 - bundled tools that need repo-owned hooks receive them explicitly
 - capability declarations are fail-closed; a missing runtime capability blocks
   the tool instead of falling back to hidden authority
+- external authority declarations are selected through capability manifests and
+  durable selection receipts, not through `SKILL.md`
 - tool outputs become replay-visible through runtime receipts, event tape, and
   verification posture
 - internal process, host command, and box execution use Effect scopes,

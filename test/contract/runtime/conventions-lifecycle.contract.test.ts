@@ -482,15 +482,15 @@ describe("convention lifecycle governance", () => {
     const skillContractRequest: ConventionChangeRequest = {
       id: "convention-target-path-skill-1",
       issuer: "unit-test",
-      subject: "Reject mismatched skill contract target",
+      subject: "Reject mismatched skill card target",
       conventionKind: "workflow_rule",
       transition: "modify",
       target: {
-        kind: "skill_contract",
+        kind: "skill_card",
         path: "skills/domain/target/SKILL.md",
       },
       evidenceRefs: [evidence("evidence-target-path-skill-1")],
-      rationale: "A request may only write its declared skill contract.",
+      rationale: "A request may only write its declared skill card.",
       patchSet: {
         id: "patchset-target-path-skill-1",
         createdAt: 2,

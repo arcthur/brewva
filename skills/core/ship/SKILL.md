@@ -1,63 +1,15 @@
 ---
 name: ship
-description: Release readiness, merge-path clarity, and operator-facing handoff
-  for implemented work.
-stability: stable
+description: Release readiness, merge-path clarity, and operator-facing handoff for implemented work.
 selection:
-  when_to_use: Use when implemented and reviewed work needs release readiness checks, merge-path clarity, or operator-facing handoff.
-intent:
-  outputs:
-    - ship_report
-    - release_checklist
-    - ship_decision
-  semantic_bindings:
-    ship_report: ship.ship_report.v2
-    release_checklist: ship.release_checklist.v2
-    ship_decision: ship.ship_decision.v2
-effects:
-  allowed_effects:
-    - workspace_read
-    - local_exec
-    - runtime_observe
-  denied_effects:
-    - workspace_write
-resources:
-  default_lease:
-    max_tool_calls: 90
-    max_tokens: 160000
-  hard_ceiling:
-    max_tool_calls: 130
-    max_tokens: 220000
-execution_hints:
-  preferred_tools:
-    - exec
-    - read
-    - workflow_status
-  fallback_tools:
-    - grep
-    - ledger_query
+  when_to_use: Use when implemented and reviewed work needs release readiness checks, merge-path
+    clarity, or operator-facing handoff.
 references:
   - references/release-readiness-checklist.md
   - references/example.md
   - references/rationalizations.md
 scripts:
   - scripts/check_release_gates.py
-consumes:
-  - change_set
-  - files_changed
-  - verification_evidence
-  - review_report
-  - review_findings
-  - merge_decision
-  - verifier_report
-  - verifier_findings
-  - verifier_verdict
-  - verifier_checks
-  - verifier_missing_evidence
-  - verifier_confidence_gaps
-  - verifier_environment_limits
-  - github_context
-  - ci_findings
 ---
 
 # Ship Skill

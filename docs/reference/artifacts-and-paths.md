@@ -69,13 +69,15 @@ The remaining `.brewva/**` entries below are operator-authored configuration or
 helper material, not session-state durability surfaces in the taxonomy above.
 
 - Generated skill index: `.brewva/skills_index.json`
-  - workspace-root inspect artifact with `schemaVersion=2`
+  - workspace-root inspect artifact with `schemaVersion=3`
   - includes selected skill roots (`roots`) and the complete loaded-skill catalog (`skills`)
-  - `summary` reports loaded, routable, non-routable (`hiddenSkills`), and overlay counts
-- each skill entry keeps normalized contract metadata plus generated `routable`,
-  `overlay`, normalized `selection` metadata, source paths, `projectGuidance`
-  metadata, and lightweight provenance (`source`, `rootDir`, optional
-  `overlayOrigins`)
+  - `summary` reports loaded, selectable, and overlay counts
+- each skill entry keeps advisory SkillCard metadata plus generated
+  `selectable`, `overlay`, normalized `selection` metadata, source paths,
+  `projectGuidance` metadata, and lightweight provenance (`source`, `rootDir`,
+  optional `overlayOrigins`)
+- Producer contracts are source files under `skills/producers/<name>.yaml`;
+  they are not generated index entries and do not authorize external actions.
 - Agent self bundle (per-agent):
   - `.brewva/agents/<agent-id>/identity.md`
   - `.brewva/agents/<agent-id>/constitution.md`

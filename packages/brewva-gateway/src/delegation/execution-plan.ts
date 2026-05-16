@@ -7,11 +7,6 @@ import type {
 import type { ToolExecutionBoundary } from "@brewva/brewva-runtime/governance";
 import { deriveToolGovernanceDescriptor } from "@brewva/brewva-runtime/governance";
 import type { ManagedToolMode } from "@brewva/brewva-runtime/session";
-import {
-  listSkillFallbackTools,
-  listSkillPreferredTools,
-  resolveSkillEffectLevel,
-} from "@brewva/brewva-runtime/skills";
 import { uniqueNonEmptyStrings as uniqueStrings } from "@brewva/brewva-std/collections";
 import type {
   DelegationPacket,
@@ -70,33 +65,15 @@ function hintedToolNames(packet: DelegationPacket | undefined): string[] {
   ]);
 }
 
-function resolveSkillToolHints(
-  runtime: BrewvaRuntimeRoot,
-  skillName: string | undefined,
-): string[] {
-  if (!skillName) {
-    return [];
-  }
-  const skill = runtime.inspect.skills.catalog.get(skillName);
-  if (!skill) {
-    return [];
-  }
-  return uniqueStrings([
-    ...listSkillPreferredTools(skill.contract),
-    ...listSkillFallbackTools(skill.contract),
-  ]);
-}
-
 function mergeBuiltinToolNames(
   target: HostedDelegationTarget,
   packet: DelegationPacket | undefined,
   boundary: SubagentExecutionBoundary,
-  skillToolNames: readonly string[],
 ): HostedDelegationBuiltinToolName[] {
   const defaults =
     target.builtinToolNames ??
     (boundary === "effectful" ? [...ALL_BUILTIN_SUBAGENT_TOOLS] : ["read"]);
-  const hinted = uniqueStrings([...skillToolNames, ...hintedToolNames(packet)]).filter(
+  const hinted = uniqueStrings([...hintedToolNames(packet)]).filter(
     (toolName): toolName is HostedDelegationBuiltinToolName => isBuiltinSubagentToolName(toolName),
   );
   if (hinted.length === 0) {
@@ -112,9 +89,8 @@ function mergeBuiltinToolNames(
 function mergeManagedToolNames(
   target: HostedDelegationTarget,
   packet: DelegationPacket | undefined,
-  skillToolNames: readonly string[],
 ): string[] {
-  const hinted = uniqueStrings([...skillToolNames, ...hintedToolNames(packet)]).filter(
+  const hinted = uniqueStrings([...hintedToolNames(packet)]).filter(
     (toolName) => !isBuiltinSubagentToolName(toolName),
   );
   const defaults = target.managedToolNames ?? [];
@@ -210,12 +186,7 @@ export function resolveBuiltinToolNamesForRun(
   boundary: SubagentExecutionBoundary,
   packet?: DelegationPacket,
 ): HostedDelegationBuiltinToolName[] {
-  const requested = mergeBuiltinToolNames(
-    target,
-    packet,
-    boundary,
-    resolveSkillToolHints(runtime, target.skillName),
-  );
+  const requested = mergeBuiltinToolNames(target, packet, boundary);
   return requested.filter((toolName) =>
     boundaryWithinCeiling(resolveRuntimeToolBoundary(runtime, toolName), boundary),
   );
@@ -227,11 +198,7 @@ export function resolveManagedToolNamesForRun(
   boundary: SubagentExecutionBoundary,
   packet?: DelegationPacket,
 ): string[] {
-  const requested = mergeManagedToolNames(
-    target,
-    packet,
-    resolveSkillToolHints(runtime, target.skillName),
-  );
+  const requested = mergeManagedToolNames(target, packet);
   return requested.filter((toolName) => {
     if (
       toolName === "subagent_run" ||
@@ -257,17 +224,10 @@ export function resolveDelegationExecutionPlan(input: {
   preselectedModelRoute?: DelegationModelRouteRecord;
 }): ResolvedDelegationExecutionPlan {
   assertConsultPacketContract(input.target, input.packet);
-  const delegatedSkillName = input.target.skillName;
-  const skill = delegatedSkillName
-    ? input.runtime.inspect.skills.catalog.get(delegatedSkillName)
-    : undefined;
-  const skillBoundaryCeiling =
-    skill && resolveSkillEffectLevel(skill.contract) === "read_only" ? "safe" : undefined;
   const boundary = resolveRequestedBoundary({
     target: input.target,
     executionShape: input.executionShape,
     packet: input.packet,
-    skillBoundaryCeiling,
   });
   const managedToolMode =
     input.executionShape?.managedToolMode ?? input.target.managedToolMode ?? "direct";
@@ -295,13 +255,13 @@ export function resolveDelegationExecutionPlan(input: {
     managedToolMode,
     builtinToolNames: resolveBuiltinToolNamesForRun(
       input.runtime,
-      { ...input.target, skillName: delegatedSkillName },
+      input.target,
       boundary,
       input.packet,
     ),
     managedToolNames: resolveManagedToolNamesForRun(
       input.runtime,
-      { ...input.target, skillName: delegatedSkillName },
+      input.target,
       boundary,
       input.packet,
     ),

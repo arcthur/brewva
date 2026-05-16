@@ -117,6 +117,11 @@ function normalizeMcpServerConfig(value: unknown, index: number): BrewvaMcpServe
   };
 
   if (transport === "stdio") {
+    if (value.inheritEnv !== undefined && value.inheritEnv !== false) {
+      throw new Error(
+        `Invalid config value for ${fieldPath}.inheritEnv: inheritEnv has been removed; stdio integrations must use envAllowlist.`,
+      );
+    }
     const command = normalizeNonEmptyString(value.command, "");
     if (!command) {
       throw new Error(`Invalid config value for ${fieldPath}.command: expected non-empty string.`);
@@ -127,6 +132,8 @@ function normalizeMcpServerConfig(value: unknown, index: number): BrewvaMcpServe
       command,
       args: normalizeStringArray(value.args, []),
       env: normalizeStringRecord(value.env, {}),
+      envAllowlist: normalizeStringArray(value.envAllowlist, []),
+      inheritEnv: false,
     };
   }
 

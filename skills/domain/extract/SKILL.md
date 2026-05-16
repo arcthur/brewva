@@ -1,43 +1,10 @@
 ---
 name: extract
-description: Evidence-backed structured data extraction from noisy or free-form
-  input.
-stability: stable
+description: Evidence-backed structured data extraction from noisy or free-form input.
 selection:
-  when_to_use: Use when noisy or free-form input must be converted into validated structured data with stable keys.
-intent:
-  outputs:
-    - structured_payload
-    - extraction_report
-  output_contracts:
-    structured_payload:
-      kind: json
-      min_keys: 1
-      min_items: 1
-    extraction_report:
-      kind: text
-      min_words: 3
-      min_length: 18
-effects:
-  allowed_effects:
-    - workspace_read
-    - local_exec
-    - runtime_observe
-  denied_effects:
-    - workspace_write
-resources:
-  default_lease:
-    max_tool_calls: 70
-    max_tokens: 140000
-  hard_ceiling:
-    max_tool_calls: 110
-    max_tokens: 200000
-execution_hints:
-  preferred_tools:
-    - read
-    - exec
-  fallback_tools:
-    - grep
+  when_to_use:
+    Use when noisy or free-form input must be converted into validated structured data with
+    stable keys.
 references:
   - references/contract-validation.md
   - references/projection-patterns.md
@@ -47,8 +14,6 @@ references:
   - references/rationalizations.md
 scripts:
   - scripts/validate_extraction.py
-consumes:
-  - browser_observations
 ---
 
 # Extract Skill

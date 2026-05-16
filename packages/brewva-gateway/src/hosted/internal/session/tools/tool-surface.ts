@@ -1,5 +1,12 @@
-import { TOOL_SURFACE_RESOLVED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
 import type {
+  CapabilityManifest,
+  CapabilitySelectionReceipt,
+} from "@brewva/brewva-runtime/capabilities";
+import { carryCapabilitySelection } from "@brewva/brewva-runtime/capabilities";
+import { TOOL_SURFACE_RESOLVED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
+import type { ToolActionClass } from "@brewva/brewva-runtime/governance";
+import type {
+  BrewvaHostBeforeAgentStartResult,
   InternalHostPluginApi as ExtensionAPI,
   BrewvaHostToolInfo as ToolInfo,
   BrewvaHostToolResultEvent as ToolResultEvent,
@@ -7,17 +14,42 @@ import type {
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import {
   getBrewvaToolSurface,
+  getBrewvaToolMetadata,
+  MANAGED_BREWVA_TOOL_METADATA_BY_NAME,
   MANAGED_BREWVA_TOOL_NAMES,
   OPERATOR_BREWVA_TOOL_NAMES,
 } from "@brewva/brewva-tools/registry";
+import {
+  formatCapabilitySelectionSection,
+  loadRuntimeCapabilityRegistry,
+  recordCapabilitySelectionReceipt,
+  readLatestCapabilitySelectionReceipt,
+  resolveCapabilityAuthorityAccess,
+  selectCapabilityReceiptForPrompt,
+} from "./capability-selection.js";
 
 const CAPABILITY_REQUEST_PATTERN = /\$([a-z][a-z0-9_]*)/g;
 
 export interface ToolSurfaceRuntime {
+  identity: {
+    cwd: string;
+    workspaceRoot: string;
+  };
   config: {
-    skills: {
-      routing: {
-        scopes: readonly string[];
+    readonly capabilities: {
+      readonly roots: readonly string[];
+      readonly defaults: Readonly<Record<string, string>>;
+      readonly policy: {
+        readonly agentScope: readonly string[];
+        readonly workspaceScope: readonly string[];
+        readonly allowedAccounts: readonly string[];
+      };
+    };
+  };
+  inspect: {
+    events: {
+      records: {
+        query(sessionId: string, query: { type: string }): Array<{ payload?: unknown }>;
       };
     };
   };
@@ -29,7 +61,7 @@ export interface RegisterToolSurfaceOptions {
 }
 
 export interface ToolSurfaceLifecycle {
-  beforeAgentStart: (event: unknown, ctx: unknown) => undefined;
+  beforeAgentStart: (event: unknown, ctx: unknown) => BrewvaHostBeforeAgentStartResult | undefined;
   toolResult: (
     event: unknown,
     ctx: unknown,
@@ -95,24 +127,69 @@ function extractRequestedToolNames(prompt: string): string[] {
 }
 
 function isOperatorProfile(runtime: ToolSurfaceRuntime): boolean {
-  const scopes = new Set(runtime.config.skills.routing.scopes);
-  return scopes.has("operator") || scopes.has("meta");
+  // TODO(capability-authority): reconnect durable operator profiles here if Brewva
+  // adds a profile authority. Until then, selected capability receipts are the
+  // only path that can expose operator-surface tools.
+  void runtime;
+  return false;
 }
 
 function isOperatorTool(toolName: string): boolean {
   return getBrewvaToolSurface(toolName) === "operator";
 }
 
+function resolveToolActionClass(input: {
+  toolName: string;
+  dynamicToolDefinitions?: ReadonlyMap<string, ToolDefinition>;
+}): ToolActionClass | undefined {
+  return (
+    getBrewvaToolMetadata(input.dynamicToolDefinitions?.get(input.toolName))?.actionClass ??
+    MANAGED_BREWVA_TOOL_METADATA_BY_NAME[
+      input.toolName as keyof typeof MANAGED_BREWVA_TOOL_METADATA_BY_NAME
+    ]?.actionClass
+  );
+}
+
+function resolveCapabilityAccessForTool(input: {
+  toolName: string;
+  actionClass?: ToolActionClass;
+  selectedCapabilityReceipt?: CapabilitySelectionReceipt;
+  capabilityManifests: readonly CapabilityManifest[];
+}): ReturnType<typeof resolveCapabilityAuthorityAccess> {
+  return resolveCapabilityAuthorityAccess({
+    receipt: input.selectedCapabilityReceipt,
+    manifests: input.capabilityManifests,
+    toolName: input.toolName,
+    actionClass: input.actionClass,
+    forceCapabilityGate: isOperatorTool(input.toolName),
+  });
+}
+
 function shouldExposeManagedTool(input: {
   toolName: string;
   operatorProfile: boolean;
   hasUI: boolean;
+  actionClass?: ToolActionClass;
+  selectedCapabilityReceipt?: CapabilitySelectionReceipt;
+  capabilityManifests: readonly CapabilityManifest[];
 }): boolean {
   if (!input.hasUI && toolRequiresInteractiveUi(input.toolName)) {
     return false;
   }
+  const capabilityAccess = resolveCapabilityAccessForTool({
+    toolName: input.toolName,
+    actionClass: input.actionClass,
+    selectedCapabilityReceipt: input.selectedCapabilityReceipt,
+    capabilityManifests: input.capabilityManifests,
+  });
+  if (!capabilityAccess.allowed) {
+    return false;
+  }
+  const explicitlyAuthorized = capabilityAccess.advisory?.startsWith(
+    "selected_capability_authorized:",
+  );
   if (isOperatorTool(input.toolName)) {
-    return input.operatorProfile;
+    return input.operatorProfile || explicitlyAuthorized === true;
   }
   return true;
 }
@@ -152,6 +229,8 @@ function registerMissingManagedTools(input: {
   knownToolNames: Set<string>;
   operatorProfile: boolean;
   hasUI: boolean;
+  selectedCapabilityReceipt?: CapabilitySelectionReceipt;
+  capabilityManifests: readonly CapabilityManifest[];
 }): void {
   if (!input.dynamicToolDefinitions || input.dynamicToolDefinitions.size === 0) return;
 
@@ -168,6 +247,12 @@ function registerMissingManagedTools(input: {
         toolName,
         operatorProfile: input.operatorProfile,
         hasUI: input.hasUI,
+        actionClass: resolveToolActionClass({
+          toolName,
+          dynamicToolDefinitions: input.dynamicToolDefinitions,
+        }),
+        selectedCapabilityReceipt: input.selectedCapabilityReceipt,
+        capabilityManifests: input.capabilityManifests,
       })
     ) {
       continue;
@@ -184,6 +269,8 @@ function resolveAndActivateToolSurface(input: {
   prompt: string;
   hasUI: boolean;
   dynamicToolDefinitions?: ReadonlyMap<string, ToolDefinition>;
+  selectedCapabilityReceipt?: CapabilitySelectionReceipt;
+  capabilityManifests: readonly CapabilityManifest[];
 }): void {
   const allToolsGetter = (input.extensionApi as { getAllTools?: () => ToolInfo[] }).getAllTools;
   const activeToolsGetter = (input.extensionApi as { getActiveTools?: () => string[] })
@@ -212,6 +299,8 @@ function resolveAndActivateToolSurface(input: {
     knownToolNames,
     operatorProfile,
     hasUI: input.hasUI,
+    selectedCapabilityReceipt: input.selectedCapabilityReceipt,
+    capabilityManifests: input.capabilityManifests,
   });
 
   const allTools = allToolsGetter.call(input.extensionApi);
@@ -239,6 +328,12 @@ function resolveAndActivateToolSurface(input: {
         toolName,
         operatorProfile,
         hasUI: input.hasUI,
+        actionClass: resolveToolActionClass({
+          toolName,
+          dynamicToolDefinitions: input.dynamicToolDefinitions,
+        }),
+        selectedCapabilityReceipt: input.selectedCapabilityReceipt,
+        capabilityManifests: input.capabilityManifests,
       })
     ) {
       active.add(toolName);
@@ -282,6 +377,9 @@ function resolveAndActivateToolSurface(input: {
       operatorRequested: requestedToolNames.filter((toolName) =>
         OPERATOR_BREWVA_TOOL_NAMES.includes(toolName),
       ),
+      selectedCapabilityNames:
+        input.selectedCapabilityReceipt?.selected_capabilities.map((entry) => entry.name) ?? [],
+      capabilitySelectionId: input.selectedCapabilityReceipt?.selection_id ?? null,
       requestedUnknownToolNames: requestedToolNames.filter(
         (toolName) => !allToolNameSet.has(toolName),
       ),
@@ -299,12 +397,29 @@ export function createToolSurfaceLifecycle(
 ): ToolSurfaceLifecycle {
   return {
     beforeAgentStart(event, ctx) {
-      const rawEvent = event as { prompt?: unknown };
+      const rawEvent = event as { prompt?: unknown; systemPrompt?: unknown };
       const prompt = typeof rawEvent.prompt === "string" ? rawEvent.prompt : "";
       const sessionId = getSessionId(ctx);
       if (!sessionId) {
         return undefined;
       }
+      const previousReceipt = readLatestCapabilitySelectionReceipt({ runtime, sessionId });
+      const carried = prompt.trim().length === 0 && previousReceipt !== undefined;
+      const selection = carried
+        ? {
+            registry: loadRuntimeCapabilityRegistry(runtime),
+            receipt: carryCapabilitySelection({ previous: previousReceipt }),
+          }
+        : selectCapabilityReceiptForPrompt({
+            runtime,
+            prompt,
+          });
+      const { registry, receipt } = selection;
+      recordCapabilitySelectionReceipt({
+        runtime,
+        sessionId,
+        receipt,
+      });
 
       resolveAndActivateToolSurface({
         extensionApi,
@@ -313,8 +428,20 @@ export function createToolSurfaceLifecycle(
         prompt,
         hasUI: (ctx as { hasUI?: boolean }).hasUI === true,
         dynamicToolDefinitions: options.dynamicToolDefinitions,
+        selectedCapabilityReceipt: receipt,
+        capabilityManifests: registry.manifests,
       });
-      return undefined;
+      const capabilitySection = formatCapabilitySelectionSection({
+        receipt,
+        manifests: registry.manifests,
+      });
+      if (!capabilitySection) {
+        return undefined;
+      }
+      const systemPrompt = typeof rawEvent.systemPrompt === "string" ? rawEvent.systemPrompt : "";
+      return {
+        systemPrompt: `${systemPrompt}${capabilitySection}`,
+      };
     },
     toolResult(_event, _ctx) {
       return undefined;

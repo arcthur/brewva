@@ -2,40 +2,28 @@ export type {
   LoadableSkillCategory,
   OverlaySkillDocument,
   ParsedSkillDocument,
+  ProducerContract,
   ProjectGuidanceEntry,
   ProjectGuidanceStrength,
-  ResourceBudgetLimits,
   SemanticArtifactSchemaId,
+  SkillCard,
+  SkillCardLike,
+  SkillCardOverride,
   SkillCategory,
-  SkillCompletionDefinition,
-  SkillContract,
-  SkillContractLike,
-  SkillContractOverride,
-  SkillCostHint,
   SkillDocument,
-  SkillEffectLevel,
-  SkillEffectsContract,
-  SkillEffectsOverride,
-  SkillEffectsPolicy,
-  SkillExecutionHints,
   SkillIndexOrigin,
-  SkillIntentContract,
   SkillOutputContract,
   SkillOutputEnumContract,
   SkillOutputJsonContract,
   SkillOutputTextContract,
+  SkillOverlayCard,
   SkillOverlayCategory,
-  SkillOverlayContract,
   SkillRefreshInput,
   SkillRefreshResult,
   SkillRegistryLoadReport,
   SkillRegistryRoot,
-  SkillResourceBudget,
-  SkillResourcePolicy,
   SkillResourceSet,
   SkillRootSource,
-  SkillRoutingPolicy,
-  SkillRoutingScope,
   SkillSelectionPolicy,
   SkillSemanticBindings,
   SkillSystemInstallResult,
@@ -52,8 +40,19 @@ export {
 export type { RuntimeSkillsSurfaceMethods, SkillsSurfaceDependencies } from "./runtime-surface.js";
 export { registerSkillsDomain } from "./registrar.js";
 export type { RuntimeSkillsDomainRegistration } from "./registrar.js";
-export { resolveSkillDefaultLease, resolveSkillHardCeiling } from "./facets.js";
-export { SkillRegistry } from "./registry.js";
+export { SkillRegistry, discoverSkillRegistryRoots } from "./registry.js";
+export {
+  createEmptySkillResources,
+  mergeOverlayCard,
+  mergeSkillResources,
+  parseSkillDocument,
+} from "./contract.js";
+export {
+  getProducerOutputContracts,
+  getProducerSemanticBindings,
+  listProducerOutputs,
+  parseProducerContractFile,
+} from "./producers.js";
 export {
   getSemanticArtifactOutputContract,
   renderSemanticArtifactExample,
@@ -65,11 +64,6 @@ export {
   normalizeSemanticArtifactSchemaId,
 } from "./semantic-artifacts.js";
 export { ensureBundledSystemSkills } from "./system-install.js";
-export {
-  SKILL_TIER_EFFECT_CEILINGS,
-  listEffectsExceedingSkillTierCeiling,
-  listSkillTierEffectCeiling,
-} from "./tier-policy.js";
 export type {
   SkillArtifactIssueTier,
   SkillNormalizedBlockingState,

@@ -1,6 +1,6 @@
 ---
 id: sol-2026-04-15-autonomous-self-improve-schedule-parent-session
-title: Autonomous self-improve schedule must preserve parent task and active skill
+title: Autonomous self-improve schedule preserves parent task and advisory context
 status: active
 problem_kind: design
 module: brewva-gateway
@@ -15,15 +15,15 @@ source_artifacts:
 tags:
   - schedule
   - self-improve
-  - skill-continuity
+  - advisory-continuity
   - task-spec
-updated_at: 2026-04-15
+updated_at: 2026-05-16
 ---
 
 ## Context
 
 The repository wanted an autonomous `self-improve` loop that was native to the
-existing scheduler, session, and skill model rather than a prompt-side cron
+existing scheduler, session, and advisory context model rather than a prompt-side cron
 hack. The immediate temptation was to seed a recurring schedule intent whose
 reason text merely told the child session to "run self-improve".
 
@@ -32,24 +32,26 @@ reason text merely told the child session to "run self-improve".
 Do not treat recurring `self-improve` as a raw cron prompt. Seed a fixed parent
 session that owns:
 
-- the `self-improve` active skill
+- the `self-improve` advisory context and producer contract
 - the TaskSpec goal / expected behavior / constraints for the learning pass
 - the durable recurring schedule intent
 
-Then make inherited schedule continuity carry the parent session's active skill
-alongside TaskSpec, truth facts, and tape handoff context into the child run.
+Then make inherited schedule continuity carry the parent session's advisory
+context alongside TaskSpec, truth facts, and tape handoff context into the
+child run.
 
 ## Why This Matters
 
 If the schedule only passes freeform reason text, the child run has to rediscover
-the intended skill contract from prose. That weakens routing fidelity and makes
+the intended producer contract from prose. That weakens handoff fidelity and makes
 the automation look like a second hidden control path.
 
 By contrast, parent-session seeding keeps the autonomous loop inside Brewva's
 existing semantic contract:
 
 - TaskSpec remains the parameter surface
-- active skill state remains the semantic owner
+- producer contracts describe the semantic artifacts
+- capability selection remains separate from the schedule trigger
 - scheduler remains the recurring trigger, not the policy brain
 - `self-improve` still stops at promotion candidates rather than direct writes
 
@@ -62,8 +64,8 @@ maintenance, retrospection, or evidence-gated improvement work.
 ## Examples
 
 - recurring `self-improve` seeded from `schedule.selfImprove`
-- future recurring specialist policies that should inherit a stable active skill
-  and TaskSpec instead of relying on prompt prose
+- future recurring specialist policies that should inherit stable advisory
+  context and TaskSpec instead of relying on prompt prose
 
 ## References
 

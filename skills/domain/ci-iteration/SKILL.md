@@ -1,61 +1,12 @@
 ---
 name: ci-iteration
-description: Bounded repair loop for failing checks, PR feedback, current CI
-  state, and local verification evidence.
-stability: experimental
+description: Bounded repair loop for failing checks, PR feedback, current CI state, and local
+  verification evidence.
 selection:
-  when_to_use: Use when failing checks, PR feedback, or repair loops need bounded iteration with current CI state and local verification evidence.
-  paths:
+  when_to_use: Use when failing checks, PR feedback, or repair loops need bounded iteration with
+    current CI state and local verification evidence.
+  path_globs:
     - .github/workflows
-intent:
-  outputs:
-    - ci_snapshot
-    - iteration_plan
-    - iteration_report
-    - remaining_blockers
-  output_contracts:
-    ci_snapshot:
-      kind: json
-      min_items: 4
-    iteration_plan:
-      kind: json
-      min_items: 4
-    iteration_report:
-      kind: json
-      min_items: 4
-    remaining_blockers:
-      kind: json
-      min_items: 1
-effects:
-  allowed_effects:
-    - workspace_read
-    - workspace_write
-    - local_exec
-    - runtime_observe
-    - delegation
-resources:
-  default_lease:
-    max_tool_calls: 110
-    max_tokens: 190000
-  hard_ceiling:
-    max_tool_calls: 150
-    max_tokens: 250000
-execution_hints:
-  preferred_tools:
-    - exec
-    - read
-    - iteration_fact
-  fallback_tools:
-    - subagent_run
-    - subagent_status
-    - workflow_status
-    - ledger_query
-consumes:
-  - ci_findings
-  - review_report
-  - review_findings
-  - verification_evidence
-  - change_set
 references:
   - references/example.md
   - references/rationalizations.md

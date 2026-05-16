@@ -19,7 +19,15 @@ import { buildBrewvaEditDiffPreview } from "@brewva/brewva-substrate/tools";
 import {
   collectStringEnumContractMismatches,
   getBrewvaAgentParameters,
+  getBrewvaToolMetadata,
+  getBrewvaToolSurface,
 } from "@brewva/brewva-tools/registry";
+import {
+  isCapabilityAuthorityGated,
+  loadRuntimeCapabilityRegistry,
+  readLatestCapabilitySelectionReceipt,
+  resolveCapabilityAuthorityAccess,
+} from "./capability-selection.js";
 
 interface QualityGateToolCallResult {
   block?: boolean;
@@ -87,6 +95,9 @@ function readRuntimeRequiredCapabilities(value: unknown): {
 
 function resolveRuntimeCapabilityAccess(input: {
   toolName: string;
+  args?: Record<string, unknown>;
+  runtime: BrewvaHostedRuntimePort;
+  sessionId: string;
   toolDefinitionsByName?: ReadonlyMap<string, Parameters<typeof getBrewvaAgentParameters>[0]>;
 }): RuntimeCapabilityAccessFact {
   const toolDefinition = input.toolDefinitionsByName?.get(input.toolName);
@@ -101,16 +112,58 @@ function resolveRuntimeCapabilityAccess(input: {
       reason: `runtime_capability_scope_invalid:${input.toolName}`,
     };
   }
+  const actionClass = getBrewvaToolMetadata(toolDefinition)?.actionClass;
+  const forceCapabilityGate = getBrewvaToolSurface(input.toolName) === "operator";
+  const requiresCapabilitySelection = isCapabilityAuthorityGated({
+    toolName: input.toolName,
+    actionClass,
+    args: input.args,
+    forceCapabilityGate,
+  });
+  if (!requiresCapabilitySelection) {
+    return {
+      allowed: true,
+      basis:
+        required.requiredCapabilities.length > 0
+          ? "runtime_capability_scope"
+          : "capability_selection_scope",
+      advisory:
+        required.requiredCapabilities.length > 0
+          ? `runtime_capabilities:${required.requiredCapabilities.join(",")}`
+          : undefined,
+    };
+  }
+  const registry = loadRuntimeCapabilityRegistry(input.runtime);
+  const selectedCapabilityAccess = resolveCapabilityAuthorityAccess({
+    receipt: readLatestCapabilitySelectionReceipt({
+      runtime: input.runtime,
+      sessionId: input.sessionId,
+    }),
+    manifests: registry.manifests,
+    toolName: input.toolName,
+    actionClass,
+    args: input.args,
+    forceCapabilityGate,
+  });
+  if (!selectedCapabilityAccess.allowed) {
+    return selectedCapabilityAccess;
+  }
   if (required.requiredCapabilities.length === 0) {
     return {
       allowed: true,
-      basis: "runtime_capability_scope",
+      basis: selectedCapabilityAccess.basis,
+      advisory: selectedCapabilityAccess.advisory,
     };
   }
   return {
     allowed: true,
     basis: "runtime_capability_scope",
-    advisory: `runtime_capabilities:${required.requiredCapabilities.join(",")}`,
+    advisory: [
+      selectedCapabilityAccess.advisory,
+      `runtime_capabilities:${required.requiredCapabilities.join(",")}`,
+    ]
+      .filter((entry): entry is string => Boolean(entry))
+      .join("; "),
   };
 }
 
@@ -312,6 +365,9 @@ export function createQualityGateLifecycle(
         diffPreview: buildDiffPreview({ toolName, args, cwd }),
         runtimeCapabilityAccess: resolveRuntimeCapabilityAccess({
           toolName,
+          args,
+          runtime,
+          sessionId,
           toolDefinitionsByName: options.toolDefinitionsByName,
         }),
       });

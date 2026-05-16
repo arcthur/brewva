@@ -21,23 +21,16 @@ import {
 } from "../conventions/api.js";
 import {
   createEmptySkillResources,
-  mergeOverlayContract,
+  mergeOverlayCard,
   mergeSkillResources,
   parseSkillDocument,
-  tightenContract,
 } from "./contract.js";
-import {
-  getSkillCostHint,
-  listSkillAllowedEffects,
-  listSkillFallbackTools,
-  listSkillOutputs,
-  listSkillPreferredTools,
-  resolveSkillEffectLevel,
-} from "./facets.js";
+import { parseProducerContractFile } from "./producers.js";
 import { buildSkillSelectionProfile, hasSelectionProfileSignals } from "./profiles.js";
 import { resolveBundledSystemSkillsRoot } from "./system-install.js";
 import type {
   LoadableSkillCategory,
+  ProducerContract,
   ProjectGuidanceEntry,
   ProjectGuidanceStrength,
   SkillDocument,
@@ -263,6 +256,12 @@ function listSkillFiles(rootDir: string): string[] {
   );
 }
 
+function listProducerFiles(rootDir: string): string[] {
+  return walkFiles(rootDir, (path) => /\.(?:ya?ml)$/iu.test(path)).toSorted((a, b) =>
+    a.localeCompare(b),
+  );
+}
+
 function listMarkdownFiles(rootDir: string): string[] {
   return walkFiles(rootDir, (path) => path.endsWith(".md")).toSorted((a, b) => a.localeCompare(b));
 }
@@ -324,13 +323,6 @@ function resolveSkillResources(
       }),
     ),
     scripts: resources.scripts.map((resourcePath) =>
-      resolveSkillResourcePath({
-        resourcePath,
-        baseDir: input.baseDir,
-        skillDir: input.skillDir,
-      }),
-    ),
-    heuristics: resources.heuristics.map((resourcePath) =>
       resolveSkillResourcePath({
         resourcePath,
         baseDir: input.baseDir,
@@ -482,10 +474,7 @@ function cloneLoadReport(report: SkillRegistryLoadReport): SkillRegistryLoadRepo
   return {
     roots: report.roots.map(cloneSkillRegistryRoot),
     loadedSkills: [...report.loadedSkills],
-    routingEnabled: report.routingEnabled,
-    routingScopes: [...report.routingScopes],
-    routableSkills: [...report.routableSkills],
-    hiddenSkills: [...report.hiddenSkills],
+    selectableSkills: [...report.selectableSkills],
     overlaySkills: [...report.overlaySkills],
     projectGuidance: cloneProjectGuidanceEntries(report.projectGuidance),
     categories: Object.fromEntries(
@@ -508,15 +497,13 @@ export class SkillRegistry {
   private lastLoadReport: SkillRegistryLoadReport = {
     roots: [],
     loadedSkills: [],
-    routingEnabled: false,
-    routingScopes: ["core", "domain"],
-    routableSkills: [],
-    hiddenSkills: [],
+    selectableSkills: [],
     overlaySkills: [],
     projectGuidance: [],
     categories: {},
   };
   private skills = new Map<string, SkillDocument>();
+  private producers = new Map<string, ProducerContract>();
   private projectGuidanceEntries: ProjectGuidanceSource[] = [];
   private defaultSkillGuidanceEntries: DefaultSkillGuidanceSource[] = [];
   private skillOrigins = new Map<string, LoadedSkillOrigin>();
@@ -531,6 +518,7 @@ export class SkillRegistry {
 
   load(): void {
     this.skills.clear();
+    this.producers.clear();
     this.projectGuidanceEntries = [];
     this.defaultSkillGuidanceEntries = [];
     this.skillOrigins.clear();
@@ -547,16 +535,11 @@ export class SkillRegistry {
 
     for (const root of discoveredRoots) {
       this.loadRoot(root);
+      this.loadProducers(root);
     }
 
     for (const disabled of this.config.skills.disabled) {
       this.skills.delete(disabled);
-    }
-
-    for (const [name, override] of Object.entries(this.config.skills.overrides)) {
-      const skill = this.skills.get(name);
-      if (!skill) continue;
-      skill.contract = tightenContract(skill.contract, override);
     }
 
     this.defaultSkillGuidanceEntries = this.loadDefaultSkillGuidance();
@@ -572,6 +555,16 @@ export class SkillRegistry {
     return this.skills.get(name);
   }
 
+  listProducers(): ProducerContract[] {
+    return [...this.producers.values()].toSorted((left, right) =>
+      left.producer.localeCompare(right.producer),
+    );
+  }
+
+  getProducer(name: string): ProducerContract | undefined {
+    return this.producers.get(name);
+  }
+
   getLoadedRoots(): SkillRegistryRoot[] {
     return this.loadedRoots.map(cloneSkillRegistryRoot);
   }
@@ -580,9 +573,9 @@ export class SkillRegistry {
     return cloneLoadReport(this.lastLoadReport);
   }
 
-  buildIndex(options: { routableOnly?: boolean } = {}): SkillsIndexEntry[] {
+  buildIndex(options: { selectableOnly?: boolean } = {}): SkillsIndexEntry[] {
     return this.list()
-      .filter((skill) => !options.routableOnly || this.isRoutable(skill))
+      .filter((skill) => !options.selectableOnly || this.isSelectable(skill))
       .map((skill) => {
         const origin = this.skillOrigins.get(skill.name);
         if (!origin) {
@@ -595,27 +588,19 @@ export class SkillRegistry {
           description: skill.description,
           filePath: skill.filePath,
           baseDir: skill.baseDir,
-          outputs: listSkillOutputs(skill.contract),
-          preferredTools: listSkillPreferredTools(skill.contract),
-          fallbackTools: listSkillFallbackTools(skill.contract),
-          allowedEffects: listSkillAllowedEffects(skill.contract),
-          costHint: getSkillCostHint(skill.contract),
-          stability: skill.contract.stability ?? "stable",
-          composableWith: skill.contract.composableWith ?? [],
-          consumes: skill.contract.consumes ?? [],
-          requires: skill.contract.requires ?? [],
-          effectLevel: resolveSkillEffectLevel(skill.contract),
-          routable: this.isRoutable(skill),
+          selectable: this.isSelectable(skill),
           overlay: skill.overlayFiles.length > 0,
           projectGuidance: cloneProjectGuidanceEntries(skill.projectGuidance),
-          routingScope: skill.contract.routing?.scope,
-          selection: skill.contract.selection
+          selection: skill.card.selection
             ? {
-                ...(skill.contract.selection.whenToUse
-                  ? { whenToUse: skill.contract.selection.whenToUse }
+                ...(skill.card.selection.whenToUse
+                  ? { whenToUse: skill.card.selection.whenToUse }
                   : {}),
-                ...(skill.contract.selection.paths
-                  ? { paths: [...skill.contract.selection.paths] }
+                ...(skill.card.selection.triggers
+                  ? { triggers: [...skill.card.selection.triggers] }
+                  : {}),
+                ...(skill.card.selection.pathGlobs
+                  ? { pathGlobs: [...skill.card.selection.pathGlobs] }
                   : {}),
               }
             : undefined,
@@ -635,17 +620,12 @@ export class SkillRegistry {
     }
     const indexEntries = this.buildIndex();
     const payload: SkillsIndexFile = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       generatedAt: formatISO(Date.now()),
       roots: this.getLoadedRoots(),
-      routing: {
-        enabled: this.config.skills.routing.enabled,
-        scopes: this.config.skills.routing.scopes,
-      },
       summary: {
         loadedSkills: indexEntries.length,
-        routableSkills: indexEntries.filter((skill) => skill.routable).length,
-        hiddenSkills: indexEntries.filter((skill) => !skill.routable).length,
+        selectableSkills: indexEntries.filter((skill) => skill.selectable).length,
         overlaySkills: indexEntries.filter((skill) => skill.overlay).length,
       },
       skills: indexEntries,
@@ -654,19 +634,14 @@ export class SkillRegistry {
     return filePath;
   }
 
-  private isRoutable(skill: SkillDocument): boolean {
-    if (!this.config.skills.routing.enabled) return false;
-    const scope = skill.contract.routing?.scope;
-    if (!scope) return false;
-    if (!this.config.skills.routing.scopes.includes(scope)) return false;
+  private isSelectable(skill: SkillDocument): boolean {
     return hasSelectionSignals(skill);
   }
 
   private buildLoadReport(): SkillRegistryLoadReport {
     const categories: SkillRegistryLoadReport["categories"] = {};
     const loadedSkills: string[] = [];
-    const routableSkills: string[] = [];
-    const hiddenSkills: string[] = [];
+    const selectableSkills: string[] = [];
     const overlaySkills: string[] = [];
 
     for (const skill of this.list()) {
@@ -674,11 +649,7 @@ export class SkillRegistry {
       const categoryBucket = categories[skill.category] ?? [];
       categoryBucket.push(skill.name);
       categories[skill.category] = categoryBucket;
-      if (this.isRoutable(skill)) {
-        routableSkills.push(skill.name);
-      } else {
-        hiddenSkills.push(skill.name);
-      }
+      if (this.isSelectable(skill)) selectableSkills.push(skill.name);
       if (skill.overlayFiles.length > 0) {
         overlaySkills.push(skill.name);
       }
@@ -693,10 +664,7 @@ export class SkillRegistry {
     return {
       roots: this.getLoadedRoots(),
       loadedSkills: [...new Set(loadedSkills)].toSorted((a, b) => a.localeCompare(b)),
-      routingEnabled: this.config.skills.routing.enabled,
-      routingScopes: [...this.config.skills.routing.scopes],
-      routableSkills: [...new Set(routableSkills)].toSorted((a, b) => a.localeCompare(b)),
-      hiddenSkills: [...new Set(hiddenSkills)].toSorted((a, b) => a.localeCompare(b)),
+      selectableSkills: [...new Set(selectableSkills)].toSorted((a, b) => a.localeCompare(b)),
       overlaySkills: [...new Set(overlaySkills)].toSorted((a, b) => a.localeCompare(b)),
       projectGuidance: uniqueProjectGuidanceEntries(this.projectGuidanceEntries),
       categories,
@@ -714,6 +682,19 @@ export class SkillRegistry {
       this.projectGuidanceEntries.push(...projectGuidanceEntries);
     }
     this.loadOverlays(join(skillDir, "project", "overlays"), root);
+  }
+
+  private loadProducers(root: SkillRegistryRoot): void {
+    for (const filePath of listProducerFiles(join(root.skillDir, "producers"))) {
+      const parsed = parseProducerContractFile(filePath, root);
+      const existing = this.producers.get(parsed.producer);
+      if (existing) {
+        throw new Error(
+          `[producer_registry] ${filePath}: duplicate producer '${parsed.producer}' conflicts with '${existing.filePath}'.`,
+        );
+      }
+      this.producers.set(parsed.producer, parsed);
+    }
   }
 
   private loadCategory(
@@ -811,7 +792,7 @@ export class SkillRegistry {
         ...baseSkill,
         markdown: joinMarkdownSections([baseSkill.inheritedMarkdown, authoredMarkdown]),
         authoredMarkdown,
-        contract: mergeOverlayContract(baseSkill.contract, overlay.contract),
+        card: mergeOverlayCard(baseSkill.card, overlay.card),
         resources: mergedResources,
         authoredResources,
         overlayFiles: [...new Set([...baseSkill.overlayFiles, filePath])],

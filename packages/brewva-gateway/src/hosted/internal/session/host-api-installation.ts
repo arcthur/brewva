@@ -28,7 +28,6 @@ import {
   type TurnLifecyclePort,
 } from "../thread-loop/lifecycle/turn-lifecycle-port.js";
 import { toHostedRuntimePort, toToolRuntimePort } from "./runtime-ports.js";
-import { DEFAULT_HOSTED_ROUTING_SCOPES } from "./session-factory.js";
 import {
   createHostedToolExecutionCoordinator,
   type HostedToolExecutionCoordinator,
@@ -177,19 +176,8 @@ export interface CreateHostedBehaviorHostAdapterOptions extends BrewvaRuntimeOpt
 }
 
 function assertHostedBehaviorHostAdapterRuntimeCompatibility(
-  options: CreateHostedBehaviorHostAdapterOptions,
-): void {
-  if (options.runtime && options.routingScopes && options.routingScopes.length > 0) {
-    throw new Error(
-      "routingScopes must be applied when calling createBrewvaRuntime; createHostedBehaviorHostAdapter does not mutate runtime.config",
-    );
-  }
-  if (options.runtime && options.routingDefaultScopes && options.routingDefaultScopes.length > 0) {
-    throw new Error(
-      "routingDefaultScopes must be applied when calling createBrewvaRuntime; createHostedBehaviorHostAdapter does not infer runtime config intent from an existing runtime",
-    );
-  }
-}
+  _options: CreateHostedBehaviorHostAdapterOptions,
+): void {}
 
 function buildManagedTools(
   runtime: BrewvaHostedRuntimePort,
@@ -241,7 +229,12 @@ function installHostedBehavior(
   }
   const turnClock = createRuntimeTurnClockStore();
   const toolSurfaceRuntime: ToolSurfaceRuntime = {
+    identity: {
+      cwd: runtime.identity.cwd,
+      workspaceRoot: runtime.identity.workspaceRoot,
+    },
     config: runtime.config,
+    inspect: runtime.inspect,
     recordEvent: (input: { sessionId: string; type: string; payload?: object }) =>
       runtime.extensions.hosted.events.record(input),
   };
@@ -317,10 +310,6 @@ export function createHostedBehaviorHostAdapter(
         options.runtime ??
           createBrewvaRuntime({
             ...options,
-            routingDefaultScopes:
-              options.routingScopes && options.routingScopes.length > 0
-                ? options.routingDefaultScopes
-                : (options.routingDefaultScopes ?? [...DEFAULT_HOSTED_ROUTING_SCOPES]),
             governancePort:
               options.governancePort ?? createTrustedLocalGovernancePort({ profile: "team" }),
           }),

@@ -75,7 +75,7 @@ export type ConventionTarget =
       path: string;
     }
   | {
-      kind: "skill_contract";
+      kind: "skill_card";
       path: string;
       skillName?: string;
     }

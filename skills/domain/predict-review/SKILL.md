@@ -1,61 +1,15 @@
 ---
 name: predict-review
-description: Multi-perspective advisory review for hard problems before choosing
-  the next action.
-stability: experimental
+description: Multi-perspective advisory review for hard problems before choosing the next action.
 selection:
-  when_to_use: Use when a hard problem needs multi-perspective advisory review and explicit disagreement before choosing the next action.
-intent:
-  outputs:
-    - perspective_findings
-    - debate_summary
-    - ranked_hypotheses
-  output_contracts:
-    perspective_findings:
-      kind: json
-      min_items: 1
-    debate_summary:
-      kind: json
-      min_items: 3
-    ranked_hypotheses:
-      kind: json
-      min_items: 1
-effects:
-  allowed_effects:
-    - workspace_read
-    - runtime_observe
-    - delegation
-  denied_effects:
-    - workspace_write
-    - local_exec
-resources:
-  default_lease:
-    max_tool_calls: 90
-    max_tokens: 170000
-  hard_ceiling:
-    max_tool_calls: 130
-    max_tokens: 230000
-execution_hints:
-  preferred_tools:
-    - read
-    - subagent_fanout
-  fallback_tools:
-    - subagent_run
-    - read_spans
-    - grep
-    - task_view_state
+  when_to_use: Use when a hard problem needs multi-perspective advisory review and explicit
+    disagreement before choosing the next action.
 references:
   - references/perspectives.md
   - references/example.md
   - references/rationalizations.md
 invariants:
   - invariants/debate-setup.md
-consumes:
-  - design_spec
-  - change_set
-  - review_report
-  - verification_evidence
-  - runtime_trace
 ---
 
 # Predict Review Skill
@@ -85,6 +39,8 @@ NO ADVISORY CONSENSUS WITHOUT EXPLICIT DISAGREEMENT CHECK
 ### Phase 1: Frame the review target
 
 Name the exact target, scope, and decision the debate is meant to inform.
+Use `verification_evidence` when available, but treat missing evidence as an
+explicit debate constraint rather than a hidden frontmatter requirement.
 Apply `invariants/debate-setup.md` with the setup conditions.
 
 **If the invariant returns `ready: false`**: Stop. Resolve every item in

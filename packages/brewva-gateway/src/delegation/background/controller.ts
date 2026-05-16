@@ -11,7 +11,6 @@ import type { DelegationRunQuery, DelegationRunRecord } from "@brewva/brewva-run
 import { isDelegationRunTerminalStatus } from "@brewva/brewva-runtime/delegation";
 import type { BrewvaStructuredEvent } from "@brewva/brewva-runtime/events";
 import { readWorkerResultsAppliedEventPayload } from "@brewva/brewva-runtime/events";
-import type { SkillRoutingScope } from "@brewva/brewva-runtime/skills";
 import type {
   DelegationPacket,
   SubagentCancelResult,
@@ -80,7 +79,6 @@ interface DetachedBackgroundControllerOptions {
   runtime: BrewvaRuntimeInstance | BrewvaHostedRuntimePort;
   delegationStore?: HostedDelegationStore;
   configPath?: string;
-  routingScopes?: SkillRoutingScope[];
   modelRouting?: DelegationModelRoutingContext;
   spawnProcess?: (input: {
     modulePath: string;
@@ -449,7 +447,6 @@ export function createDetachedSubagentBackgroundController(
         workspaceRoot: runtime.identity.workspaceRoot,
         config: cloneRuntimeConfig(runtime),
         configPath: options.configPath,
-        routingScopes: options.routingScopes,
         delegate,
         target: input.target,
         executionShape: input.executionShape,

@@ -1,8 +1,7 @@
 import type { ToolAccessResult } from "../domain/context/types.js";
 import { getToolGovernanceDescriptor } from "../domain/governance/tool-governance.js";
-import type { ToolEffectClass, ToolGovernanceDescriptor } from "../domain/governance/types.js";
-import { listSkillAllowedEffects, listSkillDeniedEffects } from "../domain/skills/facets.js";
-import type { SkillContract } from "../domain/skills/types.js";
+import type { ToolGovernanceDescriptor } from "../domain/governance/types.js";
+import type { SkillCard } from "../domain/skills/types.js";
 import { normalizeToolName } from "../utils/tool-name.js";
 
 export interface ToolPolicyOptions {
@@ -19,27 +18,13 @@ function normalizeToolList(tools: string[]): string[] {
   return tools.map((tool) => normalizeToolName(tool)).filter((tool) => tool.length > 0);
 }
 
-function setFromEffects(effects: ToolEffectClass[] | undefined): Set<ToolEffectClass> {
-  return new Set((effects ?? []).filter((effect) => typeof effect === "string"));
-}
-
-function difference<T>(left: Iterable<T>, right: Set<T>): T[] {
-  const missing: T[] = [];
-  for (const value of left) {
-    if (!right.has(value)) {
-      missing.push(value);
-    }
-  }
-  return missing;
-}
-
 export function checkToolAccess(
-  contract: SkillContract | undefined,
+  card: SkillCard | undefined,
   toolName: string,
   options: ToolPolicyOptions,
   args?: Record<string, unknown>,
 ): ToolAccessResult {
-  if (!contract) return { allowed: true };
+  if (!card) return { allowed: true };
 
   const normalized = normalizeToolName(toolName);
   if (!normalized) return { allowed: true };
@@ -57,27 +42,8 @@ export function checkToolAccess(
     return { allowed: true, warning };
   }
 
-  const deniedEffects = setFromEffects(listSkillDeniedEffects(contract));
-  const violatedDeniedEffects = descriptor.effects.filter((effect) => deniedEffects.has(effect));
-  if (options.enforceDeniedEffects && violatedDeniedEffects.length > 0) {
-    return {
-      allowed: false,
-      reason: `Tool '${normalized}' performs denied effects for skill '${contract.name}': ${violatedDeniedEffects.join(", ")}.`,
-    };
-  }
-
-  if (options.effectAuthorizationMode === "off") {
-    return { allowed: true };
-  }
-
-  const allowedEffects = setFromEffects(listSkillAllowedEffects(contract));
-  const unauthorizedEffects = difference(descriptor.effects, allowedEffects);
-  if (unauthorizedEffects.length > 0) {
-    const reason = `Tool '${normalized}' requires unauthorized effects for skill '${contract.name}': ${unauthorizedEffects.join(", ")}.`;
-    if (options.effectAuthorizationMode === "warn") {
-      return { allowed: true, warning: reason };
-    }
-    return { allowed: false, reason };
-  }
+  void options.enforceDeniedEffects;
+  void options.effectAuthorizationMode;
+  void descriptor;
   return { allowed: true };
 }

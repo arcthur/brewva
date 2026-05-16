@@ -1,54 +1,10 @@
 ---
 name: implementation
-description: Code-change execution with scope discipline and fresh verification
-  evidence.
-stability: stable
+description: Code-change execution with scope discipline and fresh verification evidence.
 selection:
-  when_to_use: Use when the task is ready for code changes and verification evidence must be produced with the change.
-intent:
-  outputs:
-    - change_set
-    - files_changed
-    - verification_evidence
-  semantic_bindings:
-    change_set: implementation.change_set.v2
-    files_changed: implementation.files_changed.v2
-    verification_evidence: implementation.verification_evidence.v2
-effects:
-  allowed_effects:
-    - workspace_read
-    - workspace_write
-    - local_exec
-    - runtime_observe
-resources:
-  default_lease:
-    max_tool_calls: 100
-    max_tokens: 180000
-  hard_ceiling:
-    max_tool_calls: 140
-    max_tokens: 240000
-execution_hints:
-  preferred_tools:
-    - read
-    - edit
-  fallback_tools:
-    - grep
-    - exec
-    - lsp_diagnostics
-    - ledger_query
-composable_with:
-  - debugging
-  - runtime-forensics
-consumes:
-  - design_spec
-  - execution_plan
-  - execution_mode_hint
-  - implementation_targets
-  - root_cause
-  - fix_strategy
-  - approach_simplicity_check
-  - scope_declaration
-  - success_criteria
+  when_to_use:
+    Use when the task is ready for code changes and verification evidence must be produced
+    with the change.
 references:
   - references/example.md
   - references/rationalizations.md

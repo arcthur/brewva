@@ -1,95 +1,16 @@
 ---
 name: office-hours
-description: Diagnose new product, feature, startup, side-project, hackathon,
-  open-source, learning, or "worth building" ideas before planning or code.
-stability: stable
+description: Diagnose new product, feature, startup, side-project, hackathon, open-source, learning,
+  or "worth building" ideas before planning or code.
 selection:
-  when_to_use: Use when a new idea or "is this worth building" question needs diagnosis before discovery, strategy, planning, or implementation.
-intent:
-  outputs:
-    - office_hours_brief
-    - mode_decision
-    - premise_challenge
-    - approach_options
-    - next_assignment
-  output_contracts:
-    office_hours_brief:
-      kind: text
-      min_words: 8
-      min_length: 48
-    mode_decision:
-      kind: enum
-      values:
-        - startup
-        - builder
-    premise_challenge:
-      kind: json
-      min_items: 1
-    approach_options:
-      kind: json
-      min_items: 2
-    next_assignment:
-      kind: json
-      required_fields:
-        - type
-        - assignment
-        - evidence_target
-      field_contracts:
-        type:
-          kind: enum
-          values:
-            - evidence_gathering
-            - selection
-            - framing
-        assignment:
-          kind: text
-          min_words: 5
-          min_length: 32
-        evidence_target:
-          kind: text
-          min_words: 4
-          min_length: 24
-effects:
-  allowed_effects:
-    - workspace_read
-    - runtime_observe
-    - delegation
-  denied_effects:
-    - workspace_write
-    - local_exec
-    - external_network
-resources:
-  default_lease:
-    max_tool_calls: 90
-    max_tokens: 180000
-  hard_ceiling:
-    max_tool_calls: 130
-    max_tokens: 240000
-execution_hints:
-  preferred_tools:
-    - read
-    - grep
-  fallback_tools:
-    - glob
-    - ledger_query
-    - subagent_fanout
+  when_to_use: Use when a new idea or "is this worth building" question needs diagnosis before
+    discovery, strategy, planning, or implementation.
 references:
   - references/startup-diagnostic.md
   - references/builder-mode.md
   - references/premise-and-alternatives.md
   - references/example.md
   - references/rationalizations.md
-consumes:
-  - repository_snapshot
-  - impact_map
-  - problem_frame
-  - user_pains
-  - scope_recommendation
-composable_with:
-  - discovery
-  - strategy
-  - architecture
-  - plan
 ---
 
 # Office-Hours Skill

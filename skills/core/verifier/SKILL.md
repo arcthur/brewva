@@ -1,53 +1,9 @@
 ---
 name: verifier
-description: Behavior validation through realistic flows, adversarial probes,
-  and executable evidence.
-stability: stable
+description: Behavior validation through realistic flows, adversarial probes, and executable evidence.
 selection:
-  when_to_use: Use when shipped behavior must be validated through realistic flows, adversarial probes, or executable evidence.
-intent:
-  outputs:
-    - verifier_report
-    - verifier_findings
-    - verifier_verdict
-    - verifier_checks
-    - verifier_missing_evidence
-    - verifier_confidence_gaps
-    - verifier_environment_limits
-  semantic_bindings:
-    verifier_report: verifier.verifier_report.v2
-    verifier_findings: verifier.verifier_findings.v2
-    verifier_verdict: verifier.verifier_verdict.v2
-    verifier_checks: verifier.verifier_checks.v2
-    verifier_missing_evidence: verifier.verifier_missing_evidence.v2
-    verifier_confidence_gaps: verifier.verifier_confidence_gaps.v2
-    verifier_environment_limits: verifier.verifier_environment_limits.v2
-effects:
-  allowed_effects:
-    - workspace_read
-    - local_exec
-    - runtime_observe
-resources:
-  default_lease:
-    max_tool_calls: 110
-    max_tokens: 190000
-  hard_ceiling:
-    max_tool_calls: 150
-    max_tokens: 250000
-execution_hints:
-  preferred_tools:
-    - browser_open
-    - browser_wait
-    - browser_snapshot
-    - browser_click
-    - browser_fill
-    - browser_screenshot
-    - browser_diff_snapshot
-    - exec
-    - read
-  fallback_tools:
-    - browser_get
-    - grep
+  when_to_use: Use when shipped behavior must be validated through realistic flows, adversarial
+    probes, or executable evidence.
 references:
   - references/exploratory-regression-checklist.md
   - references/verifier-taxonomy.md
@@ -55,18 +11,6 @@ references:
   - references/rationalizations.md
 scripts:
   - scripts/classify_verifier_verdict.py
-consumes:
-  - design_spec
-  - execution_plan
-  - execution_mode_hint
-  - risk_register
-  - implementation_targets
-  - change_set
-  - files_changed
-  - verification_evidence
-  - review_report
-  - review_findings
-  - merge_decision
 ---
 
 # Verifier Skill

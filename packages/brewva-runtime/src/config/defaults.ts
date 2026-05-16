@@ -8,10 +8,14 @@ export const DEFAULT_BREWVA_CONFIG: BrewvaConfig = {
   skills: {
     roots: [],
     disabled: [],
-    overrides: {},
-    routing: {
-      enabled: false,
-      scopes: ["core", "domain"],
+  },
+  capabilities: {
+    roots: [],
+    defaults: {},
+    policy: {
+      agentScope: [],
+      workspaceScope: [],
+      allowedAccounts: [],
     },
   },
   verification: {

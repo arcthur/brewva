@@ -18,6 +18,7 @@ Current rule:
 
 - the only proposal kind is `effect_commitment`
 - skill routing is not a proposal boundary
+- capability selection is not a proposal boundary
 - context shaping is not a proposal boundary
 
 This keeps the kernel boundary focused on one question:
@@ -38,6 +39,11 @@ Effect proposals share the same authority basis as direct tool execution.
 and authority-basis explanation. Proposal admission owns waiting, resume,
 delegation, request history, and operator-decision lifecycle. This split keeps
 approval state replayable without creating a second effect-policy model.
+
+Capability selection is an input fact to this authority model, not a proposal
+kind. A selected capability receipt can explain why an external tool or
+operator surface was visible, but proposal admission still decides whether an
+approval-bearing effect commitment may proceed.
 
 Both direct execution and proposal admission attach `manifestBasis` to their
 decision receipts. A mismatch means the implementation has split authority and

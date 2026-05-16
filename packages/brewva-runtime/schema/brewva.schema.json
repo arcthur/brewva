@@ -11,6 +11,48 @@
         "$schema": {
           "type": "string"
         },
+        "capabilities": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "defaults": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            "policy": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "agentScope": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "allowedAccounts": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "workspaceScope": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "roots": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
         "channels": {
           "type": "object",
           "additionalProperties": false,
@@ -696,31 +738,10 @@
                 "type": "string"
               }
             },
-            "overrides": {
-              "type": "object",
-              "additionalProperties": {
-                "$ref": "#/definitions/SkillContractOverride"
-              }
-            },
             "roots": {
               "type": "array",
               "items": {
                 "type": "string"
-              }
-            },
-            "routing": {
-              "type": "object",
-              "additionalProperties": false,
-              "properties": {
-                "enabled": {
-                  "type": "boolean"
-                },
-                "scopes": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/definitions/SkillRoutingScope"
-                  }
-                }
               }
             }
           }
@@ -825,6 +846,12 @@
             "type": "string"
           }
         },
+        "envAllowlist": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "id": {
           "type": "string"
         },
@@ -833,6 +860,10 @@
           "items": {
             "type": "string"
           }
+        },
+        "inheritEnv": {
+          "type": "boolean",
+          "const": false
         },
         "timeoutMs": {
           "type": "number"
@@ -853,8 +884,10 @@
         "command",
         "enabled",
         "env",
+        "envAllowlist",
         "id",
         "includeToolNames",
+        "inheritEnv",
         "timeoutMs",
         "toolPolicies",
         "transport"
@@ -944,306 +977,6 @@
         }
       ]
     },
-    "SemanticArtifactSchemaId": {
-      "type": "string",
-      "enum": [
-        "planning.design_spec.v2",
-        "planning.execution_plan.v2",
-        "planning.execution_mode_hint.v2",
-        "planning.risk_register.v2",
-        "planning.implementation_targets.v2",
-        "planning.success_criteria.v2",
-        "planning.approach_simplicity_check.v2",
-        "planning.scope_declaration.v2",
-        "implementation.change_set.v2",
-        "implementation.files_changed.v2",
-        "implementation.verification_evidence.v2",
-        "review.review_report.v2",
-        "review.review_findings.v2",
-        "review.merge_decision.v2",
-        "verifier.verifier_report.v2",
-        "verifier.verifier_findings.v2",
-        "verifier.verifier_verdict.v2",
-        "verifier.verifier_checks.v2",
-        "verifier.verifier_missing_evidence.v2",
-        "verifier.verifier_confidence_gaps.v2",
-        "verifier.verifier_environment_limits.v2",
-        "ship.ship_report.v2",
-        "ship.release_checklist.v2",
-        "ship.ship_decision.v2"
-      ]
-    },
-    "SkillCompletionDefinition": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "requiredEvidenceKinds": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "verificationLevel": {
-          "$ref": "#/definitions/VerificationLevel"
-        }
-      }
-    },
-    "SkillContractOverride": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "description": {
-          "type": "string"
-        },
-        "composableWith": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "consumes": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "effects": {
-          "$ref": "#/definitions/SkillEffectsOverride"
-        },
-        "executionHints": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "costHint": {
-              "$ref": "#/definitions/SkillCostHint"
-            },
-            "fallbackTools": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            },
-            "preferredTools": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            }
-          }
-        },
-        "intent": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "completionDefinition": {
-              "$ref": "#/definitions/SkillCompletionDefinition"
-            },
-            "outputContracts": {
-              "type": "object",
-              "additionalProperties": {
-                "$ref": "#/definitions/SkillOutputContract"
-              }
-            },
-            "outputs": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            },
-            "semanticBindings": {
-              "$ref": "#/definitions/SkillSemanticBindings"
-            }
-          }
-        },
-        "requires": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "resources": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "defaultLease": {
-              "type": "object",
-              "additionalProperties": false,
-              "properties": {
-                "maxParallel": {
-                  "type": "number"
-                },
-                "maxTokens": {
-                  "type": "number"
-                },
-                "maxToolCalls": {
-                  "type": "number"
-                }
-              }
-            },
-            "hardCeiling": {
-              "type": "object",
-              "additionalProperties": false,
-              "properties": {
-                "maxParallel": {
-                  "type": "number"
-                },
-                "maxTokens": {
-                  "type": "number"
-                },
-                "maxToolCalls": {
-                  "type": "number"
-                }
-              }
-            }
-          }
-        },
-        "routing": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "scope": {
-              "$ref": "#/definitions/SkillRoutingScope"
-            }
-          }
-        },
-        "selection": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "paths": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            },
-            "whenToUse": {
-              "type": "string"
-            }
-          }
-        },
-        "stability": {
-          "type": "string",
-          "enum": ["experimental", "stable", "deprecated"]
-        }
-      }
-    },
-    "SkillCostHint": {
-      "type": "string",
-      "enum": ["low", "medium", "high"]
-    },
-    "SkillEffectsOverride": {
-      "$ref": "#/definitions/SkillEffectsPolicy"
-    },
-    "SkillEffectsPolicy": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "allowedEffects": {
-          "type": "array",
-          "items": {
-            "$ref": "#/definitions/ToolEffectClass"
-          }
-        },
-        "deniedEffects": {
-          "type": "array",
-          "items": {
-            "$ref": "#/definitions/ToolEffectClass"
-          }
-        }
-      }
-    },
-    "SkillOutputContract": {
-      "anyOf": [
-        {
-          "$ref": "#/definitions/SkillOutputTextContract"
-        },
-        {
-          "$ref": "#/definitions/SkillOutputEnumContract"
-        },
-        {
-          "$ref": "#/definitions/SkillOutputJsonContract"
-        }
-      ]
-    },
-    "SkillOutputEnumContract": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "caseSensitive": {
-          "type": "boolean"
-        },
-        "kind": {
-          "type": "string",
-          "const": "enum"
-        },
-        "values": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        }
-      },
-      "required": ["kind", "values"]
-    },
-    "SkillOutputJsonContract": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "fieldContracts": {
-          "type": "object",
-          "additionalProperties": {
-            "$ref": "#/definitions/SkillOutputContract"
-          }
-        },
-        "itemContract": {
-          "$ref": "#/definitions/SkillOutputContract"
-        },
-        "kind": {
-          "type": "string",
-          "const": "json"
-        },
-        "minItems": {
-          "type": "number"
-        },
-        "minKeys": {
-          "type": "number"
-        },
-        "requiredFields": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        }
-      },
-      "required": ["kind"]
-    },
-    "SkillOutputTextContract": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "kind": {
-          "type": "string",
-          "const": "text"
-        },
-        "minLength": {
-          "type": "number"
-        },
-        "minWords": {
-          "type": "number"
-        }
-      },
-      "required": ["kind"]
-    },
-    "SkillRoutingScope": {
-      "type": "string",
-      "enum": ["core", "domain", "operator", "meta"]
-    },
-    "SkillSemanticBindings": {
-      "type": "object",
-      "additionalProperties": {
-        "$ref": "#/definitions/SemanticArtifactSchemaId"
-      }
-    },
     "ToolActionAdmissionOverrides": {
       "type": "object",
       "additionalProperties": false,
@@ -1306,23 +1039,6 @@
     "ToolAdmissionBehavior": {
       "type": "string",
       "enum": ["allow", "ask", "deny"]
-    },
-    "ToolEffectClass": {
-      "type": "string",
-      "enum": [
-        "workspace_read",
-        "workspace_write",
-        "local_exec",
-        "runtime_observe",
-        "external_network",
-        "external_side_effect",
-        "schedule_mutation",
-        "memory_write",
-        "budget_mutation",
-        "control_state_mutation",
-        "delegation",
-        "credential_access"
-      ]
     },
     "VerificationLevel": {
       "type": "string",

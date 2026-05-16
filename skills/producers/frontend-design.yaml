@@ -1,0 +1,39 @@
+producer: frontend-design
+outputs:
+  - ui_direction
+  - ui_spec
+output_contracts:
+  ui_direction:
+    kind: text
+    min_words: 3
+    min_length: 18
+  ui_spec:
+    kind: json
+    required_fields:
+      - layout
+      - hierarchy
+      - state_behavior
+      - density
+      - breakpoints
+    field_contracts:
+      layout:
+        kind: text
+        min_words: 4
+        min_length: 24
+      hierarchy:
+        kind: text
+        min_words: 4
+        min_length: 24
+      state_behavior:
+        kind: json
+        required_fields:
+          - loading
+          - empty
+          - error
+      density:
+        kind: text
+        min_words: 3
+        min_length: 18
+      breakpoints:
+        kind: json
+        min_items: 1

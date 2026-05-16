@@ -1,7 +1,6 @@
 import { analyzeShellCommand } from "../../security/command-policy.js";
 import { analyzeVirtualReadonlyEligibility } from "../../security/virtual-readonly-policy.js";
 import { normalizeToolName } from "../../utils/tool-name.js";
-import type { SkillRoutingScope } from "../skills/types.js";
 import type {
   EffectiveToolActionPolicy,
   ToolActionClass,
@@ -25,7 +24,6 @@ type ToolActionPolicyInput = {
   effectClasses: readonly ToolEffectClass[];
   boxPolicy?: ToolActionPolicy["boxPolicy"];
   budgetWeight?: number;
-  requiredRoutingScopes?: readonly SkillRoutingScope[];
   safetyGate?: ToolActionPolicy["safetyGate"];
 };
 
@@ -77,10 +75,6 @@ void TOOL_ADMISSION_BEHAVIOR_EXHAUSTIVE_CHECK;
 export const TOOL_ACTION_CLASSES = TOOL_ACTION_CLASS_VALUES;
 export const TOOL_ADMISSION_BEHAVIORS = TOOL_ADMISSION_BEHAVIOR_VALUES;
 
-function uniqueValues<T>(values: readonly T[] | undefined): T[] | undefined {
-  return values ? [...new Set(values)] : undefined;
-}
-
 function buildPolicy(input: ToolActionPolicyInput): ToolActionPolicy {
   return validateToolActionPolicy(input.actionClass, {
     actionClass: input.actionClass,
@@ -92,7 +86,6 @@ function buildPolicy(input: ToolActionPolicyInput): ToolActionPolicy {
     effectClasses: [...new Set(input.effectClasses)],
     boxPolicy: input.boxPolicy,
     budgetWeight: input.budgetWeight,
-    requiredRoutingScopes: uniqueValues(input.requiredRoutingScopes),
     safetyGate: input.safetyGate,
   });
 }
@@ -160,12 +153,7 @@ function workspacePatch(riskLevel: ToolRiskLevel = "high"): ToolActionPolicy {
   });
 }
 
-function memoryWrite(
-  input: {
-    effectClasses?: readonly ToolEffectClass[];
-    requiredRoutingScopes?: readonly SkillRoutingScope[];
-  } = {},
-): ToolActionPolicy {
+function memoryWrite(input: { effectClasses?: readonly ToolEffectClass[] } = {}): ToolActionPolicy {
   return buildPolicy({
     actionClass: "memory_write",
     riskLevel: "medium",
@@ -174,7 +162,6 @@ function memoryWrite(
     receiptPolicy: { kind: "control_plane", required: true },
     recoveryPolicy: { kind: "none" },
     effectClasses: input.effectClasses ?? ["memory_write"],
-    requiredRoutingScopes: input.requiredRoutingScopes,
   });
 }
 
@@ -423,7 +410,7 @@ export const TOOL_ACTION_POLICY_BY_NAME: Record<string, ToolActionPolicy> = {
     recoveryPolicy: { kind: "none" },
     effectClasses: ["workspace_read", "runtime_observe"],
   }),
-  recall_curate: memoryWrite({ requiredRoutingScopes: ["operator", "meta"] }),
+  recall_curate: memoryWrite(),
   knowledge_search: workspaceRead(),
   precedent_audit: workspaceRead(),
   precedent_sweep: workspaceRead(),
@@ -527,28 +514,11 @@ function clonePolicy(input: ToolActionPolicy): ToolActionPolicy {
   return {
     ...input,
     effectClasses: [...new Set(input.effectClasses)],
-    requiredRoutingScopes: input.requiredRoutingScopes
-      ? [...new Set(input.requiredRoutingScopes)]
-      : undefined,
     receiptPolicy: { ...input.receiptPolicy },
     recoveryPolicy: { ...input.recoveryPolicy },
     boxPolicy: input.boxPolicy ? { ...input.boxPolicy } : undefined,
     safetyGate: input.safetyGate ? { ...input.safetyGate } : undefined,
   };
-}
-
-function sameValues<T extends string>(
-  left: readonly T[] | undefined,
-  right: readonly T[] | undefined,
-): boolean {
-  const leftValues = [...new Set(left ?? [])].toSorted((leftValue, rightValue) =>
-    leftValue.localeCompare(rightValue),
-  );
-  const rightValues = [...new Set(right ?? [])].toSorted((leftValue, rightValue) =>
-    leftValue.localeCompare(rightValue),
-  );
-  if (leftValues.length !== rightValues.length) return false;
-  return leftValues.every((value, index) => value === rightValues[index]);
 }
 
 function samePrimitiveRecord(left: object | undefined, right: object | undefined): boolean {
@@ -564,6 +534,20 @@ function samePrimitiveRecord(left: object | undefined, right: object | undefined
     const [rightKey, rightValue] = rightEntries[index] ?? [];
     return key === rightKey && Object.is(value, rightValue);
   });
+}
+
+function sameStringValues(
+  left: readonly string[] | undefined,
+  right: readonly string[] | undefined,
+): boolean {
+  const leftValues = [...new Set(left ?? [])].toSorted((leftValue, rightValue) =>
+    leftValue.localeCompare(rightValue),
+  );
+  const rightValues = [...new Set(right ?? [])].toSorted((leftValue, rightValue) =>
+    leftValue.localeCompare(rightValue),
+  );
+  if (leftValues.length !== rightValues.length) return false;
+  return leftValues.every((value, index) => value === rightValues[index]);
 }
 
 export function validateToolActionPolicy(
@@ -628,9 +612,6 @@ export function deriveToolGovernanceDescriptor(policy: ToolActionPolicy): ToolGo
     defaultRisk: policy.riskLevel,
     boundary,
   };
-  if (policy.requiredRoutingScopes && policy.requiredRoutingScopes.length > 0) {
-    descriptor.requiredRoutingScopes = [...new Set(policy.requiredRoutingScopes)];
-  }
   return descriptor;
 }
 
@@ -804,8 +785,7 @@ export function sameToolActionPolicy(
     left.maxAdmission === right.maxAdmission &&
     samePrimitiveRecord(left.receiptPolicy, right.receiptPolicy) &&
     samePrimitiveRecord(left.recoveryPolicy, right.recoveryPolicy) &&
-    sameValues(left.effectClasses, right.effectClasses) &&
-    sameValues(left.requiredRoutingScopes, right.requiredRoutingScopes) &&
+    sameStringValues(left.effectClasses, right.effectClasses) &&
     samePrimitiveRecord(left.boxPolicy, right.boxPolicy) &&
     samePrimitiveRecord(left.safetyGate, right.safetyGate) &&
     left.budgetWeight === right.budgetWeight

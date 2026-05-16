@@ -1,15 +1,10 @@
-import type { VerificationLevel } from "../../core/shared.js";
 import type { ConventionKind, RetirementSensitivity } from "../conventions/api.js";
-import type { ToolEffectClass } from "../governance/api.js";
 import { SEMANTIC_ARTIFACT_SCHEMA_IDS } from "./semantic-artifacts.js";
 export { SEMANTIC_ARTIFACT_SCHEMA_IDS } from "./semantic-artifacts.js";
 
 export type LoadableSkillCategory = "core" | "domain" | "operator" | "meta" | "internal";
 export type SkillOverlayCategory = "overlay";
 export type SkillCategory = LoadableSkillCategory | SkillOverlayCategory;
-export type SkillRoutingScope = "core" | "domain" | "operator" | "meta";
-export type SkillCostHint = "low" | "medium" | "high";
-export type SkillEffectLevel = "read_only" | "execute" | "mutation";
 export type SkillRootSource = "system_root" | "global_root" | "project_root" | "config_root";
 export type ProjectGuidanceStrength = "invariant" | "workflow_gate" | "preference" | "lookup";
 
@@ -34,30 +29,42 @@ export interface SkillRegistryRoot {
 export interface SkillRegistryLoadReport {
   roots: SkillRegistryRoot[];
   loadedSkills: string[];
-  routingEnabled: boolean;
-  routingScopes: SkillRoutingScope[];
-  routableSkills: string[];
-  hiddenSkills: string[];
+  selectableSkills: string[];
   overlaySkills: string[];
   projectGuidance: ProjectGuidanceEntry[];
   categories: Partial<Record<LoadableSkillCategory, string[]>>;
 }
 
-export interface SkillRoutingPolicy {
-  scope: SkillRoutingScope;
-}
-
 export interface SkillSelectionPolicy {
   whenToUse?: string;
-  paths?: string[];
+  triggers?: string[];
+  pathGlobs?: string[];
 }
 
 export interface SkillResourceSet {
   references: string[];
   scripts: string[];
-  heuristics: string[];
   invariants: string[];
 }
+
+export interface SkillCard {
+  name: string;
+  category: LoadableSkillCategory;
+  selection?: SkillSelectionPolicy;
+  description?: string;
+}
+
+export interface SkillCardOverride extends Omit<Partial<SkillCard>, "name" | "category"> {
+  selection?: Partial<SkillSelectionPolicy>;
+}
+
+export interface SkillOverlayCard extends SkillCardOverride {
+  name: string;
+  category: SkillOverlayCategory;
+  description?: string;
+}
+
+export type SkillCardLike = SkillCard | SkillOverlayCard;
 
 export interface SkillOutputTextContract {
   kind: "text";
@@ -85,93 +92,17 @@ export type SkillOutputContract =
   | SkillOutputEnumContract
   | SkillOutputJsonContract;
 
-export interface SkillCompletionDefinition {
-  verificationLevel?: VerificationLevel;
-  requiredEvidenceKinds?: string[];
+export interface ProducerContract {
+  producer: string;
+  outputs: string[];
+  outputContracts: Record<string, SkillOutputContract>;
+  semanticBindings: SkillSemanticBindings;
+  filePath: string;
+  source: SkillRootSource;
+  rootDir: string;
 }
 
-export interface SkillIntentContract {
-  outputs?: string[];
-  outputContracts?: Record<string, SkillOutputContract>;
-  semanticBindings?: SkillSemanticBindings;
-  completionDefinition?: SkillCompletionDefinition;
-}
-
-export interface SkillEffectsPolicy {
-  allowedEffects?: ToolEffectClass[];
-  deniedEffects?: ToolEffectClass[];
-}
-
-export type SkillEffectsContract = SkillEffectsPolicy;
-export type SkillEffectsOverride = SkillEffectsPolicy;
-
-export interface ResourceBudgetLimits {
-  maxToolCalls?: number;
-  maxTokens?: number;
-  maxParallel?: number;
-}
-
-export type SkillResourceBudget = ResourceBudgetLimits;
-
-export interface SkillResourcePolicy {
-  defaultLease?: SkillResourceBudget;
-  hardCeiling?: SkillResourceBudget;
-}
-
-export interface SkillExecutionHints {
-  preferredTools?: string[];
-  fallbackTools?: string[];
-  costHint?: SkillCostHint;
-}
-
-export interface SkillContract {
-  name: string;
-  category: LoadableSkillCategory;
-  routing?: SkillRoutingPolicy;
-  selection?: SkillSelectionPolicy;
-  intent?: SkillIntentContract;
-  effects?: SkillEffectsContract;
-  resources?: SkillResourcePolicy;
-  executionHints?: SkillExecutionHints;
-  composableWith?: string[];
-  consumes?: string[];
-  requires?: string[];
-  stability?: "experimental" | "stable" | "deprecated";
-  description?: string;
-}
-
-export interface SkillContractOverride extends Omit<
-  Partial<SkillContract>,
-  | "name"
-  | "category"
-  | "intent"
-  | "effects"
-  | "resources"
-  | "executionHints"
-  | "routing"
-  | "selection"
-> {
-  intent?: Partial<SkillIntentContract>;
-  effects?: SkillEffectsOverride;
-  resources?: {
-    defaultLease?: Partial<SkillResourceBudget>;
-    hardCeiling?: Partial<SkillResourceBudget>;
-  };
-  executionHints?: Partial<SkillExecutionHints>;
-  routing?: Partial<SkillRoutingPolicy>;
-  selection?: Partial<SkillSelectionPolicy>;
-}
-
-export interface SkillOverlayContract extends SkillContractOverride {
-  name: string;
-  category: SkillOverlayCategory;
-  stability?: "experimental" | "stable" | "deprecated";
-  description?: string;
-}
-
-export type SkillContractLike = SkillContract | SkillOverlayContract;
-
-interface BaseSkillDocument<TCategory extends SkillCategory, TContract> {
+interface BaseSkillDocument<TCategory extends SkillCategory, TCard> {
   name: string;
   description: string;
   category: TCategory;
@@ -180,7 +111,7 @@ interface BaseSkillDocument<TCategory extends SkillCategory, TContract> {
   markdown: string;
   authoredMarkdown: string;
   inheritedMarkdown: string;
-  contract: TContract;
+  card: TCard;
   resources: SkillResourceSet;
   authoredResources: SkillResourceSet;
   inheritedResources: SkillResourceSet;
@@ -188,11 +119,11 @@ interface BaseSkillDocument<TCategory extends SkillCategory, TContract> {
   overlayFiles: string[];
 }
 
-export interface SkillDocument extends BaseSkillDocument<LoadableSkillCategory, SkillContract> {}
+export interface SkillDocument extends BaseSkillDocument<LoadableSkillCategory, SkillCard> {}
 
 export interface OverlaySkillDocument extends BaseSkillDocument<
   SkillOverlayCategory,
-  SkillOverlayContract
+  SkillOverlayCard
 > {}
 
 export type ParsedSkillDocument = SkillDocument | OverlaySkillDocument;
@@ -209,20 +140,9 @@ export interface SkillsIndexEntry {
   description: string;
   filePath: string;
   baseDir: string;
-  outputs: string[];
-  preferredTools: string[];
-  fallbackTools: string[];
-  allowedEffects: ToolEffectClass[];
-  costHint: SkillCostHint;
-  stability: "experimental" | "stable" | "deprecated";
-  composableWith: string[];
-  consumes: string[];
-  requires: string[];
-  effectLevel: SkillEffectLevel;
-  routable: boolean;
+  selectable: boolean;
   overlay: boolean;
   projectGuidance: ProjectGuidanceEntry[];
-  routingScope?: SkillRoutingScope;
   selection?: SkillSelectionPolicy;
   source: SkillRootSource;
   rootDir: string;
@@ -230,17 +150,12 @@ export interface SkillsIndexEntry {
 }
 
 export interface SkillsIndexFile {
-  schemaVersion: 2;
+  schemaVersion: 3;
   generatedAt: string;
   roots: SkillRegistryRoot[];
-  routing: {
-    enabled: boolean;
-    scopes: SkillRoutingScope[];
-  };
   summary: {
     loadedSkills: number;
-    routableSkills: number;
-    hiddenSkills: number;
+    selectableSkills: number;
     overlaySkills: number;
   };
   skills: SkillsIndexEntry[];
@@ -251,16 +166,16 @@ export interface SkillRefreshInput {
   sessionId?: string;
 }
 
-export interface SkillSystemInstallResult {
-  systemRoot: string;
-  fingerprint: string;
-  installed: boolean;
-  migratedLegacyGlobalSeed: boolean;
-}
-
 export interface SkillRefreshResult {
   generatedAt: string;
   systemInstall: SkillSystemInstallResult;
   loadReport: SkillRegistryLoadReport;
   indexPath: string;
+}
+
+export interface SkillSystemInstallResult {
+  systemRoot: string;
+  fingerprint: string;
+  installed: boolean;
+  migratedLegacyGlobalSeed: boolean;
 }

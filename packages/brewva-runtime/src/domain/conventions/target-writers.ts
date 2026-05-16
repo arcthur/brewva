@@ -4,7 +4,9 @@ import type { ConventionTarget } from "./types.js";
 
 const ALLOWED_RUNTIME_CONFIG_PREFIXES = [
   "verification.",
-  "skills.routing.",
+  "skills.roots",
+  "skills.disabled",
+  "capabilities.",
   "security.actionAdmissionOverrides.",
 ] as const;
 
@@ -30,7 +32,7 @@ function isProjectGuidancePath(filePath: string): boolean {
   return Boolean(normalized?.startsWith("skills/project/shared/") && normalized.endsWith(".md"));
 }
 
-function isSkillContractPath(filePath: string): boolean {
+function isSkillCardPath(filePath: string): boolean {
   const normalized = normalizeTargetPath(filePath);
   return Boolean(normalized && (normalized.endsWith("/SKILL.md") || normalized === "SKILL.md"));
 }
@@ -65,16 +67,16 @@ export function validateConventionTargetPatchSet(input: {
         ? undefined
         : "project_guidance_path_out_of_scope";
     }
-    case "skill_contract": {
+    case "skill_card": {
       const targetPath = normalizeTargetPath(input.target.path);
-      if (!targetPath || !isSkillContractPath(targetPath)) {
-        return "skill_contract_path_out_of_scope";
+      if (!targetPath || !isSkillCardPath(targetPath)) {
+        return "skill_card_path_out_of_scope";
       }
       return input.patchSet.changes.every(
         (change) => normalizeTargetPath(change.path) === targetPath,
       )
         ? undefined
-        : "skill_contract_path_out_of_scope";
+        : "skill_card_path_out_of_scope";
     }
     case "runtime_config": {
       if (!isRuntimeConfigFile(input.target.path)) {

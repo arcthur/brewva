@@ -1,8 +1,10 @@
 # Skill Playbook
 
-This guide is a human-readable operating map for Brewva skills. Runtime routing
-truth remains in skill frontmatter, runtime contracts, and workflow status. This
-file does not introduce automatic cascades, aliases, or `suggested_chains`.
+This guide is a human-readable operating map for Brewva advisory skills.
+Runtime authority lives in capability manifests, selection receipts, tool
+policy, and proposal/effect governance. Skill frontmatter helps locate context;
+it does not grant authority or create automatic cascades, aliases, or
+`suggested_chains`.
 
 ## Trigger Table
 
@@ -38,9 +40,9 @@ Vocabulary:
 - `status quo`: what the target human does today instead.
 - `posture`: the scope/timing stance inherited by downstream planning.
 
-`composable_with` is authoring metadata for known-safe concurrent use, not a
-runtime lifecycle gate or taxonomy coverage checklist. Absence does not imply
-that a skill is less important.
+Compatibility between skills is expressed by explicit handoff text, producer
+contracts, and the current task state. The removed `composable_with` field must
+not be reintroduced as a lifecycle gate or taxonomy coverage checklist.
 
 ## Manual Chains
 

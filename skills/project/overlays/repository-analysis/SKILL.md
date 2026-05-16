@@ -1,30 +1,7 @@
 ---
 name: repository-analysis
-intent:
-  outputs:
-    - repository_snapshot
-    - impact_map
-    - unknowns
-effects:
-  allowed_effects:
-    - workspace_read
-    - runtime_observe
-resources:
-  default_lease:
-    max_tool_calls: 60
-    max_tokens: 120000
-execution_hints:
-  preferred_tools:
-    - read
-    - grep
-  fallback_tools:
-    - glob
-    - lsp_symbols
-    - lsp_find_references
-    - ledger_query
 references:
   - skills/project/shared/package-boundaries.md
-consumes: []
 ---
 
 # Brewva Repository Analysis Overlay

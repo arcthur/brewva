@@ -300,8 +300,8 @@ Current implementation now performs the first recovery canonicalization pass
 before hydration from tape alone. If the tape already contains a durable
 `unclean_shutdown_reconciled` receipt, that receipt is reused directly; if not,
 the canonicalization pass still detects replay-visible open tool, open turn,
-and dangling active-skill conditions from the tape before any fold state is
-rebuilt. Hydration apply may still materialize a new
+and dangling producer/capability continuity conditions from the tape before any
+fold state is rebuilt. Hydration apply may still materialize a new
 `unclean_shutdown_reconciled` receipt afterward when an older session needs a
 durable reconciliation record.
 
@@ -315,7 +315,7 @@ permanent degradation.
   `reason=signal_interrupt`, waits for agent idle (bounded by graceful
   timeout), then exits.
 - Next startup reconstructs replay-owned hydration state from event tape
-  (`checkpoint + delta` replay), including skill, tool-lifecycle,
+  (`checkpoint + delta` replay), including skill catalog, tool-lifecycle,
   verification, resource-lease, cost, evidence-ledger, reversible-mutation,
   and parallel-budget state.
 - Projection rebuild remains a separate on-demand projection-engine path. It is

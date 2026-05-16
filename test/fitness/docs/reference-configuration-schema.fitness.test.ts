@@ -75,10 +75,20 @@ describe("brewva config schema", () => {
     );
     const skillsProperties = requireObject(skillsConfig.properties, "skills properties");
     expect(Object.hasOwn(skillsProperties, "selector")).toBe(false);
+    expect(Object.hasOwn(skillsProperties, "routing")).toBe(false);
+    expect(Object.hasOwn(skillsProperties, "overrides")).toBe(false);
 
-    const routingConfig = resolveSchemaNode(schema, skillsProperties.routing, "skills.routing");
-    const routingProperties = requireObject(routingConfig.properties, "skills.routing properties");
-    expect(Object.hasOwn(routingProperties, "continuityPhrases")).toBe(false);
-    expect(Object.hasOwn(routingProperties, "continuityContinuePattern")).toBe(false);
+    const capabilitiesConfig = resolveSchemaNode(
+      schema,
+      brewvaConfigProperties.capabilities,
+      "capabilities property",
+    );
+    const capabilitiesProperties = requireObject(
+      capabilitiesConfig.properties,
+      "capabilities properties",
+    );
+    expect(Object.hasOwn(capabilitiesProperties, "roots")).toBe(true);
+    expect(Object.hasOwn(capabilitiesProperties, "defaults")).toBe(true);
+    expect(Object.hasOwn(capabilitiesProperties, "policy")).toBe(true);
   });
 });

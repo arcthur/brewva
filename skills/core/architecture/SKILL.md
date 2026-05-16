@@ -1,71 +1,15 @@
 ---
 name: architecture
-description: Find deepening opportunities in a codebase by assessing module depth,
-  interface burden, seam placement, locality, leverage, and testability before
-  implementation planning.
-stability: stable
+description: Find deepening opportunities in a codebase by assessing module depth, interface burden,
+  seam placement, locality, leverage, and testability before implementation planning.
 selection:
-  when_to_use: Use when a task asks for architecture improvement, refactoring opportunities, shallow module detection, seam quality, testability improvement, or AI-navigability of a codebase.
-intent:
-  outputs:
-    - architecture_assessment
-    - deepening_opportunities
-    - interface_exploration_brief
-  output_contracts:
-    architecture_assessment:
-      kind: text
-      min_words: 8
-      min_length: 48
-    deepening_opportunities:
-      kind: json
-      min_items: 1
-    interface_exploration_brief:
-      kind: text
-      min_words: 8
-      min_length: 48
-effects:
-  allowed_effects:
-    - workspace_read
-    - runtime_observe
-    - delegation
-  denied_effects:
-    - workspace_write
-    - local_exec
-resources:
-  default_lease:
-    max_tool_calls: 100
-    max_tokens: 180000
-  hard_ceiling:
-    max_tool_calls: 150
-    max_tokens: 260000
-execution_hints:
-  preferred_tools:
-    - read
-    - grep
-    - subagent_fanout
-  fallback_tools:
-    - glob
-    - lsp_symbols
-    - lsp_find_references
-    - ledger_query
+  when_to_use: Use when a task asks for architecture improvement, refactoring opportunities, shallow
+    module detection, seam quality, testability improvement, or AI-navigability of a codebase.
 references:
   - references/language.md
   - references/deepening.md
   - references/interface-exploration.md
   - references/rationalizations.md
-consumes:
-  - repository_snapshot
-  - impact_map
-  - planning_posture
-  - problem_frame
-  - scope_recommendation
-  - strategy_review
-  - retro_findings
-  - review_findings
-composable_with:
-  - repository-analysis
-  - learning-research
-  - plan
 ---
 
 # Architecture Skill

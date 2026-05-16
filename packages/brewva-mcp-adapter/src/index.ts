@@ -41,6 +41,8 @@ export type McpTransportConfig =
       command: string;
       args?: string[];
       env?: Record<string, string>;
+      envAllowlist?: string[];
+      inheritEnv?: false;
     }
   | {
       type: "streamable_http";
@@ -105,9 +107,19 @@ function createMcpClient(clientInfo?: { name: string; version: string }): McpCli
 
 function createMcpTransport(config: McpTransportConfig): unknown {
   if (config.type === "stdio") {
+    const inheritEnv = (config as { inheritEnv?: boolean }).inheritEnv;
+    if (inheritEnv) {
+      throw new Error("MCP stdio inheritEnv must be false; use envAllowlist for explicit keys.");
+    }
+    const inherited = Object.fromEntries(
+      (config.envAllowlist ?? []).flatMap((key): Array<[string, string]> => {
+        const value = process.env[key];
+        return typeof value === "string" ? [[key, value]] : [];
+      }),
+    );
     const env = Object.fromEntries(
       Object.entries({
-        ...process.env,
+        ...inherited,
         ...config.env,
       }).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
     );
@@ -385,6 +397,7 @@ export function computeMcpTransportPoolKey(transport: McpTransportConfig): strin
       command: transport.command,
       args: transport.args ?? [],
       env: transport.env ?? {},
+      envAllowlist: transport.envAllowlist ?? [],
     });
   }
   return stableJsonStringify({

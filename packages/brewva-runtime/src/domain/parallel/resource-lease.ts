@@ -14,8 +14,6 @@ import type {
   ResourceLeaseResult,
 } from "../context/api.js";
 import { RuntimeSessionStateStore } from "../sessions/api.js";
-import { resolveSkillDefaultLease, resolveSkillHardCeiling } from "../skills/api.js";
-import type { ResourceBudgetLimits, SkillContract, SkillResourceBudget } from "../skills/api.js";
 
 const MODEL_OPERATED_LEASE_SCOPE = "session";
 
@@ -32,7 +30,7 @@ export interface ResourceLeaseServiceOptions {
   }): unknown;
 }
 
-function cloneBudget(budget: ResourceBudgetLimits | undefined): ResourceLeaseBudget {
+function cloneBudget(budget: ResourceLeaseBudget | undefined): ResourceLeaseBudget {
   return {
     maxToolCalls: budget?.maxToolCalls,
     maxTokens: budget?.maxTokens,
@@ -56,8 +54,8 @@ function normalizePositiveInteger(value: unknown): number | undefined {
 }
 
 function sumBudget(
-  base: ResourceBudgetLimits | undefined,
-  delta: ResourceBudgetLimits | undefined,
+  base: ResourceLeaseBudget | undefined,
+  delta: ResourceLeaseBudget | undefined,
 ): ResourceLeaseBudget {
   const sumDimension = (
     left: number | undefined,
@@ -78,9 +76,9 @@ function sumBudget(
 
 function clampAdditionalBudget(input: {
   requested: ResourceLeaseBudget;
-  base: SkillResourceBudget | undefined;
+  base: ResourceLeaseBudget | undefined;
   currentLeaseBudget: ResourceLeaseBudget;
-  hardCeiling: SkillResourceBudget | undefined;
+  hardCeiling: ResourceLeaseBudget | undefined;
 }): ResourceLeaseBudget {
   const clamp = (
     requested: number | undefined,
@@ -240,28 +238,14 @@ export class ResourceLeaseService {
 
   getEffectiveBudget(
     sessionId: string,
-    contract: SkillContract | undefined,
+    _card: unknown,
     skillName?: string,
-  ): SkillResourceBudget | undefined {
-    const base = resolveSkillDefaultLease(contract);
+  ): ResourceLeaseBudget | undefined {
     const expansion = this.getGrantedBudget(sessionId, skillName);
-    const hardCeiling = resolveSkillHardCeiling(contract);
-    const combined = sumBudget(base, expansion);
-    if (!budgetHasValues(combined)) {
+    if (!budgetHasValues(expansion)) {
       return undefined;
     }
-    const clampDimension = (
-      value: number | undefined,
-      hardValue: number | undefined,
-    ): number | undefined => {
-      if (value === undefined) return undefined;
-      return hardValue !== undefined ? Math.min(value, hardValue) : value;
-    };
-    return {
-      maxToolCalls: clampDimension(combined.maxToolCalls, hardCeiling?.maxToolCalls),
-      maxTokens: clampDimension(combined.maxTokens, hardCeiling?.maxTokens),
-      maxParallel: clampDimension(combined.maxParallel, hardCeiling?.maxParallel),
-    };
+    return expansion;
   }
 
   restoreLease(sessionId: string, lease: ResourceLeaseRecord): void {

@@ -86,7 +86,14 @@ const CLI_PARSE_OPTIONS = {
   verbose: { type: "boolean" },
 } as const;
 
-const ROOT_SUBCOMMANDS = new Set(["credentials", "gateway", "inspect", "insights", "onboard"]);
+const ROOT_SUBCOMMANDS = new Set([
+  "credentials",
+  "gateway",
+  "inspect",
+  "insights",
+  "onboard",
+  "skills",
+]);
 
 function resolveCliRootOptionSpec(token: string): {
   kind: "string" | "boolean";

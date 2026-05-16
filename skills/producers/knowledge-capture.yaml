@@ -1,0 +1,18 @@
+producer: knowledge-capture
+outputs:
+  - solution_record
+  - solution_doc_path
+  - capture_status
+output_contracts:
+  solution_record:
+    kind: json
+    min_keys: 4
+  solution_doc_path:
+    kind: text
+    min_length: 4
+  capture_status:
+    kind: enum
+    values:
+      - created
+      - updated
+      - skipped

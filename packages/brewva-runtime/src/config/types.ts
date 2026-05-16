@@ -1,7 +1,6 @@
 import type { BrewvaIntentId, BrewvaSessionId } from "../core/identifiers-bridge.js";
 import type { SecurityEnforcementPreference, VerificationLevel } from "../core/shared.js";
 import type { ToolActionAdmissionOverrides, ToolActionClass } from "../domain/governance/types.js";
-import type { SkillContractOverride, SkillRoutingScope } from "../domain/skills/types.js";
 
 export interface BrewvaSecurityBoundaryNetworkRule {
   host: string;
@@ -81,6 +80,8 @@ export interface BrewvaMcpStdioServerConfig extends BrewvaMcpServerConfigBase {
   command: string;
   args: string[];
   env: Record<string, string>;
+  envAllowlist: string[];
+  inheritEnv: false;
 }
 
 export interface BrewvaMcpStreamableHttpServerConfig extends BrewvaMcpServerConfigBase {
@@ -105,10 +106,14 @@ export interface BrewvaConfig {
   skills: {
     roots?: string[];
     disabled: string[];
-    overrides: Record<string, SkillContractOverride>;
-    routing: {
-      enabled: boolean;
-      scopes: SkillRoutingScope[];
+  };
+  capabilities: {
+    roots: string[];
+    defaults: Record<string, string>;
+    policy: {
+      agentScope: string[];
+      workspaceScope: string[];
+      allowedAccounts: string[];
     };
   };
   verification: {
@@ -284,9 +289,10 @@ type DeepPartial<T> = T extends readonly (infer U)[]
 export interface BrewvaConfigFile {
   $schema?: string;
   ui?: Partial<BrewvaConfig["ui"]>;
-  skills?: Partial<Omit<BrewvaConfig["skills"], "overrides" | "routing">> & {
-    overrides?: BrewvaConfig["skills"]["overrides"];
-    routing?: Partial<BrewvaConfig["skills"]["routing"]>;
+  skills?: Partial<BrewvaConfig["skills"]>;
+  capabilities?: Partial<Omit<BrewvaConfig["capabilities"], "defaults" | "policy">> & {
+    defaults?: Partial<BrewvaConfig["capabilities"]["defaults"]>;
+    policy?: Partial<BrewvaConfig["capabilities"]["policy"]>;
   };
   verification?: Partial<Omit<BrewvaConfig["verification"], "checks" | "commands">> & {
     checks?: Partial<BrewvaConfig["verification"]["checks"]>;

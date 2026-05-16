@@ -5,6 +5,7 @@
     "": {
       "name": "brewva",
       "devDependencies": {
+        "@brewva/brewva-capabilities": "workspace:*",
         "@brewva/brewva-channels-telegram": "workspace:*",
         "@brewva/brewva-cli": "workspace:*",
         "@brewva/brewva-effect": "workspace:*",
@@ -72,6 +73,14 @@
       "version": "0.1.0",
       "bin": {
         "brewva": "./bin/brewva",
+      },
+    },
+    "packages/brewva-capabilities": {
+      "name": "@brewva/brewva-capabilities",
+      "version": "0.1.0",
+      "dependencies": {
+        "@brewva/brewva-std": "workspace:*",
+        "yaml": "^2.8.3",
       },
     },
     "packages/brewva-channels-telegram": {
@@ -186,6 +195,7 @@
       "name": "@brewva/brewva-runtime",
       "version": "0.1.0",
       "dependencies": {
+        "@brewva/brewva-capabilities": "workspace:*",
         "@brewva/brewva-effect": "workspace:*",
         "@brewva/brewva-search": "workspace:*",
         "@brewva/brewva-std": "workspace:*",
@@ -332,6 +342,8 @@
     "@borewit/text-codec": ["@borewit/text-codec@0.2.1", "", {}, "sha512-k7vvKPbf7J2fZ5klGRD9AeKfUvojuZIQ3BT5u7Jfv+puwXkUBUT5PVyMDfJZpy30CBDXGMgw7fguK/lpOMBvgw=="],
 
     "@brewva/brewva": ["@brewva/brewva@workspace:distribution/brewva"],
+
+    "@brewva/brewva-capabilities": ["@brewva/brewva-capabilities@workspace:packages/brewva-capabilities"],
 
     "@brewva/brewva-channels-telegram": ["@brewva/brewva-channels-telegram@workspace:packages/brewva-channels-telegram"],
 

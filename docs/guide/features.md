@@ -16,7 +16,7 @@ For generated inventories, use:
 
 Brewva is organized around replay-visible runtime capabilities:
 
-- skill activation, validation, completion, and readiness
+- advisory SkillCards, ProducerContracts, and capability selection receipts
 - tool access policy, effect boundaries, and budget gates
 - evidence ledger recording and replay-visible governance receipts
 - task and truth state through event-sourced replay
@@ -53,7 +53,7 @@ Managed tools are grouped by behavior rather than listed in this guide:
 - navigation and read-only repository inspection
 - command, browser, verification, mutation, and rollback execution
 - memory, recall, precedent, output search, and observability
-- skill, subagent, worker-result, and task delegation
+- producer-contract, subagent, worker-result, and task delegation
 - workflow, scheduling, leases, tape, and resource coordination
 
 Channel-specific A2A tools are registered by channel extensions when
@@ -65,6 +65,11 @@ Skills are readable semantic guidance documents. Delegated workers define
 execution envelopes. The parent session owns task truth, effect receipts,
 verification evidence, and patch adoption; it no longer owns an active skill
 slot or skill completion state.
+
+Structured workflow artifacts come from `skills/producers/<name>.yaml`, not
+from `SKILL.md` frontmatter. External authority comes from capability manifests
+and deterministic selection receipts, not from a skill name appearing in model
+context.
 
 Skill taxonomy is split by role:
 
@@ -84,7 +89,8 @@ implementation detail behind `explorer`.
 - Read generated blocks in reference docs for exact names.
 - Use `brewva inspect` for persisted session truth.
 - Use `docs/guide/category-and-skills.md` for skill category orientation.
-- Use `docs/reference/skill-routing.md` for routing and handoff semantics.
+- Use `docs/reference/skill-routing.md` for skill routing deletion,
+  capability-selection priority, and handoff semantics.
 
 ## Related Docs
 
