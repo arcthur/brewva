@@ -204,10 +204,9 @@ proc send_prompt_with_retry {eventsDir prompt targetInputCount targetTurnStartCo
 set prompts [read_prompts $promptsFile $rounds]
 
 spawn -noecho bun run start --interactive --cwd $workspace
-if {![wait_for_event_count $eventsDir "session_start" 1 90]} {
-  puts stderr "timeout waiting for session_start"
-  exit 3
-}
+# Do not synchronize on session_start here: interactive startup may not have
+# created the events file before the first submitted prompt. The first stable
+# sync point is the input/turn_start pair checked by send_prompt_with_retry.
 after 1200
 
 for {set i 0} {$i < $rounds} {incr i} {

@@ -84,31 +84,19 @@ export function buildCodexContinuationRequest(
     return body;
   }
 
-  if (
-    stableJsonStringify(stripRequestInput(continuation.previousRequest)) !==
-    stableJsonStringify(stripRequestInput(body))
-  ) {
-    return body;
-  }
-
   const previousInput = normalizeResponseInput(continuation.previousRequest.input);
   const previousOutput = normalizeResponseInput(continuation.lastResponse.outputItems);
   const currentInput = normalizeResponseInput(body.input);
   const baseline = [...previousInput, ...previousOutput];
-  if (!responseInputStartsWith(currentInput, baseline)) {
-    return body;
+  if (responseInputStartsWith(currentInput, baseline)) {
+    return {
+      ...body,
+      previous_response_id: responseId,
+      input: currentInput.slice(baseline.length),
+    };
   }
 
-  return {
-    ...body,
-    previous_response_id: responseId,
-    input: currentInput.slice(baseline.length),
-  };
-}
-
-function stripRequestInput(body: RequestBody): Record<string, unknown> {
-  const { input: _input, previous_response_id: _previousResponseId, ...rest } = body;
-  return rest;
+  return body;
 }
 
 function normalizeResponseInput(input: ResponseInput | undefined): ResponseInput {
@@ -125,11 +113,71 @@ function responseInputStartsWith(input: ResponseInput, prefix: ResponseInput): b
     if (left === undefined || right === undefined) {
       return false;
     }
-    if (stableJsonStringify(left) !== stableJsonStringify(right)) {
+    if (!responseInputItemsMatchForContinuation(left, right)) {
       return false;
     }
   }
   return true;
+}
+
+function responseInputItemsMatchForContinuation(
+  left: ResponseInput[number],
+  right: ResponseInput[number],
+): boolean {
+  if (stableJsonStringify(left) === stableJsonStringify(right)) {
+    return true;
+  }
+  if (responseInputItemsHaveSameProtocolIdentity(left, right)) {
+    return true;
+  }
+  return (
+    stableJsonStringify(normalizeContinuationComparableItem(left)) ===
+    stableJsonStringify(normalizeContinuationComparableItem(right))
+  );
+}
+
+function responseInputItemsHaveSameProtocolIdentity(
+  left: ResponseInput[number],
+  right: ResponseInput[number],
+): boolean {
+  if (!left || !right || typeof left !== "object" || typeof right !== "object") {
+    return false;
+  }
+  if (Array.isArray(left) || Array.isArray(right)) {
+    return false;
+  }
+  const leftRecord = left as unknown as Record<string, unknown>;
+  const rightRecord = right as unknown as Record<string, unknown>;
+  if (leftRecord.type !== rightRecord.type) {
+    return false;
+  }
+
+  const leftId = readNonEmptyString(leftRecord.id);
+  const rightId = readNonEmptyString(rightRecord.id);
+  if (leftId && rightId) {
+    return leftId === rightId;
+  }
+
+  if (leftRecord.type === "function_call" || leftRecord.type === "function_call_output") {
+    const leftCallId = readNonEmptyString(leftRecord.call_id);
+    const rightCallId = readNonEmptyString(rightRecord.call_id);
+    return Boolean(leftCallId && rightCallId && leftCallId === rightCallId);
+  }
+
+  return false;
+}
+
+function readNonEmptyString(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function normalizeContinuationComparableItem(item: ResponseInput[number]): unknown {
+  if (!item || typeof item !== "object" || Array.isArray(item)) {
+    return item;
+  }
+  const normalized = { ...(item as unknown as Record<string, unknown>) };
+  delete normalized.status;
+  return normalized;
 }
 
 function clampReasoningEffort(modelId: string, effort: string): string {

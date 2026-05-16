@@ -1,4 +1,3 @@
-import type { ResponseInput } from "openai/resources/responses/responses.js";
 import type {
   AssistantMessage,
   ProviderEventSink,
@@ -7,18 +6,21 @@ import type {
 } from "../../contracts/index.js";
 import type { IncrementalToolCallFolder } from "../../stream/tool-call-folder.js";
 import { processResponsesStream } from "../openai-responses/stream-events.js";
-import type {
-  CodexContinuationState,
-  OpenAICodexResponsesOptions,
-  RequestBody,
-  ResponseInputItem,
-} from "./contract.js";
+import {
+  clearCodexContinuationState,
+  codexSessionGenerationMatches,
+  getCodexContinuationSessionCount,
+  readCodexContinuationState,
+  readCodexSessionGeneration,
+  rememberCodexContinuationState,
+} from "./continuation-state.js";
+import type { OpenAICodexResponsesOptions, RequestBody } from "./contract.js";
 import { buildCodexContinuationRequest } from "./request.js";
+import { trackCodexResponse, type CodexResponseTracker } from "./response-tracker.js";
 import { mapCodexEvents } from "./sse.js";
 import { readWebSocketConstructor } from "./wire.js";
 
 const SESSION_WEBSOCKET_CACHE_TTL_MS = 5 * 60 * 1000;
-const MAX_CODEX_CONTINUATION_STATES = 100;
 
 type WebSocketEventType = "open" | "message" | "error" | "close";
 type WebSocketListener = (event: unknown) => void;
@@ -37,25 +39,10 @@ interface CachedWebSocketConnection {
 }
 
 const websocketSessionCache = new Map<string, CachedWebSocketConnection>();
-const codexContinuationStates = new Map<string, CodexContinuationState>();
-const codexSessionGenerations = new Map<string, number>();
 const codexWebSocketFallbackSessions = new Set<string>();
 
-function readCodexSessionGeneration(sessionId: string): number {
-  return codexSessionGenerations.get(sessionId) ?? 0;
-}
-
-function advanceCodexSessionGeneration(sessionId: string): void {
-  codexSessionGenerations.set(sessionId, readCodexSessionGeneration(sessionId) + 1);
-}
-
-function codexSessionGenerationMatches(sessionId: string, generation: number): boolean {
-  return readCodexSessionGeneration(sessionId) === generation;
-}
-
 export function clearCodexSessionState(sessionId: string): void {
-  advanceCodexSessionGeneration(sessionId);
-  codexContinuationStates.delete(sessionId);
+  clearCodexContinuationState(sessionId);
   codexWebSocketFallbackSessions.delete(sessionId);
   const cached = websocketSessionCache.get(sessionId);
   if (!cached) {
@@ -77,38 +64,6 @@ export function recordCodexWebSocketFallback(sessionId: string | undefined): voi
 
 export function isCodexWebSocketFallbackActive(sessionId: string | undefined): boolean {
   return !!sessionId && codexWebSocketFallbackSessions.has(sessionId);
-}
-
-export function rememberCodexContinuationState(
-  sessionId: string,
-  state: CodexContinuationState,
-): void {
-  if (codexContinuationStates.has(sessionId)) {
-    codexContinuationStates.delete(sessionId);
-  }
-  codexContinuationStates.set(sessionId, state);
-  while (codexContinuationStates.size > MAX_CODEX_CONTINUATION_STATES) {
-    const oldestSessionId = codexContinuationStates.keys().next().value;
-    if (typeof oldestSessionId !== "string") {
-      break;
-    }
-    codexContinuationStates.delete(oldestSessionId);
-  }
-}
-
-function readCodexContinuationState(
-  sessionId: string,
-  model: Model<"openai-codex-responses">,
-): CodexContinuationState | undefined {
-  const state = codexContinuationStates.get(sessionId);
-  if (!state) {
-    return undefined;
-  }
-  if (state.model !== model.id) {
-    codexContinuationStates.delete(sessionId);
-    return undefined;
-  }
-  return state;
 }
 
 type WebSocketConstructor = new (
@@ -430,56 +385,6 @@ async function* parseWebSocket(
   }
 }
 
-interface CodexResponseTracker {
-  responseId?: string;
-  outputItems: ResponseInput;
-}
-
-async function* trackCodexWebSocketResponse(
-  events: AsyncIterable<Record<string, unknown>>,
-  tracker: CodexResponseTracker,
-): AsyncGenerator<Record<string, unknown>> {
-  for await (const event of events) {
-    const outputItem = readCodexOutputItem(event);
-    if (outputItem) {
-      tracker.outputItems.push(cloneProtocolPayload(outputItem));
-    }
-    const responseId = readCodexResponseId(event);
-    if (responseId) {
-      tracker.responseId = responseId;
-    }
-    yield event;
-  }
-}
-
-function readCodexOutputItem(event: Record<string, unknown>): ResponseInputItem | undefined {
-  if (event.type !== "response.output_item.done") {
-    return undefined;
-  }
-  const item = event.item;
-  if (!item || typeof item !== "object" || Array.isArray(item)) {
-    return undefined;
-  }
-  const type = (item as { type?: unknown }).type;
-  if (type !== "message" && type !== "function_call" && type !== "reasoning") {
-    return undefined;
-  }
-  return item as ResponseInputItem;
-}
-
-function readCodexResponseId(event: Record<string, unknown>): string | undefined {
-  const type = event.type;
-  if (type !== "response.completed" && type !== "response.done" && type !== "response.incomplete") {
-    return undefined;
-  }
-  const response = event.response;
-  if (!response || typeof response !== "object") {
-    return undefined;
-  }
-  const id = (response as { id?: unknown }).id;
-  return typeof id === "string" && id.length > 0 ? id : undefined;
-}
-
 function cloneProtocolPayload<T>(value: T): T {
   return structuredClone(value);
 }
@@ -517,9 +422,8 @@ export async function processWebSocketStream(
   try {
     socket.send(JSON.stringify({ type: "response.create", ...outboundBody }));
     onStart();
-    await stream.push({ type: "start", partial: output });
     await processResponsesStream(
-      mapCodexEvents(trackCodexWebSocketResponse(parseWebSocket(socket, options?.signal), tracker)),
+      mapCodexEvents(trackCodexResponse(parseWebSocket(socket, options?.signal), tracker)),
       output,
       stream,
       model,
@@ -569,7 +473,7 @@ export function getCodexSessionCacheState(): {
 } {
   return {
     websocketSessionCount: websocketSessionCache.size,
-    continuationSessionCount: codexContinuationStates.size,
+    continuationSessionCount: getCodexContinuationSessionCount(),
     websocketFallbackSessionCount: codexWebSocketFallbackSessions.size,
   };
 }

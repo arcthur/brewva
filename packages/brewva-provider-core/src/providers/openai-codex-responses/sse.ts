@@ -28,13 +28,8 @@ export async function processStream(
   model: Model<"openai-codex-responses">,
   toolCalls: IncrementalToolCallFolder,
 ): Promise<void> {
-  await processResponsesStream(
-    mapCodexEvents(parseSSE(response)),
-    output,
-    stream,
-    model,
-    toolCalls,
-  );
+  const events = parseSSE(response);
+  await processResponsesStream(mapCodexEvents(events), output, stream, model, toolCalls);
 }
 
 export async function* mapCodexEvents(

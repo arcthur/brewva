@@ -329,7 +329,6 @@ export const streamOpenAICodexResponses: StreamFunction<
         apiKey,
         websocketRequestId,
       );
-      const bodyJson = JSON.stringify(body);
       const transport = resolveCodexTransport(options);
       const linkedOptions: OpenAICodexResponsesOptions = { ...options, signal };
 
@@ -366,7 +365,7 @@ export const streamOpenAICodexResponses: StreamFunction<
         fetchCodexSseResponseEffect({
           url: resolveCodexUrl(model.baseUrl),
           headers: sseHeaders,
-          bodyJson,
+          bodyJson: JSON.stringify(body),
           signal,
         }),
         { signal },

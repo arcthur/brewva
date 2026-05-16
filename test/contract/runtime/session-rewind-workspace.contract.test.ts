@@ -159,6 +159,72 @@ describe("session rewind workspace", () => {
     expect(runtime.inspect.session.rewind.getState(sessionId).redoAvailable).toBe(false);
   });
 
+  test("rewind allows a closed session after execution has terminated", async () => {
+    const workspace = createWorkspace("rewind-closed-session");
+    writeConfig(workspace, createConfig({}));
+    mkdirSync(join(workspace, "src"), { recursive: true });
+
+    const sessionId = "rewind-closed-session-1";
+    const filePath = join(workspace, "src/closed.ts");
+    writeFileSync(filePath, "export const value = 1;\n", "utf8");
+
+    const runtime = createBrewvaRuntime({
+      cwd: workspace,
+      configPath: RUNTIME_CONTRACT_CONFIG_PATH,
+    }).hosted;
+    runtime.operator.context.lifecycle.onTurnStart(sessionId, 1);
+    runtime.authority.session.rewind.recordCheckpoint(sessionId, {
+      prompt: { text: "Change value in closed session", parts: [] },
+    });
+
+    const started = runtime.authority.tools.invocation.start({
+      sessionId,
+      toolCallId: "tool-closed-edit",
+      toolName: "edit",
+      args: {
+        file_path: "src/closed.ts",
+        old_string: "value = 1",
+        new_string: "value = 2",
+      },
+    });
+    expect(started.allowed).toBe(true);
+    writeFileSync(filePath, "export const value = 2;\n", "utf8");
+    runtime.authority.tools.invocation.finish({
+      sessionId,
+      toolCallId: "tool-closed-edit",
+      toolName: "edit",
+      args: {
+        file_path: "src/closed.ts",
+        old_string: "value = 1",
+        new_string: "value = 2",
+      },
+      outputText: "Applied edit.",
+      channelSuccess: true,
+      verdict: "pass",
+    });
+    runtime.extensions.hosted.events.record({
+      sessionId,
+      type: "session_shutdown",
+      payload: {
+        reason: "cli_session_complete",
+      },
+    });
+
+    expect(runtime.inspect.lifecycle.getSnapshot(sessionId).execution.kind).toBe("terminated");
+
+    const rewind = runtime.authority.session.rewind.rewind(sessionId, {
+      mode: "both",
+      summary: "carry",
+    });
+
+    expect(rewind.ok).toBe(true);
+    if (!rewind.ok) {
+      throw new Error(`Closed session rewind failed: ${rewind.reason}`);
+    }
+    expect(rewind.patchSetIds).toHaveLength(1);
+    expect(readFileSync(filePath, "utf8")).toBe("export const value = 1;\n");
+  });
+
   test("rewind enforces mode-specific governance before mutating workspace", async () => {
     const workspace = createWorkspace("rewind-governance");
     writeConfig(

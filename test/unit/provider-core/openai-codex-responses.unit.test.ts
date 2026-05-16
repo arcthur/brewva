@@ -1,9 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import type { Model } from "@brewva/brewva-provider-core/contracts";
+import { buildBaseOptions } from "../../../packages/brewva-provider-core/src/providers/_shared/simple-options.js";
 import {
   resolveCodexTransport,
   shouldAttemptCodexWebSocketTransport,
+  streamOpenAICodexResponses,
 } from "../../../packages/brewva-provider-core/src/providers/openai-codex-responses/adapter.js";
+import { rememberCodexContinuationState } from "../../../packages/brewva-provider-core/src/providers/openai-codex-responses/continuation-state.js";
+import type { RequestBody } from "../../../packages/brewva-provider-core/src/providers/openai-codex-responses/contract.js";
 import {
   buildCodexContinuationRequest,
   buildRequestBody,
@@ -14,12 +18,14 @@ import {
   getCodexSessionCacheState,
   isCodexWebSocketFallbackActive,
   rememberCachedWebSocketConnection,
-  rememberCodexContinuationState,
   recordCodexWebSocketFallback,
 } from "../../../packages/brewva-provider-core/src/providers/openai-codex-responses/websocket.js";
 import { createAssistantMessage } from "../../../packages/brewva-provider-core/src/stream/assistant-message.js";
 import { IncrementalToolCallFolder } from "../../../packages/brewva-provider-core/src/stream/tool-call-folder.js";
-import { createRecordingProviderEventStream } from "../../helpers/effect-stream.js";
+import {
+  collectProviderEvents,
+  createRecordingProviderEventStream,
+} from "../../helpers/effect-stream.js";
 import { sleep } from "../../helpers/process.js";
 
 class FakeCodexWebSocket {
@@ -105,6 +111,27 @@ async function waitForSentSocket(index: number): Promise<FakeCodexWebSocket> {
   throw new Error(`Expected websocket ${index} to send a request`);
 }
 
+function createFakeCodexToken(): string {
+  const payload = btoa(
+    JSON.stringify({
+      "https://api.openai.com/auth": {
+        chatgpt_account_id: "acct_test",
+      },
+    }),
+  );
+  return `header.${payload}.signature`;
+}
+
+function createSseResponse(events: readonly Record<string, unknown>[]): Response {
+  const body = events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join("");
+  return new Response(body, {
+    status: 200,
+    headers: {
+      "content-type": "text/event-stream",
+    },
+  });
+}
+
 describe("openai codex responses continuation", () => {
   test("clears continuation state and cached websocket on explicit session clear", () => {
     const socket = {
@@ -158,6 +185,17 @@ describe("openai codex responses continuation", () => {
     expect(shouldAttemptCodexWebSocketTransport("websocket", "session-fallback")).toBe(true);
 
     clearCodexSessionState("session-fallback");
+  });
+
+  test("preserves transport and file resolution options for simple streams", () => {
+    const resolveFile = () => undefined;
+    const options = buildBaseOptions(CODEX_MODEL, {
+      transport: "sse",
+      resolveFile,
+    });
+
+    expect(options.transport).toBe("sse");
+    expect(options.resolveFile).toBe(resolveFile);
   });
 
   test("clamps GPT-5.5 minimal reasoning to low for Codex requests", () => {
@@ -248,6 +286,52 @@ describe("openai codex responses continuation", () => {
     }
   });
 
+  test("websocket processor leaves start emission to the provider stream owner", async () => {
+    const originalWebSocket = (globalThis as { WebSocket?: unknown }).WebSocket;
+    (globalThis as { WebSocket?: unknown }).WebSocket = FakeCodexWebSocket;
+    FakeCodexWebSocket.sockets = [];
+    clearCodexSessionState("session-websocket-start-owner");
+    try {
+      const harness = createCodexStreamHarness();
+      const run = processWebSocketStream(
+        "wss://chatgpt.example/codex/responses",
+        {
+          model: CODEX_MODEL.id,
+          stream: true,
+          input: [],
+        },
+        new Headers(),
+        harness.output,
+        harness.stream,
+        CODEX_MODEL,
+        harness.toolCalls,
+        () => undefined,
+        { sessionId: "session-websocket-start-owner" },
+      );
+      const socket = await waitForSentSocket(0);
+      socket.dispatchMessage({
+        type: "response.completed",
+        response: {
+          id: "resp_websocket_start_owner",
+          status: "completed",
+          usage: {
+            input_tokens: 0,
+            output_tokens: 0,
+            total_tokens: 0,
+            input_tokens_details: { cached_tokens: 0 },
+          },
+        },
+      });
+
+      await run;
+
+      expect(harness.stream.events.filter((event) => event.type === "start")).toEqual([]);
+    } finally {
+      clearCodexSessionState("session-websocket-start-owner");
+      (globalThis as { WebSocket?: unknown }).WebSocket = originalWebSocket;
+    }
+  });
+
   test("sends only the new input delta when previous response state matches", () => {
     const firstUser = {
       role: "user",
@@ -293,7 +377,127 @@ describe("openai codex responses continuation", () => {
     expect(outbound.input as unknown).toEqual([secondUser]);
   });
 
-  test("falls back to a full request when non-input request shape drifts", () => {
+  test("matches reconstructed tool-call continuations despite provider-only item metadata", () => {
+    const firstUser = {
+      role: "user",
+      content: [{ type: "input_text", text: "Use a tool" }],
+    };
+    const reasoningOutput = {
+      type: "reasoning",
+      id: "rs_1",
+      encrypted_content: "opaque",
+      summary: [],
+    };
+    const providerToolCallOutput = {
+      type: "function_call",
+      id: "fc_1",
+      call_id: "call_1",
+      name: "task_view_state",
+      arguments: "{}",
+      status: "completed",
+    };
+    const reconstructedToolCallOutput = {
+      type: "function_call",
+      id: "fc_1",
+      call_id: "call_1",
+      name: "task_view_state",
+      arguments: "{}",
+    };
+    const toolResult = {
+      type: "function_call_output",
+      call_id: "call_1",
+      output: "ok",
+    };
+
+    const outbound = buildCodexContinuationRequest(
+      {
+        model: "gpt-5.3-codex",
+        stream: true,
+        instructions: "stable instructions",
+        prompt_cache_key: "conversation-1",
+        input: [firstUser, reasoningOutput, reconstructedToolCallOutput, toolResult] as never,
+      },
+      {
+        model: "gpt-5.3-codex",
+        previousRequest: {
+          model: "gpt-5.3-codex",
+          stream: true,
+          instructions: "stable instructions",
+          prompt_cache_key: "conversation-1",
+          input: [firstUser] as never,
+        },
+        lastResponse: {
+          responseId: "resp_1",
+          outputItems: [reasoningOutput, providerToolCallOutput] as never,
+        },
+      },
+    );
+
+    expect(outbound.previous_response_id).toBe("resp_1");
+    expect(outbound.input as unknown).toEqual([toolResult]);
+  });
+
+  test("uses previous response id for tool-result continuations when instructions drift", () => {
+    const firstUser = {
+      role: "user",
+      content: [{ type: "input_text", text: "Use a tool" }],
+    };
+    const reasoningOutput = {
+      type: "reasoning",
+      id: "rs_1",
+      encrypted_content: "opaque",
+      summary: [],
+    };
+    const toolCallOutput = {
+      type: "function_call",
+      id: "fc_1",
+      call_id: "call_1",
+      name: "task_view_state",
+      arguments: "{}",
+      status: "completed",
+    };
+    const reconstructedToolCallOutput = {
+      type: "function_call",
+      id: "fc_1",
+      call_id: "call_1",
+      name: "task_view_state",
+      arguments: "{}",
+    };
+    const toolResult = {
+      type: "function_call_output",
+      call_id: "call_1",
+      output: "ok",
+    };
+
+    const outbound = buildCodexContinuationRequest(
+      {
+        model: "gpt-5.3-codex",
+        stream: true,
+        instructions: "changed instructions",
+        prompt_cache_key: "conversation-1",
+        input: [firstUser, reasoningOutput, reconstructedToolCallOutput, toolResult] as never,
+      },
+      {
+        model: "gpt-5.3-codex",
+        previousRequest: {
+          model: "gpt-5.3-codex",
+          stream: true,
+          instructions: "stable instructions",
+          prompt_cache_key: "conversation-1",
+          input: [firstUser] as never,
+        },
+        lastResponse: {
+          responseId: "resp_1",
+          outputItems: [reasoningOutput, toolCallOutput] as never,
+        },
+      },
+    );
+
+    expect(outbound.previous_response_id).toBe("resp_1");
+    expect(outbound.input as unknown).toEqual([toolResult]);
+  });
+
+  test("sends only the new input delta when non-input request shape drifts", () => {
     const firstUser = {
       role: "user",
       content: [{ type: "input_text", text: "First turn" }],
@@ -335,8 +539,164 @@ describe("openai codex responses continuation", () => {
       },
     );
 
-    expect(outbound.previous_response_id).toBe(undefined);
-    expect(outbound.input as unknown).toEqual(fullInput);
+    expect(outbound.previous_response_id).toBe("resp_1");
+    expect(outbound.input as unknown).toEqual([secondUser]);
+  });
+
+  test("SSE transport sends full transcript because previous response ids are websocket-only", async () => {
+    const originalFetch = globalThis.fetch;
+    const requests: RequestBody[] = [];
+    const firstUser = {
+      role: "user" as const,
+      content: [{ type: "text" as const, text: "First turn" }],
+      timestamp: 1,
+    };
+    const secondUser = {
+      role: "user" as const,
+      content: [{ type: "text" as const, text: "Second turn" }],
+      timestamp: 3,
+    };
+
+    const responses = [
+      createSseResponse([
+        {
+          type: "response.created",
+          response: { id: "resp_sse_1" },
+        },
+        {
+          type: "response.output_item.added",
+          item: {
+            type: "message",
+            id: "msg_sse_1",
+            role: "assistant",
+            status: "in_progress",
+            content: [],
+          },
+        },
+        {
+          type: "response.content_part.added",
+          item_id: "msg_sse_1",
+          part: { type: "output_text", text: "", annotations: [] },
+        },
+        {
+          type: "response.output_text.delta",
+          item_id: "msg_sse_1",
+          delta: "First answer",
+        },
+        {
+          type: "response.output_item.done",
+          item: {
+            type: "message",
+            id: "msg_sse_1",
+            role: "assistant",
+            status: "completed",
+            content: [{ type: "output_text", text: "First answer", annotations: [] }],
+          },
+        },
+        {
+          type: "response.completed",
+          response: {
+            id: "resp_sse_1",
+            status: "completed",
+            usage: {
+              input_tokens: 1,
+              output_tokens: 1,
+              total_tokens: 2,
+              input_tokens_details: { cached_tokens: 0 },
+            },
+          },
+        },
+      ]),
+      createSseResponse([
+        {
+          type: "response.completed",
+          response: {
+            id: "resp_sse_2",
+            status: "completed",
+            usage: {
+              input_tokens: 1,
+              output_tokens: 0,
+              total_tokens: 1,
+              input_tokens_details: { cached_tokens: 0 },
+            },
+          },
+        },
+      ]),
+    ];
+
+    globalThis.fetch = (async (_input, init) => {
+      const body = init?.body;
+      if (typeof body !== "string") {
+        throw new Error("Expected Codex SSE request body to be a JSON string");
+      }
+      requests.push(JSON.parse(body) as RequestBody);
+      const response = responses.shift();
+      if (!response) {
+        throw new Error("Unexpected fetch call");
+      }
+      return response;
+    }) as typeof fetch;
+
+    clearCodexSessionState("session-sse-continuation");
+    try {
+      const firstEvents = await collectProviderEvents(
+        streamOpenAICodexResponses(
+          CODEX_MODEL,
+          { systemPrompt: "stable instructions", messages: [firstUser] },
+          {
+            apiKey: createFakeCodexToken(),
+            sessionId: "session-sse-continuation",
+            transport: "sse",
+          },
+        ),
+      );
+      const firstDone = firstEvents.find((event) => event.type === "done");
+      if (!firstDone || firstDone.type !== "done") {
+        throw new Error("Expected first stream to complete");
+      }
+
+      await collectProviderEvents(
+        streamOpenAICodexResponses(
+          CODEX_MODEL,
+          {
+            systemPrompt: "changed instructions",
+            messages: [firstUser, firstDone.message, secondUser],
+          },
+          {
+            apiKey: createFakeCodexToken(),
+            sessionId: "session-sse-continuation",
+            transport: "sse",
+          },
+        ),
+      );
+
+      expect(requests).toHaveLength(2);
+      const secondRequest = requests[1];
+      if (!secondRequest) {
+        throw new Error("Expected second Codex SSE request");
+      }
+      expect("previous_response_id" in secondRequest).toBe(false);
+      expect(secondRequest.input).toEqual([
+        {
+          role: "user",
+          content: [{ type: "input_text", text: "First turn" }],
+        },
+        {
+          type: "message",
+          role: "assistant",
+          content: [{ type: "output_text", text: "First answer", annotations: [] }],
+          status: "completed",
+          id: "msg_sse_1",
+        },
+        {
+          role: "user",
+          content: [{ type: "input_text", text: "Second turn" }],
+        },
+      ]);
+    } finally {
+      clearCodexSessionState("session-sse-continuation");
+      globalThis.fetch = originalFetch;
+    }
   });
 
   test("does not reuse continuation state across model switches", () => {

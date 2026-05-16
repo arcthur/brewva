@@ -94,6 +94,21 @@ function normalizeRollbackMutationReceiptId(result: RollbackResult): string | un
     : undefined;
 }
 
+function isSessionExecutionInFlight(kind: string): boolean {
+  switch (kind) {
+    case "idle":
+    case "terminated":
+      return false;
+    case "model_streaming":
+    case "tool_executing":
+    case "waiting_approval":
+    case "recovering":
+      return true;
+    default:
+      return true;
+  }
+}
+
 function buildCarryContinuity(
   checkpoint: SessionRewindCheckpointRecord,
   summaryHint: string | undefined,
@@ -255,7 +270,7 @@ export class SessionRewindService {
         summary,
       };
     }
-    if (this.isSessionStreaming(sessionId)) {
+    if (this.isSessionMutationInFlight(sessionId)) {
       return { ok: false, reason: "streaming", trigger, mode, summary };
     }
     if (this.activeMutations.has(sessionId)) {
@@ -453,7 +468,7 @@ export class SessionRewindService {
   }
 
   redo(sessionId: string, input: SessionRedoInput = {}): SessionRedoResult {
-    if (this.isSessionStreaming(sessionId)) {
+    if (this.isSessionMutationInFlight(sessionId)) {
       return { ok: false, reason: "streaming" };
     }
     if (this.activeMutations.has(sessionId)) {
@@ -662,12 +677,12 @@ export class SessionRewindService {
     return undefined;
   }
 
-  private isSessionStreaming(sessionId: string): boolean {
+  private isSessionMutationInFlight(sessionId: string): boolean {
     const snapshot = this.getSessionLifecycleSnapshot?.(sessionId);
     if (!snapshot) {
       return false;
     }
-    return snapshot.execution.kind !== "idle";
+    return isSessionExecutionInFlight(snapshot.execution.kind);
   }
 
   private resolveRewindCheckpoint(

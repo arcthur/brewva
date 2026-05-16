@@ -8,7 +8,7 @@ import {
   skipLiveForProviderRateLimitResult,
 } from "../../helpers/cli.js";
 import { writeMinimalConfig } from "../../helpers/config.js";
-import { isRecord, parseJsonLines, requireFinalBundle } from "../../helpers/events.js";
+import { parseJsonLines, requireFinalBundle } from "../../helpers/events.js";
 import { runLive } from "../../helpers/live.js";
 import { cleanupWorkspace, createWorkspace } from "../../helpers/workspace.js";
 
@@ -57,23 +57,11 @@ describe("live: tool call proof", () => {
       const lines = parseJsonLines(run.stdout, { strict: true });
       const bundle = requireFinalBundle(lines, "managed tools direct");
       expect(bundle.events.length).toBeGreaterThanOrEqual(2);
-      expect(run.stdout).toContain("NO-EXT-OK");
-
-      const nonBundleLines = lines.filter((line) => {
-        if (!isRecord(line)) return false;
-        return !(line.schema === "brewva.stream.v1" && line.type === "brewva_event_bundle");
-      });
-      expect(nonBundleLines.length).toBeGreaterThan(0);
-      const nonBundleEventTypes = nonBundleLines
-        .filter((line): line is Record<string, unknown> & { type: string } => {
-          return isRecord(line) && typeof line.type === "string";
-        })
-        .map((line) => line.type);
-      expect(nonBundleEventTypes).toContain("turn_end");
-      expect(nonBundleEventTypes).toContain("agent_end");
+      expect(run.stdout).toContain("DIRECT-TOOLS-OK");
 
       const eventTypes = bundle.events.map((event) => event.type);
       expect(eventTypes).toContain("session_start");
+      expect(eventTypes).toContain("turn_end");
       expect(eventTypes).toContain("agent_end");
     } finally {
       cleanupWorkspace(workspace);

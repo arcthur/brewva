@@ -38,7 +38,7 @@ describe("live: task spec plumbing", () => {
     const workspace = createWorkspace("task-spec");
     writeMinimalConfig(workspace);
 
-    const goal = "Validate task plumbing";
+    const goal = "Do not call tools. Reply exactly: TASK-SPEC-INLINE-OK";
     const taskSpec = {
       schema: "brewva.task.v1",
       goal,
@@ -58,6 +58,7 @@ describe("live: task spec plumbing", () => {
       expect(payload.kind).toBe("spec_set");
       expect(payload.spec.schema).toBe("brewva.task.v1");
       expect(payload.spec.goal).toBe(goal);
+      expect(run.stdout).toContain("TASK-SPEC-INLINE-OK");
     } finally {
       cleanupWorkspace(workspace);
     }
@@ -67,12 +68,12 @@ describe("live: task spec plumbing", () => {
     const workspace = createWorkspace("task-file");
     writeMinimalConfig(workspace);
 
-    const goal = "Validate task file plumbing";
+    const goal = "Do not call tools. Reply exactly: TASK-SPEC-FILE-OK";
     const taskSpec = {
       schema: "brewva.task.v1",
       goal,
       verification: {
-        level: "quick",
+        commands: ["bun --version"],
       },
     };
 
@@ -92,6 +93,10 @@ describe("live: task spec plumbing", () => {
       expect(payload.kind).toBe("spec_set");
       expect(payload.spec.schema).toBe("brewva.task.v1");
       expect(payload.spec.goal).toBe(goal);
+      expect(payload.spec.verification).toEqual({
+        commands: ["bun --version"],
+      });
+      expect(run.stdout).toContain("TASK-SPEC-FILE-OK");
     } finally {
       cleanupWorkspace(workspace);
     }

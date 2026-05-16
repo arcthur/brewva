@@ -17,6 +17,16 @@ import {
 import { runLive } from "../../helpers/live.js";
 import { cleanupWorkspace, createWorkspace } from "../../helpers/workspace.js";
 
+function isModelEditValidationFailure(run: ReturnType<typeof runCliSync>): boolean {
+  const stderr = run.stderr ?? "";
+  return (
+    run.status !== 0 &&
+    (stderr.includes("oldText must not be empty") ||
+      stderr.includes("Could not find edits[") ||
+      stderr.includes("Each oldText must be unique"))
+  );
+}
+
 describe("live: undo", () => {
   runLive("undo restores file after llm-driven edit", () => {
     const workspace = createWorkspace("undo");
@@ -30,14 +40,15 @@ describe("live: undo", () => {
 
     try {
       const prompts = [
-        `Open the file ./undo_fixture.txt and replace its entire contents with exactly '${changed.trim()}' followed by a newline. Use the file editing tool. Do not describe the change, just apply it.`,
-        `Use a file editing tool now. Rewrite ./undo_fixture.txt so the full file content is exactly '${changed.trim()}' with a trailing newline.`,
-        `Use a patch or edit tool immediately: set ./undo_fixture.txt to exactly "${changed.trim()}" plus one trailing newline.`,
+        `Use the file editing tool on ./undo_fixture.txt. The current full file content is exactly ${JSON.stringify(baseline)}. Replace that exact oldText with exactly ${JSON.stringify(changed)}. Do not use an empty oldText.`,
+        `Call the edit tool for ./undo_fixture.txt with oldText exactly ${JSON.stringify(baseline)} and newText exactly ${JSON.stringify(changed)}. Apply the edit only.`,
+        `Apply one exact replacement in ./undo_fixture.txt: oldText=${JSON.stringify(baseline)} newText=${JSON.stringify(changed)}.`,
       ];
 
       let bundle: BrewvaEventBundle | undefined;
       let sessionId = "";
       let afterEdit = readFileSync(fixturePath, "utf8");
+      let editValidationFailures = 0;
 
       for (const prompt of prompts) {
         writeFileSync(fixturePath, baseline, "utf8");
@@ -47,6 +58,13 @@ describe("live: undo", () => {
 
         if (skipLiveForProviderRateLimitResult("undo-edit-run", run)) {
           return;
+        }
+        if (isModelEditValidationFailure(run)) {
+          editValidationFailures += 1;
+          console.warn(
+            `[undo.live] retrying after model edit validation failure (${editValidationFailures}/${prompts.length})`,
+          );
+          continue;
         }
         assertCliSuccess(run, "undo-edit-run");
 
@@ -58,6 +76,12 @@ describe("live: undo", () => {
         if (afterEdit === changed) {
           break;
         }
+      }
+
+      if (editValidationFailures === prompts.length) {
+        throw new Error(
+          "[undo.live] all deterministic edit attempts failed model edit validation; this may indicate an edit tool contract regression.",
+        );
       }
 
       if (afterEdit !== changed) {

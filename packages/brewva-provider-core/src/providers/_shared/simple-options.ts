@@ -17,6 +17,7 @@ export function buildBaseOptions(
     maxTokens: options?.maxTokens || Math.min(model.maxTokens, 32000),
     signal: options?.signal,
     apiKey: apiKey || options?.apiKey,
+    transport: options?.transport,
     cachePolicy: options?.cachePolicy,
     onCacheRender: options?.onCacheRender,
     sessionId: options?.sessionId,
@@ -24,6 +25,7 @@ export function buildBaseOptions(
     onPayload: options?.onPayload,
     maxRetryDelayMs: options?.maxRetryDelayMs,
     metadata: options?.metadata,
+    resolveFile: options?.resolveFile,
   };
 }
 
